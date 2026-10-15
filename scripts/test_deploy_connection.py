@@ -34,10 +34,22 @@ FAKES = {
     + 'if "ControlMaster=yes" in a and os.environ.get("FAKE_MASTER_FAIL"):\n'
     + '    sys.stderr.write("ssh: connect to host: Connection refused\\n")\n'
     + '    sys.exit(255)\n',
+    # scp keeps what it uploads in $FAKE_REMOTE, so the stamp read after the
+    # upload sees the stamp the deploy wrote (or a corrupted one, on request).
     "scp": LOGGER
-    + 'if sys.argv[-1] != sys.argv[-2] and sys.argv[-2].endswith(":.deploy-hash"):\n'
+    + 'import shutil\n'
+    + 'src, dst = sys.argv[-2], sys.argv[-1]\n'
+    + 'remote = os.environ["FAKE_REMOTE"]\n'
+    + 'if ":" in dst:\n'
+    + '    shutil.copy(src, os.path.join(remote, os.path.basename(dst.split(":", 1)[1])))\n'
+    + '    if os.environ.get("FAKE_STAMP_CORRUPT") and dst.endswith(":.deploy-hash"):\n'
+    + '        open(os.path.join(remote, ".deploy-hash"), "w").write("sha256 0\\n")\n'
+    + '    sys.exit(0)\n'
+    + 'held = os.path.join(remote, os.path.basename(src.split(":", 1)[1]))\n'
+    + 'if not os.path.exists(held):\n'
     + '    sys.stderr.write("scp: .deploy-hash: No such file or directory\\n")\n'
-    + '    sys.exit(1)\n',
+    + '    sys.exit(1)\n'
+    + 'shutil.copy(held, dst)\n',
     "sftp": LOGGER
     + 'if os.environ.get("FAKE_SFTP_FAIL"):\n'
     + '    sys.exit(1)\n'
@@ -64,6 +76,8 @@ class DeployConnectionTest(unittest.TestCase):
             f.write("not-a-real-password\n")
         self.tmpdir = os.path.join(self.tmp.name, "tmp")
         os.mkdir(self.tmpdir)
+        self.remote = os.path.join(self.tmp.name, "remote")
+        os.mkdir(self.remote)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -76,6 +90,7 @@ class DeployConnectionTest(unittest.TestCase):
             "HOST": HOST,
             "SSHPASS_FILE": self.passfile,
             "TMPDIR": self.tmpdir,
+            "FAKE_REMOTE": self.remote,
             **extra,
         }
         return subprocess.run(["bash", DEPLOY], capture_output=True, text=True, env=env, timeout=300)
@@ -103,11 +118,11 @@ class DeployConnectionTest(unittest.TestCase):
         self.assertEqual(masters[0][-1], HOST)
 
         transfers = [c for c in calls if c[0] in ("scp", "sftp")]
-        # stamp read, uploads, scores listing, scores chmod, stamp write
-        self.assertGreaterEqual(len(transfers), 5, calls)
+        # stamp read, uploads, scores listing, scores chmod, stamp write, stamp read back
+        self.assertGreaterEqual(len(transfers), 6, calls)
         for c in transfers:
             self.assert_rides_master(c)
-        self.assertEqual(len([c for c in transfers if c[0] == "scp"]), 2, calls)
+        self.assertEqual(len([c for c in transfers if c[0] == "scp"]), 3, calls)
 
         socks = {a for c in masters + transfers for a in c if a.startswith("ControlPath=")}
         self.assertEqual(len(socks), 1, "all share one socket")
@@ -125,6 +140,12 @@ class DeployConnectionTest(unittest.TestCase):
         self.assertLess(len(path), 60, path)
         self.assertFalse(os.path.exists(os.path.dirname(path)))
         self.assertEqual(os.listdir(self.tmpdir), [])
+
+    def test_a_stamp_that_does_not_match_fails_on_the_same_login(self):
+        r = self.deploy(FAKE_STAMP_CORRUPT="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("does not hold", r.stderr)
+        self.assertEqual([c[0] for c in self.calls()].count("sshpass"), 1)
 
     def test_master_exits_when_a_later_step_fails(self):
         r = self.deploy(FAKE_SFTP_FAIL="1")

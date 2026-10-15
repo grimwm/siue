@@ -1,6 +1,19 @@
 // Shared helpers for the www.cs end-to-end checks.
 import { expect } from '@playwright/test';
-import type { Browser, BrowserContext, Page } from '@playwright/test';
+import type { APIRequestContext, Browser, BrowserContext, Page, Request } from '@playwright/test';
+
+/** The seat token a Tankity state poll carries (its X-Seat-Token header), or
+ * null for any other request. */
+export function stateToken(r: Request): string | null {
+  const u = new URL(r.url());
+  if (!u.pathname.endsWith('rooms.php') || u.searchParams.get('action') !== 'state') return null;
+  return r.headers()['x-seat-token'] ?? null;
+}
+
+/** A Tankity state poll as a seat sends it: the token in X-Seat-Token. */
+export function stateGet(request: APIRequestContext, code: string, token: string, query = '') {
+  return request.get(`games/tankity/rooms.php?action=state&code=${code}${query}`, { headers: { 'X-Seat-Token': token } });
+}
 
 /** What `recorderScript` collects in the page, per animation frame. */
 export interface Rec {
@@ -153,8 +166,11 @@ export async function newPlayer(browser: Browser, path = 'games/tankity/', { clo
   // their idle limit.
   const close = ctx.close.bind(ctx);
   ctx.close = async (...args: Parameters<BrowserContext['close']>) => {
-    await leaveStoredSeats(ctx);
-    return close(...args);
+    try {
+      await leaveStoredSeats(ctx);
+    } finally {
+      await close(...args);
+    }
   };
   await ctx.addInitScript(recorderScript);
   const page = await ctx.newPage();

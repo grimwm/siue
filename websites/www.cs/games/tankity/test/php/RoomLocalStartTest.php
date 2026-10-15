@@ -141,7 +141,7 @@ final class RoomLocalStartTest extends TestCase
         $this->assertSame(403, $this->call('start', $this->seated($host) + ['proto' => 2],
             ['REMOTE_ADDR' => '203.0.113.1', 'HTTP_ORIGIN' => 'https://evil.example'], self::ENV)[0], 'origin');
         $this->assertSame(403, $this->start($host, ['proto' => 2, 'csrf' => 'nope'])[0], 'csrf');
-        $this->assertSame(401, $this->start(['token' => str_repeat('ab', 32)] + $host, ['proto' => 2])[0], 'seat token');
+        $this->assertSame(404, $this->start(['token' => str_repeat('ab', 32)] + $host, ['proto' => 2])[0], 'seat token');
         $this->assertTrue($this->exists($host['code']), 'no refused Start closed the lobby');
         $this->gap();
         $this->assertSame(200, $this->start($host, ['proto' => 2])[0], 'the guest left, so the host is alone');

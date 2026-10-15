@@ -1374,6 +1374,9 @@ function room_again(array &$room): bool
             room_seat_economy($room, $idx);
         } elseif (!empty($s['bot'])) {
             $room['seats'][$idx] = room_idle_seat($idx);
+            foreach (['scores', 'cash', 'ammo', 'weapon', 'nextUp', 'plate', 'armor', 'chutes'] as $k) {
+                unset($room[$k][$idx]); // the drone that took a leaver's chair starts clean
+            }
         }
     }
     $room['winner'] = null;
@@ -1389,9 +1392,9 @@ function room_again(array &$room): bool
 
 /* A human walks away. The last human out closes the room, freeing its slot
    at once; otherwise the battery takes over the seat, host included: a match
-   that has begun carries on for everyone else (nothing after the lobby is
-   host-only). Only in the lobby does the host leaving close the room, since
-   nobody else can start it. */
+   that has begun carries on for everyone else, the host role passing to the
+   lowest-numbered human left (room_rehost). Only in the lobby does the host
+   leaving close the room, since nobody else can start it. */
 function room_leave(array &$room, int $seat): bool
 {
     $humans = 0;

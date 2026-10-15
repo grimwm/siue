@@ -98,7 +98,7 @@ interface Inputs {
   'roll-out': { terrain: TerrainSpec; x: number; vx: number; vy: number; wkey: string };
   armor: { ops: ArmorOp[] };
   'match-end': { lives: (number | null)[]; startHumans: number; round: number };
-  volley: WorldIn & { shooter: number; wkey: string; angle: number; power: number };
+  volley: WorldIn & { w?: number; shooter: number; wkey: string; angle: number; power: number };
   beam: WorldIn & { shooter: number; wkey: string; angle: number; power: number };
   plasma: WorldIn & { shooter: number; wkey: string; power: number };
   fall: WorldIn & { blast?: { x: number; y: number; wkey: string; owner: number } };
@@ -240,7 +240,9 @@ const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
     world(c);
     const s = { x: c.sx, y: c.sy, vx: c.vx, vy: c.vy, owner: nth(G.tanks, c.owner) };
     sim.steerShell(G.tanks, s as Shell, { steer: c.steer } as Weapon, c.dt);
-    return s.vx === c.vx && s.vy === c.vy ? null : [s.vx - c.vx, s.vy - c.vy];
+    // The server answers null when there is no rival to bend toward and a push (zero, for a zero steer) otherwise; the sim only leaves the velocity alone in both.
+    const rivals = G.tanks.filter(t => t.hp > 0 && t !== s.owner).map(t => sim.dist(t.x - c.sx, (t.y - 12) - c.sy));
+    return rivals.length === 0 || Math.min(...rivals) <= 1 ? null : [s.vx - c.vx, s.vy - c.vy];
   },
   'split-fan'(c) {
     return sim.splitShell(ownerless({ x: 0, y: 0, vx: c.vx, vy: c.vy, wkey: 'shell', owner: null }), { split: c.n, fan: c.fan } as Weapon)
@@ -305,7 +307,7 @@ const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
     return { over: o.over, winner: o.winner, bonus: 2 * (sim.TUNE.roundWinScore + c.round * 150) };
   },
   volley(c) {
-    world(c);
+    world(c, c.w ?? 720);
     const before = G.terrain.slice(), shooter = nth(G.tanks, c.shooter);
     shooter.angle = c.angle;
     shooter.power = c.power;
@@ -507,7 +509,10 @@ function expectedFor(group: string, input: unknown, expected: unknown): unknown 
   if (group !== 'ai-aim') return expected;
   const c = input as Inputs['ai-aim'], out = expected as { dx: number; wkey: string; angle: number; power: number };
   const x0 = nth(c.tanks, c.shooter).x;
-  const moved = out.dx === 0 ? 0 : Math.max(12, Math.min(720 - 12, x0 + out.dx)) - x0;
+  // The spot-taken refusal both sides apply (src/ai.ts spotTaken, rules.php room_spot_taken): a live unit closer than UNIT_GAP blocks it.
+  const nx = Math.max(12, Math.min(720 - 12, x0 + out.dx));
+  const blocked = c.tanks.some((o, i) => i !== c.shooter && (o.hp ?? 100) > 0 && Math.abs(o.x - nx) < simRules.UNIT_GAP);
+  const moved = Math.abs(out.dx) > 0.5 && !blocked ? nx - x0 : 0;
   return { wkey: out.wkey, angle: out.angle, power: out.power, moved };
 }
 

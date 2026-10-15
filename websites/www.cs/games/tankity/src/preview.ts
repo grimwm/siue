@@ -600,7 +600,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
         // As the war steers one (sim.ts steerShell): across its flight only.
         const dx = pv.tx - s.x, dy = fy - s.y;
         const d = Math.max(1, Math.hypot(dx, dy));
-        const push = (w.steer || 70) * dt;
+        const push = (w.steer ?? 70) * dt;
         let px = (dx / d) * push, py = (dy / d) * push;
         const sp = Math.hypot(s.vx, s.vy);
         if (sp > 0) {
@@ -619,7 +619,7 @@ export function stepPreview(pv: PreviewState, dt: number, env: PreviewEnv): void
       if (w.effect === 'cluster' && !s.split && (w.apex ? s.age >= 0.1 && s.vy >= 0 : s.age >= (w.fuse || 0.9))) {
         s.split = true;
         env.special(pv.fx, pv.wkey, 'split', s.x, s.y, Math.atan2(s.vy, s.vx));
-        const n = Math.max(2, w.split || 4), fan = w.fan || 0.22;
+        const n = Math.max(2, w.split || 4), fan = w.fan ?? 0.22;
         pv.seen.split += n;
         const sp = Math.hypot(s.vx, s.vy) * 0.85, base = Math.atan2(s.vy, s.vx);
         for (let i = 0; i < n; i++) {

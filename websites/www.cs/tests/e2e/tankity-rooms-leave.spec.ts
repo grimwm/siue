@@ -1,7 +1,7 @@
 // Operation Tankity rooms: a player who walks out never holds up the ones left.
 // Leaving at the shop between rounds: the next round starts without them.
 import { test, expect } from '@playwright/test';
-import { roomPair } from './helpers.ts';
+import { roomPair, stateToken } from './helpers.ts';
 import { reachShop, roomView, seatedPair } from './rooms-shop-helpers.ts';
 
 test('when the host leaves at the shop, the players left start the next round on their own', async ({ browser }) => {
@@ -10,7 +10,7 @@ test('when the host leaves at the shop, the players left start the next round on
     beforeStart: async ({ host }) => { await host.page.locator('#lobby-seats .seat-tile').nth(3).click(); },
   }));
   for (const pl of [host, guest]) {
-    pl.page.on('request', r => { const m = r.url().match(/action=state.*[?&]token=([0-9a-f]+)/); if (m) pl.token = m[1]; });
+    pl.page.on('request', r => { const t = stateToken(r); if (t) pl.token = t; });
   }
   await expect.poll(() => host.token && guest.token, { timeout: 15_000 }).toBeTruthy();
   await reachShop(host, guest, code, roomState);
@@ -32,7 +32,7 @@ test('when the others are ready and the host leaves the shop, the next round sta
     beforeStart: async ({ host }) => { await host.page.locator('#lobby-seats .seat-tile').nth(3).click(); },
   }));
   for (const pl of [host, guest]) {
-    pl.page.on('request', r => { const m = r.url().match(/action=state.*[?&]token=([0-9a-f]+)/); if (m) pl.token = m[1]; });
+    pl.page.on('request', r => { const t = stateToken(r); if (t) pl.token = t; });
   }
   await expect.poll(() => host.token && guest.token, { timeout: 15_000 }).toBeTruthy();
   await reachShop(host, guest, code, roomState);

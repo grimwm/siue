@@ -231,10 +231,12 @@ function protocol_snapshots(): array
         200, $ok(room_snapshot($walled, 0, $since))];
 
     // A browser's "Your games": a match with this seat up, a lobby it waits in, a room that is gone.
+    $waiting = $lobby;
+    $waiting['code'] = 'FXT2'; // two different rooms, two codes
     $out['mine-reply'] = ['action=mine for three stored seats, in the order asked: a running match where it is this seat\'s turn (turnKey names the turn), a lobby, and a room that is gone.',
         200, ['ok' => true, 'rooms' => [
             room_mine_row($play, 0),
-            room_mine_row($lobby, 1),
+            room_mine_row($waiting, 1),
             ['code' => 'GONE', 'gone' => true],
         ]]];
     foreach ($out as $name => [$about, $status, $body]) {

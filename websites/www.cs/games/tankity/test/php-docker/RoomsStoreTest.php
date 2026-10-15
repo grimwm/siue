@@ -51,9 +51,11 @@ final class RoomsStoreTest extends TestCase
         tankity_db()->exec('DELETE FROM rooms');
     }
 
-    private static function get(string $action, string $query = ''): ?array
+    /* A GET; a state poll's seat token rides in X-Seat-Token, as the client sends it. */
+    private static function get(string $action, string $query = '', string $token = ''): ?array
     {
-        $ctx = stream_context_create(['http' => ['timeout' => 10, 'ignore_errors' => true]]);
+        $ctx = stream_context_create(['http' => ['timeout' => 10, 'ignore_errors' => true,
+            'header' => $token === '' ? '' : "X-Seat-Token: $token\r\n"]]);
         $raw = @file_get_contents(self::$base . '/rooms.php?action=' . $action . $query, false, $ctx);
         return $raw === false ? null : json_decode($raw, true);
     }
@@ -148,7 +150,7 @@ final class RoomsStoreTest extends TestCase
         room_test_age($r['code'], 30); // a seated poll past the heartbeat takes the write lock
         [$p, $pipes] = $this->holder(3.0);
         $t = microtime(true);
-        $out = self::get('state', '&code=' . $r['code'] . '&token=' . $r['token']);
+        $out = self::get('state', '&code=' . $r['code'], $r['token']);
         $dt = microtime(true) - $t;
         proc_close($p);
         $this->assertSame('this room is busy; try again', $out['error'] ?? json_encode($out));
@@ -162,7 +164,7 @@ final class RoomsStoreTest extends TestCase
         room_test_age($r['code'], 30); // a seated poll past the heartbeat takes the write lock
         [$p, $pipes] = $this->holder(0.5);
         $t = microtime(true);
-        $out = self::get('state', '&code=' . $r['code'] . '&token=' . $r['token']);
+        $out = self::get('state', '&code=' . $r['code'], $r['token']);
         $dt = microtime(true) - $t;
         proc_close($p);
         $this->assertTrue($out['ok'] ?? false, json_encode($out));
@@ -177,7 +179,7 @@ final class RoomsStoreTest extends TestCase
         proc_terminate($p, 9);
         proc_close($p);
         $t = microtime(true);
-        $out = self::get('state', '&code=' . $r['code'] . '&token=' . $r['token']);
+        $out = self::get('state', '&code=' . $r['code'], $r['token']);
         $this->assertTrue($out['ok'] ?? false, json_encode($out));
         $this->assertLessThan(1.0, microtime(true) - $t);
     }
@@ -187,7 +189,7 @@ final class RoomsStoreTest extends TestCase
         [, $r] = self::post('create', ['initials' => 'lob']);
         [$p, $pipes] = $this->holder(3.0);
         $t = microtime(true);
-        $out = self::get('state', '&code=' . $r['code'] . '&token=' . $r['token']);
+        $out = self::get('state', '&code=' . $r['code'], $r['token']);
         $dt = microtime(true) - $t;
         proc_close($p);
         $this->assertTrue($out['ok'] ?? false, json_encode($out));

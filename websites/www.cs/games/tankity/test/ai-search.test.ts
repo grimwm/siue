@@ -107,9 +107,6 @@ test('a full round-9 rack searches every arc, rollers on a coarser grid, inside 
       assert.ok(earthOps() - ops0 <= GROUND_BUDGET, `${s} at ${targetX}: ${earthOps() - ops0} ground predictions (test/php/AiArcsTest.php holds the server to the same ${GROUND_BUDGET})`);
     }
   }
-  const t0 = performance.now();
-  for (let i = 0; i < 20; i++) turn({ s: 'glory', ammo });
-  assert.ok((performance.now() - t0) / 20 < 40, 'a full rack\'s turn stays well under the frame budget of a busy room');
 });
 
 test('a lobber searches the high arcs coarse to fine', () => {

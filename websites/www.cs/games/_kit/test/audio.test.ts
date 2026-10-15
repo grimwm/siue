@@ -189,6 +189,14 @@ test('a context whose buses cannot be built is silent and throws nothing', () =>
   assert.equal(core.bus('sfx'), null);
 });
 
+test('a context whose bus setup throws is closed, not leaked', () => {
+  const ctx = fakeAudioContext();
+  ctx.createGain = () => { throw new Error('no gain nodes'); };
+  const core = createAudioCore({ createContext: () => asAudioContext(ctx) });
+  core.tone({ freq: 440, dur: 0.1 });
+  assert.equal(ctx.closes, 1);
+});
+
 test('unlock primes and reports ready only once resume resolves, for every caller waiting', async () => {
   const ctx = fakeAudioContext('suspended', { holdResume: true });
   const core = createAudioCore({ createContext: () => asAudioContext(ctx) });
@@ -225,4 +233,15 @@ test('suspend() on a context that returns nothing or throws throws nothing', () 
     core.tone({ freq: 440, dur: 0.1 });
     assert.doesNotThrow(() => core.suspend());
   }
+});
+
+test('release() right after hold() resumes even while the suspend is still in flight', async () => {
+  const ctx = fakeAudioContext();
+  ctx.suspend = () => { ctx.suspends++; return Promise.resolve(); }; // the state flips later, as in a browser
+  const core = createAudioCore({ createContext: () => asAudioContext(ctx) });
+  core.tone({ freq: 440, dur: 0.1 });
+  core.hold();
+  core.release();
+  await tick();
+  assert.equal(ctx.resumes, 1);
 });

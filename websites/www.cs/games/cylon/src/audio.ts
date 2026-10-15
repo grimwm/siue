@@ -50,6 +50,13 @@ export interface CylonAudio {
   syncMusic(): void;
   /** The player changed the setting `key` (a settings-panel data-setting name). */
   settingChanged(key: string): void;
+  /** The page is hidden, frozen or leaving (kit followPage): the bed stops, the
+   *  context is held suspended, and nothing sounds until pageShow. */
+  pageHide(): void;
+  /** The page is visible again: the context resumes and the bed follows the settings. */
+  pageShow(): void;
+  /** The page is gone for good: the context is closed. */
+  pageClose(): void;
 }
 
 /* ---------- the voices ---------- */
@@ -204,6 +211,7 @@ export function createAudio(deps: AudioDeps): CylonAudio {
   let musicNodes: AudioNode[] = [];
   let musicTimer: ReturnType<typeof setInterval> | null = null;
   let musicPlaying = false;
+  let pageHidden = false;
 
   /** The buses follow the settings: effects are muted when off or at 0, and the
    *  bed is heard only while it plays in a live session. */
@@ -228,7 +236,7 @@ export function createAudio(deps: AudioDeps): CylonAudio {
 
   function unlock(): void {
     const s = settings();
-    if (!s.soundEnabled && !s.musicEnabled) return;
+    if (pageHidden || (!s.soundEnabled && !s.musicEnabled)) return;
     applyBusVolumes();
     core.unlock(syncMusic);
   }
@@ -442,7 +450,7 @@ export function createAudio(deps: AudioDeps): CylonAudio {
 
   function syncMusic(): void {
     const s = settings();
-    const want = deps.sessionActive() && s.musicEnabled && s.musicVolume > 0;
+    const want = !pageHidden && deps.sessionActive() && s.musicEnabled && s.musicVolume > 0;
     if (want) {
       if (!musicPlaying) startMusic();
       else applyBusVolumes();
@@ -601,10 +609,11 @@ export function createAudio(deps: AudioDeps): CylonAudio {
 
   return {
     sfx(name) {
+      if (pageHidden) return;
       applyBusVolumes();
       voices[name]();
     },
-    prime() { ensureAudio(); },
+    prime() { if (!pageHidden) ensureAudio(); },
     unlock,
     syncMusic,
     settingChanged(key) {
@@ -613,6 +622,22 @@ export function createAudio(deps: AudioDeps): CylonAudio {
       if (key === 'soundEnabled' || key === 'soundVolume') ensureAudioContext();
       if (key === 'soundEnabled' && !s.soundEnabled && !s.musicEnabled) core.suspend();
       if ((key === 'soundEnabled' || key === 'musicEnabled') && (s.soundEnabled || s.musicEnabled)) ensureAudioContext();
+    },
+    pageHide() {
+      pageHidden = true;
+      stopMusic(false);
+      core.hold();
+    },
+    pageShow() {
+      if (!pageHidden) return;
+      pageHidden = false;
+      core.release();
+      syncMusic();
+    },
+    pageClose() {
+      pageHidden = true;
+      stopMusic(false);
+      core.close();
     },
   };
 }

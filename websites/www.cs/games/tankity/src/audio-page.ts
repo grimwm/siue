@@ -2,11 +2,12 @@
  * page goes silent (the context is suspended, media elements paused, the media
  * session cleared); visible again, only what the settings call for resumes. */
 
+import { followPage } from '../../_kit/page-life.ts';
+import type { PageTargets } from '../../_kit/page-life.ts';
 import { pageHide, pageVisible, pageClose } from './audio.ts';
 
-interface Targets {
-  doc: Pick<Document, 'addEventListener' | 'querySelectorAll'> & { visibilityState: string };
-  win: Pick<Window, 'addEventListener'>;
+interface Targets extends PageTargets {
+  doc: PageTargets['doc'] & Pick<Document, 'querySelectorAll'>;
   nav?: { mediaSession?: { metadata: unknown; playbackState: string } };
 }
 
@@ -22,15 +23,5 @@ function silenceMedia(t: Targets): void {
 }
 
 export function installAudioPage(t: Targets): void {
-  const hide = (): void => { pageHide(); silenceMedia(t); };
-  const show = (): void => { if (t.doc.visibilityState !== 'hidden') pageVisible(); };
-  t.doc.addEventListener('visibilitychange', () => { if (t.doc.visibilityState === 'hidden') hide(); else show(); });
-  t.doc.addEventListener('freeze', hide);
-  t.doc.addEventListener('resume', show);
-  t.win.addEventListener('pagehide', e => {
-    hide();
-    if ((e as PageTransitionEvent).persisted === false) pageClose();
-  });
-  t.win.addEventListener('pageshow', show);
-  if (t.doc.visibilityState === 'hidden') hide();
+  followPage(t, { hide: () => { pageHide(); silenceMedia(t); }, show: pageVisible, close: pageClose });
 }

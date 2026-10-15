@@ -129,7 +129,9 @@ const bodyOf = (entry: Sent): Record<string, unknown> => JSON.parse(String(entry
   const q = makeClient(() => roomReply());
   q.net.since = 7;
   await q.net.getState();
-  await test('wire-state-query', () => { assert.ok(at(q.host.log, 0).url === 'rooms.php?action=state&code=FXT1&token=tok&since=7', at(q.host.log, 0).url); });
+  await test('wire-state-query', () => { assert.ok(at(q.host.log, 0).url === 'rooms.php?action=state&code=FXT1&since=7', at(q.host.log, 0).url); });
+  // The seat token is a bearer credential: a header, never the URL that access logs keep.
+  await test('wire-state-token-in-a-header', () => { const h = at(q.host.log, 0).init.headers; assert.ok(h && h['X-Seat-Token'] === 'tok', j(h)); });
 }
 
 // ---- the 429 retry: 180 ms, up to 3 times ----
@@ -208,7 +210,7 @@ const bodyOf = (entry: Sent): Record<string, unknown> => JSON.parse(String(entry
   try { await stumble.net.getState(); } catch (err) { e3 = errorOf(err); }
   await test('down-stumble', () => { assert.ok(e3 && /stumbled/.test(e3.message), e3?.message); });
 
-  await test('pretty-stale-session', () => { assert.ok(/went stale/.test(prettyRoomError(new Error('bad csrf token'))) && /went stale/.test(prettyRoomError('bad seat token'))); });
+  await test('pretty-stale-session', () => { assert.ok(/went stale/.test(prettyRoomError(new Error('bad csrf token'))) && /went stale/.test(prettyRoomError('bad origin'))); });
   await test('pretty-passthrough', () => { assert.ok(prettyRoomError(new Error('short on cash')) === 'short on cash'); });
 }
 
@@ -221,6 +223,13 @@ const bodyOf = (entry: Sent): Record<string, unknown> => JSON.parse(String(entry
   await test('host-sent-no-old-session', () => { assert.ok(bodyOf(at(host.log, 0)).code === '' && bodyOf(at(host.log, 0)).token === '', at(host.log, 0).init.body); });
   await net.join(' fxt1 ', 'DEF', 'hover');
   await test('join-uppercases-the-code', () => { assert.ok(bodyOf(at(host.log, 1)).code === 'FXT1' && net.seat === 1, at(host.log, 1).init.body); });
+}
+
+// ---- a join that fails leaves no half-made session behind ----
+{
+  const refused = makeClient(() => ({ status: 429, body: { ok: false, error: 'too many rooms from here; try again later' } }));
+  try { await refused.net.join('FXT1', 'DEF', 'tank'); } catch (_) { /* refused */ }
+  await test('failed-join-keeps-no-code', () => { assert.ok(refused.net.code === '' && refused.net.seat === -1, j({ c: refused.net.code, s: refused.net.seat })); });
 }
 
 // ---- the room protocol: create, join and start say which one they speak ----
@@ -751,7 +760,7 @@ await test('invite-url-escapes-the-code', () => { assert.ok(inviteUrl('A&B', {})
   net.resume(stored);
   await test('resume-adopts-the-seat', () => { assert.ok(net.code === 'FXT1' && net.seat === 1 && net.token === 'tok' && net.csrf === 'c' && net.since === 0); });
   await net.getState();
-  await test('resume-polls-with-the-stored-token', () => { assert.ok(at(host.log, 0).url.startsWith('rooms.php?action=state&code=FXT1&token=tok&'), at(host.log, 0).url); });
+  await test('resume-polls-with-the-stored-token', () => { const r = at(host.log, 0); assert.ok(r.url.startsWith('rooms.php?action=state&code=FXT1&') && r.init.headers?.['X-Seat-Token'] === 'tok', r.url); });
 }
 {
   const { net, host } = makeClient(() => roomReply({ phase: 'play' }));

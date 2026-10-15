@@ -55,8 +55,10 @@ foreach ($cands as $c) {
     }
 }
 
-$get = function (string $url) {
-    $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true]]);
+// A state poll's seat token rides in X-Seat-Token, as the client sends it.
+$get = function (string $url, string $token = '') {
+    $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true,
+        'header' => $token === '' ? '' : "X-Seat-Token: $token\r\n"]]);
     $raw = @file_get_contents($url, false, $ctx);
     return $raw === false ? null : json_decode($raw, true);
 };
@@ -162,7 +164,7 @@ $ageRoom($code);
 // An untouched record is truly gone: the sweep drops it, freeing the slot.
 $ping = $get($base . '/rooms.php?action=ping');
 $check('stale-not-counted', ($ping['lobbies']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['lobbies']['used'] ?? '?'));
-$gone = $get($base . '/rooms.php?action=state&code=' . $code . '&token=' . $token . '&since=0');
+$gone = $get($base . '/rooms.php?action=state&code=' . $code . '&since=0', $token);
 $check('stale-unreachable', ($gone['error'] ?? '') === 'no such room', $gone['error'] ?? '');
 
 // A seated state poll is a heartbeat: a fresh waiting lobby stays counted.
@@ -170,7 +172,7 @@ $room = $post('create', ['initials' => 'qrs']);
 $code = (string) ($room['code'] ?? '');
 $token = (string) ($room['token'] ?? '');
 $csrf = (string) ($room['csrf'] ?? '');
-$state = $get($base . '/rooms.php?action=state&code=' . $code . '&token=' . $token . '&since=0');
+$state = $get($base . '/rooms.php?action=state&code=' . $code . '&since=0', $token);
 $check('heartbeat-ok', ($state['ok'] ?? false) === true);
 $ping = $get($base . '/rooms.php?action=ping');
 $check('heartbeat-counts', ($ping['lobbies']['used'] ?? -1) === $baseUsed + 1, 'used=' . ($ping['lobbies']['used'] ?? '?'));
@@ -269,7 +271,7 @@ foreach (($afterGuest['room']['events'] ?? []) as $e) {
 $check('turn-cycles-past-ai', ($afterGuest['ok'] ?? false) === true && $turnG === 0 && $aiG >= 1 && $aiG <= 2,
     'turn=' . $turnG . ' ai=' . $aiG);
 usleep(300000);
-$calm = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
+$calm = $get($base . '/rooms.php?action=state&code=' . $mcode . '&since=0', $mtoken);
 $aiC = 0;
 foreach (($calm['room']['events'] ?? []) as $e) {
     if (($e['t'] ?? '') === 'aifire') $aiC++;
@@ -280,23 +282,23 @@ $check('polls-hold-turn', ($calm['ok'] ?? false) === true && ($calm['room']['tur
 // names the terrainRev it holds (have); the reply leaves terrain out when that
 // is the room's revision, and always names the revision. full=1, another
 // revision, or a missing have gets everything.
-$dUrl = $base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken;
-$dFull = $get($dUrl . '&since=0');
+$dUrl = $base . '/rooms.php?action=state&code=' . $mcode;
+$dFull = $get($dUrl . '&since=0', $mtoken);
 $dRev = $dFull['room']['terrainRev'] ?? null;
 $check('delta-first-poll-is-full', is_int($dRev) && is_array($dFull['room']['terrain'] ?? null) && count($dFull['room']['terrain']) === 720
     && !isset($dFull['room']['resync']), json_encode([$dRev, count($dFull['room']['terrain'] ?? [])]));
-$dLean = $get($dUrl . '&since=0&have=' . $dRev);
+$dLean = $get($dUrl . '&since=0&have=' . $dRev, $mtoken);
 $check('delta-omits-terrain-when-rev-matches', ($dLean['ok'] ?? false) === true && !array_key_exists('terrain', $dLean['room'] ?? [])
     && ($dLean['room']['terrainRev'] ?? null) === $dRev && count($dLean['room']['tanks'] ?? []) >= 2, json_encode(array_keys($dLean['room'] ?? [])));
-$dOther = $get($dUrl . '&since=0&have=' . ($dRev + 1));
+$dOther = $get($dUrl . '&since=0&have=' . ($dRev + 1), $mtoken);
 $check('delta-other-rev-gets-terrain', count($dOther['room']['terrain'] ?? []) === 720 && ($dOther['room']['terrainRev'] ?? null) === $dRev);
-$dForce = $get($dUrl . '&since=0&full=1&have=' . $dRev);
+$dForce = $get($dUrl . '&since=0&full=1&have=' . $dRev, $mtoken);
 $check('delta-full-1-returns-terrain', count($dForce['room']['terrain'] ?? []) === 720 && ($dForce['room']['terrain'] ?? []) === ($dFull['room']['terrain'] ?? null));
-$dZero = $get($dUrl . '&since=0&full=0&have=' . $dRev);
+$dZero = $get($dUrl . '&since=0&full=0&have=' . $dRev, $mtoken);
 $check('delta-full-0-is-not-full', !array_key_exists('terrain', $dZero['room'] ?? []));
 // since cannot be ahead of the room: events were lost (a restarted room), so
 // the answer is a full resync.
-$dLost = $get($dUrl . '&since=99999&have=' . $dRev);
+$dLost = $get($dUrl . '&since=99999&have=' . $dRev, $mtoken);
 $check('delta-stale-since-resyncs-with-terrain', ($dLost['room']['resync'] ?? false) === true && count($dLost['room']['terrain'] ?? []) === 720, json_encode(array_keys($dLost['room'] ?? [])));
 // The same fields ride on the POST actions (act, ready, buy).
 usleep(300000);
@@ -314,8 +316,9 @@ $dPlain = $post('act', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf, 
 $check('delta-plain-client-gets-terrain', count($dPlain['room']['terrain'] ?? []) === 720);
 // Compression: Accept-Encoding: gzip returns Content-Encoding: gzip that
 // decodes to the same JSON; without it the body is plain.
-$rawGet = function (string $url, string $accept) {
-    $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true, 'header' => $accept === '' ? '' : "Accept-Encoding: $accept\r\n"]]);
+$rawGet = function (string $url, string $accept, string $token = '') {
+    $header = ($accept === '' ? '' : "Accept-Encoding: $accept\r\n") . ($token === '' ? '' : "X-Seat-Token: $token\r\n");
+    $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true, 'header' => $header]]);
     $body = @file_get_contents($url, false, $ctx);
     return [$http_response_header ?? [], $body === false ? '' : $body];
 };
@@ -331,8 +334,8 @@ $volatile = function (array $r): array {
     unset($r['room']['turnLeft'], $r['room']['shopLeft']);
     return $r;
 };
-[$hPlain, $bPlain] = $rawGet($dUrl . '&since=0', '');
-[$hGz, $bGz] = $rawGet($dUrl . '&since=0', 'gzip');
+[$hPlain, $bPlain] = $rawGet($dUrl . '&since=0', '', $mtoken);
+[$hGz, $bGz] = $rawGet($dUrl . '&since=0', 'gzip', $mtoken);
 $unz = $bGz === '' ? false : @gzdecode($bGz);
 $check('gzip-plain-without-accept-encoding', $headerOf($hPlain, 'Content-Encoding') === '' && is_array(json_decode($bPlain, true)));
 $check('gzip-content-encoding', strtolower($headerOf($hGz, 'Content-Encoding')) === 'gzip' && stripos($headerOf($hGz, 'Vary'), 'Accept-Encoding') !== false,
@@ -340,7 +343,7 @@ $check('gzip-content-encoding', strtolower($headerOf($hGz, 'Content-Encoding')) 
 $check('gzip-decodes-to-the-same-json', $unz !== false && $volatile(json_decode($unz, true)) == $volatile(json_decode($bPlain, true)),
     $unz === false ? 'gzdecode failed' : '');
 $check('gzip-shrinks-the-reply', $bGz !== '' && strlen($bGz) * 2 < strlen($bPlain), strlen($bGz) . ' vs ' . strlen($bPlain));
-[$hErr, $bErr] = $rawGet($base . '/rooms.php?action=state&code=ZZZZ&token=x', 'gzip');
+[$hErr, $bErr] = $rawGet($base . '/rooms.php?action=state&code=ZZZZ', 'gzip');
 $errJson = $bErr === '' ? null : json_decode((string) @gzdecode($bErr), true);
 $check('gzip-errors-compress-too', is_array($errJson) && ($errJson['error'] ?? '') === 'no such room' && strtolower($headerOf($hErr, 'Content-Encoding')) === 'gzip');
 $check('gzip-error-status-kept', strpos($hErr[0] ?? '', '404') !== false, $hErr[0] ?? '');
@@ -379,10 +382,11 @@ $hStart = $post('start', $hctl($hh));
 $check('host-handoff-starts', (int) ($hh['seat'] ?? -1) === 1 && ($hAgain['ok'] ?? false) === true
     && ($hStart['ok'] ?? false) === true && ($hStart['room']['hostSeat'] ?? -1) === 1,
     json_encode([$hAgain['error'] ?? null, $hStart['error'] ?? null, $hStart['room']['hostSeat'] ?? null]));
-// The old host left, so its seat token is dead: it starts nothing. (The host
-// gate itself, a seated non-host refused, is guest-start-refused above.)
+// The old host left, so its seat token is dead: it starts nothing, and hears
+// what a stranger hears. (The host gate itself, a seated non-host refused, is
+// guest-start-refused above.)
 [$staleStatus, $staleStart] = $postStatus('start', $hctl($hand));
-$check('old-host-start-refused', $staleStatus === 401 && ($staleStart['ok'] ?? false) !== true && ($staleStart['error'] ?? '') === 'bad seat token',
+$check('old-host-start-refused', $staleStatus === 404 && ($staleStart['ok'] ?? false) !== true && ($staleStart['error'] ?? '') === 'no such room',
     json_encode([$staleStatus, $staleStart['error'] ?? null]));
 $ageRoom($hcode);
 
@@ -394,19 +398,19 @@ $sctl = ['code' => (string) ($solo['code'] ?? ''), 'token' => (string) ($solo['t
 usleep(300000);
 [$oldStatus, $oldStart] = $postStatus('start', $sctl);
 $check('local-start-old-bundle-reloads', $oldStatus === 426 && ($oldStart['reload'] ?? false) === true
-    && ($get($base . '/rooms.php?action=state&code=' . $sctl['code'] . '&token=' . $sctl['token'])['room']['phase'] ?? '') === 'lobby',
+    && ($get($base . '/rooms.php?action=state&code=' . $sctl['code'], $sctl['token'])['room']['phase'] ?? '') === 'lobby',
     json_encode([$oldStatus, $oldStart]));
 usleep(300000);
 [$localStatus, $localStart] = $postStatus('start', $sctl + ['proto' => 2]);
 $check('local-start', $localStatus === 200 && ($localStart['local'] ?? null) === ['difficulty' => 'hard', 'speed' => 1, 'walls' => 'none']
     && !isset($localStart['room']), json_encode([$localStatus, $localStart]));
-$soloGone = $get($base . '/rooms.php?action=state&code=' . $sctl['code'] . '&token=' . $sctl['token']);
+$soloGone = $get($base . '/rooms.php?action=state&code=' . $sctl['code'], $sctl['token']);
 $check('local-start-closes-the-lobby', ($soloGone['error'] ?? '') === 'no such room' && !isset($soloGone['closed']), json_encode($soloGone));
 
 // Leave the shared shelf as found: only this match is swept.
 $ageRoom($mcode);
 $get($base . '/rooms.php?action=ping');
-$gone = $get($base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
+$gone = $get($base . '/rooms.php?action=state&code=' . $mcode . '&since=0', $mtoken);
 $check('match-cleaned', ($gone['error'] ?? '') === 'no such room', $gone['error'] ?? '');
 
 // server/*.php are libraries for rooms.php, never endpoints: asked for directly

@@ -128,6 +128,29 @@ test('the music bed starts with the session, follows its volume, and stops on mu
   assert.equal(musicBus(ctx).gain.value, 0);
 });
 
+test('a hidden page holds the context, stops the bed and plays nothing; shown again the bed comes back; gone for good it closes', async () => {
+  const { audio, ctx } = rig();
+  audio.syncMusic();
+  await tick();
+  assert.ok(oscs(ctx) > 0);
+  audio.pageHide();
+  assert.equal(ctx.state, 'suspended');
+  assert.equal(musicBus(ctx).gain.value, 0, 'the bed stops');
+  const hidden = ctx.nodes.length;
+  SFX.forEach(n => audio.sfx(n));
+  audio.syncMusic(); // the game asking again while hidden starts nothing
+  audio.unlock();
+  await tick();
+  assert.equal(ctx.nodes.length, hidden, 'nothing is made while hidden');
+  assert.equal(ctx.state, 'suspended', 'a gesture does not wake a hidden page');
+  audio.pageShow();
+  await tick();
+  assert.equal(ctx.state, 'running');
+  assert.equal(musicBus(ctx).gain.value, volumeToGain(50, 'music'), 'the bed is back');
+  audio.pageClose();
+  assert.equal(ctx.closes, 1);
+});
+
 test('no music outside a session or at volume 0', async () => {
   const outside = rig({ session: false });
   outside.audio.syncMusic();

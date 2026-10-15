@@ -111,8 +111,9 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     if (!ctx) {
       // Asked again on every call: a page can gain Web Audio later (a test, a polyfill).
       // Built whole or not at all: a half-made context would play with no buses.
+      let made: AudioContext | null = null;
       try {
-        const made = make();
+        made = make();
         if (!made) return null;
         const built: Partial<Record<BusName, GainNode>> = {};
         for (const name of BUSES) {
@@ -125,6 +126,9 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
         for (const name of BUSES) applyGain(name);
       } catch {
         ctx = null;
+        // Made but not built: give the context back rather than leak it.
+        const leaked = made;
+        if (leaked) settle(() => leaked.close()).catch(() => {});
         return null;
       }
     }
@@ -255,7 +259,10 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     release() {
       held = false;
       const c = ctx;
-      if (c && c.state === 'suspended') settle(() => c.resume()).catch(() => {});
+      // Not gated on the state: a suspend() from hold() may still be in flight
+      // (the state reads 'running' until it lands), and the resume queued behind
+      // it is what keeps it from landing last. Resuming a running context is a no-op.
+      if (c) settle(() => c.resume()).catch(() => {});
     },
     wake() {
       const c = context();

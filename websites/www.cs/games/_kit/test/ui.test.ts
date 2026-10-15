@@ -149,6 +149,52 @@ test('a dialog with no usable button focuses its panel', () => {
   assert.equal(panel.getAttribute('tabIndex'), '-1');
 });
 
+test('the fallback skips a button inside something hidden', () => {
+  const root = mount();
+  render(dialog({ open: true }, [
+    h('div', { hidden: true }, h('button', { id: 'tucked' }, 'Tucked')),
+    h(Button, { id: 'ok', onClick() {} }, 'Ok'),
+  ]), root);
+  assert.equal(globalThis.__focused?.id, 'ok');
+});
+
+test('Tab stays in an open dialog: it wraps at either end and comes back in from outside', () => {
+  const root = mount();
+  render(dialog({ open: true }, [
+    h('button', { id: 'one' }, 'One'),
+    h('div', { hidden: true }, h('button', { id: 'tucked' }, 'Tucked')),
+    h('button', { id: 'off', disabled: true }, 'Off'),
+    h('button', { id: 'two' }, 'Two'),
+  ]), root);
+  const tab = (shiftKey = false) => fireDocument('keydown', { key: 'Tab', shiftKey });
+  assert.equal(document.activeElement?.id, 'one');
+  const back = tab(true);
+  assert.equal(back.prevented, true, 'Shift+Tab on the first wraps');
+  assert.equal(document.activeElement?.id, 'two');
+  const on = tab();
+  assert.equal(on.prevented, true, 'Tab on the last wraps');
+  assert.equal(document.activeElement?.id, 'one');
+  assert.equal(tab().prevented, false, 'between the ends the browser moves focus');
+  document.activeElement = makeEl('behind');
+  assert.equal(tab().prevented, true);
+  assert.equal(document.activeElement?.id, 'one', 'focus behind the veil comes back in');
+  document.activeElement = makeEl('behind');
+  tab(true);
+  assert.equal(document.activeElement?.id, 'two');
+  assert.equal(fireDocument('keydown', { key: 'Tab', ctrlKey: true }).prevented, false, 'Ctrl+Tab is the browser\'s');
+});
+
+test('Tab in a dialog with nothing to tab to keeps focus on its panel; a closed dialog leaves Tab alone', () => {
+  const root = mount();
+  render(dialog({ open: true }), root);
+  const panel = childEl(byId(root, 'veil'));
+  document.activeElement = makeEl('behind');
+  assert.equal(fireDocument('keydown', { key: 'Tab' }).prevented, true);
+  assert.equal(document.activeElement, panel);
+  render(dialog({ open: false }, h('button', { id: 'one' }, 'One')), root);
+  assert.equal(fireDocument('keydown', { key: 'Tab' }).prevented, false);
+});
+
 test('Q and a click on the veil dismiss; a click inside does not', () => {
   const root = mount();
   let dismissed = 0;
@@ -327,4 +373,34 @@ test('a chip can name its key-table slot and stay out of the accessible name', (
   assert.equal(chip.className, 'key');
   assert.equal(chip.getAttribute('data-keyhint'), 'global:new');
   assert.equal(chip.getAttribute('aria-hidden'), 'true');
+});
+
+test('Tab skips controls the browser cannot focus: display:none, inert, a disabled fieldset', () => {
+  const root = mount();
+  render(dialog({ open: true }, [
+    h('button', { id: 'one' }, 'One'),
+    h('div', { style: { display: 'none' } }, h('button', { id: 'gone' }, 'Gone')),
+    h('div', { inert: true }, h('button', { id: 'frozen' }, 'Frozen')),
+    h('fieldset', { disabled: true }, h('button', { id: 'locked' }, 'Locked')),
+    h('button', { id: 'two' }, 'Two'),
+  ]), root);
+  const tab = (shiftKey = false) => fireDocument('keydown', { key: 'Tab', shiftKey });
+  document.activeElement = byId(root, 'two');
+  assert.equal(tab().prevented, true, 'two is the last Tab stop');
+  assert.equal(document.activeElement?.id, 'one');
+});
+
+test('Tab from a tabindex=-1 element inside the panel stays in the panel', () => {
+  const root = mount();
+  render(dialog({ open: true }, [
+    h('button', { id: 'one' }, 'One'),
+    h('button', { id: 'two' }, 'Two'),
+    h('p', { id: 'note', tabindex: -1 }, 'Note'),
+  ]), root);
+  document.activeElement = byId(root, 'note');
+  assert.equal(fireDocument('keydown', { key: 'Tab' }).prevented, true);
+  assert.equal(document.activeElement?.id, 'one');
+  document.activeElement = byId(root, 'note');
+  fireDocument('keydown', { key: 'Tab', shiftKey: true });
+  assert.equal(document.activeElement?.id, 'two');
 });

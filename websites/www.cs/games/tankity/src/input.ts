@@ -190,6 +190,9 @@ export class Held {
 
 /** How fast a held key moves the arm, per second. */
 export const ARM_RATE = Object.freeze({ barrelDegrees: 42, power: 45 });
+/** How long a pad button activated without a pointer (Enter or Space on it,
+ *  a screen reader, a switch) holds its command: one short tap. */
+export const HOLD_TAP_MS = 150;
 export const ARM_LIMITS = Object.freeze({ angleMin: 10, angleMax: 170, powerMin: 10, powerMax: 100 });
 
 export interface ArmStep {
@@ -286,7 +289,7 @@ export interface KeyTarget {
 export interface HoldButton {
   addEventListener(type: 'pointerdown', fn: (ev: { preventDefault(): void }) => void): void;
   addEventListener(type: 'pointerup' | 'pointerleave', fn: () => void): void;
-  addEventListener(type: 'click', fn: (ev: { currentTarget: { blur?(): void } | null }) => void): void;
+  addEventListener(type: 'click', fn: (ev: { currentTarget: { blur?(): void } | null; detail?: number }) => void): void;
 }
 
 export interface Input {
@@ -305,11 +308,14 @@ export interface Input {
   keyup(e: KeyLike): void;
   /** Listen on a window: keys (not on touch screens) and the blur that drops held keys. */
   bind(win: KeyTarget): void;
-  /** Make a button hold a command for as long as the pointer is down on it. */
+  /** Make a button hold a command for as long as the pointer is down on it;
+   *  activated without a pointer, it holds the command for HOLD_TAP_MS. */
   bindHold(btn: HoldButton, cmd: HoldCommand): void;
 }
 
-export function createInput(opts: { touch: boolean; onKeyboard?: () => void }): Input {
+/** `setTimeout` times a pad button's tap (bindHold); the page passes the window's. */
+export function createInput(opts: { touch: boolean; onKeyboard?: () => void; setTimeout: (fn: () => void, ms: number) => void }): Input {
+  const later = opts.setTimeout;
   /** True until a physical key is pressed on a touch device. */
   let touch = opts.touch;
   let defs: KeyDefs = FALLBACK_KEYS;
@@ -319,6 +325,22 @@ export function createInput(opts: { touch: boolean; onKeyboard?: () => void }): 
   let ctx: InputContext = {};
 
   const lookup = (c: string, e: Pick<KeyLike, 'key' | 'code' | 'ctrlKey' | 'shiftKey'>) => lookupKey(map, c, e);
+
+  /** Pad buttons and the command each holds, so Space on a focused one taps it. */
+  const padButtons = new WeakMap<object, HoldCommand>();
+  /** Which press of a command is current: a tap's timer lets go only of its own press. */
+  const pressOf = new Map<HoldCommand, number>();
+  function begin(cmd: HoldCommand): number {
+    const n = (pressOf.get(cmd) ?? 0) + 1;
+    pressOf.set(cmd, n);
+    held.press(cmd);
+    return n;
+  }
+  function tap(cmd: HoldCommand): void {
+    const n = begin(cmd);
+    if (ctx.onHold) ctx.onHold(cmd);
+    later(() => { if (pressOf.get(cmd) === n) held.release(cmd); }, HOLD_TAP_MS);
+  }
 
   /** Offer the press to one command. Returns whether the key is now spent. */
   function offer(e: KeyLike, cmd: string | null, press: Press): boolean {
@@ -404,6 +426,14 @@ export function createInput(opts: { touch: boolean; onKeyboard?: () => void }): 
       if (ctx.onHold) ctx.onHold(act);
       return;
     }
+    // Space on a focused pad button taps that button's command, not the global
+    // fire (whose preventDefault would also cancel the button's own click).
+    const pad = e.key === ' ' && !e.ctrlKey && target ? padButtons.get(target) : undefined;
+    if (pad) {
+      e.preventDefault();
+      if (!press.repeat) tap(pad);
+      return;
+    }
     // Fire stays a special tap with its own repeat guard, but its keys come
     // from the same table as everything else.
     if (global === 'fire') {
@@ -479,12 +509,18 @@ export function createInput(opts: { touch: boolean; onKeyboard?: () => void }): 
     bindHold(btn, cmd) {
       btn.addEventListener('pointerdown', ev => {
         ev.preventDefault();
-        held.press(cmd);
+        begin(cmd);
         if (ctx.onHold) ctx.onHold(cmd);
       });
       btn.addEventListener('pointerup', () => held.release(cmd));
       btn.addEventListener('pointerleave', () => held.release(cmd));
-      btn.addEventListener('click', ev => { if (ev.currentTarget && ev.currentTarget.blur) ev.currentTarget.blur(); });
+      btn.addEventListener('click', ev => {
+        if (ev.currentTarget && ev.currentTarget.blur) ev.currentTarget.blur();
+        // A pointer already held it; a click with no pointer behind it is a tap.
+        if (ev.detail !== 0) return;
+        tap(cmd);
+      });
+      padButtons.set(btn, cmd);
     },
   };
 }

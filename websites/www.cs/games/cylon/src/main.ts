@@ -38,6 +38,7 @@ import { renderHelp } from './ui/help.tsx';
 import * as state from './state.ts';
 import { createScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
 import { exitApp, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
+import { followPage } from '../../_kit/page-life.ts';
 import { mountInstallBar } from '../../_kit/ui/install-bar.tsx';
 import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS } from '../../_kit/install.ts';
 import type { Timer } from './types.ts';
@@ -644,23 +645,62 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         if (helpRoot) renderHelp(helpRoot, { open: helpOpen, touch: coarsePointer, onClose: closeHelp });
     }
 
+    /** Stops the run's clocks (the attacks, the heal, the holes, the eye); the
+     *  music bed follows sessionActive. resumeGame skews every clock by the pause. */
+    function pauseGame() {
+        if (game.paused) return;
+        game.paused = true;
+        game.pauseStartedAt = Date.now();
+        clearTimeout(game.idleTimer ?? undefined);
+        holes.pause();
+        clearTimeout(missileTimer ?? undefined);
+        clearTimeout(nukeTimer ?? undefined);
+        clearTimeout(healTimer ?? undefined);
+        missileTimer = null;
+        nukeTimer = null;
+        healTimer = null;
+        setEyeTracking(false);
+        audio.syncMusic();
+        updateAbilityButtons();
+    }
+
+    function resumeGame() {
+        if (!game.paused) return;
+        const elapsed = Date.now() - game.pauseStartedAt;
+        applyPauseTimeSkew(elapsed);
+        game.paused = false;
+        game.pauseStartedAt = 0;
+        audio.syncMusic();
+        updateAbilityButtons();
+        syncReticleVisibility();
+    }
+
+    /* A hidden, frozen or closing page pauses a running game the way How to
+       Play does and silences the sound; shown again, the game picks up where
+       it was (unless How to Play is open, which keeps it paused). */
+    let pagePaused = false;
+    function bindPageLife() {
+        followPage({ doc: document, win: window }, {
+            hide() {
+                if (settings.gameEnabled && !game.paused) {
+                    pauseGame();
+                    pagePaused = true;
+                }
+                audio.pageHide();
+            },
+            show() {
+                audio.pageShow();
+                if (pagePaused && !helpOpen) resumeGame();
+                pagePaused = false;
+            },
+            close: audio.pageClose,
+        });
+    }
+
     function openHelp() {
         if (!helpRoot) return;
-        if (!game.paused) {
-            game.paused = true;
-            game.pauseStartedAt = Date.now();
-            clearTimeout(game.idleTimer ?? undefined);
-            holes.pause();
-            clearTimeout(missileTimer ?? undefined);
-            clearTimeout(nukeTimer ?? undefined);
-            clearTimeout(healTimer ?? undefined);
-            missileTimer = null;
-            nukeTimer = null;
-            healTimer = null;
-            setEyeTracking(false);
-            audio.syncMusic();
-            updateAbilityButtons();
-        }
+        pauseGame();
+        pagePaused = false;
         // Safari and iOS leave a clicked button unfocused; the dialog returns focus to what was focused when it opened.
         helpBtn?.focus();
         helpOpen = true;
@@ -671,15 +711,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         if (!helpOpen) return;
         helpOpen = false;
         drawHelp();
-        if (game.paused) {
-            const elapsed = Date.now() - game.pauseStartedAt;
-            applyPauseTimeSkew(elapsed);
-            game.paused = false;
-            game.pauseStartedAt = 0;
-            audio.syncMusic();
-            updateAbilityButtons();
-            syncReticleVisibility();
-        }
+        resumeGame();
     }
 
     function bindHelp() {
@@ -1062,6 +1094,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     bindPlayScrollLock();
     bindNavMenu();
     bindHelp();
+    bindPageLife();
     mountInstall();
     resizeBattlefield();
     updateHitsUi();

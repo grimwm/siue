@@ -343,7 +343,7 @@ final class RoomWallsTest extends TestCase
         $this->gap();
         $this->assertSame(403, $this->call('walls', $ask, ['HTTP_ORIGIN' => 'https://evil.example'])[0], 'origin');
         $this->assertSame(403, $this->call('walls', ['csrf' => 'nope'] + $ask)[0], 'CSRF');
-        $this->assertSame(401, $this->call('walls', ['token' => 'nope'] + $ask)[0], 'seat token');
+        $this->assertSame(404, $this->call('walls', ['token' => 'nope'] + $ask)[0], 'seat token');
         $this->gap();
         [$st, $out] = $this->call('walls', ['token' => $guest['token']] + $ask);
         $this->assertSame([403, ['error' => 'only the host picks the walls']], [$st, $out], 'host only');
@@ -354,7 +354,7 @@ final class RoomWallsTest extends TestCase
         $this->gap();
         $this->assertSame(200, $this->call('walls', $ask)[0]);
         [$room, $lock] = room_load($host['code']);
-        $room['seats'][0]['lastAct'] = microtime(true);
+        $room['seats'][0]['lastAct'] = microtime(true) + 3600; // an hour ahead: still inside the spacing however slowly the next request starts
         room_save($lock, $host['code'], $room);
         room_unlock($lock);
         $this->assertSame(429, $this->call('walls', ['walls' => 'spring'] + $ask)[0], 'rate');

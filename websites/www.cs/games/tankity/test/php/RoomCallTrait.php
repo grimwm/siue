@@ -24,6 +24,13 @@ trait RoomCallTrait
         return $this->collect($this->launch($action, $body, $server, $env));
     }
 
+    /** @return array{int, array} rooms.php as a GET request: $query is the whole query
+        string (action included), $server any request headers (HTTP_*) */
+    private function get(array $query, array $server = [], array $env = []): array
+    {
+        return $this->collect($this->launch((string) ($query['action'] ?? ''), [], $server, $env, $query));
+    }
+
     /** @return array{c: string, n: list<int>} a $action ('create' or 'join') puzzle asked
         for as $server and solved here: the first POW_COUNT nonces from 0 up */
     private function solve(string $action, array $server = [], array $env = []): array
@@ -42,15 +49,17 @@ trait RoomCallTrait
     }
 
     /** @return array{resource, array} a request started and still running, for collect().
-        `challenge` is a GET whose body is its query; every other action is a POST. */
-    private function launch(string $action, array $body, array $server = [], array $env = []): array
+        `challenge` is a GET whose body is its query, and $query makes any action a GET
+        with that query; every other action is a POST. */
+    private function launch(string $action, array $body, array $server = [], array $env = [], ?array $query = null): array
     {
-        $get = $action === 'challenge' ? ['action' => $action] + $body : ['action' => $action];
+        $get = $query ?? ($action === 'challenge' ? ['action' => $action] + $body : ['action' => $action]);
+        $isGet = $query !== null || $action === 'challenge';
         $script = 'register_shutdown_function(static function () { while (ob_get_level()) { ob_end_flush(); } echo "\n", http_response_code(); });'
             . 'require ' . var_export(__DIR__ . '/scores-stdin.php', true) . ';'
             . '$_SERVER = ' . var_export($server + ['CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => '203.0.113.9',
                 'HTTP_HOST' => 'www.cs.siue.edu', 'HTTP_ORIGIN' => 'https://www.cs.siue.edu'], true) . ' + $_SERVER;'
-            . '$_SERVER["REQUEST_METHOD"] = ' . var_export($action === 'challenge' ? 'GET' : 'POST', true) . '; $_GET = ' . var_export($get, true) . ';'
+            . '$_SERVER["REQUEST_METHOD"] = ' . var_export($isGet ? 'GET' : 'POST', true) . '; $_GET = ' . var_export($get, true) . ';'
             . 'require ' . var_export(dirname(__DIR__, 2) . '/rooms.php', true) . ';';
         // The puzzle runs at 2 bits here, so solving it in PHP takes microseconds.
         $proc = proc_open([PHP_BINARY, '-d', 'zlib.output_compression=0', '-r', $script],

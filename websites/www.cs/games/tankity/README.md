@@ -84,7 +84,10 @@ The default is the `data-theme` on `<html>` in `index.html`
 which a test holds equal; a missing or unknown saved word reads as Orange. An
 inline script in the head swaps in the saved preset, or the saved Custom
 palette, before the stylesheet loads, so the page never paints the default
-first; `src/theme.ts` saves a pick and sets the attribute at once.
+first; `src/theme.ts` saves a pick and sets the attribute at once. When the
+menu starts it shows the saved choice again (`apply()`), so a Custom whose
+saved palette was missing or malformed is painted anyway and its palette
+saved again, and the page always wears what the menu shows.
 
 Game speed: the FF button at the battlefield's top right, just under the status bar, reads 1×, 2× or 4×; each tap, or X, goes 1× → 2× → 4× → 1×. The war plays that many times as fast (shell flight, falls and parachutes, burns, the earth settling, effects, the drones' aiming and the settle, name cards and chatter) and ends exactly as it would at 1×: the solo war runs more of its fixed 1/60 s steps per frame, never a longer step. Your own aiming and driving, the camera, the music, the turn clocks and the shop clock keep wall time. Solo, the speed is yours, kept in this browser (`tankity-speed`); the demo always plays at 1×. In a room it is the room's: rooms start at 1×, the host turns it at any time (one log line tells everyone), and every client replays at it; a guest's button shows the room's speed and says the host sets it.
 
@@ -444,8 +447,9 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   check, in this order: the origin; `proto: 2` (426 with the reload line);
   the room puzzle's format, MAC, age and work (403 or 422); a puzzle already
   spent, from a plain read (409); for a create, its address's lobbies and a
-  busy pool (429, 409); then the allowance. Everything before the allowance
-  is uncharged. The allowance and the puzzle are spent together in one write
+  busy pool (429, 409), then its initials and hills (422); for a join, the
+  code's shape and the initials (422); then the allowance. Everything before
+  the allowance is uncharged. The allowance and the puzzle are spent together in one write
   transaction, so a replay that races the plain read is refused (409) with
   nothing charged. A spent allowance is
   refused from a plain read, so a flood past it never takes the write lock.
@@ -453,6 +457,14 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   (other acts retry a 429 or 503 up to three times). The docker stack
   (`compose.yaml`, local and CI) sets the allowance to 100000, since every
   test run hosts and joins from the same addresses.
+- Only a seat reads or acts in its room. `state` and every seated act answer
+  a request whose seat token holds no seat there (none, a made-up one, one
+  given up) with the same 404 `no such room` as a code nobody holds, so a
+  code is found only by a paid join. Who is asking is settled from a plain
+  read before the write lock (`room_gate`), so a stranger never queues behind
+  the one writer; the seat and the CSRF token are checked again under the
+  lock. A state poll sends its seat token in the `X-Seat-Token` header, never
+  the URL, which access logs keep; POSTs carry it in the body.
 - The server settles a whole turn per request. Every event it emits carries
   `at` (seconds into the volley); shot events carry their flight path, launch
   and landing times, and blast radius. Clients replay each volley at real
@@ -462,11 +474,13 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   create and ping) and the load check share. A lobby expires `room_live_secs`
   after its last touch (seated polls heartbeat it). A running room (play,
   shop) expires `max(room_live_secs, humans x turn time)` after the last
-  turn-moving act (`acted`): create, join, start, play again, the host's
-  lobby settings (hills, seats, turn time, speed, walls), buying, Ready, and an aim,
+  turn-moving act (`acted`): create, join, start, play again, a host's lobby
+  setting that changes something (hills, seats, turn time, speed, walls),
+  buying, Ready, and an aim,
   drive, fire or gun loaded on one's own turn. The menu flag, a new look,
-  leaving, a gun loaded while someone else is up, polls, `mine` and timeouts
-  never count. The end of a match counts as an act, and a finished room (over)
+  leaving, a gun loaded while someone else is up, a setting that changes
+  nothing, the host's settings once the match has begun, polls, `mine` and
+  timeouts never count. The end of a match counts as an act, and a finished room (over)
   lasts one live window after it, so its places come back soon. There is no
   total-age cap.
 - A `state` poll of a running room is a read: it takes the write lock and
@@ -489,7 +503,9 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   it lands right behind an aim tap). In the lobby the chair resets to a drone
   seat (a host leaving the lobby closes the room, since nobody else can start
   it). Once the match has begun the seat, host included, becomes a drone and the
-  match carries on; nothing after the lobby is host-only. The last human out
+  match carries on, the host role passing to the lowest-numbered human left. The
+  host keeps the turn time and speed in every phase and the walls between
+  rounds; everything else after the lobby is anyone's. The last human out
   removes the room.
 - Turn clock: a human's turn runs for the room's turn time (`turnSecs`, one of
   `ROOM_TURN_STOPS`: 1 min, 2 min by default, 10 min, 30 min, 8 h, 24 h, 1
@@ -569,7 +585,7 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   - `rooms.php` keeps `terrainRev` in the room, raised by
     `room_terrain_changed` whenever the hills change (a crater that really
     carved, a new round). Every snapshot names the current `terrainRev`.
-  - Polls (query) and room-answering POSTs (`start`, `act`, `buy`, `ready`,
+  - Polls (query; the seat token in `X-Seat-Token`) and room-answering POSTs (`start`, `act`, `buy`, `ready`,
     `body`, `map`, `seatmode`; body) carry `since` (the newest event seen),
     `have` (the `terrainRev` held; absent while holding no hills) and `full=1`.
     `room_want` reads them, `room_reply_snapshot` answers.
@@ -883,14 +899,18 @@ people play together, and waiting costs little.
   409 "Every match slot is in play. Try again in a few minutes." A room played
   within its floor is never closed, and an active long game outlives a stale
   short one.
-- **What counts as playing** (`acted`): create, join, Start, Play again, the
-  host's lobby settings, buying, Ready, and an aim, drive, fire or gun loaded
-  on one's own turn. The menu flag, a new look, a gun loaded while someone else
-  is up, leaving, polls, `mine` and timeouts keep a room alive for nobody.
+- **What counts as playing** (`acted`): create, join, Start, Play again, a
+  host's lobby setting that changes something, buying, Ready, and an aim,
+  drive, fire or gun loaded on one's own turn. The menu flag, a new look, a
+  gun loaded while someone else is up, a setting that changes nothing, the
+  host's turn time, speed and walls once the match has begun, leaving, polls,
+  `mine` and timeouts keep a room alive for nobody; a setting that changes
+  nothing is not even saved.
 - **Tombstones.** A room or lobby closed to make space leaves a row in
   `closed` for 14 days: the hashes of its human seats' tokens. `state`, every
   seated act and `mine` answer such a seat's token with `closed: "space"`
-  beside "no such room"; anyone else learns nothing more. The code is never
+  beside "no such room"; anyone else, a token that holds no seat in a live
+  room included, hears the plain 404 a code nobody holds gets. The code is never
   drawn for a new room while its tombstone lasts, and a tombstone never makes a
   code joinable. Housekeeping drops old tombstones.
 - **The room puzzle.** Creating or joining a room costs a small proof of
@@ -950,11 +970,15 @@ people play together, and waiting costs little.
   codes keep working until they end: the server takes 4 or 6. The lobby shows
   a code in two halves (`K7Q 2MX`), and the code box takes it in any case,
   with spaces or hyphens.
-- **Guessing codes.** A join's puzzle is checked before its code is looked
+- **Guessing codes.** Only a join finds a code: `state` and every seated act
+  answer a request that holds no seat there exactly as they answer a code
+  nobody holds (above). A join's puzzle is checked before its code is looked
   up, so a guess without the work gets the same 422 for a live code, a
   made-up one and a malformed one, and a solved puzzle buys one lookup (it is
-  spent even when the code is not found). Started matches refuse joins, so
-  only the at most `max_lobbies` lobbies can be found. With one IPv6 /56 (256
+  spent even when the code is not found). A started match answers a join 409
+  "match already started", so a paid guess can learn a code is in play, but
+  nothing about it: its state and acts answer only its seats. Only the at
+  most `max_lobbies` lobbies can be joined. With one IPv6 /56 (256
   `/64` allowances of 300 joins an hour, 76,800 guesses an hour) and 100
   lobbies open, a hit comes every 115 hours or so, and each guess first costs
   a join puzzle. A hit buys one seat in a stranger's lobby, where the host sees
@@ -1447,7 +1471,9 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
   handler per command) and an `InputContext` (`shopLive`, `modalOpen`/`modalBack`,
   `onHold`); `bind(window)` listens (no key listeners on a touch-only screen, but
   blur still drops the held keys); `bindHold(button, command)` makes an
-  on-screen pad button hold a command while the pointer is down; `held` is the
+  on-screen pad button hold a command while the pointer is down, and a click
+  with no pointer behind it (Enter or Space on the focused button, a screen
+  reader, a switch) hold it for one `HOLD_TAP_MS` (150 ms) tap; `held` is the
   set of held aim and drive commands; `lookup`, `hint` and `setKeys` serve the
   key table (Shift+ and Ctrl+ tokens win while that modifier is held, then
   `event.code`, then `event.key`). A handler returns `true` when it used the key
@@ -1565,6 +1591,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `RoomFilingTest` (host PHP) | A match two or more humans started files each human once on its Difficulty's board, the winner before the eliminated, a leaver not at all but the winner of a forfeit still; a match one human started files nothing and marks `filedLocal`; a failed filing logged and read as not filed |
 | `RoomSchemaTest` (host PHP) | Schema step 8: the `phase`, `acted` and `turn_secs` columns, backfilled from live rows and written by every save, `closed` and `pow_used`, and `room_acted` reading the older key |
 | `RoomLobbyPoolTest` (host PHP) | The lobby pool through `rooms.php`: lobbies hold no slot, four per address, a flood never closes a fresh attended lobby (uncharged 409), dead then idle then old, Play again takes a place and counts against its host's lobbies, tombstones answer only their seats (state, acts, `mine`), block the code and expire |
+| `RoomExposureTest` (host PHP) | What a request without a seat learns or costs: `state` and every seated act answer a stranger (no token, a made-up one, with or without an Origin) the same 404 as a code nobody holds, before the write lock; a state poll's token read from `X-Seat-Token`, never the URL; a host setting that changes nothing, and any setting once the match has begun, never stamping `acted`; a Start or Play again whose save fails closing nobody and charging nothing; a create or join with bad initials, hills or a malformed code refused uncharged |
 | `RoomLocalStartTest` (host PHP) | Start with the host alone: `local` with the room's Difficulty, speed and Walls, the lobby closed with no tombstone and no slot or lobby place held, open seats no bar; without `proto: 2` a 426 with the reload line and the lobby kept; origin, CSRF, seat token and host-only before anything closes; two humans from one address take a slot; two humans without `proto` start as before |
 | `RoomReclaimTest` (host PHP) | Match slots and reclaim: the floor, the tier order on a fixed clock, an active long game outliving a stale short one, ties by code, thirteen addresses unable to hold every slot, a played hold as the residual, no Start evicting a room within its floor, Start's gates before any slot, the hosting cap at Start, Play again giving the slot back, and two racing Starts never both winning or reclaiming one room twice |
 | `RoomPowTest` (host PHP) | The room puzzle on a fixed clock: a challenge signed and bound to its purpose and address (an edited difficulty, purpose or time, or another address, is `puzzle-bad`), solutions checked (short, repeated, wrong), an old or future-dated challenge refused by the server's clock alone, a replay refused and housekept, the difficulty rising under load by at most two bits, 0 turning it off, and `protocol/pow-vectors.json` |

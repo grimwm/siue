@@ -1,7 +1,7 @@
 // Operation Tankity rooms: two real browsers in one room.
 import { test, expect } from '@playwright/test';
 import type { Browser, APIRequestContext, Page } from '@playwright/test';
-import { roomPair, hud, rec, resetRec, shellTrack, bowFromChord, holdBarrel, expectFullSwing, aimTo, setPower, groundProbe, newPlayer, setInitials } from './helpers.ts';
+import { roomPair, stateGet, hud, rec, resetRec, shellTrack, bowFromChord, holdBarrel, expectFullSwing, aimTo, setPower, groundProbe, newPlayer, setInitials } from './helpers.ts';
 import { roomView, views } from './rooms-shop-helpers.ts';
 
 const myTurn = (page: Page) => hud(page, 'hud-turn').then(t => /YOU\. Aim!/.test(t));
@@ -101,11 +101,13 @@ test('closing every player tab keeps the room', async ({ browser, request }) => 
   const used = async () => (await (await request.get('games/tankity/rooms.php?action=ping')).json()).rooms.used;
   const { host, guest, code } = await roomPair(browser);
   const withRoom = await used();
+  // Only a seat reads its room: the host's, from the seats its browser keeps.
+  const seat = await host.page.evaluate((c: string) => (JSON.parse(localStorage.getItem('tankity-seats') || '{}').seats || []).find((s: { code: string }) => s.code === c), code);
   await guest.page.close();
   await host.page.close();
   await new Promise(r => setTimeout(r, 5000));
   expect(await used()).toBe(withRoom);
-  const still = await (await request.get(`games/tankity/rooms.php?action=state&code=${code}&since=0`)).json();
+  const still = await (await stateGet(request, code, seat.token, '&since=0')).json();
   expect(still.ok).toBe(true);
   expect(still.room.phase).toBe('play');
   await guest.ctx.close();
@@ -176,7 +178,7 @@ test('a host alone plays here: Start closes the lobby, takes no slot, and the ma
   const after = await occupancy(request);
   expect(after.rooms.used, 'no match slot taken').toBe(before.rooms.used);
   expect(after.lobbies.used, 'the lobby closed').toBe(before.lobbies.used - 1);
-  const gone = await request.get(`games/tankity/rooms.php?action=state&code=${code}&token=${seat.token}`);
+  const gone = await stateGet(request, code, seat.token);
   expect(gone.status()).toBe(404);
   expect(await gone.json()).toEqual({ error: 'no such room' });
   // Not in Your games: this browser holds no seat there.
@@ -198,7 +200,7 @@ test('an old tab starting alone is told to reload, and its lobby stays', async (
   await host.page.click('#lobby-start');
   await expect(host.page.locator('#lobby-status')).toHaveText('Tankity was updated. Reload the page to keep playing.');
   await expect(host.page.locator('#lobby-veil')).toBeVisible();
-  const still = await (await request.get(`games/tankity/rooms.php?action=state&code=${code}&token=${seat.token}`)).json();
+  const still = await (await stateGet(request, code, seat.token)).json();
   expect(still.room.phase).toBe('lobby');
   expect(host.errors).toEqual([]);
   await host.ctx.close();

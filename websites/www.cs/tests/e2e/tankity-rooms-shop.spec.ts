@@ -2,7 +2,7 @@
 // ready (or after 90 s), and Ready is a toggle until the last player presses it.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { roomPair } from './helpers.ts';
+import { roomPair, stateToken } from './helpers.ts';
 import { shopOpen, reachShop, loseRound, roomView, seatedPair } from './rooms-shop-helpers.ts';
 
 test('the shop starts the next round when everyone is ready, and Ready can be taken back until then', async ({ browser }) => {
@@ -13,7 +13,7 @@ test('the shop starts the next round when everyone is ready, and Ready can be ta
   }));
   // Each client's seat token rides on its state polls.
   for (const pl of [host, guest]) {
-    pl.page.on('request', r => { const m = r.url().match(/action=state.*[?&]token=([0-9a-f]+)/); if (m) pl.token = m[1]; });
+    pl.page.on('request', r => { const t = stateToken(r); if (t) pl.token = t; });
   }
   await expect.poll(() => host.token && guest.token, { timeout: 15_000 }).toBeTruthy();
   await reachShop(host, guest, code, roomState);
@@ -83,7 +83,7 @@ test('a lost round goes through the shop too: a life gone, then everyone ready s
     beforeStart: async ({ host }) => { await host.page.locator('#lobby-seats .seat-tile').nth(3).click(); },
   }));
   for (const pl of [host, guest]) {
-    pl.page.on('request', r => { const m = r.url().match(/action=state.*[?&]token=([0-9a-f]+)/); if (m) pl.token = m[1]; });
+    pl.page.on('request', r => { const t = stateToken(r); if (t) pl.token = t; });
   }
   await expect.poll(() => host.token && guest.token, { timeout: 15_000 }).toBeTruthy();
   const round = roomView(roomState.host).round;

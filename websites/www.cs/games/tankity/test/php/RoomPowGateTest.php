@@ -185,8 +185,8 @@ final class RoomPowGateTest extends TestCase
         $this->assertSame(200, $st, json_encode($in));
         $this->assertSame($host['code'], $in['code']);
         // state reads both lengths, and the gated acts and mine take the six.
-        foreach (['WXYZ', $host['code']] as $code) {
-            $this->assertSame(200, $this->raw('state', ['code' => $code], self::GUEST, self::ENV)[0], $code);
+        foreach ([['WXYZ', 'old-token'], [$host['code'], $host['token']]] as [$code, $token]) {
+            $this->assertSame(200, $this->raw('state', ['code' => $code, 'token' => $token], self::GUEST, self::ENV)[0], $code);
         }
         [$st, $mine] = $this->raw('mine', ['seats' => [['code' => strtolower($host['code']), 'token' => $host['token']]]], self::HOST, self::ENV);
         $this->assertSame(200, $st);

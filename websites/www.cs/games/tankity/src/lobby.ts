@@ -625,7 +625,11 @@ export function createLobby(deps: LobbyDeps) {
      marked, until dismissed), and the player lands in the lobby with a line
      saying so, to host or join again. */
   let netMatch = false; // a net match is running on this page (set by startNetMatch, cleared by dropRoom)
-  function netGone(code: string, why: 'closed' | 'seat' | 'space'): void {
+  function netGone(code: string, gone: 'closed' | 'seat' | 'space'): void {
+    /* The server answers a token that holds no seat as it answers a room that
+       is not there; a seat this browser's store no longer holds was given up
+       (Leave in another tab, which shares the store). */
+    const why = gone === 'closed' && !seats.get(code) ? 'seat' : gone;
     if (why === 'space') seats.markClosed(code);
     else seats.forget(code);
     /* A running match's tanks must not fall to the solo engine behind the veil:

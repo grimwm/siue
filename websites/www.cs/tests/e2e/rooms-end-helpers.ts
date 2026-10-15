@@ -3,7 +3,7 @@
 // room server, the way the keyboard would.
 import { expect } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
-import { roomPair } from './helpers.ts';
+import { roomPair, stateToken } from './helpers.ts';
 import type { RoomPair } from './helpers.ts';
 import { landing, withHills, seatedPair, roomView } from './rooms-shop-helpers.ts';
 import type { SeatedPair } from './rooms-shop-helpers.ts';
@@ -21,7 +21,7 @@ export async function endPair(browser: Browser): Promise<SeatedPair> {
     beforeStart: async ({ host }) => { await host.page.locator('#lobby-seats .seat-tile').nth(3).click(); },
   }));
   for (const pl of [pair.host, pair.guest]) {
-    pl.page.on('request', r => { const m = r.url().match(/action=state.*[?&]token=([0-9a-f]+)/); if (m) pl.token = m[1]; });
+    pl.page.on('request', r => { const t = stateToken(r); if (t) pl.token = t; });
   }
   await expect.poll(() => pair.host.token && pair.guest.token, { timeout: 15_000 }).toBeTruthy();
   return pair;

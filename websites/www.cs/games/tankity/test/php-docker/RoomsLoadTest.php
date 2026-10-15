@@ -74,13 +74,14 @@ final class RoomsLoadTest extends TestCase
             usleep(200000); // past the 150 ms act spacing a fresh seat starts under
             [$st, $out] = $this->post('start', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']]);
             $this->assertSame(200, $st, json_encode($out));
-            $seats[] = [$host['code'], '', '']; // a fourth player watching: a poll with no seat
+            $seats[] = [$host['code'], '', '']; // a stranger polling the code: answered 404 from a read
         }
         // This run's idle baseline: one seat polling a playing room, one at a time.
         $base = [];
         for ($i = 0; $i < 10; $i++) {
             $t0 = microtime(true);
-            @file_get_contents(self::BASE . '?action=state&code=' . $seats[0][0] . '&token=' . $seats[0][1]);
+            @file_get_contents(self::BASE . '?action=state&code=' . $seats[0][0], false,
+                stream_context_create(['http' => ['header' => 'X-Seat-Token: ' . $seats[0][1] . "\r\n"]]));
             $base[] = (microtime(true) - $t0) * 1000;
         }
         sort($base);
@@ -97,6 +98,7 @@ final class RoomsLoadTest extends TestCase
         $actCodes = [];
         $busy = [];
         $codes = [];
+        $strangerCodes = [];
         $lat = [];
         $active = [];
         $start = microtime(true);
@@ -109,8 +111,9 @@ final class RoomsLoadTest extends TestCase
             foreach ($seats as $k => [$code, $token]) {
                 $live = $now < $end || (min($polled) < self::MIN_POLLS_PER_SEAT && $now < $start + self::MAX_RUN_SECS);
                 if ($live && $now >= $next[$k] && !isset($active[$k])) {
-                    $h = curl_init(self::BASE . '?action=state&code=' . $code . ($token !== '' ? '&token=' . $token : ''));
-                    curl_setopt_array($h, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
+                    $h = curl_init(self::BASE . '?action=state&code=' . $code);
+                    curl_setopt_array($h, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10,
+                        CURLOPT_HTTPHEADER => $token !== '' ? ['X-Seat-Token: ' . $token] : []]);
                     curl_multi_add_handle($mh, $h);
                     $active[$k] = [$h, $now];
                     $next[$k] = $now + self::POLL_SECS;
@@ -140,7 +143,11 @@ final class RoomsLoadTest extends TestCase
                 foreach ($active as $k => [$h, $t0]) {
                     if ($h === $info['handle']) {
                         $status = (int) curl_getinfo($h, CURLINFO_RESPONSE_CODE);
-                        $codes[] = $status;
+                        if ($seats[$k][1] !== '') {
+                            $codes[] = $status;
+                        } else {
+                            $strangerCodes[] = $status;
+                        }
                         $polled[$k]++;
                         $lat[] = (microtime(true) - $t0) * 1000;
                         if ($status === 503) {
@@ -165,6 +172,7 @@ final class RoomsLoadTest extends TestCase
         $this->assertGreaterThanOrEqual(self::MIN_POLLS_PER_SEAT, min($polled), 'every player polled');
         $this->assertSame([], $busy, 'no poll answered 503');
         $this->assertSame([200], array_values(array_unique($codes)));
+        $this->assertSame([404], array_values(array_unique($strangerCodes)), 'a stranger learns nothing');
         $this->assertNotEmpty($actCodes, 'the humans acted');
         $this->assertSame([], array_diff($actCodes, [200, 409]), 'an act is accepted or told it is not the seat\'s turn, never busy');
         fwrite(STDERR, sprintf("\nRoomsLoadTest: %d polls, %d acts, baseline %.0f ms, median %.0f ms, p95 %.0f ms, max %.0f ms\n",

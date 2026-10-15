@@ -2,7 +2,7 @@
 // turn toast, and the host's turn time reaching everyone.
 import { test, expect } from '@playwright/test';
 import type { Page, APIRequestContext } from '@playwright/test';
-import { roomPair, hud } from './helpers.ts';
+import { roomPair, hud, stateToken } from './helpers.ts';
 import { roomView } from './rooms-shop-helpers.ts';
 
 const storedSeat = (page: Page, code: string) => page.evaluate((c: string) => {
@@ -24,10 +24,7 @@ test('the room link brings a closed tab back to its seat', async ({ browser, req
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   const tokens: (string | null)[] = [];
-  page.on('request', r => {
-    const u = new URL(r.url());
-    if (u.pathname.endsWith('rooms.php') && u.searchParams.get('action') === 'state') tokens.push(u.searchParams.get('token'));
-  });
+  page.on('request', r => { const t = stateToken(r); if (t !== null) tokens.push(t); });
   await page.goto(`games/tankity/?code=${code}`);
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/ABC aiming|YOU\. Aim!/);
   await expect(page.locator('#join-form')).toBeHidden();

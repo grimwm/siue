@@ -153,8 +153,10 @@ final class RoomGuardTest extends TestCase
             $this->assertSame([409, ['error' => 'Every lobby is busy. Try again in a minute.']], [$st, $out]);
         }
         $this->assertSame(1, $this->roomCharges(), 'only the create that made a room was charged');
-        // Everything else is still charged: a join refused for a bad code costs one.
+        // A malformed code is refused uncharged; a guess at a well-formed one costs one.
         $this->assertSame(422, $this->call('join', ['code' => '??', 'initials' => 'gst'], [], $env)[0]);
+        $this->assertSame(1, $this->roomCharges());
+        $this->assertSame(404, $this->call('join', ['code' => 'ZZZZZZ', 'initials' => 'gst'], [], $env)[0]);
         $this->assertSame(2, $this->roomCharges());
     }
 

@@ -127,6 +127,23 @@ test('a room swept while its lobby shows: the seat is dropped and the lobby says
   assert.equal(r.$('lobby-veil').hidden, false, 'back in the lobby, out of the room');
 });
 
+test('a seat given up in another tab: the server answers it as no room, and the lobby says the seat went', async () => {
+  let gone = false;
+  const r = rig(url => {
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    // The server answers a token that holds no seat exactly as a code nobody holds.
+    if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room' } };
+    return ok({ ok: true, room: lobbyRoom() });
+  });
+  await r.lobby.resumeRoom('AB3D');
+  r.seats.forget('AB3D'); // Leave in the other tab, which shares the stored seats
+  gone = true;
+  await r.tick();
+  assert.equal(r.net.code, '');
+  assert.match(r.$('lobby-status').textContent, /Your seat in room AB3D was given up/);
+});
+
 test('a room swept under a running match ends the match before the lobby opens: no ghost field', async () => {
   let gone = false;
   const playing = lobbyRoom({ phase: 'play' });

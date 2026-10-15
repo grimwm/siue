@@ -158,7 +158,7 @@ function replyError(data: Record<string, unknown>): Error {
 export function prettyRoomError(err: unknown): string {
   const m = String((err && (err as { message?: unknown }).message) || err || '');
   if (/too fast/.test(m)) return 'Easy on the trigger. Give it a beat and try again.';
-  if (/bad seat token|bad csrf token|bad origin/.test(m)) return 'Room session went stale. Leave the room and come back in.';
+  if (/bad csrf token|bad origin/.test(m)) return 'Room session went stale. Leave the room and come back in.';
   return m || 'The room server did not answer properly. Solo hills still work.';
 }
 
@@ -364,13 +364,13 @@ export class RoomClient {
     void this.refresh();
   }
 
-  /** The room as this seat sees it (events newer than the cursor). */
+  /** The room as this seat sees it (events newer than the cursor). The seat
+   * token rides in a header, never the URL, which access logs keep. */
   async getState(): Promise<RoomSnapshot> {
     const h = this.holdings();
-    const q = 'action=state&code=' + encodeURIComponent(this.code) +
-      '&token=' + encodeURIComponent(this.token) + '&since=' + h.since +
+    const q = 'action=state&code=' + encodeURIComponent(this.code) + '&since=' + h.since +
       (h.have !== undefined ? '&have=' + h.have : '') + (h.full ? '&full=1' : '');
-    const { res, data } = await this.fetchJson('rooms.php?' + q, { headers: { Accept: 'application/json' } });
+    const { res, data } = await this.fetchJson('rooms.php?' + q, { headers: { Accept: 'application/json', 'X-Seat-Token': this.token } });
     if (!res.ok || !data.ok) throw replyError(data);
     this.handlers.onReachable(true);
     this.needFull = false;

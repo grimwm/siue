@@ -343,7 +343,7 @@ final class RoomWallsTest extends TestCase
         $this->gap();
         $this->assertSame(403, $this->call('walls', $ask, ['HTTP_ORIGIN' => 'https://evil.example'])[0], 'origin');
         $this->assertSame(403, $this->call('walls', ['csrf' => 'nope'] + $ask)[0], 'CSRF');
-        $this->assertSame(401, $this->call('walls', ['token' => 'nope'] + $ask)[0], 'seat token');
+        $this->assertSame(404, $this->call('walls', ['token' => 'nope'] + $ask)[0], 'seat token');
         $this->gap();
         [$st, $out] = $this->call('walls', ['token' => $guest['token']] + $ask);
         $this->assertSame([403, ['error' => 'only the host picks the walls']], [$st, $out], 'host only');

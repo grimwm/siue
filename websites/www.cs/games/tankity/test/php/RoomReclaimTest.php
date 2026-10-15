@@ -271,7 +271,7 @@ final class RoomReclaimTest extends TestCase
         $seat = ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']];
         $tries = [
             [403, 'bad origin', $seat, ['HTTP_ORIGIN' => 'https://evil.example']],
-            [401, 'bad seat token', ['token' => str_repeat('ab', 32)] + $seat, []],
+            [404, 'no such room', ['token' => str_repeat('ab', 32)] + $seat, []],
             [403, 'bad csrf token', ['csrf' => 'nope'] + $seat, []],
             [403, 'only the host starts the match', ['code' => $host['code'], 'token' => $guest['token'], 'csrf' => $guest['csrf']], []],
         ];

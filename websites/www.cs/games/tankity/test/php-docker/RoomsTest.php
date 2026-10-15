@@ -92,9 +92,11 @@ final class RoomsTest extends TestCase
         room_test_age($c, 3600);
     }
 
-    private static function get(string $url, int $timeout = 5): mixed
+    /* A GET; a state poll's seat token rides in X-Seat-Token, as the client sends it. */
+    private static function get(string $url, int $timeout = 5, string $token = ''): mixed
     {
-        $ctx = stream_context_create(['http' => ['timeout' => $timeout, 'ignore_errors' => true]]);
+        $ctx = stream_context_create(['http' => ['timeout' => $timeout, 'ignore_errors' => true,
+            'header' => $token === '' ? '' : "X-Seat-Token: $token\r\n"]]);
         $raw = @file_get_contents($url, false, $ctx);
         return $raw === false ? null : json_decode($raw, true);
     }
@@ -122,9 +124,10 @@ final class RoomsTest extends TestCase
     }
 
     /** @return array{list<string>, string} the response headers and body */
-    private static function rawGet(string $url, string $accept): array
+    private static function rawGet(string $url, string $accept, string $token = ''): array
     {
-        $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true, 'header' => $accept === '' ? '' : "Accept-Encoding: $accept\r\n"]]);
+        $header = ($accept === '' ? '' : "Accept-Encoding: $accept\r\n") . ($token === '' ? '' : "X-Seat-Token: $token\r\n");
+        $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true, 'header' => $header]]);
         $body = @file_get_contents($url, false, $ctx);
         return [$http_response_header ?? [], $body === false ? '' : $body];
     }
@@ -177,7 +180,7 @@ final class RoomsTest extends TestCase
         // An untouched record is truly gone: the sweep drops it, freeing the slot.
         $ping = self::get(self::$base . '/rooms.php?action=ping');
         self::assertTrue(($ping['lobbies']['used'] ?? -1) === 0, 'stale-not-counted');
-        $gone = self::get(self::$base . '/rooms.php?action=state&code=' . $code . '&token=' . $token . '&since=0');
+        $gone = self::get(self::$base . '/rooms.php?action=state&code=' . $code . '&since=0', 5, $token);
         self::assertTrue(($gone['error'] ?? '') === 'no such room', 'stale-unreachable' . ' :: ' . ($gone['error'] ?? ''));
     }
 
@@ -187,7 +190,7 @@ final class RoomsTest extends TestCase
         $room = self::post('create', ['initials' => 'qrs', 'difficulty' => 'hard']);
         $code = (string) ($room['code'] ?? '');
         $token = (string) ($room['token'] ?? '');
-        $state = self::get(self::$base . '/rooms.php?action=state&code=' . $code . '&token=' . $token . '&since=0');
+        $state = self::get(self::$base . '/rooms.php?action=state&code=' . $code . '&since=0', 5, $token);
         self::assertTrue(($state['ok'] ?? false) === true, 'heartbeat-ok');
         self::assertTrue(self::storedDifficulty($code) === 'hard', 'create-stores-the-hosts-difficulty' . ' :: ' . self::storedDifficulty($code));
         self::assertTrue(($state['room']['difficulty'] ?? null) === 'hard', 'snapshot-shows-the-difficulty' . ' :: ' . json_encode($state['room']['difficulty'] ?? null));
@@ -232,7 +235,7 @@ final class RoomsTest extends TestCase
         }
         $ping = self::get(self::$base . '/rooms.php?action=ping');
         self::assertTrue(($ping['lobbies']['used'] ?? -1) === 0, 'sweep-frees-cap' . ' :: ' . 'used=' . ($ping['lobbies']['used'] ?? '?'));
-        $gone = self::get(self::$base . '/rooms.php?action=state&code=' . $code . '&token=' . $token . '&since=0');
+        $gone = self::get(self::$base . '/rooms.php?action=state&code=' . $code . '&since=0', 5, $token);
         self::assertTrue(($gone['error'] ?? '') === 'no such room', 'swept-unreachable' . ' :: ' . ($gone['error'] ?? ''));
     }
 
@@ -250,7 +253,7 @@ final class RoomsTest extends TestCase
         self::assertTrue(($match['ok'] ?? false) === true && ($guest['ok'] ?? false) === true && $gseat === 1, 'match-seats' . ' :: ' . 'code=' . $mcode . ' gseat=' . $gseat);
         self::assertTrue(self::storedDifficulty($mcode) === 'normal', 'a-joiner-cannot-change-the-difficulty' . ' :: ' . self::storedDifficulty($mcode));
         // The host's next poll carries the guest's arrival, so the lobby can say so.
-        $lobby = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
+        $lobby = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&since=0', 5, $mtoken);
         $joins = array_values(array_filter($lobby['room']['events'] ?? [], fn($e) => ($e['t'] ?? '') === 'join'));
         self::assertTrue(count($joins) === 1 && ($joins[0]['seat'] ?? -1) === $gseat && ($joins[0]['seq'] ?? 0) > 0, 'join-event-reaches-the-host' . ' :: ' . json_encode($joins));
         usleep(300000); // seats clock in on create/join; starting is throttled like any other act
@@ -277,7 +280,7 @@ final class RoomsTest extends TestCase
         }
         self::assertTrue(($afterGuest['ok'] ?? false) === true && $turnG === 0 && $aiG >= 1 && $aiG <= 2, 'turn-cycles-past-ai' . ' :: ' . 'turn=' . $turnG . ' ai=' . $aiG);
         usleep(300000);
-        $calm = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
+        $calm = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&since=0', 5, $mtoken);
         $aiC = 0;
         foreach (($calm['room']['events'] ?? []) as $e) {
             if (($e['t'] ?? '') === 'aifire') $aiC++;
@@ -287,23 +290,23 @@ final class RoomsTest extends TestCase
         // names the terrainRev it holds (have); the reply leaves terrain out when that
         // is the room's revision, and always names the revision. full=1, another
         // revision, or a missing have gets everything.
-        $dUrl = self::$base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken;
-        $dFull = self::get($dUrl . '&since=0');
+        $dUrl = self::$base . '/rooms.php?action=state&code=' . $mcode;
+        $dFull = self::get($dUrl . '&since=0', 5, $mtoken);
         $dRev = $dFull['room']['terrainRev'] ?? null;
         self::assertTrue(is_int($dRev) && is_array($dFull['room']['terrain'] ?? null) && count($dFull['room']['terrain']) === 720
             && !isset($dFull['room']['resync']), 'delta-first-poll-is-full' . ' :: ' . json_encode([$dRev, count($dFull['room']['terrain'] ?? [])]));
-        $dLean = self::get($dUrl . '&since=0&have=' . $dRev);
+        $dLean = self::get($dUrl . '&since=0&have=' . $dRev, 5, $mtoken);
         self::assertTrue(($dLean['ok'] ?? false) === true && !array_key_exists('terrain', $dLean['room'] ?? [])
             && ($dLean['room']['terrainRev'] ?? null) === $dRev && count($dLean['room']['tanks'] ?? []) >= 2, 'delta-omits-terrain-when-rev-matches' . ' :: ' . json_encode(array_keys($dLean['room'] ?? [])));
-        $dOther = self::get($dUrl . '&since=0&have=' . ($dRev + 1));
+        $dOther = self::get($dUrl . '&since=0&have=' . ($dRev + 1), 5, $mtoken);
         self::assertTrue(count($dOther['room']['terrain'] ?? []) === 720 && ($dOther['room']['terrainRev'] ?? null) === $dRev, 'delta-other-rev-gets-terrain');
-        $dForce = self::get($dUrl . '&since=0&full=1&have=' . $dRev);
+        $dForce = self::get($dUrl . '&since=0&full=1&have=' . $dRev, 5, $mtoken);
         self::assertTrue(count($dForce['room']['terrain'] ?? []) === 720 && ($dForce['room']['terrain'] ?? []) === ($dFull['room']['terrain'] ?? null), 'delta-full-1-returns-terrain');
-        $dZero = self::get($dUrl . '&since=0&full=0&have=' . $dRev);
+        $dZero = self::get($dUrl . '&since=0&full=0&have=' . $dRev, 5, $mtoken);
         self::assertTrue(!array_key_exists('terrain', $dZero['room'] ?? []), 'delta-full-0-is-not-full');
         // since cannot be ahead of the room: events were lost (a restarted room), so
         // the answer is a full resync.
-        $dLost = self::get($dUrl . '&since=99999&have=' . $dRev);
+        $dLost = self::get($dUrl . '&since=99999&have=' . $dRev, 5, $mtoken);
         self::assertTrue(($dLost['room']['resync'] ?? false) === true && count($dLost['room']['terrain'] ?? []) === 720, 'delta-stale-since-resyncs-with-terrain' . ' :: ' . json_encode(array_keys($dLost['room'] ?? [])));
         // The same fields ride on the POST actions (act, ready, buy).
         usleep(300000);
@@ -338,14 +341,14 @@ final class RoomsTest extends TestCase
             unset($r['room']['turnLeft'], $r['room']['shopLeft']);
             return $r;
         };
-        [$hPlain, $bPlain] = self::rawGet($dUrl . '&since=0', '');
-        [$hGz, $bGz] = self::rawGet($dUrl . '&since=0', 'gzip');
+        [$hPlain, $bPlain] = self::rawGet($dUrl . '&since=0', '', $mtoken);
+        [$hGz, $bGz] = self::rawGet($dUrl . '&since=0', 'gzip', $mtoken);
         $unz = $bGz === '' ? false : @gzdecode($bGz);
         self::assertTrue(self::headerOf($hPlain, 'Content-Encoding') === '' && is_array(json_decode($bPlain, true)), 'gzip-plain-without-accept-encoding');
         self::assertTrue(strtolower(self::headerOf($hGz, 'Content-Encoding')) === 'gzip' && stripos(self::headerOf($hGz, 'Vary'), 'Accept-Encoding') !== false, 'gzip-content-encoding' . ' :: ' . json_encode($hGz));
         self::assertTrue($unz !== false && self::volatile(json_decode($unz, true)) == self::volatile(json_decode($bPlain, true)), 'gzip-decodes-to-the-same-json' . ' :: ' . ($unz === false ? 'gzdecode failed' : ''));
         self::assertTrue($bGz !== '' && strlen($bGz) * 2 < strlen($bPlain), 'gzip-shrinks-the-reply' . ' :: ' . strlen($bGz) . ' vs ' . strlen($bPlain));
-        [$hErr, $bErr] = self::rawGet(self::$base . '/rooms.php?action=state&code=ZZZZ&token=x', 'gzip');
+        [$hErr, $bErr] = self::rawGet(self::$base . '/rooms.php?action=state&code=ZZZZ', 'gzip');
         $errJson = $bErr === '' ? null : json_decode((string) @gzdecode($bErr), true);
         self::assertTrue(is_array($errJson) && ($errJson['error'] ?? '') === 'no such room' && strtolower(self::headerOf($hErr, 'Content-Encoding')) === 'gzip', 'gzip-errors-compress-too');
         self::assertTrue(strpos($hErr[0] ?? '', '404') !== false, 'gzip-error-status-kept' . ' :: ' . ($hErr[0] ?? ''));
@@ -361,7 +364,7 @@ final class RoomsTest extends TestCase
         // human out closes the room at once, freeing its slot.
         usleep(300000);
         $gLeft = self::post('leave', ['code' => $mcode, 'token' => $gtoken, 'csrf' => $gcsrf]);
-        $after = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
+        $after = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&since=0', 5, $mtoken);
         $gSeat = $after['room']['seats'][1] ?? [];
         self::assertTrue(($gLeft['ok'] ?? false) === true && ($gSeat['human'] ?? true) === false, 'leave-guest-to-battery' . ' :: ' . json_encode($gSeat));
         usleep(300000);
@@ -369,7 +372,7 @@ final class RoomsTest extends TestCase
         $hLeft = self::post('leave', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf]);
         $usedAfter = (self::get(self::$base . '/rooms.php?action=ping')['rooms']['used'] ?? -1);
         self::assertTrue(($hLeft['ok'] ?? false) === true && $usedAfter === $usedBefore - 1, 'leave-last-closes-room' . ' :: ' . "used $usedBefore -> $usedAfter");
-        $gone = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&token=' . $mtoken . '&since=0');
+        $gone = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&since=0', 5, $mtoken);
         self::assertTrue(($gone['error'] ?? '') === 'no such room', 'leave-room-gone' . ' :: ' . ($gone['error'] ?? ''));
     }
 
@@ -382,7 +385,7 @@ final class RoomsTest extends TestCase
         $c2 = (string) ($m2['code'] ?? '');
         self::assertTrue(self::storedTurn($c2) === 120, 'create-with-an-unknown-turn-time-stores-the-default' . ' :: ' . (string) self::storedTurn($c2));
         $h2 = ['code' => $c2, 'token' => (string) ($m2['token'] ?? ''), 'csrf' => (string) ($m2['csrf'] ?? '')];
-        $snap = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $h2['token'] . '&since=0');
+        $snap = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&since=0', 5, $h2['token']);
         self::assertTrue(count(self::seatsOf($snap)) === 4 && self::modeOf($snap, 0) === 'human' && self::modeOf($snap, 1) === 'ai'
             && self::modeOf($snap, 3) === 'ai', 'lobby-four-seats' . ' :: ' . json_encode(self::seatsOf($snap)));
         $g2 = self::post('join', ['code' => $c2, 'initials' => 'smb']);
@@ -406,12 +409,12 @@ final class RoomsTest extends TestCase
         usleep(300000);
         $badMode = self::post('seatmode', $h2 + ['seat' => 2, 'mode' => 'banana']);
         self::assertTrue(isset($badMode['error']), 'seatmode-validates' . ' :: ' . ($badMode['error'] ?? ''));
-        $seen = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $g2a['token'] . '&since=0');
+        $seen = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&since=0', 5, $g2a['token']);
         self::assertTrue(self::modeOf($seen, 2) === 'open' && self::modeOf($seen, 1) === 'human', 'guest-sees-open');
         // The guest steps out of the lobby: the chair goes back to a drone seat.
         usleep(300000);
         self::post('leave', $g2a);
-        $seen = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $h2['token'] . '&since=0');
+        $seen = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&since=0', 5, $h2['token']);
         self::assertTrue(self::modeOf($seen, 1) === 'ai' && (self::seatsOf($seen)[1]['name'] ?? '') !== 'SMB', 'lobby-leave-chair-resets' . ' :: ' . json_encode(self::seatsOf($seen)[1] ?? null));
         // All three other seats open and the host alone: a bundle without the
         // room protocol cannot play that here, so it is told to reload.
@@ -420,7 +423,7 @@ final class RoomsTest extends TestCase
         usleep(300000);
         $lone = self::post('start', $h2);
         self::assertTrue(($lone['reload'] ?? false) === true && strpos($lone['error'] ?? '', 'Reload the page') !== false, 'start-alone-old-bundle-reloads' . ' :: ' . json_encode($lone));
-        $still = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $h2['token'] . '&since=0');
+        $still = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&since=0', 5, $h2['token']);
         self::assertTrue(($still['room']['phase'] ?? '') === 'lobby', 'refused-start-stays-lobby');
         // A guest joins the open chair; humans alone have nobody to fight.
         usleep(300000);
@@ -473,7 +476,7 @@ final class RoomsTest extends TestCase
         $sEvents = array_values(array_filter($sSet['room']['events'] ?? [], fn($e) => ($e['t'] ?? '') === 'speed'));
         self::assertTrue(($sSet['ok'] ?? false) === true && ($sSet['room']['speed'] ?? 0) === 4
             && count($sEvents) === 1 && $sEvents[0]['speed'] === 4 && $sEvents[0]['seat'] === 0, 'speed-host-sets-mid-play' . ' :: ' . json_encode($sSet['room']['speed'] ?? $sSet));
-        $sSeen = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $g3a['token'] . '&since=0');
+        $sSeen = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&since=0', 5, $g3a['token']);
         self::assertTrue(($sSeen['room']['speed'] ?? 0) === 4, 'speed-guest-sees-it' . ' :: ' . json_encode($sSeen['room']['speed'] ?? $sSeen));
 
         // The walls: only the host picks them, never while a round is played; the
@@ -495,7 +498,7 @@ final class RoomsTest extends TestCase
         $hostGone = self::post('leave', $h2);
         $used1 = (self::get(self::$base . '/rooms.php?action=ping')['rooms']['used'] ?? -1);
         self::assertTrue(($hostGone['ok'] ?? false) === true && $used1 === $used0, 'host-leave-keeps-room' . ' :: ' . "used $used0 -> $used1");
-        $after = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&token=' . $g3a['token'] . '&since=0');
+        $after = self::get(self::$base . '/rooms.php?action=state&code=' . $c2 . '&since=0', 5, $g3a['token']);
         $hostTank = null;
         foreach (($after['room']['tanks'] ?? []) as $t) {
             if (($t['seat'] ?? -1) === 0) $hostTank = $t;

@@ -283,3 +283,24 @@ test('createShare, on its own: Web Share with the title and address, then copy, 
   byHand.close();
   assert.equal(byHand.state(), 'idle');
 });
+
+test('createShare: a copy that fails after a newer press succeeded, or after Close, changes nothing', async () => {
+  const clock = manualClock();
+  const how = { title: 'Operation Tankity', shareUrl: 'https://site.test/play/tankity/' };
+  const writes: Array<{ ok: () => void; fail: () => void }> = [];
+  const copy = () => new Promise<void>((ok, fail) => { writes.push({ ok, fail: () => fail(new Error('blocked')) }); });
+  const s = createShare({ share: null, copy, timers: clock.timers }, how, () => {});
+  const first = s.press();
+  const second = s.press();
+  writes[1]?.ok();
+  await second;
+  assert.equal(s.state(), 'copied');
+  writes[0]?.fail();
+  await first;
+  assert.equal(s.state(), 'copied', 'the older press does not turn "Link copied" into the field');
+  const third = s.press();
+  s.close();
+  writes[2]?.fail();
+  await third;
+  assert.equal(s.state(), 'idle', 'a press closed before it answered stays closed');
+});

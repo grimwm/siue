@@ -110,6 +110,8 @@ export interface Share {
 export function createShare(env: ShareEnv, setup: Pick<InstallSetup, 'title' | 'shareUrl'>, onChange: () => void): Share {
   let state: ShareState = 'idle';
   let copiedTimer: number | null = null;
+  /** Each press and each close starts a new attempt; a press still waiting on the browser when another begins is stale and changes nothing. */
+  let attempt = 0;
 
   function set(next: ShareState): void {
     if (copiedTimer !== null) {
@@ -130,27 +132,29 @@ export function createShare(env: ShareEnv, setup: Pick<InstallSetup, 'title' | '
   return {
     state: () => state,
     async press() {
+      const mine = ++attempt;
       if (env.share) {
         try {
           await env.share({ title: setup.title, url: setup.shareUrl });
           return;
         } catch (e) {
-          if (cancelled(e)) return;
+          if (cancelled(e) || mine !== attempt) return;
           // Refused (no gesture left, a blocked sheet): copy instead.
         }
       }
       if (env.copy) {
         try {
           await env.copy(setup.shareUrl);
-          set('copied');
+          if (mine === attempt) set('copied');
           return;
         } catch {
           // A blocked clipboard: show the address to copy by hand.
         }
       }
-      set('field');
+      if (mine === attempt) set('field');
     },
     close() {
+      attempt++;
       if (state !== 'idle') set('idle');
     },
   };

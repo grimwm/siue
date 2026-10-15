@@ -13,7 +13,7 @@ import { DIFFICULTY_NAMES, isDifficulty } from './difficulty.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import type { GameState, GameTank } from './game-types.ts';
 import type { RoomClient } from './net.ts';
-import { THEMES, isTheme, themeSetting } from './theme.ts';
+import { THEMES, isHex, isTheme, themeSetting } from './theme.ts';
 import type { Volume } from './volume.ts';
 import { drawUnitIcon } from './ui/icons.ts';
 import { renderMenu as drawMenu } from './ui/menu.tsx';
@@ -130,6 +130,11 @@ export function createMenu(deps: MenuDeps) {
     sfx.play('click');
     renderMenu();
   }
+  function chooseCustom(hex: string): void {
+    if (!isHex(hex.toLowerCase())) return;
+    theme.setCustom(hex);
+    renderMenu();
+  }
   /* Difficulty: how well the drones aim (ai.ts DIFFICULTY). Kept in this
      browser; the match in progress keeps the aim it was dealt. */
   const DIFFICULTY_CHOICES = DIFFICULTIES.map(key => ({ key, name: DIFFICULTY_NAMES[key] }));
@@ -177,6 +182,8 @@ export function createMenu(deps: MenuDeps) {
       themes: THEMES,
       theme: theme.get(),
       onPickTheme: chooseTheme,
+      customColour: theme.custom(),
+      onPickCustom: chooseCustom,
       difficulties: DIFFICULTY_CHOICES,
       difficulty: difficulty.get(),
       onPickDifficulty: chooseDifficulty,

@@ -73,3 +73,114 @@ test('muting sound silences effects', () => {
   assert.equal(ctx.nodes.length, before);
   setSoundMuted(false);
 });
+
+// ---- the page hiding and coming back ----
+import { pageHide, pageVisible, setMusicMuted } from '../src/audio.ts';
+import { installAudioPage } from '../src/audio-page.ts';
+
+test('hidden suspends the context and plays no effect; visible resumes it', () => {
+  setMusicMuted(false);
+  music.stop();
+  initAudio({ sfx: {}, music: [] });
+  noteGesture(false); // the synth begins
+  const suspends = ctx.suspends;
+  pageHide();
+  assert.equal(ctx.state, 'suspended');
+  assert.equal(ctx.suspends, suspends + 1);
+  const before = ctx.nodes.length;
+  sfx.play('boom');
+  sfx.clockWarn();
+  assert.equal(ctx.nodes.length, before, 'no effect is scheduled while hidden');
+  pageVisible();
+  assert.equal(ctx.state, 'running');
+  sfx.play('click');
+  assert.ok(ctx.nodes.length > before);
+});
+
+test('hidden stops the synth scheduler, visible restarts it only with music on', async () => {
+  music.stop();
+  music.start();
+  pageHide();
+  const n = ctx.nodes.length;
+  await new Promise(r => setTimeout(r, 200));
+  assert.equal(ctx.nodes.length, n, 'no synth notes while hidden');
+  pageVisible();
+  await new Promise(r => setTimeout(r, 150));
+  assert.ok(ctx.nodes.length > n, 'the synth plays again');
+  music.stop();
+  pageHide();
+  pageVisible();
+  const m = ctx.nodes.length;
+  await new Promise(r => setTimeout(r, 150));
+  assert.equal(ctx.nodes.length, m, 'music that was off stays off');
+});
+
+test('a track resumes from where it was, and a muted music stays silent', async () => {
+  music.stop();
+  setMusicMuted(false);
+  Reflect.set(globalThis, 'fetch', (file: string) => Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve({ file }) }));
+  initAudio({ sfx: {}, music: [{ file: 'a.mp3' }] });
+  noteGesture(false);
+  await new Promise(r => setTimeout(r, 50));
+  const voices = () => ctx.nodes.filter(n => n.kind === 'source' && n.buffer?.file === 'a.mp3').length;
+  const first = voices();
+  assert.ok(first >= 1);
+  pageHide();
+  assert.equal(ctx.state, 'suspended');
+  pageVisible();
+  assert.equal(ctx.state, 'running');
+  assert.equal(voices(), first, 'the track is not restarted');
+  pageHide();
+  setMusicMuted(true);
+  const nodes = ctx.nodes.length;
+  pageVisible();
+  assert.equal(ctx.nodes.length, nodes, 'muted music starts nothing on return');
+  setMusicMuted(false);
+  music.stop();
+});
+
+test('the turn ping sounds while hidden, then the context suspends again', async () => {
+  music.stop();
+  pageHide();
+  const before = ctx.nodes.length;
+  const resumes = ctx.resumes;
+  sfx.turnPing();
+  assert.ok(ctx.nodes.length > before, 'the ping is scheduled');
+  assert.equal(ctx.resumes, resumes + 1);
+  assert.equal(ctx.state, 'running');
+  await new Promise(r => setTimeout(r, 900));
+  assert.equal(ctx.state, 'suspended');
+  pageVisible();
+});
+
+test('the page wiring: hidden pauses media and clears the session; pagehide not persisted closes', () => {
+  const handlers: Record<string, (e: unknown) => void> = {};
+  const paused: string[] = [];
+  const doc = {
+    visibilityState: 'visible',
+    addEventListener: (t: string, h: (e: unknown) => void) => { handlers['d:' + t] = h; },
+    querySelectorAll: () => [{ pause: () => paused.push('x') }],
+  };
+  const win = { addEventListener: (t: string, h: (e: unknown) => void) => { handlers['w:' + t] = h; } };
+  const session = { metadata: { title: 'x' } as unknown, playbackState: 'playing' };
+  installAudioPage({ doc: doc as never, win: win as never, nav: { mediaSession: session } });
+  doc.visibilityState = 'hidden';
+  handlers['d:visibilitychange']!({});
+  assert.equal(ctx.state, 'suspended');
+  assert.equal(paused.length, 1);
+  assert.equal(session.metadata, null);
+  assert.equal(session.playbackState, 'none');
+  doc.visibilityState = 'visible';
+  handlers['d:visibilitychange']!({});
+  assert.equal(ctx.state, 'running');
+  handlers['d:freeze']!({});
+  assert.equal(ctx.state, 'suspended');
+  handlers['w:pageshow']!({});
+  assert.equal(ctx.state, 'running');
+  handlers['w:pagehide']!({ persisted: true });
+  assert.equal(ctx.closes, 0);
+  handlers['w:pageshow']!({});
+  handlers['w:pagehide']!({ persisted: false });
+  assert.equal(ctx.closes, 1);
+  assert.equal(ctx.state, 'closed');
+});

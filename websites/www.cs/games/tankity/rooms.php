@@ -47,6 +47,7 @@ require_once __DIR__ . '/config.php';
 //   server/rules.php     seats, rounds, turn clock, pacing, the shop, scores
 //   server/protocol.php  events, snapshots and deltas
 //   server/rate.php      per-address hourly allowances (creating and joining rooms)
+//   server/pow.php       the room puzzle: challenges, their checks, spent ones
 // Those files do nothing unless this one requires them.
 define('TANKITY_ROOMS_INCLUDED', true);
 require_once __DIR__ . '/server/db.php';
@@ -64,6 +65,7 @@ require_once __DIR__ . '/server/ai.php';
 require_once __DIR__ . '/server/rules.php';
 require_once __DIR__ . '/server/protocol.php';
 require_once __DIR__ . '/server/rate.php';
+require_once __DIR__ . '/server/pow.php';
 
 // room_arsenal() resolves against this file's own location (game.json next to it), so it stays here.
 /* A client that sends Accept-Encoding: gzip gets the JSON compressed (the

@@ -48,6 +48,32 @@ function room_max_rooms(): int
 const ROOM_DORMANT_SECS = 3600;
 const ROOM_MAX_LOBBIES = 100;
 const ROOM_LOBBIES_PER_ADDRESS = 4;
+/* The room puzzle's difficulty (server/pow.php): leading zero bits a join's
+   solutions need at rest; a create needs one more, and load adds up to two.
+   0 turns the puzzle off. Measured in README "Room slots". */
+const ROOM_POW_BITS = 9;
+const ROOM_POW_BITS_MAX = 20;
+/* Creates from every address in ten minutes that count as a surge (one bit harder). */
+const ROOM_POW_SURGE = 60;
+function room_pow_bits_setting(): int
+{
+    static $logged = false;
+    $set = tankity_setting('TANKITY_POW_BITS', 'pow_bits', '');
+    $raw = trim(is_scalar($set) ? (string) $set : '');
+    if (preg_match('/^\d{1,2}$/', $raw) && (int) $raw <= ROOM_POW_BITS_MAX) {
+        return (int) $raw;
+    }
+    if ($raw !== '' && !$logged) {
+        $logged = true;
+        error_log('tankity setting pow_bits (TANKITY_POW_BITS): refused ' . var_export(substr($raw, 0, 40), true)
+            . ', not a whole number from 0 to ' . ROOM_POW_BITS_MAX . '; using ' . ROOM_POW_BITS);
+    }
+    return ROOM_POW_BITS;
+}
+function room_pow_surge(): int
+{
+    return tankity_int_setting('TANKITY_POW_SURGE', 'pow_surge', ROOM_POW_SURGE);
+}
 /* A full lobby pool may close a lobby this old even when it is attended. */
 const ROOM_LOBBY_OLD_SECS = 1800;
 /* Lobbies waiting at once; they hold no match slot (max_rooms counts started

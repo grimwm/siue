@@ -93,6 +93,15 @@ function rate_used(PDO $db, string $client, string $kind, int $now): int
     return (int) $q->fetchColumn();
 }
 
+/* How many $kind an address ($client; `*` for every address) counted in the
+   slots from the one $since falls in up to now. */
+function rate_used_since(PDO $db, string $client, string $kind, int $since): int
+{
+    $q = $db->prepare('SELECT COALESCE(SUM(n), 0) FROM rate WHERE client = ? AND kind = ? AND slot >= ?');
+    $q->execute([$client, $kind, intdiv($since, RATE_SLOT)]);
+    return (int) $q->fetchColumn();
+}
+
 /* Takes one of an address's $perHour $kind slots inside the caller's write
    transaction, so a rollback gives it back; false, and nothing taken, when
    they are spent. */

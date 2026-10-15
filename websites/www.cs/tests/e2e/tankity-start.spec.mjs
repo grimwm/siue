@@ -122,34 +122,87 @@ for (const [width, height, touch] of [[375, 667, false], [390, 844, true], [844,
   });
 }
 
-/* Play is the card's primary button at every size: the full row, thumb tall, with its word and ▶ inside. */
-for (const [width, height, touch] of [[412, 915, true], [915, 412, true], [360, 740, true], [820, 1180, true], [1280, 720, false]]) {
-  test(`Play is the full-width primary button with its ▶ and word inside, at ${width}x${height}`, async ({ browser }) => {
+/* Play is the card's primary button at every size: most of the row beside Share, thumb tall, with its word and ▶ inside. */
+const SCREENS = [[412, 915, true], [915, 412, true], [360, 740, true], [740, 360, true], [393, 852, true], [852, 393, true],
+  [820, 1180, true], [1180, 820, true], [1024, 640, false], [1280, 720, false]];
+for (const [width, height, touch] of SCREENS) {
+  test(`Play and Share share one row, Play the primary, at ${width}x${height}`, async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
     const page = await ctx.newPage();
     await page.goto('games/tankity/');
     await expect(page.locator('#title-card')).toBeVisible();
     const m = await page.evaluate(() => {
       const btn = document.getElementById('title-play');
+      const share = document.getElementById('title-share');
       const b = btn.getBoundingClientRect();
-      const card = btn.parentElement;
+      const s = share.getBoundingClientRect();
+      const row = btn.parentElement.getBoundingClientRect();
+      const card = document.querySelector('.title-card');
       const cs = getComputedStyle(card);
       const content = card.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-      const row = document.querySelector('.title-row').getBoundingClientRect();
       const range = document.createRange();
       range.selectNodeContents(btn);
       const t = range.getBoundingClientRect();
-      return { w: b.width, h: b.height, content, rowW: row.width, scroll: btn.scrollWidth, client: btn.clientWidth,
+      return { b, s, rowW: row.width, rowL: row.left, rowR: row.right, content, scroll: btn.scrollWidth, client: btn.clientWidth,
+        pageScroll: document.documentElement.scrollWidth, inner: innerWidth,
         textL: t.left - b.left, textR: b.right - t.right, textT: t.top - b.top, textB: b.bottom - t.bottom };
     });
-    expect(m.w, 'Play spans the row').toBeGreaterThanOrEqual(m.rowW - 1);
-    expect(m.w, 'Play spans the card content box').toBeGreaterThanOrEqual(m.content - 1);
+    expect(m.rowW, 'the row spans the card content box').toBeGreaterThanOrEqual(m.content - 1);
+    expect(m.b.width / m.rowW, 'Play keeps at least 60% of the row').toBeGreaterThanOrEqual(0.6);
+    expect(Math.abs(m.b.top - m.s.top), 'one row, tops level').toBeLessThanOrEqual(1);
+    expect(m.s.left, 'Share is beside Play, not under or over it').toBeGreaterThanOrEqual(m.b.right - 0.5);
+    expect(m.b.left, 'Play stays in the row').toBeGreaterThanOrEqual(m.rowL - 0.5);
+    expect(m.s.right, 'Share stays in the row').toBeLessThanOrEqual(m.rowR + 0.5);
+    expect(m.s.right, 'inside the screen').toBeLessThanOrEqual(m.inner);
+    expect(m.pageScroll).toBeLessThanOrEqual(m.inner);
+    expect(m.s.width, 'Share is thumb wide').toBeGreaterThanOrEqual(44);
+    expect(m.s.height, 'Share is thumb tall').toBeGreaterThanOrEqual(44);
+    expect(Math.abs(m.s.height - m.b.height), 'Share is as tall as Play').toBeLessThanOrEqual(1);
     expect(m.scroll, 'nothing overflows Play').toBeLessThanOrEqual(m.client);
     for (const side of ['textL', 'textR', 'textT', 'textB']) expect(m[side], `the ▶ and word sit inside Play (${side})`).toBeGreaterThanOrEqual(-0.5);
-    expect(m.h, 'Play is thumb tall').toBeGreaterThanOrEqual(44);
+    expect(m.b.height, 'Play is thumb tall').toBeGreaterThanOrEqual(44);
     await ctx.close();
   });
 }
+
+test('Share is named, reachable by Tab, and hands the /play/tankity/ address to the share sheet', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => {
+    window.__shared = [];
+    Object.defineProperty(Navigator.prototype, 'share', { value: data => { window.__shared.push(data); return Promise.resolve(); }, configurable: true });
+  });
+  const page = await ctx.newPage();
+  await page.goto('games/tankity/');
+  const share = page.locator('#title-share');
+  await expect(share).toBeVisible();
+  await expect(share).toHaveAttribute('aria-label', 'Share');
+  await expect(share).toHaveAttribute('title', /.+/);
+  await expect(page.locator('#title-play')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(share).toBeFocused();
+  await share.click();
+  const shared = await page.evaluate(() => window.__shared);
+  expect(shared).toHaveLength(1);
+  expect(new URL(shared[0].url).pathname).toMatch(/\/play\/tankity\/$/);
+  expect(shared[0].title).toBe('Operation Tankity');
+  await expect(page.locator('#title-card')).toBeVisible();
+  await ctx.close();
+});
+
+test('without Web Share, Share copies the address and says "Link copied"', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'share', { value: undefined, configurable: true });
+    window.__copied = [];
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: t => { window.__copied.push(t); return Promise.resolve(); } }, configurable: true });
+  });
+  const page = await ctx.newPage();
+  await page.goto('games/tankity/');
+  await page.locator('#title-share').click();
+  await expect(page.locator('#title-share-status')).toHaveText('Link copied');
+  expect((await page.evaluate(() => window.__copied))[0]).toMatch(/\/play\/tankity\/$/);
+  await ctx.close();
+});
 
 test('R opens Scores over the title card and Q closes it', async ({ browser }) => {
   const { page, errors } = await newPlayer(browser);

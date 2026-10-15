@@ -615,10 +615,22 @@ button.btn-leave[hidden] { display: none; }
 }
 .title-card h2 { margin: 0 0 0.25rem; font-size: 1.15rem; letter-spacing: 0.04em; color: var(--accent); text-transform: uppercase; }
 .title-tag { margin: 0 0 0.6rem; font-size: 0.75rem; color: #9aa3c7; }
+/* Play and Share share one row that never wraps: Play takes what Share leaves, Share is a square as tall as Play. */
+.title-primary { display: flex; gap: 0.4rem; margin-bottom: 0.45rem; }
 #frame .title-play {
   display: flex; align-items: center; justify-content: center; gap: 0.35rem;
-  width: 100%; min-height: 44px; padding: 0.65rem; margin-bottom: 0.45rem; font-size: 1rem; font-weight: 800; border-radius: 9px;
+  flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0.65rem; font-size: 1rem; font-weight: 800; border-radius: 9px;
 }
+/* Share: the secondary accent outline (as Tutorial), so it follows every theme. */
+#frame .title-share {
+  flex: none; display: grid; place-items: center; width: 44px; min-width: 44px; min-height: 44px; padding: 0;
+  background: rgba(var(--accent-rgb), 0.12); border: 1.5px solid var(--accent); color: var(--accent); border-radius: 9px;
+}
+#frame .title-share:hover { background: rgba(var(--accent-rgb), 0.22); }
+/* "Link copied" shows in the card; empty, it stays in the page for a screen reader and takes no room. */
+.title-share-status:empty { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); }
+.title-share-status:not(:empty) { margin: -0.2rem 0 0.4rem; color: var(--accent); }
+.title-share-url { box-sizing: border-box; width: 100%; margin: -0.2rem 0 0.4rem; padding: 0.35rem 0.5rem; font: 500 0.85rem/1.2 ui-monospace, monospace; }
 .title-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
 #frame .title-row button, #frame .title-settings { flex: 1; padding: 0.45rem; background: #11163a; border-color: #3a3fb0; border-radius: 9px; }
 #frame .title-settings { display: block; width: 100%; margin-top: 0.1rem; }
@@ -653,7 +665,8 @@ input.initial { width: 2rem; height: 2rem; max-width: none; padding: 0; text-ali
   .title-card { padding: 0.4rem 0.8rem; }
   .title-card h2 { font-size: 1rem; margin-bottom: 0.1rem; }
   .title-tag { margin-bottom: 0.3rem; }
-  #frame .title-play { padding: 0.5rem; margin-bottom: 0.3rem; }
+  #frame .title-play { padding: 0.5rem; }
+  .title-primary { margin-bottom: 0.3rem; }
   .title-row { margin-bottom: 0.3rem; }
   .title-note { margin-bottom: 0; }
 }

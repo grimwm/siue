@@ -5,10 +5,11 @@
 import { render } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { Button } from './button.tsx';
+import { ShareIcon } from './share-icon.tsx';
 import { Dialog } from './dialog.tsx';
 import { createInstall, IOS_STEPS } from '../install.ts';
 import { isBackKey } from '../keys.ts';
-import type { Install, InstallEnv, InstallSetup, InstallView, ShareIcon } from '../install.ts';
+import type { Install, InstallEnv, InstallSetup, InstallView } from '../install.ts';
 
 export interface InstallBarProps {
   view: InstallView;
@@ -19,16 +20,6 @@ export interface InstallBarProps {
   onCloseShare: () => void;
 }
 
-/** iOS's Share glyph: a box with an arrow out of its top. */
-function ShareGlyph() {
-  return (
-    <svg class="kit-install-glyph" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
-      <path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M8 10H6v11h12V10h-2" fill="none" stroke="currentColor"
-        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  );
-}
-
 const ICON = { viewBox: '0 0 24 24', width: 18, height: 18, 'aria-hidden': 'true', focusable: 'false', fill: 'none', stroke: 'currentColor',
   'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'kit-install-icon' } as const;
 
@@ -36,15 +27,6 @@ const ICON = { viewBox: '0 0 24 24', width: 18, height: 18, 'aria-hidden': 'true
 function InstallIcon() {
   return (
     <svg {...ICON}><path d="M12 3v12M7 10l5 5 5-5" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
-  );
-}
-
-/** Apple's box and arrow, or the three-dot sign, by platform. */
-function ShareIconGlyph(p: { icon: ShareIcon }) {
-  return p.icon === 'box' ? (
-    <svg {...ICON}><path d="M12 15V3M8 7l4-4 4 4" /><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1" /></svg>
-  ) : (
-    <svg {...ICON}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>
   );
 }
 
@@ -66,7 +48,7 @@ export function InstallBar(p: InstallBarProps) {
         </Button>
       )}
       <Button id="share-btn" class="kit-install-btn" title="Share a link to this game" onClick={p.onShare}>
-        <ShareIconGlyph icon={v.shareIcon} /><span class="kit-install-txt">Share</span>
+        <ShareIcon class="kit-install-icon" /><span class="kit-install-txt">Share</span>
       </Button>
       <span id="share-status" class="kit-install-status" role="status">{v.share === 'copied' ? 'Link copied' : null}</span>
       {v.share === 'field' && (
@@ -79,7 +61,7 @@ export function InstallBar(p: InstallBarProps) {
       )}
       <Dialog open={v.steps} id="install-steps" veilClass="kit-install-veil" panelClass="kit-install-panel"
         titleId="install-steps-title" title="Add to Home Screen" focusId="install-steps-done" onDismiss={p.onCloseSteps}>
-        <p id="install-steps-text"><ShareGlyph />{IOS_STEPS}.</p>
+        <p id="install-steps-text"><ShareIcon size={20} class="kit-install-glyph" />{IOS_STEPS}.</p>
         <Button id="install-steps-done" class="kit-install-btn" onClick={p.onCloseSteps}>Done</Button>
       </Dialog>
     </span>

@@ -23,9 +23,6 @@ export const PROMPT_STASH = '__installPrompt';
 
 export type Platform = 'ios' | 'chromium' | 'other';
 
-/** Apple's box with an arrow out of its top, or the three-dot share sign every other platform uses. */
-export type ShareIcon = 'box' | 'dots';
-
 /** A held-back BeforeInstallPromptEvent: prompt() shows the browser's install dialog, once. */
 export interface DeferredPrompt {
   prompt(): Promise<unknown>;
@@ -39,8 +36,6 @@ export interface InstallEnv {
   /** This page runs as an installed app. */
   installed(): boolean;
   platform(): Platform;
-  /** The Share icon this platform's own share sheet is known by. */
-  shareIcon(): ShareIcon;
   /** This page is inside another page's frame (the game inside /play/<id>/). */
   framed(): boolean;
   /** navigator.share, or null where there is none. */
@@ -77,7 +72,6 @@ export interface InstallView {
   /** iOS's Add to Home Screen steps are open. */
   steps: boolean;
   share: ShareState;
-  shareIcon: ShareIcon;
 }
 
 export interface Install {
@@ -101,8 +95,70 @@ export function withInstall(page: string): string {
 
 const cancelled = (e: unknown): boolean => (e as { name?: unknown } | null)?.name === 'AbortError';
 
+/** What sharing a link needs of the browser. */
+export type ShareEnv = Pick<InstallEnv, 'share' | 'copy' | 'timers'>;
+
+export interface Share {
+  state(): ShareState;
+  /** Web Share, else copy ("Link copied"), else show the address to copy by hand. */
+  press(): Promise<void>;
+  /** Puts the shown message or address away. */
+  close(): void;
+}
+
+/** Sharing one game's link, on its own: the install bar's Share and Tankity's title card both use it. */
+export function createShare(env: ShareEnv, setup: Pick<InstallSetup, 'title' | 'shareUrl'>, onChange: () => void): Share {
+  let state: ShareState = 'idle';
+  let copiedTimer: number | null = null;
+
+  function set(next: ShareState): void {
+    if (copiedTimer !== null) {
+      env.timers.clearTimeout(copiedTimer);
+      copiedTimer = null;
+    }
+    state = next;
+    if (next === 'copied') {
+      copiedTimer = env.timers.setTimeout(() => {
+        copiedTimer = null;
+        state = 'idle';
+        onChange();
+      }, COPIED_MS);
+    }
+    onChange();
+  }
+
+  return {
+    state: () => state,
+    async press() {
+      if (env.share) {
+        try {
+          await env.share({ title: setup.title, url: setup.shareUrl });
+          return;
+        } catch (e) {
+          if (cancelled(e)) return;
+          // Refused (no gesture left, a blocked sheet): copy instead.
+        }
+      }
+      if (env.copy) {
+        try {
+          await env.copy(setup.shareUrl);
+          set('copied');
+          return;
+        } catch {
+          // A blocked clipboard: show the address to copy by hand.
+        }
+      }
+      set('field');
+    },
+    close() {
+      if (state !== 'idle') set('idle');
+    },
+  };
+}
+
 export function createInstall(env: InstallEnv, setup: InstallSetup, onChange: (v: InstallView) => void): Install {
   const off = env.framed();
+  const sharing = createShare(env, setup, () => changed());
   const platform = env.platform();
   const ios = platform === 'ios';
   // Chromium on a page it does not prompt on: Install opens the page that does.
@@ -110,29 +166,10 @@ export function createInstall(env: InstallEnv, setup: InstallSetup, onChange: (v
   let installed = env.installed();
   let prompt: DeferredPrompt | null = null;
   let steps = false;
-  let share: ShareState = 'idle';
-  let copiedTimer: number | null = null;
 
   const offered = (): boolean => !off && !installed && (ios || sendsAway || prompt !== null);
-  const shareIcon = env.shareIcon();
-  const view = (): InstallView => ({ off, install: offered(), highlight: setup.asked && offered(), steps, share, shareIcon });
+  const view = (): InstallView => ({ off, install: offered(), highlight: setup.asked && offered(), steps, share: sharing.state() });
   const changed = (): void => onChange(view());
-
-  function setShare(next: ShareState): void {
-    if (copiedTimer !== null) {
-      env.timers.clearTimeout(copiedTimer);
-      copiedTimer = null;
-    }
-    share = next;
-    if (next === 'copied') {
-      copiedTimer = env.timers.setTimeout(() => {
-        copiedTimer = null;
-        share = 'idle';
-        changed();
-      }, COPIED_MS);
-    }
-    changed();
-  }
 
   if (!off && !installed) {
     env.onPrompt(p => {
@@ -185,29 +222,9 @@ export function createInstall(env: InstallEnv, setup: InstallSetup, onChange: (v
     },
     async pressShare() {
       if (off) return;
-      if (env.share) {
-        try {
-          await env.share({ title: setup.title, url: setup.shareUrl });
-          return;
-        } catch (e) {
-          if (cancelled(e)) return;
-          // Refused (no gesture left, a blocked sheet): copy instead.
-        }
-      }
-      if (env.copy) {
-        try {
-          await env.copy(setup.shareUrl);
-          setShare('copied');
-          return;
-        } catch {
-          // A blocked clipboard: show the address to copy by hand.
-        }
-      }
-      setShare('field');
+      await sharing.press();
     },
-    closeShare() {
-      if (share !== 'idle') setShare('idle');
-    },
+    closeShare: sharing.close,
   };
 }
 
@@ -221,10 +238,13 @@ export function detectPlatform(userAgent: string, platform: string, touchPoints:
   return brands.some(b => b.brand === 'Chromium') ? 'chromium' : 'other';
 }
 
-/** Apple's glyph on iPhone, iPad (also as a Mac with a touch screen) and Mac, whatever the browser; the dots elsewhere. */
-export function detectShareIcon(userAgent: string, platform: string, touchPoints: number): ShareIcon {
-  const apple = /iPhone|iPad|iPod|Macintosh/.test(userAgent) || /^(Mac|iPhone|iPad|iPod)/.test(platform) || (platform === 'MacIntel' && touchPoints > 1);
-  return apple ? 'box' : 'dots';
+/** The browser's share and clipboard, as sharing a link uses them. */
+export function browserShareEnv(): ShareEnv {
+  return {
+    share: typeof navigator.share === 'function' ? data => navigator.share(data) : null,
+    copy: typeof navigator.clipboard?.writeText === 'function' ? text => navigator.clipboard.writeText(text) : null,
+    timers: browserTimers,
+  };
 }
 
 export function browserInstallEnv(): InstallEnv {
@@ -243,11 +263,8 @@ export function browserInstallEnv(): InstallEnv {
     onInstalled: cb => window.addEventListener('appinstalled', () => cb()),
     installed: () => isInstalled(browserAppEnv()),
     platform: () => detectPlatform(navigator.userAgent, navigator.platform, navigator.maxTouchPoints, (navigator as WithBrands).userAgentData?.brands),
-    shareIcon: () => detectShareIcon(navigator.userAgent, navigator.platform, navigator.maxTouchPoints),
     framed: () => window.self !== window.top,
-    share: typeof navigator.share === 'function' ? data => navigator.share(data) : null,
-    copy: typeof navigator.clipboard?.writeText === 'function' ? text => navigator.clipboard.writeText(text) : null,
+    ...browserShareEnv(),
     navigate: (url, replace) => (replace ? location.replace(url) : location.assign(url)),
-    timers: browserTimers,
   };
 }

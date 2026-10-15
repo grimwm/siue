@@ -593,6 +593,20 @@ if ($action === 'start' && $method === 'POST') {
         room_unlock($fh);
         room_json_out(409, ['error' => 'already started']);
     }
+    // One human needs no referee: the browser plays the match as solo, and
+    // the lobby closes without a tombstone, since its host closed it (README
+    // "Room slots"). An old bundle could not play it, so it is told to reload
+    // and the lobby stays as it was.
+    $humans = count(array_filter($room['seats'], static fn(array $s): bool => (bool) ($s['human'] ?? false)));
+    if ($humans < 2) {
+        if (!room_proto_ok($body)) {
+            room_unlock($fh);
+            room_reload_out();
+        }
+        $local = ['difficulty' => room_difficulty($room), 'speed' => room_speed($room)];
+        room_close($fh);
+        room_json_out(200, ['ok' => true, 'local' => $local]);
+    }
     // Humans and drone seats field units; open seats stay empty. The host
     // is always seated, so a single drone seat makes at least two tanks;
     // humans alone would have no one to fight.

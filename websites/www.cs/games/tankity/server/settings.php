@@ -17,6 +17,19 @@ const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const ROOM_SEATS = 4; // seat 0 hosts a new room (see room_host); every other seat starts as AI
 const ROOM_AI_NAMES = ['REAPER', 'WRAITH', 'SPOTTER', 'HUNTER'];
 const ROOM_MAX_ROOMS = 50; // built-in default; .config.yaml and env can change it
+/* The room protocol this server speaks. A bundle that sends it can play a
+   one-human Start in the browser; one that does not is told to reload
+   (room_reload_out) rather than handed a reply it cannot read. */
+const ROOM_PROTO = 2;
+function room_proto_ok(array $body): bool
+{
+    return ($body['proto'] ?? null) === ROOM_PROTO;
+}
+function room_reload_out(): never
+{
+    room_json_out(426, ['error' => 'Tankity was updated. Reload the page to keep playing.', 'reload' => true]);
+    exit;
+}
 /* The turn times the host can pick, in seconds: Lightning 1 min, 2 min (the
    default), 10 min, 30 min, 8 h, 24 h, 1 week. src/turn-time.ts holds the same
    list with its labels; test/turn-time.test.ts keeps them equal. */

@@ -341,6 +341,8 @@ tankity_tx(tankity_db(), function (PDO $db) use ($hcode): void {
 });
 usleep(300000);
 $hAgain = $post('again', $hctl($hh));
+// A second human makes the next Start a server match (alone, it would play in the browser).
+$post('join', ['code' => $hcode, 'initials' => 'thd']);
 usleep(300000);
 $hStart = $post('start', $hctl($hh));
 $check('host-handoff-starts', (int) ($hh['seat'] ?? -1) === 1 && ($hAgain['ok'] ?? false) === true
@@ -352,6 +354,23 @@ $check('host-handoff-starts', (int) ($hh['seat'] ?? -1) === 1 && ($hAgain['ok'] 
 $check('old-host-start-refused', $staleStatus === 401 && ($staleStart['ok'] ?? false) !== true && ($staleStart['error'] ?? '') === 'bad seat token',
     json_encode([$staleStatus, $staleStart['error'] ?? null]));
 $ageRoom($hcode);
+
+// A host alone needs no referee: Start closes the lobby and the browser plays
+// the match. A bundle without the room protocol is told to reload instead,
+// and its lobby is left as it was.
+$solo = $post('create', ['initials' => 'sol', 'difficulty' => 'hard']);
+$sctl = ['code' => (string) ($solo['code'] ?? ''), 'token' => (string) ($solo['token'] ?? ''), 'csrf' => (string) ($solo['csrf'] ?? '')];
+usleep(300000);
+[$oldStatus, $oldStart] = $postStatus('start', $sctl);
+$check('local-start-old-bundle-reloads', $oldStatus === 426 && ($oldStart['reload'] ?? false) === true
+    && ($get($base . '/rooms.php?action=state&code=' . $sctl['code'] . '&token=' . $sctl['token'])['room']['phase'] ?? '') === 'lobby',
+    json_encode([$oldStatus, $oldStart]));
+usleep(300000);
+[$localStatus, $localStart] = $postStatus('start', $sctl + ['proto' => 2]);
+$check('local-start', $localStatus === 200 && ($localStart['local'] ?? null) === ['difficulty' => 'hard', 'speed' => 1]
+    && !isset($localStart['room']), json_encode([$localStatus, $localStart]));
+$soloGone = $get($base . '/rooms.php?action=state&code=' . $sctl['code'] . '&token=' . $sctl['token']);
+$check('local-start-closes-the-lobby', ($soloGone['error'] ?? '') === 'no such room' && !isset($soloGone['closed']), json_encode($soloGone));
 
 // Leave the shared shelf as found: only this match is swept.
 $ageRoom($mcode);

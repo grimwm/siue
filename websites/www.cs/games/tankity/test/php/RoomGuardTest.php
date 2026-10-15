@@ -349,6 +349,8 @@ final class RoomGuardTest extends TestCase
     {
         [$st, $host] = $this->call('create', ['initials' => 'hst'], [], self::FREE);
         $this->assertSame(200, $st);
+        // A guest makes it a server match; the host alone would play it in the browser.
+        $this->assertSame(200, $this->call('join', ['code' => $host['code'], 'initials' => 'gst'], [], self::FREE)[0]);
         $start = ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']];
         $this->gap();
         $this->assertSame(200, $this->call('start', $start, [], self::FREE)[0]);

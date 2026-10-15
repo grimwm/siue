@@ -134,7 +134,7 @@ Triggers: pull requests; pushes to `main` that change `websites/**`, `scripts/**
 
 ### deploy.yml
 
-Deploys www.cs when a `ci` run completes successfully for a push to `main` of this repository (not a pull request, not a fork), or when started by hand from the Actions tab (the `force` input sends every file). It runs in the `production` environment, deploys only if the run's commit is still the tip of `main`, runs `make -C websites/www.cs deploy PRUNE=1`, confirms with a dry run that the server reports "up to date", then requests the home page, the Tankity page and its `rooms.php?action=ping` on the live site and requires 200 from each. The login comes from a 1Password service account (the `OP_SERVICE_ACCOUNT_TOKEN` repository secret); SSH accepts only the host keys in `.github/ssh_known_hosts`.
+Deploys www.cs when a `ci` run completes successfully for a push to `main` of this repository (not a pull request, not a fork), or when started by hand from the Actions tab (the `force` input sends every file). It runs in the `production` environment, deploys only if the run's commit is still the tip of `main`, runs `make -C websites/www.cs deploy PRUNE=1` (which logs in once and reads the server's stamp back on that same connection to confirm it holds this commit's content), then requests the home page, the Tankity page and its `rooms.php?action=ping` on the live site and requires 200 from each. The login comes from a 1Password service account (the `OP_SERVICE_ACCOUNT_TOKEN` repository secret); SSH accepts only the host keys in `.github/ssh_known_hosts`.
 
 ### Deploy mechanics
 

@@ -19,9 +19,11 @@
  * main.ts builds the real RoomEnv from the page's globals. The wire types are
  * in protocol.ts. */
 import type {
-  ActBody, ErrorReply, MapInfo, MapsReply, MineRow, PingReply, PostAction, PostBodies, PostReplies, Proto,
-  RoomEvent, RoomReply, RoomSeat, RoomSnapshot, VolleyOpenerEvent,
+  ActBody, ChallengeReply, ErrorReply, MapInfo, MapsReply, MineRow, PingReply, PostAction, PostBodies, PostReplies, Proto,
+  RoomEvent, RoomReply, RoomSeat, RoomSnapshot, SeatReply, VolleyOpenerEvent,
 } from './protocol.ts';
+import { PowCancelled, solvePow } from './pow.ts';
+import type { PowSignal, Subtle } from './pow.ts';
 import type { Difficulty } from './sim.ts';
 import type { StoredSeat } from './seats.ts';
 import { parseSpeed } from './speed.ts';
@@ -55,6 +57,8 @@ export interface RoomEnv {
   now(): number;
   /** navigator.sendBeacon: true when the browser took the request. */
   beacon(url: string, body: string): boolean;
+  /** WebCrypto (crypto.subtle), for the room puzzle; null outside a secure context. */
+  subtle(): Subtle | null;
 }
 
 /** What the page supplies to hear about the room. */
@@ -95,6 +99,11 @@ export const CLOCK_WARN_S = 30;
 export const CLOCK_SHOW_S = 10;
 
 const STUMBLED = 'The room server stumbled. Solo hills still work.';
+const INSECURE = 'Rooms need a secure (https) page. Solo hills still work.';
+/** A refused puzzle worth one fresh one: run out of time, signed for another
+ * address (a phone that switched networks), or already used (a create the
+ * busy retry sent twice). One that was never finished is a bug, not bad luck. */
+const PUZZLE_AGAIN: ReadonlySet<string> = new Set(['puzzle-expired', 'puzzle-bad', 'puzzle-wrong', 'puzzle-spent']);
 
 /* ---------- words and links ---------- */
 
@@ -118,15 +127,29 @@ export function isGoneError(err: unknown): 'closed' | 'space' | null {
   return (err as { closed?: unknown }).closed === 'space' ? 'space' : 'closed';
 }
 
+/** A room code as typed or read back: uppercase, without spaces or hyphens
+ * (server/settings.php room_code_clean). */
+export function cleanCode(raw: string): string {
+  return String(raw || '').replace(/[\s-]+/g, '').toUpperCase();
+}
+
+/** A room code the server takes: six letters or digits, or four for a room
+ * made before codes grew. */
+export function isRoomCode(code: string): boolean {
+  return /^[A-Z0-9]{4}$|^[A-Z0-9]{6}$/.test(code);
+}
+
 /** What the player hears when a room they sat in is gone. */
 export function goneLine(code: string, why: 'closed' | 'space'): string {
   return why === 'space' ? `Room ${code} was closed to make space.` : `Room ${code} has closed.`;
 }
 
-/** The error a failed reply throws: the server's line, and why a room is gone when it says. */
+/** The error a failed reply throws: the server's line, why a room is gone
+ * when it says, and which puzzle check refused when one did. */
 function replyError(data: Record<string, unknown>): Error {
-  const e: Error & { closed?: 'space' } = new Error(String(data.error || STUMBLED));
+  const e: Error & { closed?: 'space'; puzzle?: string } = new Error(String(data.error || STUMBLED));
   if (data.closed === 'space') e.closed = 'space';
+  if (typeof data.puzzle === 'string') e.puzzle = data.puzzle;
   return e;
 }
 
@@ -399,22 +422,59 @@ export class RoomClient {
 
   /* ---- joining and leaving ---- */
 
+  /** A puzzle for a create or a join (server/pow.php). */
+  private async challenge(purpose: 'create' | 'join'): Promise<ChallengeReply> {
+    const { res, data } = await this.fetchJson('rooms.php?action=challenge&for=' + purpose, { headers: { Accept: 'application/json' } });
+    if (!res.ok || !data.ok) throw replyError(data);
+    return data as unknown as ChallengeReply;
+  }
+
+  /** Create or join with the room puzzle solved: ask for one, solve it, send
+   * it. A puzzle refused as stale, rebound or spent is asked for and solved
+   * once more, silently; anything else is the server's line. `signal`
+   * cancels: while solving nothing is sent, and a seat taken after it was
+   * cancelled is given up again. */
+  private async admitted<A extends 'create' | 'join'>(
+    action: A, payload: Omit<PostBodies[A], 'pow'>, signal?: PowSignal,
+  ): Promise<SeatReply> {
+    const subtle = this.env.subtle();
+    if (!subtle) throw new Error(INSECURE);
+    for (let tries = 0; ; tries++) {
+      const ch = await this.challenge(action);
+      const n = await solvePow(ch, subtle, signal ? { signal } : {});
+      let data: SeatReply;
+      try {
+        data = await this.post(action, { ...payload, pow: { c: ch.challenge, n } } as PostBodies[A]) as SeatReply;
+      } catch (err) {
+        const puzzle = (err as { puzzle?: unknown }).puzzle;
+        if (tries === 0 && typeof puzzle === 'string' && PUZZLE_AGAIN.has(puzzle)) continue;
+        throw err;
+      }
+      if (signal?.aborted) {
+        this.code = data.code; this.token = data.token; this.csrf = data.csrf;
+        this.leave();
+        throw new PowCancelled();
+      }
+      return data;
+    }
+  }
+
   /** Hosts a room: forgets any earlier session, creates, takes the seat. */
-  async host(initials: string, map: string, body: string, difficulty: Difficulty, turn?: number): Promise<void> {
+  async host(initials: string, map: string, body: string, difficulty: Difficulty, turn?: number, signal?: PowSignal): Promise<void> {
     this.forget();
     this.map = null;
     this.mapName = 'Random hills';
-    const data = await this.post('create', turn === undefined
+    const data = await this.admitted('create', turn === undefined
       ? { proto: PROTO, initials, map, body, difficulty }
-      : { proto: PROTO, initials, map, body, difficulty, turn });
+      : { proto: PROTO, initials, map, body, difficulty, turn }, signal);
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
   }
 
-  /** Joins a room by its code. */
-  async join(code: string, initials: string, body: string): Promise<void> {
+  /** Joins a room by its code, typed in any case, with spaces or hyphens. */
+  async join(code: string, initials: string, body: string, signal?: PowSignal): Promise<void> {
     this.forget();
-    this.code = String(code || '').trim().toUpperCase();
-    const data = await this.post('join', { proto: PROTO, code: this.code, initials, body });
+    this.code = cleanCode(code);
+    const data = await this.admitted('join', { proto: PROTO, code: this.code, initials, body }, signal);
     this.code = data.code; this.seat = data.seat; this.token = data.token; this.csrf = data.csrf;
   }
 

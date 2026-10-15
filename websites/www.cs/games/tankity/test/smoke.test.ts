@@ -419,7 +419,10 @@ function fxDelta(f: Fixture, u: string, body: Posted) {
   PFX.full++;
   return fxReply(f);
 }
+/** A room puzzle at 0 bits: any four nonces solve it, at once. */
+const EASY_PUZZLE = { ok: true, challenge: 'v1.1800000000.c.0.smoke-rand.smoke-mac', bits: 0, count: 4, iter: 100, expiresIn: 120 };
 function fxServe(u: string, body: Posted) {
+  if (u.includes('action=challenge')) return { ok: true, status: 200, json: async () => EASY_PUZZLE };
   if (u.includes('action=create')) return fxReply(fx('create-reply'));
   if (u.includes('action=state')) return fxDelta(fx(PFX.room), u, body);
   if (u.includes('action=start')) { PFX.room = 'play-my-turn'; return fxReply(fx('play-my-turn')); }
@@ -542,6 +545,7 @@ Reflect.set(globalThis, 'fetch', async (url: unknown, opts?: { body?: string }) 
   if (u.includes('action=ping')) {
     return okJson({ ok: true, game: 'operation-tankity', rooms: { used: 3, max: 10 }, lobbies: { used: 4, max: 20 } });
   }
+  if (u.includes('action=challenge')) return okJson(EASY_PUZZLE);
   if (u.includes('action=create')) {
     if (failMode === 'down') throw new Error('conn refused');
     if (failMode === 'page') return { ok: true, json: async () => { throw new Error('Unexpected token <'); } };

@@ -42,6 +42,7 @@ function rig(respond: (url: string, init?: { method?: string; body?: string }) =
     clearInterval: id => { intervals.delete(Number(id)); },
     now: () => 0,
     beacon: () => true,
+    subtle: () => globalThis.crypto.subtle,
   };
   const storage = new Map<string, string>();
   const store: StorageLike = { getItem: k => storage.get(k) ?? null, setItem: (k, v) => { storage.set(k, v); }, removeItem: k => { storage.delete(k); } };

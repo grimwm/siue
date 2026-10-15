@@ -222,3 +222,22 @@ test('Extra life at max lives pays 500 points; Last stand stays at one; Fuel sta
     assert.equal(G[k], 2 * row(k).n, `${k}: a smaller lot after a bigger one adds nothing`);
   }
 });
+
+test('a round plays the Walls it is mustered with; Random draws one real wall last, and no other pick moves the dice', () => {
+  const open = fresh('walls-seed'), fixed = fresh('walls-seed');
+  open.round = fixed.round = 1;
+  soloMuster(open, arsenal);
+  soloMuster(fixed, arsenal, 'spring');
+  assert.equal(open.walls, 'none');
+  assert.equal(fixed.walls, 'spring');
+  assert.equal(open.rng(), fixed.rng(), 'a fixed pick draws nothing');
+  const rnd = fresh('walls-seed');
+  const seen = new Set<string>();
+  for (let r = 1; r <= 16; r++) {
+    rnd.round = r;
+    soloMuster(rnd, arsenal, 'random');
+    seen.add(String(rnd.walls));
+  }
+  assert.ok([...seen].every(w => ['concrete', 'rubber', 'spring', 'wrap'].includes(w)), [...seen].join());
+  assert.ok(seen.size > 1, 'it changes from round to round');
+});

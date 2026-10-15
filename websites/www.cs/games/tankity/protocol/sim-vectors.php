@@ -72,6 +72,9 @@ function sv_room(array $c, int $w = SV_WIDTH): array
     if (array_key_exists('difficulty', $c)) {
         $room['difficulty'] = $c['difficulty'];
     }
+    if (isset($c['walls'])) {
+        $room['wallsNow'] = $c['walls'];
+    }
     foreach ($c['tanks'] as $i => $t) {
         $room['tanks'][$i] = ['seat' => $i, 'kind' => $t['kind'], 'name' => 'T' . $i,
             'x' => (float) $t['x'], 'y' => (float) $t['y'], 'angle' => (float) ($t['angle'] ?? 45), 'power' => (float) ($t['power'] ?? 50),
@@ -1410,6 +1413,131 @@ $matchEnd('last-of-three-wins-after-a-double-out', [2, 0, 0, null], 3, 7);
 $matchEnd('two-of-three-play-on', [1, 1, 0, null], 3, 2);
 $matchEnd('last-two-fall-together', [0, 0, null, null], 2, 6);
 $matchEnd('a-leaver-counts-as-out', [3, null, null, null], 2, 3);
+
+/* ---- the walls (server/walls.php): every flight, roll and pool against each wall, exact ---- */
+// Guns are picked by what they do, never by key.
+$gunOf = function (string $effect, bool $missile = false) use ($weapons): string {
+    foreach ($weapons as $k => $def) {
+        if (($def['effect'] ?? 'shot') === $effect && !empty($def['missile']) === $missile) {
+            return $k;
+        }
+    }
+    throw new RuntimeException("no $effect gun");
+};
+$wShell = $gunOf('shot');
+$wMissile = $gunOf('shot', true);
+$wCluster = $gunOf('cluster', true);
+$wRoller = $gunOf('roller');
+$wNapalm = $gunOf('napalm');
+$wPour = $gunOf('pour');
+$wHop = $gunOf('hop');
+$wScatter = $gunOf('scatter');
+$wPellets = $gunOf('pellets');
+foreach (ROOM_WALLS as $walls) {
+    foreach ([['right', 722.5, 210.0, 300.0, -40.0, 716.0, 212.0], ['left', -3.25, 90.0, -180.0, 25.0, 2.0, 89.0],
+        ['inside', 300.0, 200.0, 120.0, -10.0, 298.0, 200.5], ['muzzle-outside', -9.0, 380.0, -150.0, -80.0, -6.5, 381.0],
+        ['far-edge-wrap', 720.0, 150.0, 90.0, 5.0, 719.5, 150.0]] as [$side, $x, $y, $vx, $vy, $px, $py]) {
+        $st = [$x, $y, $vx];
+        $did = room_wall_step($st[0], $st[1], $st[2], $walls, SV_WIDTH, $px, $py);
+        $exact('walls', "step-$walls-$side", ['kind' => 'step', 'walls' => $walls, 'x' => $x, 'y' => $y, 'vx' => $vx, 'vy' => $vy, 'px' => $px, 'py' => $py],
+            ['did' => $did, 'x' => $st[0], 'y' => $st[1], 'vx' => $st[2]]);
+    }
+    foreach ([['right', 720.25, 80.0], ['left', -0.75, -60.0], ['inside', 360.0, 30.0]] as [$side, $x, $u]) {
+        $r = [$x, $u];
+        $did = room_wall_roll($r[0], $r[1], $walls, SV_WIDTH);
+        $exact('walls', "roll-$walls-$side", ['kind' => 'roll', 'walls' => $walls, 'x' => $x, 'u' => $u], ['did' => $did, 'x' => $r[0], 'u' => $r[1]]);
+    }
+    // Planning flights: a full-power Shell at the near wall, a missile across the field, a lob
+    // through the left wall, a roller by the wall, a long flat shot that bounces twice.
+    $shots = [
+        ['shell-at-the-wall', $wShell, 650.0, 386.0, 45.0, 100.0, 1, 'flat'],
+        ['missile-across', $wMissile, 200.0, 386.0, 45.0, 100.0, 1, 'flat'],
+        ['lob-out-the-left', $wShell, 60.0, 386.0, 70.0, 80.0, -1, 'hills'],
+        ['roller-by-the-wall', $wRoller, 640.0, 386.0, 40.0, 45.0, 1, 'flat'],
+        ['flat-and-fast', $wMissile, 360.0, 300.0, 10.0, 100.0, 1, 'low'],
+    ];
+    foreach ($shots as [$label, $wkey, $x, $y, $angle, $power, $dirS, $ground]) {
+        $spec = ['flat' => ['flat' => 400], 'hills' => ['hills' => [330, 40, 240]], 'low' => ['flat' => 450]][$ground];
+        $exact('walls', "sim-shot-$walls-$label", ['kind' => 'sim-shot', 'walls' => $walls, 'terrain' => $spec, 'wind' => 4, 'x' => $x, 'y' => $y,
+            'angle' => $angle, 'power' => $power, 'wkey' => $wkey, 'dirS' => $dirS],
+            room_sim_shot(sv_terrain($spec), 4.0, $x, $y, $angle, $power, $wkey, $dirS, SV_WIDTH, -INF, $walls));
+    }
+    $at = room_split_point(sv_terrain(['flat' => 400]), -3.0, 700.0, 380.0, 25.0, 100.0, $wCluster, 1, SV_WIDTH, $walls);
+    $exact('walls', "split-point-$walls", ['kind' => 'split', 'walls' => $walls, 'terrain' => ['flat' => 400], 'wind' => -3, 'x' => 700, 'y' => 380,
+        'angle' => 25, 'power' => 100, 'wkey' => $wCluster, 'dirS' => 1], $at);
+    foreach ([['toward-the-right', 690.0, 260.0, 20.0], ['toward-the-left', 30.0, -200.0, 10.0]] as [$label, $x, $vx, $vy]) {
+        $spec = ['slope' => [420, 380]];
+        [$rx, $ry] = room_roll_out(sv_terrain($spec), $x, $vx, $vy, $weapons[$wRoller], $walls);
+        $exact('walls', "roll-out-$walls-$label", ['kind' => 'roll-out', 'walls' => $walls, 'terrain' => $spec, 'x' => $x, 'vx' => $vx, 'vy' => $vy,
+            'wkey' => $wRoller], ['x' => $rx, 'y' => $ry]);
+    }
+    $air = room_air(SV_WIDTH, 5.0, $weapons[$wShell], $walls);
+    $exact('walls', "fall-to-$walls", ['kind' => 'fall-to', 'walls' => $walls, 'wind' => 5, 'wkey' => $wShell, 'x' => 690, 'y' => 300, 'vx' => 240, 'vy' => -150, 'ground' => 400],
+        room_fall_to(690.0, 300.0, 240.0, -150.0, 400.0, $air));
+}
+// Liquid by an edge: spilled with None and Wraparound, pooled against a solid wall.
+foreach ([false, true] as $dam) {
+    $tag = $dam ? 'dammed' : 'open';
+    foreach ([['slope-to-the-right', ['slope' => [300, 420]], 700.0], ['slope-to-the-left', ['slope' => [420, 300]], 15.0],
+        ['flat-by-the-edge', ['flat' => 400], 712.0], ['pit-by-the-edge', ['flat' => 400, 'set' => [[690, 719, 430]]], 705.0]] as [$label, $spec, $x]) {
+        $exact('walls', "pour-$tag-$label", ['kind' => 'pour', 'dam' => $dam, 'terrain' => $spec, 'x' => $x, 'wkey' => $wPour],
+            room_pour_level(sv_terrain($spec), $x, (float) $weapons[$wPour]['volume'], (float) $weapons[$wPour]['poolMin'], $dam));
+        $exact('walls', "fire-pool-$tag-$label", ['kind' => 'fire-pool', 'dam' => $dam, 'terrain' => $spec, 'x' => $x, 'wkey' => $wNapalm],
+            room_fire_pool(sv_terrain($spec), $x, (float) $weapons[$wNapalm]['volume'], (float) $weapons[$wNapalm]['flame'], (float) $weapons[$wNapalm]['poolMin'], $dam));
+    }
+}
+// Random: one real wall per draw; every other setting draws nothing.
+foreach ([1, 7, 99, 2026] as $seed) {
+    $rng = $seed;
+    $picks = [];
+    for ($i = 0; $i < 8; $i++) {
+        $picks[] = room_walls_for('random', $rng);
+    }
+    $fixed = $seed;
+    $exact('walls', "random-seed$seed", ['kind' => 'random', 'seed' => $seed], ['picks' => $picks, 'next' => room_rng_next($rng),
+        'rubberKeepsStream' => room_walls_for('rubber', $fixed) === 'rubber' && $fixed === $seed]);
+}
+// Whole volleys against each wall: the war's own flight, bursts, rolls and pools.
+$wallVolley = function (string $name, string $walls, array $c) use ($volley): void {
+    $volley("walls-$walls-$name", ['walls' => $walls] + $c);
+};
+$fl = ['flat' => 400];
+$slopeR = ['slope' => [300, 420]];
+foreach (ROOM_WALLS as $walls) {
+    $wallVolley('shell-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wShell, 'shooter' => 0, 'angle' => 50, 'power' => 72,
+        'tanks' => [$human(600, 100) + ['dirS' => 1], $drone(470, 100), $drone(120, 100)]]);
+    $wallVolley('missile-full-power', $walls, ['terrain' => $fl, 'wind' => 2, 'wkey' => $wMissile, 'shooter' => 0, 'angle' => 45, 'power' => 100,
+        'tanks' => [$human(200, 100) + ['dirS' => 1], $drone(560, 100), $drone(130, 100)]]);
+    $wallVolley('wrap-past-a-bystander', $walls, ['terrain' => ['flat' => 450], 'wind' => 0, 'wkey' => $wShell, 'shooter' => 0, 'angle' => 20, 'power' => 60,
+        'tanks' => [array_replace($human(700, 100), ['y' => 450.0, 'dirS' => 1]), array_replace($drone(360, 100), ['y' => 300.0]),
+            array_replace($drone(60, 100), ['y' => 450.0])]]);
+    $wallVolley('roller-by-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wRoller, 'shooter' => 0, 'angle' => 40, 'power' => 45,
+        'tanks' => [$human(640, 100) + ['dirS' => 1], $drone(560, 100), $drone(30, 100)]]);
+    $wallVolley('napalm-by-the-wall', $walls, ['terrain' => $slopeR, 'wind' => 0, 'wkey' => $wNapalm, 'shooter' => 0, 'angle' => 70, 'power' => 40,
+        'tanks' => [['kind' => 'human', 'x' => 600.0, 'y' => sv_terrain($slopeR)[600], 'hp' => 100, 'dirS' => 1],
+            ['kind' => 'ai', 'x' => 705.0, 'y' => sv_terrain($slopeR)[705], 'hp' => 100, 'dirS' => -1]]]);
+    $wallVolley('liquid-dirt-by-the-wall', $walls, ['terrain' => $slopeR, 'wind' => 0, 'wkey' => $wPour, 'shooter' => 0, 'angle' => 70, 'power' => 40,
+        'tanks' => [['kind' => 'human', 'x' => 600.0, 'y' => sv_terrain($slopeR)[600], 'hp' => 100, 'dirS' => 1],
+            ['kind' => 'ai', 'x' => 705.0, 'y' => sv_terrain($slopeR)[705], 'hp' => 100, 'dirS' => -1]]]);
+    $wallVolley('cluster-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wCluster, 'shooter' => 0, 'angle' => 30, 'power' => 90,
+        'tanks' => [$human(640, 100) + ['dirS' => 1], $drone(560, 100), $drone(80, 100)]]);
+    $wallVolley('hops-off-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wHop, 'shooter' => 0, 'angle' => 35, 'power' => 70,
+        'tanks' => [$human(600, 100) + ['dirS' => 1], $drone(660, 100), $drone(100, 100)]]);
+    $wallVolley('scatter-by-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wScatter, 'shooter' => 0, 'angle' => 60, 'power' => 45,
+        'tanks' => [$human(620, 100) + ['dirS' => 1], $drone(700, 100), $drone(100, 100)]]);
+    $wallVolley('pellets-at-the-wall', $walls, ['terrain' => $fl, 'wind' => 0, 'wkey' => $wPellets, 'shooter' => 0, 'angle' => 45, 'power' => 90,
+        'tanks' => [$human(640, 100) + ['dirS' => 1], $drone(520, 100), $drone(80, 100)]]);
+}
+// The drones fly the walls when they aim: through Wraparound past a mountain, off a Spring past their reach.
+$mountain = ['flat' => 400, 'set' => [[200, 520, 40]]];
+foreach (ROOM_WALLS as $walls) {
+    $aim("walls-$walls-past-a-mountain", ['walls' => $walls, 'terrain' => $mountain, 'wind' => 0, 'round' => 1, 'seed' => 5, 'shooter' => 0, 'difficulty' => 'hard',
+        'tanks' => [['kind' => 'ai', 'x' => 80.0, 'y' => 400.0, 'hp' => 100, 's' => 'hunter', 'ammo' => [$wShell => 99], 'dirS' => 1],
+            ['kind' => 'human', 'x' => 660.0, 'y' => 400.0, 'hp' => 100, 'dirS' => -1]]]);
+    $aim("walls-$walls-past-its-reach", ['walls' => $walls, 'terrain' => $fl, 'wind' => 0, 'round' => 1, 'seed' => 6, 'shooter' => 0, 'difficulty' => 'hard',
+        'tanks' => [['kind' => 'ai', 'x' => 705.0, 'y' => 400.0, 'hp' => 100, 's' => 'hunter', 'ammo' => [$wShell => 99], 'dirS' => -1],
+            ['kind' => 'human', 'x' => 120.0, 'y' => 400.0, 'hp' => 100, 'dirS' => 1]]]);
+}
 
 /* ---- write or compare ---- */
 $weaponNames = array_keys($weapons);

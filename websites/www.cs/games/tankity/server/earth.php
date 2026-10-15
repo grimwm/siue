@@ -56,8 +56,9 @@ function room_add_dirt(array &$terrain, float $x, float $y, float $r): void
 // columns out from $xi whose ground lies below the level (more than half a
 // pixel above it counts as dry), its volume (the sum of each column's depth
 // under the level) and whether it reaches the field's edge, where it spills
-// off. [x0, x1, volume, edge]; x0 > x1 when $xi itself is dry. */
-function room_pour_basin(array $terrain, int $xi, float $level): array
+// off (never against a wall that dams it, $dam). [x0, x1, volume, edge];
+// x0 > x1 when $xi itself is dry. */
+function room_pour_basin(array $terrain, int $xi, float $level, bool $dam = false): array
 {
     $n = count($terrain);
     if (!($terrain[$xi] > $level - 0.5)) {
@@ -75,7 +76,7 @@ function room_pour_basin(array $terrain, int $xi, float $level): array
     for ($ix = $a; $ix <= $b; $ix++) {
         $vol += $terrain[$ix] - $level;
     }
-    return [$a, $b, $vol, $a === 0 || $b === $n - 1];
+    return [$a, $b, $vol, !$dam && ($a === 0 || $b === $n - 1)];
 }
 /* Where $volume px^2 of liquid poured at column x comes to rest. It runs
 // downhill first, column by column to the lower neighbour (the right one on a
@@ -83,12 +84,13 @@ function room_pour_basin(array $terrain, int $xi, float $level): array
 // ROOM_POUR_ITERS halvings between the highest ground and the floor. A pool
 // that would reach either edge of the field spills off it, so the level stays
 // below what would reach one; what will not fit is lost (all of it, poured
-// on a slope down to an edge). With $poolMin above 0 a liquid spreads only
+// on a slope down to an edge). With $dam (a solid wall, room_walls_dam) the
+// edges hold it instead. With $poolMin above 0 a liquid spreads only
 // until it is $poolMin deep: when that fill would leave it shallower (or spill
 // it all), it lies instead as a puddle (room_pour_puddle) $poolMin deep at the
 // bottom it ran to. ['level', 'x0', 'x1'] (x0 > x1: no pool).
 // src/earth.ts pourLevel() is the same. */
-function room_pour_level(array $terrain, float $x, float $volume, float $poolMin = 0.0): array
+function room_pour_level(array $terrain, float $x, float $volume, float $poolMin = 0.0, bool $dam = false): array
 {
     $n = count($terrain);
     $xi = (int) det_round(max(0.0, min((float) ($n - 1), $x)));
@@ -110,26 +112,27 @@ function room_pour_level(array $terrain, float $x, float $volume, float $poolMin
     $hi = ROOM_EARTH_FLOOR;
     for ($i = 0; $i < ROOM_POUR_ITERS; $i++) {
         $mid = ($lo + $hi) / 2;
-        [, , $vol, $edge] = room_pour_basin($terrain, $xi, $mid);
+        [, , $vol, $edge] = room_pour_basin($terrain, $xi, $mid, $dam);
         if ($edge || $vol > $volume) {
             $lo = $mid;
         } else {
             $hi = $mid;
         }
     }
-    [$a, $b, , $edge] = room_pour_basin($terrain, $xi, $hi);
+    [$a, $b, , $edge] = room_pour_basin($terrain, $xi, $hi, $dam);
     $pool = $edge ? ['level' => $hi, 'x0' => $xi, 'x1' => $xi - 1] : ['level' => $hi, 'x0' => $a, 'x1' => $b];
     if (!($poolMin > 0) || ($pool['x0'] <= $pool['x1'] && $terrain[$xi] - $pool['level'] >= $poolMin)) {
         return $pool;
     }
-    return room_pour_puddle($terrain, $xi, $volume, $poolMin);
+    return room_pour_puddle($terrain, $xi, $volume, $poolMin, $dam);
 }
 /* A puddle: liquid that spreads only until it is $d deep, its level $d over
 // the ground at column $xi, widening a column at a time, left then right in
 // turn (a side whose next column stands dry gives way to the other), until it
 // holds $volume. Once it reaches either edge of the field the rest spills
-// off. src/earth.ts puddle() is the same. */
-function room_pour_puddle(array $terrain, int $xi, float $volume, float $d): array
+// off; with $dam an edge is a side that stands dry, and it widens the other
+// way. src/earth.ts puddle() is the same. */
+function room_pour_puddle(array $terrain, int $xi, float $volume, float $d, bool $dam = false): array
 {
     $n = count($terrain);
     $level = $terrain[$xi] - $d;
@@ -137,9 +140,9 @@ function room_pour_puddle(array $terrain, int $xi, float $volume, float $d): arr
     $b = $xi;
     $vol = $d;
     $left = true;
-    while ($vol < $volume && $a > 0 && $b < $n - 1) {
-        $l = $terrain[$a - 1] > $level - 0.5;
-        $r = $terrain[$b + 1] > $level - 0.5;
+    while ($vol < $volume && ($dam || ($a > 0 && $b < $n - 1))) {
+        $l = $a > 0 && $terrain[$a - 1] > $level - 0.5;
+        $r = $b < $n - 1 && $terrain[$b + 1] > $level - 0.5;
         if (!$l && !$r) {
             break;
         }

@@ -49,7 +49,7 @@ function rig(respond: (url: string, init?: { method?: string; body?: string }) =
   const said: string[] = [];
   const G = { body: 'tank', demo: true, over: false };
   const titled: number[] = [];
-  const locals: { difficulty: string; speed: number }[] = [];
+  const locals: { difficulty: string; speed: number; walls: string }[] = [];
   const net = new m.net.RoomClient(env, {
     onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {},
     onGone: (code, why) => lobby.netGone(code, why),
@@ -221,7 +221,7 @@ test('a host alone starts: the lobby closes, the seat is forgotten and the match
   await r.lobby.resumeRoom('AB3D');
   click(r.$('lobby-start'));
   await r.tick();
-  assert.deepEqual(r.locals, [{ difficulty: 'easy', speed: 4 }]);
+  assert.deepEqual(r.locals, [{ difficulty: 'easy', speed: 4, walls: 'none' }]);
   assert.equal(r.net.code, '', 'no room session');
   assert.equal(r.net.on, false);
   assert.equal(r.seats.get('AB3D'), null, 'not in Your games');
@@ -246,4 +246,35 @@ test('a Start the server says this tab is too old for: the reload line, and the 
   assert.equal(r.$('lobby-status').textContent, 'Tankity was updated. Reload the page to keep playing.');
   assert.equal(r.net.code, 'AB3D');
   assert.deepEqual(r.locals, []);
+});
+
+test('the host picks the walls in the lobby; a guest sees the room\'s pick and cannot change it', async () => {
+  const posted: unknown[] = [];
+  let walls = 'none';
+  const r = rig((url, init) => {
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    if (url.includes('action=walls')) {
+      const body = JSON.parse(String(init?.body || '{}')) as { walls: string };
+      posted.push(body.walls);
+      walls = body.walls;
+    }
+    return ok({ ok: true, room: lobbyRoom({ walls, wallsNow: 'none' }) });
+  });
+  await r.lobby.resumeRoom('AB3D');
+  const picker = r.$('room-walls');
+  const tiles = picker.children.map(c => c as unknown as { textContent: string; getAttribute(k: string): string | null });
+  assert.equal(tiles.find(t => t.getAttribute('aria-pressed') === 'true')?.textContent, 'None');
+  click(picker.children.find(c => (c as unknown as { getAttribute(k: string): string | null }).getAttribute('data-walls') === 'wrap') as never);
+  await r.tick();
+  assert.deepEqual(posted, ['wrap']);
+  assert.equal(r.net.walls, 'wrap');
+  // A guest: the label alone.
+  const g = rig(url => {
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    return ok({ ok: true, room: lobbyRoom({ hostSeat: 1, walls: 'rubber', you: { seat: 0 } }) });
+  });
+  await g.lobby.resumeRoom('AB3D');
+  assert.equal(g.$('room-walls-label').textContent, 'Walls: Rubber (the host picks)');
 });

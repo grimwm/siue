@@ -35,7 +35,7 @@ type Extras = 'flashes' | 'onFlashes' | 'onStandings' | 'onQuit' | 'onNextSong' 
 function draw(over: Partial<MenuProps> = {}) {
   const section = makeEl('menu-overlay');
   section.hidden = false;
-  const calls = { close: 0, playSeed: 0, submit: 0, unit: [] as string[], size: [] as string[], theme: [] as string[], custom: [] as string[], difficulty: [] as string[], sound: 0, music: 0, soundLevel: [] as number[], musicLevel: [] as number[], fs: 0, scores: 0, leave: 0 };
+  const calls = { close: 0, playSeed: 0, submit: 0, unit: [] as string[], size: [] as string[], theme: [] as string[], custom: [] as string[], difficulty: [] as string[], walls: [] as string[], sound: 0, music: 0, soundLevel: [] as number[], musicLevel: [] as number[], fs: 0, scores: 0, leave: 0 };
   const base: Omit<MenuProps, Extras> = {
     keyHint: (c, a) => KEYS[`${c}:${a}`] ?? '', onClose: () => { calls.close++; },
     onPlaySeed: () => { calls.playSeed++; }, onSubmit: () => { calls.submit++; },
@@ -43,6 +43,7 @@ function draw(over: Partial<MenuProps> = {}) {
     sizes: SIZES, size: 'm', onPickSize: k => { calls.size.push(k); },
     themes: THEMES, theme: 'yellow', onPickTheme: k => { calls.theme.push(k); }, customColour: '#3366ff', onPickCustom: h => { calls.custom.push(h); },
     difficulties: LEVELS, difficulty: 'normal', onPickDifficulty: k => { calls.difficulty.push(k); },
+    walls: { pick: 'none', locked: null }, onPickWalls: w => { calls.walls.push(w); },
     sound: true, music: true, soundLevel: 80, musicLevel: 60, onSoundLevel: l => { calls.soundLevel.push(l); }, onMusicLevel: l => { calls.musicLevel.push(l); }, fullscreen: false,
     onSound: () => { calls.sound++; }, onMusic: () => { calls.music++; }, onFullscreen: () => { calls.fs++; },
     onScores: () => { calls.scores++; }, inRoom: false, onLeave: () => { calls.leave++; },
@@ -91,6 +92,19 @@ test('Difficulty stays a setting: three choices, the saved one pressed, a click 
   assert.match(byId(section, 'difficulty-hint').textContent, /next match/);
   click(nth(tiles, 2));
   assert.deepEqual(calls.difficulty, ['hard']);
+});
+
+test('Walls is a setting: six choices, the pick pressed, a click reports it; locked shows the label and why', () => {
+  const { section, calls } = draw({ walls: { pick: 'rubber', locked: null } });
+  const tiles = kids(byId(section, 'walls-picker'));
+  assert.deepEqual(tiles.map(t => t.textContent), ['None', 'Concrete', 'Rubber', 'Spring', 'Wraparound', 'Random']);
+  assert.deepEqual(tiles.map(t => t.getAttribute('aria-pressed')), ['false', 'false', 'true', 'false', 'false', 'false']);
+  assert.match(byId(section, 'walls-hint').textContent, /next round/);
+  click(nth(tiles, 4));
+  assert.deepEqual(calls.walls, ['wrap']);
+  const guest = draw({ walls: { pick: 'spring', locked: 'the host picks' } });
+  assert.ok(!maybeById(guest.section, 'walls-picker'), 'no buttons for a guest');
+  assert.equal(byId(guest.section, 'walls-picker-label').textContent, 'Walls: Spring (the host picks)');
 });
 
 test('the seed box keeps what was typed across a redraw, and the scroll stays put', () => {
@@ -220,7 +234,7 @@ test('Enter in the seed box during a room match asks the leave question, never l
   const m = menuMod.createMenu({
     G: { body: 'tank', tanks: [] }, $: id => (id === 'menu-overlay' ? asElement(section) as HTMLElement : null),
     net: { on: true, sendBody() {}, turnSecs: 120, isHost: false },
-    sfx: { play() {} }, difficulty: { get: () => 'normal', set() {} }, unlock() {}, isSoundMuted: () => false, isMusicMuted: () => false,
+    sfx: { play() {} }, difficulty: { get: () => 'normal', set() {} }, walls: () => ({ pick: 'none', locked: 'the host picks' }), pickWalls() {}, unlock() {}, isSoundMuted: () => false, isMusicMuted: () => false,
     keyHint: () => '', myTank: () => null, openLeaveVeil: () => { calls.ask++; },
     placeLogBelowStatus() {}, freshMatchFromSeedBox: () => { calls.fresh++; }, toggleFullscreen() {}, quit() {}, openStandings() {},
     turnTime() {}, alerts: () => ({ state: 'off', onClick() {} }), setFlashes() {}, toggleMusic() {}, toggleOverlay() {}, toggleSound() {}, nextSong() {},

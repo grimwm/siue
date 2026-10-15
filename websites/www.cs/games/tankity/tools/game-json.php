@@ -29,6 +29,7 @@ if (!defined('TANKITY_FLIGHT_TOOL')) {
     define('TANKITY_FLIGHT_TOOL', true);
 }
 require_once __DIR__ . '/../server/detmath.php';
+require_once __DIR__ . '/../server/walls.php';
 require_once __DIR__ . '/../server/flight.php';
 
 /** A YAML or schema problem; the message already carries the line number. */

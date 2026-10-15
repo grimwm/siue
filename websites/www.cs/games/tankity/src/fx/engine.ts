@@ -29,6 +29,8 @@ import type { Weapon } from '../sim.ts';
 const TAU = Math.PI * 2, DEG = Math.PI / 180, LUT_N = 12;
 /* The full-screen flash: at most this opaque, reached after this many seconds. */
 const FLASH_MAX = 0.35, FLASH_RAMP = 0.08;
+/** A shell this far across since the last frame was carried through a Wraparound wall: its trail starts afresh. */
+const TRAIL_JUMP = 200;
 const SHAPES = ['dot', 'streak', 'ring', 'spark', 'smoke', 'sprite', 'bolt', 'beam'] as const;
 const SLOTS = ['muzzle', 'trail', 'impact'] as const;
 const SPECIALS = ['split', 'steer', 'pierce', 'arc', 'hop', 'scatter', 'beam', 'dig', 'pour', 'burn'];
@@ -482,11 +484,14 @@ function createSystem(opts?: { max?: number }): FxSys {
     return t;
   }
   /* A shell in flight: call every frame with its position. Emitters with a
-     `rate` drip particles along the path travelled since the last call. */
+     `rate` drip particles along the path travelled since the last call; a
+     jump further than TRAIL_JUMP (a shell carried through a Wraparound wall)
+     drips from where it is now, never across the field. */
   function trail(ef: FxEffect | undefined, tr: TrailState, x: number, y: number, ang: number, dt: number, r: number): void {
     if (!ef) return;
     const list = ef.emitters, red = isReduced();
-    const px = tr.has ? tr.px : x, py = tr.has ? tr.py : y;
+    const jumped = tr.has && Math.abs(x - tr.px) > TRAIL_JUMP;
+    const px = tr.has && !jumped ? tr.px : x, py = tr.has && !jumped ? tr.py : y;
     tr.has = true; tr.px = x; tr.py = y;
     if (n > max * 0.8) return; // a crowded pool keeps its budget for blasts
     const lifeK = red ? 0.7 : 1;

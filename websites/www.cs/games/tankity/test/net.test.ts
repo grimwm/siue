@@ -222,7 +222,7 @@ const bodyOf = (entry: Sent): Record<string, unknown> => JSON.parse(String(entry
   const { net, host } = makeClient(() => ({ status: 200, body: fixture('start-local-reply') }));
   const got = await net.start();
   await test('start-sends-the-protocol', () => { assert.ok(/action=start/.test(at(host.log, 0).url) && bodyOf(at(host.log, 0)).proto === 2, at(host.log, 0).init.body); });
-  await test('start-local-resolves-the-match-to-play-here', () => { assert.deepEqual(got, { local: { difficulty: 'hard', speed: 1 } }); });
+  await test('start-local-resolves-the-match-to-play-here', () => { assert.deepEqual(got, { local: { difficulty: 'hard', speed: 1, walls: 'none' } }); });
 
   const room = makeClient(() => roomReply({ phase: 'play' }));
   const started = await room.net.start();
@@ -230,7 +230,13 @@ const bodyOf = (entry: Sent): Record<string, unknown> => JSON.parse(String(entry
 
   // An odd speed on the wire plays at 1×, as everywhere else.
   const odd = makeClient(() => ok({ ok: true, local: { difficulty: 'easy', speed: 3 } }));
-  await test('start-local-speed-is-parsed', async () => { assert.deepEqual(await odd.net.start(), { local: { difficulty: 'easy', speed: 1 } }); });
+  await test('start-local-speed-is-parsed', async () => { assert.deepEqual(await odd.net.start(), { local: { difficulty: 'easy', speed: 1, walls: 'none' } }); });
+
+  // The room's Walls ride along; an odd or missing word plays None.
+  const walled = makeClient(() => ok({ ok: true, local: { difficulty: 'easy', speed: 1, walls: 'random' } }));
+  await test('start-local-carries-the-walls', async () => { assert.deepEqual(await walled.net.start(), { local: { difficulty: 'easy', speed: 1, walls: 'random' } }); });
+  const brick = makeClient(() => ok({ ok: true, local: { difficulty: 'easy', speed: 1, walls: 'brick' } }));
+  await test('start-local-odd-walls-are-none', async () => { assert.deepEqual(await brick.net.start(), { local: { difficulty: 'easy', speed: 1, walls: 'none' } }); });
 
   const old = makeClient(() => ({ status: 426, body: fixture('error-reload') }));
   let msg = '';

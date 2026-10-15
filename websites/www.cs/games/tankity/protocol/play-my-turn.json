@@ -19,6 +19,8 @@
             "turn": 0,
             "turnSecs": 120,
             "speed": 1,
+            "walls": "none",
+            "wallsNow": "none",
             "expiresAt": 1800000600,
             "closesIn": 600,
             "turnLeft": 120,

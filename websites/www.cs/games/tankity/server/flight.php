@@ -1,7 +1,8 @@
 <?php
 // Operation Tankity rooms. The air a shell flies through: gravity, quadratic
-// drag on its speed relative to the moving air, and wind that grows with the
-// height above the field's floor; and a missile's launch speed at each power. The
+// drag on its speed relative to the moving air, wind that grows with the
+// height above the field's floor, and the side walls it meets (server/walls.php);
+// and a missile's launch speed at each power. The
 // same to the last bit as src/sim.ts (stepBallistic, missileTable): only + - *
 // / and sqrt, which every engine rounds alike. Loaded by rooms.php (and by
 // tools/game-json.php, which writes each missile's table into game.json); it
@@ -32,13 +33,18 @@ const ROOM_MISSILE_FAST = 4000;
 
 /* src/sim.ts airOf(): the wind's speed at ROOM_SHEAR_H (wind x ROOM_AIR_SPEED
    x sqrt(s)), the gun's drag scaled to the field (k) and the field's scale s =
-   $fw / ROOM_W. A row with no drag flies at 1; a missile feels ROOM_MISSILE_WIND
-   of the wind. */
-function room_air(int $fw, float $wind, array $def): array
+   $fw / ROOM_W, and the field's walls ($fw apart; absent for None). A row with
+   no drag flies at 1; a missile feels ROOM_MISSILE_WIND of the wind. */
+function room_air(int $fw, float $wind, array $def, string $walls = 'none'): array
 {
     $s = $fw / ROOM_W;
     $drag = (float) ($def['drag'] ?? 1.0);
-    return ['wind' => $wind * ROOM_AIR_SPEED * sqrt($s) * (!empty($def['missile']) ? ROOM_MISSILE_WIND : 1.0), 'k' => ROOM_DRAG_K * $drag / $s, 's' => (float) $s];
+    $air = ['wind' => $wind * ROOM_AIR_SPEED * sqrt($s) * (!empty($def['missile']) ? ROOM_MISSILE_WIND : 1.0), 'k' => ROOM_DRAG_K * $drag / $s, 's' => (float) $s];
+    if ($walls !== 'none') {
+        $air['walls'] = $walls;
+        $air['fw'] = $fw;
+    }
+    return $air;
 }
 
 /* src/sim.ts shear(): (max($h, 1) / ROOM_SHEAR_H)^(3/16) by square roots alone. */
@@ -48,9 +54,12 @@ function room_shear(float $h): float
     return $r * $r * $r;
 }
 
-/* src/sim.ts stepBallistic(): one step of $dt through $air, in place. */
-function room_step_ballistic(float &$x, float &$y, float &$vx, float &$vy, float $dt, array $air): void
+/* src/sim.ts stepBallistic(): one step of $dt through $air, in place, then
+   the walls the air carries (room_wall_step): what the step did at one. */
+function room_step_ballistic(float &$x, float &$y, float &$vx, float &$vy, float $dt, array $air): int
 {
+    $px = $x;
+    $py = $y;
     $rx = $vx;
     if ($air['wind'] != 0.0) {
         $rx -= $air['wind'] * room_shear((ROOM_H - $y) / $air['s']);
@@ -61,6 +70,7 @@ function room_step_ballistic(float &$x, float &$y, float &$vx, float &$vy, float
     $vy += (ROOM_GRAV - $d * $ry) * $dt;
     $x += $vx * $dt;
     $y += $vy * $dt;
+    return isset($air['walls']) ? room_wall_step($x, $y, $vx, $air['walls'], $air['fw'], $px, $py) : 0;
 }
 
 /* src/sim.ts calmRange45(): how far a 45-degree shot at speed $v flies on a

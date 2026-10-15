@@ -8,7 +8,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createReplay, shellAt, shellVel, parsePath, PATH_HZ, FAST_SPEED } from '../src/replay.ts';
+import { createReplay, shellAt, shellVel, parsePath, wallTouches, PATH_HZ, FAST_SPEED } from '../src/replay.ts';
+import { WALL_BOUNCE, WALL_BURST, WALL_WRAP } from '../src/walls.ts';
 import { anyTankFalling, beamCarve, buildArsenal, carveCrater, fallTanks, fireBeam, fireWeapon, stepShells } from '../src/sim.ts';
 import { applyEarth, digCarve, digHeading } from '../src/earth.ts';
 import type { Replay, ReplayEnv, ReplayShot } from '../src/replay.ts';
@@ -108,6 +109,38 @@ function frames(rp: Replay, n: number) {
   await test('shellAt holds the last point after the path ends', () => { assert.ok(shellAt(s, 5)[0] === 36 && shellAt(s, -1)[0] === 0); });
   await test('shellAt of an empty path is the landing spot', () => { assert.ok(JSON.stringify(shellAt({ e: { t0: 0, x1: 9, y1: 8 } as ShotEvent, pts: [] }, 1)) === '[9,8,0]'); });
   await test('shellVel is the step to the next point at path rate', () => { assert.ok(JSON.stringify(shellVel(s, 0)) === '[144,72]' && JSON.stringify(shellVel(s, 2)) === '[0,0]'); });
+}
+
+/* ---- paths that meet the walls ---- */
+{
+  // Through Wraparound: 700 -> 714 -> (in at the left) 8 -> 22.
+  const wrap = { e: { t0: 0, x1: 22, y1: 300, r: 26 } as ShotEvent, pts: parsePath('700,300 714,296 8,292 22,290') };
+  await test('shellAt never slides a wrapped shell across the field: it is at one side or the other', () => {
+    const before = shellAt(wrap, 1.4 / PATH_HZ), after = shellAt(wrap, 1.6 / PATH_HZ);
+    assert.ok(before[0] === 714 && after[0] === 8, `${before} ${after}`);
+  });
+  await test('shellVel across a wrap is the step beside it, never the jump', () => {
+    assert.deepEqual(shellVel(wrap, 1), [14 * PATH_HZ, -4 * PATH_HZ]);
+  });
+  await test('wallTouches finds the wrap, a bounce near a side, and a Concrete burst on the wall', () => {
+    assert.deepEqual(wallTouches(wrap.pts, wrap.e, 720), [{ i: 1, x: 0, y: 294, hit: WALL_WRAP }]);
+    const bounce = parsePath('680,200 700,190 716,186 702,188 690,196');
+    assert.deepEqual(wallTouches(bounce, { x1: 690, r: 26 }, 720), [{ i: 2, x: 719, y: 186, hit: WALL_BOUNCE }]);
+    // A lob that turns back in mid-field (a headwind) met no wall.
+    assert.deepEqual(wallTouches(parsePath('300,200 310,150 305,140 290,160'), { x1: 290, r: 26 }, 720), []);
+    const concrete = parsePath('690,250 705,240 719,236');
+    assert.deepEqual(wallTouches(concrete, { x1: 719, r: 26 }, 720), [{ i: 2, x: 719, y: 236, hit: WALL_BURST }]);
+  });
+  await test('the replay tells the host each wall a shell met, once, as it gets there', () => {
+    const walls: [number, number, number][] = [];
+    const host = makeHost();
+    const env = fullEnv(host.env);
+    const rp = createReplay({ ...env, wall: (x, y, hit) => { walls.push([x, y, hit]); } });
+    const shot: RoomEvent = { t: 'shot', by: 0, w: 'shell', x0: 700, y0: 300, x1: 22, y1: 290, t0: 0, t1: 3 / PATH_HZ, r: 26, p: '700,300 714,296 8,292 22,290', at: 0, seq: 2 };
+    rp.push([{ t: 'fire', seat: 0, w: 'shell', x: 700, a: 45, pw: 50, at: 0, seq: 1 }, shot]);
+    for (let i = 0; i < 400 && !rp.idle(); i++) rp.step(DT);
+    assert.deepEqual(walls, [[0, 294, WALL_WRAP]]);
+  });
 }
 
 /* ---- the host's volley: position at fixed times ---- */

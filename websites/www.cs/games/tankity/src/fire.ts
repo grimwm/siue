@@ -18,10 +18,11 @@ export interface FirePool extends Pool { flame: number }
    comes to rest as liquid dirt would (earth.ts pourLevel: it runs to the
    bottom of the dip it landed in, and what would reach an edge spills off,
    on the ground of this moment, which it never changes, and spreading only
-   until it is poolMin deep, so flat ground holds a puddle); its flames stand
-   `flame` px over its level. server/fire.php room_fire_pool is the same. */
-export function firePool(terrain: readonly number[], x: number, volume: number, flame: number, poolMin = 0): FirePool {
-  const p = pourLevel(terrain, x, volume, poolMin);
+   until it is poolMin deep, so flat ground holds a puddle; with `dam` a solid
+   wall holds it in at the edge); its flames stand `flame` px over its level.
+   server/fire.php room_fire_pool is the same. */
+export function firePool(terrain: readonly number[], x: number, volume: number, flame: number, poolMin = 0, dam = false): FirePool {
+  const p = pourLevel(terrain, x, volume, poolMin, dam);
   return { level: p.level, x0: p.x0, x1: p.x1, flame };
 }
 /* Whether a unit's body (sim.ts unitHitBox) reaches into a pool's flames: a

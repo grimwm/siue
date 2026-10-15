@@ -28,6 +28,8 @@ import { renderLeave as drawLeave } from './ui/leave.tsx';
 import { renderLobby as drawLobby } from './ui/lobby.tsx';
 import type { GamesView } from './ui/games.tsx';
 import type { LobbySeat } from './ui/lobby.tsx';
+import { isWallsSetting } from './walls.ts';
+import type { WallsSetting } from './walls.ts';
 
 /** What the lobby shows that the game decides (see LOBBY). */
 export interface LobbyView {
@@ -53,6 +55,8 @@ export interface LobbyView {
   initialsProblem: string;
   /** The turn time: the host form's pick out of a room, the room's in one. */
   turnSecs: number;
+  /** The room's Walls pick. */
+  walls: WallsSetting;
 }
 
 /** The slice of the game's state getting into a room touches (main.ts's G). */
@@ -98,7 +102,7 @@ export interface LobbyDeps {
   hideShop(): void;
   /** Play a match here, like solo, at a room's Difficulty and speed: the host
    * started a room nobody else had joined. */
-  startLocal(local: { difficulty: Difficulty; speed: Speed }): void;
+  startLocal(local: { difficulty: Difficulty; speed: Speed; walls: WallsSetting }): void;
   paintHud(): void;
   refreshNavHints(): void;
   renderMenu(): void;
@@ -121,7 +125,7 @@ export function createLobby(deps: LobbyDeps) {
   const LOBBY: LobbyView = {
     status: '', count: '', online: false, inRoom: false, mapId: '', mapsRev: 0, prefill: '',
     code: '', link: '', hills: 'Hills: Random hills', drones: '', seats: [], mySeat: 0, isHost: false, seatsHint: '', roomHint: '',
-    initialsRev: 0, initialsProblem: '', turnSecs: TURN_DEFAULT,
+    initialsRev: 0, initialsProblem: '', turnSecs: TURN_DEFAULT, walls: 'none',
   };
   function lobbySay(text: string): void {
     LOBBY.status = text;
@@ -196,6 +200,8 @@ export function createLobby(deps: LobbyDeps) {
       turnSecs: LOBBY.turnSecs,
       onTurnForm: secs => { LOBBY.turnSecs = secs; renderLobby(); },
       onTurnRoom: secs => { void netTurnTime(secs); },
+      walls: LOBBY.walls,
+      onWallsRoom: w => { void netWalls(w); },
       games: games(),
       onCopy: copyInvite,
       onStart: () => { sfx.play('click'); startRoom(); },
@@ -467,6 +473,7 @@ export function createLobby(deps: LobbyDeps) {
     LOBBY.hills = 'Hills: ' + (net.mapName || 'Random hills');
     // The host's own pick in flight is not undone by a poll that left before it.
     if (room && typeof room.turnSecs === 'number' && !turnPending) LOBBY.turnSecs = room.turnSecs;
+    if (room && !wallsPending) LOBBY.walls = isWallsSetting(room.walls) ? room.walls : 'none';
     if (room && room.difficulty) LOBBY.drones = `Drones: ${DIFFICULTY_NAMES[room.difficulty] || 'Normal'} (the host's Difficulty)`;
     LOBBY.seats = ((room && room.seats) || net.seats || []).map(s => ({ human: !!s.human, name: String(s.name || ''), mode: s.mode }));
     if (room) net.hostSeat = room.hostSeat;
@@ -527,6 +534,40 @@ export function createLobby(deps: LobbyDeps) {
       renderMenu();
     }
   }
+  /* The host picks the walls, in the lobby or between rounds (the server
+     refuses one while a round is played); a pick applies from the next round.
+     The lobby and the menu show it at once; only the newest answer is
+     applied, and a refusal puts the room's pick back. */
+  let wallsSeq = 0;
+  let wallsPending = false;
+  async function netWalls(w: WallsSetting): Promise<void> {
+    if (!net.code || !net.isHost) return;
+    if (!net.on) LOBBY.status = ''; // a new act: an earlier refusal has had its say
+    const seq = ++wallsSeq, was = net.walls;
+    LOBBY.walls = w;
+    net.walls = w;
+    wallsPending = true;
+    renderLobby();
+    renderMenu();
+    try {
+      const d = await net.post('walls', { walls: w });
+      if (seq !== wallsSeq) return;
+      if (net.on) net.apply(d.room);
+      else netRenderRoster(d.room);
+    } catch (err) {
+      if (seq !== wallsSeq) return;
+      LOBBY.walls = was;
+      net.walls = was;
+      if (net.on) say(prettyRoomError(err), 'bad');
+      else lobbySay(prettyRoomError(err));
+    } finally {
+      if (seq === wallsSeq) {
+        wallsPending = false;
+        renderLobby();
+        renderMenu();
+      }
+    }
+  }
   /* The host flips a seat nobody holds between the drone battery and open. */
   async function netSeatMode(seat: number, mode: 'ai' | 'open'): Promise<void> {
     if (!net.isHost || net.on) return;
@@ -568,8 +609,8 @@ export function createLobby(deps: LobbyDeps) {
   }
   /* Nobody joined: the server closed the lobby, so the seat is forgotten (it
      is not in Your games) and the match plays on this device as solo, at the
-     room's Difficulty and speed. The turn-time slider keeps its pick. */
-  function playHere(local: { difficulty: Difficulty; speed: Speed }): void {
+     room's Difficulty, speed and Walls. The turn-time slider keeps its pick. */
+  function playHere(local: { difficulty: Difficulty; speed: Speed; walls: WallsSetting }): void {
     const code = net.code;
     net.detach();
     seats.forget(code);
@@ -699,6 +740,6 @@ export function createLobby(deps: LobbyDeps) {
   }
   return {
     renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-    netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime, netGone,
+    netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime, netGone, netWalls,
   };
 }

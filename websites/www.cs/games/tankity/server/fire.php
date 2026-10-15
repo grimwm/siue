@@ -17,13 +17,13 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
 /* A napalm shell's pool: $volume px^2 of burning liquid poured at column x
 // comes to rest as liquid dirt would (room_pour_level: it runs to the bottom
 // of the dip it landed in, and what would reach an edge spills off, spreading
-// only until it is $poolMin deep, so flat ground holds a puddle), on the
-// ground of this moment, which it never changes; its flames stand $flame px
-// over its level. ['level', 'x0', 'x1', 'flame'] (x0 > x1: no pool).
-// src/fire.ts firePool() is the same. */
-function room_fire_pool(array $terrain, float $x, float $volume, float $flame, float $poolMin = 0.0): array
+// only until it is $poolMin deep, so flat ground holds a puddle; with $dam a
+// solid wall holds it in at the edge), on the ground of this moment, which it
+// never changes; its flames stand $flame px over its level. ['level', 'x0',
+// 'x1', 'flame'] (x0 > x1: no pool). src/fire.ts firePool() is the same. */
+function room_fire_pool(array $terrain, float $x, float $volume, float $flame, float $poolMin = 0.0, bool $dam = false): array
 {
-    $p = room_pour_level($terrain, $x, $volume, $poolMin);
+    $p = room_pour_level($terrain, $x, $volume, $poolMin, $dam);
     return ['level' => (float) $p['level'], 'x0' => (int) $p['x0'], 'x1' => (int) $p['x1'], 'flame' => $flame];
 }
 /* Whether a unit's body ($box, room_unit_box: [cx, cy, rx, ry]) reaches into a

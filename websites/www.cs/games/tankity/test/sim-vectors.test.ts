@@ -15,6 +15,7 @@ import * as standings from '../src/standings.ts';
 import * as det from '../src/detmath.ts';
 import * as earth from '../src/earth.ts';
 import * as fire from '../src/fire.ts';
+import * as walls from '../src/walls.ts';
 import type { Ammo, Arsenal, BlastOverride, Shell, Tank, Weapon, World } from '../src/sim.ts';
 
 /* One case as protocol/sim-vectors.php writes it: `in` has the shape its group's runner reads (Inputs). */
@@ -55,7 +56,15 @@ interface TankSpec {
   score?: number; shield?: boolean; bunker?: number; laststand?: boolean; jammer?: number;
 }
 /* difficulty is a string, not a Difficulty: a case feeds an unknown word on purpose. */
-interface WorldIn { terrain?: TerrainSpec; tanks?: TankSpec[]; wind?: number; round?: number; difficulty?: string }
+interface WorldIn { terrain?: TerrainSpec; tanks?: TankSpec[]; wind?: number; round?: number; difficulty?: string; walls?: walls.Walls }
+type WallsIn =
+  | { kind: 'step'; walls: walls.Walls; x: number; y: number; vx: number; vy: number; px: number; py: number }
+  | { kind: 'roll'; walls: walls.Walls; x: number; u: number }
+  | ({ kind: 'sim-shot' | 'split'; walls: walls.Walls; terrain: TerrainSpec; wind: number } & Shot)
+  | { kind: 'roll-out'; walls: walls.Walls; terrain: TerrainSpec; x: number; vx: number; vy: number; wkey: string }
+  | { kind: 'fall-to'; walls: walls.Walls; wind: number; wkey: string; x: number; y: number; vx: number; vy: number; ground: number }
+  | { kind: 'pour' | 'fire-pool'; dam: boolean; terrain: TerrainSpec; x: number; wkey: string }
+  | { kind: 'random'; seed: number };
 interface UnitSpot { kind: string; x: number; y: number }
 interface Shot { x: number; y: number; angle: number; power: number; wkey: string; dirS: number }
 type ArmorOp = ['muster'] | ['end'] | ['damage', number] | ['repair', number] | ['plate', number];
@@ -107,6 +116,7 @@ interface Inputs {
   fire: { terrain: TerrainSpec; x: number; v: number; flame: number; m?: number; units: UnitSpot[] };
   'fire-ticks': { burn: number; tick: number } | { burn?: undefined; dmg: number; ticks: number; shield: boolean; bunker: boolean };
   settle: { terrain: TerrainSpec; x: number; y: number; hp: number; kind?: string };
+  walls: WallsIn;
 }
 
 /* ---- state the cases run over ---- */
@@ -143,7 +153,7 @@ function world(c: WorldIn, w = 720): World {
     tanks: (c.tanks || []).map(tankOf), terrain: buildTerrain(c.terrain || { flat: 400 }, w), wind: c.wind || 0, round: c.round || 1,
     shells: [], booms: [], clouds: [], fx: {}, ammo: {}, selected: 'shell', score: human.score || 0, cash: 0, shake: 0, shopSel: 0,
     shield: !!human.shield, bunker: human.bunker || 0, laststand: !!human.laststand, jammer: human.jammer || 0,
-    chutes: human.chutes || 0, difficulty: c.difficulty,
+    chutes: human.chutes || 0, difficulty: c.difficulty, walls: c.walls,
   });
   return G;
 }
@@ -447,6 +457,48 @@ const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
     world({ terrain: c.terrain, tanks: [{ kind: c.kind || 'ai', x: c.x, y: c.y, hp: c.hp }] });
     sim.settleFalls(G, arsenal);
     return nth(G.tanks, 0).y;
+  },
+  walls(c) {
+    const gun = (k: string) => must(arsenal.weapons[k], k);
+    switch (c.kind) {
+      case 'step': {
+        const st = { x: c.x, y: c.y, vx: c.vx, vy: c.vy };
+        const did = walls.wallStep(st, c.walls, 720, c.px, c.py);
+        return { did, x: st.x, y: st.y, vx: st.vx };
+      }
+      case 'roll': {
+        const r = { x: c.x, u: c.u };
+        const did = walls.wallRoll(r, c.walls, 720);
+        return { did, x: r.x, u: r.u };
+      }
+      case 'sim-shot':
+        return sim.simShot({ terrain: buildTerrain(c.terrain), wind: c.wind, walls: c.walls }, arsenal, c.x, c.y, c.angle, c.power, c.wkey, c.dirS);
+      case 'split': {
+        const at = sim.splitPoint({ terrain: buildTerrain(c.terrain), wind: c.wind, walls: c.walls }, arsenal, c.x, c.y, c.angle, c.power, c.wkey, c.dirS);
+        return at && [at.x, at.y, at.vx, at.vy];
+      }
+      case 'roll-out':
+        return sim.rollOut(buildTerrain(c.terrain), c.x, c.vx, c.vy, gun(c.wkey), undefined, c.walls);
+      case 'fall-to': {
+        const f = sim.fallTo(c.x, c.y, c.vx, c.vy, c.ground, sim.airOf(720, c.wind, gun(c.wkey), c.walls));
+        return [f.x, f.y, f.vx, f.vy, f.stopped, f.n];
+      }
+      case 'pour': {
+        const w = gun(c.wkey);
+        return earth.pourLevel(buildTerrain(c.terrain), c.x, must(w.volume, 'volume'), must(w.poolMin, 'poolMin'), c.dam);
+      }
+      case 'fire-pool': {
+        const w = gun(c.wkey);
+        return fire.firePool(buildTerrain(c.terrain), c.x, must(w.volume, 'volume'), must(w.flame, 'flame'), must(w.poolMin, 'poolMin'), c.dam);
+      }
+      case 'random': {
+        const rng = sim.mulberry32(c.seed);
+        const picks = Array.from({ length: 8 }, () => walls.wallsFor('random', rng));
+        let drew = false;
+        const kept = walls.wallsFor('rubber', () => { drew = true; return 0; }) === 'rubber' && !drew;
+        return { picks, next: rng(), rubberKeepsStream: kept };
+      }
+    }
   },
 };
 /* The server reports where a drone wanted to shuffle; the browser moves it (inside the board, unless another unit is in the way). */

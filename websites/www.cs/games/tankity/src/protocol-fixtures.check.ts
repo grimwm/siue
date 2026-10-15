@@ -32,6 +32,7 @@ import playSpeed from '../protocol/play-speed.json' with { type: 'json' };
 import mineReply from '../protocol/mine-reply.json' with { type: 'json' };
 import shopAfterWin from '../protocol/shop-after-win.json' with { type: 'json' };
 import shopReady from '../protocol/shop-ready.json' with { type: 'json' };
+import shopWalls from '../protocol/shop-walls.json' with { type: 'json' };
 
 /** The declared type with every literal widened to its primitive, which is
  * all a JSON import can say. */
@@ -104,6 +105,7 @@ export const fixturesFit: {
   mineReply: Fits<typeof mineReply.body, MineReply>;
   shopAfterWin: Fits<typeof shopAfterWin.body, RoomReply>;
   shopReady: Fits<typeof shopReady.body, RoomReply>;
+  shopWalls: Fits<typeof shopWalls.body, RoomReply>;
 } = {
   createReply: true,
   joinReply: true,
@@ -126,4 +128,5 @@ export const fixturesFit: {
   mineReply: true,
   shopAfterWin: true,
   shopReady: true,
+  shopWalls: true,
 };

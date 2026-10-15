@@ -8,6 +8,7 @@
  * assigns the server's real replies (protocol/*.json) to these types. */
 
 import type { Difficulty } from './sim.ts';
+import type { Walls, WallsSetting } from './walls.ts';
 
 /* ---------- replies ---------- */
 
@@ -26,8 +27,9 @@ export interface SeatReply { ok: true; code: string; seat: number; token: string
 export interface RoomReply { ok: true; room: RoomSnapshot }
 
 /** Start with the host the only human: the lobby is closed and this browser
- * plays the match itself, like solo, at the room's Difficulty and speed. */
-export interface LocalReply { ok: true; local: { difficulty: Difficulty; speed: number } }
+ * plays the match itself, like solo, at the room's Difficulty, speed and
+ * Walls (a server from before the setting sends no walls: None). */
+export interface LocalReply { ok: true; local: { difficulty: Difficulty; speed: number; walls?: WallsSetting } }
 
 /** leave answers with just this. */
 export interface OkReply { ok: true }
@@ -183,6 +185,13 @@ export interface RoomSnapshot {
    * many times as fast. Only the host changes it. A client that does not know
    * the field plays at 1×. */
   speed: number;
+  /** The host's Walls pick (src/walls.ts; Random included) and the wall this
+   * round plays (never Random; None outside a round). The host picks in the
+   * lobby or between rounds; a pick applies from the next round. A client
+   * that does not know the fields plays as None, and a room from before the
+   * setting sends None. */
+  walls: WallsSetting;
+  wallsNow: Walls;
   /** When the room closes for want of play, unix seconds; it can come before turnLeft runs out.
    * The game counts from closesIn (its own clock may be off); this stays for other readers. */
   expiresAt: number;
@@ -242,6 +251,8 @@ export interface AgainEvent extends EventBase { t: 'again'; seat: number }
 export interface TurnTimeEvent extends EventBase { t: 'turntime'; seat: number; secs: number }
 /** The host changed the game speed (1, 2 or 4); it applies at once. */
 export interface SpeedEvent extends EventBase { t: 'speed'; seat: number; speed: number }
+/** The host picked the walls; they apply from the next round. */
+export interface WallsEvent extends EventBase { t: 'walls'; seat: number; walls: WallsSetting }
 
 /** What opens a volley: a human fires, the drone fires, or a drone fires for
  * a human who ran the turn clock out. `x`, `a` and `pw` are where the barrel
@@ -276,13 +287,14 @@ export interface RingEvent extends EventBase { t: 'ring'; by: number; w: string;
 /** The earth guns move the ground (src/earth.ts applyEarth replays each,
  * with the server's own unrounded numbers, so a client's ground matches the
  * server's). dirt: a disc of dirt of radius r where it burst; pour: liquid
- * dirt poured at column x, v px^2 of it, spreading no thinner than m px; dig: a digger's trench from where it
+ * dirt poured at column x, v px^2 of it, spreading no thinner than m px (d: 1 when a solid wall
+ * dams the field's edges, src/walls.ts wallsDam); dig: a digger's trench from where it
  * touched down, n steps along (ux, uy), half width r, cut from `at` to t1 (its
  * warheads follow as burst events); riot: a riot charge's scoop from its
  * gunner's hull at (x, y), standing at b, barrel heading a; slump: the slopes
  * within r of x slump. Hits and falls follow as their own events. */
 export interface DirtEvent extends EventBase { t: 'dirt'; w: string; x: number; y: number; r: number }
-export interface PourEvent extends EventBase { t: 'pour'; w: string; x: number; v: number; m: number }
+export interface PourEvent extends EventBase { t: 'pour'; w: string; x: number; v: number; m: number; d?: 1 }
 export interface DigEvent extends EventBase { t: 'dig'; by: number; w: string; x: number; y: number; ux: number; uy: number; n: number; r: number; t1: number }
 export interface RiotEvent extends EventBase { t: 'riot'; by: number; w: string; x: number; y: number; a: number; r: number; fan: number; b: number }
 export interface SlumpEvent extends EventBase { t: 'slump'; w: string; x: number; r: number; slope: number; passes: number }
@@ -311,7 +323,7 @@ export interface TacticEvent extends EventBase { t: 'tactic'; seat: number; s: s
 
 /** The events a snapshot carries, discriminated by `t`. */
 export type RoomEvent =
-  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent | SpeedEvent
+  | RoundEvent | RoundWinEvent | RoundLostEvent | MatchOverEvent | MatchWinEvent | EliminatedEvent | OneUpEvent | JoinEvent | LeftEvent | AgainEvent | TurnTimeEvent | SpeedEvent | WallsEvent
   | FireEvent | AiFireEvent | AutoEvent
   | ShotEvent | BeamEvent | RingEvent | BurnEvent | BurstEvent | DirtEvent | PourEvent | DigEvent | RiotEvent | SlumpEvent | HitEvent | FallEvent | KillEvent | ShieldEvent | LastStandEvent | FizzleEvent | TacticEvent;
 
@@ -354,6 +366,8 @@ export interface PostBodies {
   turntime: { secs: number };
   /** Host only, any phase; `speed` is 1, 2 or 4. */
   speed: { speed: number };
+  /** Host only, in the lobby or between rounds (409 during a round). */
+  walls: { walls: WallsSetting };
   /** The seats this browser holds (at most 12), asked about together; the
    * reply is not a room, so no delta fields ride along. */
   mine: { seats: { code: string; token: string }[] };
@@ -374,6 +388,7 @@ export interface PostReplies {
   seatmode: RoomReply;
   turntime: RoomReply;
   speed: RoomReply;
+  walls: RoomReply;
   mine: MineReply;
   leave: OkReply;
 }

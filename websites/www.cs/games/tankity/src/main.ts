@@ -73,6 +73,8 @@ import { createMenu } from './menu.ts';
 import { createVolume } from './volume.ts';
 import { createTitle } from './title.ts';
 import { difficultySetting } from './difficulty.ts';
+import { WALL_BOUNCE, wallsSetting } from './walls.ts';
+import type { WallsSetting } from './walls.ts';
 import { initialsPref } from './initials.ts';
 import { createSeatStore } from './seats.ts';
 import { createGamesWatch, isClosedRow, roomOnScreen } from './games.ts';
@@ -206,11 +208,11 @@ async function loadGameConfig(): Promise<void> {
    skips painting, the frame loop waits on G.terrain). */
 const NOT_DEALT = null!;
 const G: GameState = {
-  seed: '', difficulty: 'normal', rng: NOT_DEALT, body: 'tank',
+  seed: '', difficulty: 'normal', wallsFixed: null, walls: 'none', rng: NOT_DEALT, body: 'tank',
   terrain: NOT_DEALT, clouds: [],
   tanks: [], turn: 0, phase: 'aim', // banner | shop | aim | think | fly | settle | over (src/flow.ts)
   thinkT: 0, settleT: 0,
-  shells: [], parts: [], booms: [], fx: null, marks: createMarks(), earth: createEarthShow(), fire: createFireShow(),
+  shells: [], parts: [], booms: [], fx: null, marks: createMarks(), wallHits: [], earth: createEarthShow(), fire: createFireShow(),
   wind: 0, round: 1, firstTurn: 0,
   lives: TUNE.lives, score: 0, cash: 0, nextOneUp: TUNE.oneUpEvery,
   rounds: [], roundStart: { score: 0, cash: 0 },
@@ -283,8 +285,12 @@ const previewEnv: PreviewEnv<FxSys> = {
 function openPreview(wkey: string): void {
   const w = WEAPONS[wkey];
   if (!w) return;
-  G.preview = createPreview(wkey, previewEnv, FX ? FX.createSystem({ max: 260 }) : null,
+  const range = createPreview(wkey, previewEnv, FX ? FX.createSystem({ max: 260 }) : null,
     document.getElementById('preview-stage'));
+  // The range flies the player's solo Walls; Random shows the wall this round plays (none outside a solo match).
+  const pick = wallsPref.get();
+  if (range) range.walls = pick !== 'random' ? pick : !net.on && !G.demo ? G.walls || 'none' : 'none';
+  G.preview = range;
   const pr = $('preview-result');
   if (pr) pr.textContent = '';
   const title = $('preview-title');
@@ -520,6 +526,10 @@ const replay = createReplay({
   earth: e => netEarth(e),
   burn: e => netBurn(e),
   mark: shot => netMark(shot),
+  wall: (x, y, hit) => {
+    G.wallHits.push({ x, y, hit, t: 0 });
+    if (hit === WALL_BOUNCE) sfx.play('clank');
+  },
 });
 /* ---------- the typed modules, wired in dependency order ---------- */
 /* The status bar's values (src/hud.ts). */
@@ -547,6 +557,8 @@ const {
 });
 /* The Difficulty setting: the Menu picks it, a new solo match and a hosted room read it. */
 const difficulty = difficultySetting(browserStorage());
+/* The solo Walls setting (src/walls.ts): the Menu picks it; a solo match reads it at every round, the firing range always. */
+const wallsPref = wallsSetting(browserStorage());
 /* The player's initials (src/initials.ts): one set per browser, edited on the
    title card and in the rooms lobby; the rooms host and join with it, and
    filed scores carry it. */
@@ -563,7 +575,7 @@ const {
   advance, startDemo, startSolo, demoBlock, playerFire, fallTanks, END, renderEndVeil, startBanner, tickBanner, nextRound,
   warFrame, decayFx, soloShopBoard, endVeilBack, checkOneUps,
 } = createMatch({
-  field, G, $, TOUCH, tables, net, sfx, music, difficulty, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
+  field, G, $, TOUCH, tables, net, sfx, music, difficulty, walls: wallsPref, unlock, alive, foesAlive, me, cur, surfY, talk, exchange, say, keyHint, windText,
   render, renderHUD, refreshNavHints, fxMuzzle, fxImpact, fxSpecial, fxTrail, closePreview, endTutorial, maybeStartTutorial,
   tutorialFired, backToTitle: () => backToTitle(),
   closeGuns: () => closeGuns(), hideShop: () => hideShop(), openShop: () => openShop(),
@@ -601,7 +613,7 @@ const {
 /* Getting into and out of a room (src/lobby.ts): the lobby, hosting, joining, the invite, leaving. */
 const {
   renderLobby, setNetDot, loadOccupancy, openLobby, maybeApplyInviteCode, renderLeaveVeil, openLeaveVeil, closeLeaveVeil,
-  netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime, netGone,
+  netLeave, netStepOut, resumeRoom, netAgain, netBackToLobby, netTurnTime, netGone, netWalls,
 } = createLobby({
   G, $, net, MATCH, HUD, END, replay, sfx, difficulty, unlock, playFullscreen, say, keyHint, seats, games: () => gamesView(),
   steppedOut: (code, myTurn) => { if (myTurn) watch.quietNext(code); }, netEvent, seatName, closeLobbyVeil,
@@ -616,7 +628,17 @@ const volume = createVolume(browserStorage(), { setSoundLevel, setMusicLevel, se
 const { loadBody, loadTextSize, loadFlashes, textScale, renderMenu } = createMenu({
   G, $, net, sfx, difficulty, unlock, playFullscreen, isSoundMuted, isMusicMuted, keyHint, myTank, openLeaveVeil, placeLogBelowStatus,
   nextSong: () => { unlock(); music.next(); },
-  openStandings: () => openStandings(), turnTime: secs => netTurnTime(secs), alerts: () => ({ state: alertsState(), onClick: toggleAlerts }), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
+  openStandings: () => openStandings(), turnTime: secs => netTurnTime(secs),
+  // Solo: the Menu's own Walls, from the next round (a room the host started alone gives way to it too).
+  // In a room: the room's, which only the host picks, and never while a round is played.
+  walls: () => !net.code
+    ? { pick: wallsPref.get(), locked: null }
+    : { pick: net.walls, locked: !net.isHost ? 'the host picks' : net.on && net.phase === 'play' ? 'the host picks between rounds' : null },
+  pickWalls: w => {
+    if (net.code) { void netWalls(w); return; }
+    wallsPref.set(w);
+    G.wallsFixed = null;
+  }, alerts: () => ({ state: alertsState(), onClick: toggleAlerts }), freshMatchFromSeedBox, toggleFullscreen, toggleMusic, toggleOverlay, toggleSound,
   quit: () => { void quitGame(); },
   setFlashes: on => { if (FX) FX.flashes = on; },
   volume,
@@ -801,7 +823,7 @@ function renderKeyHints(): void {
     el.textContent = kctx !== undefined && kact !== undefined ? keyHint(kctx, kact, +(kidx || 0)) : '';
   });
 }
-function freshMatchFromSeedBox(opts?: { tut?: boolean; difficulty?: Difficulty }): void {
+function freshMatchFromSeedBox(opts?: { tut?: boolean; difficulty?: Difficulty; walls?: WallsSetting }): void {
   // A new match takes the whole frame: shut any panels so the menu never
   // sits over the briefing and the shop never opens underneath it.
   closeOverlays();
@@ -811,21 +833,22 @@ function freshMatchFromSeedBox(opts?: { tut?: boolean; difficulty?: Difficulty }
   endTutorial(tutorialActive());
   if (opts && opts.tut) armTutorial();
   const seedInput = $<HTMLInputElement>('seed-input');
-  startSolo(seedInput ? seedInput.value : '', opts?.difficulty);
+  startSolo(seedInput ? seedInput.value : '', opts?.difficulty, opts?.walls);
   render(); renderHUD();
 }
-function randomRun(opts?: { difficulty?: Difficulty }): void {
+function randomRun(opts?: { difficulty?: Difficulty; walls?: WallsSetting }): void {
   const seedBox = $<HTMLInputElement>('seed-input');
   if (seedBox) seedBox.value = 'scorched-' + Math.floor(Math.random() * 90000 + 10000);
   freshMatchFromSeedBox(opts);
 }
 /* The host started a room nobody else joined: the server closed it, and the
-   match plays here as solo, on random hills, at the room's Difficulty (this
-   match only; the Menu's comes back for the next) and its game speed (the FF
+   match plays here as solo, on random hills, at the room's Difficulty and
+   Walls (this match only; the Menu's come back for the next, and a Walls pick
+   in the Menu takes over from the next round) and its game speed (the FF
    button's solo speed from here on, as a tap on it would set). */
-function startLocal(local: { difficulty: Difficulty; speed: Speed }): void {
+function startLocal(local: { difficulty: Difficulty; speed: Speed; walls: WallsSetting }): void {
   soloSpeed.set(local.speed);
-  randomRun({ difficulty: local.difficulty });
+  randomRun({ difficulty: local.difficulty, walls: local.walls });
 }
 function openRooms(): void {
   unlock();

@@ -367,7 +367,7 @@ $check('local-start-old-bundle-reloads', $oldStatus === 426 && ($oldStart['reloa
     json_encode([$oldStatus, $oldStart]));
 usleep(300000);
 [$localStatus, $localStart] = $postStatus('start', $sctl + ['proto' => 2]);
-$check('local-start', $localStatus === 200 && ($localStart['local'] ?? null) === ['difficulty' => 'hard', 'speed' => 1]
+$check('local-start', $localStatus === 200 && ($localStart['local'] ?? null) === ['difficulty' => 'hard', 'speed' => 1, 'walls' => 'none']
     && !isset($localStart['room']), json_encode([$localStatus, $localStart]));
 $soloGone = $get($base . '/rooms.php?action=state&code=' . $sctl['code'] . '&token=' . $sctl['token']);
 $check('local-start-closes-the-lobby', ($soloGone['error'] ?? '') === 'no such room' && !isset($soloGone['closed']), json_encode($soloGone));

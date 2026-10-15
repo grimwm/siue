@@ -225,6 +225,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 /* Theme tiles: five across, each swatch in its own theme's accent (its
    data-theme scopes the palette to the swatch). */
 .unit-picker.theme-picker { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.2rem; }
+/* Walls: six picks in two rows of three, so Wraparound fits its tile. */
+.unit-picker.walls-picker { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.unit-picker.walls-picker .unit-choice span { overflow-wrap: anywhere; }
 .theme-choice { align-content: center; min-height: 3.2rem; }
 .theme-swatch { display: block; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--accent); border: 2px solid rgba(255, 255, 255, 0.3); }
 .theme-choice[aria-pressed="true"] .theme-swatch { border-color: var(--ink); }

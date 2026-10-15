@@ -273,7 +273,7 @@ final class RoomGuardTest extends TestCase
         $this->assertEqualsWithDelta(time(), $this->actedColumn($code), 1, 'the player who is up loading a gun stamps it');
     }
 
-    public function testTheHostingPlaceFollowsTheHostWhenTheHostLeaves(): void
+    public function testAStartedMatchCountsAgainstTheAddressThatStartedIt(): void
     {
         [$st, $host] = $this->call('create', ['initials' => 'hst'], ['REMOTE_ADDR' => '203.0.113.1'], self::FREE);
         $this->assertSame(200, $st, json_encode($host));
@@ -283,16 +283,66 @@ final class RoomGuardTest extends TestCase
         $hostAddr = (string) $room['seats'][0]['addr'];
         $guestAddr = (string) $room['seats'][1]['addr'];
         $this->assertSame(1, room_lobbies_hosted($hostAddr));
-        // In a running match the host leaving passes the role on (in a lobby it closes the room).
         $this->gap();
         $this->assertSame(200, $this->call('start', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']],
             ['REMOTE_ADDR' => '203.0.113.1'], self::FREE)[0]);
         $this->assertSame(1, room_hosted($hostAddr));
+        // In a running match the host leaving passes the role on (in a lobby it
+        // closes the room), but the match still counts against the address that
+        // started it: leaving cannot launder the cap.
         $this->gap();
         $this->assertSame(200, $this->call('leave', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']],
             ['REMOTE_ADDR' => '203.0.113.1'], self::FREE)[0]);
-        $this->assertSame(0, room_hosted($hostAddr), 'the leaver hosts nothing now');
-        $this->assertSame(1, room_hosted($guestAddr), 'the new host carries the room');
+        $this->assertSame(1, $this->stored($host['code'])['hostSeat'] ?? room_host($this->stored($host['code'])), 'the guest hosts now');
+        $this->assertSame(1, room_hosted($hostAddr), 'still counted against the starter');
+        $this->assertSame(0, room_hosted($guestAddr));
+    }
+
+    /* Two addresses cannot fill the server by starting matches and walking
+       out of them: each one the starter leaves still counts against it. */
+    public function testLeavingStartedMatchesDoesNotFreeTheHostingCap(): void
+    {
+        for ($k = 0; $k < 4; $k++) {
+            [$st, $host] = $this->call('create', ['initials' => 'hst'], ['REMOTE_ADDR' => '203.0.113.1'], self::FREE);
+            $this->assertSame(200, $st, json_encode($host));
+            $this->assertSame(200, $this->call('join', ['code' => $host['code'], 'initials' => 'gst'], ['REMOTE_ADDR' => '203.0.113.2'], self::FREE)[0]);
+            $this->gap();
+            $seat = ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']];
+            $this->assertSame(200, $this->call('start', $seat, ['REMOTE_ADDR' => '203.0.113.1'], self::FREE)[0]);
+            $this->gap();
+            $this->assertSame(200, $this->call('leave', $seat, ['REMOTE_ADDR' => '203.0.113.1'], self::FREE)[0]);
+        }
+        [$st, $host] = $this->call('create', ['initials' => 'hst'], ['REMOTE_ADDR' => '203.0.113.1'], self::FREE);
+        $this->assertSame(200, $st);
+        $this->assertSame(200, $this->call('join', ['code' => $host['code'], 'initials' => 'gst'], ['REMOTE_ADDR' => '203.0.113.2'], self::FREE)[0]);
+        $this->gap();
+        $this->assertSame([429, ['error' => 'too many matches hosted from here; finish or leave one first']],
+            $this->call('start', ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']], ['REMOTE_ADDR' => '203.0.113.1'], self::FREE));
+    }
+
+    /* Play again makes a lobby like create does, so it spends the hourly
+       allowance like create does. */
+    public function testPlayAgainSpendsTheAllowanceLikeCreate(): void
+    {
+        $env = ['TANKITY_ROOM_JOINS_PER_HOUR' => '2', 'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4', 'TANKITY_LOBBIES_PER_ADDRESS' => '4'];
+        [$st, $host] = $this->call('create', ['initials' => 'hst'], ['REMOTE_ADDR' => '203.0.113.1'], $env);
+        $this->assertSame(200, $st);
+        $this->assertSame(200, $this->call('join', ['code' => $host['code'], 'initials' => 'gst'], ['REMOTE_ADDR' => '203.0.113.2'], $env)[0]);
+        $this->gap();
+        $seat = ['code' => $host['code'], 'token' => $host['token'], 'csrf' => $host['csrf']];
+        $this->assertSame(200, $this->call('start', $seat, ['REMOTE_ADDR' => '203.0.113.1'], $env)[0]);
+        [$room, $lock] = room_load($host['code']);
+        $room['phase'] = 'over';
+        room_save($lock, $host['code'], $room);
+        room_unlock($lock);
+        $this->assertSame(200, $this->call('create', ['initials' => 'two'], ['REMOTE_ADDR' => '203.0.113.1'], $env)[0], 'the second of two');
+        $this->gap();
+        $this->assertSame([429, ['error' => 'too many rooms from here; try again later']], $this->call('again', $seat, ['REMOTE_ADDR' => '203.0.113.1'], $env));
+        $this->assertSame('over', $this->stored($host['code'])['phase']);
+        [$st, $out] = $this->call('again', ['code' => $host['code'], 'token' => $this->stored($host['code'])['seats'][1]['token'],
+            'csrf' => $host['csrf']], ['REMOTE_ADDR' => '203.0.113.2'], $env);
+        $this->assertSame(200, $st, json_encode($out) . ' (the guest\'s address has one left)');
+        $this->assertSame('lobby', $this->stored($host['code'])['phase']);
     }
 
     public function testAPlayPollThatHasNothingDueDoesNotSave(): void

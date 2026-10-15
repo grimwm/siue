@@ -333,9 +333,11 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   total-age cap.
 - A `state` poll of a running room is a read: it takes the write lock and
   saves only when `room_tick_due` says a clock ran out or a drone is up.
-- The hosting cap counts a room against its current host's address
-  (`room_host_key`), so when the host leaves a running match the place moves
-  to the new host. Addresses are stored as a keyed hash (`addr_key`).
+- The lobby cap counts a lobby against its current host's address
+  (`room_host_key`); the match cap counts a started match against the address
+  that started it (`startedBy`, `room_cap_key`), even after that host leaves
+  and the role passes on, so walking out of matches never frees the cap.
+  Addresses are stored as a keyed hash (`addr_key`).
 - Seats: a room always has four (`ROOM_SEATS`), seat 0 the host. Each seat is
   a human or a non-human with `mode` `ai` (the drone battery, the default) or
   `open` (no unit). The lobby shows them as a tile grid (initials, `AI`,
@@ -701,6 +703,7 @@ people play together, and waiting costs little.
   `lobbies_per_address` lobbies. A full pool closes one lobby to make room:
   first one no tab polls (no heartbeat for 40 s), then one nobody acted in for
   `room_live_secs`, then one older than 30 minutes, the oldest first in each.
+  Play again spends the presser's hourly allowance, as create does.
   A lobby under 30 minutes old, acted in within 10 minutes and polled by a tab
   is never closed; with only those, the create gets 409 "Every lobby is busy.
   Try again in a minute." (uncharged).

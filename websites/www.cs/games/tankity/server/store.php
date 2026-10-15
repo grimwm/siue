@@ -452,6 +452,17 @@ function room_host_key(array $room): string
     $addr = (string) ($seat['addr'] ?? '');
     return $addr !== '' ? $addr : (string) ($room['hostKey'] ?? '');
 }
+/* The address a room counts against (the host column): a lobby's current
+   host, for the lobby cap; a started match's starter, for the match cap, so
+   a host who leaves a running match (the role passes on) still has it
+   counted until it ends. */
+function room_cap_key(array $room): string
+{
+    if (in_array($room['phase'] ?? 'lobby', ['play', 'shop', 'over'], true) && is_string($room['startedBy'] ?? null) && $room['startedBy'] !== '') {
+        return $room['startedBy'];
+    }
+    return room_host_key($room);
+}
 function room_save($lock, string $code, array $room): bool
 {
     if (!$lock instanceof RoomLock || !$lock->open) {
@@ -468,7 +479,7 @@ function room_save($lock, string $code, array $room): bool
         $q->bindValue(1, $raw, PDO::PARAM_LOB);
         $q->bindValue(2, $room['touched'], PDO::PARAM_INT);
         $q->bindValue(3, room_expires($room), PDO::PARAM_INT);
-        $q->bindValue(4, room_host_key($room));
+        $q->bindValue(4, room_cap_key($room));
         $q->bindValue(5, (string) ($room['phase'] ?? 'lobby'));
         $q->bindValue(6, room_acted($room), PDO::PARAM_INT);
         $q->bindValue(7, room_turn_secs($room), PDO::PARAM_INT);

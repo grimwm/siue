@@ -611,7 +611,8 @@ if ($action === 'start' && $method === 'POST') {
     // then a free slot or the stalest eligible room closed to make one.
     try {
         $now = time();
-        if (room_hosted(room_host_key($room), (string) $room['code'], $now) >= room_hosts_per_address()) {
+        $room['startedBy'] = room_host_key($room);
+        if (room_hosted($room['startedBy'], (string) $room['code'], $now) >= room_hosts_per_address()) {
             room_discard($fh);
             room_json_out(429, ['error' => 'too many matches hosted from here; finish or leave one first']);
         }
@@ -883,6 +884,17 @@ if ($action === 'again' && $method === 'POST') {
         if ($hosting) {
             room_discard($fh);
             room_json_out(429, ['error' => ROOM_LOBBIES_HOSTED]);
+        }
+        // A new lobby spends the presser's hourly allowance, as create does.
+        try {
+            $allowed = room_rate_take(tankity_guard()->clientKey(), time());
+        } catch (Throwable $e) {
+            room_discard($fh);
+            room_store_fail($e);
+        }
+        if (!$allowed) {
+            room_discard($fh);
+            room_json_out(429, ['error' => 'too many rooms from here; try again later']);
         }
     }
     room_emit($room, ['t' => 'again', 'seat' => $seat]);

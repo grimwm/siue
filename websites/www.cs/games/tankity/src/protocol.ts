@@ -12,14 +12,22 @@ import type { Difficulty } from './sim.ts';
 /* ---------- replies ---------- */
 
 /** Every failure: a status other than 200 and a short human-readable line.
- * Note there is no `ok` key; the client tests `!data.ok`. */
-export interface ErrorReply { ok?: undefined; error: string }
+ * Note there is no `ok` key; the client tests `!data.ok`. `reload` comes with
+ * 426, a request this bundle is too old for: the line asks for a reload. */
+export interface ErrorReply { ok?: undefined; error: string; reload?: true }
+
+/** The room protocol this bundle speaks, sent on create, join and start. */
+export type Proto = 2;
 
 /** What create and join answer: the seat and the two secrets for it. */
 export interface SeatReply { ok: true; code: string; seat: number; token: string; csrf: string }
 
 /** Everything that changes a room answers with the room as the asker sees it. */
 export interface RoomReply { ok: true; room: RoomSnapshot }
+
+/** Start with the host the only human: the lobby is closed and this browser
+ * plays the match itself, like solo, at the room's Difficulty and speed. */
+export interface LocalReply { ok: true; local: { difficulty: Difficulty; speed: number } }
 
 /** leave answers with just this. */
 export interface OkReply { ok: true }
@@ -332,9 +340,9 @@ export type BodyKind = 'tank' | 'hover' | 'walker' | 'buggy';
  * for the whole world, `full: true`; action=state takes the same three as
  * query parameters. */
 export interface PostBodies {
-  create: { initials: string; map: string; body: string; difficulty: Difficulty; turn?: number };
-  join: { code: string; initials: string; body: string };
-  start: Record<string, never>;
+  create: { proto: Proto; initials: string; map: string; body: string; difficulty: Difficulty; turn?: number };
+  join: { proto: Proto; code: string; initials: string; body: string };
+  start: { proto: Proto };
   act: ActBody;
   buy: { item: string; qty: number };
   ready: { ready: boolean };
@@ -356,7 +364,7 @@ export interface PostBodies {
 export interface PostReplies {
   create: SeatReply;
   join: SeatReply;
-  start: RoomReply;
+  start: RoomReply | LocalReply;
   act: RoomReply;
   buy: RoomReply;
   ready: RoomReply;

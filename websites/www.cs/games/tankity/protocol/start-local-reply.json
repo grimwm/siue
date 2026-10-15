@@ -1,0 +1,11 @@
+{
+    "about": "Start with the host alone: the lobby closes and the browser plays the match with the room's Difficulty and speed.",
+    "status": 200,
+    "body": {
+        "ok": true,
+        "local": {
+            "difficulty": "hard",
+            "speed": 1
+        }
+    }
+}

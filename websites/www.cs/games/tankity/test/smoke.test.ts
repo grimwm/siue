@@ -252,7 +252,7 @@ for (const id of ['rooms-open', 'host-form', 'lobby-initials', 'join-form',
 // The field's width is set where a match is dealt and nowhere else (spec 6.6).
 const widthWrites = [...src.matchAll(/\bG\.w\s*=(?!=)/g)].length;
 await test('field-width-written-only-at-the-deal', () => { assert.ok(widthWrites === 2 && /G\.w = w;/.test(moduleOf('solo.ts')) && /G\.w = ROOM_W/.test(moduleOf('room.ts'))
-  && /soloDeal\(G, tables\.arsenal!, seed, difficulty\.get\(\), field\.deal\(\)\)/.test(moduleOf('match.ts')), `writes=${widthWrites}`); });
+  && /soloDeal\(G, tables\.arsenal!, seed, level \?\? difficulty\.get\(\), field\.deal\(\)\)/.test(moduleOf('match.ts')), `writes=${widthWrites}`); });
 await test('no-module-imports-a-fixed-width', () => { assert.ok(!/import\s*\{[^}]*\bW\b[^}]*\}\s*from\s*'\.\/sim\.ts'/.test(src), 'a module still imports W from sim.ts'); });
 await test('no-status-codes', () => { assert.ok(!/server said no/.test(src)); });
 // The page loads the effects bundle, then the game bundle, and nothing else:

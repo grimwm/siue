@@ -1,0 +1,8 @@
+{
+    "about": "A bundle older than the server, where it cannot play the answer (a lone host's Start without `proto`): HTTP 426, reload.",
+    "status": 426,
+    "body": {
+        "error": "Tankity was updated. Reload the page to keep playing.",
+        "reload": true
+    }
+}

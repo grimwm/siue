@@ -49,6 +49,7 @@ function rig(respond: (url: string, init?: { method?: string; body?: string }) =
   const said: string[] = [];
   const G = { body: 'tank', demo: true, over: false };
   const titled: number[] = [];
+  const locals: { difficulty: string; speed: number }[] = [];
   const net = new m.net.RoomClient(env, {
     onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {},
     onGone: (code, why) => lobby.netGone(code, why),
@@ -66,19 +67,22 @@ function rig(respond: (url: string, init?: { method?: string; body?: string }) =
     closeOverlays: () => false, closePreview() {}, endTutorial() {}, closeTitle() {}, backToTitle() { titled.push(1); G.demo = true; },
     initials: { get: () => 'ABC', set() {}, subscribe: () => () => {} }, initialsSaved() {},
     hideShop() {}, paintHud() {}, refreshNavHints() {}, renderMenu() {}, renderShop() {},
+    startLocal: local => { locals.push(local); G.demo = false; },
   } satisfies LobbyDeps);
   seats.remember({ code: 'AB3D', seat: 0, token: 'tok', csrf: 'c', initials: 'ABC' });
   const tick = async () => { for (const { fn } of [...intervals.values()]) fn(); for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r)); };
-  return { net, lobby, seats, said, G, titled, intervals, tick, $ };
+  return { net, lobby, seats, said, G, titled, locals, intervals, tick, $ };
 }
 const ok = (body: unknown): Answer => ({ status: 200, body });
+
+const withGuest = lobbyRoom({ seats: [{ seat: 0, human: true, name: 'ABC', mode: 'human' }, { seat: 1, human: true, name: 'ZED', mode: 'human' }] });
 
 test('a refusal stays on the status line while the lobby polls; the roster line lives apart', async () => {
   const r = rig(url => {
     if (url.includes('action=start')) return { status: 409, body: { ok: false, error: 'A match needs at least two tanks. Switch a seat to AI so there is someone to battle.' } };
     if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 1, max: 50 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
-    return ok({ ok: true, room: lobbyRoom() });
+    return ok({ ok: true, room: withGuest });
   });
   assert.equal(await r.lobby.resumeRoom('AB3D'), true);
   click(r.$('lobby-start'));
@@ -189,4 +193,57 @@ test('the occupancy line counts matches running and lobbies open', async () => {
   });
   await r.lobby.resumeRoom('AB3D');
   assert.match(r.$('lobby-count').textContent, /^3 \/ 50 matches running · 12 lobbies open$/);
+});
+
+test('the host alone is told Start plays here; with a guest, the usual line', async () => {
+  let room = lobbyRoom();
+  const r = rig(url => {
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    return ok({ ok: true, room });
+  });
+  await r.lobby.resumeRoom('AB3D');
+  assert.equal(r.$('room-hint').textContent, 'With only you seated, Start plays here on your device.');
+  room = withGuest;
+  await r.tick();
+  assert.equal(r.$('room-hint').textContent, 'You host. Start when your crew is in.');
+});
+
+test('a host alone starts: the lobby closes, the seat is forgotten and the match plays here', async () => {
+  let polls = 0;
+  const r = rig(url => {
+    if (url.includes('action=start')) return ok({ ok: true, local: { difficulty: 'easy', speed: 4 } });
+    if (url.includes('action=state')) polls++;
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    return ok({ ok: true, room: lobbyRoom() });
+  });
+  await r.lobby.resumeRoom('AB3D');
+  click(r.$('lobby-start'));
+  await r.tick();
+  assert.deepEqual(r.locals, [{ difficulty: 'easy', speed: 4 }]);
+  assert.equal(r.net.code, '', 'no room session');
+  assert.equal(r.net.on, false);
+  assert.equal(r.seats.get('AB3D'), null, 'not in Your games');
+  assert.equal(r.$('lobby-veil').hidden, true);
+  assert.equal(r.intervals.size, 0, 'nothing polls the closed lobby');
+  const before = polls;
+  await r.tick();
+  assert.equal(polls, before);
+  assert.ok(r.said.includes('Nobody else joined, so this match plays here on your device.'), r.said.join(' | '));
+});
+
+test('a Start the server says this tab is too old for: the reload line, and the tab stays in its lobby', async () => {
+  const r = rig(url => {
+    if (url.includes('action=start')) return { status: 426, body: { error: 'Tankity was updated. Reload the page to keep playing.', reload: true } };
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
+    return ok({ ok: true, room: lobbyRoom() });
+  });
+  await r.lobby.resumeRoom('AB3D');
+  click(r.$('lobby-start'));
+  await r.tick();
+  assert.equal(r.$('lobby-status').textContent, 'Tankity was updated. Reload the page to keep playing.');
+  assert.equal(r.net.code, 'AB3D');
+  assert.deepEqual(r.locals, []);
 });

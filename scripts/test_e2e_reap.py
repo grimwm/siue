@@ -73,6 +73,15 @@ class ReapTest(unittest.TestCase):
         self.assertTrue(alive(concurrent), "another run's browser survives")
         self.assertTrue(alive(users_own), "an untagged browser survives")
 
+    def test_reap_matches_the_path_literally(self):
+        mine = os.path.join(self.tmp, "run[1]")
+        sibling = os.path.join(self.tmp, "run[1]-extra")
+        a = self.fake(mine + "/profile")
+        b = self.fake(sibling + "/profile")
+        subprocess.run(["bash", "-c", f'. "{REAP}"; e2e_reap_dir "{mine}"'], check=True)
+        self.assertTrue(wait_dead(a), "a path with regex characters is still reaped")
+        self.assertTrue(alive(b), "a longer sibling path survives")
+
     def test_reap_refuses_a_non_path(self):
         survivor = self.fake("anything")
         for bad in ("", "relative"):

@@ -6,9 +6,11 @@
 # of every browser this run launched, and of none that another run, or the
 # developer's own Chrome, Comet or Safari, launched.
 
-# e2e_pids_in DIR: pids whose command line contains DIR, except this shell.
+# e2e_pids_in DIR: pids whose command line contains DIR/ (matched literally), except this shell.
 e2e_pids_in() {
-  pgrep -f -- "$1" 2>/dev/null | grep -vx "$$" || true
+  local pattern
+  pattern=$(printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|]/\\&/g')
+  pgrep -f -- "$pattern/" 2>/dev/null | grep -vx "$$" || true
 }
 
 # e2e_reap_dir DIR: kill every process whose command line contains DIR.

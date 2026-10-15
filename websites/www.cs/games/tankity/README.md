@@ -6,7 +6,69 @@ from a $600 stake, solo or in network rooms (max 10 live). No chat; names are
 list (`room_valid_initials` in server/rules.php, through `tankity_initials`).
 Kid-friendly copy, human error strings, never status codes. GPLv3 (LICENSE).
 
-The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial, Settings, and the player's initials, the one set solo and the rooms both use. The rooms lobby has the same three boxes above Host and Join, so a friend who arrives on an invite link (straight into the lobby) can set theirs there; a set typed in either place shows in both. Host and Join use what the boxes hold, and refuse half-typed boxes or a blocked word with a line by the boxes. The card comes back after a match ends and after leaving a room. Q toggles the settings menu and closes whatever is open; Esc does nothing (Safari and Firefox always leave full screen on it, so the game never asks for it, and `game.yaml` refuses it as a binding). Quit in the menu ends the match (leaving a room first) and returns to the title card over the demo; an installed app closes, or says how to close it (`games/_kit/app.ts`).
+The page opens on a title card over the dimmed demo: Play (solo, random hills), Play with friends (the rooms), Tutorial (an accent-outlined button with a 🎓, secondary to Play's solid fill), Settings, and the player's initials, the one set solo and the rooms both use. The rooms lobby has the same three boxes above Host and Join, so a friend who arrives on an invite link (straight into the lobby) can set theirs there; a set typed in either place shows in both. Host and Join use what the boxes hold, and refuse half-typed boxes or a blocked word with a line by the boxes. The card comes back after a match ends and after leaving a room. Q toggles the settings menu and closes whatever is open; Esc does nothing (Safari and Firefox always leave full screen on it, so the game never asks for it, and `game.yaml` refuses it as a binding). Quit in the menu ends the match (leaving a room first) and returns to the title card over the demo; an installed app closes, or says how to close it (`games/_kit/app.ts`).
+
+## Tutorial
+
+The tutorial is coach marks over the live game, never a card in front of it.
+Each step dims the screen except a spotlight around the real control it is
+about, rings that control, and shows a small speech bubble beside it with an
+arrow at it: the step's few words, the keys for it on a keyboard device (none
+on a touch screen, by the same rule as every key label), and Skip and Next.
+The game stays visible and playable around the marks.
+
+Asking for it (the title card's Tutorial, or U) deals a fresh match with the
+coach armed; it starts in the pre-match shop, or at the battle's first step
+when asked mid-battle. The steps, in order: a gun row, a pack (how many shells
+one Buy brings, and its price), Buy, Preview, Start; then the barrel, power,
+drive, loading another gun (the marks move onto the weapon picker's tiles
+when it opens), FIRE, and the wind while the shot flies. The player finishes a
+step by doing it, as the game measures it (the barrel moved, cash spent, the
+firing range opened, a shot fired); Next moves on anyway, and starting the
+round early skips the rest of the shop's steps. While a step cannot be done
+(a drone's turn, a name card) or its control is covered (the firing range
+over Start), the marks wait, hidden, and the game shows undimmed. Skip ends the
+lesson; so does Q once no panel is open (Q shuts an open panel first, the
+weapon picker or the firing range). Esc does nothing here either. Skipping or
+finishing remembers the lesson as seen (`tankity-tutorial`).
+
+The lesson is data, `COACH_STEPS` in `src/coach.ts`: each step has its target
+(CSS selectors tried in order; the first with a match on top of the page wins,
+and `#a, #b` spotlights both), its text, its keys line (`{context:action}`
+tokens filled from the live key table), the phase it belongs to, and its
+completion test (the game now against the game when the step began). No step
+names a weapon: the shop's steps point at whatever gun row the shelf holds
+(`data-kind="gun"` rows, `data-act` buttons in `src/ui/shop.tsx`).
+`placeBubble` in the same file puts the bubble on the side of the target with
+room (below, above, right, left), inside the screen and off the target's
+centre, and at the screen edge away from a target as big as the screen. The
+marks (`src/ui/tutorial.tsx`) find and measure the target every frame, so they
+follow a scrolled list, a resize and a rotation. The bubble is a dialog that
+takes focus as each step first shows, and its text is a polite live region.
+
+## Settings
+
+Settings (Q, Menu, or the title card's Settings) holds the seed box with Play
+this seed, then the pickers and toggles, each remembered in this browser:
+Unit (`tankity-body`), Text size (`tankity-text`), Theme (`tankity-theme`),
+Difficulty (`tankity-difficulty`), Sound, Music, Fullscreen and Flashes
+(`tankity-flashes`); then Scores, and in a room the turn time, Turn alerts,
+Standings and Leave room; and Quit.
+
+Theme picks the page's accent palette: Yellow, Lime, Cyan, Orange or Magenta.
+It colours the primary buttons and their hover, the focus ring, the card
+edges and highlights, the aim pad, Menu and the status bar's cash; the
+battlefield (hills, units, effects, FIRE's red) keeps its own colours. Each
+theme is a `[data-theme="..."]` block of custom properties at the top of
+`game.css` (`--accent`, `--accent-hover`, `--accent-ink` for text on the
+accent, `--accent-rgb` for tints, `--focus`), and `test/theme.test.ts`
+computes every pair against WCAG AA: button text 4.5:1 on the fill and on its
+hover, accent text 4.5:1 and the focus ring 3:1 on every dark surface. The
+default is the `data-theme` on `<html>` in `index.html`
+(`<html lang="en" data-theme="yellow">`; change that word to switch it). An
+inline script in the head swaps in the saved choice before the stylesheet
+loads, so the page never paints the default first; `src/theme.ts` saves a
+pick and sets the attribute at once.
 
 Game speed: the FF button at the battlefield's top right, just under the status bar, reads 1×, 2× or 4×; each tap, or X, goes 1× → 2× → 4× → 1×. The war plays that many times as fast (shell flight, falls and parachutes, burns, the earth settling, effects, the drones' aiming and the settle, name cards and chatter) and ends exactly as it would at 1×: the solo war runs more of its fixed 1/60 s steps per frame, never a longer step. Your own aiming and driving, the camera, the music, the turn clocks and the shop clock keep wall time. Solo, the speed is yours, kept in this browser (`tankity-speed`); the demo always plays at 1×. In a room it is the room's: rooms start at 1×, the host turns it at any time (one log line tells everyone), and every client replays at it; a guest's button shows the room's speed and says the host sets it.
 
@@ -66,12 +128,14 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `src/weapon-label.ts` | The Weapon button's line: damage and an S/M/L blast size from the radius, one tested cut-off (and the same line in words for screen readers) |
 | `src/ui/gun-label.tsx` | The Weapon button's face: shell icon, name, the damage and blast line, and the rest of the rack for readers |
 | `src/view.ts` | The camera each frame (eased toward `src/camera.ts`'s target), and the `BattleView` snapshot the canvas paints each frame (whose turn marker shows, whether the aim arm is up, when the clock counts down). `createView(deps)` |
-| `src/tutorial.ts` | The coach: the steps, their key-name text, remembering a finished lesson, and the overlay's props. `createTutorial(deps)` |
+| `src/tutorial.ts` | The coach (see Tutorial): which step is on, moving on when the player did it, Next and Skip, remembering a finished lesson, and the coach marks' props. `createTutorial(deps)` |
+| `src/coach.ts` | The tutorial's lesson as data (`COACH_STEPS`: target, text, keys, phase, completion test), how a lesson starts and moves on, and the bubble's geometry (`placeBubble`, `spotlight`). Pure |
+| `src/theme.ts` | The colour themes (see Settings): the five names, and the saved choice (`tankity-theme`, an unknown word reads as the page's default) set on `<html data-theme>` |
 | `src/standings.ts` | This match's scoreboards: the room's match-end rule (`matchOutcome`, `winnerBonus`), room and solo rows (`roomBoard`, `soloBoard`), the filed line of an online score and the saved line of a local one (`localLine`), and `roomLocalSaver`, which saves a one-human room's score on this browser's board once per match |
 | `src/ui/standings.tsx` | The scoreboard table, at the top of the shop and on the end cards |
 | `src/scores.ts` | The scores overlay's data: the online board for a difficulty from `scores.php` (the latest load wins; the player's own rows marked), this browser's board for it, `saveLocal` for a finished run (the run just saved is marked), and a redraw when another tab saves. At load it moves the older `tankity-local` rows onto this browser's board. `createScores(deps)` |
 | `src/local-board.ts` | This browser's board, pure on the kit's storage port: the best 20 runs per difficulty under `tankity-scores-local` (`{v: 1, boards}`), ties to the older run, a run saved once by its `ref`, a damaged value read as empty and blocked storage kept nothing and said so, and the move of the `tankity-local` rows an older page saved |
-| `src/menu.ts` | The settings menu (the unit look, the text size, the Difficulty and Screen flashes, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
+| `src/menu.ts` | The settings menu (the unit look, the text size, the theme, the Difficulty and Screen flashes, all remembered in this browser) and the menu overlay's props. `createMenu(deps)` |
 | `src/title.ts` | The title card over the demo: whether it shows, the initials it edits, and its props. `createTitle(deps)` |
 | `src/initials.ts` | A player's three-letter initials: the rule, the blocked words, the one saved set per browser (`tankity-initials`), random until chosen, saving a typed set, and reading the three boxes for Host and Join |
 | `src/ui/initials-picker.tsx` | The three initials boxes the title card and the rooms lobby share, their ids under a prefix (`title-initial-1`, `lobby-initial-1`); typing survives a redraw |
@@ -1127,6 +1191,8 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/icons.test.ts`                          | The tracer icon (a dashed path ending in a cross) and the plasma icon (rings round a core) |
 | `test/bomblets.test.ts`                       | Every cluster and scatter gun's bomblets burst as they land, fired either way on flat ground and hills: no frame holds a shell |
 | `test/weapon-keys.test.ts`                    | No logic in `src/` or `server/` compares a weapon to a key or lists keys, bare lists included (the Shell aside); how long a blast lingers (`gfx.linger`), that every gun flies a rendered body (`body.sprite`), a match's starting ammo (`start`) and the picker's shelf (`game.yaml` order, each cat together) come from `game.yaml` |
+| `test/coach.test.ts`                          | The tutorial's steps (`src/coach.ts`): their order and shape, short words, keys only in the keys line and all in the key table, no weapon named, each completion test before and after its move, where a lesson starts and how it moves on, and the bubble on screen and off its target's centre at phone, tablet and desktop sizes |
+| `test/theme.test.ts`                          | The themes: one `game.css` palette per name, every accent pair's computed WCAG contrast, no accent hard-coded outside the palettes, the head script that applies the saved theme before the stylesheet, and the saved choice's default, write and blocked storage |
 | `test/prefs-legacy.test.ts`                   | The saved settings (`tankity-body`, `tankity-text`, `tankity-tutorial`) read back through the kit's prefs exactly as the code before it wrote them, and the `tankity-local` and `tankity-scores-local` values |
 | `test/audio.test.ts`                          | `src/audio.ts` imports without a browser; the loop-point trim and the round-to-track mapping are right |
 | `test/audio-announce.test.ts` | Only Next song starts are announced as `'next'`: the theme, a round change (even one that takes over while Next song is loading) and a track standing in for a Next song that failed to load are `'auto'` |
@@ -1187,7 +1253,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |
 | `curl <site>/games/tankity/rooms-web-test.php` | Rooms over real HTTP (local docker only; never deployed)                                   |
-| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings), and long games (`tankity-rooms-long`: the room link brings a closed tab back, Step out and Your games, the turn toast and Go, a lobby closed with Q listed, the turn time reaching everyone), and the game speed (`tankity-speed`: FF cycles 1×, 2×, 4× and the same seeded volley takes a half and a quarter of the wall time, kept across a reload; in a room the host's pick reaches the guest, who cannot change it). Each player context gives up its stored seats when a spec closes it (`tests/e2e/helpers.mjs`); `E2E_BASE_URL` points it at the live site |
+| `make e2e` (site root)                         | Real-browser checks, solo and two-player, audio, weapon effects (`tankity-fx-battle`, `tankity-fx-range`, and `tankity-fx-editor`, which runs on a local site only), and the end of a match (`tankity-end`: a lost solo match is saved on this browser's board, shows under "This browser" in Scores and sends nothing to the score server; `tankity-end-again`: Play again in a room; `tankity-end-forfeit`: a leave, the winner filed online, and the solo card after it saved locally; `tankity-end-out`: the you're-out card and Menu → Standings), the tutorial and the themes (`tankity-tutorial`: on a phone and a desktop, each step's bubble shows on screen with focus, the marked control is on top at its centre and ringed, doing the step moves on through the shop and the battle to the end, Skip and Q end it; Settings switches the theme's accent and a reload keeps it), and long games (`tankity-rooms-long`: the room link brings a closed tab back, Step out and Your games, the turn toast and Go, a lobby closed with Q listed, the turn time reaching everyone), and the game speed (`tankity-speed`: FF cycles 1×, 2×, 4× and the same seeded volley takes a half and a quarter of the wall time, kept across a reload; in a room the host's pick reaches the guest, who cannot change it). Each player context gives up its stored seats when a spec closes it (`tests/e2e/helpers.mjs`); `E2E_BASE_URL` points it at the live site |
 | `make e2e-changed` (site root) | Only the browser specs your changes need (`tests/e2e/select.mjs` maps touched files to specs; CI uses the same map) |
 
 `make test` from the site root runs every suite above except e2e. CI runs

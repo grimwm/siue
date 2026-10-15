@@ -636,23 +636,35 @@ function gunTiles(n = 10, loaded = 0) {
   await test('log-new-line-scrolls-to-bottom', () => { assert.ok(section.scrollTop === 500, String(section.scrollTop)); });
 }
 
-// ---- tutorial coach ----
+// ---- tutorial coach marks ----
 {
   const section = makeEl('tutorial-overlay');
-  let skipped = 0;
-  const tp = (over: Partial<TutorialProps> = {}): TutorialProps => ({ keyHint: (c, a) => (c === 'global' && a === 'tutorial' ? 'U' : c === 'global' && a === 'back' ? 'Q' : ''), text: '', progress: '', skip: 'Skip tutorial', skipKey: 'global:back', onSkip: () => { skipped++; }, ...over });
+  let skipped = 0, nexted = 0;
+  const step = { id: 'barrel', count: '6 of 11', text: 'Hold ◀ or ▶ to swing the barrel.', keys: 'Keys: {aim:barrelLeft} {aim:barrelRight}', target: ['[data-aim="left"]'], last: false };
+  const tp = (over: Partial<TutorialProps> = {}): TutorialProps => ({ keyHint, step, waiting: false, skipKey: 'global:back', onSkip: () => { skipped++; }, onNext: () => { nexted++; }, ...over });
+  renderTutorial(section, tp({ step: null }));
+  await test('tutorial-idle-draws-nothing', () => { assert.ok(section.children.length === 0); });
   renderTutorial(section, tp());
-  const h = kid(section, 0), p1 = kid(section, 1), p2 = kid(section, 2), btn = kid(section, 3), nav = kid(section, 4);
-  await test('tutorial-shape', () => { assert.ok(h.localName === 'h2' && h.id === 'tutorial-h' && text(h) === 'Tutorial' && p1.id === 'tutorial-text' && p2.id === 'tutorial-progress' && hasClass(p2, 'hint')
-    && btn.id === 'tutorial-skip' && btn.localName === 'button' && nav.id === 'nav-tutorial' && hasClass(nav, 'nav-hint')); });
-  await test('tutorial-idle-is-blank', () => { assert.ok(text(p1) === '' && text(p2) === ''); });
-  renderTutorial(section, tp({ text: 'Move 2 of 5: Hold ▲ or ▼ to change power.', progress: 'Follow along in the hills behind this card.' }));
-  await test('tutorial-move', () => { assert.ok(text(p1) === 'Move 2 of 5: Hold ▲ or ▼ to change power.' && text(p2) === 'Follow along in the hills behind this card.' && kid(section, 1) === p1); });
-  await test('tutorial-skip-label-has-the-q-chip', () => { assert.ok(text(btn) === 'Skip tutorial Q' && byClass(btn, 'key').length === 1); });
-  renderTutorial(section, tp({ skipKey: undefined }));
-  await test('tutorial-skip-label-without-key-on-touch', () => { assert.ok(text(btn) === 'Skip tutorial'); });
-  click(btn);
-  await test('tutorial-skip-calls-back', () => { assert.ok(skipped === 1); });
-  await test('tutorial-replay-hint-names-the-key', () => { assert.ok(text(nav) === 'U replays anytime; skipping once skips it for good' && byClass(nav, 'key').length === 0
-    && attr(walk(nav)[0], 'data-keyhint') === 'global:tutorial', text(nav)); });
+  const bubble = walk(section).find(n => hasClass(n, 'coach-bubble'));
+  // (Its tabIndex of -1, so focus can land on it, the browser specs check.)
+  await test('tutorial-bubble-shape', () => {
+    assert.ok(bubble && attr(bubble, 'role') === 'dialog'
+      && attr(bubble, 'aria-describedby') === 'tutorial-text' && attr(bubble, 'aria-labelledby') === 'tutorial-count');
+  });
+  await test('tutorial-text-is-announced', () => { assert.ok(text(byId(section, 'tutorial-text')) === step.text && attr(byId(section, 'tutorial-text'), 'aria-live') === 'polite'); });
+  await test('tutorial-count', () => { assert.ok(/Tutorial · 6 of 11$/.test(text(byId(section, 'tutorial-count')))); });
+  await test('tutorial-keys-line-names-live-keys', () => {
+    const caps = walk(byId(section, 'tutorial-keys')).filter(n => attr(n, 'data-keyhint'));
+    assert.ok(caps.map(c => attr(c, 'data-keyhint')).join() === 'aim:barrelLeft,aim:barrelRight' && text(byId(section, 'tutorial-keys')) === 'Keys: ◀ ▶');
+  });
+  // The stub page has no target on screen: the bubble waits, hidden, with no spotlight.
+  await test('tutorial-waits-without-a-target', () => { assert.ok(bubble && attr(bubble, 'data-waiting') === '' && !walk(section).some(n => hasClass(n, 'coach-spot'))); });
+  await test('tutorial-skip-label-has-the-q-chip', () => { assert.ok(text(byId(section, 'tutorial-skip')) === 'Skip Q' && byClass(byId(section, 'tutorial-skip'), 'key').length === 1); });
+  await test('tutorial-next-label', () => { assert.ok(text(byId(section, 'tutorial-next')) === 'Next' && hasClass(byId(section, 'tutorial-next'), 'btn-primary')); });
+  click(byId(section, 'tutorial-next'));
+  click(byId(section, 'tutorial-skip'));
+  await test('tutorial-buttons-call-back', () => { assert.ok(nexted === 1 && skipped === 1); });
+  renderTutorial(section, tp({ skipKey: undefined, step: { ...step, keys: null, id: 'wind', last: true } }));
+  await test('tutorial-touch-names-no-key', () => { assert.ok(text(byId(section, 'tutorial-skip')) === 'Skip' && maybeById(section, 'tutorial-keys') === undefined); });
+  await test('tutorial-last-step-says-done', () => { assert.ok(text(byId(section, 'tutorial-next')) === 'Done'); });
 }

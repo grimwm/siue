@@ -124,6 +124,7 @@ const input = createInput({
     document.documentElement.classList.remove('touch');
     paintHud();
     renderShopReady();
+    renderTutorial();
   },
 });
 
@@ -331,6 +332,8 @@ function frame(ts: number): void {
   // Name cards tick on sim time so a throttled background tab can never
   // strand the game between rounds; on return the card simply finishes.
   tickBanner(gdt);
+  // The coach watches the shop and the battle alike (it never runs in a room).
+  tickTutorial();
   // Room matches render the server snapshot; the server runs the war.
   if (net.on) {
     netFrame(dt, gdt);
@@ -355,7 +358,6 @@ function frame(ts: number): void {
   // shells; anywhere else they fall by the frame.
   const war = G.phase === 'think' || G.phase === 'fly' || G.phase === 'settle';
   if (!war) fallTanks(gdt);
-  tickTutorial();
   driftClouds(dt);
   pumpDialogue(gdt);
   G.banterT -= dt;
@@ -540,7 +542,7 @@ const {
   renderTutorial, maybeStartTutorial, tutorialOpen, endTutorial, skipTutorial, tickTutorial,
   isActive: tutorialActive, arm: armTutorial, noteFired: tutorialFired,
 } = createTutorial({
-  G, $, TOUCH, net, sfx, me, keyHint, say, refreshNavHints, closeOverlays, freshMatchFromSeedBox,
+  G, $, touch: () => touchNow, net, sfx, me, keyHint, say, closeOverlays, freshMatchFromSeedBox,
 });
 /* The Difficulty setting: the Menu picks it, a new solo match and a hosted room read it. */
 const difficulty = difficultySetting(browserStorage());
@@ -875,13 +877,14 @@ function bindKeys(): void {
     buy: () => { buySelected(); return true; },
     preview: () => (previewSelected() ? true : 'quiet'), // V does nothing else in the shop
     // Q in the shop shuts the firing range first, then any open panel (the
-    // menu can sit above the shop) or the Standings card, and with nothing
-    // open it opens the menu.
+    // menu can sit above the shop) or the Standings card, then ends a running
+    // tutorial, and with nothing open it opens the menu.
     // It never starts the round: that is N or the Start button.
     close: () => {
       if (G.preview) closePreview();
       else if (closeLeaveVeil()) { /* the question closed */ }
       else if (closeOverlays() || endVeilBack()) { /* a panel or the Standings card closed */ }
+      else if (tutorialActive()) skipTutorial();
       else toggleOverlay('menu-overlay', 'btn-menu');
       return true;
     },
@@ -1068,7 +1071,7 @@ const NAV_HINTS: [string, string][] = [
   ['preview-veil', 'nav-preview'], ['end-board', 'nav-end'],
   ['help-overlay', 'nav-help'], ['report-overlay', 'nav-report'],
   ['menu-overlay', 'nav-menu'], ['log-overlay', 'nav-log'],
-  ['tutorial-overlay', 'nav-tutorial'], ['gun-overlay', 'nav-gun'],
+  ['gun-overlay', 'nav-gun'],
 ];
 /* The rotate hint: portrait, a real match, until the player closes it once. */
 const rotateHint = pref(ROTATE_HINT_KEY, '', text, browserStorage());

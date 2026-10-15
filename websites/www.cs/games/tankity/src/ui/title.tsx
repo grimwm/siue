@@ -49,7 +49,9 @@ export function Title(p: TitleProps) {
         </button>
         <div class="title-row">
           <button type="button" id="rooms-open" onClick={blurThen(p.onFriends)}>Play with friends <Key at="global:rooms" bare /></button>
-          <button type="button" id="tutorial-open" onClick={blurThen(p.onTutorial)}>Tutorial <Key at="global:tutorial" bare /></button>
+          <button type="button" id="tutorial-open" class="title-tutorial" onClick={blurThen(p.onTutorial)}>
+            <span class="title-tutorial-icon" aria-hidden="true">🎓</span>Tutorial <Key at="global:tutorial" bare />
+          </button>
         </div>
         <InitialsPicker idPrefix="title" initials={p.initials} rev={p.initialsRev} onInitials={p.onInitials}
           problem={p.problem} noteId="title-initials-note" />

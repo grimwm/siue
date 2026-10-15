@@ -50,7 +50,7 @@ test('Play, Play with friends, Tutorial and Settings, each with its key chip', (
   const { root } = draw();
   assert.match(byId(root, 'title-play').textContent, /^▶ Play/);
   assert.match(byId(root, 'rooms-open').textContent, /^Play with friends/);
-  assert.match(byId(root, 'tutorial-open').textContent, /^Tutorial/);
+  assert.match(byId(root, 'tutorial-open').textContent, /^🎓Tutorial/);
   assert.match(byId(root, 'title-settings').textContent, /^Settings/);
   const chip = walk(byId(root, 'title-play')).find(n => n.localName === 'kbd');
   assert.ok(chip, 'a key chip');
@@ -137,4 +137,15 @@ test('the hint belongs to the open card: gone when a match starts, not shown on 
   t.closeTitle();
   t.openTitle();
   assert.equal(maybeById(root, 'title-hint'), undefined, 'the next card starts clean');
+});
+
+test('Tutorial is a secondary button of its own: the accent outline and a 🎓 the screen reader skips', () => {
+  const { root } = draw();
+  const tut = byId(root, 'tutorial-open');
+  assert.equal(tut.className, 'title-tutorial');
+  assert.doesNotMatch(String(tut.className), /btn-primary/);
+  const icon = walk(tut).find(n => n.className === 'title-tutorial-icon');
+  assert.ok(icon, 'an icon');
+  assert.equal(icon.getAttribute('aria-hidden'), 'true');
+  assert.equal(icon.textContent, '🎓');
 });

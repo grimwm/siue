@@ -1,6 +1,7 @@
 /* The field shop: category headings, the free Shell row and a row per item with
  * its Preview and Buy buttons, then the start button (the Ready toggle in a
- * room). The game owns the state (cash, selection, pack count, who is ready) and
+ * room). Rows say what they sell (data-kind: shell, gun or gear) and buttons
+ * what they do (data-act), for the tutorial's coach marks. The game owns the state (cash, selection, pack count, who is ready) and
  * hands in a finished view of it; this draws it and reports clicks. The veil
  * element (#shop-veil) stays in index.html and the game shows and hides it.
  * Copyright (C) 2026 William Grim
@@ -196,22 +197,22 @@ export function Shop(p: ShopProps) {
             if (e.kind === 'cat') return <li class="shop-cat" key={`cat:${e.name}`}>{e.name}</li>;
             if (e.kind === 'free') {
               return (
-                <li class={e.selected ? 'shop-free sel' : 'shop-free'} key="free">
+                <li class={e.selected ? 'shop-free sel' : 'shop-free'} key="free" data-kind="shell">
                   <Body row={e} draw={p.drawIcon} rev={p.arsenalRev}>
-                    <button type="button" onClick={blurThen(() => p.onPreview(e.weapon))}>Preview <Key at="shop:preview" bare /></button>
+                    <button type="button" data-act="preview" onClick={blurThen(() => p.onPreview(e.weapon))}>Preview <Key at="shop:preview" bare /></button>
                   </Body>
                 </li>
               );
             }
             return (
-              <li class={e.selected ? 'sel' : undefined} key={`item:${e.index}`}>
+              <li class={e.selected ? 'sel' : undefined} key={`item:${e.index}`} data-kind={e.weapon !== undefined ? 'gun' : 'gear'}>
                 <Body row={{ ...e, name: `${e.index + 1}. ${e.name}` }} draw={p.drawIcon} rev={p.arsenalRev}>
                   {e.weapon !== undefined && (
-                    <button type="button" onClick={blurThen(() => p.onPreview(e.weapon!))}>
+                    <button type="button" data-act="preview" onClick={blurThen(() => p.onPreview(e.weapon!))}>
                       Preview <Key at="shop:preview" bare />
                     </button>
                   )}
-                  <button type="button" disabled={e.disabled} onClick={blurThen(() => p.onBuy(e.index))}>
+                  <button type="button" data-act="buy" disabled={e.disabled} onClick={blurThen(() => p.onBuy(e.index))}>
                     {e.locked ? 'Locked' : <>{e.qty > 1 ? `Buy ×${e.qty} ` : 'Buy '}<Key at="shop:buy" bare /></>}
                   </button>
                 </Body>

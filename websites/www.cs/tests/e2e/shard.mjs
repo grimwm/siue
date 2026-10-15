@@ -43,6 +43,7 @@ export const WEIGHTS = {
   'cylon-help.spec.mjs': 6,
   'cylon-play.spec.mjs': 25,
   'tankity-touch.spec.mjs': 3,
+  'tankity-tutorial.spec.mjs': 45,
   'games-pwa.spec.mjs': 3,
   'games-install.spec.mjs': 10,
   'play-nav.spec.mjs': 14,

@@ -93,3 +93,19 @@ test('subscribers hear remember and forget until they unsubscribe', () => {
   store.remember(seat('FFFF'));
   assert.equal(heard, 2);
 });
+
+test('a seat closed to make space is kept, marked closed, and a reload reads the mark', () => {
+  const storage = mapStorage();
+  const store = createSeatStore(storage, () => 5);
+  store.remember(seat('ABCD'));
+  store.remember(seat('EFGH'));
+  store.markClosed('ABCD');
+  assert.equal(must(store.get('ABCD'), 'seat ABCD').closed, 'space');
+  assert.equal(store.get('EFGH')?.closed, undefined);
+  assert.deepEqual(store.list().map(s => s.code), ['EFGH', 'ABCD'], 'marking does not reorder');
+  assert.equal(createSeatStore(storage, () => 5).get('ABCD')?.closed, 'space');
+  store.markClosed('ZZZZ');
+  assert.equal(store.get('ZZZZ'), null, 'marking an unknown code adds nothing');
+  store.forget('ABCD');
+  assert.equal(store.get('ABCD'), null);
+});

@@ -4,9 +4,9 @@
  * authority; test/turn-time.test.ts keeps this list equal to it), their
  * labels, how a clock reads at any length, and the notes the status bar and
  * the shop add to a room's clocks. A room can close before its clock runs
- * out (nobody acting for its idle limit: 10 minutes when it is played from
- * a single connection, whatever the turn time), so a close that comes first
- * is shown instead of the clock. */
+ * out (nobody taking a turn for its idle limit: one turn time per player, at
+ * least 10 minutes), so a close that comes first is shown instead of the
+ * clock. */
 export const TURN_STOPS = [60, 120, 600, 1800, 28800, 86400, 604800] as const;
 export const TURN_DEFAULT = 120;
 export const TURN_LABELS = ['Lightning · 1 min', '2 min', '10 min', '30 min', '8 h', '24 h', '1 week'] as const;

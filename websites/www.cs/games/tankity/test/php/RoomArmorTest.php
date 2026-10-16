@@ -120,30 +120,36 @@ final class RoomArmorTest extends TestCase
         $this->assertSame(85, $room['armor'][0]);
     }
 
-    public function testDronesAreUnchanged(): void
+    public function testADroneMustersAsAPlayerDoes(): void
     {
         $room = $this->room();
         foreach ($room['tanks'] as $t) {
             if ($t['kind'] === 'ai') {
-                $this->assertSame(60, $t['hp']);
+                $this->assertSame(100, $t['hp']);
+                $this->assertSame(100, $t['maxHp']);
             }
         }
     }
 
-    public function testDronesStayOnTheirOwnCurveInLaterRounds(): void
+    public function testADroneCarriesItsArmorAndAWreckRemustersAtFullMax(): void
     {
         $room = $this->room();
-        $this->setHp($room, 'ai', 0);
+        $this->setHp($room, 'ai', 37);
+        $room['cash'][1] = 0; // nothing to spend: the shop at the round's end buys nothing
+        $room['plate'][1] = 1;
+        $room['armor'][1] = 125;
         $events = [];
         room_end_round($room, $events);
+        $this->assertSame(37, $room['armor'][1]);
         room_shop_set_ready($room, 0, true);
         room_shop_settle($room);
-        foreach ($room['tanks'] as $t) {
-            if ($t['kind'] === 'ai') {
-                $this->assertSame(66, $t['hp']);
-                $this->assertSame(66, $t['maxHp']);
-            }
-        }
+        $drone = $room['tanks'][1];
+        $this->assertSame([37, 125], [$drone['hp'], $drone['maxHp']], 'the armor it ended with, the plates it fitted');
+        $this->setHp($room, 'ai', 0);
+        $this->setHp($room, 'human', 10);
+        $room['cash'][1] = 0;
+        room_end_round($room, $events);
+        $this->assertSame(125, $room['armor'][1], 'a wreck re-musters at full max');
     }
 
     public function testAnEliminatedSeatKeepsItsArmorUntouched(): void

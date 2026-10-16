@@ -46,14 +46,14 @@ test('nobody left: over with no winner', () => {
 });
 
 
-const seat = (s: number, name: string, o: Partial<RoomSeat>): RoomSeat => ({ seat: s, human: true, name, mode: 'human', bot: false, ready: false, lives: 2, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ...o });
+const seat = (s: number, name: string, o: Partial<RoomSeat>): RoomSeat => ({ seat: s, human: true, name, mode: 'human', persona: null, bot: false, ready: false, lives: 2, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ...o });
 const ROOM = {
   code: 'ABCD', round: 6, winner: null,
   seats: [
     seat(0, 'AK', { score: 6105, gain: 380, roundsWon: 2, kills: 8, lives: 1 }),
     seat(1, 'WG', { score: 8420, gain: 1650, roundsWon: 3, kills: 11 }),
     seat(2, 'JR', { score: 3940, roundsWon: 1, kills: 4, lives: 0, out: 5 }),
-    { seat: 3, human: false, name: 'reaper', mode: 'ai', bot: false, ready: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null },
+    { seat: 3, human: false, name: 'reaper', mode: 'ai', persona: null, bot: false, ready: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null },
   ],
 } as RoomIn; // no winBonus: a match still going
 

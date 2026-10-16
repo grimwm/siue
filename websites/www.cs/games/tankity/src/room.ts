@@ -245,6 +245,7 @@ export function createRoom(deps: RoomDeps) {
         power: mine && was && aiming ? was.power : t.power,
         hp: t.hp, maxHp: t.maxHp || 100, fuel: 0, dirS: t.dirS || 1,
         name: t.name,
+        personality: ai && seat && seat.persona ? seat.persona : undefined,
         human: !ai,
         body: t.body || 'tank',
         menu: !!t.menu,

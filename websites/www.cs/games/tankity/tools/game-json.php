@@ -2,7 +2,7 @@
 /**
  * Builds Operation Tankity's one runtime data file, game.json,
  * from the one file a maintainer edits, game.yaml (arsenal,
- * keys, audio, effects). Browsers cannot read YAML and the server has no YAML
+ * drones, keys, audio, effects). Browsers cannot read YAML and the server has no YAML
  * extension, so the YAML is checked here and written out as JSON; the client
  * (src/main.ts) and the room server (rooms.php) read only the JSON.
  *
@@ -693,10 +693,10 @@ function tankity_config_build(mixed $doc, array $lines, string $gameDir): array
     $c = new TankityCheck($lines, $gameDir);
     $root = $c->map($doc ?? [], '');
     if ($root === null || !$doc) {
-        return [null, $root === null ? $c->errors : ['game.yaml is empty; it needs arsenal, keys, audio and effects sections']];
+        return [null, $root === null ? $c->errors : ['game.yaml is empty; it needs arsenal, drones, keys, audio and effects sections']];
     }
-    $c->allow($root, ['arsenal', 'keys', 'audio', 'effects'], '');
-    foreach (['arsenal', 'keys', 'audio', 'effects'] as $k) {
+    $c->allow($root, ['arsenal', 'drones', 'keys', 'audio', 'effects'], '');
+    foreach (['arsenal', 'drones', 'keys', 'audio', 'effects'] as $k) {
         if (!isset($root[$k])) {
             $c->err('', "section `$k` is required");
         }
@@ -705,6 +705,7 @@ function tankity_config_build(mixed $doc, array $lines, string $gameDir): array
     $out = [
         '_note' => 'Generated from game.yaml by tools/game-json.php. Edit game.yaml, not this file.',
         'arsenal' => $arsenal,
+        'drones' => tankity_build_drones($c, $root['drones'] ?? null),
         'keys' => tankity_build_keys($c, $root['keys'] ?? null),
         'audio' => tankity_build_audio($c, $root['audio'] ?? null),
         'effects' => tankity_build_effects($c, $root['effects'] ?? null, array_column($arsenal['ammo'], 'key'), $gameDir),
@@ -759,7 +760,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         if ($row === null) {
             continue;
         }
-        $c->allow($row, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'ai', 'aiRound', 'aiRack',
+        $c->allow($row, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'ai',
             'effect', 'speed', 'drag', 'missile', 'shortRange'], array_keys(TANKITY_AMMO_EXTRA), ['preview', 'note', 'gfx']), $p);
         $o = [];
         $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
@@ -783,13 +784,6 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
             $o['start'] = $c->int($row, 'start', $p, 0, 9);
         }
         $o['ai'] = $c->bool($row, 'ai', $p);
-        $o['aiRound'] = $c->int($row, 'aiRound', $p, 1, 99);
-        if (array_key_exists('aiRack', $row) && $row['aiRack'] !== null) {
-            $o['aiRack'] = $c->int($row, 'aiRack', $p, 1, 9);
-            if ($o['ai'] === false) {
-                $c->err("$p.aiRack", 'only a row with ai: true uses this');
-            }
-        }
         $o['effect'] = $c->enum($row, 'effect', $p, TANKITY_AMMO_EFFECTS);
         $o['speed'] = $c->num($row, 'speed', $p, 0.1, 5.0);
         // A gun that flies may name its drag factor (1, a Shell's, when it names none); a beam,
@@ -872,7 +866,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['note'] = $c->str($row, 'note', $p, 120);
         $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx", $effect);
-        $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'ai', 'aiRound', 'aiRack',
+        $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'ai',
             'effect'], array_keys(TANKITY_AMMO_EXTRA), ['speed', 'drag', 'missile', 'missileSpeed', 'shortRange', 'preview', 'note', 'gfx']));
     }
     // The shop and the picker show each cat under one heading in file order: its rows sit together.
@@ -947,6 +941,59 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
     return $res;
 }
 
+/** How a drone ranks the guns it can buy (src/drones.ts, server/ai.php room_drone_shop). */
+const TANKITY_DRONE_PICKS = ['big', 'value', 'random', 'precise'];
+
+/** drones.personalities: how each drone spends its money. A row with `shift` has no rules of its own. */
+function tankity_build_drones(TankityCheck $c, mixed $d): array
+{
+    $res = ['personalities' => []];
+    $d = $c->map($d, 'drones');
+    if ($d === null) {
+        return $res;
+    }
+    $c->allow($d, ['personalities'], 'drones');
+    $list = $c->lst($d['personalities'] ?? null, 'drones.personalities') ?? [];
+    $seen = [];
+    $shifters = 0;
+    foreach ($list as $i => $row) {
+        $p = "drones.personalities[$i]";
+        $row = $c->map($row, $p);
+        if ($row === null) {
+            continue;
+        }
+        $c->allow($row, ['key', 'name', 'reserve', 'defense', 'pick', 'maxBuys', 'shift'], $p);
+        $o = [];
+        $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
+        if ($o['key'] !== null) {
+            if (isset($seen[$o['key']])) {
+                $c->err("$p.key", "duplicate key `{$o['key']}`");
+            }
+            $seen[$o['key']] = true;
+        }
+        $o['name'] = $c->str($row, 'name', $p, 24);
+        if (array_key_exists('shift', $row) && $row['shift'] !== null) {
+            $shifters++;
+            $o['shift'] = $c->num($row, 'shift', $p, 0, 1);
+            foreach (['reserve', 'defense', 'pick', 'maxBuys'] as $k) {
+                if (array_key_exists($k, $row) && $row[$k] !== null) {
+                    $c->err("$p.$k", 'a row with shift takes other personalities\' rules; it has none of its own');
+                }
+            }
+        } else {
+            $o['reserve'] = $c->num($row, 'reserve', $p, 0, 0.9);
+            $o['defense'] = $c->num($row, 'defense', $p, 0, 1);
+            $o['pick'] = $c->enum($row, 'pick', $p, TANKITY_DRONE_PICKS);
+            $o['maxBuys'] = $c->int($row, 'maxBuys', $p, 1, 12);
+        }
+        $res['personalities'][] = tankity_ordered($o, ['key', 'name', 'reserve', 'defense', 'pick', 'maxBuys', 'shift']);
+    }
+    if (count($list) > 0 && count($list) - $shifters < 1) {
+        $c->err('drones.personalities', 'needs at least one personality with rules of its own');
+    }
+    return $res;
+}
+
 /* arsenal.fall: what a drop costs and when a parachute opens. */
 function tankity_build_fall(TankityCheck $c, mixed $f): ?array
 {
@@ -955,12 +1002,11 @@ function tankity_build_fall(TankityCheck $c, mixed $f): ?array
         return null;
     }
     $p = 'arsenal.fall';
-    $c->allow($f, ['freePx', 'perPx', 'chuteOver', 'aiRound'], $p);
+    $c->allow($f, ['freePx', 'perPx', 'chuteOver'], $p);
     return [
         'freePx' => $c->num($f, 'freePx', $p, 0, 460),
         'perPx' => $c->num($f, 'perPx', $p, 0, 10),
         'chuteOver' => $c->int($f, 'chuteOver', $p, 0, 500),
-        'aiRound' => $c->int($f, 'aiRound', $p, 1, 99),
     ];
 }
 

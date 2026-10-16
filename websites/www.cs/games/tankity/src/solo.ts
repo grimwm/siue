@@ -6,9 +6,14 @@
  * or Math.random, so the same seed deals the same match anywhere. */
 import { aiChoose, pickTactic } from './ai.ts';
 import type { AimChoice } from './ai.ts';
-import { carryArmor, fitPlates, maxArmor, repairPacksWanted, repairRestores } from './armor.ts';
+import { carryArmor, maxArmor } from './armor.ts';
+import { ONE_SHOT, buyPacks, isOneShot, soloBuy } from './buy.ts';
+export { ONE_SHOT, buyPacks, isOneShot, soloBuy };
+export type { BuyResult } from './buy.ts';
 import { SOLO_STEP, WATCH_TURNS } from './flow.ts';
-import { TUNE, clamp, droneChutes, droneRack, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, restY, spawnSpots, startAmmo, surfY } from './sim.ts';
+import { dealDrone, droneVisit, personalityOf } from './drones.ts';
+import type { Drone } from './drones.ts';
+import { TUNE, clamp, fieldWidthOk, gauss, genTerrain, hashSeed, mulberry32, restY, spawnSpots, startAmmo, surfY } from './sim.ts';
 import type { Arsenal, Cloud, Difficulty, Hills, ShopRow, Tank, World } from './sim.ts';
 import { wallsFor } from './walls.ts';
 import type { WallsSetting } from './walls.ts';
@@ -20,7 +25,7 @@ export const FOES = [
   { id: 'spotter', color: '#ff00ff' },
 ] as const;
 
-export interface SoloTank extends Tank { maxHp: number; color?: string; body?: string }
+export interface SoloTank extends Tank { maxHp: number; color?: string; body?: string; personality?: string }
 export interface SoloState extends World {
   seed: string;
   /** How well the drones aim this match (ai.ts DIFFICULTY); set at the deal, never during play. */
@@ -43,6 +48,8 @@ export interface SoloState extends World {
   fuelBank: number;
   /** The player's parachutes: they stack, and one opens on a hard fall. */
   chutes: number;
+  /** The drones' money, one per foe in FOES' order: their personality, cash, ammo, armor and gear. */
+  drones: Drone[];
 }
 
 /** A new match at a difficulty and a width: the stake, three lives, full armor, and the pre-match hills (drawn, never fought on). */
@@ -78,6 +85,10 @@ export function soloDeal(G: SoloState, arsenal: Arsenal, seed: string, difficult
   G.hills = g.hills;
   G.tanks = [];
   G.shells = [];
+  // The drones start as a player does, a personality each, and shop before the first round
+  // (their draws come from the seed, never G.rng).
+  G.drones = FOES.map((_, i) => dealDrone(arsenal, seed, i + 1));
+  G.drones.forEach((d, i) => droneVisit(d, arsenal, seed, 0, i + 1));
 }
 
 /** A round's hills, wind and four units, spread anywhere; the opener rotates round by round; and its
@@ -97,13 +108,14 @@ export function soloMuster(G: SoloState, arsenal: Arsenal, walls: WallsSetting =
     x: order[0]!, y: 0, angle: 62, power: 55, hp: G.armor, maxHp: maxArmor(G.plate), fuel,
   }];
   FOES.forEach((f, i) => {
-    // Endless escalation: thicker armor and a deeper magazine every round.
-    const armor = TUNE.droneArmor + 6 * (G.round - 1);
+    // A drone musters with what it carries: the armor, shells, parachutes, shield and cash its
+    // shopping and its rounds left it, as a player does.
+    const d = G.drones[i]!;
     G.tanks.push({
       id: f.id, isPlayer: false, color: f.color,
-      x: order[i + 1]!, y: 0, angle: 62, power: 55, hp: armor, maxHp: armor, fuel: 0,
-      ammo: droneRack(arsenal, G.round),
-      chutes: droneChutes(arsenal, G.round),
+      x: order[i + 1]!, y: 0, angle: 62, power: 55, hp: d.armor, maxHp: maxArmor(d.plate), fuel: 0,
+      ammo: { ...d.ammo }, chutes: d.chutes, shield: d.shield, cash: d.cash,
+      personality: personalityOf(arsenal, d.personality)?.name,
       s: G.tactics[f.id] || (G.tactics[f.id] = pickTactic(G.rng)),
     });
   });
@@ -144,8 +156,25 @@ export type Settled =
   | { kind: 'tankLost' }
   | { kind: 'matchLost' };
 
+/** A round's end for the drones: what each held, spent and earned goes back to its record, its armor carries as a
+ *  player's does (a wreck re-musters at full), and each shops before the next round, by the player's buy rules. */
+function settleDrones(G: SoloState, arsenal: Arsenal): void {
+  FOES.forEach((f, i) => {
+    const t = G.tanks.find(x => x.id === f.id);
+    const d = G.drones[i]!;
+    if (t) {
+      d.cash = t.cash || 0;
+      d.ammo = t.ammo || d.ammo;
+      d.chutes = t.chutes || 0;
+      d.shield = !!t.shield;
+      d.armor = carryArmor({ armor: d.armor, plates: d.plate }, t.hp, t.hp <= 0).armor;
+    }
+    droneVisit(d, arsenal, G.seed, G.round, i + 1);
+  });
+}
+
 /** After a volley: play on (the wind shifts, the next unit is up), or the round ends. */
-export function soloSettle(G: SoloState): Settled {
+export function soloSettle(G: SoloState, arsenal: Arsenal): Settled {
   snapTanks(G);
   const me = G.tanks[0]!;
   const alive = G.tanks.filter(t => t.hp > 0).length;
@@ -156,6 +185,11 @@ export function soloSettle(G: SoloState): Settled {
     soloNextTurn(G);
     return { kind: 'next' };
   }
+  const prize = TUNE.roundWinCash + G.round * 100;
+  // The round's sole survivor takes the prize, a drone as a player does.
+  const sole = alive === 1 ? G.tanks.find(t => t.hp > 0)! : null;
+  if (sole && !sole.isPlayer) sole.cash = (sole.cash || 0) + prize;
+  settleDrones(G, arsenal);
   if (me.hp <= 0) {
     G.lives -= 1;
     G.armor = carryArmor({ armor: G.armor, plates: G.plate }, 0, true).armor;
@@ -164,7 +198,6 @@ export function soloSettle(G: SoloState): Settled {
   }
   G.roundsWon += 1;
   const bonus = TUNE.roundWinScore + G.round * 150;
-  const prize = TUNE.roundWinCash + G.round * 100;
   G.score += bonus;
   G.cash += prize;
   // Trick timers tick down on claimed rounds, not on wrecked restarts.
@@ -192,49 +225,4 @@ export function soloAim(G: SoloState, arsenal: Arsenal, t: SoloTank): AimChoice 
   const plan = aiChoose(G, arsenal, t);
   if (plan.tactic) G.tactics[t.id] = plan.tactic;
   return plan;
-}
-
-/** Tricks that do their one thing once: buying more is money on fire. */
-export const ONE_SHOT: ReadonlySet<string> = new Set(['shield', 'extralife', 'laststand']);
-
-export function isOneShot(row: Pick<ShopRow, 'kind' | 'effect'>): boolean {
-  return row.kind === 'gear' && ONE_SHOT.has(row.effect || '');
-}
-
-export type BuyResult = { ok: true; qty: number; total: number } | { ok: false; why: 'cash' | 'full'; total: number };
-
-/** How many packs a purchase of `qtyIn` really buys: one for a one-shot trick,
- * and for Repair no more than the hull needs (0 when it is full). The shop prices
- * and gates by this, a room's log line reports it, and soloBuy charges it. */
-export function buyPacks(G: Pick<SoloState, 'armor' | 'plate'>, row: ShopRow, qtyIn: number): number {
-  const qty = clamp(Math.floor(qtyIn || 1), 1, 9);
-  if (isOneShot(row)) return 1;
-  if (row.effect === 'repair') return Math.min(qty, repairPacksWanted(G.armor, G.plate, row.n));
-  return qty;
-}
-
-/** One purchase, by server/rules.php room_buy()'s rules. */
-export function soloBuy(G: SoloState, row: ShopRow, qtyIn: number): BuyResult {
-  const qty = buyPacks(G, row, qtyIn);
-  if (qty === 0) return { ok: false, why: 'full', total: 0 };
-  const total = (row.price || 0) * qty;
-  if (G.cash < total) return { ok: false, why: 'cash', total };
-  G.cash -= total;
-  if (row.kind === 'ammo') {
-    G.ammo![row.w!] = (G.ammo![row.w!] || 0) + row.n * qty;
-    return { ok: true, qty, total };
-  }
-  const n = (row.n || 0) * qty;
-  switch (row.effect) {
-    case 'repair': G.armor += repairRestores(G.armor, G.plate, row.n || 0, qty); break;
-    case 'fuel': G.fuelBank += n; break;
-    case 'plate': { const h = fitPlates({ armor: G.armor, plates: G.plate }, qty); G.armor = h.armor; G.plate = h.plates; break; }
-    case 'shield': G.shield = true; break;
-    case 'extralife': if (G.lives < TUNE.maxLives) G.lives += 1; else G.score += 500; break;
-    case 'jammer': G.jammer = Math.max(G.jammer, n); break;
-    case 'bunker': G.bunker = Math.max(G.bunker, n); break;
-    case 'laststand': G.laststand = true; break;
-    case 'parachute': G.chutes += n; break;
-  }
-  return { ok: true, qty, total };
 }

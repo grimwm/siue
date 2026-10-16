@@ -16,7 +16,7 @@ test('the status bar runs Menu, the aim numbers, AMMO, ARMOR, lives, WIND and th
   expect(await hud(page, 'hud-lives')).toBe('♥ 3');
   await expect(page.locator('#hud-lives')).toHaveAttribute('aria-label', '3 lives');
   expect(await hud(page, 'hud-armor')).toMatch(/^\d+$/);
-  await expect(page.locator('.pill.armor')).toHaveAttribute('aria-label', /^Armor \d+ of \d+, .*REAPER \d+ of \d+/i);
+  await expect(page.locator('.pill.armor')).toHaveAttribute('aria-label', /^Armor \d+ of \d+, .*REAPER(?: \([a-z]+\))? \d+ of \d+/i);
   await expect(page.locator('.pill.armor')).toHaveAttribute('title', /^\d+ of \d+$/);
   expect(await hud(page, 'hud-wind')).toMatch(/^(· 0|[←→] \d+)$/);
   expect(await page.locator('#hud-score > span').count()).toBe(3);

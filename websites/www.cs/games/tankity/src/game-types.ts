@@ -7,6 +7,7 @@
 import type { DialogueLine } from './chatter.ts';
 import type { FxSys } from './fx/types.ts';
 import type { Phase } from './flow.ts';
+import type { Drone } from './drones.ts';
 import type { Marks } from './marks.ts';
 import type { EarthShow } from './earth-show.ts';
 import type { FireShow } from './fire-show.ts';
@@ -107,6 +108,7 @@ export interface GameState extends World {
   over: boolean;
   won: boolean;
   tactics: Record<string, string>; // each drone's strategy, kept from round to round
+  drones: Drone[]; // each solo drone's money and shopping personality (src/drones.ts)
   demo: boolean;
   demoHint: boolean;
   watchTurns: number; // drone-only turns since the player fell

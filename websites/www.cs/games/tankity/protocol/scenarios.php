@@ -40,8 +40,10 @@ function protocol_play(): array
     $room['seats'][2] = room_idle_seat(2, 'open');
     $room['seats'][3] = room_idle_seat(3, 'open');
     room_seat_economy($room, 0);
+    $room['droneSeed'] = 'fixture-drones'; // a fixed seed, so the drones shop the same way every run
     room_match_begin($room);
     $room['matchId'] = 'fixturematch'; // a fixed id, as the csrf token is
+    room_seat_economy($room, 1); // the drone fires its Shell: what it bought at the pre-match shop is not what these volleys show
     room_start_round($room);
     $events = [['t' => 'round', 'round' => $room['round'], 'wind' => $room['wind']]];
     room_advance($room, $events);
@@ -252,6 +254,13 @@ function protocol_fixed_close(array $v): array
 {
     if (array_key_exists('closesIn', $v) && is_int($v['expiresAt'] ?? null)) {
         $v['closesIn'] = max(0, $v['expiresAt'] - PROTOCOL_TOUCHED);
+    }
+    // The turn and shop clocks run on the wall clock while the fixtures build:
+    // whole seconds, so a slow machine's tenths do not make a fixture stale.
+    foreach (['turnLeft', 'shopLeft'] as $k) {
+        if (is_float($v[$k] ?? null) || is_int($v[$k] ?? null)) {
+            $v[$k] = (float) round($v[$k]);
+        }
     }
     foreach ($v as $k => $item) {
         if (is_array($item)) {

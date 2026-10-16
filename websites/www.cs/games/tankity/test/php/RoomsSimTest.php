@@ -298,17 +298,17 @@ final class RoomsSimTest extends TestCase
         return $round;
     }
 
-    /** A drone loads aiRack of each gun it carries (2 when the row names none), and every field a row may leave out reads the default src/sim.ts uses. */
+    /** Every field a row may leave out reads the default src/sim.ts uses, and no row carries a free drone rack. */
     public function testWeaponRowDefaults(): void
     {
-        $rack = room_ai_rack(9);
-        self::assertTrue($rack['shell'] === -1 && ($rack['deathshead'] ?? null) === 1 && ($rack['mortar'] ?? null) === 2, 'rack-round-9' . ' :: ' . json_encode($rack));
-        self::assertTrue((room_ai_rack(8)['deathshead'] ?? null) === 0, 'rack-round-8-has-no-deaths-head');
+        foreach (room_weapons() as $k => $def) {
+            self::assertTrue(!array_key_exists('aiRound', $def) && !array_key_exists('aiRack', $def), "no-free-rack-$k");
+        }
         $bare = room_weapon_row(['key' => 'x', 'dmg' => 5, 'radius' => 5]);
-        self::assertTrue($bare['start'] === 0 && $bare['aiRack'] === 2 && $bare['apex'] === false && $bare['hops'] === 1 && $bare['hopKeep'] === 0.5
+        self::assertTrue($bare['start'] === 0 && $bare['apex'] === false && $bare['hops'] === 1 && $bare['hopKeep'] === 0.5
             && $bare['kick'] === 150.0 && $bare['fuse'] === 0.9 && $bare['fan'] === 0.22 && $bare['split'] === 4 && $bare['speed'] === 1.0, 'weapon-row-defaults' . ' :: ' . json_encode($bare));
-        self::assertTrue(room_weapon_row(['key' => 'x', 'aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90])
-            === array_replace($bare, ['name' => 'x', 'aiRack' => 1, 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90.0, 'dmg' => 30, 'radius' => 24, 'subDmg' => 30, 'subRadius' => 24]), 'weapon-row-reads-new-fields');
+        self::assertTrue(room_weapon_row(['key' => 'x', 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90])
+            === array_replace($bare, ['name' => 'x', 'apex' => true, 'hops' => 3, 'hopKeep' => 0.55, 'kick' => 90.0, 'dmg' => 30, 'radius' => 24, 'subDmg' => 30, 'subRadius' => 24]), 'weapon-row-reads-new-fields');
     }
 
     /** Bomblets of one burst burst as they land: every cluster and scatter gun's shots after the first land in time order, fired either way. */
@@ -358,7 +358,7 @@ final class RoomsSimTest extends TestCase
     /** Point blank, every strategy fires what hurts itself least: it chooses from a full round-9 rack, fires it from where it aimed, and loses no more than it would firing a Shell alone (within 3 hp: the predicted landing is not quite where the shell bursts). */
     public function testPointBlankLeastSelfHarm(): void
     {
-        $fullRack = room_ai_rack(9);
+        $fullRack = tankity_test_rack();
         unset($fullRack['shell']);
         foreach (['hunter', 'bully', 'sniper', 'avenger', 'glory', 'lobber'] as $s) {
             for ($gap = 20; $gap <= 80; $gap += 10) {

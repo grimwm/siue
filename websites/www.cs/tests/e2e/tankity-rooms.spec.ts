@@ -44,7 +44,8 @@ test('two players: drive, real shell flights on both screens, turns after the re
   const armorText = await guest.page.locator('.pill.armor').getAttribute('aria-label');
   const mine = server.find(t => t.name === 'ZED')!;
   expect(armorText).toContain(`Armor ${mine.hp} of`);
-  for (const t of server.filter(t => t.name !== 'ZED')) expect(armorText).toContain(`${t.name} ${t.hp} of`);
+  // A drone's name carries its personality, e.g. "WRAITH (Saver) 56 of 100".
+  for (const t of server.filter(t => t.name !== 'ZED')) expect(armorText).toMatch(new RegExp(`\\b${t.name}(?: \\([A-Za-z]+\\))? ${t.hp} of`));
 
   await guest.page.screenshot({ path: 'test-results/tankity-room-guest.png' });
   expect(host.errors).toEqual([]);

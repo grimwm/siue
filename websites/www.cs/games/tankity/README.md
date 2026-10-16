@@ -97,7 +97,7 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.html`, `game.css`                                        | The page and its styles. The page loads `dist/fx.js` (deferred), then `dist/main.js` (an ES module) |
 | `src/main.ts`                                                   | The entry module: the game's state, the main loop, the keys, the page's plumbing (overlays, the firing range, loading `game.json`) and the wiring that hands each typed module below the pieces of the game it needs. It is bundled into `dist/main.js` |
-| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (every shell and trick, and the retired guns), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
+| `game.yaml`                                                     | The one file a maintainer edits: `arsenal` (every shell and trick, and the retired guns), `drones` (the shopping personalities), `keys` (every binding), `audio` (optional sound files), `effects` (every weapon's muzzle, trail and blast). Commented field by field |
 | `game.json`                                                     | Generated from `game.yaml`; the only data file `src/main.ts`, `rooms.php` and the effects editor load. Never edit by hand                                                                                           |
 | `audio/sfx/`, `audio/music/`, `audio/CREDITS.md`                | Optional CC0 sound files named by `game.yaml` (sixteen music tracks built by `audio/music/build_music.sh`), and where each came from                                                                                                                     |
 | `src/detmath.ts` | `dsin`, `dcos`, `datan`, `datan2`: the sim's trigonometry from `+ − × ÷` and `floor` only, the same bits as `server/detmath.php` |
@@ -131,7 +131,9 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `src/render.ts` | The battlefield on the canvas: sky and moon, clouds, hills, the scenery past the field's edges and the dirt below it (melting into the ground), the units and their bodies, aim arm, tracer marks, blasts, shells (and, draw-only, the ones the sim retired past the edge), sparks, the wind streaks, the on-canvas turn clock and the firing-range preview. Reads a `BattleView` that `view.ts` builds each frame and paints it; it never changes game state |
 | `src/game-types.ts` | Types only: the shapes `main.ts` shares with its modules. `GameState` (the sim's `World` plus the page's bookkeeping: the shop, the dialogue queue, the banner, the camera), `GameTank`, `MatchState` (a room match's turn, unsent aim and waiting snapshot) and `Tables` (the arsenal as `main.ts` holds it now). Each module picks the slice it reads and writes |
 | `src/match.ts` | The solo match as the page plays it: announcing whose turn it is, firing and what a blast does to each unit, a drone's shot, the end of a round and of the match (saved once on this browser's board), the 1-ups (`checkOneUps`: each frame, and before and after a round settles), the name cards, the end veil's props and the cosmetics decay. `createMatch(deps)` |
-| `src/solo.ts` | The solo rules, without a page: dealing a match, mustering a round, the turn order, settling a volley, 1-ups and a drone's aim. Reads no clock and no `Math.random` |
+| `src/solo.ts` | The solo rules, without a page: dealing a match (and the drones' pre-match shop), mustering a round, the turn order, settling a volley (the round prize, the drones' carry-over and shop), 1-ups and a drone's aim. Reads no clock and no `Math.random` |
+| `src/buy.ts` | What one purchase does: `buyPacks` and `soloBuy`, on a `Wallet`. The player buys with the match's state, a drone with its own record, through the same function (`solo.ts` re-exports it). `server/rules.php` `room_buy` is the same rules |
+| `src/drones.ts` | What a drone buys: `droneShop` (the pure choice, a list of purchases), the personality dealt at the start of a match (`dealDrone`), a shapeshifter's form (`droneForm`) and one shop visit (`droneVisit`). `server/ai.php` `room_drone_*` is the same, pinned by the `drone-shop` and `drone-deal` sim vector groups |
 | `src/room.ts` | A running room match on this client: the moves it sends (fire, aim, drive, load a gun, buy, Ready), adopting the room snapshot once the replay before it has played, turning events into log lines, talk and sounds, a room frame, the turn alert for a hidden tab, and the final standings. `createRoom(deps)` |
 | `src/lobby.ts` | Getting into and out of a room: the lobby overlay's props, the server dot, the hills picker, the initials boxes' line, hosting and joining under the initials the boxes hold, the roster, the invite link, starting the match, the leave question, leaving, and back to the lobby for Play again. `createLobby(deps)` |
 | `src/seats.ts` | The room seats this browser holds (`tankity-seats`: code, seat, token, CSRF token, initials; newest 12): remembered after host and join, forgotten on Leave or when the server says the room is gone. A malformed entry is dropped on its own |
@@ -188,7 +190,7 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `server/walls.php` | The arena's walls, as `src/walls.ts` has them: the picks (`ROOM_WALL_SETTINGS`), a flight's and a roller's step against them (`room_wall_step`, `room_wall_roll`), Random's draw (`room_walls_for`), which walls dam liquid, and the room's pick and the round's wall (`room_walls_setting`, `room_walls_now`); `tools/game-json.php` loads it with `server/flight.php` |
 | `server/flight.php` | The air a shell flies through, as `src/sim.ts` steps it: gravity, drag and the wind's growth with height (`room_air`, `room_shear`, `room_step_ballistic`), and a missile's launch speed at each power (`room_missile_table`), which `tools/game-json.php` also loads to write each missile's table into `game.json` |
 | `server/sim.php` | The deterministic sim that `src/sim.ts` mirrors: RNG, terrain, the curated hills, weapons (`room_weapon_row`), ballistics, the Roller (`room_roll_*`), a hop warhead's leap and a scatter gun's fan (`room_hop_vel`, `room_scatter_vel`), hit boxes and sweeps, explosions (a `dmg` 0 burst only carves), one unit's share of a hit (`room_hit_unit`), beams, plasma rings and riot charges (`room_fire_beam`, `room_fire_plasma`, `room_fire_riot`), settling (a buried ground unit stays where it is, `room_held_y`) |
-| `server/ai.php` | Drone aim, bracketing, the strategies and their flips, the gun choice by predicted harm (`room_ai_harm`, `room_ai_pick_gun`, a beam aimed by `room_ai_beam_aim`), `room_ai_rack` (`aiRack` of each gun) |
+| `server/ai.php` | Drone aim, bracketing, the strategies and their flips, the gun choice by predicted harm (`room_ai_harm`, `room_ai_pick_gun`, a beam aimed by `room_ai_beam_aim`), what a drone buys (`room_drone_shop`, `room_drone_visit`, `room_drone_deal`, `room_drone_form`) |
 | `server/rules.php` | Seats and economy, rounds (`room_start_round`, `room_advance`, `room_end_round`), the turn clock, drone pacing and watch turns, the shop, firing a volley (with a hop gun's leaps, `room_fire_hops`, a scatter gun's bomblets, `room_fire_scatter`, a beam or ring at once, and a tracer's flight with nothing after it), lives and winnings, scores |
 | `server/protocol.php` | The event log, `room_want`, snapshots and deltas (`terrainRev`, resync) |
 | `server/.htaccess` | `Require all denied`: the files in `server/` are libraries, never endpoints. Each also answers 404 if asked for directly (`TANKITY_ROOMS_INCLUDED` is defined only by `rooms.php`) |
@@ -671,12 +673,81 @@ A human's tank carries its armor from round to round. Max armor is 100 plus
 25 per hull plate; fitting a plate raises the max and adds 25 armor at once.
 Repair +40 restores up to max and never beyond: the shop greys it out at full
 armor and says what it would restore. Losing a life sends the next round out
-in a fresh tank at full max, plates still fitted. Drones are unchanged: each
-round they muster with 60 + 6 × (round − 1) armor.
+in a fresh tank at full max, plates still fitted. A drone's armor works the
+same way: it starts a match at 100 and carries what a round leaves it, raised
+only by the repair, plates and shield it buys (see Drone economy).
 
 The rules live in `src/armor.ts` and `server/rules.php` (`room_max_armor` ..
 `room_carry_armor`, used by `room_buy` and the round start and end); the
 `armor` group of the sim vectors keeps them identical.
+
+## Drone economy
+
+A drone has no free gear of any kind. It starts a match with a player's
+`start` shells and $600 and full armor (100), earns as a player does, shops
+as a player does, and keeps its unspent shells, cash, armor, plates and
+parachutes from round to round. A drone is a unit with a wallet: in solo each
+foe has a record (`SoloState.drones`, `src/drones.ts`), in a room each drone
+seat holds the same slots a human seat does (`room_seat_economy`: cash, ammo,
+armor, plate, chutes, shield). A human who leaves keeps their own economy for
+the bot that takes the seat; Play again resets every seat's economy to the
+starting values. `ai` marks the guns a drone can use at all (it never buys a
+gun without it); no gun carries `aiRound` or `aiRack`, and `arsenal.fall` has
+no `aiRound`.
+
+**Earning.** The same rules for every tank, human or drone: any tank earns
+twice the damage it deals to another tank in cash, and the kill bonus
+(`TUNE.killBonus`, 300) for wrecking one, whoever the victim was, human against
+human in a room included; nobody earns for hurting themselves. The round's sole survivor takes `roundWinCash + round × 100`,
+a drone as a player does (a drone takes it in cash and the round still reads
+as lost to the room). Only cash moves for a drone, and the score rules are
+unchanged: a human's hit or wreck of a drone still scores as well as pays,
+a hit on another human pays cash only. A
+drone's shield absorbs one hit whole, as the player's does.
+
+**Shopping.** Drones shop before the first round (round 0) and after every
+round, finishing before the next round starts: in solo at the deal and in
+`soloSettle`, in a room at match start (`room_match_begin`) and in
+`room_end_round`. Each purchase goes through the function players buy with
+(`soloBuy` in `src/buy.ts`, `room_buy` in rooms), so the same caps hold: one
+to nine packs a buy, one-shot gear once, repair only up to a full hull, never
+more than the drone can afford. The choice, `droneShop(state, arsenal,
+personality, rng)`, is pure and has a PHP twin (`room_drone_shop`); both read
+the data (price, `dmg`, `radius`, `pack`, the `ai` flag, gear `effect`) and
+no weapon key. Its draws come from a stream seeded by a hash of the match
+seed, the round and the seat (`hashSeed`, `mulberry32` and their PHP twins),
+never the shot stream, so a shop moves no flight. A room's seed
+(`droneSeed`) is dealt at match start and never sent to clients.
+
+A visit keeps `reserve` of the cash back, spends `defense` of the rest on
+defense first, in this order, each only while it is useful and within the
+defense share (found by gear `effect`): repair while the hull is below max, a
+parachute while it has none, a plate, a shield. The rest buys guns by its
+`pick` until the budget or `maxBuys` runs out, one pack a purchase.
+
+| key | name | reserve | defense | pick | maxBuys | how it shops |
+|---|---|---|---|---|---|---|
+| `saver` | Saver | 0.5 | 0.1 | `big` | 3 | Keeps half its cash back and saves up for the big gun: the dearest (by `price`) it can afford after its reserve. |
+| `scrapper` | Scrapper | 0 | 0.1 | `value` | 8 | Spends everything. Ranks guns by `dmg` × `pack` / `price`, damage per dollar, at most 2 packs of any one gun a visit. |
+| `turtle` | Turtle | 0.1 | 0.6 | `value` | 6 | Defense first, then value guns (at most 2 packs of one). |
+| `gambler` | Gambler | 0 | 0.15 | `random` | 6 | Picks at random among the affordable guns, weighted by price. |
+| `sniper` | Sniper | 0.2 | 0.15 | `precise` | 4 | Ranks guns by `dmg` / `radius` divided by `pack`: a tight hard hit over a wide blast, a pack of 1 first. |
+| `shapeshifter` | Shapeshifter | | | | | `shift: 0.35`. Each round after the first, with probability `shift` (one seeded draw) it takes another personality's rules for that round (a second draw picks which, never its own, never another shifter); otherwise it keeps the form it took last. Its first form is drawn at match start. |
+
+The table is `game.yaml` `drones.personalities`; `tools/game-json.php`
+validates it (`reserve` 0 to 0.9, `defense` 0 to 1, `pick` one of `big`,
+`value`, `random`, `precise`, `maxBuys` 1 to 12, a row with `shift` carries
+none of the others) and writes it into `game.json`. The page's baked
+fallback carries a copy in `src/fallback-arsenal.ts` (`FALLBACK_DRONES`) that
+`test/fallback-arsenal.test.ts` holds to `game.json`.
+
+**Assignment and display.** Each drone is dealt a personality at match start
+from the seeded hash, uniformly over the list. Solo shows it beside the
+drone's name on the battlefield and in the armor line ("REAPER · TURTLE"); a
+room carries it as `persona` on each drone seat of the snapshot (a
+shapeshifter reads "Shapeshifter") and shows it the same way and in the final
+standings. Personalities change shopping only: aim stays tied to the
+difficulty, and the gun a drone fires from its rack is chosen as before.
 
 ## Napalm
 
@@ -745,8 +816,8 @@ stop it.
   bar and the shop count them). One opens when a fall would cost the unit more
   than `chuteOver` (5, as in Scorched Earth), counting its bunker: the unit floats down and takes
   nothing. At or under it the parachute stays packed and the small damage
-  applies. A parachute never protects the unit underneath. Drones carry one
-  each from round `aiRound` and spend it by the same rule.
+  applies. A parachute never protects the unit underneath. A drone has none
+  until it buys one, and spends it by the same rule.
 - One settle, everywhere. The room server lands every unit at the end of each
   volley (`room_settle_tanks`, run by `room_fire_shot`) and emits `fall`
   events (and `kill`) stamped for the replay. A solo match runs the same
@@ -1543,8 +1614,10 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/music-catalog.test.ts` | `game.yaml`, `audio/CREDITS.md`, `audio/music/` and the script's pins agree: sixteen tracks, Battle Theme A first, no volume, no tags, at most four per author; with ffmpeg installed, every file is 80 kbps stereo, 40 to 240 s, and within 1 LU of the loudness target |
 | `test/field.test.ts`                          | The width from the landscape box (clamps, columns, portrait equals landscape), that a deal holds through a resize, fitting the field in a box, and the power step and display at 720, 1080 and 1440 |
 | `test/detmath.test.ts`                        | `src/detmath.ts` is within 1e-15 of `Math` where the sim feeds it, keeps the sign of zero, and is exact at 0, 1 and the right angles |
-| `test/solo.test.ts`                           | `src/solo.ts` without a page: the deal and its width, a round's muster, settling a volley, the turn order, the drones' difficulty and 1-ups |
-| `test/fall.test.ts`                           | Falls in `src/sim.ts`: the damage formula, credit to the digger (score, cash, kills, the last hit) and none for your own pit, parachutes over and under the threshold, the drones' own, the bunker and the shield, landing on a unit, a stack landing bottom up, the drawn height following the ground at once while the rules wait for the settle, a settled fall playing out from where it was drawn, a parachute armed then opened only as its unit drops (never at rest), a solo volley arming one, a unit dug out by an early pellet seen falling mid-volley, a fall wreck seen to land before its words and wreck show, the same shot costing the same armor as a solo volley and as a room's (Buckshot bursts, fractional ground, parachutes), the bunker counting toward the parachute, credit to the deepest blast, the drones' parachutes by round and the stacking shop row |
+| `test/solo.test.ts`                           | `src/solo.ts` without a page: the deal and its width, a round's muster, settling a volley, the turn order, the drones' difficulty and 1-ups, a drone's start, carry-over and round prize |
+| `test/drones.test.ts`                         | `src/drones.ts`: each personality's choices on fixed inputs, never over budget or the reserve, never a gun without `ai`, one-shot caps, the turtle's repair, the shapeshifter's shifts, the draw of a personality, and the same shop leaving the shot stream alone |
+| `test/drone-earn.test.ts`                     | A drone earns twice the damage and the kill bonus whoever the victim was, its shield absorbs one hit, and the player earns as before |
+| `test/fall.test.ts`                           | Falls in `src/sim.ts`: the damage formula, credit to the digger (score, cash, kills, the last hit) and none for your own pit, parachutes over and under the threshold, the drones' own, the bunker and the shield, landing on a unit, a stack landing bottom up, the drawn height following the ground at once while the rules wait for the settle, a settled fall playing out from where it was drawn, a parachute armed then opened only as its unit drops (never at rest), a solo volley arming one, a unit dug out by an early pellet seen falling mid-volley, a fall wreck seen to land before its words and wreck show, the same shot costing the same armor as a solo volley and as a room's (Buckshot bursts, fractional ground, parachutes), the bunker counting toward the parachute, credit to the deepest blast, a drone mustering with the parachutes it bought and the stacking shop row |
 | `test/fixed-step.test.ts` | The solo war runs in fixed steps whatever the frame lengths, tank falls included, so play is the same on a 30 Hz phone and a 144 Hz monitor |
 | `test/determinism.test.ts` | The rule modules call no clock, no `Math.random` and no libm trigonometry, so the shared sim stays bit-exact across the two languages (see Deterministic math) |
 | `test/wide-field.test.ts`                     | The sim at any width: the same hills continued, units spread outside each other's blast, reach and wind scaling, flights that last as long as the field, 720 unchanged |
@@ -1597,9 +1670,10 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `RoomAgainTest` (host PHP) | Play again keeps code and seats and resets lives, score and cash; a second press is harmless; the lowest human hosts when the host left |
 | `BoardTest`, `ScoresEndpointTest` (host PHP) | The boards (one per difficulty, room rows only, ties, the trim, a required source), and `scores.php` as a request (the board in the page's shape, no seeds, every POST answered 410 and nothing written, other methods 405) |
 | `RoomGuardTest` (host PHP) | Initials stored uppercase and the blocked set refused, origins and referers against the allow list, only turn-moving acts stamping `acted` (not the menu flag, a new look or an off-turn gun), and the hourly allowance on creating and joining: a setting, exact in every sliding hour, per address, in the `rate` table, swept by housekeeping, a spent one refused without the write lock, a 429 from `rooms.php` itself, and a create refused for a full disk not charged |
+| `RoomDronesTest` (host PHP) | The drones in a room: the personalities' choices, the budget and caps, the shapeshifter, a match start dealing every drone seat a stake, a shop and a personality, cash for damage and kills, the round prize, a shield, carry-over, a leaver's economy kept by the bot, Play again's reset |
 | `RoomArmorTest`, `RoomBuyTest` (host PHP) | Armor carry-over and re-muster, the capped repair, plates, and every shop purchase rule |
-| `RoomRetireTest` (host PHP) | A room saved holding a retired gun: refunded at its old price per shell, unknown keys dropped, a loaded one back to the Shell, drones' racks cleaned, once only, through `room_load` and `room_peek`, and malformed stock never crashing |
-| `RoomFallTest` (host PHP) | The room's falls: the formula, the digger's credit and kill, your own pit, parachutes (spent, kept, a drone's), the bunker and the shield, landing on a unit, a volley ending with its falls settled and stamped, drones' parachutes by round, the stacking shop row in the snapshot, the bunker counting toward the parachute, credit to the deepest blast, and a rise folding a parachute |
+| `RoomRetireTest` (host PHP) | A room saved holding a retired gun: refunded at its old price per shell, unknown keys dropped, a loaded one back to the Shell, drones' shells cleaned, once only, through `room_load` and `room_peek`, and malformed stock never crashing |
+| `RoomFallTest` (host PHP) | The room's falls: the formula, the digger's credit and kill, your own pit, parachutes (spent, kept, a drone's), the bunker and the shield, landing on a unit, a volley ending with its falls settled and stamped, a drone mustering with the parachutes it bought, the stacking shop row in the snapshot, the bunker counting toward the parachute, credit to the deepest blast, and a rise folding a parachute |
 | `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: two creates racing for a code, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (run inside the PHP container)                 |
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
@@ -1703,7 +1777,7 @@ with -0 equal to 0 only where a case says so.
   hop gun's leap and its chain (down a slope, through a direct hit, off the
   field), a scatter gun's fan and bomblets (on flat ground, in a pit, through
   a direct hit), where every cluster splits (on its fuse, or at the top of
-  its arc with `apex`), the rack a drone loads by round (`aiRack`), the harm
+  its arc with `apex`), what a drone buys (`drone-shop`) and the personality it is dealt (`drone-deal`), who earns from a hit and a wreck, the harm
   every gun would do from seven landings, and a drone's gun choice from a
   mixed round-9 rack; beams (the line, its hits once each, a short beam at
   low power, a channel through a hill whose fall is the gunner's, a shield,
@@ -1744,8 +1818,8 @@ with -0 equal to 0 only where a case says so.
   browser plays each volley as a solo match does (falls animated every frame,
   one settle once the last shell is down), including Buckshot pits dug in
   bursts and craters in fractional ground.
-- Shared rules the cases pin: only a kill the player's own shot made pays the
-  300 bonus, a volley's projectiles (buckshot pellets, a hop gun's warheads,
+- Shared rules the cases pin: a kill pays the 300 bonus in cash to whoever made it
+  and to a drone, in cash, whoever it wrecked, a volley's projectiles (buckshot pellets, a hop gun's warheads,
   and one burst's bomblets as a group) burst in launch order, each against the
   ground the earlier ones left, and bomblets of one burst burst in the order
   they land, in list order within a step. The browser still flies a volley's

@@ -10,10 +10,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, droneRack, fireWeapon, muzzle, mulberry32, simShot, stepShells } from '../src/sim.ts';
+import { buildArsenal, fireWeapon, muzzle, mulberry32, simShot, stepShells } from '../src/sim.ts';
 import { aiChoose, aiHarm, aiSelfHarm, earthHarm } from '../src/ai.ts';
 import type { Ammo, FallRules, Gear, Tank, Weapon, World } from '../src/sim.ts';
 import type { Landing } from '../src/ai.ts';
+import { rackOf } from './rack.ts';
 
 function must<T>(v: T | null | undefined, what: string): T {
   assert.ok(v !== null && v !== undefined, `${what} is missing`);
@@ -96,7 +97,7 @@ function selfLoss(ammo: Ammo, s: string, gap: number, dir: number, seed: number)
 }
 
 test('point blank, every strategy fires what hurts itself least: never more than a Shell alone would', () => {
-  const rack = droneRack(arsenal, 9);
+  const rack = rackOf(arsenal);
   for (const s of STRATEGIES) {
     for (let gap = 20; gap <= 80; gap += 10) {
       for (const dir of [1, -1]) {
@@ -152,7 +153,7 @@ test('drones vary their guns over rounds 5 to 12: no gun above 60% of picks', ()
   for (let round = 5; round <= 12; round++) {
     for (const [gap, hp] of [[140, 100], [220, 60], [300, 100], [380, 35], [460, 80], [520, 100]] satisfies [number, number][]) {
       for (const s of ['hunter', 'glory', 'lobber', 'sniper']) {
-        const self = drone(100, { ammo: droneRack(arsenal, round), s });
+        const self = drone(100, { ammo: rackOf(arsenal), s });
         const G = world([self, human(100 + gap, hp)], { round, difficulty: 'normal', rng: mulberry32(round * 31 + gap) });
         const c = aiChoose(G, arsenal, self);
         picks[c.wkey] = (picks[c.wkey] || 0) + 1;

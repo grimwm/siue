@@ -78,6 +78,8 @@ function room_snapshot(array $room, ?int $seat, int $since, ?int $have = null, b
             'seat' => $idx, 'human' => $s['human'],
             'name' => $s['human'] ? $s['initials'] : $s['name'],
             'mode' => $s['human'] ? 'human' : ($s['mode'] ?? 'ai'),
+            // A drone's shopping personality by name (a shapeshifter shows its own name); null for a human or before the match.
+            'persona' => $s['human'] ? null : room_drone_persona_name($room, $idx),
             // A player who left mid-match: a bot drives their unit now.
             'bot' => !$s['human'] && !empty($s['bot']),
             'lives' => $s['lives'] ?? 0,

@@ -99,7 +99,7 @@ export function createHud(deps: HudDeps) {
   /* A rival's armor in words, the way the player's own reads. */
   function foe(x: GameTank): string {
     const name = net.on ? seatName(x.seat!) : x.id;
-    return `${name} ${Math.max(0, Math.round(x.hp))} of ${x.maxHp}`;
+    return `${name}${x.personality ? ` (${x.personality})` : ''} ${Math.max(0, Math.round(x.hp))} of ${x.maxHp}`;
   }
   function renderStanding(mine: GameTank | null, others: string): void {
     // In the shop the next round's armor is what counts; on the field, the tank's.

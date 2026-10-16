@@ -477,7 +477,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   roomRange.value = '5';
   fire(roomRange, 'input');
   await test('lobby-room-turn-reports', () => { assert.ok(turns.room.join() === '86400', turns.room.join()); });
-  await test('lobby-room-close-rule', () => { assert.ok(/closed to make space/.test(text(byId(hostRoom, 'turn-hint'))), text(byId(hostRoom, 'turn-hint'))); });
+  await test('lobby-room-close-rule', () => { assert.ok(/one turn time for each player, and at least 10 minutes/.test(text(byId(hostRoom, 'turn-hint'))), text(byId(hostRoom, 'turn-hint'))); });
 
   const guestRoom = makeEl('lobby-veil');
   renderLobby(guestRoom, lobbyProps({ ...base, inRoom: true, isHost: false, code: 'AB3D', seats: SEATS, mySeat: 3 }).props);

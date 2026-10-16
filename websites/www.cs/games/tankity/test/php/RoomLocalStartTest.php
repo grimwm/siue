@@ -17,8 +17,7 @@ final class RoomLocalStartTest extends TestCase
     private string $dir;
 
     private const ENV = ['TANKITY_ROOM_LIVE_SECS' => '600', 'TANKITY_ROOM_JOINS_PER_HOUR' => '1000',
-        'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4', 'TANKITY_LOBBIES_PER_ADDRESS' => '4', 'TANKITY_MAX_LOBBIES' => '100',
-        'TANKITY_MAX_ROOMS' => '50'];
+        'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4', 'TANKITY_LOBBIES_PER_ADDRESS' => '4'];
 
     private const RELOAD = ['error' => 'Tankity was updated. Reload the page to keep playing.', 'reload' => true];
 
@@ -79,11 +78,6 @@ final class RoomLocalStartTest extends TestCase
         return (int) $q->fetchColumn() === 1;
     }
 
-    private function tombstones(): int
-    {
-        return (int) tankity_db()->query('SELECT COUNT(*) FROM closed')->fetchColumn();
-    }
-
     public function testAOneHumanStartPlaysLocally(): void
     {
         $host = $this->host(['difficulty' => 'hard']);
@@ -96,7 +90,6 @@ final class RoomLocalStartTest extends TestCase
         $this->gap();
         $this->assertSame([200, ['ok' => true, 'local' => ['difficulty' => 'hard', 'speed' => 2, 'walls' => 'rubber']]], $this->start($host, ['proto' => 2]));
         $this->assertFalse($this->exists($host['code']), 'the lobby is closed');
-        $this->assertSame(0, $this->tombstones(), 'the host closed it: nobody is told it was closed to make space');
         $this->assertSame([0, 0], $this->used());
         $this->assertSame([404, ['error' => 'no such room']],
             $this->call('state', ['code' => $host['code'], 'token' => $host['token']], [], self::ENV));

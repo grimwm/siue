@@ -5,7 +5,7 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /* The room store under real concurrency: its own php -S (four workers) on a
-   free 127.0.0.1 port, a four-lobby pool, a private data directory, and
+   free 127.0.0.1 port, a private data directory, and
    holders in other processes. */
 final class RoomsStoreTest extends TestCase
 {
@@ -19,7 +19,7 @@ final class RoomsStoreTest extends TestCase
     {
         self::$tmp = sys_get_temp_dir() . '/tankity-store-http-' . getmypid() . '-' . bin2hex(random_bytes(3));
         mkdir(self::$tmp, 0700);
-        file_put_contents(self::$tmp . '/test.yaml', 'max_lobbies: ' . self::CAP . "\nroom_live_secs: 60\n");
+        file_put_contents(self::$tmp . '/test.yaml', "room_live_secs: 60\n");
         putenv('CONFIG_FILE=' . self::$tmp . '/test.yaml');
         putenv('TANKITY_DATA_DIR=' . self::$tmp . '/data');
         require_once dirname(__DIR__) . '/php/rooms-lib.php';
@@ -87,7 +87,7 @@ final class RoomsStoreTest extends TestCase
         return [$p, $pipes];
     }
 
-    public function testCreatesTakeDistinctCodesUpToTheLobbyPool(): void
+    public function testCreatesTakeDistinctCodes(): void
     {
         $codes = [];
         for ($i = 0; $i < self::CAP; $i++) {
@@ -97,16 +97,11 @@ final class RoomsStoreTest extends TestCase
         }
         $this->assertCount(self::CAP, array_unique($codes));
         $this->assertSame(self::CAP, self::get('ping')['lobbies']['used']);
-        [$st, $r] = self::post('create', ['initials' => 'zzz']);
-        $this->assertSame([409, ['error' => 'Every lobby is busy. Try again in a minute.']], [$st, $r]);
-        $this->assertSame(self::CAP, $this->rows(), 'a refused create leaves no row');
+        $this->assertSame(self::CAP, $this->rows());
     }
 
-    public function testTwoCreatesRaceForTheLastPlace(): void
+    public function testTwoCreatesRaceForACode(): void
     {
-        for ($i = 0; $i < self::CAP - 1; $i++) {
-            $this->assertSame(200, self::post('create', ['initials' => 'ra' . chr(97 + $i)])[0]);
-        }
         $multi = curl_multi_init();
         $handles = [];
         foreach (['raz', 'ray'] as $who) {
@@ -121,9 +116,10 @@ final class RoomsStoreTest extends TestCase
             curl_multi_select($multi, 0.05);
         } while ($running > 0);
         $codes = array_map(fn($h): int => (int) curl_getinfo($h, CURLINFO_RESPONSE_CODE), $handles);
-        sort($codes);
-        $this->assertSame([200, 409], $codes);
-        $this->assertSame(self::CAP, $this->rows());
+        $this->assertSame([200, 200], $codes);
+        $made = array_map(fn($h): string => (string) (json_decode((string) curl_multi_getcontent($h), true)['code'] ?? ''), $handles);
+        $this->assertCount(2, array_unique($made), 'two creates racing never share a code');
+        $this->assertSame(2, $this->rows());
     }
 
     public function testTheLastHumanLeavingClosesTheRoom(): void

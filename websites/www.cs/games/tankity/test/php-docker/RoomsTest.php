@@ -21,7 +21,7 @@ final class RoomsTest extends TestCase
     {
         self::$tmp = sys_get_temp_dir() . '/tankity-rooms-test-' . getmypid() . '-' . bin2hex(random_bytes(3));
         mkdir(self::$tmp, 0700);
-        file_put_contents(self::$tmp . '/test.yaml', "max_rooms: 2\nmax_lobbies: 2\nroom_live_secs: 60\n");
+        file_put_contents(self::$tmp . '/test.yaml', "room_live_secs: 60\n");
         self::$env = array_merge(getenv(), ['CONFIG_FILE' => self::$tmp . '/test.yaml', 'TANKITY_DATA_DIR' => self::$tmp . '/data']);
         // The room functions, in this process, for aging records and holding the lock.
         putenv('CONFIG_FILE=' . self::$tmp . '/test.yaml');
@@ -163,7 +163,6 @@ final class RoomsTest extends TestCase
     {
         $ping = self::waitUp();
         self::assertTrue($ping !== null, 'server-up');
-        self::assertTrue(($ping['rooms']['max'] ?? 0) === 2, 'cap-from-file' . ' :: ' . 'max=' . ($ping['rooms']['max'] ?? '?'));
         self::assertTrue(($ping['rooms']['used'] ?? -1) === 0 && ($ping['lobbies']['used'] ?? -1) === 0, 'empty-shelf');
 
         $room = self::post('create', ['initials' => 'tst']);
@@ -171,7 +170,7 @@ final class RoomsTest extends TestCase
         $code = (string) ($room['code'] ?? '');
         $token = (string) ($room['token'] ?? '');
         $ping = self::get(self::$base . '/rooms.php?action=ping');
-        self::assertTrue(($ping['lobbies']['used'] ?? -1) === 1 && ($ping['rooms']['used'] ?? -1) === 0, 'a-lobby-counts-in-the-pool-not-the-slots');
+        self::assertTrue(($ping['lobbies']['used'] ?? -1) === 1 && ($ping['rooms']['used'] ?? -1) === 0, 'a-lobby-counts-as-a-lobby-not-a-match');
         self::assertTrue(self::storedInitials($code) === 'TST', 'lowercase-initials-stored-uppercase' . ' :: ' . self::storedInitials($code));
         self::assertTrue(self::storedDifficulty($code) === 'normal', 'create-without-difficulty-stores-normal' . ' :: ' . self::storedDifficulty($code));
 
@@ -208,7 +207,7 @@ final class RoomsTest extends TestCase
         self::assertTrue($pingHeld !== null && ($pingHeld['lobbies']['used'] ?? -1) >= 1
             && $lockDt < 1.0, 'ping-ignores-room-lock' . ' :: ' . sprintf('wait=%.2fs', $lockDt));
 
-        // The ceiling uses the live count, and refusals stay human.
+        // A second lobby from the same address opens too: no server-wide count stops it.
         $second = self::post('create', ['initials' => 'abc', 'difficulty' => 'HARD', 'turn' => 28800]);
         self::assertTrue(self::storedDifficulty((string) ($second['code'] ?? '')) === 'normal', 'create-with-an-unknown-difficulty-stores-normal' . ' :: ' . self::storedDifficulty((string) ($second['code'] ?? '')));
         $storedTurn = function (string $c) {
@@ -219,22 +218,21 @@ final class RoomsTest extends TestCase
         self::assertTrue(self::storedTurn((string) ($second['code'] ?? '')) === 28800, 'create-with-a-turn-time-stores-it' . ' :: ' . (string) self::storedTurn((string) ($second['code'] ?? '')));
         usleep(1100000); // respect the creation throttle before the next attempt
         $third = self::post('create', ['initials' => 'def']);
-        self::assertTrue(($second['ok'] ?? false) === true && ($third['ok'] ?? false) === false, 'cap-live' . ' :: ' . 'second=' . ($second['code'] ?? '?') . ' thirdErr=' . ($third['error'] ?? '?'));
-        self::assertTrue(isset($third['error']) && strpos($third['error'], 'Every lobby is busy') !== false, 'cap-human' . ' :: ' . ($third['error'] ?? ''));
+        self::assertTrue(($second['ok'] ?? false) === true && ($third['ok'] ?? false) === true, 'no-server-wide-cap' . ' :: ' . 'second=' . ($second['code'] ?? '?') . ' thirdErr=' . ($third['error'] ?? '?'));
 
         // Rooms live in the database, which outlives a web-server restart: a
         // restarted server still sees the same shelf. Then age every room out so the
-        // cap is free for the match below.
+        // shelf is empty for the match below.
         proc_terminate(self::$proc);
         proc_close(self::$proc);
         self::$proc = self::spawn();
         $ping = self::waitUp();
-        self::assertTrue(($ping['lobbies']['used'] ?? -1) === 2, 'restart-keeps-shelf' . ' :: ' . 'used=' . ($ping['lobbies']['used'] ?? '?'));
-        foreach ([$code, (string) ($second['code'] ?? '')] as $c) {
+        self::assertTrue(($ping['lobbies']['used'] ?? -1) === 3, 'restart-keeps-shelf' . ' :: ' . 'used=' . ($ping['lobbies']['used'] ?? '?'));
+        foreach ([$code, (string) ($second['code'] ?? ''), (string) ($third['code'] ?? '')] as $c) {
             self::ageRoom($c);
         }
         $ping = self::get(self::$base . '/rooms.php?action=ping');
-        self::assertTrue(($ping['lobbies']['used'] ?? -1) === 0, 'sweep-frees-cap' . ' :: ' . 'used=' . ($ping['lobbies']['used'] ?? '?'));
+        self::assertTrue(($ping['lobbies']['used'] ?? -1) === 0, 'sweep-empties-shelf' . ' :: ' . 'used=' . ($ping['lobbies']['used'] ?? '?'));
         $gone = self::get(self::$base . '/rooms.php?action=state&code=' . $code . '&since=0', 5, $token);
         self::assertTrue(($gone['error'] ?? '') === 'no such room', 'swept-unreachable' . ' :: ' . ($gone['error'] ?? ''));
     }

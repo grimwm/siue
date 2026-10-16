@@ -940,20 +940,8 @@ for (const puzzle of ['puzzle-expired', 'puzzle-bad', 'puzzle-wrong', 'puzzle-sp
   await test('gone-room-detaches', () => { assert.ok(net.code === '' && net.on === false && host.intervals.size === 0); });
   await test('gone-room-reported', () => { assert.ok(j(gone) === j([['FXT1', 'closed']]), j(gone)); });
 }
-{
-  // A room closed to make space says so to its own seats: the 404 carries why.
-  const gone: [string, string][] = [];
-  const host = makeHost(url => (url.includes('action=state') ? { status: 404, body: { ok: false, error: 'no such room', closed: 'space' } } : roomReply()));
-  const net = new RoomClient(host.env, { onReachable() {}, onSnapshot() {}, onReadyChange() {}, onError() {}, onGone: (c, why) => gone.push([c, why]) });
-  net.code = 'FXT1'; net.token = 'tok'; net.seat = 0;
-  net.beginMatch();
-  at([...host.intervals.values()], 0).fn();
-  await flush();
-  await test('closed-for-space-detaches-and-says-why', () => { assert.ok(net.code === '' && net.on === false && j(gone) === j([['FXT1', 'space']]), j(gone)); });
-}
 await test('gone-error-reason', () => {
   assert.equal(isGoneError(new Error('no such room')), 'closed');
-  assert.equal(isGoneError(Object.assign(new Error('no such room'), { closed: 'space' })), 'space');
   assert.equal(isGoneError(new Error('offline')), null);
 });
 {

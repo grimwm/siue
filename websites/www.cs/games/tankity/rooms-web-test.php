@@ -23,13 +23,6 @@ $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' :
 $base = $scheme . '://' . $host . $dir;
 $origin = $scheme . '://' . $host;
 
-// Read-only peek at the same .config.yaml the server reads, so expectations
-// follow the config instead of hardcoding a ceiling.
-$cfgMax = 10;
-foreach (file(__DIR__ . '/.config.yaml') ?: [] as $line) {
-    if (preg_match('/^\s*max_rooms\s*:\s*(\d+)/', $line, $m)) $cfgMax = (int) $m[1];
-}
-
 $probeGet = function (string $url) {
     $ctx = stream_context_create(['http' => ['timeout' => 8, 'ignore_errors' => true]]);
     $raw = @file_get_contents($url, false, $ctx);
@@ -136,11 +129,10 @@ $ageRoom = function (string $c): void {
 
 $ping = $get($base . '/rooms.php?action=ping');
 $check('server-up', $ping !== null);
-$check('cap-from-file', ($ping['rooms']['max'] ?? 0) === $cfgMax, 'max=' . ($ping['rooms']['max'] ?? '?'));
 // Baseline, not emptiness: strangers may share the shelf, so every count
 // below is relative to what was already live. Our own rooms are the only
-// ones this suite ever ages out. A lobby counts in the lobby pool; only a
-// started match takes one of the max_rooms slots.
+// ones this suite ever ages out. A lobby counts as a lobby; only a started
+// match counts as a match.
 $baseUsed = (int) ($ping['lobbies']['used'] ?? 0);
 $baseSlots = (int) ($ping['rooms']['used'] ?? 0);
 $check('empty-shelf', ($ping['lobbies']['used'] ?? -1) === $baseUsed, 'used=' . ($ping['lobbies']['used'] ?? '?'));
@@ -187,46 +179,8 @@ $held->exec('ROLLBACK');
 $check('ping-ignores-room-lock', $pingHeld !== null && ($pingHeld['lobbies']['used'] ?? -1) >= 1
     && $lockDt < 1.0, sprintf('wait=%.2fs', $lockDt));
 
-// The match slots use the live count of started matches, and refusals stay
-// human: fill the slots to the configured max with started two-seat matches,
-// then prove one more Start is refused kindly. A Start on a full server
-// reclaims a stranger's finished or idle room, so the check runs only when
-// none is eligible, and says it skipped otherwise.
-$fillNames = ['fax', 'fay', 'faz', 'fbx', 'fby', 'fbz', 'fcx', 'fcy', 'fcz', 'fdx'];
-$fillCodes = [];
-$fillsOk = true;
-if (room_reclaim_pick('', time()) !== null) {
-    $check('cap-live-skipped', true, 'a stranger\'s room is eligible for reclaim; not filling the slots');
-} else {
-    $pingNow = $get($base . '/rooms.php?action=ping');
-    $need = $cfgMax - (int) ($pingNow['rooms']['used'] ?? 0);
-    $fills = [];
-    // Creates and joins are limited by the hourly allowance (lifted on the
-    // test stacks), not by time: a fill to a 50-match cap must finish well
-    // inside nginx's 60 s.
-    for ($i = 0; $i <= $need; $i++) {
-        $f = $post('create', ['initials' => $fillNames[$i % count($fillNames)]]);
-        $g = ($f['ok'] ?? false) === true ? $post('join', ['code' => (string) $f['code'], 'initials' => 'gst']) : null;
-        if (($g['ok'] ?? false) !== true) $fillsOk = false;
-        else $fills[] = $f;
-        $fillCodes[] = (string) ($f['code'] ?? '');
-    }
-    usleep(200000); // past each host seat's 150 ms act spacing
-    $refused = null;
-    foreach ($fills as $i => $f) {
-        [$st, $out] = $postStatus('start', ['code' => $f['code'], 'token' => $f['token'], 'csrf' => $f['csrf']]);
-        if ($i < $need && $st !== 200) $fillsOk = false;
-        if ($i === $need) $refused = [$st, $out];
-    }
-    $check('cap-live', $fillsOk && $refused !== null && $refused[0] === 409,
-        'filled=' . min(count($fills), $need) . '/' . $need . ' refused=' . json_encode($refused));
-    $check('cap-human', ($refused[1]['error'] ?? '') === 'Every match slot is in play. Try again in a few minutes.', json_encode($refused));
-}
-
 // Empty the shelf back down for the match below, then prove the sweep took.
-foreach (array_merge($fillCodes, [$code]) as $old) {
-    if ($old !== '') $ageRoom($old);
-}
+if ($code !== '') $ageRoom($code);
 $ping = $get($base . '/rooms.php?action=ping');
 $check('shelf-emptied', ($ping['lobbies']['used'] ?? -1) === $baseUsed && ($ping['rooms']['used'] ?? -1) === $baseSlots,
     'lobbies=' . ($ping['lobbies']['used'] ?? '?') . ' matches=' . ($ping['rooms']['used'] ?? '?'));

@@ -142,15 +142,16 @@ final class RoomGuardTest extends TestCase
             static fn(array $s): ?string => ($s['human'] ?? false) ? $s['initials'] : null, $room['seats']))));
     }
 
-    public function testACreateRefusedForABusyLobbyPoolIsNotCharged(): void
+    public function testACreateRefusedForAFullDiskIsNotCharged(): void
     {
-        // A lab clicking Host while every lobby is busy keeps its allowance for the moment one frees.
-        $env = ['TANKITY_MAX_LOBBIES' => '1'];
+        // A lab clicking Host while the database is full keeps its allowance for the moment room frees up.
+        $env = ['TANKITY_ROOM_DB_MAX_MB' => '1'];
         [$st, $host] = $this->call('create', ['initials' => 'hst'], [], $env);
         $this->assertSame(200, $st, json_encode($host));
+        tankity_db()->prepare("INSERT INTO closed (code, reason, at, seats) VALUES ('PADD', 'x', 0, ?)")->execute([str_repeat('a', 1100000)]);
         for ($i = 0; $i < 3; $i++) {
             [$st, $out] = $this->call('create', ['initials' => 'two'], ['REMOTE_ADDR' => '203.0.113.10'], $env);
-            $this->assertSame([409, ['error' => 'Every lobby is busy. Try again in a minute.']], [$st, $out]);
+            $this->assertSame([503, ['error' => 'The server is full. Try again later.']], [$st, $out]);
         }
         $this->assertSame(1, $this->roomCharges(), 'only the create that made a room was charged');
         // A malformed code is refused uncharged; a guess at a well-formed one costs one.

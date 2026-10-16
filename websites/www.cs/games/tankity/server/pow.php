@@ -1,6 +1,6 @@
 <?php
 // Operation Tankity rooms. The room puzzle: creating or joining a room costs
-// a small proof of work, which gets harder under load (README "Room slots").
+// a small proof of work, which gets harder under a surge of creates (README "Room limits").
 //
 // A challenge is `v1.<issued>.<purpose>.<bits>.<rand>.<mac>`: the server's
 // unix seconds, `c` (create) or `j` (join), the leading zero bits each
@@ -33,8 +33,8 @@ const POW_TTL = 120;
 const POW_SKEW = 5;
 /* The window the global create count (the surge signal) looks back over. */
 const POW_SURGE_SECS = 600;
-/* Load raises the bits by at most this much, so a phone stays within a few seconds. */
-const POW_RAISE_MAX = 2;
+/* A surge raises the bits by this much, so a phone stays within a few seconds. */
+const POW_RAISE_MAX = 1;
 const POW_BAD = [403, 'puzzle-bad', 'That puzzle is not one of ours.'];
 const POW_EXPIRED = [403, 'puzzle-expired', 'That puzzle ran out of time.'];
 const POW_SHORT = [422, 'puzzle-short', 'That puzzle is not finished.'];
@@ -81,9 +81,8 @@ function room_pow_count_create(PDO $db, int $now): void
 }
 
 /* The bits a new challenge for $purpose ('c' or 'j') asks for: the setting
-   for a join and one more for a create, one more again when started matches
-   or lobbies reach 75 % of their caps or creates surge, two more when either
-   cap is reached. Three indexed reads; 0 when the puzzle is off. */
+   for a join and one more for a create, one more again when creates surge.
+   One indexed read; 0 when the puzzle is off. */
 function room_pow_bits(string $purpose, ?int $now = null): int
 {
     $base = room_pow_bits_setting();
@@ -91,17 +90,7 @@ function room_pow_bits(string $purpose, ?int $now = null): int
         return 0;
     }
     $now ??= time();
-    $slots = room_slots_used('', $now);
-    $lobbies = room_lobbies_used('', $now);
-    $maxRooms = room_max_rooms();
-    $maxLobbies = room_max_lobbies();
-    $raise = 0;
-    if ($slots >= $maxRooms || $lobbies >= $maxLobbies) {
-        $raise = 2;
-    } elseif (4 * $slots >= 3 * $maxRooms || 4 * $lobbies >= 3 * $maxLobbies
-        || room_pow_creates(tankity_db(), $now) >= room_pow_surge()) {
-        $raise = 1;
-    }
+    $raise = room_pow_creates(tankity_db(), $now) >= room_pow_surge() ? 1 : 0;
     return $base + ($purpose === 'c' ? 1 : 0) + min(POW_RAISE_MAX, $raise);
 }
 

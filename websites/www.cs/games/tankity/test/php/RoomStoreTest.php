@@ -48,7 +48,7 @@ final class RoomStoreTest extends TestCase
         $this->assertSame($code, $room['code']);
         $this->assertInstanceOf(RoomLock::class, $lock);
         room_unlock($lock);
-        $this->assertSame(1, room_lobbies_used());
+        $this->assertSame(1, $this->rows());
     }
 
     public function testAMissingCodeLoadsNothingAndHoldsNothing(): void
@@ -108,7 +108,7 @@ final class RoomStoreTest extends TestCase
     {
         $code = $this->make();
         room_test_age($code, 120);
-        $this->assertSame(0, room_lobbies_used());
+        $this->assertSame(0, (int) tankity_db()->query("SELECT COUNT(*) FROM rooms WHERE phase = 'lobby' AND expires >= " . time())->fetchColumn());
         $this->assertSame([null, null, $code], room_load($code));
         $this->assertSame(0, $this->rows());
     }

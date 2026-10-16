@@ -45,7 +45,7 @@ function draw(over: Partial<YourGamesProps> = {}) {
   const calls: { open: string[]; alerts: number } = { open: [], alerts: 0 };
   games.renderYourGames(asElement(box), {
     id: 'your-games', rows: ROWS, alerts: 'off', age: 0,
-    onOpen: c => { calls.open.push(c); }, onAlerts: () => { calls.alerts++; }, onDismiss: () => {}, ...over,
+    onOpen: c => { calls.open.push(c); }, onAlerts: () => { calls.alerts++; }, ...over,
   });
   return { box, calls };
 }
@@ -69,26 +69,6 @@ test('one row per room, saying where it stands, each with Open', () => {
   assert.equal(open.getAttribute('aria-label'), 'Open room 7K2Q');
   click(open);
   assert.deepEqual(calls.open, ['7K2Q']);
-});
-
-test('a room closed to make space says so, with Dismiss in place of Open', () => {
-  const box = makeEl('box');
-  const dismissed: string[] = [];
-  const opened: string[] = [];
-  games.renderYourGames(asElement(box), {
-    id: 'your-games', rows: [nth(ROWS, 1), { code: 'ABCD', closed: 'space' }], alerts: 'off', age: 0,
-    onOpen: c => { opened.push(c); }, onAlerts: () => {}, onDismiss: c => { dismissed.push(c); },
-  });
-  const items = byTag(byId(box, 'your-games'), 'li');
-  assert.equal(items.length, 2);
-  const closed = nth(items, 1);
-  assert.equal(byTag(closed, 'span').map(x => x.textContent).join(''), 'ABCD · Closed to make space');
-  const buttons = byTag(closed, 'button');
-  assert.deepEqual(buttons.map(b => b.textContent), ['Dismiss']);
-  assert.equal(nth(buttons, 0).getAttribute('aria-label'), 'Dismiss room ABCD');
-  click(nth(buttons, 0));
-  assert.deepEqual(dismissed, ['ABCD']);
-  assert.deepEqual(opened, []);
 });
 
 test('the clocks count down from when the rows arrived, not from any wall clock', () => {

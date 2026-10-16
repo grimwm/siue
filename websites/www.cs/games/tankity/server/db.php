@@ -206,12 +206,12 @@ function tankity_journal_mode(string $dir, ?string $mounts = null): string
    imported; step 4 tells a row the server filed from a match from a browser's
    own claim; step 5 counts each address's requests (server/rate.php), keeps
    only the rows rooms filed, and drops the old callsign tables; step 6 stores
-   each room's expiry (room_expires in server/store.php) so the cap count and
+   each room's expiry (room_expires in server/store.php) so the per-address counts and
    the sweep stay plain SQL; step 7 stores the address that hosts a room, so a
    hosting cap per address does too; step 8 stores each room's phase, last
-   turn-moving act and turn time, so the match slots, the lobby pool and the
-   reclaim stay plain SQL too, and adds the tombstones of rooms closed to make
-   space and the spent puzzles. A step's entry is SQL to run, or a
+   turn-moving act and turn time, so the per-address counts and the
+   sweep stay plain SQL too, and adds the tombstones of closed rooms
+   and the spent puzzles. A step's entry is SQL to run, or a
    Closure(PDO) for work SQL cannot do. */
 function tankity_schema_steps(): array
 {
@@ -259,7 +259,7 @@ function tankity_schema_steps(): array
             'CREATE INDEX rooms_host ON rooms (host, expires)',
         ],
         8 => [
-            // What the slot count, the lobby count and the reclaim read, written by every room_save (server/store.php).
+            // What the per-address counts and the sweep read, written by every room_save (server/store.php).
             "ALTER TABLE rooms ADD COLUMN phase TEXT NOT NULL DEFAULT 'lobby'",
             'ALTER TABLE rooms ADD COLUMN acted INTEGER NOT NULL DEFAULT 0',
             'ALTER TABLE rooms ADD COLUMN turn_secs INTEGER NOT NULL DEFAULT 120',

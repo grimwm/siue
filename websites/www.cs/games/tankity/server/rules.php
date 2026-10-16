@@ -1380,7 +1380,7 @@ function room_again(array &$room): bool
     return true;
 }
 
-/* A human walks away. The last human out closes the room, freeing its slot
+/* A human walks away. The last human out closes the room
    at once; otherwise the battery takes over the seat, host included: a match
    that has begun carries on for everyone else, the host role passing to the
    lowest-numbered human left (room_rehost). Only in the lobby does the host

@@ -101,7 +101,7 @@ final class RoomIdleTest extends TestCase
         $room = $this->started('POLL', 'play', 1, 60, time() - 700);
         $this->save($room); // room_save touches the room now, as a poll does
         $this->assertTrue(room_idle(room_decode(tankity_db()->query("SELECT data FROM rooms WHERE code = 'POLL'")->fetchColumn())));
-        $this->assertSame(0, room_slots_used());
+        $this->assertSame(0, $this->live());
     }
 
     public function testTheColumnFollowsTheRoom(): void
@@ -117,23 +117,24 @@ final class RoomIdleTest extends TestCase
         $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM rooms')->fetchColumn());
     }
 
-    public function testCapCountsOnlyLiveRooms(): void
+    private function live(): int
+    {
+        return (int) tankity_db()->query('SELECT COUNT(*) FROM rooms WHERE expires >= ' . time())->fetchColumn();
+    }
+
+    public function testCountsSeeOnlyLiveRooms(): void
     {
         $this->save($this->started('LIVE', 'play', 1, 600, time()));
         $this->save($this->started('DEAD', 'play', 1, 60, time() - 5000));
         $this->save($this->started('OVRL', 'over', 2, 600, time()));
         $this->save($this->started('LOBB', 'lobby', 1, 600, time()));
-        $this->assertSame(2, room_slots_used(), 'started and finished matches hold slots; a lobby does not');
-        $this->assertSame(1, room_slots_used('OVRL'));
-        $this->assertSame(1, room_lobbies_used());
+        $this->assertSame(3, $this->live(), 'a dead room is not counted');
     }
 
-    public function testTheKnobsAreTheLiveWindowAndTheCap(): void
+    public function testTheKnobIsTheLiveWindow(): void
     {
         $this->assertSame(600, room_live_secs());
         $this->assertFalse(function_exists('room_max_age'));
-        $this->assertSame(50, ROOM_MAX_ROOMS);
-        $this->assertStringContainsString("\nmax_rooms: 50\n", (string) file_get_contents(dirname(__DIR__, 2) . '/.config.yaml'));
     }
 
     private function seatsFrom(array $room, array $addrs): array
@@ -145,8 +146,7 @@ final class RoomIdleTest extends TestCase
     }
 
     /* Two seats behind one address (friends on one campus network) earn a
-       turn each: a started room has its humans by construction, and a full
-       server reclaims an idle one sooner whatever this says. */
+       turn each: a started room has its humans by construction. */
     public function testIdleLimitIsHumansTimesTurnTime(): void
     {
         $two = $this->seatsFrom($this->started('TWOS', 'play', 0, 86400, 1000), ['aaaa', 'aaaa']);

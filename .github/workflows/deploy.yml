@@ -124,7 +124,10 @@ jobs:
         if: steps.tip.outputs.skip != '1'
         run: |
           set -euo pipefail
-          for path in "" games/tankity/ games/tankity/rooms.php?action=ping; do
+          # Each game's page and each server endpoint a player depends on: a
+          # broken endpoint fails the deploy instead of failing players.
+          for path in "" play/tankity/ play/crete/ play/cylon/ games/tankity/ \
+              games/tankity/rooms.php?action=ping games/tankity/scores.php games/cylon/scores.php; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://www.cs.siue.edu/~wgrim/$path")
             echo "$code /~wgrim/$path"
             [ "$code" = 200 ]

@@ -93,3 +93,10 @@ test('the drones are buttons a screen reader can reach: no container of theirs i
     assert.match(tag[0], /role="group" aria-label="[^"]+"/, id);
   }
 });
+
+test('the ability keys skip a text box through the kit\'s typesText, and Esc is never bound', () => {
+  assert.match(main, /import \{ typesText \} from '\.\.\/\.\.\/_kit\/keys\.ts'/);
+  assert.match(main, /if \(typesText\(e\.target\)\) return;/);
+  assert.doesNotMatch(main, /isTypingTarget/);
+  assert.doesNotMatch(strip(main), /['"]Escape['"]|['"]Esc['"]|keyCode\s*===?\s*27/);
+});

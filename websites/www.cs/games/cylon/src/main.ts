@@ -39,6 +39,7 @@ import * as state from './state.ts';
 import { createScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
 import { exitApp, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
+import { typesText } from '../../_kit/keys.ts';
 import { mountInstallBar } from '../../_kit/ui/install-bar.tsx';
 import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS } from '../../_kit/install.ts';
 import type { Timer } from './types.ts';
@@ -1011,12 +1012,6 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         exitHintTimer = setTimeout(() => { exitHintEl.hidden = true; }, 6000);
     }
 
-    function isTypingTarget(target: EventTarget | null) {
-        const el = target as HTMLElement | null;
-        const tag = (el && el.tagName) || '';
-        return tag === 'INPUT' || tag === 'TEXTAREA' || (el && el.isContentEditable);
-    }
-
     function bindAbilityControls() {
         const bindAbilityTap = (btn: HTMLButtonElement | null, action: () => void) => {
             if (!btn) return;
@@ -1041,7 +1036,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         bindAbilityTap(raptorBtn, () => { abilities.callRaptor(); });
         bindAbilityTap(grenadeBtn, () => { abilities.readyGrenade(); });
         window.addEventListener('keydown', (e) => {
-            if (isTypingTarget(e.target)) return;
+            if (typesText(e.target)) return;
             // Ctrl/Cmd/Alt chords stay the browser's, and Esc does nothing (abilityKey).
             const act = abilityKey(e);
             if (act === 'disarm') {

@@ -48,8 +48,7 @@ function room_joins_per_hour(): int
     return tankity_int_setting('TANKITY_ROOM_JOINS_PER_HOUR', 'room_joins_per_hour', ROOM_JOINS_PER_HOUR);
 }
 
-// Started matches one address can host at once (checked at Start): the match
-// slots are shared out by address. Lobbies have their own cap
+// Started matches one address can host at once (checked at Start). Lobbies have their own limit
 // (room_lobbies_per_address).
 const ROOM_HOSTS_PER_ADDRESS = 4;
 /* The address a room remembers for a seat: a keyed hash of the guard's

@@ -32,7 +32,6 @@ export const WEIGHTS: Record<string, number> = {
   'tankity-rooms-shop.spec.ts': 110,
   'tankity-rooms-leave.spec.ts': 80,
   'tankity-rooms-long.spec.ts': 90,
-  'tankity-rooms-cap.spec.ts': 25,
   'tankity-pow.spec.ts': 20,
   'tankity-hud.spec.ts': 27,
   'tankity-armor.spec.ts': 15,

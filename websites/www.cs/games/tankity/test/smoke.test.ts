@@ -264,7 +264,7 @@ await test('fx-bundle-sets-the-global', () => { assert.ok(/TankityFX/.test(read(
 for (const f of ['dist/main.js', 'game.css', 'dist/fx.js']) {
   await test('page-versions-' + f, () => { assert.ok(new RegExp('(?:src|href)="' + f.replace(/[./]/g, '\\$&') + '\\?v=[0-9a-f]+"').test(html)); });
 }
-await test('room-cap', () => { assert.ok(/ROOM_MAX_ROOMS/.test(php) && /room_max_rooms/.test(php) && /Every match slot is in play/.test(php) && /room_max_lobbies/.test(php) && /Every lobby is busy/.test(php)); });
+await test('room-cap', () => { assert.ok(/room_db_max_mb/.test(php) && /The server is full\. Try again later\./.test(php) && /room_lobbies_per_address/.test(php) && !/room_max_rooms|room_max_lobbies|Every match slot|Every lobby is busy/.test(php)); });
 await test('no-seed-leak', () => { assert.ok((() => {
   const proto = must(phpText['server/protocol.php'], 'server/protocol.php');
   const body = proto.slice(proto.indexOf('function room_snapshot'));
@@ -543,7 +543,7 @@ Reflect.set(globalThis, 'fetch', async (url: unknown, opts?: { body?: string }) 
     });
   }
   if (u.includes('action=ping')) {
-    return okJson({ ok: true, game: 'operation-tankity', rooms: { used: 3, max: 10 }, lobbies: { used: 4, max: 20 } });
+    return okJson({ ok: true, game: 'operation-tankity', rooms: { used: 3 }, lobbies: { used: 4 } });
   }
   if (u.includes('action=challenge')) return okJson(EASY_PUZZLE);
   if (u.includes('action=create')) {
@@ -1148,10 +1148,10 @@ await (async () => {
   await test('maps-tiles-are-buttons', () => { assert.ok(tiles().every(t => t.getAttribute('type') === 'button' && t.children.length === 2
     && childEl(t, 0).getAttribute('aria-hidden') === 'true' && nodeAt(t, 1).textContent === t.getAttribute('title'))); });
   await test('maps-random-selected', () => { assert.ok(tileOn().join() === '', tileOn().join()); });
-  await test('room-occupancy', () => { assert.ok(E('lobby-count').textContent === '3 / 10 matches running · 4 lobbies open', E('lobby-count').textContent); });
+  await test('room-occupancy', () => { assert.ok(E('lobby-count').textContent === '3 matches running · 4 lobbies open', E('lobby-count').textContent); });
   await test('room-dot-green', () => { assert.ok(E('net-dot').className.includes('on') && E('hud-server').textContent === 'online', `${E('net-dot').className} | ${E('hud-server').textContent}`); });
-  // a full lobby pool says so in plain words, never a status code
-  failCreate = 'Every lobby is busy. Try again in a minute.';
+  // a full server says so in plain words, never a status code
+  failCreate = 'The server is full. Try again later.';
   submit(E('host-form')); await tick(10);
   await test('room-full', () => { assert.ok(E('lobby-status').textContent === failCreate, E('lobby-status').textContent); });
   failCreate = '';

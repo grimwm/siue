@@ -13,8 +13,8 @@ final class RoomPowTest extends TestCase
 {
     private string $dir;
 
-    private const ENV = ['TANKITY_POW_BITS' => '9', 'TANKITY_POW_SURGE' => '60', 'TANKITY_MAX_ROOMS' => '8',
-        'TANKITY_MAX_LOBBIES' => '8', 'TANKITY_ROOM_LIVE_SECS' => '600'];
+    private const ENV = ['TANKITY_POW_BITS' => '9', 'TANKITY_POW_SURGE' => '60',
+        'TANKITY_ROOM_LIVE_SECS' => '600'];
 
     public static function setUpBeforeClass(): void
     {
@@ -176,23 +176,14 @@ final class RoomPowTest extends TestCase
         $this->assertFalse(room_pow_spent($c));
     }
 
-    public function testBitsRiseUnderPressure(): void
+    public function testBitsRiseOnlyOnASurge(): void
     {
         $now = time();
         $this->assertSame([9, 10], [room_pow_bits('j', $now), room_pow_bits('c', $now)], 'calm: join at the setting, create one harder');
-        // Started matches at 75 % of max_rooms (6 of 8).
-        $this->rooms('play', 6, $now);
-        $this->assertSame([10, 11], [room_pow_bits('j', $now), room_pow_bits('c', $now)], '75 % of the match slots');
-        $this->emptyRooms();
-        $this->rooms('lobby', 6, $now);
-        $this->assertSame([10, 11], [room_pow_bits('j', $now), room_pow_bits('c', $now)], '75 % of the lobbies');
-        $this->emptyRooms();
-        // At the cap.
-        $this->rooms('shop', 8, $now);
-        $this->assertSame([11, 12], [room_pow_bits('j', $now), room_pow_bits('c', $now)], 'every match slot taken');
-        $this->emptyRooms();
+        // Rooms, however many, raise nothing.
+        $this->rooms('play', 8, $now);
         $this->rooms('lobby', 8, $now);
-        $this->assertSame([11, 12], [room_pow_bits('j', $now), room_pow_bits('c', $now)], 'every lobby taken');
+        $this->assertSame([9, 10], [room_pow_bits('j', $now), room_pow_bits('c', $now)], 'a crowded server is not a surge');
         $this->emptyRooms();
         // A surge of creates from everywhere: 60 within 10 minutes.
         $db = tankity_db();
@@ -202,10 +193,6 @@ final class RoomPowTest extends TestCase
         $this->assertSame(9, room_pow_bits('j', $now), '59 creates is no surge');
         room_pow_count_create($db, $now);
         $this->assertSame([10, 11], [room_pow_bits('j', $now), room_pow_bits('c', $now)], 'the 60th create');
-        // Everything at once never raises it past +2.
-        $this->rooms('play', 8, $now);
-        $this->rooms('lobby', 8, $now);
-        $this->assertSame([11, 12], [room_pow_bits('j', $now), room_pow_bits('c', $now)], 'at most two bits harder');
         // The surge counts only the last ten minutes' slots.
         $this->emptyRooms();
         $this->assertSame(9, room_pow_bits('j', $now + 2 * RATE_SLOT + 1), 'the surge has passed');

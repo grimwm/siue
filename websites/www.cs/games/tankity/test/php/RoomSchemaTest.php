@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 
-/* Schema step 8: the columns the slot count, the lobby count and the reclaim
-   read (written by every room_save), the tombstones of rooms closed to make
-   space, and the spent puzzles. */
+/* Schema step 8: the columns the per-address counts and the sweep read
+   (written by every room_save), the tombstones of closed rooms, and the spent
+   puzzles. */
 final class RoomSchemaTest extends TestCase
 {
     private string $dir;

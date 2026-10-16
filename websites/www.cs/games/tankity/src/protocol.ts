@@ -45,11 +45,9 @@ export interface OkReply { ok: true }
 
 /** One of a browser's seats, as action=mine reports it. `gone` covers no such
  * room, an expired room and a token that holds no seat there: the browser
- * forgets all three, except a room closed to make space for another match
- * (`closed: 'space'`, told only to that room's own seats), which it keeps
- * listed as closed until the player dismisses it. */
+ * forgets all three. */
 export type MineRow =
-  | { code: string; gone: true; closed?: 'space' }
+  | { code: string; gone: true }
   | {
     code: string; gone: false; seat: number; phase: 'lobby' | 'play' | 'shop' | 'over';
     round: number; turnSecs: number;
@@ -80,14 +78,13 @@ export interface MapsReply { ok: true; maps: MapInfo[] }
 export interface MapInfo { id: string; name: string; profile: number[] }
 
 /** action=ping: health plus occupancy for the lobby shelf: started matches
- * against the match slots, and lobbies waiting in their own pool. */
+ * and lobbies waiting. */
 export interface PingReply {
-  ok: true; game: string; rooms: { used: number; max: number }; lobbies: { used: number; max: number };
+  ok: true; game: string; rooms: { used: number }; lobbies: { used: number };
 }
 
-/** Every reply that finds no room: 404 `no such room`, plus `closed` when the
- * asker's seat was in a room closed to make space. */
-export interface GoneReply { ok?: false; error: 'no such room'; closed?: 'space' }
+/** Every reply that finds no room: 404 `no such room`. */
+export interface GoneReply { ok?: false; error: 'no such room' }
 
 /* ---------- the room snapshot ---------- */
 

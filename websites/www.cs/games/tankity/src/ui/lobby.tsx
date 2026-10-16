@@ -224,8 +224,7 @@ export function Lobby(p: LobbyProps) {
           <WallsPicker id="room-walls" pick={p.walls} disabled={!p.isHost} why="the host picks" onPick={p.onWallsRoom} />
           <p class="hint" id="turn-hint">
             A change counts from the next turn. With nobody taking a turn, a room stays open one turn time for
-            each player, and at least 10 minutes. When every match slot is taken, a room nobody has played in for
-            an hour (or twice its turn time, if less) may be closed to make space for a new match.
+            each player, and at least 10 minutes.
           </p>
           <div class="unit-row" role="group" aria-labelledby="seats-label">
             <span class="unit-label" id="seats-label">Seats</span>

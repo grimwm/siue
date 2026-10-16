@@ -1,6 +1,5 @@
 /* Your games: every room this browser holds a seat in (but the one on
- * screen), where each stands, and Open to go back to it (a room closed to
- * make space says so, with Dismiss instead); and the Turn alerts
+ * screen), where each stands, and Open to go back to it; and the Turn alerts
  * button, which asks for browser notifications from its own click. Shown on
  * the title card and in the rooms lobby. The game owns the rows and what the
  * buttons do; this draws them and reports.
@@ -9,22 +8,18 @@
 import { render } from 'preact';
 import { blurThen } from './chrome.tsx';
 import { clockText } from '../turn-time.ts';
-import { isClosedRow } from '../games.ts';
-import type { GameRow, LiveRow } from '../games.ts';
+import type { LiveRow } from '../games.ts';
 
 /** The Turn alerts button: on, off, blocked (the browser said no) or hidden. */
 export type AlertsState = 'on' | 'off' | 'blocked' | 'unsupported';
 
 export interface GamesView {
-  /** The live rooms, then those closed to make space. */
-  rows: GameRow[];
+  rows: LiveRow[];
   alerts: AlertsState;
   /** Seconds since the rows arrived: their clocks count down from then. */
   age: number;
   onOpen: (code: string) => void;
   onAlerts: () => void;
-  /** Drops a room closed to make space from the list (and this browser). */
-  onDismiss?: (code: string) => void;
 }
 export interface YourGamesProps extends GamesView {
   /** The list's id; the alerts button takes `${id}-alerts`. */
@@ -70,18 +65,12 @@ export function YourGames(p: YourGamesProps) {
     <section class="your-games" id={p.id} aria-labelledby={`${p.id}-h`}>
       <h3 id={`${p.id}-h`}>Your games</h3>
       <ul class="games-list">
-        {p.rows.map(r => (isClosedRow(r) ? (
-          <li key={r.code} class="game-row closed">
-            <span class="game-text">{`${r.code} · Closed to make space`}</span>
-            <button type="button" class="game-open" title={`Dismiss room ${r.code}`} aria-label={`Dismiss room ${r.code}`}
-              onClick={blurThen(() => p.onDismiss?.(r.code))}>Dismiss</button>
-          </li>
-        ) : (
+        {p.rows.map(r => (
           <li key={r.code} class={r.yourTurn ? 'game-row your-turn' : 'game-row'}>
             <span class="game-text">{gameLine(r, p.age)}</span>
             <button type="button" class="game-open" title={`Open room ${r.code}`} aria-label={`Open room ${r.code}`} onClick={blurThen(() => p.onOpen(r.code))}>Open</button>
           </li>
-        )))}
+        ))}
       </ul>
       <AlertsButton id={`${p.id}-alerts`} state={p.alerts} onClick={p.onAlerts} />
     </section>

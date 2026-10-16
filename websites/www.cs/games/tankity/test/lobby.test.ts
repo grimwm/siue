@@ -81,7 +81,7 @@ const withGuest = lobbyRoom({ seats: [{ seat: 0, human: true, name: 'ABC', mode:
 test('a refusal stays on the status line while the lobby polls; the roster line lives apart', async () => {
   const r = rig(url => {
     if (url.includes('action=start')) return { status: 409, body: { ok: false, error: 'A match needs at least two tanks. Switch a seat to AI so there is someone to battle.' } };
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 1, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 1 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     return ok({ ok: true, room: withGuest });
   });
@@ -97,7 +97,7 @@ test('a lobby closed with Q keeps polling (its heartbeat), so the room stays ope
   let polls = 0;
   const r = rig(url => {
     if (url.includes('action=state')) polls++;
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 1, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 1 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     return ok({ ok: true, room: lobbyRoom() });
   });
@@ -112,7 +112,7 @@ test('a lobby closed with Q keeps polling (its heartbeat), so the room stays ope
 test('a room swept while its lobby shows: the seat is dropped and the lobby says so', async () => {
   let gone = false;
   const r = rig(url => {
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room' } };
     return ok({ ok: true, room: lobbyRoom() });
@@ -130,7 +130,7 @@ test('a room swept while its lobby shows: the seat is dropped and the lobby says
 test('a seat given up in another tab: the server answers it as no room, and the lobby says the seat went', async () => {
   let gone = false;
   const r = rig(url => {
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     // The server answers a token that holds no seat exactly as a code nobody holds.
     if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room' } };
@@ -148,7 +148,7 @@ test('a room swept under a running match ends the match before the lobby opens: 
   let gone = false;
   const playing = lobbyRoom({ phase: 'play' });
   const r = rig(url => {
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room' } };
     if (url.includes('action=start')) return ok({ ok: true, room: playing });
@@ -168,13 +168,13 @@ test('a room swept under a running match ends the match before the lobby opens: 
   assert.equal(r.$('lobby-veil').hidden, false);
 });
 
-test('a match closed to make space: back to the title, the line says why, and the seat stays listed as closed', async () => {
+test('a match whose room is swept: back to the title, the line says so, and the seat is forgotten', async () => {
   let gone = false;
   const playing = lobbyRoom({ phase: 'play' });
   const r = rig(url => {
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 50, max: 50 }, lobbies: { used: 3, max: 100 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 50 }, lobbies: { used: 3 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
-    if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room', closed: 'space' } };
+    if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room' } };
     if (url.includes('action=start')) return ok({ ok: true, room: playing });
     return ok({ ok: true, room: lobbyRoom() });
   });
@@ -186,37 +186,37 @@ test('a match closed to make space: back to the title, the line says why, and th
   await r.tick();
   assert.equal(r.net.on, false);
   assert.equal(r.titled.length, 1);
-  assert.match(r.$('lobby-status').textContent, /^Room AB3D was closed to make space\.$/);
-  assert.equal(r.seats.get('AB3D')?.closed, 'space', 'kept, marked closed');
+  assert.match(r.$('lobby-status').textContent, /^Room AB3D has closed\.$/);
+  assert.equal(r.seats.get('AB3D'), null, 'forgotten');
   assert.equal(r.intervals.size, 0, 'nothing polls the closed room');
 });
 
-test('resuming a room that was closed to make space marks the seat and says why', async () => {
+test('resuming a room that is gone forgets the seat and says so', async () => {
   const r = rig(url => {
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 3, max: 50 }, lobbies: { used: 12, max: 100 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 3 }, lobbies: { used: 12 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
-    if (url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room', closed: 'space' } };
+    if (url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room' } };
     return ok({ ok: true });
   });
   assert.equal(await r.lobby.resumeRoom('AB3D'), false);
-  assert.equal(r.seats.get('AB3D')?.closed, 'space');
-  assert.match(r.$('lobby-status').textContent, /Room AB3D was closed to make space\./);
+  assert.equal(r.seats.get('AB3D'), null);
+  assert.match(r.$('lobby-status').textContent, /Room AB3D has closed\./);
 });
 
 test('the occupancy line counts matches running and lobbies open', async () => {
   const r = rig(url => {
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 3, max: 50 }, lobbies: { used: 12, max: 100 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 3 }, lobbies: { used: 12 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     return ok({ ok: true, room: lobbyRoom() });
   });
   await r.lobby.resumeRoom('AB3D');
-  assert.match(r.$('lobby-count').textContent, /^3 \/ 50 matches running · 12 lobbies open$/);
+  assert.match(r.$('lobby-count').textContent, /^3 matches running · 12 lobbies open$/);
 });
 
 test('the host alone is told Start plays here; with a guest, the usual line', async () => {
   let room = lobbyRoom();
   const r = rig(url => {
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     return ok({ ok: true, room });
   });
@@ -232,7 +232,7 @@ test('a host alone starts: the lobby closes, the seat is forgotten and the match
   const r = rig(url => {
     if (url.includes('action=start')) return ok({ ok: true, local: { difficulty: 'easy', speed: 4 } });
     if (url.includes('action=state')) polls++;
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     return ok({ ok: true, room: lobbyRoom() });
   });
@@ -254,7 +254,7 @@ test('a host alone starts: the lobby closes, the seat is forgotten and the match
 test('a Start the server says this tab is too old for: the reload line, and the tab stays in its lobby', async () => {
   const r = rig(url => {
     if (url.includes('action=start')) return { status: 426, body: { error: 'Tankity was updated. Reload the page to keep playing.', reload: true } };
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     return ok({ ok: true, room: lobbyRoom() });
   });
@@ -270,7 +270,7 @@ test('the host picks the walls in the lobby; a guest sees the room\'s pick and c
   const posted: unknown[] = [];
   let walls = 'none';
   const r = rig((url, init) => {
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     if (url.includes('action=walls')) {
       const body = JSON.parse(String(init?.body || '{}')) as { walls: string };
@@ -289,7 +289,7 @@ test('the host picks the walls in the lobby; a guest sees the room\'s pick and c
   assert.equal(r.net.walls, 'wrap');
   // A guest: the label alone.
   const g = rig(url => {
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     return ok({ ok: true, room: lobbyRoom({ hostSeat: 1, walls: 'rubber', you: { seat: 0 } }) });
   });
@@ -304,7 +304,7 @@ function puzzleRig(gate: { open?: () => void }) {
   const sent: string[] = [];
   const r = rig(url => {
     sent.push(url.replace(/^rooms\.php\?action=([a-z]+).*$/, '$1'));
-    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0, max: 50 } });
+    if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 0 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
     if (url.includes('action=challenge')) {
       return new Promise<Answer>(res => { gate.open = () => res(ok({ ok: true, challenge: 'v1.1.c.0.x.y', bits: 0, count: 4, iter: 100, expiresIn: 120 })); });

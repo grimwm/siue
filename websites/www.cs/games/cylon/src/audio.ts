@@ -292,16 +292,16 @@ export function createAudio(deps: AudioDeps): CylonAudio {
         const when0 = t;
         const when2 = t + beat * 2;
 
-        pulseTaiko(ac, musicMaster, when0, bar % 2 === 0 ? 0.11 : 0.08);
+        pulseTaiko(core, musicMaster, when0, bar % 2 === 0 ? 0.11 : 0.08);
         if (bar % 2 === 1) {
-          pulseTaiko(ac, musicMaster, when2, 0.06);
+          pulseTaiko(core, musicMaster, when2, 0.06);
         } else {
-          pulseRitualHit(ac, musicMaster, when2, 0.03);
+          pulseRitualHit(core, musicMaster, when2, 0.03);
         }
 
         // Long dark horn every bar, changing pitch so it moves
         playDarkHorn(
-          ac,
+          core,
           musicMaster,
           when0 + beat * 0.15,
           hornNotes[bar % hornNotes.length] ?? 73.42,
@@ -312,7 +312,7 @@ export function createAudio(deps: AudioDeps): CylonAudio {
         // High tension strand every other bar
         if (bar % 2 === 0) {
           playTensionStrand(
-            ac,
+            core,
             musicMaster,
             when0 + beat * 0.5,
             strands[(bar / 2) % strands.length] ?? 293.66,
@@ -323,8 +323,8 @@ export function createAudio(deps: AudioDeps): CylonAudio {
 
         // Heavier double-hit as intensity marker
         if (bar % 4 === 3) {
-          pulseTaiko(ac, musicMaster, when0 + beat * 0.75, 0.07);
-          pulseRitualHit(ac, musicMaster, when0 + beat * 1.1, 0.04);
+          pulseTaiko(core, musicMaster, when0 + beat * 0.75, 0.07);
+          pulseRitualHit(core, musicMaster, when0 + beat * 1.1, 0.04);
         }
 
         bar += 1;

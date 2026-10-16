@@ -9,6 +9,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createAudioCore } from '../../_kit/audio/core.ts';
+import type { AudioCore } from '../../_kit/audio/core.ts';
 import { playDarkHorn, playTensionStrand, pulseRitualHit, pulseTaiko } from '../src/voices.ts';
 
 type Call = [string, ...number[]];
@@ -115,7 +117,7 @@ function rounded(tree: unknown): unknown {
   return JSON.parse(JSON.stringify(tree, (_k, v) => (typeof v === 'number' ? +v.toFixed(9) : v)));
 }
 
-type Voice = (ctx: AudioContext, master: AudioNode, when: number) => void;
+type Voice = (host: AudioCore, master: AudioNode, when: number) => void;
 const CASES: Array<[string, Voice]> = [
   ['pulseTaiko default', (c, m, w) => pulseTaiko(c, m, w)],
   ['pulseTaiko 0.11', (c, m, w) => pulseTaiko(c, m, w, 0.11)],
@@ -140,7 +142,7 @@ function record(): Record<string, unknown> {
         Math.random = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
         const { ctx, nodes } = recorder();
         const master = ctx.createGain();
-        voice(ctx, master, when);
+        voice(createAudioCore({ createContext: () => ctx }), master, when);
         out[`${name} @${when}`] = rounded(describe(nodes, (master as unknown as { rec: Rec }).rec));
       });
     }

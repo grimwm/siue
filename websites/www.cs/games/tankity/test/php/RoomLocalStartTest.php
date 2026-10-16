@@ -17,8 +17,7 @@ final class RoomLocalStartTest extends TestCase
     private string $dir;
 
     private const ENV = ['TANKITY_ROOM_LIVE_SECS' => '600', 'TANKITY_ROOM_JOINS_PER_HOUR' => '1000',
-        'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4', 'TANKITY_LOBBIES_PER_ADDRESS' => '4', 'TANKITY_MAX_LOBBIES' => '100',
-        'TANKITY_MAX_ROOMS' => '50'];
+        'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4', 'TANKITY_LOBBIES_PER_ADDRESS' => '4'];
 
     private const RELOAD = ['error' => 'Tankity was updated. Reload the page to keep playing.', 'reload' => true];
 

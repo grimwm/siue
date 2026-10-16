@@ -80,9 +80,9 @@ export interface MapsReply { ok: true; maps: MapInfo[] }
 export interface MapInfo { id: string; name: string; profile: number[] }
 
 /** action=ping: health plus occupancy for the lobby shelf: started matches
- * against the match slots, and lobbies waiting in their own pool. */
+ * and lobbies waiting. */
 export interface PingReply {
-  ok: true; game: string; rooms: { used: number; max: number }; lobbies: { used: number; max: number };
+  ok: true; game: string; rooms: { used: number }; lobbies: { used: number };
 }
 
 /** Every reply that finds no room: 404 `no such room`, plus `closed` when the

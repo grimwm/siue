@@ -1,7 +1,6 @@
-// Operation Tankity's match slots, as a player sees them: a room the server
-// closed to make space for another match says so, and stays in Your games,
-// marked, until dismissed. The server half (which room goes, and when) is
-// covered at the handler level in games/tankity/test/php/RoomReclaimTest.php.
+// Operation Tankity's closed-room notice, as a player sees it: a room the
+// server answers with a closed reason says so, and stays in Your games,
+// marked, until dismissed.
 import { test, expect } from '@playwright/test';
 import { roomPair } from './helpers.ts';
 

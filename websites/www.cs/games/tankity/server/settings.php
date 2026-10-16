@@ -1,6 +1,6 @@
 <?php
 // Operation Tankity rooms. Room server settings: what a room is (code shape, seats, AI names) and the knobs the
-// host can turn (match slots, lobby pool, live window) through
+// host can turn (live window, per-address limits, disk guard) through
 // .config.yaml or the environment. Loaded by rooms.php; it runs nothing on its own.
 declare(strict_types=1);
 
@@ -25,7 +25,6 @@ function room_code_clean(string $raw): string
 }
 const ROOM_SEATS = 4; // seat 0 hosts a new room (see room_host); every other seat starts as AI
 const ROOM_AI_NAMES = ['REAPER', 'WRAITH', 'SPOTTER', 'HUNTER'];
-const ROOM_MAX_ROOMS = 50; // built-in default; .config.yaml and env can change it
 /* The room protocol this server speaks. A bundle that sends it can play a
    one-human Start in the browser; one that does not is told to reload
    (room_reload_out) rather than handed a reply it cannot read. */
@@ -44,22 +43,10 @@ function room_reload_out(): never
    list with its labels; test/turn-time.test.ts keeps them equal. */
 const ROOM_TURN_STOPS = [60, 120, 600, 1800, 28800, 86400, 604800];
 const ROOM_TURN_DEFAULT = 120;
-function room_max_rooms(): int
-{
-    $raw = (string) tankity_setting('TANKITY_MAX_ROOMS', 'max_rooms', '');
-    if (preg_match('/^\d+$/', trim($raw))) {
-        return max(1, (int) trim($raw));
-    }
-    return ROOM_MAX_ROOMS;
-}
-/* A full server may reclaim a long room (turn time over half an hour) once
-   nobody has taken a turn in it for this long (room_reclaim_floor). */
-const ROOM_DORMANT_SECS = 3600;
-const ROOM_MAX_LOBBIES = 100;
 const ROOM_LOBBIES_PER_ADDRESS = 4;
 /* The room puzzle's difficulty (server/pow.php): leading zero bits a join's
    solutions need at rest; a create needs one more, and load adds up to two.
-   0 turns the puzzle off. Measured in README "Room slots". */
+   0 turns the puzzle off. Measured in README "Room limits". */
 const ROOM_POW_BITS = 11;
 const ROOM_POW_BITS_MAX = 20;
 /* Creates from every address in ten minutes that count as a surge (one bit harder). */
@@ -83,18 +70,17 @@ function room_pow_surge(): int
 {
     return tankity_int_setting('TANKITY_POW_SURGE', 'pow_surge', ROOM_POW_SURGE);
 }
-/* A full lobby pool may close a lobby this old even when it is attended. */
-const ROOM_LOBBY_OLD_SECS = 1800;
-/* Lobbies waiting at once; they hold no match slot (max_rooms counts started
-   matches only). */
-function room_max_lobbies(): int
-{
-    return tankity_int_setting('TANKITY_MAX_LOBBIES', 'max_lobbies', ROOM_MAX_LOBBIES);
-}
 /* Lobbies one address hosts at once. */
 function room_lobbies_per_address(): int
 {
     return tankity_int_setting('TANKITY_LOBBIES_PER_ADDRESS', 'lobbies_per_address', ROOM_LOBBIES_PER_ADDRESS);
+}
+/* The database file plus its -wal may grow to this many MB before a new
+   lobby is refused (room_db_full). */
+const ROOM_DB_MAX_MB = 256;
+function room_db_max_mb(): int
+{
+    return tankity_int_setting('TANKITY_ROOM_DB_MAX_MB', 'room_db_max_mb', ROOM_DB_MAX_MB);
 }
 function room_live_secs(): int
 {

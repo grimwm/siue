@@ -19,7 +19,7 @@ final class RoomPowGateTest extends TestCase
     private string $dir;
 
     private const ENV = ['TANKITY_ROOM_JOINS_PER_HOUR' => '1000', 'TANKITY_LOBBIES_PER_ADDRESS' => '4',
-        'TANKITY_MAX_LOBBIES' => '100', 'TANKITY_MAX_ROOMS' => '50', 'TANKITY_ROOM_LIVE_SECS' => '600', 'TANKITY_POW_BITS' => '2'];
+        'TANKITY_ROOM_LIVE_SECS' => '600', 'TANKITY_POW_BITS' => '2'];
 
     private const RELOAD = ['error' => 'Tankity was updated. Reload the page to keep playing.', 'reload' => true];
     private const SHORT = ['error' => 'That puzzle is not finished.', 'puzzle' => 'puzzle-short'];
@@ -201,7 +201,7 @@ final class RoomPowGateTest extends TestCase
 
     public function testChallengeIsCheapAndUncharged(): void
     {
-        $env = ['TANKITY_MAX_LOBBIES' => '4'] + self::ENV;
+        $env = self::ENV;
         for ($i = 0; $i < 50; $i++) {
             [$st, $ch] = $this->raw('challenge', ['for' => $i % 2 ? 'join' : 'create'], self::HOST, $env);
             $this->assertSame(200, $st);
@@ -211,11 +211,11 @@ final class RoomPowGateTest extends TestCase
             array_diff_key($ch, ['challenge' => 1]));
         $this->assertSame(422, $this->raw('challenge', ['for' => 'start'], self::HOST, $env)[0]);
         $this->assertSame(422, $this->raw('challenge', [], self::HOST, $env)[0]);
-        // Three of four lobbies taken: one bit harder.
+        // Lobbies open make it no harder.
         for ($i = 0; $i < 3; $i++) {
             $this->assertSame(200, $this->call('create', ['initials' => 'hst'], ['REMOTE_ADDR' => "203.0.113.1$i"], $env)[0]);
         }
-        $this->assertSame(3, $this->raw('challenge', ['for' => 'join'], self::HOST, $env)[1]['bits']);
-        $this->assertSame(4, $this->raw('challenge', ['for' => 'create'], self::HOST, $env)[1]['bits']);
+        $this->assertSame(2, $this->raw('challenge', ['for' => 'join'], self::HOST, $env)[1]['bits']);
+        $this->assertSame(3, $this->raw('challenge', ['for' => 'create'], self::HOST, $env)[1]['bits']);
     }
 }

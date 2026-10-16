@@ -2,8 +2,7 @@
 // Operation Tankity rooms. Room storage: one row per room in Tankity's
 // database (server/db.php), a room held as one write transaction from load to
 // unlock, and the room lifecycle (allocate, register, load, save, close,
-// discard, sweep), the match slots, the lobby pool and the tombstones of
-// rooms closed to make space. Loaded by rooms.php; it runs nothing on its own.
+// discard, sweep), the per-address counts, the disk guard and the tombstones. Loaded by rooms.php; it runs nothing on its own.
 declare(strict_types=1);
 
 // Not an endpoint: rooms.php defines this constant, then requires the file.
@@ -20,8 +19,8 @@ const ROOM_MAX_BYTES = 131072;
    in between it is a read that never waits for the writer. */
 const ROOM_HEARTBEAT_SECS = 20;
 const ROOM_LOBBIES_HOSTED = 'too many lobbies open from here; start or leave one first';
-const ROOM_LOBBIES_BUSY = 'Every lobby is busy. Try again in a minute.';
-/* A room closed to make space keeps its tombstone (who may hear why, and its
+const ROOM_FULL = 'The server is full. Try again later.';
+/* A closed room keeps its tombstone (who may hear why, and its
    code withheld from new rooms) this long: 14 days. */
 const ROOM_TOMBSTONE_SECS = 1209600;
 
@@ -137,8 +136,7 @@ function room_decode(mixed $raw): ?array
 
 /* How long a started room (play, shop) lasts with no human taking a turn:
    one turn time per human seated, never less than the live window. A full
-   server reclaims idle rooms sooner (room_reclaim_pick), so this bounds disk,
-   not slots. */
+   this bounds disk. */
 function room_idle_limit(array $r): int
 {
     $humans = 0;
@@ -181,28 +179,26 @@ function room_closes_in(array $r, ?int $now = null): int
 }
 
 /* Past its expiry. The stored column (rooms.expires) is room_expires at the
-   last save, so the count, the cap and the sweep agree with this. */
+   last save, so the per-address counts and the sweep agree with this. */
 function room_idle(array $r, ?int $now = null): bool
 {
     return ($now ?? time()) > room_expires($r);
 }
 
-/* Live started matches (play, shop, over), not counting $except: what
-   max_rooms bounds. Reads the indexed phase and expiry columns, so the
-   occupancy never waits for a writer; under the write lock it is exact. */
-function room_slots_used(string $except = '', ?int $now = null): int
+/* The database file plus its -wal, in bytes. filesize() is a stat; PHP
+   caches stats, so the cache is cleared first. */
+function room_db_bytes(): int
 {
-    $q = tankity_db()->prepare("SELECT COUNT(*) FROM rooms WHERE phase IN ('play', 'shop', 'over') AND code <> ? AND expires >= ?");
-    $q->execute([$except, $now ?? time()]);
-    return (int) $q->fetchColumn();
+    clearstatcache();
+    $path = tankity_data_dir() . '/' . TANKITY_DB_FILE;
+    return (int) @filesize($path) + (int) @filesize($path . '-wal');
 }
 
-/* Live lobbies, not counting $except: what max_lobbies bounds. */
-function room_lobbies_used(string $except = '', ?int $now = null): int
+/* True when the database has reached room_db_max_mb: a new lobby is refused
+   (ROOM_FULL); nothing already running is touched. */
+function room_db_full(): bool
 {
-    $q = tankity_db()->prepare("SELECT COUNT(*) FROM rooms WHERE phase = 'lobby' AND code <> ? AND expires >= ?");
-    $q->execute([$except, $now ?? time()]);
-    return (int) $q->fetchColumn();
+    return room_db_bytes() >= room_db_max_mb() * 1048576;
 }
 
 /* Live lobbies an address hosts, not counting $except: what
@@ -217,95 +213,7 @@ function room_lobbies_hosted(string $hostKey, string $except = '', ?int $now = n
     return (int) $q->fetchColumn();
 }
 
-/* The lobby a new one may replace when the pool is full: one no tab polls
-   (no heartbeat for two beats), then one nobody acted in for the live
-   window, then one older than ROOM_LOBBY_OLD_SECS, the oldest first within
-   each. Null when every lobby is fresh and attended. One SELECT over the
-   columns, at most max_lobbies rows. */
-function room_lobby_evict_pick(string $except, int $now): ?string
-{
-    $q = tankity_db()->prepare("SELECT code FROM rooms WHERE phase = 'lobby' AND code <> :x AND expires >= :now
-        AND (touched < :dead OR acted <= :idle OR created <= :old)
-        ORDER BY CASE WHEN touched < :dead THEN 0 WHEN acted <= :idle THEN 1 ELSE 2 END,
-                 CASE WHEN touched < :dead THEN touched WHEN acted <= :idle THEN acted ELSE created END, code
-        LIMIT 1");
-    $q->bindValue(':x', $except);
-    foreach ([':now' => $now, ':dead' => $now - 2 * ROOM_HEARTBEAT_SECS, ':idle' => $now - room_live_secs(),
-        ':old' => $now - ROOM_LOBBY_OLD_SECS] as $k => $v) {
-        $q->bindValue($k, $v, PDO::PARAM_INT);
-    }
-    $q->execute();
-    $c = $q->fetchColumn();
-    return $c === false ? null : (string) $c;
-}
-
-/* How long a started room must go without a turn before a full server may
-   reclaim it: twice its turn time, at least the live window, at most
-   ROOM_DORMANT_SECS. */
-function room_reclaim_floor(int $turnSecs): int
-{
-    return max(room_live_secs(), min(2 * $turnSecs, ROOM_DORMANT_SECS));
-}
-
-/* The room a new match may replace on a full server: finished first, then
-   stale (idle twice its turn time), then dormant (a long room idle past its
-   floor), the longest idle first within each, then by code. Null when none
-   is eligible: a room played within its floor never goes. One SELECT over
-   the indexed columns of at most max_rooms live rows. */
-function room_reclaim_pick(string $except, int $now): ?string
-{
-    $q = tankity_db()->prepare("SELECT code FROM rooms
-        WHERE phase IN ('play', 'shop', 'over') AND code <> :x AND expires >= :now
-          AND (phase = 'over' OR :now - acted >= MAX(:L, MIN(2 * turn_secs, :D)))
-        ORDER BY CASE WHEN phase = 'over' THEN 0
-                      WHEN :now - acted >= MAX(:L, 2 * turn_secs) THEN 1 ELSE 2 END,
-                 acted, code
-        LIMIT 1");
-    // Bound as integers: SQLite compares a text parameter as greater than any
-    // number, which would make MAX(:L, ...) a string and nothing eligible.
-    $q->bindValue(':x', $except);
-    $q->bindValue(':now', $now, PDO::PARAM_INT);
-    $q->bindValue(':L', room_live_secs(), PDO::PARAM_INT);
-    $q->bindValue(':D', ROOM_DORMANT_SECS, PDO::PARAM_INT);
-    $q->execute();
-    $c = $q->fetchColumn();
-    return $c === false ? null : (string) $c;
-}
-
-/* Under the caller's write lock: true when $code may become a started match
-   now, because a slot is free or the stalest eligible room was closed (with
-   a tombstone) to make one. The one gate every path into a started phase
-   passes. */
-function room_take_slot(RoomLock $lock, string $code, int $now): bool
-{
-    if (room_slots_used($code, $now) < room_max_rooms()) {
-        return true;
-    }
-    $victim = room_reclaim_pick($code, $now);
-    if ($victim === null) {
-        return false;
-    }
-    room_tombstone($lock->db, $victim, 'space', $now);
-    return true;
-}
-
-/* A full lobby pool makes room for one more, under the caller's write lock:
-   true when there is room, or the lobby room_lobby_evict_pick names was
-   closed to make it. */
-function room_lobby_take(PDO $db, string $code, int $now): bool
-{
-    if (room_lobbies_used($code, $now) < room_max_lobbies()) {
-        return true;
-    }
-    $victim = room_lobby_evict_pick($code, $now);
-    if ($victim === null) {
-        return false;
-    }
-    room_tombstone($db, $victim, 'space', $now);
-    return true;
-}
-
-/* Closes a room to make space, inside the caller's write transaction: its
+/* Closes a room with a tombstone, inside the caller's write transaction: its
    row goes, and a tombstone keeps the hashes of its human seats' tokens for
    ROOM_TOMBSTONE_SECS, so those players (and nobody else) hear why. */
 function room_tombstone(PDO $db, string $code, string $reason, int $now): void
@@ -328,7 +236,7 @@ function room_token_hash(string $token): string
     return substr(hash('sha256', $token), 0, 32);
 }
 
-/* Why a seat's room is gone ('space'), or null: only a token whose hash the
+/* Why a seat's room is gone (the tombstone's reason), or null: only a token whose hash the
    tombstone holds hears it. A read. */
 function room_closed_for(string $code, string $token): ?string
 {
@@ -368,7 +276,7 @@ function room_tombstone_expire(int $now, int $limit = 5000): int
 }
 
 /* Holds a new room: a free code taken under the write lock, its row inserted
-   empty. The caller checks the lobby pool, saves it, then unlocks (or
+   empty. The caller checks the address's lobbies, saves it, then unlocks (or
    discards). */
 function room_alloc(?callable $nextCode = null): RoomLock
 {

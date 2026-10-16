@@ -299,9 +299,8 @@ export function createLobby(deps: LobbyDeps) {
       return false;
     }
     if (data.ok && data.rooms) {
-      // A server from before the lobby pool answers rooms alone.
       const lobbies = 'lobbies' in data && data.lobbies ? ` · ${data.lobbies.used} lobbies open` : '';
-      LOBBY.count = `${data.rooms.used} / ${data.rooms.max} matches running${lobbies}`;
+      LOBBY.count = `${data.rooms.used} matches running${lobbies}`;
     }
     renderLobby();
     return !!(data.ok && data.rooms);

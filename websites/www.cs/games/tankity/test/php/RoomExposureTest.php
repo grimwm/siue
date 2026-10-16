@@ -20,7 +20,7 @@ final class RoomExposureTest extends TestCase
     private string $dir;
 
     private const ENV = ['TANKITY_ROOM_JOINS_PER_HOUR' => '1000', 'TANKITY_LOBBIES_PER_ADDRESS' => '4',
-        'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4', 'TANKITY_MAX_LOBBIES' => '100', 'TANKITY_MAX_ROOMS' => '50',
+        'TANKITY_ROOM_HOSTS_PER_ADDRESS' => '4',
         'TANKITY_ROOM_LIVE_SECS' => '600', 'TANKITY_POW_BITS' => '2'];
 
     private const NONE = [404, ['error' => 'no such room']];
@@ -207,43 +207,28 @@ final class RoomExposureTest extends TestCase
         $this->assertSame($old, $room['acted'], 'a mid-match setting is not a turn');
     }
 
-    public function testAStartWhoseSaveFailsClosesNobody(): void
+    public function testAStartWhoseSaveFailsLeavesTheLobby(): void
     {
-        $env = ['TANKITY_MAX_ROOMS' => '1'];
-        // One finished match holds the only slot: a Start would close it.
-        [$done] = $this->started($env);
-        [$room, $lock] = room_load($done['code']);
-        $room['phase'] = 'over';
-        $this->assertTrue(room_save($lock, $done['code'], $room));
-        room_unlock($lock);
-        [$host] = $this->pair($env);
+        [$host] = $this->pair([]);
         $this->bloat($host['code']);
         $this->gap();
-        [$st, $out] = $this->call('start', $this->seat($host), self::HOST, $env + self::ENV);
+        [$st, $out] = $this->call('start', $this->seat($host), self::HOST, self::ENV);
         $this->assertSame([500, ['error' => 'store write failed']], [$st, $out]);
-        $this->assertTrue($this->exists($done['code']), 'the finished match is still there');
-        $this->assertSame(0, (int) tankity_db()->query('SELECT COUNT(*) FROM closed')->fetchColumn(), 'and has no tombstone');
         $this->assertSame('lobby', $this->stored($host['code'])['phase']);
     }
 
-    public function testAPlayAgainWhoseSaveFailsChargesNothingAndClosesNobody(): void
+    public function testAPlayAgainWhoseSaveFailsChargesNothing(): void
     {
-        $env = ['TANKITY_MAX_LOBBIES' => '2'];
-        [$host] = $this->started($env);
+        [$host] = $this->started([]);
         [$room, $lock] = room_load($host['code']);
         $room['phase'] = 'over';
         $this->assertTrue(room_save($lock, $host['code'], $room));
         room_unlock($lock);
-        // The pool is full of lobbies no tab polls: Play again would close one.
-        [$a] = $this->pair($env);
-        [$b] = $this->pair($env);
-        tankity_db()->exec("UPDATE rooms SET touched = touched - 1000 WHERE phase = 'lobby'");
         $this->bloat($host['code']);
         $charged = $this->charges();
         $this->gap();
-        [$st, $out] = $this->call('again', $this->seat($host), self::HOST, $env + self::ENV);
+        [$st, $out] = $this->call('again', $this->seat($host), self::HOST, self::ENV);
         $this->assertSame([500, ['error' => 'store write failed']], [$st, $out]);
-        $this->assertTrue($this->exists($a['code']) && $this->exists($b['code']), 'both lobbies are still there');
         $this->assertSame($charged, $this->charges(), 'nothing charged');
         $this->assertSame('over', $this->stored($host['code'])['phase']);
     }

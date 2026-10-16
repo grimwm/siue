@@ -22,7 +22,7 @@ $proc = proc_open(
     [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
     $pipes,
     null,
-    array_merge(getenv(), ['TANKITY_DATA_DIR' => $data, 'TANKITY_MAX_ROOMS' => '2', 'TANKITY_POW_BITS' => '4'])
+    array_merge(getenv(), ['TANKITY_DATA_DIR' => $data, 'TANKITY_POW_BITS' => '4'])
 );
 $cleanup = function () use ($proc, $data): void {
     if (is_resource($proc)) {

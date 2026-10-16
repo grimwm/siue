@@ -170,11 +170,11 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `test/*.test.ts` | The Node tests (`node:test`, see Tests), type-checked by `tsconfig.test.json`. The kit's `_kit/test/dom-stub.ts` is the small Node DOM that `ui.test.ts` and `smoke.test.ts` share. Never deployed |
 | `test/php/`, `test/php-docker/` | The PHPUnit cases (`tankity` and `tankity-docker` suites). Never deployed |
 | `rooms.php` | Room server entry point: request parsing, the `$action` handlers, `room_json_out` (gzip), `room_gate`. It requires the files below, and keeps the one helper that resolves against its own location (`room_arsenal` reads `game.json`) |
-| `server/settings.php` | What a room is (`ROOM_*` shape constants) and the host's knobs (`room_max_rooms`, `room_live_secs`) and the turn-time stops |
-| `server/store.php` | Rooms as rows: the room lock (`RoomLock`, one write transaction from `room_load` to `room_unlock`), create/close/discard, `room_save` (and the `phase`, `acted`, `turn_secs` columns it writes), the match slots (`room_slots_used`, `room_take_slot`, `room_reclaim_floor`, `room_reclaim_pick`), the lobby pool (`room_lobbies_used`, `room_lobby_take`, `room_lobby_evict_pick`), tombstones (`room_tombstone`, `room_closed_for`), the sweep, room codes |
+| `server/settings.php` | What a room is (`ROOM_*` shape constants) and the host's knobs (`room_live_secs`, `room_db_max_mb`, the per-address limits) and the turn-time stops |
+| `server/store.php` | Rooms as rows: the room lock (`RoomLock`, one write transaction from `room_load` to `room_unlock`), create/close/discard, `room_save` (and the `phase`, `acted`, `turn_secs` columns it writes), the per-address counts (`room_lobbies_hosted`, `room_hosted`), the disk guard (`room_db_bytes`, `room_db_full`), tombstones (`room_tombstone`, `room_closed_for`), the sweep, room codes |
 | `server/db.php` | Where Tankity keeps its files (`tankity_data_dir`), the database (`tankity_db`), the journal mode for its filesystem, the schema steps, `tankity_tx` |
 | `server/rate.php` | Each address's hourly count of rooms created and joined, in the `rate` table: `room_rate_take`, `rate_used`, `rate_used_since`, `rate_take`, `rate_expire`, and `room_joins_per_hour()` (`room_joins_per_hour`, default 300) |
-| `server/pow.php` | The room puzzle (Room slots): `room_pow_issue` (a signed challenge), `room_pow_bits` (the difficulty under load), `room_pow_check` (format, MAC, age, work), `room_pow_lead`, `room_pow_spent` and `room_pow_spend` (the `pow_used` table), and `room_now` |
+| `server/pow.php` | The room puzzle (Room limits): `room_pow_issue` (a signed challenge), `room_pow_bits` (the difficulty under a surge of creates), `room_pow_check` (format, MAC, age, work), `room_pow_lead`, `room_pow_spent` and `room_pow_spend` (the `pow_used` table), and `room_now` |
 | `server/guard.php` | Tankity's settings for the kit's `Kit\ScoreGuard` (`tankity_guard()`, `tankity_initials()`; Tankity uses its origin, address and initials checks), and `BLOCKED_INITIALS` (the same list as `src/initials.ts`) |
 | `server/score-guard.php` | The kit's score guard, a generated copy written by `tools/install-files.php` (`kit_php`); never edit it |
 | `server/board.php` | The all-time boards, one per difficulty, best 100 room runs each, rows in the database (`board_file`, `board_top`); a row can only come from a room match that two or more humans started |
@@ -416,17 +416,17 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
 - Rooms are rows in Tankity's database (see Storage), one serialized room per
   row (`rooms`: code, data, created, touched, expires, host, phase, acted,
   turn_secs; the last three are written from the room by every save, so the
-  counts and the reclaim stay plain SQL). Create, join, state and every
+  per-address counts and the sweep stay plain SQL). Create, join, state and every
   act hold their room as one write transaction (`BEGIN IMMEDIATE`) from
   `room_load` (or `room_alloc`) to `room_unlock`, so writers take turns across
   all rooms; a request that waits past the 2 s busy timeout answers 503 "this
   room is busy". A room serializes to 30–45 KB; one past 128 KB is refused.
 - Create draws a random code and inserts its row with `INSERT OR IGNORE`
   under the write lock, so a collision just draws another code (and a code
-  with a tombstone is never drawn); the lobby caps are counted under the same
-  lock, and Start counts the match slots under its own, so every cap is
-  exact. Ping only reads: it counts the started matches and the lobbies that
-  have not expired.
+  with a tombstone is never drawn); the address's lobby limit is counted under
+  the same lock, and Start counts the address's matches under its own, so
+  every limit is exact. Ping only reads: it counts the started matches and the
+  lobbies that have not expired.
 - Closing a room (the last human leaves) deletes its row in its own
   transaction; a request that was waiting for it finds no room: the 404. An
   idle room is deleted by whoever loads it next, by a create, and by
@@ -447,7 +447,7 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   check, in this order: the origin; `proto: 2` (426 with the reload line);
   the room puzzle's format, MAC, age and work (403 or 422); a puzzle already
   spent, from a plain read (409); for a create, its address's lobbies and a
-  busy pool (429, 409), then its initials and hills (422); for a join, the
+  full disk (429, 503), then its initials and hills (422); for a join, the
   code's shape and the initials (422); then the allowance. Everything before
   the allowance is uncharged. The allowance and the puzzle are spent together in one write
   transaction, so a replay that races the plain read is refused (409) with
@@ -497,7 +497,7 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   CSRF and the 150 ms act throttle apply). A joiner takes the first seat no
   human holds, open or drone. With two or more humans seated, Start refuses
   unless at least one seat is on AI (host plus a drone is the two-tank
-  minimum); the host alone plays the match in the browser (Room slots). Spawn slots count fielded seats
+  minimum); the host alone plays the match in the browser (Room limits). Spawn slots count fielded seats
   only, so spacing and AI turns work with two or three tanks.
 - Leaving: any human may leave at any time (`action=leave`, never throttled so
   it lands right behind an aim tap). In the lobby the chair resets to a drone
@@ -770,7 +770,7 @@ stop it.
 ## Match end and scoreboards
 
 Solo is endless and ends at ♥ 0. A room its host starts alone plays here as a
-solo match (Room slots), and its score goes on this browser's board. A server
+solo match (Room limits), and its score goes on this browser's board. A server
 match whose humans drop to one keeps its rule until it ends. A
 room that started with two or more humans ends when only one human has lives
 left: that human wins, with a winner's bonus of twice the round bonus
@@ -841,64 +841,57 @@ The server settings that remain are in `.config.yaml` or as upper-case
 
 | Setting | Default | What it bounds |
 | --- | --- | --- |
-| `max_rooms` | 50 | Match slots: started matches (2+ humans at Start) at once; a full server reclaims the stalest eligible room (Room slots) |
-| `max_lobbies` | 100 | Lobbies waiting at once, in a pool of their own |
+| `room_db_max_mb` | 256 | Megabytes the database file plus its `-wal` may reach before a new lobby is refused with a 503 (Room limits) |
 | `lobbies_per_address` | 4 | Lobbies one address hosts at once (429 past it) |
-| `room_live_secs` | 600 | Seconds since the last touch before a lobby closes; the shortest idle limit of a started room; the reclaim floor's minimum |
+| `room_live_secs` | 600 | Seconds since the last touch before a lobby closes; the shortest idle limit of a started room |
 | `room_hosts_per_address` | 4 | Started matches one address hosts at once (429 at Start past it) |
 | `room_joins_per_hour` | 300 | Rooms one address creates or joins in an hour |
-| `pow_bits` | 11 | The room puzzle's difficulty at rest, in leading zero bits: a join needs this, a create one more, and load adds up to two (Room slots). 0 turns the puzzle off |
+| `pow_bits` | 11 | The room puzzle's difficulty at rest, in leading zero bits: a join needs this, a create one more, and a surge of creates adds one (Room limits). 0 turns the puzzle off |
 | `pow_surge` | 60 | Creates from every address in ten minutes that make the puzzle one bit harder |
 | `allowed_hosts` | `www.cs.siue.edu,cs.siue.edu` | Hosts a request's Origin may name |
 | `addr_key` | made once, kept in the database | The key for the hash a room stores in place of an address |
 
-## Room slots
+## Room limits
 
-What runs out on the shared host is the one SQLite writer and the PHP
-workers, which acts, heartbeats and the sim spend. So the slots go to matches
-people play together, and waiting costs little.
+A room is a SQLite row with lazy clocks: nothing runs for an idle lobby or a
+match between turns, so there is no server-wide count of rooms. What bounds a
+server is the address, the puzzle, the hourly allowance, the disk and idle
+expiry.
 
-- **Match slots.** Only a started match (`play`, `shop`, `over`) holds one of
-  `max_rooms`. Start takes the slot, under its write lock (two Starts cannot
-  both take the last one); Play again gives it back. The host's address may
-  host `room_hosts_per_address` started matches (429 at Start past it).
-  Players behind one shared address (a lab or campus NAT) share this cap and
-  the lobby cap below; for such a host, raise both.
+- **Per address.** An address may hold `lobbies_per_address` lobbies (429
+  "too many lobbies open from here; start or leave one first") and host
+  `room_hosts_per_address` started matches (429 at Start). Players behind one
+  shared address (a lab or campus NAT) share both limits; for such a host,
+  raise them. Both count live rooms under the write lock, so two requests
+  racing for the last place cannot both win. Play again returns a finished
+  match to its lobby and counts against its host's lobbies like a create.
+- **The disk guard.** A new lobby (create, and nothing else) is refused with
+  503 "The server is full. Try again later." when the database file plus its
+  `-wal` is at least `room_db_max_mb` megabytes (a `filesize()` after
+  `clearstatcache()`, two stats). The refusal is answered before anything is
+  charged: no hourly allowance is spent and the puzzle stays unspent, so it
+  buys the room once there is space again. Join, Start, turns, Play again and
+  every other act are never refused for size, and no running game is closed to
+  make room; the sweep and housekeeping give space back as rooms expire.
+- **Idle expiry.** A lobby closes `room_live_secs` after its last touch; a
+  started room one turn time per human after the last turn-moving act (at
+  least `room_live_secs`); a finished match `room_live_secs` after its last
+  act. Housekeeping and the sweep delete expired rows.
 - **A host alone.** Hosting always opens a lobby, so friends can join by code.
   Start with two or more humans seated (two behind one address count as two)
-  makes a server match and takes a slot. Start with only the host seated
-  closes the lobby (no tombstone: its host closed it) and answers
-  `{ok: true, local: {difficulty, speed}}`, and no slot or lobby place is
-  held. The browser forgets the seat, says "Nobody else joined, so this match
-  plays here on your device." and plays a solo match: the room's Difficulty
-  (for that match; the Menu's comes back for the next) and its speed, solo's
-  three drones on random hills, no turn clock, this browser's board, not in
-  Your games; Q and Quit leave it as they leave solo. The room hint says so
-  before Start: "With only you seated, Start plays here on your device." The
-  turn-time slider keeps its pick for the next room. Create, join and Start
-  carry `proto: 2`; a lone host's Start without it (a tab loaded before the
-  server learned local starts) gets 426 `{"error": "Tankity was updated.
-  Reload the page to keep playing.", "reload": true}` and the lobby stays as
-  it was.
-- **The lobby pool.** Create (and Play again, which returns a finished match
-  to its lobby) takes one of `max_lobbies` places, and its address may hold
-  `lobbies_per_address` lobbies. A full pool closes one lobby to make room:
-  first one no tab polls (no heartbeat for 40 s), then one nobody acted in for
-  `room_live_secs`, then one older than 30 minutes, the oldest first in each.
-  Play again spends the presser's hourly allowance, as create does.
-  A lobby under 30 minutes old, acted in within 10 minutes and polled by a tab
-  is never closed; with only those, the create gets 409 "Every lobby is busy.
-  Try again in a minute." (uncharged).
-- **Reclaim.** With every slot taken, Start closes the stalest eligible room
-  instead of refusing. A room is eligible once it is finished, or once nobody
-  has taken a turn in it for its floor, `max(room_live_secs, min(2 x turn
-  time, 1 h))`. Finished rooms go first, then stale ones (idle at least twice
-  their turn time, at least `room_live_secs`), then dormant ones (long rooms
-  idle past the hour but not yet twice their turn time); the room idle
-  longest goes first in each, then by code. With none eligible the Start gets
-  409 "Every match slot is in play. Try again in a few minutes." A room played
-  within its floor is never closed, and an active long game outlives a stale
-  short one.
+  makes a server match. Start with only the host seated closes the lobby (no
+  tombstone: its host closed it) and answers
+  `{ok: true, local: {difficulty, speed}}`. The browser forgets the seat, says
+  "Nobody else joined, so this match plays here on your device." and plays a
+  solo match: the room's Difficulty (for that match; the Menu's comes back for
+  the next) and its speed, solo's three drones on random hills, no turn clock,
+  this browser's board, not in Your games; Q and Quit leave it as they leave
+  solo. The room hint says so before Start: "With only you seated, Start plays
+  here on your device." The turn-time slider keeps its pick for the next room.
+  Create, join and Start carry `proto: 2`; a lone host's Start without it (a
+  tab loaded before the server learned local starts) gets 426
+  `{"error": "Tankity was updated. Reload the page to keep playing.",
+  "reload": true}` and the lobby stays as it was.
 - **What counts as playing** (`acted`): create, join, Start, Play again, a
   host's lobby setting that changes something, buying, Ready, and an aim,
   drive, fire or gun loaded on one's own turn. The menu flag, a new look, a
@@ -906,10 +899,10 @@ people play together, and waiting costs little.
   host's turn time, speed and walls once the match has begun, leaving, polls,
   `mine` and timeouts keep a room alive for nobody; a setting that changes
   nothing is not even saved.
-- **Tombstones.** A room or lobby closed to make space leaves a row in
-  `closed` for 14 days: the hashes of its human seats' tokens. `state`, every
-  seated act and `mine` answer such a seat's token with `closed: "space"`
-  beside "no such room"; anyone else, a token that holds no seat in a live
+- **Tombstones.** A closed room can leave a row in `closed` for 14 days: the
+  hashes of its human seats' tokens and a reason. `state`, every seated act and
+  `mine` answer such a seat's token with `closed: "<reason>"` beside "no such
+  room" (the browser knows `space`); anyone else, a token that holds no seat in a live
   room included, hears the plain 404 a code nobody holds gets. The code is never
   drawn for a new room while its tombstone lasts, and a tombstone never makes a
   code joinable. Housekeeping drops old tombstones.
@@ -937,9 +930,8 @@ people play together, and waiting costs little.
     they would have expired). The browser asks for a fresh puzzle once,
     silently, after a 403 or a `puzzle-spent`.
   - Difficulty (`room_pow_bits`): `pow_bits` for a join and one more for a
-    create; one more again when started matches or lobbies reach 75 % of
-    their caps or `pow_surge` creates came in the last ten minutes; two more
-    when either cap is full. Never more than two more. The bits ride in the
+    create; one more again when `pow_surge` creates came in the last ten
+    minutes. The bits ride in the
     signed challenge, so a rise between asking and answering never refuses a
     solver. `pow_bits: 0` turns the puzzle off (create and join then need
     only `proto: 2`).
@@ -977,21 +969,20 @@ people play together, and waiting costs little.
   made-up one and a malformed one, and a solved puzzle buys one lookup (it is
   spent even when the code is not found). A started match answers a join 409
   "match already started", so a paid guess can learn a code is in play, but
-  nothing about it: its state and acts answer only its seats. Only the at
-  most `max_lobbies` lobbies can be joined. With one IPv6 /56 (256
-  `/64` allowances of 300 joins an hour, 76,800 guesses an hour) and 100
-  lobbies open, a hit comes every 115 hours or so, and each guess first costs
+  nothing about it: its state and acts answer only its seats. Only an open
+  lobby can be joined. With one IPv6 /56 (256 `/64` allowances of 300 joins an
+  hour, 76,800 guesses an hour) and 100 lobbies open, a hit comes every 115
+  hours or so, and each guess first costs
   a join puzzle. A hit buys one seat in a stranger's lobby, where the host sees
   the initials before Start. Codes are enough to join: there are no invites to
   sign.
-- **The remaining exposure.** Bots that take a real turn at least hourly in
-  every held room, from at least 13 addresses (four matches each, each with a
-  second human at Start), still hold every slot. That costs as much as
-  playing (plus a create puzzle per lobby and a join puzzle per guest), and
-  every match that ends frees its slot first. When it shows up, lower
-  `room_hosts_per_address`. A native attacker solves a puzzle a few times
-  faster than a phone, not hundreds, so the puzzle slows a flood rather than
-  stopping one; the caps above are what bound it.
+- **The remaining exposure.** Bots can fill the disk with lobbies and matches
+  from many addresses, each costing a create puzzle, a join puzzle per guest
+  and an hourly allowance. The disk guard then turns away new lobbies and
+  leaves running games alone; expiry frees the space again. A native attacker
+  solves a puzzle a few times faster than a phone, not hundreds, so the puzzle
+  slows a flood rather than stopping one; the limits above bound it. When one
+  shows up, lower `lobbies_per_address` and `room_hosts_per_address`.
 
 ## Long games
 
@@ -1012,7 +1003,7 @@ A room plays over minutes, hours or a week.
   one turn time in longer rooms; all voters Ready still closes it at once.
 - **Closing.** A lobby lasts `room_live_secs` after its last touch; a started
   room lasts one turn time per human with nobody taking a turn, at least
-  `room_live_secs`; a full server may close it sooner (Room slots). Replies carry `expiresAt` and
+  `room_live_secs`; Replies carry `expiresAt` and
   `closesIn` (seconds from the reply, so the client's own clock never matters);
   when the room would close before the running clock ends, the status bar, the
   shop line and Your games say "Room closes in 9:00 unless someone plays".
@@ -1023,7 +1014,7 @@ A room plays over minutes, hours or a week.
   (the seat goes to the drone battery for good); Menu → Quit steps out. Only
   Leave gives a seat up.
 - **A room its host starts alone** is a solo match on that device (Room
-  slots): it has no turn clock, and it is not in Your games.
+  limits): it has no turn clock, and it is not in Your games.
 - **A room's lobby closed with Q** keeps its seat and its heartbeat: this tab
   keeps polling the lobby, so it stays open and listed in Your games. If the
   host starts the match meanwhile, the match waits in Your games (and its turn
@@ -1032,12 +1023,12 @@ A room plays over minutes, hours or a week.
   another tab stops the polls at once: the seat is forgotten and the player
   lands in the rooms lobby with "Room CODE has closed." or "Your seat in room
   CODE was given up."
-- **A room closed to make space** (Room slots) stops the polls the same way,
-  with "Room CODE was closed to make space."; the seat is kept, marked closed,
+- **A room the server reports closed to make space** (`closed: "space"`)
+  stops the polls the same way, with "Room CODE was closed to make space."; the seat is kept, marked closed,
   and Your games shows "CODE · Closed to make space" with Dismiss until the
   player dismisses it. It is never asked about again.
 - **The lobby's status line** holds what the player's last act got (a refusal
-  such as every match slot in play, or a match that needs a drone) until the next
+  such as a server that is full, or a match that needs a drone) until the next
   act; who starts the match is a separate line (`#room-hint`).
 - **Your games** lists those rooms on the title card and in the rooms lobby,
   each with where it stands ("ZED's turn", "Your turn, 7h 59m left", "Shop
@@ -1590,19 +1581,18 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `RoomStandingsTest` (host PHP) | Each human's rounds won, kills, round gain and out round, in the snapshot with the winner's bonus |
 | `RoomFilingTest` (host PHP) | A match two or more humans started files each human once on its Difficulty's board, the winner before the eliminated, a leaver not at all but the winner of a forfeit still; a match one human started files nothing and marks `filedLocal`; a failed filing logged and read as not filed |
 | `RoomSchemaTest` (host PHP) | Schema step 8: the `phase`, `acted` and `turn_secs` columns, backfilled from live rows and written by every save, `closed` and `pow_used`, and `room_acted` reading the older key |
-| `RoomLobbyPoolTest` (host PHP) | The lobby pool through `rooms.php`: lobbies hold no slot, four per address, a flood never closes a fresh attended lobby (uncharged 409), dead then idle then old, Play again takes a place and counts against its host's lobbies, tombstones answer only their seats (state, acts, `mine`), block the code and expire |
-| `RoomExposureTest` (host PHP) | What a request without a seat learns or costs: `state` and every seated act answer a stranger (no token, a made-up one, with or without an Origin) the same 404 as a code nobody holds, before the write lock; a state poll's token read from `X-Seat-Token`, never the URL; a host setting that changes nothing, and any setting once the match has begun, never stamping `acted`; a Start or Play again whose save fails closing nobody and charging nothing; a create or join with bad initials, hills or a malformed code refused uncharged |
-| `RoomLocalStartTest` (host PHP) | Start with the host alone: `local` with the room's Difficulty, speed and Walls, the lobby closed with no tombstone and no slot or lobby place held, open seats no bar; without `proto: 2` a 426 with the reload line and the lobby kept; origin, CSRF, seat token and host-only before anything closes; two humans from one address take a slot; two humans without `proto` start as before |
-| `RoomReclaimTest` (host PHP) | Match slots and reclaim: the floor, the tier order on a fixed clock, an active long game outliving a stale short one, ties by code, thirteen addresses unable to hold every slot, a played hold as the residual, no Start evicting a room within its floor, Start's gates before any slot, the hosting cap at Start, Play again giving the slot back, and two racing Starts never both winning or reclaiming one room twice |
-| `RoomPowTest` (host PHP) | The room puzzle on a fixed clock: a challenge signed and bound to its purpose and address (an edited difficulty, purpose or time, or another address, is `puzzle-bad`), solutions checked (short, repeated, wrong), an old or future-dated challenge refused by the server's clock alone, a replay refused and housekept, the difficulty rising under load by at most two bits, 0 turning it off, and `protocol/pow-vectors.json` |
-| `RoomPowGateTest` (host PHP) | Create and join through `rooms.php`: an old bundle told to reload, a create needing a solved puzzle of its own purpose, a replay refused and uncharged (a join puzzle spent on a missed guess too), a puzzle past its life refused, a puzzle from another address refused, a guess without work answered the same for a live and a made-up code and the hourly allowance still counting solved guesses, 6-character codes with 4-character rooms still joinable and codes read back with spaces, and the challenge uncharged and rising with the lobby count |
+| `RoomLimitsTest` (host PHP) | The room limits through `rooms.php`: no server-wide count (eighty lobbies from twenty addresses, ping counting them), four lobbies and four matches per address, the setting, an expired lobby giving its place back, Play again counting against its host's lobbies, the disk guard (a create refused at the limit with a 503, uncharged and with its puzzle unspent, then accepted once space returns; join, Start, a turn and Play again still working past it with no room closed), and tombstones answering only their seats, blocking the code and expiring |
+| `RoomExposureTest` (host PHP) | What a request without a seat learns or costs: `state` and every seated act answer a stranger (no token, a made-up one, with or without an Origin) the same 404 as a code nobody holds, before the write lock; a state poll's token read from `X-Seat-Token`, never the URL; a host setting that changes nothing, and any setting once the match has begun, never stamping `acted`; a Start or Play again whose save fails changing nothing and charging nothing; a create or join with bad initials, hills or a malformed code refused uncharged |
+| `RoomLocalStartTest` (host PHP) | Start with the host alone: `local` with the room's Difficulty, speed and Walls, the lobby closed with no tombstone, open seats no bar; without `proto: 2` a 426 with the reload line and the lobby kept; origin, CSRF, seat token and host-only before anything closes; two humans from one address start a match; two humans without `proto` start as before |
+| `RoomPowTest` (host PHP) | The room puzzle on a fixed clock: a challenge signed and bound to its purpose and address (an edited difficulty, purpose or time, or another address, is `puzzle-bad`), solutions checked (short, repeated, wrong), an old or future-dated challenge refused by the server's clock alone, a replay refused and housekept, the difficulty rising by one bit on a surge of creates and by nothing for crowded rooms, 0 turning it off, and `protocol/pow-vectors.json` |
+| `RoomPowGateTest` (host PHP) | Create and join through `rooms.php`: an old bundle told to reload, a create needing a solved puzzle of its own purpose, a replay refused and uncharged (a join puzzle spent on a missed guess too), a puzzle past its life refused, a puzzle from another address refused, a guess without work answered the same for a live and a made-up code and the hourly allowance still counting solved guesses, 6-character codes with 4-character rooms still joinable and codes read back with spaces, and the challenge uncharged and unmoved by the lobby count |
 | `RoomAgainTest` (host PHP) | Play again keeps code and seats and resets lives, score and cash; a second press is harmless; the lowest human hosts when the host left |
 | `BoardTest`, `ScoresEndpointTest` (host PHP) | The boards (one per difficulty, room rows only, ties, the trim, a required source), and `scores.php` as a request (the board in the page's shape, no seeds, every POST answered 410 and nothing written, other methods 405) |
-| `RoomGuardTest` (host PHP) | Initials stored uppercase and the blocked set refused, origins and referers against the allow list, only turn-moving acts stamping `acted` (not the menu flag, a new look or an off-turn gun), and the hourly allowance on creating and joining: a setting, exact in every sliding hour, per address, in the `rate` table, swept by housekeeping, a spent one refused without the write lock, a 429 from `rooms.php` itself, and a create refused for a busy lobby pool not charged |
+| `RoomGuardTest` (host PHP) | Initials stored uppercase and the blocked set refused, origins and referers against the allow list, only turn-moving acts stamping `acted` (not the menu flag, a new look or an off-turn gun), and the hourly allowance on creating and joining: a setting, exact in every sliding hour, per address, in the `rate` table, swept by housekeeping, a spent one refused without the write lock, a 429 from `rooms.php` itself, and a create refused for a full disk not charged |
 | `RoomArmorTest`, `RoomBuyTest` (host PHP) | Armor carry-over and re-muster, the capped repair, plates, and every shop purchase rule |
 | `RoomRetireTest` (host PHP) | A room saved holding a retired gun: refunded at its old price per shell, unknown keys dropped, a loaded one back to the Shell, drones' racks cleaned, once only, through `room_load` and `room_peek`, and malformed stock never crashing |
 | `RoomFallTest` (host PHP) | The room's falls: the formula, the digger's credit and kill, your own pit, parachutes (spent, kept, a drone's), the bunker and the shield, landing on a unit, a volley ending with its falls settled and stamped, drones' parachutes by round, the stacking shop row in the snapshot, the bunker counting toward the parachute, credit to the deepest blast, and a rise folding a parachute |
-| `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: an exact lobby pool under a race, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
+| `phpunit --testsuite tankity-docker`           | `RoomsTest` (the room shelf over its own `php -S`), `RoomsStoreTest` (the store under real concurrency: two creates racing for a code, close, sweep, a held writer and the 503, a killed holder), `RoomsRefusedStoreTest` (a store PHP refuses answers JSON 503 on every endpoint, with one log line per request), `RoomsStoreFailureTest` (a database error partway through a save answers JSON 503 and leaves nothing behind) and `RoomsLoadTest` (8 playing rooms, each with 3 seated players and a watcher, polling at the client's pace against the docker site: no 503, p95 under 300 ms). Runs inside the PHP container, which matches the host's PHP (`make test` does) |
 | `php protocol/generate.php --check`            | `protocol/` fixtures are current (run inside the PHP container)                 |
 | `tests/tankity-data-deny.sh` | `games/tankity/data/` is refused over HTTP (`make test` runs it) |
 | `php protocol/sim-vectors.php --check`         | `protocol/sim-vectors.json` is current (docker PHP)                                         |

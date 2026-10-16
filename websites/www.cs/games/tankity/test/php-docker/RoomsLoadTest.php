@@ -58,7 +58,6 @@ final class RoomsLoadTest extends TestCase
     {
         $ping = json_decode((string) @file_get_contents(self::BASE . '?action=ping'), true);
         $this->assertIsArray($ping, 'the docker site answers (make up)');
-        $this->assertLessThanOrEqual($ping['rooms']['max'], $ping['rooms']['used'] + self::ROOMS, 'room for the test on the shelf');
         $seats = [];
         $rooms = [];
         for ($r = 0; $r < self::ROOMS; $r++) {

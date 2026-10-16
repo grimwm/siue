@@ -18,12 +18,12 @@ final class ConfigTest extends TestCase
     protected function setUp(): void
     {
         $this->oldConfigFile = getenv('CONFIG_FILE');
-        $this->oldMax = getenv('TANKITY_MAX_ROOMS');
+        $this->oldMax = getenv('TANKITY_ROOM_DB_MAX_MB');
         $this->oldDir = getenv('TANKITY_DATA_DIR');
         $this->tmp = sys_get_temp_dir() . '/tankity-config-test-' . getmypid() . '-' . bin2hex(random_bytes(3));
         mkdir($this->tmp);
         // The sections assume neither setting comes from the environment.
-        putenv('TANKITY_MAX_ROOMS');
+        putenv('TANKITY_ROOM_DB_MAX_MB');
         putenv('TANKITY_DATA_DIR');
     }
 
@@ -31,7 +31,7 @@ final class ConfigTest extends TestCase
     {
         @unlink($this->tmp . '/a.yaml');
         @rmdir($this->tmp);
-        foreach (['CONFIG_FILE' => $this->oldConfigFile, 'TANKITY_MAX_ROOMS' => $this->oldMax, 'TANKITY_DATA_DIR' => $this->oldDir] as $name => $old) {
+        foreach (['CONFIG_FILE' => $this->oldConfigFile, 'TANKITY_ROOM_DB_MAX_MB' => $this->oldMax, 'TANKITY_DATA_DIR' => $this->oldDir] as $name => $old) {
             putenv(is_string($old) ? "$name=$old" : $name);
         }
     }
@@ -41,7 +41,7 @@ final class ConfigTest extends TestCase
     {
         file_put_contents(
             $this->tmp . '/a.yaml',
-            "# a comment\nmax_rooms: 3\ndata_dir: \"/tmp/sco\" # trailing note\nroom_live_secs: '60'\nblank: \n"
+            "# a comment\nroom_db_max_mb: 3\ndata_dir: \"/tmp/sco\" # trailing note\nroom_live_secs: '60'\nblank: \n"
         );
         putenv('CONFIG_FILE=' . $this->tmp . '/a.yaml');
         tankity_config(true);
@@ -60,14 +60,14 @@ final class ConfigTest extends TestCase
     {
         putenv('CONFIG_FILE=' . $this->tmp . '/nope.yaml');
         tankity_config(true);
-        self::assertTrue(tankity_setting('TANKITY_MAX_ROOMS', 'max_rooms', 10) === 10, 'missing-default');
+        self::assertTrue(tankity_setting('TANKITY_ROOM_DB_MAX_MB', 'room_db_max_mb', 10) === 10, 'missing-default');
     }
 
     /** file values are picked up; comments and quotes are tolerated */
     public function testFileValues(): void
     {
         $this->useFileConfig();
-        self::assertTrue(tankity_setting('TANKITY_MAX_ROOMS', 'max_rooms', 10) === '3', 'file-max');
+        self::assertTrue(tankity_setting('TANKITY_ROOM_DB_MAX_MB', 'room_db_max_mb', 10) === '3', 'file-max');
         self::assertTrue(tankity_setting('TANKITY_DATA_DIR', 'data_dir', '') === '/tmp/sco', 'file-dir');
         putenv('TANKITY_DATA_DIR=/tmp/env-dir');
         self::assertTrue(tankity_setting('TANKITY_DATA_DIR', 'data_dir', '') === '/tmp/env-dir', 'env-dir-beats-file');
@@ -80,11 +80,11 @@ final class ConfigTest extends TestCase
     public function testEnvironmentBeatsFile(): void
     {
         $this->useFileConfig();
-        putenv('TANKITY_MAX_ROOMS=7');
-        self::assertTrue(tankity_setting('TANKITY_MAX_ROOMS', 'max_rooms', 10) === '7', 'env-beats-file');
-        putenv('TANKITY_MAX_ROOMS');
+        putenv('TANKITY_ROOM_DB_MAX_MB=7');
+        self::assertTrue(tankity_setting('TANKITY_ROOM_DB_MAX_MB', 'room_db_max_mb', 10) === '7', 'env-beats-file');
+        putenv('TANKITY_ROOM_DB_MAX_MB');
         tankity_config(true);
-        self::assertTrue(tankity_setting('TANKITY_MAX_ROOMS', 'max_rooms', 10) === '3', 'env-cleared-file');
+        self::assertTrue(tankity_setting('TANKITY_ROOM_DB_MAX_MB', 'room_db_max_mb', 10) === '3', 'env-cleared-file');
     }
 
     /** loading never writes; bytes and mtime are identical afterwards */

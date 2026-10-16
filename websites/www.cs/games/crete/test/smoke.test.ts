@@ -41,3 +41,8 @@ test('the game reaches no function the site script defines', { skip: !existsSync
   const reached = names.filter(n => new RegExp(`\\b${n}\\b`).test(code));
   assert.deepEqual(reached, []);
 });
+
+test('the entry follows the page: hidden pauses the play-through and hint timers, shown resumes them', () => {
+  const main = read('src/main.ts');
+  assert.match(main, /followPage\(\{ doc: document, win: window \}, \{ hide: game\.pause, show: game\.resume \}\)/);
+});

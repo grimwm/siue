@@ -12,20 +12,5 @@
   "scoresPerHour": 30,
   "csrfCookie": "cylon_csrf",
   "storageKey": "cylon",
-  "blockedInitials": [
-    "ASS",
-    "FUK", "FUC", "FCK", "FUX", "FUQ",
-    "SHT", "SHI",
-    "DIK", "DIC", "DCK",
-    "COK", "COC", "COQ",
-    "CUM", "JIZ",
-    "CNT", "PUS", "VAG", "CLT",
-    "SEX", "XXX", "TIT",
-    "FAG", "FGT",
-    "NIG", "NGR",
-    "WTF", "FFS",
-    "POO", "PEE",
-    "KKK"
-  ],
   "allowedHosts": ["www.cs.siue.edu", "cs.siue.edu"]
 }

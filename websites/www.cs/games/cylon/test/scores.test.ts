@@ -7,7 +7,7 @@ import { createScoresClient, highScoreRows, weeklyResetText } from '../src/score
 import type { ScoreEntry } from '../src/scores.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { last, nth } from './nth.ts';
+import { last, nth } from '../../_kit/test/nth.ts';
 
 
 interface FakeOptions {

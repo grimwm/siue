@@ -8,6 +8,7 @@ import path from 'node:path';
 import { asElement, byId, fire, installDocument, makeEl, maybeById, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
+import { nth } from '../../_kit/test/nth.ts';
 import {
   TURN_STOPS, TURN_DEFAULT, TURN_LABELS, TURN_LONG_S, TURN_SETTLE_MS, turnIndex, turnLabel, clockText, turnNote, shopNote, settleAfter,
 } from '../src/turn-time.ts';
@@ -15,12 +16,6 @@ import {
 installDocument();
 const { tt } = await importTsx<{ tt: typeof import('../src/ui/turn-time.tsx') }>(import.meta.dirname, { tt: '../src/ui/turn-time.tsx' });
 const byTag = (el: StubElement, tag: string) => walk(el).filter(n => n.localName === tag);
-/** Item `i` of a list the case reads, which must be there. */
-function nth<T>(list: readonly T[], i: number): T {
-  const v = list[i];
-  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
-  return v;
-}
 
 const settings = fs.readFileSync(path.join(import.meta.dirname, '..', 'server', 'settings.php'), 'utf8');
 

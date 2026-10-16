@@ -5,6 +5,7 @@
  * arguments. Needs the DOM lib, so it is in the second program
  * (src/tsconfig.dom.json).
  */
+import { isBackKey, typesText } from "../../_kit/keys.ts";
 import type { Game, ItemDef, ItemKind, LogTone } from "./engine.ts";
 import { renderEndCard } from "./ui/end.tsx";
 import { renderInventory } from "./ui/inventory.tsx";
@@ -263,8 +264,8 @@ export function createUi(deps: UiDeps): Ui {
   function bindControls({ game, restart, toggleMute, wake, quit }: Controls): void {
     const G = game.G;
     document.addEventListener("keydown", (ev) => {
+      if (typesText(ev.target)) return;
       const tag = (ev.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
       wake();
       const k = ev.key.toLowerCase();
       if (k === "n") {
@@ -289,7 +290,7 @@ export function createUi(deps: UiDeps): Ui {
         game.hint();
         return;
       }
-      if (k === "q" && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      if (isBackKey(ev)) {
         ev.preventDefault();
         if (!ev.repeat) quit();
         return;

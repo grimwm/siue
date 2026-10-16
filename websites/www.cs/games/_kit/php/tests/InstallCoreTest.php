@@ -3,18 +3,22 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../install-core.php';
+require_once __DIR__ . '/TempDir.php';
 
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 final class InstallCoreTest extends TestCase
 {
+    use TempDir;
+
     private string $dir;
 
     private const PLAY = ['kind' => 'play', 'versioned' => ['dist/main.js', 'game.css'], 'precache_dirs' => ['dist'], 'precache_exclude' => []];
 
     protected function setUp(): void
     {
-        $this->dir = sys_get_temp_dir() . '/install-core-' . bin2hex(random_bytes(4)) . '/arty';
+        $this->dir = self::makeTempDir('install-core') . '/arty';
         mkdir($this->dir . '/dist', 0777, true);
         file_put_contents("$this->dir/metadata.yaml", "title: Arty & Co\ndescription: >\n  Lob\n  shells.\nshort_name: Arty\ntheme_color: \"#112233\"\nbackground_color: \"#445566\"\nplay: index.html\nimage: og.png # share picture\n");
         file_put_contents("$this->dir/index.html", "<!doctype html>\n<html>\n<head>\n    <title>Arty</title>\n<link rel=\"stylesheet\" href=\"game.css?v=old\">\n</head>\n<body>\n<script type=\"module\" src=\"dist/main.js?v=old\"></script>\n</body>\n</html>\n");
@@ -30,7 +34,7 @@ final class InstallCoreTest extends TestCase
 
     protected function tearDown(): void
     {
-        exec('rm -rf ' . escapeshellarg(dirname($this->dir)));
+        self::removeTree(dirname($this->dir));
     }
 
     private static function png(int $n): string
@@ -215,6 +219,15 @@ final class InstallCoreTest extends TestCase
         $this->assertSame([[], []], install_sync($this->dir, $config, false));
         file_put_contents("$this->dir/server/install-core.php", '<?php // edited by hand');
         $this->assertSame([['server/install-core.php'], []], install_sync($this->dir, $config, false));
+    }
+
+    public function testKitJsonIsCopiedFromTheKitFolder(): void
+    {
+        file_put_contents("$this->dir/metadata.yaml", "title: Arty\ndescription: Lob.\nstart: artyStart\n");
+        $config = ['kind' => 'start', 'kit_php' => ['blocked-initials.json']];
+        [$stale] = install_sync($this->dir, $config, true);
+        $this->assertSame(['manifest.webmanifest', 'server/blocked-initials.json'], $stale);
+        $this->assertFileEquals(dirname(__DIR__, 2) . '/blocked-initials.json', "$this->dir/server/blocked-initials.json");
     }
 
     public function testKitPhpMustNameAKitFile(): void

@@ -3,22 +3,25 @@
 // starts from an empty scratch folder, $this->tmp, that tearDown() removes.
 declare(strict_types=1);
 require_once __DIR__ . '/../../games/hub.php';
+require_once __DIR__ . '/../../games/_kit/php/tests/TempDir.php';
 
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 final class GamesHubTest extends TestCase
 {
+    use TempDir;
+
     private string $tmp;
 
     protected function setUp(): void
     {
-        $this->tmp = sys_get_temp_dir() . '/games-hub-test-' . getmypid() . '-' . bin2hex(random_bytes(3));
-        mkdir($this->tmp);
+        $this->tmp = self::makeTempDir('games-hub-test');
     }
 
     protected function tearDown(): void
     {
-        exec('rm -rf ' . escapeshellarg($this->tmp));
+        self::removeTree($this->tmp);
     }
 
     /** Writes a game folder under the scratch folder: its metadata.yaml (when given) and empty files. */

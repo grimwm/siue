@@ -7,6 +7,7 @@ import { createAudio } from './audio.ts';
 import { createUi } from './ui.ts';
 import { browserTimers } from '../../_kit/ports.browser.ts';
 import { exitApp, browserAppEnv } from '../../_kit/app.ts';
+import { followPage } from '../../_kit/page-life.ts';
 
 declare global {
   interface Window {
@@ -68,6 +69,8 @@ function start(): void {
   }
   restart(seed);
 }
+// A hidden tab runs no play-through step and no hint fade; showing it again picks them up.
+followPage({ doc: document, win: window }, { hide: game.pause, show: game.resume });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
 else start();
 

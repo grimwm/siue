@@ -6,7 +6,7 @@
  * chosen, what is muted, whether a room runs, and what each button does.
  * Sound, music, fullscreen and a match on the seed box's hills arrive as deps. */
 import { browserStorage } from '../../_kit/ports.browser.ts';
-import { pref, text } from '../../_kit/prefs.ts';
+import { oneOf, pref } from '../../_kit/prefs.ts';
 import type { sfx as SfxApi } from './audio.ts';
 import { DIFFICULTIES } from './ai.ts';
 import { DIFFICULTY_NAMES, isDifficulty } from './difficulty.ts';
@@ -80,11 +80,8 @@ export function createMenu(deps: MenuDeps) {
   ];
   /* The unit picker in the Game menu: one button per body, each with a small
      drawing of it. The choice is remembered and, in a room, shared. */
-  const bodyPref = pref('tankity-body', 'tank', text, browserStorage());
-  function loadBody(): string {
-    const b = bodyPref.get();
-    return UNIT_BODIES.some(u => u.key === b) ? b : 'tank';
-  }
+  const bodyPref = pref('tankity-body', 'tank', oneOf(UNIT_BODIES.map(u => u.key), 'tank'), browserStorage());
+  function loadBody(): string { return bodyPref.get(); }
   function chooseBody(key: string): void {
     if (!UNIT_BODIES.some(u => u.key === key)) return;
     G.body = key;
@@ -106,11 +103,8 @@ export function createMenu(deps: MenuDeps) {
   function textScale(): number {
     return (TEXT_SIZES.find(t => t.key === TEXT_SIZE) || TEXT_SIZES[1]!).scale;
   }
-  const textPref = pref('tankity-text', 'm', text, browserStorage());
-  function loadTextSize(): void {
-    const key = textPref.get();
-    applyTextSize(TEXT_SIZES.some(t => t.key === key) ? key : 'm');
-  }
+  const textPref = pref('tankity-text', 'm', oneOf(TEXT_SIZES.map(t => t.key), 'm'), browserStorage());
+  function loadTextSize(): void { applyTextSize(textPref.get()); }
   function applyTextSize(key: string): void {
     TEXT_SIZE = key;
     if (document.documentElement && document.documentElement.style) {
@@ -154,7 +148,7 @@ export function createMenu(deps: MenuDeps) {
   /* Screen flashes: on unless a player turns them off (kept in this browser).
      Off drops the full-screen flash and the large bright blast layers;
      prefers-reduced-motion drops the flash whatever this says. */
-  const flashPref = pref('tankity-flashes', 'on', text, browserStorage());
+  const flashPref = pref('tankity-flashes', 'on', oneOf(['on', 'off'], 'on'), browserStorage());
   const flashesOn = (): boolean => flashPref.get() !== 'off';
   function loadFlashes(): void { setFlashes(flashesOn()); }
   function toggleFlashes(): void {

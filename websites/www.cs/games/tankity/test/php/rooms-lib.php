@@ -9,16 +9,24 @@ if (!defined('TANKITY_ROOMS_LIB')) {
 }
 require_once dirname(__DIR__, 2) . '/server/db.php';
 require_once dirname(__DIR__, 2) . '/rooms.php';
+require_once dirname(__DIR__, 3) . '/_kit/php/tests/TempDir.php';
+
+/* The kit's TempDir helpers, for the plain functions below. */
+final class TankityTempTree
+{
+    use Kit\Tests\TempDir;
+
+    public static function remove(string $path): void
+    {
+        self::removeTree($path);
+    }
+}
 
 /* Removes a test directory and everything in it, and points TANKITY_DATA_DIR
    back at this process's default. */
 function tankity_test_rm(string $dir): void
 {
-    foreach (array_diff(scandir($dir) ?: [], ['.', '..']) as $f) {
-        $p = "$dir/$f";
-        is_dir($p) && !is_link($p) ? tankity_test_rm($p) : @unlink($p);
-    }
-    @rmdir($dir);
+    TankityTempTree::remove($dir);
     putenv('TANKITY_DATA_DIR=' . ($GLOBALS['TANKITY_TEST_HOME'] ?? ''));
 }
 

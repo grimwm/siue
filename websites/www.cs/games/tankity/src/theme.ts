@@ -11,7 +11,7 @@
  * index.html's head can apply it before the first paint without a copy of the
  * derivation, and the page never flashes the default. */
 import type { StorageLike } from '../../_kit/ports.ts';
-import { pref, text } from '../../_kit/prefs.ts';
+import { oneOf, pref, text } from '../../_kit/prefs.ts';
 
 export const THEMES = [
   { key: 'yellow', name: 'Yellow' },
@@ -177,7 +177,7 @@ export interface ThemeSetting {
 
 /** The saved theme; a missing or unknown word reads as Orange. */
 export function themeSetting(storage: StorageLike | null, root: ThemeRoot | null): ThemeSetting {
-  const saved = pref<string>(THEME_PREF, DEFAULT_THEME, text, storage);
+  const saved = pref<ThemeKey>(THEME_PREF, DEFAULT_THEME, oneOf<ThemeKey>([...THEMES.map(t => t.key), CUSTOM], DEFAULT_THEME), storage);
   const colour = pref<string>(CUSTOM_PREF, DEFAULT_CUSTOM, text, storage);
   const palette = pref<string>(CUSTOM_PALETTE_PREF, '', text, storage);
   const custom = () => { const v = colour.get(); return isHex(v) ? v : DEFAULT_CUSTOM; };
@@ -189,10 +189,7 @@ export function themeSetting(storage: StorageLike | null, root: ThemeRoot | null
     }
   }
   return {
-    get() {
-      const v = saved.get();
-      return isTheme(v) ? v : DEFAULT_THEME;
-    },
+    get: saved.get,
     set(key) {
       if (!isTheme(key)) return;
       if (key === CUSTOM) { colour.set(custom()); palette.set(paletteCss(deriveCustomPalette(custom()))); }

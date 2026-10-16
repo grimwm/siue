@@ -1,35 +1,14 @@
 /* Operation Tankity: a player's three-letter initials.
  *
  * One set per browser, shared by solo and rooms: exactly three letters, shown
- * uppercase, never a blocked word (the list mirrors the score server's). A
+ * uppercase, never a blocked word (the kit's list, `_kit/blocked-initials.json`, which the score server reads too). A
  * browser that never chose any gets three random letters, saved once. */
 import { pref } from '../../_kit/prefs.ts';
 import type { Codec, Pref } from '../../_kit/prefs.ts';
 import type { Rng, StorageLike } from '../../_kit/ports.ts';
+import { BLOCKED_INITIALS, validInitials } from '../../_kit/initials.ts';
 
-export const BLOCKED_INITIALS = Object.freeze([
-  'ASS',
-  'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
-  'SHT', 'SHI',
-  'DIK', 'DIC', 'DCK',
-  'COK', 'COC', 'COQ',
-  'CUM', 'JIZ',
-  'CNT', 'PUS', 'VAG', 'CLT',
-  'SEX', 'XXX', 'TIT',
-  'FAG', 'FGT',
-  'NIG', 'NGR',
-  'WTF', 'FFS',
-  'POO', 'PEE',
-  'KKK',
-]);
-
-/** Three letters in either case, as uppercase; null for anything else or a blocked word. */
-export function validInitials(raw: unknown): string | null {
-  const s = String(raw ?? '').trim();
-  if (!/^[A-Za-z]{3}$/.test(s)) return null;
-  const up = s.toUpperCase();
-  return BLOCKED_INITIALS.includes(up) ? null : up;
-}
+export { BLOCKED_INITIALS, validInitials };
 
 /** Three random letters that are not a blocked word. A generator that keeps
  *  landing on one gives up after a while rather than spinning. */

@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { manualClock } from '../../_kit/test/clock.ts';
+import { nth } from '../../_kit/test/nth.ts';
 
 /** A game wired to recorders and a manual clock. */
 function harness() {
@@ -42,12 +43,6 @@ function cellAt<T>(g: readonly (readonly T[])[], r: number, c: number): T {
   assert.ok(row, `row ${r}`);
   const v = row[c];
   assert.ok(v !== undefined, `cell ${r},${c}`);
-  return v;
-}
-/** list[i], failing where the old untyped indexing would have thrown on a missing element. */
-function nth<T>(list: readonly T[], i: number): T {
-  const v = list[i];
-  assert.ok(v !== undefined, `element ${i}`);
   return v;
 }
 /** The [row, column] of a cell key. */
@@ -279,6 +274,41 @@ await test('distance-is-manhattan-in-the-open', () => { assert.ok(cellAt(E.bfsDi
   h.game.toggleAuto();
   h.advance(350 * 700);
   await test('auto-plays-the-run-to-an-end', () => { assert.ok(h.G.over && !h.G.auto && h.pending() === 0 && route0 > 0 && h.ends.length === 1, JSON.stringify([h.G.over, h.G.turns, h.G.deathCause])); });
+}
+
+// A hidden page stops the play-through and the hint fade; showing it re-arms them.
+{
+  const h = harness();
+  h.game.newRun('stefan-1984');
+  h.game.toggleAuto();
+  h.advance(350 * 2);
+  const turns = h.G.turns;
+  h.game.pause();
+  h.game.pause();
+  await test('pause-stops-the-auto-timer', () => { assert.ok(h.pending() === 0 && h.G.auto && h.G.autoTimer === 0, String(h.pending())); });
+  h.advance(350 * 50);
+  await test('a-hidden-page-takes-no-auto-steps', () => { assert.ok(h.G.turns === turns, `${h.G.turns} vs ${turns}`); });
+  h.game.resume();
+  h.game.resume();
+  await test('resume-re-arms-the-auto-timer-once', () => { assert.ok(h.pending() === 1 && h.G.auto && h.G.autoTimer > 0, String(h.pending())); });
+  h.advance(350 * 3);
+  await test('auto-walks-again-after-resume', () => { assert.ok(h.G.turns > turns || h.G.over, String(h.G.turns)); });
+  h.game.stopAuto();
+  h.game.pause();
+  h.game.resume();
+  await test('stopping-the-auto-run-while-hidden-keeps-it-stopped', () => { assert.ok(!h.G.auto && h.pending() === 0, ''); });
+  h.game.hint();
+  h.game.pause();
+  h.advance(5000);
+  await test('a-hidden-page-keeps-the-hint', () => { assert.ok(h.G.hint !== null && h.pending() === 0, ''); });
+  h.game.resume();
+  h.advance(1601);
+  await test('the-hint-fades-after-resume', () => { assert.ok(h.G.hint === null && h.pending() === 0, ''); });
+  h.game.toggleAuto();
+  h.game.pause();
+  h.game.quit();
+  h.game.resume();
+  await test('a-run-ended-while-hidden-stays-over', () => { assert.ok(h.G.over && h.pending() === 0 && !h.G.auto, ''); });
 }
 
 // The creature steers toward you by search, breaking ties with the rng only.

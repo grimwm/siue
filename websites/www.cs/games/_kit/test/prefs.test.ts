@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pref, text, json } from '../prefs.ts';
+import { pref, text, json, oneOf } from '../prefs.ts';
 import { memoryStorage, throwingStorage } from './record.ts';
 
 const isNums = (v: unknown): v is number[] => Array.isArray(v) && v.every(n => typeof n === 'number');
@@ -38,4 +38,17 @@ test('storage that throws, or none at all, never throws back', () => {
     assert.doesNotThrow(() => p.set('b'));
     assert.equal(p.get(), 'b', 'the value lives for the session');
   }
+});
+
+test('oneOf keeps a listed word and reads any other stored word as the fallback', () => {
+  const size = oneOf(['s', 'm', 'l'], 'm');
+  assert.equal(size.parse('l'), 'l');
+  for (const bad of ['xl', '', 'L', '__proto__', 'toString']) assert.equal(size.parse(bad), 'm', bad);
+  assert.equal(size.stringify('s'), 's');
+  assert.equal(pref('k', 'm', size, memoryStorage({ k: 'huge' })).get(), 'm');
+  const stored = memoryStorage({ k: 's' });
+  assert.equal(pref('k', 'm', size, stored).get(), 's');
+  const p = pref('k', 'm', size, stored);
+  p.set('l');
+  assert.equal(stored.getItem('k'), 'l'); // the raw word, as a text pref stored it
 });

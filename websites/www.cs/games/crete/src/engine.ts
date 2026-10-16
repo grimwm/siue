@@ -456,6 +456,10 @@ export interface Game {
   toggleAuto(): void;
   stopAuto(msg?: string): void;
   autoStep(): void;
+  /** The page is hidden: stop the play-through and hint timers without ending either. */
+  pause(): void;
+  /** The page is back: re-arm what pause() stopped. Safe to call when nothing was paused. */
+  resume(): void;
   goalPath(): Cell[];
   foeStep(): void;
   creaturePhase(bonusSteps: number): void;
@@ -606,6 +610,9 @@ export function createGame(hooks: Hooks): Game {
 
   /* ---------- player actions ---------- */
   let autoPilot = false;
+  // Timers pause() stopped and resume() should re-arm.
+  let autoPaused = false;
+  let hintPaused = false;
   function blockedMsg(): boolean {
     if (G.auto && !autoPilot) {
       say("Play-through is running — press T to take over.", "info");
@@ -925,6 +932,14 @@ export function createGame(hooks: Hooks): Game {
 
   function clearHint(): void {
     if (G.hintTimer) timers.clearTimeout(G.hintTimer);
+    hintPaused = false;
+  }
+
+  function armHintFade(): void {
+    G.hintTimer = timers.setTimeout(() => {
+      G.hint = null;
+      render();
+    }, 1600);
   }
 
   function hint(): void {
@@ -943,10 +958,7 @@ export function createGame(hooks: Hooks): Game {
     );
     render();
     clearHint();
-    G.hintTimer = timers.setTimeout(() => {
-      G.hint = null;
-      render();
-    }, 1600);
+    armHintFade();
   }
 
   /* ---------- answer: reveal the whole route ---------- */
@@ -982,6 +994,7 @@ export function createGame(hooks: Hooks): Game {
   function stopAuto(msg?: string): void {
     if (G.autoTimer) timers.clearInterval(G.autoTimer);
     G.autoTimer = 0;
+    autoPaused = false;
     G.auto = false;
     if (msg && !G.over) {
       say(msg, "info");
@@ -1007,6 +1020,32 @@ export function createGame(hooks: Hooks): Game {
     }
   }
 
+  /* A hidden tab runs no auto-step and no hint fade: the play-through stays
+     "running" (G.auto) and the hint stays shown, and resume() re-arms both. */
+  function pause(): void {
+    if (G.autoTimer) {
+      timers.clearInterval(G.autoTimer);
+      G.autoTimer = 0;
+      autoPaused = true;
+    }
+    if (G.hint !== null && G.hintTimer) {
+      timers.clearTimeout(G.hintTimer);
+      G.hintTimer = 0;
+      hintPaused = true;
+    }
+  }
+
+  function resume(): void {
+    if (autoPaused) {
+      autoPaused = false;
+      if (G.auto && !G.over) G.autoTimer = timers.setInterval(autoStep, 350);
+    }
+    if (hintPaused) {
+      hintPaused = false;
+      if (G.hint !== null) armHintFade();
+    }
+  }
+
   function foeDistance(): number {
     return bfsDist(G.walls, G.player)[G.foe.r]![G.foe.c]!;
   }
@@ -1023,7 +1062,7 @@ export function createGame(hooks: Hooks): Game {
 
   const game: Game = {
     G, newRun, startRun, tryMove, bash, useItem, wait, canJam, hint, clearHint, toggleAnswer, toggleAuto,
-    stopAuto, autoStep, goalPath, foeStep, creaturePhase, foeDistance, quit,
+    stopAuto, autoStep, pause, resume, goalPath, foeStep, creaturePhase, foeDistance, quit,
   };
   return game;
 }

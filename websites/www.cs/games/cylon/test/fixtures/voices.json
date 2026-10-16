@@ -1,0 +1,2723 @@
+{
+ "pulseTaiko default @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "exp",
+      0.0675,
+      10.07
+     ],
+     [
+      "exp",
+      0.0001,
+      10.6
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        52,
+        10.05
+       ],
+       [
+        "exp",
+        24,
+        10.45
+       ]
+      ]
+     },
+     "started": 10.05,
+     "stopped": 10.65,
+     "from": []
+    }
+   ]
+  },
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "exp",
+      0.09,
+      10.065
+     ],
+     [
+      "exp",
+      0.0001,
+      10.9
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        200,
+        10.05
+       ],
+       [
+        "exp",
+        55,
+        10.5
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          85,
+          10.05
+         ],
+         [
+          "exp",
+          32,
+          10.55
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 10.95,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseTaiko default @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "exp",
+      0.0675,
+      12.3656789
+     ],
+     [
+      "exp",
+      0.0001,
+      12.8956789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        52,
+        12.3456789
+       ],
+       [
+        "exp",
+        24,
+        12.7456789
+       ]
+      ]
+     },
+     "started": 12.3456789,
+     "stopped": 12.9456789,
+     "from": []
+    }
+   ]
+  },
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "exp",
+      0.09,
+      12.3606789
+     ],
+     [
+      "exp",
+      0.0001,
+      13.1956789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        200,
+        12.3456789
+       ],
+       [
+        "exp",
+        55,
+        12.7956789
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          85,
+          12.3456789
+         ],
+         [
+          "exp",
+          32,
+          12.8456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 13.2456789,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseTaiko default @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "exp",
+      0.0675,
+      31.137
+     ],
+     [
+      "exp",
+      0.0001,
+      31.667
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        52,
+        31.117
+       ],
+       [
+        "exp",
+        24,
+        31.517
+       ]
+      ]
+     },
+     "started": 31.117,
+     "stopped": 31.717,
+     "from": []
+    }
+   ]
+  },
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "exp",
+      0.09,
+      31.132
+     ],
+     [
+      "exp",
+      0.0001,
+      31.967
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        200,
+        31.117
+       ],
+       [
+        "exp",
+        55,
+        31.567
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          85,
+          31.117
+         ],
+         [
+          "exp",
+          32,
+          31.617
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 32.017,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseTaiko 0.11 @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "exp",
+      0.0825,
+      10.07
+     ],
+     [
+      "exp",
+      0.0001,
+      10.6
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        52,
+        10.05
+       ],
+       [
+        "exp",
+        24,
+        10.45
+       ]
+      ]
+     },
+     "started": 10.05,
+     "stopped": 10.65,
+     "from": []
+    }
+   ]
+  },
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "exp",
+      0.11,
+      10.065
+     ],
+     [
+      "exp",
+      0.0001,
+      10.9
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        200,
+        10.05
+       ],
+       [
+        "exp",
+        55,
+        10.5
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          85,
+          10.05
+         ],
+         [
+          "exp",
+          32,
+          10.55
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 10.95,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseTaiko 0.11 @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "exp",
+      0.0825,
+      12.3656789
+     ],
+     [
+      "exp",
+      0.0001,
+      12.8956789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        52,
+        12.3456789
+       ],
+       [
+        "exp",
+        24,
+        12.7456789
+       ]
+      ]
+     },
+     "started": 12.3456789,
+     "stopped": 12.9456789,
+     "from": []
+    }
+   ]
+  },
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "exp",
+      0.11,
+      12.3606789
+     ],
+     [
+      "exp",
+      0.0001,
+      13.1956789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        200,
+        12.3456789
+       ],
+       [
+        "exp",
+        55,
+        12.7956789
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          85,
+          12.3456789
+         ],
+         [
+          "exp",
+          32,
+          12.8456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 13.2456789,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseTaiko 0.11 @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "exp",
+      0.0825,
+      31.137
+     ],
+     [
+      "exp",
+      0.0001,
+      31.667
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        52,
+        31.117
+       ],
+       [
+        "exp",
+        24,
+        31.517
+       ]
+      ]
+     },
+     "started": 31.117,
+     "stopped": 31.717,
+     "from": []
+    }
+   ]
+  },
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "exp",
+      0.11,
+      31.132
+     ],
+     [
+      "exp",
+      0.0001,
+      31.967
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        200,
+        31.117
+       ],
+       [
+        "exp",
+        55,
+        31.567
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          85,
+          31.117
+         ],
+         [
+          "exp",
+          32,
+          31.617
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 32.017,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseTaiko 0.06 @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "exp",
+      0.045,
+      10.07
+     ],
+     [
+      "exp",
+      0.0001,
+      10.6
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        52,
+        10.05
+       ],
+       [
+        "exp",
+        24,
+        10.45
+       ]
+      ]
+     },
+     "started": 10.05,
+     "stopped": 10.65,
+     "from": []
+    }
+   ]
+  },
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "exp",
+      0.06,
+      10.065
+     ],
+     [
+      "exp",
+      0.0001,
+      10.9
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        200,
+        10.05
+       ],
+       [
+        "exp",
+        55,
+        10.5
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          85,
+          10.05
+         ],
+         [
+          "exp",
+          32,
+          10.55
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 10.95,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseTaiko 0.06 @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "exp",
+      0.045,
+      12.3656789
+     ],
+     [
+      "exp",
+      0.0001,
+      12.8956789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        52,
+        12.3456789
+       ],
+       [
+        "exp",
+        24,
+        12.7456789
+       ]
+      ]
+     },
+     "started": 12.3456789,
+     "stopped": 12.9456789,
+     "from": []
+    }
+   ]
+  },
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "exp",
+      0.06,
+      12.3606789
+     ],
+     [
+      "exp",
+      0.0001,
+      13.1956789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        200,
+        12.3456789
+       ],
+       [
+        "exp",
+        55,
+        12.7956789
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          85,
+          12.3456789
+         ],
+         [
+          "exp",
+          32,
+          12.8456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 13.2456789,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseTaiko 0.06 @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "exp",
+      0.045,
+      31.137
+     ],
+     [
+      "exp",
+      0.0001,
+      31.667
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        52,
+        31.117
+       ],
+       [
+        "exp",
+        24,
+        31.517
+       ]
+      ]
+     },
+     "started": 31.117,
+     "stopped": 31.717,
+     "from": []
+    }
+   ]
+  },
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "exp",
+      0.06,
+      31.132
+     ],
+     [
+      "exp",
+      0.0001,
+      31.967
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        200,
+        31.117
+       ],
+       [
+        "exp",
+        55,
+        31.567
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          85,
+          31.117
+         ],
+         [
+          "exp",
+          32,
+          31.617
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 32.017,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseRitualHit default @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.035,
+      10.05
+     ],
+     [
+      "exp",
+      0.0001,
+      10.23
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "bandpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        380,
+        10.05
+       ]
+      ],
+      "Q": [
+       [
+        "value",
+        0.7
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "source",
+       "buffer": {
+        "length": 1440,
+        "sha": "d7f520ef5fb90222651c2340baff337df175c59d"
+       },
+       "params": {},
+       "started": 10.05,
+       "stopped": 10.25,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseRitualHit default @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.035,
+      12.3456789
+     ],
+     [
+      "exp",
+      0.0001,
+      12.5256789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "bandpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        380,
+        12.3456789
+       ]
+      ],
+      "Q": [
+       [
+        "value",
+        0.7
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "source",
+       "buffer": {
+        "length": 1440,
+        "sha": "c4c6e9dfc95f200662d566ed22567b0fe8fcb622"
+       },
+       "params": {},
+       "started": 12.3456789,
+       "stopped": 12.5456789,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseRitualHit default @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.035,
+      31.117
+     ],
+     [
+      "exp",
+      0.0001,
+      31.297
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "bandpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        380,
+        31.117
+       ]
+      ],
+      "Q": [
+       [
+        "value",
+        0.7
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "source",
+       "buffer": {
+        "length": 1440,
+        "sha": "d7bf3a875730286a1119a5fbf7b71fd743bc5859"
+       },
+       "params": {},
+       "started": 31.117,
+       "stopped": 31.317,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseRitualHit 0.04 @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.04,
+      10.05
+     ],
+     [
+      "exp",
+      0.0001,
+      10.23
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "bandpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        380,
+        10.05
+       ]
+      ],
+      "Q": [
+       [
+        "value",
+        0.7
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "source",
+       "buffer": {
+        "length": 1440,
+        "sha": "d7f520ef5fb90222651c2340baff337df175c59d"
+       },
+       "params": {},
+       "started": 10.05,
+       "stopped": 10.25,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseRitualHit 0.04 @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.04,
+      12.3456789
+     ],
+     [
+      "exp",
+      0.0001,
+      12.5256789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "bandpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        380,
+        12.3456789
+       ]
+      ],
+      "Q": [
+       [
+        "value",
+        0.7
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "source",
+       "buffer": {
+        "length": 1440,
+        "sha": "c4c6e9dfc95f200662d566ed22567b0fe8fcb622"
+       },
+       "params": {},
+       "started": 12.3456789,
+       "stopped": 12.5456789,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "pulseRitualHit 0.04 @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.04,
+      31.117
+     ],
+     [
+      "exp",
+      0.0001,
+      31.297
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "bandpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        380,
+        31.117
+       ]
+      ],
+      "Q": [
+       [
+        "value",
+        0.7
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "source",
+       "buffer": {
+        "length": 1440,
+        "sha": "d7bf3a875730286a1119a5fbf7b71fd743bc5859"
+       },
+       "params": {},
+       "started": 31.117,
+       "stopped": 31.317,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playDarkHorn default @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "lin",
+      0.04,
+      11.15
+     ],
+     [
+      "lin",
+      0.028,
+      12.29
+     ],
+     [
+      "exp",
+      0.0001,
+      13.25
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        480,
+        10.05
+       ],
+       [
+        "lin",
+        280,
+        13.25
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sawtooth",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          73.42,
+          10.05
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 13.3,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          36.71,
+          10.05
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 13.3,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "triangle",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          109.98316,
+          10.05
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 13.3,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playDarkHorn default @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "lin",
+      0.04,
+      13.4456789
+     ],
+     [
+      "lin",
+      0.028,
+      14.5856789
+     ],
+     [
+      "exp",
+      0.0001,
+      15.5456789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        480,
+        12.3456789
+       ],
+       [
+        "lin",
+        280,
+        15.5456789
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sawtooth",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          73.42,
+          12.3456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 15.5956789,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          36.71,
+          12.3456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 15.5956789,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "triangle",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          109.98316,
+          12.3456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 15.5956789,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playDarkHorn default @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "lin",
+      0.04,
+      32.217
+     ],
+     [
+      "lin",
+      0.028,
+      33.357
+     ],
+     [
+      "exp",
+      0.0001,
+      34.317
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        480,
+        31.117
+       ],
+       [
+        "lin",
+        280,
+        34.317
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sawtooth",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          73.42,
+          31.117
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 34.367,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          36.71,
+          31.117
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 34.367,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "triangle",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          109.98316,
+          31.117
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 34.367,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playDarkHorn 65.41 long @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "lin",
+      0.038,
+      11.15
+     ],
+     [
+      "lin",
+      0.0266,
+      12.906
+     ],
+     [
+      "exp",
+      0.0001,
+      14.13
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        480,
+        10.05
+       ],
+       [
+        "lin",
+        280,
+        14.13
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sawtooth",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          65.41,
+          10.05
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 14.18,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          32.705,
+          10.05
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 14.18,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "triangle",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          97.98418,
+          10.05
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 14.18,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playDarkHorn 65.41 long @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "lin",
+      0.038,
+      13.4456789
+     ],
+     [
+      "lin",
+      0.0266,
+      15.2016789
+     ],
+     [
+      "exp",
+      0.0001,
+      16.4256789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        480,
+        12.3456789
+       ],
+       [
+        "lin",
+        280,
+        16.4256789
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sawtooth",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          65.41,
+          12.3456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 16.4756789,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          32.705,
+          12.3456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 16.4756789,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "triangle",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          97.98418,
+          12.3456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 16.4756789,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playDarkHorn 65.41 long @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "lin",
+      0.038,
+      32.217
+     ],
+     [
+      "lin",
+      0.0266,
+      33.973
+     ],
+     [
+      "exp",
+      0.0001,
+      35.197
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        480,
+        31.117
+       ],
+       [
+        "lin",
+        280,
+        35.197
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sawtooth",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          65.41,
+          31.117
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 35.247,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          32.705,
+          31.117
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 35.247,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "triangle",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          97.98418,
+          31.117
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 35.247,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playDarkHorn short @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "lin",
+      0.038,
+      10.47
+     ],
+     [
+      "lin",
+      0.0266,
+      10.89
+     ],
+     [
+      "exp",
+      0.0001,
+      11.25
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        480,
+        10.05
+       ],
+       [
+        "lin",
+        280,
+        11.25
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sawtooth",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          87.31,
+          10.05
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 11.3,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          43.655,
+          10.05
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 11.3,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "triangle",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          130.79038,
+          10.05
+         ]
+        ]
+       },
+       "started": 10.05,
+       "stopped": 11.3,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playDarkHorn short @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "lin",
+      0.038,
+      12.7656789
+     ],
+     [
+      "lin",
+      0.0266,
+      13.1856789
+     ],
+     [
+      "exp",
+      0.0001,
+      13.5456789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        480,
+        12.3456789
+       ],
+       [
+        "lin",
+        280,
+        13.5456789
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sawtooth",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          87.31,
+          12.3456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 13.5956789,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          43.655,
+          12.3456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 13.5956789,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "triangle",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          130.79038,
+          12.3456789
+         ]
+        ]
+       },
+       "started": 12.3456789,
+       "stopped": 13.5956789,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playDarkHorn short @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "lin",
+      0.038,
+      31.537
+     ],
+     [
+      "lin",
+      0.0266,
+      31.957
+     ],
+     [
+      "exp",
+      0.0001,
+      32.317
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "filter",
+     "type": "lowpass",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        480,
+        31.117
+       ],
+       [
+        "lin",
+        280,
+        32.317
+       ]
+      ]
+     },
+     "started": null,
+     "stopped": null,
+     "from": [
+      {
+       "kind": "osc",
+       "type": "sawtooth",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          87.31,
+          31.117
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 32.367,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "sine",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          43.655,
+          31.117
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 32.367,
+       "from": []
+      },
+      {
+       "kind": "osc",
+       "type": "triangle",
+       "params": {
+        "frequency": [
+         [
+          "set",
+          130.79038,
+          31.117
+         ]
+        ]
+       },
+       "started": 31.117,
+       "stopped": 32.367,
+       "from": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "playTensionStrand default @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "lin",
+      0.012,
+      11.55
+     ],
+     [
+      "lin",
+      0.006,
+      13.25
+     ],
+     [
+      "exp",
+      0.0001,
+      14.05
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "sine",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        299.5332,
+        10.05
+       ]
+      ]
+     },
+     "started": 10.05,
+     "stopped": 14.1,
+     "from": []
+    },
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        293.66,
+        10.05
+       ]
+      ]
+     },
+     "started": 10.05,
+     "stopped": 14.1,
+     "from": []
+    }
+   ]
+  }
+ ],
+ "playTensionStrand default @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "lin",
+      0.012,
+      13.8456789
+     ],
+     [
+      "lin",
+      0.006,
+      15.5456789
+     ],
+     [
+      "exp",
+      0.0001,
+      16.3456789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "sine",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        299.5332,
+        12.3456789
+       ]
+      ]
+     },
+     "started": 12.3456789,
+     "stopped": 16.3956789,
+     "from": []
+    },
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        293.66,
+        12.3456789
+       ]
+      ]
+     },
+     "started": 12.3456789,
+     "stopped": 16.3956789,
+     "from": []
+    }
+   ]
+  }
+ ],
+ "playTensionStrand default @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "lin",
+      0.012,
+      32.617
+     ],
+     [
+      "lin",
+      0.006,
+      34.317
+     ],
+     [
+      "exp",
+      0.0001,
+      35.117
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "sine",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        299.5332,
+        31.117
+       ]
+      ]
+     },
+     "started": 31.117,
+     "stopped": 35.167,
+     "from": []
+    },
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        293.66,
+        31.117
+       ]
+      ]
+     },
+     "started": 31.117,
+     "stopped": 35.167,
+     "from": []
+    }
+   ]
+  }
+ ],
+ "playTensionStrand 311.13 @10.05": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      10.05
+     ],
+     [
+      "lin",
+      0.014,
+      11.55
+     ],
+     [
+      "lin",
+      0.007,
+      13.506
+     ],
+     [
+      "exp",
+      0.0001,
+      14.37
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "sine",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        317.3526,
+        10.05
+       ]
+      ]
+     },
+     "started": 10.05,
+     "stopped": 14.42,
+     "from": []
+    },
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        311.13,
+        10.05
+       ]
+      ]
+     },
+     "started": 10.05,
+     "stopped": 14.42,
+     "from": []
+    }
+   ]
+  }
+ ],
+ "playTensionStrand 311.13 @12.3456789": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      12.3456789
+     ],
+     [
+      "lin",
+      0.014,
+      13.8456789
+     ],
+     [
+      "lin",
+      0.007,
+      15.8016789
+     ],
+     [
+      "exp",
+      0.0001,
+      16.6656789
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "sine",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        317.3526,
+        12.3456789
+       ]
+      ]
+     },
+     "started": 12.3456789,
+     "stopped": 16.7156789,
+     "from": []
+    },
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        311.13,
+        12.3456789
+       ]
+      ]
+     },
+     "started": 12.3456789,
+     "stopped": 16.7156789,
+     "from": []
+    }
+   ]
+  }
+ ],
+ "playTensionStrand 311.13 @31.117": [
+  {
+   "kind": "gain",
+   "params": {
+    "gain": [
+     [
+      "set",
+      0.0001,
+      31.117
+     ],
+     [
+      "lin",
+      0.014,
+      32.617
+     ],
+     [
+      "lin",
+      0.007,
+      34.573
+     ],
+     [
+      "exp",
+      0.0001,
+      35.437
+     ]
+    ]
+   },
+   "started": null,
+   "stopped": null,
+   "from": [
+    {
+     "kind": "osc",
+     "type": "sine",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        317.3526,
+        31.117
+       ]
+      ]
+     },
+     "started": 31.117,
+     "stopped": 35.487,
+     "from": []
+    },
+    {
+     "kind": "osc",
+     "type": "triangle",
+     "params": {
+      "frequency": [
+       [
+        "set",
+        311.13,
+        31.117
+       ]
+      ]
+     },
+     "started": 31.117,
+     "stopped": 35.487,
+     "from": []
+    }
+   ]
+  }
+ ]
+}

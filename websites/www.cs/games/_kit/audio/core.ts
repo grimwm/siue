@@ -5,6 +5,38 @@
 // music stay in the games. Without Web Audio it is silent and never throws.
 export type BusName = 'sfx' | 'music';
 
+/** A biquad filter in a voice's path, with an optional slide of its frequency. */
+export interface FilterSpec {
+  type: BiquadFilterType;
+  freq: number;
+  /** A slide of the frequency to this value over `slideDur`. */
+  slideTo?: number | null;
+  /** Seconds the slide takes; default is the voice's `dur`. */
+  slideDur?: number;
+  /** The slide's curve; default 'exp'. */
+  slide?: 'exp' | 'linear';
+}
+
+/** One step of a voice's gain envelope: a ramp to `to`, ending `at` seconds after the start. */
+export interface EnvelopeStep {
+  ramp: 'linear' | 'exp';
+  to: number;
+  at: number;
+}
+
+/** Layered oscillators through one filter and one gain envelope. */
+export interface VoiceSpec {
+  oscs: ReadonlyArray<{ type: OscillatorType; freq: number }>;
+  filter?: FilterSpec;
+  /** The gain starts at silence and takes these ramps in turn; the voice sounds until the last. */
+  envelope: readonly EnvelopeStep[];
+  /** Seconds the oscillators run; each stops `stopPad` after it. */
+  dur: number;
+  stopPad?: number;
+  when?: number;
+  at?: number;
+}
+
 export interface ToneSpec {
   freq: number;
   /** Seconds the gain takes to fall to silence. */
@@ -19,6 +51,12 @@ export interface ToneSpec {
   when?: number;
   /** Seconds of exponential rise from silence; without it the tone starts at full `vol`. */
   attack?: number;
+  /** Seconds after `dur` the oscillator stops; default 0.02. */
+  stopPad?: number;
+  /** A filter between the oscillator and its gain. */
+  filter?: FilterSpec;
+  /** An absolute context time to start at, instead of `when` seconds from now. */
+  at?: number;
 }
 
 export interface NoiseSpec {
@@ -31,6 +69,12 @@ export interface NoiseSpec {
   when?: number;
   /** 'loop': one shared second of white noise. 'fade': a fresh burst whose samples fade out. */
   source?: 'loop' | 'fade';
+  /** For 'fade': the samples fall off as (1 - i / length) to this power; default 1, a straight fade. */
+  fadePower?: number;
+  /** The filter's Q; left at the browser's default when absent. */
+  filterQ?: number;
+  /** An absolute context time to start at, instead of `when` seconds from now. */
+  at?: number;
 }
 
 export interface AudioCore {
@@ -57,6 +101,8 @@ export interface AudioCore {
   close(): void;
   tone(spec: ToneSpec, to?: BusName | AudioNode): void;
   noise(spec: NoiseSpec, to?: BusName | AudioNode): void;
+  /** Layered oscillators through one filter and one gain envelope (a horn, a pad). */
+  voice(spec: VoiceSpec, to?: BusName | AudioNode): void;
 }
 
 export interface AudioCoreOptions {
@@ -151,7 +197,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     if (!out) return;
     const { c, node } = out;
     try {
-      const t = c.currentTime + (s.when ?? 0);
+      const t = s.at ?? c.currentTime + (s.when ?? 0);
       const vol = s.vol ?? 0.05;
       const o = c.createOscillator();
       const g = c.createGain();
@@ -165,12 +211,61 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
         g.gain.setValueAtTime(vol, t);
       }
       g.gain.exponentialRampToValueAtTime(SILENT, t + s.dur);
-      o.connect(g);
+      if (s.filter) {
+        const f = makeFilter(c, s.filter, t, s.dur);
+        o.connect(f);
+        f.connect(g);
+      } else {
+        o.connect(g);
+      }
       g.connect(node);
       o.start(t);
-      o.stop(t + s.dur + 0.02);
+      o.stop(t + s.dur + (s.stopPad ?? 0.02));
     } catch {
       // A closed or broken context: this voice stays silent.
+    }
+  }
+
+  function makeFilter(c: AudioContext, spec: FilterSpec, t: number, dur: number): BiquadFilterNode {
+    const f = c.createBiquadFilter();
+    f.type = spec.type;
+    f.frequency.setValueAtTime(spec.freq, t);
+    if (spec.slideTo) {
+      const end = t + (spec.slideDur ?? dur);
+      if (spec.slide === 'linear') f.frequency.linearRampToValueAtTime(spec.slideTo, end);
+      else f.frequency.exponentialRampToValueAtTime(Math.max(1, spec.slideTo), end);
+    }
+    return f;
+  }
+
+  function voice(s: VoiceSpec, to?: BusName | AudioNode): void {
+    const out = output(to);
+    if (!out) return;
+    const { c, node } = out;
+    try {
+      const t = s.at ?? c.currentTime + (s.when ?? 0);
+      const oscs = s.oscs.map(spec => {
+        const o = c.createOscillator();
+        o.type = spec.type;
+        o.frequency.setValueAtTime(spec.freq, t);
+        return o;
+      });
+      const g = c.createGain();
+      g.gain.setValueAtTime(SILENT, t);
+      for (const step of s.envelope) {
+        if (step.ramp === 'linear') g.gain.linearRampToValueAtTime(step.to, t + step.at);
+        else g.gain.exponentialRampToValueAtTime(step.to, t + step.at);
+      }
+      const head: AudioNode = s.filter ? makeFilter(c, s.filter, t, s.dur) : g;
+      if (s.filter) head.connect(g);
+      for (const o of oscs) o.connect(head);
+      g.connect(node);
+      for (const o of oscs) {
+        o.start(t);
+        o.stop(t + s.dur + (s.stopPad ?? 0.02));
+      }
+    } catch {
+      // As for tone.
     }
   }
 
@@ -179,13 +274,14 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     if (!out) return;
     const { c, node } = out;
     try {
-      const t = c.currentTime + (s.when ?? 0);
+      const t = s.at ?? c.currentTime + (s.when ?? 0);
       const src = c.createBufferSource();
       if (s.source === 'fade') {
         const len = Math.max(1, Math.floor(c.sampleRate * s.dur));
         const buf = c.createBuffer(1, len, c.sampleRate);
         const data = buf.getChannelData(0);
-        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+        const power = s.fadePower ?? 1;
+        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (power === 1 ? 1 - i / len : Math.pow(1 - i / len, power));
         src.buffer = buf;
       } else {
         if (!loopNoise) {
@@ -200,6 +296,7 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
       f.type = s.filterType ?? 'lowpass';
       f.frequency.setValueAtTime(s.filterFreq ?? 1200, t);
       if (s.slideTo) f.frequency.exponentialRampToValueAtTime(Math.max(1, s.slideTo), t + s.dur);
+      if (s.filterQ !== undefined) f.Q.value = s.filterQ;
       const g = c.createGain();
       g.gain.setValueAtTime(s.vol, t);
       g.gain.exponentialRampToValueAtTime(SILENT, t + s.dur);
@@ -280,5 +377,6 @@ export function createAudioCore(opts: AudioCoreOptions = {}): AudioCore {
     },
     tone,
     noise,
+    voice,
   };
 }

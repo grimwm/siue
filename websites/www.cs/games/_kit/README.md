@@ -84,7 +84,21 @@ first time it runs, primes it with a silent blip and calls `onReady`.
 `tone(spec, bus)` and `noise(spec, bus)` are the two envelopes every voice is
 built from: an oscillator or filtered noise whose gain falls exponentially to
 silence, with an optional attack and pitch or filter slide. Voices, songs and
-what each setting means stay in the game. Without Web Audio, or when making
+what each setting means stay in the game.
+
+Beyond the plain envelope, a tone takes `filter` (a `FilterSpec`: `type`,
+`freq`, and an optional slide `slideTo` over `slideDur`, `slide: 'linear'` for
+a straight line, exponential otherwise) between the oscillator and its gain,
+`stopPad` (seconds the oscillator outlives `dur`, default 0.02) and `at` (an
+absolute context time to start at, instead of `when` seconds from now; `at`
+exists so a game that schedules ahead on `currentTime` adds no rounding).
+`noise` takes `filterQ`, `fadePower` (the `'fade'` burst falls along
+`(1 - i/length)` to that power; 1 is the straight fade) and `at`.
+`voice(spec, to)` is for layers that share one filter and one gain: `oscs`
+(`type` and `freq` each), an optional `filter`, an `envelope` of
+`{ ramp: 'linear' | 'exp', to, at }` steps after a start at silence, `dur`,
+`stopPad`, `when` or `at`. The oscillators each start at the voice's start
+and stop at `dur + stopPad`. Without Web Audio, or when making
 the context throws, every call is silent. Tests use `fakeAudioContext()` from
 `test/audio.ts`, which records every node and parameter call.
 

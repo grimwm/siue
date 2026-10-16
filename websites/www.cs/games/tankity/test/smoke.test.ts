@@ -214,6 +214,8 @@ for (const f of listeners['keydown'] || []) {
 await test('keys-no-scroll', () => { assert.ok(pd === 2, `prevented=${pd}/2`); });
 // Fullscreen degrades honestly where the API is absent (as in this stub).
 TAP('global', 'fullscreen'); frames(2);
+// The kit's toggle answers asynchronously: wait, a bounded number of turns, for its message.
+for (let turn = 0; turn < 50 && !/Fullscreen is not supported/.test(logText()); turn++) await new Promise(r => setImmediate(r));
 await test('fullscreen-fallback', () => { assert.ok(/Fullscreen is not supported/.test(logText())); });
 // Sound and music mute separately, by button or by key, without touching each other.
 const pressed = (id: string) => E(id).getAttribute('aria-pressed');
@@ -1151,13 +1153,13 @@ await (async () => {
   await test('room-dot-green', () => { assert.ok(E('net-dot').className.includes('on') && E('hud-server').textContent === 'online', `${E('net-dot').className} | ${E('hud-server').textContent}`); });
   // a full server says so in plain words, never a status code
   failCreate = 'The server is full. Try again later.';
-  submit(E('host-form')); await tick(10);
+  submit(E('host-form')); await until('the full-server line', () => E('lobby-status').textContent === failCreate, 5_000);
   await test('room-full', () => { assert.ok(E('lobby-status').textContent === failCreate, E('lobby-status').textContent); });
   failCreate = '';
   // transport trouble arrives in human words, never a status code
   for (const [mode, want] of [['down', 'Could not reach'], ['page', 'page instead of game data'], ['stumble', 'stumbled']] as const) {
     failMode = mode;
-    submit(E('host-form')); await tick(10);
+    submit(E('host-form')); await until(`the ${mode} line`, () => E('lobby-status').textContent.includes(want), 5_000);
     await test('room-err-' + mode, () => { assert.ok(E('lobby-status').textContent.includes(want), E('lobby-status').textContent); });
     if (mode === 'down') {
       await test('room-dot-red', () => { assert.ok(E('net-dot').className.includes('off') && E('hud-server').textContent === 'offline', `${E('net-dot').className} | ${E('hud-server').textContent}`); });

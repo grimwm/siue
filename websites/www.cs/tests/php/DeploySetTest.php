@@ -98,7 +98,7 @@ final class DeploySetTest extends TestCase
     public function testShipsTankity(): void
     {
         $set = self::set();
-        foreach (['games/tankity/dist/main.js', 'games/tankity/dist/fx.js', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.json', 'games/tankity/sw.js', 'games/tankity/rooms.php', 'games/tankity/server/settings.php', 'games/tankity/server/store.php', 'games/tankity/server/detmath.php', 'games/tankity/server/sim.php', 'games/tankity/server/earth.php', 'games/tankity/server/fire.php', 'games/tankity/server/ai.php', 'games/tankity/server/rules.php', 'games/tankity/server/rate.php', 'games/tankity/server/protocol.php', 'games/tankity/server/.htaccess', 'games/tankity/server/blocked-initials.json', 'games/cylon/server/blocked-initials.json'] as $f) {
+        foreach (['games/tankity/dist/main.js', 'games/tankity/dist/fx.js', 'games/tankity/fx/sprites/sprites.json', 'games/tankity/game.json', 'games/tankity/sw.js', 'games/tankity/rooms.php', 'games/tankity/server/settings.php', 'games/tankity/server/store.php', 'games/tankity/server/detmath.php', 'games/tankity/server/sim.php', 'games/tankity/server/earth.php', 'games/tankity/server/fire.php', 'games/tankity/server/ai.php', 'games/tankity/server/rules.php', 'games/tankity/server/rate.php', 'games/tankity/server/protocol.php', 'games/tankity/server/.htaccess', 'games/tankity/server/blocked-initials.json', 'games/tankity/server/score-guard.php', 'games/tankity/server/store-dir.php', 'games/cylon/server/blocked-initials.json', 'games/cylon/server/score-guard.php', 'games/cylon/server/store-dir.php'] as $f) {
             self::assertTrue(isset($set[$f]), "ships $f");
         }
     }

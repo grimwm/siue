@@ -69,6 +69,10 @@ A POST endpoint must call both `originAllowed()` and `csrfOk()`: a request with 
 
 The same file holds `Kit\StoreModes`, the one place a game's PHP takes file modes from: 0700/0600 for what only PHP writes, and for a path the deploy account also writes (a game's own `data/`) 0700/0600 when PHP runs as the deploying account, 0777/0666 when it runs as a web user every site shares. In that second case any other site's PHP on the host can read and write the game's stored files; no mode prevents it.
 
+## Storage directories (`php/store-dir.php`)
+
+`Kit\StoreDir` decides whether a place a game's PHP keeps files can be trusted. It is built with a log prefix, the exception class a refusal throws (the message is `<path> <problem>`; the log line adds the remedy) and, optionally, the `.htaccess` text. `claim($dir, $private)` creates a missing directory 0700, then refuses a symbolic link, a non-directory, an unwritable one and, when `$private`, one owned by another account or not exactly 0700. `pick($preferred, $fallback)` uses the preferred directory when PHP can write it (an unlinked one it owns is tightened to 0700) and it can hold its deny file, else the private fallback. `claimFile($path)` is for a file PHP keeps straight in a shared directory such as `/var/tmp`: a link, a non-file, a hard-linked file or another account's file is refused, and one of ours open to others is made 0600. `verifyOpened($fh, $path)` follows every fopen of such a file, because another account can plant a link between the claim and the open: the handle must be a regular file owned by PHP's user with no other hard links, and the path must still name it (not a link, same device and inode), else the handle is closed and the open refused. `openExisting($path, $mode, $initial)` is the open itself: a missing file is made with an exclusive `'x'` open (born with `$mode` and `$initial`), every other open is `'r+'`, so nothing creates or truncates through a link, and the handle comes back verified; a caller rewrites only through it, under `flock`. `ScoreGuard`'s run store and Cylon's scores file open this way, so `score-guard.php` requires `store-dir.php` and a game ships both. `denyHttp($dir)` writes the deny file. Tankity uses `claim` and `pick`; Cylon keeps its own file order (`data/scores.json`, else `/var/tmp/<storageKey>-scores.json`) and adds the link check on the first and `claimFile` on the second; it opens its scores file through `openExisting`. Tankity's SQLite file lives in a directory it claimed (0700, owned by PHP) or an operator-set `data_dir`, so it has no shared-directory open to verify. A game ships it as `server/store-dir.php` through `kit_php`.
+
 ## Sound (`audio/core.ts`)
 
 `createAudioCore()` is a facade over the game's one `AudioContext`. It makes
@@ -122,6 +126,15 @@ view of its state and callbacks, and redraws when the state changes.
   `data-keyhint`; `decorative` hides a chip that sits beside words already
   naming the action from screen readers.
 
+## Seeded generator (`rng.ts`)
+
+`hashSeed(string)` and `mulberry32(seed)` are Crete's, which its mazes are
+pinned by (`crete/test/engine.test.ts`); a change to either changes every maze.
+`test/rng.ts` re-exports `mulberry32` for tests, and `test/rng-compare.test.ts`
+shows it agrees bit for bit with an independently written mulberry32, over
+edge, negative and 10,000-seed ranges. Tankity's own `hashSeed` and
+`mulberry32` are a TS/PHP parity twin in its sim and do not come from here.
+
 ## Installed apps (`app.ts`)
 
 Each game installs as its own app (its manifest asks for full screen, then
@@ -131,8 +144,17 @@ whether it worked; `exitApp(env)` is every game's Quit: an installed app asks
 to close its window, and where that does nothing within `CLOSE_WAIT_MS`, or in
 a browser tab (never closed), it leaves full screen and answers `'title'` or,
 for an installed app, `'title-with-hint'`: the game then shows its title card
-and, with the hint, `EXIT_HINT`. Pages pass `browserAppEnv()`; tests pass a
-fake environment and a manual clock.
+and, with the hint, `EXIT_HINT`. `toggleFullscreen(env, el)` is the Fullscreen
+toggle: it enters or leaves and answers `'entered'`, `'left'`, `'unsupported'`
+(no native enter-and-leave pair) or `'refused'` (the browser denied entering),
+with the request made before its first await so it stays inside the player's
+tap. `browserAppEnv()` includes `withWebkitFullscreen`, the prefixed API as the
+fallback for entering, leaving (`webkitExitFullscreen`) and reading the
+fullscreen element (older Safari and iPadOS); a browser is supported when it
+has a way in and a way out, standard or prefixed. Only the toggle and
+`exitApp` may leave full screen, and Esc never does
+(`tankity/test/fullscreen.test.ts` scans the kit too). Pages pass
+`browserAppEnv()`; tests pass a fake environment and a manual clock.
 
 ## The back key (`keys.ts`)
 

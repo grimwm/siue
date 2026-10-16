@@ -9,6 +9,8 @@
  */
 
 import type { Timers } from '../../_kit/ports.ts';
+import { hashSeed, mulberry32 } from '../../_kit/rng.ts';
+import type { Rng } from '../../_kit/rng.ts';
 import { ROWS, COLS, DIRS, key, inBounds, unkey, grid, bfsDist, bfsPath, manhattan } from './grid.ts';
 import type { Cell } from './grid.ts';
 import { dasher, strategist } from './bots.ts';
@@ -17,27 +19,9 @@ export { ROWS, COLS, key, bfsDist, bfsPath, manhattan };
 export type { Cell };
 export type { Timers };
 
-/* ---------- seeded RNG (mulberry32 + string hash) ---------- */
-export type Rng = () => number;
-
-export function hashSeed(str: string): number {
-  let h = 1779033703 ^ str.length;
-  for (let i = 0; i < str.length; i++) {
-    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  return h >>> 0;
-}
-
-export function mulberry32(a: number): Rng {
-  return function () {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/* ---------- seeded RNG: the kit's (_kit/rng.ts), which Crete's mazes are pinned by ---------- */
+export { hashSeed, mulberry32 };
+export type { Rng };
 
 /* ---------- tuning ---------- */
 export const MAX_HP = 20;

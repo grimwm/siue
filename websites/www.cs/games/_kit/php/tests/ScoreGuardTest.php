@@ -31,6 +31,7 @@ final class ScoreGuardTest extends TestCase
     protected function tearDown(): void
     {
         @unlink($this->runs);
+        @unlink($this->runs . '.victim');
     }
 
     /** @param array<string, mixed> $server @param array<string, mixed> $cookies @param array<string, mixed> $config */
@@ -392,6 +393,82 @@ final class ScoreGuardTest extends TestCase
         }
         $this->assertSame($before, ShortWriteStream::$files['runs.json'], 'the previous store is put back');
         $this->assertNull($this->guard()->consumeRun($first), 'and still honours its tokens');
+    }
+
+    public function testAMissingRunStoreIsCreatedPrivateAndWorks(): void
+    {
+        $this->assertFileDoesNotExist($this->runs);
+        $id = $this->guard()->startRun();
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{32}\z/', (string) $id);
+        $this->assertSame(0600, fileperms($this->runs) & 0777);
+        $this->assertNull($this->guard()->consumeRun((string) $id));
+    }
+
+    public function testALinkAtTheRunStorePathIsRefusedAndNeverWrittenThrough(): void
+    {
+        $victim = $this->runs . '.victim';
+        file_put_contents($victim, 'keep');
+        symlink($victim, $this->runs);
+        $old = ini_set('error_log', '/dev/null');
+        try {
+            $this->guard()->startRun();
+            $this->fail('a score submission must fail closed on a linked run store');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('symbolic link', $e->getMessage());
+        } finally {
+            ini_set('error_log', (string) $old);
+            @unlink($this->runs);
+        }
+        $this->assertSame('keep', file_get_contents($victim));
+    }
+
+    public function testADanglingLinkAtTheRunStorePathIsRefusedToo(): void
+    {
+        symlink($this->runs . '.victim', $this->runs);
+        $old = ini_set('error_log', '/dev/null');
+        try {
+            $this->guard()->startRun();
+            $this->fail('a dangling link must be refused');
+        } catch (RuntimeException) {
+            $this->assertFileDoesNotExist($this->runs . '.victim', 'the link was not followed to create its target');
+        } finally {
+            ini_set('error_log', (string) $old);
+            @unlink($this->runs);
+        }
+    }
+
+    public function testAHardLinkAtTheRunStorePathIsRefused(): void
+    {
+        $victim = $this->runs . '.victim';
+        file_put_contents($victim, 'keep');
+        link($victim, $this->runs);
+        $old = ini_set('error_log', '/dev/null');
+        try {
+            $this->guard()->startRun();
+            $this->fail('a hard-linked run store must be refused');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('hard links', $e->getMessage());
+        } finally {
+            ini_set('error_log', (string) $old);
+            @unlink($this->runs);
+        }
+        $this->assertSame('keep', file_get_contents($victim));
+    }
+
+    public function testALinkToAnExistingFileLeavesItsContentsUntouched(): void
+    {
+        $victim = $this->runs . '.victim';
+        file_put_contents($victim, 'keep');
+        symlink($victim, $this->runs);
+        $old = ini_set('error_log', '/dev/null');
+        try {
+            $this->guard()->startRun();
+        } catch (RuntimeException) {
+        } finally {
+            ini_set('error_log', (string) $old);
+            @unlink($this->runs);
+        }
+        $this->assertSame('keep', file_get_contents($victim));
     }
 }
 

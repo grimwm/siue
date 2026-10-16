@@ -16,20 +16,3 @@ export function fullscreenForPlay(touch: () => boolean, env: AppEnv, frame: Elem
   if (!touch() || !frame) return;
   void enterFullscreen(env, frame);
 }
-
-interface WebkitElement { requestFullscreen?: unknown; webkitRequestFullscreen?: () => void | Promise<void> }
-export interface WebkitDocument { webkitFullscreenElement?: Element | null }
-
-/** The env with the webkit-prefixed fullscreen API as the fallback (older Safari and iPadOS). */
-export function withWebkitFullscreen(base: AppEnv, doc: WebkitDocument): AppEnv {
-  return {
-    ...base,
-    fullscreenElement: () => base.fullscreenElement() ?? doc.webkitFullscreenElement ?? null,
-    requestFullscreen: el => {
-      const e = el as WebkitElement;
-      if (typeof e.requestFullscreen === 'function') return base.requestFullscreen(el);
-      if (typeof e.webkitRequestFullscreen === 'function') return Promise.resolve(e.webkitRequestFullscreen());
-      return Promise.reject(new Error('no fullscreen'));
-    },
-  };
-}

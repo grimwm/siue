@@ -285,7 +285,7 @@ $headerOf = function (array $headers, string $name): string {
     return '';
 };
 $volatile = function (array $r): array {
-    unset($r['room']['turnLeft'], $r['room']['shopLeft']);
+    unset($r['room']['turnLeft'], $r['room']['shopLeft'], $r['room']['closesIn']); // clocks read at each request
     return $r;
 };
 [$hPlain, $bPlain] = $rawGet($dUrl . '&since=0', '', $mtoken);

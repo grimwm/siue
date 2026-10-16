@@ -16,8 +16,10 @@
  */
 
 require_once __DIR__ . '/server/score-guard.php';
+require_once __DIR__ . '/server/store-dir.php';
 
 use Kit\ScoreGuard;
+use Kit\StoreDir;
 use Kit\StoreModes;
 
 function gameConfig(): array {
@@ -135,17 +137,23 @@ function scorePathUsable(string $path): bool {
     return is_dir($dir) && is_writable($dir);
 }
 
-/** Prefer data/scores.json; fall back to durable world-writable /var/tmp. */
+/** The kit's storage checks: a link or another account's file is refused, with the cause in the log. */
+function scoreStore(): StoreDir {
+    static $store = null;
+    return $store ??= new StoreDir('cylon storage:');
+}
+
+/** Prefer data/scores.json; fall back to durable /var/tmp. A data/ folder or file that is a link is not used. */
 function resolveScorePath(): string {
     $override = getenv('CYLON_SCORES_FILE');
     if (is_string($override) && $override !== '') {
         return $override;
     }
     $preferred = __DIR__ . '/data/scores.json';
-    if (scorePathUsable($preferred)) {
+    if (scorePathUsable($preferred) && !is_link(dirname($preferred)) && !is_link($preferred)) {
         return $preferred;
     }
-    return '/var/tmp/' . cfg('storageKey') . '-scores.json';
+    return scoreStore()->claimFile('/var/tmp/' . cfg('storageKey') . '-scores.json');
 }
 
 function normalizeScores($data): array {
@@ -252,7 +260,7 @@ function scoresFileMode(string $path): int {
  * Open the scores file with an flock lock.
  * @return resource
  */
-function openScoresFile(string $path, string $mode) {
+function openScoresFile(string $path) {
     $dir = dirname($path);
     $m = StoreModes::modes();
     $relax = scoresPathIsOurs($path);
@@ -262,26 +270,10 @@ function openScoresFile(string $path, string $mode) {
     if ($relax) {
         @chmod($dir, $m['sharedDir']);
     }
-    if (!is_file($path)) {
-        $bootstrap = @fopen($path, 'c+');
-        if ($bootstrap === false) {
-            throw new RuntimeException('unable to create scores file: ' . $path);
-        }
-        if (flock($bootstrap, LOCK_EX)) {
-            if (filesize($path) === 0) {
-                fwrite($bootstrap, '{"week":[],"alltime":[]}');
-                fflush($bootstrap);
-            }
-            flock($bootstrap, LOCK_UN);
-        }
-        fclose($bootstrap);
-        @chmod($path, scoresFileMode($path));
-    }
-
-    $fh = @fopen($path, $mode);
-    if ($fh === false) {
-        throw new RuntimeException('unable to open scores file: ' . $path);
-    }
+    // A missing file is made with an exclusive open and every open is 'r+':
+    // nothing here creates or truncates through a link. Rewrites go through the
+    // verified handle (writeScoresHandle), under flock.
+    $fh = scoreStore()->openExisting($path, scoresFileMode($path), '{"week":[],"alltime":[]}');
     return $fh;
 }
 
@@ -331,7 +323,7 @@ function boardPayload(array $store): array {
  */
 function readScoresLocked(): array {
     $path = resolveScorePath();
-    $fh = openScoresFile($path, 'c+');
+    $fh = openScoresFile($path);
     try {
         // Exclusive: a read after the week turns rewrites the file without last week's rows.
         if (!flock($fh, LOCK_EX)) {
@@ -360,7 +352,7 @@ function readScoresLocked(): array {
  */
 function addScoreLocked(int $score, int $hits, string $initials): array {
     $path = resolveScorePath();
-    $fh = openScoresFile($path, 'c+');
+    $fh = openScoresFile($path);
     try {
         if (!flock($fh, LOCK_EX)) {
             throw new RuntimeException('unable to lock scores file for writing');

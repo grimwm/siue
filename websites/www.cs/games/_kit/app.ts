@@ -14,6 +14,8 @@ export interface AppEnv {
   matches(query: string): boolean;
   /** iOS home-screen apps say so here, not through display-mode. */
   iosStandalone(): boolean;
+  /** Whether the browser can both enter and leave full screen on this element. */
+  fullscreenSupported(el: Element): boolean;
   fullscreenElement(): Element | null;
   requestFullscreen(el: Element): Promise<void>;
   exitFullscreen(): Promise<void>;
@@ -38,6 +40,29 @@ export async function enterFullscreen(env: AppEnv, el: Element): Promise<boolean
   } catch {
     return false;
   }
+}
+
+export type FullscreenToggle = 'entered' | 'left' | 'unsupported' | 'refused';
+
+/**
+ * Full screen on if it is off, off if it is on. 'unsupported' when the browser
+ * cannot enter and leave it; 'refused' when entering was denied (a game says
+ * "not available right now"). Called from the player's Fullscreen toggle, one
+ * of the two things that may leave full screen (Quit, exitApp, is the other;
+ * tankity/test/fullscreen.test.ts holds that line). The request is made before
+ * the first await, so it stays inside the player's gesture.
+ */
+export async function toggleFullscreen(env: AppEnv, el: Element): Promise<FullscreenToggle> {
+  if (!env.fullscreenSupported(el)) return 'unsupported';
+  if (env.fullscreenElement()) {
+    try {
+      await env.exitFullscreen();
+    } catch {
+      // Already out, or refused: the player is told nothing either way.
+    }
+    return 'left';
+  }
+  return (await enterFullscreen(env, el)) ? 'entered' : 'refused';
 }
 
 /**
@@ -124,15 +149,51 @@ export async function holdEscape(full: boolean, kb: KeyLock | null, warn: (msg: 
   }
 }
 
-export function browserAppEnv(): AppEnv {
+/**
+ * The env with the webkit-prefixed fullscreen API as the fallback for entering,
+ * leaving and reading the fullscreen element (older Safari and iPadOS).
+ * Supported means the browser can both enter and leave, by either API.
+ */
+export function withWebkitFullscreen(base: AppEnv, doc: WebkitDocument): AppEnv {
   return {
+    ...base,
+    fullscreenSupported: el => {
+      const e = el as WebkitElement;
+      const enter = typeof e.requestFullscreen === 'function' || typeof e.webkitRequestFullscreen === 'function';
+      return enter && (typeof doc.exitFullscreen === 'function' || typeof doc.webkitExitFullscreen === 'function');
+    },
+    fullscreenElement: () => base.fullscreenElement() ?? doc.webkitFullscreenElement ?? null,
+    requestFullscreen: el => {
+      const e = el as WebkitElement;
+      if (typeof e.requestFullscreen === 'function') return base.requestFullscreen(el);
+      if (typeof e.webkitRequestFullscreen === 'function') return Promise.resolve(e.webkitRequestFullscreen());
+      return Promise.reject(new Error('no fullscreen'));
+    },
+    exitFullscreen: () => {
+      if (typeof doc.exitFullscreen === 'function') return base.exitFullscreen();
+      if (typeof doc.webkitExitFullscreen === 'function') return Promise.resolve(doc.webkitExitFullscreen());
+      return Promise.resolve();
+    },
+  };
+}
+
+interface WebkitElement { requestFullscreen?: unknown; webkitRequestFullscreen?: () => void | Promise<void> }
+export interface WebkitDocument {
+  webkitFullscreenElement?: Element | null;
+  exitFullscreen?: unknown;
+  webkitExitFullscreen?: () => void | Promise<void>;
+}
+
+export function browserAppEnv(): AppEnv {
+  return withWebkitFullscreen({
     matches: q => typeof window.matchMedia === 'function' && window.matchMedia(q).matches,
     iosStandalone: () => (navigator as Navigator & { standalone?: boolean }).standalone === true,
+    fullscreenSupported: el => typeof el.requestFullscreen === 'function' && typeof document.exitFullscreen === 'function',
     fullscreenElement: () => document.fullscreenElement,
     requestFullscreen: el => (typeof el.requestFullscreen === 'function' ? el.requestFullscreen() : Promise.reject(new Error('no fullscreen'))),
     exitFullscreen: () => (typeof document.exitFullscreen === 'function' ? document.exitFullscreen() : Promise.resolve()),
     closeWindow: () => window.close(),
     closed: () => window.closed,
     timers: browserTimers,
-  };
+  }, document as WebkitDocument);
 }

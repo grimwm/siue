@@ -8,6 +8,8 @@ declare(strict_types=1);
 
 namespace Kit;
 
+require_once __DIR__ . '/store-dir.php';
+
 // A library, never an endpoint.
 if ((get_included_files()[0] ?? '') === __FILE__) {
     http_response_code(404);
@@ -398,13 +400,32 @@ final class ScoreGuard
         return true;
     }
 
-    /** Runs $fn on the store under one exclusive lock and writes back what it leaves. */
-    private function withStore(callable $fn): mixed
+    /**
+     * The run store's handle. The store usually sits in the shared temp
+     * directory, where another account can plant a link at its name: a missing
+     * file is made with an exclusive open (which fails on a link), every other
+     * open is 'r+' (never creating or truncating), and the handle is checked
+     * against the path before anything is written.
+     * @return resource
+     */
+    private function openStore()
     {
-        $fh = @fopen($this->runsPath, 'c+');
+        // A stream-wrapper path (the tests' in-memory store) is no file name another account can plant a link at.
+        if (str_contains($this->runsPath, '://')) {
+            $fh = @fopen($this->runsPath, 'c+');
+        } else {
+            $fh = (new StoreDir('score guard storage:'))->openExisting($this->runsPath, StoreModes::modes()['file']);
+        }
         if ($fh === false) {
             throw new \RuntimeException('unable to open the run store: ' . $this->runsPath);
         }
+        return $fh;
+    }
+
+    /** Runs $fn on the store under one exclusive lock and writes back what it leaves. */
+    private function withStore(callable $fn): mixed
+    {
+        $fh = $this->openStore();
         try {
             if (!flock($fh, LOCK_EX)) {
                 throw new \RuntimeException('unable to lock the run store');

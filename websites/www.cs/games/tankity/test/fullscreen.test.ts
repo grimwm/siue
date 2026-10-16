@@ -78,25 +78,29 @@ test('only the Fullscreen toggle and Quit leave full screen', () => {
   assert.deepEqual(sites(/\.exitFullscreen\s*\(/g), [
     '_kit/app.ts:browserAppEnv', // the port itself
     '_kit/app.ts:exitApp', // Menu → Quit
-    'tankity/src/main.ts:toggleFullscreen',
+    '_kit/app.ts:toggleFullscreen', // the Fullscreen toggle: menu tile and F key, through main.ts
+    '_kit/app.ts:withWebkitFullscreen', // the port's prefixed fallback
   ]);
-  assert.deepEqual(sites(/webkitExitFullscreen|webkitCancelFullScreen|mozCancelFullScreen|msExitFullscreen/g), []);
+  // The prefixed exit is only the kit env's fallback behind exitFullscreen; nothing else calls it.
+  assert.deepEqual(sites(/webkitExitFullscreen|webkitCancelFullScreen|mozCancelFullScreen|msExitFullscreen/g), ['_kit/app.ts:withWebkitFullscreen']);
   // exitApp is Quit's alone, and the toggle is the F key's and the menu tile's.
   assert.deepEqual(sites(/\bexitApp\s*\(/g), ['_kit/app.ts:exitApp', 'tankity/src/main.ts:quitGame']);
   const quitLines = FILES.flatMap(f => f.src.split('\n').filter(l => /\bquitGame\s*\(/.test(l)).map(l => l.trim())).sort();
   assert.deepEqual(quitLines, ['async function quitGame(): Promise<void> {', 'quit: () => { void quitGame(); },'].sort());
   // menu.ts only declares it: the menu's Fullscreen tile is handed the function (onFullscreen).
   assert.deepEqual(sites(/\btoggleFullscreen\s*\(/g),
-    ['tankity/src/main.ts:bindKeys', 'tankity/src/main.ts:toggleFullscreen', 'tankity/src/menu.ts:(top level)']);
+    ['_kit/app.ts:toggleFullscreen', 'tankity/src/main.ts:bindKeys', 'tankity/src/main.ts:toggleFullscreen', 'tankity/src/menu.ts:(top level)']);
   assert.match(fileOf('tankity/src/menu.ts').src, /onFullscreen: toggleFullscreen,/);
+  // main.ts's toggle is the kit's, on #frame: the one place a toggle can exit.
+  assert.match(body('tankity/src/main.ts', 'toggleFullscreen'), /toggleKitFullscreen\(browserAppEnv\(\), \$\('frame'\)/);
 });
 
 test('one fullscreen element (#frame), so a preview or dialog never replaces it', () => {
   // Requesting full screen on another element swaps the fullscreen element and drops the Esc lock.
   // (withWebkitFullscreen hands a standard request on to the kit's own port.)
-  assert.deepEqual(sites(/\.requestFullscreen\s*\(/g), ['_kit/app.ts:browserAppEnv', '_kit/app.ts:enterFullscreen', 'tankity/src/play-fullscreen.ts:withWebkitFullscreen']);
+  assert.deepEqual(sites(/\.requestFullscreen\s*\(/g), ['_kit/app.ts:browserAppEnv', '_kit/app.ts:enterFullscreen', '_kit/app.ts:withWebkitFullscreen']);
   // The one request outside the toggle is a touch device's Play tap (src/play-fullscreen.ts), on the same frame.
-  assert.deepEqual(sites(/\benterFullscreen\s*\(/g), ['_kit/app.ts:enterFullscreen', 'tankity/src/main.ts:toggleFullscreen', 'tankity/src/play-fullscreen.ts:fullscreenForPlay']);
+  assert.deepEqual(sites(/\benterFullscreen\s*\(/g), ['_kit/app.ts:enterFullscreen', '_kit/app.ts:toggleFullscreen', 'tankity/src/play-fullscreen.ts:fullscreenForPlay']);
   assert.match(body('tankity/src/main.ts', 'playFullscreen'), /\$\('frame'\)/);
   // The top layer (<dialog>.showModal, popovers) answers Esc itself, before the game.
   assert.deepEqual(sites(/\.showModal\s*\(|\.showPopover\s*\(|\bpopover=/g), []);

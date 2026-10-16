@@ -245,8 +245,9 @@ A shell flies through moving air (`stepBallistic` in `src/sim.ts`,
 - Missiles (`missile: true`: Seeker, Cluster, Death's Head, Baby Nuke and
   NUKE, the guns that fly under their own power) map power to distance: at 45
   degrees in calm air, launch height back to launch height, power p flies
-  max(0.1, p/100) × 0.9 of the field (`MISSILE_LOW`, `MISSILE_FULL`), so 100%
-  lands at the far edge from a unit 30 px in from the other, never past it.
+  max(0.1, p/100) of the field (`MISSILE_LOW`, `MISSILE_FULL` = 1), so 100%
+  crosses the whole field: from a unit 30 px in from one edge it lands past
+  the far one.
   Its launch speed at each whole power is found by a 40-round bisection
   against that very flight (`missileTable`, `room_missile_table`);
   `tools/game-json.php` writes the table into the row as `missileSpeed`, so
@@ -254,9 +255,9 @@ A shell flies through moving air (`stepBallistic` in `src/sim.ts`,
   `test/missile.test.ts` holds the table to the browser's own bisection, bit
   for bit). A power between whole ones is interpolated straight. A missile
   steers against the wind and feels `MISSILE_WIND` = 1/8 of it: a gale of 10
-  drifts it, but a full-power shot lands within `MISSILE_WIND_MARGIN` = 5% of
-  the field's width past the edge (33 px on a room's), and into the wind it
-  still crosses 85% of it.
+  moves a full-power landing by no more than `MISSILE_WIND_MARGIN` = 8% of the
+  field's width from where the calm shot lands (58 px on a room's), and into
+  the wind it still crosses 85% of the field.
 - A seeker's homing (`steerShell`, `room_seek_push`) pushes across its flight
   only, never along it: it turns a seeker but never speeds it up, so it
   cannot carry one past where its power sends it.
@@ -1550,7 +1551,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/determinism.test.ts` | The rule modules call no clock, no `Math.random` and no libm trigonometry, so the shared sim stays bit-exact across the two languages (see Deterministic math) |
 | `test/wide-field.test.ts`                     | The sim at any width: the same hills continued, units spread outside each other's blast, reach and wind scaling, flights that last as long as the field, 720 unchanged |
 | `test/air.test.ts`                            | The air (`stepBallistic`): a falling shell held to its terminal speed, the artillery arc (the top past the middle, a steeper fall, drag shortening it), the wind's growth with height from the floor (and its 1 px floor), a high lob drifting more than a flat shot to the same spot by more than a wind of one speed would, negative wind the exact mirror, every gun that flies naming its drag, slick guns outranging the Shell and draggy ones falling short, short range rare (at most five guns, all draggy), and the air scaled on a wider field |
-| `test/missile.test.ts`                        | Missiles: flagged in the data with a speed table that is the browser's own bisection bit for bit, speeds interpolated between whole powers; at every power 10 to 100, at 45 degrees in calm air from either edge, landing on the field and further with each step, about p% of it; full power at least 95% of a room's field; a wind of 10 either way leaving a full-power shot within `MISSILE_WIND_MARGIN` of the edge; a seeker's homing never carrying it off the field; drones aiming each missile onto its target |
+| `test/missile.test.ts`                        | Missiles: flagged in the data with a speed table that is the browser's own bisection bit for bit, speeds interpolated between whole powers; at every power 10 to 100, at 45 degrees in calm air from either edge, landing on the field and further with each step, about p% of it; full power crossing the whole field; a wind of 10 either way moving a full-power landing no more than `MISSILE_WIND_MARGIN` of the field's width from the calm landing; a seeker's homing never carrying it off the field; drones aiming each missile onto its target |
 | `test/ghosts.test.ts`                         | A shell retired past the edge keeps flying (draw only), one that burst inside leaves no ghost, a replay's last point keeps its velocity, ghosts are dropped off the picture |
 | `test/scenery.test.ts`                        | The scenery continues the hills with no step over 1 px at the seam, cratered or not |
 | `test/camera.test.ts`                         | `src/camera.ts`: the bottom edge on the floor with units high or low, a high arc pulled into view down to the floor with every unit on screen, the hold until the volley lands (rollers and shells past the edge let go), the ease keeping every unit framed on every frame, the sky marks |

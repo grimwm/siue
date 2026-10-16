@@ -124,7 +124,7 @@ final class RoomWallsTest extends TestCase
         $this->assertLessThan(719.0, $rubber['x']);
         $wrap = room_sim_shot($flat, 0.0, $mx, $my, 45.0, 100.0, $missile, 1, 720, -INF, 'wrap');
         $this->assertFalse($wrap['oob']);
-        $this->assertLessThan(200.0, $wrap['x']);
+        $this->assertLessThan(360.0, $wrap['x']);
     }
 
     public function testARollerRollsBackOffRubberAndOnThroughWraparound(): void

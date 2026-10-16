@@ -1,8 +1,9 @@
 // Missiles (game.yaml `missile: true`): self-propelled guns whose power picks
 // how far they fly (src/sim.ts launchSpeed, missileTable). At 45 degrees in
-// calm air power p lands about p% of the field away and full power at the far
-// edge, never past it; drag and wind shape the arc but cannot cut the reach
-// short; a gale drifts one by no more than MISSILE_WIND_MARGIN of the field; a
+// calm air power p lands about p% of the field away, so full power crosses the
+// whole field; drag and wind shape the arc but drag cannot cut the reach
+// short; a gale moves a full-power landing by no more than MISSILE_WIND_MARGIN
+// of the field's width from where the calm shot lands; a
 // seeker's homing never carries it off; drones aim them. tools/game-json.php
 // writes each table with server/flight.php, and this file holds it to the
 // browser's own bisection, bit for bit.
@@ -72,13 +73,14 @@ test('a missile\'s speed between two whole powers is straight between theirs, an
 });
 
 for (const w of WIDTHS) {
-  test(`${w} wide: every missile at 45 degrees in calm air lands on the field, further with every step of power`, () => {
+  test(`${w} wide: every missile at 45 degrees in calm air lands on the field below full power, further with every step of power`, () => {
     for (const k of MISSILES) {
       for (const [x0, dirS] of [[EDGE, 1], [w - EDGE, -1]] as const) {
         let last = -Infinity;
         for (const p of POWERS) {
           const x = landing(k, w, x0, dirS, p), far = (x - x0) * dirS;
-          assert.ok(x >= 0 && x <= w, `${k} at ${p} from ${x0}: lands at ${x.toFixed(1)}`);
+          // Full power crosses the whole field, so from a unit EDGE in it lands past the far edge (the next test holds it to a field's width).
+          if (p < 100) assert.ok(x >= 0 && x <= w, `${k} at ${p} from ${x0}: lands at ${x.toFixed(1)}`);
           assert.ok(far > last, `${k} at ${p}: ${far.toFixed(1)} px, no further than at ${p - 10}`);
           last = far;
         }
@@ -92,21 +94,25 @@ for (const w of WIDTHS) {
   });
 }
 
-test('full power reaches at least 95% of a room\'s field, and at least 93% of the widest', () => {
+test('full power crosses the whole field: a field\'s width from where it fires, give or take the barrel and the drop below it', () => {
   for (const k of MISSILES) {
-    assert.ok(landing(k, ROOM_W, EDGE, 1, 100) / ROOM_W >= 0.95, `${k}: ${landing(k, ROOM_W, EDGE, 1, 100).toFixed(1)}`);
-    // The barrel and the drop to the ground below it do not grow with the field.
-    assert.ok(landing(k, 1440, EDGE, 1, 100) / 1440 >= 0.93, `${k}: ${landing(k, 1440, EDGE, 1, 100).toFixed(1)}`);
+    for (const w of WIDTHS) {
+      for (const [x0, dirS] of [[EDGE, 1], [w - EDGE, -1]] as const) {
+        const share = (landing(k, w, x0, dirS, 100) - x0) * dirS / w;
+        assert.ok(share >= 0.97 && share <= 1.05, `${k} ${w} from ${x0}: ${(share * 100).toFixed(1)}% of the field`);
+      }
+    }
   }
 });
 
-test(`in a wind of 10 either way, full power lands on the field or within ${MISSILE_WIND_MARGIN * 100}% of its width past the edge`, () => {
+test(`in a wind of 10 either way, a full-power landing moves no more than ${MISSILE_WIND_MARGIN * 100}% of the field's width from where the calm shot lands`, () => {
   for (const w of WIDTHS) {
     for (const k of MISSILES) {
-      for (const wind of [10, -10]) {
-        for (const [x0, dirS] of [[EDGE, 1], [w - EDGE, -1]] as const) {
+      for (const [x0, dirS] of [[EDGE, 1], [w - EDGE, -1]] as const) {
+        const calm = landing(k, w, x0, dirS, 100);
+        for (const wind of [10, -10]) {
           const x = landing(k, w, x0, dirS, 100, wind);
-          assert.ok(x >= -MISSILE_WIND_MARGIN * w && x <= (1 + MISSILE_WIND_MARGIN) * w, `${w} ${k} wind ${wind} from ${x0}: ${x.toFixed(1)}`);
+          assert.ok(Math.abs(x - calm) <= MISSILE_WIND_MARGIN * w, `${w} ${k} wind ${wind} from ${x0}: ${x.toFixed(1)} against calm ${calm.toFixed(1)}`);
           // Into the wind it still crosses most of the field: the air does not cut a missile short.
           if (wind * dirS < 0) assert.ok((x - x0) * dirS >= 0.85 * w, `${w} ${k} into wind ${wind}: ${((x - x0) * dirS).toFixed(1)} px`);
         }

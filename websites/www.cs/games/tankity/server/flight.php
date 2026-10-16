@@ -25,7 +25,7 @@ const ROOM_AIR_SPEED = 10;
 const ROOM_SHEAR_H = 40;
 /* src/sim.ts MISSILE_LOW, MISSILE_FULL and the bisection's rounds and span. */
 const ROOM_MISSILE_LOW = 0.1;
-const ROOM_MISSILE_FULL = 0.9;
+const ROOM_MISSILE_FULL = 1.0;
 const ROOM_MISSILE_WIND = 0.125; // the share of the wind's push a missile feels
 const ROOM_MISSILE_ROUNDS = 40;
 const ROOM_MISSILE_SLOW = 10;

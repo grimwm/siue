@@ -96,12 +96,11 @@ function shelf({ sel = 0, qty = 1, cash = 600, round = 1 } = {}): ShopEntry[] { 
         entries.push({ kind: 'free', weapon: 'shell', selected: sel === -1, name: 'Shell', vals: '∞ (free)', sub: 'A plain shell.', sub2: 'Always loaded, never runs out.', icon: { kind: 'ammo', w: 'shell' } });
       }
     }
-    const locked = (it.minRound || 0) > round;
     entries.push({
       kind: 'item', index, name: it.name ?? it.label, vals: `($${it.price})${qty > 1 ? ` ×${qty} = $${it.price * qty}` : ''}`,
-      sub: `${it.key} line one`, sub2: locked ? `Unlocks in round ${it.minRound}.` : 'Pack of 1.',
+      sub: `${it.key} line one`, sub2: 'Pack of 1.',
       icon: it.kind === 'ammo' ? { kind: 'ammo', w: it.w } : { kind: 'gear', g: it.g },
-      selected: index === sel, locked, disabled: locked || cash < it.price * qty, qty,
+      selected: index === sel, disabled: cash < it.price * qty, qty,
       weapon: it.kind === 'ammo' ? it.w : undefined,
     });
   });
@@ -162,10 +161,9 @@ function shopProps(over: Partial<ShopProps> = {}) {
     && kid(acts[0], 1).localName === 'kbd' && kid(acts[0], 1).getAttribute('aria-hidden') === 'true', acts.map(text).join('|')); });
   const gearRow = items[items.length - 1];
   await test('shop-gear-row-has-no-preview', () => { assert.ok(actsOf(gearRow).children.length === 1 && /^Buy /.test(text(kid(actsOf(gearRow), 0)))); });
-  const locked = items.find(li => /^\d+\. NUKE/.test(text(nth(byClass(li, 'shop-name'), 0))));
-  const nukeRound = GAME.arsenal.ammo.find(a => a.name === 'NUKE')?.minRound;
-  const lockedBtn = kid(actsOf(locked), 1);
-  await test('shop-locked-row', () => { assert.ok(text(lockedBtn) === 'Locked' && lockedBtn.disabled === true && new RegExp(`Unlocks in round ${nukeRound}`).test(text(kid(kid(locked, 1), 2))), text(lockedBtn)); });
+  const nukeLi = items.find(li => /^\d+\. NUKE/.test(text(nth(byClass(li, 'shop-name'), 0))));
+  const nukeBtn = kid(actsOf(nukeLi), 1);
+  await test('shop-no-locked-rows', () => { assert.ok(/^Buy /.test(text(nukeBtn)) && !nukeBtn.disabled && !items.some(li => /Locked|Unlocks in/.test(text(li))), text(nukeBtn)); });
   await test('shop-icons-drawn-once-per-row', () => { assert.ok(calls.icons.length === ITEMS && calls.icons.every(([cls]) => cls === 'shop-icon')
     && calls.icons.filter(([, i]) => i.kind === 'gear').length === gear.length, String(calls.icons.length)); });
   // Icons are painted when a row first appears and when the arsenal changes, not on every redraw.

@@ -18,10 +18,10 @@ if (!arsenal) throw new Error(`${file} has no arsenal`);
 const rows = measureArsenal(arsenal);
 const mid = median(rows.filter(r => r.role === 'damage' && r.perDollar !== null).map(r => r.perDollar!));
 const f1 = (v: number) => v.toFixed(1);
-console.log('| gun | line | role | dmg, 1 target | dmg, 3 targets | $ per shot | dmg per $ | best hit | min round | speed | reach |');
-console.log('|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|');
+console.log('| gun | line | role | dmg, 1 target | dmg, 3 targets | $ per shot | dmg per $ | best hit | speed | reach |');
+console.log('|---|---|---|--:|--:|--:|--:|--:|--:|--:|');
 for (const r of rows) {
   const w = arsenal.weapons[r.key]!;
-  console.log(`| ${w.name} | ${lineOf(w)} | ${r.role} | ${f1(r.single)} | ${f1(r.cluster)} | ${r.perShot ? f1(r.perShot) : 'free'} | ${r.perDollar === null ? '-' : r.perDollar.toFixed(2)} | ${r.bestHit.toFixed(0)} | ${w.minRound} | ${w.speed} | ${flies(w) ? (fullReach(w) / BAL_W * 100).toFixed(0) + '%' : '-'} |`);
+  console.log(`| ${w.name} | ${lineOf(w)} | ${r.role} | ${f1(r.single)} | ${f1(r.cluster)} | ${r.perShot ? f1(r.perShot) : 'free'} | ${r.perDollar === null ? '-' : r.perDollar.toFixed(2)} | ${r.bestHit.toFixed(0)} | ${w.speed} | ${flies(w) ? (fullReach(w) / BAL_W * 100).toFixed(0) + '%' : '-'} |`);
 }
 console.log(`\nDamage guns' median damage per dollar: ${mid.toFixed(3)}; band ${(mid * BAND_LO).toFixed(3)} to ${(mid * BAND_HI).toFixed(3)}.`);

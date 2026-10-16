@@ -202,5 +202,3 @@ export function fullReach(w: Readonly<Weapon>): number {
 }
 /** No gun outside NUKE's own family lands a best single-target hit above this share of NUKE's. */
 export const HIT_CAP = 0.7;
-/** Two damage guns this far apart in expected damage must unlock in that order (minRound). */
-export const UNLOCK_GAP = 1.5;

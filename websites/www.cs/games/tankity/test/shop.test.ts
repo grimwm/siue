@@ -59,10 +59,10 @@ const rowOf = (k: string): ShopRow => {
   return r;
 };
 
-/** A gun the pre-match shop sells (round 1), from game.json. */
+/** A gun the pre-match shop sells, from game.json. */
 const roundOne = (() => {
-  const k = arsenal.order.find(key => key !== 'shell' && arsenal.weapons[key]!.pack > 0 && arsenal.weapons[key]!.minRound <= 1);
-  assert.ok(k, 'game.json sells a gun from round 1');
+  const k = arsenal.order.find(key => key !== 'shell' && arsenal.weapons[key]!.pack > 0);
+  assert.ok(k, 'game.json sells a gun before round one');
   return k;
 })();
 

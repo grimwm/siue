@@ -108,7 +108,6 @@ export interface Weapon {
   price: number;
   pack: number;
   start?: number; // shells of it every player starts a match with
-  minRound: number;
   ai?: boolean;
   aiRound?: number;
   aiRack?: number; // shells of it a drone loads per round (2 when left out)
@@ -164,7 +163,6 @@ export interface Gear {
   cat?: string;
   price: number;
   n?: number;
-  minRound?: number;
   effect?: string;
   dmg?: number;
   radius?: number;
@@ -177,7 +175,6 @@ export interface ShopRow {
   n: number;
   label: string;
   cat: string;
-  minRound: number;
   price: number;
   effect?: string;
 }
@@ -337,20 +334,16 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[]; fall?: Part
   const gear: Record<string, Gear> = {};
   for (const a of (data && data.ammo) || []) {
     if (!a || !a.key || !a.name) continue;
-    w[a.key] = Object.assign({ effect: 'shot', speed: 1.0, pack: 0, price: 0, minRound: 1 }, a);
+    w[a.key] = Object.assign({ effect: 'shot', speed: 1.0, pack: 0, price: 0 }, a);
     order.push(a.key);
     if ((a.pack || 0) > 0) {
-      // Round-1 goods sell everywhere including the pre-match shelf
-      // (G.round is 0 there); later unlocks need the round to arrive.
-      const openFrom = (a.minRound || 1) <= 1 ? 0 : a.minRound;
-      shop.push({ kind: 'ammo', w: a.key, n: a.pack, label: `${a.name} ×${a.pack}`, cat: a.cat || 'Shells', minRound: openFrom, price: a.price || 0 });
+      shop.push({ kind: 'ammo', w: a.key, n: a.pack, label: `${a.name} ×${a.pack}`, cat: a.cat || 'Shells', price: a.price || 0 });
     }
   }
   for (const g of (data && data.gear) || []) {
     if (!g || !g.key || !g.name) continue;
     gear[g.key] = g;
-    const openFrom = (g.minRound || 1) <= 1 ? 0 : g.minRound!;
-    shop.push({ kind: 'gear', g: g.key, n: g.n || 0, label: g.name, cat: g.cat || 'Tricks', minRound: openFrom, price: g.price || 0, effect: g.effect });
+    shop.push({ kind: 'gear', g: g.key, n: g.n || 0, label: g.name, cat: g.cat || 'Tricks', price: g.price || 0, effect: g.effect });
   }
   if (!order.length) return null;
   // The shop shows each category under one heading, in the order the

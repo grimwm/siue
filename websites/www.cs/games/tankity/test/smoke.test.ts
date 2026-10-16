@@ -741,7 +741,7 @@ await (async () => {
     click(childEl(acts, acts.children.length - 1));
   };
   buyRow('Buckshot');
-  // Categories group the shelf, and even the locked NUKE shows its damage.
+  // Categories group the shelf, and NUKE shows its damage.
   const catNames = shopLis().filter(li => li.className === 'shop-cat').map(li => li.textContent);
   const nukeRow = must(shopRows().find(li => rowName(li).includes('NUKE')), 'NUKE row');
   const nukeStats = nodeAt(nodeAt(nukeRow, 1), 1).textContent + ' ' + nodeAt(nodeAt(nukeRow, 1), 2).textContent;
@@ -749,7 +749,7 @@ await (async () => {
   const freeRow = shopLis().find(li => li.className === 'shop-free');
   await test('shop-shell-row', () => { assert.ok(!!freeRow && /^Shell ∞/.test(rowName(freeRow)), freeRow ? rowName(freeRow) : 'missing'); });
   await test('shop-icons', () => { assert.ok(shopRows().length === shelfKeys.length - 1 && shopRows().every(li => childEl(li, 0).className === 'shop-icon' && childEl(li, 0).getAttribute('aria-hidden') === 'true'), shopRows().map(li => childEl(li, 0).className).join()); });
-  await test('nuke-stats', () => { assert.ok(nukeStats.includes(`${nukeRec.dmg} damage`) && nukeStats.includes(`round ${nukeRec.minRound}`), nukeStats); });
+  await test('nuke-stats', () => { assert.ok(nukeStats.includes(`${nukeRec.dmg} damage`), nukeStats); });
   // The arsenal section of game.json is a second source the game reads at
   // boot: it must hold every row and speak only effects and painters the code has.
   // Every ammo row has its effects (plus the wreck's, laststand): the count comes from game.json itself.
@@ -759,7 +759,7 @@ await (async () => {
   const TRICKS: readonly (string | undefined)[] = ['repair', 'fuel', 'plate', 'shield', 'extralife', 'jammer', 'bunker', 'laststand', 'parachute'];
   await test('arsenal-fx', () => { assert.ok(arsenal.ammo.every(a => FX.includes(a.effect) && a.gfx && PAINT.includes(a.gfx.painter)
     && typeof a.dmg === 'number' && typeof a.radius === 'number' && typeof a.price === 'number'
-    && typeof a.pack === 'number' && typeof a.minRound === 'number' && Array.isArray(a.gfx.blast))); });
+    && typeof a.pack === 'number' && Array.isArray(a.gfx.blast))); });
   await test('arsenal-gear', () => { assert.ok(arsenal.gear.every(g => TRICKS.includes(g.effect) && typeof g.price === 'number' && typeof g.n === 'number')); });
   const cats: (string | undefined)[] = [];
   for (const r of [...arsenal.ammo.filter(a => a.pack > 0), ...arsenal.gear]) {
@@ -828,7 +828,7 @@ await (async () => {
   click(E('preview-close')); frames(3);
   await test('shop-preview-shut', () => { assert.ok(E('preview-veil').hidden === true); });
   TAPD('shop', 'buyRow', 4); frames(3);
-  await test('shop-locked', () => { assert.ok(logTail().includes(`round ${nukeRec.minRound}`), logTail()); });
+  await test('shop-nuke-needs-cash', () => { assert.ok(logTail().includes(`That costs $${nukeRec.price}`), logTail()); });
   click(E('shop-next'));
   frames(120); // round card runs on sim time before the shooting
   // round 1, player's opening turn

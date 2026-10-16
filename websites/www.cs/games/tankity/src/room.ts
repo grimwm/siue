@@ -138,11 +138,6 @@ export function createRoom(deps: RoomDeps) {
       say(`No ${tables.weapons[w]!.name} left in the rack.`, 'info');
       return false;
     }
-    const needRound = (tables.weapons[w] && tables.weapons[w]!.minRound) || 0;
-    if (G.round < needRound) {
-      say(`That unlocks in round ${needRound}.`, 'info');
-      return false;
-    }
     G.selected = w;
     sfx.play('click');
     say(`Loaded: ${tables.weapons[w]!.name}.`, 'info');

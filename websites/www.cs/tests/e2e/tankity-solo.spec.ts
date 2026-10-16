@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 import { newPlayer, startSolo, hud, aimTo, setPower, rec, resetRec, holdBarrel, expectFullSwing } from './helpers.ts';
 
 /** The game.json arsenal, as far as these checks read it. */
-interface AmmoRow { name: string; pack: number; price: number; minRound: number }
+interface AmmoRow { name: string; pack: number; price: number }
 interface GameData { arsenal: { ammo: AmmoRow[]; gear: unknown[] } }
 
 test('the keyboard drives the tank and burns fuel', async ({ browser }) => {
@@ -112,7 +112,7 @@ test('the arrows reach every shop row on a short screen, and V previews any shel
   await expect(page.locator('#preview-veil')).toBeVisible();
   await page.keyboard.press('q');
   await expect(page.locator('#preview-veil')).toBeHidden();
-  // Down walks every row in turn, locked and unaffordable ones included.
+  // Down walks every row in turn, unaffordable ones included.
   const total = await rows.count();
   const seen = [await selName()];
   for (let i = 1; i < total; i++) {
@@ -121,14 +121,14 @@ test('the arrows reach every shop row on a short screen, and V previews any shel
     expect(await selInView()).toBe(true);
   }
   expect(new Set(seen).size).toBe(total);
-  // A locked shell still previews: the first priced row game.json locks before round 1.
+  // A gun the stake cannot cover still previews: the dearest priced row.
   const data: GameData = await page.evaluate(() => fetch('game.json').then(r => r.json()));
   const priced = data.arsenal.ammo.filter(a => a.pack > 0);
-  const at = priced.findIndex(a => a.minRound > 1) + 1;
+  const at = priced.findIndex(a => a.price === Math.max(...priced.map(b => b.price))) + 1;
   for (let i = 0; i < total; i++) await page.keyboard.press('ArrowUp');
   for (let i = 0; i < at; i++) await page.keyboard.press('ArrowDown');
   await expect.poll(selName).toMatch(new RegExp(`^${at}\\. ${priced[at - 1]!.name}`));
-  await expect(page.locator('#shop-list li.sel button', { hasText: 'Locked' })).toBeDisabled();
+  await expect(page.locator('#shop-list li.sel button', { hasText: 'Buy' })).toBeDisabled();
   await page.keyboard.press('v');
   await expect(page.locator('#preview-veil')).toBeVisible();
   expect(errors).toEqual([]);

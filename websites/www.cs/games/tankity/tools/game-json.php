@@ -759,7 +759,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         if ($row === null) {
             continue;
         }
-        $c->allow($row, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
+        $c->allow($row, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'ai', 'aiRound', 'aiRack',
             'effect', 'speed', 'drag', 'missile', 'shortRange'], array_keys(TANKITY_AMMO_EXTRA), ['preview', 'note', 'gfx']), $p);
         $o = [];
         $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
@@ -782,7 +782,6 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         if (array_key_exists('start', $row) && $row['start'] !== null) {
             $o['start'] = $c->int($row, 'start', $p, 0, 9);
         }
-        $o['minRound'] = $c->int($row, 'minRound', $p, 1, 99);
         $o['ai'] = $c->bool($row, 'ai', $p);
         $o['aiRound'] = $c->int($row, 'aiRound', $p, 1, 99);
         if (array_key_exists('aiRack', $row) && $row['aiRack'] !== null) {
@@ -873,7 +872,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         }
         $o['note'] = $c->str($row, 'note', $p, 120);
         $o['gfx'] = tankity_build_gfx($c, $row['gfx'] ?? null, "$p.gfx", $effect);
-        $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'minRound', 'ai', 'aiRound', 'aiRack',
+        $res['ammo'][] = tankity_ordered($o, array_merge(['key', 'name', 'cat', 'line', 'dmg', 'radius', 'price', 'pack', 'start', 'ai', 'aiRound', 'aiRack',
             'effect'], array_keys(TANKITY_AMMO_EXTRA), ['speed', 'drag', 'missile', 'missileSpeed', 'shortRange', 'preview', 'note', 'gfx']));
     }
     // The shop and the picker show each cat under one heading in file order: its rows sit together.
@@ -898,7 +897,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         if ($row === null) {
             continue;
         }
-        $c->allow($row, ['key', 'name', 'cat', 'price', 'n', 'effect', 'minRound', 'dmg', 'radius', 'note'], $p);
+        $c->allow($row, ['key', 'name', 'cat', 'price', 'n', 'effect', 'dmg', 'radius', 'note'], $p);
         $o = [];
         $o['key'] = $c->str($row, 'key', $p, 24, true, '/^[a-z][a-z0-9]*$/');
         if ($o['key'] !== null) {
@@ -912,9 +911,6 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
         $o['price'] = $c->int($row, 'price', $p, 0, 100000);
         $o['n'] = $c->int($row, 'n', $p, 1, 1000);
         $o['effect'] = $c->enum($row, 'effect', $p, TANKITY_GEAR_EFFECTS);
-        if (array_key_exists('minRound', $row) && $row['minRound'] !== null) {
-            $o['minRound'] = $c->int($row, 'minRound', $p, 1, 99);
-        }
         if (($o['effect'] ?? '') === 'laststand') {
             $o['dmg'] = $c->int($row, 'dmg', $p, 1, 500);
             $o['radius'] = $c->int($row, 'radius', $p, 1, 200);
@@ -926,7 +922,7 @@ function tankity_build_arsenal(TankityCheck $c, mixed $a): array
             }
         }
         $o['note'] = $c->str($row, 'note', $p, 120);
-        $res['gear'][] = tankity_ordered($o, ['key', 'name', 'cat', 'price', 'n', 'effect', 'minRound', 'dmg', 'radius', 'note']);
+        $res['gear'][] = tankity_ordered($o, ['key', 'name', 'cat', 'price', 'n', 'effect', 'dmg', 'radius', 'note']);
     }
     // Guns the game no longer has: their keys stay reserved, and a saved room still holding some refunds them.
     foreach ($c->lst($a['retired'] ?? [], 'arsenal.retired') ?? [] as $i => $row) {

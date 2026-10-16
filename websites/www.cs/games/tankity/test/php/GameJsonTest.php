@@ -87,7 +87,6 @@ arsenal:
       radius: 26
       price: 0
       pack: 0
-      minRound: 1
       ai: true
       aiRound: 1
       effect: shot
@@ -101,7 +100,6 @@ arsenal:
       radius: 20
       price: 80
       pack: 2
-      minRound: 1
       ai: true
       aiRound: 2
       effect: pellets
@@ -405,7 +403,7 @@ YAML;
         self::assertStringContainsString('arsenal.retired[0].key: `buck` is retired', (string) self::errOf(fn () => $this->render($retire("    - {key: buck, name: Buck, price: 80, pack: 2}\n"))), 'retired-key-clash');
         self::assertStringContainsString('arsenal.retired[0].pack', (string) self::errOf(fn () => $this->render($retire("    - {key: rail, name: Rail, price: 140, pack: 0}\n"))), 'retired-pack');
         // A third row back under Shells after buck moved to another cat: the Shells rows are apart.
-        $third = "    - key: mortar\n      name: Mortar\n      cat: Shells\n      dmg: 56\n      radius: 42\n      price: 200\n      pack: 2\n      minRound: 1\n"
+        $third = "    - key: mortar\n      name: Mortar\n      cat: Shells\n      dmg: 56\n      radius: 42\n      price: 200\n      pack: 2\n"
             . "      ai: true\n      aiRound: 3\n      effect: shot\n      speed: 1.0\n      note: Big.\n      gfx: {shell: \"#ff9f43\", trail: \"#ff7b39\", blast: [\"#ff7b39\", \"#ffe27a\"], painter: disc, shake: 0.5}\n";
         $apart = str_replace(["      cat: Shells\n      dmg: 17\n", "  gear:\n"], ["      cat: Odd\n      dmg: 17\n", $third . "  gear:\n"], self::good());
         self::assertStringContainsString('arsenal.ammo[2].cat: `Shells` rows must sit together', (string) self::errOf(fn () => $this->render($apart)), 'cat-rows-together');

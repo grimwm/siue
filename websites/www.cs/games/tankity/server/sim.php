@@ -157,7 +157,7 @@ function room_gen_terrain(int &$rng, int $w): array
 }
 function room_weapons(): array
 {
-    // One table for ballistics, shop packs, prices, and round unlocks.
+    // One table for ballistics, shop packs and prices.
     static $w = null;
     if ($w !== null) {
         return $w;
@@ -185,7 +185,6 @@ function room_weapon_row(array $am): array
         'price' => (int) ($am['price'] ?? 0),
         'pack' => (int) ($am['pack'] ?? 0),
         'start' => (int) ($am['start'] ?? 0),
-        'minRound' => (int) ($am['minRound'] ?? 1),
         'effect' => (string) ($am['effect'] ?? 'shot'),
         'speed' => (float) ($am['speed'] ?? 1.0),
         'drag' => (float) ($am['drag'] ?? 1.0),

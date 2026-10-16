@@ -555,7 +555,6 @@ final class RoomsTest extends TestCase
         };
         foreach ([
             'unknown-item' => ['nope', 422, 'not for sale'],
-            'locked-item' => ['nuke', 409, 'NUKE unlocks in round ' . room_weapons()['nuke']['minRound']],
             'short-on-cash' => ['repair', 409, 'short on cash'],
         ] as $name => [$item, $want, $line]) {
             usleep(300000);

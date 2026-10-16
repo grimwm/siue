@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../_kit/php/install-core.php';
 
 exit(install_run(dirname(__DIR__), [
     'kind' => 'play',
-    'versioned' => ['dist/main.js', 'dist/install.js', 'game.css'],
+    'versioned' => ['dist/main.js', 'dist/install.js', 'dist/kit.css', 'game.css'],
     'precache_dirs' => ['dist'],
     'precache_exclude' => [],
 ], $argv));

@@ -41,6 +41,7 @@ const SITE_VERSIONS_PAGE = 'index.html';
 const SITE_VERSIONS_REFS = [
     ['attr', 'site.css'],
     ['attr', 'main.js'],
+    ['attr', 'games/cylon/dist/kit.css'],
     ['attr', 'games/cylon/css/eye.css'],
     ['attr', 'games/cylon/css/nav.css'],
     ['attr', 'games/cylon/css/help.css'],

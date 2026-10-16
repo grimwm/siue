@@ -17,6 +17,8 @@ source needs this folder beside it.
   with a linked source map. `esm` for modules, `iife` for classic scripts.
 - `versions`: `{ CONSTANT: file }`; the bundle sees `CONSTANT` as the
   file's 10-hex content hash (a `?v=` for a file the code fetches).
+- `kitCss`: `true` copies `_kit/kit.css` to `dist/kit.css` (see "The kit
+  stylesheet").
 
 `--check` rebuilds in memory and fails on any stale, missing or extra file
 in `dist/`. Every tsconfig extends `build/tsconfig.base.json`: strict,
@@ -135,10 +137,38 @@ view of its state and callbacks, and redraws when the state changes.
 - `Button`: blurs itself before calling `onClick`, so the key that pressed it
   cannot press it again; `keyLabel` adds a `KeyChip`.
 - `Panel`: a section named by its `<h2>`.
-- `KeyChip`: one key as a `<kbd class="key-chip">`; the game styles it and
-  reads the label from its key table. `at` records the key-table slot as
+- `KeyChip`: one key as a `<kbd class="kit-key-chip">` (styled by the kit
+  stylesheet when the game links it; a game passing its own `class` styles
+  that), with the label read from the game's key table. `at` records the key-table slot as
   `data-keyhint`; `decorative` hides a chip that sits beside words already
   naming the action from screen readers.
+
+## The kit stylesheet (`kit.css`)
+
+An opt-in sheet for kit components. Everything in it is the kit's: classes
+start with `kit-`, custom properties with `--kit-`. No selector is bare
+(`body`, `button`, `kbd`, `*`), so linking it changes nothing until an element
+wears a `kit-` class; a game's own look stays in the game's CSS.
+
+To opt in, set `"kitCss": true` in the game's `build.json` and run
+`node _kit/build/build.mjs <game>`, which writes `<game>/dist/kit.css`. Link
+it before the game's own CSS (`<link rel="stylesheet" href="dist/kit.css?v=...">`),
+add `dist/kit.css` to `versioned` in `tools/install-files.php` (a page game's
+`precache_dirs: ['dist']` already precaches it), and run the generators.
+Cylon, mounted on the site page, is linked from the site's `index.html` and
+`SITE_VERSIONS_REFS` in `tools/site-versions.php`. The install bar's own CSS
+stays injected by `install-page.ts` and does not need the sheet.
+
+| Name | What it styles |
+|---|---|
+| `.kit-key-chip` | a `KeyChip`: keycap border, radius, padding, monospace, centered |
+| `--kit-key-bg`, `--kit-key-color`, `--kit-key-border`, `--kit-key-font` | its colors and font; defaults suit a dark page and follow `currentColor` |
+
+`:where()` gives `.kit-key-chip` zero specificity, so any rule of the game's
+(`.cylon-help-body kbd`, `.inv kbd`) overrides it. The sheet holds only rules
+that two or more games would repeat; each game's colors, fonts and layouts
+stay in the game. `test/kit-css.test.ts` fails on any selector without a
+`.kit-` class.
 
 ## Seeded generator (`rng.ts`)
 

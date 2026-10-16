@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
    (src/sim.ts settleFalls is the same rules; the 'fall' sim vectors pin them). */
 final class RoomFallTest extends TestCase
 {
-    private const RULES = ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3];
+    private const RULES = ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5];
 
     public static function setUpBeforeClass(): void
     {
@@ -177,10 +177,8 @@ final class RoomFallTest extends TestCase
         $this->assertSame($room['terrain'][$xi], $room['tanks'][1]['y']);
     }
 
-    public function testDronesCarryAParachuteFromTheRulesRound(): void
+    public function testADroneOwnsNoFreeParachuteItMustersWithTheOnesItBought(): void
     {
-        $this->assertSame(0, room_drone_chutes(2));
-        $this->assertSame(1, room_drone_chutes(3));
         $room = room_new('FALL', 'HUM');
         $room['seats'][0] = room_seat_human('HUM', 't0', [], '');
         $room['seats'][1] = room_idle_seat(1, 'ai');
@@ -189,7 +187,10 @@ final class RoomFallTest extends TestCase
         room_seat_economy($room, 0);
         $room['round'] = 2;
         room_start_round($room);
-        $this->assertSame(1, $room['tanks'][1]['chutes']);
+        $this->assertSame(0, $room['tanks'][1]['chutes'], 'no parachute is free, in any round');
+        $room['chutes'][1] = 2;
+        room_start_round($room);
+        $this->assertSame(2, $room['tanks'][1]['chutes']);
         $this->assertArrayNotHasKey('chutes', $room['tanks'][0], 'a human\'s parachutes live on the seat');
     }
 

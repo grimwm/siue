@@ -94,9 +94,9 @@ import { pref, text } from '../../_kit/prefs.ts';
 import { browserShareEnv } from '../../_kit/install.ts';
 import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
 import { renderRotateHint } from './ui/rotate-hint.tsx';
-import type { Arsenal, Difficulty, Weapon, Gear } from './sim.ts';
+import type { Arsenal, Difficulty, Weapon, Gear, Personality } from './sim.ts';
 import type { GameState, GameTank, MatchState } from './game-types.ts';
-import { FALLBACK_ARSENAL } from './fallback-arsenal.ts';
+import { FALLBACK_ARSENAL, FALLBACK_DRONES } from './fallback-arsenal.ts';
 import type { PreviewEnv } from './preview.ts';
 import type { RoomEnv } from './net.ts';
 import type { FxSetData, FxSys } from './fx/types.ts';
@@ -148,8 +148,10 @@ music.onTrackStart((t, cause) => {
 // (or when it cannot, e.g. file:// play), src/fallback-arsenal.ts keeps the war rolling. */
 /* game.json's arsenal section. */
 interface ArsenalData { ammo?: Weapon[]; gear?: Gear[] }
+/* game.json's drones section: the shopping personalities. */
+interface DronesData { personalities?: Personality[] }
 /* game.json as the page reads it; each part may be missing. */
-interface GameConfig { effects?: Record<string, FxSetData>; arsenal?: ArsenalData; keys?: unknown; audio?: AudioConfig }
+interface GameConfig { effects?: Record<string, FxSetData>; arsenal?: ArsenalData; drones?: DronesData; keys?: unknown; audio?: AudioConfig }
 let ARSENAL: Arsenal | null = null; // the same tables, as the sim takes them
 let WEAPONS: Arsenal['weapons'] = {};
 let WORDER: Arsenal['order'] = [];
@@ -159,16 +161,16 @@ let ARSENAL_REV = 0; // counts arsenal rebuilds; the shop repaints its icons whe
 /* The icons draw what they are handed (src/ui/icons.ts); these look the weapon or trick up by key. */
 const drawShellIcon = (cv: HTMLCanvasElement, wkey: string): void => paintShellIcon(cv, WEAPONS[wkey]);
 const drawGearIcon = (cv: HTMLCanvasElement, gkey: string): void => paintGearIcon(cv, GEAR[gkey]);
-function buildArsenal(data: ArsenalData | null | undefined): boolean {
-  const a = simBuildArsenal(data);
+function buildArsenal(data: ArsenalData | null | undefined, drones?: DronesData | null): boolean {
+  const a = simBuildArsenal(data, drones);
   if (!a) return false;
   ARSENAL_REV++;
   ARSENAL = a; WEAPONS = a.weapons; WORDER = a.order; SHOP = a.shop; GEAR = a.gear;
   G.shopSel = clamp(G.shopSel || 0, SHELL_ROW, SHOP.length - 1);
   return true;
 }
-function applyArsenal(data: ArsenalData | null | undefined): void {
-  if (data && Array.isArray(data.ammo) && data.ammo.length && buildArsenal(data)) {
+function applyArsenal(data: ArsenalData | null | undefined, drones?: DronesData | null): void {
+  if (data && Array.isArray(data.ammo) && data.ammo.length && buildArsenal(data, drones)) {
     say(`Arsenal loaded: ${WORDER.length} shells, ${Object.keys(GEAR).length} tricks.`, 'info');
     if (G.phase === 'shop') renderShop();
     renderHUD();
@@ -184,7 +186,7 @@ async function loadGameConfig(): Promise<void> {
     const data: GameConfig | null = await res.json();
     if (!data) return;
     installEffects(data.effects);
-    applyArsenal(data.arsenal);
+    applyArsenal(data.arsenal, data.drones);
     applyKeys(data.keys);
     initAudio(data.audio);
   } catch (_) { /* the baked fallbacks keep the war rolling */ }
@@ -212,11 +214,11 @@ const G: GameState = {
   dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null,
   w: ROOM_W, hills: null, cam: { z: 1, cx: ROOM_W / 2, cy: 230 },
   over: false, won: false,
-  tactics: {}, demo: false, demoHint: false, watchTurns: 0, preview: null,
+  tactics: {}, drones: [], demo: false, demoHint: false, watchTurns: 0, preview: null,
 };
 /* Tables start from the baked fallback (G exists from here on); the file
 // arsenal replaces them the moment it arrives. */
-buildArsenal(FALLBACK_ARSENAL);
+buildArsenal(FALLBACK_ARSENAL, FALLBACK_DRONES);
 /* The arsenal tables as the typed modules read them (src/game-types.ts). They are replaced when
    game.json arrives, so each property reads the live variable. */
 const tables = {

@@ -1110,16 +1110,235 @@ function room_ai_choose(array &$room, array $tank): array
     return $out;
 }
 
-/* Drone magazine from the data file: aiRack of each gun the battery may load
- * by round (src/sim.ts droneRack is the same). */
-function room_ai_rack(int $round): array
+/* ---------- what a drone buys (src/drones.ts is the same, pinned by the 'drone-shop' sim vectors) ---------- */
+const ROOM_DRONE_MAX_PACKS = 9;
+const ROOM_DRONE_VALUE_PACKS = 2; // a value pick buys at most this many packs of one gun in a visit
+/* The arsenal as droneShop reads it: the guns in the data file's order, and the gear rows. */
+function room_drone_arsenal(): array
 {
-    $rack = ['shell' => -1];
-    foreach (room_weapons() as $k => $def) {
-        if ($k === 'shell') {
-            continue;
+    $w = room_weapons();
+    return ['order' => array_keys($w), 'weapons' => $w, 'gear' => room_arsenal()['gear'] ?? []];
+}
+/* The first gear of an effect in the data file's order (repair, parachute, plate, shield): by effect, never by key. */
+function room_drone_gear(array $arsenal, string $effect): ?array
+{
+    foreach ($arsenal['gear'] as $g) {
+        if (($g['effect'] ?? '') === $effect) {
+            return $g;
         }
-        $rack[$k] = (!empty($def['ai']) && $round >= ($def['aiRound'] ?? 99)) ? (int) ($def['aiRack'] ?? 2) : 0;
     }
-    return $rack;
+    return null;
+}
+/* A gun's rank for a pick: higher is better (src/drones.ts gunScore). */
+function room_drone_score(string $pick, int $dmg, int $radius, int $pack, int $price): float
+{
+    return match ($pick) {
+        'value' => ($dmg * $pack) / $price,
+        'precise' => $dmg / $radius / $pack,
+        default => (float) $price, // big: the dearest it can afford
+    };
+}
+/* The guns a drone may buy with $left dollars: ai guns the shop sells that do damage, in the arsenal's order. */
+function room_drone_affordable(array $arsenal, int $left, array $bought, int $cap): array
+{
+    $out = [];
+    foreach ($arsenal['order'] as $k) {
+        $a = $arsenal['weapons'][$k];
+        if (!empty($a['ai']) && $a['pack'] > 0 && $a['price'] > 0 && $a['dmg'] > 0 && $a['price'] <= $left && ($bought[$k] ?? 0) < $cap) {
+            $out[] = $k;
+        }
+    }
+    return $out;
+}
+/* What a drone with these rules buys on one visit: a list of ['item' => key, 'qty' => packs].
+ * $state holds cash, armor, plate, chutes and shield; $p is a personality row with rules; $rng is
+ * a stream's state, drawn only by the random pick. src/drones.ts droneShop is the same. */
+function room_drone_shop(array $state, array $arsenal, array $p, int &$rng): array
+{
+    $reserve = $p['reserve'] ?? 0;
+    $defense = $p['defense'] ?? 0;
+    $maxBuys = (int) ($p['maxBuys'] ?? 1);
+    $pick = (string) ($p['pick'] ?? 'big');
+    $budget = (int) floor($state['cash'] * (1 - $reserve));
+    $defBudget = (int) floor($budget * $defense);
+    $buys = [];
+    $spent = 0;
+    $armor = (int) $state['armor'];
+    $plate = (int) $state['plate'];
+    $chutes = (int) $state['chutes'];
+    $shield = (bool) $state['shield'];
+    $maxArmor = static fn(int $pl): int => ROOM_ARMOR + ROOM_PLATE_ARMOR * $pl;
+
+    $repair = room_drone_gear($arsenal, 'repair');
+    if ($repair !== null && count($buys) < $maxBuys && $armor < $maxArmor($plate) && (int) $repair['price'] > 0) {
+        $per = (int) ($repair['n'] ?? 0);
+        $missing = $maxArmor($plate) - $armor;
+        $wanted = $missing <= 0 || $per <= 0 ? 0 : (int) ceil($missing / $per);
+        $qty = min($wanted, ROOM_DRONE_MAX_PACKS, intdiv($defBudget - $spent, (int) $repair['price']));
+        if ($qty >= 1) {
+            $buys[] = ['item' => $repair['key'], 'qty' => $qty];
+            $spent += (int) $repair['price'] * $qty;
+            $armor += max(0, min($per * $qty, $maxArmor($plate) - $armor));
+        }
+    }
+    $chute = room_drone_gear($arsenal, 'parachute');
+    if ($chute !== null && count($buys) < $maxBuys && $chutes === 0 && (int) $chute['price'] <= $defBudget - $spent) {
+        $buys[] = ['item' => $chute['key'], 'qty' => 1];
+        $spent += (int) $chute['price'];
+        $chutes += (int) ($chute['n'] ?? 0);
+    }
+    $plateRow = room_drone_gear($arsenal, 'plate');
+    if ($plateRow !== null && count($buys) < $maxBuys && (int) $plateRow['price'] <= $defBudget - $spent) {
+        $buys[] = ['item' => $plateRow['key'], 'qty' => 1];
+        $spent += (int) $plateRow['price'];
+        $armor += ROOM_PLATE_ARMOR;
+        $plate++;
+    }
+    $shieldRow = room_drone_gear($arsenal, 'shield');
+    if ($shieldRow !== null && count($buys) < $maxBuys && !$shield && (int) $shieldRow['price'] <= $defBudget - $spent) {
+        $buys[] = ['item' => $shieldRow['key'], 'qty' => 1];
+        $spent += (int) $shieldRow['price'];
+        $shield = true;
+    }
+
+    // A value pick spreads over several guns: no more than ROOM_DRONE_VALUE_PACKS packs of any one a visit.
+    $cap = $pick === 'value' ? ROOM_DRONE_VALUE_PACKS : PHP_INT_MAX;
+    $bought = [];
+    while (count($buys) < $maxBuys) {
+        $keys = room_drone_affordable($arsenal, $budget - $spent, $bought, $cap);
+        if (!$keys) {
+            break;
+        }
+        $chosen = $keys[0];
+        if ($pick === 'random') {
+            $total = 0;
+            foreach ($keys as $k) {
+                $total += $arsenal['weapons'][$k]['price'];
+            }
+            $r = room_rng_next($rng) * $total;
+            $acc = 0;
+            $chosen = $keys[count($keys) - 1];
+            foreach ($keys as $k) {
+                $acc += $arsenal['weapons'][$k]['price'];
+                if ($r < $acc) {
+                    $chosen = $k;
+                    break;
+                }
+            }
+        } else {
+            $best = -INF;
+            foreach ($keys as $k) {
+                $a = $arsenal['weapons'][$k];
+                $score = room_drone_score($pick, $a['dmg'], $a['radius'], $a['pack'], $a['price']);
+                if ($score > $best) {
+                    $best = $score;
+                    $chosen = $k;
+                }
+            }
+        }
+        $buys[] = ['item' => $chosen, 'qty' => 1];
+        $bought[$chosen] = ($bought[$chosen] ?? 0) + 1;
+        $spent += $arsenal['weapons'][$chosen]['price'];
+    }
+    return $buys;
+}
+/* The personality with this key. */
+function room_drone_personality(array $personalities, string $key): ?array
+{
+    foreach ($personalities as $p) {
+        if ($p['key'] === $key) {
+            return $p;
+        }
+    }
+    return null;
+}
+/* The personalities with rules of their own other than $self: what a shapeshifter may take. */
+function room_drone_ruled(array $personalities, string $self): array
+{
+    return array_values(array_filter($personalities, fn($p) => $p['key'] !== $self && !isset($p['shift'])));
+}
+/* The stream a drone's draws come from in one round: the match seed, the round (0 is the pre-match shop) and the seat. */
+function room_drone_rng(string $seed, int $round, int $seat): int
+{
+    return room_hash_seed($seed . '|drone|' . $round . '|' . $seat);
+}
+/* A new drone's character: a personality drawn uniformly from the seed and its seat, and a shapeshifter's first form. */
+function room_drone_deal(array $personalities, string $seed, int $seat): array
+{
+    if (!$personalities) {
+        return ['personality' => '', 'form' => ''];
+    }
+    $rng = room_hash_seed($seed . '|drone|deal|' . $seat);
+    $mine = $personalities[(int) floor(room_rng_next($rng) * count($personalities))];
+    $form = $mine['key'];
+    if (isset($mine['shift'])) {
+        $others = room_drone_ruled($personalities, $mine['key']);
+        if ($others) {
+            $form = $others[(int) floor(room_rng_next($rng) * count($others))]['key'];
+        }
+    }
+    return ['personality' => $mine['key'], 'form' => $form];
+}
+/* The form a drone shops by this round: a shapeshifter after the first shop shifts with probability `shift`
+ * (one draw) to another personality with rules (a second draw); otherwise it keeps the form it has. */
+function room_drone_form(array $personalities, array $drone, int $round, int &$rng): string
+{
+    $mine = room_drone_personality($personalities, $drone['personality']);
+    if ($mine === null || !isset($mine['shift'])) {
+        return $drone['personality'];
+    }
+    if ($round > 0 && room_rng_next($rng) < $mine['shift']) {
+        $others = room_drone_ruled($personalities, $mine['key']);
+        if ($others) {
+            return $others[(int) floor(room_rng_next($rng) * count($others))]['key'];
+        }
+    }
+    return $drone['form'];
+}
+/* One shop visit for seat $seat: it settles its form for the round, chooses, and each purchase goes through
+ * room_buy, the function the players buy with. Returns the purchases that went through. */
+function room_drone_visit(array &$room, int $seat): array
+{
+    $personalities = room_drones();
+    $drone = $room['persona'][$seat] ?? ['personality' => '', 'form' => ''];
+    $round = (int) $room['round'];
+    $rng = room_drone_rng(room_drone_seed($room), $round, $seat);
+    $room['persona'][$seat]['form'] = $form = room_drone_form($personalities, $drone, $round, $rng);
+    $rules = room_drone_personality($personalities, $form);
+    if ($rules === null) {
+        return [];
+    }
+    $state = ['cash' => (int) ($room['cash'][$seat] ?? 0), 'armor' => room_muster_armor($room, $seat), 'plate' => (int) ($room['plate'][$seat] ?? 0),
+        'chutes' => (int) ($room['chutes'][$seat] ?? 0), 'shield' => !empty($room['shield'][$seat])];
+    $done = [];
+    foreach (room_drone_shop($state, room_drone_arsenal(), $rules, $rng) as $b) {
+        if (room_buy($room, $seat, $b['item'], $b['qty']) === null) {
+            $done[] = $b;
+        }
+    }
+    return $done;
+}
+/* The seed a room's drones draw from: hidden, dealt at match start. */
+function room_drone_seed(array $room): string
+{
+    return (string) ($room['droneSeed'] ?? ('tankity-drones-' . ($room['code'] ?? '')));
+}
+/* A drone seat's economy and personality, dealt once (a match start deals every drone seat; a seat that
+ * starts without them, a room built piecemeal, gets them when it is first needed). The economy keeps
+ * whatever the seat already holds, so a human who leaves keeps their own. */
+function room_drone_ready(array &$room, int $seat): void
+{
+    if (!isset($room['cash'][$seat]) && !isset($room['ammo'][$seat])) {
+        room_seat_economy($room, $seat);
+    }
+    if (!isset($room['persona'][$seat])) {
+        $room['persona'][$seat] = room_drone_deal(room_drones(), room_drone_seed($room), $seat);
+    }
+}
+/* What a drone seat shows on its name: its personality's name (a shapeshifter's is its own), or null. */
+function room_drone_persona_name(array $room, int $seat): ?string
+{
+    $key = $room['persona'][$seat]['personality'] ?? '';
+    $p = $key === '' ? null : room_drone_personality(room_drones(), $key);
+    return $p === null ? null : (string) $p['name'];
 }

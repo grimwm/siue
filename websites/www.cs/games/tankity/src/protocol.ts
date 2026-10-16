@@ -99,6 +99,8 @@ export interface RoomSeat {
   /** Initials for a human, the drone's name otherwise. */
   name: string;
   mode: SeatMode;
+  /** A drone's shopping personality by name, once the match has dealt one (a shapeshifter shows "Shapeshifter"); null for a player. */
+  persona: string | null;
   /** A player left mid-match and a bot drives their unit now. */
   bot: boolean;
   lives: number;

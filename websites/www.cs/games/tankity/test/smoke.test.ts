@@ -484,8 +484,8 @@ function scriptTank(seat: number, x: number, name: string, kind: string) {
 function scriptSeats() {
   // Server shape: humans arrive as name=initials, drones as name=AI name.
   return [
-    { seat: 0, human: true, name: 'abc', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: NET_SHOP && mockReady },
-    { seat: 1, human: false, name: 'REAPER', mode: 'ai', bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false },
+    { seat: 0, human: true, name: 'abc', mode: 'human', persona: null, bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: NET_SHOP && mockReady },
+    { seat: 1, human: false, name: 'REAPER', mode: 'ai', persona: null, bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false },
   ];
 }
 function scriptYou() {
@@ -612,9 +612,9 @@ let stateCalls = 0;
 function lobbyRoom() {
   const aiNames: Record<string, string> = { 1: 'REAPER', 2: 'WRAITH', 3: 'SPOTTER' };
   const seats = [0, 1, 2, 3].map(i => {
-    if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
-    if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
-    return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
+    if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', persona: null, bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
+    if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', persona: null, bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
+    return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], persona: null, bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
   });
   return fxConform(Object.assign(
     { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], terrainRev: 1, hills: null, round: 0, wind: 0, turn: null, turnSecs: 120, speed: 1, walls: 'none', wallsNow: 'none', expiresAt: 1800000600, closesIn: 600, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },
@@ -676,9 +676,14 @@ await (async () => {
   await test('demo-locked', () => { assert.ok(/Demo mode/.test(logText())); });
   const feudMark = E('log').children.length;
   // Long enough for a drone to hit a drone: with drag, a ranging shot across the field lands near less often.
-  frames(14000);
-  const feudNew = E('log').children.slice(feudMark).map(li => li.textContent).join('\n');
-  await test('ai-feuds', () => { assert.ok(/(reaper|wraith|spotter) hits (reaper|wraith|spotter)/.test(feudNew), feudNew); });
+  // The demo's drones now shop with their own money, so how soon one grazes another depends on what they bought: give them a few more minutes.
+  const FEUD = /(reaper|wraith|spotter) hits (reaper|wraith|spotter)/;
+  let feudNew = '';
+  for (let minutes = 0; minutes < 6 && !FEUD.test(feudNew); minutes++) {
+    frames(14000);
+    feudNew += '\n' + E('log').children.slice(feudMark).map(li => li.textContent).join('\n');
+  }
+  await test('ai-feuds', () => { assert.ok(FEUD.test(feudNew), feudNew); });
   // T deals random hills and O opens the lobby, both from the keyboard.
   TAP('global', 'rooms'); await tick(10);
   await test('rooms-hotkey', () => { assert.ok(E('lobby-veil').hidden === false); });
@@ -1052,10 +1057,11 @@ await (async () => {
   await test('nuke-gated', () => { assert.ok(!cycleNames.includes('NUKE') && cycleNames.includes('Buckshot') && cycleNames.includes('Shell'), cycleNames.join(',')); });
   await test('buckshot-volley', () => { assert.ok(/You fire Buckshot/.test(spreadLog), `${volleyTurn} | ${volleyGun}`); });
   // Discs start tiny and grow to exactly their weapon radius, never beyond.
-  // (The battery answers with its own mortars, so 44 is a legal max too.)
+  // (The battery answers with whatever it bought, so any gun a drone may use is a legal max too.)
+  const droneRadii = (JSON.parse(read('game.json')) as { arsenal: { ammo: { ai?: boolean; radius: number }[] } }).arsenal.ammo.filter(a => a.ai).map(a => a.radius);
   const boomMax = boomR.length ? Math.max(...boomR) : -1;
   const boomOk = boomR.length >= 3 &&
-    Math.min(...[17, 26, 44].map(r => Math.abs(boomMax - r))) < 1.5;
+    Math.min(...[17, 26, 44, ...droneRadii].map(r => Math.abs(boomMax - r))) < 1.5;
   await test('boom-exact', () => { assert.ok(boomOk, `n=${boomR.length} max=${boomMax.toFixed(1)}`); });
   await test('camera-sane', () => { assert.ok(zoomZ.length > 0 && zoomZ.every(z => z >= 0.45 && z <= 1), `n=${zoomZ.length}`); });
   await test('player-fired', () => { assert.ok(/You fire/.test(firedLog)); });

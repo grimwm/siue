@@ -14,6 +14,7 @@ import path from 'node:path';
 import { buildArsenal, flightKey, mulberry32 } from '../src/sim.ts';
 import { LOB_ANGLE, aiChoose, arcGuns, earthOps } from '../src/ai.ts';
 import type { Ammo, Bracket, FallRules, Gear, Tank, Weapon, World } from '../src/sim.ts';
+import { rackOf } from './rack.ts';
 
 function must<T>(v: T | null | undefined, what: string): T {
   assert.ok(v !== null && v !== undefined, `${what} is missing`);
@@ -82,7 +83,7 @@ test('every other arc follows the lead\'s best angle, seeking only the power', (
 });
 
 test('a full round-9 rack searches every arc, rollers on a coarser grid, inside a fixed budget', () => {
-  const ammo = Object.fromEntries(GAME.arsenal.ammo.filter(a => a.ai && a.key !== 'shell' && Number(a.aiRound) <= 9).map(a => [a.key, a.aiRack ?? 2]));
+  const ammo = Object.fromEntries(Object.entries(rackOf(arsenal)).filter(([k]) => k !== 'shell'));
   const plan = arcGuns(arsenal, ['shell', ...Object.keys(ammo)]);
   const rollers = plan.filter(k => row(k).effect === 'roller');
   assert.ok(rollers.length >= 3, plan.join());

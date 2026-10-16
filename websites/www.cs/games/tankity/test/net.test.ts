@@ -746,7 +746,14 @@ await test('invite-url-escapes-the-code', () => { assert.ok(inviteUrl('A&B', {})
   const seats = fixture('play-after-fire').room.seats;
   const rows = standingsRows(seats, 0);
   await test('standings-name-the-human-by-initials', () => { assert.ok(at(rows, 0).name === 'ABC' && at(rows, 0).mine && at(rows, 0).score === 88, JSON.stringify(at(rows, 0))); });
-  await test('standings-tag-drones-ai', () => { assert.ok(rows.some(r => r.name === 'REAPER (AI)' && !r.mine), JSON.stringify(rows)); });
+  await test('standings-tag-drones-ai', () => {
+    const bare = standingsRows(seats.map(s => ({ ...s, persona: null })), 0);
+    assert.ok(bare.some(r => r.name === 'REAPER (AI)' && !r.mine), JSON.stringify(bare));
+  });
+  await test('standings-tag-a-drone-with-its-personality', () => {
+    const named = standingsRows(seats.map(s => (s.human ? s : { ...s, persona: 'Turtle' })), 0);
+    assert.ok(named.some(r => r.name === 'REAPER (AI, Turtle)'), JSON.stringify(named));
+  });
   const flipped = standingsRows([...seats].reverse(), 0);
   await test('standings-best-first', () => { assert.ok(at(flipped, 0).name === 'ABC' && at(flipped, 0).mine, JSON.stringify(at(flipped, 0))); });
 }

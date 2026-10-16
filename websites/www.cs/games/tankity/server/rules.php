@@ -828,8 +828,12 @@ function room_start_round(array &$room): void
         if (!$s['human'] && ($s['mode'] ?? 'ai') === 'open') {
             continue; // nobody plays an open seat
         }
-        $armor = $s['human'] ? room_muster_armor($room, $idx) : 60 + 6 * ($room['round'] - 1);
-        $max = $s['human'] ? room_max_armor($room, $idx) : $armor;
+        if (!$s['human']) {
+            room_drone_ready($room, $idx);
+        }
+        // A drone musters as a player does: the armor, shells, parachutes and plates its shopping and rounds left it.
+        $armor = room_muster_armor($room, $idx);
+        $max = room_max_armor($room, $idx);
         $room['tanks'][] = [
             'seat' => $idx,
             'kind' => $s['human'] ? 'human' : 'ai',
@@ -842,12 +846,10 @@ function room_start_round(array &$room): void
             'maxHp' => $max,
             'fuel' => $s['human'] ? 80 : 0,
             'dirS' => $slots[$seat % count($slots)] < $w / 2 ? 1 : -1, // face the middle
-            'ammo' => $s['human']
-                ? ($room['ammo'][$idx] ?? room_start_ammo())
-                : room_ai_rack($room['round']),
+            'ammo' => $room['ammo'][$idx] ?? room_start_ammo(),
         ];
         if (!$s['human']) {
-            $room['tanks'][count($room['tanks']) - 1]['chutes'] = room_drone_chutes($room['round']);
+            $room['tanks'][count($room['tanks']) - 1]['chutes'] = (int) ($room['chutes'][$idx] ?? 0);
         }
         $seat++;
     }
@@ -994,10 +996,19 @@ function room_match_begin(array &$room): void
     $room['filed'] = [];
     $room['winner'] = null;
     $room['winBonus'] = 0;
+    // The drones' own seed, hidden from clients: it keys every drone's personality and shop draws.
+    $room['droneSeed'] ??= bin2hex(random_bytes(8));
+    $room['persona'] = [];
     foreach ($room['seats'] as $idx => $s) {
         if ($s['human'] ?? false) {
             $room['startHumans']++;
             $room['stats'][$idx] = ['won' => 0, 'kills' => 0, 'gain' => 0, 'from' => 0, 'out' => null];
+        } elseif (($s['mode'] ?? 'ai') !== 'open') {
+            // A drone seat starts as a player does (the stake, the start shells, full armor) and shops
+            // before the first round.
+            room_seat_economy($room, $idx);
+            room_drone_ready($room, $idx);
+            room_drone_visit($room, $idx);
         }
     }
 }
@@ -1047,16 +1058,22 @@ function room_end_round(array &$room, array &$events): void
             $room['bunker'][$idx]--;
         }
     }
-    // Armor carries into the next round; a wrecked tank re-musters at full max.
+    // Armor carries into the next round; a wrecked tank re-musters at full max. A drone's seat also takes
+    // back what its tank has left: shells and parachutes (its cash and shield were the seat's all along).
     foreach ($room['tanks'] as $t) {
         // A seat this round eliminates has no next tank; its armor stays as it was.
         $out = $t['hp'] <= 0 && ($room['seats'][$t['seat']]['lives'] ?? 3) <= 1;
         if ($t['kind'] === 'human' && !$out) {
             room_carry_armor($room, (int) $t['seat'], (int) $t['hp'], $t['hp'] <= 0);
+        } elseif ($t['kind'] === 'ai') {
+            room_carry_armor($room, (int) $t['seat'], (int) $t['hp'], $t['hp'] <= 0);
+            $room['ammo'][$t['seat']] = $t['ammo'] ?? room_start_ammo();
+            $room['chutes'][$t['seat']] = (int) ($t['chutes'] ?? 0);
         }
     }
     $alive = array_values(array_filter($room['tanks'], fn($t) => $t['hp'] > 0));
-    $winner = count($alive) === 1 && $alive[0]['kind'] === 'human' ? $alive[0] : null;
+    $sole = count($alive) === 1 ? $alive[0] : null;
+    $winner = $sole !== null && $sole['kind'] === 'human' ? $sole : null;
     $wrecked = [];
     foreach ($room['tanks'] as $t) {
         if ($t['hp'] <= 0) {
@@ -1085,6 +1102,10 @@ function room_end_round(array &$room, array &$events): void
         $room['cash'][$winner['seat']] = ($room['cash'][$winner['seat']] ?? 0) + $prize;
         $events[] = ['t' => 'roundwin', 'round' => $room['round'], 'seat' => $winner['seat']];
     } else {
+        // A drone that stands alone takes the prize in cash, as a player does; the round is still lost.
+        if ($sole !== null) {
+            $room['cash'][$sole['seat']] = ($room['cash'][$sole['seat']] ?? 0) + 500 + $room['round'] * 100;
+        }
         $events[] = ['t' => 'roundlost', 'round' => $room['round']];
     }
     if ($winner !== null && isset($room['stats'][$winner['seat']])) {
@@ -1117,6 +1138,13 @@ function room_end_round(array &$room, array &$events): void
         return;
     }
     room_file_eliminated($room, $wrecked);
+    // The drones shop now, by the players' buy rules, and finish before the next round starts.
+    foreach ($room['seats'] as $idx => $s) {
+        if (!($s['human'] ?? false) && ($s['mode'] ?? 'ai') !== 'open') {
+            room_drone_ready($room, $idx);
+            room_drone_visit($room, $idx);
+        }
+    }
     // Every round starts from the shop, won or lost.
     $room['phase'] = 'shop';
     $room['shop'] = ['at' => microtime(true), 'secs' => room_shop_secs(room_turn_secs($room)), 'ready' => []];
@@ -1225,7 +1253,7 @@ function room_carry_armor(array &$room, int $seat, int $hp, bool $wrecked): void
 function room_buy(array &$room, int $seat, string $item, int $qty): ?array
 {
     // An eliminated human stays in the shop phase while others play on; refused so a seat that is out cannot move cash standings.
-    if (($room['seats'][$seat]['lives'] ?? 1) <= 0) {
+    if (($room['seats'][$seat]['human'] ?? true) && ($room['seats'][$seat]['lives'] ?? 1) <= 0) {
         return [409, 'You are out of this match.'];
     }
     $weapons = room_weapons();
@@ -1355,18 +1383,18 @@ function room_again(array &$room): bool
     if (!room_rehost($room)) {
         return false; // everyone left; nobody is there to start a lobby
     }
-    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'chutes', 'fuelBonus', 'fuelApplied', 'tactic', 'stats', 'filed', 'matchId', 'menu', 'shop', 'pace', 'clock', 'startedBy', 'wallsNow'] as $k) {
+    foreach (['plate', 'armor', 'shield', 'jammer', 'bunker', 'laststand', 'chutes', 'fuelBonus', 'fuelApplied', 'tactic', 'persona', 'droneSeed', 'stats', 'filed', 'matchId', 'menu', 'shop', 'pace', 'clock', 'startedBy', 'wallsNow'] as $k) {
         unset($room[$k]);
     }
     foreach ($room['seats'] as $idx => $s) {
         if ($s['human'] ?? false) {
             $room['seats'][$idx]['lives'] = 3;
             room_seat_economy($room, $idx);
-        } elseif (!empty($s['bot'])) {
-            $room['seats'][$idx] = room_idle_seat($idx);
-            foreach (['scores', 'cash', 'ammo', 'weapon', 'nextUp', 'plate', 'armor', 'chutes'] as $k) {
-                unset($room[$k][$idx]); // the drone that took a leaver's chair starts clean
+        } else {
+            if (!empty($s['bot'])) {
+                $room['seats'][$idx] = room_idle_seat($idx); // the chair goes back to the battery
             }
+            room_seat_economy($room, $idx); // a drone starts a match with a player's stake, as every seat does
         }
     }
     $room['winner'] = null;
@@ -1405,10 +1433,13 @@ function room_leave(array &$room, int $seat): bool
     $room['seats'][$seat] = ['human' => false, 'name' => $name, 'initials' => $name, 'mode' => 'ai', 'bot' => true,
         'lives' => $room['seats'][$seat]['lives'] ?? 0];
     room_rehost($room);
+    // The bot keeps the leaver's own economy: cash, shells, armor, plates, parachutes, shield.
+    room_drone_ready($room, $seat);
     foreach ($room['tanks'] as &$t) {
         if ($t['seat'] === $seat) {
             $t['kind'] = 'ai';
-            $t['ammo'] = room_ai_rack((int) $room['round']);
+            $t['ammo'] = $room['ammo'][$seat] ?? $t['ammo'] ?? room_start_ammo();
+            $t['chutes'] = (int) ($room['chutes'][$seat] ?? 0);
             $room['tactic'][$seat] = room_deal_tactic($room, $seat);
             $t['s'] = $room['tactic'][$seat];
         }

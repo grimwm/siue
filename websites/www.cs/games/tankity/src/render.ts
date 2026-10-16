@@ -29,6 +29,7 @@ export interface DrawTank extends Tank {
   maxHp: number;
   color?: string;
   name?: string;
+  personality?: string; // a drone's shopping personality by name (Turtle, Saver ...), shown beside its name
   body?: string; // 'tank' | 'hover' | 'walker' | 'buggy'
   menu?: boolean; // a room player who is in a menu
   bot?: boolean; // a room player who left: a bot drives the unit now
@@ -1353,7 +1354,8 @@ export function createRenderer(cv: HTMLCanvasElement, deps: RenderDeps): Rendere
       c.fillStyle = '#fff';
       c.font = `bold ${Math.round(9 * view.textScale)}px sans-serif`;
       c.textAlign = 'center';
-      const label = t.isPlayer ? 'TANK' : (ground ? String(t.name || t.id).toUpperCase() : t.id.toUpperCase());
+      const who = t.isPlayer ? 'TANK' : (ground ? String(t.name || t.id).toUpperCase() : t.id.toUpperCase());
+      const label = t.personality ? `${who} · ${t.personality.toUpperCase()}` : who;
       c.fillText(label, t.x, barY - 4);
       // A player who left: a bot drives the unit now, and a tag says so.
       if (t.bot) {

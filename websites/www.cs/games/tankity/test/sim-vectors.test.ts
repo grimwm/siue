@@ -11,6 +11,7 @@ import path from 'node:path';
 import * as simRules from '../src/sim.ts';
 import * as aiRules from '../src/ai.ts';
 import * as armorRules from '../src/armor.ts';
+import { dealDrone, droneForm, droneRng, droneShop, personalityOf } from '../src/drones.ts';
 import * as standings from '../src/standings.ts';
 import * as det from '../src/detmath.ts';
 import * as earth from '../src/earth.ts';
@@ -24,7 +25,7 @@ interface Vectors { tolerance: number; weapons: string[]; groups: Record<string,
 
 const dir = path.join(import.meta.dirname, '..');
 const VECTORS: Vectors = JSON.parse(fs.readFileSync(path.join(dir, 'protocol', 'sim-vectors.json'), 'utf8'));
-const GAME: { arsenal: Parameters<typeof simRules.buildArsenal>[0] } = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
+const GAME: { arsenal: Parameters<typeof simRules.buildArsenal>[0]; drones: Parameters<typeof simRules.buildArsenal>[1] } = JSON.parse(fs.readFileSync(path.join(dir, 'game.json'), 'utf8'));
 const TOL = VECTORS.tolerance;
 
 function must<T>(v: T | null | undefined, what: string): T {
@@ -40,7 +41,7 @@ function nth<T>(list: readonly T[], i: number): T {
    state as arguments, so the cases below pass a plain state object G. The
    physics is src/sim.ts and the drone AI src/ai.ts; `sim` holds both. */
 const sim = { ...simRules, ...aiRules };
-const arsenal: Arsenal = must(sim.buildArsenal(GAME.arsenal), 'the arsenal');
+const arsenal: Arsenal = must(sim.buildArsenal(GAME.arsenal, GAME.drones), 'the arsenal');
 
 /* ---- what the cases say ---- */
 interface TerrainSpec {
@@ -92,7 +93,8 @@ interface Inputs {
   'hop-vel': { vx: number; vy: number; keep: number };
   'scatter-vel': { n: number; fan: number; kick: number };
   'cluster-split': WorldIn & { wkey: string; x: number; y: number; vx: number; vy: number };
-  rack: { round: number };
+  'drone-shop': { personality: string; form: string; state: { cash: number; armor: number; plate: number; chutes: number; shield: boolean }; seed: string; round: number; seat: number };
+  'drone-deal': { seed: string; seat: number };
   blast: WorldIn & { owner: number; wkey: string; x: number; y: number; direct?: number | null; ov?: BlastOverride };
   'sim-shot': WorldIn & Shot;
   'roll-out': { terrain: TerrainSpec; x: number; vx: number; vy: number; wkey: string };
@@ -144,6 +146,7 @@ const tankOf = (spec: TankSpec, i: number): Tank => ({
   dirS: spec.dirS === undefined ? 1 : spec.dirS, fuel: spec.fuel === undefined ? 80 : spec.fuel, ammo: Object.assign({}, spec.ammo), vy: 0,
   s: spec.s, dry: spec.dry, dealt: spec.dealt, lastHitBy: spec.lastHitBy, kills: spec.kills, fellBy: spec.fellBy,
   chutes: spec.kind === 'human' ? undefined : spec.chutes,
+  shield: spec.kind === 'human' ? undefined : !!spec.shield, cash: spec.kind === 'human' ? undefined : 0,
 });
 /* A fresh world for a case: the tanks, the ground, the wind, and the human's tricks (G.shield and friends are the player's). */
 function world(c: WorldIn, w = 720): World {
@@ -171,6 +174,7 @@ function outcome(before: readonly number[]) {
       lastHitBy: t.lastHitBy ?? null, dealt: !!t.dealt, fellBy: t.fellBy ?? null })),
     crater: first === null ? null : { x0: first, y: G.terrain.slice(first, Number(last) + 1) },
     score: G.score, cash: G.cash, shield: G.shield, laststand: G.laststand, chutes: G.chutes,
+    droneCash: G.tanks.filter(t => !t.isPlayer).map(t => t.cash || 0), droneShield: G.tanks.filter(t => !t.isPlayer).map(t => !!t.shield),
   };
 }
 
@@ -268,9 +272,15 @@ const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
     }
     return { status: 'none' };
   },
-  rack(c) {
-    const r = sim.droneRack(arsenal, c.round);
-    return Object.fromEntries(Object.entries(r).map(([k, n]) => [k, n === Infinity ? -1 : n]));
+  'drone-shop'(c) {
+    const rng = droneRng(c.seed, c.round, c.seat);
+    const form = droneForm(arsenal, { personality: c.personality, form: c.form }, c.round, rng);
+    const rules = personalityOf(arsenal, form);
+    return { form, buys: rules ? droneShop(c.state, arsenal, rules, rng) : [] };
+  },
+  'drone-deal'(c) {
+    const d = dealDrone(arsenal, c.seed, c.seat);
+    return { personality: d.personality, form: d.form };
   },
   blast(c) {
     world(c);
@@ -350,7 +360,7 @@ const RUN: { [K in keyof Inputs]: (c: Inputs[K]) => unknown } = {
     return {
       tanks: G.tanks.map(t => ({ y: t.y, hp: t.hp, kills: t.kills || 0, lastHitBy: t.lastHitBy ?? null, chutes: t.isPlayer ? null : t.chutes || 0 })),
       falls: events.filter(e => e.kind === 'fall').map(e => [seat(e.tank), e.dmg, seat(e.by || e.tank), e.chute, e.under]),
-      score: G.score, cash: G.cash, chutes: G.chutes,
+      score: G.score, cash: G.cash, chutes: G.chutes, droneCash: G.tanks.filter(t => !t.isPlayer).map(t => t.cash || 0),
     };
   },
   field(c) {

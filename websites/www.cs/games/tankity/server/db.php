@@ -11,6 +11,7 @@ if (count(get_included_files()) === 1) {
 }
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/score-guard.php';
+require_once __DIR__ . '/store-dir.php';
 
 const TANKITY_DB_FILE = 'tankity.sqlite';
 const TANKITY_BUSY_MS = 2000; // a writer that waits longer answers "busy" instead of tying up a PHP worker
@@ -25,11 +26,17 @@ final class TankityStorageRefused extends RuntimeException
 {
 }
 
+/* The storage rules are the kit's (Kit\StoreDir); this is Tankity's wording. */
+function tankity_store(): \Kit\StoreDir
+{
+    static $store = null;
+    return $store ??= new \Kit\StoreDir('tankity storage:', TankityStorageRefused::class, TANKITY_DENY);
+}
+
 /* Logs one line naming the path and the problem, then refuses. */
 function tankity_refuse(string $dir, string $problem, string $remedy = 'remove it, or set data_dir'): never
 {
-    error_log("tankity storage: $dir $problem; $remedy");
-    throw new TankityStorageRefused("$dir $problem");
+    tankity_store()->refuse($dir, $problem, $remedy);
 }
 
 /* The mode for a directory ('dir') or file ('file') Tankity's PHP creates.
@@ -40,102 +47,29 @@ function tankity_mode(string $kind): int
     return \Kit\StoreModes::modes()[$kind];
 }
 
-/* The account the site belongs to: the owner of the running script, the same
-   in every PHP-FPM worker and pool; uid<N> when the name cannot be looked up. */
 function tankity_username(): string
 {
-    $name = strtolower((string) preg_replace('/[^A-Za-z0-9_-]+/', '', get_current_user()));
-    return $name !== '' ? substr($name, 0, 32) : 'uid' . getmyuid();
+    return \Kit\StoreDir::username();
 }
 
-/* PHP's own effective uid: who must own a directory on a shared /var/tmp. */
 function tankity_euid(): int
 {
-    return function_exists('posix_geteuid') ? posix_geteuid() : getmyuid();
+    return \Kit\StoreDir::euid();
 }
 
-/* Creates $dir (0700) unless it exists, then checks it is a real directory PHP
-   can write. $private also requires that PHP owns it and nobody else may
-   enter: /var/tmp is shared, so a directory another account made is refused. */
 function tankity_claim_dir(string $dir, bool $private): string
 {
-    // mkdir is the atomic step: if the name is taken, whatever holds it is
-    // verified below, never adopted.
-    if (!file_exists($dir) && !is_link($dir)) {
-        if (!@mkdir($dir, tankity_mode('dir'), true) && !file_exists($dir) && !is_link($dir)) {
-            tankity_refuse($dir, 'cannot be created', 'fix its parent directory, or set data_dir');
-        }
-    }
-    clearstatcache(true, $dir);
-    $st = @lstat($dir); // lstat: a link is reported as a link, not followed
-    if ($st === false) {
-        tankity_refuse($dir, 'is not a writable directory', 'fix its permissions, or set data_dir');
-    }
-    $isLink = ($st['mode'] & 0170000) === 0120000;
-    if ($isLink && !$private) {
-        tankity_refuse($dir, 'is a symbolic link, not a writable directory', 'point data_dir at the directory itself');
-    }
-    if ($private) {
-        // Ownership comes before writability: a directory someone else made is
-        // not writable to us, and that squat must be refused and logged, not
-        // reported as a plain permissions problem.
-        if ($isLink) {
-            tankity_refuse($dir, 'is a symbolic link');
-        }
-        if (($st['mode'] & 0170000) !== 0040000) {
-            tankity_refuse($dir, 'is not a directory');
-        }
-        if ($st['uid'] !== tankity_euid()) {
-            tankity_refuse($dir, 'belongs to another account');
-        }
-        if (($st['mode'] & 0777) !== tankity_mode('dir')) {
-            tankity_refuse($dir, sprintf('has mode %04o, not %04o', $st['mode'] & 0777, tankity_mode('dir')));
-        }
-    }
-    if (($st['mode'] & 0170000) !== 0040000 || !is_writable($dir)) {
-        tankity_refuse($dir, 'is not a writable directory', 'fix its permissions, or set data_dir');
-    }
-    return $dir;
+    return tankity_store()->claim($dir, $private);
 }
 
-/* The deny file Apache reads in a storage directory under the web root; true
-   once it is in place. */
 function tankity_deny_http(string $dir): bool
 {
-    $f = $dir . '/.htaccess';
-    if (is_file($f) && str_contains((string) @file_get_contents($f), 'Require all denied')) {
-        return true;
-    }
-    if (@file_put_contents($f, TANKITY_DENY) === false) {
-        return false;
-    }
-    @chmod($f, tankity_mode('file'));
-    return true;
+    return tankity_store()->denyHttp($dir);
 }
 
-/* $preferred when PHP can write it (or create it there) and its deny file is
-   in place; otherwise the private $fallback. $writable is the tests' seam. */
 function tankity_pick_dir(string $preferred, string $fallback, ?Closure $writable = null): string
 {
-    $writable ??= fn(string $p): bool => is_writable($p);
-    if (is_dir($preferred) && !is_link($preferred)) {
-        // A checkout or deploy may have made it 0755; PHP's own directory is private.
-        if (fileowner($preferred) === tankity_euid() && (fileperms($preferred) & 0077) !== 0) {
-            @chmod($preferred, tankity_mode('dir'));
-        }
-        $usable = $writable($preferred);
-    } else {
-        // A request that lost the mkdir race uses the directory the winner made.
-        $usable = !file_exists($preferred) && $writable(dirname($preferred))
-            && (@mkdir($preferred, tankity_mode('dir')) || (is_dir($preferred) && !is_link($preferred)));
-        if ($usable) {
-            @chmod($preferred, tankity_mode('dir'));
-        }
-    }
-    if ($usable && tankity_deny_http($preferred)) {
-        return $preferred;
-    }
-    return tankity_claim_dir($fallback, true);
+    return tankity_store()->pick($preferred, $fallback, $writable);
 }
 
 /* Where Tankity keeps its files. A data_dir setting (TANKITY_DATA_DIR, or

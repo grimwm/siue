@@ -69,6 +69,10 @@ A POST endpoint must call both `originAllowed()` and `csrfOk()`: a request with 
 
 The same file holds `Kit\StoreModes`, the one place a game's PHP takes file modes from: 0700/0600 for what only PHP writes, and for a path the deploy account also writes (a game's own `data/`) 0700/0600 when PHP runs as the deploying account, 0777/0666 when it runs as a web user every site shares. In that second case any other site's PHP on the host can read and write the game's stored files; no mode prevents it.
 
+## Storage directories (`php/store-dir.php`)
+
+`Kit\StoreDir` decides whether a place a game's PHP keeps files can be trusted. It is built with a log prefix, the exception class a refusal throws (the message is `<path> <problem>`; the log line adds the remedy) and, optionally, the `.htaccess` text. `claim($dir, $private)` creates a missing directory 0700, then refuses a symbolic link, a non-directory, an unwritable one and, when `$private`, one owned by another account or not exactly 0700. `pick($preferred, $fallback)` uses the preferred directory when PHP can write it (an unlinked one it owns is tightened to 0700) and it can hold its deny file, else the private fallback. `claimFile($path)` is for a file PHP keeps straight in a shared directory such as `/var/tmp`: a link, a non-file or another account's file is refused, and one of ours open to others is made 0600. `denyHttp($dir)` writes the deny file. Tankity uses `claim` and `pick`; Cylon keeps its own file order (`data/scores.json`, else `/var/tmp/<storageKey>-scores.json`) and adds the link check on the first and `claimFile` on the second. A game ships it as `server/store-dir.php` through `kit_php`.
+
 ## Sound (`audio/core.ts`)
 
 `createAudioCore()` is a facade over the game's one `AudioContext`. It makes

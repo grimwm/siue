@@ -178,6 +178,7 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `server/guard.php` | Tankity's settings for the kit's `Kit\ScoreGuard` (`tankity_guard()`, `tankity_initials()`; Tankity uses its origin, address and initials checks), and the blocked initials (the kit's `blocked-initials.json`, the same list as `src/initials.ts`) |
 | `server/blocked-initials.json` | The kit's blocked-initials list, a generated copy written by `tools/install-files.php` (`kit_php`); never edit it |
 | `server/score-guard.php` | The kit's score guard, a generated copy written by `tools/install-files.php` (`kit_php`); never edit it |
+| `server/store-dir.php` | The kit's storage-directory checks (`Kit\StoreDir`), a generated copy; `db.php`'s `tankity_*_dir` functions wrap it with Tankity's messages |
 | `server/board.php` | The all-time boards, one per difficulty, best 100 room runs each, rows in the database (`board_file`, `board_top`); a row can only come from a room match that two or more humans started |
 | `server/housekeep.php` | Cleanup on requests, at most once a minute (`tankity_housekeep`, `tankity_jobs`) |
 | `data/` | Runtime only, when PHP may write here: `tankity.sqlite` and the deny `.htaccess` PHP writes. Never in git, never deployed |

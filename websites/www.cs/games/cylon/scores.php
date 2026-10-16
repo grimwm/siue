@@ -16,8 +16,10 @@
  */
 
 require_once __DIR__ . '/server/score-guard.php';
+require_once __DIR__ . '/server/store-dir.php';
 
 use Kit\ScoreGuard;
+use Kit\StoreDir;
 use Kit\StoreModes;
 
 function gameConfig(): array {
@@ -135,17 +137,23 @@ function scorePathUsable(string $path): bool {
     return is_dir($dir) && is_writable($dir);
 }
 
-/** Prefer data/scores.json; fall back to durable world-writable /var/tmp. */
+/** The kit's storage checks: a link or another account's file is refused, with the cause in the log. */
+function scoreStore(): StoreDir {
+    static $store = null;
+    return $store ??= new StoreDir('cylon storage:');
+}
+
+/** Prefer data/scores.json; fall back to durable /var/tmp. A data/ folder or file that is a link is not used. */
 function resolveScorePath(): string {
     $override = getenv('CYLON_SCORES_FILE');
     if (is_string($override) && $override !== '') {
         return $override;
     }
     $preferred = __DIR__ . '/data/scores.json';
-    if (scorePathUsable($preferred)) {
+    if (scorePathUsable($preferred) && !is_link(dirname($preferred)) && !is_link($preferred)) {
         return $preferred;
     }
-    return '/var/tmp/' . cfg('storageKey') . '-scores.json';
+    return scoreStore()->claimFile('/var/tmp/' . cfg('storageKey') . '-scores.json');
 }
 
 function normalizeScores($data): array {

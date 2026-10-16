@@ -51,7 +51,7 @@ const GUN_ROW = '#shop-list li[data-kind="gun"]';
 export const COACH_STEPS: readonly CoachStep[] = [
   {
     id: 'shop-row', when: 'shop', target: [GUN_ROW],
-    text: 'Each row is a gun: what it does, and what it costs.',
+    text: 'Each row is a weapon or item: what it does and costs.',
     keys: '{shop:selUp} {shop:selDown} move between rows.',
     done: (now, start) => now.shopSel !== start.shopSel,
   },

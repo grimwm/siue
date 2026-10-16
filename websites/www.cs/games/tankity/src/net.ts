@@ -117,7 +117,7 @@ export function standingsRows(
   seats: readonly RoomSeat[], mySeat: number | null,
 ): { name: string; score: number; mine: boolean }[] {
   return seats
-    .map(s => ({ name: s.human ? s.name : s.name + ' (AI)', score: s.score || 0, mine: s.seat === mySeat }))
+    .map(s => ({ name: s.human ? s.name : s.name + (s.persona ? ` (AI, ${s.persona})` : ' (AI)'), score: s.score || 0, mine: s.seat === mySeat }))
     .sort((a, b) => b.score - a.score);
 }
 

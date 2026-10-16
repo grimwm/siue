@@ -4,16 +4,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildArsenal, droneRack, SPAWN_GAP, TUNE, surfY } from '../src/sim.ts';
+import { buildArsenal, SPAWN_GAP, startAmmo, TUNE, surfY } from '../src/sim.ts';
 import type { Arsenal, ShopRow, Weapon } from '../src/sim.ts';
 import type { Difficulty } from '../src/ai.ts';
 import { buyPacks, soloAim, soloBuy, soloDeal, soloMuster, soloSettle, soloNextTurn, soloOneUps, snapTanks } from '../src/solo.ts';
 import type { BuyResult, Settled, SoloState } from '../src/solo.ts';
 
 /** game.json, as far as these cases read it: the arsenal rows. */
-const GAME: { arsenal: { ammo: Array<Weapon & { key: string; ai?: boolean; aiRound: number; aiRack?: number }> } } =
+const GAME: { arsenal: NonNullable<Parameters<typeof buildArsenal>[0]> & { ammo: Weapon[] }; drones: Parameters<typeof buildArsenal>[1] } =
   JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const arsenal: Arsenal = (() => { const a = buildArsenal(GAME.arsenal); assert.ok(a, 'game.json has an arsenal'); return a; })();
+const arsenal: Arsenal = (() => { const a = buildArsenal(GAME.arsenal, GAME.drones); assert.ok(a, 'game.json has an arsenal'); return a; })();
 
 /** Item `i` of a list the case reads, which must be there. */
 function nth<T>(list: readonly T[], i: number): T {
@@ -39,21 +39,98 @@ test('a deal keeps its width; a wide field is the same hills with the units spre
   assert.throws(() => soloDeal(blank(), arsenal, 'x', 'normal', 1000), RangeError);
 });
 
-test('a drone loads aiRack of each gun it carries, 2 when the row names none', () => {
-  const rack = droneRack(arsenal, 9);
-  assert.equal(rack.shell, Infinity);
-  for (const row of GAME.arsenal.ammo) {
-    if (row.key === 'shell') continue;
-    const want = row.ai && 9 >= row.aiRound ? (row.aiRack ?? 2) : 0;
-    assert.equal(rack[row.key], want, row.key);
+test('a drone owns no gear of its own: it starts a match as a player does and musters with what it holds', () => {
+  const bare = buildArsenal(GAME.arsenal); // no personalities: nobody shops, so the deal shows the starting purse
+  assert.ok(bare);
+  const G = blank();
+  soloDeal(G, bare, 'alpha', 'normal', 720);
+  G.round = 1;
+  soloMuster(G, bare);
+  assert.equal(G.drones.length, 3);
+  for (const [i, t] of G.tanks.slice(1).entries()) {
+    const d = nth(G.drones, i);
+    assert.equal(d.cash, 600);
+    assert.equal(t.cash, 600);
+    assert.equal(t.hp, TUNE.playerArmor);
+    assert.equal(t.maxHp, TUNE.playerArmor);
+    assert.deepEqual(t.ammo, startAmmo(bare), 'the starting shells a player has, and no others');
+    assert.equal(t.chutes, 0);
+    assert.equal(t.shield, false);
   }
-  assert.equal(rack.deathshead, 1);
-  assert.equal(rack.mortar, 2);
-  assert.equal(droneRack(arsenal, 8).deathshead, 0, 'Death\'s Head waits for round 9');
-  // Partial rows: buildArsenal fills the price, pack, effect and speed.
-  const one = buildArsenal({ ammo: [{ key: 'shell', name: 'Shell', dmg: 34, radius: 26 } as Weapon, { key: 'x', name: 'X', dmg: 1, radius: 1, ai: true, aiRound: 1 } as Weapon] });
-  assert.ok(one);
-  assert.equal(droneRack(one, 1).x, 2);
+});
+
+test('a drone carries its armor, shells and cash between rounds the way the player carries his', () => {
+  const bare = buildArsenal(GAME.arsenal);
+  assert.ok(bare);
+  const G = blank();
+  soloDeal(G, bare, 'alpha', 'normal', 720);
+  G.round = 1;
+  soloMuster(G, bare);
+  const [a, b, c] = [nth(G.tanks, 1), nth(G.tanks, 2), nth(G.tanks, 3)];
+  a.hp = 40; a.ammo!.buck = 0; a.cash = 900; a.chutes = 1; a.shield = true;
+  b.hp = 0;
+  c.hp = 0;
+  nth(G.tanks, 0).hp = 0;
+  assert.equal(soloSettle(G, bare).kind, 'tankLost');
+  assert.equal(nth(G.drones, 0).armor, 40, 'what it ended with');
+  assert.equal(nth(G.drones, 1).armor, TUNE.playerArmor, 'a wreck re-musters at full');
+  assert.equal(nth(G.drones, 0).cash, 900 + 600, 'what it held, and the prize of the round it won alone');
+  assert.equal(nth(G.drones, 0).ammo!.buck, 0);
+  assert.equal(nth(G.drones, 0).chutes, 1);
+  assert.equal(nth(G.drones, 0).shield, true);
+  G.round = 2;
+  soloMuster(G, bare);
+  const again = nth(G.tanks, 1);
+  assert.deepEqual([again.hp, again.maxHp, again.cash, again.chutes, again.shield, again.ammo!.buck], [40, 100, 1500, 1, true, 0]);
+});
+
+test('a drone that stands alone wins the round prize in cash, as the player would', () => {
+  const bare = buildArsenal(GAME.arsenal);
+  assert.ok(bare);
+  const G = blank();
+  soloDeal(G, bare, 'alpha', 'normal', 720);
+  G.round = 2;
+  soloMuster(G, bare);
+  nth(G.tanks, 0).hp = 0;
+  nth(G.tanks, 1).hp = 0;
+  nth(G.tanks, 3).hp = 0;
+  const before = G.score;
+  assert.deepEqual(soloSettle(G, bare), { kind: 'tankLost' });
+  assert.equal(nth(G.drones, 1).cash, 600 + 500 + 2 * 100, 'roundWinCash + round x 100');
+  assert.equal(nth(G.drones, 0).cash, 600);
+  assert.equal(G.score, before, 'the score rules do not change');
+});
+
+test('with two drones left standing nobody takes the prize', () => {
+  const bare = buildArsenal(GAME.arsenal);
+  assert.ok(bare);
+  const G = blank();
+  soloDeal(G, bare, 'alpha', 'normal', 720);
+  G.round = 1;
+  soloMuster(G, bare);
+  nth(G.tanks, 0).hp = 0;
+  nth(G.tanks, 3).hp = 0;
+  G.watchTurns = 39;
+  assert.deepEqual(soloSettle(G, bare), { kind: 'tankLost' });
+  assert.deepEqual(G.drones.map(d => d.cash), [600, 600, 600]);
+});
+
+test('every drone is dealt a personality and shops before round 1 with the player\'s rules, never over its purse', () => {
+  const G = fresh('alpha');
+  assert.equal(G.drones.length, 3);
+  for (const d of G.drones) {
+    assert.ok(arsenal.drones.some(p => p.key === d.personality), d.personality);
+    assert.ok(d.cash >= 0 && d.cash <= 600, `cash ${d.cash}`);
+  }
+  // The same seed deals the same drones the same purchases.
+  assert.deepEqual(fresh('alpha').drones, G.drones);
+  // A mustered drone wears its personality's name, which the battlefield and the armor line show.
+  G.round = 1;
+  soloMuster(G, arsenal);
+  for (const [i, t] of G.tanks.slice(1).entries()) {
+    assert.equal(t.personality, arsenal.drones.find(p => p.key === nth(G.drones, i).personality)?.name);
+    assert.ok(t.personality);
+  }
 });
 
 test('a deal is the stake, three lives and full armor', () => {
@@ -74,14 +151,14 @@ test('the same seed musters the same round', () => {
   assert.notDeepEqual(a.terrain, c.terrain);
   assert.equal(a.tanks.length, 4);
   assert.equal(nth(a.tanks, 0).hp, 100);
-  assert.equal(nth(a.tanks, 1).hp, TUNE.droneArmor);
+  assert.equal(nth(a.tanks, 1).hp, TUNE.playerArmor);
 });
 
 test('a round won pays the bonus and carries the armor', () => {
   const G = round1('alpha');
   nth(G.tanks, 0).hp = 64;
   for (const t of G.tanks.slice(1)) t.hp = 0;
-  const end = soloSettle(G);
+  const end = soloSettle(G, arsenal);
   assert.deepEqual(end, { kind: 'roundWon', bonus: 900, prize: 600 });
   assert.equal(G.score, 900);
   assert.equal(G.armor, 64);
@@ -93,12 +170,12 @@ test('a wreck costs a life and re-musters at full max; the last life ends the ma
   G.plate = 1;
   nth(G.tanks, 0).hp = 0;
   nth(G.tanks, 1).hp = 0; nth(G.tanks, 2).hp = 0;
-  assert.deepEqual(soloSettle(G), { kind: 'tankLost' });
+  assert.deepEqual(soloSettle(G, arsenal), { kind: 'tankLost' });
   assert.equal(G.lives, 2);
   assert.equal(G.armor, 125);
   G.lives = 1;
   nth(G.tanks, 0).hp = 0;
-  assert.deepEqual(soloSettle(G), { kind: 'matchLost' });
+  assert.deepEqual(soloSettle(G, arsenal), { kind: 'matchLost' });
   assert.equal(G.lives, 0);
 });
 
@@ -106,7 +183,7 @@ test('play goes on, the wind shifts, and the turn skips the wrecked', () => {
   const G = round1('alpha');
   G.turn = 0;
   nth(G.tanks, 1).hp = 0;
-  assert.deepEqual(soloSettle(G), { kind: 'next' });
+  assert.deepEqual(soloSettle(G, arsenal), { kind: 'next' });
   assert.equal(G.turn, 2);
   G.turn = 3; soloNextTurn(G);
   assert.equal(G.turn, 0);
@@ -116,7 +193,7 @@ test('with the player down the drones get WATCH_TURNS settles', () => {
   const G = round1('alpha');
   nth(G.tanks, 0).hp = 0;
   let end: Settled | undefined;
-  for (let i = 0; i < 40 && (!end || end.kind === 'next'); i++) end = soloSettle(G);
+  for (let i = 0; i < 40 && (!end || end.kind === 'next'); i++) end = soloSettle(G, arsenal);
   assert.deepEqual(end, { kind: 'tankLost' });
   assert.equal(G.watchTurns, 40);
 });

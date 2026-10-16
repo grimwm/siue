@@ -54,7 +54,7 @@ export function fieldWidthOk(w: unknown): w is number {
 export const GRAV = 95;
 export const TUNE = {
   lives: 3, maxLives: 5, oneUpEvery: 3000,
-  playerArmor: 100, droneArmor: 60,
+  playerArmor: 100,
   fuel: 80, driveSpeed: 42,
   thinkTime: 0.9, settleTime: 1.1,
   roundWinScore: 750, roundWinCash: 500, killBonus: 300,
@@ -108,9 +108,7 @@ export interface Weapon {
   price: number;
   pack: number;
   start?: number; // shells of it every player starts a match with
-  ai?: boolean;
-  aiRound?: number;
-  aiRack?: number; // shells of it a drone loads per round (2 when left out)
+  ai?: boolean; // a drone may buy and fire it
   effect: string;
   speed: number;
   shortRange?: boolean; // short-range on purpose: spared the balance test's reach rule
@@ -178,14 +176,27 @@ export interface ShopRow {
   price: number;
   effect?: string;
 }
+/* How a drone ranks the guns it can use and afford: the most damage per shell (big), damage per
+   dollar (value), a price-weighted draw (random), or damage over blast radius divided by pack (precise). */
+export type DronePick = 'big' | 'value' | 'random' | 'precise';
+/* One drone shopping personality (game.yaml drones.personalities). A row with `shift` has no rules of
+   its own: it takes another personality's for a round now and then. */
+export interface Personality {
+  key: string;
+  name: string;
+  reserve?: number; // the share of its cash a visit keeps back, 0 to 0.9
+  defense?: number; // the share of what it may spend that goes to defense first, 0 to 1
+  pick?: DronePick;
+  maxBuys?: number; // purchases per shop visit, 1 to 12
+  shift?: number; // the chance each round it takes another personality's rules
+}
 /* What a drop costs and when a parachute opens (game.yaml arsenal.fall). */
 export interface FallRules {
   freePx: number; // pixels a unit drops for free
   perPx: number; // armor lost per pixel past freePx, rounded down
   chuteOver: number; // a parachute opens only on a fall costing more than this
-  aiRound: number; // first round each drone carries a parachute
 }
-export const FALL_RULES: Readonly<FallRules> = Object.freeze({ freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3 });
+export const FALL_RULES: Readonly<FallRules> = Object.freeze({ freePx: 10, perPx: 0.5, chuteOver: 5 });
 /* The arsenal as the sim and the shop read it, built from game.json's arsenal section. */
 export interface Arsenal {
   weapons: Readonly<Record<string, Readonly<Weapon>>>;
@@ -195,6 +206,8 @@ export interface Arsenal {
   shop: readonly Readonly<ShopRow>[];
   gear: Readonly<Record<string, Readonly<Gear>>>;
   fall: Readonly<FallRules>;
+  /** The drone shopping personalities, in game.yaml's order (none: drones buy nothing). */
+  drones: readonly Readonly<Personality>[];
 }
 /* Shells left per weapon; the player's gun and the Shell itself are endless (Infinity). */
 export type Ammo = Record<string, number>;
@@ -218,6 +231,8 @@ export interface Tank {
   lastHitBy?: number; // index in world.tanks of whoever last damaged this unit
   kills?: number; // units this drone has wrecked this round
   chutes?: number; // a drone's parachutes (the player's are world.chutes)
+  shield?: boolean; // a drone's shield: it absorbs one hit whole (the player's is world.shield)
+  cash?: number; // a drone's cash: it earns what a player earns (the player's is world.cash)
   fellBy?: number; // index in world.tanks of whoever carved the most ground from under this unit
   fellDepth?: number; // how far that blast lowered the ground under it
   chute?: boolean; // its parachute opened in the last settle (a room's snapshot says so too)
@@ -325,9 +340,9 @@ export interface HitBox {
 }
 
 /* ---------- the arsenal ---------- */
-/* Builds the read-only arsenal from game.json's arsenal section (or the baked
+/* Builds the read-only arsenal from game.json's arsenal and drones sections (or the baked
    fallback). Null when it holds no usable ammo row. */
-export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } | null | undefined): Arsenal | null {
+export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } | null | undefined, drones?: { personalities?: Personality[] } | null): Arsenal | null {
   const w: Record<string, Weapon> = {};
   const order: string[] = [];
   const shop: ShopRow[] = [];
@@ -372,7 +387,8 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[]; fall?: Part
   Object.freeze(shelf);
   Object.freeze(shop);
   const fall = Object.freeze({ ...FALL_RULES, ...((data && data.fall) || {}) });
-  return { weapons: w, order, shelf, shop, gear, fall };
+  const personalities = ((drones && drones.personalities) || []).map(p => Object.freeze({ ...p }));
+  return { weapons: w, order, shelf, shop, gear, fall, drones: Object.freeze(personalities) };
 }
 /* A player's ammo at the start of a match: the endless Shell, plus each
    row's start shells. server/rules.php room_start_ammo is the same. */
@@ -384,22 +400,6 @@ export function startAmmo(arsenal: Arsenal): Ammo {
   }
   return ammo;
 }
-/* Drone magazine from the data file: aiRack (2 when a row names none) of each
-   gun the battery may load by round. server/ai.php room_ai_rack is the same. */
-export function droneRack(arsenal: Arsenal, round: number): Ammo {
-  const rack: Ammo = { shell: Infinity };
-  for (const k of arsenal.order) {
-    if (k === 'shell') continue;
-    const a = arsenal.weapons[k];
-    rack[k] = (a && a.ai && round >= (a.aiRound || 99)) ? (a.aiRack || 2) : 0;
-  }
-  return rack;
-}
-/* Parachutes a drone musters with: one from the rules' round on. */
-export function droneChutes(arsenal: Pick<Arsenal, 'fall'>, round: number): number {
-  return round >= arsenal.fall.aiRound ? 1 : 0;
-}
-
 /* ---------- terrain ---------- */
 /** A round's hills: three sines' amplitudes, phases and frequencies. */
 export interface Hills {
@@ -1209,9 +1209,9 @@ export function explode(world: World, arsenal: Arsenal, x: number, y: number, wk
    `direct` marks the wound as from a direct hit. A blast, a beam and a plasma
    ring all hurt through this. server/sim.php room_hit_unit is the same. */
 export function hitUnit(world: World, arsenal: Arsenal, t: Tank, owner: Tank, dmg: number, w: Weapon, direct: boolean, events: BlastEvent[]): void {
-  // A shield absorbs one hit whole, then it is gone.
-  if (t.isPlayer && world.shield) {
-    world.shield = false;
+  // A shield absorbs one hit whole, then it is gone: the player's is the world's, a drone's its own.
+  if (t.isPlayer ? world.shield : t.shield) {
+    if (t.isPlayer) world.shield = false; else t.shield = false;
     events.push({ kind: 'shield', tank: t });
     return;
   }
@@ -1228,13 +1228,15 @@ export function hitUnit(world: World, arsenal: Arsenal, t: Tank, owner: Tank, dm
   else events.push({ kind: 'wound', tank: t, dmg, hp: t.hp, direct });
 }
 /* What damage t took from owner's shot pays: the player's shots at drones
-   score and earn twice the damage; any shot at someone else marks the victim's
-   last hit and the shooter's dealt and kills. */
+   score and earn twice the damage, a drone's shots at any other unit earn it
+   twice the damage in cash; any shot at someone else marks the victim's last
+   hit and the shooter's dealt and kills. */
 function credit(world: World, t: Tank, owner: Tank, dmg: number): void {
   if (owner.isPlayer && !t.isPlayer) {
     world.score += dmg * 2;
     world.cash += dmg * 2;
   }
+  if (!owner.isPlayer && t !== owner) owner.cash = (owner.cash || 0) + dmg * 2;
   if (t !== owner) {
     t.lastHitBy = world.tanks.indexOf(owner); // an avenger and the shooter's dry spell read these
     owner.dealt = true;
@@ -1255,8 +1257,8 @@ export function markFalls(world: World, owner: Tank, was: readonly number[]): vo
     }
   });
 }
-/* A unit's wreck: only a kill the player's own shot made pays the bonus, never
-   one a rival drone made. */
+/* A unit's wreck: a kill pays its bonus to the shooter, the player in score and
+   cash, a drone in cash only, a drone's kill whoever the victim was. */
 function wreck(world: World, arsenal: Arsenal, t: Tank, owner: Tank): BlastEvent {
   // Last stand: the wreck itself detonates, once, then the trick is spent.
   let lastStand: Blast | null = null;
@@ -1269,6 +1271,7 @@ function wreck(world: World, arsenal: Arsenal, t: Tank, owner: Tank): BlastEvent
     world.score += TUNE.killBonus;
     world.cash += TUNE.killBonus;
   }
+  if (!owner.isPlayer && t !== owner) owner.cash = (owner.cash || 0) + TUNE.killBonus;
   return { kind: 'wreck', tank: t, lastStand };
 }
 

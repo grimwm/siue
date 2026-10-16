@@ -208,7 +208,7 @@ export function createMatch(deps: MatchDeps) {
     const sides = wallsLine(G.walls);
     const card = typeof bannerText === 'string' && bannerText
       ? bannerText
-      : `Round ${G.round}. The battery rebuilds meaner.${sides ? ` ${sides}.` : ''}`;
+      : `Round ${G.round}. The battery has restocked.${sides ? ` ${sides}.` : ''}`;
     startBanner(card, () => {
       // Open on the scheduled tank: advancing here would skip seat 0 every round.
       if (opener.isPlayer && !G.demo) {
@@ -538,13 +538,13 @@ export function createMatch(deps: MatchDeps) {
     }
     // A threshold crossed by the last volley counts before the settle.
     checkOneUps();
-    const end = soloSettle(G);
+    const end = soloSettle(G, tables.arsenal!);
     if (end.kind === 'next') { announceTurn(); return; }
     if (end.kind !== 'matchLost') checkOneUps();
     if (end.kind === 'roundWon') {
       recordRound(true);
       sfx.play('win');
-      say(`Round ${G.round} won! +${end.bonus} pts, +$${end.prize}. The battery rebuilds meaner, so spend it wisely.`, 'good');
+      say(`Round ${G.round} won! +${end.bonus} pts, +$${end.prize}. The battery shops too, so spend it wisely.`, 'good');
       exchange('tank', 'tankity tank! Hill claimed!', pick(['reaper', 'wraith', 'spotter']),
         pick(['Lucky shot, treads...', 'The hill was... too hilly...', 'Recharge... revenge...']));
       advance('roundWon');

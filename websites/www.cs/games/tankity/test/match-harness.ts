@@ -10,7 +10,7 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 import { createMarks } from '../src/marks.ts';
 import { createEarthShow } from '../src/earth-show.ts';
 import { createFireShow } from '../src/fire-show.ts';
-import type { FallRules, Gear, Weapon } from '../src/sim.ts';
+import type { FallRules, Gear, Personality, Weapon } from '../src/sim.ts';
 import type { GameState, GameTank, Tables } from '../src/game-types.ts';
 import type { MatchDeps } from '../src/match.ts';
 
@@ -29,8 +29,8 @@ export function nth<T>(list: readonly T[], i: number): T {
   return must(list[i], `item ${i}`);
 }
 
-const GAME: { arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-export const arsenal = must(buildArsenal(GAME.arsenal), 'the arsenal');
+const GAME: { arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> }; drones?: { personalities?: Personality[] } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
+export const arsenal = must(buildArsenal(GAME.arsenal, GAME.drones), 'the arsenal');
 
 export function harness(over: Partial<MatchDeps> = {}) {
   // rng and terrain stay null until startSolo or startDemo deals them, which GameState does not allow.
@@ -40,7 +40,7 @@ export function harness(over: Partial<MatchDeps> = {}) {
     cash: 0, nextOneUp: TUNE.oneUpEvery, rounds: [], roundStart: { score: 0, cash: 0 }, roundsWon: 0, ammo: null, selected: 'shell',
     shopSel: 0, shopQty: 1, fuelBank: 0, armor: TUNE.playerArmor, plate: 0, shield: false, jammer: 0, bunker: 0, laststand: false,
     time: 0, shake: 0, dlgQ: [], dlgT: 0, lastTalk: -99, banterT: 30, bannerT: 0, bannerDone: null, w: ROOM_W, hills: null,
-    cam: { z: 1, cx: ROOM_W / 2, cy: 230 }, over: false, won: false, tactics: {}, demo: false, demoHint: false, watchTurns: 0, preview: null,
+    cam: { z: 1, cx: ROOM_W / 2, cy: 230 }, over: false, won: false, tactics: {}, drones: [], demo: false, demoHint: false, watchTurns: 0, preview: null,
     wallsFixed: null, walls: 'none', wallHits: [],
   } as unknown as GameState;
   // The page's me() and cur() read their unit after the deal (main.ts), so neither checks it is there.

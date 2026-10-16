@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as sim from '../src/sim.ts';
 import {
-  buildArsenal, droneChutes, explode, fallDamage, fallTanks, anyTankFalling, armChutes, dueFalls, restY, settleVolley, settleFalls, CHUTE_SPEED, TUNE,
+  buildArsenal, explode, fallDamage, fallTanks, anyTankFalling, armChutes, dueFalls, restY, settleVolley, settleFalls, CHUTE_SPEED, TUNE,
 } from '../src/sim.ts';
 import { soloBuy, soloDeal, soloMuster } from '../src/solo.ts';
 import type { Tank, World } from '../src/sim.ts';
@@ -23,7 +23,7 @@ function nth<T>(list: readonly T[], i: number): T {
 }
 
 const GAME: { arsenal: NonNullable<Parameters<typeof buildArsenal>[0]> } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const RULES = { freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3 };
+const RULES = { freePx: 10, perPx: 0.5, chuteOver: 5 };
 const arsenal = must(buildArsenal({ ...GAME.arsenal, fall: RULES }), 'the arsenal');
 
 const unit = (id: string, isPlayer: boolean, x: number, y: number, hp = 100, extra: Partial<Tank> = {}): Tank =>
@@ -391,16 +391,16 @@ test('of several blasts under one unit, the one that lowered its ground the most
   const ev = settleFalls(G, arsenal);
   assert.equal(must(ev.find(e => e.tank === foe), 'its fall').by, me);
 });
-test('drones carry a parachute from the rules\' round', () => {
-  assert.equal(droneChutes(arsenal, 1), 0);
-  assert.equal(droneChutes(arsenal, 2), 0);
-  assert.equal(droneChutes(arsenal, 3), 1);
-  assert.equal(droneChutes(arsenal, 9), 1);
+test('a drone owns no free parachute: it musters with the ones it bought', () => {
   const G = { body: 'tank' } as SoloState; // soloDeal fills in the rest
-  soloDeal(G, arsenal, 'chutes', 'normal', 720);
+  const noDrones = must(buildArsenal(GAME.arsenal), 'the arsenal');
+  soloDeal(G, noDrones, 'chutes', 'normal', 720);
   G.round = 3;
-  soloMuster(G, arsenal);
-  assert.deepEqual(G.tanks.slice(1).map(t => t.chutes), [1, 1, 1]);
+  soloMuster(G, noDrones);
+  assert.deepEqual(G.tanks.slice(1).map(t => t.chutes), [0, 0, 0], 'a drone that never shops has none, in any round');
+  G.drones[1]!.chutes = 2;
+  soloMuster(G, noDrones);
+  assert.deepEqual(G.tanks.slice(1).map(t => t.chutes), [0, 2, 0]);
 });
 
 test('the shop sells parachutes that stack', () => {

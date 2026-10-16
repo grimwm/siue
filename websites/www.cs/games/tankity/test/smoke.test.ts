@@ -491,8 +491,8 @@ function scriptTank(seat: number, x: number, name: string, kind: string) {
 function scriptSeats() {
   // Server shape: humans arrive as name=initials, drones as name=AI name.
   return [
-    { seat: 0, human: true, name: 'abc', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: NET_SHOP && mockReady },
-    { seat: 1, human: false, name: 'REAPER', mode: 'ai', bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false },
+    { seat: 0, human: true, name: 'abc', mode: 'human', persona: null, bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: NET_SHOP && mockReady },
+    { seat: 1, human: false, name: 'REAPER', mode: 'ai', persona: null, bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false },
   ];
 }
 function scriptYou() {
@@ -619,9 +619,9 @@ let stateCalls = 0;
 function lobbyRoom() {
   const aiNames: Record<string, string> = { 1: 'REAPER', 2: 'WRAITH', 3: 'SPOTTER' };
   const seats = [0, 1, 2, 3].map(i => {
-    if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
-    if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
-    return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
+    if (i === 0) return { seat: 0, human: true, name: 'abc', mode: 'human', persona: null, bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
+    if (i === 1 && extraGuest) return { seat: 1, human: true, name: 'def', mode: 'human', persona: null, bot: false, lives: 3, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
+    return { seat: i, human: false, name: aiNames[i], mode: seatModes[i], persona: null, bot: false, lives: 0, score: 0, roundsWon: 0, kills: 0, gain: 0, out: null, ready: false };
   });
   return fxConform(Object.assign(
     { code: 'TST1', phase: 'lobby', seats, events: [], tanks: [], terrain: [], terrainRev: 1, hills: null, round: 0, wind: 0, turn: null, turnSecs: 120, speed: 1, walls: 'none', wallsNow: 'none', expiresAt: 1800000600, closesIn: 600, turnLeft: null, shopLeft: null, you: scriptYou(), csrf: 'cs0' },

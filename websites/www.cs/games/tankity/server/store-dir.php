@@ -97,9 +97,29 @@ final class StoreDir
     }
 
     /**
+     * Who may own a stored file: PHP's own user, or the owner of the directory
+     * it sits in. In a game's own data folder that is the account the site
+     * belongs to (the file is the deploy account's, PHP writes it through its
+     * group); in a shared /var/tmp it is root. A file another account planted
+     * in a directory it does not own is neither.
+     */
+    public static function trustedOwner(int $uid, string $path): bool
+    {
+        $dir = @lstat(dirname($path));
+        $dirUid = $dir !== false && ($dir['mode'] & 0170000) === 0040000 ? (int) $dir['uid'] : null;
+        return self::ownerTrusted($uid, $dirUid, self::euid());
+    }
+
+    /** trustedOwner's rule on plain numbers: $dirUid is null when the directory is missing or not a directory. */
+    public static function ownerTrusted(int $fileUid, ?int $dirUid, int $euid): bool
+    {
+        return $fileUid === $euid || ($dirUid !== null && $fileUid === $dirUid);
+    }
+
+    /**
      * A file PHP keeps directly in a shared directory such as /var/tmp, where
-     * its name can be squatted: a link, a non-file or another account's file is
-     * refused; one of ours that is open to others is made private. A missing
+     * its name can be squatted: a link, a non-file or a file owned by neither PHP nor
+     * the directory's owner is refused; one of ours that is open to others is made private. A missing
      * file passes.
      */
     public function claimFile(string $path): string
@@ -114,7 +134,7 @@ final class StoreDir
         if (($st['mode'] & 0170000) !== 0100000) {
             $this->refuse($path, 'is not a file', 'remove it');
         }
-        if ($st['uid'] !== self::euid()) {
+        if (!self::trustedOwner($st['uid'], $path)) {
             $this->refuse($path, 'belongs to another account', 'remove it');
         }
         if ($st['nlink'] !== 1) {
@@ -169,7 +189,8 @@ final class StoreDir
     /**
      * The check after every fopen of a file in a shared directory, where
      * another account can plant a link between claimFile() and the open: the
-     * open handle must be a regular file owned by PHP's user, and the path must
+     * open handle must be a regular file owned by PHP's user or the
+     * directory's owner (trustedOwner), and the path must
      * still name that same file (not a link, same device and inode). Otherwise
      * the handle is closed and the open refused.
      * @param resource $fh
@@ -186,7 +207,7 @@ final class StoreDir
             $problem = 'is a symbolic link';
         } elseif (($open['mode'] & 0170000) !== 0100000 || ($named['mode'] & 0170000) !== 0100000) {
             $problem = 'is not a file';
-        } elseif ($open['uid'] !== self::euid()) {
+        } elseif (!self::trustedOwner($open['uid'], $path)) {
             $problem = 'belongs to another account';
         } elseif ($open['dev'] !== $named['dev'] || $open['ino'] !== $named['ino']) {
             $problem = 'changed while it was being opened';

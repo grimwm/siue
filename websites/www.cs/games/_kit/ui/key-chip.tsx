@@ -1,5 +1,5 @@
-// One key, as the player presses it. The game styles .key-chip and passes the
-// label from its key table, so a chip can never disagree with the binding.
+// One key, as the player presses it. The kit styles .kit-key-chip (_kit/kit.css, opt-in) and the
+// game passes the label from its key table, so a chip can never disagree with the binding.
 export interface KeyChipProps {
   label: string;
   class?: string;
@@ -10,5 +10,5 @@ export interface KeyChipProps {
 }
 
 export function KeyChip({ label, class: cls, at, decorative }: KeyChipProps) {
-  return <kbd class={cls ?? 'key-chip'} data-keyhint={at} aria-hidden={decorative ? 'true' : undefined}>{label}</kbd>;
+  return <kbd class={cls ?? 'kit-key-chip'} data-keyhint={at} aria-hidden={decorative ? 'true' : undefined}>{label}</kbd>;
 }

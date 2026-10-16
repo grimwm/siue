@@ -156,3 +156,31 @@ test('a game bundling no npm package gets no licenses file and no banner', t => 
   assert.ok(!existsSync(join(dir, LICENSES)));
   assert.doesNotMatch(readFileSync(join(dir, 'dist/main.js'), 'utf8'), /Third-party licenses/);
 });
+
+const KIT_CSS = readFileSync(join(HERE, '..', 'kit.css'), 'utf8');
+
+test('kitCss: true copies _kit/kit.css to dist/kit.css; without it the file is absent', t => {
+  const dir = scratch(t);
+  run(dir);
+  assert.ok(!existsSync(join(dir, 'dist/kit.css')));
+  const cfg = JSON.parse(readFileSync(join(dir, 'build.json'), 'utf8'));
+  writeFileSync(join(dir, 'build.json'), JSON.stringify({ ...cfg, kitCss: true }));
+  const r = run(dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(readFileSync(join(dir, 'dist/kit.css'), 'utf8'), KIT_CSS);
+  assert.equal(run(dir, '--check').status, 0);
+  writeFileSync(join(dir, 'dist/kit.css'), '/* edited */');
+  assert.equal(run(dir, '--check').status, 1);
+  writeFileSync(join(dir, 'build.json'), JSON.stringify(cfg));
+  run(dir);
+  assert.ok(!existsSync(join(dir, 'dist/kit.css')), 'dropping the flag removes the copy');
+});
+
+test('kitCss must be a boolean', t => {
+  const dir = scratch(t);
+  const cfg = JSON.parse(readFileSync(join(dir, 'build.json'), 'utf8'));
+  writeFileSync(join(dir, 'build.json'), JSON.stringify({ ...cfg, kitCss: 'yes' }));
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /kitCss/);
+});

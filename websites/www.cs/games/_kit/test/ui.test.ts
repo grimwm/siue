@@ -323,7 +323,7 @@ test('a button blurs itself, then calls back; a key label becomes a chip', () =>
   const chip = chips(b)[0];
   assert.ok(chip);
   assert.equal(chip.getAttribute('aria-hidden'), 'true');
-  assert.equal(chip.className, 'key-chip');
+  assert.equal(chip.className, 'kit-key-chip');
   assert.equal(chip.textContent, 'Z');
 });
 
@@ -361,7 +361,7 @@ test('a key chip shows its key, with the default class or the given one', () => 
   render(h('p', null, h(KeyChip, { label: 'Space' }), h(KeyChip, { label: 'N', class: 'cap' })), root);
   const [a, b] = chips(root);
   assert.ok(a && b);
-  assert.deepEqual([a.className, a.textContent, b.className, b.textContent], ['key-chip', 'Space', 'cap', 'N']);
+  assert.deepEqual([a.className, a.textContent, b.className, b.textContent], ['kit-key-chip', 'Space', 'cap', 'N']);
   assert.equal(a.getAttribute('aria-hidden'), undefined);
   assert.equal(a.getAttribute('data-keyhint'), undefined);
 });

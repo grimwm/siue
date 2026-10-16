@@ -29,6 +29,7 @@ final class SiteVersionsTest extends TestCase
             'site.css' => "body{}\n",
             'main.js' => "function f(){}\n",
             'games/cylon/dist/main.js' => "export const x = 1;\n",
+            'games/cylon/dist/kit.css' => ".kit-x{}\n",
         ];
         foreach (self::SHEETS as $n) {
             $this->files["games/cylon/css/$n.css"] = ".$n{}\n";
@@ -37,7 +38,7 @@ final class SiteVersionsTest extends TestCase
             file_put_contents("$this->tmp/$f", $content);
         }
         $links = implode('', array_map(fn(string $n): string => "<link href=\"games/cylon/css/$n.css?v=old\" rel=\"stylesheet\">\n", self::SHEETS));
-        $this->page = "<link href=\"site.css?v=old\" rel=\"stylesheet\">\n$links"
+        $this->page = "<link href=\"site.css?v=old\" rel=\"stylesheet\">\n<link href=\"games/cylon/dist/kit.css?v=old\" rel=\"stylesheet\">\n$links"
             . "<script src=\"main.js?v=old\"></script>\n"
             . "<script type=\"module\">\nconst m = await import('./games/cylon/dist/main.js?v=old');\n</script>\n";
         file_put_contents("$this->tmp/index.html", $this->page);
@@ -79,6 +80,7 @@ final class SiteVersionsTest extends TestCase
             self::assertTrue(str_contains($html, "href=\"games/cylon/css/$n.css?v={$this->v("games/cylon/css/$n.css")}\""), "cylon-$n-css-version");
         }
         self::assertTrue(str_contains($html, "import('./games/cylon/dist/main.js?v={$this->v('games/cylon/dist/main.js')}')"), 'cylon-js-version');
+        self::assertTrue(str_contains($html, "href=\"games/cylon/dist/kit.css?v={$this->v('games/cylon/dist/kit.css')}\""), 'cylon-kit-css-version');
         [$stale, $problems] = site_versions_sync($this->tmp, false);
         self::assertTrue($stale === false && $problems === [], 'converges-in-one-run' . ' :: ' . json_encode([$stale, $problems]));
         self::assertTrue(preg_replace('/\?v=[0-9a-f]+/', '?v=X', $html) === preg_replace('/\?v=old/', '?v=X', $this->page), 'rewrite-touches-only-versions');

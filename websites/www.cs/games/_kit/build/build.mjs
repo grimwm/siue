@@ -11,6 +11,8 @@ import * as esbuild from 'esbuild';
 
 const GAMES = resolve(import.meta.dirname, '..', '..');
 const TSC = join(GAMES, 'node_modules', '.bin', 'tsc');
+const KIT = resolve(import.meta.dirname, '..');
+const KIT_CSS = 'kit.css';
 const OUT_RE = /^[a-z][a-z0-9-]*$/;
 const FORMATS = new Set(['esm', 'iife']);
 
@@ -35,6 +37,7 @@ export function loadBuildJson(gameDir) {
     if (typeof e.out !== 'string' || !OUT_RE.test(e.out)) throw new BuildError(`build.json: entry \`out\` ${e.out} must match ${OUT_RE}`);
     if (!FORMATS.has(e.format)) throw new BuildError(`build.json: entry \`format\` must be esm or iife`);
   }
+  if (cfg.kitCss !== undefined && typeof cfg.kitCss !== 'boolean') throw new BuildError('build.json: `kitCss` must be true or false');
   for (const [name, file] of Object.entries(cfg.versions ?? {})) {
     if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new BuildError(`build.json: version constant ${name} must be UPPER_CASE`);
     if (!existsSync(join(gameDir, file))) throw new BuildError(`build.json: version file ${file} does not exist`);
@@ -125,6 +128,7 @@ export async function bundle(gameDir, cfg) {
       for (const f of result.outputFiles) files.set(relative(outdir, f.path).split(sep).join('/'), f.text);
     }
   }
+  if (cfg.kitCss === true) files.set(KIT_CSS, readFileSync(join(KIT, KIT_CSS), 'utf8'));
   if (packages.size) {
     const blocks = [...packages].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, dir]) => licenseBlock(name, dir));
     files.set(LICENSES_FILE, `Third-party code bundled into this game's scripts.\n\n${blocks.join('\n---\n\n')}`);

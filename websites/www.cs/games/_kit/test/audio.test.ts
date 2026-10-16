@@ -245,3 +245,70 @@ test('release() right after hold() resumes even while the suspend is still in fl
   await tick();
   assert.equal(ctx.resumes, 1);
 });
+
+test('a tone can start at an absolute time, stop later than its default, and run through a sliding filter', () => {
+  const { ctx, core } = rig();
+  core.tone({ freq: 85, dur: 0.85, type: 'sine', vol: 0.09, attack: 0.015, slideTo: 32, slideDur: 0.5, at: 20, stopPad: 0.05, filter: { type: 'lowpass', freq: 200, slideTo: 55, slideDur: 0.45 } });
+  const osc = nodeOf(ctx, 'osc');
+  const filter = nodeOf(ctx, 'filter');
+  const env = gainAt(filter.to);
+  assert.deepEqual(osc.to, [filter]);
+  assert.equal(filter.type, 'lowpass');
+  assert.deepEqual(round(filter.frequency.calls), [['set', 200, 20], ['exp', 55, 20.45]]);
+  assert.deepEqual(round(osc.frequency.calls), [['set', 85, 20], ['exp', 32, 20.5]]);
+  assert.deepEqual(round(env.gain.calls), [['set', 0.0001, 20], ['exp', 0.09, 20.015], ['exp', 0.0001, 20.85]]);
+  assert.equal(osc.started, 20);
+  assert.equal(+(osc.stopped ?? 0).toFixed(6), 20.9);
+});
+
+test('a fading noise burst can fall off along a power curve and set its filter Q', () => {
+  const { ctx, core } = rig();
+  core.noise({ dur: 0.18, vol: 0.035, filterType: 'bandpass', filterFreq: 380, filterQ: 0.7, source: 'fade', fadePower: 2 });
+  const f = nodeOf(ctx, 'filter');
+  assert.equal(f.Q.value, 0.7);
+  const data = nodeOf(ctx, 'source').buffer?.getChannelData(0) ?? new Float32Array();
+  assert.ok(data.length > 10);
+  const mid = Math.floor(data.length / 2);
+  // The straight fade would leave up to 0.5 at the middle; squared leaves at most 0.25.
+  assert.ok(Math.abs(data[mid] ?? 1) <= 0.25 + 1e-6);
+  const plain = rig();
+  plain.core.noise({ dur: 0.18, vol: 0.035, source: 'fade' });
+  assert.equal(nodeOf(plain.ctx, 'filter').Q.value, 1, 'Q is left alone without filterQ');
+});
+
+test('a voice layers oscillators through one filter and one gain, along the envelope', () => {
+  const { ctx, core } = rig();
+  const master = ctx.createGain();
+  core.voice({
+    oscs: [{ type: 'sawtooth', freq: 100 }, { type: 'triangle', freq: 150 }],
+    filter: { type: 'lowpass', freq: 480, slideTo: 280, slideDur: 3, slide: 'linear' },
+    envelope: [{ ramp: 'linear', to: 0.04, at: 1 }, { ramp: 'linear', to: 0.03, at: 2 }, { ramp: 'exp', to: 0.0001, at: 3 }],
+    dur: 3,
+    stopPad: 0.05,
+    at: 30,
+  }, asAudioNode(master));
+  const [a, b] = nodesOf(ctx, 'osc');
+  const filter = nodeOf(ctx, 'filter');
+  const g = gainAt(filter.to);
+  assert.deepEqual([a?.type, b?.type], ['sawtooth', 'triangle']);
+  assert.deepEqual(a?.to, [filter]);
+  assert.deepEqual(b?.to, [filter]);
+  assert.deepEqual(g.to, [master]);
+  assert.deepEqual(round(filter.frequency.calls), [['set', 480, 30], ['lin', 280, 33]]);
+  assert.deepEqual(round(g.gain.calls), [['set', 0.0001, 30], ['lin', 0.04, 31], ['lin', 0.03, 32], ['exp', 0.0001, 33]]);
+  assert.deepEqual([a?.started, b?.started], [30, 30]);
+  assert.deepEqual([a?.stopped, b?.stopped].map(t => +(t ?? 0).toFixed(6)), [33.05, 33.05]);
+});
+
+test('a voice without a filter feeds the gain directly, and a muted bus makes nothing', () => {
+  const { ctx, core } = rig();
+  core.voice({ oscs: [{ type: 'sine', freq: 300 }], envelope: [{ ramp: 'exp', to: 0.0001, at: 1 }], dur: 1, when: 2 });
+  const osc = nodeOf(ctx, 'osc');
+  assert.equal(nodesOf(ctx, 'filter').length, 0);
+  assert.equal(gainAt(osc.to).to[0], core.bus('sfx'));
+  assert.deepEqual(osc.started, 12);
+  const before = ctx.nodes.length;
+  core.setMuted('sfx', true);
+  core.voice({ oscs: [{ type: 'sine', freq: 300 }], envelope: [], dur: 1 });
+  assert.equal(ctx.nodes.length, before);
+});

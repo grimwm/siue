@@ -107,7 +107,7 @@ function describe(nodes: Rec[], master: Rec): unknown {
 // A `.value =` on a filter's frequency, made before its source starts, is the
 // same as setValueAtTime at the start: the source makes no sound before then.
 function normalise(c: Call, param: string, n: Rec, start: number | null): Call {
-  if (c[0] === 'value' && param === 'frequency' && n.kind === 'filter') return ['set', c[1], start as number];
+  if (c[0] === 'value' && param === 'frequency' && n.kind === 'filter') return ['set', c[1] ?? 0, start as number];
   return c;
 }
 

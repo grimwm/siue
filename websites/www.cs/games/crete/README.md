@@ -1,6 +1,6 @@
 # The Island of Crete
 
-A text-based chase on a seeded 15 x 15 maze. You move once per turn, the creature twice; reach the exit alive. Controls are listed on the page (arrows/WASD move, Space bashes, Z/X/C use items, H hints, V shows the route, T plays itself, M mutes, Q quits, N starts a new run). The seed is in the address (`?seed=`), so a link replays a maze.
+A text-based chase on a seeded 15 x 15 maze. You move once per turn, the creature twice; reach the exit alive. Controls are listed on the page (arrows/WASD move, Space bashes, Z/X/C use items, H hints, V shows the route, T plays itself, M mutes, Q quits, N starts a new run). The seed is in the address (`?seed=`), so a link replays a maze. A hidden tab pauses the play-through and the hint fade, and showing it again resumes them.
 
 It is a `play` game: the folder is a complete page (`index.html`) with its own PWA files, and the site wraps it in `play/crete/` without the game knowing.
 

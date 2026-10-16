@@ -93,7 +93,7 @@ document is not hidden) calls `show`; a `pagehide` that will not come back
 from the back/forward cache also calls `close`. A page that starts hidden
 hides at once. Each game decides what going quiet means: Tankity suspends its
 sound and pauses its media; Cylon pauses the run as How to Play does and
-holds its sound.
+holds its sound; Crete stops its play-through and hint timers (`pause()`, `resume()`) and re-arms them on show. Tankity's own `visibilitychange` listeners (the on-screen report and toast/poll catch-up in `main.ts`, the room catch-up in `room.ts`) stay outside it: they act on the visibility change alone, and `followPage` would also fire them on `freeze`, `resume`, `pageshow` and `pagehide`.
 
 ## Components (`ui/`)
 

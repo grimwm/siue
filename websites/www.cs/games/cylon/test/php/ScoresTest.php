@@ -318,7 +318,7 @@ final class ScoresTest extends TestCase
         symlink($victim, $this->store);
         $old = ini_set('error_log', '/dev/null');
         try {
-            openScoresFile($this->store, 'c+');
+            openScoresFile($this->store);
             $this->fail('a link at the scores path must be refused');
         } catch (RuntimeException $e) {
             $this->assertStringContainsString('symbolic link', $e->getMessage());
@@ -330,9 +330,41 @@ final class ScoresTest extends TestCase
 
     public function testAMissingScoresFileIsCreatedPrivateAndOpens(): void
     {
-        $fh = openScoresFile($this->store, 'c+');
+        $fh = openScoresFile($this->store);
         fclose($fh);
         $this->assertSame('{"week":[],"alltime":[]}', $this->bytes());
         $this->assertSame(0600, fileperms($this->store) & 0777);
+    }
+
+    public function testADanglingLinkAtTheScoresPathCreatesNothing(): void
+    {
+        $target = $this->dir . '/target';
+        symlink($target, $this->store);
+        $old = ini_set('error_log', '/dev/null');
+        try {
+            openScoresFile($this->store);
+            $this->fail('a dangling link must be refused');
+        } catch (RuntimeException) {
+        } finally {
+            ini_set('error_log', (string) $old);
+        }
+        $this->assertFileDoesNotExist($target);
+    }
+
+    public function testAHardLinkAtTheScoresPathIsRefused(): void
+    {
+        $victim = $this->dir . '/victim';
+        file_put_contents($victim, 'keep');
+        link($victim, $this->store);
+        $old = ini_set('error_log', '/dev/null');
+        try {
+            openScoresFile($this->store);
+            $this->fail('a hard link must be refused');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('hard links', $e->getMessage());
+        } finally {
+            ini_set('error_log', (string) $old);
+        }
+        $this->assertSame('keep', file_get_contents($victim));
     }
 }

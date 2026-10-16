@@ -198,4 +198,72 @@ final class StoreDirTest extends TestCase
             $this->assertStringContainsString('belongs to another account', $e->getMessage());
         }
     }
+
+    public function testAHardLinkToOurFileIsRefusedByTheClaimAndThePostOpenCheck(): void
+    {
+        $ours = $this->root . '/ours';
+        file_put_contents($ours, '{}');
+        link($ours, $this->root . '/scores.json');
+        try {
+            $this->silently(fn() => $this->store->claimFile($this->root . '/scores.json'));
+            $this->fail('a hard-linked file must be refused by the claim');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('hard links', $e->getMessage());
+        }
+        $fh = fopen($this->root . '/scores.json', 'r+');
+        try {
+            $this->silently(fn() => $this->store->verifyOpened($fh, $this->root . '/scores.json'));
+            $this->fail('a hard-linked file must be refused after opening');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('hard links', $e->getMessage());
+        }
+        $this->assertFalse(is_resource($fh));
+        $this->assertSame('{}', file_get_contents($ours));
+    }
+
+    public function testOpenExistingCreatesAMissingFileWithTheModeAndSeed(): void
+    {
+        $path = $this->root . '/new.json';
+        $fh = $this->store->openExisting($path, 0600, '{"a":1}');
+        $this->assertSame('{"a":1}', stream_get_contents($fh));
+        fclose($fh);
+        $this->assertSame(0600, fileperms($path) & 0777);
+        $fh = $this->store->openExisting($path, 0600, 'ignored');
+        $this->assertSame('{"a":1}', stream_get_contents($fh), 'an existing file is neither reseeded nor truncated');
+        fclose($fh);
+    }
+
+    public function testOpenExistingNeverCreatesOrTruncatesThroughALink(): void
+    {
+        $target = $this->root . '/target';
+        symlink($target, $this->root . '/dangling');
+        try {
+            $this->silently(fn() => $this->store->openExisting($this->root . '/dangling', 0600, 'x'));
+            $this->fail('a dangling link must be refused');
+        } catch (DomainException) {
+        }
+        $this->assertFileDoesNotExist($target, 'the link was not followed to create its target');
+        file_put_contents($target, 'keep');
+        try {
+            $this->silently(fn() => $this->store->openExisting($this->root . '/dangling', 0600, 'x'));
+            $this->fail('a link to a file must be refused');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('symbolic link', $e->getMessage());
+        }
+        $this->assertSame('keep', file_get_contents($target));
+    }
+
+    /** A game that ships the score guard must ship the file it requires. */
+    public function testEveryGameThatShipsTheScoreGuardShipsStoreDir(): void
+    {
+        $found = 0;
+        foreach (glob(dirname(__DIR__, 3) . '/*/tools/install-files.php') ?: [] as $file) {
+            $src = (string) file_get_contents($file);
+            if (str_contains($src, "'score-guard.php'")) {
+                $found++;
+                $this->assertStringContainsString("'store-dir.php'", $src, $file);
+            }
+        }
+        $this->assertGreaterThanOrEqual(2, $found);
+    }
 }

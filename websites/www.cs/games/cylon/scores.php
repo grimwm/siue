@@ -260,7 +260,7 @@ function scoresFileMode(string $path): int {
  * Open the scores file with an flock lock.
  * @return resource
  */
-function openScoresFile(string $path, string $mode) {
+function openScoresFile(string $path) {
     $dir = dirname($path);
     $m = StoreModes::modes();
     $relax = scoresPathIsOurs($path);
@@ -270,28 +270,10 @@ function openScoresFile(string $path, string $mode) {
     if ($relax) {
         @chmod($dir, $m['sharedDir']);
     }
-    if (!is_file($path)) {
-        // 'x' creates the file or fails when the name now exists (a link included).
-        $bootstrap = @fopen($path, 'x');
-        if ($bootstrap !== false) {
-            scoreStore()->verifyOpened($bootstrap, $path);
-            if (flock($bootstrap, LOCK_EX)) {
-                fwrite($bootstrap, '{"week":[],"alltime":[]}');
-                fflush($bootstrap);
-                flock($bootstrap, LOCK_UN);
-            }
-            fclose($bootstrap);
-            @chmod($path, scoresFileMode($path));
-        } elseif (!file_exists($path) && !is_link($path)) {
-            throw new RuntimeException('unable to create scores file: ' . $path);
-        }
-    }
-
-    $fh = @fopen($path, $mode);
-    if ($fh === false) {
-        throw new RuntimeException('unable to open scores file: ' . $path);
-    }
-    scoreStore()->verifyOpened($fh, $path);
+    // A missing file is made with an exclusive open and every open is 'r+':
+    // nothing here creates or truncates through a link. Rewrites go through the
+    // verified handle (writeScoresHandle), under flock.
+    $fh = scoreStore()->openExisting($path, scoresFileMode($path), '{"week":[],"alltime":[]}');
     return $fh;
 }
 
@@ -341,7 +323,7 @@ function boardPayload(array $store): array {
  */
 function readScoresLocked(): array {
     $path = resolveScorePath();
-    $fh = openScoresFile($path, 'c+');
+    $fh = openScoresFile($path);
     try {
         // Exclusive: a read after the week turns rewrites the file without last week's rows.
         if (!flock($fh, LOCK_EX)) {
@@ -370,7 +352,7 @@ function readScoresLocked(): array {
  */
 function addScoreLocked(int $score, int $hits, string $initials): array {
     $path = resolveScorePath();
-    $fh = openScoresFile($path, 'c+');
+    $fh = openScoresFile($path);
     try {
         if (!flock($fh, LOCK_EX)) {
             throw new RuntimeException('unable to lock scores file for writing');

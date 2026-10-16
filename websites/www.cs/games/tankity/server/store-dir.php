@@ -117,10 +117,53 @@ final class StoreDir
         if ($st['uid'] !== self::euid()) {
             $this->refuse($path, 'belongs to another account', 'remove it');
         }
+        if ($st['nlink'] !== 1) {
+            $this->refuse($path, 'has other hard links', 'remove it');
+        }
         if (($st['mode'] & 0077) !== 0) {
             @chmod($path, StoreModes::modes()['file']);
         }
         return $path;
+    }
+
+    /**
+     * Opens a file in a shared directory without ever following a link or
+     * creating through one: a missing file is made with an exclusive 'x' open
+     * (O_EXCL fails on any existing name, a dangling link included) and born
+     * with $mode; the file is then opened 'r+', which neither creates nor
+     * truncates. The handle is verified against the path before it is returned.
+     * A caller rewrites only through the handle (ftruncate, fwrite) under flock.
+     * @param string $initial what a newly made file starts with
+     * @return resource
+     */
+    public function openExisting(string $path, int $mode, string $initial = '')
+    {
+        if (!file_exists($path) && !is_link($path)) {
+            $old = umask(0777 & ~$mode);
+            try {
+                $made = @fopen($path, 'x');
+            } finally {
+                umask($old);
+            }
+            if ($made !== false) {
+                $this->verifyOpened($made, $path);
+                // Exclusive creation: nobody else holds it yet, so the lock only orders us against a later opener.
+                if (flock($made, LOCK_EX)) {
+                    if ((fstat($made)['size'] ?? 0) === 0 && $initial !== '') {
+                        fwrite($made, $initial);
+                        fflush($made);
+                    }
+                    flock($made, LOCK_UN);
+                }
+                fclose($made);
+            }
+        }
+        $fh = @fopen($path, 'r+');
+        if ($fh === false) {
+            $this->refuse($path, 'cannot be opened', 'remove it, or fix its permissions');
+        }
+        $this->verifyOpened($fh, $path);
+        return $fh;
     }
 
     /**
@@ -147,6 +190,8 @@ final class StoreDir
             $problem = 'belongs to another account';
         } elseif ($open['dev'] !== $named['dev'] || $open['ino'] !== $named['ino']) {
             $problem = 'changed while it was being opened';
+        } elseif ($open['nlink'] !== 1) {
+            $problem = 'has other hard links';
         }
         if ($problem !== null) {
             if (is_resource($fh)) {

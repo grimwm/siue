@@ -8,6 +8,7 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 import type { LiveRow } from '../src/games.ts';
 import type { AlertsState, GamesView, YourGamesProps } from '../src/ui/games.tsx';
 import type { TitleProps } from '../src/ui/title.tsx';
+import { nth } from '../../_kit/test/nth.ts';
 
 installDocument();
 const { games, toast, title } = await importTsx<{
@@ -18,12 +19,6 @@ const { games, toast, title } = await importTsx<{
   games: '../src/ui/games.tsx', toast: '../src/ui/toast.tsx', title: '../src/ui/title.tsx',
 });
 
-/** Item `i` of a list the case reads, which must be there. */
-function nth<T>(list: readonly T[], i: number): T {
-  const v = list[i];
-  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
-  return v;
-}
 // walk, byId and maybeById are the stub's: elements only, which is all an id or tag can match.
 const byTag = (el: StubElement, tag: string) => walk(el).filter(n => n.localName === tag);
 

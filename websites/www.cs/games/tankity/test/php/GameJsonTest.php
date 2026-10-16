@@ -6,11 +6,15 @@ if (!defined('TANKITY_GAME_DIR')) {
     define('TANKITY_GAME_DIR', dirname(__DIR__, 2));
 }
 require_once TANKITY_GAME_DIR . '/tools/game-json.php';
+require_once TANKITY_GAME_DIR . '/../_kit/php/tests/TempDir.php';
 
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 final class GameJsonTest extends TestCase
 {
+    use TempDir;
+
     /**
      * A bare weapon entry (shell's is the rich one in good()). Several tests change one
      * value in shell's entry, so its numbers appear nowhere else.
@@ -25,7 +29,7 @@ final class GameJsonTest extends TestCase
     /** The game folder the schema checks resolve audio and sprite files against. */
     protected function setUp(): void
     {
-        $this->tmp = sys_get_temp_dir() . '/game-json-test-' . getmypid() . '-' . bin2hex(random_bytes(3));
+        $this->tmp = self::makeTempDir('game-json-test');
         $this->outside = $this->tmp . '-outside';
         $tmp = $this->tmp;
         @mkdir("$tmp/audio/sfx", 0777, true);
@@ -42,7 +46,8 @@ final class GameJsonTest extends TestCase
 
     protected function tearDown(): void
     {
-        exec('rm -rf ' . escapeshellarg($this->tmp) . ' ' . escapeshellarg($this->outside));
+        self::removeTree($this->tmp);
+        self::removeTree($this->outside);
     }
 
     /** The message a parse or render throws, or null when it succeeds. */

@@ -2,6 +2,9 @@
 // games/tankity/test/php-docker/RoomsStoreFailureTest.php
 declare(strict_types=1);
 
+require_once dirname(__DIR__, 3) . '/_kit/php/tests/TempDir.php';
+
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 /* A database error partway through a request (disk full, read-only) must answer
@@ -9,6 +12,8 @@ use PHPUnit\Framework\TestCase;
    aborts every room UPDATE stands in for the failing disk. */
 final class RoomsStoreFailureTest extends TestCase
 {
+    use TempDir;
+
     private static string $tmp;
     private static string $base;
     /** @var resource */
@@ -16,8 +21,7 @@ final class RoomsStoreFailureTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        self::$tmp = sys_get_temp_dir() . '/tankity-failing-' . getmypid() . '-' . bin2hex(random_bytes(3));
-        mkdir(self::$tmp, 0700);
+        self::$tmp = self::makeTempDir('tankity-failing');
         putenv('TANKITY_DATA_DIR=' . self::$tmp . '/data');
         require_once dirname(__DIR__) . '/php/rooms-lib.php';
         $probe = stream_socket_server('tcp://127.0.0.1:0');
@@ -36,7 +40,8 @@ final class RoomsStoreFailureTest extends TestCase
     {
         proc_terminate(self::$server);
         proc_close(self::$server);
-        tankity_test_rm(self::$tmp);
+        self::removeTree(self::$tmp);
+        putenv('TANKITY_DATA_DIR=' . ($GLOBALS['TANKITY_TEST_HOME'] ?? ''));
     }
 
     /** @return array{int, mixed} */

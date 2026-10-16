@@ -5,11 +5,15 @@ if (!defined('TANKITY_GAME_DIR')) {
     define('TANKITY_GAME_DIR', dirname(__DIR__, 2));
 }
 require_once TANKITY_GAME_DIR . '/config.php';
+require_once TANKITY_GAME_DIR . '/../_kit/php/tests/TempDir.php';
 
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 final class ConfigTest extends TestCase
 {
+    use TempDir;
+
     private string|false $oldConfigFile;
     private string|false $oldMax;
     private string|false $oldDir;
@@ -20,8 +24,7 @@ final class ConfigTest extends TestCase
         $this->oldConfigFile = getenv('CONFIG_FILE');
         $this->oldMax = getenv('TANKITY_ROOM_DB_MAX_MB');
         $this->oldDir = getenv('TANKITY_DATA_DIR');
-        $this->tmp = sys_get_temp_dir() . '/tankity-config-test-' . getmypid() . '-' . bin2hex(random_bytes(3));
-        mkdir($this->tmp);
+        $this->tmp = self::makeTempDir('tankity-config-test');
         // The sections assume neither setting comes from the environment.
         putenv('TANKITY_ROOM_DB_MAX_MB');
         putenv('TANKITY_DATA_DIR');
@@ -29,8 +32,7 @@ final class ConfigTest extends TestCase
 
     protected function tearDown(): void
     {
-        @unlink($this->tmp . '/a.yaml');
-        @rmdir($this->tmp);
+        self::removeTree($this->tmp);
         foreach (['CONFIG_FILE' => $this->oldConfigFile, 'TANKITY_ROOM_DB_MAX_MB' => $this->oldMax, 'TANKITY_DATA_DIR' => $this->oldDir] as $name => $old) {
             putenv(is_string($old) ? "$name=$old" : $name);
         }

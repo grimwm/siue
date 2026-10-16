@@ -2,12 +2,17 @@
 // games/tankity/test/php-docker/RoomsRefusedStoreTest.php
 declare(strict_types=1);
 
+require_once dirname(__DIR__, 3) . '/_kit/php/tests/TempDir.php';
+
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 /* A storage directory PHP will not use (here a symbolic link) must answer every
    endpoint with 503 JSON, never an empty 500 from an uncaught exception. */
 final class RoomsRefusedStoreTest extends TestCase
 {
+    use TempDir;
+
     /* Well-formed puzzles (their MACs cannot be checked until the store answers) with the protocol. */
     private const PUZZLE = ['proto' => 2, 'pow' => ['c' => 'v1.1800000000.c.4.AAAAAAAAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA', 'n' => [0, 1, 2, 3]]];
     private const JOIN_PUZZLE = ['proto' => 2, 'pow' => ['c' => 'v1.1800000000.j.4.AAAAAAAAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA', 'n' => [0, 1, 2, 3]]];
@@ -19,8 +24,8 @@ final class RoomsRefusedStoreTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        self::$tmp = sys_get_temp_dir() . '/tankity-refused-' . getmypid() . '-' . bin2hex(random_bytes(3));
-        mkdir(self::$tmp . '/real', 0700, true);
+        self::$tmp = self::makeTempDir('tankity-refused');
+        mkdir(self::$tmp . '/real', 0700);
         symlink(self::$tmp . '/real', self::$tmp . '/link');
         self::$log = self::$tmp . '/php.log';
         $probe = stream_socket_server('tcp://127.0.0.1:0');
@@ -39,10 +44,7 @@ final class RoomsRefusedStoreTest extends TestCase
     {
         proc_terminate(self::$server);
         proc_close(self::$server);
-        @unlink(self::$tmp . '/link');
-        @unlink(self::$log);
-        @rmdir(self::$tmp . '/real');
-        @rmdir(self::$tmp);
+        self::removeTree(self::$tmp);
     }
 
     /** @return array{int, mixed} */

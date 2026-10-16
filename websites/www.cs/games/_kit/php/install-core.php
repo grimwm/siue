@@ -370,10 +370,11 @@ function install_sync(string $dir, array $config, bool $write): array
         return [[], array_merge($notes, ['config: kit_php must be a list of file names in games/_kit/php'])];
     }
     foreach ($config['kit_php'] ?? [] as $file) {
-        if (!is_string($file) || !preg_match('/^[a-z0-9-]+\.php$/', $file)) {
+        if (!is_string($file) || !preg_match('/^[a-z0-9-]+\.(php|json)$/', $file)) {
             return [[], array_merge($notes, ['config: kit_php entries are file names in games/_kit/php, such as score-guard.php'])];
         }
-        $copy = @file_get_contents(__DIR__ . "/$file");
+        // A .json copy (blocked-initials.json) is shared data that lives in games/_kit/, beside php/.
+        $copy = @file_get_contents((str_ends_with($file, '.json') ? dirname(__DIR__) : __DIR__) . "/$file");
         if ($copy === false) {
             return [[], array_merge($notes, ["config: kit_php names $file, which games/_kit/php does not have"])];
         }

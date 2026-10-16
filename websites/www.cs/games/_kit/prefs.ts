@@ -10,6 +10,14 @@ export interface Codec<T> {
 
 export const text: Codec<string> = { parse: raw => raw, stringify: v => v };
 
+/** One of a fixed set of words; any other stored word reads as `fallback`. The stored form is the word itself. */
+export function oneOf<T extends string>(values: readonly T[], fallback: T): Codec<T> {
+  return {
+    parse: raw => values.find(v => v === raw) ?? fallback,
+    stringify: v => v,
+  };
+}
+
 /** JSON values; a parsed value the guard rejects counts as malformed. */
 export function json<T>(guard: (v: unknown) => v is T): Codec<T> {
   return {

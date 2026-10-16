@@ -63,7 +63,7 @@ function validateConfig(array $data): array {
     if ($unknown) {
         throw new RuntimeException('unknown config keys: ' . implode(', ', $unknown));
     }
-    $missing = array_diff($required, array_keys($data));
+    $missing = array_diff($required, array_keys($data), ScoreGuard::OPTIONAL_KEYS);
     if ($missing) {
         throw new RuntimeException('missing config keys: ' . implode(', ', $missing));
     }

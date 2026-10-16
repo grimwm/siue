@@ -177,7 +177,8 @@ Game speed: the FF button at the battlefield's top right, just under the status 
 | `server/db.php` | Where Tankity keeps its files (`tankity_data_dir`), the database (`tankity_db`), the journal mode for its filesystem, the schema steps, `tankity_tx` |
 | `server/rate.php` | Each address's hourly count of rooms created and joined, in the `rate` table: `room_rate_take`, `rate_used`, `rate_used_since`, `rate_take`, `rate_expire`, and `room_joins_per_hour()` (`room_joins_per_hour`, default 300) |
 | `server/pow.php` | The room puzzle (Room limits): `room_pow_issue` (a signed challenge), `room_pow_bits` (the difficulty under a surge of creates), `room_pow_check` (format, MAC, age, work), `room_pow_lead`, `room_pow_spent` and `room_pow_spend` (the `pow_used` table), and `room_now` |
-| `server/guard.php` | Tankity's settings for the kit's `Kit\ScoreGuard` (`tankity_guard()`, `tankity_initials()`; Tankity uses its origin, address and initials checks), and `BLOCKED_INITIALS` (the same list as `src/initials.ts`) |
+| `server/guard.php` | Tankity's settings for the kit's `Kit\ScoreGuard` (`tankity_guard()`, `tankity_initials()`; Tankity uses its origin, address and initials checks), and the blocked initials (the kit's `blocked-initials.json`, the same list as `src/initials.ts`) |
+| `server/blocked-initials.json` | The kit's blocked-initials list, a generated copy written by `tools/install-files.php` (`kit_php`); never edit it |
 | `server/score-guard.php` | The kit's score guard, a generated copy written by `tools/install-files.php` (`kit_php`); never edit it |
 | `server/board.php` | The all-time boards, one per difficulty, best 100 room runs each, rows in the database (`board_file`, `board_top`); a row can only come from a room match that two or more humans started |
 | `server/housekeep.php` | Cleanup on requests, at most once a minute (`tankity_housekeep`, `tankity_jobs`) |

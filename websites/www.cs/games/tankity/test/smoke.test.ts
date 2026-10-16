@@ -370,13 +370,6 @@ await test('scroll-idle', () => { assert.ok(E('help-overlay').scrollTop === idle
 await test('cam-pins-ground', () => { assert.ok(/const floorY = h \+ FLOOR_SLACK/.test(src) && /bottom - \(h \+ FLOOR_SLACK\)/.test(src)); });
 await test('cam-wide-sky', () => { assert.ok(/fillRect\(rect\.x0 - 20, rect\.y0 - 20, rect\.x1 - rect\.x0 \+ 40/.test(renderSrc)); }); // the sky covers everything the canvas shows
 // (invite-prefill runs inside the async block below: openLobby unhides late)
-// The clean-initials list must match the server copy exactly (cylon rule).
-function blockedOf(src: string) {
-  const start = src.search(/BLOCKED_INITIALS = (Object\.freeze\()?\[/);
-  const end = src.indexOf(']', start);
-  return [...src.slice(start, end).matchAll(/'([A-Z]{3})'/g)].map(m => m[1]).sort().join(',');
-}
-await test('blocked-parity', () => { assert.ok(blockedOf(php) === blockedOf(src), blockedOf(src).split(',').length + ' entries'); });
 const textFiles: [string, string][] = [['src/main.ts', mainSrc], ...moduleFiles.map((m): [string, string] => ['src/' + m, moduleOf(m)]), ['index.html', html], ['game.css', css], ...phpFiles.map((f): [string, string] => [f, must(phpText[f], f)])];
 for (const [f, text] of textFiles) {
   await test('no-dashes-' + f, () => { assert.ok(!/[—–]/.test(text)); });

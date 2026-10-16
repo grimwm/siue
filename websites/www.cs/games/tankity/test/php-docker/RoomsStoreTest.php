@@ -2,6 +2,9 @@
 // games/tankity/test/php-docker/RoomsStoreTest.php
 declare(strict_types=1);
 
+require_once dirname(__DIR__, 3) . '/_kit/php/tests/TempDir.php';
+
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 /* The room store under real concurrency: its own php -S (four workers) on a
@@ -9,6 +12,8 @@ use PHPUnit\Framework\TestCase;
    holders in other processes. */
 final class RoomsStoreTest extends TestCase
 {
+    use TempDir;
+
     private const CAP = 4;
     private static string $tmp;
     private static string $base;
@@ -17,8 +22,7 @@ final class RoomsStoreTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        self::$tmp = sys_get_temp_dir() . '/tankity-store-http-' . getmypid() . '-' . bin2hex(random_bytes(3));
-        mkdir(self::$tmp, 0700);
+        self::$tmp = self::makeTempDir('tankity-store-http');
         file_put_contents(self::$tmp . '/test.yaml', "room_live_secs: 60\n");
         putenv('CONFIG_FILE=' . self::$tmp . '/test.yaml');
         putenv('TANKITY_DATA_DIR=' . self::$tmp . '/data');
@@ -40,7 +44,8 @@ final class RoomsStoreTest extends TestCase
     {
         proc_terminate(self::$server);
         proc_close(self::$server);
-        tankity_test_rm(self::$tmp);
+        self::removeTree(self::$tmp);
+        putenv('TANKITY_DATA_DIR=' . ($GLOBALS['TANKITY_TEST_HOME'] ?? ''));
         putenv('CONFIG_FILE');
         tankity_config(true);
     }

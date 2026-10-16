@@ -19,6 +19,9 @@ final class ScoreGuard
     /** The config keys the guard reads; a game's config may hold others it checks itself. */
     public const CONFIG_KEYS = ['runTtlSec', 'startsPerHour', 'scoresPerHour', 'csrfCookie', 'storageKey', 'blockedInitials', 'allowedHosts'];
 
+    /** Config keys a game may leave out: blockedInitials defaults to blocked-initials.json. */
+    public const OPTIONAL_KEYS = ['blockedInitials'];
+
     private const WINDOW_SEC = 3600;
     private const TOKEN = '/^[a-f0-9]{32}\z/';
 
@@ -60,6 +63,7 @@ final class ScoreGuard
      */
     public static function validateConfig(array $data): array
     {
+        $data += ['blockedInitials' => self::defaultBlockedInitials()];
         $missing = array_diff(self::CONFIG_KEYS, array_keys($data));
         if ($missing) {
             throw new \RuntimeException('missing config keys: ' . implode(', ', $missing));
@@ -102,6 +106,22 @@ final class ScoreGuard
         }
         $out['allowedHosts'] = array_keys($hosts);
         return $out;
+    }
+
+    /**
+     * The words nobody may file, from blocked-initials.json: beside this file in
+     * a game's server/ copy, in games/_kit/ in the kit (the one list;
+     * games/_kit/initials.ts reads the same file).
+     * @return list<string>
+     */
+    public static function defaultBlockedInitials(): array
+    {
+        $raw = @file_get_contents(__DIR__ . '/blocked-initials.json');
+        $list = json_decode($raw !== false ? $raw : (string) @file_get_contents(dirname(__DIR__) . '/blocked-initials.json'), true);
+        if (!is_array($list) || !$list) {
+            throw new \RuntimeException('blocked-initials.json is missing or not a list');
+        }
+        return array_values($list);
     }
 
     /** Exactly three letters in either case, as uppercase; null for anything else. */

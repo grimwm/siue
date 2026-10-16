@@ -3,11 +3,15 @@
 // files that setUp() writes under $this->tmp.
 declare(strict_types=1);
 require_once __DIR__ . '/../../tools/site-game-pages.php';
+require_once __DIR__ . '/../../games/_kit/php/tests/TempDir.php';
 
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 final class SiteGamePagesTest extends TestCase
 {
+    use TempDir;
+
     private string $site = 'https://example.edu/~me/';
     private string $tmp;
     private string $root;
@@ -16,7 +20,7 @@ final class SiteGamePagesTest extends TestCase
     /** Two games (a page game and a mounted one) and the shared play files, in a scratch tree. */
     protected function setUp(): void
     {
-        $this->tmp = sys_get_temp_dir() . '/site-game-pages-test-' . getmypid() . '-' . bin2hex(random_bytes(3));
+        $this->tmp = self::makeTempDir('site-game-pages-test');
         $this->root = "$this->tmp/games";
         mkdir("$this->root/arty", 0777, true);
         mkdir("$this->root/mounted", 0777, true);
@@ -36,7 +40,7 @@ final class SiteGamePagesTest extends TestCase
 
     protected function tearDown(): void
     {
-        exec('rm -rf ' . escapeshellarg($this->tmp));
+        self::removeTree($this->tmp);
     }
 
     /** The ?v= a wrapper page should carry for a shared play file. */

@@ -4,7 +4,7 @@
 import * as f from '../src/field.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { last, nth } from './nth.ts';
+import { last, nth } from '../../_kit/test/nth.ts';
 
 
 class FakeStyle {

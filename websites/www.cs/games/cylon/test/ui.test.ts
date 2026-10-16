@@ -9,7 +9,7 @@ import type { GameOverProps } from '../src/ui/gameover.tsx';
 import type { HelpProps } from '../src/ui/help.tsx';
 import type { SettingsProps } from '../src/ui/settings.tsx';
 import type { HsRow } from '../src/scores.ts';
-import { nth } from './nth.ts';
+import { nth } from '../../_kit/test/nth.ts';
 
 installDocument();
 const ui = await importTsx<{

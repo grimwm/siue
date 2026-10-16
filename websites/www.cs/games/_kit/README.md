@@ -58,12 +58,12 @@ engines type-check without DOM types and run under plain Node.
 `pref(key, fallback, codec, storage)` is one setting under its own
 localStorage key, in the raw form that key already holds (`text` or
 `json(guard)`), so moving a game onto it keeps every player's settings.
-`subscribe` tells the UI when a value changes. Blocked or missing storage
+`oneOf(values, fallback)` is the codec for a setting that holds one of a fixed set of words: the stored form is the word itself, and any other stored word reads as `fallback`. `subscribe` tells the UI when a value changes. Blocked or missing storage
 falls back to a value that lives for the session; nothing throws.
 
 ## Score guard (`php/score-guard.php`)
 
-`Kit\ScoreGuard` is the gate in front of a score endpoint: the Origin (else Referer) allow-list, CSRF double-submit (the header must equal the cookie), single-use run tokens that expire, per-client rate limits keyed by an HMAC of the address (`startRun()` and `consumeRun()` count their own; `rateTake($kind, $perHour)` caps any other endpoint), and three-letter initials (`initials()`: `[A-Za-z]{3}` in, `[A-Z]{3}` out; `coerceInitials()` for rows stored before that rule). It reads only the keys in `ScoreGuard::CONFIG_KEYS`, checked by `ScoreGuard::validateConfig()`; a game's config may hold more. A game lists `score-guard.php` under `kit_php` in its `install-files.php` config, which keeps a copy in the game's `server/` (deny that folder in `.htaccess` and in `docker/nginx/default.conf`).
+`Kit\ScoreGuard` is the gate in front of a score endpoint: the Origin (else Referer) allow-list, CSRF double-submit (the header must equal the cookie), single-use run tokens that expire, per-client rate limits keyed by an HMAC of the address (`startRun()` and `consumeRun()` count their own; `rateTake($kind, $perHour)` caps any other endpoint), and three-letter initials (`initials()`: `[A-Za-z]{3}` in, `[A-Z]{3}` out; `coerceInitials()` for rows stored before that rule). It reads only the keys in `ScoreGuard::CONFIG_KEYS`, checked by `ScoreGuard::validateConfig()`; a game's config may hold more. The blocked words are one list, `blocked-initials.json`: `ScoreGuard` uses it when a game's config has no `blockedInitials` (`ScoreGuard::OPTIONAL_KEYS`), and `initials.ts` exports it as `BLOCKED_INITIALS` with `validInitials()` (the `[A-Za-z]{3}` rule, uppercased, blocked words refused); `test/initials.test.ts` fails when PHP and TS disagree. A game lists `score-guard.php` and `blocked-initials.json` under `kit_php` in its `install-files.php` config, which keeps a copy of each in the game's `server/` (deny that folder in `.htaccess` and in `docker/nginx/default.conf`).
 
 A POST endpoint must call both `originAllowed()` and `csrfOk()`: a request with neither Origin nor Referer passes the first, so the CSRF pair is what stops it.
 
@@ -93,7 +93,7 @@ document is not hidden) calls `show`; a `pagehide` that will not come back
 from the back/forward cache also calls `close`. A page that starts hidden
 hides at once. Each game decides what going quiet means: Tankity suspends its
 sound and pauses its media; Cylon pauses the run as How to Play does and
-holds its sound.
+holds its sound; Crete stops its play-through and hint timers (`pause()`, `resume()`) and re-arms them on show. Tankity's own `visibilitychange` listeners (the on-screen report and toast/poll catch-up in `main.ts`, the room catch-up in `room.ts`) stay outside it: they act on the visibility change alone, and `followPage` would also fire them on `freeze`, `resume`, `pageshow` and `pagehide`.
 
 ## Components (`ui/`)
 
@@ -140,7 +140,7 @@ Q closes whatever is open in every game but one: `isBackKey(ev)` is Q in either
 case with no Ctrl, Cmd or Alt and nothing being composed, and `typesText(target)`
 says when Q is a letter instead (a box that takes text). A held Q acts once:
 callers ignore `ev.repeat`. Crete is the exception: with nothing open, Q is Quit
-there, and Q is back only for the install steps and the Share field. No game listens for
+there, and Q is back only for the install steps and the Share field. Crete's key router asks `isBackKey` for Q and `typesText` for the seed box; Cylon's ability keys skip a typing target through `typesText`. No game listens for
 Escape and no hint names it: Safari and Firefox always leave full screen on
 Esc, and no page can stop them (`tankity/test/fullscreen.test.ts` fails on a
 binding, listener or visible hint that asks for it).
@@ -201,10 +201,10 @@ partial fixture is built by a typed helper or `satisfies`, and `as unknown as`
 needs a one-line reason. `test/typed-tests.test.ts` is the guard: it fails on
 a `*.test.mjs`, a test program missing or left out of `build.json`, an escape
 hatch in a test, a `test.sh` that runs `node --test`, or a `units.sh` without
-its zero-files check. Doubles:
+its zero-files check. `nth(list, i)` and `last(list)` (`test/nth.ts`) read an element and fail the test, naming the index, when it is not there. Doubles:
 `manualClock()` (timers that fire only on `advance`), `mulberry32(seed)`,
 `recorder()`, `memoryStorage()`, `throwingStorage()`. Tests use `test()`
-and `assert` directly; PHP tests are plain PHPUnit `TestCase`s.
+and `assert` directly; PHP tests are plain PHPUnit `TestCase`s, and one that needs scratch files uses the `Kit\Tests\TempDir` trait (`php/tests/TempDir.php`, required by path): `makeTempDir($prefix)` makes a unique private directory, `removeTree($path)` deletes it whole (a symlink is unlinked, never followed).
 
 Components are tested in Node: `importTsx(import.meta.dirname, { name: '../src/ui/x.tsx' })`
 bundles `.tsx` with esbuild (preact left external, so the test and the

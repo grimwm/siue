@@ -48,6 +48,20 @@ final class ScoreGuardTest extends TestCase
         );
     }
 
+    public function testBlockedInitialsDefaultToTheKitList(): void
+    {
+        $file = dirname(__DIR__, 2) . '/blocked-initials.json';
+        $list = json_decode((string) file_get_contents($file), true);
+        $this->assertIsArray($list);
+        $this->assertSame($list, ScoreGuard::defaultBlockedInitials());
+        $config = self::CONFIG;
+        unset($config['blockedInitials']);
+        $this->assertSame($list, ScoreGuard::validateConfig($config)['blockedInitials']);
+        $guard = new ScoreGuard(ScoreGuard::validateConfig($config), 'X-T', 'salt', [], [], sys_get_temp_dir() . '/unused-runs.json');
+        $this->assertTrue($guard->isBlocked('ass'));
+        $this->assertFalse($guard->isBlocked('abc'));
+    }
+
     public function testConfigIsValidatedAndNormalised(): void
     {
         $c = ScoreGuard::validateConfig(self::CONFIG + ['somethingElse' => 1]);

@@ -121,14 +121,18 @@ test('the arrows reach every shop row on a short screen, and V previews any shel
     expect(await selInView()).toBe(true);
   }
   expect(new Set(seen).size).toBe(total);
-  // A gun the stake cannot cover still previews: the dearest priced row.
+  // The dearest gun sells from the first shop: Buy waits only on the money, and V previews it.
   const data: GameData = await page.evaluate(() => fetch('game.json').then(r => r.json()));
   const priced = data.arsenal.ammo.filter(a => a.pack > 0);
   const at = priced.findIndex(a => a.price === Math.max(...priced.map(b => b.price))) + 1;
   for (let i = 0; i < total; i++) await page.keyboard.press('ArrowUp');
   for (let i = 0; i < at; i++) await page.keyboard.press('ArrowDown');
   await expect.poll(selName).toMatch(new RegExp(`^${at}\\. ${priced[at - 1]!.name}`));
-  await expect(page.locator('#shop-list li.sel button', { hasText: 'Buy' })).toBeDisabled();
+  const cash = Number(/\$(\d+)/.exec((await page.locator('#shop-cash').textContent()) ?? '')?.[1]);
+  expect(cash).toBeGreaterThan(0);
+  const buy = page.locator('#shop-list li.sel button', { hasText: 'Buy' });
+  if (priced[at - 1]!.price <= cash) await expect(buy).toBeEnabled();
+  else await expect(buy).toBeDisabled();
   await page.keyboard.press('v');
   await expect(page.locator('#preview-veil')).toBeVisible();
   expect(errors).toEqual([]);

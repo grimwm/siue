@@ -14,22 +14,6 @@ require_once __DIR__ . '/score-guard.php';
 
 use Kit\ScoreGuard;
 
-// Matched on the uppercase form. src/initials.ts BLOCKED_INITIALS is the same list.
-const BLOCKED_INITIALS = [
-    'ASS',
-    'FUK', 'FUC', 'FCK', 'FUX', 'FUQ',
-    'SHT', 'SHI',
-    'DIK', 'DIC', 'DCK',
-    'COK', 'COC', 'COQ',
-    'CUM', 'JIZ',
-    'CNT', 'PUS', 'VAG', 'CLT',
-    'SEX', 'XXX', 'TIT',
-    'FAG', 'FGT',
-    'NIG', 'NGR',
-    'WTF', 'FFS',
-    'POO', 'PEE',
-    'KKK',
-];
 // Where the guard would keep run tokens and rate stamps; no Tankity request writes it.
 const TANKITY_GUARD_RUNS = 'guard-runs.json';
 
@@ -47,7 +31,6 @@ function tankity_guard_config(array $override = []): array
         'scoresPerHour' => 240,
         'csrfCookie' => 'tankity_csrf',
         'storageKey' => 'operation-tankity',
-        'blockedInitials' => BLOCKED_INITIALS,
         'allowedHosts' => $hosts,
     ]);
 }

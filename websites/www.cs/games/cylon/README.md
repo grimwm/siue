@@ -12,7 +12,8 @@ Homepage mini-game module. Licensed under the GNU GPL v3 (see `LICENSE`).
 - `mount.html` — scanner, battlefield, FX and the help and game-over mount points (injected into `#game-root`)
 - `scores.php` — high-score API
 - `server/score-guard.php` — the kit's score guard (origin, CSRF, run tokens, rate limits, initials), copied by `tools/install-files.php`; never edit the copy
-- `data/config.json` — timezone, week boundary, board size, blocked initials, and request limits
+- `server/blocked-initials.json` — the kit's blocked-initials list, copied by `tools/install-files.php`; the guard uses it unless `data/config.json` sets `blockedInitials`, and `scores.php` sends it to the browser
+- `data/config.json` — timezone, week boundary, board size, and request limits
 - `data/scores.json` — live boards (created on the server; not part of the source tree)
 - `test/*.test.ts` — unit and static checks on `node:test`, type-checked by the build; `test/php/ScoresTest.php` — PHPUnit cases for `scores.php` (`vendor/bin/phpunit --testsuite cylon` from the site root)
 - `data/.htaccess` — denies HTTP access to `data/`

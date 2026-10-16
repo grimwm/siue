@@ -217,6 +217,15 @@ final class InstallCoreTest extends TestCase
         $this->assertSame([['server/install-core.php'], []], install_sync($this->dir, $config, false));
     }
 
+    public function testKitJsonIsCopiedFromTheKitFolder(): void
+    {
+        file_put_contents("$this->dir/metadata.yaml", "title: Arty\ndescription: Lob.\nstart: artyStart\n");
+        $config = ['kind' => 'start', 'kit_php' => ['blocked-initials.json']];
+        [$stale] = install_sync($this->dir, $config, true);
+        $this->assertSame(['manifest.webmanifest', 'server/blocked-initials.json'], $stale);
+        $this->assertFileEquals(dirname(__DIR__, 2) . '/blocked-initials.json', "$this->dir/server/blocked-initials.json");
+    }
+
     public function testKitPhpMustNameAKitFile(): void
     {
         file_put_contents("$this->dir/metadata.yaml", "title: Arty\ndescription: Lob.\nstart: artyStart\n");

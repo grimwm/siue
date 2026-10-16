@@ -47,7 +47,7 @@ final class RoomAgainTest extends TestCase
         return $room;
     }
 
-    public function testAReplacedBotSeatCarriesNoEconomyIntoTheLobby(): void
+    public function testEverySeatStartsTheNextMatchOnTheStartingEconomy(): void
     {
         $room = $this->over();
         $room['scores'][2] = 900;
@@ -55,11 +55,22 @@ final class RoomAgainTest extends TestCase
         $room['ammo'][2] = ['shell' => -1, 'nuke' => 2];
         $room['weapon'][2] = 'nuke';
         $room['nextUp'][2] = 9000;
+        $room['plate'][2] = 3;
+        $room['armor'][2] = 17;
+        $room['chutes'][2] = 4;
+        $room['shield'][2] = true;
         $this->assertTrue(room_again($room));
-        foreach (['scores', 'cash', 'ammo', 'weapon', 'nextUp'] as $k) {
-            $this->assertArrayNotHasKey(2, $room[$k], $k);
+        foreach ([0, 1, 2] as $seat) {
+            $this->assertSame(0, $room['scores'][$seat], "seat $seat score");
+            $this->assertSame(600, $room['cash'][$seat], "seat $seat cash");
+            $this->assertSame(room_start_ammo(), $room['ammo'][$seat], "seat $seat ammo");
+            $this->assertSame([0, 100, 0], [$room['plate'][$seat], $room['armor'][$seat], $room['chutes'][$seat]], "seat $seat plate, armor, parachutes");
+            $this->assertArrayNotHasKey($seat, $room['shield'] ?? [], "seat $seat shield");
         }
+        $this->assertArrayNotHasKey('persona', $room, 'the personalities are dealt again at the next start');
+        $this->assertArrayNotHasKey('droneSeed', $room);
         $this->assertSame(0, room_snapshot($room, 0, 0)['seats'][2]['score']);
+        $this->assertNull(room_snapshot($room, 0, 0)['seats'][2]['persona']);
     }
 
     public function testNoTwoIdleSeatsShareADroneName(): void

@@ -244,7 +244,7 @@ final class AiArcsTest extends TestCase
                     'tanks' => [
                         ['seat' => 0, 'kind' => 'human', 'x' => 150.0, 'y' => $terrain[150], 'hp' => 100, 'dirS' => 1, 'angle' => 45.0, 'power' => 50.0],
                         ['seat' => 1, 'kind' => 'ai', 'x' => 560.0, 'y' => $terrain[560], 'hp' => 60, 'dirS' => -1, 'angle' => 45.0, 'power' => 50.0,
-                            's' => $s, 'ammo' => room_ai_rack(9)],
+                            's' => $s, 'ammo' => tankity_test_rack()],
                     ]];
                 $before = room_sim_flights();
                 $ops = room_ai_earth_ops();

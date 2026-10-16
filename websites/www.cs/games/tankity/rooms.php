@@ -180,16 +180,32 @@ function room_arsenal(): array
     }
     if ($a === false) {
         $a = ['ammo' => [
-            ['key' => 'shell', 'name' => 'Shell', 'dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'ai' => true, 'aiRound' => 1, 'effect' => 'shot', 'speed' => 1.0],
-            ['key' => 'buck', 'name' => 'Buckshot', 'dmg' => 17, 'radius' => 20, 'price' => 80, 'pack' => 2, 'ai' => true, 'aiRound' => 2, 'effect' => 'pellets', 'pellets' => 3, 'spread' => 0.10, 'speed' => 1.0],
-            ['key' => 'mortar', 'name' => 'Mortar', 'dmg' => 56, 'radius' => 42, 'price' => 200, 'pack' => 2, 'ai' => true, 'aiRound' => 3, 'effect' => 'shot', 'speed' => 1.0],
-            ['key' => 'nuke', 'name' => 'NUKE', 'dmg' => 95, 'radius' => 70, 'price' => 500, 'pack' => 1, 'ai' => false, 'aiRound' => 99, 'effect' => 'shot', 'speed' => 1.0],
+            ['key' => 'shell', 'name' => 'Shell', 'dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'ai' => true, 'effect' => 'shot', 'speed' => 1.0],
+            ['key' => 'buck', 'name' => 'Buckshot', 'dmg' => 17, 'radius' => 20, 'price' => 80, 'pack' => 2, 'ai' => true, 'effect' => 'pellets', 'pellets' => 3, 'spread' => 0.10, 'speed' => 1.0],
+            ['key' => 'mortar', 'name' => 'Mortar', 'dmg' => 56, 'radius' => 42, 'price' => 200, 'pack' => 2, 'ai' => true, 'effect' => 'shot', 'speed' => 1.0],
+            ['key' => 'nuke', 'name' => 'NUKE', 'dmg' => 95, 'radius' => 70, 'price' => 500, 'pack' => 1, 'ai' => false, 'effect' => 'shot', 'speed' => 1.0],
         ], 'gear' => [
             ['key' => 'repair', 'name' => 'Repair +40 armor', 'price' => 120, 'n' => 40, 'effect' => 'repair'],
             ['key' => 'fuel', 'name' => 'Fuel +60', 'price' => 60, 'n' => 60, 'effect' => 'fuel'],
         ]];
     }
     return $a;
+}
+/* The drones' shopping personalities (game.yaml drones.personalities, served in game.json), in file order;
+// none when the file is missing, and then drones buy nothing. */
+function room_drones(): array
+{
+    static $d = null;
+    if ($d !== null) {
+        return $d;
+    }
+    $d = [];
+    $raw = @file_get_contents(__DIR__ . '/game.json');
+    $j = $raw === false ? null : json_decode($raw, true);
+    if (is_array($j) && is_array($j['drones']['personalities'] ?? null)) {
+        $d = array_values(array_filter($j['drones']['personalities'], 'is_array'));
+    }
+    return $d;
 }
 
 /* A browser's seats, one row each in the order asked; null when it asked for

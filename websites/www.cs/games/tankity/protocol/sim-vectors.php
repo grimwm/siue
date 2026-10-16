@@ -104,7 +104,11 @@ function sv_outcome(array $before, array $room): array
 {
     $tanks = [];
     $human = null;
+    $droneCash = [];
     foreach ($room['tanks'] as $i => $t) {
+        if ($t['kind'] === 'ai') {
+            $droneCash[] = (int) ($room['cash'][$i] ?? 0);
+        }
         $tanks[] = ['hp' => $t['hp'], 'fuel' => $t['fuel'], 'y' => (float) $t['y'], 'chutes' => $t['kind'] === 'ai' ? (int) ($t['chutes'] ?? 0) : null,
             'lastHitBy' => $t['lastHitBy'] ?? null, 'dealt' => !empty($t['dealt']), 'fellBy' => $t['fellBy'] ?? null];
         if ($t['kind'] === 'human' && $human === null) {
@@ -125,7 +129,9 @@ function sv_outcome(array $before, array $room): array
         'cash' => $human === null ? 0 : ($room['cash'][$human] ?? 0),
         'shield' => $human === null ? false : $room['shield'][$human],
         'laststand' => $human === null ? false : $room['laststand'][$human],
-        'chutes' => $human === null ? 0 : (int) ($room['chutes'][$human] ?? 0)];
+        'chutes' => $human === null ? 0 : (int) ($room['chutes'][$human] ?? 0),
+        'droneCash' => $droneCash,
+        'droneShield' => array_values(array_map(fn($t) => !empty($room['shield'][$t['seat']]), array_filter($room['tanks'], fn($t) => $t['kind'] === 'ai')))];
 }
 
 /** The aim (angle, power) a shooter would pick to land a shell on x, found with the server's own predictor. */
@@ -444,9 +450,48 @@ foreach ($weapons as $wkey => $def) {
     $clusterSplit("$wkey-fired-level", $wkey, ['x' => 100, 'y' => 300, 'vx' => 150, 'vy' => 0]);
 }
 
-/* ---- the rack a drone brings to a round: aiRack of each gun it may load (the Shell is endless, -1) ---- */
-foreach ([1, 3, 6, 7, 9, 12] as $round) {
-    $add('rack', "round$round", ['round' => $round], room_ai_rack($round));
+/* ---- what a drone buys: each personality on fixed purses and hulls, and a shapeshifter's shifts through the rounds ---- */
+$droneArsenal = room_drone_arsenal();
+$personalities = room_drones();
+$droneShopCase = function (string $name, array $c) use ($add, $droneArsenal, $personalities): void {
+    $rng = room_drone_rng($c['seed'], $c['round'], $c['seat']);
+    $form = room_drone_form($personalities, ['personality' => $c['personality'], 'form' => $c['form']], $c['round'], $rng);
+    $rules = room_drone_personality($personalities, $form);
+    $add('drone-shop', $name, $c, ['form' => $form, 'buys' => $rules === null ? [] : room_drone_shop($c['state'], $droneArsenal, $rules, $rng)]);
+};
+$purses = [
+    'fresh' => ['cash' => 600, 'armor' => 100, 'plate' => 0, 'chutes' => 0, 'shield' => false],
+    'hurt-and-rich' => ['cash' => 2500, 'armor' => 40, 'plate' => 1, 'chutes' => 0, 'shield' => false],
+    'broke' => ['cash' => 90, 'armor' => 100, 'plate' => 0, 'chutes' => 0, 'shield' => false],
+    'geared' => ['cash' => 1500, 'armor' => 125, 'plate' => 1, 'chutes' => 2, 'shield' => true],
+];
+foreach ($personalities as $p) {
+    foreach ($purses as $pname => $state) {
+        foreach (['alpha' => [1, 2], 'omega' => [4, 3]] as $seed => [$round, $seat]) {
+            $droneShopCase($p['key'] . "-$pname-$seed", ['personality' => $p['key'], 'form' => $p['key'], 'state' => $state, 'seed' => $seed, 'round' => $round, 'seat' => $seat]);
+        }
+    }
+}
+foreach ($personalities as $p) {
+    if (!isset($p['shift'])) {
+        continue;
+    }
+    $others = room_drone_ruled($personalities, $p['key']);
+    foreach (['alpha', 'omega', 'delta'] as $seed) {
+        $form = $others[0]['key'];
+        for ($round = 0; $round <= 8; $round++) {
+            $rng = room_drone_rng($seed, $round, 3);
+            $shifted = room_drone_form($personalities, ['personality' => $p['key'], 'form' => $form], $round, $rng);
+            $droneShopCase($p['key'] . "-$seed-round$round", ['personality' => $p['key'], 'form' => $form, 'state' => $purses['hurt-and-rich'], 'seed' => $seed, 'round' => $round, 'seat' => 3]);
+            $form = $shifted;
+        }
+    }
+}
+/* ---- the personality and first form each drone is dealt ---- */
+foreach (['alpha', 'omega', 'delta', 'scorched-1234'] as $seed) {
+    foreach ([1, 2, 3, 4, 5, 6, 7] as $seat) {
+        $add('drone-deal', "$seed-seat$seat", ['seed' => $seed, 'seat' => $seat], room_drone_deal($personalities, $seed, $seat));
+    }
 }
 
 /* ---- blast damage and the crater ---- */
@@ -475,6 +520,9 @@ $blast('drone-hurts-human', array_replace($base, ['tanks' => [$drone(100), $huma
 $blast('human-kills-drone-pays-bonus', array_replace($base, ['tanks' => [$human(100), $drone(300, 20)], 'x' => 300, 'direct' => 1]));
 $blast('drone-kills-drone', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(500, 20)], 'x' => 500, 'direct' => 2, 'owner' => 1]));
 $blast('drone-kills-human', array_replace($base, ['tanks' => [$drone(100), $human(300, 10)], 'x' => 300, 'direct' => 1]));
+$blast('drone-shield-absorbs-one-hit', array_replace($base, ['tanks' => [$human(100), $drone(300, 100) + ['shield' => true]], 'x' => 300, 'direct' => 1]));
+$blast('drone-shield-spares-the-neighbour-not', array_replace($base, ['tanks' => [$human(100), $drone(300, 100) + ['shield' => true], $drone(320, 100)], 'x' => 310]));
+$blast('drone-hits-drone-and-kills-pays-both', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(320, 20)], 'x' => 320, 'direct' => 2, 'owner' => 1]));
 $blast('shield-absorbs-one-hit', array_replace($base, ['tanks' => [$drone(100), $human(300, 100) + ['shield' => true]], 'x' => 300, 'direct' => 1]));
 $blast('shield-spares-the-neighbour-not', array_replace($base, ['tanks' => [$drone(100), $human(300, 100) + ['shield' => true], $drone(320, 100)], 'x' => 310]));
 $blast('bunker-halves', array_replace($base, ['tanks' => [$drone(100), $human(300, 100) + ['bunker' => 2]], 'x' => 312]));
@@ -922,7 +970,12 @@ foreach ($weapons as $wkey => $def) {
 $aim('pressed-against-its-target', ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 5, 'shooter' => 1, 'difficulty' => 'hard',
     'tanks' => [$human(350, 100), $drone(300, 60) + ['dirS' => 1, 's' => 'hunter', 'ammo' => ['heavy' => 1, 'babynuke' => 1, 'needle' => 1]]]]);
 // Point blank with a full round-9 rack, every strategy fires what would hurt it least.
-$rack9 = room_ai_rack(9);
+$rack9 = ['shell' => -1];
+foreach ($weapons as $wkey => $def) {
+    if ($wkey !== 'shell') {
+        $rack9[$wkey] = !empty($def['ai']) ? 2 : 0; // the drone is handed two of every gun it may use
+    }
+}
 foreach (['hunter', 'glory', 'lobber', 'sniper'] as $s) {
     foreach ([20, 40, 70] as $gap) {
         $aim("point-blank-least-self-harm-$s-$gap", ['terrain' => $flat, 'wind' => 0, 'round' => 9, 'seed' => 2, 'shooter' => 1, 'difficulty' => 'hard',
@@ -1315,7 +1368,11 @@ $fall = function (string $name, array $c) use ($add): void {
     room_settle_tanks($room, $events);
     $human = null;
     $tanks = [];
+    $droneCash = [];
     foreach ($room['tanks'] as $i => $t) {
+        if ($t['kind'] === 'ai') {
+            $droneCash[] = (int) ($room['cash'][$i] ?? 0);
+        }
         $tanks[] = ['y' => $t['y'], 'hp' => $t['hp'], 'kills' => $t['kills'] ?? 0, 'lastHitBy' => $t['lastHitBy'] ?? null,
             'chutes' => $t['kind'] === 'ai' ? (int) ($t['chutes'] ?? 0) : null];
         if ($t['kind'] === 'human' && $human === null) {
@@ -1330,7 +1387,7 @@ $fall = function (string $name, array $c) use ($add): void {
     }
     $add('fall', $name, $c, ['tanks' => $tanks, 'falls' => $falls,
         'score' => $human === null ? 0 : $room['scores'][$human], 'cash' => $human === null ? 0 : ($room['cash'][$human] ?? 0),
-        'chutes' => $human === null ? 0 : (int) ($room['chutes'][$human] ?? 0)]);
+        'chutes' => $human === null ? 0 : (int) ($room['chutes'][$human] ?? 0), 'droneCash' => $droneCash]);
 };
 $at = fn(string $kind, float $x, float $y, int $hp = 100, array $more = []) => ['kind' => $kind, 'x' => $x, 'y' => $y, 'hp' => $hp] + $more;
 foreach ([0, 5, 10, 10.5, 11, 12, 21, 22, 22.25, 37.7, 100, 166] as $drop) {

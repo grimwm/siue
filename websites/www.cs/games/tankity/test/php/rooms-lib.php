@@ -117,3 +117,16 @@ function tankity_test_admit(string $base, string $action, array $body): array
     }
     return $body + ['proto' => ROOM_PROTO, 'pow' => ['c' => $ch['challenge'], 'n' => $found]];
 }
+
+/* A drone's magazine for a test that needs one: $n shells of every gun a drone may use (`ai`). A drone owns no free
+   gear, so a case that wants it holding a gun hands it one (test/rack.ts is the browser's twin). */
+function tankity_test_rack(int $n = 2): array
+{
+    $rack = ['shell' => -1];
+    foreach (room_weapons() as $k => $def) {
+        if ($k !== 'shell') {
+            $rack[$k] = !empty($def['ai']) ? $n : 0;
+        }
+    }
+    return $rack;
+}

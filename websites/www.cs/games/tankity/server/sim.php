@@ -170,7 +170,7 @@ function room_weapons(): array
         $w[(string) $am['key']] = room_weapon_row($am);
     }
     if (!isset($w['shell'])) {
-        $w['shell'] = room_weapon_row(['key' => 'shell', 'name' => 'Shell', 'dmg' => 34, 'radius' => 26, 'ai' => true, 'aiRound' => 1]);
+        $w['shell'] = room_weapon_row(['key' => 'shell', 'name' => 'Shell', 'dmg' => 34, 'radius' => 26, 'ai' => true]);
     }
     return $w;
 }
@@ -203,8 +203,6 @@ function room_weapon_row(array $am): array
         'friction' => (float) ($am['friction'] ?? 0.3),
         'rollTime' => (float) ($am['rollTime'] ?? 5.0),
         'ai' => !empty($am['ai']),
-        'aiRound' => (int) ($am['aiRound'] ?? 99),
-        'aiRack' => (int) ($am['aiRack'] ?? 2),
         'hops' => (int) ($am['hops'] ?? 1),
         'hopKeep' => (float) ($am['hopKeep'] ?? 0.5),
         'kick' => (float) ($am['kick'] ?? 150.0),
@@ -784,8 +782,8 @@ function room_mark_falls(array &$room, array $ground, ?int $ownerIdx): void
 function room_hit_unit(array &$room, array &$events, int $idx, int $dmg, array $tank, ?int $ownerIdx, array $w, bool $direct): void
 {
     $t = $room['tanks'][$idx];
-    // A shield absorbs one hit whole, then it is gone.
-    if ($t['kind'] === 'human' && ($room['shield'][$t['seat']] ?? false)) {
+    // A shield absorbs one hit whole, then it is gone: a drone's, like a player's, is its seat's.
+    if ($room['shield'][$t['seat']] ?? false) {
         $room['shield'][$t['seat']] = false;
         $events[] = ['t' => 'shield', 'seat' => $t['seat'], 'by' => $tank['seat']];
         return;
@@ -803,10 +801,11 @@ function room_hit_unit(array &$room, array &$events, int $idx, int $dmg, array $
 }
 /* What $dmg the unit at $idx just took from $tank's shot ($ownerIdx its index,
 // null when it is gone) pays: a human's shots at drones score and earn twice
-// the damage, any shot at someone else marks the victim's last hit and the
+// the damage, a drone's shots at any other unit earn it twice the damage in
+// cash, any shot at someone else marks the victim's last hit and the
 // shooter's dealt and kills; a wreck is a kill event, a human's kill bonus
-// and match kill, and a rigged wreck's last stand. src/sim.ts credit() and
-// wreck() are the same. */
+// and match kill (a drone's kill bonus, in cash, whoever it wrecked), and a
+// rigged wreck's last stand. src/sim.ts credit() and wreck() are the same. */
 function room_credit(array &$room, array &$events, int $idx, int $dmg, array $tank, ?int $ownerIdx): void
 {
     $t = $room['tanks'][$idx];
@@ -821,10 +820,16 @@ function room_credit(array &$room, array &$events, int $idx, int $dmg, array $ta
         $room['scores'][$tank['seat']] = ($room['scores'][$tank['seat']] ?? 0) + $dmg * 2;
         $room['cash'][$tank['seat']] = ($room['cash'][$tank['seat']] ?? 0) + $dmg * 2;
     }
+    if ($tank['kind'] === 'ai' && $t['seat'] !== $tank['seat']) {
+        $room['cash'][$tank['seat']] = ($room['cash'][$tank['seat']] ?? 0) + $dmg * 2;
+    }
     if ($t['hp'] > 0) {
         return;
     }
     $events[] = ['t' => 'kill', 'seat' => $t['seat'], 'by' => $tank['seat']];
+    if ($tank['kind'] === 'ai' && $t['seat'] !== $tank['seat']) {
+        $room['cash'][$tank['seat']] = ($room['cash'][$tank['seat']] ?? 0) + 300;
+    }
     if ($tank['kind'] === 'human' && $t['seat'] !== $tank['seat'] && isset($room['stats'][$tank['seat']])) {
         $room['stats'][$tank['seat']]['kills']++;
     }
@@ -1136,7 +1141,7 @@ function room_roll_arc(array $room, array $w, int $ownerIdx, float $sx, float $v
 // A drop costs armor by its height at rest, credited to the blast that
 // lowered the ground under it the most. src/sim.ts fallDamage() .. settleFalls() are the same rules,
 // pinned by the 'fall' sim vectors. */
-const ROOM_FALL_RULES = ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3];
+const ROOM_FALL_RULES = ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5];
 /* game.yaml arsenal.fall: what a drop costs and when a parachute opens. */
 function room_fall_rules(): array
 {
@@ -1152,11 +1157,6 @@ function room_fall_rules(): array
 function room_fall_damage(float $drop, array $rules): int
 {
     return $drop <= $rules['freePx'] ? 0 : (int) floor($rules['perPx'] * ($drop - $rules['freePx']));
-}
-/* Parachutes a drone musters with: one from the rules' round on. */
-function room_drone_chutes(int $round): int
-{
-    return $round >= room_fall_rules()['aiRound'] ? 1 : 0;
 }
 /* The ground under column x (src/sim.ts surfY()). */
 function room_surf_y(array $terrain, float $x): float

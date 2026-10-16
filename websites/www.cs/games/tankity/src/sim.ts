@@ -1227,16 +1227,18 @@ export function hitUnit(world: World, arsenal: Arsenal, t: Tank, owner: Tank, dm
   if (t.hp <= 0) events.push(wreck(world, arsenal, t, owner));
   else events.push({ kind: 'wound', tank: t, dmg, hp: t.hp, direct });
 }
-/* What damage t took from owner's shot pays: the player's shots at drones
-   score and earn twice the damage, a drone's shots at any other unit earn it
-   twice the damage in cash; any shot at someone else marks the victim's last
-   hit and the shooter's dealt and kills. */
+/* What damage t took from owner's shot pays: any unit earns twice the damage it
+   deals to another unit in cash (the player's in world.cash, a drone's its own),
+   and the player's shots at drones score the same; nobody earns for hurting
+   itself. Any shot at someone else marks the victim's last hit and the
+   shooter's dealt and kills. */
 function credit(world: World, t: Tank, owner: Tank, dmg: number): void {
-  if (owner.isPlayer && !t.isPlayer) {
-    world.score += dmg * 2;
-    world.cash += dmg * 2;
+  if (t !== owner) {
+    if (owner.isPlayer) {
+      world.cash += dmg * 2;
+      if (!t.isPlayer) world.score += dmg * 2;
+    } else owner.cash = (owner.cash || 0) + dmg * 2;
   }
-  if (!owner.isPlayer && t !== owner) owner.cash = (owner.cash || 0) + dmg * 2;
   if (t !== owner) {
     t.lastHitBy = world.tanks.indexOf(owner); // an avenger and the shooter's dry spell read these
     owner.dealt = true;
@@ -1257,8 +1259,9 @@ export function markFalls(world: World, owner: Tank, was: readonly number[]): vo
     }
   });
 }
-/* A unit's wreck: a kill pays its bonus to the shooter, the player in score and
-   cash, a drone in cash only, a drone's kill whoever the victim was. */
+/* A unit's wreck: a kill pays its bonus in cash to whoever made it, whoever the
+   victim was (never a unit that wrecks itself); the player's kill of a drone
+   scores it too. */
 function wreck(world: World, arsenal: Arsenal, t: Tank, owner: Tank): BlastEvent {
   // Last stand: the wreck itself detonates, once, then the trick is spent.
   let lastStand: Blast | null = null;
@@ -1267,11 +1270,12 @@ function wreck(world: World, arsenal: Arsenal, t: Tank, owner: Tank): BlastEvent
     const ls: Partial<Gear> = arsenal.gear['laststand'] || {};
     lastStand = explode(world, arsenal, t.x, t.y - 12, 'shell', t, null, { dmg: ls.dmg || 50, radius: ls.radius || 44, fx: 'laststand' });
   }
-  if (!t.isPlayer && owner.isPlayer) {
-    world.score += TUNE.killBonus;
-    world.cash += TUNE.killBonus;
+  if (t !== owner) {
+    if (owner.isPlayer) {
+      world.cash += TUNE.killBonus;
+      if (!t.isPlayer) world.score += TUNE.killBonus;
+    } else owner.cash = (owner.cash || 0) + TUNE.killBonus;
   }
-  if (!owner.isPlayer && t !== owner) owner.cash = (owner.cash || 0) + TUNE.killBonus;
   return { kind: 'wreck', tank: t, lastStand };
 }
 

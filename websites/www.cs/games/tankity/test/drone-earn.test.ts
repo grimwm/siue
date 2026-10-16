@@ -1,6 +1,6 @@
 // A drone earns as a player does: twice the damage it deals to any other unit, the kill bonus whoever the
 // victim was, a shield of its own that absorbs one hit, and the round prize when it stands alone
-// (the prize is test/solo.test.ts's). The player earns exactly as before.
+// (the prize is test/solo.test.ts's). The player's score rules are as before: only a hit on a drone scores.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -69,7 +69,7 @@ test('a drone earns nothing from hurting itself', () => {
   assert.equal(a.cash, 50);
 });
 
-test('the player earns as he always has: damage and kills of drones pay score and cash, hits on the player or between drones pay him nothing', () => {
+test('the player earns twice the damage and the kill bonus against any unit; only a drone scores for him; hits on him or between drones pay him nothing', () => {
   const me = unit('tank', true, 100), a = unit('reaper', false, 300, 100, { cash: 0 }), b = unit('reaper', false, 500, 5, { cash: 0 });
   const G = world([me, a, b]);
   const d1 = hit(G, me, a);
@@ -81,6 +81,18 @@ test('the player earns as he always has: damage and kills of drones pay score an
   assert.equal(G.cash, 2 * d1 + 2 * shellOn(false) + TUNE.killBonus);
   assert.equal(a.cash, 0);
   assert.equal(b.cash, 0, 'being hit pays a drone nothing');
+});
+
+test('a player who hits another player (a room) earns the damage and the kill bonus in cash, never score; and nothing for hurting himself', () => {
+  const me = unit('tank', true, 100, 100), other = unit('other', true, 300, 5);
+  const G = world([me, other]);
+  hit(G, me, other);
+  assert.equal(other.hp, 0);
+  assert.equal(G.cash, 2 * shellOn(true) + TUNE.killBonus);
+  assert.equal(G.score, 0, 'the score rules do not change');
+  const solo = world([unit('tank', true, 100, 100)]);
+  hit(solo, at(solo.tanks, 0), at(solo.tanks, 0));
+  assert.equal(solo.cash, 0);
 });
 
 test('a drone\'s shield absorbs one hit whole and is then gone; the player\'s is the world\'s', () => {

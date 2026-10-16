@@ -520,6 +520,9 @@ $blast('drone-hurts-human', array_replace($base, ['tanks' => [$drone(100), $huma
 $blast('human-kills-drone-pays-bonus', array_replace($base, ['tanks' => [$human(100), $drone(300, 20)], 'x' => 300, 'direct' => 1]));
 $blast('drone-kills-drone', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(500, 20)], 'x' => 500, 'direct' => 2, 'owner' => 1]));
 $blast('drone-kills-human', array_replace($base, ['tanks' => [$drone(100), $human(300, 10)], 'x' => 300, 'direct' => 1]));
+$blast('human-hits-human-pays-cash-not-score', array_replace($base, ['tanks' => [$human(100), $human(300, 100)], 'x' => 300, 'direct' => 1]));
+$blast('human-wrecks-human-pays-the-bonus-in-cash', array_replace($base, ['tanks' => [$human(100), $human(300, 20)], 'x' => 300, 'direct' => 1]));
+$blast('human-hurts-himself-earns-nothing', array_replace($base, ['tanks' => [$human(300, 100), $drone(500, 100)], 'x' => 300, 'direct' => 0]));
 $blast('drone-shield-absorbs-one-hit', array_replace($base, ['tanks' => [$human(100), $drone(300, 100) + ['shield' => true]], 'x' => 300, 'direct' => 1]));
 $blast('drone-shield-spares-the-neighbour-not', array_replace($base, ['tanks' => [$human(100), $drone(300, 100) + ['shield' => true], $drone(320, 100)], 'x' => 310]));
 $blast('drone-hits-drone-and-kills-pays-both', array_replace($base, ['tanks' => [$human(100), $drone(300, 100), $drone(320, 20)], 'x' => 320, 'direct' => 2, 'owner' => 1]));

@@ -694,13 +694,14 @@ starting values. `ai` marks the guns a drone can use at all (it never buys a
 gun without it); no gun carries `aiRound` or `aiRack`, and `arsenal.fall` has
 no `aiRound`.
 
-**Earning.** Any tank earns twice the damage it deals to another tank, and a
-drone that wrecks one earns the kill bonus (`TUNE.killBonus`, 300), whoever
-the victim was; the round's sole survivor takes `roundWinCash + round × 100`,
+**Earning.** The same rules for every tank, human or drone: any tank earns
+twice the damage it deals to another tank in cash, and the kill bonus
+(`TUNE.killBonus`, 300) for wrecking one, whoever the victim was, human against
+human in a room included; nobody earns for hurting themselves. The round's sole survivor takes `roundWinCash + round × 100`,
 a drone as a player does (a drone takes it in cash and the round still reads
-as lost to the room). Only cash moves for a drone; the score rules are
-unchanged, and a human earns exactly as before (twice the damage against
-drones, the bonus for wrecking one; human against human pays nothing). A
+as lost to the room). Only cash moves for a drone, and the score rules are
+unchanged: a human's hit or wreck of a drone still scores as well as pays,
+a hit on another human pays cash only. A
 drone's shield absorbs one hit whole, as the player's does.
 
 **Shopping.** Drones shop before the first round (round 0) and after every
@@ -725,9 +726,9 @@ parachute while it has none, a plate, a shield. The rest buys guns by its
 
 | key | name | reserve | defense | pick | maxBuys | how it shops |
 |---|---|---|---|---|---|---|
-| `saver` | Saver | 0.5 | 0.1 | `big` | 3 | Keeps half its cash back. Buys the highest-`dmg` gun it can afford. |
-| `scrapper` | Scrapper | 0 | 0.1 | `value` | 8 | Spends everything. Ranks guns by `dmg` × `pack` / `price`, damage per dollar. |
-| `turtle` | Turtle | 0.1 | 0.6 | `value` | 6 | Defense first, then cheap value guns. |
+| `saver` | Saver | 0.5 | 0.1 | `big` | 3 | Keeps half its cash back and saves up for the big gun: the dearest (by `price`) it can afford after its reserve. |
+| `scrapper` | Scrapper | 0 | 0.1 | `value` | 8 | Spends everything. Ranks guns by `dmg` × `pack` / `price`, damage per dollar, at most 2 packs of any one gun a visit. |
+| `turtle` | Turtle | 0.1 | 0.6 | `value` | 6 | Defense first, then value guns (at most 2 packs of one). |
 | `gambler` | Gambler | 0 | 0.15 | `random` | 6 | Picks at random among the affordable guns, weighted by price. |
 | `sniper` | Sniper | 0.2 | 0.15 | `precise` | 4 | Ranks guns by `dmg` / `radius` divided by `pack`: a tight hard hit over a wide blast, a pack of 1 first. |
 | `shapeshifter` | Shapeshifter | | | | | `shift: 0.35`. Each round after the first, with probability `shift` (one seeded draw) it takes another personality's rules for that round (a second draw picks which, never its own, never another shifter); otherwise it keeps the form it took last. Its first form is drawn at match start. |
@@ -1816,7 +1817,7 @@ with -0 equal to 0 only where a case says so.
   browser plays each volley as a solo match does (falls animated every frame,
   one settle once the last shell is down), including Buckshot pits dug in
   bursts and craters in fractional ground.
-- Shared rules the cases pin: a kill pays the 300 bonus to the player who made it
+- Shared rules the cases pin: a kill pays the 300 bonus in cash to whoever made it
   and to a drone, in cash, whoever it wrecked, a volley's projectiles (buckshot pellets, a hop gun's warheads,
   and one burst's bomblets as a group) burst in launch order, each against the
   ground the earlier ones left, and bomblets of one burst burst in the order

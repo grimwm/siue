@@ -1123,8 +1123,9 @@ arsenal:
 #              each while the defense share lasts. The rest of the budget
 #              buys guns.
 #   pick       how it ranks the guns it can use and afford (ai: true, sold in packs):
-#                big      the most damage per shell
-#                value    damage x pack / price, damage per dollar
+#                big      the dearest gun it can afford: it saves up for the big one
+#                value    damage x pack / price, damage per dollar, but no more
+#                         than 2 packs of any one gun in a visit
 #                random   a draw among them, weighted by price
 #                precise  damage / radius, a tight hard hit over a wide blast,
 #                         divided by pack so a pack of 1 wins

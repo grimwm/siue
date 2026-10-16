@@ -83,7 +83,7 @@ final class RoomDronesTest extends TestCase
                 $first = $guns[0]['item'];
                 $this->assertContains($first, $keys, "{$p['key']} \$$cash");
                 $score = fn(string $k) => match ($p['pick']) {
-                    'big' => (float) $w[$k]['dmg'],
+                    'big' => (float) $w[$k]['price'],
                     'value' => ($w[$k]['dmg'] * $w[$k]['pack']) / $w[$k]['price'],
                     'precise' => $w[$k]['dmg'] / $w[$k]['radius'] / $w[$k]['pack'],
                     default => 0.0,
@@ -288,7 +288,7 @@ final class RoomDronesTest extends TestCase
         $this->assertSame(420, $room['cash'][2], 'hurting itself earns nothing');
     }
 
-    public function testAPlayersEarningsAreUnchanged(): void
+    public function testAnyUnitEarnsTwiceTheDamageAndTheKillBonusScoreOnlyForAHumanHittingADrone(): void
     {
         $room = $this->begun();
         $idx = fn(int $seat) => array_search($seat, array_column($room['tanks'], 'seat'), true);
@@ -300,10 +300,16 @@ final class RoomDronesTest extends TestCase
         room_hit_unit($room, $events, $d, 30, $room['tanks'][$h], $h, room_weapons()['shell'], true);
         $this->assertSame([60, 60], [$room['cash'][0], $room['scores'][0]], 'a player hitting a drone pays score and cash');
         room_hit_unit($room, $events, $g, 30, $room['tanks'][$h], $h, room_weapons()['shell'], true);
-        $this->assertSame([60, 60], [$room['cash'][0], $room['scores'][0]], 'a player hitting a player pays nothing');
+        $this->assertSame([120, 60], [$room['cash'][0], $room['scores'][0]], 'a player hitting a player earns cash, not score');
+        $room['tanks'][$g]['hp'] = 5;
+        room_hit_unit($room, $events, $g, 30, $room['tanks'][$h], $h, room_weapons()['shell'], true);
+        $this->assertSame([120 + 60 + 300, 60], [$room['cash'][0], $room['scores'][0]], 'and the kill bonus in cash');
         $room['tanks'][$d]['hp'] = 5;
         room_hit_unit($room, $events, $d, 30, $room['tanks'][$h], $h, room_weapons()['shell'], true);
-        $this->assertSame([60 + 60 + 300, 60 + 60 + 300], [$room['cash'][0], $room['scores'][0]]);
+        $this->assertSame([480 + 60 + 300, 60 + 60 + 300], [$room['cash'][0], $room['scores'][0]]);
+        $before = $room['cash'][0];
+        room_hit_unit($room, $events, $h, 30, $room['tanks'][$h], $h, room_weapons()['shell'], true);
+        $this->assertSame($before, $room['cash'][0], 'nobody earns for hurting himself');
     }
 
     public function testADroneSeatsShieldAbsorbsOneHit(): void
@@ -387,5 +393,56 @@ final class RoomDronesTest extends TestCase
         $this->assertSame([600, 0, 100, 0], [$room['cash'][2], $room['plate'][2], $room['armor'][2], $room['chutes'][2]]);
         $this->assertSame(room_start_ammo(), $room['ammo'][2]);
         $this->assertArrayNotHasKey('persona', $room);
+    }
+
+    public function testAValuePickBuysAtMostTwoPacksOfAnyOneGunAndABigPickIsNotCapped(): void
+    {
+        $scrapper = room_drone_personality(room_drones(), 'scrapper');
+        $this->assertSame('value', $scrapper['pick']);
+        foreach ([600, 1500, 4000, 20000] as $cash) {
+            $buys = $this->shop(self::view(['cash' => $cash]), ['maxBuys' => 12] + $scrapper, 'cap');
+            $tally = [];
+            foreach ($buys as $b) {
+                if (isset(room_weapons()[$b['item']])) {
+                    $tally[$b['item']] = ($tally[$b['item']] ?? 0) + $b['qty'];
+                }
+            }
+            $this->assertSame([], array_filter($tally, fn($n) => $n > 2), "\$$cash: " . json_encode($tally));
+        }
+        $saver = ['reserve' => 0, 'maxBuys' => 12] + room_drone_personality(room_drones(), 'saver');
+        $items = array_column($this->shop(self::view(['cash' => 20000]), $saver, 'big'), 'item');
+        $this->assertLessThan(count($items), count(array_unique($items)), 'the dearest gun again and again');
+    }
+
+    public function testSaverScrapperAndSniperDoNotAllBuyAlike(): void
+    {
+        $ps = array_map(fn($k) => room_drone_personality(room_drones(), $k), ['saver', 'scrapper', 'sniper']);
+        $all = [];
+        foreach ($ps as $i => $p) {
+            foreach ([600, 1500, 4000] as $cash) {
+                $all[$i][$cash] = json_encode($this->shop(self::view(['cash' => $cash]), $p, 'distinct'));
+            }
+        }
+        foreach ([600, 1500, 4000] as $cash) {
+            $this->assertGreaterThanOrEqual(2, count(array_unique([$all[0][$cash], $all[1][$cash], $all[2][$cash]])), "\$$cash");
+        }
+        $this->assertCount(3, array_unique(array_map(fn($a) => implode('|', $a), $all)));
+    }
+
+    public function testRoomBuyRefusesAnEliminatedHumanButNotAWreckedTankOrADroneSeat(): void
+    {
+        $room = $this->begun();
+        foreach ($room['tanks'] as $i => $t) {
+            $room['tanks'][$i]['hp'] = 0; // every tank wrecked, as at a round's end
+        }
+        $room['cash'][0] = 1000;
+        $room['cash'][2] = 1000;
+        $room['seats'][0]['lives'] = 1;
+        $this->assertNull(room_buy($room, 0, 'shield', 1), 'a wrecked human with a life left shops');
+        $this->assertNull(room_buy($room, 2, 'shield', 1), 'a wrecked drone shops: a drone is never eliminated');
+        $room['seats'][1]['lives'] = 0;
+        $room['cash'][1] = 1000;
+        $this->assertSame(409, room_buy($room, 1, 'shield', 1)[0], 'an eliminated human is refused');
+        $this->assertSame(1000, $room['cash'][1]);
     }
 }

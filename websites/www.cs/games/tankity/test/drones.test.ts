@@ -65,7 +65,7 @@ test('each personality picks guns the way its rule says: the best of the guns it
       const first = guns[0]!.item;
       const keys = gunsFor(left);
       assert.ok(keys.includes(first), `${p.key} $${cash}: ${first} is affordable and an ai gun`);
-      if (p.pick === 'big') assert.equal(w(first).dmg, best(keys, k => w(k).dmg), `${p.key} $${cash}`);
+      if (p.pick === 'big') assert.equal(w(first).price, best(keys, k => w(k).price), `${p.key} $${cash}: the dearest it can afford`);
       if (p.pick === 'value') assert.equal((w(first).dmg * w(first).pack) / w(first).price, best(keys, k => (w(k).dmg * w(k).pack) / w(k).price), `${p.key} $${cash}`);
       if (p.pick === 'precise') assert.equal(w(first).dmg / w(first).radius / w(first).pack, best(keys, k => w(k).dmg / w(k).radius / w(k).pack), `${p.key} $${cash}`);
     }
@@ -237,4 +237,39 @@ test('shopping never touches the match\'s shot stream: the same deal with and wi
   soloDeal(b, bare, 'stream', 'normal', 720);
   assert.deepEqual([a.rng(), a.rng(), a.rng()], [b.rng(), b.rng(), b.rng()]);
   assert.ok(a.drones.some(d => d.cash < 600), 'the drones did shop');
+});
+
+test('a value pick buys no more than two packs of any one gun in a visit, and spreads over several', () => {
+  const rich = { ...personality('scrapper'), maxBuys: 12 };
+  assert.equal(rich.pick, 'value');
+  for (const cash of [600, 1500, 4000, 20000]) {
+    const guns = droneShop(fresh({ cash }), arsenal, rich, rngFor('cap')).filter(b => isGun(b.item));
+    const tally: Record<string, number> = {};
+    for (const b of guns) tally[b.item] = (tally[b.item] || 0) + b.qty;
+    assert.ok(Object.values(tally).every(n => n <= 2), `$${cash}: ${JSON.stringify(tally)}`);
+    if (guns.length > 2) assert.ok(Object.keys(tally).length >= 2, `$${cash}: spread over several guns`);
+  }
+  // A big pick is not capped: with enough money it may buy the same dear gun again.
+  const saver = { ...personality('saver'), reserve: 0, maxBuys: 12 };
+  const again = droneShop(fresh({ cash: 20000 }), arsenal, saver, rngFor('big'));
+  assert.ok(again.filter(b => isGun(b.item)).length > 2 && new Set(again.map(b => b.item)).size < again.length);
+});
+
+test('a big pick saves up for the dearest gun it can afford, a precise pick takes the tight hard hit: the personalities do not all buy alike', () => {
+  const saver = personality('saver'), scrapper = personality('scrapper'), sniper = personality('sniper');
+  const list = (p: Personality, cash: number) => JSON.stringify(droneShop(fresh({ cash }), arsenal, p, rngFor('distinct')));
+  for (const cash of [600, 1500, 4000]) {
+    const lists = new Set([list(saver, cash), list(scrapper, cash), list(sniper, cash)]);
+    assert.ok(lists.size >= 2, `$${cash}: all three bought the same: ${[...lists][0]}`);
+  }
+  // Across the three purses together all three differ from each other.
+  const all = (p: Personality) => [600, 1500, 4000].map(c => list(p, c)).join('|');
+  assert.equal(new Set([all(saver), all(scrapper), all(sniper)]).size, 3);
+  // Saver's first gun is the dearest within its reserve at each purse.
+  for (const cash of [600, 1500, 4000]) {
+    const budget = Math.floor(cash * (1 - saver.reserve!));
+    const keys = gunsFor(budget);
+    const first = droneShop(fresh({ cash }), arsenal, saver, rngFor('distinct')).find(b => isGun(b.item));
+    if (keys.length && first) assert.equal(w(first.item).price, Math.max(...keys.map(k => w(k).price)));
+  }
 });

@@ -1057,10 +1057,11 @@ await (async () => {
   await test('nuke-gated', () => { assert.ok(!cycleNames.includes('NUKE') && cycleNames.includes('Buckshot') && cycleNames.includes('Shell'), cycleNames.join(',')); });
   await test('buckshot-volley', () => { assert.ok(/You fire Buckshot/.test(spreadLog), `${volleyTurn} | ${volleyGun}`); });
   // Discs start tiny and grow to exactly their weapon radius, never beyond.
-  // (The battery answers with its own mortars, so 44 is a legal max too.)
+  // (The battery answers with whatever it bought, so any gun a drone may use is a legal max too.)
+  const droneRadii = (JSON.parse(read('game.json')) as { arsenal: { ammo: { ai?: boolean; radius: number }[] } }).arsenal.ammo.filter(a => a.ai).map(a => a.radius);
   const boomMax = boomR.length ? Math.max(...boomR) : -1;
   const boomOk = boomR.length >= 3 &&
-    Math.min(...[17, 26, 44].map(r => Math.abs(boomMax - r))) < 1.5;
+    Math.min(...[17, 26, 44, ...droneRadii].map(r => Math.abs(boomMax - r))) < 1.5;
   await test('boom-exact', () => { assert.ok(boomOk, `n=${boomR.length} max=${boomMax.toFixed(1)}`); });
   await test('camera-sane', () => { assert.ok(zoomZ.length > 0 && zoomZ.every(z => z >= 0.45 && z <= 1), `n=${zoomZ.length}`); });
   await test('player-fired', () => { assert.ok(/You fire/.test(firedLog)); });

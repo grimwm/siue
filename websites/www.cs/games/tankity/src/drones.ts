@@ -37,6 +37,7 @@ export interface DroneView {
 export interface Purchase { item: string; qty: number }
 
 const MAX_PACKS = 9;
+const VALUE_PACKS = 2; // a value pick buys at most this many packs of one gun in a visit
 
 /** The first gear of an effect (repair, parachute, plate, shield) in game.yaml's order, by effect and never by key. */
 function gearRow(arsenal: Arsenal, effect: string): Gear | undefined {
@@ -48,16 +49,16 @@ function gunScore(pick: string, dmg: number, radius: number, pack: number, price
   switch (pick) {
     case 'value': return (dmg * pack) / price;
     case 'precise': return dmg / radius / pack;
-    default: return dmg; // big
+    default: return price; // big: the dearest it can afford
   }
 }
 
 /** The guns a drone may buy with `left` dollars: ai guns the shop sells that do damage, in the arsenal's order. */
-function affordable(arsenal: Arsenal, left: number): string[] {
+function affordable(arsenal: Arsenal, left: number, bought: Record<string, number>, cap: number): string[] {
   const out: string[] = [];
   for (const k of arsenal.order) {
     const a = arsenal.weapons[k]!;
-    if (a.ai && a.pack > 0 && a.price > 0 && a.dmg > 0 && a.price <= left) out.push(k);
+    if (a.ai && a.pack > 0 && a.price > 0 && a.dmg > 0 && a.price <= left && (bought[k] || 0) < cap) out.push(k);
   }
   return out;
 }
@@ -109,9 +110,12 @@ export function droneShop(state: DroneView, arsenal: Arsenal, personality: Perso
     shield = true;
   }
 
+  // A value pick spreads over several guns: no more than VALUE_PACKS packs of any one a visit.
+  const cap = pick === 'value' ? VALUE_PACKS : Infinity;
+  const bought: Record<string, number> = {};
   while (buys.length < maxBuys) {
     const left = budget - spent;
-    const keys = affordable(arsenal, left);
+    const keys = affordable(arsenal, left, bought, cap);
     if (!keys.length) break;
     let chosen = keys[0]!;
     if (pick === 'random') {
@@ -133,6 +137,7 @@ export function droneShop(state: DroneView, arsenal: Arsenal, personality: Perso
       }
     }
     buys.push({ item: chosen, qty: 1 });
+    bought[chosen] = (bought[chosen] || 0) + 1;
     spent += arsenal.weapons[chosen]!.price;
   }
   return buys;

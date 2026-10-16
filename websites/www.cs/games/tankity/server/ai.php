@@ -1112,6 +1112,7 @@ function room_ai_choose(array &$room, array $tank): array
 
 /* ---------- what a drone buys (src/drones.ts is the same, pinned by the 'drone-shop' sim vectors) ---------- */
 const ROOM_DRONE_MAX_PACKS = 9;
+const ROOM_DRONE_VALUE_PACKS = 2; // a value pick buys at most this many packs of one gun in a visit
 /* The arsenal as droneShop reads it: the guns in the data file's order, and the gear rows. */
 function room_drone_arsenal(): array
 {
@@ -1134,16 +1135,16 @@ function room_drone_score(string $pick, int $dmg, int $radius, int $pack, int $p
     return match ($pick) {
         'value' => ($dmg * $pack) / $price,
         'precise' => $dmg / $radius / $pack,
-        default => (float) $dmg,
+        default => (float) $price, // big: the dearest it can afford
     };
 }
 /* The guns a drone may buy with $left dollars: ai guns the shop sells that do damage, in the arsenal's order. */
-function room_drone_affordable(array $arsenal, int $left): array
+function room_drone_affordable(array $arsenal, int $left, array $bought, int $cap): array
 {
     $out = [];
     foreach ($arsenal['order'] as $k) {
         $a = $arsenal['weapons'][$k];
-        if (!empty($a['ai']) && $a['pack'] > 0 && $a['price'] > 0 && $a['dmg'] > 0 && $a['price'] <= $left) {
+        if (!empty($a['ai']) && $a['pack'] > 0 && $a['price'] > 0 && $a['dmg'] > 0 && $a['price'] <= $left && ($bought[$k] ?? 0) < $cap) {
             $out[] = $k;
         }
     }
@@ -1200,8 +1201,11 @@ function room_drone_shop(array $state, array $arsenal, array $p, int &$rng): arr
         $shield = true;
     }
 
+    // A value pick spreads over several guns: no more than ROOM_DRONE_VALUE_PACKS packs of any one a visit.
+    $cap = $pick === 'value' ? ROOM_DRONE_VALUE_PACKS : PHP_INT_MAX;
+    $bought = [];
     while (count($buys) < $maxBuys) {
-        $keys = room_drone_affordable($arsenal, $budget - $spent);
+        $keys = room_drone_affordable($arsenal, $budget - $spent, $bought, $cap);
         if (!$keys) {
             break;
         }
@@ -1233,6 +1237,7 @@ function room_drone_shop(array $state, array $arsenal, array $p, int &$rng): arr
             }
         }
         $buys[] = ['item' => $chosen, 'qty' => 1];
+        $bought[$chosen] = ($bought[$chosen] ?? 0) + 1;
         $spent += $arsenal['weapons'][$chosen]['price'];
     }
     return $buys;

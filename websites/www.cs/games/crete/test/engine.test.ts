@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { manualClock } from '../../_kit/test/clock.ts';
+import { nth } from '../../_kit/test/nth.ts';
 
 /** A game wired to recorders and a manual clock. */
 function harness() {
@@ -42,12 +43,6 @@ function cellAt<T>(g: readonly (readonly T[])[], r: number, c: number): T {
   assert.ok(row, `row ${r}`);
   const v = row[c];
   assert.ok(v !== undefined, `cell ${r},${c}`);
-  return v;
-}
-/** list[i], failing where the old untyped indexing would have thrown on a missing element. */
-function nth<T>(list: readonly T[], i: number): T {
-  const v = list[i];
-  assert.ok(v !== undefined, `element ${i}`);
   return v;
 }
 /** The [row, column] of a cell key. */

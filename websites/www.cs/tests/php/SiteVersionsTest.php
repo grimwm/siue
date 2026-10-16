@@ -3,11 +3,15 @@
 // home page. Each test starts from the page and files that setUp() writes.
 declare(strict_types=1);
 require_once __DIR__ . '/../../tools/site-versions.php';
+require_once __DIR__ . '/../../games/_kit/php/tests/TempDir.php';
 
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 final class SiteVersionsTest extends TestCase
 {
+    use TempDir;
+
     /** The stylesheets of the game page, in the order the page links them: that order is the cascade. */
     private const SHEETS = ['eye', 'nav', 'help', 'hud', 'gameover', 'settings', 'controls', 'fx', 'units', 'world', 'intro'];
 
@@ -18,7 +22,7 @@ final class SiteVersionsTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tmp = sys_get_temp_dir() . '/site-versions-test-' . getmypid() . '-' . bin2hex(random_bytes(3));
+        $this->tmp = self::makeTempDir('site-versions-test');
         mkdir("$this->tmp/games/cylon/css", 0777, true);
         mkdir("$this->tmp/games/cylon/dist", 0777, true);
         $this->files = [
@@ -41,7 +45,7 @@ final class SiteVersionsTest extends TestCase
 
     protected function tearDown(): void
     {
-        exec('rm -rf ' . escapeshellarg($this->tmp));
+        self::removeTree($this->tmp);
     }
 
     private function read(string $f): string

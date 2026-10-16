@@ -13,6 +13,7 @@ import type { StorageLike } from '../../_kit/ports.ts';
 import type { ScoresProps } from '../src/ui/scores.tsx';
 import type { LocalRow } from '../src/local-board.ts';
 import type { Difficulty } from '../src/sim.ts';
+import { nth } from '../../_kit/test/nth.ts';
 
 installDocument();
 const realFetch = globalThis.fetch, realWindow = globalThis.window;
@@ -23,12 +24,6 @@ const { scores, logic, local } = await importTsx<{
   local: typeof import('../src/local-board.ts');
 }>(import.meta.dirname, { scores: '../src/ui/scores.tsx', logic: '../src/scores.ts', local: '../src/local-board.ts' });
 
-/** Item `i` of a list the case reads, which must be there. */
-function nth<T>(list: readonly T[], i: number): T {
-  const v = list[i];
-  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
-  return v;
-}
 const render = (root: StubElement, p: ScoresProps) => scores.renderScores(asElement(root), p);
 /** The section as the `$` lookup answers it. */
 const asHtml = (el: StubElement) => asElement(el) as HTMLElement;

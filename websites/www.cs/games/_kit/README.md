@@ -201,10 +201,10 @@ partial fixture is built by a typed helper or `satisfies`, and `as unknown as`
 needs a one-line reason. `test/typed-tests.test.ts` is the guard: it fails on
 a `*.test.mjs`, a test program missing or left out of `build.json`, an escape
 hatch in a test, a `test.sh` that runs `node --test`, or a `units.sh` without
-its zero-files check. Doubles:
+its zero-files check. `nth(list, i)` and `last(list)` (`test/nth.ts`) read an element and fail the test, naming the index, when it is not there. Doubles:
 `manualClock()` (timers that fire only on `advance`), `mulberry32(seed)`,
 `recorder()`, `memoryStorage()`, `throwingStorage()`. Tests use `test()`
-and `assert` directly; PHP tests are plain PHPUnit `TestCase`s.
+and `assert` directly; PHP tests are plain PHPUnit `TestCase`s, and one that needs scratch files uses the `Kit\Tests\TempDir` trait (`php/tests/TempDir.php`, required by path): `makeTempDir($prefix)` makes a unique private directory, `removeTree($path)` deletes it whole (a symlink is unlinked, never followed).
 
 Components are tested in Node: `importTsx(import.meta.dirname, { name: '../src/ui/x.tsx' })`
 bundles `.tsx` with esbuild (preact left external, so the test and the

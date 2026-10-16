@@ -3,11 +3,16 @@
 // included), ranking, the all-time board, and the legacy file shape.
 declare(strict_types=1);
 
+require_once dirname(__DIR__, 3) . '/_kit/php/tests/TempDir.php';
+
 use Kit\ScoreGuard;
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 final class ScoresTest extends TestCase
 {
+    use TempDir;
+
     private string $dir;
     private string $store;
 
@@ -20,8 +25,7 @@ final class ScoresTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->dir = sys_get_temp_dir() . '/cylon-scores-test-' . bin2hex(random_bytes(4));
-        mkdir($this->dir);
+        $this->dir = self::makeTempDir('cylon-scores-test');
         $this->store = $this->dir . '/scores.json';
         putenv('CYLON_SCORES_FILE=' . $this->store);
     }
@@ -29,10 +33,7 @@ final class ScoresTest extends TestCase
     protected function tearDown(): void
     {
         putenv('CYLON_SCORES_FILE');
-        foreach (glob($this->dir . '/*') ?: [] as $f) {
-            unlink($f);
-        }
-        rmdir($this->dir);
+        self::removeTree($this->dir);
     }
 
     private function bytes(): string

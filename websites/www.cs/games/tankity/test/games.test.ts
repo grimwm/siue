@@ -9,18 +9,13 @@ import type { GamesWatch, LiveRow } from '../src/games.ts';
 import type { MineRow } from '../src/protocol.ts';
 import { createSeatStore } from '../src/seats.ts';
 import type { SeatStore } from '../src/seats.ts';
+import { nth } from '../../_kit/test/nth.ts';
 
 function must<T>(v: T | null | undefined, what: string): T {
   assert.ok(v !== null && v !== undefined, `missing ${what}`);
   return v;
 }
 
-/** Item `i` of a list the case reads, which must be there. */
-function nth<T>(list: readonly T[], i: number): T {
-  const v = list[i];
-  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
-  return v;
-}
 
 function mapStorage(): StorageLike {
   const m = new Map<string, string>();

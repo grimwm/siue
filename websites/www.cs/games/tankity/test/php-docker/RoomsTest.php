@@ -5,10 +5,15 @@ if (!defined('TANKITY_GAME_DIR')) {
     define('TANKITY_GAME_DIR', dirname(__DIR__, 2));
 }
 
+require_once dirname(__DIR__, 3) . '/_kit/php/tests/TempDir.php';
+
+use Kit\Tests\TempDir;
 use PHPUnit\Framework\TestCase;
 
 final class RoomsTest extends TestCase
 {
+    use TempDir;
+
     private static string $tmp;
     private static string $base;
     private static int $port;
@@ -19,8 +24,7 @@ final class RoomsTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        self::$tmp = sys_get_temp_dir() . '/tankity-rooms-test-' . getmypid() . '-' . bin2hex(random_bytes(3));
-        mkdir(self::$tmp, 0700);
+        self::$tmp = self::makeTempDir('tankity-rooms-test');
         file_put_contents(self::$tmp . '/test.yaml', "room_live_secs: 60\n");
         self::$env = array_merge(getenv(), ['CONFIG_FILE' => self::$tmp . '/test.yaml', 'TANKITY_DATA_DIR' => self::$tmp . '/data']);
         // The room functions, in this process, for aging records and holding the lock.
@@ -42,7 +46,8 @@ final class RoomsTest extends TestCase
         proc_terminate(self::$proc);
         proc_close(self::$proc);
         // Remove the private shelf.
-        tankity_test_rm(self::$tmp);
+        self::removeTree(self::$tmp);
+        putenv('TANKITY_DATA_DIR=' . ($GLOBALS['TANKITY_TEST_HOME'] ?? ''));
         putenv('CONFIG_FILE');
         tankity_config(true);
     }

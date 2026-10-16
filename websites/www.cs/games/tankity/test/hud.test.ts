@@ -9,6 +9,7 @@ import type { GameTank, Tables } from '../src/game-types.ts';
 import type { HudDeps } from '../src/hud.ts';
 import type { HudProps } from '../src/ui/hud.tsx';
 import type { GunLabelProps } from '../src/ui/gun-label.tsx';
+import { nth } from '../../_kit/test/nth.ts';
 
 installDocument();
 const { hud, gunLabel } = await importTsx<{
@@ -16,12 +17,6 @@ const { hud, gunLabel } = await importTsx<{
   gunLabel: typeof import('../src/ui/gun-label.tsx');
 }>(import.meta.dirname, { hud: '../src/ui/hud.tsx', gunLabel: '../src/ui/gun-label.tsx' });
 
-/** Item `i` of a list the case reads, which must be there. */
-function nth<T>(list: readonly T[], i: number): T {
-  const v = list[i];
-  assert.ok(v !== undefined, `no item ${i} of ${list.length}`);
-  return v;
-}
 /** An element the case knows is drawn; it fails, naming it, when it is not. */
 function must(el: StubElement | undefined, what: string): StubElement {
   assert.ok(el, `no ${what}`);

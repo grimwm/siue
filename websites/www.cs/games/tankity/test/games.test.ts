@@ -99,32 +99,6 @@ test('a gone room is forgotten and left out of the list', async () => {
   assert.deepEqual(r.rows, [['AAAA']]);
 });
 
-test('a room closed to make space is marked, listed as closed, and never asked about again', async () => {
-  const listed: unknown[][] = [];
-  const r = rig({ codes: ['AAAA', 'BBBB'], reply: asks => asks.map(a => (a.code === 'BBBB' ? { code: 'BBBB', gone: true, closed: 'space' } : row(a.code))) });
-  const seen = r.rows;
-  r.watch.stop();
-  const store = r.store;
-  const watch = createGamesWatch({
-    store,
-    mine: asks => { r.asks.push(asks.map(a => a.code)); return Promise.resolve(r.reply(asks) as MineRow[]); },
-    setInterval: () => 1, clearInterval: () => {},
-    viewing: () => '',
-    onRows: rows => { listed.push(rows); seen.push(rows.map(x => x.code)); },
-    onTurn: () => {},
-  });
-  await watch.pollNow();
-  assert.equal(must(store.get('BBBB'), 'the seat is kept').closed, 'space');
-  assert.deepEqual(listed[0], [row('AAAA'), { code: 'BBBB', closed: 'space' }]);
-  await watch.pollNow();
-  assert.deepEqual(r.asks, [['AAAA', 'BBBB'], ['AAAA']], 'a closed seat is never sent to mine again');
-  assert.deepEqual(listed[1], [row('AAAA'), { code: 'BBBB', closed: 'space' }]);
-  store.forget('AAAA');
-  await watch.pollNow();
-  assert.deepEqual(r.asks.length, 2, 'only closed seats left: nothing to ask');
-  assert.deepEqual(listed[2], [{ code: 'BBBB', closed: 'space' }]);
-});
-
 test('each turn is reported once, by its key', async () => {
   let key = '1:0:3';
   const r = rig({ codes: ['AAAA'], reply: asks => asks.map(a => row(a.code, { yourTurn: true, turnKey: key, turn: 1 })) });

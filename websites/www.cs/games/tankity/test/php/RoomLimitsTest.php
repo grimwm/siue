@@ -67,11 +67,24 @@ final class RoomLimitsTest extends TestCase
             ->execute([time(), str_repeat('a', 1100000)]);
     }
 
+    /** Frees the padding the way a sweep does: the rows go, the file stays as big. */
     private function emptyDisk(): void
     {
         tankity_db()->exec("DELETE FROM closed WHERE code = 'PADD'");
-        tankity_db()->exec('PRAGMA wal_checkpoint(TRUNCATE)');
-        tankity_db()->exec('VACUUM');
+    }
+
+    /** A lobby row grown past one megabyte, expired or live. */
+    private function padLobby(string $code, bool $expired): void
+    {
+        $now = time();
+        $q = tankity_db()->prepare("INSERT INTO rooms (code, data, created, touched, expires, phase, acted) VALUES (?, ?, ?, ?, ?, 'lobby', ?)");
+        $q->bindValue(1, $code);
+        $q->bindValue(2, str_repeat('a', 1100000), PDO::PARAM_LOB);
+        $q->bindValue(3, $now - 5000);
+        $q->bindValue(4, $now - 5000);
+        $q->bindValue(5, $expired ? $now - 1 : $now + 600);
+        $q->bindValue(6, $now - 5000);
+        $q->execute();
     }
 
     public function testNoCountCapsRoomsServerWide(): void
@@ -186,20 +199,64 @@ final class RoomLimitsTest extends TestCase
         $this->assertGreaterThan(0, room_db_bytes());
     }
 
-    public function testTheDiskGuardCountsTheDatabaseAndItsWal(): void
+    public function testTheDiskGuardCountsLiveDataNotFileSize(): void
     {
         putenv('TANKITY_ROOM_DB_MAX_MB=1');
         $this->assertSame(200, $this->createFrom(1)[0]);
         $path = tankity_data_dir() . '/' . TANKITY_DB_FILE;
         $this->assertFalse(room_db_full());
         $this->fillDisk();
-        clearstatcache();
-        $this->assertSame(filesize($path) + (is_file($path . '-wal') ? filesize($path . '-wal') : 0), room_db_bytes());
         $this->assertGreaterThanOrEqual(1048576, room_db_bytes());
         $this->assertTrue(room_db_full());
+        $this->emptyDisk();
+        clearstatcache();
+        $this->assertLessThan(1048576, room_db_bytes(), 'freed pages are not live data');
+        $this->assertGreaterThanOrEqual(1048576, filesize($path) + (is_file($path . '-wal') ? filesize($path . '-wal') : 0),
+            'while the file and its -wal stay as large as they grew');
+        $this->assertFalse(room_db_full());
         putenv('TANKITY_ROOM_DB_MAX_MB');
         $this->assertSame(256, room_db_max_mb());
-        $this->assertFalse(room_db_full());
+    }
+
+    public function testCreatesComeBackAfterTheRowsGoWithoutAVacuum(): void
+    {
+        putenv('TANKITY_ROOM_DB_MAX_MB=1');
+        $this->fillDisk();
+        $this->assertSame(self::REFUSED, $this->createFrom(1, 'hst', self::FULL));
+        $this->emptyDisk();
+        $this->assertSame(200, $this->createFrom(1, 'hst', self::FULL)[0]);
+    }
+
+    public function testExpiredLobbiesAreSweptBeforeAnyoneIsRefused(): void
+    {
+        putenv('TANKITY_ROOM_DB_MAX_MB=1');
+        $this->assertSame(200, $this->createFrom(1, 'hst', self::FULL)[0]);
+        $this->padLobby('EXPD', true);
+        $this->assertTrue(room_db_full());
+        // Nobody has swept yet: the create does it, rechecks and goes through.
+        $this->assertSame(200, $this->createFrom(2, 'two', self::FULL)[0]);
+        $this->assertSame(0, (int) tankity_db()->query("SELECT COUNT(*) FROM rooms WHERE code = 'EXPD'")->fetchColumn());
+        // A live lobby that big is not swept: the data is real, so the create is refused.
+        $this->padLobby('LIVE', false);
+        $this->assertSame(self::REFUSED, $this->createFrom(3, 'thr', self::FULL));
+        $this->assertSame(1, (int) tankity_db()->query("SELECT COUNT(*) FROM rooms WHERE code = 'LIVE'")->fetchColumn(), 'a live room is never closed');
+    }
+
+    public function testAnIpv6PrefixSharesOneAddressLimit(): void
+    {
+        $from = fn(string $addr): array => $this->call('create', ['initials' => 'hst'], ['REMOTE_ADDR' => $addr], self::ENV);
+        for ($i = 1; $i <= 4; $i++) {
+            $this->assertSame(200, $from("2001:db8:1:2::$i")[0]);
+        }
+        $this->assertSame(429, $from('2001:db8:1:2:aaaa:bbbb:cccc:dddd')[0], 'the same /64 is one address');
+        $this->assertSame(200, $from('2001:db8:1:3::1')[0], 'the next /64 is another');
+    }
+
+    public function testARequestBodyPastTheCapIsRefused(): void
+    {
+        [$st, $out] = $this->raw('create', ['initials' => 'hst', 'pad' => str_repeat('x', ROOM_BODY_MAX)], [], self::ENV);
+        $this->assertSame([413, ['error' => 'request too large']], [$st, $out]);
+        $this->assertSame(0, $this->rows());
     }
 
     public function testTheDiskGuardRefusesANewLobbyAtTheLimitUncharged(): void
@@ -260,31 +317,5 @@ final class RoomLimitsTest extends TestCase
 
         $this->assertSame($before, $this->rows(), 'no room was closed to make room');
         $this->assertSame(self::REFUSED, $this->createFrom(9, 'new', self::FULL), 'only a new lobby is turned away');
-    }
-
-    public function testATombstoneBlocksTheCodeAndExpires(): void
-    {
-        $lock = room_alloc(fn() => 'TOMB');
-        $room = room_new('TOMB', 'ABC');
-        $room['seats'][0] = room_seat_human('ABC', 'tok', [], '');
-        room_save($lock, 'TOMB', $room);
-        room_unlock($lock);
-        $at = time();
-        tankity_tx(tankity_db(), fn(PDO $db) => room_tombstone($db, 'TOMB', 'gone', $at));
-        $this->assertSame('gone', room_closed_for('TOMB', 'tok'));
-        $this->assertNull(room_closed_for('TOMB', 'other'));
-        $this->assertNull(room_closed_for('TOMB', ''));
-
-        $feed = ['TOMB', 'TOMB', 'FRSH'];
-        $lock = room_alloc(function () use (&$feed): string {
-            return array_shift($feed);
-        });
-        $this->assertSame('FRSH', $lock->code, 'a tombstoned code is never drawn again');
-        room_discard($lock);
-
-        $this->assertSame(0, room_tombstone_expire($at + ROOM_TOMBSTONE_SECS - 1));
-        $done = tankity_housekeep($at + ROOM_TOMBSTONE_SECS + 1, tankity_jobs());
-        $this->assertSame(1, $done['closed']);
-        $this->assertNull(room_closed_for('TOMB', 'tok'));
     }
 }

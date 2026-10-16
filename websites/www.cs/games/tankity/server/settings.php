@@ -12,6 +12,8 @@ if (!defined('TANKITY_ROOMS_INCLUDED')) {
 }
 
 const ROOM_GAME = 'operation-tankity';
+/* The most a request body may be, in bytes: far past any real one. */
+const ROOM_BODY_MAX = 65536;
 const ROOM_CODE_LEN = 6;
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 /* A room code as the server accepts it: six characters, or four for a room
@@ -75,7 +77,7 @@ function room_lobbies_per_address(): int
 {
     return tankity_int_setting('TANKITY_LOBBIES_PER_ADDRESS', 'lobbies_per_address', ROOM_LOBBIES_PER_ADDRESS);
 }
-/* The database file plus its -wal may grow to this many MB before a new
+/* The live data in the database may grow to this many MB before a new
    lobby is refused (room_db_full). */
 const ROOM_DB_MAX_MB = 256;
 function room_db_max_mb(): int

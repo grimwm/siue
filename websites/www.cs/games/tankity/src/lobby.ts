@@ -466,10 +466,9 @@ export function createLobby(deps: LobbyDeps) {
       net.detach();
       const why = isGoneError(err);
       if (why) {
-        if (why === 'space') seats.markClosed(code);
-        else seats.forget(code);
+        seats.forget(code);
         await openLobby();
-        lobbySay(goneLine(code, why));
+        lobbySay(goneLine(code));
       } else {
         await openLobby();
         lobbySay(prettyRoomError(err));
@@ -618,19 +617,16 @@ export function createLobby(deps: LobbyDeps) {
       netRenderRoster(d.room);
     } catch (err) { lobbySay(prettyRoomError(err)); }
   }
-  /* The room this client sat in is gone (the server swept it, or closed it to
-     make space for another match) or its seat was given up elsewhere: the
-     seat is forgotten here too (one closed to make space stays in Your games,
-     marked, until dismissed), and the player lands in the lobby with a line
-     saying so, to host or join again. */
+  /* The room this client sat in is gone (the server swept it) or its seat was
+     given up elsewhere: the seat is forgotten here too, and the player lands
+     in the lobby with a line saying so, to host or join again. */
   let netMatch = false; // a net match is running on this page (set by startNetMatch, cleared by dropRoom)
-  function netGone(code: string, gone: 'closed' | 'seat' | 'space'): void {
+  function netGone(code: string, gone: 'closed' | 'seat'): void {
     /* The server answers a token that holds no seat as it answers a room that
        is not there; a seat this browser's store no longer holds was given up
        (Leave in another tab, which shares the store). */
     const why = gone === 'closed' && !seats.get(code) ? 'seat' : gone;
-    if (why === 'space') seats.markClosed(code);
-    else seats.forget(code);
+    seats.forget(code);
     /* A running match's tanks must not fall to the solo engine behind the veil:
        end it the way leaving does. */
     const wasMatch = netMatch;
@@ -638,7 +634,7 @@ export function createLobby(deps: LobbyDeps) {
     LOBBY.inRoom = false;
     if (wasMatch) backToTitle();
     void openLobby().then(() => {
-      lobbySay(why === 'seat' ? `Your seat in room ${code} was given up.` : goneLine(code, why));
+      lobbySay(why === 'seat' ? `Your seat in room ${code} was given up.` : goneLine(code));
     });
   }
   async function startRoom(): Promise<void> {

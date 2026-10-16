@@ -168,13 +168,13 @@ test('a room swept under a running match ends the match before the lobby opens: 
   assert.equal(r.$('lobby-veil').hidden, false);
 });
 
-test('a match closed to make space: back to the title, the line says why, and the seat stays listed as closed', async () => {
+test('a match whose room is swept: back to the title, the line says so, and the seat is forgotten', async () => {
   let gone = false;
   const playing = lobbyRoom({ phase: 'play' });
   const r = rig(url => {
     if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 50 }, lobbies: { used: 3 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
-    if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room', closed: 'space' } };
+    if (gone && url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room' } };
     if (url.includes('action=start')) return ok({ ok: true, room: playing });
     return ok({ ok: true, room: lobbyRoom() });
   });
@@ -186,21 +186,21 @@ test('a match closed to make space: back to the title, the line says why, and th
   await r.tick();
   assert.equal(r.net.on, false);
   assert.equal(r.titled.length, 1);
-  assert.match(r.$('lobby-status').textContent, /^Room AB3D was closed to make space\.$/);
-  assert.equal(r.seats.get('AB3D')?.closed, 'space', 'kept, marked closed');
+  assert.match(r.$('lobby-status').textContent, /^Room AB3D has closed\.$/);
+  assert.equal(r.seats.get('AB3D'), null, 'forgotten');
   assert.equal(r.intervals.size, 0, 'nothing polls the closed room');
 });
 
-test('resuming a room that was closed to make space marks the seat and says why', async () => {
+test('resuming a room that is gone forgets the seat and says so', async () => {
   const r = rig(url => {
     if (url.includes('action=ping')) return ok({ ok: true, rooms: { used: 3 }, lobbies: { used: 12 } });
     if (url.includes('action=maps')) return ok({ ok: true, maps: [] });
-    if (url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room', closed: 'space' } };
+    if (url.includes('action=state')) return { status: 404, body: { ok: false, error: 'no such room' } };
     return ok({ ok: true });
   });
   assert.equal(await r.lobby.resumeRoom('AB3D'), false);
-  assert.equal(r.seats.get('AB3D')?.closed, 'space');
-  assert.match(r.$('lobby-status').textContent, /Room AB3D was closed to make space\./);
+  assert.equal(r.seats.get('AB3D'), null);
+  assert.match(r.$('lobby-status').textContent, /Room AB3D has closed\./);
 });
 
 test('the occupancy line counts matches running and lobbies open', async () => {

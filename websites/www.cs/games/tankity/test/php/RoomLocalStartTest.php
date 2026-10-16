@@ -78,11 +78,6 @@ final class RoomLocalStartTest extends TestCase
         return (int) $q->fetchColumn() === 1;
     }
 
-    private function tombstones(): int
-    {
-        return (int) tankity_db()->query('SELECT COUNT(*) FROM closed')->fetchColumn();
-    }
-
     public function testAOneHumanStartPlaysLocally(): void
     {
         $host = $this->host(['difficulty' => 'hard']);
@@ -95,7 +90,6 @@ final class RoomLocalStartTest extends TestCase
         $this->gap();
         $this->assertSame([200, ['ok' => true, 'local' => ['difficulty' => 'hard', 'speed' => 2, 'walls' => 'rubber']]], $this->start($host, ['proto' => 2]));
         $this->assertFalse($this->exists($host['code']), 'the lobby is closed');
-        $this->assertSame(0, $this->tombstones(), 'the host closed it: nobody is told it was closed to make space');
         $this->assertSame([0, 0], $this->used());
         $this->assertSame([404, ['error' => 'no such room']],
             $this->call('state', ['code' => $host['code'], 'token' => $host['token']], [], self::ENV));

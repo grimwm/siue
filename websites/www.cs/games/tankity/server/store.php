@@ -2,7 +2,7 @@
 // Operation Tankity rooms. Room storage: one row per room in Tankity's
 // database (server/db.php), a room held as one write transaction from load to
 // unlock, and the room lifecycle (allocate, register, load, save, close,
-// discard, sweep), the per-address counts, the disk guard and the tombstones. Loaded by rooms.php; it runs nothing on its own.
+// discard, sweep), the per-address counts, the disk guard. Loaded by rooms.php; it runs nothing on its own.
 declare(strict_types=1);
 
 // Not an endpoint: rooms.php defines this constant, then requires the file.
@@ -20,9 +20,6 @@ const ROOM_MAX_BYTES = 131072;
 const ROOM_HEARTBEAT_SECS = 20;
 const ROOM_LOBBIES_HOSTED = 'too many lobbies open from here; start or leave one first';
 const ROOM_FULL = 'The server is full. Try again later.';
-/* A closed room keeps its tombstone (who may hear why, and its
-   code withheld from new rooms) this long: 14 days. */
-const ROOM_TOMBSTONE_SECS = 1209600;
 
 /* A held room: its write transaction is open until room_unlock (commit),
    room_close (delete, commit) or room_discard (roll back). */
@@ -185,20 +182,36 @@ function room_idle(array $r, ?int $now = null): bool
     return ($now ?? time()) > room_expires($r);
 }
 
-/* The database file plus its -wal, in bytes. filesize() is a stat; PHP
-   caches stats, so the cache is cleared first. */
+/* The bytes of live data in the database: its pages less the free ones, times
+   the page size. SQLite keeps pages a delete frees (and the -wal stays large
+   until a checkpoint), so the file's size never shrinks when rooms expire;
+   this does, at once. Three cheap pragmas on the open connection. */
 function room_db_bytes(): int
 {
-    clearstatcache();
-    $path = tankity_data_dir() . '/' . TANKITY_DB_FILE;
-    return (int) @filesize($path) + (int) @filesize($path . '-wal');
+    $db = tankity_db();
+    $pages = (int) $db->query('PRAGMA page_count')->fetchColumn();
+    $free = (int) $db->query('PRAGMA freelist_count')->fetchColumn();
+    $size = (int) $db->query('PRAGMA page_size')->fetchColumn();
+    return max(0, $pages - $free) * $size;
 }
 
-/* True when the database has reached room_db_max_mb: a new lobby is refused
+/* True when the live data has reached room_db_max_mb: a new lobby is refused
    (ROOM_FULL); nothing already running is touched. */
 function room_db_full(): bool
 {
     return room_db_bytes() >= room_db_max_mb() * 1048576;
+}
+
+/* room_db_full, after the expired rooms have been swept out: a lobby is
+   refused only when the data a live room holds is what fills the disk. Counts
+   bytes, never rooms. */
+function room_db_full_swept(): bool
+{
+    if (!room_db_full()) {
+        return false;
+    }
+    room_sweep(null, 5000);
+    return room_db_full();
 }
 
 /* Live lobbies an address hosts, not counting $except: what
@@ -213,46 +226,6 @@ function room_lobbies_hosted(string $hostKey, string $except = '', ?int $now = n
     return (int) $q->fetchColumn();
 }
 
-/* Closes a room with a tombstone, inside the caller's write transaction: its
-   row goes, and a tombstone keeps the hashes of its human seats' tokens for
-   ROOM_TOMBSTONE_SECS, so those players (and nobody else) hear why. */
-function room_tombstone(PDO $db, string $code, string $reason, int $now): void
-{
-    $q = $db->prepare('SELECT data FROM rooms WHERE code = ?');
-    $q->execute([$code]);
-    $room = room_decode($q->fetchColumn());
-    $seats = [];
-    foreach ($room['seats'] ?? [] as $s) {
-        if (($s['human'] ?? false) && is_string($s['token'] ?? null) && $s['token'] !== '') {
-            $seats[] = room_token_hash($s['token']);
-        }
-    }
-    $db->prepare('DELETE FROM rooms WHERE code = ?')->execute([$code]);
-    $db->prepare('INSERT OR REPLACE INTO closed (code, reason, at, seats) VALUES (?, ?, ?, ?)')
-        ->execute([$code, $reason, $now, json_encode($seats)]);
-}
-function room_token_hash(string $token): string
-{
-    return substr(hash('sha256', $token), 0, 32);
-}
-
-/* Why a seat's room is gone (the tombstone's reason), or null: only a token whose hash the
-   tombstone holds hears it. A read. */
-function room_closed_for(string $code, string $token): ?string
-{
-    if ($token === '') {
-        return null;
-    }
-    $q = tankity_db()->prepare('SELECT reason, seats FROM closed WHERE code = ?');
-    $q->execute([$code]);
-    $row = $q->fetch(PDO::FETCH_NUM);
-    if ($row === false) {
-        return null;
-    }
-    $seats = json_decode((string) $row[1], true);
-    return is_array($seats) && in_array(room_token_hash($token), $seats, true) ? (string) $row[0] : null;
-}
-
 /* Deletes spent puzzles whose challenge has expired anyway, at most $limit
    (housekeeping). */
 function room_pow_expire(int $now, int $limit = 5000): int
@@ -264,17 +237,6 @@ function room_pow_expire(int $now, int $limit = 5000): int
     });
 }
 
-/* Deletes tombstones older than ROOM_TOMBSTONE_SECS, at most $limit
-   (housekeeping). */
-function room_tombstone_expire(int $now, int $limit = 5000): int
-{
-    return tankity_tx(tankity_db(), function (PDO $db) use ($now, $limit): int {
-        $q = $db->prepare('DELETE FROM closed WHERE code IN (SELECT code FROM closed WHERE at < ? LIMIT ?)');
-        $q->execute([$now - ROOM_TOMBSTONE_SECS, $limit]);
-        return $q->rowCount();
-    });
-}
-
 /* Holds a new room: a free code taken under the write lock, its row inserted
    empty. The caller checks the address's lobbies, saves it, then unlocks (or
    discards). */
@@ -282,13 +244,11 @@ function room_alloc(?callable $nextCode = null): RoomLock
 {
     $nextCode = $nextCode ?? fn() => room_new_code(fn($c) => false);
     $db = room_begin();
-    // A code with a tombstone is never drawn again while the tombstone lasts.
-    $ins = $db->prepare("INSERT OR IGNORE INTO rooms (code, data, created, touched, expires, phase, acted)
-        SELECT ?, '', ?, ?, ?, 'lobby', ? WHERE NOT EXISTS (SELECT 1 FROM closed WHERE code = ?)");
+    $ins = $db->prepare("INSERT OR IGNORE INTO rooms (code, data, created, touched, expires, phase, acted) VALUES (?, '', ?, ?, ?, 'lobby', ?)");
     for ($try = 0; $try < 50; $try++) {
         $code = $nextCode();
         $now = time();
-        $ins->execute([$code, $now, $now, $now + room_live_secs(), $now, $code]);
+        $ins->execute([$code, $now, $now, $now + room_live_secs(), $now]);
         if ($ins->rowCount() === 1) {
             return room_hold(new RoomLock($db, $code));
         }

@@ -76,9 +76,9 @@ export interface RoomHandlers {
   /** A background send failed and the player should hear it. */
   onError(err: unknown): void;
   /** The room this client sat in is gone ('closed': the server has no such
-   * room; 'space': closed to make space for another match) or holds no seat
-   * for it any more ('seat': given up, in another tab say). The polls have stopped and the session is cleared. */
-  onGone?(code: string, why: 'closed' | 'seat' | 'space'): void;
+   * room) or holds no seat for it any more ('seat': given up, in another tab
+   * say). The polls have stopped and the session is cleared. */
+  onGone?(code: string, why: 'closed' | 'seat'): void;
 }
 
 /* ---------- timing ---------- */
@@ -121,12 +121,10 @@ export function standingsRows(
     .sort((a, b) => b.score - a.score);
 }
 
-/** The server says the room is gone: 'space' when it was closed to make space
- * for another match (the 404 told this seat why), 'closed' when it was swept,
- * closed or never there; null for any other error. */
-export function isGoneError(err: unknown): 'closed' | 'space' | null {
-  if (!/no such room/.test(String((err && (err as { message?: unknown }).message) || err || ''))) return null;
-  return (err as { closed?: unknown }).closed === 'space' ? 'space' : 'closed';
+/** The server says the room is gone ('closed': swept, closed or never there);
+ * null for any other error. */
+export function isGoneError(err: unknown): 'closed' | null {
+  return /no such room/.test(String((err && (err as { message?: unknown }).message) || err || '')) ? 'closed' : null;
 }
 
 /** A room code as typed or read back: uppercase, without spaces or hyphens
@@ -142,15 +140,14 @@ export function isRoomCode(code: string): boolean {
 }
 
 /** What the player hears when a room they sat in is gone. */
-export function goneLine(code: string, why: 'closed' | 'space'): string {
-  return why === 'space' ? `Room ${code} was closed to make space.` : `Room ${code} has closed.`;
+export function goneLine(code: string): string {
+  return `Room ${code} has closed.`;
 }
 
-/** The error a failed reply throws: the server's line, why a room is gone
- * when it says, and which puzzle check refused when one did. */
+/** The error a failed reply throws: the server's line, and which puzzle check
+ * refused when one did. */
 function replyError(data: Record<string, unknown>): Error {
-  const e: Error & { closed?: 'space'; puzzle?: string } = new Error(String(data.error || STUMBLED));
-  if (data.closed === 'space') e.closed = 'space';
+  const e: Error & { puzzle?: string } = new Error(String(data.error || STUMBLED));
   if (typeof data.puzzle === 'string') e.puzzle = data.puzzle;
   return e;
 }
@@ -608,7 +605,7 @@ export class RoomClient {
     return !room.you && !!mine && !mine.human;
   }
 
-  private gone(why: 'closed' | 'seat' | 'space'): void {
+  private gone(why: 'closed' | 'seat'): void {
     const code = this.code;
     this.detach();
     this.handlers.onGone?.(code, why);

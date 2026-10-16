@@ -224,8 +224,7 @@ function room_mine_one(string $code, string $token): array
     }
     $room = room_peek($code);
     if ($room === null) {
-        $why = room_closed_for($code, $token);
-        return $why !== null ? $gone + ['closed' => $why] : $gone;
+        return $gone;
     }
     $seat = room_find_seat($room, $token);
     if ($seat === null) {
@@ -262,7 +261,11 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
 $body = [];
 if ($method === 'POST') {
-    $raw = file_get_contents('php://input');
+    // A request body is a few hundred bytes; read one byte past the cap and refuse.
+    $raw = file_get_contents('php://input', false, null, 0, ROOM_BODY_MAX + 1);
+    if (is_string($raw) && strlen($raw) > ROOM_BODY_MAX) {
+        room_json_out(413, ['error' => 'request too large']);
+    }
     $dec = json_decode(is_string($raw) ? $raw : '', true);
     $body = is_array($dec) ? $dec : $_POST;
 }
@@ -393,7 +396,7 @@ if ($action === 'create' && $method === 'POST') {
     try {
         $hostKey = room_client_hash();
         $hosting = room_lobbies_hosted($hostKey) >= room_lobbies_per_address();
-        $full = !$hosting && room_db_full();
+        $full = !$hosting && room_db_full_swept();
     } catch (Throwable $e) {
         room_store_fail($e);
     }
@@ -520,16 +523,10 @@ if ($action === 'join' && $method === 'POST') {
 
 /* The 404 for a room that is not there, and for a request whose token holds
    no seat in a room that is: a stranger cannot tell a live code from one
-   nobody holds. A seat whose room was closed to make space (its token's hash
-   is in the tombstone) also hears why; anyone else learns nothing more. */
-function room_gone_out(string $code, string $token): never
+   nobody holds. */
+function room_gone_out(): never
 {
-    try {
-        $why = room_closed_for($code, $token);
-    } catch (Throwable $e) {
-        $why = null; // the plain 404 still says the room is gone
-    }
-    room_json_out(404, ['error' => 'no such room'] + ($why !== null ? ['closed' => $why] : []));
+    room_json_out(404, ['error' => 'no such room']);
 }
 
 /* The seat token a request carries: in the body of a POST, or the
@@ -571,7 +568,7 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true, bool $sta
         room_store_fail($e);
     }
     if ($peek === null || room_find_seat($peek, $token) === null) {
-        room_gone_out($code, $token);
+        room_gone_out();
     }
     if ($needCsrf && !room_csrf_ok($peek, $body)) {
         room_json_out(403, ['error' => 'bad csrf token']);
@@ -582,7 +579,7 @@ function room_gate(array $body, bool $needCsrf, bool $throttle = true, bool $sta
     if ($seat === null) {
         // Gone, or the seat left, between the read and the lock.
         room_unlock($fh);
-        room_gone_out($code, $token);
+        room_gone_out();
     }
     if ($needCsrf) {
         if (!room_csrf_ok($room, $body)) {
@@ -713,7 +710,7 @@ if ($action === 'start' && $method === 'POST') {
         room_json_out(409, ['error' => 'already started']);
     }
     // One human needs no referee: the browser plays the match as solo, and
-    // the lobby closes without a tombstone, since its host closed it (README
+    // the lobby closes without a word, since its host closed it (README
     // "Room limits"). An old bundle could not play it, so it is told to reload
     // and the lobby stays as it was.
     $humans = count(array_filter($room['seats'], static fn(array $s): bool => (bool) ($s['human'] ?? false)));
@@ -789,7 +786,7 @@ if ($action === 'state') {
     $token = room_req_token($body);
     $peekSeat = $peek !== null ? room_find_seat($peek, $token) : null;
     if ($peekSeat === null) {
-        room_gone_out($code, $token);
+        room_gone_out();
     }
     if (in_array($peek['phase'], ['lobby', 'over'], true)
         && time() - (int) ($peek['touched'] ?? 0) < ROOM_HEARTBEAT_SECS) {
@@ -806,7 +803,7 @@ if ($action === 'state') {
     $seat = is_array($room) ? room_find_seat($room, $token) : null;
     if ($seat === null) {
         room_unlock($fh);
-        room_gone_out($code, $token);
+        room_gone_out();
     }
     if ($room['phase'] === 'play' || $room['phase'] === 'shop') {
         // A turn or shop clock that ran out, or a drone's turn, is applied by whoever polls first.

@@ -123,6 +123,39 @@ final class StoreDir
         return $path;
     }
 
+    /**
+     * The check after every fopen of a file in a shared directory, where
+     * another account can plant a link between claimFile() and the open: the
+     * open handle must be a regular file owned by PHP's user, and the path must
+     * still name that same file (not a link, same device and inode). Otherwise
+     * the handle is closed and the open refused.
+     * @param resource $fh
+     */
+    public function verifyOpened($fh, string $path): void
+    {
+        $open = is_resource($fh) ? @fstat($fh) : false;
+        clearstatcache(true, $path);
+        $named = @lstat($path);
+        $problem = null;
+        if ($open === false || $named === false) {
+            $problem = 'cannot be verified after opening';
+        } elseif (($named['mode'] & 0170000) === 0120000) {
+            $problem = 'is a symbolic link';
+        } elseif (($open['mode'] & 0170000) !== 0100000 || ($named['mode'] & 0170000) !== 0100000) {
+            $problem = 'is not a file';
+        } elseif ($open['uid'] !== self::euid()) {
+            $problem = 'belongs to another account';
+        } elseif ($open['dev'] !== $named['dev'] || $open['ino'] !== $named['ino']) {
+            $problem = 'changed while it was being opened';
+        }
+        if ($problem !== null) {
+            if (is_resource($fh)) {
+                fclose($fh);
+            }
+            $this->refuse($path, $problem, 'remove it');
+        }
+    }
+
     /** The deny file Apache reads in a storage directory under the web root; true once it is in place. */
     public function denyHttp(string $dir): bool
     {

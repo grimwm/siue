@@ -271,25 +271,27 @@ function openScoresFile(string $path, string $mode) {
         @chmod($dir, $m['sharedDir']);
     }
     if (!is_file($path)) {
-        $bootstrap = @fopen($path, 'c+');
-        if ($bootstrap === false) {
-            throw new RuntimeException('unable to create scores file: ' . $path);
-        }
-        if (flock($bootstrap, LOCK_EX)) {
-            if (filesize($path) === 0) {
+        // 'x' creates the file or fails when the name now exists (a link included).
+        $bootstrap = @fopen($path, 'x');
+        if ($bootstrap !== false) {
+            scoreStore()->verifyOpened($bootstrap, $path);
+            if (flock($bootstrap, LOCK_EX)) {
                 fwrite($bootstrap, '{"week":[],"alltime":[]}');
                 fflush($bootstrap);
+                flock($bootstrap, LOCK_UN);
             }
-            flock($bootstrap, LOCK_UN);
+            fclose($bootstrap);
+            @chmod($path, scoresFileMode($path));
+        } elseif (!file_exists($path) && !is_link($path)) {
+            throw new RuntimeException('unable to create scores file: ' . $path);
         }
-        fclose($bootstrap);
-        @chmod($path, scoresFileMode($path));
     }
 
     $fh = @fopen($path, $mode);
     if ($fh === false) {
         throw new RuntimeException('unable to open scores file: ' . $path);
     }
+    scoreStore()->verifyOpened($fh, $path);
     return $fh;
 }
 

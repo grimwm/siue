@@ -310,4 +310,29 @@ final class ScoresTest extends TestCase
         $this->assertNotNull($g->startRun());
         $this->assertSame(0600, fileperms($runs) & 0777);
     }
+
+    public function testAScoresFileThatIsALinkIsNeverWrittenThrough(): void
+    {
+        $victim = $this->dir . '/victim';
+        file_put_contents($victim, 'keep');
+        symlink($victim, $this->store);
+        $old = ini_set('error_log', '/dev/null');
+        try {
+            openScoresFile($this->store, 'c+');
+            $this->fail('a link at the scores path must be refused');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('symbolic link', $e->getMessage());
+        } finally {
+            ini_set('error_log', (string) $old);
+        }
+        $this->assertSame('keep', file_get_contents($victim));
+    }
+
+    public function testAMissingScoresFileIsCreatedPrivateAndOpens(): void
+    {
+        $fh = openScoresFile($this->store, 'c+');
+        fclose($fh);
+        $this->assertSame('{"week":[],"alltime":[]}', $this->bytes());
+        $this->assertSame(0600, fileperms($this->store) & 0777);
+    }
 }

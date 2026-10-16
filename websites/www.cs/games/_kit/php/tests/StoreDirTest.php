@@ -141,4 +141,61 @@ final class StoreDirTest extends TestCase
         $this->assertSame(0600, fileperms($this->root . '/.htaccess') & 0777);
         $this->assertTrue($store->denyHttp($this->root));
     }
+
+    public function testAFileOpenedNormallyPassesThePostOpenCheck(): void
+    {
+        $path = $this->root . '/scores.json';
+        $fh = fopen($path, 'x');
+        $this->store->verifyOpened($fh, $path);
+        $this->assertIsResource($fh);
+        fclose($fh);
+    }
+
+    public function testALinkPlantedAfterTheClaimIsRefusedAndClosed(): void
+    {
+        $path = $this->root . '/scores.json';
+        $this->assertSame($path, $this->store->claimFile($path), 'missing, so it passes the claim');
+        $victim = $this->root . '/victim';
+        file_put_contents($victim, 'keep');
+        symlink($victim, $path); // another account wins the race
+        $fh = fopen($path, 'c+'); // the open follows the link
+        try {
+            $this->silently(fn() => $this->store->verifyOpened($fh, $path));
+            $this->fail('a link planted after the claim must be refused');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('symbolic link', $e->getMessage());
+        }
+        $this->assertFalse(is_resource($fh), 'the handle is closed');
+        $this->assertSame('keep', file_get_contents($victim));
+    }
+
+    public function testAFileSwappedForAnotherIsRefused(): void
+    {
+        $path = $this->root . '/scores.json';
+        $fh = fopen($path, 'c+');
+        unlink($path);
+        file_put_contents($path, 'other'); // same name, another inode
+        try {
+            $this->silently(fn() => $this->store->verifyOpened($fh, $path));
+            $this->fail('a swapped file must be refused');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('changed while it was being opened', $e->getMessage());
+        }
+    }
+
+    public function testAFileOfAnotherAccountIsRefused(): void
+    {
+        if (StoreDir::euid() === 0) {
+            $this->markTestSkipped('root owns everything it makes');
+        }
+        // A file root owns, opened read-only: the handle is not ours.
+        $path = '/etc/hosts';
+        $fh = fopen($path, 'r');
+        try {
+            $this->silently(fn() => $this->store->verifyOpened($fh, $path));
+            $this->fail("$path belongs to another account and must be refused");
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('belongs to another account', $e->getMessage());
+        }
+    }
 }

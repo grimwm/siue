@@ -8,7 +8,7 @@
 import type { GameState, Tables } from './game-types.ts';
 import type { RoomClient } from './net.ts';
 import { clamp } from './sim.ts';
-import { pref, text } from '../../_kit/prefs.ts';
+import { oneOf, pref } from '../../_kit/prefs.ts';
 import { browserStorage } from '../../_kit/ports.browser.ts';
 import type { sfx as SfxApi } from './audio.ts';
 import type { KeyHintFn } from './ui/chrome.tsx';
@@ -63,7 +63,7 @@ export function createGuns(deps: GunsDeps) {
   const GUN_COLS = 4;
   let gunCursor = 0;
   /* All guns, or only those in stock: a toggle in the picker, kept in this browser. */
-  const showPref = pref('tankity-guns-show', 'all', text, browserStorage());
+  const showPref = pref('tankity-guns-show', 'all', oneOf(['all', 'stock'], 'all'), browserStorage());
   const inStockOnly = (): boolean => showPref.get() === 'stock';
   function inStock(w: string): boolean {
     return w === 'shell' || (G.ammo![w] || 0) > 0;

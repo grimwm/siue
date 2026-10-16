@@ -58,7 +58,7 @@ engines type-check without DOM types and run under plain Node.
 `pref(key, fallback, codec, storage)` is one setting under its own
 localStorage key, in the raw form that key already holds (`text` or
 `json(guard)`), so moving a game onto it keeps every player's settings.
-`subscribe` tells the UI when a value changes. Blocked or missing storage
+`oneOf(values, fallback)` is the codec for a setting that holds one of a fixed set of words: the stored form is the word itself, and any other stored word reads as `fallback`. `subscribe` tells the UI when a value changes. Blocked or missing storage
 falls back to a value that lives for the session; nothing throws.
 
 ## Score guard (`php/score-guard.php`)

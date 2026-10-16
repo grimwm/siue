@@ -21,7 +21,7 @@
  * DOM-free: the setting is kept through _kit/prefs; the menu, the lobby and
  * the renderer draw it. */
 import type { StorageLike } from '../../_kit/ports.ts';
-import { pref, text } from '../../_kit/prefs.ts';
+import { oneOf, pref } from '../../_kit/prefs.ts';
 
 /** A wall the sim flies against. */
 export type Walls = 'none' | 'concrete' | 'rubber' | 'spring' | 'wrap';
@@ -151,12 +151,6 @@ export interface WallsPref {
 }
 export const WALLS_KEY = 'tankity-walls';
 export function wallsSetting(storage: StorageLike | null): WallsPref {
-  const saved = pref(WALLS_KEY, 'none', text, storage);
-  return {
-    get() {
-      const v = saved.get();
-      return isWallsSetting(v) ? v : 'none';
-    },
-    set(w) { saved.set(w); },
-  };
+  const saved = pref<WallsSetting>(WALLS_KEY, 'none', oneOf(WALL_SETTINGS, 'none'), storage);
+  return { get: saved.get, set: saved.set };
 }

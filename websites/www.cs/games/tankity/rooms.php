@@ -180,10 +180,10 @@ function room_arsenal(): array
     }
     if ($a === false) {
         $a = ['ammo' => [
-            ['key' => 'shell', 'name' => 'Shell', 'dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'minRound' => 1, 'ai' => true, 'aiRound' => 1, 'effect' => 'shot', 'speed' => 1.0],
-            ['key' => 'buck', 'name' => 'Buckshot', 'dmg' => 17, 'radius' => 20, 'price' => 80, 'pack' => 2, 'minRound' => 1, 'ai' => true, 'aiRound' => 2, 'effect' => 'pellets', 'pellets' => 3, 'spread' => 0.10, 'speed' => 1.0],
-            ['key' => 'mortar', 'name' => 'Mortar', 'dmg' => 56, 'radius' => 42, 'price' => 200, 'pack' => 2, 'minRound' => 1, 'ai' => true, 'aiRound' => 3, 'effect' => 'shot', 'speed' => 1.0],
-            ['key' => 'nuke', 'name' => 'NUKE', 'dmg' => 95, 'radius' => 70, 'price' => 500, 'pack' => 1, 'minRound' => 4, 'ai' => false, 'aiRound' => 99, 'effect' => 'shot', 'speed' => 1.0],
+            ['key' => 'shell', 'name' => 'Shell', 'dmg' => 34, 'radius' => 26, 'price' => 0, 'pack' => 0, 'ai' => true, 'aiRound' => 1, 'effect' => 'shot', 'speed' => 1.0],
+            ['key' => 'buck', 'name' => 'Buckshot', 'dmg' => 17, 'radius' => 20, 'price' => 80, 'pack' => 2, 'ai' => true, 'aiRound' => 2, 'effect' => 'pellets', 'pellets' => 3, 'spread' => 0.10, 'speed' => 1.0],
+            ['key' => 'mortar', 'name' => 'Mortar', 'dmg' => 56, 'radius' => 42, 'price' => 200, 'pack' => 2, 'ai' => true, 'aiRound' => 3, 'effect' => 'shot', 'speed' => 1.0],
+            ['key' => 'nuke', 'name' => 'NUKE', 'dmg' => 95, 'radius' => 70, 'price' => 500, 'pack' => 1, 'ai' => false, 'aiRound' => 99, 'effect' => 'shot', 'speed' => 1.0],
         ], 'gear' => [
             ['key' => 'repair', 'name' => 'Repair +40 armor', 'price' => 120, 'n' => 40, 'effect' => 'repair'],
             ['key' => 'fuel', 'name' => 'Fuel +60', 'price' => 60, 'n' => 60, 'effect' => 'fuel'],
@@ -883,12 +883,6 @@ if ($action === 'act' && $method === 'POST') {
             room_unlock($fh);
             room_json_out(409, ['error' => 'none left']);
         }
-        $minRound = $weapons[$wkey]['minRound'] ?? 1;
-        if ($room['round'] < $minRound) {
-            room_unlock($fh);
-            $msg = room_unlock_msg($weapons[$wkey]['name'], (int) $minRound);
-            room_json_out(409, ['error' => $msg]);
-        }
         $room['weapon'][$seat] = $wkey;
         // The barrel comes back inside the new gun's limits.
         unset($tank);
@@ -908,12 +902,6 @@ if ($action === 'act' && $method === 'POST') {
         if ($wkey !== 'shell' && $have <= 0) {
             room_unlock($fh);
             room_json_out(409, ['error' => 'none left']);
-        }
-        $minRound = $weapons[$wkey]['minRound'] ?? 1;
-        if ($room['round'] < $minRound) {
-            room_unlock($fh);
-            $msg = room_unlock_msg($weapons[$wkey]['name'], (int) $minRound);
-            room_json_out(409, ['error' => $msg]);
         }
         if ($wkey !== 'shell') {
             $room['ammo'][$seat][$wkey] = $have - 1;

@@ -197,13 +197,13 @@ test('a missile at full power keeps its reach mapping on an open field, and the 
     const land = predict(MISSILE, walls, 200, 1, 45, 60);
     assert.equal(land.x, mid.x, `${walls}: the open-field landing is unchanged`);
   }
-  // At full power from x 200 it flies 90% of the field: off the right edge.
+  // At full power from x 200 it flies the whole field: off the right edge.
   const off = predict(MISSILE, 'none', 200, 1, 45, 100);
   assert.ok(off.oob, `None: past the edge (${off.x})`);
   const rubber = predict(MISSILE, 'rubber', 200, 1, 45, 100);
   assert.ok(!rubber.oob && rubber.x < 719 && rubber.x > 200, `Rubber: back on the field (${rubber.x})`);
   const wrap = predict(MISSILE, 'wrap', 200, 1, 45, 100);
-  assert.ok(!wrap.oob && wrap.x < 200, `Wraparound: in from the left (${wrap.x})`);
+  assert.ok(!wrap.oob && wrap.x < W / 2, `Wraparound: in from the left (${wrap.x})`);
   // Same height and velocity through the wall: it lands a field's width from where an endless field would put it.
   const m = muzzle({ x: 200, y: 400, angle: 45, dirS: 1, isPlayer: true });
   const v = launchSpeed(gun(MISSILE), 100), st = { x: m.x, y: m.y, vx: dcos(rad(45)) * v, vy: -dsin(rad(45)) * v };

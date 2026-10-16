@@ -124,7 +124,7 @@ function room_shop_settle(array &$room): bool
 }
 /* A human's turn ran out: a drone takes this one shot for them, aimed as the
 // room's drones aim, with a gun from the player's own rack (the Shell when the
-// drone's pick is not in the rack or not yet unlocked). It never drives. The
+// drone's pick is not in the rack). It never drives. The
 // seat stays the player's. Answers the gun. */
 function room_standin_shot(array &$room, int $cur): string
 {
@@ -142,7 +142,7 @@ function room_standin_shot(array &$room, int $cur): string
     $wkey = (string) $choice['wkey'];
     $def = room_weapons()[$wkey] ?? null;
     $have = $room['ammo'][$t['seat']][$wkey] ?? 0;
-    if ($wkey !== 'shell' && ($def === null || $have <= 0 || ($room['round'] ?? 1) < ($def['minRound'] ?? 1))) {
+    if ($wkey !== 'shell' && ($def === null || $have <= 0)) {
         $wkey = 'shell';
     }
     $room['tanks'][$cur]['angle'] = (float) $choice['angle'];
@@ -722,11 +722,6 @@ function room_retire_guns(array &$room): bool
     }
     return $changed;
 }
-/* What a buy or a pick of a locked row says: its name and its round. */
-function room_unlock_msg(string $name, int $minRound): string
-{
-    return "$name unlocks in round $minRound";
-}
 /* Every economy slot a new human seat needs, keyed by seat. */
 function room_seat_economy(array &$room, int $seat): void
 {
@@ -1225,8 +1220,8 @@ function room_carry_armor(array &$room, int $seat, int $hp, bool $wrecked): void
 }
 /* One purchase: ammo packs or a piece of gear. Null when it went through, else
    [HTTP status, the player's line]. One-shot tricks never stack, a repair buys
-   only the packs that fill the hull, and round-one goods sell in the pre-match
-   shop (round 0) as the browser's shelf does. */
+   only the packs that fill the hull, and every good sells from the pre-match
+   shop (round 0) on, as the browser's shelf does. */
 function room_buy(array &$room, int $seat, string $item, int $qty): ?array
 {
     // An eliminated human stays in the shop phase while others play on; refused so a seat that is out cannot move cash standings.
@@ -1237,18 +1232,13 @@ function room_buy(array &$room, int $seat, string $item, int $qty): ?array
     $qty = max(1, min(9, $qty));
     $gear = null;
     if ($item !== 'shell' && isset($weapons[$item])) {
-        $minRound = (int) ($weapons[$item]['minRound'] ?? 1);
         $price = (int) $weapons[$item]['price'];
         $pack = (int) ($weapons[$item]['pack'] ?? 1);
     } elseif (($gear = room_gear($item)) !== null) {
-        $minRound = (int) ($gear['minRound'] ?? 1);
         $price = (int) ($gear['price'] ?? 0);
         $pack = 0;
     } else {
         return [422, 'not for sale'];
-    }
-    if ((int) $room['round'] < ($minRound <= 1 ? 0 : $minRound)) {
-        return [409, room_unlock_msg((string) (isset($weapons[$item]) ? $weapons[$item]['name'] : ($gear['name'] ?? $item)), $minRound)];
     }
     $effect = (string) ($gear['effect'] ?? '');
     if (in_array($effect, ['shield', 'extralife', 'laststand'], true)) {

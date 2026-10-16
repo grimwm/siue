@@ -108,7 +108,6 @@ export interface Weapon {
   price: number;
   pack: number;
   start?: number; // shells of it every player starts a match with
-  minRound: number;
   ai?: boolean;
   aiRound?: number;
   aiRack?: number; // shells of it a drone loads per round (2 when left out)
@@ -164,7 +163,6 @@ export interface Gear {
   cat?: string;
   price: number;
   n?: number;
-  minRound?: number;
   effect?: string;
   dmg?: number;
   radius?: number;
@@ -177,7 +175,6 @@ export interface ShopRow {
   n: number;
   label: string;
   cat: string;
-  minRound: number;
   price: number;
   effect?: string;
 }
@@ -337,20 +334,16 @@ export function buildArsenal(data: { ammo?: Weapon[]; gear?: Gear[]; fall?: Part
   const gear: Record<string, Gear> = {};
   for (const a of (data && data.ammo) || []) {
     if (!a || !a.key || !a.name) continue;
-    w[a.key] = Object.assign({ effect: 'shot', speed: 1.0, pack: 0, price: 0, minRound: 1 }, a);
+    w[a.key] = Object.assign({ effect: 'shot', speed: 1.0, pack: 0, price: 0 }, a);
     order.push(a.key);
     if ((a.pack || 0) > 0) {
-      // Round-1 goods sell everywhere including the pre-match shelf
-      // (G.round is 0 there); later unlocks need the round to arrive.
-      const openFrom = (a.minRound || 1) <= 1 ? 0 : a.minRound;
-      shop.push({ kind: 'ammo', w: a.key, n: a.pack, label: `${a.name} ×${a.pack}`, cat: a.cat || 'Shells', minRound: openFrom, price: a.price || 0 });
+      shop.push({ kind: 'ammo', w: a.key, n: a.pack, label: `${a.name} ×${a.pack}`, cat: a.cat || 'Shells', price: a.price || 0 });
     }
   }
   for (const g of (data && data.gear) || []) {
     if (!g || !g.key || !g.name) continue;
     gear[g.key] = g;
-    const openFrom = (g.minRound || 1) <= 1 ? 0 : g.minRound!;
-    shop.push({ kind: 'gear', g: g.key, n: g.n || 0, label: g.name, cat: g.cat || 'Tricks', minRound: openFrom, price: g.price || 0, effect: g.effect });
+    shop.push({ kind: 'gear', g: g.key, n: g.n || 0, label: g.name, cat: g.cat || 'Tricks', price: g.price || 0, effect: g.effect });
   }
   if (!order.length) return null;
   // The shop shows each category under one heading, in the order the
@@ -533,7 +526,7 @@ export function shotSpeed(power: number, mult: number | undefined, reach = 1): n
 /* A missile (a row with missile: true) flies under its own power: its power
    picks how far it goes, not how hard a cannon throws it. At 45 degrees in
    calm air, from launch height back down to it, power p lands
-   max(MISSILE_LOW, p / 100) x MISSILE_FULL of the field away, whatever the
+   max(MISSILE_LOW, p / 100) x MISSILE_FULL of the field away (full power crosses all of it), whatever the
    gun's drag; drag and wind still shape its arc and its drift. Its launch
    speed at each whole power is found by bisection against this very flight
    (missileTable), and tools/game-json.php writes that table into the row as
@@ -541,13 +534,13 @@ export function shotSpeed(power: number, mult: number | undefined, reach = 1): n
    between two whole ones is interpolated straight. server/sim.php
    room_missile_table() is the same bisection. */
 export const MISSILE_LOW = 0.1;
-export const MISSILE_FULL = 0.9;
+export const MISSILE_FULL = 1;
 /** The share of the wind's push a missile feels: its guidance holds its heading against the rest,
- *  so a gale drifts it a little but cannot carry it off the field (MISSILE_WIND_MARGIN). */
+ *  so a gale drifts it a little but cannot carry it far off its calm landing (MISSILE_WIND_MARGIN). */
 export const MISSILE_WIND = 0.125;
-/** How far past the field's edge, as a share of its width, a full-power missile may land in a wind
- *  of 10 at 45 degrees from a unit 30 px from the edge (test/missile.test.ts). */
-export const MISSILE_WIND_MARGIN = 0.05;
+/** How far, as a share of the field's width, a wind of 10 at 45 degrees may move a full-power
+ *  missile's landing from where the calm shot lands (test/missile.test.ts). */
+export const MISSILE_WIND_MARGIN = 0.08;
 /** Bisection rounds per power, and the launch speeds (px/s) the search spans. */
 const MISSILE_ROUNDS = 40, MISSILE_SLOW = 10, MISSILE_FAST = 4000;
 /** How far a 45-degree shot at speed v flies on a room's field in calm air with drag k, from

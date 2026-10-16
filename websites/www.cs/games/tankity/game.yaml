@@ -47,7 +47,7 @@
 # weapon families, each ordered small to big: Shells, Splitters, Rollers,
 # Nukes, Beams, Tracers, Earth, Fire. rooms.php builds its authoritative sim
 # from the same rows, so
-# prices, damage and unlock rounds can never disagree between solo and rooms.
+# prices and damage can never disagree between solo and rooms.
 # Ids (key) are shared by ammo and gear and must be unique.
 #
 # Balance: test/balance.test.ts fires every gun through the real sim at a
@@ -59,12 +59,11 @@
 #     of NUKE's.
 #   - Along a weapon line (a cat, or a `line` within it), each tier costs more
 #     per shot (price / pack) than the one before, does more expected damage
-#     (where the line does damage) and unlocks no sooner.
+#     (where the line does damage).
 #   - Every damage gun's damage per dollar sits within 0.5x to 2x the damage
 #     guns' median. Utility guns (tracers, dirt, a pour, riot charges, a slump,
 #     a harmless crater or burrow whose only damage is a fall) and napalm's
 #     damage over time are judged by their lines instead.
-#   - A damage gun 1.5x as strong as another never unlocks before it.
 #
 # ammo row fields
 #   key       id, lowercase letters and digits. `shell` must exist and be free
@@ -92,14 +91,10 @@
 #             the free `shell` uses 0). 0 to 99.
 #   start     shells of it every player starts a match with, 0 to 9.
 #             Optional (0 when left out).
-#   minRound  first round the shop sells it. 1 means from the pre-match shop;
-#             a later round locks the row ("Unlocks in round N") until then.
 #   ai        true lets the drone battery carry it. false keeps it player only.
 #   aiRound   first round drones carry it (they get a rack of aiRack from
-#             then on). minRound is when the PLAYER can buy it; aiRound is
-#             when DRONES start firing it, so a shell can reach players before
-#             drones, or the other way round. 99 means never (use with
-#             ai: false).
+#             then on). Players can buy any gun from the first shop; 99 means
+#             drones never carry it (use with ai: false).
 #   aiRack    shells of it each drone loads per round, 1 to 9. Optional
 #             (2 when left out); only a row with ai: true takes it.
 #   effect    what the shell does in flight:
@@ -337,7 +332,6 @@
 #               parachute  parachutes added (they stack; see fall below)
 #   effect    repair, fuel, plate, shield, extralife, jammer, bunker, laststand,
 #             parachute
-#   minRound  optional, as for ammo
 #   dmg, radius  laststand only: the blast of the wreck when you go down
 arsenal:
   ammo:
@@ -348,7 +342,6 @@ arsenal:
       radius: 26
       price: 0
       pack: 0
-      minRound: 1
       ai: true
       aiRound: 1
       effect: shot
@@ -365,7 +358,6 @@ arsenal:
       price: 140
       pack: 2
       start: 1
-      minRound: 1
       ai: true
       aiRound: 2
       effect: pellets
@@ -384,7 +376,6 @@ arsenal:
       radius: 42
       price: 200
       pack: 2
-      minRound: 1
       ai: true
       aiRound: 3
       effect: shot
@@ -401,7 +392,6 @@ arsenal:
       radius: 30
       price: 120
       pack: 2
-      minRound: 1
       ai: true
       aiRound: 5
       effect: emp
@@ -419,7 +409,6 @@ arsenal:
       radius: 30
       price: 180
       pack: 2
-      minRound: 1
       ai: true
       aiRound: 4
       effect: proximity
@@ -438,7 +427,6 @@ arsenal:
       radius: 8
       price: 120
       pack: 1
-      minRound: 1
       ai: true
       aiRound: 6
       effect: shot
@@ -455,7 +443,6 @@ arsenal:
       radius: 24
       price: 260
       pack: 2
-      minRound: 2
       ai: true
       aiRound: 6
       effect: seeker
@@ -474,7 +461,6 @@ arsenal:
       radius: 52
       price: 350
       pack: 2
-      minRound: 4
       ai: true
       aiRound: 6
       effect: shot
@@ -490,7 +476,6 @@ arsenal:
       radius: 24
       price: 180
       pack: 2
-      minRound: 2
       ai: true
       aiRound: 7
       effect: scatter
@@ -513,7 +498,6 @@ arsenal:
       radius: 26
       price: 200
       pack: 2
-      minRound: 2
       ai: true
       aiRound: 6
       effect: hop
@@ -534,7 +518,6 @@ arsenal:
       radius: 18
       price: 280
       pack: 2
-      minRound: 3
       ai: true
       aiRound: 4
       effect: cluster
@@ -557,7 +540,6 @@ arsenal:
       radius: 20
       price: 400
       pack: 1
-      minRound: 5
       ai: true
       aiRound: 9
       aiRack: 1
@@ -581,7 +563,6 @@ arsenal:
       radius: 22
       price: 120
       pack: 3
-      minRound: 1
       ai: true
       aiRound: 3
       effect: roller
@@ -600,7 +581,6 @@ arsenal:
       radius: 34
       price: 160
       pack: 2
-      minRound: 2
       ai: true
       aiRound: 5
       effect: roller
@@ -619,7 +599,6 @@ arsenal:
       radius: 50
       price: 380
       pack: 1
-      minRound: 4
       ai: true
       aiRound: 8
       aiRack: 1
@@ -639,7 +618,6 @@ arsenal:
       radius: 50
       price: 320
       pack: 1
-      minRound: 3
       ai: true
       aiRound: 7
       aiRack: 1
@@ -657,7 +635,6 @@ arsenal:
       radius: 70
       price: 500
       pack: 1
-      minRound: 5
       ai: false
       aiRound: 99
       effect: shot
@@ -674,7 +651,6 @@ arsenal:
       radius: 90
       price: 200
       pack: 2
-      minRound: 1
       ai: true
       aiRound: 5
       effect: plasma
@@ -689,7 +665,6 @@ arsenal:
       radius: 6
       price: 300
       pack: 2
-      minRound: 2
       ai: true
       aiRound: 6
       effect: beam
@@ -707,7 +682,6 @@ arsenal:
       radius: 0
       price: 15
       pack: 5
-      minRound: 1
       ai: false
       aiRound: 99
       effect: tracer
@@ -725,7 +699,6 @@ arsenal:
       radius: 0
       price: 30
       pack: 5
-      minRound: 1
       ai: false
       aiRound: 99
       effect: tracer
@@ -744,7 +717,6 @@ arsenal:
       radius: 20
       price: 40
       pack: 5
-      minRound: 1
       ai: true
       aiRound: 4
       effect: dirt
@@ -762,7 +734,6 @@ arsenal:
       radius: 35
       price: 90
       pack: 3
-      minRound: 2
       ai: true
       aiRound: 5
       effect: dirt
@@ -780,7 +751,6 @@ arsenal:
       radius: 60
       price: 200
       pack: 2
-      minRound: 4
       ai: true
       aiRound: 7
       aiRack: 1
@@ -798,7 +768,6 @@ arsenal:
       radius: 1
       price: 160
       pack: 2
-      minRound: 3
       ai: true
       aiRound: 6
       effect: pour
@@ -818,7 +787,6 @@ arsenal:
       radius: 45
       price: 180
       pack: 2
-      minRound: 4
       ai: true
       aiRound: 6
       effect: dirt
@@ -835,7 +803,6 @@ arsenal:
       radius: 1
       price: 50
       pack: 3
-      minRound: 1
       ai: true
       aiRound: 4
       effect: dig
@@ -856,7 +823,6 @@ arsenal:
       radius: 1
       price: 110
       pack: 2
-      minRound: 3
       ai: true
       aiRound: 6
       effect: dig
@@ -877,7 +843,6 @@ arsenal:
       radius: 1
       price: 200
       pack: 2
-      minRound: 5
       ai: true
       aiRound: 8
       effect: dig
@@ -898,7 +863,6 @@ arsenal:
       radius: 1
       price: 160
       pack: 2
-      minRound: 1
       ai: true
       aiRound: 5
       effect: dig
@@ -921,7 +885,6 @@ arsenal:
       radius: 1
       price: 280
       pack: 2
-      minRound: 2
       ai: true
       aiRound: 7
       effect: dig
@@ -944,7 +907,6 @@ arsenal:
       radius: 1
       price: 200
       pack: 1
-      minRound: 3
       ai: true
       aiRound: 9
       aiRack: 1
@@ -968,7 +930,6 @@ arsenal:
       radius: 45
       price: 60
       pack: 3
-      minRound: 1
       ai: true
       aiRound: 2
       effect: riot
@@ -986,7 +947,6 @@ arsenal:
       radius: 90
       price: 120
       pack: 2
-      minRound: 3
       ai: true
       aiRound: 4
       effect: riot
@@ -1004,7 +964,6 @@ arsenal:
       radius: 45
       price: 100
       pack: 3
-      minRound: 2
       ai: true
       aiRound: 5
       effect: shot
@@ -1021,7 +980,6 @@ arsenal:
       radius: 75
       price: 220
       pack: 2
-      minRound: 4
       ai: true
       aiRound: 7
       effect: shot
@@ -1038,7 +996,6 @@ arsenal:
       radius: 120
       price: 260
       pack: 1
-      minRound: 5
       ai: true
       aiRound: 8
       aiRack: 1
@@ -1058,7 +1015,6 @@ arsenal:
       radius: 1
       price: 300
       pack: 2
-      minRound: 4
       ai: true
       aiRound: 6
       effect: napalm
@@ -1080,7 +1036,6 @@ arsenal:
       radius: 1
       price: 550
       pack: 1
-      minRound: 6
       ai: true
       aiRound: 9
       aiRack: 1

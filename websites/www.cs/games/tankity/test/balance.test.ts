@@ -10,8 +10,6 @@
 //   - every damage gun's damage per dollar sits within BAND_LO..BAND_HI of the
 //     damage guns' median (utility and damage-over-time guns are judged by
 //     their lines instead, see balanceRole);
-//   - unlocks follow power: along a line minRound never falls, and a damage gun
-//     UNLOCK_GAP times stronger than another never unlocks before it;
 //   - every gun that flies reaches REACH_MIN of a room's field at full power
 //     and its best angle, unless its row says shortRange.
 // tools/balance-report.ts prints the same numbers as a table.
@@ -20,7 +18,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildArsenal } from '../src/sim.ts';
-import { BAL_W, BAND_HI, BAND_LO, HIT_CAP, REACH_MIN, UNLOCK_GAP, fullReach, lineOf, measureArsenal, median } from '../src/balance.ts';
+import { BAL_W, BAND_HI, BAND_LO, HIT_CAP, REACH_MIN, fullReach, lineOf, measureArsenal, median } from '../src/balance.ts';
 import { flies } from '../src/sim.ts';
 import type { GunWorth } from '../src/balance.ts';
 
@@ -69,7 +67,7 @@ for (const g of worth) {
 const shell = worth.find(g => gun(g.key).pack <= 0 && gun(g.key).price === 0);
 if (shell) lines.get(lineOf(gun(shell.key)))?.unshift(shell);
 
-test('along each line, a bigger tier costs more per shot, does more damage and unlocks no sooner', () => {
+test('along each line, a bigger tier costs more per shot, does more damage', () => {
   assert.ok(lines.size >= 8, `only ${lines.size} lines`);
   for (const [l, row] of lines) {
     const damaging = row.every(g => g.single > 0);
@@ -77,7 +75,6 @@ test('along each line, a bigger tier costs more per shot, does more damage and u
       const a = row[i - 1]!, b = row[i]!;
       assert.ok(b.perShot > a.perShot, `${l}: ${name(b)} $${f1(b.perShot)} a shot is not dearer than ${name(a)} $${f1(a.perShot)}`);
       if (damaging) assert.ok(b.single > a.single, `${l}: ${name(b)} ${f1(b.single)} does no more than ${name(a)} ${f1(a.single)}`);
-      assert.ok(gun(b.key).minRound >= gun(a.key).minRound, `${l}: ${name(b)} unlocks before ${name(a)}`);
     }
   }
 });
@@ -97,18 +94,6 @@ test(`every damage gun's damage per dollar sits within ${BAND_LO}x to ${BAND_HI}
   for (const g of damage) {
     const r = g.perDollar! / mid;
     assert.ok(r >= BAND_LO && r <= BAND_HI, `${name(g)}: ${g.perDollar!.toFixed(3)} damage per dollar is ${r.toFixed(2)}x the median ${mid.toFixed(3)}`);
-  }
-});
-
-test('unlocks follow power: a gun far stronger than another never unlocks before it', () => {
-  const fighters = worth.filter(g => g.role === 'damage');
-  for (const a of fighters) {
-    for (const b of fighters) {
-      if (a.single >= UNLOCK_GAP * b.single) {
-        assert.ok(gun(a.key).minRound >= gun(b.key).minRound,
-          `${name(a)} (${f1(a.single)}, round ${gun(a.key).minRound}) unlocks before ${name(b)} (${f1(b.single)}, round ${gun(b.key).minRound})`);
-      }
-    }
   }
 });
 

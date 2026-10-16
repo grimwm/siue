@@ -201,7 +201,7 @@ export function isOneShot(row: Pick<ShopRow, 'kind' | 'effect'>): boolean {
   return row.kind === 'gear' && ONE_SHOT.has(row.effect || '');
 }
 
-export type BuyResult = { ok: true; qty: number; total: number } | { ok: false; why: 'locked' | 'cash' | 'full'; total: number };
+export type BuyResult = { ok: true; qty: number; total: number } | { ok: false; why: 'cash' | 'full'; total: number };
 
 /** How many packs a purchase of `qtyIn` really buys: one for a one-shot trick,
  * and for Repair no more than the hull needs (0 when it is full). The shop prices
@@ -215,7 +215,6 @@ export function buyPacks(G: Pick<SoloState, 'armor' | 'plate'>, row: ShopRow, qt
 
 /** One purchase, by server/rules.php room_buy()'s rules. */
 export function soloBuy(G: SoloState, row: ShopRow, qtyIn: number): BuyResult {
-  if ((row.minRound || 0) > G.round) return { ok: false, why: 'locked', total: 0 };
   const qty = buyPacks(G, row, qtyIn);
   if (qty === 0) return { ok: false, why: 'full', total: 0 };
   const total = (row.price || 0) * qty;

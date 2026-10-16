@@ -114,10 +114,9 @@ final class RoomTurnTimeTest extends TestCase
     /* The human's turn, with the drone's pick forced to the Nuke: it is the
        only gun in the tank's rack besides the Shell, and a "glory" gunner
        takes the heaviest. $stock is the Nuke count in the player's rack. */
-    private function nukeRoom(int $round, int $stock, int $tankStock): array
+    private function nukeRoom(int $stock, int $tankStock): array
     {
         $room = $this->playing();
-        $room['round'] = $round;
         $room['ammo'][0]['nuke'] = $stock;
         $room['tanks'][0]['ammo'] = ['shell' => -1, 'nuke' => $tankStock];
         $room['tanks'][0]['s'] = 'glory';
@@ -134,9 +133,9 @@ final class RoomTurnTimeTest extends TestCase
         return array_values(array_filter($events, fn($e) => $e['t'] === 'auto'))[0];
     }
 
-    public function testTheStandInFiresAStockedUnlockedGunAndSpendsIt(): void
+    public function testTheStandInFiresAStockedGunAndSpendsIt(): void
     {
-        $room = $this->nukeRoom(room_weapons()['nuke']['minRound'], 2, 2);
+        $room = $this->nukeRoom(2, 2);
         $this->assertSame('nuke', room_ai_choose($room, $room['tanks'][0])['wkey'], 'the scenario makes the drone pick the Nuke');
         $auto = $this->timeOut($room);
         $this->assertSame('nuke', $auto['w']);
@@ -147,24 +146,24 @@ final class RoomTurnTimeTest extends TestCase
 
     public function testTheLastRoundSpentFallsTheSelectionBackToShell(): void
     {
-        $room = $this->nukeRoom(room_weapons()['nuke']['minRound'], 1, 1);
+        $room = $this->nukeRoom(1, 1);
         $this->assertSame('nuke', $this->timeOut($room)['w']);
         $this->assertSame(0, $room['ammo'][0]['nuke']);
         $this->assertSame('shell', $room['weapon'][0]);
     }
 
-    public function testTheStandInLeavesAStockedGunThatIsNotUnlockedYet(): void
+    public function testTheStandInFiresAStockedGunInTheFirstRound(): void
     {
-        $room = $this->nukeRoom(1, 1, 1);
+        $room = $this->nukeRoom(1, 1);
+        $room['round'] = 1;
         $this->assertSame('nuke', room_ai_choose($room, $room['tanks'][0])['wkey']);
-        $auto = $this->timeOut($room);
-        $this->assertSame('shell', $auto['w'], 'the Nuke unlocks in round 4');
-        $this->assertSame(1, $room['ammo'][0]['nuke'], 'the rack is untouched');
+        $this->assertSame('nuke', $this->timeOut($room)['w'], 'no gun waits for a later round');
+        $this->assertSame(0, $room['ammo'][0]['nuke']);
     }
 
     public function testTheStandInFiresTheShellWhenTheRackIsEmpty(): void
     {
-        $room = $this->nukeRoom(room_weapons()['nuke']['minRound'], 0, 1);
+        $room = $this->nukeRoom(0, 1);
         $this->assertSame('nuke', room_ai_choose($room, $room['tanks'][0])['wkey']);
         $this->assertSame('shell', $this->timeOut($room)['w']);
         $this->assertSame(0, $room['ammo'][0]['nuke']);

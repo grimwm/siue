@@ -245,8 +245,9 @@ A shell flies through moving air (`stepBallistic` in `src/sim.ts`,
 - Missiles (`missile: true`: Seeker, Cluster, Death's Head, Baby Nuke and
   NUKE, the guns that fly under their own power) map power to distance: at 45
   degrees in calm air, launch height back to launch height, power p flies
-  max(0.1, p/100) × 0.9 of the field (`MISSILE_LOW`, `MISSILE_FULL`), so 100%
-  lands at the far edge from a unit 30 px in from the other, never past it.
+  max(0.1, p/100) of the field (`MISSILE_LOW`, `MISSILE_FULL` = 1), so 100%
+  crosses the whole field: from a unit 30 px in from one edge it lands past
+  the far one.
   Its launch speed at each whole power is found by a 40-round bisection
   against that very flight (`missileTable`, `room_missile_table`);
   `tools/game-json.php` writes the table into the row as `missileSpeed`, so
@@ -254,9 +255,9 @@ A shell flies through moving air (`stepBallistic` in `src/sim.ts`,
   `test/missile.test.ts` holds the table to the browser's own bisection, bit
   for bit). A power between whole ones is interpolated straight. A missile
   steers against the wind and feels `MISSILE_WIND` = 1/8 of it: a gale of 10
-  drifts it, but a full-power shot lands within `MISSILE_WIND_MARGIN` = 5% of
-  the field's width past the edge (33 px on a room's), and into the wind it
-  still crosses 85% of it.
+  moves a full-power landing by no more than `MISSILE_WIND_MARGIN` = 8% of the
+  field's width from where the calm shot lands (58 px on a room's), and into
+  the wind it still crosses 85% of the field.
 - A seeker's homing (`steerShell`, `room_seek_push`) pushes across its flight
   only, never along it: it turns a seeker but never speeds it up, so it
   cannot carry one past where its power sends it.
@@ -347,7 +348,7 @@ php tools/install-files.php      # after the last edit to any served file
 node tools/balance-report.ts     # each gun's expected damage, $ per shot and damage per $
 ```
 
-- A change to a gun's numbers (dmg, radius, price, pack, minRound, speed and
+- A change to a gun's numbers (dmg, radius, price, pack, speed and
   the rest) is held to the balance rules in `game.yaml`'s arsenal header by
   `test/balance.test.ts`; the report prints the same table to tune against.
 - To drop a gun, delete its ammo row and its `effects` entry and list it under
@@ -514,7 +515,7 @@ node tools/balance-report.ts     # each gun's expected damage, $ per shot and da
   next turn; aiming and driving do not reset it. When it runs out a drone
   fires for that player (`room_standin_shot`): it aims as the room's drones
   aim, with a gun from the player's own rack (the Shell when the drone's pick
-  is not stocked or not yet unlocked), and never drives; the seat stays the
+  is not stocked), and never drives; the seat stays the
   player's. Snapshots carry `turnSecs` and `turnLeft`; the client alerts its
   player at 30 s and shows everyone a countdown for the last 10. Solo play has
   no clock. `room_tick` applies whatever is due and `room_tick_due` says from
@@ -1006,7 +1007,7 @@ A room plays over minutes, hours or a week.
   With a turn time of 10 min or more, the status bar shows the time left.
 - **When a turn runs out**, a drone fires for that player once: it aims as the
   room's drones aim and fires from the player's own rack (the Shell when the
-  drone's pick is not stocked or not yet unlocked), and never drives. The seat
+  drone's pick is not stocked), and never drives. The seat
   stays the player's.
 - **The shop** stays open 90 s in rooms of 2 min or less (60 s in Lightning) and
   one turn time in longer rooms; all voters Ready still closes it at once.
@@ -1512,7 +1513,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/speed.test.ts` | `src/speed.ts`: the speeds equal `server/settings.php`'s, the tap order, the button's words, the solo setting in storage (blocked storage keeps it for the session), and the host's pick: settled, refused, newest answer only |
 | `test/speed-war.test.ts` | The same seed and shots end the same at 1×, 2× and 4× (and at 4× on a 30 Hz screen), in a quarter of the frames; drives `match.ts` `warFrame` through main.ts's solo frame (`test/match-harness.ts` is the stubbed match the solo tests share) |
 | `test/match-local.test.ts` | A solo match played to its end saves once on this browser's board under the difficulty it was dealt, and the end card says where it went; the turn does not pass while a napalm pool burns, and every tick lands on the drone in it |
-| `test/shop.test.ts` | `src/shop.ts`: a solo visit buys as often as the chest allows (a round-1 gun from `game.json`), and a room's Repair asks `netBuy` for what the hull takes |
+| `test/shop.test.ts` | `src/shop.ts`: a solo visit buys as often as the chest allows (a gun from `game.json`), and a room's Repair asks `netBuy` for what the hull takes |
 | `test/ui.test.ts`                             | The Preact overlays (`src/ui/`) rendered with sample props into the stub DOM: ids and classes, the title bar, every shop row, the Ready toggle, the lobby's forms, map tiles and seat grid, the menu's pickers and toggles, the weapon tiles, the log, the tutorial and the status bar, the key labels, that clicks and submits reach the callbacks, and that a redraw keeps the scroll |
 | `test/smoke.test.ts`                          | The shipped bundles (`dist/fx.js`, then `dist/main.js`) in a stub DOM, driven by the `game.json` key table and the `protocol/` fixtures; also checks the page loads exactly those two scripts with no import map and that the bundle has no bare imports, every weapon has muzzle, trail and impact effects, that the `effects:` block of `game.yaml` is exactly what the editor exports, and that the particle pool caps; a solo player who wrecks their own tank sees the drones fight on to one and the lost round open the shop |
 | `test/ai-hitrate.test.ts`                     | The drones' measured hit rates per difficulty against the targets (see Difficulty), the table's shape, hard being the sharpest aim (its exact constants), unknown levels aiming at normal, and the saved setting's default and form. The harness is seeded, so it never flakes, but one cell runs close: at 1080 wide, round 10, normal's ranging shot (29.2%) is 0.8 points inside its band (25 ± 5). A later aim or weapon change can fail this test on that normal cell rather than on what it changed; read the failure for that before blaming the change |
@@ -1546,7 +1547,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/determinism.test.ts` | The rule modules call no clock, no `Math.random` and no libm trigonometry, so the shared sim stays bit-exact across the two languages (see Deterministic math) |
 | `test/wide-field.test.ts`                     | The sim at any width: the same hills continued, units spread outside each other's blast, reach and wind scaling, flights that last as long as the field, 720 unchanged |
 | `test/air.test.ts`                            | The air (`stepBallistic`): a falling shell held to its terminal speed, the artillery arc (the top past the middle, a steeper fall, drag shortening it), the wind's growth with height from the floor (and its 1 px floor), a high lob drifting more than a flat shot to the same spot by more than a wind of one speed would, negative wind the exact mirror, every gun that flies naming its drag, slick guns outranging the Shell and draggy ones falling short, short range rare (at most five guns, all draggy), and the air scaled on a wider field |
-| `test/missile.test.ts`                        | Missiles: flagged in the data with a speed table that is the browser's own bisection bit for bit, speeds interpolated between whole powers; at every power 10 to 100, at 45 degrees in calm air from either edge, landing on the field and further with each step, about p% of it; full power at least 95% of a room's field; a wind of 10 either way leaving a full-power shot within `MISSILE_WIND_MARGIN` of the edge; a seeker's homing never carrying it off the field; drones aiming each missile onto its target |
+| `test/missile.test.ts`                        | Missiles: flagged in the data with a speed table that is the browser's own bisection bit for bit, speeds interpolated between whole powers; at every power 10 to 100, at 45 degrees in calm air from either edge, landing on the field and further with each step, about p% of it; full power crossing the whole field; a wind of 10 either way moving a full-power landing no more than `MISSILE_WIND_MARGIN` of the field's width from the calm landing; a seeker's homing never carrying it off the field; drones aiming each missile onto its target |
 | `test/ghosts.test.ts`                         | A shell retired past the edge keeps flying (draw only), one that burst inside leaves no ghost, a replay's last point keeps its velocity, ghosts are dropped off the picture |
 | `test/scenery.test.ts`                        | The scenery continues the hills with no step over 1 px at the seam, cratered or not |
 | `test/camera.test.ts`                         | `src/camera.ts`: the bottom edge on the floor with units high or low, a high arc pulled into view down to the floor with every unit on screen, the hold until the volley lands (rollers and shells past the edge let go), the ease keeping every unit framed on every frame, the sky marks |
@@ -1577,7 +1578,7 @@ php tools/install-files.php                # after a rebuild: ?v= cache-busters 
 | `test/preview.test.ts`                        | `src/preview.ts` on a fake clock with the real arsenal: the aim, fly, show and aim phases, each gun's first volley, cluster and pellet behaviour, a beam through the dummy, a ring around it, a tracer's path, and the resets |
 | `test/preview-scenarios.test.ts`              | Every gun's preview for three volleys: no shell, bomblet or beam leaves the frame, it does what it advertises (damage, a burial, a drop, a mark on the dummy, a gunner dug out), the range's wind is pinned and nothing is random, and a gun whose power is indirect declares a scenario whose demo shows it: a hop, a roll, a burrow under the dummy, liquid flowing to it, bomblets, a seeker's bend, an air burst, a beam's dip, a tracer's arc, dirt cleared, a ridge slumping |
 | `test/retired.test.ts`                        | Retired guns (`arsenal.retired`) are in no ammo, gear, shelf or shop row and keep a price for the refund; a rack holding a key the arsenal lacks fires nothing and spends nothing |
-| `test/balance.test.ts`                        | The arsenal's balance on the real sim (`src/balance.ts`): NUKE does the most expected damage at one target and at three, and no gun outside the Nukes lands a best single-target hit above 70% of NUKE's; along each line, tiers cost more per shot, do more damage, unlock no sooner and sit in order on the shelf; damage per dollar within 0.5x to 2x the median; unlocks follow power |
+| `test/balance.test.ts`                        | The arsenal's balance on the real sim (`src/balance.ts`): NUKE does the most expected damage at one target and at three, and no gun outside the Nukes lands a best single-target hit above 70% of NUKE's; along each line, tiers cost more per shot, do more damage and sit in order on the shelf; damage per dollar within 0.5x to 2x the median |
 | `test/flow.test.ts`                           | `src/flow.ts`: every legal transition, every other event/phase pair rejected, and a scripted match from the demo through shop, turns, a won round, a lost round that goes through the shop, the match-over phase, and the 3x watch speed on a fake clock |
 | `test/protocol.test.ts`                       | `src/protocol.ts` against the server: the check program type-checks, and the literal unions (phases, seat modes, event `t`) read out of the types are compared with the fixtures, with the phases, event types and POST actions `rooms.php` spells out, and with the events the client handles (`src/**/*.ts`) |
 | `test/sim-vectors.test.ts`                    | `src/sim.ts`, `src/ai.ts` and `src/armor.ts` agree with `rooms.php` on every shared sim vector; the detmath, field, armor and match-end cases compare exactly (see Sim vectors) |

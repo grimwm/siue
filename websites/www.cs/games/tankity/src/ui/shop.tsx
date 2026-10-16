@@ -39,8 +39,7 @@ export interface ShopItemRow extends ShopRowText {
   /** Position in the whole shelf; passed back to onBuy. */
   index: number;
   selected: boolean;
-  locked: boolean;
-  /** The Buy button is off: locked, or the chest cannot cover `qty` packs. */
+  /** The Buy button is off: the chest cannot cover `qty` packs. */
   disabled: boolean;
   /** Packs a click buys; the button reads "Buy ×qty" above one. */
   qty: number;
@@ -213,7 +212,7 @@ export function Shop(p: ShopProps) {
                     </button>
                   )}
                   <button type="button" data-act="buy" disabled={e.disabled} onClick={blurThen(() => p.onBuy(e.index))}>
-                    {e.locked ? 'Locked' : <>{e.qty > 1 ? `Buy ×${e.qty} ` : 'Buy '}<Key at="shop:buy" bare /></>}
+                    {e.qty > 1 ? `Buy ×${e.qty} ` : 'Buy '}<Key at="shop:buy" bare />
                   </button>
                 </Body>
               </li>

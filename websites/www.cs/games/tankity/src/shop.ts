@@ -149,7 +149,6 @@ export function createShop(deps: ShopDeps) {
           entries.push(shellShopRow(G.shopSel === SHELL_ROW));
         }
       }
-      const locked = (it.minRound || 0) > G.round;
       const unit = packPrice(it);
       // A repair buys only the packs the hull needs and a one-shot trick one, so each prices by those.
       const packs = buyPacks(G, it, qty);
@@ -161,11 +160,10 @@ export function createShop(deps: ShopDeps) {
         name: parts.name,
         vals: `${parts.vals}${packs > 1 ? ` ×${packs} = $${total}` : ''}`,
         sub: shopSub(it),
-        sub2: shopSub2(it, locked),
+        sub2: shopSub2(it),
         icon: it.kind === 'ammo' ? { kind: 'ammo', w: it.w! } : { kind: 'gear', g: it.g! },
         selected: idx === G.shopSel,
-        locked,
-        disabled: locked || G.cash < total || packs === 0,
+        disabled: G.cash < total || packs === 0,
         qty: packs,
         weapon: it.kind === 'ammo' ? it.w : undefined,
       });
@@ -245,9 +243,8 @@ export function createShop(deps: ShopDeps) {
     const g = tables.gear[it.g!];
     return (g && g.note) || it.label!;
   }
-  function shopSub2(it: ShopRow, locked: boolean): string {
+  function shopSub2(it: ShopRow): string {
     if (it.kind === 'ammo') {
-      if (locked) return `Unlocks in round ${it.minRound}.`;
       return `Pack of ${it.n}. You own ${G.ammo![it.w!] || 0}.`;
     }
     switch (it.effect) {
@@ -293,8 +290,7 @@ export function createShop(deps: ShopDeps) {
     const lives = G.lives;
     const r = soloBuy(G, it, qty);
     if (!r.ok) {
-      if (r.why === 'locked') say(`That unlocks in round ${it.minRound}.`, 'info');
-      else if (r.why === 'full') say('Armor is full already.', 'info');
+      if (r.why === 'full') say('Armor is full already.', 'info');
       else say(`That costs $${r.total}, and the chest holds $${G.cash}.`, 'info');
       return;
     }
@@ -343,7 +339,7 @@ export function createShop(deps: ShopDeps) {
     }
   }
   /* The keys walk every row: the free Shell (SHELL_ROW) above the priced
-  // rows, locked rows and ones the chest cannot cover, so Preview always
+  // rows and ones the chest cannot cover, so Preview always
   // has a row to act on. Only Buy turns down what cannot be bought. */
   function shopSelect(dir: number): boolean {
     G.shopSel = clamp(G.shopSel + dir, SHELL_ROW, tables.shop.length - 1);

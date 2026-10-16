@@ -25,9 +25,9 @@ function beamOf(e: StepEvent): BeamShot {
 }
 
 const GAME: { arsenal: { ammo: Weapon[]; gear?: Gear[]; fall?: Partial<FallRules> } } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'game.json'), 'utf8'));
-const ZAP = { key: 'zap', name: 'Zap', dmg: 45, radius: 6, price: 1, pack: 1, minRound: 1, effect: 'beam', range: 520, aimMin: -20, speed: 1 };
-const RING = { key: 'ring', name: 'Ring', dmg: 60, radius: 90, price: 1, pack: 1, minRound: 1, effect: 'plasma', speed: 1 };
-const MARK = { key: 'mark', name: 'Mark', dmg: 0, radius: 0, price: 1, pack: 1, minRound: 1, effect: 'tracer', speed: 1, gfx: { shell: '#fff', trail: '#fff', painter: 'dash', mark: 'line' } };
+const ZAP = { key: 'zap', name: 'Zap', dmg: 45, radius: 6, price: 1, pack: 1, effect: 'beam', range: 520, aimMin: -20, speed: 1 };
+const RING = { key: 'ring', name: 'Ring', dmg: 60, radius: 90, price: 1, pack: 1, effect: 'plasma', speed: 1 };
+const MARK = { key: 'mark', name: 'Mark', dmg: 0, radius: 0, price: 1, pack: 1, effect: 'tracer', speed: 1, gfx: { shell: '#fff', trail: '#fff', painter: 'dash', mark: 'line' } };
 const arsenal = must(buildArsenal({ ammo: [...GAME.arsenal.ammo.filter(a => a.key === 'shell'), ZAP, RING, MARK], gear: GAME.arsenal.gear, fall: GAME.arsenal.fall }), 'the arsenal');
 
 const flat = (y = 400, w = 720): number[] => Array(w).fill(y);

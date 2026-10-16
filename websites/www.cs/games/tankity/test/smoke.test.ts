@@ -1147,13 +1147,13 @@ await (async () => {
   await test('room-dot-green', () => { assert.ok(E('net-dot').className.includes('on') && E('hud-server').textContent === 'online', `${E('net-dot').className} | ${E('hud-server').textContent}`); });
   // a full server says so in plain words, never a status code
   failCreate = 'The server is full. Try again later.';
-  submit(E('host-form')); await tick(10);
+  submit(E('host-form')); await until('the full-server line', () => E('lobby-status').textContent === failCreate, 5_000);
   await test('room-full', () => { assert.ok(E('lobby-status').textContent === failCreate, E('lobby-status').textContent); });
   failCreate = '';
   // transport trouble arrives in human words, never a status code
   for (const [mode, want] of [['down', 'Could not reach'], ['page', 'page instead of game data'], ['stumble', 'stumbled']] as const) {
     failMode = mode;
-    submit(E('host-form')); await tick(10);
+    submit(E('host-form')); await until(`the ${mode} line`, () => E('lobby-status').textContent.includes(want), 5_000);
     await test('room-err-' + mode, () => { assert.ok(E('lobby-status').textContent.includes(want), E('lobby-status').textContent); });
     if (mode === 'down') {
       await test('room-dot-red', () => { assert.ok(E('net-dot').className.includes('off') && E('hud-server').textContent === 'offline', `${E('net-dot').className} | ${E('hud-server').textContent}`); });

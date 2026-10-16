@@ -91,12 +91,8 @@
 #             the free `shell` uses 0). 0 to 99.
 #   start     shells of it every player starts a match with, 0 to 9.
 #             Optional (0 when left out).
-#   ai        true lets the drone battery carry it. false keeps it player only.
-#   aiRound   first round drones carry it (they get a rack of aiRack from
-#             then on). Players can buy any gun from the first shop; 99 means
-#             drones never carry it (use with ai: false).
-#   aiRack    shells of it each drone loads per round, 1 to 9. Optional
-#             (2 when left out); only a row with ai: true takes it.
+#   ai        true lets the drone battery use it: a drone only ever buys a
+#             gun with ai: true. false keeps it player only.
 #   effect    what the shell does in flight:
 #               shot       a plain shell, bursts where it lands
 #               pellets    fires `pellets` shells at once, fanned by `spread`
@@ -343,7 +339,6 @@ arsenal:
       price: 0
       pack: 0
       ai: true
-      aiRound: 1
       effect: shot
       speed: 1.0
       drag: 1
@@ -359,7 +354,6 @@ arsenal:
       pack: 2
       start: 1
       ai: true
-      aiRound: 2
       effect: pellets
       pellets: 3
       spread: 0.1
@@ -377,7 +371,6 @@ arsenal:
       price: 200
       pack: 2
       ai: true
-      aiRound: 3
       effect: shot
       speed: 1.0
       drag: 0.8
@@ -393,7 +386,6 @@ arsenal:
       price: 120
       pack: 2
       ai: true
-      aiRound: 5
       effect: emp
       drain: 60
       speed: 1.0
@@ -410,7 +402,6 @@ arsenal:
       price: 180
       pack: 2
       ai: true
-      aiRound: 4
       effect: proximity
       prox: 34
       speed: 1.0
@@ -428,7 +419,6 @@ arsenal:
       price: 120
       pack: 1
       ai: true
-      aiRound: 6
       effect: shot
       speed: 1.3
       drag: 0.4
@@ -444,7 +434,6 @@ arsenal:
       price: 260
       pack: 2
       ai: true
-      aiRound: 6
       effect: seeker
       steer: 70
       speed: 1.0
@@ -462,7 +451,6 @@ arsenal:
       price: 350
       pack: 2
       ai: true
-      aiRound: 6
       effect: shot
       speed: 0.95
       drag: 0.45
@@ -477,14 +465,12 @@ arsenal:
       price: 180
       pack: 2
       ai: true
-      aiRound: 7
       effect: scatter
       split: 8
       fan: 2.4
       kick: 150
       subDmg: 13
       subRadius: 18
-      aiRack: 1
       speed: 1.0
       drag: 1.1
       preview: {aim: -20, ground: bowl, dummy: 200}
@@ -499,7 +485,6 @@ arsenal:
       price: 200
       pack: 2
       ai: true
-      aiRound: 6
       effect: hop
       hops: 3
       hopKeep: 0.55
@@ -519,7 +504,6 @@ arsenal:
       price: 280
       pack: 2
       ai: true
-      aiRound: 4
       effect: cluster
       fuse: 0.9
       split: 4
@@ -541,8 +525,6 @@ arsenal:
       price: 400
       pack: 1
       ai: true
-      aiRound: 9
-      aiRack: 1
       effect: cluster
       apex: true
       split: 6
@@ -564,7 +546,6 @@ arsenal:
       price: 120
       pack: 3
       ai: true
-      aiRound: 3
       effect: roller
       friction: 0.8
       rollTime: 6
@@ -582,7 +563,6 @@ arsenal:
       price: 160
       pack: 2
       ai: true
-      aiRound: 5
       effect: roller
       friction: 0.6
       rollTime: 8
@@ -600,8 +580,6 @@ arsenal:
       price: 380
       pack: 1
       ai: true
-      aiRound: 8
-      aiRack: 1
       effect: roller
       friction: 0.45
       rollTime: 9
@@ -619,8 +597,6 @@ arsenal:
       price: 320
       pack: 1
       ai: true
-      aiRound: 7
-      aiRack: 1
       effect: shot
       speed: 1.0
       drag: 0.75
@@ -636,7 +612,6 @@ arsenal:
       price: 500
       pack: 1
       ai: false
-      aiRound: 99
       effect: shot
       speed: 1.0
       drag: 0.55
@@ -652,7 +627,6 @@ arsenal:
       price: 200
       pack: 2
       ai: true
-      aiRound: 5
       effect: plasma
       speed: 1.0
       note: Spares you; power sets its size.
@@ -666,7 +640,6 @@ arsenal:
       price: 300
       pack: 2
       ai: true
-      aiRound: 6
       effect: beam
       range: 520
       aimMin: -20
@@ -683,7 +656,6 @@ arsenal:
       price: 15
       pack: 5
       ai: false
-      aiRound: 99
       effect: tracer
       speed: 1.0
       drag: 1.4
@@ -700,7 +672,6 @@ arsenal:
       price: 30
       pack: 5
       ai: false
-      aiRound: 99
       effect: tracer
       speed: 1.0
       drag: 1.8
@@ -718,7 +689,6 @@ arsenal:
       price: 40
       pack: 5
       ai: true
-      aiRound: 4
       effect: dirt
       speed: 1.0
       drag: 2.2
@@ -735,7 +705,6 @@ arsenal:
       price: 90
       pack: 3
       ai: true
-      aiRound: 5
       effect: dirt
       speed: 1.0
       drag: 1.8
@@ -752,8 +721,6 @@ arsenal:
       price: 200
       pack: 2
       ai: true
-      aiRound: 7
-      aiRack: 1
       effect: dirt
       speed: 1.0
       drag: 0.9
@@ -769,7 +736,6 @@ arsenal:
       price: 160
       pack: 2
       ai: true
-      aiRound: 6
       effect: pour
       volume: 4000
       poolMin: 34
@@ -788,7 +754,6 @@ arsenal:
       price: 180
       pack: 2
       ai: true
-      aiRound: 6
       effect: dirt
       speed: 1.0
       drag: 1.1
@@ -804,7 +769,6 @@ arsenal:
       price: 50
       pack: 3
       ai: true
-      aiRound: 4
       effect: dig
       digLen: 60
       digR: 8
@@ -824,7 +788,6 @@ arsenal:
       price: 110
       pack: 2
       ai: true
-      aiRound: 6
       effect: dig
       digLen: 110
       digR: 11
@@ -844,7 +807,6 @@ arsenal:
       price: 200
       pack: 2
       ai: true
-      aiRound: 8
       effect: dig
       digLen: 180
       digR: 15
@@ -864,7 +826,6 @@ arsenal:
       price: 160
       pack: 2
       ai: true
-      aiRound: 5
       effect: dig
       digLen: 70
       digR: 7
@@ -886,7 +847,6 @@ arsenal:
       price: 280
       pack: 2
       ai: true
-      aiRound: 7
       effect: dig
       digLen: 120
       digR: 9
@@ -908,8 +868,6 @@ arsenal:
       price: 200
       pack: 1
       ai: true
-      aiRound: 9
-      aiRack: 1
       effect: dig
       digLen: 180
       digR: 12
@@ -931,7 +889,6 @@ arsenal:
       price: 60
       pack: 3
       ai: true
-      aiRound: 2
       effect: riot
       fan: 1.2
       speed: 1.0
@@ -948,7 +905,6 @@ arsenal:
       price: 120
       pack: 2
       ai: true
-      aiRound: 4
       effect: riot
       fan: 0.6
       speed: 1.0
@@ -965,7 +921,6 @@ arsenal:
       price: 100
       pack: 3
       ai: true
-      aiRound: 5
       effect: shot
       speed: 1.0
       drag: 1
@@ -981,7 +936,6 @@ arsenal:
       price: 220
       pack: 2
       ai: true
-      aiRound: 7
       effect: shot
       speed: 1.0
       drag: 0.8
@@ -997,8 +951,6 @@ arsenal:
       price: 260
       pack: 1
       ai: true
-      aiRound: 8
-      aiRack: 1
       effect: slump
       slope: 1.0
       passes: 24
@@ -1016,7 +968,6 @@ arsenal:
       price: 300
       pack: 2
       ai: true
-      aiRound: 6
       effect: napalm
       volume: 2200
       poolMin: 20
@@ -1037,8 +988,6 @@ arsenal:
       price: 550
       pack: 1
       ai: true
-      aiRound: 9
-      aiRack: 1
       effect: napalm
       volume: 3200
       poolMin: 24
@@ -1153,8 +1102,47 @@ arsenal:
   #              than this (a whole number, 0 to 500); at or under it the
   #              unit keeps its parachute and takes the scratch. Scorched
   #              Earth's own default is 5.
-  #   aiRound    first round each drone carries one parachute (1 to 99)
-  fall: {freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3}
+  fall: {freePx: 10, perPx: 0.5, chuteOver: 5}
+
+# --------------------------------------------------------------------------
+# drones
+# --------------------------------------------------------------------------
+# A drone has no free gear: it starts a match with the same shells and $600 a
+# player does, earns and shops under the same rules, and carries its armor,
+# ammo and cash from round to round. It shops before the first round and
+# after every round, through the same purchase rules as a player, with a
+# personality that decides what it spends on. Each drone is dealt one at
+# the start of a match, uniformly over this list.
+#
+#   key        a short lowercase word, unique in the list
+#   name       what the roster calls it
+#   reserve    the share of its cash a visit keeps back (0 to 0.9)
+#   defense    the share of what it may spend that goes to defense first
+#              (0 to 1): repair when the hull is below max, a parachute when
+#              it has none, a plate, a shield (found by the gear's effect),
+#              each while the defense share lasts. The rest of the budget
+#              buys guns.
+#   pick       how it ranks the guns it can use and afford (ai: true, sold in packs):
+#                big      the most damage per shell
+#                value    damage x pack / price, damage per dollar
+#                random   a draw among them, weighted by price
+#                precise  damage / radius, a tight hard hit over a wide blast,
+#                         divided by pack so a pack of 1 wins
+#   maxBuys    the most purchases one visit makes (1 to 12)
+#   shift      a personality with a shift has no rules of its own (none of
+#              the fields above): each round after the first it takes
+#              another personality's rules for that round with this
+#              probability (0 to 1), never its own, and otherwise keeps the
+#              form it took last. Its first form is drawn at the start of
+#              the match.
+drones:
+  personalities:
+    - {key: saver, name: Saver, reserve: 0.5, defense: 0.1, pick: big, maxBuys: 3}
+    - {key: scrapper, name: Scrapper, reserve: 0, defense: 0.1, pick: value, maxBuys: 8}
+    - {key: turtle, name: Turtle, reserve: 0.1, defense: 0.6, pick: value, maxBuys: 6}
+    - {key: gambler, name: Gambler, reserve: 0, defense: 0.15, pick: random, maxBuys: 6}
+    - {key: sniper, name: Sniper, reserve: 0.2, defense: 0.15, pick: precise, maxBuys: 4}
+    - {key: shapeshifter, name: Shapeshifter, shift: 0.35}
 
 # --------------------------------------------------------------------------
 # keys

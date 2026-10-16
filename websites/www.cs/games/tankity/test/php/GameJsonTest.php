@@ -88,7 +88,6 @@ arsenal:
       price: 0
       pack: 0
       ai: true
-      aiRound: 1
       effect: shot
       speed: 1.0
       note: Free and honest.
@@ -101,7 +100,6 @@ arsenal:
       price: 80
       pack: 2
       ai: true
-      aiRound: 2
       effect: pellets
       pellets: 3
       spread: 0.1
@@ -125,7 +123,12 @@ arsenal:
       dmg: 50
       radius: 44
       note: Your wreck detonates.
-  fall: {freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3}
+  fall: {freePx: 10, perPx: 0.5, chuteOver: 5}
+drones:
+  personalities:
+    - {key: saver, name: Saver, reserve: 0.5, defense: 0.1, pick: big, maxBuys: 3}
+    - {key: turtle, name: Turtle, reserve: 0.1, defense: 0.6, pick: value, maxBuys: 6}
+    - {key: shifty, name: Shifty, shift: 0.35}
 keys:
 $keysYaml
 
@@ -353,16 +356,14 @@ YAML;
         }
     }
 
-    /** apex clusters and the optional aiRack, linger, start and ball fields */
+    /** apex clusters and the optional linger, start and ball fields */
     public function testClusterAndOptionalFields(): void
     {
         $apex = $this->row1(self::asEffect("      effect: cluster\n      apex: true\n      split: 9\n      fan: 0.16\n      subDmg: 60\n      subRadius: 40\n"));
         self::assertTrue(($apex['apex'] ?? null) === true && !isset($apex['fuse']) && $apex['split'] === 9, 'apex-cluster-needs-no-fuse' . ' :: ' . json_encode($apex));
-        $rack = $this->row1(self::mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 1\n"));
-        self::assertTrue(($rack['aiRack'] ?? null) === 1 && array_search('aiRack', array_keys($rack), true) === array_search('aiRound', array_keys($rack), true) + 1, 'airack-validates' . ' :: ' . json_encode($rack));
         $look = $this->rowOf(self::mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, linger: 0.8}'), 0);
         self::assertTrue(($look['gfx']['linger'] ?? null) === 0.8, 'gfx-linger-validates' . ' :: ' . json_encode($look['gfx'] ?? $look));
-        $start = $this->row1(self::mut("      aiRound: 2\n", "      aiRound: 2\n      start: 1\n"));
+        $start = $this->row1(self::mut("      pack: 2\n", "      pack: 2\n      start: 1\n"));
         self::assertTrue(($start['start'] ?? null) === 1, 'start-validates' . ' :: ' . json_encode($start));
         self::assertTrue((json_decode($this->render(self::mut('painter: spark', 'painter: ball')), true)['arsenal']['ammo'][1]['gfx']['painter'] ?? '') === 'ball', 'ball-painter-validates');
     }
@@ -404,7 +405,7 @@ YAML;
         self::assertStringContainsString('arsenal.retired[0].pack', (string) self::errOf(fn () => $this->render($retire("    - {key: rail, name: Rail, price: 140, pack: 0}\n"))), 'retired-pack');
         // A third row back under Shells after buck moved to another cat: the Shells rows are apart.
         $third = "    - key: mortar\n      name: Mortar\n      cat: Shells\n      dmg: 56\n      radius: 42\n      price: 200\n      pack: 2\n"
-            . "      ai: true\n      aiRound: 3\n      effect: shot\n      speed: 1.0\n      note: Big.\n      gfx: {shell: \"#ff9f43\", trail: \"#ff7b39\", blast: [\"#ff7b39\", \"#ffe27a\"], painter: disc, shake: 0.5}\n";
+            . "      ai: true\n      effect: shot\n      speed: 1.0\n      note: Big.\n      gfx: {shell: \"#ff9f43\", trail: \"#ff7b39\", blast: [\"#ff7b39\", \"#ffe27a\"], painter: disc, shake: 0.5}\n";
         $apart = str_replace(["      cat: Shells\n      dmg: 17\n", "  gear:\n"], ["      cat: Odd\n      dmg: 17\n", $third . "  gear:\n"], self::good());
         self::assertStringContainsString('arsenal.ammo[2].cat: `Shells` rows must sit together', (string) self::errOf(fn () => $this->render($apart)), 'cat-rows-together');
     }
@@ -517,12 +518,26 @@ YAML;
             'bad-mark' => [self::tracerOf(', mark: glow'), 'arsenal.ammo[1].gfx.mark: must be one of: line, smoke'],
             'mark-on-a-shot' => [self::mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, mark: line}'), 'arsenal.ammo[0].gfx.mark: only the tracer effect uses this'],
             'pellets-on-a-roller' => [self::asEffect("      effect: roller\n      friction: 0.5\n      rollTime: 6\n      pellets: 3\n"), 'arsenal.ammo[1].pellets: only the pellets effect uses this'],
-            'airack-range-low' => [self::mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 0\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
-            'airack-range-high' => [self::mut("      aiRound: 2\n", "      aiRound: 2\n      aiRack: 10\n"), 'arsenal.ammo[1].aiRack: must be a whole number from 1 to 9'],
+            'airound-is-gone' => [self::mut("      pack: 2\n", "      pack: 2\n      aiRound: 2\n"), 'arsenal.ammo[1].aiRound: unknown key'],
+            'airack-is-gone' => [self::mut("      pack: 2\n", "      pack: 2\n      aiRack: 1\n"), 'arsenal.ammo[1].aiRack: unknown key'],
+            'fall-airound-is-gone' => [self::mut('chuteOver: 5}', 'chuteOver: 5, aiRound: 3}'), 'arsenal.fall.aiRound: unknown key'],
+            'drones-missing' => [self::mut("drones:\n  personalities:\n    - {key: saver, name: Saver, reserve: 0.5, defense: 0.1, pick: big, maxBuys: 3}\n    - {key: turtle, name: Turtle, reserve: 0.1, defense: 0.6, pick: value, maxBuys: 6}\n    - {key: shifty, name: Shifty, shift: 0.35}\n", ''), 'section `drones` is required'],
+            'drones-unknown-field' => [self::mut('maxBuys: 3}', 'maxBuys: 3, greed: 9}'), 'drones.personalities[0].greed: unknown key'],
+            'drone-reserve-high' => [self::mut('reserve: 0.5', 'reserve: 0.95'), 'drones.personalities[0].reserve: must be a number from 0 to 0.9'],
+            'drone-reserve-low' => [self::mut('reserve: 0.5', 'reserve: -0.1'), 'drones.personalities[0].reserve: must be a number from 0 to 0.9'],
+            'drone-defense-high' => [self::mut('defense: 0.1', 'defense: 1.5'), 'drones.personalities[0].defense: must be a number from 0 to 1'],
+            'drone-bad-pick' => [self::mut('pick: big', 'pick: lucky'), 'drones.personalities[0].pick: must be one of: big, value, random, precise'],
+            'drone-maxbuys-low' => [self::mut('maxBuys: 3', 'maxBuys: 0'), 'drones.personalities[0].maxBuys: must be a whole number from 1 to 12'],
+            'drone-maxbuys-high' => [self::mut('maxBuys: 3', 'maxBuys: 13'), 'drones.personalities[0].maxBuys: must be a whole number from 1 to 12'],
+            'drone-missing-rules' => [self::mut(', pick: big', ''), 'drones.personalities[0].pick: is required'],
+            'drone-duplicate-key' => [self::mut('key: turtle', 'key: saver'), 'drones.personalities[1].key: duplicate key `saver`'],
+            'drone-bad-key' => [self::mut('key: saver', 'key: Saver-1'), 'drones.personalities[0].key: has the wrong format'],
+            'drone-shift-range' => [self::mut('shift: 0.35', 'shift: 1.5'), 'drones.personalities[2].shift: must be a number from 0 to 1'],
+            'drone-shift-has-no-rules' => [self::mut('name: Shifty, shift: 0.35', 'name: Shifty, shift: 0.35, reserve: 0.2'), 'drones.personalities[2].reserve: a row with shift takes other personalities'],
+            'drone-needs-a-ruled-one' => [self::mut("    - {key: saver, name: Saver, reserve: 0.5, defense: 0.1, pick: big, maxBuys: 3}\n    - {key: turtle, name: Turtle, reserve: 0.1, defense: 0.6, pick: value, maxBuys: 6}\n", ''), 'drones.personalities: needs at least one personality with rules of its own'],
             'linger-range' => [self::mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, linger: 9}'), 'arsenal.ammo[0].gfx.linger: must be a number from 0.1 to 3'],
             'size-is-the-body' => [self::mut('painter: disc, shake: 0.3}', 'painter: disc, shake: 0.3, size: 4}'), 'arsenal.ammo[0].gfx.size: unknown key'],
-            'start-range' => [self::mut("      aiRound: 2\n", "      aiRound: 2\n      start: 10\n"), 'arsenal.ammo[1].start: must be a whole number from 0 to 9'],
-            'airack-needs-ai' => [self::mut("      ai: true\n      aiRound: 2\n", "      ai: false\n      aiRound: 2\n      aiRack: 1\n"), 'arsenal.ammo[1].aiRack: only a row with ai: true uses this'],
+            'start-range' => [self::mut("      pack: 2\n", "      pack: 2\n      start: 10\n"), 'arsenal.ammo[1].start: must be a whole number from 0 to 9'],
             'dmg-float' => [self::mut("      dmg: 34\n", "      dmg: 34.5\n"), 'arsenal.ammo[0].dmg'],
             'dmg-string' => [self::mut("      dmg: 34\n", "      dmg: lots\n"), 'arsenal.ammo[0].dmg'],
             'bad-effect' => [self::mut('effect: shot', 'effect: laser'), 'arsenal.ammo[0].effect: must be one of'],
@@ -543,8 +558,8 @@ YAML;
             'roller-friction-range' => [self::mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", "      effect: roller\n      friction: 9\n      rollTime: 6\n"), 'arsenal.ammo[1].friction: must be a number from 0.01 to 5'],
             'roller-rolltime-range' => [self::mut("      effect: pellets\n      pellets: 3\n      spread: 0.1\n", "      effect: roller\n      friction: 0.5\n      rollTime: 60\n"), 'arsenal.ammo[1].rollTime: must be a number from 0.5 to 10'],
             'pellets-need-fields' => [self::mut("      pellets: 3\n", ''), 'arsenal.ammo[1].pellets: is required when effect is pellets'],
-            'fall-missing' => [self::mut("  fall: {freePx: 10, perPx: 0.5, chuteOver: 5, aiRound: 3}\n", ''), 'arsenal.fall: must be a mapping'],
-            'fall-unknown-field' => [self::mut('aiRound: 3}', 'aiRound: 3, slide: 1}'), 'arsenal.fall.slide: unknown key'],
+            'fall-missing' => [self::mut("  fall: {freePx: 10, perPx: 0.5, chuteOver: 5}\n", ''), 'arsenal.fall: must be a mapping'],
+            'fall-unknown-field' => [self::mut('chuteOver: 5}', 'chuteOver: 5, slide: 1}'), 'arsenal.fall.slide: unknown key'],
             'fall-per-px-range' => [self::mut('perPx: 0.5', 'perPx: 11'), 'arsenal.fall.perPx: must be a number from 0 to 10'],
             'fall-chute-over-whole' => [self::mut('chuteOver: 5', 'chuteOver: 5.5'), 'arsenal.fall.chuteOver: must be a whole number'],
             'dmg-on-wrong-gear' => [self::mut("      n: 40\n", "      n: 40\n      dmg: 5\n"), 'arsenal.gear[0].dmg: only the laststand'],
@@ -643,6 +658,19 @@ YAML;
         self::assertTrue(str_contains($e, 'must stay inside the game folder'), 'schema-symlink-escape' . ' :: ' . $e);
     }
 
+    /** drones.personalities render in file order with their rules, and a row with shift carries only its shift */
+    public function testDronesRender(): void
+    {
+        $out = json_decode($this->render(self::good()), true);
+        self::assertSame([
+            ['key' => 'saver', 'name' => 'Saver', 'reserve' => 0.5, 'defense' => 0.1, 'pick' => 'big', 'maxBuys' => 3],
+            ['key' => 'turtle', 'name' => 'Turtle', 'reserve' => 0.1, 'defense' => 0.6, 'pick' => 'value', 'maxBuys' => 6],
+            ['key' => 'shifty', 'name' => 'Shifty', 'shift' => 0.35],
+        ], $out['drones']['personalities'], 'drones-render');
+        $edge = json_decode($this->render(self::mut('reserve: 0.5, defense: 0.1', 'reserve: 0, defense: 1')), true);
+        self::assertSame([0, 1], [$edge['drones']['personalities'][0]['reserve'], $edge['drones']['personalities'][0]['defense']], 'drones-edges-are-allowed');
+    }
+
     /** the shipped game.yaml is valid, in sync with game.json, and covers every weapon */
     public function testShippedGameYaml(): void
     {
@@ -655,9 +683,14 @@ YAML;
         self::assertTrue($e === null, 'shipped-yaml-valid' . ' :: ' . (string) $e);
         self::assertTrue($shipped !== null && $shipped === (string) @file_get_contents("$repoDir/game.json"), 'shipped-json-in-sync' . ' :: ' . 'run: php tools/game-json.php (in games/tankity)');
         $sd = json_decode((string) $shipped, true);
-        self::assertTrue(($out['arsenal']['fall'] ?? null) === ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5, 'aiRound' => 3], 'good-fall' . ' :: ' . json_encode($out['arsenal']['fall'] ?? null));
+        self::assertTrue(($out['arsenal']['fall'] ?? null) === ['freePx' => 10, 'perPx' => 0.5, 'chuteOver' => 5], 'good-fall' . ' :: ' . json_encode($out['arsenal']['fall'] ?? null));
         self::assertTrue(count($sd['arsenal']['ammo'] ?? []) >= 30 && count($sd['arsenal']['ammo']) === count($sd['effects'] ?? []) - 1 && count($sd['arsenal']['gear'] ?? []) === 9
             && count($sd['audio']['sfx'] ?? []) >= 1 && count($sd['audio']['music'] ?? []) >= 1, 'shipped-counts');
+        $ruled = array_filter($sd['drones']['personalities'] ?? [], fn($p) => !isset($p['shift']));
+        self::assertTrue(count($ruled) >= 2 && count($sd['drones']['personalities']) > count($ruled), 'shipped-personalities' . ' :: ' . json_encode($sd['drones'] ?? null));
+        foreach ($sd['arsenal']['ammo'] ?? [] as $row) {
+            self::assertTrue(!array_key_exists('aiRound', $row) && !array_key_exists('aiRack', $row), 'shipped-no-free-racks-' . $row['key']);
+        }
         $ammoKeys = array_column($sd['arsenal']['ammo'] ?? [], 'key');
         $rollerRow = $sd['arsenal']['ammo'][array_search('roller', $ammoKeys, true)] ?? [];
         self::assertTrue(($rollerRow['effect'] ?? '') === 'roller' && ($rollerRow['friction'] ?? 0) > 0 && ($rollerRow['rollTime'] ?? 0) > 0

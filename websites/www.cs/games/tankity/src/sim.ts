@@ -537,10 +537,10 @@ export const MISSILE_LOW = 0.1;
 export const MISSILE_FULL = 1;
 /** The share of the wind's push a missile feels: its guidance holds its heading against the rest,
  *  so a gale drifts it a little but cannot carry it far off its calm landing (MISSILE_WIND_MARGIN). */
-export const MISSILE_WIND = 0.125;
+export const MISSILE_WIND = 1 / 12;
 /** How far, as a share of the field's width, a wind of 10 at 45 degrees may move a full-power
  *  missile's landing from where the calm shot lands (test/missile.test.ts). */
-export const MISSILE_WIND_MARGIN = 0.08;
+export const MISSILE_WIND_MARGIN = 0.06;
 /** Bisection rounds per power, and the launch speeds (px/s) the search spans. */
 const MISSILE_ROUNDS = 40, MISSILE_SLOW = 10, MISSILE_FAST = 4000;
 /** How far a 45-degree shot at speed v flies on a room's field in calm air with drag k, from

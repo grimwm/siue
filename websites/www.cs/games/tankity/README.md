@@ -254,9 +254,9 @@ A shell flies through moving air (`stepBallistic` in `src/sim.ts`,
   the browser and the server read the same numbers (and
   `test/missile.test.ts` holds the table to the browser's own bisection, bit
   for bit). A power between whole ones is interpolated straight. A missile
-  steers against the wind and feels `MISSILE_WIND` = 1/8 of it: a gale of 10
-  moves a full-power landing by no more than `MISSILE_WIND_MARGIN` = 8% of the
-  field's width from where the calm shot lands (58 px on a room's), and into
+  steers against the wind and feels `MISSILE_WIND` = 1/12 of it: a gale of 10
+  moves a full-power landing by no more than `MISSILE_WIND_MARGIN` = 6% of the
+  field's width from where the calm shot lands (43 px on a room's), and into
   the wind it still crosses 85% of the field.
 - A seeker's homing (`steerShell`, `room_seek_push`) pushes across its flight
   only, never along it: it turns a seeker but never speeds it up, so it

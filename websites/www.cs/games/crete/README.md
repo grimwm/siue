@@ -39,7 +39,7 @@ The split follows one seam: what the game *is* versus what the player *sees*. Th
 
 - `dist/` is generated: edit `src/`, rebuild, rerun `install-files.php`, commit all of it. `make test` runs `npm ci` and `--check`, and `deploy.sh` refuses a stale `dist/`.
 - `tsconfig.json` extends the kit's base, is strict and lists the DOM-free modules (`engine`, `grid`, `bots`), which compile without page types, so it cannot reach for `document`. `src/tsconfig.dom.json` extends it with the DOM lib for `audio.ts`, `ui.ts` and `main.ts`. Imports carry their `.ts` extension.
-- The engine keeps its own mulberry32: the mazes are pinned to their seeds.
+- `hashSeed` and `mulberry32` come from the kit (`_kit/rng.ts`, written for Crete): the mazes are pinned to their seeds.
 - Versions are content hashes written by `tools/install-files.php`, never by hand: `dist/main.js?v=` and `game.css?v=` in `index.html`. `sw.js` hashes the same files plus the rest of `dist/`, so a changed bundle makes it stale too.
 
 ## The maze rule

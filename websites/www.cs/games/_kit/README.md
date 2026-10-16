@@ -126,6 +126,15 @@ view of its state and callbacks, and redraws when the state changes.
   `data-keyhint`; `decorative` hides a chip that sits beside words already
   naming the action from screen readers.
 
+## Seeded generator (`rng.ts`)
+
+`hashSeed(string)` and `mulberry32(seed)` are Crete's, which its mazes are
+pinned by (`crete/test/engine.test.ts`); a change to either changes every maze.
+`test/rng.ts` re-exports `mulberry32` for tests, and `test/rng-compare.test.ts`
+shows it agrees bit for bit with an independently written mulberry32, over
+edge, negative and 10,000-seed ranges. Tankity's own `hashSeed` and
+`mulberry32` are a TS/PHP parity twin in its sim and do not come from here.
+
 ## Installed apps (`app.ts`)
 
 Each game installs as its own app (its manifest asks for full screen, then

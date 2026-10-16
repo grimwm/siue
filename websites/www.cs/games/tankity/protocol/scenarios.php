@@ -255,6 +255,13 @@ function protocol_fixed_close(array $v): array
     if (array_key_exists('closesIn', $v) && is_int($v['expiresAt'] ?? null)) {
         $v['closesIn'] = max(0, $v['expiresAt'] - PROTOCOL_TOUCHED);
     }
+    // The turn and shop clocks run on the wall clock while the fixtures build:
+    // whole seconds, so a slow machine's tenths do not make a fixture stale.
+    foreach (['turnLeft', 'shopLeft'] as $k) {
+        if (is_float($v[$k] ?? null) || is_int($v[$k] ?? null)) {
+            $v[$k] = (float) round($v[$k]);
+        }
+    }
     foreach ($v as $k => $item) {
         if (is_array($item)) {
             $v[$k] = protocol_fixed_close($item);

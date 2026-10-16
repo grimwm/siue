@@ -185,18 +185,35 @@ final class StoreDirTest extends TestCase
 
     public function testAFileOfAnotherAccountIsRefused(): void
     {
+        // PHP runs as 48; a stranger (1001) planted a file in root's sticky /var/tmp.
+        $this->assertFalse(StoreDir::ownerTrusted(1001, 0, 48));
+        // ...or in a directory that belongs to yet another account.
+        $this->assertFalse(StoreDir::ownerTrusted(1001, 500, 48));
+        $this->assertFalse(StoreDir::ownerTrusted(1001, null, 48));
+    }
+
+    public function testAFileOfPhpOrOfItsDirectorysOwnerIsTrusted(): void
+    {
+        // PHP's own file, wherever it is.
+        $this->assertTrue(StoreDir::ownerTrusted(48, 0, 48));
+        $this->assertTrue(StoreDir::ownerTrusted(48, null, 48));
+        // The site account's file in the site account's data folder, written by PHP through its group (www.cs.siue.edu).
+        $this->assertTrue(StoreDir::ownerTrusted(500, 500, 48));
+        // Root's file in root's directory: root could do anything anyway.
+        $this->assertTrue(StoreDir::ownerTrusted(0, 0, 48));
+    }
+
+    public function testTheDirectorysOwnersFileOpensWhenPhpIsSomeoneElse(): void
+    {
         if (StoreDir::euid() === 0) {
             $this->markTestSkipped('root owns everything it makes');
         }
-        // A file root owns, opened read-only: the handle is not ours.
-        $path = '/etc/hosts';
+        // /etc/hosts: root's file in root's /etc, opened by a non-root PHP (its real path: macOS links /etc).
+        $path = (string) realpath('/etc/hosts');
         $fh = fopen($path, 'r');
-        try {
-            $this->silently(fn() => $this->store->verifyOpened($fh, $path));
-            $this->fail("$path belongs to another account and must be refused");
-        } catch (DomainException $e) {
-            $this->assertStringContainsString('belongs to another account', $e->getMessage());
-        }
+        $this->store->verifyOpened($fh, $path);
+        $this->assertTrue(is_resource($fh));
+        fclose($fh);
     }
 
     public function testAHardLinkToOurFileIsRefusedByTheClaimAndThePostOpenCheck(): void

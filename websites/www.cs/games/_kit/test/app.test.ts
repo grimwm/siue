@@ -3,7 +3,7 @@
 // an installed app that can close, one that cannot, and a browser tab.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isInstalled, enterFullscreen, exitApp, EXIT_HINT, CLOSE_WAIT_MS, topKeyLock, holdEscape } from '../app.ts';
+import { isInstalled, enterFullscreen, toggleFullscreen, withWebkitFullscreen, exitApp, EXIT_HINT, CLOSE_WAIT_MS, topKeyLock, holdEscape } from '../app.ts';
 import type { AppEnv, KeyLock, LockWindow } from '../app.ts';
 import { manualClock } from './clock.ts';
 
@@ -11,7 +11,7 @@ import { manualClock } from './clock.ts';
 const FRAME = { id: 'frame' } as Element;
 const NO_ELEMENT = {} as Element;
 
-function fakeEnv({ modes = [], ios = false, full = false, closes = false, refuse = false }: { modes?: string[]; ios?: boolean; full?: boolean; closes?: boolean; refuse?: boolean } = {}) {
+function fakeEnv({ modes = [], ios = false, full = false, closes = false, refuse = false, supported = true }: { modes?: string[]; ios?: boolean; full?: boolean; closes?: boolean; refuse?: boolean; supported?: boolean } = {}) {
   const clock = manualClock();
   const log: string[] = [];
   let closed = false;
@@ -19,6 +19,7 @@ function fakeEnv({ modes = [], ios = false, full = false, closes = false, refuse
   const env: AppEnv = {
     matches: q => modes.some(m => q === `(display-mode: ${m})`),
     iosStandalone: () => ios,
+    fullscreenSupported: () => supported,
     fullscreenElement: () => (inFull ? FRAME : null),
     requestFullscreen: async () => { log.push('enter'); if (refuse) throw new Error('denied'); inFull = true; },
     exitFullscreen: async () => { log.push('leave'); if (refuse) throw new Error('denied'); inFull = false; },
@@ -135,4 +136,48 @@ test('a refused lock is reported, never swallowed', async () => {
   assert.equal(warn.length, 1);
   assert.ok(warn[0] !== undefined);
   assert.match(warn[0], /Esc will leave full screen.*top-level browsing context/);
+});
+
+test('where only the webkit-prefixed API exists, it is asked through it', async () => {
+  const { env } = fakeEnv();
+  const calls: string[] = [];
+  const el = { webkitRequestFullscreen: () => { calls.push('webkit'); } } as unknown as Element;
+  const wk = withWebkitFullscreen(env, { webkitFullscreenElement: null });
+  await wk.requestFullscreen(el);
+  assert.deepEqual(calls, ['webkit']);
+  assert.equal(wk.fullscreenElement(), null);
+  assert.equal(withWebkitFullscreen(env, { webkitFullscreenElement: FRAME }).fullscreenElement(), FRAME);
+});
+
+test('with the standard API the base env is used; with neither, it rejects', async () => {
+  const { env, log } = fakeEnv();
+  const std = { requestFullscreen: () => Promise.resolve() } as unknown as Element;
+  await withWebkitFullscreen(env, {}).requestFullscreen(std);
+  assert.deepEqual(log, ['enter']);
+  await assert.rejects(withWebkitFullscreen(env, {}).requestFullscreen(NO_ELEMENT));
+});
+
+test('toggleFullscreen enters when off, leaves when on, and asks inside the gesture', async () => {
+  const { env, log } = fakeEnv();
+  const out = toggleFullscreen(env, FRAME);
+  assert.deepEqual(log, ['enter'], 'the request is made before the first await');
+  assert.equal(await out, 'entered');
+  const leaving = toggleFullscreen(env, FRAME);
+  assert.deepEqual(log, ['enter', 'leave'], 'so is the exit');
+  assert.equal(await leaving, 'left');
+});
+
+test('toggleFullscreen reports a browser without full screen, and a refused request', async () => {
+  const none = fakeEnv({ supported: false });
+  assert.equal(await toggleFullscreen(none.env, FRAME), 'unsupported');
+  assert.deepEqual(none.log, []);
+  const refused = fakeEnv({ refuse: true });
+  assert.equal(await toggleFullscreen(refused.env, FRAME), 'refused');
+  assert.deepEqual(refused.log, ['enter']);
+});
+
+test('toggleFullscreen still reports left when the exit is refused', async () => {
+  const { env, log } = fakeEnv({ full: true, refuse: true });
+  assert.equal(await toggleFullscreen(env, FRAME), 'left');
+  assert.deepEqual(log, ['leave']);
 });

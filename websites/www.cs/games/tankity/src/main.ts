@@ -87,9 +87,8 @@ import { renderToasts } from './ui/toast.tsx';
 import type { AlertsState, GamesView } from './ui/games.tsx';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { createTrackToast, trackToastText } from './track-toast.ts';
-import { fullscreenForPlay, withWebkitFullscreen } from './play-fullscreen.ts';
-import type { WebkitDocument } from './play-fullscreen.ts';
-import { exitApp, enterFullscreen, browserAppEnv, EXIT_HINT, holdEscape, topKeyLock } from '../../_kit/app.ts';
+import { fullscreenForPlay } from './play-fullscreen.ts';
+import { exitApp, toggleFullscreen as toggleKitFullscreen, browserAppEnv, EXIT_HINT, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { pref, text } from '../../_kit/prefs.ts';
 import { browserShareEnv } from '../../_kit/install.ts';
 import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
@@ -1183,21 +1182,13 @@ async function quitGame(): Promise<void> {
 }
 /* A tap that starts a match on a phone or tablet goes full screen (src/play-fullscreen.ts). */
 function playFullscreen(): void {
-  fullscreenForPlay(() => touchNow, withWebkitFullscreen(browserAppEnv(), document as WebkitDocument), $('frame'));
+  fullscreenForPlay(() => touchNow, browserAppEnv(), $('frame'));
 }
 function toggleFullscreen(): void {
   // The frame carries the canvas plus its HUD and pads, so the whole battle goes fullscreen together.
-  const el = $('frame') || document.documentElement;
-  if (typeof el.requestFullscreen !== 'function' || typeof document.exitFullscreen !== 'function') {
-    say('Fullscreen is not supported in this browser.', 'info');
-    return;
-  }
-  if (document.fullscreenElement) {
-    void document.exitFullscreen();
-    return;
-  }
-  void enterFullscreen(browserAppEnv(), el).then(ok => {
-    if (!ok) say('Fullscreen is not available right now.', 'info');
+  void toggleKitFullscreen(browserAppEnv(), $('frame') || document.documentElement).then(outcome => {
+    if (outcome === 'unsupported') say('Fullscreen is not supported in this browser.', 'info');
+    else if (outcome === 'refused') say('Fullscreen is not available right now.', 'info');
   });
 }
 /* In fullscreen the browser takes Esc to leave fullscreen. The game never

@@ -1,12 +1,12 @@
 // Tapping Play on a phone or tablet asks for full screen in the same gesture,
 // so the browser's own bars do not eat the bottom of a landscape screen. A
-// desktop never asks, a refusal changes nothing, and a browser with only the
-// webkit-prefixed API is asked through it.
+// desktop never asks, and a refusal changes nothing. (The webkit-prefixed
+// fallback is the kit's: _kit/test/app.test.ts.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AppEnv } from '../../_kit/app.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
-import { fullscreenForPlay, withWebkitFullscreen } from '../src/play-fullscreen.ts';
+import { fullscreenForPlay } from '../src/play-fullscreen.ts';
 
 const FRAME = { id: 'frame' } as Element;
 
@@ -15,6 +15,7 @@ function fakeEnv({ refuse = false, full = false }: { refuse?: boolean; full?: bo
   const env: AppEnv = {
     matches: () => false,
     iosStandalone: () => false,
+    fullscreenSupported: () => true,
     fullscreenElement: () => (full ? FRAME : null),
     requestFullscreen: () => { log.push('request'); return refuse ? Promise.reject(new Error('denied')) : Promise.resolve(); },
     exitFullscreen: () => Promise.resolve(),
@@ -74,23 +75,4 @@ test('the player leaving full screen is not undone: only a tap asks again', () =
   assert.deepEqual(log, ['request']);
   fullscreenForPlay(() => true, env, FRAME); // the next Play tap
   assert.deepEqual(log, ['request', 'request']);
-});
-
-test('where only the webkit-prefixed API exists, it is asked through it', async () => {
-  const { env } = fakeEnv();
-  const calls: string[] = [];
-  const el = { webkitRequestFullscreen: () => { calls.push('webkit'); } } as unknown as Element;
-  const wk = withWebkitFullscreen(env, { webkitFullscreenElement: null });
-  await wk.requestFullscreen(el);
-  assert.deepEqual(calls, ['webkit']);
-  assert.equal(wk.fullscreenElement(), null);
-  assert.equal(withWebkitFullscreen(env, { webkitFullscreenElement: FRAME }).fullscreenElement(), FRAME);
-});
-
-test('with the standard API the base env is used; with neither, it rejects', async () => {
-  const { env, log } = fakeEnv();
-  const std = { requestFullscreen: () => Promise.resolve() } as unknown as Element;
-  await withWebkitFullscreen(env, {}).requestFullscreen(std);
-  assert.deepEqual(log, ['request']);
-  await assert.rejects(withWebkitFullscreen(env, {}).requestFullscreen({} as Element));
 });

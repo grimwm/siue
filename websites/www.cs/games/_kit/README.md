@@ -135,8 +135,16 @@ whether it worked; `exitApp(env)` is every game's Quit: an installed app asks
 to close its window, and where that does nothing within `CLOSE_WAIT_MS`, or in
 a browser tab (never closed), it leaves full screen and answers `'title'` or,
 for an installed app, `'title-with-hint'`: the game then shows its title card
-and, with the hint, `EXIT_HINT`. Pages pass `browserAppEnv()`; tests pass a
-fake environment and a manual clock.
+and, with the hint, `EXIT_HINT`. `toggleFullscreen(env, el)` is the Fullscreen
+toggle: it enters or leaves and answers `'entered'`, `'left'`, `'unsupported'`
+(no native enter-and-leave pair) or `'refused'` (the browser denied entering),
+with the request made before its first await so it stays inside the player's
+tap. `browserAppEnv()` includes `withWebkitFullscreen`, the prefixed API as the
+fallback for entering and for reading the fullscreen element (older Safari and
+iPadOS); leaving and the support check stay native. Only the toggle and
+`exitApp` may leave full screen, and Esc never does
+(`tankity/test/fullscreen.test.ts` scans the kit too). Pages pass
+`browserAppEnv()`; tests pass a fake environment and a manual clock.
 
 ## The back key (`keys.ts`)
 

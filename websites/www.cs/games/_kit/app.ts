@@ -149,13 +149,19 @@ export async function holdEscape(full: boolean, kb: KeyLock | null, warn: (msg: 
   }
 }
 
-interface WebkitElement { requestFullscreen?: unknown; webkitRequestFullscreen?: () => void | Promise<void> }
-export interface WebkitDocument { webkitFullscreenElement?: Element | null }
-
-/** The env with the webkit-prefixed fullscreen API as the fallback (older Safari and iPadOS). */
+/**
+ * The env with the webkit-prefixed fullscreen API as the fallback for entering,
+ * leaving and reading the fullscreen element (older Safari and iPadOS).
+ * Supported means the browser can both enter and leave, by either API.
+ */
 export function withWebkitFullscreen(base: AppEnv, doc: WebkitDocument): AppEnv {
   return {
     ...base,
+    fullscreenSupported: el => {
+      const e = el as WebkitElement;
+      const enter = typeof e.requestFullscreen === 'function' || typeof e.webkitRequestFullscreen === 'function';
+      return enter && (typeof doc.exitFullscreen === 'function' || typeof doc.webkitExitFullscreen === 'function');
+    },
     fullscreenElement: () => base.fullscreenElement() ?? doc.webkitFullscreenElement ?? null,
     requestFullscreen: el => {
       const e = el as WebkitElement;
@@ -163,7 +169,19 @@ export function withWebkitFullscreen(base: AppEnv, doc: WebkitDocument): AppEnv 
       if (typeof e.webkitRequestFullscreen === 'function') return Promise.resolve(e.webkitRequestFullscreen());
       return Promise.reject(new Error('no fullscreen'));
     },
+    exitFullscreen: () => {
+      if (typeof doc.exitFullscreen === 'function') return base.exitFullscreen();
+      if (typeof doc.webkitExitFullscreen === 'function') return Promise.resolve(doc.webkitExitFullscreen());
+      return Promise.resolve();
+    },
   };
+}
+
+interface WebkitElement { requestFullscreen?: unknown; webkitRequestFullscreen?: () => void | Promise<void> }
+export interface WebkitDocument {
+  webkitFullscreenElement?: Element | null;
+  exitFullscreen?: unknown;
+  webkitExitFullscreen?: () => void | Promise<void>;
 }
 
 export function browserAppEnv(): AppEnv {

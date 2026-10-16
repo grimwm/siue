@@ -149,8 +149,9 @@ toggle: it enters or leaves and answers `'entered'`, `'left'`, `'unsupported'`
 (no native enter-and-leave pair) or `'refused'` (the browser denied entering),
 with the request made before its first await so it stays inside the player's
 tap. `browserAppEnv()` includes `withWebkitFullscreen`, the prefixed API as the
-fallback for entering and for reading the fullscreen element (older Safari and
-iPadOS); leaving and the support check stay native. Only the toggle and
+fallback for entering, leaving (`webkitExitFullscreen`) and reading the
+fullscreen element (older Safari and iPadOS); a browser is supported when it
+has a way in and a way out, standard or prefixed. Only the toggle and
 `exitApp` may leave full screen, and Esc never does
 (`tankity/test/fullscreen.test.ts` scans the kit too). Pages pass
 `browserAppEnv()`; tests pass a fake environment and a manual clock.

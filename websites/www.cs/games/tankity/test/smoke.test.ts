@@ -214,7 +214,8 @@ for (const f of listeners['keydown'] || []) {
 await test('keys-no-scroll', () => { assert.ok(pd === 2, `prevented=${pd}/2`); });
 // Fullscreen degrades honestly where the API is absent (as in this stub).
 TAP('global', 'fullscreen'); frames(2);
-await new Promise(r => setImmediate(r)); // the kit's toggle answers on a microtask
+// The kit's toggle answers asynchronously: wait, a bounded number of turns, for its message.
+for (let turn = 0; turn < 50 && !/Fullscreen is not supported/.test(logText()); turn++) await new Promise(r => setImmediate(r));
 await test('fullscreen-fallback', () => { assert.ok(/Fullscreen is not supported/.test(logText())); });
 // Sound and music mute separately, by button or by key, without touching each other.
 const pressed = (id: string) => E(id).getAttribute('aria-pressed');

@@ -181,3 +181,28 @@ test('toggleFullscreen still reports left when the exit is refused', async () =>
   assert.equal(await toggleFullscreen(env, FRAME), 'left');
   assert.deepEqual(log, ['leave']);
 });
+
+test('on a WebKit-only browser the toggle enters through webkitRequestFullscreen and leaves through webkitExitFullscreen', async () => {
+  const calls: string[] = [];
+  let full: Element | null = null;
+  const el = { webkitRequestFullscreen: () => { calls.push('webkit-enter'); full = el; } } as unknown as Element;
+  const doc = {
+    get webkitFullscreenElement() { return full; },
+    webkitExitFullscreen: () => { calls.push('webkit-exit'); full = null; },
+  };
+  const { env: base } = fakeEnv({ supported: false });
+  base.fullscreenElement = () => null; // the standard API reports nothing
+  const env = withWebkitFullscreen(base, doc);
+  assert.equal(env.fullscreenSupported(el), true, 'supported through the prefixed pair');
+  assert.equal(await toggleFullscreen(env, el), 'entered');
+  assert.equal(await toggleFullscreen(env, el), 'left');
+  assert.deepEqual(calls, ['webkit-enter', 'webkit-exit']);
+});
+
+test('without either exit, or either request, full screen is unsupported', () => {
+  const { env } = fakeEnv();
+  const enterOnly = { webkitRequestFullscreen: () => {} } as unknown as Element;
+  assert.equal(withWebkitFullscreen(env, {}).fullscreenSupported(enterOnly), false, 'no way out');
+  assert.equal(withWebkitFullscreen(env, { webkitExitFullscreen: () => {} }).fullscreenSupported({} as Element), false, 'no way in');
+  assert.equal(withWebkitFullscreen(env, { exitFullscreen: () => Promise.resolve() }).fullscreenSupported({ requestFullscreen: () => Promise.resolve() } as unknown as Element), true);
+});

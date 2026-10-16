@@ -79,8 +79,10 @@ test('only the Fullscreen toggle and Quit leave full screen', () => {
     '_kit/app.ts:browserAppEnv', // the port itself
     '_kit/app.ts:exitApp', // Menu → Quit
     '_kit/app.ts:toggleFullscreen', // the Fullscreen toggle: menu tile and F key, through main.ts
+    '_kit/app.ts:withWebkitFullscreen', // the port's prefixed fallback
   ]);
-  assert.deepEqual(sites(/webkitExitFullscreen|webkitCancelFullScreen|mozCancelFullScreen|msExitFullscreen/g), []);
+  // The prefixed exit is only the kit env's fallback behind exitFullscreen; nothing else calls it.
+  assert.deepEqual(sites(/webkitExitFullscreen|webkitCancelFullScreen|mozCancelFullScreen|msExitFullscreen/g), ['_kit/app.ts:withWebkitFullscreen']);
   // exitApp is Quit's alone, and the toggle is the F key's and the menu tile's.
   assert.deepEqual(sites(/\bexitApp\s*\(/g), ['_kit/app.ts:exitApp', 'tankity/src/main.ts:quitGame']);
   const quitLines = FILES.flatMap(f => f.src.split('\n').filter(l => /\bquitGame\s*\(/.test(l)).map(l => l.trim())).sort();

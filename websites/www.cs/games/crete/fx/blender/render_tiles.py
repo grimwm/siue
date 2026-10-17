@@ -14,8 +14,9 @@ quantize pass use the system `python3` with Pillow (`pip3 install pillow`).
 
 Options (after the `--`):
 
-    --out DIR         Where tiles.png, tiles.json and preview-16.png go. Default
-                      ../sprites next to this script.
+    --out DIR         Where tiles.png and tiles.json go. Default ../sprites next
+                      to this script. preview-16.png and board-preview.png are
+                      written beside this script, not into DIR.
     --only A,B        Render just these sprites into <out>/_only/ as one PNG strip
                       each, for a quick look. The atlas is left alone.
     --engine NAME     eevee (default; falls back to cycles if EEVEE cannot start
@@ -52,7 +53,8 @@ them readable at 16 px.
 The 16 px check. After the atlas is written, every object and figure's first frame
 is shrunk to 16 px wide and must cover 12-85% of its frame and differ in mean
 luminance from the floor by at least 0.18; the script lists each failure and exits
-non-zero. It also writes preview-16.png (every sprite at 16, 24 and 48 px).
+non-zero. It also writes preview-16.png (every sprite at 16, 24 and 48 px) and
+board-preview.png beside this script.
 """
 import json
 import math
@@ -1288,7 +1290,8 @@ def render_sprite(name, build, frames, kind, blend_path):
 def quantize(path):
     code = ("import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]).convert('RGBA')\n"
             "im.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(sys.argv[1], optimize=True)\n")
-    return run_python(code, [path]) is not None
+    r = run_python(code, [path])
+    return r is not None and r.returncode == 0
 
 
 def run_python(code, argv):
@@ -1434,7 +1437,7 @@ sys.exit(1 if failures else 0)
 def check(out_dir, args):
     kinds = {name: kind for name, _, _, _, kind in SPRITES}
     r = run_python(CHECK_PY, [os.path.join(out_dir, 'tiles.png'), os.path.join(out_dir, 'tiles.json'),
-                              os.path.join(out_dir, 'preview-16.png'), json.dumps(kinds)])
+                              os.path.join(os.path.dirname(os.path.abspath(__file__)), 'preview-16.png'), json.dumps(kinds)])
     if r is None:
         print('WARNING: Pillow is not importable by python3; the 16 px check was skipped (pip3 install pillow)')
         return True

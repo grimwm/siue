@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/Clock.php';
 require_once __DIR__ . '/Db.php';
+require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Pages.php';
 
 // The kit's StoreDir and StoreModes. Where the kit's source is present (a

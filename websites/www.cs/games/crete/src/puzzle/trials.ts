@@ -57,11 +57,11 @@ intro: The Naiads lend flippers for the water and Hephaestus lends boots for the
 intro: Daedalus polished these halls to glass and set currents in the stones. Skates hold the ice; suction boots hold the current.
 
 ###########
-#P.#===..M#
-##k.===##.#
-##..=.#<#E#
-#.===u=..##
-#...=..=<.#
+#P.===...##
+##k=#..<<.#
+##.=#....E#
+#.=##u=...#
+#..#==...M#
 ###########
 ` },
   { id: 'trial-6', text: `title: The Sinking Stones
@@ -78,7 +78,7 @@ intro: Roll a stone into the deep and the water becomes a road. Tread the plate 
 ###########
 ` },
   { id: 'trial-7', text: `title: The Gifts of Ariadne
-intro: Ariadne left you gifts: Medusa's mirror, Daedalus's cow and a honey cake. Stone the beast to pass him, then set the cow where the walls will pin him.
+intro: Ariadne left you gifts: Medusa's mirror, Daedalus's cow and a honey cake. Stone the beast to pass him, set the cow where the walls will pin him, and keep the cake as a spare heart.
 
 #########
 #..E..M.#
@@ -90,17 +90,17 @@ intro: Ariadne left you gifts: Medusa's mirror, Daedalus's cow and a honey cake.
 #########
 ` },
   { id: 'trial-8', text: `title: The Heart of the Labyrinth
-intro: Here Minos hid his last riddle: key and door, a block in the flood, and ice, with the beast between. Pass it, and Athens owes no more tribute.
+intro: Here Minos hid his last riddle: a locked door, a block to sink in the pool, a flood to swim, and the beast between. Pass it, and Athens owes no more tribute.
 
 ############
-#P..#.M.~=##
-###.#...~=.#
+#P..#.M.~.##
+###.#...~..#
 #.r.##..~..#
-#.#.R...~==#
-#.#.###.~==#
-#.z##..O~=.#
-#...#..~~=.#
-#...#.~f~=E#
+#.#.R...~..#
+#.#.###.~..#
+#.z##..O~..#
+#...#..~~..#
+#...#.~f~.E#
 ############
 ` },
 ];

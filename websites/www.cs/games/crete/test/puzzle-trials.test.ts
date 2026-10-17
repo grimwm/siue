@@ -8,8 +8,16 @@ import { solve } from '../src/puzzle/solver.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { GameEvent } from '../src/puzzle/step.ts';
 import { parse, serialize } from '../src/puzzle/level.ts';
+import type { Level } from '../src/puzzle/level.ts';
+import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
-const SHORTEST: number[] = [10, 23, 36, 28, 38, 24, 22, 30];
+const SHORTEST: number[] = [10, 23, 36, 28, 18, 24, 22, 31];
+
+/** The level with every object of these kinds taken off the board. */
+const withoutObjects = (lv: Level, kinds: readonly ObjectKind[]): Level => ({ ...lv, objects: lv.objects.map(o => (o && kinds.includes(o) ? null : o)) });
+/** The level with the terrain of these kinds replaced. */
+const retile = (lv: Level, from: readonly Terrain[], to: Terrain): Level => ({ ...lv, terrain: lv.terrain.map(t => (from.includes(t) ? to : t)) });
+const unsolved = (lv: Level) => !solve(initial(lv)).solved;
 
 function solved(i: number) {
   const r = solve(initial(trialLevel(i)));
@@ -49,20 +57,42 @@ test('trial 1: walking straight to the exit gets you caught', () => {
 });
 
 test('trials 2 to 8 each need their idea', () => {
-  assert.ok(trialLevel(1).relics >= 2 && trialLevel(1).terrain.includes('gate'));
+  const lv2 = trialLevel(1);
+  assert.ok(lv2.relics >= 2 && lv2.terrain.includes('gate'));
+  assert.ok(unsolved(withoutObjects(lv2, ['relic'])), 'the gate needs its relics');
+
+  const lv3 = trialLevel(2);
   const t3 = solved(2);
   assert.ok(t3.events.filter(e => e.kind === 'opened').length >= 2 && t3.took.has('key-green'));
+  for (const k of ['key-red', 'key-blue', 'key-green'] as const) assert.ok(unsolved(withoutObjects(lv3, [k])), `trial 3 needs ${k}`);
+
+  const lv4 = trialLevel(3);
   const t4 = solved(3);
   assert.ok(t4.took.has('flippers') && t4.took.has('fire-boots'));
+  assert.ok(unsolved(withoutObjects(lv4, ['flippers'])), 'trial 4 needs the flippers');
+  assert.ok(unsolved(withoutObjects(lv4, ['fire-boots'])), 'trial 4 needs the fire boots');
+
+  const lv5 = trialLevel(4);
   const t5 = solved(4);
   assert.ok(t5.took.has('skates') && t5.took.has('suction') && t5.kinds.has('slid'));
+  assert.ok(unsolved(withoutObjects(lv5, ['skates'])), 'trial 5 needs the skates');
+  assert.ok(unsolved(withoutObjects(lv5, ['suction'])), 'trial 5 needs the suction boots');
+
+  const lv6 = trialLevel(5);
   const t6 = solved(5);
   assert.ok(t6.kinds.has('pushed') && t6.kinds.has('flipped') && t6.kinds.has('sank'));
+  assert.ok(unsolved(withoutObjects(lv6, ['block'])), 'trial 6 needs a block');
+  const base6 = solve(initial(lv6));
+  for (const to of ['floor', 'wall'] as const) {
+    const r = solve(initial(retile(lv6, ['toggle-open', 'toggle-closed'], to)));
+    assert.ok(!r.solved || r.line.length !== (base6.solved ? base6.line.length : -1), `the toggle walls matter (as ${to})`);
+  }
+  assert.ok(unsolved(retile(lv6, ['button'], 'wall')), 'trial 6 needs the plate');
+
   const lv7 = trialLevel(6);
-  const without = (...gone: string[]) => initial({ ...lv7, objects: lv7.objects.map(o => (o && gone.includes(o) ? null : o)) });
-  assert.equal(solve(without('mirror', 'cow', 'cake')).solved, false, 'trial 7 needs a tool');
-  assert.equal(solve(without('cow')).solved, false, 'trial 7 needs the cow');
-  assert.equal(solve(without('mirror')).solved, false, 'trial 7 needs the mirror');
+  assert.ok(unsolved(withoutObjects(lv7, ['mirror', 'cow', 'cake'])), 'trial 7 needs a tool');
+  assert.ok(unsolved(withoutObjects(lv7, ['cow'])), 'trial 7 needs the cow');
+  assert.ok(unsolved(withoutObjects(lv7, ['mirror'])), 'trial 7 needs the mirror');
   assert.ok(lv7.objects.includes('cake'), 'trial 7 has a cake');
   assert.ok(lv7.terrain.includes('safe'));
   const t7 = solved(6);
@@ -70,7 +100,9 @@ test('trials 2 to 8 each need their idea', () => {
   assert.ok(!noSafe.solved || noSafe.line.length > t7.line.length, 'the safe zones matter');
   assert.ok(t7.kinds.has('stoned') && t7.took.has('cow'));
   const t8 = solved(7);
-  const others = [t8.kinds.has('opened'), t8.took.has('flippers') || t8.took.has('fire-boots'), t8.kinds.has('slid'), t8.kinds.has('stoned')];
+  const others = [t8.kinds.has('opened'), t8.took.has('flippers') || t8.took.has('fire-boots'), t8.kinds.has('stoned')];
+  const lv8 = trialLevel(7);
   assert.ok(t8.kinds.has('pushed'), 'the finale pushes its block');
-  assert.ok(others.filter(Boolean).length >= 3, 'the finale combines at least three more ideas');
+  for (const k of ['key-red', 'mirror', 'block', 'flippers'] as const) assert.ok(unsolved(withoutObjects(lv8, [k])), `trial 8 needs ${k}`);
+  assert.ok(others.filter(Boolean).length >= 3, 'the finale combines three more ideas');
 });

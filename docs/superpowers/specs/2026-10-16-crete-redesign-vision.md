@@ -41,6 +41,22 @@ developer endings Crete has today (the Whitehead review, the PAX ending, the
 - one or two lines when each level opens;
 - endings chosen by how many pages were found.
 
+**Real quotes.** Chapter cards, level intros and pages quote the ancient
+sources where they fit, word for word from public-domain English
+translations, each with its citation (author, work, book or section,
+translator, year):
+
+- Plutarch, *Life of Theseus* (Bernadotte Perrin, 1914);
+- Ovid, *Metamorphoses* Book 8 (Brookes More, 1922);
+- Apollodorus, *The Library* (J. G. Frazer, 1921);
+- Catullus, poem 64, Ariadne on Naxos (public-domain translations);
+- Nathaniel Hawthorne, *Tanglewood Tales*, "The Minotaur" (1853).
+
+Our own text joins the quotes, and the meta chapters are ours alone. Only
+translations in the public domain are quoted; a modern translation is
+paraphrased, never quoted. The lore file keeps each quote's source beside it,
+and the Lore book shows it.
+
 ## Parts
 
 1. **Shell** (`2026-10-16-crete-shell-design.md`): controls inside the game

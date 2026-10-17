@@ -85,3 +85,11 @@ test('the passphrase is stripped of exactly the explicit whitespace set, after N
   assert.deepEqual(normalizePassphrase('​abc'), new TextEncoder().encode('​abc'), 'a zero-width space is not in the set');
   assert.ok(STRIPPED.includes('﻿') && STRIPPED.includes('　'));
 });
+
+test('a keyring Python locked unlocks in the browser, current key first', async () => {
+  const { readFileSync } = await import('node:fs');
+  const locked = JSON.parse(readFileSync(new URL('./fixtures/keyring-by-python.json', import.meta.url), 'utf8')) as typeof fx.keyring;
+  const ring = await unlockKeyring(locked, fx.passphrase, [builtIn, otherKey]);
+  assert.deepEqual([...ring.keys()], [fx.fingerprint, fx.other.fingerprint]);
+  for (const key of ring.values()) assert.equal(key.extractable, false);
+});

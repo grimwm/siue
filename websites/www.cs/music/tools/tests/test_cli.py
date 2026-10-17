@@ -55,6 +55,38 @@ class CliTest(unittest.TestCase):
         for call in self.w.op_calls():
             self.assertNotIn("c" * 64, " ".join(call))
 
+    def test_keys_init_uploads_with_the_music_publish_key_and_exits_0_even_when_it_cannot(self):
+        sent = []
+
+        class StubApi:
+            def __init__(self, base, key):
+                sent.append((base, key))
+
+            def publish_keyring(self, locked):
+                sent.append(locked)
+
+        self.run_cli("api-key-set", "music-publish", stdin="d" * 64 + "\n")
+        self.env["SIUE_MUSIC_BASE"] = "http://127.0.0.1:1/music/"
+        with mock.patch.object(cli, "make_api", StubApi):
+            code, out, _ = self.run_cli("keys", "init")
+        self.assertEqual(code, 0)
+        self.assertEqual(sent[0], ("http://127.0.0.1:1/music/", "d" * 64))
+        self.assertEqual(sent[1]["iterations"], 600_000)
+        self.assertIn("games && node _kit/build/build.mjs workroom", out)
+        self.assertIn("make keys-status", out)
+
+    def test_keys_init_without_an_api_key_still_succeeds_and_says_how_to_upload(self):
+        code, out, _ = self.run_cli("keys", "init")
+        self.assertEqual(code, 0)
+        self.assertIn("make api-key-set NAME=music-publish && make keys-upload", out)
+        self.assertEqual(self.run_cli("keys", "init")[0], 1, "a second init is refused")
+
+    def test_keys_upload_without_a_key_exits_1(self):
+        self.run_cli("keys", "init")
+        code, _, err = self.run_cli("keys", "upload")
+        self.assertEqual(code, 1)
+        self.assertIn("music-publish", err)
+
     def test_usage_exits_2(self):
         self.assertEqual(self.run_cli("bogus")[0], 2)
 

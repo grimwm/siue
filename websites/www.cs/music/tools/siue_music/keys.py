@@ -17,6 +17,11 @@ API_TAG = "siue-music-api"
 WORKROOM_URL = "https://www.cs.siue.edu/~wgrim/music/"
 _API_KEY = re.compile(r"[0-9a-f]{64}")
 _API_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,47}")
+KEY_TITLE = "SIUE music notes key "
+PREVIOUS_SUFFIX = " (previous)"
+PUBLISH_KEY = "music-publish"
+
+Upload = Callable[[dict], None]
 
 
 class KeyMismatch(Exception):
@@ -63,6 +68,26 @@ def read_repo_keys(path: Path) -> RepoKeys:
     current = entry(data["current"]) if data.get("current") else None
     previous = [entry(e) for e in data.get("previous") or []]
     return RepoKeys(current, previous, spki)
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
+def write_public_files(json_path: Path, ts_path: Path, current: tuple[str, bytes], previous: list[tuple[str, bytes]]) -> None:
+    """music/keys/public.json and the page's built-in public-key.ts, from the same public halves."""
+    entry = lambda k: {"fingerprint": k[0], "spki": base64.b64encode(k[1]).decode("ascii")}  # noqa: E731
+    now, before = entry(current), [entry(k) for k in previous]
+    _write_atomic(json_path, json.dumps({"schema": 1, "current": now, "previous": before}, indent=2) + "\n")
+    compact = lambda v: json.dumps(v, separators=(",", ":"))  # noqa: E731
+    _write_atomic(ts_path, "// The notes key built into the page: written by `siue-music keys init|rotate`\n"
+                  "// from music/keys/public.json (a unit test keeps them equal). Not secret.\n"
+                  "import type { BuiltInKey } from './seal.ts';\n\n"
+                  f"export const PUBLIC_KEY: BuiltInKey | null = {compact(now)};\n"
+                  f"export const PREVIOUS_KEYS: readonly BuiltInKey[] = {compact(before)};\n")
 
 
 class Cache:
@@ -241,3 +266,100 @@ class Keys:
         if not password:
             raise KeysError(f"The 1Password item {held[repo.current][0]} has no password field: fix the item")
         return password
+
+    def keyring(self) -> dict[str, bytes]:
+        """fingerprint -> PKCS#8 DER for the current key, then every retained one; a key the cache lacks is an error, never skipped."""
+        ring = self.ensure_synced()
+        repo = read_repo_keys(self.public_json)
+        missing = [fp for fp in (repo.current, *repo.previous) if fp not in ring]
+        if missing:
+            self.pull()
+            ring = self.ensure_synced()
+            missing = [fp for fp in (repo.current, *repo.previous) if fp not in ring]
+        if missing:
+            raise KeysError("1Password holds no private key for " + ", ".join(display(fp) for fp in missing)
+                            + ": a keyring without it would stop opening the notes sealed to it, so nothing was changed")
+        return ring
+
+    def _item(self, fp: str) -> dict:
+        for item in self.op.list_items(KEY_TAG):
+            if self.op.fields(item["id"]).get("fingerprint") == fp:
+                return item
+        raise KeysError(f"1Password has no item for the key {display(fp)}")
+
+    def _create_key_item(self, pkcs8: bytes, fp: str, passphrase: str) -> None:
+        private_key = base64.b64encode(pkcs8).decode("ascii")
+        new_id = self.op.create(KEY_TITLE + fp[:16], "PASSWORD", [KEY_TAG], [
+            {"id": "password", "type": "CONCEALED", "purpose": "PASSWORD", "label": "password", "value": passphrase},
+            {"id": "private_key", "type": "CONCEALED", "label": "private_key", "value": private_key},
+            {"id": "fingerprint", "type": "STRING", "label": "fingerprint", "value": fp},
+        ], urls=[WORKROOM_URL])
+        stored = self.op.fields(new_id)
+        for label, want in (("password", passphrase), ("private_key", private_key), ("fingerprint", fp)):
+            if not hmac.compare_digest(stored.get(label, "").encode(), want.encode()):
+                self.op.archive(new_id)
+                raise KeysError(f"1Password did not store the key's {label} field as sent; the new item was removed and nothing was changed")
+
+    def _remember(self, fp: str, pkcs8: bytes) -> None:
+        data = self.cache.load()
+        data["keys"][fp] = base64.b64encode(pkcs8).decode("ascii")
+        self.cache.save(data)
+
+    def _send(self, upload: Upload | None, ring: dict[str, bytes], passphrase: str, first: bool) -> None:
+        reason = "no music-publish API key"
+        if upload is not None:
+            try:
+                upload(sealing.lock_keyring(ring, passphrase))
+                self.out(f"Uploaded the locked keyring ({len(ring)} key{'' if len(ring) == 1 else 's'}).")
+                return
+            except Exception as e:  # any failure leaves the keys safe in 1Password; the retry is make keys-upload
+                reason = str(e) or type(e).__name__
+        retry = (f"After creating the {PUBLISH_KEY} API key on the hub: make api-key-set NAME={PUBLISH_KEY} && make keys-upload"
+                 if first else "Retry with: make keys-upload")
+        self.out(f"The locked keyring was not uploaded ({reason}). {retry}")
+
+    def init(self, upload: Upload | None) -> str:
+        self._ready()
+        if read_repo_keys(self.public_json).current is not None or self.op.list_items(KEY_TAG):
+            raise KeysError("A notes key already exists (in the repository or in 1Password): use make keys-rotate")
+        pkcs8, spki = sealing.generate()
+        fp, passphrase = sealing.fingerprint(spki), sealing.new_passphrase()
+        self._create_key_item(pkcs8, fp, passphrase)
+        write_public_files(self.public_json, self.public_ts, (fp, spki), [])
+        self._remember(fp, pkcs8)
+        self.out(f"Made the notes key {display(fp)} and saved it to 1Password (vault {self.op.vault}).")
+        self._send(upload, {fp: pkcs8}, passphrase, first=True)
+        self.out("Next: build the page: (cd games && node _kit/build/build.mjs workroom)\n"
+                 "Then commit music/keys/public.json, games/workroom/src/public-key.ts and games/workroom/dist/,\n"
+                 "and after the deploy compare the hub's fingerprint with make keys-status.")
+        return fp
+
+    def rotate(self, upload: Upload | None) -> str:
+        self.ensure_synced()
+        self.pull()
+        ring = self.keyring()
+        repo = read_repo_keys(self.public_json)
+        assert repo.current is not None
+        passphrase = self.passphrase()
+        old = repo.current
+        pkcs8, spki = sealing.generate()
+        fp = sealing.fingerprint(spki)
+        self._create_key_item(pkcs8, fp, passphrase)
+        item = self._item(old)
+        title = item.get("title") or KEY_TITLE + old[:16]
+        if not title.endswith(PREVIOUS_SUFFIX):
+            self.op.retitle(item["id"], title + PREVIOUS_SUFFIX)
+        write_public_files(self.public_json, self.public_ts, (fp, spki),
+                           [(k, repo.spki[k]) for k in (old, *repo.previous)])
+        self._remember(fp, pkcs8)
+        self.out(f"Rotated to the notes key {display(fp)}; the earlier keys are kept.")
+        self._send(upload, {fp: pkcs8, **ring}, passphrase, first=False)
+        self.out("Next: build the page: (cd games && node _kit/build/build.mjs workroom)\n"
+                 "Then commit music/keys/public.json, games/workroom/src/public-key.ts and games/workroom/dist/,\n"
+                 "and after the deploy compare the hub's fingerprint with make keys-status.")
+        return fp
+
+    def upload_keyring(self, upload: Upload) -> int:
+        ring = self.keyring()
+        upload(sealing.lock_keyring(ring, self.passphrase()))
+        return len(ring)

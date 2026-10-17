@@ -116,7 +116,7 @@ music-e2e:
 
 # The music workroom's key and note tool (music/tools/siue-music). Its own
 # virtualenv when make music-tools-venv made one, else python3.
-.PHONY: keys-status keys-pull keys-forget api-key-set music-tools-venv music-tools-test
+.PHONY: keys-status keys-pull keys-init keys-rotate keys-upload keys-forget api-key-set music-tools-venv music-tools-test
 MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
 MUSIC_TOOL = $(MUSIC_PY) music/tools/siue-music
 
@@ -124,6 +124,12 @@ keys-status:
 	@$(MUSIC_TOOL) keys status
 keys-pull:
 	@$(MUSIC_TOOL) keys pull
+keys-init:
+	@$(MUSIC_TOOL) keys init
+keys-rotate:
+	@$(MUSIC_TOOL) keys rotate
+keys-upload:
+	@$(MUSIC_TOOL) keys upload
 keys-forget:
 	@$(MUSIC_TOOL) keys forget
 api-key-set:

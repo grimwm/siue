@@ -47,6 +47,9 @@ standard input and are never printed.
 - `make music-tools-venv` makes the tool's virtualenv; `make music-tools-test` runs its tests.
 - `make keys-status` compares the repository's current public key with 1Password and the cache (exit 3 when they differ).
 - `make keys-pull` copies the keys and API keys from 1Password into the cache and checks the repository's current key is among them.
+- `make keys-init` (once) makes the RSA-4096 pair and the passphrase, saves them to 1Password first, writes `music/keys/public.json` and `games/workroom/src/public-key.ts`, and uploads a locked keyring of one with the `music-publish` API key (scope `keys:publish`). It then prints the build and commit steps.
+- `make keys-rotate` makes a new pair under the same passphrase, retitles the old item `(previous)`, adds the old public key to `previous`, and uploads the full keyring, current key first, replacing the stored one. It refuses when the cache or 1Password lacks the private key for any retained key.
+- `make keys-upload` locks and uploads the same full keyring again, for when the first upload could not happen (no API key yet, or the hub was unreachable). A 429 is retried after a short back-off.
 - `make keys-forget` deletes the cache.
 - `make api-key-set NAME=music-pickup` saves an API key made on the hub (pasted at the prompt) as a 1Password item, replacing any earlier one of that name.
 

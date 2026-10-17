@@ -54,10 +54,14 @@ the vocabulary, and version 2 lets them edit the music themselves.
 
 The server stores only sealed notes, which it cannot open.
 
-- **Keys:** a pickup tool on the owner's Mac creates an RSA-4096 key pair once.
-  The private key stays in `~/.config/siue-music/` (mode 0600), never in git.
-  The public key is committed in this repository (it is not secret) and built
-  into the page's script, together with its SHA-256 fingerprint.
+- **Keys:** an RSA-4096 key pair. The private key's home is the owner's
+  1Password (an item in the `Private` vault, `OP_VAULT` to change), so any
+  computer signed in to 1Password can open notes; a computer keeps a cached
+  copy in `~/.config/siue/` (mode 0600) and never in git. The public key is
+  committed in this repository (it is not secret) and built into the page's
+  script, together with its SHA-256 fingerprint. Each sealed note names the
+  fingerprint it was sealed to, and the keyring keeps earlier private keys
+  after a rotation, so a note sealed before a rotation still opens.
 - **Sealing, in the browser** (Web Crypto API): for each note, a fresh
   AES-256-GCM key encrypts the whole note (its text or audio and all its
   details: draft version, time span, lane, kind, words); RSA-OAEP with SHA-256
@@ -90,9 +94,34 @@ A small HTTPS API under `/music/api/`, behind the admin kit's API keys:
 - Upload limits: 60 seconds of audio, 2 MB per note, 200 waiting notes; over
   that the page says so and keeps the note in the browser.
 
-On the Mac, `siue-music pickup` downloads, verifies, opens and deletes; opened
-notes go to `~/Library/Application Support/siue-music/notes/`, outside the
-repository. Speech is turned into text with a local Whisper model; humming into
+On the owner's computer, `siue-music pickup` downloads, verifies, opens and
+deletes; opened notes go to `~/Library/Application Support/siue-music/notes/`
+(or the platform's equivalent), outside the repository.
+
+## Keys from 1Password, through make
+
+Secrets live in 1Password and are fetched with the 1Password CLI (`op`); a
+secret is passed to tools on standard input, never as a command-line argument
+(so never visible in a process list) and never printed. From
+`websites/www.cs`:
+
+| Command | What it does |
+| --- | --- |
+| `make keys-status` | Fingerprints of the public key in the repository, in 1Password and in this computer's cache, whether they match, and which API keys are stored (labels only). |
+| `make keys-pull` | Fetches the private keys and API keys from 1Password into the cache, then checks the private key matches the repository's public key. |
+| `make keys-init` | First time only: makes the key pair, saves both halves to 1Password, writes the public key and fingerprint into the repository for a commit. Refuses if a key already exists. |
+| `make keys-rotate` | Makes a new pair; the old private key stays in 1Password as a previous key; the new public key goes into the repository. |
+| `make api-key-set NAME=music-pickup` | Prompts for an API key shown once on the admin hub and saves it to 1Password only. |
+| `make keys-forget` | Deletes this computer's cached copies (for a borrowed or shared computer). |
+| `make music-pickup` | Picks up waiting notes: syncs keys first, then downloads, verifies, opens and deletes. |
+| `make music-publish PIECE=...` | Publishes a rendered draft through the API. |
+
+**Staying in sync:** every `music-*` target first compares the repository's
+public key fingerprint with the cached private key. When they differ (a pull
+brought a rotated key), it fetches from 1Password and checks again; when they
+still differ, it stops and says which side is out of date. Nothing proceeds on
+a mismatched key, and the page refuses to seal to a key whose fingerprint
+differs from the one built into it. Speech is turned into text with a local Whisper model; humming into
 pitches and rhythm (a pitch tracker such as pYIN), written as a small MIDI motif
 that the next draft can use. Notes are never committed: this repository is
 public.
@@ -126,8 +155,9 @@ the game. The login guards the notes and the actions.
   DOM-free modules for the score model, the timeline layout, zoom and hit
   testing, sealing (Web Crypto), and the waiting-notes store; views as Preact
   components; sheet music with OpenSheetMusicDisplay or VexFlow.
-- The Mac tool: `music/tools/siue-music` (Python): `keygen`, `fingerprint`,
-  `pickup`, `publish`.
+- The owner's tool: `music/tools/siue-music` (Python): `keys` (status, pull,
+  init, rotate, forget, using `op`), `pickup`, `publish`; the Makefile targets
+  call it.
 
 ## Tests
 

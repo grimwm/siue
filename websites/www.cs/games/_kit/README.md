@@ -169,7 +169,7 @@ stays injected by `install-page.ts` and does not need the sheet.
 `:where()` gives `.kit-key-chip` zero specificity, so any rule of the game's
 (`.cylon-help-body kbd`, `.inv kbd`) overrides it. `.kit-key-tab` has zero specificity too. A game that wants a tab in flow sets `--kit-key-tab-position: static` on it; a tab's `class` is added after the kit class (a chip's replaces it). The sheet holds only rules
 that two or more games would repeat; each game's colors, fonts and layouts
-stay in the game. `test/kit-css.test.ts fails on any selector without a
+stay in the game. `test/kit-css.test.ts` fails on any selector without a
 `.kit-` class.
 
 ## Seeded generator (`rng.ts`)

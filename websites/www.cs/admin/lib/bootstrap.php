@@ -6,6 +6,9 @@ require_once __DIR__ . '/Clock.php';
 require_once __DIR__ . '/Db.php';
 require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Pages.php';
+require_once __DIR__ . '/Request.php';
+require_once __DIR__ . '/Sessions.php';
+require_once __DIR__ . '/Headers.php';
 
 // The kit's StoreDir and StoreModes. Where the kit's source is present (a
 // checkout, the test suites, which share one process with the kit's own tests)

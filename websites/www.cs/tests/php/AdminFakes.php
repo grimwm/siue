@@ -39,3 +39,13 @@ function admin_tmp_db(): PDO
 {
     return Admin\Db::open(admin_tmp_dir());
 }
+
+/** A request as the endpoints see it; override only what a test cares about. */
+function req(array $with = []): Admin\Request
+{
+    $a = $with + [
+        'method' => 'GET', 'ip' => '203.0.113.9', 'https' => true, 'host' => 'www.cs.siue.edu',
+        'headers' => [], 'cookies' => [], 'post' => [], 'query' => [], 'agent' => 'PHPUnit',
+    ];
+    return new Admin\Request($a['method'], $a['ip'], $a['https'], $a['host'], $a['headers'], $a['cookies'], $a['post'], $a['query'], $a['agent']);
+}

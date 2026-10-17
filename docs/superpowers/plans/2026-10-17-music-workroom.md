@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A signed-in page at `/music/` where the owner sees, hears and learns each draft of the game's music in four views that share one playhead, answers with notes sealed in the browser, and Claude picks the notes up and publishes the next draft through scoped API calls.
+**Goal:** A signed-in page at `/music/` where the owner sees, hears and learns each draft of a project's music or sound effects (Crete's score first; Tankity, Cylon and projects unrelated to the website after it) in up to four views that share one playhead, answers with notes sealed in the browser, and Claude picks the notes up and publishes the next draft through scoped API calls. Every piece belongs to a project and is either `music` or `sound`; its characters and their colours come from its score, never from code.
 
-**Architecture:** The server is plain PHP 8.4 in `websites/www.cs/music/` (namespace `Music`) on the admin login's `Request`, `Response`, `Sessions`, `Keys` and SQLite database (`Admin\Db`, `secure_delete` on); sealed notes and published drafts are files under the admin data directory, never served directly. The page is TypeScript and Preact built by the games kit's `build.mjs` from `games/workroom/` (a kit folder with a `build.json` and no `metadata.yaml`, so the games hub never lists it), with DOM-free modules for the score model, layout, zoom, hit testing, gestures and note building, Web Crypto modules in their own type-checked program for sealing, unlocking, the outbox and the page's API client, and thin Preact views. The owner's tool `music/tools/siue-music` (Python 3, `cryptography`, 1Password CLI v2) keeps the keys in step, picks notes up and publishes drafts; the Makefile calls it.
+**Architecture:** The server is plain PHP 8.4 in `websites/www.cs/music/` (namespace `Music`) on the admin login's `Request`, `Response`, `Sessions`, `Keys` and SQLite database (`Admin\Db`, `secure_delete` on); sealed notes and published drafts are files under the admin data directory, never served directly. The page is TypeScript and Preact built by the games kit's `build.mjs` from `games/workroom/` (a kit folder with a `build.json` and no `metadata.yaml`, so the games hub never lists it), with DOM-free modules for the score model, the time axis, layout, zoom, hit testing, gestures and note building, Web Crypto modules in their own type-checked program for sealing, unlocking, the outbox and the page's API client, and thin Preact views. The owner's tool `music/tools/siue-music` (Python 3, `cryptography`, 1Password CLI v2) keeps the keys in step, picks notes up and publishes drafts; the Makefile calls it.
 
 **Tech Stack:** PHP 8.4, PDO SQLite, PHPUnit 12 (`--testsuite site`); TypeScript 7, Preact 11, esbuild 0.28 through `games/_kit/build/build.mjs`, `node:test` on Node 24 (Web Crypto as `globalThis.crypto.subtle`), OpenSheetMusicDisplay for notation; Python 3.11+, `cryptography`, optional `faster-whisper`, `librosa`, `mido`, `numpy`, `ffmpeg`; 1Password CLI (`op`) 2.25+; Playwright (local only).
 
@@ -41,7 +41,8 @@
 - CI is not changed: no edits to `.github/`, `tests/e2e/select.ts`, `compose.yaml`, or the Makefile's `test` and `e2e` targets. The one change near CI is a single `env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS` line in `docker/php/Dockerfile` (Task 15), because FPM clears the worker environment; it does nothing unless the variable is set, and only `compose.music-local.yaml` sets it. PHPUnit files go in `tests/php/` (the `site` suite). Unit tests go in `games/workroom/test/`, which `games/units.sh` discovers because the folder has a `build.json`. No `*.spec.ts` is added to `tests/e2e/` (`select.ts --check` requires every spec there to be reachable from a rule); the browser check is `tests/e2e/workroom.local.ts`, run only by `make music-e2e` through `tests/e2e/local.config.ts`.
 - Never bind ports 3000, 5173, 8000 or 8080. Docker runs use a unique `COMPOSE_PROJECT_NAME` and are torn down with `docker compose -p <name> down -v`; never touch the `siue` project, never prune. Never SSH, SFTP or SCP to www.cs; deploys happen on merge.
 - Nothing secret is committed; the repository is public. Opened notes are never committed. Test keys under `games/workroom/test/fixtures/` are labelled test keys, used by nothing but tests.
-- Delivery: three PRs, each green on its own, in order: (1) the API and storage, (2) the page with the four views and the glossary, (3) the answering tools with the owner's key tool.
+- **The workroom is general (projects, kinds, characters).** `score.json` names the piece's `project` (`{ id, name }`), its `kind` (`music` or `sound`) and its `characters` (`[{ id, name, color }]`, possibly empty); a motif names a character id and takes its colour, and no character or colour is built into the code (Crete's Ariadne, Minotaur, Daedalus and Athens live only in Crete's fixture data). A `sound` piece is a sound effect or an ambience: it has no `bars`, `tempo` or bar spans, its times are seconds (its sections are optional named moments with `from`/`to` seconds), its duration is at least 0.05 s, `score.musicxml` is optional, and the page offers no Sheet music view and a Piano roll only when the score has notes. A `music` piece requires `bars`, `tempo` and `score.musicxml`. Either kind may use any lane family (the orchestral families and `impact`, `whoosh`, `ambience`, `voice`, `electronic`, `foley`, `ui`). The default zoom fits the whole piece, whatever its length. The server records each draft's `project_id`, `project_name` and `kind` from the validated `score.json` (Task 2). Schema stays version 1.
+- Delivery: three PRs, each green on its own, in order: (1) the API and storage, (2) the page with its views and the glossary, (3) the answering tools with the owner's key tool.
 - Comments and docs describe the current state, never history.
 - Commits end with the committing session's attribution lines: a `Co-Authored-By:` line naming the model that commits and the session's `Claude-Session:` line. The commit blocks below show the shape with the lines this plan was written under:
   ```
@@ -58,6 +59,8 @@
 5. **A truncated, bit-flipped or re-headed sealed bundle** (the clear fingerprint swapped): opening fails with a named reason, pickup leaves it waiting, the page shows "Could not open this note" instead of failing the whole history. Pinned in Task 10 (`seal.test.ts`) and Task 13 (`test_pickup.py`).
 6. **Nothing of any key reaches browser storage**: unlocking, using and losing the vault touch no IndexedDB, `localStorage`, `sessionStorage`, cookie or Cache API, and the second browser context in the full check finds none. Pinned in Task 10 (`no-storage.test.ts`) and Task 15.
 7. **An oversized, over-quota or twenty-first draft**: refused or evicted by the server alone, whatever the tool sends. Pinned in Task 1 (`MusicStoreTest`) and Task 2 (`MusicApiTest`).
+8. **A 0.3-second sound effect on views built for minutes of music**: the default zoom fits the whole piece (the zoom ceiling scales with the fit, so a short sound can still zoom in), the axis reads milliseconds and seconds, sections are optional named moments, notes pinned on it carry seconds only (`fromBar`/`toBar` null), Sheet music is not offered and an empty Piano roll is not offered. Pinned in Task 5 (`score.test.ts`), Task 6 (`axis.test.ts`, `zoom.test.ts`, `timeline.test.ts`, `hit.test.ts`), Task 8 (`views.test.ts`) and Task 14 (`answer.test.ts`).
+9. **A music draft without MusicXML, a sound draft with or without it, or a project or kind the server cannot record**: the server alone decides: music without `score.musicxml` is refused (`missing_file`), a `score.musicxml` that is not MusicXML is refused (`bad_file`), a sound draft without one is kept, and a draft whose project id, project name or kind is malformed is refused (`bad_score`) before anything is written. An older database gains the three columns when the store opens it. Pinned in Task 2 (`MusicApiTest`, `MusicStoreTest`) and Task 13 (`test_publish.py`).
 
 ## Decisions this plan makes (the spec leaves them open)
 
@@ -67,6 +70,8 @@
 - **A third scope, `keys:publish`**, lets `keys-init` and `keys-rotate` upload the locked keyring. The server cannot read inside a keyring, so it checks only the outer envelope (version, KDF, iterations, salt, IV and ciphertext sizes, total size) and keeps one, replacing the stored one on each upload; the upload happens before the deploy that makes a new key current. `make keys-upload` re-uploads the full keyring when that first upload could not happen (no API key yet, or offline). Two API keys: `music-pickup` (`notes:pickup`) and `music-publish` (`drafts:publish`, `keys:publish`). The scopes are the three strings in `ADMIN_KEY_SCOPES` (`admin/lib/bootstrap.php`), which is empty on `main`; Task 2 fills it and updates the admin test that asserts it empty.
 - **The draft quota counts what remains.** The 100 MB check sums the new draft and the newest 19 stored drafts (the ones that survive the 20-draft limit), so a full store of small drafts can always roll forward; the check and the eviction run in one transaction, the check before any file is written.
 - **One 1Password item per key pair** (category Password): `password` = the passphrase (so 1Password fills it on the workroom page), `private_key` (concealed, PKCS8 base64), `fingerprint`, website `https://www.cs.siue.edu/~wgrim/music/`, tag `siue-music-key`. A rotation creates a new item with the same passphrase and retitles the old one "(previous)"; which key is current is decided by the repository's `music/keys/public.json`, never by 1Password.
+- **Projects, kinds and characters are data in `score.json`.** One page serves music and sound effects for any project, so nothing project-specific is in the code: the pieces list groups pieces under the project name the latest draft of each piece carries (projects ordered by their most recent publish, pieces likewise), the page colours a motif with its character's colour from the score, and a sound piece trades bars for seconds. The schema stays at version 1 because nothing is published yet.
+- **The draft table gains its project columns by a guarded `ALTER TABLE`.** `music_drafts` has `project_id`, `project_name` and `kind` columns (defaults `''`, `''`, `'music'`). `Store`'s constructor adds each with `ALTER TABLE music_drafts ADD COLUMN ...` only when `PRAGMA table_info` does not list it, so a database whose `music_drafts` table has only the four base columns (Task 1's tests seed rows into one) upgrades in place and keeps its rows, and two requests opening the store at once cannot trip over each other. Recreating the table would drop those rows for no gain.
 - **The committed public key** is `music/keys/public.json` (read by PHP and the tool) and `games/workroom/src/public-key.ts` (built into the page); a unit test keeps them equal. Before `make keys-init` both say "no key" and the page offers no note tools.
 - **Committed drafts** live in `music/pieces/<piece>/v<N>/` (not deployed); `make music-publish` uploads one into the server's data directory, where the page reads it through a session. `changes` (Claude's change list) is part of `score.json`.
 - **Per-piece waiting counts** need the sealed notes opened (the server cannot know a note's piece), so the pieces list shows the total waiting until the key is unlocked, then per-piece counts.
@@ -100,7 +105,7 @@ plaintext = uint32 big-endian J | J bytes UTF-8 JSON NoteBody | audio bytes (pos
   "audio": null, "made": "2026-10-20T14:03:11.000Z" }
 ```
 
-`kind` is one of `text`, `speech`, `hum`, `react`, `energy`. `reaction` is one of `more-epic`, `calmer`, `darker`, `brighter`, `longer`, `shorter`, `love-it`, `not-this`. `curve` is a list of `[seconds, energy 0..1]`. `audio` is `{ "mime": string, "seconds": number ≤ 60 }` when audio bytes follow.
+`from` and `to` are seconds. `fromBar` and `toBar` are integers for a note on a `music` piece and `null` for a note on a `sound` piece, which has seconds only. `kind` is one of `text`, `speech`, `hum`, `react`, `energy`. `reaction` is one of `more-epic`, `calmer`, `darker`, `brighter`, `longer`, `shorter`, `love-it`, `not-this`. `curve` is a list of `[seconds, energy 0..1]`. `audio` is `{ "mime": string, "seconds": number ≤ 60 }` when audio bytes follow.
 
 ### Locked keyring (JSON, version 1)
 
@@ -128,7 +133,7 @@ offset  length  field
 7       ...     N entries, each: 1 byte name length, the ASCII name, uint32 big-endian size, the file's bytes
 ```
 
-Names come from `score.json`, `score.musicxml`, `audio.webm`, `audio.m4a`, `spectrogram.png`, each at most once, and the entries end exactly at the end of the body. The whole body is at most 8,388,608 bytes and the request must declare it in `Content-Length` (411 `length_required` without one, 413 `too_large` over).
+Names come from `score.json`, `score.musicxml`, `audio.webm`, `audio.m4a`, `spectrogram.png`, each at most once (`score.musicxml` is required in a music draft and optional in a sound draft), and the entries end exactly at the end of the body. The whole body is at most 8,388,608 bytes and the request must declare it in `Content-Length` (411 `length_required` without one, 413 `too_large` over).
 
 ### `music/keys/public.json`
 
@@ -147,24 +152,27 @@ The page refuses any other `schema` value with: "This draft uses score schema N,
 | Field | Type and rule |
 | --- | --- |
 | `schema` | `1` |
+| `kind` | `music` or `sound`. A `sound` piece is a sound effect or an ambience |
+| `project` | `{ id, name }`; `id` matches `^[a-z0-9][a-z0-9-]{0,47}$`; `name` 1–80 chars. Every piece belongs to one project |
 | `piece` | `{ id, title }`; `id` matches `^[a-z0-9][a-z0-9-]{0,47}$`; `title` 1–120 chars |
 | `draft` | integer ≥ 1 (the draft version) |
 | `made` | ISO 8601 UTC string ending in `Z` |
-| `duration` | seconds, > 0 |
-| `bars` | integer ≥ 1, the last bar number (bars count from 1) |
-| `tempo` | ≥ 1 of `{ bar, bpm, beats, unit }`; first `bar` is 1; bars strictly increasing and ≤ `bars`; `bpm` > 0 counts `unit` notes per minute; `beats` integer 1–16; `unit` one of 1, 2, 4, 8, 16 |
-| `sections` | ≥ 1 of `{ id, name, from_bar, to_bar, color }`; contiguous: the first starts at bar 1, each starts one bar after the previous ends, the last ends at `bars`; `name` is plain words, 1–60 chars |
-| `lanes` | ≥ 1 of `{ id, name, family, icon, color }`; unique ids; `family` and `icon` each one of `strings`, `brass`, `woodwinds`, `percussion`, `choir`, `keys`, `synth`, `harp`, `bells` |
-| `motifs` | `{ id, character, color, spans: [{ lane, from, to }] }`; `from` < `to` seconds within `[0, duration]`; `lane` names a lane; a known character has its fixed colour: Ariadne `#d4a017`, Minotaur `#c0392b`, Daedalus `#b08d57`, Athens `#3b6fb6` |
-| `notes` | `{ lane, start, length, pitch, velocity, motif }`; `start` ≥ 0 and `start + length` ≤ `duration` (seconds), `length` > 0; `pitch` MIDI integer 0–127; `velocity` integer 1–127; `motif` a motif id or `null` |
+| `duration` | seconds, > 0; for `sound`, ≥ 0.05 |
+| `bars` | `music`: integer ≥ 1, the last bar number (bars count from 1). `sound`: absent |
+| `tempo` | `music`: ≥ 1 of `{ bar, bpm, beats, unit }`; first `bar` is 1; bars strictly increasing and ≤ `bars`; `bpm` > 0 counts `unit` notes per minute; `beats` integer 1–16; `unit` one of 1, 2, 4, 8, 16. `sound`: absent |
+| `sections` | `music`: ≥ 1 of `{ id, name, from_bar, to_bar, color }`; contiguous: the first starts at bar 1, each starts one bar after the previous ends, the last ends at `bars`; `name` is plain words, 1–60 chars. `sound`: ≥ 0 named moments `{ id, name, from, to, color }` in seconds; `0 ≤ from < to ≤ duration`, in time order, none overlapping the one before; `name` 1–60 chars; sections of either kind have unique ids |
+| `lanes` | ≥ 1 of `{ id, name, family, icon, color }` (for a sound piece the lanes are its layers); unique ids; `family` and `icon` each one of `strings`, `brass`, `woodwinds`, `percussion`, `choir`, `keys`, `synth`, `harp`, `bells`, `impact`, `whoosh`, `ambience`, `voice`, `electronic`, `foley`, `ui`; either kind may use any family |
+| `characters` | ≥ 0 of `{ id, name, color }`; unique ids; `name` 1–60 chars. The page has no built-in characters or colours |
+| `motifs` | `{ id, character, spans: [{ lane, from, to }] }`; `character` is the `id` of an entry of `characters` (the motif takes that character's colour); `from` < `to` seconds within `[0, duration]`; `lane` names a lane |
+| `notes` | ≥ 0 of `{ lane, start, length, pitch, velocity, motif }` (a sound piece may have none, and then has no Piano roll); `start` ≥ 0 and `start + length` ≤ `duration` (seconds), `length` > 0; `pitch` MIDI integer 0–127; `velocity` integer 1–127; `motif` a motif id or `null` |
 | `energy` | ≥ 2 points `[seconds, value]`; times strictly increasing, first 0, last `duration`; values in [0, 1] |
 | `glossary` | `{ term, from, to }`; `term` is a page glossary id (an `id` in `games/workroom/src/glossary.json`, the glossary's one source; the page and the tool both read it); `0 ≤ from < to ≤ duration`, `to - from` ≤ 15 |
 | `audio` | ≥ 1 of `{ file, type }`; `file` is `audio.webm` (type `audio/webm; codecs=opus`) or `audio.m4a` (type `audio/mp4; codecs=mp4a.40.2`) |
 | `spectrogram` | `{ file: "spectrogram.png", low_hz, high_hz, scale }`; 0 < `low_hz` < `high_hz`; `scale` `log` or `linear` |
-| `musicxml` | `"score.musicxml"`; each lane is the MusicXML part whose `id` equals the lane id |
-| `changes` | `{ from_bar, to_bar, lane, text, answers }`; `1 ≤ from_bar ≤ to_bar ≤ bars`; `lane` a lane id or `null`; `text` 1–500 chars; `answers` a list of note ids (32 hex) |
+| `musicxml` | `music`: `"score.musicxml"`, required; each lane is the MusicXML part whose `id` equals the lane id. `sound`: absent, or `"score.musicxml"` (a sound piece never shows Sheet music) |
+| `changes` | `music`: `{ from_bar, to_bar, lane, text, answers }` with `1 ≤ from_bar ≤ to_bar ≤ bars`. `sound`: `{ from, to, lane, text, answers }` with `0 ≤ from < to ≤ duration` seconds. Both: `lane` a lane id or `null`; `text` 1–500 chars; `answers` a list of note ids (32 hex) |
 
-Colours everywhere match `^#[0-9a-f]{6}$`. Ids everywhere match `^[a-z0-9][a-z0-9-]{0,47}$`.
+Colours everywhere match `^#[0-9a-f]{6}$`. Ids everywhere match `^[a-z0-9][a-z0-9-]{0,47}$`. The server checks only what it records or must refuse (`schema`, `kind`, `project`, `piece`, `draft`, the file set and the file signatures, Task 2); the page and the tool check every rule in the table.
 
 ## File map
 
@@ -180,12 +188,12 @@ websites/www.cs/
     lib/.htaccess                 # Require all denied
     lib/bootstrap.php             # requires admin/lib/bootstrap.php and the music classes; music_request/early_refusal/run/read_body helpers
     lib/PublicKeys.php            # Music\PublicKeys: public.json reader, fingerprints
-    lib/Store.php                 # Music\Store, NoteRejected, DraftRejected: notes, drafts (limits), the locked keyring
+    lib/Store.php                 # Music\Store, NoteRejected, DraftRejected: notes, drafts (limits, project and kind), the locked keyring
     lib/Http.php                  # Music\Http: header(), declaredLength(), refuseCrossSite(), json(), finish() (headers + music CSP), serveFile() (Range)
     lib/Api.php                   # Music\Api: API-key routes (scopes, draft bundle, keyring envelope)
     lib/Pages.php                 # Music\Pages: session routes and the two page shells
     keys/public.json              # written by keys-init / keys-rotate (absent until then)
-    pieces/<piece>/v<N>/          # committed drafts: score.json score.musicxml audio.webm [audio.m4a] spectrogram.png
+    pieces/<piece>/v<N>/          # committed drafts: score.json [score.musicxml: always for music] audio.webm [audio.m4a] spectrogram.png
     tools/siue-music              # the owner's tool (entry point)
     tools/siue_music/{__init__,paths,op,sealing,keys,api,pickup,answering,publish,score,cli}.py
     tools/requirements.txt tools/requirements-answering.txt
@@ -194,14 +202,14 @@ websites/www.cs/
     build.json tsconfig.json tsconfig.test.json test.sh
     src/tsconfig.dom.json src/tsconfig.crypto.json
     src/glossary.json             # the glossary's one source (page and tool)
-    src/score.ts tempo.ts zoom.ts timeline.ts hit.ts pianoroll.ts spectro.ts glossary.ts gestures.ts player.ts load.ts   # DOM-free (view)
+    src/score.ts tempo.ts axis.ts zoom.ts timeline.ts hit.ts pianoroll.ts spectro.ts glossary.ts gestures.ts player.ts tabs.ts load.ts   # DOM-free (view)
     src/note.ts answer.ts energy.ts recorder.ts                                   # DOM-free (answering)
     src/seal.ts unlock.ts vault.ts public-key.ts api.ts outbox.ts history.ts     # Web Crypto types (src/tsconfig.crypto.json)
     src/idb.ts sheet.ts main.ts   # DOM adapters and the entry
     src/ui/{Workroom,ViewTabs,Timeline,PianoRoll,SoundPicture,Sheet,Glossary,Player}.tsx                              # views
     src/ui/{UnlockPanel,PinComposer,HumButton,ReactBar,EnergyEditor,History,PiecesWaiting}.tsx                          # answering
     tools/make-fixtures.ts tools/make-draft-fixture.ts tools/e2e-bundle.ts
-    test/*.test.ts test/fixture-key.ts test/fixtures/{score-v1.json,test-key.json,public.json,public-key.ts,keyring-by-python.json,note-text.sealed,note-hum.sealed,draft/}
+    test/*.test.ts test/fixture-key.ts test/fixtures/{score-v1.json,score-sound-v1.json,test-key.json,public.json,public-key.ts,keyring-by-python.json,note-text.sealed,note-hum.sealed,draft/,draft-sound/}
     dist/                         # built: workroom.js sheet.js (+ maps, THIRD_PARTY_LICENSES.txt)
   admin/lib/bootstrap.php         # + dashboard, fingerprint, three scopes (ADMIN_KEY_SCOPES)
   tests/php/AdminKeysTest.php     # registry assertion
@@ -655,15 +663,36 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ```
 
-### Task 2: The API-key routes and the three scopes
+### Task 2: The API-key routes, the three scopes, and the draft's project and kind
 
 **Files:**
 - Create: `websites/www.cs/music/lib/Http.php`, `music/lib/Api.php`, `tests/php/MusicApiTest.php`
+- Modify: `websites/www.cs/music/lib/Store.php` (the draft table gains `project_id`, `project_name` and `kind`; `putDraft` records them; `drafts()` returns them), `tests/php/MusicStoreTest.php` (three new tests)
 - Modify: `websites/www.cs/admin/lib/bootstrap.php` (`ADMIN_KEY_SCOPES`, the registry behind `Admin\Keys::SCOPES`), `tests/php/AdminKeysTest.php` (the registry assertion), `music/lib/bootstrap.php` (require the two files)
 
 **Interfaces:**
 - Consumes: `Store`, `PublicKeys`, `Admin\Keys::check/create/SCOPES`, `Admin\Headers`, `Admin\Response`.
-- Produces:
+- Produces, in `Store` (Task 1's class, extended; every Task 1 call still works because `$about` is optional):
+
+```php
+namespace Music;
+
+final class Store {
+    public const KINDS = ['music', 'sound'];
+    /**
+     * $about is taken from the validated score.json: project_id (matches /^[a-z0-9][a-z0-9-]{0,47}$/), project_name (1 to 80
+     * characters) and kind (one of KINDS); anything else throws DraftRejected('bad_score') before the transaction opens. null records
+     * no project: '' and '' and 'music' (the store's own tests; a published draft always has one).
+     * @param array<string, string> $files
+     * @param array{project_id: string, project_name: string, kind: string}|null $about
+     */
+    public function putDraft(string $piece, int $version, array $files, ?array $about = null): void;
+    /** @return list<array{piece: string, version: int, published_at: int, project_id: string, project_name: string, kind: string}> newest first */
+    public function drafts(?string $piece = null): array;
+}
+```
+
+- Produces, in `Http` and `Api`:
 
 ```php
 namespace Music;
@@ -705,7 +734,7 @@ Scopes, exactly: `listNotes`, `getNote` and `pickedUp` need `notes:pickup`; `pub
 
 Errors are JSON `{"error": "<reason>"}`: 405 `method`, 400 `bad_id`/`bad_state`/`bad_length`, 404 `not_found`, 409 `exists`, 411 `length_required`, 413 `too_large`/`over_quota`, 422 `bad_bundle`/`bad_piece`/`bad_version`/`missing_file`/`bad_file`/`bad_score`/`bad_keyring`. A failed `Keys::check` returns its own response unchanged, passed through `Http::finish`. The method is checked **after** the key check, so an unauthenticated caller learns nothing.
 
-`publishDraft`, in this order: key (`drafts:publish`), method (`POST`), the declared length (`Http::declaredLength`: none → 411 `length_required`; over `Store::MAX_REQUEST_BYTES` → 413 `too_large`, with the body never read), then `$read($length)` (a body whose length differs from the declared one → 400 `bad_length`), then the bundle (`SIUED1`, 1 to 5 entries, names from `DRAFT_FILES`, each at most once, entries ending exactly at the end of the body, else 422 `bad_bundle`), then the files: `score.json` parses, `schema === 1`, `piece.id` equals the query's `piece` and `draft` its `version` (else 422 `bad_score`); `spectrogram.png` starts `"\x89PNG"`; `audio.webm` starts `"\x1A\x45\xDF\xA3"`; `audio.m4a` has `ftyp` at offset 4; at least one audio file; `score.musicxml` contains `<score-partwise` (else 422 `bad_file`); then `Store::putDraft`, whose refusals map `exists` → 409, `too_large`/`over_quota` → 413 and the rest to 422 with the reason as the error.
+`publishDraft`, in this order: key (`drafts:publish`), method (`POST`), the declared length (`Http::declaredLength`: none → 411 `length_required`; over `Store::MAX_REQUEST_BYTES` → 413 `too_large`, with the body never read), then `$read($length)` (a body whose length differs from the declared one → 400 `bad_length`), then the bundle (`SIUED1`, 1 to 5 entries, names from `DRAFT_FILES`, each at most once, entries ending exactly at the end of the body, else 422 `bad_bundle`), then the files: `score.json` parses, `schema === 1`, `piece.id` equals the query's `piece` and `draft` its `version`, `kind` is `music` or `sound`, `project.id` matches the id pattern and `project.name` is a string of 1 to 80 characters (else 422 `bad_score`); `spectrogram.png` starts `"\x89PNG"`; `audio.webm` starts `"\x1A\x45\xDF\xA3"`; `audio.m4a` has `ftyp` at offset 4; at least one audio file; `score.musicxml` is required when `kind` is `music` (absent: 422 `missing_file`) and optional when it is `sound`, and a `score.musicxml` that is present, of either kind, must contain `<score-partwise` (else 422 `bad_file`); then `Store::putDraft` with the score's `project.id`, `project.name` and `kind` as `$about`, whose refusals map `exists` → 409, `too_large`/`over_quota` → 413 and the rest to 422 with the reason as the error.
 
 `publishKeyring`: key (`keys:publish`), method, declared length (none → 411; over `Store::MAX_KEYRING_BYTES` → 413 `too_large`, body never read), `$read($length)`, then the envelope check of Formats ("Locked keyring"): exactly the six fields `v`, `kdf`, `iterations`, `salt`, `iv`, `ct`, `v === 1`, `kdf === 'PBKDF2-SHA-256'`, integer `iterations >= 600000`, `salt` strict base64 of 16 bytes, `iv` strict base64 of 12 bytes, `ct` strict base64 of at least 17 bytes (else 422 `bad_keyring`); the body, as received, is stored with `Store::putKeyring`, replacing the stored keyring. The server cannot look inside the keyring, so it cannot check that the keyring holds the current key; the page does that when it unlocks (Task 10).
 
@@ -767,15 +796,22 @@ final class MusicApiTest extends TestCase
         return json_decode($res->body, true, flags: JSON_THROW_ON_ERROR);
     }
 
-    /** A complete, valid draft's files. */
-    private function draftFiles(string $piece = 'ch1-labyrinth', int $draft = 1): array
+    /** A complete, valid draft's files: a music draft carries score.musicxml, a sound draft does not. */
+    private function draftFiles(string $piece = 'ch1-labyrinth', int $draft = 1, string $kind = 'music', string $project = 'crete'): array
     {
-        return [
-            'score.json' => json_encode(['schema' => 1, 'piece' => ['id' => $piece, 'title' => 'T'], 'draft' => $draft]),
-            'score.musicxml' => '<?xml version="1.0"?><score-partwise version="4.0"></score-partwise>',
+        return array_filter([
+            'score.json' => json_encode(['schema' => 1, 'kind' => $kind, 'project' => ['id' => $project, 'name' => ucfirst($project)], 'piece' => ['id' => $piece, 'title' => 'T'], 'draft' => $draft]),
+            'score.musicxml' => $kind === 'music' ? '<?xml version="1.0"?><score-partwise version="4.0"></score-partwise>' : null,
             'audio.webm' => "\x1A\x45\xDF\xA3" . random_bytes(100),
             'spectrogram.png' => "\x89PNG\r\n\x1A\n" . random_bytes(100),
-        ];
+        ], static fn(?string $bytes): bool => $bytes !== null);
+    }
+
+    /** The files with score.json's fields changed (a field set to null is removed). */
+    private function withScore(array $files, array $changes): array
+    {
+        $score = array_filter(array_replace(json_decode($files['score.json'], true), $changes), static fn($v): bool => $v !== null);
+        return ['score.json' => json_encode($score)] + $files;
     }
 
     private function publish(string $key, array $files, string $piece, int $version): Admin\Response
@@ -888,6 +924,11 @@ final class MusicApiTest extends TestCase
         self::assertSame(201, $res->status);
         self::assertSame(['piece' => 'ch1-labyrinth', 'version' => 1], $this->body($res));
         self::assertSame($files['audio.webm'], file_get_contents((string) $this->store->draftFile('ch1-labyrinth', 1, 'audio.webm')));
+        self::assertSame(
+            [['piece' => 'ch1-labyrinth', 'version' => 1, 'published_at' => 1_800_000_000, 'project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']],
+            $this->store->drafts(),
+            'the project and kind come from score.json',
+        );
         self::assertSame(409, $this->publish($k, $files, 'ch1-labyrinth', 1)->status, 'drafts are immutable');
         self::assertSame('bad_score', $this->body($this->publish($k, $files, 'ch1-labyrinth', 2))['error'], 'draft must equal version');
         self::assertSame('bad_score', $this->body($this->publish($k, $files, 'other-piece', 3))['error'], 'piece must equal the query');
@@ -899,6 +940,53 @@ final class MusicApiTest extends TestCase
         ))['error']);
         $pickup = $this->keys->create('pickup', ['notes:pickup']);
         self::assertSame(403, $this->publish($pickup, $files, 'ch1-labyrinth', 1)->status);
+    }
+
+    public function testMusicNeedsMusicXmlAndSoundDoesNot(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $music = array_diff_key($this->draftFiles('ch2-descent', 1), ['score.musicxml' => 1]);
+        $res = $this->publish($k, $music, 'ch2-descent', 1);
+        self::assertSame(422, $res->status, 'a music draft without score.musicxml');
+        self::assertSame('missing_file', $this->body($res)['error']);
+        self::assertSame([], $this->store->drafts(), 'nothing was written');
+
+        $sound = $this->draftFiles('cannon-fire', 1, 'sound', 'tankity');
+        self::assertArrayNotHasKey('score.musicxml', $sound);
+        self::assertSame(201, $this->publish($k, $sound, 'cannon-fire', 1)->status, 'a sound draft needs no score.musicxml');
+        self::assertSame(['tankity', 'Tankity', 'sound'], [$this->store->drafts()[0]['project_id'], $this->store->drafts()[0]['project_name'], $this->store->drafts()[0]['kind']]);
+
+        $notXml = ['score.musicxml' => 'not musicxml'] + $this->draftFiles('cannon-fire', 2, 'sound', 'tankity');
+        $res = $this->publish($k, $notXml, 'cannon-fire', 2);
+        self::assertSame(['bad_file', 422], [$this->body($res)['error'], $res->status], 'a score.musicxml that is not MusicXML is refused for either kind');
+        $notXml = ['score.musicxml' => 'not musicxml'] + $this->draftFiles('ch2-descent', 2);
+        self::assertSame('bad_file', $this->body($this->publish($k, $notXml, 'ch2-descent', 2))['error']);
+        $withXml = ['score.musicxml' => '<score-partwise></score-partwise>'] + $this->draftFiles('cannon-fire', 3, 'sound', 'tankity');
+        self::assertSame(201, $this->publish($k, $withXml, 'cannon-fire', 3)->status, 'a sound draft may carry one');
+    }
+
+    public function testADraftWithoutAProjectOrKindTheServerCanRecordIsRefused(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $base = $this->draftFiles();
+        $bad = [
+            'no kind' => ['kind' => null],
+            'unknown kind' => ['kind' => 'noise'],
+            'no project' => ['project' => null],
+            'project is not an object' => ['project' => 'crete'],
+            'project id with capitals' => ['project' => ['id' => 'Crete', 'name' => 'Crete']],
+            'project id too long' => ['project' => ['id' => str_repeat('a', 49), 'name' => 'Crete']],
+            'project name empty' => ['project' => ['id' => 'crete', 'name' => '']],
+            'project name 81 characters' => ['project' => ['id' => 'crete', 'name' => str_repeat('n', 81)]],
+            'project name not a string' => ['project' => ['id' => 'crete', 'name' => 7]],
+        ];
+        foreach ($bad as $why => $change) {
+            $res = $this->publish($k, $this->withScore($base, $change), 'ch1-labyrinth', 1);
+            self::assertSame(['bad_score', 422], [$this->body($res)['error'], $res->status], $why);
+        }
+        self::assertSame([], $this->store->drafts(), 'nothing was written');
+        $edge = $this->withScore($base, ['project' => ['id' => str_repeat('a', 48), 'name' => str_repeat('n', 80)]]);
+        self::assertSame(201, $this->publish($k, $edge, 'ch1-labyrinth', 1)->status, '48-character id and 80-character name are allowed');
     }
 
     public function testADraftBodyOverEightMegabytesIsRefusedBeforeItIsRead(): void
@@ -1035,12 +1123,149 @@ final class MusicApiTest extends TestCase
 }
 ```
 
+Add these three tests to Task 1's `tests/php/MusicStoreTest.php` (before its closing brace; the class already requires `MusicFakes.php`):
+
+```php
+    public function testADraftRecordsItsProjectAndKind(): void
+    {
+        [$s, , , $clock] = music_world();
+        $s->putDraft('ch1-labyrinth', 1, ['score.json' => '{}'], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
+        $clock->now += 10;
+        $s->putDraft('cannon-fire', 1, ['score.json' => '{}'], ['project_id' => 'tankity', 'project_name' => 'Tankity', 'kind' => 'sound']);
+        $clock->now += 10;
+        $s->putDraft('bare', 1, ['score.json' => '{}']);
+        $rows = $s->drafts();
+        self::assertSame(['bare', 'cannon-fire', 'ch1-labyrinth'], array_column($rows, 'piece'), 'newest first');
+        self::assertSame(['', '', 'music'], [$rows[0]['project_id'], $rows[0]['project_name'], $rows[0]['kind']], 'no $about records no project');
+        self::assertSame(['tankity', 'Tankity', 'sound'], [$rows[1]['project_id'], $rows[1]['project_name'], $rows[1]['kind']]);
+        self::assertSame(['crete', 'Crete', 'music'], [$rows[2]['project_id'], $rows[2]['project_name'], $rows[2]['kind']]);
+        self::assertSame(['cannon-fire'], array_column($s->drafts('cannon-fire'), 'piece'), 'the piece filter still works');
+    }
+
+    public function testADraftWhoseProjectOrKindCannotBeKeptIsRefusedBeforeAnythingIsWritten(): void
+    {
+        [$s, , $dir] = music_world();
+        $ok = ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music'];
+        foreach ([
+            'kind' => ['kind' => 'noise'] + $ok,
+            'id with capitals' => ['project_id' => 'Crete'] + $ok,
+            'id with a slash' => ['project_id' => '../x'] + $ok,
+            'id 49 characters' => ['project_id' => str_repeat('a', 49)] + $ok,
+            'empty name' => ['project_name' => ''] + $ok,
+            'name of 81 characters' => ['project_name' => str_repeat('n', 81)] + $ok,
+            'missing key' => ['project_id' => 'crete', 'project_name' => 'Crete'],
+        ] as $why => $about) {
+            try {
+                $s->putDraft('ch1-labyrinth', 1, ['score.json' => '{}'], $about);
+                self::fail($why . ' must be refused');
+            } catch (Music\DraftRejected $e) {
+                self::assertSame('bad_score', $e->reason, $why);
+            }
+        }
+        self::assertSame([], $s->drafts());
+        self::assertDirectoryDoesNotExist("$dir/drafts/ch1-labyrinth");
+        $s->putDraft('edge', 1, ['score.json' => '{}'], ['project_id' => str_repeat('a', 48), 'project_name' => str_repeat('é', 80), 'kind' => 'sound']);
+        self::assertSame(str_repeat('é', 80), $s->drafts()[0]['project_name'], '80 characters, counted as characters');
+    }
+
+    public function testADatabaseFromBeforeTheProjectColumnsUpgradesInPlace(): void
+    {
+        $db = admin_tmp_db();
+        $db->exec('CREATE TABLE music_drafts (piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, size INTEGER NOT NULL, PRIMARY KEY (piece, version))');
+        $db->exec("INSERT INTO music_drafts (piece, version, published_at, size) VALUES ('old', 1, 5, 7)");
+        $dir = admin_tmp_dir() . '/music';
+        $clock = new FakeClock(1_800_000_000);
+        $s = new Music\Store($db, $dir, $clock, music_keys());
+        self::assertSame(
+            [['piece' => 'old', 'version' => 1, 'published_at' => 5, 'project_id' => '', 'project_name' => '', 'kind' => 'music']],
+            $s->drafts(),
+            'the old row is kept, with the column defaults',
+        );
+        $s->putDraft('new', 1, ['score.json' => '{}'], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
+        self::assertSame('crete', $s->drafts('new')[0]['project_id']);
+        new Music\Store($db, $dir, $clock, music_keys()); // opening it again changes nothing and does not trip over the columns
+        self::assertCount(2, $s->drafts());
+    }
+```
+
 - [ ] **Step 2: Run to see it fail**
 
-Run: `vendor/bin/phpunit tests/php/MusicApiTest.php`
-Expected: FAIL — class `Music\Api` not found, and `testScopesAreRegistered` fails on the empty registry.
+Run: `vendor/bin/phpunit tests/php/MusicApiTest.php tests/php/MusicStoreTest.php`
+Expected: FAIL — class `Music\Api` not found, `testScopesAreRegistered` fails on the empty registry, and the three new store tests fail on the missing columns and the missing `$about` parameter.
 
 - [ ] **Step 3: Implement**
+
+`Store` (Modify: `music/lib/Store.php`). In the constructor, replace the `music_drafts` line with the table including the three columns and the guarded upgrade:
+
+```php
+        $this->db->exec("CREATE TABLE IF NOT EXISTS music_drafts (piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, size INTEGER NOT NULL, project_id TEXT NOT NULL DEFAULT '', project_name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'music', PRIMARY KEY (piece, version))");
+        // A database made before these columns existed gains them here; each is added only when the table lacks it.
+        $have = array_column($this->db->query('PRAGMA table_info(music_drafts)')->fetchAll(\PDO::FETCH_ASSOC), 'name');
+        foreach (['project_id' => "''", 'project_name' => "''", 'kind' => "'music'"] as $column => $default) {
+            if (in_array($column, $have, true)) {
+                continue;
+            }
+            try {
+                $this->db->exec("ALTER TABLE music_drafts ADD COLUMN $column TEXT NOT NULL DEFAULT $default");
+            } catch (\PDOException $e) {
+                if (!str_contains($e->getMessage(), 'duplicate column')) { // another request added it between the check and the ALTER
+                    throw $e;
+                }
+            }
+        }
+```
+
+Add the constants beside `DRAFT_FILES` and `PIECE`: `public const KINDS = ['music', 'sound'];` and `private const PROJECT = '/^[a-z0-9][a-z0-9-]{0,47}$/D';`. Replace `putDraft`'s signature, check `$about` after the file-name loop (before the transaction), and record the columns in the `INSERT`:
+
+```php
+    public function putDraft(string $piece, int $version, array $files, ?array $about = null): void
+    {
+        // ... the piece, version, empty and file-name checks, unchanged ...
+        $about ??= ['project_id' => '', 'project_name' => '', 'kind' => 'music'];
+        if (!self::aboutIsKeepable($about)) {
+            throw new DraftRejected('bad_score');
+        }
+        // ... the transaction (add `$about` to its closure's `use ($piece, $version, $files, $about)` list), with the INSERT replaced by:
+                $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size, project_id, project_name, kind) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$piece, $version, $this->clock->now(), $size, $about['project_id'], $about['project_name'], $about['kind']]);
+    }
+
+    /** A recorded project is a valid id with a name of 1 to 80 characters; ('', '') is the one "no project" value. */
+    private static function aboutIsKeepable(array $about): bool
+    {
+        $id = $about['project_id'] ?? null;
+        $name = $about['project_name'] ?? null;
+        $kind = $about['kind'] ?? null;
+        if (!is_string($id) || !is_string($name) || !is_string($kind) || !in_array($kind, self::KINDS, true)) {
+            return false;
+        }
+        if ($id === '' && $name === '') {
+            return true;
+        }
+        return preg_match(self::PROJECT, $id) === 1 && mb_strlen($name) >= 1 && mb_strlen($name) <= 80;
+    }
+```
+
+`drafts()` selects and returns the three columns:
+
+```php
+    /** @return list<array{piece: string, version: int, published_at: int, project_id: string, project_name: string, kind: string}> newest first */
+    public function drafts(?string $piece = null): array
+    {
+        $q = $this->db->prepare('SELECT piece, version, published_at, project_id, project_name, kind FROM music_drafts WHERE (? IS NULL OR piece = ?) ORDER BY published_at DESC, rowid DESC');
+        $q->execute([$piece, $piece]);
+        return array_map(static fn(array $r): array => [
+            'piece' => (string) $r['piece'],
+            'version' => (int) $r['version'],
+            'published_at' => (int) $r['published_at'],
+            'project_id' => (string) $r['project_id'],
+            'project_name' => (string) $r['project_name'],
+            'kind' => (string) $r['kind'],
+        ], $q->fetchAll(\PDO::FETCH_ASSOC));
+    }
+```
+
+`Api::publishDraft` passes `['project_id' => $score['project']['id'], 'project_name' => $score['project']['name'], 'kind' => $score['kind']]` as `$about` (a `project` that is not an array, or a missing `kind`, is `bad_score` there, before the call), and reads `score.musicxml`'s presence from the bundle's file names for the music rule.
 
 In `admin/lib/bootstrap.php`, set the registry that `Admin\Keys::SCOPES` reads to the three scopes, in this order: `const ADMIN_KEY_SCOPES = ['notes:pickup', 'drafts:publish', 'keys:publish'];` (the hub's key panel offers each as a checkbox labelled with the scope). In `tests/php/AdminKeysTest.php` replace `testProductionRegistryIsEmpty` with `testProductionRegistryHoldsTheWorkroomScopes`, which asserts `Admin\Keys::SCOPES` equals those three strings; every other admin test passes its own scope list.
 
@@ -1050,13 +1275,13 @@ In `admin/lib/bootstrap.php`, set the registry that `Admin\Keys::SCOPES` reads t
 
 - [ ] **Step 4: Run the tests**
 
-Run: `vendor/bin/phpunit tests/php/MusicApiTest.php` — PASS; `vendor/bin/phpunit --testsuite site` — PASS (the admin tests still pass with the registry filled).
+Run: `vendor/bin/phpunit tests/php/MusicApiTest.php tests/php/MusicStoreTest.php` — PASS; `vendor/bin/phpunit --testsuite site` — PASS (the admin tests still pass with the registry filled).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add websites/www.cs/music/lib websites/www.cs/admin/lib/bootstrap.php websites/www.cs/tests/php/MusicApiTest.php websites/www.cs/tests/php/AdminKeysTest.php
-git commit -m "Music workroom: the API-key routes, their scopes and the draft limits
+git add websites/www.cs/music/lib websites/www.cs/admin/lib/bootstrap.php websites/www.cs/tests/php/MusicApiTest.php websites/www.cs/tests/php/MusicStoreTest.php websites/www.cs/tests/php/AdminKeysTest.php
+git commit -m "Music workroom: the API-key routes, their scopes, the draft limits, and each draft's project and kind
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
@@ -1078,7 +1303,7 @@ namespace Music;
 final class Pages {
     /** $assetVersion: 10 hex of games/workroom/dist/workroom.js (the ?v= on the script); $baseUrl: admin_base_url(). */
     public function __construct(Store $store, \Admin\Pages $admin, \Admin\Sessions $sessions, ?PublicKeys $keys, string $assetVersion, string $baseUrl) {}
-    public function index(\Admin\Request $r): \Admin\Response;       // GET index.php: pieces list (HTML)
+    public function index(\Admin\Request $r): \Admin\Response;       // GET index.php: pieces list grouped by project (HTML)
     public function piece(\Admin\Request $r): \Admin\Response;       // GET piece.php?id=<piece>[&v=<n>]: the page shell (HTML)
     public function csrf(\Admin\Request $r): \Admin\Response;        // GET csrf.php → {"csrf"}
     public function notes(\Admin\Request $r, string $body): \Admin\Response; // GET notes.php → {"notes":[{id,size,arrived_at,picked_up_at}]}; POST (X-CSRF, body = bundle) → 201 {"id","csrf"}
@@ -1098,7 +1323,7 @@ Every method runs the same gates, in this order, and returns the first refusal t
 4. **CSRF**, for POST: `checkCsrf($r, Http::header($r, 'X-CSRF') ?? '')` false → 403 `{"error":"csrf"}`. `checkCsrf` spends the session's token on every call, right or wrong, so after any refusal the session has no usable token until the caller fetches a fresh one from `csrf.php`.
 5. The work.
 
-Every POST success returns the next token from `$sessions->csrf($r)`. Upload errors: 413 `too_large`, 409 `full`, 422 `bad_header`/`unknown_key`, 503 `no_key`. The page shell (`piece`) is a full HTML document: `<body data-view="piece" data-piece="<id>" data-version="<n or empty>">`, `<meta name="csrf" content="...">`, `<link rel="stylesheet" href="music.css?v=...">`, `<main id="workroom"></main>`, `<script type="module" src="../games/workroom/dist/workroom.js?v=<assetVersion>"></script>`. `index` renders, server side, one row per piece (latest version; `piece.title` and the first three `changes[].text` read from that draft's `score.json`, all escaped with `htmlspecialchars(..., ENT_QUOTES)`), the total waiting count, and the same mount and script with `data-view="index"`. A row is `<li class="piece"><a href="piece.php?id=ID" data-waiting="ID">TITLE</a><span class="waiting-count"></span><ul class="changes">…</ul></li>`: the link is named by the piece title alone (the browser check clicks it by that name), and the `data-waiting` attribute and the empty span next to it are what `PiecesWaiting` (Task 15) fills. Draft files are served with `Content-Type` from a fixed map (`score.json` application/json, `score.musicxml` application/vnd.recordare.musicxml+xml, `audio.webm` audio/webm, `audio.m4a` audio/mp4, `spectrogram.png` image/png).
+Every POST success returns the next token from `$sessions->csrf($r)`. Upload errors: 413 `too_large`, 409 `full`, 422 `bad_header`/`unknown_key`, 503 `no_key`. The page shell (`piece`) is a full HTML document: `<body data-view="piece" data-piece="<id>" data-version="<n or empty>">`, `<meta name="csrf" content="...">`, `<link rel="stylesheet" href="music.css?v=...">`, `<main id="workroom"></main>`, `<script type="module" src="../games/workroom/dist/workroom.js?v=<assetVersion>"></script>`. `index` renders, server side, the pieces grouped by project: from `Store::drafts()` (newest publish first) it keeps the first row of each piece (its latest draft), and groups those rows by their `project_id` in order of first appearance, so projects are ordered by their most recent publish and the pieces inside a project likewise; a project's heading is the `project_name` of its newest row, and a piece recorded with no project (`project_id` of `''`, which a published draft never has) is listed in a last group headed "No project". Each group is `<section class="project"><h2 class="project">NAME</h2><ul class="pieces">ROWS</ul></section>`. A row is one per piece (its latest version; `piece.title` and the first three `changes[].text` read from that draft's `score.json`, all escaped with `htmlspecialchars(..., ENT_QUOTES)`); the page also carries the total waiting count and the same mount and script with `data-view="index"`. A row is `<li class="piece" data-kind="KIND"><a href="piece.php?id=ID" data-waiting="ID">TITLE</a><span class="waiting-count"></span><ul class="changes">…</ul></li>` (`KIND` is `music` or `sound`): the link is named by the piece title alone (the browser check clicks it by that name), and the `data-waiting` attribute and the empty span next to it are what `PiecesWaiting` (Task 15) fills. Draft files are served with `Content-Type` from a fixed map (`score.json` application/json, `score.musicxml` application/vnd.recordare.musicxml+xml, `audio.webm` audio/webm, `audio.m4a` audio/mp4, `spectrogram.png` image/png).
 
 A script on another user's `~folder` page is same-origin with www.cs, so `refuseCrossSite` stops cross-site pages only. What keeps a sibling page from reading the notes is that they are sealed to a key it does not have, and the keyring is locked under a passphrase it does not have; the CSRF token guards every change.
 
@@ -1126,11 +1351,13 @@ final class MusicPagesTest extends TestCase
     private Music\Store $store;
     private Admin\Sessions $sessions;
     private Admin\Keys $keys;
+    private FakeClock $clock;
     private string $dir;
 
     protected function setUp(): void
     {
         [$this->store, $db, $this->dir, $clock] = music_world();
+        $this->clock = $clock;
         $this->sessions = new Admin\Sessions($db, $clock, '/~wgrim/');
         $this->keys = new Admin\Keys($db, $clock, null, self::BASE);
         $admin = new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true, $this->keys);
@@ -1286,7 +1513,7 @@ final class MusicPagesTest extends TestCase
         $score = ['schema' => 1, 'piece' => ['id' => 'test-piece', 'title' => 'Test piece: <the> Labyrinth wakes'], 'draft' => 1, 'changes' => [
             ['text' => 'Horns carry the theme.'], ['text' => 'Strings < softer'], ['text' => 'Third change'], ['text' => 'Fourth-change-text'],
         ]];
-        $this->store->putDraft('test-piece', 1, ['score.json' => json_encode($score)]);
+        $this->store->putDraft('test-piece', 1, ['score.json' => json_encode($score)], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
         $res = $this->pages->index(music_signed_in($this->sessions));
         self::assertSame(200, $res->status);
         self::assertStringContainsString(
@@ -1295,6 +1522,32 @@ final class MusicPagesTest extends TestCase
         );
         self::assertStringContainsString('Strings &lt; softer', $res->body, 'change text is escaped');
         self::assertStringNotContainsString('Fourth-change-text', $res->body, 'only the first three changes');
+        self::assertStringContainsString('<li class="piece" data-kind="music">', $res->body);
+    }
+
+    public function testTheIndexGroupsPiecesUnderTheirProjectsNewestFirst(): void
+    {
+        $put = function (string $piece, string $title, string $project, string $name, string $kind): void {
+            $this->clock->now += 10;
+            $score = ['schema' => 1, 'kind' => $kind, 'project' => ['id' => $project, 'name' => $name], 'piece' => ['id' => $piece, 'title' => $title], 'draft' => 1, 'changes' => []];
+            $this->store->putDraft($piece, 1, ['score.json' => json_encode($score)], ['project_id' => $project, 'project_name' => $name, 'kind' => $kind]);
+        };
+        $put('ch1-labyrinth', 'Chapter 1', 'crete', 'Crete', 'music');
+        $put('cannon-fire', 'Cannon fire', 'tankity', 'Tankity <Games>', 'sound');
+        $put('ch2-descent', 'Chapter 2', 'crete', 'Crete', 'music');
+        $res = $this->pages->index(music_signed_in($this->sessions));
+        self::assertSame(200, $res->status);
+        // Crete published most recently (chapter 2), so its heading comes first and chapter 2 leads inside it; Tankity follows.
+        preg_match_all('~<h2 class="project">(.*?)</h2>~', $res->body, $headings);
+        self::assertSame(['Crete', 'Tankity &lt;Games&gt;'], $headings[1], 'projects by their most recent publish, names escaped');
+        preg_match_all('~data-waiting="([a-z0-9-]+)"~', $res->body, $rows);
+        self::assertSame(['ch2-descent', 'ch1-labyrinth', 'cannon-fire'], $rows[1], 'pieces by their latest publish, grouped by project');
+        self::assertSame(1, preg_match('~<h2 class="project">Crete</h2><ul class="pieces"><li class="piece" data-kind="music"><a href="piece.php\?id=ch2-descent"~', $res->body));
+        self::assertStringContainsString('<li class="piece" data-kind="sound"><a href="piece.php?id=cannon-fire"', $res->body);
+        // A fresh publish in the older project moves that project to the front.
+        $put('mortar-fire', 'Mortar fire', 'tankity', 'Tankity <Games>', 'sound');
+        preg_match_all('~<h2 class="project">(.*?)</h2>~', $this->pages->index(music_signed_in($this->sessions))->body, $again);
+        self::assertSame(['Tankity &lt;Games&gt;', 'Crete'], $again[1]);
     }
 
     public function testHubListsTheWorkroomAndItsFingerprint(): void
@@ -1315,7 +1568,7 @@ final class MusicPagesTest extends TestCase
 Run: `vendor/bin/phpunit tests/php/MusicPagesTest.php`
 Expected: FAIL — class `Music\Pages` not found.
 
-- [ ] **Step 3: Implement** `Music\Pages` and the two `admin/lib/bootstrap.php` functions as described above. The piece id is checked against `/^[a-z0-9][a-z0-9-]{0,47}$/` (else 400 page "No such piece."). `notes()` dispatches on `$r->method`: GET lists (no `sha256` in the page's list), POST uploads, anything else 405.
+- [ ] **Step 3: Implement** `Music\Pages` and the two `admin/lib/bootstrap.php` functions as described above (`index` groups `Store::drafts()` by project as described). The piece id is checked against `/^[a-z0-9][a-z0-9-]{0,47}$/` (else 400 page "No such piece."). `notes()` dispatches on `$r->method`: GET lists (no `sha256` in the page's list), POST uploads, anything else 405.
 
 - [ ] **Step 4: Run the tests**
 
@@ -1325,7 +1578,7 @@ Run: `vendor/bin/phpunit tests/php/MusicPagesTest.php` — PASS; `vendor/bin/php
 
 ```bash
 git add websites/www.cs/music/lib websites/www.cs/admin/lib/bootstrap.php websites/www.cs/tests/php/MusicPagesTest.php
-git commit -m "Music workroom: session routes, page shells and the hub entry
+git commit -m "Music workroom: session routes, page shells, the pieces list by project and the hub entry
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
@@ -1520,7 +1773,7 @@ Run: `vendor/bin/phpunit tests/php/MusicDeployTest.php tests/php/MusicBootstrapT
 
 `.gitignore`: `music/tools/.venv/` and `music/tools/**/__pycache__/`.
 
-Write the thin pages, `music.css` (dark site look: the site's `#0d0f12` background, `#e8ebf0` text, red `#e02020` accents, a list of pieces as cards), and `music/README.md` (what the workroom is; the security model in short; the routes and scopes; the draft limits (8 MB a request, 20 kept, 100 MB in all); `make` targets that exist so far; how to create the two API keys on the hub).
+Write the thin pages, `music.css` (dark site look: the site's `#0d0f12` background, `#e8ebf0` text, red `#e02020` accents, a project heading (`h2.project`) over each group of pieces shown as cards), and `music/README.md` (what the workroom is (music and sound effects for any project; projects, kinds and characters in `score.json`); the security model in short; the routes and scopes; the draft limits (8 MB a request, 20 kept, 100 MB in all); `make` targets that exist so far; how to create the two API keys on the hub).
 
 - [ ] **Step 4: Run the gates**
 
@@ -1540,7 +1793,7 @@ Open the PR (foundry `pr-fix-loop` as for every siue PR): title "Music workroom:
 
 ---
 
-# PR 2: the page, its four views and the glossary (branch `music/page`)
+# PR 2: the page, its views and the glossary (branch `music/page`)
 
 Start from `main` after PR 1 merged.
 
@@ -1548,7 +1801,7 @@ Start from `main` after PR 1 merged.
 
 **Files:**
 - Create: `websites/www.cs/games/workroom/build.json`, `tsconfig.json`, `tsconfig.test.json`, `test.sh`, `src/tsconfig.dom.json`, `src/score.ts`, `src/glossary.json`, `src/glossary.ts`, `src/main.ts`
-- Create: `games/workroom/test/score.test.ts`, `test/glossary.test.ts`, `test/committed-drafts.test.ts`, `test/fixtures/score-v1.json`
+- Create: `games/workroom/test/score.test.ts`, `test/glossary.test.ts`, `test/committed-drafts.test.ts`, `test/fixtures/score-v1.json` (a Crete music piece), `test/fixtures/score-sound-v1.json` (a Tankity sound effect)
 - Create: `websites/www.cs/music/pieces/.gitkeep`
 - Modify: `music/README.md` (the score schema section, copied from this plan's "Formats")
 
@@ -1561,29 +1814,42 @@ Start from `main` after PR 1 merged.
 export const SCHEMA = 1;
 export const ID_RE = /^[a-z0-9][a-z0-9-]{0,47}$/;
 export const COLOR_RE = /^#[0-9a-f]{6}$/;
-export const FAMILIES = ['strings', 'brass', 'woodwinds', 'percussion', 'choir', 'keys', 'synth', 'harp', 'bells'] as const;
+export const KINDS = ['music', 'sound'] as const;
+export type Kind = (typeof KINDS)[number];
+/** The shortest sound piece, in seconds. */
+export const MIN_SOUND_SECONDS = 0.05;
+export const FAMILIES = ['strings', 'brass', 'woodwinds', 'percussion', 'choir', 'keys', 'synth', 'harp', 'bells', 'impact', 'whoosh', 'ambience', 'voice', 'electronic', 'foley', 'ui'] as const;
 export type Family = (typeof FAMILIES)[number];
-export const CHARACTER_COLORS: Readonly<Record<string, string>> = { Ariadne: '#d4a017', Minotaur: '#c0392b', Daedalus: '#b08d57', Athens: '#3b6fb6' };
+export interface Project { id: string; name: string }
 export interface Tempo { bar: number; bpm: number; beats: number; unit: 1 | 2 | 4 | 8 | 16 }
-export interface Section { id: string; name: string; from_bar: number; to_bar: number; color: string }
+/** A music section spans bars (from_bar, to_bar); a sound section is a named moment in seconds (from, to). parseScore guarantees the pair that fits the score's kind and none of the other. */
+export interface Section { id: string; name: string; color: string; from_bar?: number; to_bar?: number; from?: number; to?: number }
 export interface Lane { id: string; name: string; family: Family; icon: Family; color: string }
+/** A character belongs to the score: the page has none built in. */
+export interface Character { id: string; name: string; color: string }
 export interface MotifSpan { lane: string; from: number; to: number }
-export interface Motif { id: string; character: string; color: string; spans: MotifSpan[] }
+/** `character` is the id of an entry of the score's characters; the motif is drawn in that character's colour. */
+export interface Motif { id: string; character: string; spans: MotifSpan[] }
 export interface ScoreNote { lane: string; start: number; length: number; pitch: number; velocity: number; motif: string | null }
 export interface GlossaryUse { term: string; from: number; to: number }
 export interface AudioSource { file: 'audio.webm' | 'audio.m4a'; type: string }
 export interface Spectrogram { file: 'spectrogram.png'; low_hz: number; high_hz: number; scale: 'log' | 'linear' }
-export interface Change { from_bar: number; to_bar: number; lane: string | null; text: string; answers: string[] }
+/** A music change names bars (from_bar, to_bar); a sound change names seconds (from, to). */
+export interface Change { from_bar?: number; to_bar?: number; from?: number; to?: number; lane: string | null; text: string; answers: string[] }
 export interface Score {
-  schema: 1; piece: { id: string; title: string }; draft: number; made: string; duration: number; bars: number;
-  tempo: Tempo[]; sections: Section[]; lanes: Lane[]; motifs: Motif[]; notes: ScoreNote[];
+  schema: 1; kind: Kind; project: Project; piece: { id: string; title: string }; draft: number; made: string; duration: number;
+  bars?: number; tempo?: Tempo[];                          // music only; absent for sound
+  sections: Section[]; lanes: Lane[]; characters: Character[]; motifs: Motif[]; notes: ScoreNote[];
   energy: [number, number][]; glossary: GlossaryUse[]; audio: AudioSource[]; spectrogram: Spectrogram;
-  musicxml: 'score.musicxml'; changes: Change[];
+  musicxml?: 'score.musicxml';                             // required for music, optional for sound
+  changes: Change[];
 }
 export type Parsed = { ok: true; score: Score } | { ok: false; error: string };
 /** Validates every rule in the plan's schema table; the first broken rule is the error, naming its path (e.g. "sections[1].from_bar"). */
 export function parseScore(raw: unknown): Parsed;
 export function unknownSchemaMessage(n: unknown): string;
+/** The colour of the motif's character, from the score's own characters. */
+export function motifColor(score: Score, motif: Motif): string;
 
 // src/glossary.ts (DOM-free; reads src/glossary.json, the glossary's one source: the Python tool reads the same file)
 export interface Term { id: string; word: string; lines: [string, string] }
@@ -1591,11 +1857,28 @@ export const GLOSSARY: readonly Term[];
 export function term(id: string): Term | undefined;
 /** The glossary uses in a score, in order of first appearance, with their definitions. */
 export function termsIn(score: Score): { term: Term; from: number; to: number }[];
-/** Splits text into plain runs and glossary words (whole words, case-insensitive, first match wins). */
+/** Splits text into plain runs and glossary words (whole words or whole phrases such as "reverb tail", case-insensitive, first match wins). */
 export function splitTerms(text: string): ({ text: string } | { term: Term; text: string })[];
 ```
 
-`src/glossary.json` holds at least these ids, each with its two plain-words lines: `ostinato`, `motif`, `theme`, `phrygian`, `crescendo`, `decrescendo`, `octave`, `chord`, `drone`, `pedal-point`, `tremolo`, `pizzicato`, `legato`, `staccato`, `tempo`, `bar`, `beat`, `dynamics`, `unison`, `minor`, `major`, `cadence`, `orchestration`, `swell`. The file is `{ "terms": [ ... ] }`, for example:
+`src/glossary.json` holds at least these ids, each with its two plain-words lines: `ostinato`, `motif`, `theme`, `phrygian`, `crescendo`, `decrescendo`, `octave`, `chord`, `drone`, `pedal-point`, `tremolo`, `pizzicato`, `legato`, `staccato`, `tempo`, `bar`, `beat`, `dynamics`, `unison`, `minor`, `major`, `cadence`, `orchestration`, `swell`, and the sound-design terms `attack`, `decay`, `release`, `envelope`, `layer`, `transient`, `pitch-sweep`, `reverb-tail`, `foley`, `ambience`, `low-pass-filter`, `distortion`. The sound-design entries are exactly these (append them to the `terms` array):
+
+```json
+    { "id": "attack", "word": "attack", "lines": ["How quickly a sound reaches its full loudness after it starts.", "A drum hit has a sharp attack; a slow string swell has a soft one."] },
+    { "id": "decay", "word": "decay", "lines": ["How a sound falls from its first peak down to a steadier level.", "A cannon's boom drops away fast; a bell's ring decays slowly."] },
+    { "id": "release", "word": "release", "lines": ["What a sound does after the key or trigger is let go.", "A short release stops it dead; a long one lets it fade away."] },
+    { "id": "envelope", "word": "envelope", "lines": ["The shape of a sound's loudness over time: attack, decay, hold, release.", "It is why a plucked note and a bowed note feel so different."] },
+    { "id": "layer", "word": "layer", "lines": ["One of several sounds played together to make one bigger sound.", "A cannon shot might layer a deep boom, a sharp crack and a rushing hiss."] },
+    { "id": "transient", "word": "transient", "lines": ["The very short, sharp burst at the very start of a sound.", "It is the snap of a snare or the click of a button before the tone settles."] },
+    { "id": "pitch-sweep", "word": "pitch sweep", "lines": ["A sound whose pitch slides up or down while it plays.", "A falling sweep makes a laser or a boom feel as if it drops away."] },
+    { "id": "reverb-tail", "word": "reverb tail", "lines": ["The fading echo that lingers after a sound has stopped.", "A long tail makes a sound feel as if it happened in a cave or a cathedral."] },
+    { "id": "foley", "word": "foley", "lines": ["Everyday sounds made by hand to match what is on screen.", "Footsteps, creaking leather and rustling cloth are all foley."] },
+    { "id": "ambience", "word": "ambience", "lines": ["The quiet background sound that makes a place feel real.", "Wind, far-off machinery or a hum of insects sets the scene without being noticed."] },
+    { "id": "low-pass-filter", "word": "low-pass filter", "lines": ["A filter that keeps the low sounds and cuts the high ones.", "It muffles a sound, like hearing music through a wall."] },
+    { "id": "distortion", "word": "distortion", "lines": ["Deliberately overloading a sound so it turns rough and gritty.", "It adds bite and aggression, like an overdriven guitar or a crunchy explosion."] }
+```
+
+The file is `{ "terms": [ ... ] }`, for example:
 
 ```json
 {
@@ -1659,11 +1942,13 @@ node ../_kit/build/build.mjs workroom --check
 
 Every later task that adds a DOM-free module appends it to `tsconfig.json`'s `files`; every DOM module or `.tsx` goes in `src/tsconfig.dom.json`'s `files`. A module that uses `crypto`, `CryptoKey` or `TextEncoder`, or imports one that does, goes in `src/tsconfig.crypto.json` (Task 10 creates it): `tsc` checks every imported file under the importing program's `lib`, so such a module in the DOM-free program fails with TS2304.
 
-- [ ] **Step 1: Write the fixture** `games/workroom/test/fixtures/score-v1.json` (8 bars of 4/4 at 120 bpm: two seconds a bar):
+- [ ] **Step 1: Write the fixtures.** `games/workroom/test/fixtures/score-v1.json` is a Crete music piece (8 bars of 4/4 at 120 bpm: two seconds a bar). Crete's four characters and their colours live here, in data, and nowhere in the page's code:
 
 ```json
 {
   "schema": 1,
+  "kind": "music",
+  "project": { "id": "crete", "name": "Crete" },
   "piece": { "id": "test-piece", "title": "Test piece: the Labyrinth wakes" },
   "draft": 1,
   "made": "2026-10-17T12:00:00Z",
@@ -1678,8 +1963,14 @@ Every later task that adds a DOM-free module appends it to `tsconfig.json`'s `fi
     { "id": "strings-low", "name": "Low strings", "family": "strings", "icon": "strings", "color": "#7a9cc6" },
     { "id": "brass", "name": "Horns", "family": "brass", "icon": "brass", "color": "#c98b3a" }
   ],
+  "characters": [
+    { "id": "ariadne", "name": "Ariadne", "color": "#d4a017" },
+    { "id": "minotaur", "name": "Minotaur", "color": "#c0392b" },
+    { "id": "daedalus", "name": "Daedalus", "color": "#b08d57" },
+    { "id": "athens", "name": "Athens", "color": "#3b6fb6" }
+  ],
   "motifs": [
-    { "id": "ariadne", "character": "Ariadne", "color": "#d4a017", "spans": [{ "lane": "brass", "from": 8, "to": 16 }] }
+    { "id": "ariadne", "character": "ariadne", "spans": [{ "lane": "brass", "from": 8, "to": 16 }] }
   ],
   "notes": [
     { "lane": "strings-low", "start": 0, "length": 2, "pitch": 38, "velocity": 70, "motif": null },
@@ -1698,30 +1989,77 @@ Every later task that adds a DOM-free module appends it to `tsconfig.json`'s `fi
 }
 ```
 
+`games/workroom/test/fixtures/score-sound-v1.json` is a Tankity sound effect: a 0.4-second "cannon fire" with an impact layer and a whoosh layer, in seconds, with no bars, no tempo, no notes, no characters and no MusicXML:
+
+```json
+{
+  "schema": 1,
+  "kind": "sound",
+  "project": { "id": "tankity", "name": "Tankity" },
+  "piece": { "id": "cannon-fire", "title": "Cannon fire" },
+  "draft": 1,
+  "made": "2026-10-17T12:30:00Z",
+  "duration": 0.4,
+  "sections": [
+    { "id": "blast", "name": "Blast", "from": 0, "to": 0.08, "color": "#c0392b" },
+    { "id": "echo", "name": "Echo", "from": 0.08, "to": 0.4, "color": "#2e4057" }
+  ],
+  "lanes": [
+    { "id": "boom", "name": "Boom", "family": "impact", "icon": "impact", "color": "#c0392b" },
+    { "id": "air", "name": "Air rush", "family": "whoosh", "icon": "whoosh", "color": "#7a9cc6" }
+  ],
+  "characters": [],
+  "motifs": [],
+  "notes": [],
+  "energy": [[0, 1], [0.08, 0.8], [0.4, 0]],
+  "glossary": [{ "term": "attack", "from": 0, "to": 0.08 }, { "term": "decay", "from": 0.08, "to": 0.4 }],
+  "audio": [{ "file": "audio.webm", "type": "audio/webm; codecs=opus" }],
+  "spectrogram": { "file": "spectrogram.png", "low_hz": 30, "high_hz": 16000, "scale": "log" },
+  "changes": [{ "from": 0, "to": 0.08, "lane": "boom", "text": "A sharper, shorter attack on the boom.", "answers": [] }]
+}
+```
+
 - [ ] **Step 2: Write the failing tests**
 
 `test/score.test.ts`:
 
 ```ts
-// The score.json schema, version 1: the fixture parses; an unknown schema is
-// refused with the reload message; each rule names the path it breaks.
+// The score.json schema, version 1: a music piece and a sound effect parse; an
+// unknown schema is refused with the reload message; each rule names the path
+// it breaks; the two kinds differ exactly where the schema says; the page has
+// no characters of its own.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { parseScore, unknownSchemaMessage, type Score } from '../src/score.ts';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { FAMILIES, MIN_SOUND_SECONDS, motifColor, parseScore, unknownSchemaMessage, type Score } from '../src/score.ts';
 
-const fixture = (): Score => JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
-const broken = (change: (s: Score) => void): string => {
-  const s = fixture();
-  change(s);
+const read = (name: string): Score => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')) as Score;
+const fixture = (): Score => read('score-v1.json');
+const sound = (): Score => read('score-sound-v1.json');
+const failure = (s: Score): string => {
   const r = parseScore(s);
   assert.equal(r.ok, false);
   return r.ok ? '' : r.error;
 };
+const broken = (change: (s: Score) => void): string => {
+  const s = fixture();
+  change(s);
+  return failure(s);
+};
+const brokenSound = (change: (s: Score) => void): string => {
+  const s = sound();
+  change(s);
+  return failure(s);
+};
 
-test('the fixture is a valid schema 1 score', () => {
-  const r = parseScore(fixture());
-  assert.ok(r.ok, r.ok ? '' : r.error);
+test('the fixtures are valid schema 1 scores, one of each kind', () => {
+  for (const s of [fixture(), sound()]) {
+    const r = parseScore(s);
+    assert.ok(r.ok, r.ok ? '' : r.error);
+  }
+  assert.deepEqual([fixture().kind, sound().kind], ['music', 'sound']);
+  assert.deepEqual([fixture().project.id, sound().project.id], ['crete', 'tankity']);
 });
 
 test('an unknown schema is refused with the reload message', () => {
@@ -1734,9 +2072,16 @@ test('an unknown schema is refused with the reload message', () => {
 
 test('each rule names its path', () => {
   assert.match(broken(s => { s.piece.id = 'Bad Id'; }), /piece\.id/);
+  assert.match(broken(s => { s.kind = 'noise' as never; }), /kind/);
+  assert.match(broken(s => { s.project.id = 'Not An Id'; }), /project\.id/);
+  assert.match(broken(s => { s.project.name = ''; }), /project\.name/);
+  assert.match(broken(s => { s.project.name = 'n'.repeat(81); }), /project\.name/);
   assert.match(broken(s => { s.sections[1]!.from_bar = 6; }), /sections\[1\]\.from_bar/);
   assert.match(broken(s => { s.sections[1]!.to_bar = 7; }), /sections\[1\]\.to_bar/);
-  assert.match(broken(s => { s.motifs[0]!.color = '#ffffff'; }), /motifs\[0\]\.color/);
+  assert.match(broken(s => { s.sections = []; }), /sections/);
+  assert.match(broken(s => { s.characters[0]!.color = 'gold'; }), /characters\[0\]\.color/);
+  assert.match(broken(s => { s.characters[1]!.id = 'ariadne'; }), /characters\[1\]\.id/);
+  assert.match(broken(s => { s.motifs[0]!.character = 'nobody'; }), /motifs\[0\]\.character/);
   assert.match(broken(s => { s.notes[5]!.length = 5; }), /notes\[5\]/);
   assert.match(broken(s => { s.notes[0]!.lane = 'violas'; }), /notes\[0\]\.lane/);
   assert.match(broken(s => { s.notes[0]!.motif = 'minotaur'; }), /notes\[0\]\.motif/);
@@ -1745,27 +2090,87 @@ test('each rule names its path', () => {
   assert.match(broken(s => { s.energy[1] = [8, 1.5]; }), /energy\[1\]/);
   assert.match(broken(s => { s.glossary[0]!.term = 'flibbertigibbet'; }), /glossary\[0\]\.term/);
   assert.match(broken(s => { s.glossary[0]!.to = 20; }), /glossary\[0\]/);
-  assert.match(broken(s => { s.tempo[0]!.bar = 2; }), /tempo\[0\]\.bar/);
+  assert.match(broken(s => { s.tempo![0]!.bar = 2; }), /tempo\[0\]\.bar/);
+  assert.match(broken(s => { delete s.tempo; }), /tempo/);
+  assert.match(broken(s => { delete s.bars; }), /bars/);
+  assert.match(broken(s => { delete s.musicxml; }), /musicxml/);
   assert.match(broken(s => { s.audio = []; }), /audio/);
   assert.match(broken(s => { s.lanes[1]!.id = 'strings-low'; }), /lanes\[1\]\.id/);
   assert.match(broken(s => { s.changes[0]!.answers = ['xyz']; }), /changes\[0\]\.answers/);
   assert.match(broken(s => { s.lanes[0]!.color = 'red'; }), /lanes\[0\]\.color/);
+});
+
+test('a sound effect has seconds, no bars and no tempo, and needs no MusicXML', () => {
+  const s = sound();
+  assert.deepEqual([s.bars, s.tempo, s.musicxml, s.notes.length, s.characters.length], [undefined, undefined, undefined, 0, 0]);
+  assert.ok(s.duration >= MIN_SOUND_SECONDS);
+  assert.match(brokenSound(x => { x.bars = 8; }), /bars/);
+  assert.match(brokenSound(x => { x.tempo = [{ bar: 1, bpm: 120, beats: 4, unit: 4 }]; }), /tempo/);
+  assert.match(brokenSound(x => { x.duration = 0.04; }), /duration/);
+  assert.match(brokenSound(x => { x.sections[0]!.from_bar = 1; }), /sections\[0\]/);
+  assert.match(brokenSound(x => { x.sections[1]!.from = 0.05; }), /sections\[1\]\.from/);
+  assert.match(brokenSound(x => { x.sections[1]!.to = 0.5; }), /sections\[1\]\.to/);
+  assert.match(brokenSound(x => { x.changes[0]!.to = 0.5; }), /changes\[0\]\.to/);
+  assert.match(brokenSound(x => { x.changes[0]!.from_bar = 1; }), /changes\[0\]/);
+  assert.match(brokenSound(x => { x.energy[2] = [0.5, 0]; }), /energy/);
+  assert.match(brokenSound(x => { x.lanes[0]!.family = 'kazoo' as never; }), /lanes\[0\]\.family/);
+  const withXml = sound();
+  withXml.musicxml = 'score.musicxml';
+  assert.ok(parseScore(withXml).ok, 'a sound piece may carry MusicXML');
+  const noMoments = sound();
+  noMoments.sections = [];
+  assert.ok(parseScore(noMoments).ok, 'sections are optional for a sound piece');
+  const shortest = sound();
+  shortest.duration = MIN_SOUND_SECONDS;
+  shortest.sections = [];
+  shortest.energy = [[0, 1], [MIN_SOUND_SECONDS, 0]];
+  shortest.glossary = [];
+  shortest.changes = [];
+  assert.ok(parseScore(shortest).ok, 'a 0.05 s sound is allowed');
+});
+
+test('either kind may use any lane family', () => {
+  assert.deepEqual(FAMILIES.slice(-7), ['impact', 'whoosh', 'ambience', 'voice', 'electronic', 'foley', 'ui']);
+  const music = fixture();
+  music.lanes[0]!.family = 'impact';
+  music.lanes[0]!.icon = 'impact';
+  assert.ok(parseScore(music).ok, 'a music lane may use a sound-design family');
+  const effect = sound();
+  effect.lanes[1]!.family = 'strings';
+  effect.lanes[1]!.icon = 'strings';
+  assert.ok(parseScore(effect).ok, 'a sound layer may use an orchestral family');
+});
+
+test("a motif takes its character's colour from the score", () => {
+  const s = fixture();
+  assert.equal(motifColor(s, s.motifs[0]!), '#d4a017');
+  s.characters[0]!.color = '#112233';
+  assert.equal(motifColor(s, s.motifs[0]!), '#112233');
+});
+
+test('the page has no characters or colours of its own', () => {
+  const src = join(import.meta.dirname, '..', 'src');
+  const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? files(join(dir, e.name)) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : []));
+  for (const f of files(src)) assert.doesNotMatch(readFileSync(f, 'utf8'), /Ariadne|Minotaur|Daedalus|Athens|CHARACTER_COLORS/, f);
 });
 ```
 
 `test/glossary.test.ts`:
 
 ```ts
-// The glossary: every term has two lines; a score's uses come back in order
-// with their clip spans; words in text become tappable terms.
+// The glossary: every term has two lines; the sound-design terms are there; a
+// score's uses come back in order with their clip spans; words and phrases in
+// text become tappable terms.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { GLOSSARY, splitTerms, term, termsIn } from '../src/glossary.ts';
 import type { Score } from '../src/score.ts';
 
+const read = (name: string): Score => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')) as Score;
+
 test('every term has an id, a word and two non-empty lines', () => {
-  assert.ok(GLOSSARY.length >= 24);
+  assert.ok(GLOSSARY.length >= 36);
   for (const t of GLOSSARY) {
     assert.match(t.id, /^[a-z][a-z-]*$/);
     assert.ok(t.lines[0].length > 0 && t.lines[1].length > 0, t.id);
@@ -1773,15 +2178,27 @@ test('every term has an id, a word and two non-empty lines', () => {
   assert.equal(new Set(GLOSSARY.map(t => t.id)).size, GLOSSARY.length);
 });
 
+test('the sound-design terms are in the glossary', () => {
+  for (const id of ['attack', 'decay', 'release', 'envelope', 'layer', 'transient', 'pitch-sweep', 'reverb-tail', 'foley', 'ambience', 'low-pass-filter', 'distortion']) {
+    assert.ok(term(id), id);
+  }
+  assert.deepEqual([term('pitch-sweep')?.word, term('low-pass-filter')?.word], ['pitch sweep', 'low-pass filter']);
+});
+
 test("a score's terms come with their clips", () => {
-  const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
-  assert.deepEqual(termsIn(score).map(u => [u.term.id, u.from, u.to]), [['ostinato', 0, 4], ['motif', 8, 12]]);
+  assert.deepEqual(termsIn(read('score-v1.json')).map(u => [u.term.id, u.from, u.to]), [['ostinato', 0, 4], ['motif', 8, 12]]);
+  assert.deepEqual(termsIn(read('score-sound-v1.json')).map(u => [u.term.id, u.from, u.to]), [['attack', 0, 0.08], ['decay', 0.08, 0.4]]);
 });
 
 test('words in text become terms, whole words only', () => {
   const parts = splitTerms('A Phrygian ostinato, motifs and a crescendo.');
   assert.deepEqual(parts.map(p => ('term' in p ? `[${p.term.id}]` : p.text)).join(''), 'A [phrygian] [ostinato], motifs and a [crescendo].');
   assert.equal(term('octave')?.word, 'octave');
+});
+
+test('a phrase is one term', () => {
+  const parts = splitTerms('A low-pass filter on the Reverb Tail.');
+  assert.deepEqual(parts.map(p => ('term' in p ? `[${p.term.id}]` : p.text)).join(''), 'A [low-pass-filter] on the [reverb-tail].');
 });
 ```
 
@@ -1816,7 +2233,7 @@ test('every committed draft validates', { skip: drafts.length === 0 ? 'no draft 
 Run, from `websites/www.cs/games`: `node --test workroom/test/*.test.ts`
 Expected: FAIL — cannot find `../src/score.ts`.
 
-- [ ] **Step 4: Implement** `score.ts` (a hand-written validator: one small checker per field, each returning a path-named message), `glossary.json` and `glossary.ts`, `main.ts` (for now: `document.getElementById('workroom')!.textContent = 'Loading…';`), the folder files above and `music/pieces/.gitkeep`. Run `node _kit/build/build.mjs workroom` to write `dist/`.
+- [ ] **Step 4: Implement** `score.ts` (a hand-written validator: one small checker per field, each returning a path-named message; it checks `kind` first and then applies the schema table's music or sound column: a music score requires `bars`, `tempo`, bar-spanned `sections` and `musicxml`, a sound score refuses `bars` and `tempo`, takes second-spanned optional `sections` and `changes`, needs `duration` of at least `MIN_SOUND_SECONDS`, and treats `musicxml` as optional; a field that belongs to the other kind is an error naming its path; `motifs[i].character` must be the id of an entry of `characters`; `motifColor` looks that entry up), `glossary.json` and `glossary.ts`, `main.ts` (for now: `document.getElementById('workroom')!.textContent = 'Loading…';`), the folder files above and `music/pieces/.gitkeep`. Run `node _kit/build/build.mjs workroom` to write `dist/`.
 
 - [ ] **Step 5: Run the tests and the build check**
 
@@ -1826,7 +2243,7 @@ Run: `node --test workroom/test/*.test.ts` — PASS; `sh workroom/test.sh` — e
 
 ```bash
 git add websites/www.cs/games/workroom websites/www.cs/music/pieces/.gitkeep websites/www.cs/music/README.md
-git commit -m "Music workroom: the page's kit folder, score schema 1 and glossary
+git commit -m "Music workroom: the page's kit folder, score schema 1 (music and sound) and glossary
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
@@ -1835,28 +2252,42 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ### Task 6: Tempo, zoom, the story timeline's layout and hit testing
 
 **Files:**
-- Create: `games/workroom/src/tempo.ts`, `src/zoom.ts`, `src/timeline.ts`, `src/hit.ts`, `test/tempo.test.ts`, `test/zoom.test.ts`, `test/timeline.test.ts`, `test/hit.test.ts`
-- Modify: `games/workroom/tsconfig.json` (add the four files)
+- Create: `games/workroom/src/tempo.ts`, `src/axis.ts`, `src/zoom.ts`, `src/timeline.ts`, `src/hit.ts`, `test/tempo.test.ts`, `test/axis.test.ts`, `test/zoom.test.ts`, `test/timeline.test.ts`, `test/hit.test.ts`
+- Modify: `games/workroom/tsconfig.json` (add the five files)
 
 **Interfaces:**
-- Consumes: `Score` from `score.ts`.
+- Consumes: `Score`, `Section` from `score.ts`.
 - Produces:
 
 ```ts
 // src/tempo.ts
 export interface TempoMap {
-  /** Seconds at which bar n (1-based) starts; a bar past the last (n > score.bars) is the end of the piece, score.duration. */
+  /** true for a music piece (bars and tempo); false for a sound piece, which has seconds only. */
+  readonly metric: boolean;
+  /** Seconds at which bar n (1-based) starts; a bar past the last (n > score.bars) is the end of the piece, score.duration. A sound piece has no bars: 0 for n <= 1, else score.duration. */
   barStart(bar: number): number;
-  /** The bar (1-based integer) playing at t seconds; clamped to [1, bars]. */
-  barAt(t: number): number;
+  /** The bar (1-based integer) playing at t seconds; clamped to [1, bars]. null for a sound piece. */
+  barAt(t: number): number | null;
 }
 export function tempoMap(score: Score): TempoMap;
+/** The seconds a section covers: a music section from the start of from_bar to the start of the bar after to_bar (so the last ends at score.duration); a sound section its own from and to. */
+export function sectionTimes(section: Section, tempo: TempoMap, duration: number): { from: number; to: number };
+
+// src/axis.ts (the time axis: bars for music, seconds for sound)
+export interface AxisTick { x: number; label: string; bar: number | null }  // bar is null on a sound piece's axis
+/** "0 s", "50 ms", "300 ms", "1 s", "1.5 s", "12 s": milliseconds below one second, otherwise seconds with at most two decimals. */
+export function formatSeconds(t: number): string;
+/** Ticks at a round step (10 ms up to 5 min) chosen so neighbours are at least 60 px apart; only ticks with 0 <= x < view.width - 1e-6. */
+export function secondsTicks(view: View): AxisTick[];
+/** A music piece: one tick per visible bar start, labelled with the bar number. A sound piece: secondsTicks(view). */
+export function axisTicks(score: Score, tempo: TempoMap, view: View): AxisTick[];
 
 // src/zoom.ts
 export interface View { start: number; pxPerSec: number; width: number }
 export interface Bounds { duration: number; minPxPerSec: number; maxPxPerSec: number }
 export const MAX_PX_PER_SEC = 400;
-export function boundsFor(duration: number, width: number): Bounds; // minPxPerSec = width / duration
+/** minPxPerSec = width / duration (the whole piece fits); maxPxPerSec = max(MAX_PX_PER_SEC, 8 * minPxPerSec), so even a 0.3 s sound can zoom in. */
+export function boundsFor(duration: number, width: number): Bounds;
 export function fitView(duration: number, width: number): View;
 export function timeToX(v: View, t: number): number;
 export function xToTime(v: View, x: number): number;
@@ -1875,21 +2306,21 @@ export interface TimelineLayout {
   energy: { rect: Rect; points: [number, number][] };            // pixel points, y = energyH * (1 - value)
   sections: { id: string; name: string; color: string; rect: Rect }[];
   lanes: { id: string; name: string; icon: string; color: string; rect: Rect }[];   // rect spans the view width
-  ribbons: { motif: string; character: string; color: string; lane: string; rect: Rect }[]; // at the bottom of their lane
-  barTicks: { bar: number; x: number }[];                        // visible bar starts
+  ribbons: { motif: string; character: string; color: string; lane: string; rect: Rect }[]; // at the bottom of their lane; character is the character id, color that character's colour from the score
+  ticks: AxisTick[];                                             // the time axis: visible bar starts (music) or seconds ticks (sound)
 }
 export function layoutTimeline(score: Score, tempo: TempoMap, view: View): TimelineLayout;
 
 // src/hit.ts
 export type Zone = 'energy' | 'sections' | 'lanes' | 'none';
-export interface Hit { time: number; bar: number; zone: Zone; laneId: string | null; sectionId: string | null }
+export interface Hit { time: number; bar: number | null; zone: Zone; laneId: string | null; sectionId: string | null }  // bar is null on a sound piece
 export function hitTimeline(layout: TimelineLayout, view: View, tempo: TempoMap, x: number, y: number): Hit;
-export interface Span { from: number; to: number; fromBar: number; toBar: number; laneId: string | null }
+export interface Span { from: number; to: number; fromBar: number | null; toBar: number | null; laneId: string | null }  // the bars are null on a sound piece
 /** The span between two hits, in time order; the lane only when both hits are in the same lane. */
 export function spanBetween(a: Hit, b: Hit, tempo: TempoMap): Span;
 ```
 
-Vertical order: energy band `0..48`, sections `48..76`, then one lane per row from `76`, `laneH` each. Bars are drawn and hit from the tempo map, never from pixel arithmetic alone.
+Vertical order: energy band `0..48`, sections `48..76` (empty when a sound piece has no sections), then one lane per row from `76`, `laneH` each. Bars are drawn and hit from the tempo map, never from pixel arithmetic alone; a sound piece has no bars, so it is drawn and hit in seconds, and its sections are optional moments.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1899,10 +2330,11 @@ Vertical order: energy band `0..48`, sections `48..76`, then one lane per row fr
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { tempoMap } from '../src/tempo.ts';
+import { sectionTimes, tempoMap } from '../src/tempo.ts';
 import type { Score } from '../src/score.ts';
 
 const score = (): Score => JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
+const sound = (): Score => JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
 
 test('one tempo: two seconds a bar', () => {
   const m = tempoMap(score());
@@ -1918,6 +2350,22 @@ test('a tempo and metre change mid-piece', () => {
   assert.deepEqual([m.barStart(2), m.barStart(3), m.barStart(4)], [2, 4, 7]);
   assert.equal(m.barAt(6.9), 3);
   assert.equal(m.barAt(7), 4);
+});
+
+test('a sound piece has no bars: the map says so and sections are moments', () => {
+  const s = sound();
+  const m = tempoMap(s);
+  assert.equal(m.metric, false);
+  assert.equal(tempoMap(score()).metric, true);
+  assert.deepEqual([m.barAt(0), m.barAt(0.3), m.barAt(99)], [null, null, null]);
+  assert.deepEqual([m.barStart(1), m.barStart(2)], [0, s.duration]);
+  assert.deepEqual(s.sections.map(x => sectionTimes(x, m, s.duration)), [{ from: 0, to: 0.08 }, { from: 0.08, to: 0.4 }]);
+});
+
+test('a music section covers its bars, the last to the end of the piece', () => {
+  const s = score();
+  const m = tempoMap(s);
+  assert.deepEqual(s.sections.map(x => sectionTimes(x, m, s.duration)), [{ from: 0, to: 8 }, { from: 8, to: 16 }]);
 });
 ```
 
@@ -1951,10 +2399,64 @@ test('zoom and pan are clamped to the piece', () => {
   assert.equal(panBy(v, -10_000, b).start, 8, 'cannot pan past the end (16 s - 800 px / 100 px/s)');
 });
 
+test('a very short sound fits the view and can still zoom in', () => {
+  const short = boundsFor(0.4, 800);
+  const whole = fitView(0.4, 800);
+  assert.ok(Math.abs(whole.pxPerSec - 2000) < 1e-6 && Math.abs(short.minPxPerSec - 2000) < 1e-6, 'a 0.4 s sound fills 800 px');
+  assert.ok(Math.abs(short.maxPxPerSec - 16000) < 1e-6, 'the ceiling is eight times the fit, not the 400 px/s a long piece gets');
+  assert.equal(whole.start, 0);
+  assert.equal(zoomAt(whole, 400, 1e6, short).pxPerSec, short.maxPxPerSec);
+  assert.equal(zoomAt(whole, 400, 0.1, short).pxPerSec, short.minPxPerSec, 'never smaller than the whole sound');
+  assert.equal(b.maxPxPerSec, MAX_PX_PER_SEC, 'a 16 s piece on 800 px keeps the 400 px/s ceiling');
+});
+
 test('pinch: the times under the fingers follow them', () => {
   const v = pinch(fit, [100, 300], [0, 400], b);
   assert.deepEqual(v, { start: 2, pxPerSec: 100, width: 800 });
   assert.deepEqual(pinch(fit, [100, 100], [0, 400], b), fit, 'fingers on one spot change nothing');
+});
+```
+
+`test/axis.test.ts`:
+
+```ts
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { axisTicks, formatSeconds, secondsTicks } from '../src/axis.ts';
+import { tempoMap } from '../src/tempo.ts';
+import { fitView, zoomAt, boundsFor } from '../src/zoom.ts';
+import type { Score } from '../src/score.ts';
+
+const read = (name: string): Score => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')) as Score;
+const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-6, `${a} ≈ ${b}`);
+
+test('milliseconds below one second, seconds above', () => {
+  assert.deepEqual([0, 0.01, 0.05, 0.3, 0.999, 1, 1.5, 2.25, 12].map(formatSeconds), ['0 s', '10 ms', '50 ms', '300 ms', '999 ms', '1 s', '1.5 s', '2.25 s', '12 s']);
+});
+
+test('a 0.4 s sound is ticked every 50 ms across the full width', () => {
+  const ticks = secondsTicks(fitView(0.4, 800));
+  assert.deepEqual(ticks.map(t => t.label), ['0 s', '50 ms', '100 ms', '150 ms', '200 ms', '250 ms', '300 ms', '350 ms']);
+  assert.ok(ticks.every(t => t.bar === null));
+  close(ticks[1]!.x, 100);
+  close(ticks[7]!.x, 700);
+});
+
+test('a longer sound is ticked in whole seconds, and zooming in narrows the step', () => {
+  assert.deepEqual(secondsTicks(fitView(12, 600)).map(t => t.label), ['0 s', '2 s', '4 s', '6 s', '8 s', '10 s']);
+  const zoomed = zoomAt(fitView(12, 600), 0, 8, boundsFor(12, 600)); // 400 px/s
+  assert.deepEqual(secondsTicks(zoomed).map(t => t.label), ['0 s', '200 ms', '400 ms', '600 ms', '800 ms', '1 s', '1.2 s', '1.4 s']);
+});
+
+test('a music piece is ticked by bar, a sound piece by seconds', () => {
+  const music = read('score-v1.json');
+  const bars = axisTicks(music, tempoMap(music), fitView(16, 800));
+  assert.deepEqual(bars.map(t => [t.bar, t.label]), [1, 2, 3, 4, 5, 6, 7, 8].map(n => [n, String(n)]));
+  const sound = read('score-sound-v1.json');
+  const seconds = axisTicks(sound, tempoMap(sound), fitView(sound.duration, 800));
+  assert.equal(seconds[1]!.label, '50 ms');
+  assert.ok(seconds.every(t => t.bar === null));
 });
 ```
 
@@ -1969,7 +2471,9 @@ import { tempoMap } from '../src/tempo.ts';
 import { boundsFor, fitView, zoomAt } from '../src/zoom.ts';
 import type { Score } from '../src/score.ts';
 
-const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
+const read = (name: string): Score => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')) as Score;
+const score = read('score-v1.json');
+const sound = read('score-sound-v1.json');
 const tempo = tempoMap(score);
 const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 
@@ -1980,20 +2484,43 @@ test('sections, lanes and ribbons in pixels at fit', () => {
     ['thread', { x: 400, y: 48, w: 400, h: 28 }],
   ]);
   assert.deepEqual(l.lanes.map(x => [x.id, x.rect.y, x.rect.h]), [['strings-low', 76, 36], ['brass', 112, 36]]);
-  assert.deepEqual(l.ribbons, [{ motif: 'ariadne', character: 'Ariadne', color: '#d4a017', lane: 'brass', rect: { x: 400, y: 142, w: 400, h: TIMELINE.ribbonH } }]);
+  assert.deepEqual(l.ribbons, [{ motif: 'ariadne', character: 'ariadne', color: '#d4a017', lane: 'brass', rect: { x: 400, y: 142, w: 400, h: TIMELINE.ribbonH } }]);
   assert.equal(l.height, 148);
-  assert.deepEqual(l.barTicks.map(t => t.x), [0, 100, 200, 300, 400, 500, 600, 700]);
+  assert.deepEqual(l.ticks.map(t => t.x), [0, 100, 200, 300, 400, 500, 600, 700]);
+  assert.deepEqual(l.ticks.map(t => t.label), ['1', '2', '3', '4', '5', '6', '7', '8']);
   const [p0, p1, p2] = l.energy.points;
   close(p0![0], 0); close(p0![1], 38.4);
   close(p1![0], 400); close(p1![1], 24);
   close(p2![0], 800); close(p2![1], 4.8);
 });
 
+test("a ribbon takes the colour of the score's own character", () => {
+  const s: Score = { ...score, characters: score.characters.map(c => (c.id === 'ariadne' ? { ...c, color: '#112233' } : c)) };
+  assert.equal(layoutTimeline(s, tempoMap(s), fitView(16, 800)).ribbons[0]!.color, '#112233');
+});
+
 test('zoomed in, layout follows the view', () => {
   const v = zoomAt(fitView(16, 800), 400, 4, boundsFor(16, 800)); // 200 px/s, start 6
   const l = layoutTimeline(score, tempo, v);
   assert.deepEqual(l.sections.map(s => [s.id, s.rect.x, s.rect.w]), [['stirs', -1200, 1600], ['thread', 400, 1600]]);
-  assert.deepEqual(l.barTicks.map(t => t.bar), [4, 5], 'only bar starts with 0 <= x < width (6 s and 8 s)');
+  assert.deepEqual(l.ticks.map(t => t.bar), [4, 5], 'only bar starts with 0 <= x < width (6 s and 8 s)');
+});
+
+test('a sound piece is laid out in seconds: moments for sections, layers for lanes, a seconds axis', () => {
+  const l = layoutTimeline(sound, tempoMap(sound), fitView(sound.duration, 800)); // 2000 px/s
+  assert.deepEqual(l.sections.map(s => s.id), ['blast', 'echo']);
+  close(l.sections[0]!.rect.x, 0); close(l.sections[0]!.rect.w, 160);
+  close(l.sections[1]!.rect.x, 160); close(l.sections[1]!.rect.w, 640);
+  assert.deepEqual(l.lanes.map(x => [x.id, x.rect.y]), [['boom', 76], ['air', 112]]);
+  assert.deepEqual(l.ribbons, [], 'no characters, no ribbons');
+  assert.deepEqual(l.ticks.map(t => t.label), ['0 s', '50 ms', '100 ms', '150 ms', '200 ms', '250 ms', '300 ms', '350 ms']);
+  assert.ok(l.ticks.every(t => t.bar === null));
+});
+
+test('a sound piece without sections still lays out its lanes', () => {
+  const bare: Score = { ...sound, sections: [] };
+  const l = layoutTimeline(bare, tempoMap(bare), fitView(bare.duration, 800));
+  assert.deepEqual([l.sections, l.lanes.map(x => x.id)], [[], ['boom', 'air']]);
 });
 ```
 
@@ -2010,9 +2537,11 @@ import { boundsFor, fitView, zoomAt } from '../src/zoom.ts';
 import type { Score } from '../src/score.ts';
 
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
+const sound = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
 const tempo = tempoMap(score);
 const view = fitView(16, 800);
 const layout = layoutTimeline(score, tempo, view);
+const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 
 test('a tap maps to the right bar, lane and section', () => {
   assert.deepEqual(hitTimeline(layout, view, tempo, 450, 120), { time: 9, bar: 5, zone: 'lanes', laneId: 'brass', sectionId: 'thread' });
@@ -2033,6 +2562,22 @@ test('times outside the piece clamp', () => {
   assert.equal(hitTimeline(layout, view, tempo, 900, 120).time, 16);
 });
 
+test('on a sound piece a tap has seconds and no bar', () => {
+  const sTempo = tempoMap(sound);
+  const sView = fitView(sound.duration, 800); // 2000 px/s
+  const sLayout = layoutTimeline(sound, sTempo, sView);
+  const early = hitTimeline(sLayout, sView, sTempo, 40, 90);
+  close(early.time, 0.02);
+  assert.deepEqual([early.bar, early.zone, early.laneId, early.sectionId], [null, 'lanes', 'boom', 'blast']);
+  const late = hitTimeline(sLayout, sView, sTempo, 400, 120);
+  close(late.time, 0.2);
+  assert.deepEqual([late.bar, late.laneId, late.sectionId], [null, 'air', 'echo']);
+  assert.equal(hitTimeline(sLayout, sView, sTempo, 900, 120).time, sound.duration, 'clamped to the end');
+  const span = spanBetween(late, early, sTempo);
+  close(span.from, 0.02); close(span.to, 0.2);
+  assert.deepEqual([span.fromBar, span.toBar, span.laneId], [null, null, null], 'seconds only, no shared lane');
+});
+
 test('a span runs forward and keeps a shared lane only', () => {
   const a = hitTimeline(layout, view, tempo, 700, 120);
   const b = hitTimeline(layout, view, tempo, 450, 120);
@@ -2044,9 +2589,9 @@ test('a span runs forward and keeps a shared lane only', () => {
 
 - [ ] **Step 2: Run to see them fail**
 
-Run: `node --test workroom/test/tempo.test.ts workroom/test/zoom.test.ts workroom/test/timeline.test.ts workroom/test/hit.test.ts` — FAIL (modules missing).
+Run: `node --test workroom/test/tempo.test.ts workroom/test/axis.test.ts workroom/test/zoom.test.ts workroom/test/timeline.test.ts workroom/test/hit.test.ts` — FAIL (modules missing).
 
-- [ ] **Step 3: Implement** the four modules. `tempoMap` precomputes each bar's start from the tempo list (`secondsPerBar = beats * 60 / bpm`); `barStart(n)` for `n > score.bars` returns `score.duration`, and `barAt` clamps to `[1, bars]`. `layoutTimeline` lists every section and ribbon (SVG clips what is off screen) and only the bar ticks with `0 ≤ x < width`. `hitTimeline`: `time = clamp(xToTime(view, x), 0, duration)`; zone from y against the layout's bands; `laneId` from the lane whose rect contains y; `sectionId` from the section containing `bar` (any y).
+- [ ] **Step 3: Implement** the five modules. `tempoMap` for a music score precomputes each bar's start from the tempo list (`secondsPerBar = beats * 60 / bpm`); `barStart(n)` for `n > score.bars` returns `score.duration`, and `barAt` clamps to `[1, bars]`; for a sound score it returns `{ metric: false, barStart: n => (n <= 1 ? 0 : duration), barAt: () => null }`. `sectionTimes` is the one place a section becomes seconds. `formatSeconds(t)` is `"0 s"` for 0, `"<round(t*1000)> ms"` below one second, else `"<t rounded to 2 decimals, no trailing zeros> s"`. `secondsTicks` takes the smallest step from `[0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300]` seconds whose `step * view.pxPerSec >= 60`, then walks `k * step` (rounded to 9 decimals) from the first multiple at or after `view.start`, keeping ticks with `-1e-6 <= x < view.width - 1e-6`; `axisTicks` returns, for a music score, one tick per bar whose start has that `x` (label = the bar number, `bar` = the bar). `boundsFor` returns `maxPxPerSec = Math.max(MAX_PX_PER_SEC, 8 * minPxPerSec)`; `fitView` is `width / duration` whatever that is, so the default zoom always fits the whole piece. `layoutTimeline` lays every section out with `sectionTimes` (the sections band is empty for a sound piece without sections), colours a ribbon with `motifColor`, and fills `ticks` from `axisTicks`. `layoutTimeline` lists every section and ribbon (SVG clips what is off screen) and only the bar ticks with `0 ≤ x < width`. `hitTimeline`: `time = clamp(xToTime(view, x), 0, duration)`; `bar = tempo.barAt(time)` (null on a sound piece); zone from y against the layout's bands; `laneId` from the lane whose rect contains y; `sectionId` from the section whose `sectionTimes` interval contains `time` (`from <= time < to`; the last section also owns `time == duration`; any y). `spanBetween` takes `fromBar`/`toBar` from the two hits' bars, null when either is null.
 
 - [ ] **Step 4: Run the tests** — PASS. Add the files to `tsconfig.json`, run `node _kit/build/build.mjs workroom --check` — exit 0.
 
@@ -2054,7 +2599,7 @@ Run: `node --test workroom/test/tempo.test.ts workroom/test/zoom.test.ts workroo
 
 ```bash
 git add websites/www.cs/games/workroom
-git commit -m "Music workroom: tempo map, zoom, timeline layout and hit testing
+git commit -m "Music workroom: tempo map, time axis, zoom, timeline layout and hit testing
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
@@ -2078,10 +2623,10 @@ export interface RollLayout {
   rows: { pitch: number; y: number; name: string; black: boolean }[];
   notes: { index: number; lane: string; motif: string | null; color: string; rect: Rect }[]; // index into score.notes
 }
-/** Pitch range = the shown notes' lowest - 1 .. highest + 1; higher pitch is higher (smaller y); colour = motif colour, else lane colour. */
+/** Pitch range = the shown notes' lowest - 1 .. highest + 1; higher pitch is higher (smaller y); colour = the motif's character colour from the score (motifColor), else lane colour. With no shown notes (a sound piece may have none) rows and notes are empty and rowH is 0. */
 export function layoutRoll(score: Score, view: View, height: number, lanes?: ReadonlySet<string>): RollLayout;
 export function pitchName(midi: number): string; // 60 → "C4", 61 → "C#4"
-export function hitRoll(roll: RollLayout, view: View, tempo: TempoMap, score: Score, x: number, y: number): Hit & { pitch: number | null; noteIndex: number | null };
+export function hitRoll(roll: RollLayout, view: View, tempo: TempoMap, score: Score, x: number, y: number): Hit & { pitch: number | null; noteIndex: number | null }; // bar is null on a sound piece
 
 // src/spectro.ts
 export function freqToY(spec: Spectrogram, hz: number, height: number): number;
@@ -2123,7 +2668,9 @@ import { fitView } from '../src/zoom.ts';
 import type { Score } from '../src/score.ts';
 
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
+const sound = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
 const view = fitView(16, 800);
+const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 
 test('higher is higher, longer is longer, coloured by motif then lane', () => {
   const r = layoutRoll(score, view, 280);
@@ -2150,6 +2697,26 @@ test('a tap on a note finds it', () => {
   const n = r.notes.find(x => x.index === 4)!;
   const hit = hitRoll(r, view, tempoMap(score), score, n.rect.x + 2, n.rect.y + 1);
   assert.deepEqual([hit.noteIndex, hit.pitch, hit.laneId, hit.bar], [4, 65, 'brass', 6]);
+});
+
+test('a sound piece with no notes has an empty roll', () => {
+  const r = layoutRoll(sound, fitView(sound.duration, 800), 280);
+  assert.deepEqual([r.rows, r.notes, r.rowH], [[], [], 0]);
+});
+
+test('a sound piece with notes draws them in seconds and hits them with no bar', () => {
+  const s: Score = { ...sound, notes: [
+    { lane: 'boom', start: 0, length: 0.1, pitch: 36, velocity: 100, motif: null },
+    { lane: 'air', start: 0.1, length: 0.2, pitch: 60, velocity: 90, motif: null },
+  ] };
+  const v = fitView(s.duration, 800); // 2000 px/s
+  const r = layoutRoll(s, v, 280);
+  close(r.notes[0]!.rect.w, 200);
+  close(r.notes[1]!.rect.x, 200);
+  assert.deepEqual(r.notes.map(n => n.color), ['#c0392b', '#7a9cc6'], 'lane colours: no motifs');
+  const n = r.notes[0]!;
+  const hit = hitRoll(r, v, tempoMap(s), s, n.rect.x + 2, n.rect.y + 1);
+  assert.deepEqual([hit.noteIndex, hit.pitch, hit.laneId, hit.bar], [0, 36, 'boom', null]);
 });
 ```
 
@@ -2247,12 +2814,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ```
 
-### Task 8: The four views, the shared playhead, the glossary cards and sheet music
+### Task 8: The views, the shared playhead, the glossary cards and sheet music
 
 **Files:**
-- Create: `games/workroom/src/player.ts`, `src/load.ts`, `src/sheet.ts`, `src/ui/Workroom.tsx`, `src/ui/ViewTabs.tsx`, `src/ui/Timeline.tsx`, `src/ui/PianoRoll.tsx`, `src/ui/SoundPicture.tsx`, `src/ui/Sheet.tsx`, `src/ui/Glossary.tsx`, `src/ui/Player.tsx`
-- Create: `games/workroom/test/player.test.ts`, `test/load.test.ts`, `test/views.test.ts`
-- Modify: `games/workroom/src/main.ts`, `tsconfig.json` (`player.ts`, `load.ts`), `src/tsconfig.dom.json` (`sheet.ts` and the `.tsx` files), `build.json` (entry `sheet`), `games/package.json` and `games/package-lock.json` (`opensheetmusicdisplay`), `music/music.css`
+- Create: `games/workroom/src/player.ts`, `src/tabs.ts`, `src/load.ts`, `src/sheet.ts`, `src/ui/Workroom.tsx`, `src/ui/ViewTabs.tsx`, `src/ui/Timeline.tsx`, `src/ui/PianoRoll.tsx`, `src/ui/SoundPicture.tsx`, `src/ui/Sheet.tsx`, `src/ui/Glossary.tsx`, `src/ui/Player.tsx`
+- Create: `games/workroom/test/player.test.ts`, `test/tabs.test.ts`, `test/load.test.ts`, `test/views.test.ts`
+- Modify: `games/workroom/src/main.ts`, `tsconfig.json` (`player.ts`, `tabs.ts`, `load.ts`), `src/tsconfig.dom.json` (`sheet.ts` and the `.tsx` files), `build.json` (entry `sheet`), `games/package.json` and `games/package-lock.json` (`opensheetmusicdisplay`), `music/music.css`
 
 **Interfaces:**
 - Consumes: everything from Tasks 5–7; `Music\Pages` routes `drafts.php`, `draft.php`.
@@ -2266,6 +2833,14 @@ export interface Clip { from: number; to: number }
 export function clipDone(t: number, clip: Clip): boolean;
 /** Keeps the playhead visible: a view whose window contains t, moved by whole pages. */
 export function follow(view: View, t: number, b: Bounds): View;
+
+// src/tabs.ts (DOM-free)
+export type Tab = 'story' | 'roll' | 'sound' | 'sheet';
+export const TAB_LABELS: Readonly<Record<Tab, string>>; // Story, Piano roll, Sound picture, Sheet music
+/** The views a piece offers, in this order: Story and Sound picture always; Piano roll only when the score has notes; Sheet music only for a music piece (a sound piece never shows it, even when it carries MusicXML). */
+export function tabsFor(score: Score): Tab[];
+/** The wanted tab when the piece offers it, else 'story'. */
+export function pickTab(tabs: readonly Tab[], wanted: Tab): Tab;
 
 // src/load.ts (DOM-free; fetch is a port)
 export type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: Uint8Array<ArrayBuffer> }) => Promise<{ ok: boolean; status: number; redirected: boolean; headers: { get(n: string): string | null }; json(): Promise<unknown>; arrayBuffer(): Promise<ArrayBuffer>; text(): Promise<string> }>;
@@ -2284,26 +2859,27 @@ Components (thin: they hold no logic the DOM-free modules can hold):
 ```tsx
 // src/ui/Workroom.tsx
 export interface WorkroomProps { score: Score; version: number; versions: number[]; audioSrc: (file: string) => string; onVersion(v: number): void; children?: ComponentChildren }
-export function Workroom(p: WorkroomProps): JSX.Element; // owns view (View), time (number), tab ('story'|'roll'|'sound'|'sheet'), lane filter, open term;
-// above the views: the draft picker, the Player, the ViewTabs, a "Words in this piece" row of Glossary.Word buttons from termsIn(score),
-// and Claude's change list (changes[].text through splitTerms) pinned to its bars on the story timeline
+export function Workroom(p: WorkroomProps): JSX.Element; // owns view (View, initially fitView(score.duration, width): the whole piece, even a 0.3 s sound), time (number), tab (a Tab from tabsFor(score); pickTab keeps it valid), lane filter, open term;
+// above the views: the draft picker, the Player, the ViewTabs (only the tabs tabsFor(score) returns, so a sound piece never shows Sheet music and shows the Piano roll only when it has notes),
+// a "Words in this piece" row of Glossary.Word buttons from termsIn(score),
+// and Claude's change list (changes[].text through splitTerms) pinned to its bars (music) or its seconds (sound) on the story timeline
 
 // src/ui/Timeline.tsx
 export interface TimelineProps { score: Score; tempo: TempoMap; view: View; time: number; onSeek(t: number): void; onView(v: View): void; onTerm(id: string): void; overlay?: ComponentChildren }
-// renders <svg class="tl" data-timeline> with data-section, data-lane, data-motif attributes. Section names run through splitTerms and are drawn
+// renders <svg class="tl" data-timeline> with data-section, data-lane, data-motif attributes and one <text data-tick> per layout tick (the label is the bar number on a music piece, "50 ms" or "1.5 s" on a sound piece). Section names run through splitTerms and are drawn
 // as SVG text: a plain run is a <tspan>, a glossary word is a <tspan data-term="<id>" class="word" role="button" tabindex="0"> whose onClick (and
 // Enter or Space on keydown) calls onTerm(id). Its onPointerDown stops propagation, so tapping a word opens the card and does not also seek.
 // HTML buttons (Glossary.Word) are never placed inside the <svg>; they belong to the rows above and below it.
 
-// src/ui/PianoRoll.tsx   props { score, tempo, view, time, lanes?: ReadonlySet<string>, onSeek, onView }
-// src/ui/SoundPicture.tsx props { score, view, time, imageSrc: string, onSeek, onView }  (an <img> stretched by the view, the axis labels and the legend)
+// src/ui/PianoRoll.tsx   props { score, tempo, view, time, lanes?: ReadonlySet<string>, onSeek, onView }  (its time axis comes from axisTicks; Workroom renders it only when tabsFor offers it)
+// src/ui/SoundPicture.tsx props { score, view, time, imageSrc: string, onSeek, onView }  (an <img data-spectrogram> stretched by the view, the axis labels and the legend)
 // src/ui/Sheet.tsx       props { musicxmlSrc: string, laneId: string, lanes: Lane[], onLane(id: string): void }
 //                        (a lane picker, and one <div id="sheet"> that renderSheet draws the notation into; the browser check waits for `#sheet svg`)
 // src/ui/Glossary.tsx    export function Word(p: { term: Term; text: string; onOpen(id: string): void }): JSX.Element;
 //                        export function Card(p: { term: Term; clip: Clip | null; onHear(c: Clip): void; onClose(): void }): JSX.Element;
-// src/ui/Player.tsx      props { src: AudioSource[], audioSrc(file): string, time: number, onTime(t: number): void, clip: Clip | null, onClipDone(): void }
-//                        (an <audio> element, one button named "Play" or "Pause", the time as bar and seconds)
-// src/ui/ViewTabs.tsx    props { tab, onTab } — four buttons: "Story", "Piano roll", "Sound picture", "Sheet music"
+// src/ui/Player.tsx      props { src: AudioSource[], audioSrc(file): string, time: number, bar: number | null, onTime(t: number): void, clip: Clip | null, onClipDone(): void }
+//                        (an <audio> element, one button named "Play" or "Pause", the time as formatSeconds(time) and, on a music piece, "bar N" from `bar`; a sound piece passes bar null and shows seconds only)
+// src/ui/ViewTabs.tsx    props { tabs: Tab[], tab: Tab, onTab(t: Tab): void } — one button per entry of `tabs`, labelled from TAB_LABELS ("Story", "Piano roll", "Sound picture", "Sheet music")
 ```
 
 `main.ts` reads `document.body.dataset` (`view`, `piece`, `version`), and for `piece` calls `loadDraft(window.fetch.bind(window), ...)` then renders `Workroom` into `#workroom`; for `index` it renders nothing yet (Task 15 adds the waiting counts). The sheet bundle is a second entry, `{ "in": "src/sheet.ts", "out": "sheet", "format": "esm" }`, loaded only when the Sheet tab opens with `import(new URL('./sheet.js', import.meta.url).href)`.
@@ -2342,6 +2918,43 @@ test('the view follows the playhead a page at a time', () => {
 });
 ```
 
+`test/tabs.test.ts`:
+
+```ts
+// Which views a piece offers: a sound effect never gets Sheet music, and the
+// Piano roll waits for notes.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { TAB_LABELS, pickTab, tabsFor } from '../src/tabs.ts';
+import type { Score } from '../src/score.ts';
+
+const read = (name: string): Score => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')) as Score;
+
+test('a music piece offers all four views', () => {
+  assert.deepEqual(tabsFor(read('score-v1.json')), ['story', 'roll', 'sound', 'sheet']);
+  assert.deepEqual(Object.values(TAB_LABELS), ['Story', 'Piano roll', 'Sound picture', 'Sheet music']);
+});
+
+test('a sound effect without notes offers the story and the sound picture only', () => {
+  assert.deepEqual(tabsFor(read('score-sound-v1.json')), ['story', 'sound']);
+});
+
+test('a sound effect with notes gets the piano roll but never sheet music, even with MusicXML', () => {
+  const s: Score = { ...read('score-sound-v1.json'), musicxml: 'score.musicxml', notes: [{ lane: 'boom', start: 0, length: 0.1, pitch: 36, velocity: 100, motif: null }] };
+  assert.deepEqual(tabsFor(s), ['story', 'roll', 'sound']);
+});
+
+test('a music piece without notes has no piano roll', () => {
+  assert.deepEqual(tabsFor({ ...read('score-v1.json'), notes: [], motifs: [] }), ['story', 'sound', 'sheet']);
+});
+
+test('a tab the piece does not offer falls back to the story', () => {
+  assert.equal(pickTab(['story', 'sound'], 'sheet'), 'story');
+  assert.equal(pickTab(['story', 'sound'], 'sound'), 'sound');
+});
+```
+
 `test/load.test.ts`:
 
 ```ts
@@ -2375,6 +2988,13 @@ test('loads the latest draft by default', async () => {
   assert.deepEqual(f.urls, ['drafts.php?piece=test-piece', 'draft.php?piece=test-piece&v=2&file=score.json']);
 });
 
+test('a sound effect loads like a piece of music', async () => {
+  const sound = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as unknown;
+  const r = await loadDraft(fakeFetch(sound).fetch, 'cannon-fire', 1);
+  assert.ok(r.ok);
+  assert.deepEqual(r.ok && [r.score.kind, r.score.project.id, r.score.duration], ['sound', 'tankity', 0.4]);
+});
+
 test('an unknown schema is refused, not drawn', async () => {
   const r = await loadDraft(fakeFetch({ ...JSON.parse(scoreText), schema: 9 }).fetch, 'test-piece', 1);
   assert.deepEqual(r.ok ? '' : r.error.slice(0, 31), 'This draft uses score schema 9,');
@@ -2400,6 +3020,7 @@ import { fire, installDocument, makeEl, renderTarget, walk, type StubElement } f
 import { tempoMap } from '../src/tempo.ts';
 import { fitView } from '../src/zoom.ts';
 import { term } from '../src/glossary.ts';
+import { tabsFor } from '../src/tabs.ts';
 import type { Score } from '../src/score.ts';
 
 installDocument();
@@ -2410,6 +3031,7 @@ const ui = await importTsx<{
 }>(import.meta.dirname, { tl: '../src/ui/Timeline.tsx', gl: '../src/ui/Glossary.tsx', tabs: '../src/ui/ViewTabs.tsx' });
 
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
+const sound = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
 const withAttr = (root: StubElement, name: string) => walk(root).filter(e => e._attrs[name] !== undefined);
 
 test('the timeline draws sections, lanes and the motif ribbon', () => {
@@ -2419,6 +3041,32 @@ test('the timeline draws sections, lanes and the motif ribbon', () => {
   assert.deepEqual(withAttr(root, 'data-lane').map(e => e._attrs['data-lane']), ['strings-low', 'brass']);
   assert.deepEqual(withAttr(root, 'data-motif').map(e => e._attrs['data-motif']), ['ariadne']);
   assert.match(root.textContent, /The Labyrinth stirs/);
+});
+
+test('a music timeline is ticked by bar', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  assert.deepEqual(withAttr(root, 'data-tick').map(e => e.textContent), ['1', '2', '3', '4', '5', '6', '7', '8']);
+});
+
+test('a sound effect fills the view, is ticked in milliseconds, and draws its layers and moments', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score: sound, tempo: tempoMap(sound), view: fitView(sound.duration, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  assert.deepEqual(withAttr(root, 'data-tick').map(e => e.textContent), ['0 s', '50 ms', '100 ms', '150 ms', '200 ms', '250 ms', '300 ms', '350 ms']);
+  assert.deepEqual(withAttr(root, 'data-lane').map(e => e._attrs['data-lane']), ['boom', 'air']);
+  assert.deepEqual(withAttr(root, 'data-section').map(e => e._attrs['data-section']), ['blast', 'echo']);
+  assert.deepEqual(withAttr(root, 'data-motif'), [], 'no characters, no ribbons');
+});
+
+test('a tap on a sound effect seeks to a time in seconds', () => {
+  const root = makeEl('root');
+  const seeks: number[] = [];
+  render(h(ui.tl.Timeline, { score: sound, tempo: tempoMap(sound), view: fitView(sound.duration, 800), time: 0, onSeek: t => seeks.push(t), onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  const svg = withAttr(root, 'data-timeline')[0]!;
+  fire(svg, 'pointerdown', { pointerId: 1, clientX: 400, clientY: 120, timeStamp: 0 });
+  fire(svg, 'pointerup', { pointerId: 1, clientX: 400, clientY: 120, timeStamp: 50 });
+  assert.equal(seeks.length, 1);
+  assert.ok(Math.abs(seeks[0]! - 0.2) < 1e-9);
 });
 
 test('a glossary word in a section name is SVG text that opens its card, not a button', () => {
@@ -2457,14 +3105,21 @@ test('a glossary word opens a two-line card and Hear it plays the clip', () => {
   assert.deepEqual(heard, [{ from: 0, to: 4 }]);
 });
 
-test('four view tabs', () => {
+test('four view tabs for music', () => {
   const root = makeEl('root');
   const picked: string[] = [];
-  render(h(ui.tabs.ViewTabs, { tab: 'story', onTab: t => picked.push(t) }), renderTarget(root));
+  render(h(ui.tabs.ViewTabs, { tabs: tabsFor(score), tab: 'story', onTab: t => picked.push(t) }), renderTarget(root));
   const buttons = walk(root).filter(e => e.localName === 'button');
   assert.deepEqual(buttons.map(b => b.textContent), ['Story', 'Piano roll', 'Sound picture', 'Sheet music']);
   fire(buttons[3]!, 'click');
   assert.deepEqual(picked, ['sheet']);
+});
+
+test('a sound effect has no Sheet music tab and no empty Piano roll', () => {
+  const root = makeEl('root');
+  render(h(ui.tabs.ViewTabs, { tabs: tabsFor(sound), tab: 'story', onTab: () => {} }), renderTarget(root));
+  assert.deepEqual(walk(root).filter(e => e.localName === 'button').map(b => b.textContent), ['Story', 'Sound picture']);
+  assert.doesNotMatch(root.textContent, /Sheet music|Piano roll/);
 });
 ```
 
@@ -2485,7 +3140,7 @@ process.exit(bad.length ? 1 : 0);'
 
 It must print `all N packages have a license file`. If it lists a package, stop and report the list: the notation library is then swapped for one whose bundled packages all carry a license file, which is a decision for the plan's owner, not something to work around in `build.mjs`.
 
-- [ ] **Step 4: Implement** the modules and components. `Workroom` keeps one `time` for all four views and the `<audio>`: a view's `onSeek(t)` sets `audio.currentTime = t`; `timeupdate` and a `requestAnimationFrame` loop while playing set `time`; every view draws a playhead line at `timeToX(view, time)`. The Sound picture `<img>` is positioned with `style={{ left: \`${-view.start * view.pxPerSec}px\`, width: \`${score.duration * view.pxPerSec}px\` }}` (CSSOM, allowed by the CSP). `Sheet` renders `<div id="sheet">` and passes it to `renderSheet`. `renderSheet` parses the MusicXML with `DOMParser`, removes every `<score-part>` and `<part>` whose `id` is not `laneId`, serialises it, and renders it with `new OpenSheetMusicDisplay(el, { autoResize: true, drawTitle: false }).load(xml)` then `.render()`. Styles go in `music/music.css` (never inline `<style>`).
+- [ ] **Step 4: Implement** the modules and components. `tabsFor` returns `['story']`, then `'roll'` when `score.notes.length > 0`, then `'sound'`, then `'sheet'` when `score.kind === 'music'`; `Workroom` renders only those tabs and views, starts at `fitView(score.duration, width)` and passes `layout.ticks` labels to `Timeline`/`PianoRoll` as `<text data-tick>` (the axis is bars for music and milliseconds and seconds for a sound piece, from `axisTicks`). `Workroom` keeps one `time` for all its views and the `<audio>`: a view's `onSeek(t)` sets `audio.currentTime = t`; `timeupdate` and a `requestAnimationFrame` loop while playing set `time`; every view draws a playhead line at `timeToX(view, time)`. The Sound picture `<img>` is positioned with `style={{ left: \`${-view.start * view.pxPerSec}px\`, width: \`${score.duration * view.pxPerSec}px\` }}` (CSSOM, allowed by the CSP). `Sheet` renders `<div id="sheet">` and passes it to `renderSheet`. `renderSheet` parses the MusicXML with `DOMParser`, removes every `<score-part>` and `<part>` whose `id` is not `laneId`, serialises it, and renders it with `new OpenSheetMusicDisplay(el, { autoResize: true, drawTitle: false }).load(xml)` then `.render()`. Styles go in `music/music.css` (never inline `<style>`).
 
 - [ ] **Step 5: Run the tests and build**
 
@@ -2495,7 +3150,7 @@ Run: `node --test workroom/test/*.test.ts` — PASS; `node _kit/build/build.mjs 
 
 ```bash
 git add websites/www.cs/games/workroom websites/www.cs/games/package.json websites/www.cs/games/package-lock.json websites/www.cs/music/music.css
-git commit -m "Music workroom: four views on one playhead, glossary cards, sheet music
+git commit -m "Music workroom: views on one playhead (sheet music for music only), glossary cards
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
@@ -2504,12 +3159,12 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ### Task 9: The local browser check; open PR 2
 
 **Files:**
-- Create: `websites/www.cs/compose.music-local.yaml`, `tests/e2e/local.config.ts`, `tests/e2e/workroom.local.ts`, `games/workroom/tools/make-draft-fixture.ts`, `games/workroom/tools/e2e-bundle.ts`, `games/workroom/test/fixtures/public-key.ts`, `games/workroom/test/fixtures/draft/{score.json,score.musicxml,audio.webm,spectrogram.png}`
+- Create: `websites/www.cs/compose.music-local.yaml`, `tests/e2e/local.config.ts`, `tests/e2e/workroom.local.ts`, `games/workroom/tools/make-draft-fixture.ts`, `games/workroom/tools/e2e-bundle.ts`, `games/workroom/test/fixtures/public-key.ts`, `games/workroom/test/fixtures/draft/{score.json,score.musicxml,audio.webm,spectrogram.png}`, `games/workroom/test/fixtures/draft-sound/{score.json,audio.webm,spectrogram.png}`
 - Modify: `websites/www.cs/Makefile` (new target `music-e2e`), `music/README.md` (how to run the check)
 
 **Interfaces:**
 - Consumes: the merged `compose.admin-local.yaml` (it needs `ADMIN_SMOKE_DIR`; it sets `ADMIN_BASE_URL=http://localhost/admin/`, a local base that lets the admin kit accept plain HTTP, `ADMIN_DATA_DIR=$ADMIN_SMOKE_DIR` and mail capture to `$ADMIN_SMOKE_DIR/mail`, all inside the PHP container), `tests/admin-smoke.sh` (the pattern for waiting on the stack and creating the mail folder), the hub's keys panel (`admin/keys.php`), `Music\Api::publishDraft`.
-- Produces: `make music-e2e` (local only; prints `MUSIC-E2E-OK`); `tests/e2e/workroom.local.ts` exports nothing; helpers inside it: `signIn(page, base)`, `createKey(page, base, scopes): Promise<string>`, `publishFixtureDraft(request, base, key)`.
+- Produces: `make music-e2e` (local only; prints `MUSIC-E2E-OK`); `tests/e2e/workroom.local.ts` exports nothing; helpers inside it: `signIn(page, base)`, `createKey(page, base, scopes): Promise<string>`, `publishFixtureDraft(request, base, key, fixture = 'draft')` (`'draft'` is the Crete music piece `test-piece`; `'draft-sound'` is the Tankity sound effect `cannon-fire`, which has no MusicXML).
 
 `compose.music-local.yaml`:
 
@@ -2592,13 +3247,18 @@ export const PUBLIC_KEY = null;
 export const PREVIOUS_KEYS = [];
 ```
 
-- [ ] **Step 1: Make the draft fixture.** `tools/make-draft-fixture.ts` copies `test/fixtures/score-v1.json` to `test/fixtures/draft/score.json` and writes `score.musicxml`: a `score-partwise` with one `<score-part id="strings-low">` and one `<score-part id="brass">`, eight 4/4 measures each, one whole note per measure at that lane's note pitch (or a whole rest), with `<divisions>1</divisions>`. Run it: `node workroom/tools/make-draft-fixture.ts`. Make the audio and picture (16 s, as the score says):
+- [ ] **Step 1: Make the draft fixtures.** `tools/make-draft-fixture.ts` also copies `test/fixtures/score-sound-v1.json` to `test/fixtures/draft-sound/score.json` (a sound draft has no `score.musicxml`). It copies `test/fixtures/score-v1.json` to `test/fixtures/draft/score.json` and writes `score.musicxml`: a `score-partwise` with one `<score-part id="strings-low">` and one `<score-part id="brass">`, eight 4/4 measures each, one whole note per measure at that lane's note pitch (or a whole rest), with `<divisions>1</divisions>`. Run it: `node workroom/tools/make-draft-fixture.ts`. Make the audio and picture (16 s, as the score says):
 
 ```bash
 cd websites/www.cs/games/workroom/test/fixtures/draft
 ffmpeg -loglevel error -f lavfi -i "sine=frequency=220:duration=16" -c:a libopus -b:a 24k audio.webm
 ffmpeg -loglevel error -i audio.webm -lavfi showspectrumpic=s=800x200:legend=0 spectrogram.png
+cd ../draft-sound
+ffmpeg -loglevel error -f lavfi -i "sine=frequency=110:duration=0.4" -c:a libopus -b:a 24k audio.webm
+ffmpeg -loglevel error -i audio.webm -lavfi showspectrumpic=s=800x200:legend=0 spectrogram.png
 ```
+
+The sound fixture's audio is 0.4 s, as `score-sound-v1.json` says.
 
 - [ ] **Step 2: Write the check** (`tests/e2e/workroom.local.ts`):
 
@@ -2606,14 +3266,18 @@ ffmpeg -loglevel error -i audio.webm -lavfi showspectrumpic=s=800x200:legend=0 s
 // The workroom in a real browser against local docker (make music-e2e): sign in
 // through the captured mail, publish a draft with an API key made on the hub,
 // open the piece, play, move the playhead, switch views, open a glossary card,
-// and never trip the content security policy.
+// and never trip the content security policy; then a sound effect from another
+// project: two projects on the list, a seconds axis, no sheet music.
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SITE = join(import.meta.dirname, '..', '..');
-const DRAFT = join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft');
+const FIXTURE_DRAFTS = {
+  draft: { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft'), piece: 'test-piece' },
+  'draft-sound': { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft-sound'), piece: 'cannon-fire' },
+} as const;
 
 // The tests share one browser worker and one sign-in: the admin sign-in link is limited to three a hour per address,
 // so a run makes two link requests at most (this shared session, and the second device in the second test).
@@ -2683,11 +3347,13 @@ function draftBundle(files: Record<string, Buffer>): Buffer {
   return Buffer.concat(parts);
 }
 
-export async function publishFixtureDraft(request: APIRequestContext, base: string, key: string): Promise<void> {
-  const read = (name: string) => readFileSync(join(DRAFT, name));
-  const res = await request.post(`${base}music/api/drafts.php?piece=test-piece&version=1`, {
+export async function publishFixtureDraft(request: APIRequestContext, base: string, key: string, fixture: keyof typeof FIXTURE_DRAFTS = 'draft'): Promise<void> {
+  const { dir, piece } = FIXTURE_DRAFTS[fixture];
+  // A music draft carries score.musicxml; a sound draft does not.
+  const files = Object.fromEntries(['score.json', 'score.musicxml', 'audio.webm', 'spectrogram.png'].filter(name => existsSync(join(dir, name))).map(name => [name, readFileSync(join(dir, name))]));
+  const res = await request.post(`${base}music/api/drafts.php?piece=${piece}&version=1`, {
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/octet-stream' },
-    data: draftBundle({ 'score.json': read('score.json'), 'score.musicxml': read('score.musicxml'), 'audio.webm': read('audio.webm'), 'spectrogram.png': read('spectrogram.png') }),
+    data: draftBundle(files),
   });
   expect([201, 409]).toContain(res.status());
 }
@@ -2728,11 +3394,39 @@ test('open a piece, play, seek, switch views, read a term, no CSP violations', a
   expect(violations).toEqual([]);
   await context.close();
 });
+
+test('a sound effect from another project: grouped list, seconds on the axis, no sheet music', async ({ browser, request, baseURL }) => {
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
+  const bundle = process.env.WORKROOM_E2E_BUNDLE;
+  if (bundle) await page.route('**/games/workroom/dist/workroom.js*', r => r.fulfill({ contentType: 'text/javascript', body: readFileSync(bundle, 'utf8') }));
+  const violations: string[] = [];
+  page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
+  const key = await createKey(page, base, 'e2e publish sound', ['drafts:publish']);
+  await publishFixtureDraft(request, base, key); // Crete, music
+  await publishFixtureDraft(request, base, key, 'draft-sound'); // Tankity, sound: published last, so its project is listed first
+
+  await page.goto(`${base}music/`);
+  await expect(page.locator('h2.project')).toHaveText(['Tankity', 'Crete']);
+  await page.getByRole('link', { name: 'Cannon fire' }).click();
+  await expect(page.locator('[data-lane="boom"]')).toBeVisible();
+  await expect(page.locator('[data-lane="air"]')).toBeVisible();
+  await expect(page.locator('[data-section="blast"]')).toBeVisible();
+  await expect(page.locator('[data-tick]').nth(1)).toHaveText('50 ms');
+  await expect(page.getByRole('button', { name: 'Sheet music' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Piano roll' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Sound picture' }).click();
+  await expect(page.locator('img[data-spectrogram]')).toBeVisible();
+  await page.getByRole('button', { name: 'Play' }).click();
+  await expect.poll(() => page.locator('audio').evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(0.05);
+  expect(violations).toEqual([]);
+  await context.close();
+});
 ```
 
 The labels the check uses (`Email`, `Email me a link`, `Sign in`, `Label`, one checkbox per scope labelled with the scope, `Create key`, and the new key in `code.secret`) are the admin pages' own, as `Admin\Pages` renders them.
 
-- [ ] **Step 3: Run it** — `make music-e2e`. Expected: the check passes and `MUSIC-E2E-OK` prints; `docker compose ls` shows no `music-e2e-*` project afterwards.
+- [ ] **Step 3: Run it** — `make music-e2e`. Expected: both tests pass and `MUSIC-E2E-OK` prints; `docker compose ls` shows no `music-e2e-*` project afterwards.
 
 - [ ] **Step 4: Gates** — from `websites/www.cs`: `vendor/bin/phpunit --testsuite site`; `(cd games && npm ci --silent && npm run --silent check)`; `sh games/units.sh`; `cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json` (the new `.local.ts` type-checks); `node tests/e2e/select.ts --check` prints `E2E-SELECT-OK`.
 
@@ -2740,13 +3434,13 @@ The labels the check uses (`Email`, `Email me a link`, `Sign in`, `Label`, one c
 
 ```bash
 git add websites/www.cs/compose.music-local.yaml websites/www.cs/tests/e2e/local.config.ts websites/www.cs/tests/e2e/workroom.local.ts websites/www.cs/games/workroom websites/www.cs/Makefile websites/www.cs/music/README.md
-git commit -m "Music workroom: local browser check for the four views
+git commit -m "Music workroom: local browser check for the views, music and sound
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ```
 
-Open the PR (foundry `pr-fix-loop`): "Music workroom: the page, four views and the glossary"; body: summary, spec and plan paths, `make music-e2e` result, after-deploy check (sign in, open `/music/`, no pieces until the first `make music-publish`), attribution lines.
+Open the PR (foundry `pr-fix-loop`): "Music workroom: the page, its views and the glossary"; body: summary, spec and plan paths, `make music-e2e` result, after-deploy check (sign in, open `/music/`, no pieces until the first `make music-publish`), attribution lines.
 
 ---
 
@@ -2773,7 +3467,8 @@ export type NoteKind = (typeof NOTE_KINDS)[number];
 export const REACTION_IDS = ['more-epic', 'calmer', 'darker', 'brighter', 'longer', 'shorter', 'love-it', 'not-this'] as const;
 export type Reaction = (typeof REACTION_IDS)[number];
 export interface NoteBody {
-  v: 1; kind: NoteKind; piece: string; draft: number; from: number; to: number; fromBar: number; toBar: number;
+  v: 1; kind: NoteKind; piece: string; draft: number; from: number; to: number; // seconds
+  fromBar: number | null; toBar: number | null;                                  // bars on a music piece; null on a sound piece (seconds only)
   lane: string | null; text: string | null; reaction: Reaction | null; curve: [number, number][] | null;
   audio: { mime: string; seconds: number } | null; made: string;
 }
@@ -2900,6 +3595,13 @@ test('seal then open gives back the note and its audio', async () => {
   assert.equal(opened.fingerprint, fx.fingerprint);
   assert.deepEqual(opened.body, { ...body, kind: 'hum', audio: { mime: 'audio/webm', seconds: 1 } });
   assert.deepEqual([...(opened.audio ?? [])], [1, 2, 3, 4, 5]);
+});
+
+test('a note on a sound effect carries seconds only', async () => {
+  const sound: NoteBody = { ...body, piece: 'cannon-fire', from: 0.02, to: 0.2, fromBar: null, toBar: null, lane: 'boom', text: 'a sharper attack' };
+  const opened = await open(await seal(sound, null, builtIn), new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)]]));
+  assert.deepEqual(opened.body, sound);
+  assert.deepEqual([opened.body.fromBar, opened.body.toBar], [null, null]);
 });
 
 test('the words are not in the bundle, and two seals differ', async () => {
@@ -4399,7 +5101,8 @@ if __name__ == "__main__":
 
 ```python
 """Publish validates score.json with the same rules as the page and sends only
-a complete, valid draft; the newest version is the default."""
+a complete, valid draft (music with its MusicXML, a sound effect without);
+the newest version is the default."""
 import json
 import shutil
 import tempfile
@@ -4468,13 +5171,43 @@ class PublishTest(unittest.TestCase):
         with self.assertRaises(PublishError):
             publish("test-piece", 1, self.pieces, self.api, self.ids)
 
+    def test_a_sound_effect_publishes_without_musicxml(self):
+        shutil.copytree(FIXTURES / "draft-sound", self.pieces / "cannon-fire" / "v1")
+        self.assertEqual(publish("cannon-fire", None, self.pieces, self.api, self.ids), 1)
+        self.assertEqual(self.api.sent, [("cannon-fire", 1, ["audio.webm", "score.json", "spectrogram.png"])])
+
+    def test_music_without_musicxml_never_leaves_the_computer(self):
+        (self.v1 / "score.musicxml").unlink()
+        with self.assertRaises(PublishError) as e:
+            publish("test-piece", 1, self.pieces, self.api, self.ids)
+        self.assertIn("score.musicxml", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+
+    def test_a_sound_effect_with_bars_never_leaves_the_computer(self):
+        sound = self.pieces / "cannon-fire" / "v1"
+        shutil.copytree(FIXTURES / "draft-sound", sound)
+        score = json.loads((sound / "score.json").read_text())
+        score["bars"] = 8
+        (sound / "score.json").write_text(json.dumps(score))
+        with self.assertRaises(PublishError) as e:
+            publish("cannon-fire", 1, self.pieces, self.api, self.ids)
+        self.assertIn("bars", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+
     def test_python_and_the_page_name_the_same_paths(self):
         base = json.loads((FIXTURES / "score-v1.json").read_text())
         self.assertEqual(validate(base, self.ids), [])
         cases = [
             (lambda s: s["piece"].__setitem__("id", "Bad Id"), "piece.id"),
             (lambda s: s["sections"][1].__setitem__("to_bar", 7), "sections[1].to_bar"),
-            (lambda s: s["motifs"][0].__setitem__("color", "#ffffff"), "motifs[0].color"),
+            (lambda s: s.__setitem__("kind", "noise"), "kind"),
+            (lambda s: s["project"].__setitem__("id", "Not An Id"), "project.id"),
+            (lambda s: s["project"].__setitem__("name", ""), "project.name"),
+            (lambda s: s["characters"][0].__setitem__("color", "gold"), "characters[0].color"),
+            (lambda s: s["characters"][1].__setitem__("id", "ariadne"), "characters[1].id"),
+            (lambda s: s["motifs"][0].__setitem__("character", "nobody"), "motifs[0].character"),
+            (lambda s: s.pop("musicxml"), "musicxml"),
+            (lambda s: s.pop("bars"), "bars"),
             (lambda s: s["notes"][0].__setitem__("lane", "violas"), "notes[0].lane"),
             (lambda s: s["energy"][1].__setitem__(1, 1.5), "energy[1]"),
             (lambda s: s["glossary"][0].__setitem__("term", "flibbertigibbet"), "glossary[0].term"),
@@ -4485,6 +5218,40 @@ class PublishTest(unittest.TestCase):
             change(s)
             errors = validate(s, self.ids)
             self.assertTrue(errors and path in errors[0], (path, errors))
+
+    def test_python_and_the_page_name_the_same_sound_paths(self):
+        base = json.loads((FIXTURES / "score-sound-v1.json").read_text())
+        self.assertEqual(validate(base, self.ids), [])
+        with_xml = json.loads(json.dumps(base))
+        with_xml["musicxml"] = "score.musicxml"
+        self.assertEqual(validate(with_xml, self.ids), [], "a sound piece may carry MusicXML")
+        no_moments = json.loads(json.dumps(base))
+        no_moments["sections"] = []
+        self.assertEqual(validate(no_moments, self.ids), [], "sections are optional for a sound piece")
+        cases = [
+            (lambda s: s.__setitem__("bars", 8), "bars"),
+            (lambda s: s.__setitem__("tempo", [{"bar": 1, "bpm": 120, "beats": 4, "unit": 4}]), "tempo"),
+            (lambda s: s.__setitem__("duration", 0.04), "duration"),
+            (lambda s: s["sections"][0].__setitem__("from_bar", 1), "sections[0]"),
+            (lambda s: s["sections"][1].__setitem__("from", 0.05), "sections[1].from"),
+            (lambda s: s["sections"][1].__setitem__("to", 0.5), "sections[1].to"),
+            (lambda s: s["changes"][0].__setitem__("to", 0.5), "changes[0].to"),
+            (lambda s: s["lanes"][0].__setitem__("family", "kazoo"), "lanes[0].family"),
+            (lambda s: s["project"].__setitem__("id", "Bad Id"), "project.id"),
+        ]
+        for change, path in cases:
+            s = json.loads(json.dumps(base))
+            change(s)
+            errors = validate(s, self.ids)
+            self.assertTrue(errors and path in errors[0], (path, errors))
+
+    def test_either_kind_may_use_any_lane_family(self):
+        music = json.loads((FIXTURES / "score-v1.json").read_text())
+        music["lanes"][0].update(family="impact", icon="impact")
+        self.assertEqual(validate(music, self.ids), [])
+        sound = json.loads((FIXTURES / "score-sound-v1.json").read_text())
+        sound["lanes"][1].update(family="strings", icon="strings")
+        self.assertEqual(validate(sound, self.ids), [])
 
 
 if __name__ == "__main__":
@@ -4505,7 +5272,7 @@ Both run `ensure_synced()` first (exit 3 on a mismatch, before any request), and
 
 - [ ] **Step 2: Run to see them fail** — `make music-tools-test` — FAIL (modules missing).
 
-- [ ] **Step 3: Implement.** `f0_to_notes`: a frame is voiced when it is a finite number > 0; MIDI = `round(69 + 12 * log2(f / 440))`; consecutive voiced frames with the same MIDI number form one note starting at `index * hop`; notes shorter than `min_seconds` are dropped. `hum_to_midi`: `to_wav`, `librosa.load(wav, sr=16000)`, `librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C6'), sr=16000, frame_length=1024, hop_length=160)`, `f0_to_notes(f0, 160 / 16000)`, then a one-track `mido.MidiFile` at 480 ticks per beat and 60 bpm (one beat a second) with `note_on`/`note_off` per note. Each optional import sits inside its function in `try: ... except ImportError: raise MissingDependency(f"... needs <package>: {INSTALL}")`; `shutil.which('ffmpeg') is None` raises `MissingDependency` too. `score.validate(obj, glossary_ids)` follows the schema table rule by rule, in the same order as `parseScore`, with the same path spellings, including `glossary[i].term` against `glossary_ids`; `score.glossary_ids(path)` reads `games/workroom/src/glossary.json` (`{"terms": [{"id": ...}]}`), the same file the page's `glossary.ts` imports, so the tool and the page cannot disagree about which terms exist. `publish.publish(piece, version, pieces, api, glossary_ids)` validates `score.json` with those ids (the first error becomes a `PublishError` naming its path) and raises `PublishError("... is over the server's 8 MB limit for one draft")` before any request when the module function `draft_size(files)` (imported with `from .api import MAX_REQUEST_BYTES, draft_size`) is over `MAX_REQUEST_BYTES`, so the server's 413 is the backstop, not the first answer. The `api` argument is only the object whose `publish_draft` sends the draft; it has neither `draft_size` nor `MAX_REQUEST_BYTES`, which is why the `FakeApi` in `test_publish.py` needs neither. The CLI passes `score.glossary_ids(paths.glossary_path())`.
+- [ ] **Step 3: Implement.** `f0_to_notes`: a frame is voiced when it is a finite number > 0; MIDI = `round(69 + 12 * log2(f / 440))`; consecutive voiced frames with the same MIDI number form one note starting at `index * hop`; notes shorter than `min_seconds` are dropped. `hum_to_midi`: `to_wav`, `librosa.load(wav, sr=16000)`, `librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C6'), sr=16000, frame_length=1024, hop_length=160)`, `f0_to_notes(f0, 160 / 16000)`, then a one-track `mido.MidiFile` at 480 ticks per beat and 60 bpm (one beat a second) with `note_on`/`note_off` per note. Each optional import sits inside its function in `try: ... except ImportError: raise MissingDependency(f"... needs <package>: {INSTALL}")`; `shutil.which('ffmpeg') is None` raises `MissingDependency` too. `score.validate(obj, glossary_ids)` follows the schema table rule by rule, in the same order as `parseScore` (schema, kind, project, piece, draft, made, duration, then `bars` and `tempo`, which a music score requires and a sound score refuses, then sections, lanes, characters, motifs, notes, energy, glossary, audio, spectrogram, `musicxml` (required for music, optional for sound), changes), with the same path spellings, including `glossary[i].term` against `glossary_ids` and `motifs[i].character` against the score's own `characters`; `score.glossary_ids(path)` reads `games/workroom/src/glossary.json` (`{"terms": [{"id": ...}]}`), the same file the page's `glossary.ts` imports, so the tool and the page cannot disagree about which terms exist. `publish.publish(piece, version, pieces, api, glossary_ids)` validates `score.json` with those ids (the first error becomes a `PublishError` naming its path), sends the draft's files that exist among `score.json`, `score.musicxml`, `audio.webm`, `audio.m4a` and `spectrogram.png` (a music draft with no `score.musicxml` is a `PublishError` naming it; a sound draft needs none) and raises `PublishError("... is over the server's 8 MB limit for one draft")` before any request when the module function `draft_size(files)` (imported with `from .api import MAX_REQUEST_BYTES, draft_size`) is over `MAX_REQUEST_BYTES`, so the server's 413 is the backstop, not the first answer. The `api` argument is only the object whose `publish_draft` sends the draft; it has neither `draft_size` nor `MAX_REQUEST_BYTES`, which is why the `FakeApi` in `test_publish.py` needs neither. The CLI passes `score.glossary_ids(paths.glossary_path())`.
 
 - [ ] **Step 4: Run the tests** — `make music-tools-test` — PASS (the hum and speech fixture tests run when the optional packages are installed: `music/tools/.venv/bin/pip install -r music/tools/requirements-answering.txt` and `brew install ffmpeg`; run them once that way too and see them pass).
 
@@ -4539,9 +5306,12 @@ export class NoteTooLong extends Error {}
 export interface Context { piece: string; draft: number; now: () => Date }
 export function textNote(c: Context, span: Span, text: string): NoteBody;              // trims; empty → Error('Type a note first.')
 export function speechNote(c: Context, span: Span, audio: { mime: string; seconds: number }): NoteBody;
-export function humNote(c: Context, at: { time: number; bar: number; laneId: string | null }, audio: { mime: string; seconds: number }): NoteBody;
-export function reactNote(c: Context, section: Section, tempo: TempoMap, duration: number, reaction: Reaction): NoteBody;
-export function energyNote(c: Context, curve: [number, number][], duration: number, bars: number): NoteBody;
+export function humNote(c: Context, at: { time: number; bar: number | null; laneId: string | null }, audio: { mime: string; seconds: number }): NoteBody; // bar is null on a sound piece
+export function reactNote(c: Context, section: Section, tempo: TempoMap, duration: number, reaction: Reaction): NoteBody; // the section's seconds from sectionTimes; its bars (music) or null (sound)
+export function energyNote(c: Context, curve: [number, number][], duration: number, bars: number | null): NoteBody; // bars is score.bars ?? null: fromBar 1 and toBar bars, or both null for a sound piece
+/** A section spanning the whole piece (bars 1 to score.bars, or 0 to score.duration seconds), for a reaction when no section is under the playhead: a sound piece may have no sections. */
+export function wholePiece(score: Score): Section;
+// Every note body carries seconds (from, to); fromBar and toBar are the bars on a music piece and null on a sound piece.
 
 // src/energy.ts
 export type Curve = [number, number][];
@@ -4778,12 +5548,13 @@ test('pixels in the energy band become a curve', () => {
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { NoteTooLong, REACTIONS, energyNote, humNote, reactNote, textNote } from '../src/answer.ts';
+import { NoteTooLong, REACTIONS, energyNote, humNote, reactNote, textNote, wholePiece } from '../src/answer.ts';
 import { tempoMap } from '../src/tempo.ts';
 import { REACTION_IDS } from '../src/note.ts';
 import type { Score } from '../src/score.ts';
 
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
+const sound = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
 const ctx = { piece: 'test-piece', draft: 1, now: () => new Date('2026-10-20T14:03:11.000Z') };
 
 test('a typed note is tied to its span and draft', () => {
@@ -4810,6 +5581,21 @@ test('a reaction covers its section; the last section ends at the end of the pie
 test('a redrawn energy curve covers the whole piece', () => {
   const n = energyNote(ctx, [[0, 0.1], [16, 1]], 16, 8);
   assert.deepEqual([n.kind, n.from, n.to, n.fromBar, n.toBar, n.curve], ['energy', 0, 16, 1, 8, [[0, 0.1], [16, 1]]]);
+});
+
+test('notes on a sound effect carry seconds only', () => {
+  const sctx = { ...ctx, piece: 'cannon-fire' };
+  const text = textNote(sctx, { from: 0.02, to: 0.2, fromBar: null, toBar: null, laneId: 'boom' }, 'a sharper attack');
+  assert.deepEqual([text.from, text.to, text.fromBar, text.toBar, text.lane, text.text], [0.02, 0.2, null, null, 'boom', 'a sharper attack']);
+  const hum = humNote(sctx, { time: 0.1, bar: null, laneId: null }, { mime: 'audio/webm', seconds: 2 });
+  assert.deepEqual([hum.kind, hum.from, hum.to, hum.fromBar, hum.toBar], ['hum', 0.1, 0.1, null, null]);
+  const echo = reactNote(sctx, sound.sections[1]!, tempoMap(sound), sound.duration, 'calmer');
+  assert.deepEqual([echo.from, echo.to, echo.fromBar, echo.toBar], [0.08, 0.4, null, null], 'the moment named echo, in seconds');
+  const whole = reactNote(sctx, wholePiece(sound), tempoMap(sound), sound.duration, 'love-it');
+  assert.deepEqual([whole.from, whole.to, whole.fromBar, whole.toBar], [0, 0.4, null, null], 'a sound piece may react to the whole piece');
+  assert.deepEqual([wholePiece(score).from_bar, wholePiece(score).to_bar], [1, 8]);
+  const energy = energyNote(sctx, [[0, 1], [0.4, 0]], sound.duration, sound.bars ?? null);
+  assert.deepEqual([energy.from, energy.to, energy.fromBar, energy.toBar], [0, 0.4, null, null]);
 });
 ```
 
@@ -4866,7 +5652,7 @@ test('recording stops at 60 seconds, unless cancelled', () => {
 
 - [ ] **Step 2: Run to see them fail** — `node --test workroom/test/{answer,energy,outbox,api,history,recorder}.test.ts` — FAIL.
 
-- [ ] **Step 3: Implement** the six modules. `reactNote` covers the whole section: `from = tempo.barStart(section.from_bar)`, `to = min(tempo.barStart(section.to_bar + 1), duration)`, so the last section ends at the piece's end (`barStart` past the last bar is the duration, Task 6). `createApi` keeps a `queue: Promise<unknown>` and chains each POST onto it; a POST sends `X-CSRF` and, for deletes, `Content-Type: application/x-www-form-urlencoded` with `id=<id>` or `all=1`; the upload sends the bundle as `application/octet-stream`. Every response is checked by status, never by `Content-Type`: `redirected`, a 401, or a 403 whose JSON `error` is not `csrf` → `SignedOut`; another non-2xx status → an `Error` naming it; `keyring()` maps a 404 `no_keyring` to `NoKeyring`. `bytes(id)` fetches `note.php?id=<id>` with the same checks, then requires a 200 whose `Content-Type` starts `application/octet-stream` (else an `Error` saying so, not `SignedOut`) and returns `new Uint8Array(await res.arrayBuffer())`; the JSON routes parse their body whatever its type. `createOutbox.add` puts the note first (`reason: 'new'`), then flushes; `flush` walks `all()` sorted by `made`, stops at the first `offline`, and rewrites a kept note's `reason`.
+- [ ] **Step 3: Implement** the six modules. `reactNote` covers the whole section: `{ from, to } = sectionTimes(section, tempo, duration)` (Task 6: for a music section `from = tempo.barStart(section.from_bar)` and `to = tempo.barStart(section.to_bar + 1)`, so the last section ends at the piece's end because `barStart` past the last bar is the duration; for a sound section its own seconds), with `fromBar`/`toBar` the section's bars, or null for a sound section. `humNote` sets `from = to = at.time` and both bars to `at.bar`; `energyNote` sets both bars to null when `bars` is null. `createApi` keeps a `queue: Promise<unknown>` and chains each POST onto it; a POST sends `X-CSRF` and, for deletes, `Content-Type: application/x-www-form-urlencoded` with `id=<id>` or `all=1`; the upload sends the bundle as `application/octet-stream`. Every response is checked by status, never by `Content-Type`: `redirected`, a 401, or a 403 whose JSON `error` is not `csrf` → `SignedOut`; another non-2xx status → an `Error` naming it; `keyring()` maps a 404 `no_keyring` to `NoKeyring`. `bytes(id)` fetches `note.php?id=<id>` with the same checks, then requires a 200 whose `Content-Type` starts `application/octet-stream` (else an `Error` saying so, not `SignedOut`) and returns `new Uint8Array(await res.arrayBuffer())`; the JSON routes parse their body whatever its type. `createOutbox.add` puts the note first (`reason: 'new'`), then flushes; `flush` walks `all()` sorted by `made`, stops at the first `offline`, and rewrites a kept note's `reason`.
 
 - [ ] **Step 4: Run the tests** — PASS. Add `answer.ts`, `energy.ts` and `recorder.ts` to `tsconfig.json`'s `files` and `api.ts`, `outbox.ts` and `history.ts` to `src/tsconfig.crypto.json`'s; `node _kit/build/build.mjs workroom --check` — exit 0 (it type-checks every program first; if it then reports a stale `dist/`, run `node _kit/build/build.mjs workroom` and check again).
 
@@ -4874,7 +5660,7 @@ test('recording stops at 60 seconds, unless cancelled', () => {
 
 ```bash
 git add websites/www.cs/games/workroom
-git commit -m "Music workroom: notes, energy curves, outbox, page API client and history
+git commit -m "Music workroom: notes (bars or seconds), energy curves, outbox, page API client and history
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
@@ -4884,7 +5670,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 
 **Files:**
 - Create: `games/workroom/src/idb.ts` (`indexedDbOutbox()`, the only IndexedDB use; it stores sealed bundles), `games/workroom/src/ui/UnlockPanel.tsx`, `src/ui/PinComposer.tsx`, `src/ui/HumButton.tsx`, `src/ui/ReactBar.tsx`, `src/ui/EnergyEditor.tsx`, `src/ui/History.tsx`, `src/ui/PiecesWaiting.tsx`, `games/workroom/test/answering-views.test.ts`
-- Modify: `games/workroom/src/main.ts`, `src/ui/Workroom.tsx` (the answering bar and notes on the timeline), `src/tsconfig.dom.json` (`idb.ts`), `tests/e2e/workroom.local.ts` (second test), `websites/www.cs/Makefile` (`music-e2e` passes `MUSIC_PY`), `websites/www.cs/docker/php/Dockerfile` (`env[MUSIC_PUBLIC_KEYS]`), `tests/php/MusicDeployTest.php` (pins that line), `music/music.css`, `music/README.md`
+- Modify: `games/workroom/src/main.ts`, `src/ui/Workroom.tsx` (the answering bar and notes on the timeline), `src/tsconfig.dom.json` (`idb.ts`), `tests/e2e/workroom.local.ts` (a further test), `websites/www.cs/Makefile` (`music-e2e` passes `MUSIC_PY`), `websites/www.cs/docker/php/Dockerfile` (`env[MUSIC_PUBLIC_KEYS]`), `tests/php/MusicDeployTest.php` (pins that line), `music/music.css`, `music/README.md`
 
 **Interfaces:**
 - Consumes: everything in Tasks 10 and 14; `Workroom`, `Timeline` (Task 8); `make music-tools-venv` for the check.
@@ -4896,6 +5682,7 @@ export function UnlockPanel(p: { busy: boolean; error: string | null; onUnlock(p
   // (autocomplete="current-password") so 1Password fills it; button "Unlock notes"; no checkbox and nothing to remember: the passphrase is asked on every visit.
   // The typed value lives in component state set from the field's `input` event; submit reads that state, calls onUnlock(value) and clears it.
 export function PinComposer(p: { span: Span | null; recording: boolean; onSend(text: string): void; onRecord(): void; onStop(): void; onCancel(): void }): JSX.Element;
+  // The span is shown as bars and seconds on a music piece and as seconds only on a sound effect (fromBar and toBar are null there).
   // "Select a moment or a span on the timeline" until span is set; textarea "Your note"; buttons "Send", "Record", "Stop", "Cancel".
   // "Send" is always rendered, and disabled until a span is set AND the textarea holds words (not only spaces)
 export function HumButton(p: { recording: boolean; seconds: number; onStart(): void; onStop(): void }): JSX.Element; // "Hum it" / "Stop (0:12 of 1:00)"
@@ -4911,7 +5698,7 @@ export function PiecesWaiting(p: { counts: Map<string, number>; list: ParentNode
   // Task 3) and sets the text of the `<span class="waiting-count">` that follows the link to "N waiting" ("" for 0)
 ```
 
-`Workroom` gains an answering bar under the player: "Pin a note" (switches the gestures to `select` and opens `PinComposer`), `HumButton`, "React" (opens `ReactBar` for the section under the playhead) and "Draw the energy" (opens `EnergyEditor` over the energy band); below the views, `History` for this piece.
+`Workroom` gains an answering bar under the player: "Pin a note" (switches the gestures to `select` and opens `PinComposer`), `HumButton`, "React" (opens `ReactBar` for the section under the playhead, or for `wholePiece(score)` when none is, as on a sound effect without sections) and "Draw the energy" (opens `EnergyEditor` over the energy band); below the views, `History` for this piece.
 
 `main.ts` wiring (thin; everything decided lives in the pure modules): read the CSRF token from `<meta name="csrf">`; `api = createApi(fetch, csrf)`; `vault = createVault()` (memory only; nothing is restored from anywhere); `outbox = createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID())`, `flush()` on load and on `online`; when `PUBLIC_KEY` is null the answering bar shows "No notes key yet (make keys-init)" and nothing seals. Until the vault holds keys the page shows `UnlockPanel`; on submit it fetches `api.keyring()` (`NoKeyring` → "No notes key has been uploaded yet (make keys-init)."), runs `unlockKeyring(locked, passphrase, [PUBLIC_KEY, ...PREVIOUS_KEYS])` and `vault.load(keys)` (`WrongPassphrase` → "That passphrase did not unlock the key."; `KeyringInvalid` → "The keyring on the server does not match this page's key. Reload the page; if it still fails, run make keys-upload."), then, only now, `api.list()`, `api.bytes(id)` and `open(bytes, vault.keyring())` per note into the history map (notes are listed after an unlock and not before: until then `History` gets `locked: true`, the index page shows the server-rendered total waiting, and nothing says Waiting or Picked up) (one failure never stops the rest; a note sealed to a fingerprint `vault.missing(...)` reports is shown as unreadable). Nothing about a key is stored: the passphrase field is cleared after submit and `main.ts` never touches `indexedDB`, `localStorage`, `sessionStorage` or cookies for keys; the only IndexedDB use is `indexedDbOutbox()` (database `siue-music`, store `outbox`), which holds sealed bundles. Sending: build the `NoteBody` with `answer.ts`, `seal(body, audio, PUBLIC_KEY)`, `outbox.add(bundle, body.made)`, show the report, refresh the history. The recorder uses `MediaRecorder` with `pickMime(MediaRecorder.isTypeSupported)` and `stopAfterLimit(window, stop)`.
 
@@ -5054,11 +5841,11 @@ The local check needs the PHP worker to see `MUSIC_PUBLIC_KEYS`, and FPM clears 
     && echo 'env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS' >> /etc/php-fpm.d/www.conf
 ```
 
-Notes on the timeline: each opened note of this piece draws a pin (a moment) or a band (a span) at its `from`/`to` in its lane row (or across all lanes), marked with its draft when it differs from the shown one; each `changes[]` entry draws a band on its bars with Claude's text, beside the pins of the notes in its `answers`.
+Notes on the timeline: each opened note of this piece draws a pin (a moment) or a band (a span) at its `from`/`to` in its lane row (or across all lanes), marked with its draft when it differs from the shown one; each `changes[]` entry draws a band on its bars (music) or its seconds (sound) with Claude's text, beside the pins of the notes in its `answers`.
 
 - [ ] **Step 4: Run the unit tests and build** — `node --test workroom/test/*.test.ts` — PASS; `node _kit/build/build.mjs workroom`; `sh workroom/test.sh` — exit 0.
 
-- [ ] **Step 5: Extend the browser check.** In the Makefile, beside `MUSIC_PY`, add `MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))`: the venv's interpreter (a path) becomes absolute, which the check needs because it runs the tool from another directory, while the bare fallback `python3` stays a command name (`abspath` would turn it into `<cwd>/python3`). In the `music-e2e` recipe pass `MUSIC_PY=$(MUSIC_PY_ABS)` to the check (`MUSIC_PY=$(MUSIC_PY_ABS) E2E_BASE_URL=... tests/e2e/run.sh -c local.config.ts`). Add this test to `tests/e2e/workroom.local.ts`, beside the first (same imports, plus `mkdtempSync`, `readdirSync` and `writeFileSync` from `node:fs` and `tmpdir` from `node:os`):
+- [ ] **Step 5: Extend the browser check.** In the Makefile, beside `MUSIC_PY`, add `MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))`: the venv's interpreter (a path) becomes absolute, which the check needs because it runs the tool from another directory, while the bare fallback `python3` stays a command name (`abspath` would turn it into `<cwd>/python3`). In the `music-e2e` recipe pass `MUSIC_PY=$(MUSIC_PY_ABS)` to the check (`MUSIC_PY=$(MUSIC_PY_ABS) E2E_BASE_URL=... tests/e2e/run.sh -c local.config.ts`). Add this test to `tests/e2e/workroom.local.ts`, beside the others (same imports, plus `mkdtempSync`, `readdirSync` and `writeFileSync` from `node:fs` and `tmpdir` from `node:os`):
 
 ```ts
 const FIXTURES = join(SITE, 'games', 'workroom', 'test', 'fixtures');

@@ -532,8 +532,21 @@ def key_obj(o, f, **kw):
 
 
 # --------------------------------------------------------------- terrain bits
-def floor_mat(**kw):
-    return limestone('floor', **kw)
+def floor_mat():
+    """Calm, light flagstone: slabs a quarter of a cell across, hairline joints, a
+    fine speckle and a gentle bump, so a field of floor stays quiet."""
+    m = MB('floor')
+    p = m.coord()
+    s = m.sep()
+    uv = m.comb(s.outputs['X'], s.outputs['Y'])
+    br = m.n('ShaderNodeTexBrick', {'offset': 0.5, 'squash': 1.0},
+             {'Color1': '#efe6cc', 'Color2': '#e6dcc0', 'Mortar': '#c9bd9f', 'Scale': 1.0, 'Mortar Size': 0.012,
+              'Mortar Smooth': 0.3, 'Brick Width': 0.25, 'Row Height': 0.25, 'Vector': uv})
+    nz = m.noise(30, 4, 0.5)
+    col = m.mix(br.outputs['Color'], m.ramp(nz, [(0.35, '#ffffff'), (0.7, '#ece4d0')]), 1.0, 'MULTIPLY')
+    col = m.groove(col, 0.85)
+    m.pbr(col, 0.9, 0.0, m.bump(m.math('SUBTRACT', 1.0, br.outputs['Fac']), 0.3, 0.02), spec=0.2)
+    return m.mat
 
 
 def slab(mat, side=None, z0=-0.3, z1=0.0, bevel=0.0):
@@ -571,19 +584,24 @@ def build_dirt(f):
 
 
 def build_wall(f):
-    top = limestone('wall-top', '#e6dabb', '#cdbf9c', 6.0, 0.4, grid=False)
-    m = MB('wall-front')
-    s = m.sep()
-    p = m.comb(s.outputs['X'], s.outputs['Z'])
-    br = m.n('ShaderNodeTexBrick', {'offset': 0.5, 'squash': 1.0},
-             {'Color1': '#c9b98f', 'Color2': '#b8a77c', 'Mortar': '#6d604a', 'Scale': 1.0,
-              'Mortar Size': 0.025, 'Mortar Smooth': 0.2, 'Brick Width': 0.34, 'Row Height': 0.19, 'Vector': p})
-    nz = m.noise(14, 6, 0.6)
-    col = m.mix(br.outputs['Color'], m.ramp(nz, [(0.3, '#ffffff'), (0.7, '#bdb29a')]), 1.0, 'MULTIPLY')
-    sh = m.ramp(s.outputs['Z'], [(0.0, '#a09483'), (WALL_H, '#ffffff')])        # shaded at the foot
-    col = m.mix(col, sh, 1.0, 'MULTIPLY')
-    m.pbr(col, 0.9, 0.0, m.bump(m.math('SUBTRACT', 1.0, br.outputs['Fac']), 0.9, 0.03), spec=0.2)
-    box(-0.5, 0.5, -0.5, 0.5, -0.3, WALL_H, top, m.mat, 0.012, outline=False)
+    """A raised block of dark, cool, coarsely dressed stone: big courses on top, a
+    shaded front that fills the rise band, darkest at the foot."""
+    def courses(name, c1, c2, mortar, plane, width, height, shade_foot=None):
+        m = MB(name)
+        s = m.sep()
+        p = m.comb(s.outputs['X'], s.outputs['Y' if plane == 'XY' else 'Z'])
+        br = m.n('ShaderNodeTexBrick', {'offset': 0.5, 'squash': 1.0},
+                 {'Color1': c1, 'Color2': c2, 'Mortar': mortar, 'Scale': 1.0, 'Mortar Size': 0.03,
+                  'Mortar Smooth': 0.15, 'Brick Width': width, 'Row Height': height, 'Vector': p})
+        nz = m.noise(12, 6, 0.6)
+        col = m.mix(br.outputs['Color'], m.ramp(nz, [(0.3, '#ffffff'), (0.7, '#b5bac4')]), 1.0, 'MULTIPLY')
+        if shade_foot:
+            col = m.mix(col, m.ramp(s.outputs['Z'], [(0.0, shade_foot), (WALL_H, '#ffffff')]), 1.0, 'MULTIPLY')
+        m.pbr(col, 0.9, 0.0, m.bump(m.math('SUBTRACT', 1.0, br.outputs['Fac']), 1.0, 0.04), spec=0.2)
+        return m.mat
+    top = courses('wall-top', '#7d8696', '#6c7586', '#3c424e', 'XY', 0.5, 0.33)
+    front = courses('wall-front', '#555c6a', '#4a5160', '#262a33', 'XZ', 0.34, 0.125, '#6a6e78')
+    box(-0.5, 0.5, -0.5, 0.5, -0.3, WALL_H, top, front, 0.012, outline=False)
 
 
 def lowered_grate(mat_bar, z):
@@ -632,24 +650,28 @@ DOOR_COLORS = {'red': '#d11f16', 'blue': '#1f55e0', 'yellow': '#f2c40c', 'green'
 
 
 def build_gate(f, closed):
+    """Closed: bronze bars from floor to lintel over a dark opening. Open: the bars
+    are lifted into the lintel, leaving short teeth and the floor showing through."""
     slab(floor_mat())
-    bz = bronze('gate-bronze')
-    pit = paint('pit', '#2a2118', rough=1.0)
-    for x in (-0.47, 0.47):
-        box(x - 0.05, x + 0.05, -0.1, 0.1, 0.0, 0.52, bz, bz, 0.01, outline=False)
-    box(-0.5, 0.5, -0.08, 0.08, 0.46, 0.54, bz, bz, 0.01, outline=False)
+    bz = bronze('gate-bronze', '#b97b3a')
+    dark = paint('gate-dark', '#17110a', rough=1.0)
+    lintel = 0.5
     if closed:
-        for i in range(7):
-            x = -0.36 + i * 0.12
-            cyl((x, 0, 0.25), 0.028, length=0.5, mat=bz, seg=10, outline=False)
-        cyl((0, 0, 0.12), 0.02, length=1.0, axis='X', mat=bz, seg=8, outline=False)
+        box(-0.45, 0.45, 0.06, 0.12, 0.0, lintel, dark, dark, 0.0, outline=False)
+        for i in range(6):
+            x = -0.375 + i * 0.15
+            cyl((x, 0, lintel / 2), 0.04, length=lintel, mat=bz, seg=10, outline=False)
+        cyl((0, 0, 0.14), 0.025, length=1.0, axis='X', mat=bz, seg=8, outline=False)
+        for x in (-0.48, 0.48):
+            box(x - 0.05, x + 0.05, -0.08, 0.1, 0.0, lintel + 0.03, bz, bz, 0.01, outline=False)
     else:
-        for i in range(7):
-            x = -0.36 + i * 0.12
-            cyl((x, 0, 0.4), 0.028, length=0.1, mat=bz, seg=10, outline=False)
-        for i in range(7):
-            x = -0.36 + i * 0.12
-            ball((x, 0, 0.0), 0.035, pit, (1, 1, 0.3), 8, 6, outline=False)
+        for x in (-0.48, 0.48):
+            box(x - 0.035, x + 0.035, -0.06, 0.06, 0.0, lintel + 0.03, bz, bz, 0.01, outline=False)
+    box(-0.5, 0.5, -0.07, 0.07, lintel - 0.02, lintel + 0.06, bz, bz, 0.01, outline=False)
+    if not closed:
+        for i in range(6):
+            x = -0.375 + i * 0.15
+            cyl((x, 0, lintel - 0.07), 0.03, 0.012, 0.1, mat=bz, seg=8, outline=False)
 
 
 def ring(h_out, h_in, z_top, top, side, depth=0.5):
@@ -666,15 +688,16 @@ def build_exit(f):
     holed_floor(P, floor_mat())
     light = MB('exit-light')
     light.emission('#fff6cc', 2.2)
-    tops = ['#bfae88', '#9b8b68', '#d2a85c', '#f0c868']
-    sides = ['#6e6048', '#54483a', '#9c7430', '#d0a040']
+    tops = ['#4a3d2a', '#5c4a30', '#b8803a', '#ffd070']
+    sides = ['#2a2218', '#33291b', '#8a5c24', '#e0a040']
     hs = [P, P - 0.07, P - 0.14, P - 0.2]
+    ring(P + 0.035, P, 0.012, paint('exit-lip', '#2a2218', rough=0.9), paint('exit-lip2', '#2a2218', rough=0.9))
     for i in range(4):
         h_in = hs[i + 1] if i < 3 else 0.12
         m = MB('step%d' % i)
-        m.pbr(tops[i], 0.9, 0.0, emit=tops[i] if i > 1 else None, estr=0.5 + 0.4 * i)
+        m.pbr(tops[i], 0.9, 0.0, emit=tops[i] if i > 1 else None, estr=0.6 + 0.5 * i)
         ms = MB('riser%d' % i)
-        ms.pbr(sides[i], 0.9, 0.0, emit=sides[i] if i > 1 else None, estr=0.5 + 0.4 * i)
+        ms.pbr(sides[i], 0.9, 0.0, emit=sides[i] if i > 1 else None, estr=0.6 + 0.5 * i)
         ring(hs[i], h_in, -0.07 - i * 0.08, m.mat, ms.mat)
     box(-0.12, 0.12, -0.12, 0.12, -0.5, -0.36, light.mat, light.mat, 0.0, outline=False)
 
@@ -1075,6 +1098,9 @@ def build_theseus(f):
     cyl((0, y - 0.012, 0.745), 0.015, length=0.04, mat=gold('clasp'), seg=8, outline=False)
     ball((0, y - 0.07, 0.535), 0.03, gold('clasp'), outline=False)
     blob(0.26, y, 0.4)
+    k = 1.22                                    # taller, near the Minotaur's height: the head uses the rise band
+    ROOT.scale = tuple(v * k for v in ROOT.scale)
+    ROOT.location = (0, (1 - k) * ROOT.scale[1] / k * y, 0)
 
 
 def build_minotaur(f, stone=False):
@@ -1308,6 +1334,10 @@ def mean_lum(im, w=16):
 
 floor_lum, _ = mean_lum(frame('floor'))
 failures = []
+wall_lum, _ = mean_lum(frame('wall'))
+print('floor %.2f  wall %.2f  gap %.2f' % (floor_lum, wall_lum, floor_lum - wall_lum))
+if floor_lum - wall_lum < 0.25:
+    failures.append('wall: luminance %.2f vs floor %.2f (gap %.2f, need 0.25)' % (wall_lum, floor_lum, floor_lum - wall_lum))
 rows = []
 for name, kind in KINDS.items():
     if kind == 'terrain':
@@ -1354,6 +1384,47 @@ for i, name in enumerate(names):
         img.paste(small, (x, gy + 16))
         x += w + pad
 img.save(preview)
+
+# a mock board with the real draw order: rows top to bottom, each sprite's rise over the row above
+BOARD = [
+    '#########',
+    '#.S..#.E#',
+    '#.##.#.|#',
+    '#...~~.R#',
+    '#.#.##=.#',
+    '#r.F.>.y#',
+    '#########',
+]
+LEGEND = {'.': 'floor', '#': 'wall', 'S': 'safe', 'E': 'exit', '|': 'gate-closed', '~': 'water', 'R': 'door-red',
+          '=': 'ice', 'F': 'fire', '>': 'force-right'}
+ITEMS = {'r': 'key-red', 'y': 'key-yellow'}
+FIGS = [(1, 1, 'theseus'), (5, 3, 'minotaur'), (3, 5, 'cow-standing')]
+
+def board(w):
+    h = round((cell + rise) * w / cell)
+    r = round(rise * w / cell)
+    img = Image.new('RGBA', (len(BOARD[0]) * w, len(BOARD) * w + r), (30, 28, 26, 255))
+    def put(name, row, col):
+        sp = frame(name).resize((w, h), Image.LANCZOS)
+        img.alpha_composite(sp, (col * w, row * w + r - (h - w)))
+    for row, line in enumerate(BOARD):
+        for col, ch in enumerate(line):
+            if ch in ITEMS:
+                put('floor', row, col)
+            else:
+                put(LEGEND[ch], row, col)
+        for col, ch in enumerate(line):
+            if ch in ITEMS:
+                put(ITEMS[ch], row, col)
+    for row, col, name in FIGS:
+        put(name, row, col)
+    return img
+
+b16, b24 = board(16), board(24)
+canvas = Image.new('RGBA', (b16.width + b24.width + 12, b24.height), (60, 56, 52, 255))
+canvas.alpha_composite(b16, (0, 0))
+canvas.alpha_composite(b24, (b16.width + 12, 0))
+canvas.convert('RGB').save(preview.replace('preview-16', 'board-preview'))
 for f in failures:
     print('FAIL ' + f)
 sys.exit(1 if failures else 0)

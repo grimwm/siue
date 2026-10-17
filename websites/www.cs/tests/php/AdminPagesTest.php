@@ -417,11 +417,13 @@ final class AdminPagesTest extends TestCase
         self::assertSame(0, $calls);
     }
 
-    public function testTheLoginFormIsPrefilledAndOffersToEmailALink(): void
+    public function testTheLoginFormNeverRevealsTheAllowedAddress(): void
     {
         [$p] = $this->pages();
         $body = $p->loginForm(req())->body;
-        self::assertStringContainsString('value="wgrim@siue.edu"', $body);
+        self::assertStringNotContainsString(Admin\Auth::ALLOWED, $body);
+        self::assertStringNotContainsString('siue.edu', $body);
+        self::assertStringNotContainsString('name="email" value=', $body);
         self::assertStringContainsString('Email me a link', $body);
     }
 

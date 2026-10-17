@@ -14,8 +14,8 @@ owner's Mac use scoped API keys, never the login.
 
 ## What the owner gets
 
-- **Sign-in page** (`/admin/login.php`): one field, prefilled with the owner's
-  address, and **Email me a link**. Every request, allowed or not, gets the
+- **Sign-in page** (`/admin/login.php`): one empty email field and **Email me a
+  link**. The page never shows which address may sign in. Every request, allowed or not, gets the
   same reply: "If that address may sign in, a link is on its way. It is good
   for 15 minutes, once."
 - **The email**: "Your sign-in link", in the site's look (below), with one red

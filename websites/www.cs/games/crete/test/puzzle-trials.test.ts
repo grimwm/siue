@@ -11,7 +11,7 @@ import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
-const SHORTEST: number[] = [10, 23, 36, 28, 18, 24, 22, 31];
+const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 22, 31];
 
 /** The level with every object of these kinds taken off the board. */
 const withoutObjects = (lv: Level, kinds: readonly ObjectKind[]): Level => ({ ...lv, objects: lv.objects.map(o => (o && kinds.includes(o) ? null : o)) });
@@ -74,9 +74,13 @@ test('trials 2 to 8 each need their idea', () => {
 
   const lv5 = trialLevel(4);
   const t5 = solved(4);
-  assert.ok(t5.took.has('skates') && t5.took.has('suction') && t5.kinds.has('slid'));
+  assert.ok(t5.took.has('skates') && t5.took.has('suction'));
   assert.ok(unsolved(withoutObjects(lv5, ['skates'])), 'trial 5 needs the skates');
   assert.ok(unsolved(withoutObjects(lv5, ['suction'])), 'trial 5 needs the suction boots');
+  const alone = { ...lv5, minotaur: null };
+  assert.ok(solve(initial(alone)).solved, 'trial 5 is winnable without the Minotaur');
+  assert.ok(unsolved(withoutObjects(alone, ['skates'])), 'the ice needs the skates even without the Minotaur');
+  assert.ok(unsolved(withoutObjects(alone, ['suction'])), 'the conveyor needs the suction boots even without the Minotaur');
 
   const lv6 = trialLevel(5);
   const t6 = solved(5);

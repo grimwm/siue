@@ -127,8 +127,9 @@ test('a pushed block is never carried into the cell the player is entering', () 
   assert.equal(r.state.objects[2], 'block');
 });
 
-test('a ride never brings the player back onto the cell the move started from', () => {
-  assert.deepEqual(play(grid(['P<.']), mv('right')).state.player, { r: 0, c: 1 });
+test('a conveyor carries the player back onto the cell the move started from, unless they wear suction boots', () => {
+  assert.deepEqual(play(grid(['P<.']), mv('right')).state.player, { r: 0, c: 0 });
+  assert.deepEqual(play(grid(['Pu<.']), mv('right'), mv('right')).state.player, { r: 0, c: 2 });
 });
 
 test('a relics header below the grid count: extra relics never close the gate again', () => {

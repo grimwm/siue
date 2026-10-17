@@ -56,13 +56,15 @@ intro: The Naiads lend flippers for the water and Hephaestus lends boots for the
   { id: 'trial-5', text: `title: The Slippery Halls
 intro: Daedalus polished these halls to glass and set currents in the stones. Skates hold the ice; suction boots hold the current.
 
-###########
-#P.===...##
-##k=#..<<.#
-##.=#....E#
-#.=##u=...#
-#..#==...M#
-###########
+############
+#P.#k======#
+##.#.##.####
+##...##u<<E#
+#.##.#######
+#....#######
+###..#######
+#..M.#######
+############
 ` },
   { id: 'trial-6', text: `title: The Sinking Stones
 intro: Roll a stone into the deep and the water becomes a road. Tread the plate and the walls of Daedalus change places.

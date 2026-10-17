@@ -116,7 +116,7 @@ music-e2e:
 
 # The music workroom's key and note tool (music/tools/siue-music). Its own
 # virtualenv when make music-tools-venv made one, else python3.
-.PHONY: keys-status keys-pull keys-init keys-rotate keys-upload keys-forget api-key-set music-tools-venv music-tools-test
+.PHONY: keys-status keys-pull keys-init keys-rotate keys-upload keys-forget api-key-set music-pickup music-publish music-tools-venv music-tools-test
 MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
 MUSIC_TOOL = $(MUSIC_PY) music/tools/siue-music
 
@@ -135,6 +135,11 @@ keys-forget:
 api-key-set:
 	@test -n "$(NAME)" || { echo "usage: make api-key-set NAME=music-pickup" >&2; exit 1; }
 	@$(MUSIC_TOOL) api-key-set "$(NAME)"
+music-pickup:
+	@$(MUSIC_TOOL) pickup
+music-publish:
+	@test -n "$(PIECE)" || { echo "usage: make music-publish PIECE=ch1-labyrinth [VERSION=3]" >&2; exit 1; }
+	@$(MUSIC_TOOL) publish "$(PIECE)" $(if $(VERSION),--version $(VERSION))
 music-tools-venv:
 	python3 -m venv music/tools/.venv
 	music/tools/.venv/bin/pip install --quiet -r music/tools/requirements.txt

@@ -3,3 +3,4 @@ librosa>=0.10
 mido>=1.3
 numpy>=1.26
 soundfile>=0.12
+av>=14,<18  # faster-whisper 1.x passes av.open an option newer releases dropped

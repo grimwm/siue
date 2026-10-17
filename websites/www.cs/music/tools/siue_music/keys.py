@@ -20,6 +20,7 @@ _API_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,47}")
 KEY_TITLE = "SIUE music notes key "
 PREVIOUS_SUFFIX = " (previous)"
 PUBLISH_KEY = "music-publish"
+PICKUP_KEY = "music-pickup"
 
 Upload = Callable[[dict], None]
 

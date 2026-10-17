@@ -32,6 +32,10 @@ def glossary_path() -> Path:
     return site_dir() / "games" / "workroom" / "src" / "glossary.json"
 
 
+def pieces_dir() -> Path:
+    return site_dir() / "music" / "pieces"
+
+
 def config_dir(env: Mapping[str, str], home: Path) -> Path:
     return Path(env["SIUE_CONFIG_DIR"]) if env.get("SIUE_CONFIG_DIR") else home / ".config" / "siue"
 

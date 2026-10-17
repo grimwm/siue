@@ -49,6 +49,8 @@ export interface Anim {
 export interface Game {
   /** 0-based; -1 before one opens. */
   readonly trial: number;
+  /** How many times a trial has been opened: the page shows its start card for each. */
+  readonly opens: number;
   readonly run: Run | null;
   /** V: the line's cells while shown. */
   readonly thread: readonly Cell[] | null;
@@ -78,6 +80,7 @@ export function frameOf(g: Pick<Game, 'run' | 'anim'>, ms: number): { state: Sta
 
 export function createGame(deps: GameDeps): Game {
   let trial = -1;
+  let opens = 0;
   let run: Run | null = null;
   let thread: readonly Cell[] | null = null;
   let anim: Anim | null = null;
@@ -123,7 +126,10 @@ export function createGame(deps: GameDeps): Game {
           else deps.sfx('pickup');
           break;
         case 'flipped': deps.sfx('button'); break;
-        case 'caught': deps.sfx('caught'); break;
+        case 'caught':
+          deps.sfx('caught');
+          deps.say(`Caught! ${e.hearts} ${e.hearts === 1 ? 'heart' : 'hearts'} left.`, 'bad');
+          break;
         case 'stoned': deps.sfx('stone'); break;
         case 'won': deps.sfx('win'); break;
         case 'lost': deps.sfx('lose'); break;
@@ -210,6 +216,7 @@ export function createGame(deps: GameDeps): Game {
 
   return {
     get trial() { return trial; },
+    get opens() { return opens; },
     get run() { return run; },
     get thread() { return thread; },
     get playing() { return tick !== null; },
@@ -221,8 +228,7 @@ export function createGame(deps: GameDeps): Game {
       threadOn = false;
       thread = null;
       anim = null;
-      const lv = run.now.level;
-      deps.say(`${lv.title}: ${lv.intro}`, 'info');
+      opens++;
       deps.changed();
     },
     press(a) {

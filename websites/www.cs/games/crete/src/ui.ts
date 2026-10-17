@@ -25,6 +25,7 @@ import { renderMenu } from "./ui/menu.tsx";
 import type { LogLine } from "./ui/menu.tsx";
 import { renderStatus } from "./ui/status.tsx";
 import { renderStoryCard } from "./ui/story.tsx";
+import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
 import { renderTitleCard } from "./ui/title.tsx";
@@ -72,7 +73,7 @@ const TOOL_EMOJI: Record<Tool, string> = { mirror: "🪞", cake: "🍯", cow: "�
 const TOOL_KINDS = Object.keys(TOOLS) as Tool[];
 
 const LOG_LIMIT = 80;
-const TOAST_MS = 7000;
+const TOAST_MS = 3000;
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
@@ -90,6 +91,8 @@ export function createUi(deps: UiDeps): Ui {
   /** The try whose ending card has been shown, so closing the card does not bring it back. */
   let endFor: unknown = null;
   let sized = "";
+  /** The opening the start card was last shown for. */
+  let shownOpen = 0;
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
@@ -126,6 +129,14 @@ export function createUi(deps: UiDeps): Ui {
       current: g?.trial ?? -1,
       onPick: pick,
       onClose: () => layers.close("trials"),
+    });
+    const lv = g?.run?.now.level;
+    renderStart($("start-root"), {
+      open: layers.isOpen("start"),
+      number: (g?.trial ?? 0) + 1,
+      title: lv?.title ?? "",
+      intro: lv?.intro ?? "",
+      onBegin: () => layers.close("start"),
     });
     renderEndCard($("end-root"), {
       ...end,
@@ -228,6 +239,12 @@ export function createUi(deps: UiDeps): Ui {
     }
     const s = run.now;
     if (sized !== `${s.level.cols}x${s.level.rows}`) fit();
+    // A trial opened: the start card shows (a restart does not); the story log keeps its words.
+    if (g.opens !== shownOpen) {
+      shownOpen = g.opens;
+      log.push({ text: `${s.level.title}: ${s.level.intro}`, tone: "info" });
+      layers.open("start");
+    }
 
     renderStatus($("status-root"), {
       view: statusView({
@@ -252,7 +269,10 @@ export function createUi(deps: UiDeps): Ui {
       playing: g.playing,
       route: g.thread !== null,
       over: s.outcome !== "playing",
-      onMove: (dir) => act(() => g.press({ kind: "move", dir }))(),
+      onMove: (dir) => act(() => {
+        layers.close("start");
+        g.press({ kind: "move", dir });
+      })(),
       onWait: act(() => g.press({ kind: "wait" })),
       onUndo: act(() => g.press("undo")),
       onRestart: act(() => g.press("restart")),
@@ -305,8 +325,17 @@ export function createUi(deps: UiDeps): Ui {
         c.toggleMute();
         return;
       }
+      // The start card closes on Begin and on a move, which then also moves; it blocks nothing else.
+      if (layers.isOpen("start")) {
+        if (action === "begin") {
+          ev.preventDefault();
+          layers.close("start");
+          return;
+        }
+        if (isMove(action)) layers.close("start");
+      }
       // A card is up: only Q, N and M reach the game.
-      if (layers.any()) return;
+      if (layers.any() && !layers.isOpen("start")) return;
       const g = c.game;
       if (isMove(action)) {
         ev.preventDefault();

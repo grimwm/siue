@@ -7,7 +7,7 @@ import { BACK_KEY } from "../../_kit/keys.ts";
 export type MoveAction = "up" | "down" | "left" | "right";
 export type Action =
   | MoveAction
-  | "wait" | "undo" | "restart" | "hint" | "route" | "auto" | "mute" | "new" | "menu";
+  | "begin" | "wait" | "undo" | "restart" | "hint" | "route" | "auto" | "mute" | "new" | "menu";
 
 export interface KeyDef {
   /** What a button's key tab and the help text print. */
@@ -21,6 +21,8 @@ export const KEYS: Record<Action, KeyDef> = {
   down: { label: "↓", keys: ["arrowdown", "s"] },
   left: { label: "←", keys: ["arrowleft", "a"] },
   right: { label: "→", keys: ["arrowright", "d"] },
+  /** Closes the start card; no other key of the game. */
+  begin: { label: "↵", keys: ["enter", " "] },
   wait: { label: ".", keys: ["."] },
   undo: { label: "U", keys: ["u"] },
   restart: { label: "R", keys: ["r"] },

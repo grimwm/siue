@@ -25,6 +25,9 @@ test('the rows the trials use', () => {
   assert.deepEqual(KEYS.undo, { label: 'U', keys: ['u'] });
   assert.deepEqual(KEYS.restart, { label: 'R', keys: ['r'] });
   assert.deepEqual(KEYS.new, { label: 'N', keys: ['n'] });
+  assert.deepEqual(KEYS.begin, { label: '↵', keys: ['enter', ' '] });
+  assert.equal(actionFor('Enter'), 'begin');
+  assert.equal(actionFor(' '), 'begin');
   assert.equal('bash' in KEYS, false);
 });
 

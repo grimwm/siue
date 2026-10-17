@@ -37,6 +37,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ["Three tools, one use each. ", ...toolSegs],
     [
       `Move with ${arrows}${letters ? ` or ${letters}` : ""}; bumping a wall costs no turn. `,
+      { strong: `Begin (${k("begin")})` }, " closes a trial's start card; so does a move. ",
       { strong: `Wait (${k("wait")})` }, " lets the Minotaur come. ",
       { strong: `Undo (${k("undo")})` }, " takes back a move. ",
       { strong: `Restart (${k("restart")})` }, " begins the trial again.",

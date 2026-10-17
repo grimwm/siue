@@ -104,7 +104,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .toast {
   position: absolute;
   left: 50%;
-  bottom: 10px;
+  top: 10px;
   transform: translateX(-50%);
   max-width: min(92%, 34rem);
   margin: 0;
@@ -119,7 +119,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   transition: opacity 0.4s;
   pointer-events: none;
 }
-.toast.show { opacity: 1; }
+.toast.show { opacity: 1; pointer-events: auto; cursor: pointer; }
 .toast.good { border-color: var(--good); }
 .toast.bad { border-color: var(--bad); }
 .toast.info { border-color: var(--safe); }

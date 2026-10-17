@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import { createGame } from '../src/game.ts';
 import { createProgress } from '../src/progress.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
-import { solve } from '../src/puzzle/solver.ts';
+import { solve, stateKey } from '../src/puzzle/solver.ts';
+import { step } from '../src/puzzle/step.ts';
+import type { State } from '../src/puzzle/state.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { trialLevel, TRIALS } from '../src/puzzle/trials.ts';
 import { DELTA } from '../src/puzzle/tiles.ts';
@@ -56,7 +58,8 @@ test('an unassisted win records the best; opening the trial again clears the ass
   for (const a of line(0)) h.game.press(a);
   assert.equal(h.game.run!.now.outcome, 'won');
   assert.equal(h.progress.get(TRIALS[0]!.id).best, h.game.run!.now.moves);
-  h.game.route();
+  h.game.open(0);
+  h.game.hint();
   assert.equal(h.game.run!.assisted, true);
   h.game.open(0);
   assert.equal(h.game.run!.assisted, false);
@@ -81,4 +84,74 @@ test('a bump sounds bump and changes nothing; undo and restart go through', () =
   h.game.press(line(0)[0]!);
   h.game.press('restart');
   assert.equal(h.game.run!.now.moves, 0);
+});
+
+test('V keeps drawing the line through a turn, undo and restart, from the new state', () => {
+  const h = harness();
+  h.game.open(0);
+  h.game.route();
+  assert.ok(h.game.thread && h.game.thread.length > 1);
+  h.game.press(line(0)[0]!);
+  const p = h.game.run!.now.player;
+  assert.ok(h.game.thread, 'still drawn after a move');
+  assert.deepEqual(h.game.thread![0], p);
+  h.game.press('undo');
+  assert.deepEqual(h.game.thread![0], h.game.run!.now.player);
+  h.game.press(line(0)[0]!);
+  h.game.press('restart');
+  assert.deepEqual(h.game.thread![0], h.game.run!.now.player);
+});
+
+/** A shortest line of the first trial that loses the try, found by breadth-first search. */
+function losingLine(): Action[] {
+  const dirs = ['up', 'down', 'left', 'right'] as const;
+  const moves: Action[] = [{ kind: 'wait' }, ...dirs.map((dir): Action => ({ kind: 'move', dir }))];
+  let frontier: { s: State; line: Action[] }[] = [{ s: initial(trialLevel(0)), line: [] }];
+  const seen = new Set<string>();
+  for (let depth = 0; depth < 40; depth++) {
+    const next: typeof frontier = [];
+    for (const f of frontier) {
+      for (const a of moves) {
+        const r = step(f.s, a);
+        if (r.state === f.s) continue;
+        if (r.state.outcome === 'lost') return [...f.line, a];
+        const k = stateKey(r.state);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        next.push({ s: r.state, line: [...f.line, a] });
+      }
+    }
+    frontier = next;
+  }
+  throw new Error('no losing line');
+}
+
+test('V turns off when a turn ends the try', () => {
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => false, changed() {},
+  });
+  game.open(0);
+  game.route();
+  assert.ok(game.thread);
+  for (const act of losingLine()) game.press(act);
+  assert.equal(game.run!.now.outcome, 'lost');
+  assert.equal(game.thread, null);
+  game.press('undo');
+  assert.equal(game.thread, null, 'V stays off after it turned off');
+});
+
+test('a goes-slack press neither assists nor draws; a finished try ignores Hint, Route and Auto', () => {
+  const h = harness();
+  h.game.open(0);
+  for (const a of line(0)) h.game.press(a);
+  assert.equal(h.game.run!.now.outcome, 'won');
+  const run = h.game.run;
+  h.game.hint();
+  h.game.route();
+  h.game.auto();
+  assert.equal(h.game.run, run);
+  assert.equal(h.game.thread, null);
+  assert.equal(h.game.playing, false);
+  assert.equal(run!.assisted, false);
 });

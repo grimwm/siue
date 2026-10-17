@@ -82,6 +82,8 @@ export function createGame(deps: GameDeps): Game {
   let thread: readonly Cell[] | null = null;
   let anim: Anim | null = null;
   let tick: number | null = null;
+  /** V is on: the line from the try as it stands stays drawn through every turn. */
+  let threadOn = false;
 
   const stop = (): void => {
     if (tick === null) return;
@@ -139,12 +141,12 @@ export function createGame(deps: GameDeps): Game {
     }
     const before = run.now;
     run = r.run;
-    thread = null;
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
     anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before } : null;
     if (run.now.outcome === 'won') deps.progress.record(TRIALS[trial]!.id, run.now.moves, run.assisted);
+    redraw();
     deps.changed();
     return true;
   }
@@ -165,9 +167,26 @@ export function createGame(deps: GameDeps): Game {
     if (run) run = assist(run);
   }
 
+  /** The thread after the try changed: drawn again from where it stands, or off when it ends or cannot be won. */
+  function redraw(): void {
+    thread = null;
+    if (!threadOn) return;
+    if (!live()) {
+      threadOn = false;
+      return;
+    }
+    const l = line();
+    if (!l) {
+      threadOn = false;
+      return;
+    }
+    thread = cells(l);
+  }
+
   function nextOfLine(): boolean {
     const l = line();
     if (!l || l.length === 0) return false;
+    helped();
     finishAnim();
     play(l[0]!);
     return true;
@@ -199,11 +218,11 @@ export function createGame(deps: GameDeps): Game {
       stop();
       trial = i;
       run = startRun(trialLevel(i));
+      threadOn = false;
       thread = null;
       anim = null;
       const lv = run.now.level;
-      deps.say(lv.title, 'info');
-      deps.say(lv.intro, 'info');
+      deps.say(`${lv.title}: ${lv.intro}`, 'info');
       deps.changed();
     },
     press(a) {
@@ -212,33 +231,35 @@ export function createGame(deps: GameDeps): Game {
       stop();
       if (a === 'undo' || a === 'restart') {
         run = a === 'undo' ? undo(run) : restart(run);
-        thread = null;
+        redraw();
         deps.changed();
         return;
       }
       play(a);
     },
     hint() {
-      if (!run) return;
+      if (!live()) return;
       finishAnim();
       stop();
-      helped();
-      deps.sfx('hint');
-      nextOfLine();
+      if (nextOfLine()) deps.sfx('hint');
     },
     route() {
-      if (!run) return;
+      if (!live()) return;
       finishAnim();
       stop();
-      helped();
-      if (thread) {
+      if (threadOn) {
+        threadOn = false;
         thread = null;
         deps.changed();
         return;
       }
-      deps.sfx('hint');
       const l = line();
-      if (l) thread = cells(l);
+      if (l) {
+        helped();
+        deps.sfx('hint');
+        threadOn = true;
+        thread = cells(l);
+      }
       deps.changed();
     },
     auto() {
@@ -248,8 +269,6 @@ export function createGame(deps: GameDeps): Game {
       }
       if (!live()) return;
       finishAnim();
-      helped();
-      thread = null;
       tick = deps.timers.setInterval(() => {
         if (!live() || !nextOfLine() || !live()) stop();
       }, SLIDE_MS * 3);

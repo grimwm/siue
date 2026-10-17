@@ -119,3 +119,14 @@ test('a card opening stops the play-out', () => {
   press('q');
   assert.ok(calls.includes('stop'));
 });
+
+test('a chord with Ctrl, Cmd or Alt is the browser\'s: no game key acts on it or swallows it', () => {
+  for (const chord of ['ctrlKey', 'metaKey', 'altKey']) {
+    for (const key of ['r', 't', 'w', 'n', 'm', 'h', 'u', 'v', 'z', '.', 'ArrowUp']) {
+      const { ev, calls } = press(key, { [chord]: true });
+      assert.deepEqual(calls, [], `${chord} ${key}`);
+      assert.equal(ev.prevented, false, `${chord} ${key}`);
+    }
+  }
+  assert.equal(page.top(), null);
+});

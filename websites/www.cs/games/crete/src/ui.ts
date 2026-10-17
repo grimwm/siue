@@ -292,6 +292,8 @@ export function createUi(deps: UiDeps): Ui {
         if (!ev.repeat) layers.pressBack();
         return;
       }
+      // A chord is the browser's (Cmd+R reloads, Ctrl+T opens a tab), never a game key.
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
       const k = ev.key.toLowerCase();
       const action = actionFor(k);
       if (action === "new") {
@@ -331,6 +333,8 @@ export function createUi(deps: UiDeps): Ui {
     });
 
     document.addEventListener("pointerdown", c.wake);
+    // A tap on the toast puts it away.
+    $("toast").addEventListener("click", () => $("toast").classList.remove("show"));
 
     if (typeof ResizeObserver === "function") new ResizeObserver(fit).observe($("board"));
     if (typeof window !== "undefined") window.addEventListener("resize", fit);

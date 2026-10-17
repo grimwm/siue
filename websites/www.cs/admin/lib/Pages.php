@@ -29,12 +29,17 @@ final class Pages
     private string $cookiePath;
     /** @var list<array{to:string,subject:string,mime:string,token:?string}> */
     private array $queue = [];
+    private Keys $keys;
     /** @var callable():bool */
     private $mailProbe;
 
-    /** @param (callable():bool)|null $mailProbe true when the SMTP server greets us; defaults to a live check */
-    public function __construct(private \PDO $db, private Clock $clock, private Mailer $mailer, private string $baseUrl, ?callable $mailProbe = null)
+    /**
+     * @param (callable():bool)|null $mailProbe true when the SMTP server greets us; defaults to a live check
+     * @param Keys|null $keys the key store; defaults to the configured scope registry
+     */
+    public function __construct(private \PDO $db, private Clock $clock, private Mailer $mailer, private string $baseUrl, ?callable $mailProbe = null, ?Keys $keys = null)
     {
+        $this->keys = $keys ?? new Keys($db, $clock, null, $baseUrl);
         $this->auth = new Auth($db, $clock);
         $this->cookiePath = admin_cookie_path($baseUrl);
         $this->sessions = new Sessions($db, $clock, $this->cookiePath);
@@ -191,6 +196,45 @@ final class Pages
         });
     }
 
+    /** GET keys.php: the key list and the create form. */
+    public function keysPanel(Request $r): Response
+    {
+        return $this->guard(function () use ($r): Response {
+            $gate = $this->requireAdmin($r);
+            return $gate ?? $this->keysPage(200, $r);
+        });
+    }
+
+    /** POST keys.php: create or revoke a key. A new key is shown on this response only. */
+    public function keysAction(Request $r): Response
+    {
+        return $this->guard(function () use ($r): Response {
+            $gate = $this->requireAdmin($r);
+            if ($gate !== null) {
+                return $gate;
+            }
+            $given = $r->post['csrf'] ?? '';
+            if (!is_string($given) || !$this->sessions->checkCsrf($r, $given)) {
+                return self::html(403, 'Form expired', Html::p('This form expired. Open the page again.') . '<a class="button" href="keys.php">Back</a>');
+            }
+            if (($r->post['do'] ?? '') === 'revoke') {
+                $id = $r->post['id'] ?? '';
+                if (is_string($id) && ctype_digit($id)) {
+                    $this->keys->revoke((int) $id);
+                }
+                return $this->keysPage(200, $r);
+            }
+            $label = $r->post['label'] ?? '';
+            $scopes = $r->post['scopes'] ?? [];
+            try {
+                $key = $this->keys->create(is_string($label) ? $label : '', is_array($scopes) ? array_values($scopes) : []);
+            } catch (\InvalidArgumentException $e) {
+                return $this->keysPage(400, $r, $e->getMessage());
+            }
+            return $this->keysPage(200, $r, null, $key);
+        });
+    }
+
     /** GET health.php. Reports the database now and the mail server as last probed (see mailHealthy). */
     public function health(): Response
     {
@@ -237,6 +281,62 @@ final class Pages
                 }
             }
         }
+    }
+
+    /** The keys page; $newKey is shown once, $error explains a refused create. */
+    private function keysPage(int $status, Request $r, ?string $error = null, ?string $newKey = null): Response
+    {
+        $csrf = $this->sessions->csrf($r);
+        if ($csrf === '') {
+            return self::redirect('login.php');
+        }
+        $body = '';
+        if ($error !== null) {
+            $body .= Html::p($error, 'error');
+        }
+        if ($newKey !== null) {
+            $body .= '<h2>New key</h2><p>Copy it now; it will not be shown again.</p><p><code class="secret">' . Html::e($newKey) . '</code></p>';
+        }
+        $body .= '<h2>Create a key</h2>';
+        $registry = $this->keys->registry();
+        if ($registry === []) {
+            $body .= Html::p('No scopes are defined yet, so no key can be created.');
+        } else {
+            $body .= '<form method="post" action="keys.php"><input type="hidden" name="do" value="create">'
+                . '<input type="hidden" name="csrf" value="' . Html::e($csrf) . '">'
+                . '<label for="label">Label</label><input id="label" type="text" name="label" maxlength="' . Keys::LABEL_MAX . '" required>'
+                . '<fieldset><legend>Scopes</legend>';
+            foreach ($registry as $scope) {
+                $body .= '<label class="check"><input type="checkbox" name="scopes[]" value="' . Html::e($scope) . '"> ' . Html::e($scope) . '</label>';
+            }
+            $body .= '</fieldset><button type="submit" class="button">Create key</button></form>';
+        }
+        $body .= '<h2>Keys</h2>';
+        $list = $this->keys->list();
+        if ($list === []) {
+            $body .= Html::p('No keys yet.');
+        }
+        foreach ($list as $k) {
+            $body .= '<div class="key"><strong>' . Html::e($k['label']) . '</strong><dl class="prints">'
+                . '<dt>Scopes</dt><dd>' . Html::e(implode(', ', $k['scopes'])) . '</dd>'
+                . '<dt>Created</dt><dd>' . self::when($k['created_at']) . '</dd>'
+                . '<dt>Last used</dt><dd>' . ($k['last_used_at'] === null ? 'never' : self::when($k['last_used_at'])) . '</dd>'
+                . '<dt>Revoked</dt><dd>' . ($k['revoked_at'] === null ? 'no' : self::when($k['revoked_at'])) . '</dd></dl>';
+            if ($k['revoked_at'] === null) {
+                $body .= '<form method="post" action="keys.php"><input type="hidden" name="do" value="revoke">'
+                    . '<input type="hidden" name="id" value="' . $k['id'] . '">'
+                    . '<input type="hidden" name="csrf" value="' . Html::e($csrf) . '">'
+                    . '<button type="submit" class="button danger">Revoke</button></form>';
+            }
+            $body .= '</div>';
+        }
+        $body .= '<p><a href="index.php">Back to the hub</a></p>';
+        return self::html($status, 'API keys', $body);
+    }
+
+    private static function when(int $t): string
+    {
+        return gmdate('Y-m-d H:i', $t) . ' UTC';
     }
 
     /** The refusal for a sign-out request, or null when it may proceed. */

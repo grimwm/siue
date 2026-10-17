@@ -9,6 +9,7 @@ require_once __DIR__ . '/Html.php';
 require_once __DIR__ . '/Pages.php';
 require_once __DIR__ . '/Request.php';
 require_once __DIR__ . '/Sessions.php';
+require_once __DIR__ . '/Keys.php';
 require_once __DIR__ . '/Headers.php';
 require_once __DIR__ . '/Mailer.php';
 require_once __DIR__ . '/MailTemplate.php';
@@ -25,6 +26,9 @@ if (is_file($kitPhp . '/score-guard.php')) {
     require_once __DIR__ . '/store-dir.php';
 }
 unset($kitPhp);
+
+/** The scopes an API key may carry. Workrooms add theirs here. */
+const ADMIN_KEY_SCOPES = [];
 
 /** Dashboard links for the hub, label => path relative to /admin/. Workrooms add themselves here. */
 function admin_dashboards(): array
@@ -94,6 +98,21 @@ function admin_refuse_plain_http(Admin\Request $r, string $baseUrl): ?Admin\Resp
     return new Admin\Response(403, Admin\Headers::apply(['Content-Type' => 'text/plain; charset=utf-8']), 'HTTPS required.');
 }
 
+/**
+ * The 403 for a page request a script made (fetch, XHR, an embed) instead of a browser navigation, or
+ * null. www.cs is one origin for every user's folder, so another user's script could otherwise read
+ * these pages. Requests without Fetch Metadata headers (curl, older browsers) pass.
+ */
+function admin_refuse_script_fetch(Admin\Request $r): ?Admin\Response
+{
+    $mode = $r->headers['sec-fetch-mode'] ?? null;
+    $dest = $r->headers['sec-fetch-dest'] ?? null;
+    if (($mode === null || $mode === 'navigate') && ($dest === null || $dest === 'document')) {
+        return null;
+    }
+    return new Admin\Response(403, Admin\Headers::apply(['Content-Type' => 'text/plain; charset=utf-8']), 'Open this page directly.');
+}
+
 /** Writes a response to the client. */
 function admin_emit(Admin\Response $res): void
 {
@@ -108,7 +127,8 @@ function admin_emit(Admin\Response $res): void
 }
 
 /**
- * The whole of a thin page: refuse plain HTTP (except from a local host), open the
+ * The whole of a thin page: refuse plain HTTP (except from a local host) and, for a page
+ * ($health false), script-made requests; open the
  * database, run $handler(Pages, Request), send the response, then send queued mail
  * once the client has what it asked for.
  *
@@ -119,6 +139,11 @@ function admin_serve(callable $handler, bool $health = false): void
     $r = Admin\Request::fromGlobals();
     $base = admin_base_url();
     $refused = admin_refuse_plain_http($r, $base);
+    if ($refused !== null) {
+        admin_emit($refused);
+        return;
+    }
+    $refused = $health ? null : admin_refuse_script_fetch($r);
     if ($refused !== null) {
         admin_emit($refused);
         return;

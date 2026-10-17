@@ -13,7 +13,7 @@ final class AdminSessionsTest extends TestCase
     {
         $c = new FakeClock(1_000_000);
         $db = admin_tmp_db();
-        return [new Admin\Sessions($db, $c), $db, $c];
+        return [new Admin\Sessions($db, $c, '/'), $db, $c];
     }
 
     private function idOf(string $cookie): string
@@ -187,7 +187,7 @@ final class AdminSessionsTest extends TestCase
         self::assertSame('__Secure-admin-device', Admin\Sessions::DEVICE_COOKIE);
         self::assertSame(
             '__Secure-admin-device=abc123; Max-Age=7776000; Path=/; Secure; HttpOnly; SameSite=Strict',
-            Admin\Sessions::deviceCookie('abc123'),
+            Admin\Sessions::deviceCookie('abc123', '/'),
         );
     }
 
@@ -195,7 +195,7 @@ final class AdminSessionsTest extends TestCase
     {
         self::assertSame(
             '__Secure-admin-device=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; Secure; HttpOnly; SameSite=Strict',
-            Admin\Sessions::expireDeviceCookie(),
+            Admin\Sessions::expireDeviceCookie('/'),
         );
     }
 

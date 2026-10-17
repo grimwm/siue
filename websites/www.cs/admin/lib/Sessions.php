@@ -16,7 +16,7 @@ final class Sessions
      * @param string $cookiePath the Path every cookie carries: the owner's folder, never wider (www.cs
      *                           serves every user's pages from the same host, and __Host- would force Path=/)
      */
-    public function __construct(private \PDO $db, private Clock $clock, private string $cookiePath = '/')
+    public function __construct(private \PDO $db, private Clock $clock, private string $cookiePath)
     {
     }
 
@@ -126,13 +126,13 @@ final class Sessions
     }
 
     /** The Set-Cookie value that remembers a trusted device for ninety days. */
-    public static function deviceCookie(string $token, string $path = '/'): string
+    public static function deviceCookie(string $token, string $path): string
     {
         return self::DEVICE_COOKIE . '=' . $token . '; Max-Age=' . Auth::DEVICE_TTL . '; ' . self::attributes($path);
     }
 
     /** The Set-Cookie value that removes the trusted-device cookie. */
-    public static function expireDeviceCookie(string $path = '/'): string
+    public static function expireDeviceCookie(string $path): string
     {
         return self::DEVICE_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . self::attributes($path);
     }

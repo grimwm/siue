@@ -114,3 +114,13 @@ a:hover { color: #fff; }
 code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9rem; }
 
 .actions { display: grid; gap: 0.6rem; margin-top: 1.75rem; }
+
+.error { color: #ff8a8a; }
+.secret { display: block; padding: 0.7rem 0.8rem; background: var(--bg); border: 1px solid var(--crimson); border-radius: 6px; overflow-wrap: anywhere; user-select: all; }
+input[type="text"] { width: 100%; margin-bottom: 1rem; padding: 0.7rem 0.8rem; background: var(--bg); color: var(--text); border: 1px solid var(--rail-edge); border-radius: 6px; font: inherit; }
+fieldset { margin: 0 0 1rem; padding: 0.5rem 0.8rem; border: 1px solid var(--rail-edge); border-radius: 6px; }
+legend { color: var(--text-muted); font-size: 0.95rem; }
+.check { display: flex; gap: 0.5rem; align-items: center; margin: 0.3rem 0; color: var(--text); }
+.key { margin: 0 0 1.25rem; padding: 0.75rem 0.8rem; background: var(--bg); border: 1px solid var(--rail-edge); border-radius: 6px; }
+.key strong { overflow-wrap: anywhere; }
+.key form { margin-top: 0.5rem; }

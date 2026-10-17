@@ -58,11 +58,22 @@ Tightened here:
 - **15-minute links** instead of 24 hours. Expired and used tokens are deleted
   on every request.
 - **Own sessions, not PHP's.** Sessions live in the kit's SQLite database, not
-  in PHP's shared session directory: the cookie (`__Host-admin`, `Secure`,
-  `HttpOnly`, `SameSite=Strict`, `Path=/`) holds a random 32-byte id, and the
-  server stores only its hash. A session ends after 2 hours idle or 7 days in
-  all; **Sign out** deletes it; **Sign out everywhere** deletes them all and
-  every unused link.
+  in PHP's shared session directory: the cookie (`__Secure-admin`, `Secure`,
+  `HttpOnly`, `SameSite=Strict`, `Path=/~wgrim/`) holds a random 32-byte id,
+  and the server stores only its hash. A session ends after 30 minutes idle or
+  24 hours in all; **Sign out** deletes it; **Sign out everywhere** deletes them
+  all, every unused link and every trusted device.
+- **Trusted devices:** a sign-in also sets `__Secure-admin-device` (same
+  attributes, 90 days, stored as a hash). A link request from a trusted device
+  skips the address and overall limits and keeps the per-IP one, so nobody can
+  lock the owner out by spending the public allowance.
+- **The shared host:** www.cs serves every user's `~folder` as one browser
+  origin. Cookies are scoped to `/~wgrim/`, so other users' pages never receive
+  them, and the base URL comes only from configuration (`ADMIN_BASE_URL`,
+  default `https://www.cs.siue.edu/~wgrim/admin/`), never from the request's
+  Host header. What path scoping cannot stop: a script on another `~user` page
+  that the owner visits while signed in runs on the same origin. The short
+  sessions narrow that window; the owner chose to stay on www.cs with it.
 - **Rate limits beyond the address:** at most 20 link requests per hour per IP
   and 30 in all, so the form cannot be used to flood the mailbox.
 - **No secrets in git.** Nothing secret is committed: the database (tokens,
@@ -113,7 +124,9 @@ In `websites/www.cs/admin/`:
   dashboard and API calls one of them first.
 - `health.php`: answers whether the mail server's port can be reached and the
   database opens (yes or no each, nothing else), so the deploy check proves
-  sign-in can work before the owner tries it.
+  sign-in can work before the owner tries it. The mail check's result is
+  cached and refreshed at most once every 10 minutes, so requests to this
+  public page can never multiply connections to the mail server.
 
 ## Tests
 

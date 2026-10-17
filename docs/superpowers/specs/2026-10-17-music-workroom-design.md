@@ -80,10 +80,11 @@ The server stores only sealed notes, which it cannot open.
   the browser unlocks the private key locally (Web Crypto) and opens the
   notes: their text, their recordings to play, their curves. The passphrase
   and the unlocked key never leave the device, and the locked copy is served
-  only to a signed-in session. **Remember this device** keeps the unlocked key
-  in the browser as a non-extractable key (even the page cannot read its
-  bytes); **Forget this device** erases it. `make keys-rotate` re-locks the new
-  key, so every device keeps working.
+  only to a signed-in session. The unlocked key lives only in that page view's
+  memory: www.cs is one browser origin shared by every user's `~folder`, so the
+  key is never stored in the browser (1Password fills the passphrase on each
+  visit). `make keys-rotate` re-locks the new key, so every device keeps
+  working.
 
 ## Pickup and the note history
 
@@ -177,8 +178,8 @@ the game. The login guards the notes and the actions.
   pixels at any zoom), hit testing (a tap maps to the right bar and lane),
   sealing round-trips with a test key pair and refuses a public key whose
   fingerprint differs, unlocking the private key with the passphrase (a wrong
-  passphrase fails cleanly), the remembered key is non-extractable and Forget
-  erases it.
+  passphrase fails cleanly), and nothing of the key is written to browser
+  storage.
 - PHPUnit: every API route needs the right key scope and HTTPS; a sealed note's
   size and count limits; marking picked up; the page's delete removes row and
   file and needs a session and CSRF; an API key cannot delete; the locked

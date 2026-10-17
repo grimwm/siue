@@ -168,6 +168,14 @@ while IFS= read -r -d '' f; do
     admin/*/*) continue ;;
     admin/*.php | admin/admin.css | admin/.htaccess) ;;
     admin/*) continue ;;
+    # The music workroom: its pages, API, library, styles and the public key
+    # (PHP reads it). Its tools, committed drafts and README stay home. A case
+    # pattern's * also matches /, so each folder is named and anything deeper skipped.
+    music/api/*/* | music/lib/*/* | music/keys/*/*) continue ;;
+    music/api/*.php | music/lib/*.php | music/lib/.htaccess | music/keys/public.json) ;;
+    music/*/*) continue ;;
+    music/*.php | music/.htaccess | music/music.css) ;;
+    music/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;

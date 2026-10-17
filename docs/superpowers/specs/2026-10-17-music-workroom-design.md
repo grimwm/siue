@@ -1,47 +1,80 @@
-# Music workroom: seeing, hearing and answering the score together
+# Music workroom: seeing, hearing and answering music and sound together
 
-A page on the site where the owner, who is not a musician, sees each draft of
-the game's music broken down in plain words, hears it with a moving playhead,
-learns the terms as they meet them, and answers back precisely: pinned notes,
-spoken or typed, hummed tunes, one-tap reactions and redrawn energy curves.
-Claude picks the notes up, composes the next draft, and answers on the same
-moments. Notes are encrypted in the browser; the server never sees them in the
-clear. Notes stay sealed on the server until the owner deletes them, so every
-device the owner signs in on, a phone included, shows the whole history.
+A page on the site where the owner, who is not a musician or a sound designer,
+sees each draft of a project's music or sound effects broken down in plain
+words, hears it with a moving playhead, learns the terms as they meet them, and
+answers back precisely: pinned notes, spoken or typed, hummed tunes, one-tap
+reactions and redrawn energy curves. The workroom is general: it serves music
+and sound effects for any project, whether Crete (its score is the first
+project), Tankity, Cylon or something unrelated to the website. Claude picks the
+notes up, composes the next draft, and answers on the same moments. Notes are
+encrypted in the browser; the server never sees them in the clear. Notes stay
+sealed on the server until the owner deletes them, so every device the owner
+signs in on, a phone included, shows the whole history.
 
-Built on the admin login (`2026-10-17-admin-login-design.md`). Music direction:
-epic cinematic scoring in the vein of Interstellar and Gladiator, themed on the
-Crete lore (the vision spec and `crete-redesign` notes).
+Built on the admin login (`2026-10-17-admin-login-design.md`). The first
+project's music direction: epic cinematic scoring in the vein of Interstellar
+and Gladiator, themed on the Crete lore (the vision spec and `crete-redesign`
+notes).
 
 ## Goal
 
 The owner can point at a moment ("right where it gets big", "the low part under
-Ariadne's theme") and say what they want, in their own words or voice, and
-Claude knows the exact bars and instruments meant. Over time the owner learns
+Ariadne's theme", "the first tenth of a second of the cannon") and say what they
+want, in their own words or voice, and Claude knows the exact bars (music) or
+seconds (sound) and the instruments or layers meant. Over time the owner learns
 the vocabulary, and version 2 lets them edit the music themselves.
+
+## Projects, kinds and characters
+
+Three facts about every piece come from its `score.json`, not from the workroom's
+code:
+
+- **Project.** Every piece belongs to one project (`id` and a plain-words
+  `name`, for example `crete` and "Crete", or `tankity` and "Tankity"). The pieces
+  list groups pieces under their project's name.
+- **Kind.** A piece is `music` or `sound`. Music is measured in bars and tempo.
+  A sound piece is a sound effect or an ambience: it has no tempo and no bars,
+  its times are seconds, it can be as short as 0.05 s, and it needs no
+  notation. Either kind may use any lane family.
+- **Characters.** A score lists its own characters (`id`, name, colour; the list
+  may be empty). A motif names one of them and takes its colour. Crete's
+  Ariadne (gold), Minotaur (red), Daedalus (bronze) and Athens (blue) live in
+  Crete's score, not in the workroom.
 
 ## What the owner gets (version 1)
 
-- **Pieces list** (`/music/`): each piece (for example "Chapter 1: The
-  Labyrinth wakes") with its latest draft, how many of the owner's notes are
+- **Pieces list** (`/music/`): pieces grouped under their project's name
+  (projects ordered by their most recent publish, pieces likewise). Each piece
+  (for example "Chapter 1: The Labyrinth wakes" under Crete, or "Cannon fire"
+  under Tankity) shows its latest draft, how many of the owner's notes are
   waiting for pickup, and Claude's latest change list.
-- **A piece page** with an audio player and one playhead shared by four views:
+- **A piece page** with an audio player and one playhead shared by up to four
+  views. A music piece has all four; a sound piece has the Story timeline and
+  the Sound picture, plus the Piano roll only when its score has notes, and
+  never Sheet music:
   - **Story timeline:** the piece left to right; sections as coloured blocks
-    named in plain words; one lane per instrument family with an icon; each
-    character's motif as a coloured ribbon (Ariadne gold, the Minotaur red,
-    Daedalus bronze, Athens blue); an energy curve on top.
+    named in plain words (for a sound piece they are optional named moments);
+    one lane per instrument family or sound layer with an icon; each
+    character's motif as a ribbon in the colour the score gives that character;
+    an energy curve on top. The time axis is bars for music and seconds for a
+    sound piece (milliseconds below one second).
   - **Piano roll:** every note as a bar, higher is higher, longer is held
     longer, coloured by lane and motif.
   - **Sound picture:** the rendered audio's spectrogram, labelled low to high
     and dark to bright.
-  - **Sheet music:** standard notation for any lane, drawn in the browser.
-  - Pinch or drag to zoom on a phone; tap to move the playhead.
-- **Learning as you go:** every musical term on screen (ostinato, Phrygian,
-  crescendo, octave, motif) is tappable and opens a two-line explanation and,
+  - **Sheet music** (music only): standard notation for any lane, drawn in the
+    browser.
+  - Pinch or drag to zoom on a phone; tap to move the playhead. The default
+    zoom fits the whole piece, so a 0.3-second sound fills the view.
+- **Learning as you go:** every musical or sound-design term on screen
+  (ostinato, Phrygian, crescendo, octave, motif; attack, decay, envelope, layer,
+  transient, reverb tail, low-pass filter) is tappable and opens a two-line explanation and,
   where it helps, a short "hear it" clip cut from the piece itself.
 - **Answering back:**
-  - **Pin a note:** select a moment or a span (and optionally a lane), then type
-    or record speech.
+  - **Pin a note:** select a moment or a span (and optionally a lane or layer),
+    then type or record speech. A note on a music piece names bars and seconds;
+    a note on a sound piece names seconds only.
   - **Hum it:** record up to 60 seconds of humming or singing at a moment.
   - **React:** one tap on a section: more epic, calmer, darker, brighter,
     longer, shorter, love it, not this.
@@ -148,22 +181,26 @@ public.
 
 ## The score data
 
-The music pipeline (Python composing MIDI, sample instruments rendered with
-sfizz, SuperCollider textures, mastering with ffmpeg) writes, for every draft:
+The pipeline (for music, Python composing MIDI, sample instruments rendered with
+sfizz, SuperCollider textures, mastering with ffmpeg; for sound effects,
+SuperCollider or recorded layers mixed and mastered with ffmpeg) writes, for every draft:
 
-- `score.json`: the piece, the draft version, tempo and bars; sections with
-  plain-words names and bar spans; lanes (instrument family, icon, colour);
-  motifs (character, colour, where they appear); every note (lane, start,
-  length, pitch, loudness, motif); the energy curve; the glossary terms used,
-  each with where a "hear it" clip starts and ends.
-- `score.musicxml` for the sheet music view.
+- `score.json`: the project (id and name), the kind (`music` or `sound`), the
+  piece, the draft version; for music, tempo and bars; sections with
+  plain-words names and bar spans (music) or optional named moments in seconds
+  (sound); lanes (family, icon, colour); the characters (name, colour); motifs
+  (which character, where they appear); every note (lane, start, length, pitch,
+  loudness, motif), which a sound piece may leave empty; the energy curve; the
+  glossary terms used, each with where a "hear it" clip starts and ends.
+- `score.musicxml` for the sheet music view: required for music, optional for
+  sound (a sound piece never shows Sheet music).
 - The audio (Opus, about 1 to 2 MB a minute at the chosen quality) and the
   spectrogram image.
 
 `score.json` has a schema with a version; the page refuses a draft whose schema
 it does not know, and a test validates every committed draft against it. The
 music and its drafts are not secret: the source and renders are committed with
-the game. The login guards the notes and the actions.
+the project's game or site. The login guards the notes and the actions.
 
 ## Code
 
@@ -183,15 +220,23 @@ the game. The login guards the notes and the actions.
 
 - Unit (node:test): the score model and layout (sections, lanes and motifs to
   pixels at any zoom), hit testing (a tap maps to the right bar and lane),
-  sealing round-trips with a test key pair and refuses a public key whose
+  the score model accepts a music piece and a 0.4-second sound effect (no bars,
+  no MusicXML) and names the path of each broken rule, the layout draws seconds
+  and milliseconds on a sound piece's axis and fits a 0.4-second sound to the
+  full width, the Sheet music tab is hidden for sound and the Piano roll for a
+  sound piece without notes; sealing round-trips with a test key pair and refuses a public key whose
   fingerprint differs, unlocking the private key with the passphrase (a wrong
   passphrase fails cleanly), and nothing of the key is written to browser
   storage.
 - PHPUnit: every API route needs the right key scope and HTTPS; a sealed note's
   size and count limits; marking picked up; the page's delete removes row and
   file and needs a session and CSRF; an API key cannot delete; the locked
-  private key is served only to a session; the pages need a session.
-- Python: pickup verifies the hash and opens the note before marking it picked
+  private key is served only to a session; the pages need a session; a music draft without MusicXML is refused and a
+  sound draft without it is kept; each draft's project and kind are recorded
+  from its score; the pieces list groups pieces under two projects, newest
+  first.
+- Python: publish validates a music draft and a sound draft with the page's
+  rules; pickup verifies the hash and opens the note before marking it picked
   up; a corrupt download is not marked; opened notes land outside the
   repository; `keys-init` and `keys-rotate` write the locked private key that
   the browser can unlock.
@@ -202,8 +247,8 @@ the game. The login guards the notes and the actions.
 
 ## Delivery
 
-Three PRs, each green on its own: the API and storage; the page with the four
-views and the glossary; the answering tools (notes, humming, reactions, energy)
+Three PRs, each green on its own: the API and storage; the page with its views
+and the glossary; the answering tools (notes, humming, reactions, energy)
 with the owner's key tool. CI is not changed. The admin login lands first.
 
 ## Version 2 (later)
@@ -213,5 +258,5 @@ play back in the browser; send an edited draft back as a note.
 
 ## Out of scope
 
-Composing the chapter music itself (its own spec, using this workroom); other
-users; public sharing.
+Composing the music and sound itself (each project's own spec, using this
+workroom); other users; public sharing.

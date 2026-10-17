@@ -11,6 +11,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const WEIGHTS: Record<string, number> = {
+  'crete-layout.spec.ts': 10,
   'crete-play.spec.ts': 15,
   'tankity-start.spec.ts': 12,
   'tankity-layout.spec.ts': 15,

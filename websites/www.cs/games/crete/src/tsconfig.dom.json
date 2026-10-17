@@ -1,5 +1,5 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": { "lib": ["ES2022", "DOM"] },
-  "files": ["audio.ts", "ui.ts", "ui/end.tsx", "ui/inventory.tsx", "ui/title.tsx", "main.ts"]
+  "files": ["audio.ts", "ui.ts", "ui/end.tsx", "ui/menu.tsx", "ui/status.tsx", "ui/story.tsx", "ui/strip.tsx", "ui/title.tsx", "notes.ts", "install-slot.ts", "main.ts"]
 }

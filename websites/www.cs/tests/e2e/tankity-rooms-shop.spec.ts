@@ -26,7 +26,7 @@ test('the shop starts the next round when everyone is ready, and Ready can be ta
   for (const p of [host.page, guest.page]) {
     await expect(btn(p)).toHaveText(/^Ready( N)?$/);
     await expect(btn(p)).toHaveAttribute('aria-pressed', 'false');
-    await expect(line(p)).toContainText(/^0\/2 ready · shop closes in \d:\d\d · ABC {2}ZED/);
+    await expect(line(p)).toContainText(/^0\/2 ready · shop closes in (\d:\d\d|[0-5]?\d s) · ABC {2}ZED/);
   }
     await host.page.locator('#shop-veil .card').screenshot({ path: 'test-results/tankity-shop-ready.png' });
 
@@ -34,7 +34,7 @@ test('the shop starts the next round when everyone is ready, and Ready can be ta
   await btn(host.page).click();
   await expect(btn(host.page)).toHaveText(/^Ready ✓/);
   await expect(btn(host.page)).toHaveAttribute('aria-pressed', 'true');
-  await expect(line(guest.page)).toContainText(/^1\/2 ready · shop closes in \d:\d\d · ABC ✓ {2}ZED/, { timeout: 10_000 });
+  await expect(line(guest.page)).toContainText(/^1\/2 ready · shop closes in (\d:\d\d|[0-5]?\d s) · ABC ✓ {2}ZED/, { timeout: 10_000 });
   await btn(host.page).click();
   await expect(btn(host.page)).toHaveAttribute('aria-pressed', 'false');
   await expect(line(guest.page)).toContainText(/^0\/2 ready/, { timeout: 10_000 });

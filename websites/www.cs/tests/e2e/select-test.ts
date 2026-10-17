@@ -58,8 +58,8 @@ has('cylon-bundle-runs-the-shell-specs', select([`${S}games/cylon/dist/main.js`]
 has('cylon-build-config-runs-the-shell-specs', select([`${S}games/cylon/tsconfig.json`, `${S}games/cylon/build.json`]), ['home-eye.spec.ts', 'cylon-help.spec.ts']);
 check('cylon-skips-tankity', list(select([`${S}games/cylon/src/rules.ts`])).some(s => s.startsWith('tankity-')), false);
 has('home-page-tool-runs-the-shell', select([`${S}tools/site-versions.php`]), ['home-eye.spec.ts', 'cylon-help.spec.ts']);
-has('crete-sources-run-its-specs', select([`${S}games/crete/src/engine.ts`]), ['games-hub.spec.ts', 'games-pwa.spec.ts', 'crete-play.spec.ts']);
-has('crete-bundle-runs-its-specs', select([`${S}games/crete/dist/main.js`, `${S}games/crete/tsconfig.json`, `${S}games/crete/build.json`]), ['games-hub.spec.ts', 'games-pwa.spec.ts', 'crete-play.spec.ts']);
+has('crete-sources-run-its-specs', select([`${S}games/crete/src/engine.ts`]), ['games-hub.spec.ts', 'games-pwa.spec.ts', 'crete-play.spec.ts', 'crete-layout.spec.ts']);
+has('crete-bundle-runs-its-specs', select([`${S}games/crete/dist/main.js`, `${S}games/crete/tsconfig.json`, `${S}games/crete/build.json`]), ['games-hub.spec.ts', 'games-pwa.spec.ts', 'crete-play.spec.ts', 'crete-layout.spec.ts']);
 check('crete-lockfile-alone-runs-no-browser', select([`${S}games/crete/package-lock.json`]), 'NONE');
 check('crete-build-tool-and-tests-run-nothing', select([`${S}games/crete/tools/install-files.php`, `${S}games/crete/.gitignore`, `${S}games/crete/test/engine.test.ts`, `${S}games/crete/test/smoke.test.ts`]), 'NONE');
 check('crete-skips-tankity', list(select([`${S}games/crete/src/ui.ts`])).some(s => s.startsWith('tankity-')), false);

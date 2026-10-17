@@ -31,7 +31,7 @@ export function Leave(p: LeaveProps) {
         <p id="leave-text">{p.text}</p>
         <div class="acts">
           <button type="button" id="leave-stay" class="btn-primary" onClick={blurThen(p.onStay)}>
-            Stay in the match <Key at="global:back" cls="key" />
+            Stay in the match <Key at="global:back" cls="kit-key-tab key" />
           </button>
           {p.onStepOut && <button type="button" id="leave-step" onClick={blurThen(p.onStepOut)}>Step out</button>}
           <button type="button" id="leave-go" class="btn-leave" onClick={blurThen(p.onLeave)}>Leave room</button>

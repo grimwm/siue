@@ -172,7 +172,7 @@ final class DeploySetTest extends TestCase
         $kept = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match(self::NEVER_SHIPS, $f)));
         self::assertTrue(count($kept) > 80, 'the rule matches the authoring files' . ' :: ' . (string) count($kept));
         foreach (['games/tankity/src/sim.ts', 'games/tankity/test/smoke.test.ts', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/dist/fx-editor.js',
-            'games/tankity/dist/pow-bench.js', 'games/cylon/src/state.ts', 'games/crete/src/engine.ts', 'src/main.ts', 'tools/ts-build.mjs', 'tsconfig.json'] as $f) {
+            'games/tankity/dist/pow-bench.js', 'games/crete/dist/tiles-test.js', 'games/cylon/src/state.ts', 'games/crete/src/engine.ts', 'src/main.ts', 'tools/ts-build.mjs', 'tsconfig.json'] as $f) {
             self::assertTrue(in_array($f, $kept, true), "the rule covers $f");
         }
         $shipped = array_values(array_filter($kept, fn(string $f): bool => isset($set[$f])));
@@ -181,12 +181,12 @@ final class DeploySetTest extends TestCase
         self::assertTrue($leaks === [], 'ships no authoring or test files' . ' :: ' . implode(', ', $leaks));
     }
 
-    /** every built bundle and its map ships, except the dev-only effects editor's and puzzle bench's */
+    /** every built bundle and its map ships, except the dev-only ones: the effects editor's, the puzzle bench's and test pages' */
     public function testShipsEveryBuiltFile(): void
     {
         $set = self::set();
         $tracked = self::tracked();
-        $built = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match('~^games/[^/]+/dist/~', $f) && !str_contains($f, '/fx-editor.') && !str_contains($f, '/pow-bench.')));
+        $built = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match('~^games/[^/]+/dist/~', $f) && !str_contains($f, '/fx-editor.') && !str_contains($f, '/pow-bench.') && !preg_match('~-test\.[a-z.]+$~', $f)));
         $missing = array_values(array_filter($built, fn(string $f): bool => !isset($set[$f])));
         self::assertTrue(count($built) >= 8 && $missing === [], 'ships every built file' . ' :: ' . implode(', ', $missing));
     }

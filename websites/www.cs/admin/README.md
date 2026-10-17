@@ -16,9 +16,9 @@ login.
 
 `lib/` holds the code (deployed, never served: an `.htaccess` denies it). The SQLite database,
 `admin.sqlite`, lives in `data/` next to this file: on the host that is `admin/data/` inside the
-site. The deploy creates the folder (mode 2770, group of the site root, so PHP's user can write and
+site. The deploy creates the folder (group of the site root, mode 770, with setgid when the host allows it, so PHP's user can write and
 other accounts cannot enter) and never uploads, overwrites or prunes anything in it; the database
-survives deploys and php-fpm restarts, and you can fetch or inspect it by sftp. If PHP cannot use
+survives deploys and php-fpm restarts. Its files belong to PHP's user (mode 0600), so sftp can delete them but not read them. If PHP cannot use
 `admin/data/`, it falls back to `/var/tmp/<account>-admin/`, which the host wipes whenever php-fpm
 restarts (sessions, links, keys and trusted devices would vanish). `ADMIN_DATA_DIR` moves the
 database elsewhere, but reaches PHP only where the server passes environment through (an FPM pool

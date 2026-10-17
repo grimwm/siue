@@ -105,7 +105,7 @@ Tightened here:
   file when the directory is under the web root, the server's group-write
   ownership), with the database file never served. On the host the database
   is `admin/data/admin.sqlite` inside the site: the deploy creates `admin/data`
-  (mode 2770, group of the site root, so PHP's user can write and other
+  (group of the site root, mode 770, with setgid when the host allows it, so PHP's user can write and other
   accounts cannot enter) and never uploads, overwrites or prunes anything in
   it. `/var/tmp/<account>-admin/` is only the fallback when `admin/data` is
   unusable; the host wipes it whenever php-fpm restarts. `ADMIN_DATA_DIR`

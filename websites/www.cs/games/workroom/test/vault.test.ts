@@ -38,3 +38,14 @@ test('after a rotation a newly signed-in device opens notes sealed before and af
   assert.equal((await open(sealedBefore, device.keyring())).body.text, 'sealed before the rotation');
   assert.equal((await open(sealedAfter, device.keyring())).body.text, 'sealed after the rotation');
 });
+
+test('the keyring a caller gets is a copy: changing it leaves the vault alone', async () => {
+  const v = createVault();
+  v.load(await unlockKeyring(fx.keyring, fx.passphrase, [builtIn, otherKey]));
+  const view = v.keyring() as Map<string, CryptoKey>;
+  view.delete(fx.fingerprint);
+  view.set('00'.repeat(32), view.get(fx.other.fingerprint)!);
+  assert.ok(v.has(fx.fingerprint));
+  assert.ok(!v.has('00'.repeat(32)));
+  assert.equal(v.keyring().size, 2);
+});

@@ -1,8 +1,10 @@
 // Unlocking the locked keyring in the browser: PBKDF2 over the passphrase, AES-GCM, and a proof that every key pairs
 // with the public key built into the page. The unlocked keys are non-extractable.
+import { fingerprintOf } from './seal.ts';
 import type { BuiltInKey } from './seal.ts';
 
 export const ITERATIONS = 600_000;
+export const MAX_ITERATIONS = 10_000_000;
 export const KEYRING_AAD = 'siue-music-keyring-v1';
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
@@ -13,9 +15,17 @@ export interface LockedKeyring { v: 1; kdf: 'PBKDF2-SHA-256'; iterations: number
 export class WrongPassphrase extends Error {}
 export class KeyringInvalid extends Error {}
 
-/** NFC-normalised, trimmed, UTF-8: the same bytes Python derives from the same passphrase. */
+/** The characters stripped from both ends of a passphrase: an explicit set, so Python strips exactly the same. */
+export const STRIPPED = ' \t\n\r\f\v\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF';
+
+/** NFC-normalised, stripped of STRIPPED at both ends, UTF-8: the same bytes Python derives from the same passphrase. */
 export function normalizePassphrase(p: string): Uint8Array<ArrayBuffer> {
-  return new TextEncoder().encode(p.normalize('NFC').trim());
+  const chars = Array.from(p.normalize('NFC'));
+  let start = 0;
+  let end = chars.length;
+  while (start < end && STRIPPED.includes(chars[start]!)) start++;
+  while (end > start && STRIPPED.includes(chars[end - 1]!)) end--;
+  return new TextEncoder().encode(chars.slice(start, end).join(''));
 }
 
 const toBase64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
@@ -45,7 +55,7 @@ export async function unlockKeyring(locked: LockedKeyring, passphrase: string, k
   const salt = fromBase64(locked.salt);
   const iv = fromBase64(locked.iv);
   const ct = fromBase64(locked.ct);
-  if (locked.v !== 1 || locked.kdf !== 'PBKDF2-SHA-256' || !Number.isInteger(locked.iterations) || locked.iterations < ITERATIONS
+  if (locked.v !== 1 || locked.kdf !== 'PBKDF2-SHA-256' || !Number.isInteger(locked.iterations) || locked.iterations < ITERATIONS || locked.iterations > MAX_ITERATIONS
     || salt?.length !== SALT_LENGTH || iv?.length !== IV_LENGTH || ct === null || ct.length < TAG_LENGTH + 1) {
     throw new KeyringInvalid('the keyring envelope is weak or malformed');
   }
@@ -59,13 +69,17 @@ export async function unlockKeyring(locked: LockedKeyring, passphrase: string, k
   }
 
   const entries = parseEntries(plain);
+  plain.fill(0);
   if (!entries.some((e) => e.fingerprint === current.fingerprint)) throw new KeyringInvalid('the keyring lacks the current key');
 
   const ring = new Map<string, CryptoKey>();
   for (const entry of entries) {
     const pub = known.find((k) => k.fingerprint === entry.fingerprint);
-    if (pub === undefined) continue;
-    ring.set(entry.fingerprint, await importPaired(entry.pkcs8, pub));
+    try {
+      if (pub !== undefined) ring.set(entry.fingerprint, await importPaired(entry.pkcs8, pub));
+    } finally {
+      entry.pkcs8.fill(0);
+    }
   }
   return ring;
 }
@@ -99,6 +113,7 @@ async function importPaired(pkcs8: Uint8Array<ArrayBuffer>, pub: BuiltInKey): Pr
   try {
     const priv = await crypto.subtle.importKey('pkcs8', pkcs8, RSA, false, ['decrypt']);
     const spki = Uint8Array.from(atob(pub.spki), (c) => c.charCodeAt(0));
+    if ((await fingerprintOf(spki)) !== pub.fingerprint) throw new Error('fingerprint');
     const pubKey = await crypto.subtle.importKey('spki', spki, RSA, false, ['encrypt']);
     const probe = crypto.getRandomValues(new Uint8Array(32));
     const back = new Uint8Array(await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, priv, await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pubKey, probe)));

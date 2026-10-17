@@ -13,7 +13,7 @@ export interface Vault {
 export function createVault(): Vault {
   let ring: ReadonlyMap<string, CryptoKey> = new Map();
   return {
-    keyring: () => ring,
+    keyring: () => new Map(ring),
     has: (fp) => ring.has(fp),
     missing: (fps) => fps.filter((fp) => !ring.has(fp)),
     load(keys) {

@@ -3,7 +3,7 @@
 // weak, malformed, swapped or incomplete keyring is refused.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { KeyringInvalid, WrongPassphrase, lockKeyring, unlockKeyring } from '../src/unlock.ts';
+import { KeyringInvalid, STRIPPED, WrongPassphrase, lockKeyring, normalizePassphrase, unlockKeyring } from '../src/unlock.ts';
 import { open, seal } from '../src/seal.ts';
 import { b64, builtIn, fx, otherKey } from './fixture-key.ts';
 
@@ -66,4 +66,22 @@ test('lockKeyring writes standard padded base64 with no line breaks, as the serv
     assert.match(field, /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/);
     assert.equal(Buffer.from(field, 'base64').toString('base64'), field, 'round-trips exactly');
   }
+});
+
+test('more iterations than the cap are refused', async () => {
+  await assert.rejects(unlockKeyring({ ...fx.keyring, iterations: 10_000_001 }, fx.passphrase, [builtIn]), KeyringInvalid);
+});
+
+test('a known public key whose fingerprint does not match its bytes is refused', async () => {
+  await assert.rejects(unlockKeyring(fx.keyring, fx.passphrase, [{ fingerprint: fx.fingerprint, spki: fx.other.spki }]), KeyringInvalid);
+});
+
+test('the passphrase is stripped of exactly the explicit whitespace set, after NFC', () => {
+  const plain = new TextEncoder().encode('abc');
+  for (const pad of ['﻿', '　', ' ', ' ', ' ', ' \t\n\r\f\v']) {
+    assert.deepEqual(normalizePassphrase(`${pad}abc${pad}`), plain, JSON.stringify(pad));
+  }
+  assert.deepEqual(normalizePassphrase('a　b'), new TextEncoder().encode('a　b'), 'inside is kept');
+  assert.deepEqual(normalizePassphrase('​abc'), new TextEncoder().encode('​abc'), 'a zero-width space is not in the set');
+  assert.ok(STRIPPED.includes('﻿') && STRIPPED.includes('　'));
 });

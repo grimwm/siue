@@ -7,6 +7,9 @@ export const MAGIC = 'SIUEN1';
 const MAGIC_BYTES = new TextEncoder().encode(MAGIC);
 const FP_LENGTH = 32;
 const HEADER_LENGTH = MAGIC_BYTES.length + FP_LENGTH + 2; // magic, fingerprint, wrapped-key length
+// The note's additional data: the magic and the fingerprint, bytes 0..37 (not the wrapped-key length after them).
+const AAD_LENGTH = MAGIC_BYTES.length + FP_LENGTH;
+const RSA_BITS = 4096;
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 
@@ -40,6 +43,7 @@ export async function seal(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null
   const spki = fromBase64(key.spki);
   if ((await fingerprintOf(spki)) !== key.fingerprint) throw new FingerprintMismatch('the public key does not match its built-in fingerprint');
   const pub = await crypto.subtle.importKey('spki', spki, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
+  if ((pub.algorithm as RsaHashedKeyAlgorithm).modulusLength !== RSA_BITS) throw new FingerprintMismatch(`the public key is not RSA-${RSA_BITS}`);
   const aes = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);
   const wrapped = new Uint8Array(await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pub, await crypto.subtle.exportKey('raw', aes)));
 
@@ -56,7 +60,7 @@ export async function seal(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null
   plain.set(audioBytes, 4 + json.length);
 
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: header }, aes, plain));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: header.subarray(0, AAD_LENGTH) }, aes, plain));
 
   const out = new Uint8Array(header.length + wrapped.length + iv.length + ct.length);
   out.set(header, 0);
@@ -84,11 +88,11 @@ export async function open(bundle: Uint8Array<ArrayBuffer>, keyring: ReadonlyMap
   const priv = keyring.get(fingerprint);
   if (priv === undefined) throw new NoteUnreadable('unknown-key');
   try {
-    const header = bundle.slice(0, HEADER_LENGTH);
+    const aad = bundle.slice(0, AAD_LENGTH);
     const rawKey = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, priv, bundle.slice(HEADER_LENGTH, ivAt));
     const aes = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']);
     const iv = bundle.slice(ivAt, ivAt + IV_LENGTH);
-    const plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: header }, aes, bundle.slice(ivAt + IV_LENGTH)));
+    const plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: aad }, aes, bundle.slice(ivAt + IV_LENGTH)));
     const jsonLength = new DataView(plain.buffer).getUint32(0);
     if (plain.length < 4 + jsonLength) throw new NoteUnreadable('tampered');
     const body: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plain.subarray(4, 4 + jsonLength)));

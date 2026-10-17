@@ -50,7 +50,7 @@ standard input and are never printed.
 - `make keys-init` (once) makes the RSA-4096 pair and the passphrase, saves them to 1Password first, writes `music/keys/public.json` and `games/workroom/src/public-key.ts`, and uploads a locked keyring of one with the `music-publish` API key (scope `keys:publish`). It then prints the build and commit steps.
 - `make keys-rotate` makes a new pair under the same passphrase, retitles the old item `(previous)`, adds the old public key to `previous`, and uploads the full keyring, current key first, replacing the stored one. It refuses when the cache or 1Password lacks the private key for any retained key.
 - `make keys-upload` locks and uploads the same full keyring again, for when the first upload could not happen (no API key yet, or the hub was unreachable). A 429 is retried after a short back-off.
-- `make keys-forget` deletes the cache.
+- `make keys-forget` deletes the cache. A key removed from 1Password stays usable from this computer's cache (and `pull` keeps it, with a warning) until you run `make keys-forget`; every cached key is checked against its fingerprint before it is used.
 - `make api-key-set NAME=music-pickup` saves an API key made on the hub (pasted at the prompt) as a 1Password item, replacing any earlier one of that name.
 
 ## The local browser check

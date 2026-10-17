@@ -35,7 +35,7 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(sealing.unlock_keyring(locked, passphrase), {fp: pkcs8}, "the browser's passphrase opens the uploaded keyring of one")
         ts = self.w.public_ts.read_text()
         self.assertIn(fp, ts)
-        whole, middle = fields["private_key"], fields["private_key"][200:260]
+        middle = fields["private_key"][200:260]
         self.assertNotIn(middle, ts + self.w.public_json.read_text())
         for call in self.w.op_calls():
             self.assertFalse(any(passphrase in a or middle in a for a in call))
@@ -184,6 +184,42 @@ class LifecycleTest(unittest.TestCase):
         self.w.keys.init(self.uploads.append)
         with self.assertRaises(KeysError):
             self.w.keys.init(self.uploads.append, adopt=True)
+
+
+    def test_a_corrupt_cache_only_key_stops_rotate_and_upload(self):
+        old = self.cache_only_key()
+        count = len(self.uploads)
+        data = self.w.cache.load()
+        other = pool_key(3)[1]
+        import base64 as b
+        data["keys"][old] = b.b64encode(other).decode()  # a real key, filed under the wrong fingerprint
+        self.w.cache.save(data)
+        for action in (lambda: self.w.keys.rotate(self.uploads.append), lambda: self.w.keys.upload_keyring(self.uploads.append)):
+            with self.assertRaises(KeysError) as ctx:
+                action()
+            self.assertIn("make keys-forget", str(ctx.exception))
+            self.assertIn(old[:4], str(ctx.exception))
+        data["keys"][old] = "not base64 !!"
+        self.w.cache.save(data)
+        with self.assertRaises(KeysError):
+            self.w.keys.pull()
+        self.assertEqual((len(self.uploads), len(self.item_fields())), (count, 1), "nothing uploaded, no new item")
+
+    def test_an_archive_failure_keeps_the_read_back_error_first(self):
+        original_fields, original_archive = self.w.op.fields, self.w.op.archive
+
+        def boom(item_id):
+            raise OSError("op died")
+
+        def stuck(item_id):
+            raise OSError("archive refused")
+        self.w.op.fields, self.w.op.archive = boom, stuck
+        with self.assertRaises(KeysError) as ctx:
+            self.w.keys.init(self.uploads.append)
+        self.w.op.fields, self.w.op.archive = original_fields, original_archive
+        self.assertTrue(str(ctx.exception).startswith("op died"))
+        self.assertIn("ADOPT=1", str(ctx.exception))
+        self.assertIsInstance(ctx.exception.__cause__, OSError)
 
 
 if __name__ == "__main__":

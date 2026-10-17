@@ -177,8 +177,22 @@ class Keys:
         cached = self.cache.load()["keys"]
         for fp in cached:
             if fp not in held:
+                self._verified(fp, cached[fp])
                 self.out(f"Only this computer holds key {display(fp)}; it is kept.")
         self.cache.save({"v": 1, "keys": {**cached, **{fp: f["private_key"] for fp, (_, f) in held.items()}}, "api": api})
+
+    @staticmethod
+    def _verified(fp: str, encoded: object) -> bytes:
+        """A cached private key's DER, proven to belong to the fingerprint it is filed under."""
+        try:
+            pkcs8 = base64.b64decode(encoded, validate=True)  # type: ignore[arg-type]
+            ok = sealing.fingerprint(sealing.spki_of(pkcs8)) == fp
+        except (binascii.Error, ValueError, TypeError):
+            ok = False
+        if not ok:
+            raise KeysError(f"The cached key {display(fp)} is damaged or does not match its fingerprint: "
+                            "make keys-forget, then make keys-pull")
+        return pkcs8
 
     def pull_checked(self) -> None:
         self.pull()
@@ -196,12 +210,12 @@ class Keys:
         if repo.current not in cached:
             unknown = [fp for fp in cached if fp not in wanted]
             if unknown:
-                raise KeyMismatch(f"1Password holds a key the repository does not know ({', '.join(display(fp) for fp in unknown)}). "
+                raise KeyMismatch(f"This computer or 1Password holds a key the repository does not know ({', '.join(display(fp) for fp in unknown)}). "
                                   "The repository may be out of date: git pull, then run this again. If it is up to date, "
                                   f"the repository's key {display(repo.current)} was never saved to 1Password: run make keys-status.")
             raise KeyMismatch(f"1Password (vault {self.op.vault}) has no private key for the repository's public key "
                               f"{display(repo.current)}. Check OP_VAULT, or the key was never saved to 1Password: run make keys-status.")
-        return {fp: base64.b64decode(cached[fp]) for fp in wanted if fp in cached}
+        return {fp: self._verified(fp, cached[fp]) for fp in wanted if fp in cached}
 
     def status(self) -> int:
         repo = read_repo_keys(self.public_json)
@@ -309,12 +323,23 @@ class Keys:
             stored = self.op.fields(new_id)
             bad = next((label for label, want in (("password", passphrase), ("private_key", private_key), ("fingerprint", fp))
                         if not hmac.compare_digest(stored.get(label, "").encode(), want.encode())), None)
-        except BaseException:
-            self.op.archive(new_id)
+        except Exception as e:
+            left = self._discard(new_id)
+            if left:
+                raise KeysError(f"{e}{left}") from e
             raise
         if bad is not None:
-            self.op.archive(new_id)
-            raise KeysError(f"1Password did not store the key's {bad} field as sent; the new item was removed and nothing was changed")
+            left = self._discard(new_id)
+            raise KeysError(f"1Password did not store the key's {bad} field as sent; " + (
+                f"nothing else was changed.{left}" if left else "the new item was removed and nothing was changed"))
+
+    def _discard(self, item_id: str) -> str:
+        """Archive a half-made item; returns "" or a sentence naming the orphan when that fails too."""
+        try:
+            self.op.archive(item_id)
+        except Exception as e:
+            return f" The new 1Password item {item_id} could not be removed ({e}): remove it by hand, or adopt it with make keys-init ADOPT=1."
+        return ""
 
     def _remember(self, fp: str, pkcs8: bytes) -> None:
         data = self.cache.load()

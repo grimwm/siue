@@ -6,10 +6,7 @@ import { clipDone, pickSource } from '../player.ts';
 import type { Clip } from '../player.ts';
 import type { AudioSource } from '../score.ts';
 
-export interface PlayerProps { src: AudioSource[]; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void }
-
-/** A time that differs from the audio's by more than this is a seek from outside, not the audio's own progress. */
-const SEEK_EPS = 0.25;
+export interface PlayerProps { src: AudioSource[]; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null } }
 
 export function Player(p: PlayerProps) {
   const audio = useRef<HTMLAudioElement>(null);
@@ -21,11 +18,13 @@ export function Player(p: PlayerProps) {
   const live = useRef(p);
   live.current = p;
 
-  // A seek from a view moves the audio.
+  // A seek from a view writes the audio's position at once, so the next frame reports the new time and never the old one.
   useEffect(() => {
-    const a = audio.current;
-    if (a && Math.abs(a.currentTime - p.time) > SEEK_EPS) a.currentTime = p.time;
-  }, [p.time]);
+    const ref = p.seekRef;
+    if (!ref) return;
+    ref.current = t => { if (audio.current) audio.current.currentTime = t; };
+    return () => { ref.current = null; };
+  }, [p.seekRef]);
 
   // Hear it: play the clip from its start.
   useEffect(() => {

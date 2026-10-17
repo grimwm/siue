@@ -193,11 +193,17 @@ test('an inlined package that is not installed fails the build, naming it', t =>
 
 test('an inlined package without a license file fails the build, naming it', t => {
   const dir = scratch(t);
-  if (!existsSync(join(NODE_MODULES, 'isarray/package.json')) || readdirSync(join(NODE_MODULES, 'isarray')).some(f => /^licen[sc]e/i.test(f))) return t.skip('needs an installed package with no license file');
-  withInlined(dir, ['isarray']);
+  // A package made for this test, so it never depends on what else is installed.
+  const name = `kit-test-unlicensed-${process.pid}`;
+  const pkg = join(NODE_MODULES, name);
+  mkdirSync(pkg);
+  t.after(() => rmSync(pkg, { recursive: true, force: true }));
+  writeFileSync(join(pkg, 'package.json'), JSON.stringify({ name, version: '1.0.0', license: 'MIT' }));
+  writeFileSync(join(pkg, 'README.md'), 'No license file here.\n');
+  withInlined(dir, [name]);
   const r = run(dir);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /isarray: no license file/);
+  assert.match(r.stderr, new RegExp(`${name}: no license file`));
 });
 
 test('inlined must be a list of package names', t => {

@@ -11,11 +11,11 @@ import { AXIS_H, Axis, Playhead } from './parts.tsx';
 
 export const PICTURE_HEIGHT = 200;
 
-export interface SoundPictureProps { score: Score; view: View; time: number; imageSrc: string; onSeek(t: number): void; onView(v: View): void }
+export interface SoundPictureProps { score: Score; view: View; time: number; imageSrc: string; onSeek(t: number): void; onView(v: View): void; onHold?(held: boolean): void }
 
 export function SoundPicture(p: SoundPictureProps) {
   const { score, view } = p;
-  const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView });
+  const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold });
   const height = PICTURE_HEIGHT + AXIS_H;
   return (
     <div class="sound-picture">

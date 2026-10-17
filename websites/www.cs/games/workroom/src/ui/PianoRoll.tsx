@@ -10,12 +10,12 @@ import { AXIS_H, Axis, Playhead } from './parts.tsx';
 
 export const ROLL_HEIGHT = 280;
 
-export interface PianoRollProps { score: Score; tempo: TempoMap; view: View; time: number; lanes?: ReadonlySet<string>; onSeek(t: number): void; onView(v: View): void }
+export interface PianoRollProps { score: Score; tempo: TempoMap; view: View; time: number; lanes?: ReadonlySet<string>; onSeek(t: number): void; onView(v: View): void; onHold?(held: boolean): void }
 
 export function PianoRoll(p: PianoRollProps) {
   const { score, tempo, view } = p;
   const roll = layoutRoll(score, view, ROLL_HEIGHT, p.lanes);
-  const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView });
+  const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold });
   const height = roll.height + AXIS_H;
   if (roll.notes.length === 0) return <p class="empty">No notes to show in the chosen lanes.</p>;
   return (

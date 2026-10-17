@@ -11,7 +11,7 @@ import type { View } from '../zoom.ts';
 import { useSurface } from './surface.ts';
 import { AXIS_H, Axis, Playhead } from './parts.tsx';
 
-export interface TimelineProps { score: Score; tempo: TempoMap; view: View; time: number; onSeek(t: number): void; onView(v: View): void; onTerm(id: string): void; overlay?: ComponentChildren }
+export interface TimelineProps { score: Score; tempo: TempoMap; view: View; time: number; onSeek(t: number): void; onView(v: View): void; onTerm(id: string): void; onHold?(held: boolean): void; overlay?: ComponentChildren }
 
 /** A section's name as SVG text: plain runs are tspans, glossary words are tspans that open their card (a button cannot live inside an svg). */
 function SectionName(p: { name: string; onTerm(id: string): void }) {
@@ -34,7 +34,7 @@ function SectionName(p: { name: string; onTerm(id: string): void }) {
 export function Timeline(p: TimelineProps) {
   const { score, tempo, view } = p;
   const layout = layoutTimeline(score, tempo, view);
-  const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView });
+  const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold });
   const height = layout.height + AXIS_H;
   return (
     <svg class="tl" data-timeline="" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`} role="img" aria-label="Story timeline" {...surface}>

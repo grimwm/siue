@@ -13,6 +13,8 @@ export interface SurfaceProps {
   duration: number;
   onSeek(t: number): void;
   onView(v: View): void;
+  /** true while any pointer is down on the surface, false once all are up or cancelled. */
+  onHold?(held: boolean): void;
 }
 interface PointerLike { pointerId: number; clientX: number; clientY: number; timeStamp: number; currentTarget: Element }
 interface WheelLike { clientX: number; deltaX: number; deltaY: number; ctrlKey: boolean; currentTarget: Element; preventDefault(): void }
@@ -38,6 +40,13 @@ export function useSurface(p: SurfaceProps): SurfaceHandlers {
   const machine = useRef<Gestures | null>(null);
   machine.current ??= createGestures(() => live.current.view, () => live.current.bounds, () => 'pan');
   const g = machine.current;
+  const down = useRef(new Set<number>());
+  const hold = (id: number, held: boolean): void => {
+    const was = down.current.size > 0;
+    if (held) down.current.add(id); else down.current.delete(id);
+    const is = down.current.size > 0;
+    if (was !== is) live.current.onHold?.(is);
+  };
 
   const apply = (outs: GestureOut[]): void => {
     for (const o of outs) {
@@ -50,12 +59,13 @@ export function useSurface(p: SurfaceProps): SurfaceHandlers {
   return {
     onPointerDown(e) {
       e.currentTarget.setPointerCapture?.(e.pointerId);
+      hold(e.pointerId, true);
       apply(g.down(at(e)));
     },
     onPointerMove: e => apply(g.move(at(e))),
-    onPointerUp: e => apply(g.up(at(e))),
-    onPointerCancel: e => apply(g.cancel(e.pointerId)),
-    onLostPointerCapture: e => apply(g.cancel(e.pointerId)),
+    onPointerUp(e) { apply(g.up(at(e))); hold(e.pointerId, false); },
+    onPointerCancel(e) { apply(g.cancel(e.pointerId)); hold(e.pointerId, false); },
+    onLostPointerCapture(e) { apply(g.cancel(e.pointerId)); hold(e.pointerId, false); },
     onWheel(e) {
       e.preventDefault();
       apply(g.wheel(local(e.currentTarget, e.clientX, 0).x, e.deltaX, e.deltaY, e.ctrlKey));

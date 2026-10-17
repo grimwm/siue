@@ -46,6 +46,8 @@ export function Workroom(p: WorkroomProps) {
   const [sheetLane, setSheetLane] = useState(score.lanes[0]!.id);
   const [open, setOpen] = useState<string | null>(null);
   const [clip, setClip] = useState<Clip | null>(null);
+  const [holding, setHolding] = useState(false);
+  const seekAudio = useRef<((t: number) => void) | null>(null);
   const tab = pickTab(tabs, wanted);
   const bounds = useMemo(() => boundsFor(score.duration, width), [score.duration, width]);
 
@@ -63,11 +65,12 @@ export function Workroom(p: WorkroomProps) {
     fitted.current = { score, width };
     setView(v => (!was || was.score !== score ? fitView(score.duration, width) : clampView({ ...v, width }, boundsFor(score.duration, width))));
   }, [score, width]);
-  // The playhead stays on screen, a page at a time.
-  useEffect(() => { setView(v => follow(v, time, bounds)); }, [time, bounds]);
+  // The playhead stays on screen, a page at a time, except while a finger or the mouse is on a view (a pan is not undone every frame); it catches up on release.
+  useEffect(() => { if (!holding) setView(v => follow(v, time, bounds)); }, [time, bounds, holding]);
 
-  const seek = (t: number): void => { setClip(null); setTime(t); };
-  const hear = (c: Clip): void => { setClip(c); setTime(c.from); };
+  // The audio moves first, in this call, so the next frame reports the new time.
+  const seek = (t: number): void => { seekAudio.current?.(t); setClip(null); setTime(t); };
+  const hear = (c: Clip): void => { seekAudio.current?.(c.from); setClip(c); setTime(c.from); };
   const openTerm = open === null ? undefined : term(open);
   const openClip = openTerm ? uses.find(u => u.term.id === openTerm.id) : undefined;
   const seen = [...new Map(uses.map(u => [u.term.id, u.term])).values()];
@@ -97,7 +100,7 @@ export function Workroom(p: WorkroomProps) {
           </select>
         </label>
       </div>
-      <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} />
+      <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} />
       <ViewTabs tabs={tabs} tab={tab} onTab={setWanted} />
       {seen.length > 0 ? (
         <div class="words" aria-label="Words in this piece">
@@ -108,7 +111,7 @@ export function Workroom(p: WorkroomProps) {
       {openTerm ? <Card term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={() => setOpen(null)} /> : null}
       {tab === 'story' ? (
         <>
-          <Timeline score={score} tempo={tempo} view={view} time={time} onSeek={seek} onView={setView} onTerm={setOpen} overlay={pins} />
+          <Timeline score={score} tempo={tempo} view={view} time={time} onSeek={seek} onView={setView} onHold={setHolding} onTerm={setOpen} overlay={pins} />
           {score.changes.length > 0 ? (
             <ol class="changes" aria-label="Claude's changes">
               {score.changes.map((c, i) => (
@@ -126,10 +129,10 @@ export function Workroom(p: WorkroomProps) {
           <div class="lane-picker" role="group" aria-label="Lanes shown">
             {score.lanes.map(l => <button type="button" class="chip" aria-pressed={!lanes || lanes.has(l.id)} onClick={() => toggleLane(l.id)}>{l.name}</button>)}
           </div>
-          <PianoRoll score={score} tempo={tempo} view={view} time={time} lanes={lanes} onSeek={seek} onView={setView} />
+          <PianoRoll score={score} tempo={tempo} view={view} time={time} lanes={lanes} onSeek={seek} onView={setView} onHold={setHolding} />
         </>
       ) : null}
-      {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram.file)} onSeek={seek} onView={setView} /> : null}
+      {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram.file)} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
       {tab === 'sheet' ? <Sheet musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane} /> : null}
       {p.children}
     </div>

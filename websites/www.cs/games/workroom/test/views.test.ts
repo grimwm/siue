@@ -110,3 +110,19 @@ test('a sound effect has no Sheet music tab and no empty Piano roll', () => {
   assert.deepEqual(walk(root).filter(e => e.localName === 'button').map(b => b.textContent), ['Story', 'Sound picture']);
   assert.doesNotMatch(root.textContent, /Sheet music|Piano roll/);
 });
+
+test('a view reports being held while a pointer is down, and lets go on up, cancel or a lost capture', () => {
+  for (const release of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+    const root = makeEl('root');
+    const held: boolean[] = [];
+    render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {}, onHold: (b: boolean) => held.push(b) }), renderTarget(root));
+    const svg = withAttr(root, 'data-timeline')[0]!;
+    fire(svg, 'pointerdown', { pointerId: 1, clientX: 10, clientY: 120, timeStamp: 0 });
+    fire(svg, 'pointerdown', { pointerId: 2, clientX: 20, clientY: 120, timeStamp: 1 });
+    assert.deepEqual(held, [true], 'one report for the first finger');
+    fire(svg, release, { pointerId: 2, clientX: 20, clientY: 120, timeStamp: 5 });
+    assert.deepEqual(held, [true], 'still held with one finger down');
+    fire(svg, release, { pointerId: 1, clientX: 10, clientY: 120, timeStamp: 6 });
+    assert.deepEqual(held, [true, false], release);
+  }
+});

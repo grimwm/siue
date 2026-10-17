@@ -30,7 +30,10 @@ RUN sed -i \
 RUN echo 'env[TANKITY_ROOM_JOINS_PER_HOUR] = $TANKITY_ROOM_JOINS_PER_HOUR' >> /etc/php-fpm.d/www.conf \
     && echo 'env[TANKITY_ROOM_HOSTS_PER_ADDRESS] = $TANKITY_ROOM_HOSTS_PER_ADDRESS' >> /etc/php-fpm.d/www.conf \
     && echo 'env[TANKITY_LOBBIES_PER_ADDRESS] = $TANKITY_LOBBIES_PER_ADDRESS' >> /etc/php-fpm.d/www.conf \
-    && echo 'env[TANKITY_POW_BITS] = $TANKITY_POW_BITS' >> /etc/php-fpm.d/www.conf
+    && echo 'env[TANKITY_POW_BITS] = $TANKITY_POW_BITS' >> /etc/php-fpm.d/www.conf \
+    && echo 'env[ADMIN_BASE_URL] = $ADMIN_BASE_URL' >> /etc/php-fpm.d/www.conf \
+    && echo 'env[ADMIN_DATA_DIR] = $ADMIN_DATA_DIR' >> /etc/php-fpm.d/www.conf \
+    && echo 'env[ADMIN_MAIL_CAPTURE_DIR] = $ADMIN_MAIL_CAPTURE_DIR' >> /etc/php-fpm.d/www.conf
 
 EXPOSE 9000
 CMD ["php-fpm", "--nodaemonize"]

@@ -1,4 +1,4 @@
-.PHONY: help deploy up down url parity test protocol sim-vectors e2e screenshots
+.PHONY: help deploy up down url parity test protocol sim-vectors e2e screenshots admin-smoke
 
 .DEFAULT_TARGET := help
 
@@ -27,6 +27,7 @@ help:
 	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL;"
 	@echo "           one run per machine at a time (E2E_ARGS passes to playwright)"
 	@echo "  e2e-changed - Only the browser specs your changes against origin/main need"
+	@echo "  admin-smoke - Sign in to the admin pages in a throwaway docker project and back out (prints ADMIN-SMOKE-OK)"
 	@echo "  screenshots - Recapture each game's Games-page picture (macOS sips)"
 
 deploy:
@@ -92,3 +93,7 @@ e2e-changed:
 	@specs=$$( { git diff --name-only origin/main...HEAD; git diff --name-only HEAD; git ls-files --others --exclude-standard | sed 's|^|websites/www.cs/|'; } | sort -u | node tests/e2e/select.ts ) && \
 	echo "e2e: $$specs" && \
 	case "$$specs" in NONE) ;; ALL) $(MAKE) --no-print-directory e2e ;; *) $(MAKE) --no-print-directory e2e E2E_ARGS="$$specs" ;; esac
+
+# The admin login end to end in its own docker project (torn down afterwards).
+admin-smoke:
+	tests/admin-smoke.sh

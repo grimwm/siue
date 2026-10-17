@@ -112,6 +112,22 @@ sftp_batch() {
   sftp -q -oBatchMode=no "${mux[@]}" -b "$1" "$HOST" 2> >(tr -d '\r' | grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
 }
 
+# The admin login's database lives in admin/data/, the server's like the scores
+# file: made when missing, never staged, uploaded, overwritten or pruned (the
+# case arm above keeps it out of the manifest). PHP runs as the web user, not
+# the site account, so the folder is 770 and the group it inherits from the
+# setgid site root is what lets PHP in; other accounts cannot enter. Every
+# line is '-'-prefixed so a refusal (such as a setgid bit this account may not
+# set) never aborts the deploy; 770 comes first so a refused 2770 leaves 770. The folder is made right after admin/ and
+# before the upload batch's chmod 755 on admin/, which clears admin/'s setgid.
+admin_data_batch() {
+  printf '%s\n' '-mkdir admin' '-mkdir admin/data' '-chmod 770 admin/data' '-chmod 2770 admin/data'
+}
+if [ "${ADMIN_BATCH:-0}" = 1 ]; then
+  admin_data_batch
+  exit 0
+fi
+
 # 1. Stage.
 while IFS= read -r -d '' f; do
   [ -e "$f" ] || continue # deleted but still in the index
@@ -142,6 +158,16 @@ while IFS= read -r -d '' f; do
     # never staged, so never uploaded, never chmodded, and never in the
     # manifest a PRUNE reads.
     games/tankity/data/*) continue ;;
+    # The admin login's storage (its database) likewise.
+    admin/data/*) continue ;;
+    # The admin login's pages, stylesheet, libraries and their .htaccess files
+    # ship; its notes (README.md) and anything else under admin/ do not. A case
+    # pattern's * crosses slashes, so a library's subfolder is refused first.
+    admin/lib/*/*) continue ;;
+    admin/lib/*.php | admin/lib/.htaccess) ;;
+    admin/*/*) continue ;;
+    admin/*.php | admin/admin.css | admin/.htaccess) ;;
+    admin/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;
@@ -221,6 +247,9 @@ if [ "${DRY_RUN:-0}" = 1 ]; then
   echo "DRY_RUN: nothing uploaded"
   exit 0
 fi
+
+admin_data_batch >"$work/admin-data"
+sftp_batch "$work/admin-data"
 
 # 3. Upload the changed files. sftp creates missing directories ('-' lets an
 # existing one pass) and put -p keeps the staged 644 file modes. mkdir lands

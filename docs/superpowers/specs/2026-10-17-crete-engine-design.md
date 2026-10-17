@@ -106,10 +106,11 @@ All DOM-free, in `crete/src/puzzle/`, compiled by Crete's DOM-free program.
 
 ## Board and art
 
-- **Blender:** `crete/art/blender/render_tiles.py` builds every scene in
+- **Blender:** `crete/fx/blender/render_tiles.py` builds every scene in
   code (no outside assets), renders with Cycles or EEVEE, and writes a sprite
-  atlas and `tiles.json`, as Tankity's `render_fx.py` does; the `.blend` files
-  are committed through Git LFS.
+  atlas and `tiles.json` to `crete/fx/sprites/`, as Tankity's `render_fx.py`
+  does; the `.blend` files are committed through Git LFS. The deploy and the
+  web server already keep every game's `fx/blender/` off the site.
 - **Look:** painted and realistic, seen from a three-quarter top-down camera:
   limestone floors and walls with a front face, bronze doors, sea-blue water,
   fire, ice, force floors with moving arrows, a Theseus and a Minotaur that

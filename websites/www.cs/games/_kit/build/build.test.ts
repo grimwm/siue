@@ -1,6 +1,6 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, symlinkSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -492,4 +492,63 @@ test('fonts: the stylesheet points only at fonts that ship, and every shipped fo
   dir = scratch(t);
   withFonts(dir, '');
   assert.match(run(dir).stderr, /fonts\/test-sans-400\.woff2 is not used by src\/app\.css/);
+});
+
+const setManifest = (dir: string, fonts: unknown): void => writeFileSync(join(dir, 'fonts/fonts.json'), JSON.stringify({ fonts }));
+const entry = (over: Record<string, unknown> = {}) => ({ name: 'Test Sans', source: 'test 1.0', license: 'OFL-1.1', licenseFile: 'OFL.txt', files: ['test-sans-400.woff2'], ...over });
+
+test('fonts: a licence file must be a plain file name inside the folder', t => {
+  for (const licenseFile of ['../x.txt', '/etc/hosts']) {
+    const dir = scratch(t);
+    withFonts(dir);
+    setManifest(dir, [entry({ licenseFile })]);
+    const r = run(dir);
+    assert.equal(r.status, 1);
+    assert.ok(r.stderr.includes(licenseFile), r.stderr);
+  }
+  const dir = scratch(t);
+  withFonts(dir);
+  writeFileSync(join(dir, 'outside.txt'), 'secret');
+  rmSync(join(dir, 'fonts/OFL.txt'));
+  symlinkSync(join(dir, 'outside.txt'), join(dir, 'fonts/OFL.txt'));
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /OFL\.txt is not a regular file/);
+});
+
+test('fonts: a listed font that is a symlink or missing is refused', t => {
+  let dir = scratch(t);
+  withFonts(dir);
+  writeFileSync(join(dir, 'outside.woff2'), WOFF2_BYTES);
+  rmSync(join(dir, 'fonts/test-sans-400.woff2'));
+  symlinkSync(join(dir, 'outside.woff2'), join(dir, 'fonts/test-sans-400.woff2'));
+  assert.match(run(dir).stderr, /test-sans-400\.woff2 is not a regular file/);
+  dir = scratch(t);
+  withFonts(dir);
+  rmSync(join(dir, 'fonts/test-sans-400.woff2'));
+  assert.match(run(dir).stderr, /test-sans-400\.woff2 does not exist/);
+});
+
+test('fonts: a malformed or duplicated manifest is a build error, not a crash', t => {
+  const cases: [unknown, RegExp][] = [
+    [null, /fonts\.json/],
+    [[null], /fonts\.json: every font must be an object/],
+    [[entry(), entry({ files: ['other.woff2'] })], /duplicate font name Test Sans/],
+    [[entry({ files: ['test-sans-400.woff2', 'test-sans-400.woff2'] })], /duplicate file test-sans-400\.woff2/],
+  ];
+  for (const [fonts, re] of cases) {
+    const dir = scratch(t);
+    withFonts(dir);
+    setManifest(dir, fonts);
+    const r = run(dir);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, re);
+    assert.doesNotMatch(r.stderr, /TypeError/);
+  }
+  const dir = scratch(t);
+  withFonts(dir);
+  writeFileSync(join(dir, 'fonts/fonts.json'), 'null');
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.doesNotMatch(r.stderr, /TypeError/);
 });

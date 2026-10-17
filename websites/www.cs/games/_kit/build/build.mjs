@@ -5,7 +5,7 @@
 //   node _kit/build/build.mjs <game> --check  exit 1 if dist/ is stale, missing or has extra files
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import * as esbuild from 'esbuild';
 
@@ -79,6 +79,7 @@ export function compileCss(gameDir, css) {
 }
 
 const WOFF2_MAGIC = Buffer.from('wOF2');
+const LICENSE_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const FONT_FILE_RE = /^[a-z0-9][a-z0-9-]*\.woff2$/;
 // url(fonts/x.woff2), quoted or not, as Tailwind's minifier writes it.
 const FONT_URL_RE = /url\(\s*["']?fonts\/([^"')\s]+)["']?\s*\)/g;
@@ -92,18 +93,27 @@ export function loadFonts(gameDir, folder) {
   } catch (e) {
     throw new BuildError(`${folder}/fonts.json: ${e.message}`);
   }
-  if (!Array.isArray(manifest.fonts) || manifest.fonts.length === 0) throw new BuildError(`${folder}/fonts.json: \`fonts\` must list at least one font`);
+  if (typeof manifest !== 'object' || manifest === null || !Array.isArray(manifest.fonts) || manifest.fonts.length === 0) throw new BuildError(`${folder}/fonts.json: \`fonts\` must list at least one font`);
   const files = new Map();
   const blocks = [];
+  const names = new Set();
+  const isFile = p => lstatSync(p, { throwIfNoEntry: false })?.isFile() === true;
   for (const f of manifest.fonts) {
+    if (typeof f !== 'object' || f === null || Array.isArray(f)) throw new BuildError(`${folder}/fonts.json: every font must be an object`);
     for (const k of ['name', 'source', 'license', 'licenseFile']) {
       if (typeof f[k] !== 'string' || f[k] === '') throw new BuildError(`${folder}/fonts.json: every font needs a \`${k}\``);
     }
+    if (names.has(f.name)) throw new BuildError(`${folder}/fonts.json: duplicate font name ${f.name}`);
+    names.add(f.name);
+    if (!LICENSE_FILE_RE.test(f.licenseFile)) throw new BuildError(`${folder}/fonts.json: ${f.name}: licenseFile ${f.licenseFile} must be a plain file name in ${folder}/`);
     if (!Array.isArray(f.files) || f.files.length === 0) throw new BuildError(`${folder}/fonts.json: ${f.name}: \`files\` must list its woff2 files`);
     if (!existsSync(join(dir, f.licenseFile))) throw new BuildError(`${folder}/fonts.json: ${f.name}: licence file ${f.licenseFile} does not exist`);
+    if (!isFile(join(dir, f.licenseFile))) throw new BuildError(`${folder}/${f.licenseFile} is not a regular file`);
     for (const name of f.files) {
       if (typeof name !== 'string' || !FONT_FILE_RE.test(name)) throw new BuildError(`${folder}/fonts.json: ${f.name}: ${name} must match ${FONT_FILE_RE}`);
-      if (!existsSync(join(dir, name))) throw new BuildError(`${folder}/fonts.json: ${name} does not exist`);
+      if (files.has(`fonts/${name}`)) throw new BuildError(`${folder}/fonts.json: duplicate file ${name}`);
+      if (!lstatSync(join(dir, name), { throwIfNoEntry: false })) throw new BuildError(`${folder}/fonts.json: ${name} does not exist`);
+      if (!isFile(join(dir, name))) throw new BuildError(`${folder}/${name} is not a regular file`);
       const bytes = readFileSync(join(dir, name));
       if (!bytes.subarray(0, 4).equals(WOFF2_MAGIC)) throw new BuildError(`${folder}/${name} is not a woff2 file`);
       files.set(`fonts/${name}`, bytes);

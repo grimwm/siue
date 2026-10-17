@@ -100,6 +100,14 @@ class SyncTest(unittest.TestCase):
         for secret in ("never print me", "f" * 64, base64.b64encode(pkcs8).decode()[:40]):
             self.assertNotIn(secret, text)
 
+    def test_a_key_item_without_a_password_is_a_plain_error(self):
+        from siue_music.keys import KeysError
+        fp = self.w.add_key_to_op(0, passphrase="")
+        self.w.write_repo(fp)
+        with self.assertRaises(KeysError) as e:
+            self.w.keys.passphrase()
+        self.assertIn("password", str(e.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

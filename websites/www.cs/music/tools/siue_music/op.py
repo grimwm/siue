@@ -7,8 +7,18 @@ from typing import Callable, Sequence
 MIN_VERSION = (2, 25)
 
 
+TIMEOUT_SECONDS = 120  # long enough for the 1Password app's approval prompt
+
+
 class OpError(Exception):
     pass
+
+
+def item_template(title: str, category: str, tags: list[str], fields: list[dict], urls: Sequence[str]) -> dict:
+    """The JSON `op item create ... -` reads on stdin. It must match the shape `op item template get Password`
+    (and `API Credential`) prints: top-level title, category, tags, fields (id, type, purpose, label, value), urls (href, primary)."""
+    return {"title": title, "category": category, "tags": tags, "fields": fields,
+            "urls": [{"href": u, "primary": i == 0} for i, u in enumerate(urls)]}
 
 
 class Op:
@@ -21,7 +31,10 @@ class Op:
     def _run(self, args: Sequence[str], stdin: str | None = None) -> str:
         what = " ".join(args[:2])
         try:
-            done = self._run_process([*self.exe, *args], input=stdin, capture_output=True, text=True)
+            done = self._run_process([*self.exe, *args], input=stdin, capture_output=True, text=True,
+                                         timeout=TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            raise OpError("1Password did not answer in time; open the 1Password app and approve, then retry") from None
         except FileNotFoundError:
             raise OpError("the 1Password CLI is not installed: brew install 1password-cli") from None
         if done.returncode != 0:
@@ -59,8 +72,7 @@ class Op:
         return out
 
     def create(self, title: str, category: str, tags: list[str], fields: list[dict], urls: Sequence[str] = ()) -> str:
-        template = {"title": title, "category": category, "tags": tags, "fields": fields,
-                    "urls": [{"href": u, "primary": i == 0} for i, u in enumerate(urls)]}
+        template = item_template(title, category, tags, fields, urls)
         made = self._json(["item", "create", "--vault", self.vault, "--format", "json", "-"], json.dumps(template))
         return made["id"]
 

@@ -49,8 +49,11 @@ def main(argv):
         return 1
     if argv[:2] == ["item", "create"] and argv[-1] == "-":
         t = json.load(sys.stdin)
+        fields = t["fields"]
+        if os.environ.get("FAKE_OP_MANGLE"):  # a store that keeps a different shape than was sent
+            fields = [{**f, "label": "x_" + f["label"]} for f in fields]
         item = {"id": uuid.uuid4().hex[:26], "vault": vault, "title": t["title"], "category": t["category"],
-                "tags": t.get("tags", []), "fields": t["fields"], "urls": t.get("urls", [])}
+                "tags": t.get("tags", []), "fields": fields, "urls": t.get("urls", [])}
         data["items"].append(item)
         save(data)
         print(json.dumps({"id": item["id"]}))

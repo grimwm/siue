@@ -3,6 +3,7 @@ import base64
 import binascii
 import json
 import os
+import hmac
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -85,11 +86,16 @@ class Cache:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(self.path.parent, 0o700)
         tmp = self.path.with_name(self.path.name + ".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            f.write(json.dumps(data))
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, self.path)
+        tmp.unlink(missing_ok=True)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, "w") as f:
+                os.fchmod(f.fileno(), 0o600)
+                f.write(json.dumps(data))
+            os.replace(tmp, self.path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
     def forget(self) -> bool:
         try:
@@ -199,10 +205,16 @@ class Keys:
             raise KeysError("an API key is 64 lowercase hex characters, as the hub shows it once")
         self._ready()
         old = [item_id for item_id, existing in self._api_items() if existing == name]
-        self.op.create(f"SIUE music API {name}", "API_CREDENTIAL", [API_TAG], [
+        new_id = self.op.create(f"SIUE music API {name}", "API_CREDENTIAL", [API_TAG], [
             {"id": "name", "type": "STRING", "label": "name", "value": name},
             {"id": "credential", "type": "CONCEALED", "label": "credential", "value": secret},
         ], urls=[WORKROOM_URL])
+        stored = self.op.fields(new_id)
+        for label, want in (("name", name), ("credential", secret)):
+            if not hmac.compare_digest(stored.get(label, "").encode(), want.encode()):
+                self.op.archive(new_id)
+                raise KeysError(f"1Password did not store the API key's {label} field as sent; the new item was removed "
+                                "and the old key (if any) is untouched")
         for item_id in old:
             self.op.archive(item_id)
         self.out(f"Saved the API key {name} to 1Password (vault {self.op.vault}).")
@@ -225,4 +237,7 @@ class Keys:
         if repo.current not in held:
             raise KeyMismatch(f"1Password (vault {self.op.vault}) has no private key for the repository's public key "
                               f"{display(repo.current)}. Check OP_VAULT, or the key was never saved to 1Password: run make keys-status.")
-        return held[repo.current][1]["password"]
+        password = held[repo.current][1].get("password")
+        if not password:
+            raise KeysError(f"The 1Password item {held[repo.current][0]} has no password field: fix the item")
+        return password

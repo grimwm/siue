@@ -171,15 +171,15 @@ const withInlined = (dir: string, inlined: unknown): void => {
 
 test('inlined packages get their notice in the licenses file, like the bundled ones', t => {
   const dir = scratch(t);
-  withInlined(dir, ['jszip', 'loglevel']);
+  withInlined(dir, ['lie', 'loglevel']);
   const r = run(dir);
   assert.equal(r.status, 0, r.stderr);
   const text = readFileSync(join(dir, LICENSES), 'utf8');
-  for (const name of ['jszip', 'loglevel']) {
+  for (const name of ['lie', 'loglevel']) {
     const version = JSON.parse(readFileSync(join(NODE_MODULES, name, 'package.json'), 'utf8')).version;
     assert.ok(text.includes(`${name} ${version}\nLicense: `), name);
   }
-  assert.ok(text.indexOf('jszip ') < text.indexOf('loglevel ') && text.indexOf('loglevel ') < text.indexOf('preact '), 'sorted by name');
+  assert.ok(text.indexOf('lie ') < text.indexOf('loglevel ') && text.indexOf('loglevel ') < text.indexOf('preact '), 'sorted by name');
   assert.equal(run(dir, '--check').status, 0);
 });
 
@@ -240,4 +240,87 @@ test('kitCss must be a boolean', t => {
   const r = run(dir);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /kitCss/);
+});
+
+type Mjs = {
+  runtimeClosure(lock: unknown, roots: string[], skip?: string[]): Map<string, string>;
+  licenseFile(names: string[]): string | undefined;
+};
+const kit = (): Promise<Mjs> => import('./build.mjs') as Promise<Mjs>;
+const pkgs = (p: Record<string, object>) => ({ packages: { '': {}, ...p } });
+
+test('runtimeClosure follows dependencies recursively, once each, through cycles', async () => {
+  const { runtimeClosure } = await kit();
+  const lock = pkgs({
+    'node_modules/a': { dependencies: { b: '1' } },
+    'node_modules/b': { dependencies: { c: '1', a: '1' } },
+    'node_modules/c': {},
+    'node_modules/unrelated': {},
+  });
+  assert.deepEqual([...runtimeClosure(lock, ['node_modules/a']).values()].sort(), ['a', 'b', 'c']);
+});
+
+test('runtimeClosure resolves a dependency to the nearest node_modules, scoped names included', async () => {
+  const { runtimeClosure } = await kit();
+  const lock = pkgs({
+    'node_modules/a': { dependencies: { b: '2', '@s/c': '1' } },
+    'node_modules/a/node_modules/b': {},
+    'node_modules/b': {},
+    'node_modules/@s/c': {},
+  });
+  assert.deepEqual([...runtimeClosure(lock, ['node_modules/a']).keys()].sort(),
+    ['node_modules/@s/c', 'node_modules/a', 'node_modules/a/node_modules/b']);
+});
+
+test('runtimeClosure skips dev and optional packages, @types and the named skips', async () => {
+  const { runtimeClosure } = await kit();
+  const lock = pkgs({
+    'node_modules/a': { dependencies: { d: '1', o: '1', '@types/a': '1', s: '1', k: '1' } },
+    'node_modules/d': { dev: true },
+    'node_modules/o': { optional: true },
+    'node_modules/@types/a': {},
+    'node_modules/s': { dependencies: { deep: '1' } },
+    'node_modules/deep': {},
+    'node_modules/k': {},
+  });
+  assert.deepEqual([...runtimeClosure(lock, ['node_modules/a'], ['s']).values()].sort(), ['a', 'k']);
+});
+
+test('runtimeClosure fails loudly on a package the lockfile does not know', async () => {
+  const { runtimeClosure } = await kit();
+  assert.throws(() => runtimeClosure(pkgs({ 'node_modules/a': { dependencies: { gone: '1' } } }), ['node_modules/a']), /no entry for gone, a dependency of node_modules\/a/);
+  assert.throws(() => runtimeClosure(pkgs({}), ['node_modules/a']), /no entry for node_modules\/a/);
+});
+
+test("OSMD's closure covers every package its prebuilt bundle inlines", async () => {
+  const { runtimeClosure } = await kit();
+  const lock = JSON.parse(readFileSync(join(NODE_MODULES, '..', 'package-lock.json'), 'utf8'));
+  const names = [...runtimeClosure(lock, ['node_modules/opensheetmusicdisplay'], ['readable-stream']).values()];
+  for (const n of ['jszip', 'loglevel', 'vexflow', 'typescript-collections', 'pako', 'lie', 'immediate', 'setimmediate']) assert.ok(names.includes(n), n);
+  assert.ok(!names.includes('@types/vexflow') && !names.includes('readable-stream'));
+});
+
+test('an inlined package pulls its dependencies into the licenses file', t => {
+  const dir = scratch(t);
+  withInlined(dir, ['lie']);
+  assert.equal(run(dir).status, 0);
+  const text = readFileSync(join(dir, LICENSES), 'utf8');
+  assert.ok(text.includes('lie ') && text.includes('immediate '), 'lie is inlined; its dependency immediate is derived');
+});
+
+test('notInlined must be a list of package names', t => {
+  const dir = scratch(t);
+  const cfg = JSON.parse(readFileSync(join(dir, 'build.json'), 'utf8'));
+  writeFileSync(join(dir, 'build.json'), JSON.stringify({ ...cfg, notInlined: 'x' }));
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /`notInlined` must be a list/);
+});
+
+test('licenseFile prefers LICENSE over COPYING, whatever the order', async () => {
+  const { licenseFile } = await kit();
+  assert.equal(licenseFile(['COPYING', 'LICENSE', 'README.md']), 'LICENSE');
+  assert.equal(licenseFile(['LICENSE.md', 'COPYING']), 'LICENSE.md');
+  assert.equal(licenseFile(['COPYING.txt', 'COPYING']), 'COPYING');
+  assert.equal(licenseFile(['README.md']), undefined);
 });

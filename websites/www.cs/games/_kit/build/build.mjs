@@ -40,6 +40,9 @@ export function loadBuildJson(gameDir) {
   if (cfg.inlined !== undefined && !(Array.isArray(cfg.inlined) && cfg.inlined.every(p => typeof p === 'string' && p !== ''))) {
     throw new BuildError('build.json: `inlined` must be a list of package names');
   }
+  if (cfg.notInlined !== undefined && !(Array.isArray(cfg.notInlined) && cfg.notInlined.every(p => typeof p === 'string' && p !== ''))) {
+    throw new BuildError('build.json: `notInlined` must be a list of package names');
+  }
   if (cfg.kitCss !== undefined && typeof cfg.kitCss !== 'boolean') throw new BuildError('build.json: `kitCss` must be true or false');
   for (const [name, file] of Object.entries(cfg.versions ?? {})) {
     if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new BuildError(`build.json: version constant ${name} must be UPPER_CASE`);
@@ -60,6 +63,50 @@ const LICENSES_FILE = 'THIRD_PARTY_LICENSES.txt';
 const BANNER = `/*! Third-party licenses: ${LICENSES_FILE} */`;
 // LICENSE, LICENCE or COPYING, optionally with -MIT and an .md, .txt or .markdown extension.
 export const LICENSE_NAME_RE = /^(licen[sc]e|copying)(-mit)?(\.(md|txt|markdown))?$/i;
+
+/** The license file among a package's file names: LICENSE and LICENCE before COPYING, then the shortest name, then alphabetical. */
+export function licenseFile(names) {
+  const rank = f => (/^copying/i.test(f) ? 1 : 0);
+  return names.filter(f => LICENSE_NAME_RE.test(f))
+    .sort((a, b) => rank(a) - rank(b) || a.length - b.length || (a < b ? -1 : a > b ? 1 : 0))[0];
+}
+
+/**
+ * The runtime dependency closure of lockfile packages: `roots` are lock keys
+ * (node_modules/<name>); follows `dependencies` recursively, resolving each the
+ * way node does (the nearest node_modules/<dep> up the key's path). Skips
+ * dev and optional packages, @types/* (declarations ship no runtime code) and the
+ * names in `skip` (dependencies a package lists but its prebuilt bundle does not contain).
+ * Returns key -> package name for the roots and everything they pull in.
+ */
+export function runtimeClosure(lock, roots, skip = []) {
+  const found = new Map();
+  const visit = key => {
+    if (found.has(key)) return;
+    const entry = lock.packages?.[key];
+    if (!entry) throw new BuildError(`package-lock.json has no entry for ${key}; run npm install in games/`);
+    found.set(key, key.split('node_modules/').pop());
+    for (const dep of Object.keys(entry.dependencies ?? {})) {
+      if (dep.startsWith('@types/') || skip.includes(dep)) continue;
+      let scope = key;
+      for (;;) {
+        const candidate = `${scope}/node_modules/${dep}`.replace(/^\//, '');
+        const hit = lock.packages[candidate];
+        if (hit) {
+          if (!hit.dev && !hit.optional) visit(candidate);
+          break;
+        }
+        const i = scope.lastIndexOf('/node_modules/');
+        if (i < 0) {
+          if (scope === '') throw new BuildError(`package-lock.json has no entry for ${dep}, a dependency of ${key}; run npm install in games/`);
+          scope = '';
+        } else scope = scope.slice(0, i);
+      }
+    }
+  };
+  for (const key of roots) visit(key);
+  return found;
+}
 
 /** The npm packages an esbuild metafile's inputs came from: name -> package dir. */
 function packagesOf(metafile, gameDir) {
@@ -82,8 +129,8 @@ function licenseBlock(name, dir) {
   const license = typeof field === 'string' ? field
     : Array.isArray(field) ? field.map(l => l.type ?? l).join(' OR ')
     : field?.type ?? 'UNKNOWN';
-  const file = readdirSync(dir).filter(f => LICENSE_NAME_RE.test(f)).sort()[0];
-  if (!file) throw new BuildError(`${name}: no license file (LICENSE, LICENSE.md, LICENSE.txt) in the package; the bundle cannot ship it without its notice`);
+  const file = licenseFile(readdirSync(dir));
+  if (!file) throw new BuildError(`${name}: no license file (LICENSE, LICENCE or COPYING, optionally -MIT and .md, .txt or .markdown) in the package; the bundle cannot ship it without its notice`);
   const text = readFileSync(join(dir, file), 'utf8').replace(/\r\n?/g, '\n').trim();
   return `${name} ${pkg.version}\nLicense: ${license}\n\n${text}\n`;
 }
@@ -98,7 +145,7 @@ export async function bundle(gameDir, cfg) {
   }
   const outdir = join(gameDir, 'dist');
   const files = new Map();
-  const packages = new Map();
+  const packages = new Map(); // package dir -> name
   for (const format of FORMATS) {
     const entries = cfg.entries.filter(e => e.format === format);
     if (!entries.length) continue;
@@ -127,20 +174,28 @@ export async function bundle(gameDir, cfg) {
       const used = packagesOf(result.metafile, gameDir);
       if (used.size) {
         result = await esbuild.build({ ...options, banner: { js: BANNER } });
-        for (const [name, dir] of used) packages.set(name, dir);
+        for (const [name, dir] of used) packages.set(dir, name);
       }
       for (const f of result.outputFiles) files.set(relative(outdir, f.path).split(sep).join('/'), f.text);
     }
   }
   if (cfg.kitCss === true) files.set(KIT_CSS, readFileSync(join(KIT, KIT_CSS), 'utf8'));
-  // Packages a bundled dependency carries prebuilt inside itself: esbuild never sees them, so the build names them.
+  // Packages a bundled dependency carries prebuilt inside itself (OSMD's min.js inlines jszip, pako and more): esbuild never
+  // sees them, so the notices come from the lockfile's runtime dependency closure of every package it did see,
+  // plus any package build.json's `inlined` names (and their closures).
   if (packages.size || (cfg.inlined ?? []).length) {
+    const lockFile = join(GAMES, 'package-lock.json');
+    const lock = existsSync(lockFile) ? JSON.parse(readFileSync(lockFile, 'utf8')) : { packages: {} };
+    const roots = [...packages.keys()].map(dir => relative(GAMES, dir).split(sep).join('/'));
     for (const name of cfg.inlined ?? []) {
       const dir = join(GAMES, 'node_modules', ...name.split('/'));
       if (!existsSync(join(dir, 'package.json'))) throw new BuildError(`build.json: inlined package ${name} is not installed in games/node_modules`);
-      packages.set(name, dir);
+      packages.set(dir, name);
+      const key = `node_modules/${name}`;
+      if (lock.packages?.[key]) roots.push(key);
     }
-    const blocks = [...packages].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, dir]) => licenseBlock(name, dir));
+    for (const [key, name] of runtimeClosure(lock, roots, cfg.notInlined)) packages.set(join(GAMES, ...key.split('/')), name);
+    const blocks = [...packages].sort(([da, a], [db, b]) => (a < b ? -1 : a > b ? 1 : da < db ? -1 : da > db ? 1 : 0)).map(([dir, name]) => licenseBlock(name, dir));
     files.set(LICENSES_FILE, `Third-party code bundled into this game's scripts.\n\n${blocks.join('\n---\n\n')}`);
   }
   return files;

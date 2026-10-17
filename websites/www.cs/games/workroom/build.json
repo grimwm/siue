@@ -4,5 +4,5 @@
     { "in": "src/main.ts", "out": "workroom", "format": "esm" },
     { "in": "src/sheet.ts", "out": "sheet", "format": "esm" }
   ],
-  "inlined": ["jszip", "loglevel", "vexflow"]
+  "notInlined": ["readable-stream"]
 }

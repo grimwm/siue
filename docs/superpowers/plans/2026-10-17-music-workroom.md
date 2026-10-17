@@ -8,19 +8,29 @@
 
 **Tech Stack:** PHP 8.4, PDO SQLite, PHPUnit 12 (`--testsuite site`); TypeScript 7, Preact 11, esbuild 0.28 through `games/_kit/build/build.mjs`, `node:test` on Node 24 (Web Crypto as `globalThis.crypto.subtle`), OpenSheetMusicDisplay for notation; Python 3.11+, `cryptography`, optional `faster-whisper`, `librosa`, `mido`, `numpy`, `ffmpeg`; 1Password CLI (`op`) 2.25+; Playwright (local only).
 
-**Spec:** `docs/superpowers/specs/2026-10-17-music-workroom-design.md`. It builds on `docs/superpowers/specs/2026-10-17-admin-login-design.md` and its plan `docs/superpowers/plans/2026-10-17-admin-login.md`, whose classes this plan uses as they are defined there.
+**Spec:** `docs/superpowers/specs/2026-10-17-music-workroom-design.md`. It builds on `docs/superpowers/specs/2026-10-17-admin-login-design.md` and its plan `docs/superpowers/plans/2026-10-17-admin-login.md`, whose merged code (`websites/www.cs/admin/lib/` and `tests/php/AdminFakes.php`) this plan uses exactly as it stands on `main`.
 
 ## Global Constraints
 
-- Work starts after the admin login PR has merged. Use its interfaces exactly: `Admin\Request` (constructor `method, ip, https, host, headers, cookies, post, query, agent`; `fromGlobals()`), `Admin\Response(int $status, array $headers, string $body)`, `Admin\Pages::requireAdmin(Request): ?Response` and `Pages::storageDown()`, `Admin\Keys::check(Request, string $scope): ?Response` and `Keys::create(string $label, array $scopes)`, the scope registry `Admin\Keys::SCOPES`, `Admin\Sessions::start/current/csrf/checkCsrf`, `Admin\Db::open(string $dir)` and `Db::dataDir()`, `Admin\Headers::LIST` and `Headers::apply(array)`, `Admin\StorageUnavailable`, `Kit\StoreDir`, `Admin\Clock`, and the test helpers `FakeClock`, `admin_tmp_db()`, `admin_tmp_dir()`, `req()` in `tests/php/AdminFakes.php`.
+- Work starts from `main`, where the admin login is merged. Use its code exactly as it stands in `websites/www.cs/admin/lib/*.php`:
+  - `Admin\Request`: public constructor `method, ip, https, host, headers, cookies, post, query, agent`; header names are lower-case (`authorization`, `x-csrf`, `sec-fetch-site`); `fromGlobals()` builds it. PHP keeps `CONTENT_LENGTH` out of the `HTTP_*` variables it reads, so `music_request()` (Task 4) adds the `content-length` header from `$_SERVER`.
+  - `Admin\Response(int $status, array $headers, string $body, array $cookies = [])`, with public mutable properties.
+  - `Admin\Pages::requireAdmin(Request): ?Response` (a 303 to `login.php` without a session; a `PDOException` becomes the 503 page), and the statics `Pages::storageDown()` and `Pages::fromStorageError()`.
+  - `Admin\Keys`: `__construct(PDO, Clock, ?array $scopes = null, ?string $baseUrl = null)`, `check(Request, string $scope): ?Response` (HTTPS, a Bearer header only, the per-key rate limit of 60 a minute, the scope), `create(string $label, array $scopes): string`, and `Keys::SCOPES`, which is the global constant `ADMIN_KEY_SCOPES` in `admin/lib/bootstrap.php`. It is `[]` on `main`; Task 2 fills it with the three music scopes and updates the admin test that asserts it empty.
+  - `Admin\Sessions`: `__construct(PDO, Clock, string $cookiePath)`, `start(Request): string` (the Set-Cookie value), `current(Request): bool`, `csrf(Request): string`, `checkCsrf(Request, string): bool`, and `Sessions::COOKIE` (`__Secure-admin`).
+  - `Admin\Db::open(string $dir): PDO` and `Db::dataDir(): string`; `Admin\Headers::LIST` and `Headers::apply(array)`; `Admin\StorageUnavailable`; `Admin\Clock` and `Admin\SystemClock`; `Kit\StoreDir`.
+  - The bootstrap functions `admin_base_url()`, `admin_cookie_path(string)`, `admin_mailer(...)`, `admin_refuse_plain_http(Request, string $baseUrl): ?Response`, `admin_refuse_script_fetch(Request): ?Response` and `admin_emit(Response)`.
+  - The test helpers in `tests/php/AdminFakes.php`: `FakeClock`, `admin_tmp_dir()`, `admin_tmp_db()` and `req(array $with)`; and `MemoryMailer` (an `Admin\Mailer`) in `tests/php/AdminPagesTest.php`, which the music fakes `require_once`.
+- **Session pages use the admin pages' guards.** Every session route refuses plain HTTP with `admin_refuse_plain_http` and then calls `Admin\Pages::requireAdmin`. The two HTML pages (`index.php`, `piece.php`) also run `admin_refuse_script_fetch` (Fetch Metadata: only a browser navigation may load them). The JSON and byte routes that the page's own script fetches, and the draft files its `<audio>` and `<img>` elements load, run `Music\Http::refuseCrossSite` instead: a request whose `Sec-Fetch-Site` is present and not `same-origin` is refused with 403.
 - Header lookups go through `Music\Http::header(Request $r, string $name): ?string`, case-insensitive, so nothing depends on how `Request` spells header names.
 - Sealing, in the browser with Web Crypto: per note a fresh AES-256-GCM key (12-byte IV) encrypts the whole note; RSA-OAEP with SHA-256 (MGF1-SHA-256) wraps that key to the committed **RSA-4096** public key. The fingerprint is the lowercase hex SHA-256 of the public key's SPKI DER, built into the page with the key; the page refuses to seal to a key whose computed fingerprint differs from the built-in one; every sealed note carries the fingerprint it was sealed to.
 - The server keeps per note only: a random id, the sealed bundle's size, its arrival time, the sealed bytes, the SHA-256 of the sealed bytes (derived from them, for the pickup check) and the picked-up time.
 - www.cs PHP has **no sodium** (`docker/expected-modules.txt`). Crypto is Web Crypto in the browser and `cryptography` (OpenSSL) in Python; PHP never decrypts anything.
-- The private key's home is 1Password vault `SIUE` (`OP_VAULT` overrides). The passphrase is in the same item. The locked copy: PBKDF2-SHA-256, **600,000** rounds, 16-byte random salt, AES-256-GCM (12-byte IV, AAD = the fingerprint's ASCII) over the PKCS8 DER; it is served only to a signed-in session and unlocked in the browser. The passphrase is NFC-normalised and trimmed before use, in TypeScript and Python alike.
-- **Remember this device** stores the unlocked private key as a non-extractable `CryptoKey` in IndexedDB; **Forget this device** erases it.
+- The private keys' home is 1Password vault `SIUE` (`OP_VAULT` overrides), one item per key pair; every item carries the same passphrase. The server holds **one locked keyring**: the current private key and every retained earlier one, each tagged with its fingerprint, all locked under that passphrase with PBKDF2-SHA-256 (**600,000** rounds, 16-byte random salt) and AES-256-GCM (12-byte IV, additional data = the ASCII `siue-music-keyring-v1`); the JSON is in Formats. It is served only to a signed-in session and unlocked in the browser, which picks the key a note's header names. The passphrase is NFC-normalised and trimmed before use, in TypeScript and Python alike.
+- **Keys never touch browser storage.** The unlocked private keys live only in the memory of the page view, as non-extractable `CryptoKey` objects held by the vault. Nothing of any key (the passphrase, the locked keyring, an unlocked key) is written to IndexedDB, `localStorage`, `sessionStorage`, a cookie or the Cache API: www.cs is one browser origin shared by every user's `~folder`, so a stored key would be readable by their scripts. The passphrase is asked on every visit (1Password fills it in). Only sealed notes waiting to be sent (the outbox) use IndexedDB.
 - Notes stay sealed on the server until the owner deletes them in the page (session + CSRF). Pickup only marks a note picked up. An API key cannot delete. SQLite runs with `secure_delete` on.
-- Limits: 60 s of audio per note (the page's recorder stops at 60 s), **2,097,152** bytes per sealed note, **2,000** notes stored; over either, the page says so and keeps the note in the browser's outbox.
+- **Scopes on every API route:** the notes list, one note and picked-up need `notes:pickup`; publishing a draft needs `drafts:publish`; uploading the keyring needs `keys:publish`. A key without a route's scope gets 403 there.
+- Limits: 60 s of audio per note (the page's recorder stops at 60 s), **2,097,152** bytes per sealed note, **2,000** notes stored; over either, the page says so and keeps the note in the browser's outbox. Drafts, enforced by the server: a request whose declared `Content-Length` is over **8,388,608** bytes (8 MB) is refused with 413 `too_large` before any of its body is read; only the newest **20** drafts are kept (each successful publish deletes the older rows and files); a publish that would leave the stored drafts over **104,857,600** bytes (100 MB) is refused with 413 `over_quota` before anything is written.
 - Secrets reach tools on standard input, never as a command-line argument, and are never printed. `op` is the 1Password CLI v2 (2.25 or newer, for `--reveal`).
 - Opened notes go to `~/Library/Application Support/siue-music/notes/` on macOS, `$XDG_DATA_HOME/siue-music/notes/` (default `~/.local/share/siue-music/notes/`) elsewhere on Unix, `%APPDATA%\siue-music\notes\` on Windows; never inside the repository (the tool refuses a notes directory inside it). The key cache is `~/.config/siue/music.json`, directory 0700, file 0600.
 - Speech-to-text (local Whisper via `faster-whisper`) and humming-to-MIDI (`librosa.pyin` and `mido`) are optional: when missing, pickup still opens and saves every note and prints one line naming the missing package and the install command.
@@ -41,23 +51,26 @@
 1. **iPhone Safari plays and records different audio**: it may not play Opus in WebM and records `audio/mp4`. A draft may carry `audio.webm` and `audio.m4a`, the player picks the first source the browser can play, the recorder picks the first MIME type `MediaRecorder` supports, and pickup converts any of them with ffmpeg. Pinned in Task 8 (`pickSource`) and Task 14 (`pickMime`).
 2. **A double tap or two quick deletes burn one CSRF token twice**: the page's API client sends one POST at a time, and on a `403 {"error":"csrf"}` fetches a fresh token once and retries once. Pinned in Task 14 (`api.test.ts`).
 3. **The network drops mid-upload, or the server is full (409) or the note too large (413)**: the sealed note stays in the outbox, is never lost, and the owner is told why. Pinned in Task 14 (`outbox.test.ts`).
-4. **After `make keys-rotate`**: notes sealed to the previous key still open in the page and in pickup, and a remembered device asks for the passphrase once, for the new key only. Pinned in Task 10 (`vault.test.ts`) and Task 12 (`test_keys_lifecycle.py`).
+4. **After `make keys-rotate`**: notes sealed to the previous key still open in the page and in pickup, because the server's keyring holds every retained key; a device that signs in for the first time after the rotation unlocks the keyring once and opens old and new notes alike. Pinned in Task 10 (`vault.test.ts`), Task 12 (`test_keys_lifecycle.py`) and Task 13 (`test_pickup.py`).
 5. **A truncated, bit-flipped or re-headed sealed bundle** (the clear fingerprint swapped): opening fails with a named reason, pickup leaves it waiting, the page shows "Could not open this note" instead of failing the whole history. Pinned in Task 10 (`seal.test.ts`) and Task 13 (`test_pickup.py`).
+6. **Nothing of any key reaches browser storage**: unlocking, using and losing the vault touch no IndexedDB, `localStorage`, `sessionStorage`, cookie or Cache API, and the second browser context in the full check finds none. Pinned in Task 10 (`no-storage.test.ts`) and Task 15.
+7. **An oversized, over-quota or twenty-first draft**: refused or evicted by the server alone, whatever the tool sends. Pinned in Task 1 (`MusicStoreTest`) and Task 2 (`MusicApiTest`).
 
 ## Decisions this plan makes (the spec leaves them open)
 
 - **Where the page's TypeScript lives:** `websites/www.cs/games/workroom/`, built by `node _kit/build/build.mjs workroom`. The kit's build resolves the folder from `games/` and esbuild finds Preact by walking up to `games/node_modules`; a folder outside `games/` (such as `music/page/`) would need kit changes to resolve Preact, and `games/units.sh`, `npm run check` and `make test`'s `games/*/test.sh` loop find only `games/*/build.json`. The games hub lists only folders with a `metadata.yaml`, so the workroom is not a game card. Its `dist/` ships under `games/workroom/dist/` (public; nothing in it is secret), and the PHP pages under `music/` load it.
-- **API routes are files** with the id in the query string (`api/note.php?id=`), because nginx (local) has no rewrite for `/music/api/notes/{id}` and the host's Apache rewrite support is unknown. Paths: `GET api/notes.php?state=waiting`, `GET api/note.php?id=`, `POST api/picked-up.php?id=`, `POST api/drafts.php`, `POST api/locked-key.php`.
-- **A third scope, `keys:publish`**, lets `keys-init` and `keys-rotate` upload the locked private key. The server accepts a locked key for any well-formed fingerprint, because a new key's locked copy is uploaded before the deploy that makes it current; `make keys-upload` re-uploads every repository key's locked copy when that first upload could not happen (no API key yet, or offline). Two API keys: `music-pickup` (`notes:pickup`) and `music-publish` (`drafts:publish`, `keys:publish`).
-- **The note bundle format** (byte layout below) authenticates the clear header: AES-GCM's additional data is the magic and fingerprint.
+- **API routes are files** with the id in the query string (`api/note.php?id=`), because nginx (local) has no rewrite for `/music/api/notes/{id}` and the host's Apache rewrite support is unknown. Paths: `GET api/notes.php?state=waiting`, `GET api/note.php?id=`, `POST api/picked-up.php?id=`, `POST api/drafts.php?piece=&version=`, `POST api/keyring.php`.
+- **Drafts and the keyring are raw request bodies, never multipart.** PHP parses a multipart body before the first line of the script runs, which would buffer an oversized upload before the 8 MB check could refuse it. A draft is one `application/octet-stream` body in the `SIUED1` bundle format (Formats); the script reads it only after the key, the method and the declared `Content-Length` have passed. A request with no `Content-Length` (chunked) is refused with 411.
+- **A third scope, `keys:publish`**, lets `keys-init` and `keys-rotate` upload the locked keyring. The server cannot read inside a keyring, so it checks only the outer envelope (version, KDF, iterations, salt, IV and ciphertext sizes, total size) and keeps one, replacing the stored one on each upload; the upload happens before the deploy that makes a new key current. `make keys-upload` re-uploads the full keyring when that first upload could not happen (no API key yet, or offline). Two API keys: `music-pickup` (`notes:pickup`) and `music-publish` (`drafts:publish`, `keys:publish`). The scopes are the three strings in `ADMIN_KEY_SCOPES` (`admin/lib/bootstrap.php`), which is empty on `main`; Task 2 fills it and updates the admin test that asserts it empty.
+- **The draft quota counts what remains.** The 100 MB check sums the new draft and the newest 19 stored drafts (the ones that survive the 20-draft limit), so a full store of small drafts can always roll forward; the check and the eviction run in one transaction, the check before any file is written.
 - **One 1Password item per key pair** (category Password): `password` = the passphrase (so 1Password fills it on the workroom page), `private_key` (concealed, PKCS8 base64), `fingerprint`, website `https://www.cs.siue.edu/~wgrim/music/`, tag `siue-music-key`. A rotation creates a new item with the same passphrase and retitles the old one "(previous)"; which key is current is decided by the repository's `music/keys/public.json`, never by 1Password.
 - **The committed public key** is `music/keys/public.json` (read by PHP and the tool) and `games/workroom/src/public-key.ts` (built into the page); a unit test keeps them equal. Before `make keys-init` both say "no key" and the page offers no note tools.
 - **Committed drafts** live in `music/pieces/<piece>/v<N>/` (not deployed); `make music-publish` uploads one into the server's data directory, where the page reads it through a session. `changes` (Claude's change list) is part of `score.json`.
 - **Per-piece waiting counts** need the sealed notes opened (the server cannot know a note's piece), so the pieces list shows the total waiting until the key is unlocked, then per-piece counts.
-- **Remember this device** keeps unlocked keys per fingerprint; after a rotation the device asks once more, for the new key.
+- **The unlocked keys stay in the page view's memory.** The page fetches the locked keyring from the signed-in session, unlocks every entry for which it holds a built-in public key, keeps the keys in memory until the view closes, and writes them nowhere. There is no remembered device: each visit asks for the passphrase (1Password fills it in), and a rotation changes nothing for the owner.
 - **Music pages' CSP** is the admin CSP plus `media-src 'self' blob:`, so recorded notes and opened recordings can play.
 - **Python tests run locally** (`make music-tools-test`): CI's runner has no `cryptography` and CI is not changed. The two directions of the cross-language crypto are pinned by committed fixtures that the CI-run Node tests also check.
-- **Local HTTPS for the docker check:** `compose.music-local.yaml` mounts `docker/nginx/fastcgi_params.https-local` (nginx's stock list plus `fastcgi_param HTTPS on;`) so the admin kit's HTTPS rules hold against `http://localhost:<port>` in the local stack only; `MUSIC_PUBLIC_KEYS` points the server at the test public key there.
+- **The docker check runs on the admin kit's local base URL.** `compose.admin-local.yaml` (merged with the admin login) sets `ADMIN_BASE_URL=http://localhost/admin/`, a local base, so the kit accepts plain HTTP and the check's browser and API calls use `http://localhost:<port>/`; the admin data folder and the captured mail live inside the PHP container (`ADMIN_SMOKE_DIR`), as in `tests/admin-smoke.sh`. `compose.music-local.yaml` only adds `MUSIC_PUBLIC_KEYS`, which points the server at the test public keys.
 - **The browser check uses a test-key bundle**: `games/workroom/tools/e2e-bundle.ts` builds the page with `public-key.ts` aliased to the test fixture into a temporary file, and the check routes `dist/workroom.js` to it, so the shipped bundle is never built with a test key.
 
 ## Formats
@@ -86,12 +99,33 @@ plaintext = uint32 big-endian J | J bytes UTF-8 JSON NoteBody | audio bytes (pos
 
 `kind` is one of `text`, `speech`, `hum`, `react`, `energy`. `reaction` is one of `more-epic`, `calmer`, `darker`, `brighter`, `longer`, `shorter`, `love-it`, `not-this`. `curve` is a list of `[seconds, energy 0..1]`. `audio` is `{ "mime": string, "seconds": number ≤ 60 }` when audio bytes follow.
 
-### Locked private key (JSON, version 1)
+### Locked keyring (JSON, version 1)
 
 ```json
 { "v": 1, "kdf": "PBKDF2-SHA-256", "iterations": 600000, "salt": "<base64 16 bytes>",
-  "iv": "<base64 12 bytes>", "fingerprint": "<64 hex>", "ct": "<base64 AES-GCM(pkcs8) || tag>" }
+  "iv": "<base64 12 bytes>", "ct": "<base64 AES-GCM(keyring plaintext) || 16-byte tag>" }
 ```
+
+The AES-256 key is PBKDF2-HMAC-SHA-256 over the NFC-normalised, trimmed passphrase as UTF-8, with the salt and the iteration count. The AES-GCM additional data is the ASCII bytes `siue-music-keyring-v1`. The plaintext is UTF-8 JSON with the current key first and every retained earlier key after it:
+
+```json
+{ "v": 1, "keys": [ { "fingerprint": "<64 hex>", "pkcs8": "<base64 PKCS8 DER>" } ] }
+```
+
+Each fingerprint is the SHA-256 of that key's SPKI DER and appears once. The server checks only the outer envelope: exactly the six fields above, `v === 1`, `kdf`, `iterations >= 600000`, `salt` 16 bytes and `iv` 12 bytes once decoded, `ct` strict base64 of at least 17 bytes, and the whole body at most `Store::MAX_KEYRING_BYTES` (65,536; about 4.5 KB per retained RSA-4096 key). The browser and the tool refuse a keyring whose version, KDF or iterations differ, whose plaintext is malformed or repeats a fingerprint, and (browser) one that lacks the page's current key.
+
+### Draft bundle (version `SIUED1`)
+
+`POST api/drafts.php?piece=<id>&version=<n>`, `Content-Type: application/octet-stream`, scope `drafts:publish`. The body is:
+
+```
+offset  length  field
+0       6       ASCII "SIUED1"
+6       1       N = number of files, 1 to 5
+7       ...     N entries, each: 1 byte name length, the ASCII name, uint32 big-endian size, the file's bytes
+```
+
+Names come from `score.json`, `score.musicxml`, `audio.webm`, `audio.m4a`, `spectrogram.png`, each at most once, and the entries end exactly at the end of the body. The whole body is at most 8,388,608 bytes and the request must declare it in `Content-Length` (411 `length_required` without one, 413 `too_large` over).
 
 ### `music/keys/public.json`
 
@@ -136,16 +170,16 @@ websites/www.cs/
   music/
     .htaccess                     # admin headers with the music CSP; deny lib/ tools/ pieces/ keys/
     index.php piece.php           # session pages (thin)
-    csrf.php notes.php note.php delete.php locked-keys.php drafts.php draft.php   # session JSON/bytes (thin)
-    api/notes.php api/note.php api/picked-up.php api/drafts.php api/locked-key.php  # API-key routes (thin)
+    csrf.php notes.php note.php delete.php keyring.php drafts.php draft.php   # session JSON/bytes (thin)
+    api/notes.php api/note.php api/picked-up.php api/drafts.php api/keyring.php  # API-key routes (thin)
     music.css                     # the pages' look (dark site look)
     README.md                     # what it is, security model, schema, make targets, local check
     lib/.htaccess                 # Require all denied
-    lib/bootstrap.php             # requires admin/lib/bootstrap.php and the music classes; music_* helpers
+    lib/bootstrap.php             # requires admin/lib/bootstrap.php and the music classes; music_request/run/read_body helpers
     lib/PublicKeys.php            # Music\PublicKeys: public.json reader, fingerprints
-    lib/Store.php                 # Music\Store, NoteRejected, DraftRejected: notes, drafts, locked keys
-    lib/Http.php                  # Music\Http: header(), json(), finish() (headers + music CSP), serveFile() (Range)
-    lib/Api.php                   # Music\Api: API-key routes
+    lib/Store.php                 # Music\Store, NoteRejected, DraftRejected: notes, drafts (limits), the locked keyring
+    lib/Http.php                  # Music\Http: header(), declaredLength(), refuseCrossSite(), json(), finish() (headers + music CSP), serveFile() (Range)
+    lib/Api.php                   # Music\Api: API-key routes (scopes, draft bundle, keyring envelope)
     lib/Pages.php                 # Music\Pages: session routes and the two page shells
     keys/public.json              # written by keys-init / keys-rotate (absent until then)
     pieces/<piece>/v<N>/          # committed drafts: score.json score.musicxml audio.webm [audio.m4a] spectrogram.png
@@ -162,12 +196,13 @@ websites/www.cs/
     src/ui/{Workroom,ViewTabs,Timeline,PianoRoll,SoundPicture,Sheet,Glossary,Player}.tsx                              # views
     src/ui/{UnlockPanel,PinComposer,HumButton,ReactBar,EnergyEditor,History,PiecesWaiting}.tsx                          # answering
     tools/make-fixtures.ts tools/make-draft-fixture.ts tools/e2e-bundle.ts
-    test/*.test.ts test/fixture-key.ts test/fixtures/{score-v1.json,test-key.json,public.json,public-key.ts,locked-by-python.json,note-text.sealed,note-hum.sealed,draft/}
+    test/*.test.ts test/fixture-key.ts test/fixtures/{score-v1.json,test-key.json,public.json,public-key.ts,keyring-by-python.json,note-text.sealed,note-hum.sealed,draft/}
     dist/                         # built: workroom.js sheet.js (+ maps, THIRD_PARTY_LICENSES.txt)
-  admin/lib/bootstrap.php         # + dashboard, fingerprint, three scopes
+  admin/lib/bootstrap.php         # + dashboard, fingerprint, three scopes (ADMIN_KEY_SCOPES)
+  tests/php/AdminKeysTest.php     # registry assertion
   tests/php/MusicFakes.php MusicStoreTest.php MusicApiTest.php MusicPagesTest.php MusicDeployTest.php
   tests/e2e/local.config.ts tests/e2e/workroom.local.ts
-  compose.music-local.yaml docker/nginx/fastcgi_params.https-local
+  compose.music-local.yaml
   docker/nginx/default.conf       # deny /music/lib/ /music/tools/ /music/pieces/ /music/keys/
   deploy.sh  .gitignore  Makefile games/package.json games/package-lock.json
 ```
@@ -185,7 +220,7 @@ Start from `main` after the admin login PR merged: `git switch -c music/api orig
 - Create: `websites/www.cs/tests/php/MusicFakes.php`, `tests/php/MusicStoreTest.php`
 
 **Interfaces:**
-- Consumes: `Admin\Db::open`, `Admin\Clock`, `Admin\StorageUnavailable`, `Kit\StoreDir` (from `admin/lib/store-dir.php`), `FakeClock`, `admin_tmp_db()`, `admin_tmp_dir()`.
+- Consumes: `Admin\Db::open`, `Admin\Clock`, `Admin\StorageUnavailable`, `Kit\StoreDir` (from `admin/lib/store-dir.php`), `FakeClock`, `admin_tmp_db()`, `admin_tmp_dir()`, `req()`, `MemoryMailer` (from `tests/php/AdminPagesTest.php`).
 - Produces:
 
 ```php
@@ -206,7 +241,7 @@ final class NoteRejected extends \RuntimeException {
     public function __construct(public readonly string $reason) {}
 }
 final class DraftRejected extends \RuntimeException {
-    /** $reason: bad_piece | bad_version | missing_file | bad_file | too_large | exists | bad_score */
+    /** $reason: bad_piece | bad_version | missing_file | bad_file | too_large | over_quota | exists | bad_score */
     public function __construct(public readonly string $reason) {}
 }
 
@@ -214,8 +249,14 @@ final class Store {
     public const MAGIC = 'SIUEN1';
     public const MAX_NOTE_BYTES = 2_097_152;
     public const MAX_NOTES = 2000;
-    public const MAX_DRAFT_FILE_BYTES = 33_554_432;
-    public const MAX_LOCKED_KEY_BYTES = 16_384;
+    /** The most a draft request may carry, and so the most one draft holds: 8 MB. */
+    public const MAX_REQUEST_BYTES = 8_388_608;
+    /** Only this many drafts are kept; each successful publish deletes the older ones. */
+    public const KEEP_DRAFTS = 20;
+    /** The most the kept drafts may hold in total: 100 MB. */
+    public const MAX_DRAFT_TOTAL_BYTES = 104_857_600;
+    /** The locked keyring: about 4.5 KB per retained RSA-4096 key, room for a dozen rotations. */
+    public const MAX_KEYRING_BYTES = 65_536;
     public const DRAFT_FILES = ['score.json', 'score.musicxml', 'audio.webm', 'audio.m4a', 'spectrogram.png'];
     /** $dir is <admin data dir>/music; claimed private (0700) with notes/ and drafts/ inside; creates the music tables. */
     public function __construct(\PDO $db, string $dir, \Admin\Clock $clock, ?PublicKeys $keys) {}
@@ -229,15 +270,24 @@ final class Store {
     public function deleteNote(string $id): bool;
     public function deleteAllNotes(): int;
     public function waitingCount(): int;
-    /** @param array<string, string> $files published name => readable temp path @throws DraftRejected */
+    /**
+     * Keeps one draft. In one transaction, before any file is written: refuses when the files total more than
+     * MAX_REQUEST_BYTES (too_large), when the draft exists, or when the new draft plus the newest KEEP_DRAFTS - 1
+     * stored drafts (the ones that remain) total more than MAX_DRAFT_TOTAL_BYTES (over_quota). After the files
+     * are written, deletes every draft (row and files) older than the newest KEEP_DRAFTS.
+     * @param array<string, string> $files published name => the file's bytes @throws DraftRejected
+     */
     public function putDraft(string $piece, int $version, array $files): void;
     /** @return list<array{piece: string, version: int, published_at: int}> newest first */
     public function drafts(?string $piece = null): array;
+    /** The bytes of every stored draft, as recorded when each was kept. */
+    public function draftBytes(): int;
     /** Absolute path, or null for an unknown draft or a name outside DRAFT_FILES. */
     public function draftFile(string $piece, int $version, string $name): ?string;
-    public function putLockedKey(string $fingerprint, string $lockedJson): void;
-    /** @return list<array{fingerprint: string, locked: string, uploaded_at: int}> */
-    public function lockedKeys(): array;
+    /** Keeps the one locked keyring, replacing the stored one. The server never reads inside it. */
+    public function putKeyring(string $lockedJson): void;
+    /** @return array{locked: string, uploaded_at: int}|null */
+    public function keyring(): ?array;
 }
 ```
 
@@ -252,8 +302,8 @@ Tables (created by `Store` on the admin database, which already runs `PRAGMA sec
 
 ```sql
 CREATE TABLE IF NOT EXISTS music_notes (id TEXT PRIMARY KEY, size INTEGER NOT NULL, sha256 TEXT NOT NULL, arrived_at INTEGER NOT NULL, picked_up_at INTEGER);
-CREATE TABLE IF NOT EXISTS music_drafts (piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, PRIMARY KEY (piece, version));
-CREATE TABLE IF NOT EXISTS music_locked_keys (fingerprint TEXT PRIMARY KEY, locked TEXT NOT NULL, uploaded_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS music_drafts (piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, size INTEGER NOT NULL, PRIMARY KEY (piece, version));
+CREATE TABLE IF NOT EXISTS music_keyring (id INTEGER PRIMARY KEY CHECK (id = 1), locked TEXT NOT NULL, uploaded_at INTEGER NOT NULL);
 ```
 
 - [ ] **Step 1: Write the test helpers** (`tests/php/MusicFakes.php`; not a test, no `Test` suffix)
@@ -261,11 +311,12 @@ CREATE TABLE IF NOT EXISTS music_locked_keys (fingerprint TEXT PRIMARY KEY, lock
 ```php
 <?php
 // Helpers for the music workroom's tests: fixed fingerprints, a fake sealed
-// bundle (only its clear header is real), a store in a temp directory, and a
-// signed-in request.
+// bundle (only its clear header is real), a draft bundle, a store in a temp
+// directory, and a signed-in request.
 declare(strict_types=1);
 
 require_once __DIR__ . '/AdminFakes.php';
+require_once __DIR__ . '/AdminPagesTest.php'; // MemoryMailer
 require_once __DIR__ . '/../../music/lib/bootstrap.php';
 
 const MUSIC_FP_CURRENT = 'abababababababababababababababababababababababababababababababab';
@@ -282,6 +333,16 @@ function music_sealed(string $fpHex = MUSIC_FP_CURRENT, int $body = 64): string
     return 'SIUEN1' . hex2bin($fpHex) . random_bytes($body);
 }
 
+/** The SIUED1 draft bundle (Formats) for name => bytes. */
+function music_draft_bundle(array $files): string
+{
+    $out = 'SIUED1' . chr(count($files));
+    foreach ($files as $name => $bytes) {
+        $out .= chr(strlen($name)) . $name . pack('N', strlen($bytes)) . $bytes;
+    }
+    return $out;
+}
+
 /** @return array{Music\Store, PDO, string, FakeClock} store, database, music dir, clock */
 function music_world(?Music\PublicKeys $keys = null): array
 {
@@ -295,8 +356,8 @@ function music_world(?Music\PublicKeys $keys = null): array
 function music_signed_in(Admin\Sessions $sessions, array $over = []): Admin\Request
 {
     $header = $sessions->start(req(['https' => true]));
-    preg_match('/__Host-admin=([0-9a-f]{64})/', $header, $m);
-    return req(array_replace(['https' => true, 'cookies' => ['__Host-admin' => $m[1]]], $over));
+    preg_match('/' . preg_quote(Admin\Sessions::COOKIE, '/') . '=([0-9a-f]{64})/', $header, $m);
+    return req(array_replace(['https' => true, 'cookies' => [Admin\Sessions::COOKIE => $m[1]]], $over));
 }
 ```
 
@@ -304,9 +365,10 @@ function music_signed_in(Admin\Sessions $sessions, array $over = []): Admin\Requ
 
 ```php
 <?php
-// The note store: only sealed bundles with a known key's header, the two
-// limits, private files, deletes that remove row and file, pickup marks only;
-// drafts are immutable; public.json is checked against its own spki.
+// The store: only sealed bundles with a known key's header, the note limits,
+// private files, deletes that remove row and file, pickup marks only; drafts
+// are immutable, capped at 8 MB each, 20 in all and 100 MB in total; one
+// locked keyring; public.json is checked against its own spki.
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
@@ -418,25 +480,93 @@ final class MusicStoreTest extends TestCase
     public function testDraftsAreImmutableAndNamesAllowListed(): void
     {
         [$s, , $dir] = music_world();
-        $tmp = admin_tmp_dir();
-        file_put_contents("$tmp/s", '{"schema":1}');
-        $s->putDraft('ch1-labyrinth', 2, ['score.json' => "$tmp/s"]);
+        $s->putDraft('ch1-labyrinth', 2, ['score.json' => '{"schema":1}']);
         self::assertSame('{"schema":1}', file_get_contents((string) $s->draftFile('ch1-labyrinth', 2, 'score.json')));
+        self::assertSame(0, fileperms("$dir/drafts/ch1-labyrinth/2/score.json") & 0077, 'draft files are private');
         self::assertNull($s->draftFile('ch1-labyrinth', 2, '../../admin.sqlite'));
         self::assertNull($s->draftFile('ch1-labyrinth', 3, 'score.json'));
         $this->expectExceptionObject(new Music\DraftRejected('exists'));
-        $s->putDraft('ch1-labyrinth', 2, ['score.json' => "$tmp/s"]);
+        $s->putDraft('ch1-labyrinth', 2, ['score.json' => '{"schema":1}']);
     }
 
-    public function testLockedKeysUpsertByFingerprint(): void
+    public function testADraftOfExactlyEightMegabytesIsKeptAndOneByteMoreIsRefused(): void
     {
-        [$s, , , $clock] = music_world();
-        $s->putLockedKey(MUSIC_FP_CURRENT, '{"v":1}');
+        [$s, , $dir] = music_world();
+        $s->putDraft('big', 1, ['score.json' => str_repeat('x', Music\Store::MAX_REQUEST_BYTES)]);
+        self::assertSame(8_388_608, $s->draftBytes());
+        try {
+            $s->putDraft('big', 2, ['score.json' => str_repeat('x', Music\Store::MAX_REQUEST_BYTES - 1), 'audio.webm' => 'xx']);
+            self::fail('8,388,609 bytes must be refused');
+        } catch (Music\DraftRejected $e) {
+            self::assertSame('too_large', $e->reason);
+        }
+        self::assertDirectoryDoesNotExist("$dir/drafts/big/2");
+        self::assertSame(8_388_608, $s->draftBytes());
+    }
+
+    public function testTwentyDraftsStayAndTheTwentyFirstEvictsTheOldest(): void
+    {
+        [$s, $db, $dir, $clock] = music_world();
+        for ($v = 1; $v <= 20; $v++) {
+            $clock->now += 10;
+            $s->putDraft($v % 2 === 0 ? 'even' : 'odd', $v, ['score.json' => "v$v"]);
+        }
+        self::assertCount(20, $s->drafts());
+        self::assertNotNull($s->draftFile('odd', 1, 'score.json'), 'twenty are all kept');
+        $clock->now += 10;
+        $s->putDraft('odd', 21, ['score.json' => 'v21']);
+        $kept = $s->drafts();
+        self::assertCount(20, $kept);
+        self::assertSame(['odd', 21], [$kept[0]['piece'], $kept[0]['version']], 'newest first');
+        self::assertNull($s->draftFile('odd', 1, 'score.json'), 'the oldest is gone');
+        self::assertFileDoesNotExist("$dir/drafts/odd/1/score.json");
+        self::assertSame(20, (int) $db->query('SELECT COUNT(*) FROM music_drafts')->fetchColumn());
+        self::assertSame('v2', file_get_contents((string) $s->draftFile('even', 2, 'score.json')));
+        self::assertSame(52, $s->draftBytes(), 'v2 to v9 are 2 bytes each, v10 to v21 are 3: sizes follow the rows');
+    }
+
+    public function testDraftQuotaIsExactAndARefusalWritesNothing(): void
+    {
+        [$s, $db, $dir] = music_world();
+        $seed = $db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)');
+        $seed->execute(['seed', 1, 1, 60_000_000]);
+        $seed->execute(['seed', 2, 2, Music\Store::MAX_DRAFT_TOTAL_BYTES - 60_000_000 - 1000]);
+        $before = [$s->drafts(), scandir("$dir/drafts")];
+        try {
+            $s->putDraft('next', 1, ['score.json' => str_repeat('x', 1001)]);
+            self::fail('one byte past 104,857,600 must be refused');
+        } catch (Music\DraftRejected $e) {
+            self::assertSame('over_quota', $e->reason);
+        }
+        self::assertSame($before, [$s->drafts(), scandir("$dir/drafts")], 'storage is unchanged');
+        self::assertDirectoryDoesNotExist("$dir/drafts/next");
+        $s->putDraft('next', 1, ['score.json' => str_repeat('x', 1000)]);
+        self::assertSame(Music\Store::MAX_DRAFT_TOTAL_BYTES, $s->draftBytes(), 'exactly 104,857,600 is allowed');
+    }
+
+    public function testTheQuotaCountsOnlyWhatRemainsAfterEviction(): void
+    {
+        [$s, $db] = music_world();
+        $seed = $db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)');
+        $seed->execute(['old', 1, 1, 100_000_000]); // the oldest of twenty: it goes when the next draft lands
+        for ($v = 2; $v <= 20; $v++) {
+            $seed->execute(['old', $v, $v, 1]);
+        }
+        $s->putDraft('new', 1, ['score.json' => str_repeat('x', 1_000_000)]);
+        self::assertNull($s->draftFile('old', 1, 'score.json'));
+        self::assertCount(20, $s->drafts());
+        self::assertSame(1_000_019, $s->draftBytes());
+    }
+
+    public function testTheKeyringIsOneReplaceableDocument(): void
+    {
+        [$s, $db, , $clock] = music_world();
+        self::assertNull($s->keyring());
+        $s->putKeyring('{"v":1,"ct":"first"}');
         $clock->now += 1;
-        $s->putLockedKey(MUSIC_FP_CURRENT, '{"v":1,"again":true}');
-        $keys = $s->lockedKeys();
-        self::assertCount(1, $keys);
-        self::assertSame('{"v":1,"again":true}', $keys[0]['locked']);
+        $s->putKeyring('{"v":1,"ct":"second"}');
+        self::assertSame(['locked' => '{"v":1,"ct":"second"}', 'uploaded_at' => 1_800_000_001], $s->keyring());
+        self::assertSame(1, (int) $db->query('SELECT COUNT(*) FROM music_keyring')->fetchColumn());
     }
 
     public function testPublicKeysFileMustMatchItsSpki(): void
@@ -499,8 +629,10 @@ function music_store(\PDO $db, Admin\Clock $clock): Music\Store
 - `addNote`: `strlen > MAX_NOTE_BYTES` → `too_large`; `$keys === null || $keys->current === ''` → `no_key`; `strlen < 38 || substr(0, 6) !== MAGIC` → `bad_header`; `bin2hex(substr(6, 32))` not in `$keys->all()` → `unknown_key`; `SELECT COUNT(*)` ≥ `MAX_NOTES` → `full`. Then `id = bin2hex(random_bytes(16))`; write `"$dir/notes/$id.tmp"` with `fopen(..., 'x')`, `chmod 0600`, `rename` to `$id.sealed`; insert the row. The count check and insert run inside `BEGIN IMMEDIATE` … `COMMIT`; on a failed insert the file is unlinked.
 - Every id parameter is checked against `/^[0-9a-f]{32}$/` first; a bad id returns null/false without touching the filesystem.
 - `deleteNote`: in one transaction `DELETE FROM music_notes WHERE id = ?`, then `unlink` the file; returns whether a row went. `deleteAllNotes`: select ids, delete rows, unlink each file, return the count.
-- `putDraft`: piece matches `/^[a-z0-9][a-z0-9-]{0,47}$/` else `bad_piece`; `1 ≤ version ≤ 9999` else `bad_version`; every key in `DRAFT_FILES` else `bad_file`; a file over `MAX_DRAFT_FILE_BYTES` → `too_large`; existing row → `exists`; copy each file into `"$dir/drafts/$piece/$version/"` (claimed private), mode 0600, then insert the row.
+- `putDraft`: piece matches `/^[a-z0-9][a-z0-9-]{0,47}$/` else `bad_piece`; `1 ≤ version ≤ 9999` else `bad_version`; no files → `missing_file`; every key in `DRAFT_FILES` else `bad_file`. Then `BEGIN IMMEDIATE`; `$size = array_sum(array_map('strlen', $files))`; `$size > MAX_REQUEST_BYTES` → `too_large`; existing row → `exists`; `$size + COALESCE(SUM(size), 0)` over `SELECT size FROM music_drafts ORDER BY published_at DESC, rowid DESC LIMIT KEEP_DRAFTS - 1` greater than `MAX_DRAFT_TOTAL_BYTES` → `over_quota`. Each refusal rolls back and leaves no file and no directory. Then write each file into `"$dir/drafts/$piece/$version/"` (claimed private), mode 0600, insert the row with `size`, select the rows past `ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET KEEP_DRAFTS`, delete them and remove their directories (files first, then `rmdir`, then the piece directory when empty), and `COMMIT`. A failure while writing removes the half-written directory and rolls back.
+- `drafts`: rows ordered `published_at DESC, rowid DESC`. `draftBytes`: `COALESCE(SUM(size), 0)`.
 - `draftFile`: same piece/version checks, name in `DRAFT_FILES`, row exists, file exists → path.
+- `putKeyring`: `INSERT ... ON CONFLICT(id) DO UPDATE` on the single row `id = 1`. `keyring`: that row or null.
 
 - [ ] **Step 5: Run the tests**
 
@@ -510,7 +642,7 @@ Run: `vendor/bin/phpunit tests/php/MusicStoreTest.php` — PASS. Then `vendor/bi
 
 ```bash
 git add websites/www.cs/music/lib websites/www.cs/tests/php/MusicFakes.php websites/www.cs/tests/php/MusicStoreTest.php
-git commit -m "Music workroom: sealed-note and draft storage
+git commit -m "Music workroom: sealed-note, draft and keyring storage
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
@@ -520,10 +652,10 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 
 **Files:**
 - Create: `websites/www.cs/music/lib/Http.php`, `music/lib/Api.php`, `tests/php/MusicApiTest.php`
-- Modify: `websites/www.cs/admin/lib/bootstrap.php` (the `Admin\Keys::SCOPES` registry), `music/lib/bootstrap.php` (require the two files)
+- Modify: `websites/www.cs/admin/lib/bootstrap.php` (`ADMIN_KEY_SCOPES`, the registry behind `Admin\Keys::SCOPES`), `tests/php/AdminKeysTest.php` (the registry assertion), `music/lib/bootstrap.php` (require the two files)
 
 **Interfaces:**
-- Consumes: `Store`, `PublicKeys`, `Admin\Keys::check/create`, `Admin\Headers`.
+- Consumes: `Store`, `PublicKeys`, `Admin\Keys::check/create/SCOPES`, `Admin\Headers`, `Admin\Response`.
 - Produces:
 
 ```php
@@ -534,6 +666,10 @@ final class Http {
     public const CSP_EXTRA = "; media-src 'self' blob:";
     public static function csp(): string; // \Admin\Headers::LIST['Content-Security-Policy'] . self::CSP_EXTRA
     public static function header(\Admin\Request $r, string $name): ?string; // case-insensitive
+    /** The Content-Length header as a non-negative integer; null when it is missing or not all digits. */
+    public static function declaredLength(\Admin\Request $r): ?int;
+    /** 403 {"error":"cross_site"} when Sec-Fetch-Site is present and is not "same-origin"; null otherwise. */
+    public static function refuseCrossSite(\Admin\Request $r): ?\Admin\Response;
     /** JSON response with every admin header and the music CSP. */
     public static function json(int $status, array $data): \Admin\Response;
     /** Adds the admin headers and the music CSP to any response. */
@@ -543,25 +679,37 @@ final class Http {
 }
 
 final class Api {
+    public const DRAFT_MAGIC = 'SIUED1';
     public function __construct(Store $store, \Admin\Keys $keys) {}
     public function listNotes(\Admin\Request $r): \Admin\Response;   // GET, notes:pickup, ?state=waiting|picked-up → {"notes":[{id,size,sha256,arrived_at,picked_up_at}]}
     public function getNote(\Admin\Request $r): \Admin\Response;     // GET, notes:pickup, ?id= → application/octet-stream
     public function pickedUp(\Admin\Request $r): \Admin\Response;    // POST, notes:pickup, ?id= → {"id","picked_up":true}; 404 unknown
-    /** POST, drafts:publish; post fields piece, version; $files name => temp path (from $_FILES, by the thin page). */
-    public function publishDraft(\Admin\Request $r, array $files): \Admin\Response; // 201 {"piece","version"}
-    public function publishLockedKey(\Admin\Request $r, string $body): \Admin\Response; // POST, keys:publish → 201 {"fingerprint"}
+    /**
+     * POST ?piece=&version=, drafts:publish; the body is a SIUED1 draft bundle (Formats). $read(int $n) returns the
+     * request body's first $n bytes and is called only after the key, the method and the declared length have passed.
+     */
+    public function publishDraft(\Admin\Request $r, \Closure $read): \Admin\Response; // 201 {"piece","version"}
+    /** POST, keys:publish; the body is the locked keyring JSON (Formats). $read as for publishDraft. */
+    public function publishKeyring(\Admin\Request $r, \Closure $read): \Admin\Response; // 201 {"uploaded":true}
 }
 ```
 
-Errors are JSON `{"error": "<reason>"}`: 405 `method`, 400 `bad_id`/`bad_state`, 404 `not_found`, 409 `exists`, 413 `too_large`, 422 `bad_file`/`bad_score`/`bad_key`/`unknown_key`. A failed `Keys::check` returns its own response unchanged, passed through `Http::finish`. The method is checked **after** the key check, so an unauthenticated caller learns nothing. `publishDraft` checks `score.json` parses, `schema === 1`, `piece.id === piece`, `draft === version`; `spectrogram.png` starts `"\x89PNG"`; `audio.webm` starts `"\x1A\x45\xDF\xA3"`; `audio.m4a` has `ftyp` at offset 4; at least one audio file; `score.musicxml` contains `<score-partwise`. `publishLockedKey` requires valid JSON with `v === 1`, `kdf === 'PBKDF2-SHA-256'`, `iterations >= 600000`, base64 `salt` (16 bytes), `iv` (12 bytes), `ct`, and a 64-hex `fingerprint`; body ≤ `MAX_LOCKED_KEY_BYTES`. The fingerprint need not be known to the server yet: `keys-init` and `keys-rotate` upload a new key's locked copy before the deploy that makes it current, and the page uses only the locked keys whose fingerprints are built into it.
+Scopes, exactly: `listNotes`, `getNote` and `pickedUp` need `notes:pickup`; `publishDraft` needs `drafts:publish`; `publishKeyring` needs `keys:publish`. A key holding any other scope gets 403 on every route; the API has no delete route and no method that deletes.
+
+Errors are JSON `{"error": "<reason>"}`: 405 `method`, 400 `bad_id`/`bad_state`/`bad_length`, 404 `not_found`, 409 `exists`, 411 `length_required`, 413 `too_large`/`over_quota`, 422 `bad_bundle`/`bad_piece`/`bad_version`/`missing_file`/`bad_file`/`bad_score`/`bad_keyring`. A failed `Keys::check` returns its own response unchanged, passed through `Http::finish`. The method is checked **after** the key check, so an unauthenticated caller learns nothing.
+
+`publishDraft`, in this order: key (`drafts:publish`), method (`POST`), the declared length (`Http::declaredLength`: none → 411 `length_required`; over `Store::MAX_REQUEST_BYTES` → 413 `too_large`, with the body never read), then `$read($length)` (a body whose length differs from the declared one → 400 `bad_length`), then the bundle (`SIUED1`, 1 to 5 entries, names from `DRAFT_FILES`, each at most once, entries ending exactly at the end of the body, else 422 `bad_bundle`), then the files: `score.json` parses, `schema === 1`, `piece.id` equals the query's `piece` and `draft` its `version` (else 422 `bad_score`); `spectrogram.png` starts `"\x89PNG"`; `audio.webm` starts `"\x1A\x45\xDF\xA3"`; `audio.m4a` has `ftyp` at offset 4; at least one audio file; `score.musicxml` contains `<score-partwise` (else 422 `bad_file`); then `Store::putDraft`, whose refusals map `exists` → 409, `too_large`/`over_quota` → 413 and the rest to 422 with the reason as the error.
+
+`publishKeyring`: key (`keys:publish`), method, declared length (none → 411; over `Store::MAX_KEYRING_BYTES` → 413 `too_large`, body never read), `$read($length)`, then the envelope check of Formats ("Locked keyring"): exactly the six fields `v`, `kdf`, `iterations`, `salt`, `iv`, `ct`, `v === 1`, `kdf === 'PBKDF2-SHA-256'`, integer `iterations >= 600000`, `salt` strict base64 of 16 bytes, `iv` strict base64 of 12 bytes, `ct` strict base64 of at least 17 bytes (else 422 `bad_keyring`); the body, as received, is stored with `Store::putKeyring`, replacing the stored keyring. The server cannot look inside the keyring, so it cannot check that the keyring holds the current key; the page does that when it unlocks (Task 10).
 
 - [ ] **Step 1: Write the failing tests** (`tests/php/MusicApiTest.php`)
 
 ```php
 <?php
-// The API-key routes: HTTPS only, the right scope only, header-only keys, no
-// delete route at all, pickup marks after a separate call, drafts and locked
-// keys validated before they are kept.
+// The API-key routes: HTTPS only, exactly the right scope on every route,
+// header-only keys, no delete route at all, pickup marks after a separate
+// call, drafts and the keyring validated before they are kept, and the draft
+// limits (8 MB per request, 20 kept, 100 MB in total) enforced by the server.
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
@@ -570,20 +718,41 @@ require_once __DIR__ . '/MusicFakes.php';
 
 final class MusicApiTest extends TestCase
 {
+    private const BASE = 'https://www.cs.siue.edu/~wgrim/admin/';
+
     private Music\Api $api;
     private Music\Store $store;
     private Admin\Keys $keys;
+    private PDO $db;
+    /** How many times a route read its request body. */
+    private int $reads = 0;
 
     protected function setUp(): void
     {
-        [$this->store, $db, , $clock] = music_world();
-        $this->keys = new Admin\Keys($db, $clock);
+        [$this->store, $this->db, , $clock] = music_world();
+        $this->keys = new Admin\Keys($this->db, $clock, null, self::BASE);
         $this->api = new Music\Api($this->store, $this->keys);
     }
 
     private function as(string $key, array $over = []): Admin\Request
     {
-        return req(array_replace(['https' => true, 'method' => 'GET', 'headers' => ['Authorization' => "Bearer $key"]], $over));
+        $headers = ['authorization' => "Bearer $key"] + ($over['headers'] ?? []);
+        unset($over['headers']);
+        return req(array_replace(['https' => true, 'method' => 'GET', 'headers' => $headers], $over));
+    }
+
+    /** A POST declaring $length bytes (default: the body's own length). */
+    private function post(string $key, array $query, string $body, ?int $length = null): Admin\Request
+    {
+        return $this->as($key, ['method' => 'POST', 'query' => $query, 'headers' => ['content-length' => (string) ($length ?? strlen($body))]]);
+    }
+
+    private function reading(string $body): Closure
+    {
+        return function (int $n) use ($body): string {
+            $this->reads++;
+            return substr($body, 0, $n);
+        };
     }
 
     private function body(Admin\Response $res): array
@@ -591,9 +760,38 @@ final class MusicApiTest extends TestCase
         return json_decode($res->body, true, flags: JSON_THROW_ON_ERROR);
     }
 
+    /** A complete, valid draft's files. */
+    private function draftFiles(string $piece = 'ch1-labyrinth', int $draft = 1): array
+    {
+        return [
+            'score.json' => json_encode(['schema' => 1, 'piece' => ['id' => $piece, 'title' => 'T'], 'draft' => $draft]),
+            'score.musicxml' => '<?xml version="1.0"?><score-partwise version="4.0"></score-partwise>',
+            'audio.webm' => "\x1A\x45\xDF\xA3" . random_bytes(100),
+            'spectrogram.png' => "\x89PNG\r\n\x1A\n" . random_bytes(100),
+        ];
+    }
+
+    private function publish(string $key, array $files, string $piece, int $version): Admin\Response
+    {
+        $body = music_draft_bundle($files);
+        return $this->api->publishDraft($this->post($key, ['piece' => $piece, 'version' => (string) $version], $body), $this->reading($body));
+    }
+
+    private function keyring(array $over = []): array
+    {
+        return $over + ['v' => 1, 'kdf' => 'PBKDF2-SHA-256', 'iterations' => 600000, 'salt' => base64_encode(random_bytes(16)),
+            'iv' => base64_encode(random_bytes(12)), 'ct' => base64_encode(random_bytes(2400))];
+    }
+
+    private function uploadKeyring(string $key, string $body, ?int $length = null): Admin\Response
+    {
+        return $this->api->publishKeyring($this->post($key, [], $body, $length), $this->reading($body));
+    }
+
     public function testScopesAreRegistered(): void
     {
-        foreach (['notes:pickup', 'drafts:publish', 'keys:publish'] as $scope) {
+        self::assertSame(['notes:pickup', 'drafts:publish', 'keys:publish'], Admin\Keys::SCOPES);
+        foreach (Admin\Keys::SCOPES as $scope) {
             self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $this->keys->create("t-$scope", [$scope]));
         }
     }
@@ -608,6 +806,39 @@ final class MusicApiTest extends TestCase
         self::assertSame(403, $this->api->listNotes($this->as($pickup, ['https' => false, 'query' => ['state' => 'waiting']]))->status, 'HTTP');
         self::assertSame(401, $this->api->listNotes(req(['https' => true, 'query' => ['state' => 'waiting', 'key' => $pickup]]))->status, 'key in URL ignored');
         self::assertSame(401, $this->api->listNotes($this->as(str_repeat('0', 64), ['query' => ['state' => 'waiting']]))->status);
+    }
+
+    public function testEveryRouteDemandsExactlyItsOwnScope(): void
+    {
+        $id = $this->store->addNote(music_sealed())['id'];
+        $routes = [
+            'notes:pickup' => [
+                'listNotes' => fn(string $k) => $this->api->listNotes($this->as($k, ['query' => ['state' => 'waiting']])),
+                'getNote' => fn(string $k) => $this->api->getNote($this->as($k, ['query' => ['id' => $id]])),
+                'pickedUp' => fn(string $k) => $this->api->pickedUp($this->as($k, ['method' => 'POST', 'query' => ['id' => $id]])),
+            ],
+            'drafts:publish' => ['publishDraft' => fn(string $k) => $this->api->publishDraft($this->post($k, [], ''), $this->reading(''))],
+            'keys:publish' => ['publishKeyring' => fn(string $k) => $this->api->publishKeyring($this->post($k, [], ''), $this->reading(''))],
+        ];
+        $held = [];
+        foreach (array_keys($routes) as $scope) {
+            $held[$scope] = $this->keys->create("only-$scope", [$scope]);
+        }
+        foreach ($routes as $scope => $calls) {
+            foreach ($calls as $route => $call) {
+                foreach ($held as $heldScope => $key) {
+                    $reads = $this->reads;
+                    $status = $call($key)->status;
+                    if ($heldScope === $scope) {
+                        self::assertNotContains($status, [401, 403], "$route with its own scope $scope");
+                    } else {
+                        self::assertSame(403, $status, "$route with only $heldScope");
+                        self::assertSame($reads, $this->reads, "$route read a body for a key without $scope");
+                    }
+                }
+            }
+        }
+        self::assertCount(1, $this->store->notes(), 'no route removed anything');
     }
 
     public function testListGetAndMarkInThatOrder(): void
@@ -643,38 +874,126 @@ final class MusicApiTest extends TestCase
     public function testPublishDraftValidatesFiles(): void
     {
         $k = $this->keys->create('publish', ['drafts:publish']);
-        $tmp = admin_tmp_dir();
-        $score = ['schema' => 1, 'piece' => ['id' => 'ch1-labyrinth', 'title' => 'T'], 'draft' => 1];
-        file_put_contents("$tmp/score.json", json_encode($score));
-        file_put_contents("$tmp/score.musicxml", '<?xml version="1.0"?><score-partwise version="4.0"></score-partwise>');
-        file_put_contents("$tmp/audio.webm", "\x1A\x45\xDF\xA3" . random_bytes(100));
-        file_put_contents("$tmp/spectrogram.png", "\x89PNG\r\n\x1A\n" . random_bytes(100));
-        $files = [];
-        foreach (['score.json', 'score.musicxml', 'audio.webm', 'spectrogram.png'] as $f) $files[$f] = "$tmp/$f";
-        $post = ['method' => 'POST', 'post' => ['piece' => 'ch1-labyrinth', 'version' => '1']];
-        self::assertSame(201, $this->api->publishDraft($this->as($k, $post), $files)->status);
-        self::assertSame(409, $this->api->publishDraft($this->as($k, $post), $files)->status, 'drafts are immutable');
-        $wrong = array_replace_recursive($post, ['post' => ['version' => '2']]);
-        self::assertSame('bad_score', $this->body($this->api->publishDraft($this->as($k, $wrong), $files))['error'], 'draft must equal version');
-        file_put_contents("$tmp/fake.png", 'GIF89a');
-        self::assertSame(422, $this->api->publishDraft($this->as($k, array_replace_recursive($post, ['post' => ['version' => '3']])), ['spectrogram.png' => "$tmp/fake.png"] + $files)->status);
+        $files = $this->draftFiles();
+        $res = $this->publish($k, $files, 'ch1-labyrinth', 1);
+        self::assertSame(201, $res->status);
+        self::assertSame(['piece' => 'ch1-labyrinth', 'version' => 1], $this->body($res));
+        self::assertSame($files['audio.webm'], file_get_contents((string) $this->store->draftFile('ch1-labyrinth', 1, 'audio.webm')));
+        self::assertSame(409, $this->publish($k, $files, 'ch1-labyrinth', 1)->status, 'drafts are immutable');
+        self::assertSame('bad_score', $this->body($this->publish($k, $files, 'ch1-labyrinth', 2))['error'], 'draft must equal version');
+        self::assertSame('bad_score', $this->body($this->publish($k, $files, 'other-piece', 3))['error'], 'piece must equal the query');
+        self::assertSame(422, $this->publish($k, ['spectrogram.png' => 'GIF89a'] + $files, 'ch1-labyrinth', 1)->status, 'a fake png');
+        self::assertSame(422, $this->publish($k, array_diff_key($this->draftFiles('ch1-labyrinth', 4), ['audio.webm' => 1]), 'ch1-labyrinth', 4)->status, 'no audio');
+        self::assertSame('bad_bundle', $this->body($this->api->publishDraft(
+            $this->post($k, ['piece' => 'ch1-labyrinth', 'version' => '5'], 'not a bundle'),
+            $this->reading('not a bundle'),
+        ))['error']);
         $pickup = $this->keys->create('pickup', ['notes:pickup']);
-        self::assertSame(403, $this->api->publishDraft($this->as($pickup, $post), $files)->status);
+        self::assertSame(403, $this->publish($pickup, $files, 'ch1-labyrinth', 1)->status);
     }
 
-    public function testLockedKeyUploadNeedsKeysScopeAndAWellFormedLock(): void
+    public function testADraftBodyOverEightMegabytesIsRefusedBeforeItIsRead(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $res = $this->api->publishDraft($this->post($k, ['piece' => 'ch1-labyrinth', 'version' => '1'], '', 8_388_609), $this->reading(''));
+        self::assertSame(413, $res->status);
+        self::assertSame('too_large', $this->body($res)['error']);
+        self::assertSame(0, $this->reads, 'the body is never read');
+        self::assertSame([], $this->store->drafts());
+    }
+
+    public function testADraftBodyOfExactlyEightMegabytesIsAccepted(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $files = $this->draftFiles();
+        $files['audio.webm'] .= str_repeat("\0", Music\Store::MAX_REQUEST_BYTES - strlen(music_draft_bundle($files)));
+        $body = music_draft_bundle($files);
+        self::assertSame(8_388_608, strlen($body));
+        $res = $this->api->publishDraft($this->post($k, ['piece' => 'ch1-labyrinth', 'version' => '1'], $body), $this->reading($body));
+        self::assertSame(201, $res->status);
+        self::assertSame(array_sum(array_map('strlen', $files)), $this->store->draftBytes());
+    }
+
+    public function testADraftNeedsADeclaredLengthThatTheBodyMatches(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $query = ['piece' => 'ch1-labyrinth', 'version' => '1'];
+        $none = $this->as($k, ['method' => 'POST', 'query' => $query]);
+        self::assertSame(411, $this->api->publishDraft($none, $this->reading(''))->status);
+        $bad = $this->as($k, ['method' => 'POST', 'query' => $query, 'headers' => ['content-length' => '12abc']]);
+        self::assertSame(411, $this->api->publishDraft($bad, $this->reading(''))->status);
+        self::assertSame(0, $this->reads);
+        $body = music_draft_bundle($this->draftFiles());
+        $res = $this->api->publishDraft($this->post($k, $query, $body, strlen($body) + 10), $this->reading($body));
+        self::assertSame(400, $res->status);
+        self::assertSame('bad_length', $this->body($res)['error']);
+        self::assertSame([], $this->store->drafts());
+    }
+
+    public function testTheTwentyFirstDraftEvictsTheOldest(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        for ($v = 1; $v <= 21; $v++) {
+            self::assertSame(201, $this->publish($k, $this->draftFiles('ch1-labyrinth', $v), 'ch1-labyrinth', $v)->status, "draft $v");
+        }
+        self::assertCount(20, $this->store->drafts());
+        self::assertNull($this->store->draftFile('ch1-labyrinth', 1, 'score.json'), 'the oldest is gone');
+        self::assertNotNull($this->store->draftFile('ch1-labyrinth', 2, 'score.json'));
+        self::assertNotNull($this->store->draftFile('ch1-labyrinth', 21, 'score.json'));
+    }
+
+    public function testADraftThatWouldPassTheQuotaIsRefusedAndNothingIsWritten(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)')
+            ->execute(['seed', 1, 1, Music\Store::MAX_DRAFT_TOTAL_BYTES - 10]);
+        $before = $this->store->drafts();
+        $res = $this->publish($k, $this->draftFiles(), 'ch1-labyrinth', 1);
+        self::assertSame(413, $res->status);
+        self::assertSame('over_quota', $this->body($res)['error']);
+        self::assertSame($before, $this->store->drafts());
+        self::assertNull($this->store->draftFile('ch1-labyrinth', 1, 'score.json'));
+    }
+
+    public function testKeyringUploadNeedsKeysScopeAndAWellFormedEnvelope(): void
     {
         $k = $this->keys->create('publish', ['keys:publish']);
-        $locked = ['v' => 1, 'kdf' => 'PBKDF2-SHA-256', 'iterations' => 600000, 'salt' => base64_encode(random_bytes(16)),
-            'iv' => base64_encode(random_bytes(12)), 'fingerprint' => MUSIC_FP_CURRENT, 'ct' => base64_encode(random_bytes(2400))];
-        $post = ['method' => 'POST'];
-        self::assertSame(201, $this->api->publishLockedKey($this->as($k, $post), json_encode($locked))->status);
-        self::assertSame(422, $this->api->publishLockedKey($this->as($k, $post), json_encode(['iterations' => 1000] + $locked))->status, 'weak KDF');
-        self::assertSame(422, $this->api->publishLockedKey($this->as($k, $post), json_encode(['fingerprint' => 'xyz'] + $locked))->status);
-        self::assertSame(422, $this->api->publishLockedKey($this->as($k, $post), json_encode(['salt' => base64_encode('short')] + $locked))->status);
-        self::assertSame(201, $this->api->publishLockedKey($this->as($k, $post), json_encode(['fingerprint' => str_repeat('ef', 32)] + $locked))->status, 'a key not yet deployed');
+        $good = json_encode($this->keyring());
+        self::assertSame(201, $this->uploadKeyring($k, $good)->status);
+        self::assertSame($good, $this->store->keyring()['locked']);
+        $second = json_encode($this->keyring());
+        self::assertSame(201, $this->uploadKeyring($k, $second)->status);
+        self::assertSame($second, $this->store->keyring()['locked'], 'a new upload replaces the stored keyring');
+        foreach ([
+            'weak KDF' => $this->keyring(['iterations' => 1000]),
+            'wrong version' => $this->keyring(['v' => 2]),
+            'wrong KDF' => $this->keyring(['kdf' => 'scrypt']),
+            'short salt' => $this->keyring(['salt' => base64_encode('short')]),
+            'short iv' => $this->keyring(['iv' => base64_encode(random_bytes(8))]),
+            'ct not base64' => $this->keyring(['ct' => '***']),
+            'ct too short' => $this->keyring(['ct' => base64_encode(random_bytes(16))]),
+            'extra field' => $this->keyring(['fingerprint' => MUSIC_FP_CURRENT]),
+        ] as $why => $bad) {
+            self::assertSame(422, $this->uploadKeyring($k, json_encode($bad))->status, $why);
+        }
+        self::assertSame(422, $this->uploadKeyring($k, 'not json')->status);
+        self::assertSame($second, $this->store->keyring()['locked'], 'refused uploads change nothing');
         $drafts = $this->keys->create('drafts', ['drafts:publish']);
-        self::assertSame(403, $this->api->publishLockedKey($this->as($drafts, $post), json_encode($locked))->status);
+        self::assertSame(403, $this->uploadKeyring($drafts, $good)->status);
+    }
+
+    public function testKeyringSizeLimitIsExactAndCheckedBeforeReading(): void
+    {
+        $k = $this->keys->create('publish', ['keys:publish']);
+        $base = $this->keyring(['ct' => '']);
+        $room = Music\Store::MAX_KEYRING_BYTES - strlen(json_encode($base, JSON_UNESCAPED_SLASHES));
+        $envelope = json_encode(['ct' => str_repeat('A', 4 * intdiv($room, 4))] + $base, JSON_UNESCAPED_SLASHES);
+        $body = $envelope . str_repeat(' ', Music\Store::MAX_KEYRING_BYTES - strlen($envelope));
+        self::assertSame(65_536, strlen($body));
+        self::assertSame(201, $this->uploadKeyring($k, $body)->status);
+        $reads = $this->reads;
+        self::assertSame(413, $this->uploadKeyring($k, '', 65_537)->status);
+        self::assertSame($reads, $this->reads, 'an oversized keyring is refused from its declared length');
     }
 
     public function testTheApiHasNoWayToDelete(): void
@@ -695,31 +1014,40 @@ final class MusicApiTest extends TestCase
         self::assertSame(416, Music\Http::serveFile($f, 'audio/webm', 'bytes=20-30')->status);
         self::assertSame('bytes', Music\Http::serveFile($f, 'audio/webm', null)->headers['Accept-Ranges']);
     }
+
+    public function testCrossSiteRequestsAreRefusedForSessionData(): void
+    {
+        $at = fn(string $site) => req(['https' => true, 'headers' => ['sec-fetch-site' => $site]]);
+        self::assertSame(403, Music\Http::refuseCrossSite($at('cross-site'))?->status);
+        self::assertSame(403, Music\Http::refuseCrossSite($at('same-site'))?->status);
+        self::assertNull(Music\Http::refuseCrossSite($at('same-origin')));
+        self::assertNull(Music\Http::refuseCrossSite(req(['https' => true])), 'curl and older browsers send none');
+    }
 }
 ```
 
 - [ ] **Step 2: Run to see it fail**
 
 Run: `vendor/bin/phpunit tests/php/MusicApiTest.php`
-Expected: FAIL — class `Music\Api` not found, and `testScopesAreRegistered` fails on unknown scopes.
+Expected: FAIL — class `Music\Api` not found, and `testScopesAreRegistered` fails on the empty registry.
 
 - [ ] **Step 3: Implement**
 
-In `admin/lib/bootstrap.php`, add to the `Admin\Keys::SCOPES` registry the three entries `notes:pickup` ("Pick up sealed music notes"), `drafts:publish` ("Publish music drafts") and `keys:publish` ("Upload the locked music notes key"), in the registry's existing shape.
+In `admin/lib/bootstrap.php`, set the registry that `Admin\Keys::SCOPES` reads to the three scopes, in this order: `const ADMIN_KEY_SCOPES = ['notes:pickup', 'drafts:publish', 'keys:publish'];` (the hub's key panel offers each as a checkbox labelled with the scope). In `tests/php/AdminKeysTest.php` replace `testProductionRegistryIsEmpty` with `testProductionRegistryHoldsTheWorkroomScopes`, which asserts `Admin\Keys::SCOPES` equals those three strings; every other admin test passes its own scope list.
 
-`Http::header`: loop `$r->headers`, compare `strcasecmp`. `Http::finish`: `$res->headers = \Admin\Headers::apply($res->headers); $res->headers['Content-Security-Policy'] = self::csp(); return $res;`. `Http::json`: `finish(new Response($status, ['Content-Type' => 'application/json'], json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)))`. `serveFile`: `Accept-Ranges: bytes`, `Content-Type`, `Content-Length`; a `Range` matching `/^bytes=(\d*)-(\d*)$/` with a satisfiable span → 206 with `Content-Range: bytes a-b/size`; any other `Range` value → 416 with `Content-Range: bytes */size`.
+`Http::header`: loop `$r->headers`, compare `strcasecmp`. `Http::declaredLength`: `Http::header($r, 'Content-Length')`; null unless it matches `/^\d{1,12}$/D`; else the integer. `Http::refuseCrossSite`: `Sec-Fetch-Site` absent or `same-origin` → null; anything else → `Http::json(403, ['error' => 'cross_site'])`. `Http::finish`: `$res->headers = \Admin\Headers::apply($res->headers); $res->headers['Content-Security-Policy'] = self::csp(); return $res;`. `Http::json`: `finish(new Response($status, ['Content-Type' => 'application/json'], json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)))`. `serveFile`: `Accept-Ranges: bytes`, `Content-Type`, `Content-Length`; a `Range` matching `/^bytes=(\d*)-(\d*)$/` with a satisfiable span → 206 with `Content-Range: bytes a-b/size`; any other `Range` value → 416 with `Content-Range: bytes */size`.
 
-`Api`: each method starts `if ($deny = $this->keys->check($r, '<scope>')) return Http::finish($deny);`, then checks the method (`405`), then the parameters, then calls `Store`, mapping `NoteRejected`/`DraftRejected` reasons to the statuses above.
+`Api`: each method starts `if ($deny = $this->keys->check($r, '<scope>')) return Http::finish($deny);`, then checks the method (`405`), then the remaining steps in the order given above, mapping `NoteRejected`/`DraftRejected` reasons to the statuses above. The bundle parser reads the magic, the count, then each entry with `unpack('N', ...)`, and refuses (422 `bad_bundle`) a truncated entry, a name outside `Store::DRAFT_FILES`, a repeated name, a count outside 1 to 5 or bytes left over.
 
 - [ ] **Step 4: Run the tests**
 
-Run: `vendor/bin/phpunit tests/php/MusicApiTest.php` — PASS; `vendor/bin/phpunit --testsuite site` — PASS (the admin tests still pass with the new scopes).
+Run: `vendor/bin/phpunit tests/php/MusicApiTest.php` — PASS; `vendor/bin/phpunit --testsuite site` — PASS (the admin tests still pass with the registry filled).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add websites/www.cs/music/lib websites/www.cs/admin/lib/bootstrap.php websites/www.cs/tests/php/MusicApiTest.php
-git commit -m "Music workroom: the API-key routes and their scopes
+git add websites/www.cs/music/lib websites/www.cs/admin/lib/bootstrap.php websites/www.cs/tests/php/MusicApiTest.php websites/www.cs/tests/php/AdminKeysTest.php
+git commit -m "Music workroom: the API-key routes, their scopes and the draft limits
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
@@ -729,41 +1057,52 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 
 **Files:**
 - Create: `websites/www.cs/music/lib/Pages.php`, `tests/php/MusicPagesTest.php`
-- Modify: `music/lib/bootstrap.php` (require `Pages.php`), `admin/lib/bootstrap.php` (dashboard entry and fingerprint entry)
+- Modify: `music/lib/bootstrap.php` (require `Pages.php`), `admin/lib/bootstrap.php` (`admin_dashboards()` and `admin_key_fingerprints()` return the workroom's entries)
 
 **Interfaces:**
-- Consumes: `Store`, `PublicKeys`, `Http`, `Admin\Pages::requireAdmin`, `Admin\Sessions::csrf/checkCsrf`.
+- Consumes: `Store`, `PublicKeys`, `Http`, `Admin\Pages::requireAdmin`, `Admin\Sessions::csrf/checkCsrf`, `admin_refuse_plain_http`, `admin_refuse_script_fetch`.
 - Produces:
 
 ```php
 namespace Music;
 
 final class Pages {
-    /** $assetVersion: 10 hex of games/workroom/dist/workroom.js (the ?v= on the script). */
-    public function __construct(Store $store, \Admin\Pages $admin, \Admin\Sessions $sessions, ?PublicKeys $keys, string $assetVersion) {}
+    /** $assetVersion: 10 hex of games/workroom/dist/workroom.js (the ?v= on the script); $baseUrl: admin_base_url(). */
+    public function __construct(Store $store, \Admin\Pages $admin, \Admin\Sessions $sessions, ?PublicKeys $keys, string $assetVersion, string $baseUrl) {}
     public function index(\Admin\Request $r): \Admin\Response;       // GET index.php: pieces list (HTML)
     public function piece(\Admin\Request $r): \Admin\Response;       // GET piece.php?id=<piece>[&v=<n>]: the page shell (HTML)
     public function csrf(\Admin\Request $r): \Admin\Response;        // GET csrf.php → {"csrf"}
     public function notes(\Admin\Request $r, string $body): \Admin\Response; // GET notes.php → {"notes":[{id,size,arrived_at,picked_up_at}]}; POST (X-CSRF, body = bundle) → 201 {"id","csrf"}
     public function note(\Admin\Request $r): \Admin\Response;        // GET note.php?id= → bundle bytes
     public function delete(\Admin\Request $r): \Admin\Response;      // POST delete.php (X-CSRF; post id=<id> or all=1) → {"deleted":n,"csrf"}
-    public function lockedKeys(\Admin\Request $r): \Admin\Response;  // GET locked-keys.php → {"keys":[{fingerprint, locked: object}]}
+    public function keyring(\Admin\Request $r): \Admin\Response;     // GET keyring.php → {"keyring": <the locked keyring object>}; 404 {"error":"no_keyring"} before the first upload
     public function drafts(\Admin\Request $r): \Admin\Response;      // GET drafts.php?piece= → {"drafts":[{version,published_at}]}
     public function draftFile(\Admin\Request $r): \Admin\Response;   // GET draft.php?piece=&v=&file= (Range for audio)
 }
 ```
 
-Every method: non-HTTPS → 403 JSON `{"error":"https"}` (HTML pages: plain 403); then `requireAdmin` (its redirect passes through `Http::finish`); then for POST, `checkCsrf($r, Http::header($r, 'X-CSRF') ?? '')` false → 403 `{"error":"csrf"}`; then the work. Every POST success returns the next token from `$sessions->csrf($r)`. Upload errors: 413 `too_large`, 409 `full`, 422 `bad_header`/`unknown_key`, 503 `no_key`. The page shell (`piece`) is a full HTML document: `<body data-view="piece" data-piece="<id>" data-version="<n or empty>">`, `<meta name="csrf" content="...">`, `<link rel="stylesheet" href="music.css?v=...">`, `<main id="workroom"></main>`, `<script type="module" src="../games/workroom/dist/workroom.js?v=<assetVersion>"></script>`. `index` renders, server side, one row per piece (latest version; `piece.title` and the first three `changes[].text` read from that draft's `score.json`, all escaped with `htmlspecialchars(..., ENT_QUOTES)`), the total waiting count, and the same mount and script with `data-view="index"`. Draft files are served with `Content-Type` from a fixed map (`score.json` application/json, `score.musicxml` application/vnd.recordare.musicxml+xml, `audio.webm` audio/webm, `audio.m4a` audio/mp4, `spectrogram.png` image/png).
+Every method runs the same gates, in this order, and returns the first refusal through `Http::finish`:
 
-In `admin/lib/bootstrap.php`: add the dashboard `Music workroom` → `../music/` to the hub's dashboard list, and to the fingerprint list the entry `Music notes key` whose value is `Music\PublicKeys::display($k->current)` for `$k = Music\PublicKeys::fromFile(__DIR__ . '/../../music/keys/public.json')`, or `not made yet (make keys-init)` when null (require `../../music/lib/PublicKeys.php` there; it has no dependencies).
+1. **HTTPS:** `admin_refuse_plain_http($r, $this->baseUrl)` (403 `HTTPS required.`; only a local base URL permits plain HTTP).
+2. **Who may ask:** the two HTML pages (`index`, `piece`) run `admin_refuse_script_fetch($r)`, the Fetch Metadata guard the admin pages run (403 `Open this page directly.` for any request a script, embed or frame made). The routes the workroom's own script fetches, and the draft files its `<audio>` and `<img>` elements load, run `Http::refuseCrossSite($r)` instead (403 `{"error":"cross_site"}` unless `Sec-Fetch-Site` is absent or `same-origin`).
+3. **Session:** `$this->admin->requireAdmin($r)` (its 303 to `login.php` passes through `Http::finish`).
+4. **CSRF**, for POST: `checkCsrf($r, Http::header($r, 'X-CSRF') ?? '')` false → 403 `{"error":"csrf"}`.
+5. The work.
+
+Every POST success returns the next token from `$sessions->csrf($r)`. Upload errors: 413 `too_large`, 409 `full`, 422 `bad_header`/`unknown_key`, 503 `no_key`. The page shell (`piece`) is a full HTML document: `<body data-view="piece" data-piece="<id>" data-version="<n or empty>">`, `<meta name="csrf" content="...">`, `<link rel="stylesheet" href="music.css?v=...">`, `<main id="workroom"></main>`, `<script type="module" src="../games/workroom/dist/workroom.js?v=<assetVersion>"></script>`. `index` renders, server side, one row per piece (latest version; `piece.title` and the first three `changes[].text` read from that draft's `score.json`, all escaped with `htmlspecialchars(..., ENT_QUOTES)`), the total waiting count, and the same mount and script with `data-view="index"`. Draft files are served with `Content-Type` from a fixed map (`score.json` application/json, `score.musicxml` application/vnd.recordare.musicxml+xml, `audio.webm` audio/webm, `audio.m4a` audio/mp4, `spectrogram.png` image/png).
+
+A script on another user's `~folder` page is same-origin with www.cs, so `refuseCrossSite` stops cross-site pages only. What keeps a sibling page from reading the notes is that they are sealed to a key it does not have, and the keyring is locked under a passphrase it does not have; the CSRF token guards every change.
+
+In `admin/lib/bootstrap.php`: `admin_dashboards()` returns `['Music workroom' => '../music/']`, and `admin_key_fingerprints()` returns `['Music notes key' => <value>]` where the value is `Music\PublicKeys::display($k->current)` for `$k = Music\PublicKeys::fromFile(__DIR__ . '/../../music/keys/public.json')`, or `not made yet (make keys-init)` when null (require `../../music/lib/PublicKeys.php` there; it has no dependencies). The hub (`Admin\Pages::hub`) already renders both lists.
 
 - [ ] **Step 1: Write the failing tests** (`tests/php/MusicPagesTest.php`)
 
 ```php
 <?php
-// The session routes: a session for everything, CSRF on every POST (burned on
-// use, the next token returned), deletes remove row and file, an API key is
-// never a session, the locked key and drafts go only to a session.
+// The session routes: plain HTTP, script-made page loads and cross-site data
+// requests refused; a session for everything; CSRF on every POST (burned on
+// use, the next token returned); deletes remove row and file; an API key is
+// never a session; the locked keyring and drafts go only to a session.
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
@@ -772,6 +1111,8 @@ require_once __DIR__ . '/MusicFakes.php';
 
 final class MusicPagesTest extends TestCase
 {
+    private const BASE = 'https://example.test/~wgrim/admin/';
+
     private Music\Pages $pages;
     private Music\Store $store;
     private Admin\Sessions $sessions;
@@ -781,10 +1122,10 @@ final class MusicPagesTest extends TestCase
     protected function setUp(): void
     {
         [$this->store, $db, $this->dir, $clock] = music_world();
-        $this->sessions = new Admin\Sessions($db, $clock);
-        $this->keys = new Admin\Keys($db, $clock);
-        $admin = new Admin\Pages($db, $clock, new MemoryMailer(), 'https://example.test/admin/');
-        $this->pages = new Music\Pages($this->store, $admin, $this->sessions, music_keys(), '0123456789');
+        $this->sessions = new Admin\Sessions($db, $clock, '/~wgrim/');
+        $this->keys = new Admin\Keys($db, $clock, null, self::BASE);
+        $admin = new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true, $this->keys);
+        $this->pages = new Music\Pages($this->store, $admin, $this->sessions, music_keys(), '0123456789', self::BASE);
     }
 
     private function csrfFor(Admin\Request $r): string
@@ -795,7 +1136,7 @@ final class MusicPagesTest extends TestCase
     public function testEveryRouteNeedsASession(): void
     {
         $anon = req(['https' => true, 'query' => ['id' => str_repeat('0', 32), 'piece' => 'x', 'v' => '1', 'file' => 'score.json']]);
-        foreach (['index', 'piece', 'csrf', 'note', 'lockedKeys', 'drafts', 'draftFile', 'delete'] as $route) {
+        foreach (['index', 'piece', 'csrf', 'note', 'keyring', 'drafts', 'draftFile', 'delete'] as $route) {
             self::assertSame(303, $this->pages->$route($anon)->status, $route);
         }
         self::assertSame(303, $this->pages->notes($anon, '')->status);
@@ -805,24 +1146,53 @@ final class MusicPagesTest extends TestCase
     {
         $key = $this->keys->create('all', ['notes:pickup', 'drafts:publish', 'keys:publish']);
         $id = $this->store->addNote(music_sealed())['id'];
-        $this->store->putLockedKey(MUSIC_FP_CURRENT, '{"v":1}');
-        $bearer = req(['https' => true, 'method' => 'POST', 'headers' => ['Authorization' => "Bearer $key"], 'post' => ['id' => $id]]);
-        self::assertSame(303, $this->pages->delete($bearer)->status);
+        $this->store->putKeyring('{"v":1}');
+        $bearer = ['authorization' => "Bearer $key"];
+        self::assertSame(303, $this->pages->delete(req(['https' => true, 'method' => 'POST', 'headers' => $bearer, 'post' => ['id' => $id]]))->status);
         self::assertNotNull($this->store->noteBytes($id), 'an API key cannot delete');
-        self::assertSame(303, $this->pages->lockedKeys(req(['https' => true, 'headers' => ['Authorization' => "Bearer $key"]]))->status, 'locked key only to a session');
+        self::assertSame(303, $this->pages->keyring(req(['https' => true, 'headers' => $bearer]))->status, 'the keyring goes only to a session');
+        self::assertSame(303, $this->pages->note(req(['https' => true, 'headers' => $bearer, 'query' => ['id' => $id]]))->status);
     }
 
     public function testHttpsIsRequired(): void
     {
         $r = music_signed_in($this->sessions, ['https' => false]);
-        self::assertSame(403, $this->pages->lockedKeys($r)->status);
+        foreach (['index', 'piece', 'csrf', 'keyring', 'drafts'] as $route) {
+            self::assertSame(403, $this->pages->$route($r)->status, $route);
+        }
+    }
+
+    public function testPagesRefuseRequestsAScriptMade(): void
+    {
+        $script = ['sec-fetch-mode' => 'cors', 'sec-fetch-dest' => 'empty', 'sec-fetch-site' => 'same-origin'];
+        $navigation = ['sec-fetch-mode' => 'navigate', 'sec-fetch-dest' => 'document', 'sec-fetch-site' => 'none'];
+        foreach (['index', 'piece'] as $route) {
+            $query = ['query' => ['id' => 'ch1-labyrinth']];
+            self::assertSame(403, $this->pages->$route(music_signed_in($this->sessions, ['headers' => $script] + $query))->status, "$route by script");
+            self::assertSame(200, $this->pages->$route(music_signed_in($this->sessions, ['headers' => $navigation] + $query))->status, "$route by navigation");
+            self::assertSame(200, $this->pages->$route(music_signed_in($this->sessions, $query))->status, "$route without Fetch Metadata headers");
+        }
+    }
+
+    public function testDataRoutesRefuseCrossSiteRequests(): void
+    {
+        $this->store->putKeyring('{"v":1}');
+        foreach (['cross-site', 'same-site'] as $site) {
+            $r = music_signed_in($this->sessions, ['headers' => ['sec-fetch-site' => $site]]);
+            foreach (['csrf', 'notes', 'keyring', 'drafts'] as $route) {
+                $res = $route === 'notes' ? $this->pages->notes($r, '') : $this->pages->$route($r);
+                self::assertSame(403, $res->status, "$route from $site");
+            }
+        }
+        $own = music_signed_in($this->sessions, ['headers' => ['sec-fetch-site' => 'same-origin', 'sec-fetch-mode' => 'cors', 'sec-fetch-dest' => 'empty']]);
+        self::assertSame(200, $this->pages->keyring($own)->status, "the page's own script is same-origin");
     }
 
     public function testUploadNeedsCsrfAndReturnsTheNextToken(): void
     {
         $r = music_signed_in($this->sessions, ['method' => 'POST']);
         self::assertSame(403, $this->pages->notes($r, music_sealed())->status, 'no token');
-        $withToken = fn(string $t) => req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies, 'headers' => ['X-CSRF' => $t]]);
+        $withToken = fn(string $t) => req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies, 'headers' => ['x-csrf' => $t]]);
         $token = $this->csrfFor(req(['https' => true, 'cookies' => $r->cookies]));
         $res = $this->pages->notes($withToken($token), music_sealed());
         self::assertSame(201, $res->status);
@@ -836,7 +1206,7 @@ final class MusicPagesTest extends TestCase
     public function testUploadLimitsAreReported(): void
     {
         $r = music_signed_in($this->sessions);
-        $post = fn() => req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies, 'headers' => ['X-CSRF' => $this->csrfFor($r)]]);
+        $post = fn() => req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies, 'headers' => ['x-csrf' => $this->csrfFor($r)]]);
         self::assertSame(413, $this->pages->notes($post(), music_sealed(MUSIC_FP_CURRENT, Music\Store::MAX_NOTE_BYTES))->status);
         self::assertSame(422, $this->pages->notes($post(), music_sealed(str_repeat('ef', 32)))->status);
     }
@@ -847,7 +1217,7 @@ final class MusicPagesTest extends TestCase
         $a = $this->store->addNote(music_sealed())['id'];
         $b = $this->store->addNote(music_sealed())['id'];
         $post = fn(array $fields, ?string $t = null) => req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies,
-            'headers' => ['X-CSRF' => $t ?? $this->csrfFor($r)], 'post' => $fields]);
+            'headers' => ['x-csrf' => $t ?? $this->csrfFor($r)], 'post' => $fields]);
         self::assertSame(403, $this->pages->delete($post(['id' => $a], 'nope'))->status);
         self::assertNotNull($this->store->noteBytes($a));
         $one = $this->pages->delete($post(['id' => $a]));
@@ -859,14 +1229,19 @@ final class MusicPagesTest extends TestCase
         self::assertSame([], $this->store->notes());
     }
 
-    public function testLockedKeysAndHistoryGoToTheSession(): void
+    public function testTheKeyringAndTheHistoryGoToTheSession(): void
     {
         $r = music_signed_in($this->sessions);
-        $this->store->putLockedKey(MUSIC_FP_CURRENT, '{"v":1,"fingerprint":"' . MUSIC_FP_CURRENT . '"}');
+        $none = $this->pages->keyring($r);
+        self::assertSame(404, $none->status);
+        self::assertSame('no_keyring', json_decode($none->body, true)['error']);
+        $locked = ['v' => 1, 'kdf' => 'PBKDF2-SHA-256', 'iterations' => 600000, 'salt' => 'c2FsdA==', 'iv' => 'aXY=', 'ct' => 'Y3Q='];
+        $this->store->putKeyring(json_encode($locked));
+        $res = $this->pages->keyring($r);
+        self::assertSame(200, $res->status);
+        self::assertSame($locked, json_decode($res->body, true)['keyring']);
         $id = $this->store->addNote(music_sealed())['id'];
         $this->store->markPickedUp($id);
-        $keys = json_decode($this->pages->lockedKeys($r)->body, true)['keys'];
-        self::assertSame(MUSIC_FP_CURRENT, $keys[0]['locked']['fingerprint']);
         $notes = json_decode($this->pages->notes($r, '')->body, true)['notes'];
         self::assertSame([$id], array_column($notes, 'id'), 'picked-up notes stay in the history');
         self::assertArrayNotHasKey('sha256', $notes[0]);
@@ -888,8 +1263,8 @@ final class MusicPagesTest extends TestCase
     {
         $db = admin_tmp_db();
         $clock = new FakeClock(1_800_000_000);
-        $sessions = new Admin\Sessions($db, $clock);
-        $hub = (new Admin\Pages($db, $clock, new MemoryMailer(), 'https://example.test/admin/'))->hub(music_signed_in($sessions));
+        $sessions = new Admin\Sessions($db, $clock, '/~wgrim/');
+        $hub = (new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true))->hub(music_signed_in($sessions));
         self::assertSame(200, $hub->status);
         self::assertStringContainsString('href="../music/"', $hub->body);
         self::assertStringContainsString('Music notes key', $hub->body);
@@ -902,7 +1277,7 @@ final class MusicPagesTest extends TestCase
 Run: `vendor/bin/phpunit tests/php/MusicPagesTest.php`
 Expected: FAIL — class `Music\Pages` not found.
 
-- [ ] **Step 3: Implement** `Music\Pages` and the two `admin/lib/bootstrap.php` entries as described above. The piece id is checked against `/^[a-z0-9][a-z0-9-]{0,47}$/` (else 400 page "No such piece."). `notes()` dispatches on `$r->method`: GET lists (no `sha256` in the page's list), POST uploads, anything else 405.
+- [ ] **Step 3: Implement** `Music\Pages` and the two `admin/lib/bootstrap.php` functions as described above. The piece id is checked against `/^[a-z0-9][a-z0-9-]{0,47}$/` (else 400 page "No such piece."). `notes()` dispatches on `$r->method`: GET lists (no `sha256` in the page's list), POST uploads, anything else 405.
 
 - [ ] **Step 4: Run the tests**
 
@@ -921,21 +1296,26 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ### Task 4: Thin pages, serving rules, deploy, docs; open PR 1
 
 **Files:**
-- Create: `music/index.php`, `piece.php`, `csrf.php`, `notes.php`, `note.php`, `delete.php`, `locked-keys.php`, `drafts.php`, `draft.php`, `api/notes.php`, `api/note.php`, `api/picked-up.php`, `api/drafts.php`, `api/locked-key.php`, `music/.htaccess`, `music/music.css`, `music/README.md`, `tests/php/MusicDeployTest.php`
-- Modify: `music/lib/bootstrap.php` (`music_run`, `music_read_body`, `music_emit`), `docker/nginx/default.conf`, `deploy.sh`, `.gitignore`
+- Create: `music/index.php`, `piece.php`, `csrf.php`, `notes.php`, `note.php`, `delete.php`, `keyring.php`, `drafts.php`, `draft.php`, `api/notes.php`, `api/note.php`, `api/picked-up.php`, `api/drafts.php`, `api/keyring.php`, `music/.htaccess`, `music/music.css`, `music/README.md`, `tests/php/MusicDeployTest.php`
+- Modify: `music/lib/bootstrap.php` (`music_request`, `music_run`, `music_read_body`, `music_asset_version`), `docker/nginx/default.conf`, `deploy.sh`, `.gitignore`
 
 **Interfaces:**
-- Consumes: everything from Tasks 1–3.
+- Consumes: everything from Tasks 1–3, and `admin_base_url()`, `admin_cookie_path()`, `admin_mailer()`, `admin_emit()` from `admin/lib/bootstrap.php`.
 - Produces (in `music/lib/bootstrap.php`):
 
 ```php
-/** Builds the request, the database and the controllers, runs $route, emits; StorageUnavailable → Admin\Pages::storageDown(). */
+/** Admin\Request::fromGlobals() plus the content-length header: PHP keeps CONTENT_LENGTH out of the HTTP_* variables Request reads. */
+function music_request(): Admin\Request;
+/**
+ * Builds the database, the key store, the sessions and the controllers the way admin_serve() does, runs $route,
+ * and emits the response; StorageUnavailable and PDOException → Admin\Pages::storageDown() through Music\Http::finish.
+ * The page guards (HTTPS, Fetch Metadata, session, CSRF) live in Music\Pages and Music\Api, per route.
+ */
 function music_run(callable $route): void; // $route(Music\Pages $pages, Music\Api $api, Admin\Request $r): Admin\Response
-/** php://input, at most $max + 1 bytes (so the caller can tell "too large"). */
+/** Up to $max bytes of php://input. Callers that must tell "too large" apart ask for one byte more than their limit. */
 function music_read_body(int $max): string;
-function music_emit(Admin\Response $res): void;
-/** name => temp path for the uploaded draft files that arrived without error. */
-function music_draft_uploads(): array;
+/** First 10 hex of games/workroom/dist/workroom.js's SHA-256; '' while the file is missing (until PR 2 lands). */
+function music_asset_version(): string;
 ```
 
 Each thin page is three lines, for example `music/api/note.php`:
@@ -947,7 +1327,7 @@ require __DIR__ . '/../lib/bootstrap.php';
 music_run(fn(Music\Pages $p, Music\Api $a, Admin\Request $r) => $a->getNote($r));
 ```
 
-`notes.php` passes `music_read_body(Music\Store::MAX_NOTE_BYTES)`; `api/locked-key.php` passes `music_read_body(Music\Store::MAX_LOCKED_KEY_BYTES)`; `api/drafts.php` passes `music_draft_uploads()` (maps the form fields `score`, `musicxml`, `audio_webm`, `audio_m4a`, `spectrogram` to the published names). `music_run` builds `Admin\Pages` the way `admin/lib/bootstrap.php` builds it for the admin pages, and the asset version as `substr(hash_file('sha256', __DIR__ . '/../../games/workroom/dist/workroom.js') ?: '', 0, 10)` (empty string when the file is missing, until PR 2 lands).
+`notes.php` passes `music_read_body(Music\Store::MAX_NOTE_BYTES + 1)`. `api/keyring.php` and `api/drafts.php` pass a reader, not a body: `fn(int $n) => music_read_body($n)`, so the API reads the body only after the key, the method and the declared `Content-Length` have passed (`$a->publishKeyring($r, fn(int $n) => music_read_body($n))`). There is no multipart handling anywhere: PHP parses a multipart body before the script runs, which would buffer an oversized upload first.
 
 `music/.htaccess`: `Header always set` each `Admin\Headers::LIST` header with the CSP value `Music\Http::csp()` spelled out, and `<If "%{REQUEST_URI} =~ m#/music/(lib|tools|pieces|keys)/#"> Require all denied </If>`.
 
@@ -980,7 +1360,7 @@ final class MusicDeployTest extends TestCase
     public function testShipsThePagesApiAndLibrary(): void
     {
         $list = self::shipped();
-        foreach (['music/index.php', 'music/piece.php', 'music/notes.php', 'music/delete.php', 'music/api/note.php', 'music/api/picked-up.php',
+        foreach (['music/index.php', 'music/piece.php', 'music/notes.php', 'music/delete.php', 'music/keyring.php', 'music/api/note.php', 'music/api/picked-up.php', 'music/api/keyring.php',
             'music/lib/Store.php', 'music/lib/.htaccess', 'music/.htaccess', 'music/music.css'] as $f) {
             self::assertContains($f, $list, $f);
         }
@@ -989,7 +1369,7 @@ final class MusicDeployTest extends TestCase
     public function testNeverShipsToolsDraftsOrDocs(): void
     {
         foreach (self::shipped() as $f) {
-            self::assertDoesNotMatchRegularExpression('~^music/(tools|pieces)/|^music/README\.md$|^compose\.music-local\.yaml$|fastcgi_params~', $f, $f);
+            self::assertDoesNotMatchRegularExpression('~^music/(tools|pieces)/|^music/README\.md$|^compose\.music-local\.yaml$~', $f, $f);
         }
     }
 
@@ -1035,7 +1415,7 @@ Run: `vendor/bin/phpunit tests/php/MusicDeployTest.php` — FAIL (nothing under 
 
 `.gitignore`: `music/tools/.venv/` and `music/tools/**/__pycache__/`.
 
-Write the thin pages, `music.css` (dark site look: the site's `#0d0f12` background, `#e8ebf0` text, red `#e02020` accents, a list of pieces as cards), and `music/README.md` (what the workroom is; the security model in short; the routes and scopes; `make` targets that exist so far; how to create the two API keys on the hub).
+Write the thin pages, `music.css` (dark site look: the site's `#0d0f12` background, `#e8ebf0` text, red `#e02020` accents, a list of pieces as cards), and `music/README.md` (what the workroom is; the security model in short; the routes and scopes; the draft limits (8 MB a request, 20 kept, 100 MB in all); `make` targets that exist so far; how to create the two API keys on the hub).
 
 - [ ] **Step 4: Run the gates**
 
@@ -1981,30 +2361,28 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ### Task 9: The local browser check; open PR 2
 
 **Files:**
-- Create: `websites/www.cs/compose.music-local.yaml`, `docker/nginx/fastcgi_params.https-local`, `tests/e2e/local.config.ts`, `tests/e2e/workroom.local.ts`, `games/workroom/tools/make-draft-fixture.ts`, `games/workroom/tools/e2e-bundle.ts`, `games/workroom/test/fixtures/public-key.ts`, `games/workroom/test/fixtures/draft/{score.json,score.musicxml,audio.webm,spectrogram.png}`
+- Create: `websites/www.cs/compose.music-local.yaml`, `tests/e2e/local.config.ts`, `tests/e2e/workroom.local.ts`, `games/workroom/tools/make-draft-fixture.ts`, `games/workroom/tools/e2e-bundle.ts`, `games/workroom/test/fixtures/public-key.ts`, `games/workroom/test/fixtures/draft/{score.json,score.musicxml,audio.webm,spectrogram.png}`
 - Modify: `websites/www.cs/Makefile` (new target `music-e2e`), `music/README.md` (how to run the check)
 
 **Interfaces:**
-- Consumes: the admin plan's `compose.admin-local.yaml` (mail capture to `admin/data/mail`, `ADMIN_BASE_URL`), the hub's keys panel (`admin/keys.php`), `Music\Api::publishDraft`.
+- Consumes: the merged `compose.admin-local.yaml` (it needs `ADMIN_SMOKE_DIR`; it sets `ADMIN_BASE_URL=http://localhost/admin/`, a local base that lets the admin kit accept plain HTTP, `ADMIN_DATA_DIR=$ADMIN_SMOKE_DIR` and mail capture to `$ADMIN_SMOKE_DIR/mail`, all inside the PHP container), `tests/admin-smoke.sh` (the pattern for waiting on the stack and creating the mail folder), the hub's keys panel (`admin/keys.php`), `Music\Api::publishDraft`.
 - Produces: `make music-e2e` (local only; prints `MUSIC-E2E-OK`); `tests/e2e/workroom.local.ts` exports nothing; helpers inside it: `signIn(page, base)`, `createKey(page, base, scopes): Promise<string>`, `publishFixtureDraft(request, base, key)`.
 
 `compose.music-local.yaml`:
 
 ```yaml
-# Local docker only (make music-e2e); CI never reads this file. The admin kit
-# refuses API keys over plain HTTP; this stack's nginx tells PHP the request is
-# HTTPS so the workroom's API can be checked against http://localhost:<port>.
-# MUSIC_PUBLIC_KEYS points the server at the test key the check seals to.
+# Local docker only (make music-e2e); CI never reads this file. It goes after
+# compose.admin-local.yaml, whose local ADMIN_BASE_URL (http://localhost/admin/)
+# is what lets the admin kit accept plain HTTP from the check's browser and API
+# calls against http://localhost:<port>. MUSIC_PUBLIC_KEYS points the server at
+# the test public keys the check seals to.
 services:
-  www-cs-nginx:
-    volumes:
-      - ./docker/nginx/fastcgi_params.https-local:/etc/nginx/fastcgi_params:ro
   www-cs-php:
     environment:
       MUSIC_PUBLIC_KEYS: /var/www/html/games/workroom/test/fixtures/public.json
 ```
 
-`docker/nginx/fastcgi_params.https-local`: the stock `fastcgi_params` of `nginx:1.29-alpine` (copy it with `docker run --rm nginx:1.29-alpine cat /etc/nginx/fastcgi_params`) followed by one line, `fastcgi_param HTTPS on;`. (`games/workroom/test/fixtures/public.json` is written in Task 10; in PR 2 the server simply has no key, which the view-only check never needs.)
+(`games/workroom/test/fixtures/public.json` is written in Task 10; in PR 2 the server simply has no key, which the view-only check never needs.)
 
 `tests/e2e/local.config.ts`:
 
@@ -2018,19 +2396,24 @@ import base from './playwright.config.ts';
 export default defineConfig({ ...base, testMatch: ['*.local.ts'], projects: base.projects?.slice(0, 1) ?? [] });
 ```
 
-Makefile target (`test` and `e2e` untouched):
+Makefile target (`test` and `e2e` untouched). It mirrors `tests/admin-smoke.sh`: its own project name, the stack's ephemeral port, a wait until PHP answers (which makes the data folder), then the mail folder, and teardown on exit:
 
 ```make
 # The workroom's browser check against its own docker project, with the
-# admin mail capture and the workroom's local HTTPS override. Local only.
+# admin mail capture. Local only.
 music-e2e:
 	@name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml -f compose.music-local.yaml"; \
+	export ADMIN_SMOKE_DIR=/tmp/$$name; \
 	trap 'docker compose $$files -p $$name down -v >/dev/null 2>&1' EXIT; \
-	COMPOSE_PROJECT_NAME=$$name docker compose $$files -p $$name up -d --build www-cs-php www-cs-nginx >/dev/null && \
-	port=$$(docker compose $$files -p $$name port www-cs-nginx 80 | sed 's/^127\.0\.0\.1/localhost/') && \
+	docker compose $$files -p $$name up -d --build www-cs-php www-cs-nginx >/dev/null && \
+	addr=$$(docker compose $$files -p $$name port www-cs-nginx 80) && port=$${addr##*:} && \
+	ready=0; for i in $$(seq 1 60); do if curl -sf -o /dev/null -H 'Host: localhost' "http://127.0.0.1:$$port/admin/login.php"; then ready=1; break; fi; sleep 1; done; \
+	test $$ready = 1 || { echo "music-e2e: the stack did not answer" >&2; exit 1; }; \
+	docker compose $$files -p $$name exec -T -u apache www-cs-php mkdir -p $$ADMIN_SMOKE_DIR/mail && \
 	bundle=$$(mktemp "$${TMPDIR:-/tmp}/workroom-e2e.XXXXXX") && \
 	(cd games && npm ci --silent && node workroom/tools/e2e-bundle.ts "$$bundle") && \
-	E2E_BASE_URL=http://$$port/ WORKROOM_E2E_BUNDLE=$$bundle tests/e2e/run.sh -c local.config.ts && \
+	MUSIC_E2E_COMPOSE="$$files" MUSIC_E2E_PROJECT=$$name MUSIC_E2E_MAIL_DIR=$$ADMIN_SMOKE_DIR/mail \
+	E2E_BASE_URL=http://localhost:$$port/ WORKROOM_E2E_BUNDLE=$$bundle tests/e2e/run.sh -c local.config.ts && \
 	rm -f "$$bundle" && echo MUSIC-E2E-OK
 ```
 
@@ -2063,6 +2446,7 @@ and `games/workroom/test/fixtures/public-key.ts`, which Task 10 fills with the t
 ```ts
 // The test key pair's public half, built into the page only by tools/e2e-bundle.ts.
 export const PUBLIC_KEY = null;
+export const PREVIOUS_KEYS = [];
 ```
 
 - [ ] **Step 1: Make the draft fixture.** `tools/make-draft-fixture.ts` copies `test/fixtures/score-v1.json` to `test/fixtures/draft/score.json` and writes `score.musicxml`: a `score-partwise` with one `<score-part id="strings-low">` and one `<score-part id="brass">`, eight 4/4 measures each, one whole note per measure at that lane's note pitch (or a whole rest), with `<divisions>1</divisions>`. Run it: `node workroom/tools/make-draft-fixture.ts`. Make the audio and picture (16 s, as the score says):
@@ -2081,25 +2465,39 @@ ffmpeg -loglevel error -i audio.webm -lavfi showspectrumpic=s=800x200:legend=0 s
 // open the piece, play, move the playhead, switch views, open a glossary card,
 // and never trip the content security policy.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SITE = join(import.meta.dirname, '..', '..');
-const MAIL = join(SITE, 'admin', 'data', 'mail');
 const DRAFT = join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft');
 
+// The admin mail is captured inside the PHP container (compose.admin-local.yaml), as in tests/admin-smoke.sh.
+function inPhp(command: string): string {
+  const compose = (process.env.MUSIC_E2E_COMPOSE ?? '').split(' ').filter(Boolean);
+  const run = spawnSync('docker', ['compose', ...compose, '-p', process.env.MUSIC_E2E_PROJECT!, 'exec', '-T', 'www-cs-php', 'sh', '-c', command], { encoding: 'utf8', cwd: SITE });
+  if (run.error || run.signal) throw new Error(`docker compose exec failed: ${run.error?.message ?? run.signal}`);
+  return run.stdout;
+}
+const mailFiles = (): string[] => inPhp(`ls ${process.env.MUSIC_E2E_MAIL_DIR}/*.eml 2>/dev/null`).split('\n').filter(Boolean);
+
 export async function signIn(page: Page, base: string): Promise<void> {
-  const before = Date.now();
+  const known = new Set(mailFiles());
   await page.goto(`${base}admin/login.php`);
+  await page.getByLabel('Email').fill('wgrim@siue.edu');
   await page.getByRole('button', { name: 'Email me a link' }).click();
   let token = '';
   await expect.poll(() => {
-    const fresh = readdirSync(MAIL).filter(f => f.endsWith('.eml')).map(f => join(MAIL, f)).filter(f => statSync(f).mtimeMs >= before - 1000);
-    const m = fresh.map(f => readFileSync(f, 'utf8').match(/verify\.php\?token=([0-9a-f]{64})/)).find(Boolean);
-    token = m?.[1] ?? '';
+    const fresh = mailFiles().filter(f => !known.has(f));
+    for (const f of fresh) {
+      // The mail is quoted-printable: undo its soft line breaks and =XX escapes before reading the link.
+      const text = inPhp(`cat ${f}`).replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (_m, h: string) => String.fromCharCode(parseInt(h, 16)));
+      const m = text.match(/verify\.php\?token=([0-9a-f]{64})/);
+      if (m) { token = m[1]!; break; }
+    }
     return token;
-  }, { timeout: 15_000 }).not.toBe('');
-  await page.goto(`${base}admin/verify.php?token=${token}`);
+  }, { timeout: 20_000 }).not.toBe('');
+  await page.goto(`${base}admin/verify.php?token=${token}`); // the mailed link names http://localhost/ with no port
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/admin\/(index\.php)?$/);
 }
@@ -2109,18 +2507,25 @@ export async function createKey(page: Page, base: string, label: string, scopes:
   await page.getByLabel('Label').fill(label);
   for (const s of scopes) await page.getByLabel(s).check();
   await page.getByRole('button', { name: 'Create key' }).click();
-  return (await page.locator('[data-new-key]').textContent())!.trim();
+  return (await page.locator('code.secret').textContent())!.trim();
+}
+
+/** The SIUED1 bundle (Formats): "SIUED1", a file count, then per file a name length, the name, a uint32 size and the bytes. */
+function draftBundle(files: Record<string, Buffer>): Buffer {
+  const parts: Buffer[] = [Buffer.from('SIUED1'), Buffer.from([Object.keys(files).length])];
+  for (const [name, bytes] of Object.entries(files)) {
+    const size = Buffer.alloc(4);
+    size.writeUInt32BE(bytes.length);
+    parts.push(Buffer.from([name.length]), Buffer.from(name), size, bytes);
+  }
+  return Buffer.concat(parts);
 }
 
 export async function publishFixtureDraft(request: APIRequestContext, base: string, key: string): Promise<void> {
-  const file = (name: string, mimeType: string) => ({ name, mimeType, buffer: readFileSync(join(DRAFT, name)) });
-  const res = await request.post(`${base}music/api/drafts.php`, {
-    headers: { Authorization: `Bearer ${key}` },
-    multipart: {
-      piece: 'test-piece', version: '1',
-      score: file('score.json', 'application/json'), musicxml: file('score.musicxml', 'application/xml'),
-      audio_webm: file('audio.webm', 'audio/webm'), spectrogram: file('spectrogram.png', 'image/png'),
-    },
+  const read = (name: string) => readFileSync(join(DRAFT, name));
+  const res = await request.post(`${base}music/api/drafts.php?piece=test-piece&version=1`, {
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/octet-stream' },
+    data: draftBundle({ 'score.json': read('score.json'), 'score.musicxml': read('score.musicxml'), 'audio.webm': read('audio.webm'), 'spectrogram.png': read('spectrogram.png') }),
   });
   expect([201, 409]).toContain(res.status());
 }
@@ -2162,7 +2567,7 @@ test('open a piece, play, seek, switch views, read a term, no CSP violations', a
 });
 ```
 
-The labels the check uses (`Email me a link`, `Sign in`, `Label`, the scope checkboxes, `Create key`, `[data-new-key]`) are the admin pages' own; if the admin login's keys panel names them differently, use its names (read `admin/keys.php` and `Admin\Pages::keysPanel` first).
+The labels the check uses (`Email`, `Email me a link`, `Sign in`, `Label`, one checkbox per scope labelled with the scope, `Create key`, and the new key in `code.secret`) are the admin pages' own, as `Admin\Pages` renders them.
 
 - [ ] **Step 3: Run it** — `make music-e2e`. Expected: the check passes and `MUSIC-E2E-OK` prints; `docker compose ls` shows no `music-e2e-*` project afterwards.
 
@@ -2171,7 +2576,7 @@ The labels the check uses (`Email me a link`, `Sign in`, `Label`, the scope chec
 - [ ] **Step 5: Commit and open PR 2**
 
 ```bash
-git add websites/www.cs/compose.music-local.yaml websites/www.cs/docker/nginx/fastcgi_params.https-local websites/www.cs/tests/e2e/local.config.ts websites/www.cs/tests/e2e/workroom.local.ts websites/www.cs/games/workroom websites/www.cs/Makefile websites/www.cs/music/README.md
+git add websites/www.cs/compose.music-local.yaml websites/www.cs/tests/e2e/local.config.ts websites/www.cs/tests/e2e/workroom.local.ts websites/www.cs/games/workroom websites/www.cs/Makefile websites/www.cs/music/README.md
 git commit -m "Music workroom: local browser check for the four views
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -2186,13 +2591,13 @@ Open the PR (foundry `pr-fix-loop`): "Music workroom: the page, four views and t
 
 Start from `main` after PR 2 merged.
 
-### Task 10: Sealing, unlocking and remembering the key (TypeScript)
+### Task 10: Sealing and unlocking the keyring (TypeScript)
 
 **Files:**
-- Create: `games/workroom/src/note.ts`, `src/seal.ts`, `src/unlock.ts`, `src/vault.ts`, `src/public-key.ts`, `src/idb.ts`
+- Create: `games/workroom/src/note.ts`, `src/seal.ts`, `src/unlock.ts`, `src/vault.ts`, `src/public-key.ts`
 - Create: `games/workroom/tools/make-fixtures.ts`, `test/fixtures/test-key.json`, `test/fixtures/public.json`, `test/fixtures/note-text.sealed`, `test/fixtures/note-hum.sealed`
-- Create: `games/workroom/test/seal.test.ts`, `test/unlock.test.ts`, `test/vault.test.ts`, `test/public-key.test.ts`, `test/fixture-key.ts`
-- Modify: `games/workroom/test/fixtures/public-key.ts` (the test key), `tsconfig.json` (`note.ts`, `seal.ts`, `unlock.ts`, `vault.ts`, `public-key.ts`), `src/tsconfig.dom.json` (`idb.ts`)
+- Create: `games/workroom/test/seal.test.ts`, `test/unlock.test.ts`, `test/vault.test.ts`, `test/no-storage.test.ts`, `test/public-key.test.ts`, `test/fixture-key.ts`
+- Modify: `games/workroom/test/fixtures/public-key.ts` (the test key), `tsconfig.json` (`note.ts`, `seal.ts`, `unlock.ts`, `vault.ts`, `public-key.ts`)
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks but the folder.
@@ -2223,53 +2628,56 @@ export function headerFingerprint(bundle: Uint8Array): string | null;
 /** Checks the built-in fingerprint first; throws FingerprintMismatch and seals nothing when it differs. */
 export function seal(body: NoteBody, audio: Uint8Array | null, key: BuiltInKey): Promise<Uint8Array>;
 export interface Opened { fingerprint: string; body: NoteBody; audio: Uint8Array | null }
+/** Picks the key the bundle's header names out of the keyring. */
 export function open(bundle: Uint8Array, keyring: ReadonlyMap<string, CryptoKey>): Promise<Opened>;
 
 // src/unlock.ts
 export const ITERATIONS = 600_000;
-export interface LockedKey { v: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; fingerprint: string; ct: string }
+export const KEYRING_AAD = 'siue-music-keyring-v1';
+export interface LockedKeyring { v: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ct: string }
 export class WrongPassphrase extends Error {}
-export class LockedKeyInvalid extends Error {}
+export class KeyringInvalid extends Error {}
 export function normalizePassphrase(p: string): Uint8Array; // NFC, trimmed, UTF-8
-/** A non-extractable RSA-OAEP SHA-256 private key (usages ['decrypt']) that is proven to pair with publicKey. */
-export function unlock(locked: LockedKey, passphrase: string, publicKey: BuiltInKey): Promise<CryptoKey>;
-/** The same format Python's lock() writes; the page never locks, tests and fixtures do. */
-export function lock(pkcs8: Uint8Array, passphrase: string, fingerprint: string): Promise<LockedKey>;
+/**
+ * Unlocks the whole keyring. `known` lists the public keys built into the page, the current one first. Every entry
+ * whose fingerprint is in `known` becomes a non-extractable RSA-OAEP SHA-256 private key (usages ['decrypt']) proven
+ * to pair with that public key; entries the page has no public key for are skipped. The result is in keyring order.
+ * KeyringInvalid when the envelope is weak or malformed, the plaintext is malformed or repeats a fingerprint, the
+ * keyring lacks known[0] (the current key), or an entry does not pair with its public key; WrongPassphrase when
+ * the passphrase does not decrypt it.
+ */
+export function unlockKeyring(locked: LockedKeyring, passphrase: string, known: readonly BuiltInKey[]): Promise<Map<string, CryptoKey>>;
+/** The format Python's lock_keyring writes (current key first); the page never locks, tests and fixtures do. */
+export function lockKeyring(keys: readonly { fingerprint: string; pkcs8: Uint8Array }[], passphrase: string): Promise<LockedKeyring>;
 
-// src/vault.ts
-export interface KeyStore { get(fp: string): Promise<CryptoKey | undefined>; put(fp: string, key: CryptoKey): Promise<void>; keys(): Promise<string[]>; clear(): Promise<void> }
-export function memoryKeyStore(): KeyStore;
+// src/vault.ts: unlocked keys, in memory only
 export interface Vault {
   keyring(): ReadonlyMap<string, CryptoKey>;
   has(fp: string): boolean;
-  /** The fingerprints in fps with no key yet (what the page must ask the passphrase for). */
+  /** The fingerprints in fps with no key (a note sealed to a key the keyring does not hold). */
   missing(fps: readonly string[]): string[];
-  /** Refuses an extractable key. remember=true also stores it. */
-  add(fp: string, key: CryptoKey, remember: boolean): Promise<void>;
-  /** Loads remembered keys; returns how many. */
-  restore(): Promise<number>;
-  /** Erases every remembered key and empties the keyring. */
-  forget(): Promise<void>;
+  /** Replaces the keyring with the unlocked keys. Throws on an extractable key. Nothing is stored anywhere. */
+  load(keys: ReadonlyMap<string, CryptoKey>): void;
+  /** Empties the keyring. */
+  clear(): void;
 }
-export function createVault(store: KeyStore): Vault;
+export function createVault(): Vault;
 
 // src/public-key.ts (written by `siue-music keys init|rotate`)
 export const PUBLIC_KEY: BuiltInKey | null;
 export const PREVIOUS_KEYS: readonly BuiltInKey[];
-
-// src/idb.ts (DOM)
-export function indexedDbKeyStore(db?: string): KeyStore; // database "siue-music", store "keys"; CryptoKey objects stored as they are (structured clone keeps them non-extractable)
 ```
 
 `test/fixture-key.ts` (shared by the tests):
 
 ```ts
-// The committed TEST key pair (tools/make-fixtures.ts): used by nothing but tests.
+// The committed TEST key pairs (tools/make-fixtures.ts): used by nothing but tests.
+// `fx` is the current key; `fx.other` is an earlier key a rotation retained. Both are in fx.keyring.
 import { readFileSync } from 'node:fs';
-import type { LockedKey } from '../src/unlock.ts';
+import type { LockedKeyring } from '../src/unlock.ts';
 import type { BuiltInKey } from '../src/seal.ts';
 
-export interface TestKey { label: string; fingerprint: string; spki: string; pkcs8: string; passphrase: string; locked: LockedKey; other: { fingerprint: string; spki: string; pkcs8: string } }
+export interface TestKey { label: string; fingerprint: string; spki: string; pkcs8: string; passphrase: string; keyring: LockedKeyring; other: { fingerprint: string; spki: string; pkcs8: string } }
 export const fx = JSON.parse(readFileSync(new URL('./fixtures/test-key.json', import.meta.url), 'utf8')) as TestKey;
 export const builtIn: BuiltInKey = { fingerprint: fx.fingerprint, spki: fx.spki };
 export const otherKey: BuiltInKey = { fingerprint: fx.other.fingerprint, spki: fx.other.spki };
@@ -2292,7 +2700,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { FingerprintMismatch, NoteUnreadable, fingerprintOf, headerFingerprint, open, seal } from '../src/seal.ts';
 import type { NoteBody } from '../src/note.ts';
-import { b64, builtIn, fx, hex, importPrivate, otherKey } from './fixture-key.ts';
+import { b64, builtIn, fx, hex, importPrivate } from './fixture-key.ts';
 
 const body: NoteBody = {
   v: 1, kind: 'text', piece: 'test-piece', draft: 1, from: 8, to: 12, fromBar: 5, toBar: 6, lane: 'brass',
@@ -2327,6 +2735,13 @@ test('a public key whose fingerprint differs from the built-in one is refused', 
   await assert.rejects(seal(body, null, { fingerprint: fx.fingerprint, spki: fx.other.spki }), FingerprintMismatch);
 });
 
+test('open picks the key the header names out of a keyring of several', async () => {
+  const keyring = new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)], [fx.other.fingerprint, await importPrivate(fx.other.pkcs8)]]);
+  const toOther = await seal(body, null, { fingerprint: fx.other.fingerprint, spki: fx.other.spki });
+  assert.equal(headerFingerprint(toOther), fx.other.fingerprint);
+  assert.equal((await open(toOther, keyring)).body.text, body.text);
+});
+
 test('tampering fails with a reason', async () => {
   const keyring = new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)], [fx.other.fingerprint, await importPrivate(fx.other.pkcs8)]]);
   const bundle = await seal(body, null, builtIn);
@@ -2339,7 +2754,6 @@ test('tampering fails with a reason', async () => {
   await assert.rejects(open(bundle.slice(0, 30), keyring), isReason('format'));
   await assert.rejects(open(new Uint8Array(0), keyring), isReason('format'));
   await assert.rejects(open(bundle, new Map()), isReason('unknown-key'));
-  void otherKey;
 });
 
 test('the committed fixture notes still open (the format is stable)', async () => {
@@ -2355,91 +2769,149 @@ test('the committed fixture notes still open (the format is stable)', async () =
 `test/unlock.test.ts`:
 
 ```ts
-// Unlocking: the right passphrase gives a non-extractable key proven to pair
-// with the built-in public key; a wrong one fails cleanly; a weak or swapped
-// locked key is refused.
+// Unlocking the keyring: the right passphrase gives non-extractable keys, each
+// proven to pair with its built-in public key; a wrong one fails cleanly; a
+// weak, malformed, swapped or incomplete keyring is refused.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LockedKeyInvalid, WrongPassphrase, lock, unlock } from '../src/unlock.ts';
+import { KeyringInvalid, WrongPassphrase, lockKeyring, unlockKeyring } from '../src/unlock.ts';
 import { open, seal } from '../src/seal.ts';
 import { b64, builtIn, fx, otherKey } from './fixture-key.ts';
 
-test('the right passphrase unlocks a non-extractable key that opens notes', async () => {
-  const key = await unlock(fx.locked, fx.passphrase, builtIn);
-  assert.equal(key.extractable, false);
-  assert.deepEqual(key.usages, ['decrypt']);
-  await assert.rejects(crypto.subtle.exportKey('pkcs8', key));
-  const note = await seal({ v: 1, kind: 'text', piece: 'p', draft: 1, from: 0, to: 1, fromBar: 1, toBar: 1, lane: null, text: 'hi', reaction: null, curve: null, audio: null, made: '2026-10-20T00:00:00.000Z' }, null, builtIn);
-  assert.equal((await open(note, new Map([[fx.fingerprint, key]]))).body.text, 'hi');
+const note = { v: 1 as const, kind: 'text' as const, piece: 'p', draft: 1, from: 0, to: 1, fromBar: 1, toBar: 1, lane: null, text: 'hi', reaction: null, curve: null, audio: null, made: '2026-10-20T00:00:00.000Z' };
+
+test('the right passphrase unlocks every known key, non-extractable, in keyring order', async () => {
+  const ring = await unlockKeyring(fx.keyring, fx.passphrase, [builtIn, otherKey]);
+  assert.deepEqual([...ring.keys()], [fx.fingerprint, fx.other.fingerprint]);
+  for (const key of ring.values()) {
+    assert.equal(key.extractable, false);
+    assert.deepEqual(key.usages, ['decrypt']);
+    await assert.rejects(crypto.subtle.exportKey('pkcs8', key));
+  }
+  assert.equal((await open(await seal(note, null, builtIn), ring)).body.text, 'hi');
+  assert.equal((await open(await seal(note, null, otherKey), ring)).body.text, 'hi');
 });
 
 test('a wrong passphrase fails cleanly', async () => {
-  await assert.rejects(unlock(fx.locked, 'not the passphrase', builtIn), WrongPassphrase);
-  await assert.rejects(unlock(fx.locked, '', builtIn), WrongPassphrase);
+  await assert.rejects(unlockKeyring(fx.keyring, 'not the passphrase', [builtIn, otherKey]), WrongPassphrase);
+  await assert.rejects(unlockKeyring(fx.keyring, '', [builtIn, otherKey]), WrongPassphrase);
 });
 
 test('spaces around it and the Unicode form do not matter', async () => {
   // The fixture passphrase ends in "café" with a composed é; type it decomposed with a newline.
   const typed = `  ${fx.passphrase.normalize('NFD')}\n`;
   assert.notEqual(typed.trim(), fx.passphrase);
-  assert.equal((await unlock(fx.locked, typed, builtIn)).extractable, false);
+  assert.equal((await unlockKeyring(fx.keyring, typed, [builtIn])).size, 1);
 });
 
-test('a weak, mismatched or swapped locked key is refused', async () => {
-  await assert.rejects(unlock({ ...fx.locked, iterations: 1000 }, fx.passphrase, builtIn), LockedKeyInvalid);
-  await assert.rejects(unlock(fx.locked, fx.passphrase, otherKey), LockedKeyInvalid);
-  const swapped = await lock(b64(fx.other.pkcs8), fx.passphrase, fx.fingerprint);
-  await assert.rejects(unlock(swapped, fx.passphrase, builtIn), LockedKeyInvalid, 'unlocks, but to a key that does not pair with the public key');
+test('keys the page has no public key for are skipped', async () => {
+  const ring = await unlockKeyring(fx.keyring, fx.passphrase, [builtIn]);
+  assert.deepEqual([...ring.keys()], [fx.fingerprint]);
+});
+
+test('a weak or malformed keyring is refused before any key is derived', async () => {
+  for (const bad of [{ iterations: 1000 }, { v: 2 }, { kdf: 'scrypt' }, { salt: 'AAAA' }, { iv: 'AAAA' }, { ct: '' }]) {
+    await assert.rejects(unlockKeyring({ ...fx.keyring, ...bad } as typeof fx.keyring, fx.passphrase, [builtIn]), KeyringInvalid, JSON.stringify(bad));
+  }
+});
+
+test('a keyring without the current key, or with a key that does not pair, is refused', async () => {
+  const onlyOld = await lockKeyring([{ fingerprint: fx.other.fingerprint, pkcs8: b64(fx.other.pkcs8) }], fx.passphrase);
+  await assert.rejects(unlockKeyring(onlyOld, fx.passphrase, [builtIn, otherKey]), KeyringInvalid, 'the current key is missing');
+  await assert.rejects(unlockKeyring(fx.keyring, fx.passphrase, []), KeyringInvalid, 'the page has no key at all');
+  const swapped = await lockKeyring([{ fingerprint: fx.fingerprint, pkcs8: b64(fx.other.pkcs8) }], fx.passphrase);
+  await assert.rejects(unlockKeyring(swapped, fx.passphrase, [builtIn]), KeyringInvalid, 'unlocks, but to a key that does not pair with the public key');
+  const twice = await lockKeyring([{ fingerprint: fx.fingerprint, pkcs8: b64(fx.pkcs8) }, { fingerprint: fx.fingerprint, pkcs8: b64(fx.pkcs8) }], fx.passphrase);
+  await assert.rejects(unlockKeyring(twice, fx.passphrase, [builtIn]), KeyringInvalid, 'a fingerprint twice');
 });
 ```
 
 `test/vault.test.ts`:
 
 ```ts
-// Remember this device keeps a non-extractable key; Forget erases it; after a
-// rotation the remembered old key still opens old notes and only the new
-// fingerprint is missing.
+// The vault holds unlocked keys in memory only and refuses extractable ones.
+// A device that signs in after a rotation unlocks the one keyring and opens
+// notes sealed to the old key and to the new one.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createVault, memoryKeyStore } from '../src/vault.ts';
-import { unlock } from '../src/unlock.ts';
+import { createVault } from '../src/vault.ts';
+import { unlockKeyring } from '../src/unlock.ts';
 import { open, seal } from '../src/seal.ts';
-import { builtIn, fx } from './fixture-key.ts';
+import type { NoteBody } from '../src/note.ts';
+import { builtIn, fx, otherKey } from './fixture-key.ts';
 
-const key = await unlock(fx.locked, fx.passphrase, builtIn);
+const note = (text: string): NoteBody => ({ v: 1, kind: 'text', piece: 'p', draft: 1, from: 0, to: 1, fromBar: 1, toBar: 1, lane: null, text, reaction: null, curve: null, audio: null, made: '2026-10-20T00:00:00.000Z' });
 
-test('remembered across a reload, erased by forget', async () => {
-  const store = memoryKeyStore();
-  await createVault(store).add(fx.fingerprint, key, true);
-  assert.deepEqual(await store.keys(), [fx.fingerprint]);
-  const reloaded = createVault(store);
-  assert.equal(await reloaded.restore(), 1);
-  assert.ok(reloaded.has(fx.fingerprint));
-  assert.equal((await store.get(fx.fingerprint))?.extractable, false);
-  await reloaded.forget();
-  assert.deepEqual(await store.keys(), []);
-  assert.equal(reloaded.keyring().size, 0);
+test('load replaces the keyring and clear empties it', async () => {
+  const v = createVault();
+  assert.equal(v.keyring().size, 0);
+  v.load(await unlockKeyring(fx.keyring, fx.passphrase, [builtIn, otherKey]));
+  assert.ok(v.has(fx.fingerprint) && v.has(fx.other.fingerprint));
+  v.load(await unlockKeyring(fx.keyring, fx.passphrase, [builtIn]));
+  assert.ok(v.has(fx.fingerprint) && !v.has(fx.other.fingerprint), 'a load replaces what was there');
+  v.clear();
+  assert.equal(v.keyring().size, 0);
 });
 
-test('without remember nothing is stored', async () => {
-  const store = memoryKeyStore();
-  const v = createVault(store);
-  await v.add(fx.fingerprint, key, false);
-  assert.ok(v.has(fx.fingerprint));
-  assert.deepEqual(await store.keys(), []);
-});
-
-test('an extractable key is never remembered', async () => {
+test('an extractable key is refused', async () => {
   const pair = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['encrypt', 'decrypt']);
-  await assert.rejects(createVault(memoryKeyStore()).add('ff'.repeat(32), pair.privateKey, true));
+  assert.throws(() => createVault().load(new Map([['ff'.repeat(32), pair.privateKey]])));
 });
 
-test('after a rotation: old notes open, only the new key is missing', async () => {
-  const v = createVault(memoryKeyStore());
-  await v.add(fx.fingerprint, key, true);
-  const old = await seal({ v: 1, kind: 'text', piece: 'p', draft: 1, from: 0, to: 1, fromBar: 1, toBar: 1, lane: null, text: 'old', reaction: null, curve: null, audio: null, made: '2026-10-20T00:00:00.000Z' }, null, builtIn);
-  assert.equal((await open(old, v.keyring())).body.text, 'old');
-  assert.deepEqual(v.missing([fx.other.fingerprint, fx.fingerprint]), [fx.other.fingerprint]);
+test('after a rotation a newly signed-in device opens notes sealed before and after it', async () => {
+  // fx is the current key; fx.other is the earlier key the rotation retained; both are in the one keyring.
+  const sealedBefore = await seal(note('sealed before the rotation'), null, otherKey);
+  const sealedAfter = await seal(note('sealed after the rotation'), null, builtIn);
+  const device = createVault(); // a phone that has never held a key
+  assert.deepEqual(device.missing([otherKey.fingerprint, fx.fingerprint]), [otherKey.fingerprint, fx.fingerprint]);
+  device.load(await unlockKeyring(fx.keyring, fx.passphrase, [builtIn, otherKey]));
+  assert.deepEqual(device.missing([otherKey.fingerprint, fx.fingerprint]), []);
+  assert.equal((await open(sealedBefore, device.keyring())).body.text, 'sealed before the rotation');
+  assert.equal((await open(sealedAfter, device.keyring())).body.text, 'sealed after the rotation');
+});
+```
+
+`test/no-storage.test.ts`:
+
+```ts
+// Nothing of any key is ever written to browser storage: unlocking, loading
+// the vault, sealing and opening touch no IndexedDB, localStorage,
+// sessionStorage, cookie or Cache API, and the key modules do not even name them.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createVault } from '../src/vault.ts';
+import { unlockKeyring } from '../src/unlock.ts';
+import { open, seal } from '../src/seal.ts';
+import { builtIn, fx, otherKey } from './fixture-key.ts';
+
+const touched: string[] = [];
+const trap = (name: string) => new Proxy({}, {
+  get: (_t, p) => { touched.push(`${name}.${String(p)}`); return () => undefined; },
+  set: (_t, p) => { touched.push(`${name}.${String(p)}=`); return true; },
+});
+for (const name of ['indexedDB', 'localStorage', 'sessionStorage', 'caches']) {
+  Object.defineProperty(globalThis, name, { value: trap(name), configurable: true });
+}
+Object.defineProperty(globalThis, 'document', {
+  configurable: true,
+  value: { get cookie() { touched.push('document.cookie'); return ''; }, set cookie(_v: string) { touched.push('document.cookie='); } },
+});
+
+test('unlocking, using and clearing the vault touch no browser storage', async () => {
+  const vault = createVault();
+  vault.load(await unlockKeyring(fx.keyring, fx.passphrase, [builtIn, otherKey]));
+  const sealed = await seal({ v: 1, kind: 'text', piece: 'p', draft: 1, from: 0, to: 1, fromBar: 1, toBar: 1, lane: null, text: 'hi', reaction: null, curve: null, audio: null, made: '2026-10-20T00:00:00.000Z' }, null, builtIn);
+  assert.equal((await open(sealed, vault.keyring())).body.text, 'hi');
+  vault.clear();
+  assert.deepEqual(touched, []);
+});
+
+test('the modules that handle keys never name a browser store', () => {
+  for (const file of ['note', 'seal', 'unlock', 'vault', 'public-key']) {
+    const source = readFileSync(new URL(`../src/${file}.ts`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /indexedDB|localStorage|sessionStorage|document\.cookie|\bcaches\b/, `${file}.ts`);
+  }
 });
 ```
 
@@ -2474,13 +2946,14 @@ test('public-key.ts and music/keys/public.json agree', async () => {
 - [ ] **Step 2: Write the fixture maker** (`tools/make-fixtures.ts`), run with `node workroom/tools/make-fixtures.ts` from `games/` once the modules exist (Step 4):
 
 ```ts
-// Writes the TEST key pair and fixtures the unit tests, the Python tests and
-// the local browser check share. Rerun only to replace the test key; the
-// committed files are what every test reads.
+// Writes the TEST key pairs and fixtures the unit tests, the Python tests and
+// the local browser check share: a current key and an earlier one a rotation
+// retained, both locked in one keyring. Rerun only to replace the test keys;
+// the committed files are what every test reads.
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fingerprintOf, seal } from '../src/seal.ts';
-import { lock } from '../src/unlock.ts';
+import { lockKeyring } from '../src/unlock.ts';
 
 const dir = join(import.meta.dirname, '..', 'test', 'fixtures');
 const b64 = (u: ArrayBuffer | Uint8Array) => Buffer.from(u instanceof Uint8Array ? u : new Uint8Array(u)).toString('base64');
@@ -2494,29 +2967,31 @@ const main = await pair();
 const other = await pair();
 const passphrase = 'test passphrase for the workroom fixtures, café';
 const fixture = {
-  label: 'TEST KEY: used by nothing but tests. Never a real notes key.',
+  label: 'TEST KEYS: used by nothing but tests. Never a real notes key.',
   fingerprint: main.fingerprint, spki: main.spki, pkcs8: main.pkcs8, passphrase,
-  locked: await lock(main.raw, passphrase, main.fingerprint),
+  keyring: await lockKeyring([{ fingerprint: main.fingerprint, pkcs8: main.raw }, { fingerprint: other.fingerprint, pkcs8: other.raw }], passphrase),
   other: { fingerprint: other.fingerprint, spki: other.spki, pkcs8: other.pkcs8 },
 };
 writeFileSync(join(dir, 'test-key.json'), JSON.stringify(fixture, null, 2) + '\n');
-writeFileSync(join(dir, 'public.json'), JSON.stringify({ schema: 1, current: { fingerprint: main.fingerprint, spki: main.spki }, previous: [] }, null, 2) + '\n');
-writeFileSync(join(dir, 'public-key.ts'), `// The TEST key pair's public half, built into the page only by tools/e2e-bundle.ts.\nexport const PUBLIC_KEY = ${JSON.stringify({ fingerprint: main.fingerprint, spki: main.spki })};\nexport const PREVIOUS_KEYS = [];\n`);
-const key = { fingerprint: main.fingerprint, spki: main.spki };
+const publicOf = (k: { fingerprint: string; spki: string }) => ({ fingerprint: k.fingerprint, spki: k.spki });
+writeFileSync(join(dir, 'public.json'), JSON.stringify({ schema: 1, current: publicOf(main), previous: [publicOf(other)] }, null, 2) + '\n');
+writeFileSync(join(dir, 'public-key.ts'), `// The test keys' public halves, built into the page only by tools/e2e-bundle.ts.\nexport const PUBLIC_KEY = ${JSON.stringify(publicOf(main))};\nexport const PREVIOUS_KEYS = [${JSON.stringify(publicOf(other))}];\n`);
+const key = publicOf(main);
 const base = { v: 1 as const, piece: 'test-piece', draft: 1, from: 64, to: 78, fromBar: 33, toBar: 40, lane: 'brass', reaction: null, curve: null, made: '2026-10-17T12:00:00.000Z' };
 writeFileSync(join(dir, 'note-text.sealed'), await seal({ ...base, kind: 'text', text: 'Fixture note: louder at bar 33', audio: null }, null, key));
 writeFileSync(join(dir, 'note-hum.sealed'), await seal({ ...base, kind: 'hum', text: null, audio: { mime: 'audio/webm', seconds: 2 } }, new Uint8Array(2048).fill(7), key));
-console.log(`fixtures: test key ${main.fingerprint}`);
+console.log(`fixtures: test keys ${main.fingerprint} (current), ${other.fingerprint} (earlier)`);
 ```
 
-- [ ] **Step 3: Run the tests to see them fail** — `node --test workroom/test/seal.test.ts workroom/test/unlock.test.ts workroom/test/vault.test.ts workroom/test/public-key.test.ts` — FAIL (modules missing).
+- [ ] **Step 3: Run the tests to see them fail** — `node --test workroom/test/seal.test.ts workroom/test/unlock.test.ts workroom/test/vault.test.ts workroom/test/no-storage.test.ts workroom/test/public-key.test.ts` — FAIL (modules missing).
 
 - [ ] **Step 4: Implement**, then run the fixture maker.
 
 - `seal`: `importKey('spki', ...)` only after `fingerprintOf(spki) === key.fingerprint` (else `FingerprintMismatch`); `aes = generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt'])`; `wrapped = encrypt({ name: 'RSA-OAEP' }, pub, exportKey('raw', aes))`; header = magic ‖ fingerprint bytes; plaintext = uint32 J ‖ JSON ‖ audio; `encrypt({ name: 'AES-GCM', iv, additionalData: header }, aes, plaintext)`; concatenate per the bundle table.
-- `open`: length < 52 or wrong magic or `L` past the end → `format`; fingerprint not in keyring → `unknown-key`; any failure of RSA decrypt, AES-GCM decrypt or a JSON body that does not parse as a `NoteBody` (`v === 1`, known `kind`) → `tampered`.
-- `unlock`: `v`, `kdf`, `iterations >= ITERATIONS`, `fingerprint === publicKey.fingerprint` else `LockedKeyInvalid` (checked before PBKDF2 runs); derive `PBKDF2(SHA-256, salt, iterations)` → AES-GCM key; decrypt with `additionalData = UTF-8(fingerprint)`; failure → `WrongPassphrase`; import the PKCS8 with `extractable: false`, usages `['decrypt']`; prove the pair: encrypt 32 random bytes with the public key, decrypt with the private key, compare; failure → `LockedKeyInvalid`.
-- `vault.add` throws on `key.extractable`; `memoryKeyStore` keeps the `CryptoKey` objects in a `Map`.
+- `open`: length < 52 or wrong magic or `L` past the end → `format`; the header's fingerprint not in the keyring → `unknown-key`; any failure of RSA decrypt, AES-GCM decrypt or a JSON body that does not parse as a `NoteBody` (`v === 1`, known `kind`) → `tampered`.
+- `unlockKeyring`: before any key is derived, check `v === 1`, `kdf === 'PBKDF2-SHA-256'`, `Number.isInteger(iterations) && iterations >= ITERATIONS`, `salt` decoding to 16 bytes, `iv` to 12 bytes and `ct` to at least 17 bytes, and that `known` is not empty (else `KeyringInvalid`); derive `PBKDF2(SHA-256, salt, iterations)` → AES-GCM key; decrypt with `additionalData = UTF-8(KEYRING_AAD)`; failure → `WrongPassphrase`; parse the plaintext (`v === 1`, `keys` an array of `{ fingerprint: /^[0-9a-f]{64}$/, pkcs8: base64 }`, no fingerprint twice, else `KeyringInvalid`); the entries must include `known[0].fingerprint` (else `KeyringInvalid`); for each entry whose fingerprint is in `known`, import the PKCS8 with `extractable: false`, usages `['decrypt']`, and prove the pair: encrypt 32 random bytes with that entry's built-in public key, decrypt with the private key, compare (failure → `KeyringInvalid`); entries not in `known` are skipped.
+- `lockKeyring`: the inverse, for tests and fixtures: random 16-byte salt and 12-byte IV, `ITERATIONS` rounds, the plaintext JSON of Formats, the same additional data.
+- `vault.load` throws on any `key.extractable` and copies the map; `vault` has no other state and no storage.
 - `public-key.ts` starts as `export const PUBLIC_KEY: BuiltInKey | null = null; export const PREVIOUS_KEYS: readonly BuiltInKey[] = [];` with a comment that `siue-music keys init|rotate` writes it.
 
 Run `node workroom/tools/make-fixtures.ts` (writes the five fixture files, replacing `test/fixtures/public-key.ts`).
@@ -2527,7 +3002,7 @@ Run `node workroom/tools/make-fixtures.ts` (writes the five fixture files, repla
 
 ```bash
 git add websites/www.cs/games/workroom
-git commit -m "Music workroom: sealing, unlocking and remembering the key in the browser
+git commit -m "Music workroom: sealing and unlocking the keyring in the browser
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
@@ -2541,7 +3016,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 - Modify: `websites/www.cs/Makefile` (new targets `keys-status`, `keys-pull`, `keys-forget`, `api-key-set`, `music-tools-venv`, `music-tools-test`), `music/README.md`
 
 **Interfaces:**
-- Consumes: the bundle and lock formats (Task 10's fixtures), `music/keys/public.json`.
+- Consumes: the bundle and keyring formats (Task 10's fixtures), `music/keys/public.json`.
 - Produces:
 
 ```python
@@ -2569,18 +3044,18 @@ class Op:
     def archive(self, item_id: str) -> None             # op item delete ID --vault V --archive
 
 # siue_music/sealing.py
-MAGIC = b"SIUEN1"; ITERATIONS = 600_000
+MAGIC = b"SIUEN1"; ITERATIONS = 600_000; KEYRING_AAD = b"siue-music-keyring-v1"
 class NoteUnreadable(Exception): reason: str           # "format" | "unknown-key" | "tampered"
 class WrongPassphrase(Exception): ...
-class LockedKeyInvalid(Exception): ...
+class KeyringInvalid(Exception): ...
 @dataclass(frozen=True) class Opened: fingerprint: str; body: dict; audio: bytes
 def fingerprint(spki_der: bytes) -> str
 def generate() -> tuple[bytes, bytes]                   # (pkcs8_der, spki_der), RSA-4096, e = 65537
 def spki_of(pkcs8_der: bytes) -> bytes
 def normalize_passphrase(p: str) -> bytes               # NFC, strip, UTF-8
 def new_passphrase() -> str                             # secrets.token_urlsafe(32): 43 characters
-def lock(pkcs8_der: bytes, passphrase: str, fp: str) -> dict
-def unlock(locked: dict, passphrase: str) -> bytes
+def lock_keyring(keys: Mapping[str, bytes], passphrase: str) -> dict         # fp -> pkcs8 DER, current first; the Formats envelope
+def unlock_keyring(locked: dict, passphrase: str) -> dict[str, bytes]        # the same order; KeyringInvalid (weak or malformed) / WrongPassphrase
 def seal(body: dict, audio: bytes, spki_der: bytes) -> bytes
 def open_bundle(bundle: bytes, keyring: Mapping[str, bytes]) -> Opened
 
@@ -2598,12 +3073,12 @@ class Keys:
     def __init__(self, op: Op, cache: Cache, public_json: Path, public_ts: Path, out: Callable[[str], None] = print): ...
     def status(self) -> int
     def pull(self) -> None
-    def ensure_synced(self) -> dict[str, bytes]   # fp -> pkcs8 DER for every repo key it holds; the current one guaranteed
+    def ensure_synced(self) -> dict[str, bytes]   # fp -> pkcs8 DER for every repo key it holds, the current one first (guaranteed present), then `previous` in repository order
     def forget(self) -> None
     def api_key_set(self, name: str, secret: str) -> None
     def api_key(self, name: str) -> str
     def passphrase(self) -> str                   # from the current key's 1Password item; never printed
-    # Task 12 adds: init(upload), rotate(upload), upload_locked(upload)
+    # Task 12 adds: init(upload), rotate(upload), upload_keyring(upload), keyring()
 
 # siue_music/cli.py
 def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int
@@ -2977,9 +3452,18 @@ class SealingTest(unittest.TestCase):
         self.assertEqual((hum.body["kind"], len(hum.audio)), ("hum", 2048))
 
     def test_unlocks_what_the_browser_locked(self):
-        self.assertEqual(sealing.unlock(self.fx["locked"], self.fx["passphrase"]), self.pkcs8)
+        other = base64.b64decode(self.fx["other"]["pkcs8"])
+        ring = sealing.unlock_keyring(self.fx["keyring"], self.fx["passphrase"])
+        self.assertEqual(ring, {self.fx["fingerprint"]: self.pkcs8, self.fx["other"]["fingerprint"]: other})
+        self.assertEqual(list(ring), [self.fx["fingerprint"], self.fx["other"]["fingerprint"]], "current first")
         with self.assertRaises(sealing.WrongPassphrase):
-            sealing.unlock(self.fx["locked"], "wrong")
+            sealing.unlock_keyring(self.fx["keyring"], "wrong")
+
+    def test_a_keyring_round_trips_in_order(self):
+        (fp0, pkcs0, _), (fp1, pkcs1, _) = pool_key(0), pool_key(1)
+        locked = sealing.lock_keyring({fp1: pkcs1, fp0: pkcs0}, "a test passphrase")
+        self.assertEqual(set(locked), {"v", "kdf", "iterations", "salt", "iv", "ct"})
+        self.assertEqual(list(sealing.unlock_keyring(locked, "a test passphrase").items()), [(fp1, pkcs1), (fp0, pkcs0)])
 
     def test_round_trip_and_tampering(self):
         fp, pkcs8, spki = pool_key(0)
@@ -2992,9 +3476,10 @@ class SealingTest(unittest.TestCase):
                 sealing.open_bundle(blob, {fp: pkcs8} if reason != "unknown-key" else {})
             self.assertEqual(e.exception.reason, reason)
 
-    def test_weak_locks_are_refused(self):
-        with self.assertRaises(sealing.LockedKeyInvalid):
-            sealing.unlock({**self.fx["locked"], "iterations": 1000}, self.fx["passphrase"])
+    def test_weak_or_malformed_keyrings_are_refused(self):
+        for bad in ({"iterations": 1000}, {"v": 2}, {"kdf": "scrypt"}, {"salt": "AAAA"}, {"iv": "AAAA"}, {"ct": ""}):
+            with self.assertRaises(sealing.KeyringInvalid, msg=str(bad)):
+                sealing.unlock_keyring({**self.fx["keyring"], **bad}, self.fx["passphrase"])
 
 
 if __name__ == "__main__":
@@ -3043,10 +3528,10 @@ Expected: FAIL — `ModuleNotFoundError: siue_music`.
 
 - [ ] **Step 5: Implement.**
   - `Op._run(args, stdin=None)`: `run([*exe, *args], input=stdin, capture_output=True, text=True)`; a non-zero exit raises `OpError(f"op {args[0]} {args[1]} failed: {first stderr line}")`. `check_version` parses `op --version` and compares to `MIN_VERSION`. `create` sends `json.dumps({"title", "category", "tags", "fields", "urls": [{"href": u, "primary": i == 0}]})` on stdin.
-  - `sealing` uses `cryptography`: `rsa.generate_private_key(65537, 4096)`; OAEP with `MGF1(SHA256)` and `SHA256`; `AESGCM`; `PBKDF2HMAC(SHA256, 32, salt, ITERATIONS)`; AAD as in the formats section; `open_bundle` maps every failure to `NoteUnreadable` with the same reasons as the page.
+  - `sealing` uses `cryptography`: `rsa.generate_private_key(65537, 4096)`; OAEP with `MGF1(SHA256)` and `SHA256`; `AESGCM`; `PBKDF2HMAC(SHA256, 32, salt, ITERATIONS)`; AAD as in the formats section (`KEYRING_AAD` for the keyring); `unlock_keyring` checks the envelope before deriving anything, then the plaintext (`v`, a `keys` list, no fingerprint twice, each fingerprint equal to the SHA-256 of its key's SPKI, else `KeyringInvalid`); `open_bundle` maps every failure to `NoteUnreadable` with the same reasons as the page.
   - `Cache.save`: `mkdir(mode=0o700, parents=True)` then `os.chmod(dir, 0o700)`; write to `music.json.tmp` opened with `os.open(..., O_WRONLY | O_CREAT | O_TRUNC, 0o600)`, `os.replace` onto `music.json`.
   - `Keys.pull`: for each item tagged `siue-music-key`, read its fields, check `fingerprint(spki_of(b64decode(private_key))) == fingerprint field` (else `KeyMismatch("The 1Password item <title> holds a private key whose fingerprint is <A>, not <B>: fix the item")`), keep it; for each item tagged `siue-music-api`, keep `name → credential`; save the cache.
-  - `Keys.ensure_synced`: no `current` → `KeyMismatch("No notes key yet: run make keys-init")`; current in cache → return the cache's keys that the repository names; else `pull()` and look again; still missing → the two messages: with keys in 1Password the repository does not know: `1Password holds a key the repository does not know (<display>). The repository may be out of date: git pull, then run this again. If it is up to date, the repository's key <display> was never saved to 1Password: run make keys-status.`; otherwise: `1Password (vault <V>) has no private key for the repository's public key <display>. Check OP_VAULT, or the key was never saved to 1Password: run make keys-status.`
+  - `Keys.ensure_synced`: no `current` → `KeyMismatch("No notes key yet: run make keys-init")`; current in cache → return the cache's keys that the repository names, current first; else `pull()` and look again; still missing → the two messages: with keys in 1Password the repository does not know: `1Password holds a key the repository does not know (<display>). The repository may be out of date: git pull, then run this again. If it is up to date, the repository's key <display> was never saved to 1Password: run make keys-status.`; otherwise: `1Password (vault <V>) has no private key for the repository's public key <display>. Check OP_VAULT, or the key was never saved to 1Password: run make keys-status.`
   - `Keys.status`: prints the repository's current fingerprint (display form), 1Password's fingerprints (or "unreachable: <reason>"), the cache's, one line `match` / `out of date: <side>` per side, and `API keys: <names>` (names only); returns 0 when all match, 3 otherwise.
   - `Keys.api_key_set`: refuses anything but 64 lowercase hex (`KeysError`); archives an existing item with that name; creates the new one; does not touch the cache.
   - `cli.main`: `keys status|pull|forget`, `api-key-set NAME` (the secret read with `getpass.getpass("API key (shown once on the hub): ")` when stdin is a terminal, else one line from stdin); `KeyMismatch` → message on stderr, exit 3; `KeysError`/`OpError` → message, exit 1. `OP_VAULT` defaults to `SIUE`; `SIUE_OP` overrides the `op` executable.
@@ -3066,34 +3551,42 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ### Task 12: `keys-init`, `keys-rotate` and `keys-upload`
 
 **Files:**
-- Create: `music/tools/siue_music/api.py`, `music/tools/tests/test_keys_lifecycle.py`, `music/tools/tests/make_fixture.py`, `games/workroom/test/fixtures/locked-by-python.json`
+- Create: `music/tools/siue_music/api.py`, `music/tools/tests/test_keys_lifecycle.py`, `music/tools/tests/test_api.py`, `music/tools/tests/make_fixture.py`, `games/workroom/test/fixtures/keyring-by-python.json`
 - Modify: `music/tools/siue_music/keys.py`, `cli.py`, `websites/www.cs/Makefile` (`keys-init`, `keys-rotate`, `keys-upload`), `games/workroom/test/unlock.test.ts` (one test), `tests/php/MusicDeployTest.php` (expects `music/keys/public.json` when it exists), `music/README.md`
 
 **Interfaces:**
-- Consumes: `Op`, `Cache`, `Keys`, `sealing.generate/lock/unlock/new_passphrase`.
+- Consumes: `Op`, `Cache`, `Keys`, `sealing.generate/lock_keyring/unlock_keyring/new_passphrase`.
 - Produces:
 
 ```python
 # siue_music/api.py
+MAX_REQUEST_BYTES = 8_388_608                              # what the server accepts in one draft request
 class ApiError(Exception): status: int
+def draft_size(files: Mapping[str, Path]) -> int           # the SIUED1 body's length in bytes
+def draft_container(files: Mapping[str, Path]) -> bytes    # the SIUED1 bundle of the Formats section
 class Api:
     """HTTPS only (http:// allowed only for localhost and 127.0.0.1, the local docker check)."""
     def __init__(self, base: str, key: str, opener: Callable = urllib.request.urlopen): ...
     def waiting(self) -> list[dict]                        # GET api/notes.php?state=waiting
     def note(self, note_id: str) -> bytes                  # GET api/note.php?id=
     def mark_picked_up(self, note_id: str) -> None         # POST api/picked-up.php?id=
-    def publish_draft(self, piece: str, version: int, files: Mapping[str, Path]) -> None  # POST api/drafts.php multipart
-    def publish_locked_key(self, locked: dict) -> None     # POST api/locked-key.php
+    def publish_draft(self, piece: str, version: int, files: Mapping[str, Path]) -> None  # POST api/drafts.php?piece=&version= (application/octet-stream, Content-Length set)
+    def publish_keyring(self, locked: dict) -> None        # POST api/keyring.php (JSON)
 
 # siue_music/keys.py (added)
 Upload = Callable[[dict], None]
 class Keys:
-    def init(self, upload: Upload | None) -> str           # returns the new fingerprint
-    def rotate(self, upload: Upload | None) -> str
-    def upload_locked(self, upload: Upload) -> int         # re-uploads a locked copy of every repository key; returns the count
+    def init(self, upload: Upload | None) -> str           # returns the new fingerprint; uploads a keyring of one
+    def rotate(self, upload: Upload | None) -> str         # uploads the full keyring, replacing the stored one
+    def upload_keyring(self, upload: Upload) -> int        # re-locks and uploads the full keyring of every repository key; returns the number of keys in it
+    def keyring(self) -> dict[str, bytes]                  # fp -> pkcs8 DER for the current key then every retained one, from ensure_synced()
 ```
 
-`init` order: refuse (`KeysError("A notes key already exists ...: use make keys-rotate")`) when `public.json` has a current key **or** 1Password holds any `siue-music-key` item; generate the pair and `new_passphrase()`; create the 1Password item (nothing is written anywhere if this fails); write `public.json` (`current` = new, `previous` = []) and `public-key.ts`; save the private key to the cache; then `upload(lock(...))` when an upload is given — a failed or missing upload prints `The locked key was not uploaded (<reason>). After creating the music-publish API key on the hub: make api-key-set NAME=music-publish && make keys-upload` and still exits 0; finally prints the next steps: `(cd games && node _kit/build/build.mjs workroom)`, commit `music/keys/public.json`, `games/workroom/src/public-key.ts`, `games/workroom/dist/`, and compare the hub's fingerprint after the deploy with `make keys-status`. `rotate`: requires `ensure_synced()`; reads the passphrase from the current key's item; generates; creates the new item with the same passphrase; retitles the old item `... (previous)`; writes `public.json` with the old current first in `previous`; caches; uploads. `public-key.ts` is generated as:
+`init` order: refuse (`KeysError("A notes key already exists ...: use make keys-rotate")`) when `public.json` has a current key **or** 1Password holds any `siue-music-key` item; generate the pair and `new_passphrase()`; create the 1Password item (nothing is written anywhere if this fails); write `public.json` (`current` = new, `previous` = []) and `public-key.ts`; save the private key to the cache; then `upload(lock_keyring({new: pkcs8}, passphrase))` when an upload is given, a keyring of one. A failed or missing upload prints `The locked keyring was not uploaded (<reason>). After creating the music-publish API key on the hub: make api-key-set NAME=music-publish && make keys-upload` and still exits 0; finally it prints the next steps: `(cd games && node _kit/build/build.mjs workroom)`, commit `music/keys/public.json`, `games/workroom/src/public-key.ts`, `games/workroom/dist/`, and compare the hub's fingerprint after the deploy with `make keys-status`.
+
+`rotate`: requires `ensure_synced()`; then runs `pull()` once and refuses (`KeysError`, nothing written or uploaded) when the cache still holds no private key for the current key or for any key in `previous`, because a keyring that dropped one would stop opening the notes sealed to it; reads the passphrase from the current key's item; generates; creates the new item with the same passphrase; retitles the old item `... (previous)`; writes `public.json` with the old current first in `previous`; caches; then uploads `lock_keyring` of the new key followed by the old current and every older retained key, in that order, under the same passphrase. The upload replaces the stored keyring.
+
+`upload_keyring`: `ensure_synced()`, then locks and uploads the same full keyring (current first), for when the first upload could not happen. `public-key.ts` is generated as:
 
 ```ts
 // The notes key built into the page: written by `siue-music keys init|rotate`
@@ -3115,15 +3608,19 @@ keys-upload:
 	@$(MUSIC_TOOL) keys upload
 ```
 
-The CLI builds the upload from `Api(base, keys.api_key("music-publish")).publish_locked_key`, base `$SIUE_MUSIC_BASE` or `https://www.cs.siue.edu/~wgrim/music/`.
+The CLI builds the upload from `Api(base, keys.api_key("music-publish")).publish_keyring`, base `$SIUE_MUSIC_BASE` or `https://www.cs.siue.edu/~wgrim/music/`.
 
-- [ ] **Step 1: Write the failing tests** (`tests/test_keys_lifecycle.py`)
+- [ ] **Step 1: Write the failing tests**
+
+`tests/test_keys_lifecycle.py`:
 
 ```python
 """keys-init and keys-rotate: the pair and passphrase go to 1Password first,
-the repository gets only public halves, the uploaded locked key opens with the
-passphrase, rotation keeps the old key and the passphrase, and nothing secret
-reaches argv or output."""
+the repository gets only public halves, the uploaded keyring opens with the
+passphrase and holds the current key and every retained one, rotation keeps
+the old keys and the passphrase and never drops one, a note sealed before a
+rotation opens with the rotated keyring, and nothing secret reaches argv or
+output."""
 import base64
 import json
 import unittest
@@ -3141,7 +3638,7 @@ class LifecycleTest(unittest.TestCase):
     def item_fields(self):
         return [self.w.op.fields(i["id"]) for i in self.w.op.list_items("siue-music-key")]
 
-    def test_init_saves_uploads_and_writes_only_public_halves(self):
+    def test_init_saves_uploads_a_keyring_of_one_and_writes_only_public_halves(self):
         fp = self.w.keys.init(self.uploads.append)
         repo = json.loads(self.w.public_json.read_text())
         self.assertEqual(repo["current"]["fingerprint"], fp)
@@ -3151,8 +3648,8 @@ class LifecycleTest(unittest.TestCase):
         self.assertGreaterEqual(len(passphrase), 40)
         self.assertEqual(sealing.fingerprint(sealing.spki_of(pkcs8)), fp)
         [locked] = self.uploads
-        self.assertEqual((locked["fingerprint"], locked["iterations"]), (fp, 600_000))
-        self.assertEqual(sealing.unlock(locked, passphrase), pkcs8, "the browser's passphrase opens the uploaded copy")
+        self.assertEqual((locked["v"], locked["iterations"], set(locked)), (1, 600_000, {"v", "kdf", "iterations", "salt", "iv", "ct"}))
+        self.assertEqual(sealing.unlock_keyring(locked, passphrase), {fp: pkcs8}, "the browser's passphrase opens the uploaded keyring of one")
         ts = self.w.public_ts.read_text()
         self.assertIn(fp, ts)
         self.assertNotIn(fields["private_key"][:40], ts + self.w.public_json.read_text())
@@ -3175,9 +3672,9 @@ class LifecycleTest(unittest.TestCase):
         fp = self.w.keys.init(fail)
         self.assertIn(fp, self.w.cache.load()["keys"])
         self.assertIn("make keys-upload", "\n".join(self.w.out))
-        self.assertEqual(self.w.keys.upload_locked(self.uploads.append), 1)
+        self.assertEqual(self.w.keys.upload_keyring(self.uploads.append), 1)
 
-    def test_rotate_keeps_the_old_key_and_the_passphrase(self):
+    def test_rotate_uploads_the_full_keyring_and_keeps_the_passphrase(self):
         old = self.w.keys.init(self.uploads.append)
         new = self.w.keys.rotate(self.uploads.append)
         repo = json.loads(self.w.public_json.read_text())
@@ -3186,12 +3683,38 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(len({f["password"] for f in fields}), 1, "one passphrase, so every device keeps working")
         titles = sorted(i["title"] for i in self.w.op.list_items("siue-music-key"))
         self.assertTrue(any(t.endswith("(previous)") and old[:16] in t for t in titles))
-        self.assertEqual(sealing.unlock(self.uploads[-1], fields[0]["password"]), self.w.keys.ensure_synced()[new])
-        pkcs8_old = self.w.keys.ensure_synced()[old]
-        note = sealing.seal({"v": 1, "kind": "text", "text": "before the rotation"}, b"", sealing.spki_of(pkcs8_old))
-        self.assertEqual(sealing.open_bundle(note, self.w.keys.ensure_synced()).body["text"], "before the rotation")
+        ring = self.w.keys.keyring()
+        self.assertEqual(list(ring), [new, old], "current first, then the retained key")
+        unlocked = sealing.unlock_keyring(self.uploads[-1], fields[0]["password"])
+        self.assertEqual(unlocked, ring, "the uploaded keyring is the full keyring, current first")
+        self.assertEqual(len(self.uploads), 2, "init uploaded a keyring of one, rotate the full keyring")
         self.assertIn(new, self.w.public_ts.read_text())
         self.assertIn(old, self.w.public_ts.read_text(), "PREVIOUS_KEYS keeps the old public key")
+
+    def test_a_note_sealed_before_a_rotation_opens_with_the_rotated_keyring(self):
+        old = self.w.keys.init(self.uploads.append)
+        note = sealing.seal({"v": 1, "kind": "text", "text": "before the rotation"}, b"", sealing.spki_of(self.w.keys.keyring()[old]))
+        new = self.w.keys.rotate(self.uploads.append)
+        passphrase = self.item_fields()[0]["password"]
+        for ring in (self.w.keys.ensure_synced(), sealing.unlock_keyring(self.uploads[-1], passphrase)):
+            self.assertEqual(sealing.open_bundle(note, ring).body["text"], "before the rotation")
+        after = sealing.seal({"v": 1, "kind": "text", "text": "after"}, b"", sealing.spki_of(self.w.keys.keyring()[new]))
+        self.assertEqual(sealing.open_bundle(after, sealing.unlock_keyring(self.uploads[-1], passphrase)).body["text"], "after")
+
+    def test_rotate_never_drops_a_retained_key(self):
+        old = self.w.keys.init(self.uploads.append)
+        self.w.keys.rotate(self.uploads.append)
+        count = len(self.uploads)
+        for item in self.w.op.list_items("siue-music-key"):
+            if old[:16] in item["title"]:
+                self.w.op.archive(item["id"])
+        data = self.w.cache.load()
+        del data["keys"][old]
+        self.w.cache.save(data)
+        with self.assertRaises(KeysError):
+            self.w.keys.rotate(self.uploads.append)
+        self.assertEqual(len(self.uploads), count, "nothing was uploaded")
+        self.assertEqual(len(self.item_fields()), 1, "no new item was made")
 
     def test_rotate_refuses_on_a_mismatched_key(self):
         with self.assertRaises(Exception):
@@ -3203,14 +3726,109 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
+`tests/test_api.py`:
+
+```python
+"""The tool's side of the wire formats: the draft body is exactly the SIUED1
+bundle the server parses, the request declares its length, a body past the
+server's 8 MB is refused before it is sent, and plain HTTP is refused."""
+import struct
+import tempfile
+import unittest
+from pathlib import Path
+
+import support  # noqa: F401  (puts siue_music on the path)
+from siue_music.api import MAX_REQUEST_BYTES, Api, ApiError, draft_container, draft_size
+
+
+class FakeResponse:
+    status = 201
+
+    def __init__(self, body=b'{"piece":"p","version":1}'):
+        self.body = body
+
+    def read(self):
+        return self.body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+
+class ApiTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    def files(self, **sizes):
+        out = {}
+        for name, size in sizes.items():
+            path = self.dir / name.replace("_", ".")
+            path.write_bytes(b"x" * size)
+            out[name.replace("_", ".")] = path
+        return out
+
+    def test_the_container_has_the_documented_layout(self):
+        files = self.files(score_json=5, audio_webm=3)
+        body = draft_container(files)
+        self.assertEqual(body[:7], b"SIUED1" + bytes([2]))
+        self.assertEqual(body[7:7 + 1 + 10 + 4 + 5], bytes([10]) + b"score.json" + struct.pack(">I", 5) + b"xxxxx")
+        self.assertEqual(len(body), draft_size(files))
+
+    def test_the_request_declares_its_length_and_carries_the_piece_and_version(self):
+        seen = {}
+
+        def opener(request, timeout=None):
+            seen["url"], seen["headers"], seen["data"], seen["method"] = request.full_url, dict(request.header_items()), request.data, request.get_method()
+            return FakeResponse()
+
+        files = self.files(score_json=5, audio_webm=3)
+        Api("https://example.test/~wgrim/music/", "k" * 64, opener).publish_draft("ch1-labyrinth", 3, files)
+        self.assertEqual(seen["url"], "https://example.test/~wgrim/music/api/drafts.php?piece=ch1-labyrinth&version=3")
+        self.assertEqual((seen["method"], seen["headers"]["Content-type"]), ("POST", "application/octet-stream"))
+        self.assertEqual(seen["headers"]["Content-length"], str(len(seen["data"])))
+        self.assertEqual(seen["data"], draft_container(files))
+        self.assertEqual(seen["headers"]["Authorization"], "Bearer " + "k" * 64)
+
+    def test_a_body_past_the_servers_limit_is_never_sent(self):
+        sent = []
+        files = self.files(audio_webm=MAX_REQUEST_BYTES)
+        with self.assertRaises(ApiError):
+            Api("https://example.test/music/", "k" * 64, lambda *a, **k: sent.append(a)).publish_draft("p", 1, files)
+        self.assertEqual(sent, [])
+
+    def test_a_body_of_exactly_the_limit_is_sent(self):
+        files = self.files(score_json=1, audio_webm=1)
+        overhead = draft_size(files) - 2
+        files = self.files(score_json=1, audio_webm=MAX_REQUEST_BYTES - overhead - 1)
+        self.assertEqual(draft_size(files), MAX_REQUEST_BYTES)
+        sent = []
+        Api("https://example.test/music/", "k" * 64, lambda r, timeout=None: (sent.append(r), FakeResponse())[1]).publish_draft("p", 1, files)
+        self.assertEqual(len(sent), 1)
+
+    def test_plain_http_is_refused_except_for_localhost(self):
+        with self.assertRaises(ApiError):
+            Api("http://www.cs.siue.edu/~wgrim/music/", "k" * 64)
+        Api("http://localhost:5555/music/", "k" * 64)
+        Api("http://127.0.0.1/music/", "k" * 64)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
 Append to `games/workroom/test/unlock.test.ts`:
 
 ```ts
-test('a key Python locked unlocks in the browser', async () => {
+test('a keyring Python locked unlocks in the browser, current key first', async () => {
   const { readFileSync } = await import('node:fs');
-  const locked = JSON.parse(readFileSync(new URL('./fixtures/locked-by-python.json', import.meta.url), 'utf8')) as typeof fx.locked;
-  assert.equal(locked.fingerprint, fx.fingerprint);
-  assert.equal((await unlock(locked, fx.passphrase, builtIn)).extractable, false);
+  const locked = JSON.parse(readFileSync(new URL('./fixtures/keyring-by-python.json', import.meta.url), 'utf8')) as typeof fx.keyring;
+  const ring = await unlockKeyring(locked, fx.passphrase, [builtIn, otherKey]);
+  assert.deepEqual([...ring.keys()], [fx.fingerprint, fx.other.fingerprint]);
+  for (const key of ring.values()) assert.equal(key.extractable, false);
 });
 ```
 
@@ -3219,9 +3837,10 @@ test('a key Python locked unlocks in the browser', async () => {
 - [ ] **Step 3: Write the parity fixture maker** (`tests/make_fixture.py`) and run it once (`$(MUSIC_PY) music/tools/tests/make_fixture.py`):
 
 ```python
-"""Writes games/workroom/test/fixtures/locked-by-python.json: the TEST key from
-test-key.json locked by Python, so the page's tests prove they unlock what the
-tool uploads. Rerun only after tools/make-fixtures.ts replaces the test key."""
+"""Writes games/workroom/test/fixtures/keyring-by-python.json: the TEST keys
+from test-key.json (current, then the earlier one) locked in one keyring by
+Python, so the page's tests prove they unlock what the tool uploads. Rerun only
+after tools/make-fixtures.ts replaces the test keys."""
 import base64
 import json
 
@@ -3229,12 +3848,13 @@ from support import FIXTURES
 from siue_music import sealing
 
 fx = json.loads((FIXTURES / "test-key.json").read_text())
-locked = sealing.lock(base64.b64decode(fx["pkcs8"]), fx["passphrase"], fx["fingerprint"])
-(FIXTURES / "locked-by-python.json").write_text(json.dumps(locked, indent=2) + "\n")
-print("wrote locked-by-python.json")
+keys = {fx["fingerprint"]: base64.b64decode(fx["pkcs8"]), fx["other"]["fingerprint"]: base64.b64decode(fx["other"]["pkcs8"])}
+locked = sealing.lock_keyring(keys, fx["passphrase"])
+(FIXTURES / "keyring-by-python.json").write_text(json.dumps(locked, indent=2) + "\n")
+print("wrote keyring-by-python.json")
 ```
 
-- [ ] **Step 4: Implement** `init`, `rotate`, `upload_locked`, `api.py` (urllib with `Authorization: Bearer`, a 30 s timeout; the base must be `https://`, or `http://localhost[:port]/` / `http://127.0.0.1[:port]/`, else `ApiError`; a non-2xx status raises `ApiError` with the JSON `error`) and the CLI verbs. In `MusicDeployTest::testShipsThePagesApiAndLibrary`, add: `if (is_file(dirname(__DIR__, 2) . '/music/keys/public.json')) self::assertContains('music/keys/public.json', $list);`.
+- [ ] **Step 4: Implement** `init`, `rotate`, `upload_keyring`, `keyring`, `api.py` (urllib with `Authorization: Bearer`, a 30 s timeout; the base must be `https://`, or `http://localhost[:port]/` / `http://127.0.0.1[:port]/`, else `ApiError`; a non-2xx status raises `ApiError` with the JSON `error`; `publish_draft` raises `ApiError` before connecting when `draft_size` exceeds `MAX_REQUEST_BYTES`, and sends `Content-Type: application/octet-stream` with `Content-Length` set explicitly to the body's length; `draft_container` writes the entries in the mapping's order) and the CLI verbs. In `MusicDeployTest::testShipsThePagesApiAndLibrary`, add: `if (is_file(dirname(__DIR__, 2) . '/music/keys/public.json')) self::assertContains('music/keys/public.json', $list);`.
 
 - [ ] **Step 5: Run the tests** — `make music-tools-test` — PASS; `node --test games/workroom/test/unlock.test.ts` — PASS; `vendor/bin/phpunit tests/php/MusicDeployTest.php` — PASS.
 
@@ -3387,6 +4007,24 @@ class PickupTest(unittest.TestCase):
         self.assertEqual(api.marked, [A])
         self.assertTrue((self.notes / f"2027-01-15-{A}" / "audio.webm").exists())
         self.assertEqual(len([n for n in report.notices if "pip install" in n]), 1)
+
+
+class RotationTest(unittest.TestCase):
+    def test_a_note_sealed_before_a_rotation_is_picked_up_with_the_rotated_keyring(self):
+        w = World(self)
+        uploads: list[dict] = []
+        old = w.keys.init(uploads.append)
+        old_spki = sealing.spki_of(w.keys.keyring()[old])
+        w.keys.rotate(uploads.append)
+        body = {"v": 1, "kind": "text", "piece": "test-piece", "draft": 1, "from": 0, "to": 1, "fromBar": 1, "toBar": 1, "lane": None,
+                "text": "sealed before the rotation", "reaction": None, "curve": None, "audio": None, "made": "2027-01-15T08:00:00.000Z"}
+        api = FakeApi({A: sealing.seal(body, b"", old_spki)})
+        with tempfile.TemporaryDirectory() as d:
+            notes = Path(d) / "notes"
+            report = pickup(api, w.keys.ensure_synced(), notes, SITE.parents[1], Steps(transcribe=missing, hum_to_midi=missing))
+            self.assertEqual((report.picked, api.marked), ([A], [A]))
+            saved = json.loads((notes / f"2027-01-15-{A}" / "note.json").read_text())
+        self.assertEqual((saved["body"]["text"], saved["fingerprint"]), ("sealed before the rotation", old))
 
 
 class MismatchNeverReachesTheServer(unittest.TestCase):
@@ -3545,6 +4183,13 @@ class PublishTest(unittest.TestCase):
         self.assertIn("sections[1].from_bar", str(e.exception))
         self.assertEqual(self.api.sent, [])
 
+    def test_a_draft_past_the_servers_8_mb_never_leaves_the_computer(self):
+        (self.v1 / "audio.webm").write_bytes(b"\x1a\x45\xdf\xa3" + b"0" * 8_388_608)
+        with self.assertRaises(PublishError) as e:
+            publish("test-piece", 1, self.pieces, self.api)
+        self.assertIn("8 MB", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+
     def test_a_draft_without_audio_is_refused(self):
         (self.v1 / "audio.webm").unlink()
         with self.assertRaises(PublishError):
@@ -3586,7 +4231,7 @@ Both run `ensure_synced()` first (exit 3 on a mismatch, before any request). `pi
 
 - [ ] **Step 2: Run to see them fail** — `make music-tools-test` — FAIL (modules missing).
 
-- [ ] **Step 3: Implement.** `f0_to_notes`: a frame is voiced when it is a finite number > 0; MIDI = `round(69 + 12 * log2(f / 440))`; consecutive voiced frames with the same MIDI number form one note starting at `index * hop`; notes shorter than `min_seconds` are dropped. `hum_to_midi`: `to_wav`, `librosa.load(wav, sr=16000)`, `librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C6'), sr=16000, frame_length=1024, hop_length=160)`, `f0_to_notes(f0, 160 / 16000)`, then a one-track `mido.MidiFile` at 480 ticks per beat and 60 bpm (one beat a second) with `note_on`/`note_off` per note. Each optional import sits inside its function in `try: ... except ImportError: raise MissingDependency(f"... needs <package>: {INSTALL}")`; `shutil.which('ffmpeg') is None` raises `MissingDependency` too. `score.validate` follows the schema table rule by rule, in the same order as `parseScore`, with the same path spellings.
+- [ ] **Step 3: Implement.** `f0_to_notes`: a frame is voiced when it is a finite number > 0; MIDI = `round(69 + 12 * log2(f / 440))`; consecutive voiced frames with the same MIDI number form one note starting at `index * hop`; notes shorter than `min_seconds` are dropped. `hum_to_midi`: `to_wav`, `librosa.load(wav, sr=16000)`, `librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C6'), sr=16000, frame_length=1024, hop_length=160)`, `f0_to_notes(f0, 160 / 16000)`, then a one-track `mido.MidiFile` at 480 ticks per beat and 60 bpm (one beat a second) with `note_on`/`note_off` per note. Each optional import sits inside its function in `try: ... except ImportError: raise MissingDependency(f"... needs <package>: {INSTALL}")`; `shutil.which('ffmpeg') is None` raises `MissingDependency` too. `score.validate` follows the schema table rule by rule, in the same order as `parseScore`, with the same path spellings. `publish.publish` raises `PublishError("... is over the server's 8 MB limit for one draft")` before any request when `api.draft_size(files)` is over `api.MAX_REQUEST_BYTES`, so the server's 413 is the backstop, not the first answer.
 
 - [ ] **Step 4: Run the tests** — `make music-tools-test` — PASS (the hum and speech fixture tests run when the optional packages are installed: `music/tools/.venv/bin/pip install -r music/tools/requirements-answering.txt` and `brew install ffmpeg`; run them once that way too and see them pass).
 
@@ -3608,7 +4253,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 - Modify: `games/workroom/tsconfig.json` (the six files)
 
 **Interfaces:**
-- Consumes: `NoteBody`, `Reaction`, `REACTION_IDS` (`note.ts`), `Span`, `TempoMap`, `Section`, `View`, `TIMELINE`, `Fetch` (`load.ts`), `Opened`, `NoteUnreadable`, `LockedKey`.
+- Consumes: `NoteBody`, `Reaction`, `REACTION_IDS` (`note.ts`), `Span`, `TempoMap`, `Section`, `View`, `TIMELINE`, `Fetch` (`load.ts`), `Opened`, `NoteUnreadable`, `LockedKeyring`.
 - Produces:
 
 ```ts
@@ -3641,6 +4286,7 @@ export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, n
 
 // src/api.ts
 export class SignedOut extends Error {}
+export class NoKeyring extends Error {} // keyring.php answered 404 no_keyring: keys-init has not uploaded one
 export interface ServerNote { id: string; size: number; arrived_at: number; picked_up_at: number | null }
 export type UploadResult = { kind: 'sent'; id: string } | { kind: 'refused'; reason: Exclude<KeptReason, 'offline' | 'signed_out'> };
 export interface PageApi {
@@ -3649,7 +4295,7 @@ export interface PageApi {
   bytes(id: string): Promise<Uint8Array>;
   remove(id: string): Promise<number>;
   removeAll(): Promise<number>;
-  lockedKeys(): Promise<{ fingerprint: string; locked: LockedKey }[]>;
+  keyring(): Promise<LockedKeyring>; // GET keyring.php → { keyring }
 }
 /** One POST at a time; each sends the token the previous POST returned; a 403 {"error":"csrf"} refreshes the token from csrf.php once and retries once; a redirect is SignedOut. */
 export function createApi(fetch: Fetch, csrf: string): PageApi;
@@ -3679,7 +4325,7 @@ export function stopAfterLimit(timers: Timers, stop: () => void): () => void;
 // one returned, a burned token is refreshed once, and a lost session is SignedOut.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SignedOut, createApi } from '../src/api.ts';
+import { NoKeyring, SignedOut, createApi } from '../src/api.ts';
 import type { Fetch } from '../src/load.ts';
 
 type Init = Parameters<Fetch>[1];
@@ -3729,6 +4375,16 @@ test('a second refusal is not retried again', async () => {
 test('a sign-in redirect is SignedOut', async () => {
   const fetch: Fetch = async () => reply(200, '<html>', true);
   await assert.rejects(createApi(fetch, 'x').list(), SignedOut);
+});
+
+test('the keyring comes from keyring.php; before the first upload there is none', async () => {
+  const locked = { v: 1, kdf: 'PBKDF2-SHA-256', iterations: 600000, salt: 's', iv: 'i', ct: 'c' };
+  const urls: string[] = [];
+  const fetch: Fetch = async url => { urls.push(url); return urls.length === 1 ? reply(200, { keyring: locked }) : reply(404, { error: 'no_keyring' }); };
+  const api = createApi(fetch, 'x');
+  assert.deepEqual(await api.keyring(), locked);
+  await assert.rejects(api.keyring(), NoKeyring);
+  assert.deepEqual(urls, ['keyring.php', 'keyring.php']);
 });
 
 test('upload limits come back as refusals, not errors', async () => {
@@ -3910,7 +4566,7 @@ test('recording stops at 60 seconds, unless cancelled', () => {
 
 - [ ] **Step 2: Run to see them fail** — `node --test workroom/test/{answer,energy,outbox,api,history,recorder}.test.ts` — FAIL.
 
-- [ ] **Step 3: Implement** the six modules. `createApi` keeps a `queue: Promise<unknown>` and chains each POST onto it; a POST sends `X-CSRF` and, for deletes, `Content-Type: application/x-www-form-urlencoded` with `id=<id>` or `all=1`; the upload sends the bundle as `application/octet-stream`. Every response is checked: `redirected` or a non-JSON `Content-Type` → `SignedOut`. `createOutbox.add` puts the note first (`reason: 'new'`), then flushes; `flush` walks `all()` sorted by `made`, stops at the first `offline`, and rewrites a kept note's `reason`.
+- [ ] **Step 3: Implement** the six modules. `createApi` keeps a `queue: Promise<unknown>` and chains each POST onto it; a POST sends `X-CSRF` and, for deletes, `Content-Type: application/x-www-form-urlencoded` with `id=<id>` or `all=1`; the upload sends the bundle as `application/octet-stream`. Every response is checked: `redirected` or a non-JSON `Content-Type` → `SignedOut`; `keyring()` maps a 404 `no_keyring` to `NoKeyring`. `createOutbox.add` puts the note first (`reason: 'new'`), then flushes; `flush` walks `all()` sorted by `made`, stops at the first `offline`, and rewrites a kept note's `reason`.
 
 - [ ] **Step 4: Run the tests** — PASS. Add the files to `tsconfig.json`; `node _kit/build/build.mjs workroom --check` — exit 0.
 
@@ -3927,38 +4583,38 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ### Task 15: The answering views, unlock and history; the full browser check; open PR 3
 
 **Files:**
-- Create: `games/workroom/src/ui/UnlockPanel.tsx`, `src/ui/PinComposer.tsx`, `src/ui/HumButton.tsx`, `src/ui/ReactBar.tsx`, `src/ui/EnergyEditor.tsx`, `src/ui/History.tsx`, `src/ui/PiecesWaiting.tsx`, `games/workroom/test/answering-views.test.ts`
-- Modify: `games/workroom/src/main.ts`, `src/ui/Workroom.tsx` (the answering bar and notes on the timeline), `src/idb.ts` (`indexedDbOutbox()`), `src/tsconfig.dom.json`, `tests/e2e/workroom.local.ts` (second test), `websites/www.cs/Makefile` (`music-e2e` passes `MUSIC_PY`), `music/music.css`, `music/README.md`
+- Create: `games/workroom/src/idb.ts` (`indexedDbOutbox()`, the only IndexedDB use; it stores sealed bundles), `games/workroom/src/ui/UnlockPanel.tsx`, `src/ui/PinComposer.tsx`, `src/ui/HumButton.tsx`, `src/ui/ReactBar.tsx`, `src/ui/EnergyEditor.tsx`, `src/ui/History.tsx`, `src/ui/PiecesWaiting.tsx`, `games/workroom/test/answering-views.test.ts`
+- Modify: `games/workroom/src/main.ts`, `src/ui/Workroom.tsx` (the answering bar and notes on the timeline), `src/tsconfig.dom.json` (`idb.ts`), `tests/e2e/workroom.local.ts` (second test), `websites/www.cs/Makefile` (`music-e2e` passes `MUSIC_PY`), `music/music.css`, `music/README.md`
 
 **Interfaces:**
 - Consumes: everything in Tasks 10 and 14; `Workroom`, `Timeline` (Task 8); `make music-tools-venv` for the check.
 - Produces:
 
 ```tsx
-export function UnlockPanel(p: { busy: boolean; error: string | null; onUnlock(passphrase: string, remember: boolean): void }): JSX.Element;
+export function UnlockPanel(p: { busy: boolean; error: string | null; onUnlock(passphrase: string): void }): JSX.Element;
   // a form with a hidden username field "siue-music" (autocomplete="username") and a password field labelled "Passphrase"
-  // (autocomplete="current-password") so 1Password fills it; checkbox "Remember this device"; button "Unlock notes"
+  // (autocomplete="current-password") so 1Password fills it; button "Unlock notes"; no checkbox and nothing to remember: the passphrase is asked on every visit
 export function PinComposer(p: { span: Span | null; recording: boolean; onSend(text: string): void; onRecord(): void; onStop(): void; onCancel(): void }): JSX.Element;
   // "Select a moment or a span on the timeline" until span is set; textarea "Your note"; buttons "Send", "Record", "Stop", "Cancel"
 export function HumButton(p: { recording: boolean; seconds: number; onStart(): void; onStop(): void }): JSX.Element; // "Hum it" / "Stop (0:12 of 1:00)"
 export function ReactBar(p: { section: Section; onReact(r: Reaction): void }): JSX.Element; // the eight REACTIONS buttons
 export function EnergyEditor(p: { score: Score; view: View; onSend(curve: Curve): void }): JSX.Element; // drag over the energy band; "Send this shape" / "Start over"
-export function History(p: { items: HistoryItem[]; locked: boolean; kept: Pending[]; onDelete(id: string): void; onDeleteAll(): void; onForget(): void }): JSX.Element;
+export function History(p: { items: HistoryItem[]; locked: boolean; kept: Pending[]; onDelete(id: string): void; onDeleteAll(): void }): JSX.Element;
   // each item: when, state ("Waiting" / "Picked up"), its words or a player for its recording (blob: URL), or its problem; "Delete" each;
-  // "Delete all" asks "Delete all N notes? This cannot be undone." with "Delete all notes" / "Keep them"; "Forget this device";
+  // "Delete all" asks "Delete all N notes? This cannot be undone." with "Delete all notes" / "Keep them";
   // kept outbox notes listed with their KEPT_MESSAGES text
 export function PiecesWaiting(p: { counts: Map<string, number> }): JSX.Element; // fills each piece row's [data-waiting="<piece>"] on the index page
 ```
 
 `Workroom` gains an answering bar under the player: "Pin a note" (switches the gestures to `select` and opens `PinComposer`), `HumButton`, "React" (opens `ReactBar` for the section under the playhead) and "Draw the energy" (opens `EnergyEditor` over the energy band); below the views, `History` for this piece.
 
-`main.ts` wiring (thin; everything decided lives in the DOM-free modules): read the CSRF token from `<meta name="csrf">`; `api = createApi(fetch, csrf)`; `vault = createVault(indexedDbKeyStore())` and `await vault.restore()`; `outbox = createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID())`, `flush()` on load and on `online`; when `PUBLIC_KEY` is null the answering bar shows "No notes key yet (make keys-init)" and nothing seals; the needed fingerprints are `[PUBLIC_KEY, ...PREVIOUS_KEYS]` that appear in the history's bundle headers; `vault.missing(...)` non-empty → `UnlockPanel` (unlock each missing fingerprint whose locked copy `api.lockedKeys()` returned, against its `BuiltInKey`); then `api.list()`, `api.bytes(id)` and `open()` per note into the history map (one failure never stops the rest). Sending: build the `NoteBody` with `answer.ts`, `seal(body, audio, PUBLIC_KEY)`, `outbox.add(bundle, body.made)`, show the report, refresh the history. The recorder uses `MediaRecorder` with `pickMime(MediaRecorder.isTypeSupported)` and `stopAfterLimit(window, stop)`.
+`main.ts` wiring (thin; everything decided lives in the DOM-free modules): read the CSRF token from `<meta name="csrf">`; `api = createApi(fetch, csrf)`; `vault = createVault()` (memory only; nothing is restored from anywhere); `outbox = createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID())`, `flush()` on load and on `online`; when `PUBLIC_KEY` is null the answering bar shows "No notes key yet (make keys-init)" and nothing seals. Until the vault holds keys the page shows `UnlockPanel`; on submit it fetches `api.keyring()` (`NoKeyring` → "No notes key has been uploaded yet (make keys-init)."), runs `unlockKeyring(locked, passphrase, [PUBLIC_KEY, ...PREVIOUS_KEYS])` and `vault.load(keys)` (`WrongPassphrase` → "That passphrase did not unlock the key."; `KeyringInvalid` → "The keyring on the server does not match this page's key. Reload the page; if it still fails, run make keys-upload."), then `api.list()`, `api.bytes(id)` and `open(bytes, vault.keyring())` per note into the history map (one failure never stops the rest; a note sealed to a fingerprint `vault.missing(...)` reports is shown as unreadable). Nothing about a key is stored: the passphrase field is cleared after submit and `main.ts` never touches `indexedDB`, `localStorage`, `sessionStorage` or cookies for keys; the only IndexedDB use is `indexedDbOutbox()` (database `siue-music`, store `outbox`), which holds sealed bundles. Sending: build the `NoteBody` with `answer.ts`, `seal(body, audio, PUBLIC_KEY)`, `outbox.add(bundle, body.made)`, show the report, refresh the history. The recorder uses `MediaRecorder` with `pickMime(MediaRecorder.isTypeSupported)` and `stopAfterLimit(window, stop)`.
 
 - [ ] **Step 1: Write the failing component tests** (`test/answering-views.test.ts`)
 
 ```ts
 // The answering views are thin: the unlock form is fillable by a password
-// manager and passes Remember; Delete all asks first; the eight reactions are
+// manager and has nothing to remember; Delete all asks first; the eight reactions are
 // there; Send waits for words.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -3981,19 +4637,18 @@ const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import
 const button = (root: StubElement, text: string) => walk(root).find(e => e.localName === 'button' && e.textContent === text);
 const byAttr = (root: StubElement, name: string, value: string) => walk(root).find(e => e._attrs[name] === value);
 
-test('the unlock form suits a password manager and passes Remember', () => {
+test('the unlock form suits a password manager and offers nothing to remember', () => {
   const root = makeEl('root');
-  const calls: [string, boolean][] = [];
-  render(h(ui.unlock.UnlockPanel, { busy: false, error: null, onUnlock: (p, r) => calls.push([p, r]) }), renderTarget(root));
+  const calls: string[] = [];
+  render(h(ui.unlock.UnlockPanel, { busy: false, error: null, onUnlock: p => calls.push(p) }), renderTarget(root));
   const pass = byAttr(root, 'autocomplete', 'current-password')!;
   assert.ok(byAttr(root, 'autocomplete', 'username'));
   pass.value = 'secret words';
   fire(pass, 'input', { target: pass });
-  const remember = walk(root).find(e => e._attrs.type === 'checkbox')!;
-  remember.checked = true;
-  fire(remember, 'change', { target: remember });
+  assert.equal(walk(root).some(e => e._attrs.type === 'checkbox'), false, 'no remember-this-device checkbox');
+  assert.doesNotMatch(root.textContent, /remember|forget/i);
   fire(walk(root).find(e => e.localName === 'form')!, 'submit', { preventDefault: () => {} });
-  assert.deepEqual(calls, [['secret words', true]]);
+  assert.deepEqual(calls, ['secret words']);
 });
 
 test('a wrong passphrase is shown, not thrown', () => {
@@ -4009,7 +4664,8 @@ test('Delete all asks first', () => {
     { id: 'a'.repeat(32), arrived: 1, pickedUp: null, state: 'waiting', opened: null, problem: null },
     { id: 'b'.repeat(32), arrived: 2, pickedUp: 3, state: 'picked-up', opened: null, problem: null },
   ];
-  render(h(ui.history.History, { items, locked: false, kept: [], onDelete: () => {}, onDeleteAll: () => all++, onForget: () => {} }), renderTarget(root));
+  render(h(ui.history.History, { items, locked: false, kept: [], onDelete: () => {}, onDeleteAll: () => all++ }), renderTarget(root));
+  assert.equal(button(root, 'Forget this device'), undefined, 'there is no remembered device to forget');
   fire(button(root, 'Delete all')!, 'click');
   assert.equal(all, 0);
   assert.match(root.textContent, /Delete all 2 notes\? This cannot be undone\./);
@@ -4040,11 +4696,11 @@ test('Send waits for a span and words', () => {
 
 - [ ] **Step 4: Run the unit tests and build** — `node --test workroom/test/*.test.ts` — PASS; `node _kit/build/build.mjs workroom`; `sh workroom/test.sh` — exit 0.
 
-- [ ] **Step 5: Extend the browser check.** In the Makefile's `music-e2e` recipe, export `MUSIC_PY=$(abspath $(MUSIC_PY))` to the check (`MUSIC_PY=... E2E_BASE_URL=... tests/e2e/run.sh -c local.config.ts`). Add this test to `tests/e2e/workroom.local.ts`, beside the first (same imports, plus `spawnSync` from `node:child_process`, `mkdtempSync`, `writeFileSync` from `node:fs` and `tmpdir` from `node:os`):
+- [ ] **Step 5: Extend the browser check.** In the Makefile's `music-e2e` recipe, export `MUSIC_PY=$(abspath $(MUSIC_PY))` to the check (`MUSIC_PY=... E2E_BASE_URL=... tests/e2e/run.sh -c local.config.ts`). Add this test to `tests/e2e/workroom.local.ts`, beside the first (same imports, plus `mkdtempSync`, `readdirSync` and `writeFileSync` from `node:fs` and `tmpdir` from `node:os`):
 
 ```ts
 const FIXTURES = join(SITE, 'games', 'workroom', 'test', 'fixtures');
-const testKey = JSON.parse(readFileSync(join(FIXTURES, 'test-key.json'), 'utf8')) as { fingerprint: string; pkcs8: string; passphrase: string; locked: object };
+const testKey = JSON.parse(readFileSync(join(FIXTURES, 'test-key.json'), 'utf8')) as { fingerprint: string; pkcs8: string; passphrase: string; keyring: object };
 
 test('pin a note, pick it up with the tool, read and delete it on a second device', async ({ browser, page, request, baseURL }) => {
   const base = baseURL!;
@@ -4055,7 +4711,7 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
   const publish = await createKey(page, base, 'e2e publish', ['drafts:publish', 'keys:publish']);
   const pickupKey = await createKey(page, base, 'e2e pickup', ['notes:pickup']);
   await publishFixtureDraft(request, base, publish);
-  const up = await request.post(`${base}music/api/locked-key.php`, { headers: { Authorization: `Bearer ${publish}` }, data: testKey.locked });
+  const up = await request.post(`${base}music/api/keyring.php`, { headers: { Authorization: `Bearer ${publish}` }, data: testKey.keyring });
   expect(up.status()).toBe(201);
 
   // Pin a typed note on bars 5 to 7 of the horns.
@@ -4086,7 +4742,7 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
   await page.reload();
   await expect(page.getByText('Picked up', { exact: true })).toBeVisible();
 
-  // A second device: sign in, unlock with the passphrase, read, delete; remembered across a reload; forgotten on request.
+  // A second device: sign in, unlock with the passphrase, read, delete. Nothing is remembered: no key reaches browser storage and a reload asks again.
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const p2 = await phone.newPage();
   await routeBundle(p2);
@@ -4096,16 +4752,30 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
   await p2.getByRole('button', { name: 'Unlock notes' }).click();
   await expect(p2.getByText('That passphrase did not unlock the key.')).toBeVisible();
   await p2.getByLabel('Passphrase').fill(testKey.passphrase);
-  await p2.getByLabel('Remember this device').check();
   await p2.getByRole('button', { name: 'Unlock notes' }).click();
   await expect(p2.getByText('louder and slower right here')).toBeVisible();
+  const stored = await p2.evaluate(async () => {
+    const stores: string[] = [];
+    for (const info of await indexedDB.databases()) {
+      if (!info.name) continue;
+      const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open(info.name!); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+      stores.push(...Array.from(db.objectStoreNames).map(s => `${info.name}/${s}`));
+      db.close();
+    }
+    return { local: Object.keys(localStorage), session: Object.keys(sessionStorage), stores, cookies: document.cookie };
+  });
+  expect(stored.local).toEqual([]);
+  expect(stored.session).toEqual([]);
+  expect(stored.stores.filter(s => !s.endsWith('/outbox'))).toEqual([]);
+  expect(stored.cookies).toBe('');
   await p2.reload();
+  await expect(p2.getByRole('button', { name: 'Unlock notes' })).toBeVisible();
+  await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
+  await p2.getByLabel('Passphrase').fill(testKey.passphrase);
+  await p2.getByRole('button', { name: 'Unlock notes' }).click();
   await expect(p2.getByText('louder and slower right here')).toBeVisible();
   await p2.getByRole('button', { name: 'Delete', exact: true }).first().click();
   await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
-  await p2.getByRole('button', { name: 'Forget this device' }).click();
-  await p2.reload();
-  await expect(p2.getByRole('button', { name: 'Unlock notes' })).toBeVisible();
   await phone.close();
 });
 ```

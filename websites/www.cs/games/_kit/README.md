@@ -204,11 +204,10 @@ has a way in and a way out, standard or prefixed. Only the toggle and
 
 ## The back key (`keys.ts`)
 
-Q closes whatever is open in every game but one: `isBackKey(ev)` is Q in either
+Q closes whatever is open: `isBackKey(ev)` is Q in either
 case with no Ctrl, Cmd or Alt and nothing being composed, and `typesText(target)`
 says when Q is a letter instead (a box that takes text). A held Q acts once:
-callers ignore `ev.repeat`. Crete is the exception: with nothing open, Q is Quit
-there, and Q is back only for the install steps and the Share field. Crete's key router asks `isBackKey` for Q and `typesText` for the seed box; Cylon's ability keys skip a typing target through `typesText`. No game listens for
+callers ignore `ev.repeat`. Crete's key router owns Q: with nothing open it opens the menu, and it closes whatever card is open; the install steps and the Share field own Q while they are open. It asks `isBackKey` for Q and `typesText` for the seed box; Cylon's ability keys skip a typing target through `typesText`. No game listens for
 Escape and no hint names it: Safari and Firefox always leave full screen on
 Esc, and no page can stop them (`tankity/test/fullscreen.test.ts` fails on a
 binding, listener or visible hint that asks for it).

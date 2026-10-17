@@ -36,11 +36,11 @@ test('a span with no notes in its lane keeps its ribbon', () => {
   assert.deepEqual(c!.ribbon, { x: 400, y: 76 + TIMELINE.laneH - TIMELINE.ribbonH, w: 400, h: TIMELINE.ribbonH });
 });
 
-test("a single note sits in the middle of its lane's band", () => {
+test("a single-note span's star sits on that note's place in the lane's scale", () => {
   const s: Score = { ...crete, motifs: [{ id: 'ariadne', character: 'ariadne', spans: [{ lane: 'brass', from: 12, to: 16 }] }] };
   const [c] = at(s);
   assert.deepEqual(c!.stars.map(x => x.note), [5]);
-  close(c!.stars[0]!.y, 118 + 12);
+  close(c!.stars[0]!.y, 118); // the lane's highest note (69 of 62..69)
 });
 
 test("another lane's notes inside the span's time are not stars", () => {
@@ -54,4 +54,33 @@ test('star sizes by velocity: under 64 small, under 96 middle, else big', () => 
 
 test('a sound effect with no characters has no constellations', () => {
   assert.deepEqual(at(read('score-sound-v1.json')), []);
+});
+
+test("a star sits exactly on its note's bar in the lane", () => {
+  const view = fitView(crete.duration, 800);
+  const layout = layoutTimeline(crete, tempoMap(crete), view);
+  for (const star of layoutConstellations(crete, layout, view)[0]!.stars) {
+    const bar = layout.notes.find(n => n.index === star.note)!;
+    close(star.y, bar.rect.y + TIMELINE.noteH / 2);
+  }
+});
+
+test('a tune that repeats transposed keeps its shape, offset in y', () => {
+  const note = (start: number, pitch: number) => ({ lane: 'brass', start, length: 1, pitch, velocity: 80, motif: 'ariadne' });
+  const s: Score = {
+    ...crete,
+    notes: [note(0, 60), note(1, 64), note(2, 62), note(8, 67), note(9, 71), note(10, 69), note(11, 60)],
+    motifs: [{ id: 'ariadne', character: 'ariadne', spans: [{ lane: 'brass', from: 0, to: 4 }, { lane: 'brass', from: 8, to: 11 }] }],
+  };
+  const [a, b] = at(s);
+  const ys = (c: typeof a) => c!.stars.map(x => x.y);
+  const dy = ys(b)[0]! - ys(a)[0]!;
+  ys(a).forEach((y, i) => close(ys(b)[i]!, y + dy));
+  assert.notEqual(dy, 0);
+});
+
+test('a lane with one pitch puts its stars in the middle of the band', () => {
+  const s: Score = { ...crete, notes: crete.notes.map(n => (n.lane === 'brass' ? { ...n, pitch: 65 } : n)) };
+  const ys = at(s)[0]!.stars.map(x => x.y);
+  ys.forEach(y => assert.ok(Number.isFinite(y) && Math.abs(y - 130) < 1e-9, `${y}`));
 });

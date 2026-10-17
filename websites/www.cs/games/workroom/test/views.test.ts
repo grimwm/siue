@@ -236,3 +236,21 @@ test('the glow is painted first, behind the sections, the lanes, the lane notes 
     assert.ok(first > glow, `${attr} is drawn after (on top of) the glow`);
   }
 });
+
+test('a constellation is named for assistive technology and its decoration is hidden', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  assert.equal(withAttr(root, 'data-motif')[0]!._attrs['aria-label'], "Ariadne's tune: 3 notes, rising");
+  for (const a of ['data-glow', 'data-star', 'data-constellation-line']) {
+    for (const e of withAttr(root, a)) assert.equal(e._attrs['aria-hidden'], 'true', a);
+  }
+});
+
+test('two timelines get their own glow filter', () => {
+  const ids = [0, 1].map(() => {
+    const root = makeEl('root');
+    render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+    return withAttr(root, 'data-glow')[0]!._attrs['filter'];
+  });
+  assert.notEqual(ids[0], ids[1]);
+});

@@ -66,7 +66,7 @@ One small Preact component per recurring part, each styled only with tokens: `Bu
 
 ### Constellation drawing
 
-A DOM-free module `src/constellation.ts` turns a score into stars: for each motif span, the notes in that lane between `from` and `to`, each placed at its time (x) and pitch (y within the lane's band, scaled to the motif's own pitch range so a small tune still has shape), sized by velocity (three sizes), joined in time order. A motif span with no notes in its lane draws its ribbon (today's look) instead. Unit tests cover the placement, the sizing and the empty-span fallback with the Crete fixture.
+A DOM-free module `src/constellation.ts` turns a score into stars: for each motif span, the notes in that lane between `from` and `to`, each placed at its time (x) and pitch (y within the lane's band, on the same pitch scale as the lane's dimmed note bars, so each star sits on its note and a tune that repeats keeps its shape), sized by velocity (three sizes), joined in time order. A motif span with no notes in its lane draws its ribbon (today's look) instead. Unit tests cover the placement, the sizing and the empty-span fallback with the Crete fixture.
 
 ### "How to read this" guide
 

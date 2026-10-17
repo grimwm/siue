@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { sectionTimes, tempoMap } from '../src/tempo.ts';
+import { changeTimes, sectionTimes, tempoMap } from '../src/tempo.ts';
 import type { Score } from '../src/score.ts';
 
 const score = (): Score => JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
@@ -37,4 +37,10 @@ test('a music section covers its bars, the last to the end of the piece', () => 
   const s = score();
   const m = tempoMap(s);
   assert.deepEqual(s.sections.map(x => sectionTimes(x, m, s.duration)), [{ from: 0, to: 8 }, { from: 8, to: 16 }]);
+});
+
+test('a change covers its bars on a music piece and its seconds on a sound piece', () => {
+  const m = tempoMap(score());
+  assert.deepEqual(changeTimes({ from_bar: 3, to_bar: 4, lane: null, text: 'x', answers: [] }, m, 16), { from: 4, to: 8 });
+  assert.deepEqual(changeTimes({ from: 0.1, to: 0.3, lane: null, text: 'x', answers: [] }, tempoMap(sound()), 0.4), { from: 0.1, to: 0.3 });
 });

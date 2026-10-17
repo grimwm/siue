@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { axisTicks, formatSeconds, secondsTicks } from '../src/axis.ts';
+import { axisTicks, formatSeconds, secondsTicks, thinTicks } from '../src/axis.ts';
 import { tempoMap } from '../src/tempo.ts';
 import { fitView, zoomAt, boundsFor } from '../src/zoom.ts';
 import type { Score } from '../src/score.ts';
@@ -35,4 +35,10 @@ test('a music piece is ticked by bar, a sound piece by seconds', () => {
   const seconds = axisTicks(sound, tempoMap(sound), fitView(sound.duration, 800));
   assert.equal(seconds[1]!.label, '50 ms');
   assert.ok(seconds.every(t => t.bar === null));
+});
+
+test('labels that would overlap are skipped, never squeezed', () => {
+  const ticks = [{ x: 0, label: '1', bar: 1 }, { x: 10, label: '2', bar: 2 }, { x: 40, label: '300 ms', bar: null }, { x: 45, label: '350 ms', bar: null }, { x: 120, label: '400 ms', bar: null }];
+  assert.deepEqual(thinTicks(ticks).map(t => t.label), ['1', '300 ms', '400 ms']);
+  assert.deepEqual(thinTicks([]), []);
 });

@@ -39,3 +39,18 @@ export function axisTicks(score: Score, tempo: TempoMap, view: View): AxisTick[]
   }
   return out;
 }
+
+const CHAR_PX = 7;
+const LABEL_PAD_PX = 8;
+
+/** The ticks whose labels can be read: left to right, a tick is kept only when its label starts after the end of the last kept one (about 7 px a character plus 8 px of air). */
+export function thinTicks(ticks: readonly AxisTick[]): AxisTick[] {
+  const out: AxisTick[] = [];
+  let free = -Infinity;
+  for (const t of ticks) {
+    if (t.x < free) continue;
+    out.push(t);
+    free = t.x + t.label.length * CHAR_PX + LABEL_PAD_PX;
+  }
+  return out;
+}

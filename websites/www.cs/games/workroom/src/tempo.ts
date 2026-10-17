@@ -1,6 +1,6 @@
 // The tempo map: where each bar of a music piece starts in seconds, and the
 // seconds a section covers. A sound piece has no bars. DOM-free.
-import type { Score, Section } from './score.ts';
+import type { Change, Score, Section } from './score.ts';
 
 export interface TempoMap {
   /** true for a music piece (bars and tempo); false for a sound piece, which has seconds only. */
@@ -48,4 +48,10 @@ export function tempoMap(score: Score): TempoMap {
 export function sectionTimes(section: Section, tempo: TempoMap, duration: number): { from: number; to: number } {
   if (tempo.metric) return { from: tempo.barStart(section.from_bar ?? 1), to: tempo.barStart((section.to_bar ?? 0) + 1) };
   return { from: section.from ?? 0, to: section.to ?? duration };
+}
+
+/** The seconds a change covers: a music change from the start of from_bar to the start of the bar after to_bar; a sound change its own from and to. */
+export function changeTimes(change: Change, tempo: TempoMap, duration: number): { from: number; to: number } {
+  if (tempo.metric) return { from: tempo.barStart(change.from_bar ?? 1), to: tempo.barStart((change.to_bar ?? 0) + 1) };
+  return { from: change.from ?? 0, to: change.to ?? duration };
 }

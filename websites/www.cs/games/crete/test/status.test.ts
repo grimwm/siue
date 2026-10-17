@@ -1,26 +1,34 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { statusView } from '../src/status.ts';
-import type { StatusInput } from '../src/status.ts';
 
-const base: StatusInput = { hp: 7, maxHp: 10, turns: 12, pages: 1, totalPages: 3, score: 340, fuses: 2, bashCd: 0, frozen: 0, inSafe: false, foeDist: 6 };
+const base = { trial: 'The first gate', hearts: 4, relicsLeft: 2, keys: { red: 1, blue: 0, yellow: 0, green: 1 }, gear: ['flippers'] as const, moves: 12, stone: 0 };
 
-test('plain numbers read as they are', () => {
-  assert.deepEqual(statusView(base), {
-    hp: '7/10', turns: '12', pages: '1/3', score: '340', fuses: '2', bash: 'ready', foe: '6',
-    foeNote: '6 steps away — and it moves twice',
-  });
+test('hearts are a heart and a number; keys and gear list what is held', () => {
+  const v = statusView(base);
+  assert.equal(v.hearts, '♥ 4');
+  assert.equal(v.heartsNote, '4 hearts left');
+  assert.equal(v.relics, '2');
+  assert.equal(v.moves, '12');
+  assert.equal(v.keys, '🔴1 🟢1');
+  assert.equal(v.keysNote, 'red key ×1, green key ×1');
+  assert.doesNotMatch(v.keysNote, /blue/i);
+  assert.equal(v.gear, 'flippers');
+  assert.equal(v.trial, 'The first gate');
 });
 
-test('a recharging bash shows its turns; one step away is singular', () => {
-  assert.equal(statusView({ ...base, bashCd: 2 }).bash, '2');
-  assert.equal(statusView({ ...base, foeDist: 1 }).foeNote, '1 step away — and it moves twice');
+test('nothing held reads as none; several gear are joined', () => {
+  const v = statusView({ ...base, keys: { red: 0, blue: 0, yellow: 0, green: 0 }, gear: ['flippers', 'skates'] });
+  assert.equal(v.keys, '');
+  assert.equal(v.keysNote, 'no keys');
+  assert.equal(v.gear, 'flippers, skates');
+  assert.equal(statusView({ ...base, gear: [] }).gear, '');
 });
 
-test('frozen, safe and lost each say so, in that order of precedence', () => {
-  assert.deepEqual(pick(statusView({ ...base, frozen: 2, inSafe: true, foeDist: -1 })), ['❄ 2', 'frozen solid (2 turns)']);
-  assert.deepEqual(pick(statusView({ ...base, frozen: 1 })), ['❄ 1', 'frozen solid (1 turn)']);
-  assert.deepEqual(pick(statusView({ ...base, inSafe: true, foeDist: -1 })), ['safe', 'pacing outside your safe zone']);
-  assert.deepEqual(pick(statusView({ ...base, foeDist: -1 })), ['?', 'lost in the static']);
+test('one heart is singular and a stone Minotaur is said', () => {
+  assert.equal(statusView({ ...base, hearts: 1 }).heartsNote, '1 heart left');
+  const v = statusView({ ...base, stone: 2 });
+  assert.equal(v.trial, 'The first gate');
+  assert.match(v.heartsNote, /the Minotaur is stone for 2 turns/);
+  assert.match(statusView({ ...base, stone: 1 }).heartsNote, /stone for 1 turn$/);
 });
-const pick = (v: ReturnType<typeof statusView>) => [v.foe, v.foeNote];

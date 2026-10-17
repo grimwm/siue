@@ -1,15 +1,21 @@
-/* The Island of Crete: the page. Draws the board, the status bar, the strip,
- * the toast and the cards, and turns keys and clicks into game actions. It
- * reads the engine's state and calls its actions; it holds no rules. Only the
- * engine's types are imported; `createUi` takes the values it borrows as
- * arguments. Needs the DOM lib, so it is in the second program
+/* The Island of Crete: the page. Sizes the board, draws the status bar, the
+ * strip, the toast and the cards, and turns keys and clicks into game
+ * presses. It reads the game's state and calls its actions; it holds no
+ * rules. Needs the DOM lib, so it is in the second program
  * (src/tsconfig.dom.json).
  */
 import { isBackKey, typesText } from "../../_kit/keys.ts";
-import type { Game, ItemDef, ItemKind, LogTone } from "./engine.ts";
-import { KEYS, MOVE_DELTA, actionFor, isMove, itemFor } from "./keys.ts";
+import type { Board } from "./board.ts";
+import { boardRows } from "./board-plan.ts";
+import type { Atlas } from "./board-plan.ts";
+import type { Game, Tone } from "./game.ts";
+import { KEYS, actionFor, isMove, itemFor } from "./keys.ts";
 import { createLayers } from "./layers.ts";
 import type { LayerName } from "./layers.ts";
+import type { Progress } from "./progress.ts";
+import { TOOLS } from "./puzzle/tiles.ts";
+import type { Tool } from "./puzzle/tiles.ts";
+import { TRIALS, trialLevel } from "./puzzle/trials.ts";
 import { statusView } from "./status.ts";
 import { fitCell } from "./fit.ts";
 import { helpLines } from "./help.ts";
@@ -22,25 +28,19 @@ import { renderStoryCard } from "./ui/story.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
 import { renderTitleCard } from "./ui/title.tsx";
+import { renderTrials } from "./ui/trials.tsx";
+import type { TrialRow } from "./ui/trials.tsx";
 
-/** What the page borrows from the engine at run time. */
+/** What the page borrows at run time. */
 export interface UiDeps {
-  ROWS: number;
-  COLS: number;
-  MAX_HP: number;
-  TOTAL_PAGES: number;
-  ITEMS: Record<ItemKind, ItemDef>;
-  /** The key a cell goes by in the engine's sets. */
-  key(r: number, c: number): string;
-  /** The heartbeat sound for a creature close by. */
-  heart(): void;
+  atlas: Atlas;
+  board: Board;
+  progress: Progress;
 }
 
 /** What a key press or click asks of the page. */
 export interface Controls {
   game: Game;
-  /** A new run on this seed ("" for a fresh random one). */
-  restart(seed: string): void;
   toggleMute(): void;
   toggleFullscreen(): void;
   /** Wake the speakers: any gesture does. */
@@ -53,59 +53,66 @@ export interface Controls {
 
 export interface Ui {
   /** A line for the toast and the story log. */
-  say(text: string, tone?: LogTone): void;
+  say(text: string, tone?: Tone): void;
   render(game: Game): void;
-  /** The ending card, over the title card. */
-  showEnd(game: Game, won: boolean): void;
-  clearLog(): void;
-  /** Put the run's seed in the seed box and in the address. */
-  showSeed(seed: string): void;
   setMuted(muted: boolean): void;
   setFullscreen(on: boolean): void;
   bindControls(controls: Controls): void;
   /** The title card, alone; `hint` adds how to close an installed app. */
   showTitle(hint: boolean): void;
+  /** The trial list, over whatever is showing. */
+  showTrials(): void;
   /** Closes every card. */
   closeLayers(): void;
   /** The card showing now, if any. */
   top(): LayerName | null;
 }
 
-const LOOT_EMOJI: Record<string, string> = {
-  shard: "🔮",
-  snack: "🥣",
-  jammer: "📻",
-  page: "📄",
-  fuse: "🔌",
-};
+const TOOL_EMOJI: Record<Tool, string> = { mirror: "🪞", cake: "🍯", cow: "🐄" };
+const TOOL_KINDS = Object.keys(TOOLS) as Tool[];
 
 const LOG_LIMIT = 80;
-const TOAST_MS = 4000;
+const TOAST_MS = 7000;
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
 export function createUi(deps: UiDeps): Ui {
-  const { ROWS, COLS, MAX_HP, TOTAL_PAGES, ITEMS, key } = deps;
-  const itemKinds = Object.keys(ITEMS) as ItemKind[];
-  const itemKeys = itemKinds.map((k) => ITEMS[k].key);
+  const { atlas, board, progress } = deps;
 
   const log: LogLine[] = [];
-  let seedText = "";
-  let runInfo = "";
   let muted = false;
   let full = false;
   let toastTimer = 0;
   let controls: Controls | null = null;
   let game: Game | null = null;
-  let end: EndView = { open: false, kicker: "", title: "", text: "", score: "" };
   let titleHint = false;
+  let end: EndView = { open: false, won: false, hasNext: false, kicker: "", title: "", text: "", score: "" };
+  /** The try whose ending card has been shown, so closing the card does not bring it back. */
+  let endFor: unknown = null;
+  let sized = "";
 
   const layers = createLayers(() => {
-    if (layers.any()) game?.stopAuto();
+    if (layers.any()) game?.stop();
     drawLayers();
   });
 
+  function trialRows(): TrialRow[] {
+    return TRIALS.map((t, i) => {
+      const p = progress.get(t.id);
+      return {
+        title: trialLevel(i).title,
+        status: !p.cleared ? "not yet" : p.assisted ? "cleared with help" : `cleared · best ${p.best}`,
+      };
+    });
+  }
+
+  function pick(i: number): void {
+    layers.clear();
+    controls?.game.open(i);
+  }
+
   function drawLayers(): void {
+    const g = controls?.game ?? game;
     renderTitleCard($("title-root"), {
       open: layers.isOpen("title"),
       hint: titleHint,
@@ -113,29 +120,29 @@ export function createUi(deps: UiDeps): Ui {
       onStory: () => layers.open("story"),
       onSettings: () => layers.open("menu"),
     });
+    renderTrials($("trials-root"), {
+      open: layers.isOpen("trials"),
+      rows: trialRows(),
+      current: g?.trial ?? -1,
+      onPick: pick,
+      onClose: () => layers.close("trials"),
+    });
     renderEndCard($("end-root"), {
       ...end,
       open: layers.isOpen("end"),
-      onAgain: () => controls?.restart(seedText),
+      onNext: () => pick((g?.trial ?? 0) + 1),
+      onRetry: () => pick(g?.trial ?? 0),
+      onTrials: () => layers.open("trials"),
+      onUndo: () => g?.press("undo"),
+      onRestart: () => g?.press("restart"),
     });
     renderStoryCard($("story-root"), { open: layers.isOpen("story"), onClose: () => layers.close("story") });
     renderMenu($("menu-root"), {
       open: layers.isOpen("menu"),
-      seed: seedText,
-      runInfo,
       muted,
       fullscreen: full,
       log,
-      help: helpLines(KEYS, itemKeys),
-      onSeed: (text) => {
-        seedText = text;
-        drawLayers();
-      },
-      onPlaySeed: () => controls?.restart(seedText),
-      onRandom: () => {
-        controls?.wake();
-        controls?.restart("");
-      },
+      help: helpLines(KEYS, TOOLS),
       onSound: () => {
         controls?.wake();
         controls?.toggleMute();
@@ -149,7 +156,7 @@ export function createUi(deps: UiDeps): Ui {
     });
   }
 
-  function say(text: string, tone?: LogTone): void {
+  function say(text: string, tone?: Tone): void {
     log.push(tone ? { text, tone } : { text });
     while (log.length > LOG_LIMIT) log.shift();
     const toast = $("toast");
@@ -160,94 +167,77 @@ export function createUi(deps: UiDeps): Ui {
     if (layers.isOpen("menu")) drawLayers();
   }
 
-  /** The cell size: the largest whole pixel count that fits the space the board has left. */
+  /** The cell size: the largest whole pixel count whose canvas, as the board actually sizes it
+   *  (whole device pixels), fits the space the board has left. */
   function fit(): void {
-    const board = $("board");
-    const stage = $("stage");
-    const bs = getComputedStyle(board);
-    const w = board.clientWidth - parseFloat(bs.paddingLeft) - parseFloat(bs.paddingRight);
-    const h = board.clientHeight - parseFloat(bs.paddingTop) - parseFloat(bs.paddingBottom);
-    const gap = parseFloat(getComputedStyle(stage).columnGap) || 0;
-    stage.style.setProperty("--cell", `${Math.max(1, fitCell(w, h, COLS, ROWS, gap))}px`);
+    const run = game?.run;
+    if (!run) return;
+    const { cols, rows } = run.now.level;
+    const holder = $("board");
+    const canvas = $("stage");
+    const bs = getComputedStyle(holder);
+    const w = holder.clientWidth - parseFloat(bs.paddingLeft) - parseFloat(bs.paddingRight);
+    const h = holder.clientHeight - parseFloat(bs.paddingTop) - parseFloat(bs.paddingBottom);
+    let cell = Math.max(1, fitCell(w, h, cols, boardRows(run.now.level, atlas), 0));
+    board.size(cols, rows, cell);
+    // The board snaps a cell to whole device pixels, which can round it up: read what it made.
+    while (cell > 1 && (parseFloat(canvas.style.width) > w || parseFloat(canvas.style.height) > h)) {
+      cell--;
+      board.size(cols, rows, cell);
+    }
+    sized = `${cols}x${rows}`;
   }
 
   function toolRows(g: Game): ToolRow[] {
-    const G = g.G;
-    return itemKinds.map((kind) => {
-      const def = ITEMS[kind];
-      const useNote = kind === "shard" ? " Move right after." : " Using it costs your turn.";
+    const s = g.run!.now;
+    return TOOL_KINDS.map((kind) => ({
+      kind,
+      emoji: TOOL_EMOJI[kind],
+      name: TOOLS[kind].name,
+      key: TOOLS[kind].key,
+      count: s.tools[kind],
+      desc: TOOLS[kind].desc,
+      disabled: s.outcome !== "playing" || s.tools[kind] <= 0,
+    }));
+  }
+
+  function endView(g: Game): EndView {
+    const run = g.run!;
+    const s = run.now;
+    const won = s.outcome === "won";
+    if (!won) {
       return {
-        kind,
-        emoji: LOOT_EMOJI[kind] ?? "🎁",
-        name: def.name,
-        key: def.key,
-        count: G.inv[kind],
-        desc: (kind === "snack" ? `Heal ${G.snackHeal} HP.` : def.desc) + useNote,
-        disabled: G.over || G.inv[kind] <= 0,
+        open: true, won, hasNext: false, kicker: "Trial failed", title: "The Minotaur has you",
+        text: "Your last heart is gone. Undo a turn or begin the trial again.", score: `${s.moves} moves`,
       };
-    });
+    }
+    const best = progress.get(TRIALS[g.trial]!.id).best;
+    return {
+      open: true, won, hasNext: g.trial + 1 < TRIALS.length, kicker: `Trial ${g.trial + 1} cleared`, title: s.level.title,
+      text: run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.",
+      score: [`${s.moves} moves`, best !== null ? `best ${best}` : "", run.assisted ? "with help" : ""].filter(Boolean).join(" · "),
+    };
   }
 
   function render(g: Game): void {
     game = g;
-    const G = g.G;
-    const { walls, safe, barriers, pickups, player, foe, exit } = G;
-    const stage = $("stage");
-    stage.style.gridTemplateColumns = `repeat(${COLS}, var(--cell, 16px))`;
-    const route = new Set(G.showRoute ? g.goalPath().map((p) => key(p.r, p.c)) : []);
-    let html = "";
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        const k = key(r, c);
-        let ch = walls[r]![c] ? "⬛" : "";
-        let cls = "cell";
-        if (!walls[r]![c] && r === exit.r && c === exit.c) {
-          ch = "🚪";
-          cls += " e";
-        }
-        if (safe.has(k)) {
-          ch = "🛡️";
-          cls += " s";
-        }
-        if (pickups.has(k)) {
-          ch = LOOT_EMOJI[pickups.get(k)!] || "🎁";
-          cls += " i";
-        }
-        if (barriers.has(k)) {
-          ch = "🚧";
-          cls += " g";
-        }
-        if (r === foe.r && c === foe.c && !(r === player.r && c === player.c)) {
-          ch = G.frozen > 0 ? "🥶" : "👹";
-          cls += " c";
-        }
-        if (r === player.r && c === player.c) {
-          ch = "🧑‍💻";
-          cls += " p";
-        }
-        if (route.has(k)) cls += " rt";
-        if (G.hint === k) cls += " hm";
-        html += `<span class="${cls}">${ch}</span>`;
-      }
+    const run = g.run;
+    if (!run) {
+      drawLayers();
+      return;
     }
-    stage.innerHTML = html;
-    fit();
+    const s = run.now;
+    if (sized !== `${s.level.cols}x${s.level.rows}`) fit();
 
-    const d = g.foeDistance();
-    if (!G.over && G.turns > 0 && d >= 0 && d <= 4) deps.heart();
     renderStatus($("status-root"), {
       view: statusView({
-        hp: G.hp,
-        maxHp: MAX_HP,
-        turns: G.turns,
-        pages: G.pages,
-        totalPages: TOTAL_PAGES,
-        score: G.score,
-        fuses: G.fuses,
-        bashCd: G.bashCd,
-        frozen: G.frozen,
-        inSafe: safe.has(key(player.r, player.c)),
-        foeDist: d,
+        trial: `${g.trial + 1}/${TRIALS.length}`,
+        hearts: s.hearts,
+        relicsLeft: s.relicsLeft,
+        keys: s.keys,
+        gear: s.gear,
+        moves: s.moves,
+        stone: s.stone,
       }),
       menuKey: KEYS.menu.label,
       onMenu: () => layers.open("menu"),
@@ -259,64 +249,29 @@ export function createUi(deps: UiDeps): Ui {
     };
     renderStrip($("strip-root"), {
       tools: toolRows(g),
-      auto: G.auto,
-      route: G.showRoute,
-      over: G.over,
-      onMove: (dir) => {
-        controls?.wake();
-        if (G.auto || layers.any()) return;
-        const [dr, dc] = MOVE_DELTA[dir];
-        g.tryMove(dr, dc);
-      },
+      playing: g.playing,
+      route: g.thread !== null,
+      over: s.outcome !== "playing",
+      onMove: (dir) => act(() => g.press({ kind: "move", dir }))(),
+      onWait: act(() => g.press({ kind: "wait" })),
+      onUndo: act(() => g.press("undo")),
+      onRestart: act(() => g.press("restart")),
       onHint: act(() => g.hint()),
-      onRoute: act(() => g.toggleAnswer()),
-      onAuto: act(() => g.toggleAuto()),
-      onBash: act(() => g.bash()),
-      onTool: (kind) => act(() => g.useItem(kind))(),
+      onRoute: act(() => g.route()),
+      onAuto: act(() => g.auto()),
+      onTool: (tool) => act(() => g.press({ kind: "tool", tool }))(),
     });
 
-    runInfo =
-      `Seed ${G.seed} · optimal route ${G.optimal} moves ` +
-      `· Sugar Puffs heal ${G.snackHeal} · creature pace 2/turn, spawned ${G.foeSpawnDist} away`;
-    if (layers.isOpen("menu")) drawLayers();
-  }
-
-  /* ---------- endings: the title card waits under the ending card ---------- */
-  function showEnd(g: Game, won: boolean): void {
-    const G = g.G;
-    let title: string, text: string;
-    if (won && G.pages >= TOTAL_PAGES) {
-      title = "True Ending: Shut Down the Maze";
-      text =
-        "Every page recovered, every choice owned. Theseus ships the game, " +
-        "and the creature starves outside the safe zones. Five stars in Whitehead’s review.";
-    } else if (won && G.pages > 0) {
-      title = "Lesser Escape: Out, But Thin";
-      text =
-        `You reached the exit with ${G.pages}/${TOTAL_PAGES} pages. The game ships with bugs, ` +
-        "and something still rustles in the code. It works — barely.";
-    } else if (won) {
-      title = "Bare Survival: The Hallway Ending";
-      text =
-        "You escaped with no pages and no proof. Nobody believes the maze was real. " +
-        "The creature waits for your sequel.";
-    } else {
-      title = "Taken: The PAX Ending";
-      text = G.deathCause || "The creature reached you.";
+    // The ending card waits for the last step to land; a try taken back or begun again lets the next ending show.
+    if (s.outcome === "playing") {
+      endFor = null;
+      layers.close("end");
+    } else if (!g.anim && endFor !== run) {
+      endFor = run;
+      end = endView(g);
+      layers.open("end");
     }
-    end = {
-      open: true,
-      kicker: won ? "You escaped" : "Run over — permadeath, no continues",
-      title,
-      text,
-      score:
-        `Score ${G.score} · ${G.turns} turns · pages ${G.pages}/${TOTAL_PAGES} · ` +
-        `barriers opened ${G.opened} · seed ${G.seed}`,
-    };
-    titleHint = false;
-    layers.open("title");
-    layers.open("end");
-    render(g);
+    drawLayers();
   }
 
   function showTitle(hint: boolean): void {
@@ -325,26 +280,12 @@ export function createUi(deps: UiDeps): Ui {
     layers.open("title");
   }
 
-  function showSeed(seed: string): void {
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set("seed", seed);
-      window.history.replaceState(null, "", url);
-    } catch (_) {
-      /* file:// or sandbox: the seed box still shows it */
-    }
-    seedText = seed;
-    drawLayers();
-  }
-
-  /* ---------- input: moves, tools, bash, and guides never share a key ---------- */
+  /* ---------- input: moves, tools and guides never share a key ---------- */
   function bindControls(c: Controls): void {
     controls = c;
     game = c.game;
-    const G = c.game.G;
     document.addEventListener("keydown", (ev) => {
       if (typesText(ev.target)) return;
-      const tag = (ev.target as HTMLElement | null)?.tagName;
       c.wake();
       if (isBackKey(ev)) {
         ev.preventDefault();
@@ -355,7 +296,7 @@ export function createUi(deps: UiDeps): Ui {
       const action = actionFor(k);
       if (action === "new") {
         ev.preventDefault();
-        c.restart(seedText);
+        layers.open("trials");
         return;
       }
       if (action === "mute") {
@@ -364,36 +305,28 @@ export function createUi(deps: UiDeps): Ui {
       }
       // A card is up: only Q, N and M reach the game.
       if (layers.any()) return;
-      if (action === "auto") {
-        ev.preventDefault();
-        c.game.toggleAuto();
-        return;
-      }
-      if (action === "route") {
-        c.game.toggleAnswer();
-        return;
-      }
-      if (action === "hint") {
-        c.game.hint();
-        return;
-      }
-      if (G.over || G.auto) return;
-      if (action === "bash") {
-        if (tag === "BUTTON") return;
-        ev.preventDefault();
-        c.game.bash();
-        return;
-      }
+      const g = c.game;
       if (isMove(action)) {
         ev.preventDefault();
-        const [dr, dc] = MOVE_DELTA[action];
-        c.game.tryMove(dr, dc);
-        return;
-      }
-      const item = itemFor(k, ITEMS);
-      if (item) {
+        g.press({ kind: "move", dir: action });
+      } else if (action === "wait") {
         ev.preventDefault();
-        c.game.useItem(item);
+        g.press({ kind: "wait" });
+      } else if (action === "undo" || action === "restart") {
+        g.press(action);
+      } else if (action === "hint") {
+        g.hint();
+      } else if (action === "route") {
+        g.route();
+      } else if (action === "auto") {
+        ev.preventDefault();
+        g.auto();
+      } else {
+        const tool = itemFor(k, TOOLS);
+        if (tool) {
+          ev.preventDefault();
+          g.press({ kind: "tool", tool });
+        }
       }
     });
 
@@ -407,10 +340,9 @@ export function createUi(deps: UiDeps): Ui {
   return {
     say,
     render,
-    showEnd,
-    showSeed,
     bindControls,
     showTitle,
+    showTrials: () => layers.open("trials"),
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
     setMuted: (m) => {
@@ -420,11 +352,6 @@ export function createUi(deps: UiDeps): Ui {
     setFullscreen: (on) => {
       full = on;
       drawLayers();
-    },
-    clearLog: () => {
-      log.length = 0;
-      $("toast").className = "toast";
-      if (layers.isOpen("menu")) drawLayers();
     },
   };
 }

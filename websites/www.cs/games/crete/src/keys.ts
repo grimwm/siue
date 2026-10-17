@@ -1,11 +1,13 @@
-/* The Island of Crete: the key table. One place says which keys do what and
- * what a button's key tab prints, so a tab can never disagree with its
- * binding. The tools' keys are not here: they come from the engine's ITEMS.
- * Q is the kit's back key (isBackKey) and Escape is not bound. DOM-free. */
+/* The Island of Crete, trials: the key table. One place says which keys do
+ * what and what a button's key tab prints, so a tab can never disagree with
+ * its binding. The tools' keys are not here: they come from TOOLS. Q is the
+ * kit's back key (isBackKey) and Escape is not bound. DOM-free. */
 import { BACK_KEY } from "../../_kit/keys.ts";
 
 export type MoveAction = "up" | "down" | "left" | "right";
-export type Action = MoveAction | "hint" | "route" | "auto" | "bash" | "mute" | "new" | "menu";
+export type Action =
+  | MoveAction
+  | "wait" | "undo" | "restart" | "hint" | "route" | "auto" | "mute" | "new" | "menu";
 
 export interface KeyDef {
   /** What a button's key tab and the help text print. */
@@ -19,11 +21,14 @@ export const KEYS: Record<Action, KeyDef> = {
   down: { label: "↓", keys: ["arrowdown", "s"] },
   left: { label: "←", keys: ["arrowleft", "a"] },
   right: { label: "→", keys: ["arrowright", "d"] },
+  wait: { label: ".", keys: ["."] },
+  undo: { label: "U", keys: ["u"] },
+  restart: { label: "R", keys: ["r"] },
   hint: { label: "H", keys: ["h"] },
   route: { label: "V", keys: ["v"] },
   auto: { label: "T", keys: ["t"] },
-  bash: { label: "Space", keys: [" ", "spacebar"] },
   mute: { label: "M", keys: ["m"] },
+  /** Opens the trial list. */
   new: { label: "N", keys: ["n"] },
   // Q is read with isBackKey; this row only names it.
   menu: { label: BACK_KEY, keys: [] },

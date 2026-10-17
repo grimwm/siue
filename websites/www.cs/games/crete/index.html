@@ -15,28 +15,24 @@
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
     <!-- app-tags:end -->
     <link rel="stylesheet" href="dist/kit.css?v=50839f1237" />
-    <link rel="stylesheet" href="game.css?v=56715df331" />
+    <link rel="stylesheet" href="game.css?v=b4598295b1" />
   </head>
   <body>
     <div id="frame">
       <header id="status-root" class="status" aria-label="Status"></header>
-      <main id="board" class="board" aria-label="Maze">
-        <div
-          id="stage"
-          class="stage"
-          role="img"
-          aria-label="Maze grid. Your position, the Minotaur, the exit, safe zones, barriers and items are announced in the log and status bar."
-        ></div>
+      <main id="board" class="board" aria-label="The labyrinth board">
+        <canvas id="stage" class="stage" role="img" aria-label="The labyrinth"></canvas>
         <p id="toast" class="toast" role="status" aria-live="polite"></p>
       </main>
       <div id="strip-root" class="strip"></div>
       <div id="title-root"></div>
       <div id="menu-root"></div>
+      <div id="trials-root"></div>
       <div id="story-root"></div>
       <div id="end-root"></div>
     </div>
 
-    <script type="module" src="dist/main.js?v=1a6ad3e2dc"></script>
+    <script type="module" src="dist/main.js?v=77cd65c58c"></script>
     <script src="dist/install.js?v=c2cc5785cd" defer></script>
   </body>
 </html>

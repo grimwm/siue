@@ -1,22 +1,27 @@
 # The Island of Crete
 
-A text-based chase on a seeded 15 x 15 maze. You move once per turn, the creature twice; reach the exit alive. The page is one frame: a status bar (HP, Turns, Pages, Score, Fuses, Bash, the Minotaur's distance, Menu), the maze, and a control strip (the move pad, Hint, Route, Auto, Bash and the three tools with their counts), each button with a key tab. Arrows or WASD move, Space bashes, Z/X/C use tools, H hints, V shows the route, T plays itself, M mutes, N starts a new run, and Q opens the menu and closes whatever is open. Esc is never bound. The seed is in the address (`?seed=`), so a link replays a maze. A hidden tab pauses the play-through and the hint fade, and showing it again resumes them.
+Eight tile puzzles in the Labyrinth. Gather every relic, open the gate and reach the exit; the Minotaur takes two steps to every move you make and closes the distance by the longer way first. A catch costs a heart and throws you back to the last safe zone you stood on. The board is a Blender-rendered canvas; doors, keys, water, fire, ice, force floors, blocks, buttons, toggle walls and three tools (Medusa's mirror, Daedalus's cow, a honey cake) are the pieces. Each trial teaches one idea, and the solver proves each winnable.
+
+The page is one frame: a status bar (Trial, Hearts, Relics, Keys, Gear, Moves, Menu), the board, and a control strip (the move pad, Wait, Undo, Restart, Hint, Route, Auto and the three tools with their counts), each button with a key tab. Arrows or WASD move, `.` waits, U undoes, R restarts the trial, H flashes one step of Ariadne's thread, V draws all of it, T plays it out, Z/X/C use the tools, M mutes, N opens the trial list, and Q opens the menu and closes whatever is open. Esc is never bound. Any use of the thread marks the try assisted; this browser keeps which trials are cleared and the fewest moves of an unassisted clear. `?seed=` (any value) opens trial 1 with no title card.
 
 It is a `play` game: the folder is a complete page (`index.html`) with its own PWA files, and the site wraps it in `play/crete/` without the game knowing.
 
 ## Files
 
-- `index.html`, `game.css`: the frame markup and its style (status bar, maze, strip, toast, cards, the phone layouts).
-- `src/main.ts`: the entry. It wires the modules together, starts a run behind the title card, keeps the sound and full-screen settings, and exposes `window.__mazeTest` for the browser specs.
-- `src/engine.ts`, `src/audio.ts`, `src/ui.ts`: the typed modules (below).
-- `src/keys.ts`, `src/layers.ts`, `src/status.ts`, `src/fit.ts`, `src/help.ts`, `src/settings.ts`: the DOM-free page helpers (below). `src/notes.ts`, `src/install-slot.ts`: the words for a full-screen toggle that did not go, and the title card's install bar.
-- `dist/`: the esbuild bundle (`main.js`, `main.js.map`), checked in and served as it is: the host has no Node.
+- `index.html`, `game.css`: the frame markup and its style (status bar, board, strip, toast, cards, the phone layouts).
+- `src/main.ts`: the entry. It wires the modules together, paints the board every frame, keeps the sound and full-screen settings, and exposes `window.__creteTest` (`game`, `TRIALS`, `solve`, `initial`, `trialLevel`) for the browser specs.
+- `src/puzzle/`: the rules, DOM-free: `tiles` (the pieces as data), `level` (the level text), `state`, `step` (one turn), `minotaur`, `run` (a try with its undo), `solver` (exact breadth-first search), `trials` (the eight levels).
+- `src/game.ts`: the controller, DOM-free: the try in progress, the turn that is animating, Ariadne's thread, sounds per event, progress on a win.
+- `src/board-plan.ts` (what to draw and the turn's timeline, DOM-free), `src/board.ts` (the canvas painter), `fx/sprites/tiles.{png,json}` (the atlas, rendered from `fx/blender/`), `src/tiles-page.ts` with `tiles-test.html` (a test page, not deployed).
+- `src/audio.ts`, `src/ui.ts`, `src/ui/*.tsx`: sound, the page and its views (DOM lib).
+- `src/keys.ts`, `src/layers.ts`, `src/status.ts`, `src/fit.ts`, `src/help.ts`, `src/progress.ts`, `src/settings.ts`: the DOM-free page helpers. `src/notes.ts`, `src/install-slot.ts`: the words for a full-screen toggle that did not go, and the title card's install bar.
+- `dist/`: the esbuild bundle, checked in and served as it is: the host has no Node.
 - `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`: the build and its two type programs.
 - `test/`: the unit and static suites, TypeScript on `node:test`; `tsconfig.test.json` type-checks them, so `build.mjs crete --check` fails on a type error in a test. `../units.sh` runs them with every other game's; `test.sh` runs the build checks.
 - `tools/install-files.php`: Crete's config for `../_kit/php/install-core.php` (manifest, service worker, install block, `?v=` versions).
 - `metadata.yaml`: the Games-page card and install colours.
 
-## Source layout and build
+## Build
 
 `index.html` loads `dist/main.js` with `<script type="module">`. The patterns shared with the other games are in `../_kit/README.md`.
 
@@ -27,51 +32,23 @@ node ../_kit/build/build.mjs crete --check # fail if dist/ is missing or stale
 php tools/install-files.php                # then rewrite the ?v= versions and sw.js
 ```
 
-| Module | What it holds | Program |
-| --- | --- | --- |
-| `grid` | cells, keys and the breadth-first searches | DOM-free |
-| `bots` | the dasher and the strategist: each names one action for a game | DOM-free |
-| `engine` | seeded RNG and the per-attempt streams, maze generation and the maze rule, the run's state and every rule (moves, items, bash, waiting, the chase, hint, route, play-through) | DOM-free |
-| `audio` | the Web Audio synth and the mute switch | DOM lib |
-| `ui` | drawing the board, toast and cards, choosing what the ending says; keys and clicks | DOM lib |
-| `keys`, `layers`, `status`, `fit`, `help`, `settings` | the key table (which keys do what, and what every key tab and help line prints), the stack of open cards and the Q rule, the status bar's words, the largest whole-pixel maze cell that fits, the "How to play" lines, the sound and full-screen preferences on the kit's `pref` | DOM-free |
-| `ui/status.tsx`, `ui/strip.tsx`, `ui/menu.tsx`, `ui/story.tsx`, `ui/title.tsx`, `ui/end.tsx` | the status bar, the control strip, the menu, the story card, the title card and the ending card, drawn with the kit's `Dialog`, `Button` and `KeyChip`; `ui.ts` hands them a finished view | DOM lib |
+- `dist/` is generated: edit `src/`, rebuild, rerun `install-files.php`, commit all of it. `make test` runs `npm ci` and `--check`, and `deploy.sh` refuses a stale `dist/`.
+- `tsconfig.json` extends the kit's base, is strict and lists the DOM-free modules, which compile without page types, so they cannot reach for `document`. `src/tsconfig.dom.json` extends it with the DOM lib for `audio.ts`, `ui.ts`, the views, `board.ts` and `main.ts`. Imports carry their `.ts` extension.
+- Versions are content hashes written by `tools/install-files.php`, never by hand: `dist/main.js?v=` and `game.css?v=` in `index.html`. `sw.js` hashes the same files plus the rest of `dist/` and `fx/sprites/`, so a changed bundle or atlas makes it stale too.
+
+## The seam
+
+The rules never name the page. `game.ts` takes everything it needs as `GameDeps` (`sfx`, `say`, `progress`, `timers`, `clock`, `reducedMotion`, `changed`), so `test/game.test.ts` plays whole trials against recording hooks and a manual clock. `ui.ts` and `audio.ts` are the other ends of those hooks.
+
+A turn that animates draws the state *before* it while the figures walk (`frameOf` in `game.ts`), so an item vanishes and a door opens when the figure arrives, and the state after it once the last step lands. A key during a slide finishes it and acts at once, exactly once. Reduced motion is read live from `prefers-reduced-motion` and snaps the figures. The thread solves with a cap of 200,000 states; when none is found in that, or the try cannot be won, the toast says the thread goes slack and to undo or restart.
 
 ## Layout
 
-The frame (`#frame`, a size container) fills the window and stacks the status bar (`#status-root`), the maze (`#board`, with a one-line toast over its foot that shows the newest log line and fades) and the control strip (`#strip-root`). `fit.ts` picks the largest whole-pixel cell that fits the board, and `ui.ts` sets it as `--cell` on every resize. The title, menu, story and ending cards are inside the frame, so full screen keeps them. A key tab is the kit's `.kit-key-tab`; it shows only with a mouse and a frame at least 760 px wide. A portrait phone stacks the status bar in two rows and puts the strip under the maze; a landscape phone puts the pad and the actions in the margins left and right of the maze. `crete-layout.spec.ts` measures ten screens: no page scroll, every control on screen, no control over the maze, at least 8 px per cell.
+The frame (`#frame`, a size container) fills the window and stacks the status bar (`#status-root`), the board (`#board`, holding the `#stage` canvas and a toast over its foot that shows the newest log line and fades) and the control strip (`#strip-root`). `ui.ts` fits the canvas with `fitCell` over the board's free space and `boardRows` (the top row's rise included), then reads the size the canvas was actually given: `board.ts` snaps a cell to whole device pixels, which can round it up, so the cell shrinks until the canvas fits. The cards are inside the frame, so full screen keeps them. A key tab is the kit's `.kit-key-tab`; it shows only with a mouse and a frame at least 760 px wide. A portrait phone stacks the status bar in two rows and puts the strip under the board; a landscape phone puts the pad and the actions in the margins left and right of the board.
 
 ## Cards, Q and settings
 
-The cards are a stack (`layers.ts`): title, menu, story, ending. Only the top one shows. Q (the kit's `isBackKey`) closes the top card; with nothing open it opens the menu; the title card ignores it. A run's end opens the ending card over the title card, so Q reveals the title card. While a card is up only Q, N and M reach the game. Q typed into the seed box is a letter. Esc is never bound and never leaves full screen: the full-screen toggle takes the Escape lock where the browser has Keyboard Lock (`_kit/app.ts`). The menu holds, in order, the seed box, Sound and Full screen, the story log, How to play and Quit. Sound and full screen are kept in this browser under `crete-sound` and `crete-fullscreen`; Play enters full screen again when it was last on.
-
-The split follows one seam: what the game *is* versus what the player *sees*. The engine never names the page. Everything it shows or plays goes out through `Hooks` (`say`, `sfx`, `render`, `showEnd`), and its timers arrive as an argument, so `test/engine.test.ts` plays whole runs against recording hooks and a manual clock. `ui.ts` and `audio.ts` are the other ends of those hooks. `ui.ts` imports only *types* from the engine and takes what it needs at run time as arguments.
-
-- `dist/` is generated: edit `src/`, rebuild, rerun `install-files.php`, commit all of it. `make test` runs `npm ci` and `--check`, and `deploy.sh` refuses a stale `dist/`.
-- `tsconfig.json` extends the kit's base, is strict and lists the DOM-free modules (`engine`, `grid`, `bots` and the page helpers), which compile without page types, so it cannot reach for `document`. `src/tsconfig.dom.json` extends it with the DOM lib for `audio.ts`, `ui.ts`, the views and `main.ts`. Imports carry their `.ts` extension.
-- `hashSeed` and `mulberry32` come from the kit (`_kit/rng.ts`, written for Crete): the mazes are pinned to their seeds.
-- Versions are content hashes written by `tools/install-files.php`, never by hand: `dist/main.js?v=` and `game.css?v=` in `index.html`. `sw.js` hashes the same files plus the rest of `dist/`, so a changed bundle makes it stale too.
-
-## The maze rule
-
-Every maze must be met and must be winnable. For a seed, attempt *i* draws its
-layout from `mulberry32(hashSeed(seed + ":maze:" + i))` and its run from
-`mulberry32(hashSeed(seed + ":run:" + i))`, and `trial()` plays it with the real
-`createGame` rules and silent hooks, twice: the **dasher** (`bots.ts`) walks
-`goalPath()` and never fights; the **strategist** bashes, raises a shard,
-throws the jammer, eats a snack, waits in a safe zone (six turns at most) or
-steps, first match wins. The first attempt (of 80) where the creature reaches
-the dasher and the strategist escapes is the maze. Failing that, the
-strategist-won attempt whose dasher came closest is used; a maze the
-strategist loses is never returned. A candidate is skipped before any bot plays
-it when a closed barrier seals off the loot, leaves the creature on the exit, or
-starts it fewer than 8 steps from the player (barriers open). The route the bots
-walk, and the Hint, is the fewest-step trip to the exit, fetching a spare fuse on
-the way when that is shorter. The play-through
-(T) is the strategist, so it wins any run it starts from the beginning.
-`test/maze-sweep.test.ts` holds the budgets over 300 seeds, and 10,000 nightly:
-the fallback on at most 1% of seeds, and at most 6 candidates per seed on average
-(20 at p95), which keeps generation to a few milliseconds.
+The cards are a stack (`layers.ts`): title, menu, story, trial list, ending. Only the top one shows. Q (the kit's `isBackKey`) closes the top card; with nothing open it opens the menu; the title card ignores it. Play on the title card, and N anywhere, open the trial list over what is showing; Q returns to it. A trial's end opens the ending card once its last step has landed: after a win Next trial, Retry and Trials; after a loss Undo and Restart. While a card is up only Q, N and M reach the game. Esc is never bound and never leaves full screen: the full-screen toggle takes the Escape lock where the browser has Keyboard Lock (`_kit/app.ts`). The menu holds, in order, Sound and Full screen, the story log, How to play and Quit. Sound and full screen are kept in this browser under `crete-sound` and `crete-fullscreen`; Play enters full screen again when it was last on. Cleared trials are kept under `crete-progress`.
 
 ## Tests
 

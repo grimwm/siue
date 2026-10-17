@@ -1,4 +1,4 @@
-// The kit's mulberry32 (_kit/rng.ts, Crete's: its mazes are pinned by seed)
+// The kit's mulberry32 (_kit/rng.ts)
 // against an independently written mulberry32, bit for bit. The reference
 // below keeps the unsigned form, so this test shows the two agree for every
 // seed Crete can hand over: a number (negative and above 2^31 included) comes

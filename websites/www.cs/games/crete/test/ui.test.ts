@@ -21,7 +21,12 @@ const renderEndCard = (root: StubElement, props: EndCardProps): void => ui.end.r
 const renderTitleCard = (root: StubElement, props: TitleCardProps): void => ui.title.renderTitleCard(asElement(root), props);
 const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));
 
-const END = { kicker: 'You escaped', title: 'True Ending: Shut Down the Maze', text: 'Every page recovered.', score: 'Score 340 · 31 turns' };
+const WON = { won: true, hasNext: true, kicker: 'Trial 1 cleared', title: 'The Mouth of the Labyrinth', text: 'You found the way on your own.', score: '14 moves · best 14' };
+const LOST = { won: false, hasNext: false, kicker: 'Trial failed', title: 'The Minotaur has you', text: 'Your last heart is gone.', score: '9 moves' };
+const calls = (seen: string[]) => ({
+  onNext: () => seen.push('next'), onRetry: () => seen.push('retry'), onTrials: () => seen.push('trials'),
+  onUndo: () => seen.push('undo'), onRestart: () => seen.push('restart'),
+});
 
 // Unmounting each root keeps one test's dialog from holding focus for the next.
 const roots: StubElement[] = [];
@@ -32,34 +37,49 @@ afterEach(() => {
   globalThis.__focused = null;
 });
 
-test('the ending card waits hidden until the run ends', () => {
+test('the ending card waits hidden until a trial ends', () => {
   const root = mount();
-  renderEndCard(root, { open: false, kicker: '', title: '', text: '', score: '', onAgain() {} });
+  renderEndCard(root, { open: false, ...WON, ...calls([]) });
   assert.equal(byId(root, 'end-veil').hidden, true);
   assert.equal(byId(root, 'end-veil').className, 'veil');
 });
 
-test('the ending card shows the result and focuses Play again', () => {
+test('a won trial offers Next trial, Retry and Trials, and focuses Next trial', () => {
   const root = mount();
-  renderEndCard(root, { open: false, ...END, onAgain() {} });
-  renderEndCard(root, { open: true, ...END, onAgain() {} });
+  const seen: string[] = [];
+  renderEndCard(root, { open: false, ...WON, ...calls(seen) });
+  renderEndCard(root, { open: true, ...WON, ...calls(seen) });
   assert.equal(byId(root, 'end-veil').hidden, false);
   const card = childEl(byId(root, 'end-veil'));
   assert.equal(card.className, 'card');
   assert.equal(card.getAttribute('aria-labelledby'), 'end-title');
   assert.deepEqual(['end-kicker', 'end-title', 'end-text', 'end-score'].map(id => byId(root, id).textContent),
-    [END.kicker, END.title, END.text, END.score]);
+    [WON.kicker, WON.title, WON.text, WON.score]);
   assert.equal(byId(root, 'end-score').className, 'runstats');
-  assert.equal(byId(root, 'again').textContent, 'Play again (N)');
-  assert.equal(document.activeElement?.id, 'again');
+  assert.equal(document.activeElement?.id, 'end-next');
+  for (const id of ['end-next', 'end-retry', 'end-trials']) click(byId(root, id));
+  assert.deepEqual(seen, ['next', 'retry', 'trials']);
+  assert.equal(maybeById(root, 'end-undo'), undefined);
+  assert.equal(maybeById(root, 'end-restart'), undefined);
 });
 
-test('Play again calls back', () => {
+test('after the last trial there is no Next trial, and Retry takes the focus', () => {
   const root = mount();
-  let again = 0;
-  renderEndCard(root, { open: true, ...END, onAgain: () => { again++; } });
-  click(byId(root, 'again'));
-  assert.equal(again, 1);
+  renderEndCard(root, { open: true, ...WON, hasNext: false, ...calls([]) });
+  assert.equal(maybeById(root, 'end-next'), undefined);
+  assert.equal(document.activeElement?.id, 'end-retry');
+});
+
+test('a lost trial offers Undo and Restart only', () => {
+  const root = mount();
+  const seen: string[] = [];
+  renderEndCard(root, { open: true, ...LOST, ...calls(seen) });
+  assert.equal(byId(root, 'end-title').textContent, 'The Minotaur has you');
+  assert.equal(document.activeElement?.id, 'end-undo');
+  click(byId(root, 'end-undo'));
+  click(byId(root, 'end-restart'));
+  assert.deepEqual(seen, ['undo', 'restart']);
+  for (const id of ['end-next', 'end-retry', 'end-trials']) assert.equal(maybeById(root, id), undefined, id);
 });
 
 test('the title card names the game and focuses Play; Play calls back', () => {

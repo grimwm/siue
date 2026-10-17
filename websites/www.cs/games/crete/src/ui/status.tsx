@@ -12,25 +12,25 @@ export interface StatusProps {
   onMenu: () => void;
 }
 
-type Field = Exclude<keyof StatusView, 'foeNote'>;
-const STATS: { id: string; field: Field; label: string }[] = [
-  { id: 'hud-hp', field: 'hp', label: 'HP' },
-  { id: 'hud-turns', field: 'turns', label: 'Turns' },
-  { id: 'hud-pages', field: 'pages', label: 'Pages' },
-  { id: 'hud-score', field: 'score', label: 'Score' },
-  { id: 'hud-fuses', field: 'fuses', label: 'Fuses' },
-  { id: 'hud-bash', field: 'bash', label: 'Bash' },
-  { id: 'hud-dist', field: 'foe', label: 'Minotaur' },
+const STATS: { id: string; field: 'trial' | 'hearts' | 'relics' | 'keys' | 'gear' | 'moves'; label: string }[] = [
+  { id: 'hud-trial', field: 'trial', label: 'Trial' },
+  { id: 'hud-hearts', field: 'hearts', label: 'Hearts' },
+  { id: 'hud-relics', field: 'relics', label: 'Relics' },
+  { id: 'hud-keys', field: 'keys', label: 'Keys' },
+  { id: 'hud-gear', field: 'gear', label: 'Gear' },
+  { id: 'hud-moves', field: 'moves', label: 'Moves' },
 ];
 
 export function Status(p: StatusProps) {
+  const note = (field: string): string | undefined =>
+    field === 'hearts' ? p.view.heartsNote : field === 'keys' ? p.view.keysNote : undefined;
   return (
     <>
       <dl class="hud">
         {STATS.map(s => (
-          <div class="stat" key={s.id} title={s.field === 'foe' ? p.view.foeNote : undefined}>
-            <dt>{s.field === 'foe' ? <><span aria-hidden="true">👹</span><span class="sr">{s.label}</span></> : s.label}</dt>
-            <dd id={s.id}>{p.view[s.field]}</dd>
+          <div class="stat" key={s.id} title={note(s.field)}>
+            <dt>{s.label}</dt>
+            <dd id={s.id}>{p.view[s.field] || '–'}</dd>
           </div>
         ))}
       </dl>

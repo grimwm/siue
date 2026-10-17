@@ -17,15 +17,20 @@ test('the page versions its stylesheet', () => {
   assert.match(read('index.html'), /href="game\.css\?v=[0-9a-f]{10}"/);
 });
 
+// The DOM-free program lists the rules; none of its files may name the page.
+const domFree = (): string[] => (JSON.parse(strip(read('tsconfig.json'))) as { files: string[] }).files;
 test('the rules never name the page', () => {
-  for (const file of ['engine.ts', 'grid.ts', 'bots.ts']) {
-    assert.doesNotMatch(strip(read('src/' + file)), /\b(document|window|navigator|localStorage|AudioContext)\b/, file);
+  const files = domFree();
+  assert.ok(files.includes('src/puzzle/step.ts') && files.includes('src/game.ts'), String(files));
+  for (const file of files) {
+    assert.doesNotMatch(strip(read(file)), /\b(document|window|navigator|localStorage|AudioContext)\b/, file);
   }
 });
 
 test('the entry hands the browser specs their test hook, and the bundle ships it', () => {
-  assert.match(read('src/main.ts'), /window\.__mazeTest = \{/);
-  assert.match(read('dist/main.js'), /__mazeTest/);
+  assert.match(read('src/main.ts'), /window\.__creteTest = \{ game, TRIALS, solve, initial, trialLevel \};/);
+  assert.match(read('dist/main.js'), /__creteTest/);
+  assert.doesNotMatch(read('dist/main.js'), /__mazeTest/);
 });
 
 // Games do not know the site: nothing the site's script defines may appear in
@@ -42,19 +47,20 @@ test('the game reaches no function the site script defines', { skip: !existsSync
   assert.deepEqual(reached, []);
 });
 
-test('the entry follows the page: hidden pauses the play-through and hint timers, shown resumes them', () => {
+test('the entry follows the page: hidden ends the play-out', () => {
   const main = read('src/main.ts');
-  assert.match(main, /followPage\(\{ doc: document, win: window \}, \{ hide: game\.pause, show: game\.resume \}\)/);
+  assert.match(main, /followPage\(\{ doc: document, win: window \}, \{ hide: game\.stop, show: \(\) => \{\} \}\)/);
 });
 
-test('the page is one frame: no header, side panels or seed form outside the menu, and the cards are inside it', () => {
+test('the page is one frame: no header, side panels or seed form, the board is a canvas, and the cards are inside it', () => {
   const html = read('index.html');
-  for (const gone of ['class="topbar"', 'class="side"', 'id="seed-form"', 'id="hud-hp"', 'id="inventory-root"', '<h1']) {
+  for (const gone of ['class="topbar"', 'class="side"', 'id="seed-form"', 'id="hud-hp"', '<div\n          id="stage"', 'id="inventory-root"', '<h1']) {
     assert.ok(!html.includes(gone), gone);
   }
   const frame = html.slice(html.indexOf('<div id="frame"'), html.indexOf('<script type="module"'));
   assert.ok(frame.length > 0, 'a #frame');
-  for (const id of ['status-root', 'board', 'stage', 'toast', 'strip-root', 'title-root', 'menu-root', 'story-root', 'end-root']) {
+  assert.match(frame, /<canvas id="stage" class="stage" role="img" aria-label="The labyrinth"><\/canvas>/);
+  for (const id of ['status-root', 'board', 'stage', 'toast', 'strip-root', 'title-root', 'menu-root', 'trials-root', 'story-root', 'end-root']) {
     assert.ok(frame.includes(`id="${id}"`), `${id} inside #frame`);
   }
 });

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Branch:** `music/theme`, made from `docs/workroom-theme` (so the spec and this plan travel in the PR), in a worktree under `.claude/worktrees/`. The root checkout stays on `main`. All paths below are relative to the repository root unless a step says `cd`.
-- **PR 3 (`music/answering`) is not merged.** It also edits `games/workroom/build.json` (`programs` gains `src/tsconfig.crypto.json`) and `games/workroom/tsconfig.json` (`files` gains `src/note.ts`). Whichever PR lands second rebases: both lists become the union of the two, then `node _kit/build/build.mjs workroom` rebuilds `dist/`. No task here touches PR 3's files.
+- **PR 3 (`music/answering`) merges first.** It edits `games/workroom/build.json` (`programs` gains `src/tsconfig.crypto.json`) and `games/workroom/tsconfig.json` (`files` gains `src/note.ts`). `music/theme` is made from `docs/workroom-theme` after PR 3 is in `main` (rebase `docs/workroom-theme` onto `main` first when PR 3 landed after the plan was written), so Task 3 starts from a `tsconfig.json` whose one-line `files` array already holds `src/note.ts`; every task here appends its files to that line and keeps `src/note.ts`. If a rebase still conflicts on that line, the answer is the union of both lists, then `node _kit/build/build.mjs workroom` rebuilds `dist/`. No task here touches PR 3's other files.
 - **Tailwind:** `tailwindcss` and `@tailwindcss/cli`, both exactly `4.3.3`, in `games/package.json` `devDependencies` (exact pins, like the others). Build-time only; the compiled CSS keeps Tailwind's `/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */` banner.
 - **No CDN, no inline styles.** The stylesheet is one static file, `games/workroom/dist/workroom.css`. No `style="…"` attribute in any PHP or HTML string and no `<style>` element; dynamic values go through Preact `style` props (CSSOM, not blocked by `style-src 'self'`) or SVG attributes. The CSP in `music/.htaccess` and `Music\Http::csp()` does not change.
 - **Tokens, never colours.** Components name tokens (`bg-panel`, `text-dim`, `fill-amber`, …). `app.css` clears Tailwind's palette (`--color-*: initial`), so `bg-red-500` compiles to nothing. Colours from score data (`characters[].color`, `lanes[].color`, `sections[].color`) are passed through `readableOn()` (Task 3) before they mark or label anything. The only hex literals in `src/` are in `app.css`'s token blocks, `tokens.ts`, `color.ts` (white and black) and `pianoroll.ts`'s existing lane fallback.
@@ -22,7 +22,7 @@
 - **Storage keys** (localStorage, not secrets, shared origin so prefixed): `workroom-theme` = `system` | `dark` | `light`; `workroom-guide-<tab>` = `seen` for `story`, `roll`, `sound`, `sheet`. Blocked or missing storage never throws: theme falls back to System, the guide to "seen for this page view".
 - **Layout:** one column below 1024 px (Tailwind `lg`), the notes sheet a bottom sheet; from 1024 px two columns (views left, notes right). Every HTML tap target is at least 44 × 44 px (`min-h-11 min-w-11`).
 - **Escape is never bound** by workroom code (no `keydown` handler reacts to it), as in the games.
-- **CI is not changed:** no edits to `.github/`, `tests/e2e/select.ts`, `compose.yaml`, or the Makefile's `test` and `e2e` targets. The browser check stays `tests/e2e/workroom.local.ts`, run only by `make music-e2e`. No `*.spec.ts` is added.
+- **CI is not changed:** no edits to `.github/`, `tests/e2e/select.ts`, `compose.yaml`, or the Makefile's `test` and `e2e` targets. (`select.ts` maps changes to `games/package*.json`, `_kit/**` and `music/lib/*.php` to the full browser suite, so CI runs all of it on this PR; that is expected.) The browser check stays `tests/e2e/workroom.local.ts`, run only by `make music-e2e`. No `*.spec.ts` is added.
 - **Ports and docker:** never bind 3000, 5173, 8000 or 8080. Docker only through `make music-e2e` (its own unique `-p music-e2e-<pid>` project, torn down with `down -v`). Never touch the `siue` project, never prune, never SSH/SFTP to www.cs.
 - **Text:** comments and docs describe the current state, never history ("was", "now", "used to", "kept from"). Nothing secret is committed.
 - **Tests:** unit tests are `*.test.ts` under `games/workroom/test/` or `games/_kit/build/`, run by `sh games/units.sh`; no `any`, `@ts-ignore` or `@ts-nocheck`; `as unknown as` only with a one-line reason. Components are tested with `importTsx` and `_kit/test/dom-stub.ts`.
@@ -36,7 +36,7 @@
 ## Review Focus
 
 1. **A remembered Light choice on a dark device paints light from the first frame** (and blocked storage gives System, never an exception). A module script at the end of `<body>` runs after the first paint, so the boot is a classic script in `<head>`. Pinned in Task 4 (`theme.test.ts`: `applyTheme` from stored, garbage, throwing and missing storage) and Task 8 (`MusicPagesTest`: `theme.js` is a plain `<script src>` in `<head>`, before the stylesheet, on every page shell and the error page).
-2. **A score colour that vanishes on one theme**: navy `#2e4057` on the dark well, gold `#d4a017` on the daylight well, and the extremes `#000000` and `#ffffff`, as marks and as text. Pinned in Task 3 (`color.test.ts`: every fixture colour and both extremes reach 3:1 and 4.5:1 on both wells after `readable`).
+2. **A score colour that vanishes on one theme**: navy `#2e4057` on the dark well and lane, gold `#d4a017` on the daylight well and lane, and the extremes `#000000` and `#ffffff`, as marks and as text. Pinned in Task 3 (`color.test.ts`: every fixture colour and both extremes reach 3:1 and 4.5:1 on both the well and the lane (where marks and labels are drawn) after `readableOn`, in both themes).
 3. **Deploying the fonts:** a `case` pattern's `*` crosses `/`, so a `games/*/fonts/*` skip would also drop `games/workroom/dist/fonts/*`. Pinned in Task 8 (`MusicDeployTest`: the six `dist/fonts/*.woff2` ship, nothing under `games/workroom/fonts/` does, `music/music.css` is gone).
 4. **The guide on a piece that lacks a part, or a zoomed view**: a sound effect has no notes and no characters, a music piece may have no motifs, and a zoomed view puts the first note off screen. Parts with nothing to show are left out, spots are clamped to the drawing, clips stay inside the piece and last at most 4 s. Pinned in Task 9 (`guide.test.ts`: both fixtures, a motif-less copy, and a zoomed view).
 5. **Hear it while the piece is already playing**: a demo pauses the piece first; a piece clip plays from its start and stops at its end. Pinned in Task 10 (`workroom.test.ts`: playing, then a demo's Hear it, leaves the audio paused and calls the demo once).
@@ -45,6 +45,7 @@
 
 - **Theme boot is its own classic script.** The spec places it "at the top of `workroom.js`", but that bundle is a module loaded at the end of `<body>` and runs after the first paint, and the CSP forbids an inline script. `src/theme-boot.ts` is built as an `iife` entry `dist/theme.js` and linked as `<script src>` in `<head>` before the stylesheet; it only sets `data-theme`. `main.ts` starts the live switch (choice changes, device changes under System).
 - **Two tokens beyond the spec's table:** `--color-on-accent` (text and icons on amber, green or red fills: `#121519` dark, `#ffffff` light, ≥ 4.5:1 on all three in both themes) and `--color-paper` (`#ffffff` both themes: the sheet-music paper, which OpenSheetMusicDisplay draws black on).
+- **Score colours** are made readable against both the well and the lane, the surfaces marks and labels are drawn on (the lane is the harder one in both themes), so `readableOn` takes the worse of the two.
 - **Contrast floors** (the test in Task 3): `ink` and `dim` ≥ 4.5:1 on `ground`, `panel`, `well`, `lane`; `amber` ≥ 4.5:1 on `ground`, `panel`, `well` (time readouts); `go` ≥ 4.5:1 on `panel`; `amber`, `go`, `record` ≥ 3:1 on `ground`, `panel`, `well`, `lane` (marks); `on-accent` ≥ 4.5:1 on `amber`, `go`, `record`. `record` is never body-size text on a panel (dark: 4.49:1).
 - **`tokens.ts` mirrors the token values** for the code that computes contrast; `test/tokens.test.ts` parses `app.css` and fails when they differ. `app.css` stays the one place a component's colour comes from.
 - **Fonts manifest:** `games/workroom/fonts/fonts.json` lists each family's `name`, `source` (`@fontsource/<pkg> 5.3.0`), `license` (`OFL-1.1`), `licenseFile` and `files`; `build.json` names the folder as `"css": { "in": "src/app.css", "out": "workroom", "fonts": "fonts" }`. The build refuses a woff2 not listed, a listed file that is not woff2, a missing licence, a `url(fonts/…)` the manifest lacks and a listed font the stylesheet never uses. `THIRD_PARTY_LICENSES.txt` gets the font notices after the package notices and its header becomes "Third-party code bundled into this game's scripts, and the fonts in fonts/." only when fonts ship, so crete, cylon and tankity stay byte-identical.
@@ -52,7 +53,7 @@
 - **Name clash:** the spec's bottom-sheet component is `Sheet` (`src/ui/console/Sheet.tsx`); the sheet-music view becomes `SheetMusic` (`src/ui/SheetMusic.tsx`).
 - **The notes sheet in PR 4** holds the open glossary card, "Words in this piece" and Claude's changes; PR 5 adds the answer tools to it. On a phone it is a bottom sheet with a 44 px handle ("Notes" and the change count) that opens it to at most 75% of the screen; opening a word opens it.
 - **Story lanes draw their notes as dimmed bars** (the spec says lanes "keep" them; the Story view draws none yet), each lane scaled to its own pitch range. Constellations scale to the motif span's own range.
-- **Energy glow** is a filled, blurred band over the drawing's full height (`layout.glow`), behind sections and lanes; `layout.energy` (the top strip) stays for hit testing.
+- **Energy glow** is a filled, blurred band over the drawing's full height (`layout.glow`), the first thing the Timeline draws, behind everything (the spec); the section fills (40%) and the lane fills (80%) are translucent so it shows through them. `layout.energy` (the top strip) stays for hit testing.
 - **Guide text:** the Story view's seven parts are the reading guide's text with its Crete-only comparisons made general (no character is built into the code); the other views' parts are written below and go to the owner with the screenshots. A part with nothing to show on this piece is left out. Every piece clip is at most 4 s; the ruler and the "higher / louder" parts use the three built-in demos (`clicks`, `updown`, `swell`).
 - **Tabs** are a real tab list (`role="tablist"`/`"tab"`, `aria-selected`, roving tabindex, Left/Right/Home/End), so the browser check finds views with `getByRole('tab')`. The theme switch is a group of three toggle buttons (`aria-pressed`), reachable with Tab and Enter.
 - **Screenshots** are written by the browser check itself when `MUSIC_E2E_SHOTS` names a folder; the final task points it outside the repository.
@@ -262,7 +263,9 @@ and a new section after "The kit stylesheet":
 Run by the build, never shipped (only their output is): `esbuild` (MIT),
 `typescript` (Apache-2.0), `@resvg/resvg-js` (MPL-2.0), `tailwindcss` and
 `@tailwindcss/cli` (MIT; the compiled CSS carries Tailwind's own licence
-banner), `@types/node` (MIT). All are exact pins in `games/package.json`.
+banner), `lightningcss` (MPL-2.0; Tailwind's CSS minifier, a transitive
+dependency of the CLI), `@types/node` (MIT). All but `lightningcss` are
+exact pins in `games/package.json`.
 ```
 
 - [ ] **Step 7: Commit**
@@ -512,6 +515,8 @@ Expected: all PASS; `npm run check` exits 0 (no game has fonts yet, so every lic
   fonts from the CSS as `url("fonts/<file>.woff2")`.
 ```
 
+and in the same README's licences paragraph, replace the sentence "A game with no npm packages gets neither." with: "A game with fonts (`css.fonts`) also gets its licences file, with the font notices after the package notices and the header \"Third-party code bundled into this game's scripts, and the fonts in fonts/.\"; a game with no npm packages and no fonts gets neither."
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -537,7 +542,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 - Consumes: Task 1–2 `css` entry with `fonts`.
 - Produces:
   - `tokens.ts`: `export type Theme = 'dark' | 'light'`; `export const TOKEN_NAMES` (`'ground' | 'panel' | 'well' | 'lane' | 'rule' | 'ink' | 'dim' | 'amber' | 'go' | 'record' | 'on-accent' | 'paper'`); `export type Token`; `export const TOKENS: Readonly<Record<Theme, Readonly<Record<Token, string>>>>`.
-  - `color.ts`: `MARK_MIN = 3`, `TEXT_MIN = 4.5`, `luminance(hex): number`, `contrast(a, b): number`, `mix(hex, toward, amount): string`, `readable(color, bg, min): string`, `readableOn(theme: Theme, color: string, use: 'mark' | 'text'): string`.
+  - `color.ts`: `MARK_MIN = 3`, `TEXT_MIN = 4.5`, `luminance(hex): number`, `contrast(a, b): number`, `mix(hex, toward, amount): string`, `readable(color, bg, min): string`, `readableOn(theme: Theme, color: string, use: 'mark' | 'text'): string` (readable against the theme's well and lane both).
   - Tailwind utilities from tokens: `bg-*`, `text-*`, `border-*`, `fill-*`, `stroke-*`, `ring-*`, `outline-*` for every token; `font-display`, `font-body`, `font-mono`.
   - `shell.css` classes for the PHP markup (`console-head`, `crumb`, `index-body`, `waiting-total`, `project`, `pieces`, `piece`, `version`, `waiting-count`, `changes`) and shared state classes `error`, `empty`, `loading`.
 
@@ -688,13 +693,15 @@ test('readable lightens on the dark well and darkens on the light one until the 
   assert.ok(contrast(gold, TOKENS.light.well) >= TEXT_MIN);
 });
 
-test('every fixture colour and both extremes reach both floors on both wells', () => {
+test('every fixture colour and both extremes reach both floors on the well and the lane, in both themes', () => {
   const scores = [read('score-v1.json'), read('score-sound-v1.json')];
   const all = [...scores.flatMap(s => [...s.characters, ...s.lanes, ...s.sections].map(x => x.color)), '#000000', '#ffffff'];
   for (const theme of ['dark', 'light'] as const) {
     for (const c of all) {
-      assert.ok(contrast(readableOn(theme, c, 'mark'), TOKENS[theme].well) >= MARK_MIN, `${theme} mark ${c}`);
-      assert.ok(contrast(readableOn(theme, c, 'text'), TOKENS[theme].well) >= TEXT_MIN, `${theme} text ${c}`);
+      for (const surface of ['well', 'lane'] as const) {
+        assert.ok(contrast(readableOn(theme, c, 'mark'), TOKENS[theme][surface]) >= MARK_MIN, `${theme} mark ${c} on ${surface}`);
+        assert.ok(contrast(readableOn(theme, c, 'text'), TOKENS[theme][surface]) >= TEXT_MIN, `${theme} text ${c} on ${surface}`);
+      }
     }
   }
 });
@@ -779,9 +786,16 @@ export function readable(color: string, bg: string, min: number): string {
   return toward;
 }
 
-/** A score colour made readable on this theme's well: 3:1 for a mark, 4.5:1 for text. */
+/**
+ * A score colour made readable on this theme's drawing surfaces: 3:1 for a
+ * mark, 4.5:1 for text, against the well and against the lane (where marks and
+ * labels are drawn; the lane is the harder of the two). Both surfaces sit on
+ * the same side of the colour, so the second nudge goes the same way as the
+ * first and keeps what the first achieved.
+ */
 export function readableOn(theme: Theme, color: string, use: 'mark' | 'text'): string {
-  return readable(color, TOKENS[theme].well, use === 'mark' ? MARK_MIN : TEXT_MIN);
+  const min = use === 'mark' ? MARK_MIN : TEXT_MIN;
+  return readable(readable(color, TOKENS[theme].well, min), TOKENS[theme].lane, min);
 }
 ```
 
@@ -915,7 +929,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ### Task 4: Choosing dark or light
 
 **Files:**
-- Create: `websites/www.cs/games/workroom/src/theme.ts`, `src/browser.ts`, `src/theme-boot.ts`, `src/ui/theme-context.ts`, `src/ui/ThemeSwitch.tsx`
+- Create: `websites/www.cs/games/workroom/src/theme.ts`, `src/browser.ts`, `src/theme-boot.ts`, `src/ui/theme-context.ts`, `src/ui/ThemeSwitch.tsx`, `src/ui/console/cx.ts`
 - Modify: `websites/www.cs/games/workroom/src/main.ts`, `build.json`, `tsconfig.json`, `src/tsconfig.dom.json`
 - Test: `websites/www.cs/games/workroom/test/theme.test.ts`
 - Regenerate: `dist/` (adds `theme.js`, `theme.js.map`)
@@ -1224,7 +1238,7 @@ export function ThemeRoot(p: { handle: ThemeHandle; children?: ComponentChildren
 }
 ```
 
-`cx` comes from Task 5; create it now (Task 5 lists it as created here):
+`cx` joins class names for every console component (Task 5 imports it); create it here:
 
 ```ts
 // src/ui/console/cx.ts
@@ -1312,7 +1326,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
   - `Button({ variant?: 'primary' | 'secondary' | 'ghost' | 'record'; onClick?(): void; disabled?; pressed?; label?; class?; buttonRef?: Ref<HTMLButtonElement>; data?: Record<\`data-${string}\`, string>; children })` — `type="button"`, at least 44 × 44.
   - `Tabs<T extends string>({ label; idPrefix; items: readonly { id: T; label: string }[]; value: T; onChange(id: T): void })`, plus `tabId(prefix, id)` and `panelId(prefix)`.
   - `Chip({ onClick(): void; pressed?: boolean; term?: string; children })` — a glossary word (`term` set: `data-term`, dashed amber) or a toggle (`aria-pressed`).
-  - `Panel({ title?; accent?: boolean; class?; role?; label?; tabIndex?; panelRef?: Ref<HTMLElement>; data?; children })` — a `<section>`.
+  - `Panel({ title?; accent?: boolean; class?; role?: 'dialog' | 'region' | 'group'; label?; tabIndex?; panelRef?: Ref<HTMLElement>; data?; children })` — a `<section>`.
   - `Sheet({ title; count?: number; open: boolean; onToggle(open: boolean): void; children })` — `data-sheet`; a bottom sheet below 1024 px, a side panel from 1024 px.
   - `Readout({ time: number; bar: number | null })` — `data-readout`, `data-clock`, `data-bar`.
   - `Legend({ items: readonly string[] })` — `<p data-legend>`, items joined by ` · `.
@@ -1326,6 +1340,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
+import type { ComponentChild } from 'preact';
 import { act } from 'preact/test-utils';
 import { fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
@@ -1345,7 +1360,7 @@ const c = await importTsx<{
   button: '../src/ui/console/Button.tsx', tabs: '../src/ui/console/Tabs.tsx', chip: '../src/ui/console/Chip.tsx', panel: '../src/ui/console/Panel.tsx',
   sheet: '../src/ui/console/Sheet.tsx', readout: '../src/ui/console/Readout.tsx', legend: '../src/ui/console/Legend.tsx',
 });
-const mount = async (vnode: ReturnType<typeof h>): Promise<StubElement> => {
+const mount = async (vnode: ComponentChild): Promise<StubElement> => {
   const root = makeEl('root');
   await act(() => { render(vnode, renderTarget(root)); });
   return root;
@@ -1374,7 +1389,7 @@ test('Tabs: a tab list with one selected, roving focus, arrows, Home and End; Es
   const tabs = walk(root).filter(e => e._attrs['role'] === 'tab');
   assert.deepEqual(tabs.map(t => t._attrs['aria-selected']), ['false', 'true', 'false']);
   assert.deepEqual(tabs.map(t => t._attrs['tabindex']), ['-1', '0', '-1']);
-  assert.equal(tabs[1]!._attrs['id'], c.tabs.tabId('v', 'b'));
+  assert.equal(tabs[1]!.id, c.tabs.tabId('v', 'b'));
   assert.equal(tabs[1]!._attrs['aria-controls'], c.tabs.panelId('v'));
   fire(tabs[1]!, 'keydown', { key: 'ArrowRight' });
   fire(tabs[1]!, 'keydown', { key: 'ArrowLeft' });
@@ -1569,7 +1584,7 @@ export interface PanelProps {
   title?: string;
   accent?: boolean;
   class?: string;
-  role?: string;
+  role?: 'dialog' | 'region' | 'group';
   label?: string;
   tabIndex?: number;
   panelRef?: Ref<HTMLElement>;
@@ -1734,9 +1749,46 @@ test('opening a word opens the notes sheet on a phone', async () => {
   assert.equal(handle._attrs['aria-expanded'], 'true');
   unmount(root);
 });
+
+test('a change that names one bar still has a 44 px tap target', async () => {
+  const short = { ...score, changes: [{ ...score.changes[0]!, from_bar: 3, to_bar: 3 }] };
+  const root = makeEl('root');
+  await act(() => { render(h(ui.room.Workroom, { score: short, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {} }), renderTarget(root)); });
+  const where = walk(root).find(e => e._attrs['data-where'] !== undefined)!;
+  assert.equal(where.textContent, 'Bar 3');
+  const cls = (where._attrs['class'] ?? where.className ?? '').split(/\s+/);
+  assert.ok(cls.includes('min-h-11') && cls.includes('min-w-11'), 'tall and wide enough for a thumb, whatever the label');
+  unmount(root);
+});
 ```
 
-(`openWord`, `named`, `mount`, `unmount` are the file's existing helpers.)
+test('the drawing is measured again when the stage changes width without a window resize', async () => {
+  const observed: { fire: () => void; observed: StubElement[]; disconnected: boolean }[] = [];
+  class StubObserver {
+    readonly entry = { fire: () => {}, observed: [] as StubElement[], disconnected: false };
+    constructor(cb: () => void) { this.entry.fire = cb; observed.push(this.entry); }
+    observe(el: StubElement): void { this.entry.observed.push(el); }
+    disconnect(): void { this.entry.disconnected = true; }
+  }
+  Object.assign(globalThis, { ResizeObserver: StubObserver });
+  try {
+    const root = await mount();
+    const stage = walk(root).find(e => e._attrs['data-guide'] === 'view')!;
+    assert.equal(observed.length, 1, 'one observer');
+    assert.deepEqual(observed[0]!.observed, [stage], 'it watches the stage');
+    const drawing = (): number => Number(named(root, 'data-timeline')._attrs['width']);
+    assert.equal(drawing(), 720);
+    stage.getBoundingClientRect = () => ({ width: 600, height: 460 });
+    await act(() => { observed[0]!.fire(); });
+    assert.equal(drawing(), 600, 'the drawing follows the stage');
+    unmount(root);
+    assert.equal(observed[0]!.disconnected, true, 'leaving the page stops watching');
+  } finally {
+    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+  }
+});
+
+(`openWord`, `named`, `mount`, `unmount` are the file's existing helpers; the last two tests render the same component with their own score or observer.)
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -1956,10 +2008,16 @@ export function Workroom(p: WorkroomProps) {
   const tab = pickTab(tabs, wanted);
   const bounds = useMemo(() => boundsFor(score.duration, width), [score.duration, width]);
 
-  // The views are as wide as the stage: measured on mount and on resize.
+  // The views are as wide as the stage: measured on mount and whenever the stage changes width (a window resize, a scrollbar appearing, the sheet opening). A browser without ResizeObserver falls back to the window's resize.
   useLayoutEffect(() => {
-    const measure = (): void => setWidth(Math.floor(stage.current?.getBoundingClientRect().width || FALLBACK_WIDTH));
+    const el = stage.current;
+    const measure = (): void => setWidth(Math.floor(el?.getBoundingClientRect().width || FALLBACK_WIDTH));
     measure();
+    if (el && typeof ResizeObserver !== 'undefined') {
+      const watch = new ResizeObserver(measure);
+      watch.observe(el);
+      return () => watch.disconnect();
+    }
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, []);
@@ -2047,7 +2105,7 @@ export function Workroom(p: WorkroomProps) {
             <ol class="changes grid list-decimal gap-2 pl-5 text-sm marker:font-mono marker:text-dim" aria-label="Claude's changes">
               {score.changes.map((c, i) => (
                 <li data-change={i}>
-                  <button type="button" data-where="" class="where mr-1 inline-flex min-h-11 items-center font-mono text-amber underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-amber" onClick={() => seek(changeTimes(c, tempo, score.duration).from)}>{changeLabel(c)}</button>{' '}
+                  <button type="button" data-where="" class="where mr-1 inline-flex min-h-11 min-w-11 items-center font-mono text-amber underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-amber" onClick={() => seek(changeTimes(c, tempo, score.duration).from)}>{changeLabel(c)}</button>{' '}
                   {splitTerms(c.text).map(part => 'term' in part ? <Word term={part.term} text={part.text} onOpen={openCard} /> : part.text)}
                 </li>
               ))}
@@ -2207,6 +2265,18 @@ test('the story draws stars joined by a line, the character named, lane notes di
   assert.equal(withAttr(root, 'data-glow').length, 1);
   assert.equal(withAttr(root, 'data-ribbon').length, 0, 'a span with stars draws no ribbon');
 });
+
+test('the glow is painted first, behind the sections, the lanes, the lane notes and the stars', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  const all = walk(root);
+  const glow = all.findIndex(e => e._attrs['data-glow'] !== undefined);
+  assert.ok(glow >= 0, 'there is a glow');
+  for (const attr of ['data-section', 'data-lane', 'data-lane-note', 'data-star']) {
+    const first = all.findIndex(e => e._attrs[attr] !== undefined);
+    assert.ok(first > glow, `${attr} is drawn after (on top of) the glow`);
+  }
+});
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
@@ -2287,7 +2357,7 @@ export function layoutConstellations(score: Score, layout: TimelineLayout, view:
   return score.motifs.flatMap(m => {
     const color = motifColor(score, m);
     const name = score.characters.find(c => c.id === m.character)?.name ?? m.character;
-    return m.spans.flatMap(s => {
+    return m.spans.flatMap((s): Constellation[] => {
       const lane = layout.lanes.find(l => l.id === s.lane);
       if (!lane) return [];
       const base = { motif: m.id, character: m.character, name, color, lane: s.lane, from: s.from, to: s.to };
@@ -2321,6 +2391,7 @@ export function Timeline(p: TimelineProps) {
   return (
     <svg class="tl block max-w-full touch-none select-none" data-timeline="" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`} role="group" aria-label="Story timeline" {...surface}>
       <defs><filter id="tl-glow" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="8" /></filter></defs>
+      <polygon class="pointer-events-none fill-go opacity-25" data-glow="" filter="url(#tl-glow)" points={layout.glow.map(([x, y]) => `${x},${y}`).join(' ')} />
       {layout.sections.map(s => (
         <svg x={s.rect.x} y={s.rect.y} width={Math.max(0, s.rect.w)} height={s.rect.h}>
           <rect class="section opacity-40" data-section={s.id} width={Math.max(0, s.rect.w)} height={s.rect.h} fill={s.color} />
@@ -2329,12 +2400,11 @@ export function Timeline(p: TimelineProps) {
       ))}
       {layout.lanes.map(l => (
         <g>
-          <rect class="lane fill-lane stroke-rule" data-lane={l.id} x={l.rect.x} y={l.rect.y} width={l.rect.w} height={l.rect.h} />
+          <rect class="lane fill-lane/80 stroke-rule" data-lane={l.id} x={l.rect.x} y={l.rect.y} width={l.rect.w} height={l.rect.h} />
           <LaneIcon family={l.icon} color={readableOn(theme, l.color, 'mark')} x={6} y={l.rect.y + 4} />
           <text class="lane-name pointer-events-none font-display text-[11px] font-semibold tracking-wider uppercase" x={8 + LANE_ICON_SIZE + 4} y={l.rect.y + 15} fill={readableOn(theme, l.color, 'text')}>{l.name}</text>
         </g>
       ))}
-      <polygon class="pointer-events-none fill-go opacity-25" data-glow="" filter="url(#tl-glow)" points={layout.glow.map(([x, y]) => `${x},${y}`).join(' ')} />
       {layout.notes.map(n => <rect class="pointer-events-none opacity-35" data-lane-note={n.index} x={n.rect.x} y={n.rect.y} width={Math.max(1, n.rect.w)} height={n.rect.h} rx={1} fill={readableOn(theme, n.color, 'mark')} />)}
       {stars.map(c => {
         const mark = readableOn(theme, c.color, 'mark');
@@ -2423,6 +2493,22 @@ In `tests/php/MusicPagesTest.php` add a helper and tests:
         self::assertStringContainsString(self::HEAD_ASSETS, $head);
         self::assertStringContainsString('<p class="error" role="alert">No such piece.</p>', $res->body);
         self::assertStringContainsString('<a href="./">All pieces</a>', $res->body);
+    }
+```
+
+The existing `testTheNoSuchPiecePageMountsNothing` asserts the error page holds neither "workroom" nor `<script`, which the styled error page now contradicts (it links `workroom.css` and `theme.js`). Replace it: the error page may carry the stylesheet and the theme boot, and still mounts nothing.
+
+```php
+    public function testTheNoSuchPiecePageMountsNothing(): void
+    {
+        $res = $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => '<script>']]));
+        self::assertSame(400, $res->status);
+        self::assertStringContainsString('No such piece.', $res->body);
+        preg_match_all('~<script\b[^>]*>~', $res->body, $scripts);
+        self::assertSame(['<script src="../games/workroom/dist/theme.js?v=0123456789">'], $scripts[0], 'the only script is the theme boot');
+        foreach (['workroom.js', 'sheet.js', 'type="module"', 'data-view', 'data-piece', '<main id="workroom">'] as $mount) {
+            self::assertStringNotContainsString($mount, $res->body, "the error page does not mount the workroom: $mount");
+        }
     }
 ```
 
@@ -2527,7 +2613,7 @@ Replace `errorPage` with:
             . '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             . '<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="dark light">'
             . '<title>' . Html::e($message) . '</title>' . $this->assets() . '</head>'
-            . '<body data-view="error"><header class="console-head"><p class="crumb"><a href="./">All pieces</a></p></header>'
+            . '<body><header class="console-head"><p class="crumb"><a href="./">All pieces</a></p></header>'
             . '<main class="index-body"><p class="error" role="alert">' . Html::e($message) . '</p></main></body></html>';
         return Http::finish(new \Admin\Response($status, ['Content-Type' => 'text/html; charset=utf-8'], $html));
     }
@@ -3029,15 +3115,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
 import { act } from 'preact/test-utils';
-import { fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
+import { fire, installDocument, makeEl, document as stubDocument, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import { asAudioContext, fakeAudioContext, nodesOf } from '../../_kit/test/audio.ts';
 import { createAudioCore } from '../../_kit/audio/core.ts';
+import { DEMOS } from '../src/demo.ts';
 import type { GuideClip, GuidePart } from '../src/guide.ts';
 
 installDocument();
-Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} } });
+// Every key listener the overlay (or anything it mounts) puts on the window or the document, so the Escape test can press Escape at each.
+const keyListeners: unknown[] = [];
+const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); };
+Object.assign(globalThis, { window: { addEventListener: listen, removeEventListener() {} } });
+const addToDocument = stubDocument.addEventListener;
+stubDocument.addEventListener = (type, f) => { listen(type, f); addToDocument(type, f); };
 const ui = await importTsx<{ g: typeof import('../src/ui/console/GuideOverlay.tsx'); d: typeof import('../src/ui/demo-player.ts') }>(
   import.meta.dirname, { g: '../src/ui/console/GuideOverlay.tsx', d: '../src/ui/demo-player.ts' });
 
@@ -3079,12 +3171,18 @@ test('Hear it hands over the part’s clip and says it is playing', async () => 
   render(null, renderTarget(root));
 });
 
-test('focus starts on the card; Escape does nothing; Close calls onClose', async () => {
+test('focus starts on the card; Escape does nothing, on the card or to any window or document key listener; Close calls onClose', async () => {
   let closed = 0;
   const root = await mount(() => {}, () => { closed++; });
   const card = walk(root).find(e => e._attrs['data-guide-card'] !== undefined)!;
   assert.equal(globalThis.__focused, card);
   fire(card, 'keydown', { key: 'Escape' });
+  const pressed = keyListeners.map(f => {
+    const ev = { type: 'keydown', key: 'Escape', prevented: false, stopped: false, preventDefault() { ev.prevented = true; }, stopPropagation() { ev.stopped = true; } };
+    (f as (e: typeof ev) => void)(ev);
+    return ev;
+  });
+  assert.ok(pressed.every(ev => !ev.prevented && !ev.stopped), 'no global key listener takes Escape');
   assert.equal(closed, 0);
   assert.ok(walk(root).some(e => e._attrs['data-guide-card'] !== undefined));
   await act(() => { fire(button(root, 'Close'), 'click'); });
@@ -3101,14 +3199,11 @@ test('the demo player plays every tone of a demo', () => {
 });
 ```
 
-(add `import { DEMOS } from '../src/demo.ts';` to the file's imports; a running fake context primes one oscillator on `unlock`, and each `tone` sets its frequency with `setValueAtTime`, recorded as `['set', freq, t]`.)
+(A running fake context primes one oscillator on `unlock`, and each `tone` sets its frequency with `setValueAtTime`, recorded as `['set', freq, t]`.)
 
-Append to `test/workroom.test.ts` (it has `mount`, `button`, `named`, `unmount`; extend `mount` to accept extra props: `const mount = async (extra: Record<string, unknown> = {}) => { …h(ui.room.Workroom, { score, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {}, ...extra })… }`):
+In `test/workroom.test.ts`, add `import { memoryStorage } from '../../_kit/test/record.ts';` and `import { guideStore } from '../src/guide.ts';` to the import block at the top of the file, and extend `mount` (the file has `mount`, `button`, `named`, `unmount`) to accept extra props: `const mount = async (extra: Record<string, unknown> = {}) => { …h(ui.room.Workroom, { score, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {}, ...extra })… }`. Then append:
 
 ```ts
-import { memoryStorage } from '../../_kit/test/record.ts';
-import { guideStore } from '../src/guide.ts';
-
 const overlay = (root: StubElement) => walk(root).find(e => e._attrs['data-guide-overlay'] !== undefined);
 
 test('the guide opens by itself on a first visit, once, and Close gives focus to How to read this', async () => {
@@ -3607,7 +3702,7 @@ Expected: all green; `select.ts --check` prints `E2E-SELECT-OK`; the `git diff -
 git push -u origin music/theme
 ```
 
-- [ ] **Step 4: Open PR 4** with the foundry `pr-fix-loop` skill. Title: "Music workroom: its own look (Studio Console, dark and daylight), constellations, How to read this". Body: a summary (Tailwind v4 in the kit with fonts and licences; tokens in both themes and the System/Dark/Light switch applied before the first paint; the console components PR 5 builds on; the restyled pages; constellations and the energy glow; the guide and legends), the spec and plan paths, the decisions list from this plan, the `make music-e2e` result, the screenshot folder path ("44 screenshots, every screen at 390 and 1280 px in dark and light, for the owner before merge"), the note that PR 3 and this PR both touch `games/workroom/build.json` and `tsconfig.json` (the second to merge takes the union and rebuilds `dist/`), and the PR attribution lines:
+- [ ] **Step 4: Open PR 4** with the foundry `pr-fix-loop` skill. Title: "Music workroom: its own look (Studio Console, dark and daylight), constellations, How to read this". Body: a summary (Tailwind v4 in the kit with fonts and licences; tokens in both themes and the System/Dark/Light switch applied before the first paint; the console components PR 5 builds on; the restyled pages; constellations and the energy glow; the guide and legends), the spec and plan paths, the decisions list from this plan, the `make music-e2e` result, the screenshot folder path ("44 screenshots, every screen at 390 and 1280 px in dark and light, for the owner before merge"), the note that PR 3 merged first and this PR starts from `main` with it in (`games/workroom/build.json` and `tsconfig.json` carry both PRs' entries), and the PR attribution lines:
 
 ```
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Crete tiles test</title>
+    <link rel="stylesheet" href="dist/kit.css" />
+    <link rel="stylesheet" href="game.css" />
+    <style>
+      body { overflow: auto; padding: 12px; }
+      #stage { display: block; background: #000; }
+      #strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+      #strip figure { margin: 0; text-align: center; font-size: 11px; }
+      #strip canvas { display: block; margin: 0 auto; }
+      label { margin-right: 12px; }
+    </style>
+  </head>
+  <body>
+    <p>
+      <label>Cell <select id="cell-px"><option>16</option><option>24</option><option selected>32</option><option>48</option><option>64</option></select> px</label>
+      <label><input type="checkbox" id="reduced" /> Reduced motion</label>
+      Arrows move, . waits, Z/X/C use a tool.
+    </p>
+    <canvas id="stage"></canvas>
+    <div id="strip"></div>
+    <pre id="level"></pre>
+    <script src="dist/tiles-test.js"></script>
+  </body>
+</html>

@@ -6,7 +6,8 @@ learns the terms as they meet them, and answers back precisely: pinned notes,
 spoken or typed, hummed tunes, one-tap reactions and redrawn energy curves.
 Claude picks the notes up, composes the next draft, and answers on the same
 moments. Notes are encrypted in the browser; the server never sees them in the
-clear, and each is deleted once picked up.
+clear. Notes stay sealed on the server until the owner deletes them, so every
+device the owner signs in on, a phone included, shows the whole history.
 
 Built on the admin login (`2026-10-17-admin-login-design.md`). Music direction:
 epic cinematic scoring in the vein of Interstellar and Gladiator, themed on the
@@ -70,32 +71,43 @@ The server stores only sealed notes, which it cannot open.
   when it arrived. Nothing else.
 - **No swapped padlock:** the page encrypts only to the built-in public key and
   checks it against the built-in fingerprint; the admin hub shows the
-  fingerprint so the owner can compare it once with the Mac's
-  (`make keys-status`).
-- **The owner's view of their own notes:** the browser keeps a readable copy of
-  each note it sealed (in this browser's storage) until the note is picked up,
-  so the owner sees what they said; another browser sees only "3 notes waiting".
+  fingerprint so the owner can compare it once with `make keys-status`.
+- **Opening notes on any device, a phone included:** the private key is also
+  stored on the server, locked. `make keys-init` encrypts it with AES-256-GCM
+  under a key derived from a long random passphrase (PBKDF2-SHA-256, 600,000
+  rounds, random salt); the passphrase lives in the same 1Password item, so
+  1Password fills it in on any device. After sign-in the workroom asks for it;
+  the browser unlocks the private key locally (Web Crypto) and opens the
+  notes: their text, their recordings to play, their curves. The passphrase
+  and the unlocked key never leave the device, and the locked copy is served
+  only to a signed-in session. **Remember this device** keeps the unlocked key
+  in the browser as a non-extractable key (even the page cannot read its
+  bytes); **Forget this device** erases it. `make keys-rotate` re-locks the new
+  key, so every device keeps working.
 
-## Pickup and deletion
+## Pickup and the note history
 
 A small HTTPS API under `/music/api/`, behind the admin kit's API keys:
 
-- `GET /music/api/notes`: ids, sizes and SHA-256 hashes of waiting sealed
-  notes (scope `notes:pickup`).
+- `GET /music/api/notes?state=waiting`: ids, sizes and SHA-256 hashes of
+  sealed notes not yet picked up (scope `notes:pickup`).
 - `GET /music/api/notes/{id}`: one sealed bundle.
-- `DELETE /music/api/notes/{id}`: delete it; the server removes the database
-  row and the file at once. The pickup tool calls this only after the download
-  matches its hash and the note opens with the private key, so a failed
-  download never loses a note.
-- The database runs with `secure_delete` on, so removed rows are overwritten.
-- **Maximum age:** a note not picked up within 14 days is deleted anyway.
+- `POST /music/api/notes/{id}/picked-up`: marks it picked up. The pickup tool
+  calls this only after the download matches its hash and the note opens, so a
+  failed download never loses a note.
+- **History:** notes stay sealed on the server until the owner deletes them.
+  The workroom shows every note on any device once the key is unlocked, each
+  marked waiting or picked up, with **Delete** on each and **Delete all**.
+  Deleting removes the database row and the file at once; the database runs
+  with `secure_delete` on, so removed rows are overwritten. The page's deletes
+  need the signed-in session and its CSRF token; an API key cannot delete.
 - `POST /music/api/drafts` (scope `drafts:publish`): Claude publishes a draft
   (the score data, audio and spectrogram) with its change list.
-- Upload limits: 60 seconds of audio, 2 MB per note, 200 waiting notes; over
+- Upload limits: 60 seconds of audio, 2 MB per note, 2,000 notes stored; over
   that the page says so and keeps the note in the browser.
 
 On the owner's computer, `siue-music pickup` downloads, verifies, opens and
-deletes; opened notes go to `~/Library/Application Support/siue-music/notes/`
+marks each note picked up; opened notes go to `~/Library/Application Support/siue-music/notes/`
 (or the platform's equivalent), outside the repository.
 
 ## Keys from 1Password, through make
@@ -109,11 +121,11 @@ secret is passed to tools on standard input, never as a command-line argument
 | --- | --- |
 | `make keys-status` | Fingerprints of the public key in the repository, in 1Password and in this computer's cache, whether they match, and which API keys are stored (labels only). |
 | `make keys-pull` | Fetches the private keys and API keys from 1Password into the cache, then checks the private key matches the repository's public key. |
-| `make keys-init` | First time only: makes the key pair, saves both halves to 1Password, writes the public key and fingerprint into the repository for a commit. Refuses if a key already exists. |
-| `make keys-rotate` | Makes a new pair; the old private key stays in 1Password as a previous key; the new public key goes into the repository. |
+| `make keys-init` | First time only: makes the key pair and a passphrase, saves all three to 1Password, uploads the passphrase-locked private key for the browser, and writes the public key and fingerprint into the repository for a commit. Refuses if a key already exists. |
+| `make keys-rotate` | Makes a new pair; the old private key stays in 1Password as a previous key; the new locked private key is uploaded and the new public key goes into the repository. |
 | `make api-key-set NAME=music-pickup` | Prompts for an API key shown once on the admin hub and saves it to 1Password only. |
 | `make keys-forget` | Deletes this computer's cached copies (for a borrowed or shared computer). |
-| `make music-pickup` | Picks up waiting notes: syncs keys first, then downloads, verifies, opens and deletes. |
+| `make music-pickup` | Picks up waiting notes: syncs keys first, then downloads, verifies, opens and marks each picked up. |
 | `make music-publish PIECE=...` | Publishes a rendered draft through the API. |
 
 **Staying in sync:** every `music-*` target first compares the repository's
@@ -164,15 +176,21 @@ the game. The login guards the notes and the actions.
 - Unit (node:test): the score model and layout (sections, lanes and motifs to
   pixels at any zoom), hit testing (a tap maps to the right bar and lane),
   sealing round-trips with a test key pair and refuses a public key whose
-  fingerprint differs, the waiting-notes store.
+  fingerprint differs, unlocking the private key with the passphrase (a wrong
+  passphrase fails cleanly), the remembered key is non-extractable and Forget
+  erases it.
 - PHPUnit: every API route needs the right key scope and HTTPS; a sealed note's
-  size and count limits; DELETE removes row and file; the 14-day purge; the
-  pages need a session.
-- Python: pickup verifies the hash and opens the note before it deletes; a
-  corrupt download is not deleted; opened notes land outside the repository.
+  size and count limits; marking picked up; the page's delete removes row and
+  file and needs a session and CSRF; an API key cannot delete; the locked
+  private key is served only to a session; the pages need a session.
+- Python: pickup verifies the hash and opens the note before marking it picked
+  up; a corrupt download is not marked; opened notes land outside the
+  repository; `keys-init` and `keys-rotate` write the locked private key that
+  the browser can unlock.
 - Browser (locally, `make e2e`): sign in, open a piece, play, move the
   playhead, pin a typed note, see it waiting, pick it up with the tool against
-  the docker stack, and see it gone from the server.
+  the docker stack, see it marked picked up, then unlock the key in a second
+  browser context and read and delete it there.
 
 ## Delivery
 

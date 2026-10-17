@@ -41,8 +41,8 @@ final class Store
     public const DRAFT_FILES = ['score.json', 'score.musicxml', 'audio.webm', 'audio.m4a', 'spectrogram.png'];
 
     private const ID = '/^[0-9a-f]{32}$/';
-    private const PIECE = '/^[a-z0-9][a-z0-9-]{0,47}$/';
-    private const PROJECT = '/^[a-z0-9][a-z0-9-]{0,47}$/D';
+    /** The shape of a piece id and of a project id. */
+    private const PIECE = '/^[a-z0-9][a-z0-9-]{0,47}$/D';
     /** The magic, the 32-byte fingerprint and the two-byte key length: the least a sealed note can be. */
     private const HEADER_BYTES = 38;
 
@@ -181,7 +181,7 @@ final class Store
      * MAX_REQUEST_BYTES (too_large), when the draft exists, or when the new draft plus the newest KEEP_DRAFTS - 1
      * stored drafts (the ones that remain) total more than MAX_DRAFT_TOTAL_BYTES (over_quota). After the files
      * are written, deletes every draft (row and files) older than the newest KEEP_DRAFTS.
-     * $about is taken from the validated score.json: project_id (matches PROJECT), project_name (1 to 80 characters) and
+     * $about is taken from the validated score.json: project_id (matches validProjectId), project_name (1 to 80 characters) and
      * kind (one of KINDS); anything else throws DraftRejected('bad_score') before the transaction opens. null records no
      * project: '' and '' and 'music' (a published draft always has one).
      * @param array<string, string> $files published name => the file's bytes
@@ -190,7 +190,7 @@ final class Store
      */
     public function putDraft(string $piece, int $version, array $files, ?array $about = null): void
     {
-        if (preg_match(self::PIECE, $piece) !== 1) {
+        if (!self::validPieceId($piece)) {
             throw new DraftRejected('bad_piece');
         }
         if ($version < 1 || $version > 9999) {
@@ -266,7 +266,7 @@ final class Store
     /** Absolute path, or null for an unknown draft or a name outside DRAFT_FILES. */
     public function draftFile(string $piece, int $version, string $name): ?string
     {
-        if (preg_match(self::PIECE, $piece) !== 1 || $version < 1 || $version > 9999 || !in_array($name, self::DRAFT_FILES, true)) {
+        if (!self::validPieceId($piece) || $version < 1 || $version > 9999 || !in_array($name, self::DRAFT_FILES, true)) {
             return null;
         }
         $known = $this->db->prepare('SELECT 1 FROM music_drafts WHERE piece = ? AND version = ?');
@@ -289,6 +289,22 @@ final class Store
         return $row === false ? null : ['locked' => (string) $row['locked'], 'uploaded_at' => (int) $row['uploaded_at']];
     }
 
+    public static function validPieceId(mixed $id): bool
+    {
+        return is_string($id) && preg_match(self::PIECE, $id) === 1;
+    }
+
+    public static function validProjectId(mixed $id): bool
+    {
+        return self::validPieceId($id);
+    }
+
+    /** 1 to 80 characters. */
+    public static function validProjectName(mixed $name): bool
+    {
+        return is_string($name) && mb_strlen($name) >= 1 && mb_strlen($name) <= 80;
+    }
+
     /** A recorded project is a valid id with a name of 1 to 80 characters; ('', '') is the one "no project" value. */
     private static function aboutIsKeepable(array $about): bool
     {
@@ -301,7 +317,7 @@ final class Store
         if ($id === '' && $name === '') {
             return true;
         }
-        return preg_match(self::PROJECT, $id) === 1 && mb_strlen($name) >= 1 && mb_strlen($name) <= 80;
+        return self::validProjectId($id) && self::validProjectName($name);
     }
 
     private function noteExists(string $id): bool

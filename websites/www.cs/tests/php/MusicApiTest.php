@@ -377,4 +377,93 @@ final class MusicApiTest extends TestCase
         self::assertNull(Music\Http::refuseCrossSite($at('same-origin')));
         self::assertNull(Music\Http::refuseCrossSite(req(['https' => true])), 'curl and older browsers send none');
     }
+
+    /** Each of the five routes as a closure from a request to its response; the body readers return an empty body. */
+    private function allRoutes(): array
+    {
+        $read = $this->reading('');
+        return [
+            'listNotes' => fn(Admin\Request $r) => $this->api->listNotes($r),
+            'getNote' => fn(Admin\Request $r) => $this->api->getNote($r),
+            'pickedUp' => fn(Admin\Request $r) => $this->api->pickedUp($r),
+            'publishDraft' => fn(Admin\Request $r) => $this->api->publishDraft($r, $read),
+            'publishKeyring' => fn(Admin\Request $r) => $this->api->publishKeyring($r, $read),
+        ];
+    }
+
+    public function testEveryRouteRefusesPlainHttpAndUrlKeysAndLearnsNothingWithoutAKey(): void
+    {
+        $all = $this->keys->create('all', Admin\Keys::SCOPES);
+        $query = ['id' => str_repeat('a', 32), 'state' => 'waiting', 'piece' => 'p', 'version' => '1'];
+        foreach ($this->allRoutes() as $route => $call) {
+            foreach (['GET', 'POST', 'DELETE'] as $method) {
+                $over = ['method' => $method, 'query' => $query, 'headers' => ['content-length' => '0']];
+                self::assertSame(403, $call($this->as($all, ['https' => false] + $over))->status, "$route $method over HTTP");
+                self::assertSame(401, $call(req(['https' => true, 'method' => $method, 'headers' => ['content-length' => '0'], 'query' => $query + ['key' => $all]]))->status, "$route $method with the key in the URL");
+                self::assertSame(401, $call(req(['https' => true, 'method' => $method, 'headers' => ['content-length' => '0'], 'query' => $query]))->status, "$route $method with no key is 401, never 405");
+            }
+        }
+        self::assertSame(0, $this->reads);
+    }
+
+    public function testAnOversizedDeclaredLengthWithTheWrongScopeIsForbiddenNotTooLarge(): void
+    {
+        $pickup = $this->keys->create('pickup', ['notes:pickup']);
+        $drafts = $this->keys->create('drafts', ['drafts:publish']);
+        $keyring = $this->keys->create('keyring', ['keys:publish']);
+        $huge = ['content-length' => '99999999'];
+        self::assertSame(403, $this->api->publishDraft($this->as($pickup, ['method' => 'POST', 'query' => ['piece' => 'p', 'version' => '1'], 'headers' => $huge]), $this->reading(''))->status);
+        self::assertSame(403, $this->api->publishKeyring($this->as($drafts, ['method' => 'POST', 'headers' => $huge]), $this->reading(''))->status);
+        self::assertSame(403, $this->api->publishDraft($this->as($keyring, ['method' => 'POST', 'query' => ['piece' => 'p', 'version' => '1'], 'headers' => $huge]), $this->reading(''))->status);
+        self::assertSame(0, $this->reads);
+    }
+
+    public function testMalformedBundlesAreRefused(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $entry = static fn(string $name, string $bytes): string => chr(strlen($name)) . $name . pack('N', strlen($bytes)) . $bytes;
+        $one = $entry('score.json', '{}');
+        $cases = [
+            'truncated entry' => 'SIUED1' . chr(1) . substr($one, 0, -1),
+            'size past the end' => 'SIUED1' . chr(1) . chr(10) . 'score.json' . pack('N', 500) . '{}',
+            'duplicate name' => 'SIUED1' . chr(2) . $one . $one,
+            'unknown name' => 'SIUED1' . chr(1) . $entry('evil.php', '<?php'),
+            'trailing bytes' => 'SIUED1' . chr(1) . $one . 'x',
+            'count 0' => 'SIUED1' . chr(0),
+            'count 6' => 'SIUED1' . chr(6) . $one . $one . $one . $one . $one . $one,
+            'count above entries' => 'SIUED1' . chr(2) . $one,
+            'no count' => 'SIUED1',
+        ];
+        foreach ($cases as $why => $body) {
+            $res = $this->api->publishDraft($this->post($k, ['piece' => 'ch1-labyrinth', 'version' => '1'], $body), $this->reading($body));
+            self::assertSame(['bad_bundle', 422], [$this->body($res)['error'], $res->status], $why);
+        }
+        self::assertSame([], $this->store->drafts());
+    }
+
+    public function testAudioSignaturesAndAMissingScoreAreRefused(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $files = $this->draftFiles();
+        $res = $this->publish($k, ['audio.webm' => 'RIFF....WEBM'] + $files, 'ch1-labyrinth', 1);
+        self::assertSame(['bad_file', 422], [$this->body($res)['error'], $res->status], 'a fake webm');
+        $res = $this->publish($k, ['audio.m4a' => 'abcdefghijkl'] + $files, 'ch1-labyrinth', 1);
+        self::assertSame(['bad_file', 422], [$this->body($res)['error'], $res->status], 'a fake m4a');
+        $res = $this->publish($k, array_diff_key($files, ['score.json' => 1]), 'ch1-labyrinth', 1);
+        self::assertSame(['missing_file', 422], [$this->body($res)['error'], $res->status], 'no score.json');
+        $m4a = ['audio.m4a' => "\0\0\0\x18ftypM4A " . random_bytes(20)] + array_diff_key($files, ['audio.webm' => 1]);
+        self::assertSame(201, $this->publish($k, $m4a, 'ch1-labyrinth', 1)->status, 'a real m4a alone is enough audio');
+    }
+
+    public function testKeyringNeedsADeclaredLengthThatTheBodyMatches(): void
+    {
+        $k = $this->keys->create('publish', ['keys:publish']);
+        $none = $this->as($k, ['method' => 'POST']);
+        self::assertSame(411, $this->api->publishKeyring($none, $this->reading(''))->status);
+        self::assertSame(0, $this->reads);
+        $body = json_encode($this->keyring());
+        $res = $this->api->publishKeyring($this->post($k, [], $body, strlen($body) + 5), $this->reading($body));
+        self::assertSame(['bad_length', 400], [$this->body($res)['error'], $res->status]);
+        self::assertNull($this->store->keyring());
+    }
 }

@@ -11,8 +11,6 @@ final class Api
     public const DRAFT_MAGIC = 'SIUED1';
 
     private const ID = '/^[0-9a-f]{32}$/D';
-    /** The id shape shared by pieces and projects. */
-    private const PROJECT = '/^[a-z0-9][a-z0-9-]{0,47}$/D';
     private const KEYRING_FIELDS = ['ct', 'iterations', 'iv', 'kdf', 'salt', 'v'];
     private const MIN_ITERATIONS = 600000;
 
@@ -81,7 +79,7 @@ final class Api
         }
         $piece = $r->query['piece'] ?? null;
         $version = $r->query['version'] ?? null;
-        if (!is_string($piece) || preg_match(self::PROJECT, $piece) !== 1) {
+        if (!Store::validPieceId($piece)) {
             return Http::json(422, ['error' => 'bad_piece']);
         }
         if (!is_string($version) || preg_match('/^[1-9]\d{0,3}$/D', $version) !== 1) {
@@ -216,7 +214,7 @@ final class Api
         }
         $id = $score['project']['id'] ?? null;
         $name = $score['project']['name'] ?? null;
-        if (!is_string($id) || preg_match(self::PROJECT, $id) !== 1 || !is_string($name) || mb_strlen($name) < 1 || mb_strlen($name) > 80) {
+        if (!Store::validProjectId($id) || !Store::validProjectName($name)) {
             return 'bad_score';
         }
         if (isset($files['spectrogram.png']) && !str_starts_with($files['spectrogram.png'], "\x89PNG")) {

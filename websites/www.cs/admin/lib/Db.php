@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Admin;
 
-require_once __DIR__ . '/store-modes.php';
-require_once __DIR__ . '/store-dir.php';
+// bootstrap.php loads the kit's StoreDir and StoreModes before this file.
 
 /** The storage directory cannot be trusted (someone else's, a link, open to others). */
 final class StorageUnavailable extends \RuntimeException

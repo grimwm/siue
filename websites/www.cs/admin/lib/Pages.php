@@ -14,6 +14,12 @@ final class Response
 
 final class Pages
 {
+    /** The response for a refused storage directory: the problem goes to the log, never to the visitor. */
+    public static function fromStorageError(\Throwable $e): Response
+    {
+        return self::storageDown();
+    }
+
     /** What a visitor sees when storage is refused: no paths, no detail. */
     public static function storageDown(): Response
     {

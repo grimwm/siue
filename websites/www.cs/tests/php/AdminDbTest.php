@@ -21,7 +21,12 @@ final class AdminDbTest extends TestCase
     {
         $dir = admin_tmp_dir();
         Admin\Db::open($dir);
-        self::assertSame(0, fileperms("$dir/admin.sqlite") & 0007, 'no access for others');
+        self::assertSame(0600, fileperms("$dir/admin.sqlite") & 0777);
+        foreach (["$dir/admin.sqlite-wal", "$dir/admin.sqlite-shm"] as $side) {
+            if (file_exists($side)) {
+                self::assertSame(0, fileperms($side) & 0077, "$side has no group or other access");
+            }
+        }
     }
 
     public function testStoreDirCopyMatchesTheKit(): void
@@ -38,9 +43,21 @@ final class AdminDbTest extends TestCase
     {
         $root = dirname(__DIR__, 2);
         $kit = (string) file_get_contents("$root/games/_kit/php/score-guard.php");
-        $class = substr($kit, (int) strpos($kit, "/**\n * The file modes"));
+        $start = (int) strpos($kit, "/**\n * The file modes");
+        $open = (int) strpos($kit, '{', (int) strpos($kit, 'final class StoreModes', $start));
+        $depth = 0;
+        $end = $open;
+        for ($i = $open, $n = strlen($kit); $i < $n; $i++) {
+            $depth += $kit[$i] === '{' ? 1 : ($kit[$i] === '}' ? -1 : 0);
+            if ($depth === 0) {
+                $end = $i;
+                break;
+            }
+        }
+        $block = substr($kit, $start, $end - $start + 1);
+        self::assertStringContainsString('final class StoreModes', $block);
         self::assertStringContainsString(
-            trim($class),
+            $block,
             (string) file_get_contents("$root/admin/lib/store-modes.php"),
             'admin/lib/store-modes.php holds the kit\'s StoreModes class verbatim',
         );
@@ -55,7 +72,12 @@ final class AdminDbTest extends TestCase
             Admin\Db::dataDir();
             self::fail('a symlink must be refused');
         } catch (Admin\StorageUnavailable $e) {
-            self::assertStringNotContainsString(sys_get_temp_dir(), Admin\Pages::storageDown()->body);
+            self::assertStringContainsString('is a symbolic link', $e->getMessage(), 'the log names the problem');
+            $body = Admin\Pages::fromStorageError($e)->body;
+            self::assertStringNotContainsString($e->getMessage(), $body);
+            self::assertStringNotContainsString($base, $body);
+            self::assertStringNotContainsString('link', $body);
+            self::assertStringNotContainsString(sys_get_temp_dir(), $body);
         } finally {
             putenv('ADMIN_DATA_DIR');
         }

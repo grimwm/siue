@@ -157,6 +157,57 @@ test('a game bundling no npm package gets no licenses file and no banner', t => 
   assert.doesNotMatch(readFileSync(join(dir, 'dist/main.js'), 'utf8'), /Third-party licenses/);
 });
 
+test('license files are found under the names npm packages use', async () => {
+  const { LICENSE_NAME_RE } = (await import('./build.mjs')) as { LICENSE_NAME_RE: RegExp };
+  for (const ok of ['LICENSE', 'LICENCE', 'license.md', 'LICENSE.txt', 'LICENSE.markdown', 'LICENSE-MIT', 'COPYING']) assert.match(ok, LICENSE_NAME_RE);
+  for (const no of ['LICENSE-APACHE.bak', 'README.md', 'licenses.json', 'NOTICE']) assert.doesNotMatch(no, LICENSE_NAME_RE);
+});
+
+const NODE_MODULES = join(HERE, '..', '..', 'node_modules');
+const withInlined = (dir: string, inlined: unknown): void => {
+  const cfg = JSON.parse(readFileSync(join(dir, 'build.json'), 'utf8'));
+  writeFileSync(join(dir, 'build.json'), JSON.stringify({ ...cfg, inlined }));
+};
+
+test('inlined packages get their notice in the licenses file, like the bundled ones', t => {
+  const dir = scratch(t);
+  withInlined(dir, ['jszip', 'loglevel']);
+  const r = run(dir);
+  assert.equal(r.status, 0, r.stderr);
+  const text = readFileSync(join(dir, LICENSES), 'utf8');
+  for (const name of ['jszip', 'loglevel']) {
+    const version = JSON.parse(readFileSync(join(NODE_MODULES, name, 'package.json'), 'utf8')).version;
+    assert.ok(text.includes(`${name} ${version}\nLicense: `), name);
+  }
+  assert.ok(text.indexOf('jszip ') < text.indexOf('loglevel ') && text.indexOf('loglevel ') < text.indexOf('preact '), 'sorted by name');
+  assert.equal(run(dir, '--check').status, 0);
+});
+
+test('an inlined package that is not installed fails the build, naming it', t => {
+  const dir = scratch(t);
+  withInlined(dir, ['no-such-package']);
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /inlined package no-such-package is not installed/);
+});
+
+test('an inlined package without a license file fails the build, naming it', t => {
+  const dir = scratch(t);
+  if (!existsSync(join(NODE_MODULES, 'isarray/package.json')) || readdirSync(join(NODE_MODULES, 'isarray')).some(f => /^licen[sc]e/i.test(f))) return t.skip('needs an installed package with no license file');
+  withInlined(dir, ['isarray']);
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /isarray: no license file/);
+});
+
+test('inlined must be a list of package names', t => {
+  const dir = scratch(t);
+  withInlined(dir, 'jszip');
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /`inlined` must be a list/);
+});
+
 const KIT_CSS = readFileSync(join(HERE, '..', 'kit.css'), 'utf8');
 
 test('kitCss: true copies _kit/kit.css to dist/kit.css; without it the file is absent', t => {

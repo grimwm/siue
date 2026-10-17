@@ -37,6 +37,9 @@ export function loadBuildJson(gameDir) {
     if (typeof e.out !== 'string' || !OUT_RE.test(e.out)) throw new BuildError(`build.json: entry \`out\` ${e.out} must match ${OUT_RE}`);
     if (!FORMATS.has(e.format)) throw new BuildError(`build.json: entry \`format\` must be esm or iife`);
   }
+  if (cfg.inlined !== undefined && !(Array.isArray(cfg.inlined) && cfg.inlined.every(p => typeof p === 'string' && p !== ''))) {
+    throw new BuildError('build.json: `inlined` must be a list of package names');
+  }
   if (cfg.kitCss !== undefined && typeof cfg.kitCss !== 'boolean') throw new BuildError('build.json: `kitCss` must be true or false');
   for (const [name, file] of Object.entries(cfg.versions ?? {})) {
     if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new BuildError(`build.json: version constant ${name} must be UPPER_CASE`);
@@ -55,7 +58,8 @@ export function typecheck(gameDir, cfg) {
 
 const LICENSES_FILE = 'THIRD_PARTY_LICENSES.txt';
 const BANNER = `/*! Third-party licenses: ${LICENSES_FILE} */`;
-const LICENSE_NAME_RE = /^licen[sc]e(\.(md|txt))?$/i;
+// LICENSE, LICENCE or COPYING, optionally with -MIT and an .md, .txt or .markdown extension.
+export const LICENSE_NAME_RE = /^(licen[sc]e|copying)(-mit)?(\.(md|txt|markdown))?$/i;
 
 /** The npm packages an esbuild metafile's inputs came from: name -> package dir. */
 function packagesOf(metafile, gameDir) {
@@ -129,7 +133,13 @@ export async function bundle(gameDir, cfg) {
     }
   }
   if (cfg.kitCss === true) files.set(KIT_CSS, readFileSync(join(KIT, KIT_CSS), 'utf8'));
-  if (packages.size) {
+  // Packages a bundled dependency carries prebuilt inside itself: esbuild never sees them, so the build names them.
+  if (packages.size || (cfg.inlined ?? []).length) {
+    for (const name of cfg.inlined ?? []) {
+      const dir = join(GAMES, 'node_modules', ...name.split('/'));
+      if (!existsSync(join(dir, 'package.json'))) throw new BuildError(`build.json: inlined package ${name} is not installed in games/node_modules`);
+      packages.set(name, dir);
+    }
     const blocks = [...packages].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, dir]) => licenseBlock(name, dir));
     files.set(LICENSES_FILE, `Third-party code bundled into this game's scripts.\n\n${blocks.join('\n---\n\n')}`);
   }

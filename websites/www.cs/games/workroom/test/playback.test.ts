@@ -136,7 +136,7 @@ test('pausing cancels the Player\'s pending frame', async () => {
 // --- Sheet ---
 
 const lanes = ['a', 'b'].map(id => ({ id, name: id, family: 'strings' as const, icon: 'strings' as const, color: '#112233' }));
-const settle = async (): Promise<void> => { for (let i = 0; i < 6; i++) await act(() => new Promise<void>(r => setTimeout(r, 5))); };
+const settle = async (): Promise<void> => { for (let i = 0; i < 6; i++) await act(() => new Promise<void>(r => setImmediate(r))); };
 
 test('switching lanes twice leaves one drawing, and leaving the view removes the resize listener', async () => {
   const listeners = new Set<() => void>();
@@ -198,7 +198,7 @@ test('a view left before its file arrives mounts nothing and rejects nothing', a
   await act(() => { render(null, renderTarget(root)); });
   arrive('<xml/>');
   await settle();
-  await new Promise<void>(r => setTimeout(r, 20));
+  await new Promise<void>(r => setImmediate(r)); // Node reports a rejection once the microtask queue drains
   process.off('unhandledRejection', note);
   assert.equal(mounts, 0);
   assert.deepEqual(unhandled, []);

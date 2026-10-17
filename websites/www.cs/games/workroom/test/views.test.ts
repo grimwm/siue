@@ -84,6 +84,12 @@ test('a tap on the timeline seeks to that time', () => {
   assert.deepEqual(seeks, [9]);
 });
 
+test('the timeline is a group, so its section words stay buttons for assistive technology', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  assert.equal(withAttr(root, 'data-timeline')[0]!._attrs['role'], 'group');
+});
+
 test('a glossary word opens a two-line card and Hear it plays the clip', () => {
   const root = makeEl('root');
   const heard: { from: number; to: number }[] = [];

@@ -151,6 +151,18 @@ test('an opened word card is scrolled into view', async () => {
   unmount(root);
 });
 
+test('an opened card takes focus, and closing it returns focus to its word', async () => {
+  const root = await mount();
+  const word = walk(root).find(e => e.localName === 'button' && e._attrs['data-term'] === 'ostinato')!;
+  word.focus();
+  await act(() => { fire(word, 'click'); });
+  const card = walk(root).find(e => e.className === 'card')!;
+  assert.ok(globalThis.__focused === card, 'the card has focus');
+  await act(() => { fire(button(root, 'Close'), 'click'); });
+  assert.ok(globalThis.__focused === word, 'the word has focus again');
+  unmount(root);
+});
+
 test('the page is headed by its piece and project, and its title names them', async () => {
   stubDocument.body.dataset = {};
   const root = await mount();

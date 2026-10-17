@@ -41,3 +41,12 @@ test('pinch: the times under the fingers follow them', () => {
   assert.deepEqual(v, { start: 2, pxPerSec: 100, width: 800 });
   assert.deepEqual(pinch(fit, [100, 100], [0, 400], b), fit, 'fingers on one spot change nothing');
 });
+
+test('a zero-width measurement still gives a usable view', () => {
+  const zb = boundsFor(16, 0);
+  const zv = fitView(16, 0);
+  assert.ok(zv.pxPerSec > 0 && zv.width >= 1);
+  const c = zoomAt(zv, 0, 2, zb);
+  assert.ok(Number.isFinite(c.start) && Number.isFinite(c.pxPerSec));
+  assert.deepEqual(panBy({ start: NaN, pxPerSec: NaN, width: 0 }, 5, zb), { start: 0, pxPerSec: zb.minPxPerSec, width: 1 });
+});

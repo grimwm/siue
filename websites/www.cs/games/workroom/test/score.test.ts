@@ -66,6 +66,7 @@ test('each rule names its path', () => {
   assert.match(broken(s => { s.glossary[0]!.to = 20; }), /glossary\[0\]/);
   assert.match(broken(s => { s.tempo![0]!.bar = 2; }), /tempo\[0\]\.bar/);
   assert.match(broken(s => { delete s.tempo; }), /tempo/);
+  assert.match(broken(s => { s.duration = 1; }), /duration.*last bar/, 'a tempo map that outruns the duration');
   assert.match(broken(s => { delete s.bars; }), /bars/);
   assert.match(broken(s => { delete s.musicxml; }), /musicxml/);
   assert.match(broken(s => { s.audio = []; }), /audio/);

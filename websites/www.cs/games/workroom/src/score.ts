@@ -120,6 +120,13 @@ function build(r: Obj): Score {
     tempo.forEach((t, i) => {
       if (i === 0 ? t.bar !== 1 : t.bar <= tempo![i - 1]!.bar) fail(`tempo[${i}].bar`, i === 0 ? 'the first tempo must start at bar 1' : 'bars must increase');
     });
+    // The last bar starts inside the piece: the tempo map and the duration agree.
+    let lastBarStart = 0;
+    tempo.forEach((t, i) => {
+      const lastBefore = Math.min(i + 1 < tempo!.length ? tempo![i + 1]!.bar - 1 : bars!, bars! - 1);
+      lastBarStart += Math.max(0, lastBefore - t.bar + 1) * ((t.beats * 60) / t.bpm);
+    });
+    if (lastBarStart >= duration - EPS) fail('duration', `must run past the start of the last bar (${lastBarStart} seconds)`);
   } else {
     absent(r, 'bars', '', 'a sound piece has no bars');
     absent(r, 'tempo', '', 'a sound piece has no tempo');

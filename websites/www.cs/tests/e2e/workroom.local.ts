@@ -23,9 +23,11 @@ function inPhp(command: string): string {
   const compose = (process.env.MUSIC_E2E_COMPOSE ?? '').split(' ').filter(Boolean);
   const run = spawnSync('docker', ['compose', ...compose, '-p', process.env.MUSIC_E2E_PROJECT!, 'exec', '-T', 'www-cs-php', 'sh', '-c', command], { encoding: 'utf8', cwd: SITE });
   if (run.error || run.signal) throw new Error(`docker compose exec failed: ${run.error?.message ?? run.signal}`);
+  if (run.status !== 0) throw new Error(`docker compose exec exited ${run.status}: ${run.stderr}`);
   return run.stdout;
 }
-const mailFiles = (): string[] => inPhp(`ls ${process.env.MUSIC_E2E_MAIL_DIR}/*.eml 2>/dev/null`).split('\n').filter(Boolean);
+// An empty mail directory is the expected start: the glob matches nothing and the listing ends in `true`.
+const mailFiles = (): string[] => inPhp(`ls ${process.env.MUSIC_E2E_MAIL_DIR}/*.eml 2>/dev/null || true`).split('\n').filter(Boolean);
 
 export async function signIn(page: Page, base: string): Promise<void> {
   const known = new Set(mailFiles());
@@ -96,65 +98,71 @@ export async function publishFixtureDraft(request: APIRequestContext, base: stri
 test('open a piece, play, seek, switch views, read a term, no CSP violations', async ({ browser, request, baseURL }) => {
   const base = baseURL!;
   const { context, page } = await signedInPage(browser, base);
-  const violations: string[] = [];
-  page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
-  await publishFixtureDraft(request, base, await createKey(page, base, 'e2e publish', ['drafts:publish']));
+  try {
+    const violations: string[] = [];
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
+    await publishFixtureDraft(request, base, await createKey(page, base, 'e2e publish', ['drafts:publish']));
 
-  await page.goto(`${base}music/`);
-  await page.getByRole('link', { name: /Test piece: the Labyrinth wakes/ }).click();
-  await expect(page.locator('[data-section="stirs"]')).toBeVisible();
-  await expect(page.locator('[data-motif="ariadne"]')).toBeVisible();
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Test piece: the Labyrinth wakes');
-  await expect(page.getByRole('link', { name: 'All pieces' })).toBeVisible();
-  await expect(page.getByRole('img', { name: 'strings instruments' })).toBeVisible();
+    await page.goto(`${base}music/`);
+    await page.getByRole('link', { name: /Test piece: the Labyrinth wakes/ }).click();
+    await expect(page.locator('[data-section="stirs"]')).toBeVisible();
+    await expect(page.locator('[data-motif="ariadne"]')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Test piece: the Labyrinth wakes');
+    await expect(page.getByRole('link', { name: 'All pieces' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'strings instruments' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Play' }).click();
-  await expect.poll(() => page.locator('audio').evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(0.2);
-  await page.getByRole('button', { name: 'Pause' }).click();
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(() => page.locator('audio').evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(0.2);
+    await page.getByRole('button', { name: 'Pause' }).click();
 
-  const tl = page.locator('[data-timeline]');
-  const box = (await tl.boundingBox())!;
-  await tl.click({ position: { x: box.width * 0.75, y: 120 } });
-  await expect.poll(() => page.locator('audio').evaluate(a => Math.round((a as HTMLAudioElement).currentTime))).toBe(12);
+    const tl = page.locator('[data-timeline]');
+    const box = (await tl.boundingBox())!;
+    await tl.click({ position: { x: box.width * 0.75, y: 120 } });
+    await expect.poll(() => page.locator('audio').evaluate(a => Math.round((a as HTMLAudioElement).currentTime))).toBe(12);
 
-  await page.getByRole('button', { name: 'ostinato' }).first().click();
-  await expect(page.getByText('A short pattern repeated over and over underneath the music.')).toBeVisible();
-  await page.getByRole('button', { name: 'Hear it' }).click();
+    await page.getByRole('button', { name: 'ostinato' }).first().click();
+    await expect(page.getByText('A short pattern repeated over and over underneath the music.')).toBeVisible();
+    await page.getByRole('button', { name: 'Hear it' }).click();
 
-  for (const tab of ['Piano roll', 'Sound picture', 'Sheet music', 'Story']) await page.getByRole('button', { name: tab }).click();
-  await page.getByRole('button', { name: 'Sheet music' }).click();
-  await expect(page.locator('#sheet svg')).toBeVisible({ timeout: 15_000 });
+    for (const tab of ['Piano roll', 'Sound picture', 'Sheet music', 'Story']) await page.getByRole('button', { name: tab }).click();
+    await page.getByRole('button', { name: 'Sheet music' }).click();
+    await expect(page.locator('#sheet svg')).toBeVisible({ timeout: 15_000 });
 
-  // The timeline belongs to the Story view alone.
-  await page.getByRole('button', { name: 'Story' }).click();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('[data-timeline]')).toBeVisible();
-  expect(violations).toEqual([]);
-  await context.close();
+    // The timeline belongs to the Story view alone.
+    await page.getByRole('button', { name: 'Story' }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator('[data-timeline]')).toBeVisible();
+    expect(violations).toEqual([]);
+  } finally {
+    await context.close();
+  }
 });
 
 test('a sound effect from another project: grouped list, seconds on the axis, no sheet music', async ({ browser, request, baseURL }) => {
   const base = baseURL!;
   const { context, page } = await signedInPage(browser, base);
-  const violations: string[] = [];
-  page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
-  const key = await createKey(page, base, 'e2e publish sound', ['drafts:publish']);
-  await publishFixtureDraft(request, base, key); // Crete, music
-  await publishFixtureDraft(request, base, key, 'draft-sound'); // Tankity, sound: published last, so its project is listed first
+  try {
+    const violations: string[] = [];
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
+    const key = await createKey(page, base, 'e2e publish sound', ['drafts:publish']);
+    await publishFixtureDraft(request, base, key); // Crete, music
+    await publishFixtureDraft(request, base, key, 'draft-sound'); // Tankity, sound: published last, so its project is listed first
 
-  await page.goto(`${base}music/`);
-  await expect(page.locator('h2.project')).toHaveText(['Tankity', 'Crete']);
-  await page.getByRole('link', { name: 'Cannon fire' }).click();
-  await expect(page.locator('[data-lane="boom"]')).toBeVisible();
-  await expect(page.locator('[data-lane="air"]')).toBeVisible();
-  await expect(page.locator('[data-section="blast"]')).toBeVisible();
-  await expect(page.locator('[data-tick]').nth(1)).toHaveText('50 ms');
-  await expect(page.getByRole('button', { name: 'Sheet music' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Piano roll' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Sound picture' }).click();
-  await expect(page.locator('img[data-spectrogram]')).toBeVisible();
-  await page.getByRole('button', { name: 'Play' }).click();
-  await expect.poll(() => page.locator('audio').evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(0.05);
-  expect(violations).toEqual([]);
-  await context.close();
+    await page.goto(`${base}music/`);
+    await expect(page.locator('h2.project')).toHaveText(['Tankity', 'Crete']);
+    await page.getByRole('link', { name: 'Cannon fire' }).click();
+    await expect(page.locator('[data-lane="boom"]')).toBeVisible();
+    await expect(page.locator('[data-lane="air"]')).toBeVisible();
+    await expect(page.locator('[data-section="blast"]')).toBeVisible();
+    await expect(page.locator('[data-tick]').nth(1)).toHaveText('50 ms');
+    await expect(page.getByRole('button', { name: 'Sheet music' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Piano roll' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Sound picture' }).click();
+    await expect(page.locator('img[data-spectrogram]')).toBeVisible();
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(() => page.locator('audio').evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(0.05);
+    expect(violations).toEqual([]);
+  } finally {
+    await context.close();
+  }
 });

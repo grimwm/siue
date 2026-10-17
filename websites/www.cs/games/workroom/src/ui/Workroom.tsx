@@ -51,6 +51,7 @@ export function Workroom(p: WorkroomProps) {
   const seekAudio = useRef<((t: number) => void) | null>(null);
   const playClip = useRef<((c: Clip) => void) | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const opener = useRef<Element | null>(null);
   const tab = pickTab(tabs, wanted);
   const bounds = useMemo(() => boundsFor(score.duration, width), [score.duration, width]);
 
@@ -80,7 +81,10 @@ export function Workroom(p: WorkroomProps) {
   const seen = [...new Map(uses.map(u => [u.term.id, u.term])).values()];
   useEffect(() => { document.title = `${score.piece.title} – ${score.project.name}`; }, [score]);
   // A card opens near the top of the page; on a phone that can be off screen.
-  useEffect(() => { if (openTerm) cardRef.current?.scrollIntoView({ block: 'nearest' }); }, [openTerm?.id]);
+  // Focus moves into the card so a keyboard user lands on it; closing returns focus to the word that opened it.
+  useEffect(() => { if (openTerm) { cardRef.current?.scrollIntoView({ block: 'nearest' }); cardRef.current?.focus({ preventScroll: true }); } }, [openTerm?.id]);
+  const openCard = (id: string): void => { if (open === null) opener.current = document.activeElement; setOpen(id); };
+  const closeCard = (): void => { setOpen(null); const o = opener.current as HTMLElement | null; opener.current = null; o?.focus(); };
   const toggleLane = (id: string): void => {
     const all = lanes ?? new Set(score.lanes.map(l => l.id));
     const next = new Set(all);
@@ -116,19 +120,19 @@ export function Workroom(p: WorkroomProps) {
       {seen.length > 0 ? (
         <div class="words" aria-label="Words in this piece">
           <span class="words-title">Words in this piece</span>
-          {seen.map(t => <Word term={t} text={t.word} onOpen={setOpen} />)}
+          {seen.map(t => <Word term={t} text={t.word} onOpen={openCard} />)}
         </div>
       ) : null}
-      {openTerm ? <Card cardRef={cardRef} term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={() => setOpen(null)} /> : null}
+      {openTerm ? <Card cardRef={cardRef} term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={closeCard} /> : null}
       {tab === 'story' ? (
         <>
-          <Timeline score={score} tempo={tempo} view={view} time={time} onSeek={seek} onView={setView} onHold={setHolding} onTerm={setOpen} overlay={pins} />
+          <Timeline score={score} tempo={tempo} view={view} time={time} onSeek={seek} onView={setView} onHold={setHolding} onTerm={openCard} overlay={pins} />
           {score.changes.length > 0 ? (
             <ol class="changes" aria-label="Claude's changes">
               {score.changes.map((c, i) => (
                 <li data-change={i}>
                   <button type="button" class="where" onClick={() => seek(changeTimes(c, tempo, score.duration).from)}>{i + 1}. {changeLabel(c)}</button>{' '}
-                  {splitTerms(c.text).map(part => 'term' in part ? <Word term={part.term} text={part.text} onOpen={setOpen} /> : part.text)}
+                  {splitTerms(c.text).map(part => 'term' in part ? <Word term={part.term} text={part.text} onOpen={openCard} /> : part.text)}
                 </li>
               ))}
             </ol>

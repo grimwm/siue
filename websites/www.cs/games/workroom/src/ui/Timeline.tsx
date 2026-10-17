@@ -37,7 +37,7 @@ export function Timeline(p: TimelineProps) {
   const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold });
   const height = layout.height + AXIS_H;
   return (
-    <svg class="tl" data-timeline="" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`} role="img" aria-label="Story timeline" {...surface}>
+    <svg class="tl" data-timeline="" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`} role="group" aria-label="Story timeline" {...surface}>
       <polyline class="energy" fill="none" points={layout.energy.points.map(([x, y]) => `${x},${y}`).join(' ')} />
       {layout.sections.map(s => (
         <svg x={s.rect.x} y={s.rect.y} width={Math.max(0, s.rect.w)} height={s.rect.h}>

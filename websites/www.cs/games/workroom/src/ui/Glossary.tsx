@@ -10,7 +10,7 @@ export function Word(p: { term: Term; text: string; onOpen(id: string): void }) 
 export function Card(p: { cardRef?: { current: HTMLDivElement | null }; term: Term; clip: Clip | null; onHear(c: Clip): void; onClose(): void }) {
   const clip = p.clip;
   return (
-    <div class="card" role="dialog" ref={p.cardRef} aria-label={p.term.word}>
+    <div class="card" role="dialog" tabindex={-1} ref={p.cardRef} aria-label={p.term.word}>
       <h3>{p.term.word}</h3>
       <p>{p.term.lines[0]}</p>
       <p>{p.term.lines[1]}</p>

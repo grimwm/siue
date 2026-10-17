@@ -6,21 +6,22 @@ export const MAX_PX_PER_SEC = 400;
 
 /** minPxPerSec = width / duration (the whole piece fits); maxPxPerSec = max(MAX_PX_PER_SEC, 8 * minPxPerSec), so even a 0.3 s sound can zoom in. */
 export function boundsFor(duration: number, width: number): Bounds {
-  const min = width / duration;
+  const min = Math.max(1, width) / duration;
   return { duration, minPxPerSec: min, maxPxPerSec: Math.max(MAX_PX_PER_SEC, 8 * min) };
 }
 
 export function fitView(duration: number, width: number): View {
-  return { start: 0, pxPerSec: width / duration, width };
+  return { start: 0, pxPerSec: Math.max(1, width) / duration, width: Math.max(1, width) };
 }
 
 export const timeToX = (v: View, t: number): number => (t - v.start) * v.pxPerSec;
 export const xToTime = (v: View, x: number): number => v.start + x / v.pxPerSec;
 
 export function clampView(v: View, b: Bounds): View {
-  const pxPerSec = Math.min(b.maxPxPerSec, Math.max(b.minPxPerSec, v.pxPerSec));
-  const latest = Math.max(0, b.duration - v.width / pxPerSec);
-  return { start: Math.min(latest, Math.max(0, v.start)), pxPerSec, width: v.width };
+  const pxPerSec = Number.isFinite(v.pxPerSec) ? Math.min(b.maxPxPerSec, Math.max(b.minPxPerSec, v.pxPerSec)) : b.minPxPerSec;
+  const width = Math.max(1, v.width);
+  const latest = Math.max(0, b.duration - width / pxPerSec);
+  return { start: Math.min(latest, Math.max(0, Number.isFinite(v.start) ? v.start : 0)), pxPerSec, width };
 }
 
 /** Zooms by factor keeping the time under x fixed; clamps pxPerSec and start. */

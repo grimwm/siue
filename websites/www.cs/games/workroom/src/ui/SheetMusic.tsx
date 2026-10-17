@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { siblingUrl } from '../load.ts';
 import type { Lane } from '../score.ts';
 import type { SheetHandle } from '../sheetlife.ts';
+import { Chip } from './console/Chip.tsx';
 
 export interface SheetModule { mountSheet(el: HTMLElement): SheetHandle }
 /** The two things the view fetches, replaceable in tests. */
 export interface SheetPorts { fetchText(url: string): Promise<string>; loadModule(): Promise<SheetModule> }
-export interface SheetProps { musicxmlSrc: string; laneId: string; lanes: Lane[]; onLane(id: string): void; ports?: SheetPorts }
+export interface SheetMusicProps { musicxmlSrc: string; laneId: string; lanes: Lane[]; onLane(id: string): void; ports?: SheetPorts }
 
 const realPorts: SheetPorts = {
   async fetchText(url) {
@@ -31,7 +32,7 @@ const NO_SHEET: SheetHandle = { async show() {}, dispose() {} };
 
 interface Mounted { xml: string; sheet: SheetHandle }
 
-export function Sheet(p: SheetProps) {
+export function SheetMusic(p: SheetMusicProps) {
   const host = useRef<HTMLDivElement>(null);
   const mounted = useRef<Promise<Mounted> | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -64,13 +65,13 @@ export function Sheet(p: SheetProps) {
   }, [p.musicxmlSrc, p.laneId]);
 
   return (
-    <div class="sheet-view">
-      <div class="lane-picker" role="group" aria-label="Instrument">
-        {p.lanes.map(l => <button type="button" class="chip" aria-pressed={l.id === p.laneId} onClick={() => p.onLane(l.id)}>{l.name}</button>)}
+    <div class="sheet-view grid gap-2 p-2">
+      <div class="lane-picker flex flex-wrap gap-2" role="group" aria-label="Instrument" data-guide="lane-picker">
+        {p.lanes.map(l => <Chip pressed={l.id === p.laneId} onClick={() => p.onLane(l.id)}>{l.name}</Chip>)}
       </div>
       {status === 'loading' ? <p class="loading" role="status">Loading sheet music…</p> : null}
       {status === 'error' ? <p class="error" role="alert">{error}</p> : null}
-      <div id="sheet" ref={host} />
+      <div id="sheet" data-guide="sheet" class="overflow-x-auto rounded-md bg-paper p-2" ref={host} />
     </div>
   );
 }

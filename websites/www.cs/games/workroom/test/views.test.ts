@@ -18,7 +18,8 @@ const ui = await importTsx<{
   gl: typeof import('../src/ui/Glossary.tsx');
   tabs: typeof import('../src/ui/ViewTabs.tsx');
   roll: typeof import('../src/ui/PianoRoll.tsx');
-}>(import.meta.dirname, { tl: '../src/ui/Timeline.tsx', gl: '../src/ui/Glossary.tsx', tabs: '../src/ui/ViewTabs.tsx', roll: '../src/ui/PianoRoll.tsx' });
+  ctx: typeof import('../src/ui/theme-context.ts');
+}>(import.meta.dirname, { tl: '../src/ui/Timeline.tsx', gl: '../src/ui/Glossary.tsx', tabs: '../src/ui/ViewTabs.tsx', roll: '../src/ui/PianoRoll.tsx', ctx: '../src/ui/theme-context.ts' });
 
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
 const sound = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
@@ -193,6 +194,22 @@ test('a piano roll with no C in its range still shows pitch names', () => {
   const root = makeEl('root');
   const narrow: Score = { ...score, notes: [62, 64].map((pitch, i) => ({ lane: 'brass', start: i, length: 1, pitch, velocity: 80, motif: null })) };
   render(h(ui.roll.PianoRoll, { score: narrow, tempo: tempoMap(narrow), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {} }), renderTarget(root));
-  const names = walk(root).filter(e => e.className === 'pitch-name').map(e => e.textContent);
+  const names = walk(root).filter(e => e._attrs['data-pitch-name'] !== undefined).map(e => e.textContent);
   assert.deepEqual(names, ['F4', 'C#4']);
+});
+
+test('the view tabs are a tab list, the chosen one selected', () => {
+  const root = makeEl('root');
+  render(h(ui.tabs.ViewTabs, { tabs: tabsFor(score), tab: 'roll', onTab: () => {} }), renderTarget(root));
+  const tabs = walk(root).filter(e => e._attrs['role'] === 'tab');
+  assert.deepEqual(tabs.map(t => t.textContent), ['Story', 'Piano roll', 'Sound picture', 'Sheet music']);
+  assert.deepEqual(tabs.map(t => t._attrs['aria-selected']), ['false', 'true', 'false', 'false']);
+});
+
+test('a roll note is drawn in a colour readable on the light well', () => {
+  const root = makeEl('root');
+  const gold = { ...score, characters: score.characters.map(c => ({ ...c, color: '#ffe680' })) };
+  render(h(ui.ctx.ThemeContext.Provider, { value: 'light' }, h(ui.roll.PianoRoll, { score: gold, tempo: tempoMap(gold), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {} })), renderTarget(root));
+  const fills = withAttr(root, 'data-note').filter(e => e._attrs['data-lane'] === 'brass').map(e => e._attrs['fill']);
+  assert.ok(fills.length > 0 && fills.every(f => f !== '#ffe680'), 'pale gold is darkened on daylight');
 });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BRIGHTNESS_LEGEND, freqToY, spectroAxis } from '../src/spectro.ts';
+import { freqToY, spectroAxis } from '../src/spectro.ts';
 import type { Spectrogram } from '../src/score.ts';
 
 const spec: Spectrogram = { file: 'spectrogram.png', low_hz: 30, high_hz: 16000, scale: 'log' };
@@ -20,7 +20,6 @@ test('a linear scale spaces evenly', () => {
 
 test('labels in plain words and Hz', () => {
   assert.deepEqual(spectroAxis(spec, 300).map(l => l.text), ['high', '10 kHz', '1 kHz', '100 Hz', 'low']);
-  assert.deepEqual(BRIGHTNESS_LEGEND, ['dark: quiet', 'bright: loud']);
 });
 
 test('ticks outside the range are left out', () => {

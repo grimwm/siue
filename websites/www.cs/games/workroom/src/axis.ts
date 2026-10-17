@@ -54,3 +54,6 @@ export function thinTicks(ticks: readonly AxisTick[]): AxisTick[] {
   }
   return out;
 }
+
+/** The height of the time axis under a drawing. */
+export const AXIS_H = 20;

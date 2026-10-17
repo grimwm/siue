@@ -1,10 +1,12 @@
-// The audio: one Play/Pause button, the time, the bar on a music piece, and
-// the playhead's time kept in step with the <audio> element in both directions.
+// The audio: one Play/Pause button, the time readout (and the bar on a music
+// piece), and the playhead's time kept in step with the <audio> element in both
+// directions.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { formatSeconds } from '../axis.ts';
 import { clipDone, pickSource } from '../player.ts';
 import type { Clip } from '../player.ts';
 import type { AudioSource } from '../score.ts';
+import { Button } from './console/Button.tsx';
+import { Readout } from './console/Readout.tsx';
 
 export interface PlayerProps { src: AudioSource[]; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void }
 
@@ -68,17 +70,16 @@ export function Player(p: PlayerProps) {
     if (a.paused) start(a); else a.pause();
   };
   return (
-    <div class="player">
+    <div class="player flex flex-wrap items-center gap-3 rounded-lg bg-panel p-3 ring-1 ring-rule">
       {source ? (
         <audio ref={audio} preload="metadata" src={p.audioSrc(source.file)}
           onError={() => setProblem("This draft's audio could not play. Reload the page, or open another draft.")}
           onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onTimeUpdate={() => { if (audio.current) p.onTime(audio.current.currentTime); }} />
-      ) : <p class="error" role="alert">This browser cannot play this draft's audio.</p>}
-      {problem ? <p class="error" role="alert">{problem}</p> : null}
-      <button type="button" class="play" disabled={!source} onClick={toggle}>{playing ? 'Pause' : 'Play'}</button>
-      <span class="clock" data-clock="">{formatSeconds(p.time)}</span>
-      {p.bar !== null ? <span class="bar" data-bar="">bar {p.bar}</span> : null}
+      ) : <p class="error w-full" role="alert">This browser cannot play this draft's audio.</p>}
+      {problem ? <p class="error w-full" role="alert">{problem}</p> : null}
+      <Button variant="primary" class="min-w-24" disabled={!source} onClick={toggle}>{playing ? 'Pause' : 'Play'}</Button>
+      <Readout time={p.time} bar={p.bar} />
     </div>
   );
 }

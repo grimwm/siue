@@ -145,7 +145,7 @@ test('an opened word card is scrolled into view', async () => {
   const root = await mount();
   globalThis.__scrolledTo = null;
   await openWord(root, 'ostinato');
-  const card = walk(root).find(e => e.className === 'card');
+  const card = walk(root).find(e => e._attrs['data-card'] !== undefined);
   assert.ok(card);
   assert.equal(globalThis.__scrolledTo, card);
   unmount(root);
@@ -156,7 +156,7 @@ test('an opened card takes focus, and closing it returns focus to its word', asy
   const word = walk(root).find(e => e.localName === 'button' && e._attrs['data-term'] === 'ostinato')!;
   word.focus();
   await act(() => { fire(word, 'click'); });
-  const card = walk(root).find(e => e.className === 'card')!;
+  const card = walk(root).find(e => e._attrs['data-card'] !== undefined)!;
   assert.ok(globalThis.__focused === card, 'the card has focus');
   await act(() => { fire(button(root, 'Close'), 'click'); });
   assert.ok(globalThis.__focused === word, 'the word has focus again');
@@ -168,7 +168,7 @@ test('the change list is numbered once, by its list markers', async () => {
   const items = walk(root).filter(e => e.localName === 'li' && e._attrs['data-change'] !== undefined);
   assert.ok(items.length > 0);
   for (const li of items) {
-    const where = walk(li).find(e => e.className === 'where')!;
+    const where = walk(li).find(e => e._attrs['data-where'] !== undefined)!;
     assert.doesNotMatch(where.textContent, /^\d+\./, 'no number inside the button; the <ol> marker is the number');
   }
   unmount(root);
@@ -182,4 +182,69 @@ test('the page is headed by its piece and project, and its title names them', as
   assert.match(root.textContent, new RegExp(score.project.name));
   assert.equal((globalThis.document as unknown as { title: string }).title, `${score.piece.title} – ${score.project.name}`);
   unmount(root);
+});
+
+test('the piece page: two columns from 1024 px, the notes in a sheet, a legend under the view', async () => {
+  const root = await mount();
+  const page = walk(root).find(e => (e._attrs['class'] ?? e.className ?? '').includes('lg:grid-cols-['))!;
+  assert.ok(page, 'a grid that becomes two columns at lg');
+  const sheet = named(root, 'data-sheet');
+  assert.ok(walk(sheet).some(e => e._attrs['data-change'] !== undefined), 'the change list is in the sheet');
+  assert.equal(named(root, 'data-legend').textContent, 'star = a note · higher = higher note · bigger = louder · glow = energy');
+  assert.ok(named(root, 'data-guide'), 'the view stage is marked for the guide');
+  unmount(root);
+});
+
+test('opening a word opens the notes sheet on a phone', async () => {
+  const root = await mount();
+  const handle = walk(named(root, 'data-sheet')).find(e => e._attrs['aria-expanded'] !== undefined)!;
+  assert.equal(handle._attrs['aria-expanded'], 'false');
+  await openWord(root, 'ostinato');
+  assert.equal(handle._attrs['aria-expanded'], 'true');
+  unmount(root);
+});
+
+test('on a phone the page keeps room under its content for the fixed sheet', async () => {
+  const root = await mount();
+  const page = walk(root).find(e => (e._attrs['class'] ?? e.className ?? '').includes('lg:grid-cols-['))!;
+  const cls = (page._attrs['class'] ?? page.className ?? '').split(/\s+/);
+  assert.ok(cls.some(c => /^pb-/.test(c)) && cls.some(c => /^lg:pb-/.test(c)), 'bottom padding below lg, none from lg');
+  unmount(root);
+});
+
+test('a change that names one bar still has a 44 px tap target', async () => {
+  const short = { ...score, changes: [{ ...score.changes[0]!, from_bar: 3, to_bar: 3 }] };
+  const root = makeEl('root');
+  await act(() => { render(h(ui.room.Workroom, { score: short, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {} }), renderTarget(root)); });
+  const where = walk(root).find(e => e._attrs['data-where'] !== undefined)!;
+  assert.equal(where.textContent, 'Bar 3');
+  const cls = (where._attrs['class'] ?? where.className ?? '').split(/\s+/);
+  assert.ok(cls.includes('min-h-11') && cls.includes('min-w-11'), 'tall and wide enough for a thumb, whatever the label');
+  unmount(root);
+});
+
+test('the drawing is measured again when the stage changes width without a window resize', async () => {
+  const observed: { fire: () => void; observed: StubElement[]; disconnected: boolean }[] = [];
+  class StubObserver {
+    readonly entry = { fire: () => {}, observed: [] as StubElement[], disconnected: false };
+    constructor(cb: () => void) { this.entry.fire = cb; observed.push(this.entry); }
+    observe(el: StubElement): void { this.entry.observed.push(el); }
+    disconnect(): void { this.entry.disconnected = true; }
+  }
+  Object.assign(globalThis, { ResizeObserver: StubObserver });
+  try {
+    const root = await mount();
+    const stage = walk(root).find(e => e._attrs['data-guide'] === 'view')!;
+    assert.equal(observed.length, 1, 'one observer');
+    assert.deepEqual(observed[0]!.observed, [stage], 'it watches the stage');
+    const drawing = (): number => Number(named(root, 'data-timeline')._attrs['width']);
+    assert.equal(drawing(), 720);
+    stage.getBoundingClientRect = () => ({ width: 600, height: 460 });
+    await act(() => { observed[0]!.fire(); });
+    assert.equal(drawing(), 600, 'the drawing follows the stage');
+    unmount(root);
+    assert.equal(observed[0]!.disconnected, true, 'leaving the page stops watching');
+  } finally {
+    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+  }
 });

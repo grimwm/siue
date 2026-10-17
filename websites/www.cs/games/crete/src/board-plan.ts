@@ -24,7 +24,7 @@ export const SLIDE_MS = 120;
 
 export const boardRows = (level: { rows: number }, atlas: Atlas): number => level.rows + atlas.rise / atlas.cell;
 
-function frameAt(atlas: Atlas, sprite: string, ms: number): number {
+export function frameAt(atlas: Atlas, sprite: string, ms: number): number {
   const s = atlas.sprites[sprite];
   if (!s || s.frames <= 1 || s.fps <= 0) return 0;
   return Math.floor((ms * s.fps) / 1000) % s.frames;

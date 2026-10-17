@@ -44,19 +44,20 @@ test("a turn plays the player's slide, then each Minotaur step, 120 ms a cell", 
   assert.deepEqual(tl.at(SLIDE_MS / 2).player, { r: 0, c: 0.5 });
   assert.deepEqual(tl.at(SLIDE_MS / 2).minotaur, { r: 2, c: 4 });
   assert.deepEqual(tl.at(SLIDE_MS * 1.5).minotaur, { r: 2, c: 3.5 });
-  assert.deepEqual(tl.at(tl.duration), { player: r.state.player, minotaur: r.state.minotaur });
+  assert.deepEqual(tl.at(tl.duration), { player: { r: 0, c: 1 }, minotaur: { r: 2, c: 2 } });
   assert.deepEqual(tl.at(tl.duration + 999), tl.at(tl.duration));
 });
 
-test('reduced motion snaps; a catch snaps the player back after the Minotaur arrives', () => {
+test('reduced motion snaps; a catch plays the Minotaur in, then throws the player back', () => {
   const s = grid(['P....', '.....', '....M']);
   const moved = step(s, mv('right'));
   assert.equal(timeline(s, moved.events, true, moved.state).duration, 0);
   const c = grid(['M.P']);
   const r = step(c, WAIT);
   const tl = timeline(c, r.events, false, r.state);
-  assert.deepEqual(tl.at(tl.duration).player, r.state.player);
-  assert.deepEqual(tl.at(tl.duration).minotaur, r.state.minotaur);
+  assert.deepEqual(tl.at(SLIDE_MS * 0.5), { player: { r: 0, c: 2 }, minotaur: { r: 0, c: 0.5 } });
+  assert.deepEqual(tl.at(SLIDE_MS * 1.5), { player: { r: 0, c: 2 }, minotaur: { r: 0, c: 1.5 } });
+  assert.deepEqual(tl.at(tl.duration), { player: { r: 0, c: 2 }, minotaur: { r: 0, c: 0 } });
 });
 
 test('the board is the rows plus the rise of the top row', () => {

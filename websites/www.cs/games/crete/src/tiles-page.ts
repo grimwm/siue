@@ -4,12 +4,14 @@
  * deployed (games/*-test.* stays off the site). */
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
 import { createBoard } from './board.ts';
-import { drawList, timeline } from './board-plan.ts';
+import { drawList, frameAt, timeline } from './board-plan.ts';
 import type { Atlas, Figures, Timeline } from './board-plan.ts';
 import { parse } from './puzzle/level.ts';
 import { act, startRun } from './puzzle/run.ts';
 import type { Run } from './puzzle/run.ts';
 import type { Action } from './puzzle/step.ts';
+import { TOOLS } from './puzzle/tiles.ts';
+import { itemFor } from './keys.ts';
 
 const atlas = atlasJson as Atlas;
 
@@ -31,9 +33,6 @@ const KEYS: Record<string, Action> = {
   ArrowLeft: { kind: 'move', dir: 'left' },
   ArrowRight: { kind: 'move', dir: 'right' },
   '.': { kind: 'wait' },
-  z: { kind: 'tool', tool: 'mirror' },
-  x: { kind: 'tool', tool: 'cake' },
-  c: { kind: 'tool', tool: 'cow' },
 };
 
 const level = parse(LEVEL);
@@ -74,10 +73,12 @@ function start(): void {
   resize();
 
   addEventListener('keydown', e => {
-    const a = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
-    if (!a || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const tool = itemFor(e.key, TOOLS);
+    const a: Action | undefined = tool ? { kind: 'tool', tool } : KEYS[e.key];
+    if (!a) return;
     e.preventDefault();
-    if (tl) return;
+    tl = null; // a press during a slide finishes it at once, then acts
     const r = act(run, a);
     if (r.run === run) return;
     from = run;
@@ -94,7 +95,7 @@ function start(): void {
       if (ms >= tl.duration) tl = null;
     }
     board.paint(drawList(run.now, fig, atlas, now));
-    for (const t of tiles) t.board.paint([{ sprite: t.name, frame: Math.floor((now * (atlas.sprites[t.name]!.fps || 0)) / 1000) % atlas.sprites[t.name]!.frames, x: 0, y: 0 }]);
+    for (const t of tiles) t.board.paint([{ sprite: t.name, frame: frameAt(atlas, t.name, now), x: 0, y: 0 }]);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

@@ -1,12 +1,15 @@
 // websites/www.cs/games/crete/src/puzzle/step.ts
 /* The Island of Crete: one turn. `step(state, action)` plays the player's
- * action and returns the new state and what happened, for the log, the sounds and the board's animation. A bump
- * (an action that cannot happen) returns the same state object and no
- * events, and costs no turn. DOM-free. */
+ * action (a move, a wait or a tool), then, unless the player has won, the
+ * Minotaur's two steps, and returns the new state and what happened, for the
+ * log, the sounds and the board's animation. A bump (an action that cannot
+ * happen: a wall in the way, a tool not held or of no use) returns the same
+ * state object and no events, and costs no turn. DOM-free. */
 import { TERRAIN } from './tiles.ts';
 import type { Cell, Dir, Gear, KeyColor } from './tiles.ts';
 import { index, inside, same, next, gateOpen } from './state.ts';
 import type { State } from './state.ts';
+import { minotaurPhase } from './minotaur.ts';
 import { work, tAt, oAt } from './work.ts';
 import type { Action, GameEvent, Work } from './work.ts';
 
@@ -130,8 +133,20 @@ export function step(s: State, a: Action): StepResult {
     arrive(w, to, ev);
     ridePlayer(w, a.dir, from, ev);
   } else if (a.kind === 'tool') {
-    return { state: s, events: [] }; // a tool action is a bump
+    if (w.tools[a.tool] <= 0) return { state: s, events: [] };
+    if (a.tool === 'cake') {
+      if (w.hearts >= w.level.hearts) return { state: s, events: [] };
+      w.hearts++;
+    } else if (a.tool === 'cow') {
+      if (w.cow) return { state: s, events: [] };
+      w.cow = w.player;
+    } else {
+      w.stone = 3;
+      ev.push({ kind: 'stoned', turns: 3 });
+    }
+    w.tools[a.tool]--;
   }
+  if (w.outcome === 'playing') minotaurPhase(w, ev);
   w.moves++;
   return { state: w, events: ev };
 }

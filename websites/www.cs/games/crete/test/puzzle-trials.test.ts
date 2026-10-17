@@ -11,7 +11,7 @@ import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
-const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 22, 31];
+const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 23, 29];
 
 /** The level with every object of these kinds taken off the board. */
 const withoutObjects = (lv: Level, kinds: readonly ObjectKind[]): Level => ({ ...lv, objects: lv.objects.map(o => (o && kinds.includes(o) ? null : o)) });

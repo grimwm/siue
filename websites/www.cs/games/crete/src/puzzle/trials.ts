@@ -85,8 +85,8 @@ intro: Ariadne left you gifts: Medusa's mirror, Daedalus's cow and a honey cake.
 #########
 #..E..M.#
 ##.....##
-#P##.##c#
-#x......#
+#P#..##c#
+#x.#....#
 ##S.z#..#
 ####..S.#
 #########

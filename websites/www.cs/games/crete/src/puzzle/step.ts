@@ -150,7 +150,9 @@ export function step(s: State, a: Action): StepResult {
     }
     w.tools[a.tool]--;
   }
-  if (w.outcome === 'playing') minotaurPhase(w, ev);
+  // The mirror turn is itself a stone turn: the Minotaur sits it out without spending any of the 3 that follow.
+  const raisedMirror = a.kind === 'tool' && a.tool === 'mirror';
+  if (w.outcome === 'playing' && !raisedMirror) minotaurPhase(w, ev);
   w.moves++;
   // A turn that left the terrain or the objects as they were shares the previous arrays.
   if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];

@@ -70,13 +70,15 @@ test('you cannot walk into it; as stone it is a wall to you too', () => {
   assert.equal(step(stoned.state, mv('right')).state, stoned.state);
 });
 
-test("Medusa's mirror stones it for its next 3 turns", () => {
+test("Medusa's mirror stones it for the turn you raise it and 3 turns after", () => {
   const got = play(grid(['Pz.....M']), mv('right'));
   assert.deepEqual(got.state.minotaur, { r: 0, c: 5 });
   const stoned = play(got.state, tool('mirror'));
   assert.equal(stoned.state.tools.mirror, 0);
   assert.ok(stoned.kinds.includes('stoned'));
-  const held = play(stoned.state, WAIT, WAIT);
+  assert.deepEqual(stoned.state.minotaur, { r: 0, c: 5 }, 'the use turn is a stone turn');
+  assert.equal(stoned.state.stone, 3, 'three free turns are left');
+  const held = play(stoned.state, WAIT, WAIT, WAIT);
   assert.deepEqual(held.state.minotaur, { r: 0, c: 5 });
   assert.equal(held.state.stone, 0);
   assert.deepEqual(play(held.state, WAIT).state.minotaur, { r: 0, c: 3 });

@@ -15,7 +15,7 @@ export const GEAR: readonly Gear[] = ['flippers', 'fire-boots', 'skates', 'sucti
 
 export type Tool = 'mirror' | 'cake' | 'cow';
 export const TOOLS: Record<Tool, { name: string; key: string; desc: string }> = {
-  mirror: { name: "Medusa's mirror", key: 'Z', desc: 'Turns the Minotaur to stone for 3 turns; stone blocks everyone.' },
+  mirror: { name: "Medusa's mirror", key: 'Z', desc: 'Turns the Minotaur to stone for the turn you raise it and the 3 turns after; stone blocks everyone.' },
   cake: { name: 'Honey cake', key: 'X', desc: 'Gives back one heart.' },
   cow: { name: "Daedalus's cow", key: 'C', desc: 'Set down where you stand; the Minotaur goes for it first.' },
 };

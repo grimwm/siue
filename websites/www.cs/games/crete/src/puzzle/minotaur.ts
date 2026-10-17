@@ -24,7 +24,10 @@ function caught(w: Work, ev: GameEvent[]): void {
     return;
   }
   w.player = w.throwBack;
-  if (same(w.player, w.minotaur)) w.minotaur = w.level.minotaur;
+  if (same(w.player, w.minotaur)) {
+    w.minotaur = w.level.minotaur;
+    if (same(w.minotaur!, w.cow)) w.cow = null;
+  }
 }
 
 /** The Minotaur arrives on `to`: the cow is gone, the player is caught. True when the turn's steps end. */

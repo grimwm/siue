@@ -6,7 +6,7 @@
  * happen: a wall in the way, a tool not held or of no use) returns the same
  * state object and no events, and costs no turn. DOM-free. */
 import { TERRAIN } from './tiles.ts';
-import type { Cell, Dir, Gear, KeyColor } from './tiles.ts';
+import type { Cell, Dir, Gear, KeyColor, ObjectKind, Terrain } from './tiles.ts';
 import { index, inside, same, next, gateOpen } from './state.ts';
 import type { State } from './state.ts';
 import { minotaurPhase } from './minotaur.ts';
@@ -21,10 +21,12 @@ function flip(w: Work, ev: GameEvent[]): void {
   ev.push({ kind: 'flipped' });
 }
 
-/** A pushed block may enter this cell. */
+/** A pushed block may enter this cell. Never the cell a catch throws the player back to, nor the Minotaur's
+ *  start: a block there would share a cell with whoever lands on it. */
 function blockMayEnter(w: Work, x: Cell): boolean {
   return inside(w.level, x) && TERRAIN[tAt(w, x)].block && !oAt(w, x)
-    && !same(x, w.player) && !same(x, w.minotaur) && !same(x, w.cow);
+    && !same(x, w.player) && !same(x, w.minotaur) && !same(x, w.cow)
+    && !same(x, w.throwBack) && !same(x, w.level.minotaur);
 }
 
 /** A block has just entered `at` heading `d`: it sinks, presses, slides or is carried. It never enters `pusher`,
@@ -89,7 +91,7 @@ function arrive(w: Work, at: Cell, ev: GameEvent[]): void {
   if (o && o !== 'block') {
     w.objects[index(w, at)] = null;
     ev.push({ kind: 'took', what: o, at });
-    if (o === 'relic') w.relicsLeft--;
+    if (o === 'relic') w.relicsLeft = Math.max(0, w.relicsLeft - 1);
     else if (o === 'page') w.pages++;
     else if (o.startsWith('key-')) w.keys[o.slice(4) as KeyColor]++;
     else if (o === 'mirror' || o === 'cake' || o === 'cow') w.tools[o]++;
@@ -121,6 +123,8 @@ function ridePlayer(w: Work, d: Dir, origin: Cell, ev: GameEvent[]): void {
   }
 }
 
+const sameItems = <T>(a: readonly T[], b: readonly T[]): boolean => a.every((v, i) => v === b[i]);
+
 export function step(s: State, a: Action): StepResult {
   if (s.outcome !== 'playing') return { state: s, events: [] };
   const w = work(s);
@@ -148,5 +152,8 @@ export function step(s: State, a: Action): StepResult {
   }
   if (w.outcome === 'playing') minotaurPhase(w, ev);
   w.moves++;
+  // A turn that left the terrain or the objects as they were shares the previous arrays.
+  if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];
+  if (sameItems(w.objects, s.objects)) w.objects = s.objects as (ObjectKind | null)[];
   return { state: w, events: ev };
 }

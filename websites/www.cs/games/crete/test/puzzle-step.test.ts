@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { step } from '../src/puzzle/step.ts';
 import { terrainAt } from '../src/puzzle/state.ts';
-import { grid, mv, play } from './puzzle-grid.ts';
+import { grid, mv, play, WAIT } from './puzzle-grid.ts';
 
 test('a move takes a turn; a bump returns the same state and costs nothing', () => {
   const s = grid(['P.#']);
@@ -129,4 +129,38 @@ test('a pushed block is never carried into the cell the player is entering', () 
 
 test('a ride never brings the player back onto the cell the move started from', () => {
   assert.deepEqual(play(grid(['P<.']), mv('right')).state.player, { r: 0, c: 1 });
+});
+
+test('a relics header below the grid count: extra relics never close the gate again', () => {
+  const s = grid(['P**E'], 'relics: 1');
+  const r = play(s, mv('right'), mv('right'), mv('right'));
+  assert.equal(r.state.relicsLeft, 0);
+  assert.equal(r.state.outcome, 'won');
+});
+
+test('a block is never pushed onto the throw-back cell', () => {
+  const s = grid(['....', '.PO.', '....']);
+  // Round the block and back at it from the far side: the cell it would land on is the start.
+  const r = play(s, mv('down'), mv('right'), mv('right'), mv('up'));
+  assert.deepEqual(r.state.player, { r: 1, c: 3 });
+  const b = step(r.state, mv('left'));
+  assert.equal(b.state, r.state, 'a bump');
+  assert.deepEqual(b.events, []);
+});
+
+test('a block is never pushed onto the Minotaur\'s start cell', () => {
+  const s = { ...grid(['PO.M']), minotaur: null };
+  const r = play(s, mv('right'));
+  assert.equal(r.state.objects[2], 'block');
+  const b = step(r.state, mv('right'));
+  assert.equal(b.state, r.state, 'a bump');
+});
+
+test('sent home onto the cow, the Minotaur eats it', () => {
+  const base = grid(['..P.M']);
+  const s = { ...base, minotaur: { r: 0, c: 0 }, cow: { r: 0, c: 4 } };
+  const r = play(s, WAIT);
+  assert.deepEqual(r.state.minotaur, { r: 0, c: 4 });
+  assert.equal(r.state.cow, null);
+  assert.ok(r.kinds.includes('caught'));
 });

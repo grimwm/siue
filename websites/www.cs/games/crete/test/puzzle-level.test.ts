@@ -61,6 +61,7 @@ test('a bad level names its line and column', () => {
     ['title: t\nsize: 4\n\nP\n', 2, 1, /unknown header 'size'/],
     ['title: t\nhearts: 0\n\nP\n', 2, 9, /hearts must be 1 to 99/],
     ['title: t\nrelics: 2\n\nP*\n', 2, 9, /relics: 2 but the grid has 1/],
+    ['title: t\nintro: i\n\nP.\n\nE.\n', 6, 1, /text after the grid/],
   ];
   for (const [text, line, col, msg] of cases) {
     assert.throws(() => parse(text), (e: unknown) => {
@@ -80,4 +81,8 @@ test('every piece has a distinct legend character and a sprite on the list', () 
   for (const t of Object.values(TERRAIN)) for (const s of t.sprites) assert.ok(SPRITE_NAMES.includes(s), s);
   for (const o of Object.values(OBJECTS)) assert.ok(SPRITE_NAMES.includes(o.sprite), o.sprite);
   for (const fig of ['theseus', 'minotaur', 'minotaur-stone', 'cow-standing']) assert.ok(SPRITE_NAMES.includes(fig), fig);
+});
+
+test('blank lines after the grid are fine', () => {
+  assert.doesNotThrow(() => parse('title: t\nintro: i\n\nP.\n\n\n'));
 });

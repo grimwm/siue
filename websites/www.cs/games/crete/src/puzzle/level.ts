@@ -52,6 +52,7 @@ export function parse(text: string): Level {
   const rows: string[] = [];
   for (; i < lines.length && lines[i] !== ''; i++) rows.push(lines[i]!);
   if (rows.length === 0) throw new LevelError(first + 1, 1, 'no grid');
+  for (; i < lines.length; i++) if (lines[i]!.trim() !== '') throw new LevelError(i + 1, 1, 'text after the grid');
   const cols = rows[0]!.length;
   const terrain: Terrain[] = [];
   const objects: (ObjectKind | null)[] = [];

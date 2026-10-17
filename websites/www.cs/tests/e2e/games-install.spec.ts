@@ -93,7 +93,7 @@ test('on an iPhone, Install opens the game page with the Add to Home Screen step
   await expect(page.locator('#install-steps-done')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.locator('#install-steps')).toBeVisible();
-  // The steps own Q: it closes them, and Crete's own Q (Quit) never sees it.
+  // The steps own Q: it closes them, and Crete's own Q (the menu) never sees it.
   const titleShown = await page.locator('#title-veil').isVisible();
   await page.keyboard.press('q');
   await expect(page.locator('#install-steps')).toBeHidden();

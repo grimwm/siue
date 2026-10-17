@@ -87,7 +87,8 @@ input[type="text"] {
   border: 1px solid var(--line);
 }
 .menu-btn:hover, .strip button:hover { border-color: var(--accent); filter: none; }
-.menu-btn { flex: none; min-height: 36px; margin-right: 6px; }
+.menu-btn, .strip button { --kit-key-tab-right: 0; }
+.menu-btn { flex: none; min-height: 36px; }
 .strip button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
 /* ---- maze ---- */
@@ -227,8 +228,9 @@ input[type="text"] {
 /* ---- phones ---- */
 /* Portrait: the status bar in two rows, the strip under the maze. */
 @container frame (max-width: 760px) and (orientation: portrait) {
-  .status { align-items: flex-start; }
-  .hud { display: grid; grid-template-columns: repeat(4, minmax(0, auto)); gap: 2px 10px; }
+  .status { align-items: flex-start; gap: 6px; padding: 6px; }
+  .hud { display: grid; grid-template-columns: repeat(4, auto); gap: 2px 8px; }
+  .menu-btn { padding: 0 0.55rem; }
   .stat { flex-direction: column; align-items: flex-start; gap: 0; }
   .strip { flex-wrap: wrap; justify-content: center; gap: 8px 12px; padding: 12px 10px 10px; }
   .actions { flex: 1 1 10rem; justify-content: center; gap: 8px; }
@@ -237,7 +239,7 @@ input[type="text"] {
 /* Landscape: the pad and the actions float over the maze's lower corners. */
 @container frame (orientation: landscape) and (max-height: 500px) {
   .status { padding: 2px 8px; }
-  .hud { display: flex; flex-wrap: nowrap; gap: 0 10px; }
+  .hud { display: flex; flex-wrap: wrap; gap: 0 10px; }
   .stat { flex-direction: row; align-items: baseline; gap: 0.3rem; }
   .stat dt { font-size: 0.7rem; }
   .stat dd { font-size: 0.85rem; }
@@ -256,7 +258,7 @@ input[type="text"] {
   }
   .strip button { pointer-events: auto; min-width: 40px; min-height: 40px; padding: 0 0.4rem; background: rgba(22, 27, 34, 0.92); }
   .pad { grid-template-columns: repeat(3, 40px); gap: 4px; }
-  .actions { display: grid; grid-template-columns: repeat(3, auto); justify-content: end; gap: 4px; }
+  .actions { display: grid; grid-template-columns: repeat(2, auto); justify-content: end; gap: 4px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

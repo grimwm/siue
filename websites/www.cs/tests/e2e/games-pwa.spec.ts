@@ -5,7 +5,7 @@ import type { APIRequestContext } from '@playwright/test';
 
 const GAMES = ['cylon', 'tankity', 'crete'];
 const PAGE_GAMES = ['tankity', 'crete'];
-const RENDERED: Record<string, string> = { tankity: '#stage', crete: 'h1' };
+const RENDERED: Record<string, string> = { tankity: '#stage', crete: '#stage' };
 // The entry script each page loads: both games' bundles.
 const ENTRY: Record<string, string> = { tankity: 'dist/main.js', crete: 'dist/main.js' };
 

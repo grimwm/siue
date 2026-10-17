@@ -63,7 +63,7 @@ final class Pages
     {
         $form = '<form method="post" action="login.php">'
             . '<label for="email">Email</label>'
-            . '<input id="email" type="email" name="email" value="' . Html::e(Auth::ALLOWED) . '" autocomplete="username" required>'
+            . '<input id="email" type="email" name="email" autocomplete="username" required>'
             . '<button type="submit" class="button">Email me a link</button></form>';
         return self::html(200, 'Sign in', $form);
     }

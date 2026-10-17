@@ -42,9 +42,10 @@ final class AdminMailTest extends TestCase
         }
         self::assertStringContainsString('Good for 15 minutes, once.', $html);
         self::assertStringContainsString('Sign in', $html);
-        self::assertStringContainsString('#e02020', $html);
-        self::assertStringContainsString('#0d0f12', $html);
-        self::assertStringContainsString('<meta name="color-scheme" content="dark">', $html);
+        self::assertStringContainsString(Admin\MailTemplate::RED, $html);
+        self::assertStringContainsString(Admin\MailTemplate::CARD, $html);
+        self::assertStringContainsString('<meta name="color-scheme" content="light">', $html);
+        self::assertStringNotContainsString('#0d0f12', $html, 'no dark design for clients to grey out');
         self::assertStringNotContainsString('<img', $html);
     }
 
@@ -209,5 +210,25 @@ final class AdminMailTest extends TestCase
         $eml = file_get_contents($files[0]);
         self::assertStringContainsString('To: wgrim@siue.edu', $eml);
         self::assertStringContainsString('Subject: Hi', $eml);
+    }
+
+    /** WCAG contrast ratio of two #rrggbb colours. */
+    private static function contrast(string $a, string $b): float
+    {
+        $lum = static function (string $hex): float {
+            $c = array_map(static fn (string $h): float => hexdec($h) / 255, str_split(ltrim($hex, '#'), 2));
+            $c = array_map(static fn (float $v): float => $v <= 0.03928 ? $v / 12.92 : (($v + 0.055) / 1.055) ** 2.4, $c);
+            return 0.2126 * $c[0] + 0.7152 * $c[1] + 0.0722 * $c[2];
+        };
+        [$hi, $lo] = [max($lum($a), $lum($b)), min($lum($a), $lum($b))];
+        return ($hi + 0.05) / ($lo + 0.05);
+    }
+
+    public function testEveryTextColourIsClearlyLegible(): void
+    {
+        self::assertGreaterThanOrEqual(7.0, self::contrast(Admin\MailTemplate::TEXT, Admin\MailTemplate::CARD), 'body text');
+        self::assertGreaterThanOrEqual(4.5, self::contrast(Admin\MailTemplate::MUTED, Admin\MailTemplate::CARD), 'muted text');
+        self::assertGreaterThanOrEqual(4.5, self::contrast('#ffffff', Admin\MailTemplate::RED), 'button label');
+        self::assertGreaterThanOrEqual(4.5, self::contrast(Admin\MailTemplate::RED, Admin\MailTemplate::CARD), 'red label');
     }
 }

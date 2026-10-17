@@ -417,11 +417,14 @@ final class AdminPagesTest extends TestCase
         self::assertSame(0, $calls);
     }
 
-    public function testTheLoginFormIsPrefilledAndOffersToEmailALink(): void
+    public function testTheLoginFormNeverRevealsTheAllowedAddress(): void
     {
         [$p] = $this->pages();
         $body = $p->loginForm(req())->body;
-        self::assertStringContainsString('value="wgrim@siue.edu"', $body);
+        self::assertStringNotContainsString(Admin\Auth::ALLOWED, $body);
+        self::assertStringNotContainsString('siue.edu', $body);
+        self::assertSame(1, preg_match('/<input\b[^>]*\bname="email"[^>]*>/', $body, $input), 'the form has an email input');
+        self::assertDoesNotMatchRegularExpression('/\bvalue\s*=/', $input[0], 'the email input carries no value');
         self::assertStringContainsString('Email me a link', $body);
     }
 

@@ -1,12 +1,21 @@
 <?php
 // The two sign-in messages, each a multipart/alternative with the plain text first. The HTML
-// part is table markup with inline styles and no images, in the site's dark look.
+// part is table markup with inline styles and no images, in the site's light look: dark text on
+// white reads in every client, and clients with a dark mode invert it cleanly, where a dark design
+// gets lightened to grey with dimmed text.
 declare(strict_types=1);
 
 namespace Admin;
 
 final class MailTemplate
 {
+    /** The site's light palette (site.css, [data-bs-theme="light"]). */
+    public const PAGE = '#e8ebf0';
+    public const CARD = '#ffffff';
+    public const TEXT = '#1a1f2a';
+    public const MUTED = '#5a6578';
+    public const RED = '#c81010';
+
     /** @return array{subject:string,mime:string} */
     public static function link(string $url, int $minutes): array
     {
@@ -32,8 +41,8 @@ final class MailTemplate
             . "If this was not you, sign in, then sign out everywhere:\r\n$hubUrl\r\n";
         $rows = '';
         foreach (['When' => $at, 'IP' => $ip, 'Browser' => $agent] as $label => $value) {
-            $rows .= '<tr><td style="padding:6px 16px 6px 0;font-family:\'Source Sans 3\',Arial,sans-serif;color:#9aa3b2;font-size:14px;vertical-align:top;white-space:nowrap;">'
-                . self::e($label) . '</td><td style="padding:6px 0;font-family:\'Source Sans 3\',Arial,sans-serif;color:#e8ebf0;font-size:16px;word-break:break-word;">'
+            $rows .= '<tr><td style="padding:6px 16px 6px 0;font-family:\'Source Sans 3\',Arial,sans-serif;color:' . self::MUTED . ';font-size:14px;vertical-align:top;white-space:nowrap;">'
+                . self::e($label) . '</td><td style="padding:6px 0;font-family:\'Source Sans 3\',Arial,sans-serif;color:' . self::TEXT . ';font-size:16px;word-break:break-word;">'
                 . self::e($value) . '</td></tr>';
         }
         $body = self::p('Someone signed in to your admin pages.')
@@ -57,7 +66,7 @@ final class MailTemplate
 
     private static function p(string $text, bool $muted = false, bool $last = true): string
     {
-        $color = $muted ? '#9aa3b2' : '#e8ebf0';
+        $color = $muted ? self::MUTED : self::TEXT;
         $size = $muted ? '14px' : '17px';
         $margin = $last ? '24px 0 0 0' : '0 0 24px 0';
         return "<p style=\"margin:$margin;font-family:'Source Sans 3',Arial,sans-serif;font-size:$size;line-height:1.5;color:$color;\">"
@@ -67,7 +76,7 @@ final class MailTemplate
     private static function button(string $url, string $label): string
     {
         return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 0 0;"><tr>'
-            . '<td bgcolor="#e02020" style="background:#e02020;border-radius:6px;">'
+            . '<td bgcolor="' . self::RED . '" style="background:' . self::RED . ';border-radius:6px;">'
             . '<a href="' . self::e($url) . '" style="display:inline-block;padding:14px 32px;'
             . "font-family:'Source Sans 3',Arial,sans-serif;font-size:17px;font-weight:bold;color:#ffffff;text-decoration:none;\">"
             . self::e($label) . '</a></td></tr></table>';
@@ -75,26 +84,22 @@ final class MailTemplate
 
     private static function page(string $heading, string $body): string
     {
-        $mark = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="left" style="margin:0 0 24px 0;"><tr>'
-            . '<td width="120" height="28" bgcolor="#1e2633" style="background:#1e2633;border-radius:14px;width:120px;height:28px;" align="center" valign="middle">'
-            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
-            . '<td width="22" height="14" bgcolor="#e02020" style="background:#e02020;border-radius:50%;width:22px;height:14px;font-size:1px;line-height:1px;">&nbsp;</td>'
-            . '</tr></table></td></tr></table><div style="clear:both;"></div>';
         $h = self::e($heading);
+        $bar = '<tr><td height="6" bgcolor="' . self::RED . '" style="background:' . self::RED . ';height:6px;font-size:1px;line-height:6px;">&nbsp;</td></tr>';
         return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
             . '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            . '<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">'
+            . '<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">'
             . "<title>$h</title></head>"
-            . '<body style="margin:0;padding:0;background:#0d0f12;color:#e8ebf0;">'
-            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0d0f12" style="background:#0d0f12;"><tr><td align="center">'
+            . '<body style="margin:0;padding:0;background:' . self::PAGE . ';color:' . self::TEXT . ';">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' . self::PAGE . '" style="background:' . self::PAGE . ';"><tr><td align="center" style="padding:24px 12px;">'
             . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">'
-            . '<tr><td height="6" bgcolor="#e02020" style="background:#e02020;height:6px;font-size:1px;line-height:6px;">&nbsp;</td></tr>'
-            . '<tr><td bgcolor="#0d0f12" style="background:#0d0f12;padding:40px 24px 40px 24px;">'
-            . $mark
-            . "<h1 style=\"margin:0;font-family:Orbitron,'Source Sans 3',Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:bold;color:#e8ebf0;\">$h</h1>"
+            . $bar
+            . '<tr><td bgcolor="' . self::CARD . '" style="background:' . self::CARD . ';padding:36px 28px;">'
+            . "<p style=\"margin:0 0 12px 0;font-family:Orbitron,'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:bold;letter-spacing:2px;color:" . self::RED . ";\">WWW.CS &middot; ADMIN</p>"
+            . "<h1 style=\"margin:0;font-family:Orbitron,'Source Sans 3',Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:bold;color:" . self::TEXT . ";\">$h</h1>"
             . $body
             . '</td></tr>'
-            . '<tr><td height="6" bgcolor="#e02020" style="background:#e02020;height:6px;font-size:1px;line-height:6px;">&nbsp;</td></tr>'
+            . $bar
             . '</table></td></tr></table></body></html>';
     }
 

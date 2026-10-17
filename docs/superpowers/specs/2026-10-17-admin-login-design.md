@@ -14,8 +14,8 @@ owner's Mac use scoped API keys, never the login.
 
 ## What the owner gets
 
-- **Sign-in page** (`/admin/login.php`): one field, prefilled with the owner's
-  address, and **Email me a link**. Every request, allowed or not, gets the
+- **Sign-in page** (`/admin/login.php`): one empty email field and **Email me a
+  link**. The page never shows which address may sign in. Every request, allowed or not, gets the
   same reply: "If that address may sign in, a link is on its way. It is good
   for 15 minutes, once."
 - **The email**: "Your sign-in link", in the site's look (below), with one red
@@ -119,11 +119,15 @@ Tightened here:
 One template, two messages (the link and the sign-in notice), each
 `multipart/alternative` with a plain-text part first:
 
-- Near-black panel (`#0d0f12`), red bars top and bottom (`#e02020`), the
-  site's Cylon-eye mark above an Orbitron heading, body in Source Sans 3 with
-  system fallbacks (Gmail and Outlook drop web fonts; Apple Mail keeps them).
-- Tables and inline styles only (what mail clients render), `color-scheme:
-  dark` so phones do not invert it, a 600 px column that fits a phone.
+- The site's light palette: a white card on `#e8ebf0`, text `#1a1f2a`, muted
+  text `#5a6578`, red bars top and bottom and a red **WWW.CS · ADMIN** label
+  (`#c81010`) above an Orbitron heading, body in Source Sans 3 with system
+  fallbacks (Gmail and Outlook drop web fonts; Apple Mail keeps them). Dark
+  text on white reads in every client, and a client's dark mode inverts it
+  cleanly; a dark design is lightened to grey with dimmed text. A test holds
+  every text colour to WCAG contrast (7:1 body, 4.5:1 the rest).
+- Tables and inline styles only (what mail clients render), a 600 px column
+  that fits a phone.
 - The **Sign in** button is a bulletproof table button in red with white text;
   the plain-text part carries the same link on its own line.
 

@@ -46,3 +46,19 @@ test('the entry follows the page: hidden pauses the play-through and hint timers
   const main = read('src/main.ts');
   assert.match(main, /followPage\(\{ doc: document, win: window \}, \{ hide: game\.pause, show: game\.resume \}\)/);
 });
+
+test('the page is one frame: no header, side panels or seed form outside the menu, and the cards are inside it', () => {
+  const html = read('index.html');
+  for (const gone of ['class="topbar"', 'class="side"', 'id="seed-form"', 'id="hud-hp"', 'id="inventory-root"', '<h1']) {
+    assert.ok(!html.includes(gone), gone);
+  }
+  const frame = html.slice(html.indexOf('<div id="frame"'), html.indexOf('<script type="module"'));
+  assert.ok(frame.length > 0, 'a #frame');
+  for (const id of ['status-root', 'board', 'stage', 'toast', 'strip-root', 'title-root', 'menu-root', 'story-root', 'end-root']) {
+    assert.ok(frame.includes(`id="${id}"`), `${id} inside #frame`);
+  }
+});
+
+test('the frame is a size container, so the kit key tabs and the phone layouts can ask its size', () => {
+  assert.match(read('game.css'), /#frame\s*\{[^}]*container:\s*frame\s*\/\s*size/);
+});

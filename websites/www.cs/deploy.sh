@@ -144,6 +144,12 @@ while IFS= read -r -d '' f; do
     games/tankity/data/*) continue ;;
     # The admin login's storage (its database) likewise.
     admin/data/*) continue ;;
+    # The admin login's pages, stylesheet, libraries and their .htaccess files
+    # ship; its notes (README.md) and anything else under admin/ do not.
+    admin/lib/*.php | admin/lib/.htaccess) ;;
+    admin/*/*) continue ;;
+    admin/*.php | admin/admin.css | admin/.htaccess) ;;
+    admin/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;

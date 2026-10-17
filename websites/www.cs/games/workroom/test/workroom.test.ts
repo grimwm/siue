@@ -123,7 +123,7 @@ test('a refused play says so in plain words', async () => {
   rejectPlay = true;
   try {
     fire(button(root, 'Hear it'), 'click');
-    await act(() => new Promise<void>(r => setTimeout(r, 5)));
+    await act(() => new Promise<void>(r => setImmediate(r))); // the rejected play() settles in microtasks
   } finally { rejectPlay = false; }
   const alert = walk(root).find(e => e._attrs['role'] === 'alert');
   assert.ok(alert, 'a message is shown');
@@ -160,6 +160,17 @@ test('an opened card takes focus, and closing it returns focus to its word', asy
   assert.ok(globalThis.__focused === card, 'the card has focus');
   await act(() => { fire(button(root, 'Close'), 'click'); });
   assert.ok(globalThis.__focused === word, 'the word has focus again');
+  unmount(root);
+});
+
+test('the change list is numbered once, by its list markers', async () => {
+  const root = await mount();
+  const items = walk(root).filter(e => e.localName === 'li' && e._attrs['data-change'] !== undefined);
+  assert.ok(items.length > 0);
+  for (const li of items) {
+    const where = walk(li).find(e => e.className === 'where')!;
+    assert.doesNotMatch(where.textContent, /^\d+\./, 'no number inside the button; the <ol> marker is the number');
+  }
   unmount(root);
 });
 

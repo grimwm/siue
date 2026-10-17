@@ -131,7 +131,7 @@ export function Workroom(p: WorkroomProps) {
             <ol class="changes" aria-label="Claude's changes">
               {score.changes.map((c, i) => (
                 <li data-change={i}>
-                  <button type="button" class="where" onClick={() => seek(changeTimes(c, tempo, score.duration).from)}>{i + 1}. {changeLabel(c)}</button>{' '}
+                  <button type="button" class="where" onClick={() => seek(changeTimes(c, tempo, score.duration).from)}>{changeLabel(c)}</button>{' '}
                   {splitTerms(c.text).map(part => 'term' in part ? <Word term={part.term} text={part.text} onOpen={openCard} /> : part.text)}
                 </li>
               ))}

@@ -187,15 +187,19 @@ export async function bundle(gameDir, cfg) {
     const lockFile = join(GAMES, 'package-lock.json');
     const lock = existsSync(lockFile) ? JSON.parse(readFileSync(lockFile, 'utf8')) : { packages: {} };
     const roots = [...packages.keys()].map(dir => relative(GAMES, dir).split(sep).join('/'));
+    const unlocked = [];
     for (const name of cfg.inlined ?? []) {
       const dir = join(GAMES, 'node_modules', ...name.split('/'));
       if (!existsSync(join(dir, 'package.json'))) throw new BuildError(`build.json: inlined package ${name} is not installed in games/node_modules`);
       packages.set(dir, name);
       const key = `node_modules/${name}`;
       if (lock.packages?.[key]) roots.push(key);
+      else unlocked.push(name);
     }
     for (const [key, name] of runtimeClosure(lock, roots, cfg.notInlined)) packages.set(join(GAMES, ...key.split('/')), name);
     const blocks = [...packages].sort(([da, a], [db, b]) => (a < b ? -1 : a > b ? 1 : da < db ? -1 : da > db ? 1 : 0)).map(([dir, name]) => licenseBlock(name, dir));
+    // Without a lockfile root its dependencies' notices cannot be collected: fail rather than write an incomplete file.
+    if (unlocked.length) throw new BuildError(`build.json: inlined package ${unlocked.join(', ')} has no entry in games/package-lock.json, so its dependencies' notices cannot be collected`);
     files.set(LICENSES_FILE, `Third-party code bundled into this game's scripts.\n\n${blocks.join('\n---\n\n')}`);
   }
   return files;

@@ -191,6 +191,20 @@ test('an inlined package that is not installed fails the build, naming it', t =>
   assert.match(r.stderr, /inlined package no-such-package is not installed/);
 });
 
+test('an inlined package missing from the lockfile fails the build, naming it', t => {
+  const dir = scratch(t);
+  const name = `kit-test-unlocked-${process.pid}`;
+  const pkg = join(NODE_MODULES, name);
+  mkdirSync(pkg);
+  t.after(() => rmSync(pkg, { recursive: true, force: true }));
+  writeFileSync(join(pkg, 'package.json'), JSON.stringify({ name, version: '1.0.0', license: 'MIT' }));
+  writeFileSync(join(pkg, 'LICENSE'), 'MIT test license\n');
+  withInlined(dir, [name]);
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, new RegExp(`inlined package ${name} has no entry in games/package-lock.json`));
+});
+
 test('an inlined package without a license file fails the build, naming it', t => {
   const dir = scratch(t);
   // A package made for this test, so it never depends on what else is installed.

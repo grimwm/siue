@@ -1,8 +1,15 @@
-// The workroom page: reads which view and piece the server rendered, loads the
-// draft over the session and draws it. The index view has nothing to draw yet.
+// The workroom page: starts the theme switch, reads which view and piece the
+// server rendered, loads the draft over the session and draws it. The index view has nothing to draw yet.
 import { render, h } from 'preact';
+import { browserThemePorts } from './browser.ts';
 import { draftUrl, loadDraft } from './load.ts';
+import { startTheme } from './theme.ts';
+import { ThemeRoot, ThemeSwitch } from './ui/ThemeSwitch.tsx';
 import { Workroom } from './ui/Workroom.tsx';
+
+const theme = startTheme(browserThemePorts());
+const switchHost = document.getElementById('theme-switch');
+if (switchHost) render(h(ThemeSwitch, { handle: theme }), switchHost);
 
 const root = document.getElementById('workroom')!;
 const { view, piece, version } = document.body.dataset;
@@ -22,13 +29,13 @@ if (view === 'piece' && piece) {
   if (!loaded.ok) say(loaded.error);
   else {
     root.textContent = '';
-    render(h(Workroom, {
+    render(h(ThemeRoot, { handle: theme }, h(Workroom, {
       score: loaded.score,
       version: loaded.version,
       versions: loaded.versions,
       audioSrc: file => draftUrl(piece, loaded.version, file),
       onVersion: v => { location.search = `?id=${encodeURIComponent(piece)}&v=${v}`; },
-    }), root);
+    })), root);
   }
 } else {
   root.textContent = '';

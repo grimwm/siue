@@ -9,6 +9,7 @@ final class Auth
 {
     public const ALLOWED = 'wgrim@siue.edu';
     public const LINK_TTL = 900;
+    public const DEVICE_TTL = 7776000;
 
     private const WINDOW = 3600;
     private const LIMIT_GLOBAL = 30;
@@ -28,9 +29,15 @@ final class Auth
         return strtolower(trim($email)) === self::ALLOWED;
     }
 
-    /** Records the request; returns the plain token when a link may be sent, else null (not allowed, or a limit hit). */
-    public function requestLink(string $email, string $ip): ?string
+    /**
+     * Records the request; returns the plain token when a link may be sent, else
+     * null (not allowed, or a limit hit). A trusted device skips the address and
+     * global limits (so strangers cannot lock the owner out) but keeps the per-IP
+     * limit. Opens its own BEGIN IMMEDIATE transaction: callers must not hold one.
+     */
+    public function requestLink(string $email, string $ip, bool $trustedDevice = false): ?string
     {
+        $ip = substr($ip, 0, 45);
         $now = $this->clock->now();
         $since = $now - self::WINDOW;
         $ok = self::allowed($email);
@@ -53,7 +60,8 @@ final class Auth
                 ->execute([':ip' => $ip, ':e' => substr(strtolower(trim($email)), 0, 254), ':at' => $now]);
 
             $token = null;
-            if ($ok && $global < self::LIMIT_GLOBAL && $perIp < self::LIMIT_IP && $perAddress < self::LIMIT_ADDRESS) {
+            if ($ok && $perIp < self::LIMIT_IP
+                && ($trustedDevice || ($global < self::LIMIT_GLOBAL && $perAddress < self::LIMIT_ADDRESS))) {
                 $token = bin2hex(random_bytes(32));
                 $this->db->prepare('INSERT INTO links (token_hash, email, created_at, expires_at, used_at) VALUES (:h, :e, :c, :x, NULL)')
                     ->execute([':h' => hash('sha256', $token), ':e' => self::ALLOWED, ':c' => $now, ':x' => $now + self::LINK_TTL]);
@@ -66,6 +74,34 @@ final class Auth
             throw $e;
         }
         return $token;
+    }
+
+    /** Registers a trusted device; returns its plain token (only the SHA-256 is stored). */
+    public function issueDevice(): string
+    {
+        $now = $this->clock->now();
+        $this->db->prepare('DELETE FROM devices WHERE expires_at <= :now')->execute([':now' => $now]);
+        $token = bin2hex(random_bytes(32));
+        $this->db->prepare('INSERT INTO devices (token_hash, created_at, expires_at) VALUES (:h, :c, :x)')
+            ->execute([':h' => hash('sha256', $token), ':c' => $now, ':x' => $now + self::DEVICE_TTL]);
+        return $token;
+    }
+
+    /** True for a well-formed, known, unexpired device token. */
+    public function isTrustedDevice(?string $token): bool
+    {
+        if ($token === null || !self::wellFormed($token)) {
+            return false;
+        }
+        $st = $this->db->prepare('SELECT 1 FROM devices WHERE token_hash = :h AND expires_at > :now');
+        $st->execute([':h' => hash('sha256', $token), ':now' => $this->clock->now()]);
+        return $st->fetchColumn() !== false;
+    }
+
+    /** Forgets every trusted device. */
+    public function forgetDevices(): void
+    {
+        $this->db->exec('DELETE FROM devices');
     }
 
     /** The address for a valid, unused, unexpired token; never consumes. */

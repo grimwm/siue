@@ -65,14 +65,15 @@ function music_read_body(int $max): string
 }
 
 /**
- * First 10 hex of one SHA-256 over games/workroom/dist/workroom.js and sheet.js (the page script loads sheet.js
- * with the same ?v=, so a change to either busts both); '' while either file is missing.
+ * First 10 hex of one SHA-256 over the workroom's built assets in games/workroom/dist: the page script, the
+ * sheet-music script it loads with the same ?v=, the theme boot script and the stylesheet. A change to any busts
+ * them all; '' while any is missing.
  */
 function music_asset_version(?string $dist = null): string
 {
     $dist ??= __DIR__ . '/../../games/workroom/dist';
     $hash = hash_init('sha256');
-    foreach (['workroom.js', 'sheet.js'] as $file) {
+    foreach (['workroom.js', 'sheet.js', 'theme.js', 'workroom.css'] as $file) {
         $bytes = @file_get_contents("$dist/$file");
         if ($bytes === false) {
             return '';

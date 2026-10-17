@@ -17,8 +17,9 @@ its project, its kind (`music` or `sound`) and its characters.
   CSRF token. All routes refuse plain HTTP.
 - API keys are made on the admin hub and carry scopes. A key cannot delete.
 - `lib/`, `tools/`, `pieces/` and `keys/` are never served (`.htaccess` on Apache,
-  `docker/nginx/default.conf` locally). `deploy.sh` ships the pages, `api/`, `lib/`,
-  `music.css` and `keys/public.json` only.
+  `docker/nginx/default.conf` locally). `deploy.sh` ships the pages, `api/`, `lib/` and
+  `keys/public.json` only; the page's script, stylesheet, theme boot and fonts ship
+  from `games/workroom/dist/`.
 
 ## Routes
 
@@ -29,6 +30,16 @@ Session routes (same-origin, signed in): `index.php`, `piece.php?id=&v=` (pages)
 API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
 `api/picked-up.php` (POST) need `notes:pickup`; `api/drafts.php` (POST) needs
 `drafts:publish`; `api/keyring.php` (POST) needs `keys:publish`.
+
+## The look
+
+The workroom has its own Studio Console look, dark or light ("daylight"),
+compiled with Tailwind at build time from `games/workroom/src/app.css` into
+`games/workroom/dist/workroom.css`, with self-hosted OFL fonts in
+`dist/fonts/`. The header's switch (System, Dark, Light) is remembered in this
+browser (`workroom-theme` in localStorage); `dist/theme.js`, the first script
+in the head, applies it before the first paint. Colours are tokens in
+`app.css`; a score's own colours are nudged to stay readable on either theme.
 
 ## Limits
 

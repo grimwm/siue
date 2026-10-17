@@ -305,12 +305,49 @@ final class MusicPagesTest extends TestCase
         self::assertSame(['Crete', 'No project'], $h[1], 'the unprojected group is last whatever its recency');
     }
 
+    private const HEAD_ASSETS = '<script src="../games/workroom/dist/theme.js?v=0123456789"></script>'
+        . '<link rel="stylesheet" href="../games/workroom/dist/workroom.css?v=0123456789">';
+
+    private static function assertConsoleShell(string $html): void
+    {
+        $head = substr($html, 0, (int) strpos($html, '</head>'));
+        self::assertStringContainsString('<meta name="color-scheme" content="dark light">', $head);
+        self::assertStringContainsString(self::HEAD_ASSETS, $head, 'the theme boot runs before the stylesheet, as a plain script in the head');
+        self::assertStringNotContainsString('music.css', $html);
+        self::assertStringNotContainsString('style="', $html, 'no inline style attribute (the CSP blocks them)');
+        self::assertMatchesRegularExpression('~<header class="console-head">.*<div id="theme-switch"></div></header>~s', $html);
+    }
+
+    public function testEveryShellLinksTheConsoleStylesheetAndTheThemeBoot(): void
+    {
+        $piece = $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => 'ch1-labyrinth']]));
+        self::assertConsoleShell($piece->body);
+        self::assertStringContainsString('<header class="console-head"><p class="crumb"><a href="./">All pieces</a></p><div id="theme-switch"></div></header>', $piece->body);
+        $index = $this->pages->index(music_signed_in($this->sessions));
+        self::assertConsoleShell($index->body);
+        self::assertStringContainsString('<header class="console-head"><h1>Music workroom</h1><div id="theme-switch"></div></header>', $index->body);
+        self::assertStringContainsString('<div class="index-body"><p class="waiting-total">', $index->body);
+    }
+
+    public function testTheErrorPageWearsTheConsoleToo(): void
+    {
+        $res = $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => '<script>']]));
+        self::assertSame(400, $res->status);
+        $head = substr($res->body, 0, (int) strpos($res->body, '</head>'));
+        self::assertStringContainsString(self::HEAD_ASSETS, $head);
+        self::assertStringContainsString('<p class="error" role="alert">No such piece.</p>', $res->body);
+        self::assertStringContainsString('<a href="./">All pieces</a>', $res->body);
+    }
+
     public function testTheNoSuchPiecePageMountsNothing(): void
     {
         $res = $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => '<script>']]));
         self::assertSame(400, $res->status);
         self::assertStringContainsString('No such piece.', $res->body);
-        self::assertStringNotContainsString('workroom', $res->body);
-        self::assertStringNotContainsString('<script', $res->body);
+        preg_match_all('~<script\b[^>]*>~', $res->body, $scripts);
+        self::assertSame(['<script src="../games/workroom/dist/theme.js?v=0123456789">'], $scripts[0], 'the only script is the theme boot');
+        foreach (['workroom.js', 'sheet.js', 'type="module"', 'data-view', 'data-piece', '<main id="workroom">'] as $mount) {
+            self::assertStringNotContainsString($mount, $res->body, "the error page does not mount the workroom: $mount");
+        }
     }
 }

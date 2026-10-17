@@ -21,7 +21,7 @@ final class Pages
     private const NOTE_ERRORS = ['too_large' => 413, 'full' => 409, 'bad_header' => 422, 'unknown_key' => 422, 'no_key' => 503];
     private const LISTED_CHANGES = 3;
 
-    /** $assetVersion: 10 hex over games/workroom/dist/workroom.js and sheet.js (the ?v= on the script, which the script passes on to sheet.js); $baseUrl: admin_base_url(). */
+    /** $assetVersion: 10 hex over games/workroom/dist's workroom.js, sheet.js, theme.js and workroom.css (the ?v= on each; the script passes it on to sheet.js); $baseUrl: admin_base_url(). */
     public function __construct(
         private Store $store,
         private \Admin\Pages $admin,
@@ -259,29 +259,40 @@ final class Pages
             . Html::e($title) . '</a><span class="waiting-count"></span><span class="version">v' . (int) $row['version'] . '</span><ul class="changes">' . $changes . '</ul></li>';
     }
 
+    /** The head's assets: the theme boot first (a plain script, so data-theme is set before the first paint), then the stylesheet. */
+    private function assets(): string
+    {
+        $v = Html::e($this->assetVersion);
+        return '<script src="../games/workroom/dist/theme.js?v=' . $v . '"></script>'
+            . '<link rel="stylesheet" href="../games/workroom/dist/workroom.css?v=' . $v . '">';
+    }
+
     private function errorPage(int $status, string $message): \Admin\Response
     {
         $html = '<!doctype html>' . "\n"
             . '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-            . '<meta name="robots" content="noindex, nofollow"><title>' . Html::e($message) . '</title></head>'
-            . '<body><p>' . Html::e($message) . '</p></body></html>';
+            . '<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="dark light">'
+            . '<title>' . Html::e($message) . '</title>' . $this->assets() . '</head>'
+            . '<body><header class="console-head"><p class="crumb"><a href="./">All pieces</a></p></header>'
+            . '<main class="index-body"><p class="error" role="alert">' . Html::e($message) . '</p></main></body></html>';
         return Http::finish(new \Admin\Response($status, ['Content-Type' => 'text/html; charset=utf-8'], $html));
     }
 
     private function shell(int $status, string $title, string $view, string $piece, string $version, string $body, \Admin\Request $r): \Admin\Response
     {
         $v = Html::e($this->assetVersion);
+        $heading = $view === 'piece' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>';
         $html = '<!doctype html>' . "\n"
             . '<html lang="en"><head><meta charset="utf-8">'
             . '<meta name="viewport" content="width=device-width, initial-scale=1">'
             . '<meta name="robots" content="noindex, nofollow">'
-            . '<meta name="color-scheme" content="dark">'
+            . '<meta name="color-scheme" content="dark light">'
             . '<meta name="csrf" content="' . Html::e($this->sessions->csrf($r)) . '">'
             . '<title>' . Html::e($title) . '</title>'
-            . '<link rel="stylesheet" href="music.css?v=' . $v . '">'
+            . $this->assets()
             . '</head><body data-view="' . Html::e($view) . '" data-piece="' . Html::e($piece) . '" data-version="' . Html::e($version) . '">'
-            . ($view === 'piece' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>')
-            . $body
+            . '<header class="console-head">' . $heading . '<div id="theme-switch"></div></header>'
+            . ($body === '' ? '' : '<div class="index-body">' . $body . '</div>')
             . '<main id="workroom"></main>'
             . '<script type="module" src="../games/workroom/dist/workroom.js?v=' . $v . '"></script>'
             . '</body></html>';

@@ -37,6 +37,19 @@ API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
   before the script reads the body); the newest 20 drafts are kept; a publish that would
   leave more than 100 MB stored is refused with 413.
 
+## The owner's key tool
+
+`music/tools/siue-music` keeps the notes keys in 1Password (vault `SIUE`, or
+`$OP_VAULT`; the `op` CLI must be 2.25 or newer) and a working copy in
+`~/.config/siue/music.json` (folder 0700, file 0600). Secrets reach `op` on
+standard input and are never printed.
+
+- `make music-tools-venv` makes the tool's virtualenv; `make music-tools-test` runs its tests.
+- `make keys-status` compares the repository's current public key with 1Password and the cache (exit 3 when they differ).
+- `make keys-pull` copies the keys and API keys from 1Password into the cache and checks the repository's current key is among them.
+- `make keys-forget` deletes the cache.
+- `make api-key-set NAME=music-pickup` saves an API key made on the hub (pasted at the prompt) as a 1Password item, replacing any earlier one of that name.
+
 ## The local browser check
 
 `make music-e2e` (local only; CI never runs it) brings up its own docker project

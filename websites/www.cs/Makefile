@@ -113,3 +113,25 @@ music-e2e:
 	MUSIC_E2E_COMPOSE="$$files" MUSIC_E2E_PROJECT=$$name MUSIC_E2E_MAIL_DIR=$$ADMIN_SMOKE_DIR/mail \
 	E2E_BASE_URL=http://localhost:$$port/ tests/e2e/run.sh -c local.config.ts && \
 	echo MUSIC-E2E-OK
+
+# The music workroom's key and note tool (music/tools/siue-music). Its own
+# virtualenv when make music-tools-venv made one, else python3.
+.PHONY: keys-status keys-pull keys-forget api-key-set music-tools-venv music-tools-test
+MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
+MUSIC_TOOL = $(MUSIC_PY) music/tools/siue-music
+
+keys-status:
+	@$(MUSIC_TOOL) keys status
+keys-pull:
+	@$(MUSIC_TOOL) keys pull
+keys-forget:
+	@$(MUSIC_TOOL) keys forget
+api-key-set:
+	@test -n "$(NAME)" || { echo "usage: make api-key-set NAME=music-pickup" >&2; exit 1; }
+	@$(MUSIC_TOOL) api-key-set "$(NAME)"
+music-tools-venv:
+	python3 -m venv music/tools/.venv
+	music/tools/.venv/bin/pip install --quiet -r music/tools/requirements.txt
+	@echo "Speech and humming (optional): music/tools/.venv/bin/pip install -r music/tools/requirements-answering.txt; brew install ffmpeg"
+music-tools-test:
+	$(MUSIC_PY) -m unittest discover -s music/tools/tests -t music/tools/tests

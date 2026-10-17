@@ -7,10 +7,10 @@ from typing import Mapping, Sequence
 
 from . import paths
 from .api import Api, ApiError
-from .keys import PUBLISH_KEY, Cache, Keys, KeyMismatch, KeysError
+from .keys import PUBLISH_KEY, NotUploaded, Cache, Keys, KeyMismatch, KeysError
 from .op import Op, OpError
 
-USAGE = """usage: siue-music keys status|pull|forget|init|rotate|upload
+USAGE = """usage: siue-music keys status|pull|forget|init [--adopt]|rotate|upload
        siue-music api-key-set NAME   (the key is read from the terminal, or one line of stdin)"""
 
 
@@ -48,12 +48,15 @@ def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
             else:
                 keys.forget()
             return 0
-        if args[:1] == ["keys"] and args[1:2] in (["init"], ["rotate"]) and len(args) == 2:
+        if args[:1] == ["keys"] and (args[1:] in (["init"], ["rotate"], ["init", "--adopt"])):
             try:
                 upload = publisher(keys, env)
             except (KeysError, ApiError):
                 upload = None
-            (keys.init if args[1] == "init" else keys.rotate)(upload)
+            if args[1] == "init":
+                keys.init(upload, adopt=args[2:] == ["--adopt"])
+            else:
+                keys.rotate(upload)
             return 0
         if args[:1] == ["keys"] and args[1:] == ["upload"]:
             count = keys.upload_keyring(publisher(keys, env))
@@ -65,6 +68,9 @@ def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
     except KeyMismatch as e:
         print(str(e), file=sys.stderr)
         return 3
+    except NotUploaded as e:
+        print(str(e), file=sys.stderr)
+        return 4
     except (KeysError, OpError, ApiError) as e:
         print(str(e), file=sys.stderr)
         return 1

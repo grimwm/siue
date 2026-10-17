@@ -163,5 +163,42 @@ class ApiTest(unittest.TestCase):
         self.assertEqual((json.loads(got["body"]), got["length"], got["auth"]), ({"v": 1}, str(len(got["body"])), "Bearer " + "k" * 64))
 
 
+    def test_a_redirect_is_refused_and_the_key_never_follows_it(self):
+        import http.server
+        import threading
+        seen = {"target_auth": None, "target_hit": False}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def _go(self):
+                if self.path.startswith("/target"):
+                    seen["target_hit"] = True
+                    seen["target_auth"] = self.headers.get("Authorization")
+                    self.send_response(200)
+                    self.send_header("Content-Length", "2")
+                    self.end_headers()
+                    self.wfile.write(b"{}")
+                    return
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.send_response(302)
+                self.send_header("Location", f"http://127.0.0.1:{self.server.server_port}/target")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            do_GET = do_POST = _go
+
+            def log_message(self, *_):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        with self.assertRaises(ApiError) as ctx:
+            Api(f"http://127.0.0.1:{server.server_port}/music/", "k" * 64).publish_keyring({"v": 1})
+        self.assertEqual(ctx.exception.status, 302)
+        self.assertFalse(seen["target_hit"], "the redirect target was never contacted")
+        self.assertIsNone(seen["target_auth"])
+
+
 if __name__ == "__main__":
     unittest.main()

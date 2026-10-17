@@ -35,9 +35,10 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(sealing.unlock_keyring(locked, passphrase), {fp: pkcs8}, "the browser's passphrase opens the uploaded keyring of one")
         ts = self.w.public_ts.read_text()
         self.assertIn(fp, ts)
-        self.assertNotIn(fields["private_key"][:40], ts + self.w.public_json.read_text())
+        whole, middle = fields["private_key"], fields["private_key"][200:260]
+        self.assertNotIn(middle, ts + self.w.public_json.read_text())
         for call in self.w.op_calls():
-            self.assertFalse(any(passphrase in a or fields["private_key"][:40] in a for a in call))
+            self.assertFalse(any(passphrase in a or middle in a for a in call))
         self.assertNotIn(passphrase, "\n".join(self.w.out))
 
     def test_init_refuses_when_a_key_exists_anywhere(self):
@@ -108,6 +109,81 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(self.uploads, [], "nothing was uploaded")
         self.assertEqual(len(self.item_fields()), 1, "no new item was made")
         self.assertEqual(json.loads(self.w.public_json.read_text())["current"]["fingerprint"], orphan, "public.json is untouched")
+
+
+    def cache_only_key(self):
+        """A retained key that 1Password lost: the cache holds the last copy."""
+        old = self.w.keys.init(self.uploads.append)
+        self.w.keys.rotate(self.uploads.append)
+        for item in self.w.op.list_items("siue-music-key"):
+            if old[:16] in item["title"]:
+                self.w.op.archive(item["id"])
+        return old
+
+    def test_a_key_only_the_cache_holds_survives_pull_and_the_api_key_pull(self):
+        old = self.cache_only_key()
+        self.w.keys.pull()
+        self.assertIn(old, self.w.cache.load()["keys"])
+        self.assertTrue(any(old[:4] in line and "kept" in line for line in self.w.out), "one warning names it")
+        self.w.keys.api_key_set("music-publish", "e" * 64)
+        self.w.cache.save({**self.w.cache.load(), "api": {}})
+        self.w.keys.api_key("music-publish")
+        self.assertIn(old, self.w.cache.load()["keys"])
+        self.w.out.clear()
+        self.w.keys.status()
+        self.assertTrue(any("Only this computer" in line for line in self.w.out))
+
+    def test_rotate_uses_a_cache_only_key_and_uploads_it(self):
+        old = self.cache_only_key()
+        new = self.w.keys.rotate(self.uploads.append)
+        passphrase = self.item_fields()[0]["password"]
+        ring = list(sealing.unlock_keyring(self.uploads[-1], passphrase))
+        self.assertEqual((ring[0], len(ring)), (new, 3), "the new key, the middle one, and the cache-only oldest")
+        self.assertIn(old, sealing.unlock_keyring(self.uploads[-1], passphrase))
+
+    def test_a_failed_rotate_upload_raises_not_uploaded_and_does_not_say_commit(self):
+        from siue_music.keys import NotUploaded
+        self.w.keys.init(self.uploads.append)
+        self.w.out.clear()
+
+        def fail(_locked):
+            raise OSError("network down")
+        with self.assertRaises(NotUploaded):
+            self.w.keys.rotate(fail)
+        text = "\n".join(self.w.out)
+        self.assertIn("make keys-upload before you commit or deploy", text)
+        self.assertNotIn("Then commit", text)
+
+    def test_a_read_back_failure_archives_the_new_item(self):
+        original = self.w.op.fields
+
+        def boom(item_id):
+            raise OSError("op died")
+        self.w.op.fields = boom
+        with self.assertRaises(OSError):
+            self.w.keys.init(self.uploads.append)
+        self.w.op.fields = original
+        self.assertEqual(self.w.op.list_items("siue-music-key"), [], "no orphan item")
+
+    def test_an_orphan_item_is_named_and_adopted(self):
+        fp = self.w.add_key_to_op(0, passphrase="orphan passphrase")
+        with self.assertRaises(KeysError) as ctx:
+            self.w.keys.init(self.uploads.append)
+        self.assertIn("ADOPT=1", str(ctx.exception))
+        self.assertIn(fp[:16], str(ctx.exception))
+        self.assertFalse(self.w.public_json.exists())
+        self.assertEqual(self.w.keys.init(self.uploads.append, adopt=True), fp)
+        self.assertEqual(json.loads(self.w.public_json.read_text())["current"]["fingerprint"], fp)
+        self.assertIn(fp, self.w.cache.load()["keys"])
+        self.assertEqual(list(sealing.unlock_keyring(self.uploads[-1], "orphan passphrase")), [fp])
+        self.assertEqual(len(self.item_fields()), 1, "no second item")
+
+    def test_adopt_refuses_with_no_item_or_with_a_repository_key(self):
+        with self.assertRaises(KeysError):
+            self.w.keys.init(self.uploads.append, adopt=True)
+        self.w.keys.init(self.uploads.append)
+        with self.assertRaises(KeysError):
+            self.w.keys.init(self.uploads.append, adopt=True)
 
 
 if __name__ == "__main__":

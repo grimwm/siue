@@ -55,7 +55,7 @@ class CliTest(unittest.TestCase):
         for call in self.w.op_calls():
             self.assertNotIn("c" * 64, " ".join(call))
 
-    def test_keys_init_uploads_with_the_music_publish_key_and_exits_0_even_when_it_cannot(self):
+    def test_keys_init_uploads_with_the_music_publish_key(self):
         sent = []
 
         class StubApi:
@@ -86,6 +86,31 @@ class CliTest(unittest.TestCase):
         code, _, err = self.run_cli("keys", "upload")
         self.assertEqual(code, 1)
         self.assertIn("music-publish", err)
+
+    def test_a_failed_init_upload_exits_0_and_a_failed_rotate_upload_exits_4(self):
+        class Failing:
+            def __init__(self, base, key):
+                pass
+
+            def publish_keyring(self, locked):
+                raise OSError("network down")
+
+        self.run_cli("api-key-set", "music-publish", stdin="d" * 64 + "\n")
+        with mock.patch.object(cli, "make_api", Failing):
+            code, out, _ = self.run_cli("keys", "init")
+            self.assertEqual(code, 0)
+            self.assertIn("network down", out)
+            code, out, err = self.run_cli("keys", "rotate")
+        self.assertEqual(code, 4)
+        self.assertIn("make keys-upload before you commit or deploy", out)
+        self.assertNotIn("Then commit", out)
+        self.assertIn("not uploaded", err)
+
+    def test_init_adopt_flag(self):
+        fp = self.w.add_key_to_op(0)
+        self.assertEqual(self.run_cli("keys", "init")[0], 1)
+        self.assertEqual(self.run_cli("keys", "init", "--adopt")[0], 0)
+        self.assertIn(fp, self.w.public_json.read_text())
 
     def test_usage_exits_2(self):
         self.assertEqual(self.run_cli("bogus")[0], 2)

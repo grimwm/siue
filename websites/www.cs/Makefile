@@ -125,7 +125,7 @@ keys-status:
 keys-pull:
 	@$(MUSIC_TOOL) keys pull
 keys-init:
-	@$(MUSIC_TOOL) keys init
+	@$(MUSIC_TOOL) keys init $(if $(ADOPT),--adopt)
 keys-rotate:
 	@$(MUSIC_TOOL) keys rotate
 keys-upload:

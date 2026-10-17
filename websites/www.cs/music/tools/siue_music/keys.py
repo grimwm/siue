@@ -32,6 +32,10 @@ class KeysError(Exception):
     """Exit code 1."""
 
 
+class NotUploaded(Exception):
+    """The keys changed but the locked keyring did not reach the server. Exit code 4."""
+
+
 def display(fp: str) -> str:
     return " ".join(fp[i:i + 4] for i in range(0, 16, 4))
 
@@ -170,7 +174,11 @@ class Keys:
             f = self.op.fields(item["id"])
             if f.get("name") and f.get("credential"):
                 api[f["name"]] = f["credential"]
-        self.cache.save({"v": 1, "keys": {fp: f["private_key"] for fp, (_, f) in held.items()}, "api": api})
+        cached = self.cache.load()["keys"]
+        for fp in cached:
+            if fp not in held:
+                self.out(f"Only this computer holds key {display(fp)}; it is kept.")
+        self.cache.save({"v": 1, "keys": {**cached, **{fp: f["private_key"] for fp, (_, f) in held.items()}}, "api": api})
 
     def pull_checked(self) -> None:
         self.pull()
@@ -209,6 +217,9 @@ class Keys:
             side_ok = repo.current in held
             self.out("1Password: match" if side_ok else "1Password: out of date: the repository's key is not saved there; run make keys-init or check OP_VAULT")
             ok &= side_ok
+            only_here = [fp for fp in self.cache.load()["keys"] if fp not in held]
+            if only_here:
+                self.out("Only this computer holds: " + ", ".join(display(fp) for fp in only_here) + " (not in 1Password)")
         except (OpError, KeysError, KeyMismatch) as e:
             self.out(f"1Password: unreachable: {e}")
             ok = False
@@ -294,45 +305,75 @@ class Keys:
             {"id": "private_key", "type": "CONCEALED", "label": "private_key", "value": private_key},
             {"id": "fingerprint", "type": "STRING", "label": "fingerprint", "value": fp},
         ], urls=[WORKROOM_URL])
-        stored = self.op.fields(new_id)
-        for label, want in (("password", passphrase), ("private_key", private_key), ("fingerprint", fp)):
-            if not hmac.compare_digest(stored.get(label, "").encode(), want.encode()):
-                self.op.archive(new_id)
-                raise KeysError(f"1Password did not store the key's {label} field as sent; the new item was removed and nothing was changed")
+        try:
+            stored = self.op.fields(new_id)
+            bad = next((label for label, want in (("password", passphrase), ("private_key", private_key), ("fingerprint", fp))
+                        if not hmac.compare_digest(stored.get(label, "").encode(), want.encode())), None)
+        except BaseException:
+            self.op.archive(new_id)
+            raise
+        if bad is not None:
+            self.op.archive(new_id)
+            raise KeysError(f"1Password did not store the key's {bad} field as sent; the new item was removed and nothing was changed")
 
     def _remember(self, fp: str, pkcs8: bytes) -> None:
         data = self.cache.load()
         data["keys"][fp] = base64.b64encode(pkcs8).decode("ascii")
         self.cache.save(data)
 
-    def _send(self, upload: Upload | None, ring: dict[str, bytes], passphrase: str, first: bool) -> None:
+    def _send(self, upload: Upload | None, ring: dict[str, bytes], passphrase: str, first: bool) -> bool:
+        locked = sealing.lock_keyring(ring, passphrase)
         reason = "no music-publish API key"
         if upload is not None:
             try:
-                upload(sealing.lock_keyring(ring, passphrase))
+                upload(locked)
                 self.out(f"Uploaded the locked keyring ({len(ring)} key{'' if len(ring) == 1 else 's'}).")
-                return
+                return True
             except Exception as e:  # any failure leaves the keys safe in 1Password; the retry is make keys-upload
                 reason = str(e) or type(e).__name__
         retry = (f"After creating the {PUBLISH_KEY} API key on the hub: make api-key-set NAME={PUBLISH_KEY} && make keys-upload"
-                 if first else "Retry with: make keys-upload")
+                 if first else "Run make keys-upload before you commit or deploy")
         self.out(f"The locked keyring was not uploaded ({reason}). {retry}")
+        return False
 
-    def init(self, upload: Upload | None) -> str:
-        self._ready()
-        if read_repo_keys(self.public_json).current is not None or self.op.list_items(KEY_TAG):
-            raise KeysError("A notes key already exists (in the repository or in 1Password): use make keys-rotate")
-        pkcs8, spki = sealing.generate()
-        fp, passphrase = sealing.fingerprint(spki), sealing.new_passphrase()
-        self._create_key_item(pkcs8, fp, passphrase)
-        write_public_files(self.public_json, self.public_ts, (fp, spki), [])
-        self._remember(fp, pkcs8)
-        self.out(f"Made the notes key {display(fp)} and saved it to 1Password (vault {self.op.vault}).")
-        self._send(upload, {fp: pkcs8}, passphrase, first=True)
+    def _next_steps(self) -> None:
         self.out("Next: build the page: (cd games && node _kit/build/build.mjs workroom)\n"
                  "Then commit music/keys/public.json, games/workroom/src/public-key.ts and games/workroom/dist/,\n"
                  "and after the deploy compare the hub's fingerprint with make keys-status.")
+
+    def init(self, upload: Upload | None, adopt: bool = False) -> str:
+        self._ready()
+        if read_repo_keys(self.public_json).current is not None:
+            raise KeysError("A notes key already exists in the repository: use make keys-rotate")
+        items = self.op.list_items(KEY_TAG)
+        if adopt:
+            fp, pkcs8, spki, passphrase = self._adopt(items)
+        else:
+            if items:
+                names = ", ".join(i.get("title", i["id"]) for i in items)
+                raise KeysError(f"1Password already holds a notes key ({names}) but the repository has no music/keys/public.json "
+                                "(an earlier init stopped part-way, or the repository is out of date: git pull). "
+                                "To adopt that key: make keys-init ADOPT=1")
+            pkcs8, spki = sealing.generate()
+            fp, passphrase = sealing.fingerprint(spki), sealing.new_passphrase()
+            self._create_key_item(pkcs8, fp, passphrase)
+        write_public_files(self.public_json, self.public_ts, (fp, spki), [])
+        self._remember(fp, pkcs8)
+        self.out(("Adopted" if adopt else "Made") + f" the notes key {display(fp)} " + ("from" if adopt else "and saved it to")
+                 + f" 1Password (vault {self.op.vault}).")
+        self._send(upload, {fp: pkcs8}, passphrase, first=True)
+        self._next_steps()
         return fp
+
+    def _adopt(self, items: list[dict]) -> tuple[str, bytes, bytes, str]:
+        if len(items) != 1:
+            raise KeysError(f"--adopt needs exactly one notes key item in 1Password (vault {self.op.vault}); found {len(items)}")
+        [(fp, (title, fields))] = self._held().items()
+        passphrase = fields.get("password")
+        if not passphrase:
+            raise KeysError(f"The 1Password item {title} has no password field: fix the item")
+        pkcs8 = base64.b64decode(fields["private_key"])
+        return fp, pkcs8, sealing.spki_of(pkcs8), passphrase
 
     def rotate(self, upload: Upload | None) -> str:
         self.ensure_synced()
@@ -345,18 +386,17 @@ class Keys:
         pkcs8, spki = sealing.generate()
         fp = sealing.fingerprint(spki)
         self._create_key_item(pkcs8, fp, passphrase)
+        write_public_files(self.public_json, self.public_ts, (fp, spki),
+                           [(k, repo.spki[k]) for k in (old, *repo.previous)])
+        self._remember(fp, pkcs8)
         item = self._item(old)
         title = item.get("title") or KEY_TITLE + old[:16]
         if not title.endswith(PREVIOUS_SUFFIX):
             self.op.retitle(item["id"], title + PREVIOUS_SUFFIX)
-        write_public_files(self.public_json, self.public_ts, (fp, spki),
-                           [(k, repo.spki[k]) for k in (old, *repo.previous)])
-        self._remember(fp, pkcs8)
         self.out(f"Rotated to the notes key {display(fp)}; the earlier keys are kept.")
-        self._send(upload, {fp: pkcs8, **ring}, passphrase, first=False)
-        self.out("Next: build the page: (cd games && node _kit/build/build.mjs workroom)\n"
-                 "Then commit music/keys/public.json, games/workroom/src/public-key.ts and games/workroom/dist/,\n"
-                 "and after the deploy compare the hub's fingerprint with make keys-status.")
+        if not self._send(upload, {fp: pkcs8, **ring}, passphrase, first=False):
+            raise NotUploaded(f"Rotated to {display(fp)}; the keyring was not uploaded")
+        self._next_steps()
         return fp
 
     def upload_keyring(self, upload: Upload) -> int:

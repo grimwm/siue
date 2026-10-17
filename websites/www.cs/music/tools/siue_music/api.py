@@ -16,6 +16,17 @@ MAX_RETRY_AFTER = 60.0
 _LOCAL_HOSTS = ("localhost", "127.0.0.1")
 
 
+class _NeverRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect would forward the Bearer key, or turn a POST into a GET that reports a false success: never follow one."""
+
+    def redirect_request(self, *_args, **_kwargs):
+        return None
+
+
+def default_opener(request, timeout=None):
+    return urllib.request.build_opener(_NeverRedirect).open(request, timeout=timeout)
+
+
 class ApiError(Exception):
     def __init__(self, message: str, status: int = 0):
         super().__init__(message)
@@ -39,7 +50,7 @@ def draft_container(files: Mapping[str, Path]) -> bytes:
 class Api:
     """HTTPS only (http:// allowed only for localhost and 127.0.0.1, the local docker check)."""
 
-    def __init__(self, base: str, key: str, opener: Callable = urllib.request.urlopen, sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, base: str, key: str, opener: Callable = default_opener, sleep: Callable[[float], None] = time.sleep):
         parts = urllib.parse.urlsplit(base)
         if parts.scheme != "https" and not (parts.scheme == "http" and parts.hostname in _LOCAL_HOSTS):
             raise ApiError("the workroom address must be https:// (http:// is only for localhost)")
@@ -69,6 +80,8 @@ class Api:
                 if e.code == 429 and attempt < len(RATE_LIMIT_PAUSES):
                     self._sleep(_pause(e, RATE_LIMIT_PAUSES[attempt]))
                     continue
+                if 300 <= e.code < 400:
+                    raise ApiError(f"{route} was redirected ({e.code}); the tool does not follow redirects: check the workroom address", e.code) from None
                 raise ApiError(f"{route} answered {e.code}: {detail}", e.code) from None
             except urllib.error.URLError as e:
                 raise ApiError(f"{route} could not be reached: {e.reason}") from None

@@ -7,6 +7,7 @@ require_once __DIR__ . '/PublicKeys.php';
 require_once __DIR__ . '/Store.php';
 require_once __DIR__ . '/Http.php';
 require_once __DIR__ . '/Api.php';
+require_once __DIR__ . '/Pages.php';
 
 function music_public_keys(): ?Music\PublicKeys
 {

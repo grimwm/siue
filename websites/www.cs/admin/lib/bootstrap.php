@@ -33,13 +33,15 @@ const ADMIN_KEY_SCOPES = ['notes:pickup', 'drafts:publish', 'keys:publish'];
 /** Dashboard links for the hub, label => path relative to /admin/. Workrooms add themselves here. */
 function admin_dashboards(): array
 {
-    return [];
+    return ['Music workroom' => '../music/'];
 }
 
 /** Encryption-key fingerprints for the hub, label => fingerprint. Workrooms add their own here. */
 function admin_key_fingerprints(): array
 {
-    return [];
+    require_once __DIR__ . '/../../music/lib/PublicKeys.php';
+    $k = Music\PublicKeys::fromFile(__DIR__ . '/../../music/keys/public.json');
+    return ['Music notes key' => $k === null ? 'not made yet (make keys-init)' : Music\PublicKeys::display($k->current)];
 }
 
 /** True for exactly `localhost` or `127.0.0.1`, with an optional port. */

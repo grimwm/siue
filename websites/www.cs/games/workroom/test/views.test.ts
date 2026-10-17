@@ -126,3 +126,14 @@ test('a view reports being held while a pointer is down, and lets go on up, canc
     assert.deepEqual(held, [true, false], release);
   }
 });
+
+test('a view unmounted with a pointer down lets go of the hold', async () => {
+  const { act } = await import('preact/test-utils');
+  const root = makeEl('root');
+  const held: boolean[] = [];
+  await act(() => { render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {}, onHold: (b: boolean) => held.push(b) }), renderTarget(root)); });
+  fire(withAttr(root, 'data-timeline')[0]!, 'pointerdown', { pointerId: 1, clientX: 10, clientY: 120, timeStamp: 0 });
+  assert.deepEqual(held, [true]);
+  await act(() => { render(null, renderTarget(root)); });
+  assert.deepEqual(held, [true, false]);
+});

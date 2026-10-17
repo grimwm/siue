@@ -1,7 +1,7 @@
 // Pointer events on a drawing surface, handed to the gesture machine: a tap
 // seeks, a drag pans, two fingers or ctrl+wheel zoom. A cancelled or lost
 // pointer capture cancels the machine, so a missed pointerup cannot wedge it.
-import { useRef } from 'preact/hooks';
+import { useEffect, useRef } from 'preact/hooks';
 import { createGestures } from '../gestures.ts';
 import type { GestureOut, Gestures } from '../gestures.ts';
 import { xToTime } from '../zoom.ts';
@@ -41,6 +41,8 @@ export function useSurface(p: SurfaceProps): SurfaceHandlers {
   machine.current ??= createGestures(() => live.current.view, () => live.current.bounds, () => 'pan');
   const g = machine.current;
   const down = useRef(new Set<number>());
+  // A view left with a pointer still down never sees its release.
+  useEffect(() => () => { if (down.current.size > 0) live.current.onHold?.(false); }, []);
   const hold = (id: number, held: boolean): void => {
     const was = down.current.size > 0;
     if (held) down.current.add(id); else down.current.delete(id);

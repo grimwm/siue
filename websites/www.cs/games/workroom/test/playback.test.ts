@@ -12,10 +12,11 @@ installDocument();
 
 // A manual frame clock: the Player's loop (and Preact's own effect flush) run when the test says.
 const frames = new Map<number, (t: number) => void>();
+const cancelled: number[] = [];
 let nextFrame = 1;
 Object.assign(globalThis, {
   requestAnimationFrame: (cb: (t: number) => void) => { frames.set(nextFrame, cb); return nextFrame++; },
-  cancelAnimationFrame: (id: number) => { frames.delete(id); },
+  cancelAnimationFrame: (id: number) => { cancelled.push(id); frames.delete(id); },
 });
 const frame = (): void => { const run = [...frames.values()]; frames.clear(); for (const cb of run) cb(0); };
 
@@ -94,7 +95,7 @@ test('Hear it plays the clip and stops at its end', async () => {
   render(null, renderTarget(root));
 });
 
-test('unmounting ends the frame loop and drops the seek handle', async () => {
+test('unmounting cancels the Player\'s own pending frame and drops the seek handle', async () => {
   const root = makeEl('root');
   const reported: number[] = [];
   const seekRef: { current: ((t: number) => void) | null } = { current: null };
@@ -102,23 +103,31 @@ test('unmounting ends the frame loop and drops the seek handle', async () => {
   await act(() => { fire(button(root, 'Play'), 'click'); });
   frame();
   const seen = reported.length;
-  assert.ok(pending() > 0, 'a frame is waiting while playing');
+  assert.ok(seen > 0, 'the loop reported a time');
+  assert.equal(frames.size, 1, 'the Player waits on exactly one frame');
+  const mine = [...frames.keys()];
   await act(() => { render(null, renderTarget(root)); });
-  frames.clear(); // anything Preact itself queued
+  assert.ok(mine.every(id => cancelled.includes(id)), 'cancelAnimationFrame was called with the Player\'s frame');
+  assert.ok(!mine.some(id => frames.has(id)), 'and it is no longer queued');
   assert.equal(seekRef.current, null);
-  frame();
+  frame(); // the queue was not cleared by the test
   assert.equal(reported.length, seen, 'nothing reported after unmount');
 });
 
-test('pausing cancels the frame loop', async () => {
+test('pausing cancels the Player\'s pending frame', async () => {
   const root = makeEl('root');
-  await act(() => { render(h(ui.player.Player, playerProps()), renderTarget(root)); });
-  await act(() => { fire(button(root, 'Play'), 'click'); });
-  await act(() => { fire(button(root, 'Pause'), 'click'); });
-  frames.clear();
   const reported: number[] = [];
+  await act(() => { render(h(ui.player.Player, playerProps({ onTime: (t: number) => reported.push(t) })), renderTarget(root)); });
+  await act(() => { fire(button(root, 'Play'), 'click'); });
   frame();
-  assert.deepEqual(reported, []);
+  const seen = reported.length;
+  assert.equal(frames.size, 1);
+  const mine = [...frames.keys()];
+  await act(() => { fire(button(root, 'Pause'), 'click'); });
+  assert.ok(mine.every(id => cancelled.includes(id)), 'cancelAnimationFrame was called with the Player\'s frame');
+  assert.equal(frames.size, 0, 'nothing is queued');
+  frame();
+  assert.equal(reported.length, seen, 'no time reported while paused');
   render(null, renderTarget(root));
 });
 
@@ -170,4 +179,25 @@ test('a renderer that fails to load says so, readably', async () => {
   assert.match(root.textContent, /renderer did not load/);
   assert.doesNotMatch(root.textContent, /Loading sheet music/);
   render(null, renderTarget(root));
+});
+
+test('a view left before its file arrives mounts nothing and rejects nothing', async () => {
+  let mounts = 0;
+  let arrive!: (xml: string) => void;
+  const ports = {
+    fetchText: () => new Promise<string>(r => { arrive = r; }),
+    loadModule: async () => ({ mountSheet: () => { mounts++; throw new Error('should not mount'); } }),
+  };
+  const unhandled: unknown[] = [];
+  const note = (e: unknown): void => { unhandled.push(e); };
+  process.on('unhandledRejection', note);
+  const root = makeEl('root');
+  await act(() => { render(h(ui.sheet.Sheet, { musicxmlSrc: 'score.musicxml', laneId: 'a', lanes, onLane: () => {}, ports }), renderTarget(root)); });
+  await act(() => { render(null, renderTarget(root)); });
+  arrive('<xml/>');
+  await settle();
+  await new Promise<void>(r => setTimeout(r, 20));
+  process.off('unhandledRejection', note);
+  assert.equal(mounts, 0);
+  assert.deepEqual(unhandled, []);
 });

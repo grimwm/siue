@@ -25,6 +25,9 @@ const realPorts: SheetPorts = {
   },
 };
 
+/** What a view that was left before its file arrived mounts: nothing to draw into, nothing to dispose. */
+const NO_SHEET: SheetHandle = { async show() {}, dispose() {} };
+
 interface Mounted { xml: string; sheet: SheetHandle }
 
 export function Sheet(p: SheetProps) {
@@ -45,7 +48,7 @@ export function Sheet(p: SheetProps) {
   useEffect(() => {
     let current = true;
     setStatus('loading');
-    mounted.current ??= Promise.all([ports.fetchText(p.musicxmlSrc), ports.loadModule()]).then(([xml, mod]) => ({ xml, sheet: mod.mountSheet(host.current!) }));
+    mounted.current ??= Promise.all([ports.fetchText(p.musicxmlSrc), ports.loadModule()]).then(([xml, mod]) => ({ xml, sheet: host.current ? mod.mountSheet(host.current) : NO_SHEET }));
     const mine = mounted.current;
     mine.then(m => m.sheet.show(m.xml, p.laneId)).then(
       () => { if (current) setStatus('ready'); },

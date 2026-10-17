@@ -28,3 +28,15 @@ test('a lane the score has no part for is an error in words', () => {
 test('text that is not a MusicXML score is refused', () => {
   assert.throws(() => onlyLane('<html></html>', 'brass'), /not valid MusicXML/);
 });
+
+test('a self-closing part is dropped alone and never swallows the next one', () => {
+  const x = `<score-partwise><part-list><score-part id="a"/><score-part id="b"><part-name>B</part-name></score-part></part-list><part id="a"/><part id="b"><measure/></part></score-partwise>`;
+  const keepB = onlyLane(x, 'b');
+  assert.match(keepB, /<score-part id="b"><part-name>B<\/part-name><\/score-part>/);
+  assert.match(keepB, /<part id="b"><measure\/><\/part>/);
+  assert.doesNotMatch(keepB, /id="a"/);
+  const keepA = onlyLane(x, 'a');
+  assert.match(keepA, /<score-part id="a"\/>/);
+  assert.match(keepA, /<part id="a"\/>/);
+  assert.doesNotMatch(keepA, /id="b"|<measure/);
+});

@@ -412,3 +412,84 @@ test('css: a Tailwind error fails the build, names the entry and writes nothing'
   assert.match(r.stderr, /bg-nope/);
   assert.ok(!existsSync(join(dir, 'dist')));
 });
+
+const WOFF2_BYTES = Buffer.concat([Buffer.from('wOF2'), Buffer.from([0, 1, 2, 254, 255])]);
+const FONT_FACE = '@font-face { font-family: "Test Sans"; src: url("fonts/test-sans-400.woff2") format("woff2"); }\n';
+const withFonts = (dir: string, extraCss = FONT_FACE): void => {
+  mkdirSync(join(dir, 'fonts'));
+  writeFileSync(join(dir, 'fonts/test-sans-400.woff2'), WOFF2_BYTES);
+  writeFileSync(join(dir, 'fonts/OFL.txt'), 'Copyright Test\r\nSIL OPEN FONT LICENSE Version 1.1\r\n');
+  writeFileSync(join(dir, 'fonts/fonts.json'), JSON.stringify({ fonts: [{ name: 'Test Sans', source: 'test 1.0', license: 'OFL-1.1', licenseFile: 'OFL.txt', files: ['test-sans-400.woff2'] }] }));
+  withCss(dir, { in: 'src/app.css', out: 'look', fonts: 'fonts' }, extraCss);
+};
+
+test('fonts: each listed woff2 is copied byte for byte to dist/fonts/', t => {
+  const dir = scratch(t);
+  withFonts(dir);
+  const r = run(dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(readFileSync(join(dir, 'dist/fonts/test-sans-400.woff2')).equals(WOFF2_BYTES));
+  assert.match(readFileSync(join(dir, 'dist/look.css'), 'utf8'), /url\(fonts\/test-sans-400\.woff2\)/);
+  assert.equal(run(dir, '--check').status, 0);
+});
+
+test('fonts: their licences follow the package notices, under a header that names them', t => {
+  const dir = scratch(t);
+  withFonts(dir);
+  run(dir);
+  const text = readFileSync(join(dir, LICENSES), 'utf8');
+  assert.ok(text.startsWith("Third-party code bundled into this game's scripts, and the fonts in fonts/.\n\n"));
+  assert.ok(text.includes('Test Sans (test 1.0)\nLicense: OFL-1.1\n\nCopyright Test\nSIL OPEN FONT LICENSE Version 1.1\n'));
+  assert.ok(!text.includes('\r'));
+  assert.ok(text.indexOf(`preact ${preactVersion}`) < text.indexOf('Test Sans'));
+});
+
+test('fonts: a game without fonts keeps the plain header', t => {
+  const dir = scratch(t);
+  run(dir);
+  assert.ok(readFileSync(join(dir, LICENSES), 'utf8').startsWith("Third-party code bundled into this game's scripts.\n\n"));
+});
+
+test('fonts: --check fails when a shipped font changes, and a build restores it', t => {
+  const dir = scratch(t);
+  withFonts(dir);
+  run(dir);
+  writeFileSync(join(dir, 'dist/fonts/test-sans-400.woff2'), Buffer.from('wOF2changed'));
+  const r = run(dir, '--check');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /dist\/fonts\/test-sans-400\.woff2/);
+  run(dir);
+  assert.ok(readFileSync(join(dir, 'dist/fonts/test-sans-400.woff2')).equals(WOFF2_BYTES));
+});
+
+test('fonts: a listed file that is not woff2 is refused', t => {
+  const dir = scratch(t);
+  withFonts(dir);
+  writeFileSync(join(dir, 'fonts/test-sans-400.woff2'), 'not a font');
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /fonts\/test-sans-400\.woff2 is not a woff2 file/);
+});
+
+test('fonts: a woff2 the manifest does not list is refused', t => {
+  const dir = scratch(t);
+  withFonts(dir);
+  writeFileSync(join(dir, 'fonts/stray.woff2'), WOFF2_BYTES);
+  assert.match(run(dir).stderr, /stray\.woff2 is not listed in fonts\.json/);
+});
+
+test('fonts: a missing licence file is refused', t => {
+  const dir = scratch(t);
+  withFonts(dir);
+  rmSync(join(dir, 'fonts/OFL.txt'));
+  assert.match(run(dir).stderr, /Test Sans: licence file OFL\.txt does not exist/);
+});
+
+test('fonts: the stylesheet points only at fonts that ship, and every shipped font is used', t => {
+  let dir = scratch(t);
+  withFonts(dir, `${FONT_FACE}@font-face { font-family: "Gone"; src: url("fonts/gone.woff2"); }\n`);
+  assert.match(run(dir).stderr, /fonts\/gone\.woff2 is not in fonts\/fonts\.json/);
+  dir = scratch(t);
+  withFonts(dir, '');
+  assert.match(run(dir).stderr, /fonts\/test-sans-400\.woff2 is not used by src\/app\.css/);
+});

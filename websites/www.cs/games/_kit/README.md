@@ -24,6 +24,14 @@ source needs this folder beside it.
   says what it scans (`@import "tailwindcss" source(none);` then `@source`
   lines), so only the classes a game's sources use are emitted. `--check`
   covers the stylesheet like a bundle.
+- `css.fonts`: a folder (in the game, not shipped) with the stylesheet's
+  woff2 files and `fonts.json`: `{ "fonts": [{ name, source, license,
+  licenseFile, files }] }`. Each listed file is copied to `dist/fonts/` and
+  each family's licence text joins `THIRD_PARTY_LICENSES.txt` after the
+  package notices. The build refuses a woff2 the manifest does not list, a
+  listed file that is not woff2, a missing licence file, a `url(fonts/…)`
+  the manifest lacks and a listed font the stylesheet never uses. Reference
+  fonts from the CSS as `url("fonts/<file>.woff2")`.
 
 - `inlined`: package names (resolved from `games/node_modules`) that a bundled
   dependency carries prebuilt inside itself, so esbuild never sees them. Their
@@ -41,7 +49,10 @@ and full license text, sorted by name, built from the packages' own files. A
 package without a license file (`LICENSE`, `LICENCE` or `COPYING`, with `-MIT`
 or an `.md`, `.txt` or `.markdown` extension) fails the build. Every bundle containing npm
 code starts with `/*! Third-party licenses: THIRD_PARTY_LICENSES.txt */`, and
-`--check` covers the file like any other output. A game with no npm packages
+`--check` covers the file like any other output. A game with fonts
+(`css.fonts`) also gets its licences file, with the font notices after the
+package notices and the header "Third-party code bundled into this game's
+scripts, and the fonts in fonts/."; a game with no npm packages and no fonts
 gets neither.
 
 `node _kit/build/icons.mjs <game>` renders the game's six install icons from

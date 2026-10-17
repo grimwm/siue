@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { layoutTimeline, TIMELINE } from '../src/timeline.ts';
+import { layoutTimeline, pitchY, TIMELINE } from '../src/timeline.ts';
 import { tempoMap } from '../src/tempo.ts';
 import { boundsFor, fitView, zoomAt } from '../src/zoom.ts';
 import type { Score } from '../src/score.ts';
@@ -56,4 +56,34 @@ test('a sound piece without sections still lays out its lanes', () => {
   const bare: Score = { ...sound, sections: [] };
   const l = layoutTimeline(bare, tempoMap(bare), fitView(bare.duration, 800));
   assert.deepEqual([l.sections, l.lanes.map(x => x.id)], [[], ['boom', 'air']]);
+});
+
+test('lane notes sit in their lane, scaled to that lane’s pitch range', () => {
+  const l = layoutTimeline(score, tempo, fitView(16, 800));
+  const n = l.notes;
+  assert.deepEqual(n.map(x => [x.index, x.lane, x.color]), [
+    [0, 'strings-low', '#7a9cc6'], [1, 'strings-low', '#7a9cc6'], [2, 'strings-low', '#7a9cc6'],
+    [3, 'brass', '#c98b3a'], [4, 'brass', '#c98b3a'], [5, 'brass', '#c98b3a'],
+  ]);
+  // strings-low: lane y 76, band 82..106 for pitches 36..41; brass: lane y 112, band 118..142 for 62..69.
+  close(n[0]!.rect.y, 82 + (1 - 2 / 5) * 24 - 1.5); close(n[1]!.rect.y, 82 - 1.5); close(n[2]!.rect.y, 106 - 1.5);
+  close(n[3]!.rect.y, 142 - 1.5); close(n[5]!.rect.y, 118 - 1.5);
+  assert.deepEqual(n.map(x => [x.rect.x, x.rect.w, x.rect.h]), [[0, 100, 3], [100, 100, 3], [200, 200, 3], [400, 100, 3], [500, 100, 3], [600, 200, 3]]);
+});
+
+test('the energy glow spans the whole drawing height', () => {
+  const l = layoutTimeline(score, tempo, fitView(16, 800));
+  const want: [number, number][] = [[0, 118.4], [400, 74], [800, 14.8], [800, 148], [0, 148]];
+  assert.equal(l.glow.length, want.length);
+  l.glow.forEach(([x, y], i) => { close(x, want[i]![0]); close(y, want[i]![1]); });
+});
+
+test('pitchY: higher pitch higher, the middle when the range is one note', () => {
+  assert.equal(pitchY(60, 60, 72, 10, 24), 34);
+  assert.equal(pitchY(72, 60, 72, 10, 24), 10);
+  assert.equal(pitchY(64, 64, 64, 10, 24), 22);
+});
+
+test('a sound effect without notes has no lane notes', () => {
+  assert.deepEqual(layoutTimeline(sound, tempoMap(sound), fitView(sound.duration, 800)).notes, []);
 });

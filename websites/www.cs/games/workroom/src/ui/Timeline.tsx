@@ -1,8 +1,11 @@
-// The story timeline: the energy curve, the sections, one row per lane with
-// its motif ribbons, and the time axis, all on the shared view.
+// The story timeline: the energy as a glow behind everything, the sections,
+// one row per lane with its dimmed notes, each character's tune as a
+// constellation of stars over its lane, and the time axis, all on the shared view.
 import type { ComponentChildren } from 'preact';
+import { useMemo } from 'preact/hooks';
 import { readableOn } from '../color.ts';
 import { layoutTimeline, TIMELINE } from '../timeline.ts';
+import { layoutConstellations, STAR_R } from '../constellation.ts';
 import { splitTerms } from '../glossary.ts';
 import { axisTicks } from '../axis.ts';
 import type { Score } from '../score.ts';
@@ -36,26 +39,45 @@ function SectionName(p: { name: string; onTerm(id: string): void }) {
 export function Timeline(p: TimelineProps) {
   const { score, tempo, view } = p;
   const layout = layoutTimeline(score, tempo, view);
+  const stars = layoutConstellations(score, layout, view);
   const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold });
   const theme = useTheme();
+  // Readable colours depend on the theme and the score's own colours, not on the view, so panning and zooming reuse them.
+  const marks = useMemo(() => {
+    const of = (list: { id: string; color: string }[]) => new Map(list.map(x => [x.id, { mark: readableOn(theme, x.color, 'mark'), text: readableOn(theme, x.color, 'text') }]));
+    return { section: of(score.sections), lane: of(score.lanes), character: of(score.characters) };
+  }, [theme, score]);
   const height = layout.height + AXIS_H;
   return (
     <svg class="tl block max-w-full touch-none select-none" data-timeline="" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`} role="group" aria-label="Story timeline" {...surface}>
-      <polyline class="energy stroke-ink" stroke-width={1.5} fill="none" points={layout.energy.points.map(([x, y]) => `${x},${y}`).join(' ')} />
+      <defs><filter id="tl-glow" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="8" /></filter></defs>
+      <polygon class="pointer-events-none fill-go opacity-25" data-glow="" filter="url(#tl-glow)" points={layout.glow.map(([x, y]) => `${x},${y}`).join(' ')} />
       {layout.sections.map(s => (
         <svg x={s.rect.x} y={s.rect.y} width={Math.max(0, s.rect.w)} height={s.rect.h}>
-          <rect class="section" data-section={s.id} width={Math.max(0, s.rect.w)} height={s.rect.h} fill={readableOn(theme, s.color, 'mark')} opacity={0.35} />
-          <text class="section-name pointer-events-none fill-ink text-[13px]" x={6} y={TIMELINE.sectionH - 10}><SectionName name={s.name} onTerm={p.onTerm} /></text>
+          <rect class="section opacity-40" data-section={s.id} width={Math.max(0, s.rect.w)} height={s.rect.h} fill={marks.section.get(s.id)?.mark} />
+          <text class="section-name pointer-events-none fill-ink font-display text-[12px] font-semibold tracking-wider uppercase" x={6} y={TIMELINE.sectionH - 10}><SectionName name={s.name} onTerm={p.onTerm} /></text>
         </svg>
       ))}
       {layout.lanes.map(l => (
         <g>
-          <rect class="lane fill-lane stroke-rule" data-lane={l.id} x={l.rect.x} y={l.rect.y} width={l.rect.w} height={l.rect.h} />
-          <LaneIcon family={l.icon} color={readableOn(theme, l.color, 'text')} x={6} y={l.rect.y + 4} />
-          <text class="lane-name pointer-events-none text-xs" x={8 + LANE_ICON_SIZE + 4} y={l.rect.y + 16} fill={readableOn(theme, l.color, 'text')}>{l.name}</text>
+          <rect class="lane fill-lane/80 stroke-rule" data-lane={l.id} x={l.rect.x} y={l.rect.y} width={l.rect.w} height={l.rect.h} />
+          <LaneIcon family={l.icon} color={marks.lane.get(l.id)?.mark ?? ''} x={6} y={l.rect.y + 4} />
+          <text class="lane-name pointer-events-none font-display text-[11px] font-semibold tracking-wider uppercase" x={8 + LANE_ICON_SIZE + 4} y={l.rect.y + 15} fill={marks.lane.get(l.id)?.text}>{l.name}</text>
         </g>
       ))}
-      {layout.ribbons.map(r => <rect class="ribbon" opacity={0.9} data-motif={r.motif} data-character={r.character} x={r.rect.x} y={r.rect.y} width={Math.max(0, r.rect.w)} height={r.rect.h} fill={readableOn(theme, r.color, 'mark')} />)}
+      {layout.notes.map(n => <rect class="pointer-events-none opacity-35" data-lane-note={n.index} x={n.rect.x} y={n.rect.y} width={Math.max(1, n.rect.w)} height={n.rect.h} rx={1} fill={marks.lane.get(n.lane)?.mark} />)}
+      {stars.map(c => {
+        const mark = marks.character.get(c.character)?.mark;
+        const first = c.stars[0];
+        return (
+          <g class="pointer-events-none" data-motif={c.motif} data-character={c.character}>
+            {c.ribbon ? <rect data-ribbon="" x={c.ribbon.x} y={c.ribbon.y} width={Math.max(0, c.ribbon.w)} height={c.ribbon.h} fill={mark} /> : null}
+            {c.stars.length > 1 ? <polyline data-constellation-line="" fill="none" stroke={mark} stroke-width={1.5} stroke-opacity={0.85} stroke-linejoin="round" points={c.stars.map(s => `${s.x},${s.y}`).join(' ')} /> : null}
+            {c.stars.map(s => <circle data-star={s.note} cx={s.x} cy={s.y} r={STAR_R[s.size]} fill={mark} />)}
+            {first ? <text data-character-name="" class="font-display text-[11px] font-semibold tracking-wider uppercase" x={first.x + 7} y={Math.max(first.y - 6, layout.lanes[0]?.rect.y ?? 0) + 2} fill={marks.character.get(c.character)?.text}>{c.name}</text> : null}
+          </g>
+        );
+      })}
       {p.overlay}
       <Axis ticks={axisTicks(score, tempo, view)} height={layout.height} />
       <Playhead view={view} time={p.time} height={layout.height} />

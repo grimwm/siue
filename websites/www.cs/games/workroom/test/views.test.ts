@@ -213,3 +213,26 @@ test('a roll note is drawn in a colour readable on the light well', () => {
   const fills = withAttr(root, 'data-note').filter(e => e._attrs['data-lane'] === 'brass').map(e => e._attrs['fill']);
   assert.ok(fills.length > 0 && fills.every(f => f !== '#ffe680'), 'pale gold is darkened on daylight');
 });
+
+test('the story draws stars joined by a line, the character named, lane notes dimmed, and a glow', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  assert.equal(withAttr(root, 'data-star').length, 3);
+  assert.equal(withAttr(root, 'data-constellation-line').length, 1);
+  assert.equal(withAttr(root, 'data-character-name')[0]!.textContent, 'Ariadne');
+  assert.equal(withAttr(root, 'data-lane-note').length, 6);
+  assert.equal(withAttr(root, 'data-glow').length, 1);
+  assert.equal(withAttr(root, 'data-ribbon').length, 0, 'a span with stars draws no ribbon');
+});
+
+test('the glow is painted first, behind the sections, the lanes, the lane notes and the stars', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  const all = walk(root);
+  const glow = all.findIndex(e => e._attrs['data-glow'] !== undefined);
+  assert.ok(glow >= 0, 'there is a glow');
+  for (const attr of ['data-section', 'data-lane', 'data-lane-note', 'data-star']) {
+    const first = all.findIndex(e => e._attrs[attr] !== undefined);
+    assert.ok(first > glow, `${attr} is drawn after (on top of) the glow`);
+  }
+});

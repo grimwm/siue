@@ -8,6 +8,13 @@ export type Fetch = (url: string, init?: { method?: string; headers?: Record<str
 export const draftUrl = (piece: string, version: number, file: string): string =>
   `draft.php?piece=${encodeURIComponent(piece)}&v=${version}&file=${encodeURIComponent(file)}`;
 
+/** A file beside the running module, carrying the module's own query (its ?v= version stamp), so one stamp busts both. */
+export function siblingUrl(moduleUrl: string, file: string): string {
+  const [beforeHash = ''] = moduleUrl.split('#');
+  const [path = '', ...query] = beforeHash.split('?');
+  return `${path.slice(0, path.lastIndexOf('/') + 1)}${file}${query.length ? `?${query.join('?')}` : ''}`;
+}
+
 export type Loaded = { ok: true; score: Score; version: number; versions: number[] } | { ok: false; error: string };
 
 const SIGNED_OUT = 'Your sign-in ended. Sign in again.';

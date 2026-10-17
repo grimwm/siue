@@ -1,6 +1,7 @@
 // Sheet music: a lane picker and the notation of the chosen lane. The notation
 // library is a separate bundle, fetched when this view first opens.
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { siblingUrl } from '../load.ts';
 import type { Lane } from '../score.ts';
 import type { SheetHandle } from '../sheetlife.ts';
 
@@ -18,7 +19,7 @@ const realPorts: SheetPorts = {
   },
   async loadModule() {
     try {
-      return (await import(new URL('./sheet.js', import.meta.url).href)) as SheetModule;
+      return (await import(siblingUrl(import.meta.url, 'sheet.js'))) as SheetModule;
     } catch {
       throw new Error('The sheet music renderer did not load. Check the connection and reload the page.');
     }

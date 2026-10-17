@@ -106,3 +106,26 @@ test('a very short note is still tappable, the nearest note wins', () => {
   assert.equal(hitRoll(r, v, tempoMap(s), s, b.rect.x - 4, cy).noteIndex, 1, 'nearer the second');
   assert.equal(hitRoll(r, v, tempoMap(s), s, a.rect.x + 2.5 + 40, cy).noteIndex, null, 'far away');
 });
+
+test('pitch labels sit on every C and on the top and bottom rows, so a narrow range is never unlabelled', async () => {
+  const { labelRows } = await import('../src/pianoroll.ts');
+  const only = (lane: string, pitches: number[]): Score => ({ ...score, notes: pitches.map((pitch, i) => ({ lane, start: i, length: 1, pitch, velocity: 80, motif: null })) });
+  const narrow = layoutRoll(only('brass', [62, 64]), view, 280); // D4..E4 and a row either side: no C in 61..65
+  assert.equal(narrow.rows.some(r => r.pitch % 12 === 0), false);
+  assert.deepEqual(labelRows(narrow).map(r => r.name), ['F4', 'C#4']);
+  const wide = layoutRoll(score, view, 280); // 35..70 has C2 (36), C3 (48), C4 (60)
+  const named = labelRows(wide).map(r => r.name);
+  for (const c of ['C2', 'C3', 'C4']) assert.ok(named.includes(c), c);
+  assert.ok(named.includes('B1') || named.includes('C2'), 'bottom row labelled or a C right beside it');
+  assert.equal(new Set(named).size, named.length, 'no row twice');
+});
+
+test('an end row is not labelled on top of a C that is a row or two away', async () => {
+  const { labelRows } = await import('../src/pianoroll.ts');
+  const r = layoutRoll({ ...score, notes: [{ lane: 'brass', start: 0, length: 1, pitch: 60, velocity: 80, motif: null }] }, view, 280);
+  assert.equal(r.rows.length, 3, 'B3 C4 C#4');
+  const names = labelRows(r).map(x => x.name);
+  assert.ok(names.includes('C4'));
+  const ys = labelRows(r).map(x => x.y).sort((a, b) => a - b);
+  for (let i = 1; i < ys.length; i++) assert.ok(ys[i]! - ys[i - 1]! >= 12, 'labels at least a text height apart');
+});

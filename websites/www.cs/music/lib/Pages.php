@@ -21,7 +21,7 @@ final class Pages
     private const NOTE_ERRORS = ['too_large' => 413, 'full' => 409, 'bad_header' => 422, 'unknown_key' => 422, 'no_key' => 503];
     private const LISTED_CHANGES = 3;
 
-    /** $assetVersion: 10 hex of games/workroom/dist/workroom.js (the ?v= on the script); $baseUrl: admin_base_url(). */
+    /** $assetVersion: 10 hex over games/workroom/dist/workroom.js and sheet.js (the ?v= on the script, which the script passes on to sheet.js); $baseUrl: admin_base_url(). */
     public function __construct(
         private Store $store,
         private \Admin\Pages $admin,
@@ -280,7 +280,7 @@ final class Pages
             . '<title>' . Html::e($title) . '</title>'
             . '<link rel="stylesheet" href="music.css?v=' . $v . '">'
             . '</head><body data-view="' . Html::e($view) . '" data-piece="' . Html::e($piece) . '" data-version="' . Html::e($version) . '">'
-            . '<h1>' . Html::e($title) . '</h1>'
+            . ($view === 'piece' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>')
             . $body
             . '<main id="workroom"></main>'
             . '<script type="module" src="../games/workroom/dist/workroom.js?v=' . $v . '"></script>'

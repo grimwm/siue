@@ -47,7 +47,10 @@ export function Workroom(p: WorkroomProps) {
   const [open, setOpen] = useState<string | null>(null);
   const [clip, setClip] = useState<Clip | null>(null);
   const [holding, setHolding] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const seekAudio = useRef<((t: number) => void) | null>(null);
+  const playClip = useRef<((c: Clip) => void) | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const tab = pickTab(tabs, wanted);
   const bounds = useMemo(() => boundsFor(score.duration, width), [score.duration, width]);
 
@@ -65,15 +68,19 @@ export function Workroom(p: WorkroomProps) {
     fitted.current = { score, width };
     setView(v => (!was || was.score !== score ? fitView(score.duration, width) : clampView({ ...v, width }, boundsFor(score.duration, width))));
   }, [score, width]);
-  // The playhead stays on screen, a page at a time, except while a finger or the mouse is on a view (a pan is not undone every frame); it catches up on release.
-  useEffect(() => { if (!holding) setView(v => follow(v, time, bounds)); }, [time, bounds, holding]);
+  // While playing, the playhead stays on screen, a page at a time, except while a finger or the mouse is on a view (a pan is not undone every frame). A paused view stays where the owner put it.
+  useEffect(() => { if (playing && !holding) setView(v => follow(v, time, bounds)); }, [time, bounds, holding, playing]);
 
-  // The audio moves first, in this call, so the next frame reports the new time.
-  const seek = (t: number): void => { seekAudio.current?.(t); setClip(null); setTime(t); };
-  const hear = (c: Clip): void => { seekAudio.current?.(c.from); setClip(c); setTime(c.from); };
+  // The audio moves first, in this call, so the next frame reports the new time. A jump the owner asked for (a change, a clip) brings its time on screen even while paused.
+  const seek = (t: number): void => { seekAudio.current?.(t); setClip(null); setTime(t); setView(v => follow(v, t, bounds)); };
+  // Hear it plays inside the tap itself: iOS refuses sound started later.
+  const hear = (c: Clip): void => { playClip.current?.(c); setClip(c); setTime(c.from); setView(v => follow(v, c.from, bounds)); };
   const openTerm = open === null ? undefined : term(open);
   const openClip = openTerm ? uses.find(u => u.term.id === openTerm.id) : undefined;
   const seen = [...new Map(uses.map(u => [u.term.id, u.term])).values()];
+  useEffect(() => { document.title = `${score.piece.title} – ${score.project.name}`; }, [score]);
+  // A card opens near the top of the page; on a phone that can be off screen.
+  useEffect(() => { if (openTerm) cardRef.current?.scrollIntoView({ block: 'nearest' }); }, [openTerm?.id]);
   const toggleLane = (id: string): void => {
     const all = lanes ?? new Set(score.lanes.map(l => l.id));
     const next = new Set(all);
@@ -93,6 +100,10 @@ export function Workroom(p: WorkroomProps) {
 
   return (
     <div class="workroom" ref={holder}>
+      <header class="piece-head">
+        <h1>{score.piece.title}</h1>
+        <p class="project-name">{score.project.name}</p>
+      </header>
       <div class="bar-row">
         <label class="draft-picker">Draft{' '}
           <select value={String(p.version)} onChange={e => p.onVersion(Number(e.currentTarget.value))}>
@@ -100,7 +111,7 @@ export function Workroom(p: WorkroomProps) {
           </select>
         </label>
       </div>
-      <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} />
+      <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} />
       <ViewTabs tabs={tabs} tab={tab} onTab={setWanted} />
       {seen.length > 0 ? (
         <div class="words" aria-label="Words in this piece">
@@ -108,7 +119,7 @@ export function Workroom(p: WorkroomProps) {
           {seen.map(t => <Word term={t} text={t.word} onOpen={setOpen} />)}
         </div>
       ) : null}
-      {openTerm ? <Card term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={() => setOpen(null)} /> : null}
+      {openTerm ? <Card cardRef={cardRef} term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={() => setOpen(null)} /> : null}
       {tab === 'story' ? (
         <>
           <Timeline score={score} tempo={tempo} view={view} time={time} onSeek={seek} onView={setView} onHold={setHolding} onTerm={setOpen} overlay={pins} />

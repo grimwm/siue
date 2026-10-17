@@ -6,11 +6,12 @@ import { clipDone, pickSource } from '../player.ts';
 import type { Clip } from '../player.ts';
 import type { AudioSource } from '../score.ts';
 
-export interface PlayerProps { src: AudioSource[]; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null } }
+export interface PlayerProps { src: AudioSource[]; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void }
 
 export function Player(p: PlayerProps) {
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const source = useMemo(() => {
     const probe = document.createElement('audio');
     return pickSource(p.src, t => probe.canPlayType(t));
@@ -26,13 +27,25 @@ export function Player(p: PlayerProps) {
     return () => { ref.current = null; };
   }, [p.seekRef]);
 
+  // Starting the sound must happen inside the tap that asked for it (iOS refuses a later play()), so these run in the click handler itself.
+  const start = (a: HTMLAudioElement): void => {
+    setProblem(null);
+    a.play().catch(() => setProblem('The sound did not start. Tap Play to start it.'));
+  };
   // Hear it: play the clip from its start.
   useEffect(() => {
-    const a = audio.current;
-    if (!a || !p.clip) return;
-    a.currentTime = p.clip.from;
-    void a.play().catch(() => {});
-  }, [p.clip]);
+    const ref = p.clipRef;
+    if (!ref) return;
+    ref.current = c => {
+      const a = audio.current;
+      if (!a) return;
+      a.currentTime = c.from;
+      start(a);
+    };
+    return () => { ref.current = null; };
+  }, [p.clipRef]);
+
+  useEffect(() => { p.onPlaying?.(playing); }, [playing]);
 
   // While playing, the playhead follows the audio every frame; a clip stops at its end.
   useEffect(() => {
@@ -52,15 +65,17 @@ export function Player(p: PlayerProps) {
   const toggle = (): void => {
     const a = audio.current;
     if (!a) return;
-    if (a.paused) void a.play().catch(() => {}); else a.pause();
+    if (a.paused) start(a); else a.pause();
   };
   return (
     <div class="player">
       {source ? (
         <audio ref={audio} preload="metadata" src={p.audioSrc(source.file)}
+          onError={() => setProblem("This draft's audio could not play. Reload the page, or open another draft.")}
           onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onTimeUpdate={() => { if (audio.current) p.onTime(audio.current.currentTime); }} />
       ) : <p class="error" role="alert">This browser cannot play this draft's audio.</p>}
+      {problem ? <p class="error" role="alert">{problem}</p> : null}
       <button type="button" class="play" disabled={!source} onClick={toggle}>{playing ? 'Pause' : 'Play'}</button>
       <span class="clock" data-clock="">{formatSeconds(p.time)}</span>
       {p.bar !== null ? <span class="bar" data-bar="">bar {p.bar}</span> : null}

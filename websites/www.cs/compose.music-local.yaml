@@ -1,9 +1,0 @@
-# Local docker only (make music-e2e); CI never reads this file. It goes after
-# compose.admin-local.yaml, whose local ADMIN_BASE_URL (http://localhost/admin/)
-# is what lets the admin kit accept plain HTTP from the check's browser and API
-# calls against http://localhost:<port>. MUSIC_PUBLIC_KEYS points the server at
-# the test public keys the check seals to.
-services:
-  www-cs-php:
-    environment:
-      MUSIC_PUBLIC_KEYS: /var/www/html/games/workroom/test/fixtures/public.json

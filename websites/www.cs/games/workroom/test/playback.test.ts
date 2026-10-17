@@ -78,11 +78,13 @@ test('Hear it plays the clip and stops at its end', async () => {
   const root = makeEl('root');
   let done = 0;
   const clip = { from: 2, to: 4 };
-  await act(() => { render(h(ui.player.Player, playerProps({ clip, onClipDone: () => { done++; } })), renderTarget(root)); });
+  const clipRef: { current: ((c: { from: number; to: number }) => void) | null } = { current: null };
+  await act(() => { render(h(ui.player.Player, playerProps({ clip, clipRef, onClipDone: () => { done++; } })), renderTarget(root)); });
   const audio = audios.at(-1)!;
+  assert.equal(audio.paused, true, 'nothing plays until the tap');
+  await act(() => { clipRef.current!(clip); });
   assert.equal(audio.currentTime, 2, 'starts at the clip start');
   assert.equal(audio.paused, false, 'and plays');
-  await act(() => {});
   audio.currentTime = 3.9;
   frame();
   assert.equal(done, 0);

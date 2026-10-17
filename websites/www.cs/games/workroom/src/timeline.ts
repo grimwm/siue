@@ -1,7 +1,7 @@
 // The story timeline's layout in pixels: energy band, sections, one row per
 // lane, motif ribbons and the time axis. DOM-free.
 import { motifColor } from './score.ts';
-import type { Score } from './score.ts';
+import type { Family, Score } from './score.ts';
 import { axisTicks } from './axis.ts';
 import type { AxisTick } from './axis.ts';
 import { sectionTimes } from './tempo.ts';
@@ -16,7 +16,7 @@ export interface TimelineLayout {
   height: number;
   energy: { rect: Rect; points: [number, number][] };            // pixel points, y = energyH * (1 - value)
   sections: { id: string; name: string; color: string; rect: Rect }[];
-  lanes: { id: string; name: string; icon: string; color: string; rect: Rect }[];   // rect spans the view width
+  lanes: { id: string; name: string; icon: Family; color: string; rect: Rect }[];   // rect spans the view width
   ribbons: { motif: string; character: string; color: string; lane: string; rect: Rect }[]; // at the bottom of their lane; character is the character id, color that character's colour from the score
   ticks: AxisTick[];                                             // the time axis: visible bar starts (music) or seconds ticks (sound)
 }

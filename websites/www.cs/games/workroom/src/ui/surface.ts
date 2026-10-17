@@ -50,12 +50,18 @@ export function useSurface(p: SurfaceProps): SurfaceHandlers {
     if (was !== is) live.current.onHold?.(is);
   };
 
-  const apply = (outs: GestureOut[]): void => {
+  /** Hands the gesture's outputs on; true when one of them changed the view. */
+  const apply = (outs: GestureOut[]): boolean => {
+    let moved = false;
     for (const o of outs) {
       const { view, duration, onSeek, onView } = live.current;
       if (o.kind === 'tap') onSeek(Math.min(duration, Math.max(0, xToTime(view, o.x))));
-      else if (o.kind === 'view') onView(o.view);
+      else if (o.kind === 'view') {
+        if (o.view.start !== view.start || o.view.pxPerSec !== view.pxPerSec) moved = true;
+        onView(o.view);
+      }
     }
+    return moved;
   };
   const at = (e: PointerLike) => ({ id: e.pointerId, ...local(e.currentTarget, e.clientX, e.clientY), t: e.timeStamp });
   return {
@@ -69,8 +75,9 @@ export function useSurface(p: SurfaceProps): SurfaceHandlers {
     onPointerCancel(e) { apply(g.cancel(e.pointerId)); hold(e.pointerId, false); },
     onLostPointerCapture(e) { apply(g.cancel(e.pointerId)); hold(e.pointerId, false); },
     onWheel(e) {
-      e.preventDefault();
-      apply(g.wheel(local(e.currentTarget, e.clientX, 0).x, e.deltaX, e.deltaY, e.ctrlKey));
+      // Only a wheel that moved the view is stopped (and a pinch, which would otherwise zoom the whole page): the rest scrolls the page.
+      const moved = apply(g.wheel(local(e.currentTarget, e.clientX, 0).x, e.deltaX, e.deltaY, e.ctrlKey));
+      if (moved || e.ctrlKey) e.preventDefault();
     },
   };
 }

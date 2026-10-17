@@ -81,6 +81,29 @@ final class MusicBootstrapTest extends TestCase
         }
     }
 
+    public function testTheAssetVersionStampsBothScripts(): void
+    {
+        $dir = sys_get_temp_dir() . '/music-assets-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        try {
+            self::assertSame('', music_asset_version($dir), 'no files, no version');
+            file_put_contents("$dir/workroom.js", 'page');
+            self::assertSame('', music_asset_version($dir), 'sheet.js missing');
+            file_put_contents("$dir/sheet.js", 'sheet');
+            $both = music_asset_version($dir);
+            self::assertMatchesRegularExpression('/^[0-9a-f]{10}$/', $both);
+            file_put_contents("$dir/sheet.js", 'sheet, changed');
+            self::assertNotSame($both, music_asset_version($dir), 'a change to sheet.js alone changes the version');
+            file_put_contents("$dir/sheet.js", 'sheet');
+            file_put_contents("$dir/workroom.js", 'page, changed');
+            self::assertNotSame($both, music_asset_version($dir), 'and so does one to workroom.js alone');
+            self::assertMatchesRegularExpression('/^[0-9a-f]{10}$/', music_asset_version(), 'the shipped files');
+        } finally {
+            array_map('unlink', glob("$dir/*") ?: []);
+            rmdir($dir);
+        }
+    }
+
     public function testAnUnknownKindIsABug(): void
     {
         $this->expectException(InvalidArgumentException::class);

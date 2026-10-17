@@ -96,8 +96,6 @@ export async function publishFixtureDraft(request: APIRequestContext, base: stri
 test('open a piece, play, seek, switch views, read a term, no CSP violations', async ({ browser, request, baseURL }) => {
   const base = baseURL!;
   const { context, page } = await signedInPage(browser, base);
-  const bundle = process.env.WORKROOM_E2E_BUNDLE;
-  if (bundle) await page.route('**/games/workroom/dist/workroom.js*', r => r.fulfill({ contentType: 'text/javascript', body: readFileSync(bundle, 'utf8') }));
   const violations: string[] = [];
   page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
   await publishFixtureDraft(request, base, await createKey(page, base, 'e2e publish', ['drafts:publish']));
@@ -106,6 +104,9 @@ test('open a piece, play, seek, switch views, read a term, no CSP violations', a
   await page.getByRole('link', { name: /Test piece: the Labyrinth wakes/ }).click();
   await expect(page.locator('[data-section="stirs"]')).toBeVisible();
   await expect(page.locator('[data-motif="ariadne"]')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Test piece: the Labyrinth wakes');
+  await expect(page.getByRole('link', { name: 'All pieces' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'strings instruments' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Play' }).click();
   await expect.poll(() => page.locator('audio').evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(0.2);
@@ -135,8 +136,6 @@ test('open a piece, play, seek, switch views, read a term, no CSP violations', a
 test('a sound effect from another project: grouped list, seconds on the axis, no sheet music', async ({ browser, request, baseURL }) => {
   const base = baseURL!;
   const { context, page } = await signedInPage(browser, base);
-  const bundle = process.env.WORKROOM_E2E_BUNDLE;
-  if (bundle) await page.route('**/games/workroom/dist/workroom.js*', r => r.fulfill({ contentType: 'text/javascript', body: readFileSync(bundle, 'utf8') }));
   const violations: string[] = [];
   page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
   const key = await createKey(page, base, 'e2e publish sound', ['drafts:publish']);

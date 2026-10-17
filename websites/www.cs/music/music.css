@@ -43,6 +43,10 @@ ul.changes { margin: 8px 0 0; padding-left: 18px; color: #9aa3af; font-size: .85
 
 /* The piece page: player, view tabs, the views and the glossary. */
 .workroom { display: grid; gap: 12px; }
+.piece-head h1 { margin: 0; font-size: 1.4rem; }
+.piece-head .project-name { margin: 2px 0 0; color: #9aa3af; font-size: .9rem; }
+.crumb { margin: 0 0 8px; }
+.tl .lane-icon { pointer-events: none; }
 .bar-row, .player, .words, .lane-picker, .view-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .workroom button, .workroom select {
   min-height: 44px;

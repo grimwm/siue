@@ -7,10 +7,10 @@ export function Word(p: { term: Term; text: string; onOpen(id: string): void }) 
   return <button type="button" class="word" data-term={p.term.id} onClick={() => p.onOpen(p.term.id)}>{p.text}</button>;
 }
 
-export function Card(p: { term: Term; clip: Clip | null; onHear(c: Clip): void; onClose(): void }) {
+export function Card(p: { cardRef?: { current: HTMLDivElement | null }; term: Term; clip: Clip | null; onHear(c: Clip): void; onClose(): void }) {
   const clip = p.clip;
   return (
-    <div class="card" role="dialog" aria-label={p.term.word}>
+    <div class="card" role="dialog" ref={p.cardRef} aria-label={p.term.word}>
       <h3>{p.term.word}</h3>
       <p>{p.term.lines[0]}</p>
       <p>{p.term.lines[1]}</p>

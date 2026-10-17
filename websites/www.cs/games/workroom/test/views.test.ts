@@ -17,7 +17,8 @@ const ui = await importTsx<{
   tl: typeof import('../src/ui/Timeline.tsx');
   gl: typeof import('../src/ui/Glossary.tsx');
   tabs: typeof import('../src/ui/ViewTabs.tsx');
-}>(import.meta.dirname, { tl: '../src/ui/Timeline.tsx', gl: '../src/ui/Glossary.tsx', tabs: '../src/ui/ViewTabs.tsx' });
+  roll: typeof import('../src/ui/PianoRoll.tsx');
+}>(import.meta.dirname, { tl: '../src/ui/Timeline.tsx', gl: '../src/ui/Glossary.tsx', tabs: '../src/ui/ViewTabs.tsx', roll: '../src/ui/PianoRoll.tsx' });
 
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
 const sound = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
@@ -136,4 +137,56 @@ test('a view unmounted with a pointer down lets go of the hold', async () => {
   assert.deepEqual(held, [true]);
   await act(() => { render(null, renderTarget(root)); });
   assert.deepEqual(held, [true, false]);
+});
+
+test('a wheel over a view is only stopped when it moved the view, so the page still scrolls', async () => {
+  const { act } = await import('preact/test-utils');
+  const root = makeEl('root');
+  const seen: unknown[] = [];
+  const base = { score, tempo: tempoMap(score), time: 0, onSeek: () => {}, onTerm: () => {} };
+  const mount = async (view: ReturnType<typeof fitView>) => {
+    seen.length = 0;
+    await act(() => { render(h(ui.tl.Timeline, { ...base, view, onView: (v: unknown) => seen.push(v) }), renderTarget(root)); });
+    return withAttr(root, 'data-timeline')[0]!;
+  };
+  const wheel = (svg: StubElement, extra: Record<string, unknown>): boolean => {
+    let prevented = false;
+    fire(svg, 'wheel', { clientX: 100, deltaX: 0, deltaY: 0, ctrlKey: false, preventDefault: () => { prevented = true; }, ...extra });
+    return prevented;
+  };
+  const fit = await mount(fitView(16, 800));
+  assert.equal(wheel(fit, { deltaY: 120 }), false, 'a plain vertical scroll goes to the page');
+  assert.equal(wheel(fit, { deltaX: 40 }), false, 'a sideways wheel on a view that shows everything moves nothing');
+  assert.equal(wheel(fit, { deltaY: -200, ctrlKey: true }), true, 'a pinch zooms the view, not the page');
+  const zoomed = await mount({ start: 4, pxPerSec: 100, width: 800 });
+  assert.equal(wheel(zoomed, { deltaX: 40 }), true, 'a sideways wheel pans a zoomed view');
+  assert.equal(wheel(zoomed, { deltaY: 120 }), false, 'a vertical scroll over it still scrolls the page');
+});
+
+test('every instrument family has its own icon in the timeline lane labels, named for the family', async () => {
+  const { FAMILIES } = await import('../src/score.ts');
+  const lanes = FAMILIES.map(f => ({ id: `lane-${f}`, name: `Lane ${f}`, family: f, icon: f, color: '#7a9cc6' }));
+  const s: Score = { ...score, lanes, motifs: [], notes: [] };
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score: s, tempo: tempoMap(s), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  const icons = withAttr(root, 'data-icon');
+  assert.deepEqual(icons.map(e => e._attrs['data-icon']), [...FAMILIES]);
+  const drawn = new Set<string>();
+  for (const icon of icons) {
+    const family = icon._attrs['data-icon']!;
+    assert.match(icon._attrs['aria-label']!, new RegExp(family));
+    assert.equal(icon._attrs['role'], 'img');
+    const d = walk(icon).map(e => e._attrs['d'] ?? e._attrs['points'] ?? `${e.localName}:${e._attrs['cx'] ?? ''}${e._attrs['cy'] ?? ''}${e._attrs['rx'] ?? ''}${e._attrs['x'] ?? ''}`).join('|');
+    assert.ok(d.length > 0, `${family} draws something`);
+    drawn.add(d);
+  }
+  assert.equal(drawn.size, FAMILIES.length, 'no two families share a drawing');
+});
+
+test('a piano roll with no C in its range still shows pitch names', () => {
+  const root = makeEl('root');
+  const narrow: Score = { ...score, notes: [62, 64].map((pitch, i) => ({ lane: 'brass', start: i, length: 1, pitch, velocity: 80, motif: null })) };
+  render(h(ui.roll.PianoRoll, { score: narrow, tempo: tempoMap(narrow), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {} }), renderTarget(root));
+  const names = walk(root).filter(e => e.className === 'pitch-name').map(e => e.textContent);
+  assert.deepEqual(names, ['F4', 'C#4']);
 });

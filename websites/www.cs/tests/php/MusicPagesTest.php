@@ -170,6 +170,8 @@ final class MusicPagesTest extends TestCase
         self::assertStringContainsString('src="../games/workroom/dist/workroom.js?v=0123456789"', $res->body);
         self::assertMatchesRegularExpression('/<meta name="csrf" content="[0-9a-f]{64}">/', $res->body);
         self::assertStringContainsString('data-piece="ch1-labyrinth"', $res->body);
+        self::assertStringContainsString('<p class="crumb"><a href="./">All pieces</a></p>', $res->body, 'a way back to the pieces');
+        self::assertStringNotContainsString('<h1>', $res->body, 'the piece page is headed by the piece, which the script draws');
         self::assertSame(Music\Http::csp(), $res->headers['Content-Security-Policy']);
         self::assertSame(400, $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => '<script>']]))->status);
     }

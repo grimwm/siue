@@ -22,6 +22,18 @@ export function pitchName(midi: number): string {
   return `${NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 }
 
+/** A pitch label is about this tall; two labels closer than this would overprint. */
+export const LABEL_H = 12;
+
+/** The rows that carry a pitch name: every C, plus the top and bottom rows (so a range with no C is still labelled) unless a C is already closer than a label's height. */
+export function labelRows(roll: RollLayout): RollLayout['rows'] {
+  const cs = roll.rows.filter(r => r.pitch % 12 === 0);
+  const ends = [roll.rows[0], roll.rows.at(-1)].filter((r): r is RollLayout['rows'][number] => r !== undefined && r.pitch % 12 !== 0);
+  const clear = ends.filter(r => !cs.some(c => Math.abs(c.y - r.y) < LABEL_H));
+  const distinct = clear.length === 2 && Math.abs(clear[0]!.y - clear[1]!.y) < LABEL_H ? clear.slice(0, 1) : clear;
+  return roll.rows.filter(r => cs.includes(r) || distinct.includes(r));
+}
+
 /** Pitch range = the shown notes' lowest - 1 .. highest + 1; higher pitch is higher (smaller y); colour = the motif's character colour from the score (motifColor), else lane colour. rowH is the row height clamped to ROLL's range and height is rows * rowH. With no shown notes (a sound piece may have none) rows and notes are empty and rowH and height are 0. */
 export function layoutRoll(score: Score, view: View, height: number, lanes?: ReadonlySet<string>): RollLayout {
   const shown = score.notes.map((n, index) => ({ n, index })).filter(({ n }) => !lanes || lanes.has(n.lane));

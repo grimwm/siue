@@ -40,3 +40,22 @@ test('a self-closing part is dropped alone and never swallows the next one', () 
   assert.match(keepA, /<part id="a"\/>/);
   assert.doesNotMatch(keepA, /id="b"|<measure/);
 });
+
+test('a score without an XML declaration gets one, since the notation library needs it', () => {
+  const bare = xml.replace(/^\s*<\?xml[^>]*\?>\s*/, '');
+  assert.doesNotMatch(bare, /^<\?xml/);
+  assert.match(onlyLane(bare, 'brass'), /^<\?xml version="1\.0" encoding="UTF-8"\?>\s*</);
+  assert.match(onlyLane(`﻿  ${bare}`, 'brass'), /^<\?xml version="1\.0" encoding="UTF-8"\?>\s*</, 'a byte-order mark or blank space does not hide the missing declaration');
+});
+
+test('a declaration the score already has is kept, once', () => {
+  const declared = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml.replace(/^\s*<\?xml[^>]*\?>\s*/, '');
+  const out = onlyLane(declared, 'brass');
+  assert.equal(out.match(/<\?xml/g)?.length, 1);
+  assert.ok(out.startsWith('<?xml version="1.0" encoding="UTF-8"?>'));
+});
+
+test('a score laid out by time is refused in plain words', () => {
+  const timewise = '<?xml version="1.0"?><score-timewise version="3.1"><part-list><score-part id="brass"/></part-list><measure number="1"><part id="brass"/></measure></score-timewise>';
+  assert.throws(() => onlyLane(timewise, 'brass'), /laid out by time.*instrument/);
+});

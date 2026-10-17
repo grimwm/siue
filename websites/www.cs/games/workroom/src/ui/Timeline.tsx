@@ -9,7 +9,7 @@ import type { TempoMap } from '../tempo.ts';
 import { boundsFor } from '../zoom.ts';
 import type { View } from '../zoom.ts';
 import { useSurface } from './surface.ts';
-import { AXIS_H, Axis, Playhead } from './parts.tsx';
+import { AXIS_H, Axis, LANE_ICON_SIZE, LaneIcon, Playhead } from './parts.tsx';
 
 export interface TimelineProps { score: Score; tempo: TempoMap; view: View; time: number; onSeek(t: number): void; onView(v: View): void; onTerm(id: string): void; onHold?(held: boolean): void; overlay?: ComponentChildren }
 
@@ -48,7 +48,8 @@ export function Timeline(p: TimelineProps) {
       {layout.lanes.map(l => (
         <g>
           <rect class="lane" data-lane={l.id} x={l.rect.x} y={l.rect.y} width={l.rect.w} height={l.rect.h} />
-          <text class="lane-name" x={6} y={l.rect.y + 16} fill={l.color}>{l.name}</text>
+          <LaneIcon family={l.icon} color={l.color} x={6} y={l.rect.y + 4} />
+          <text class="lane-name" x={8 + LANE_ICON_SIZE + 4} y={l.rect.y + 16} fill={l.color}>{l.name}</text>
         </g>
       ))}
       {layout.ribbons.map(r => <rect class="ribbon" data-motif={r.motif} data-character={r.character} x={r.rect.x} y={r.rect.y} width={Math.max(0, r.rect.w)} height={r.rect.h} fill={r.color} />)}

@@ -44,3 +44,9 @@ test('a lost session says so', async () => {
   const r = await loadDraft(fakeFetch(null, true).fetch, 'test-piece', null);
   assert.deepEqual(r, { ok: false, error: 'Your sign-in ended. Sign in again.' });
 });
+
+test('a sibling script is loaded with the page script\'s own query, so one version stamps both', async () => {
+  const { siblingUrl } = await import('../src/load.ts');
+  assert.equal(siblingUrl('https://www.cs.siue.edu/~wgrim/games/workroom/dist/workroom.js?v=abc1234567', 'sheet.js'), 'https://www.cs.siue.edu/~wgrim/games/workroom/dist/sheet.js?v=abc1234567');
+  assert.equal(siblingUrl('https://x.test/dist/workroom.js', 'sheet.js'), 'https://x.test/dist/sheet.js');
+});

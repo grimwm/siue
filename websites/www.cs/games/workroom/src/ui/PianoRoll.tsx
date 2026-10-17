@@ -1,6 +1,6 @@
 // The piano roll: notes as bars, pitch up, on the same view as the timeline.
 import { axisTicks } from '../axis.ts';
-import { layoutRoll } from '../pianoroll.ts';
+import { labelRows, layoutRoll } from '../pianoroll.ts';
 import type { Score } from '../score.ts';
 import type { TempoMap } from '../tempo.ts';
 import { boundsFor } from '../zoom.ts';
@@ -21,7 +21,7 @@ export function PianoRoll(p: PianoRollProps) {
   return (
     <svg class="roll" data-roll="" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`} role="img" aria-label="Piano roll" {...surface}>
       {roll.rows.map(r => <rect class={r.black ? 'row black' : 'row'} x={0} y={r.y} width={view.width} height={roll.rowH} />)}
-      {roll.rows.filter(r => r.pitch % 12 === 0).map(r => <text class="pitch-name" x={4} y={r.y + roll.rowH - 1}>{r.name}</text>)}
+      {labelRows(roll).map(r => <text class="pitch-name" x={4} y={r.y + roll.rowH - 1}>{r.name}</text>)}
       {roll.notes.map(n => <rect class="note" data-note={n.index} data-lane={n.lane} x={n.rect.x} y={n.rect.y} width={Math.max(1, n.rect.w)} height={n.rect.h} fill={n.color} />)}
       <Axis ticks={axisTicks(score, tempo, view)} height={roll.height} />
       <Playhead view={view} time={p.time} height={roll.height} />

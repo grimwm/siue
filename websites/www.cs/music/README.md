@@ -44,8 +44,8 @@ with the admin mail capture, signs in through the captured email, publishes the
 fixture drafts with an API key made on the hub, and drives the page in Chrome:
 play, seek, the four views, a glossary card, the sheet music, a sound effect from
 a second project, and no content security policy violation. It prints
-`MUSIC-E2E-OK` and tears the project down. The page is bundled for the check by
-`games/workroom/tools/e2e-bundle.ts` (the test key built in), never into `dist/`.
+`MUSIC-E2E-OK` and tears the project down. The page it drives is the shipped
+`games/workroom/dist/workroom.js`.
 The admin sign-in link is limited to three a hour per address; one run asks for
 two. The fixtures under `games/workroom/test/fixtures/draft*/` come from
 `node games/workroom/tools/make-draft-fixture.ts` and `ffmpeg` (see that script).

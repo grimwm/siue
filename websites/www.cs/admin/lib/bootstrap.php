@@ -6,10 +6,15 @@ require_once __DIR__ . '/Clock.php';
 require_once __DIR__ . '/Db.php';
 require_once __DIR__ . '/Pages.php';
 
-// The kit's classes, unless the kit is already loaded (the test suites share a process).
-if (!class_exists(\Kit\StoreModes::class, false)) {
+// The kit's StoreDir and StoreModes. Where the kit's source is present (a
+// checkout, the test suites, which share one process with the kit's own tests)
+// its files are the ones loaded, so a class is never declared twice; the
+// deployed site ships the copies in this folder instead.
+$kitPhp = __DIR__ . '/../../games/_kit/php';
+if (is_file($kitPhp . '/score-guard.php')) {
+    require_once $kitPhp . '/score-guard.php';
+} elseif (!class_exists(\Kit\StoreDir::class, false)) {
     require_once __DIR__ . '/store-modes.php';
-}
-if (!class_exists(\Kit\StoreDir::class, false)) {
     require_once __DIR__ . '/store-dir.php';
 }
+unset($kitPhp);

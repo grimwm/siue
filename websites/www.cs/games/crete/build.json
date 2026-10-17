@@ -2,7 +2,8 @@
   "programs": ["tsconfig.json", "src/tsconfig.dom.json", "tsconfig.test.json"],
   "entries": [
     { "in": "src/main.ts", "out": "main", "format": "esm" },
-    { "in": "../_kit/install-page.ts", "out": "install", "format": "iife" }
+    { "in": "../_kit/install-page.ts", "out": "install", "format": "iife" },
+    { "in": "src/tiles-page.ts", "out": "tiles-test", "format": "iife" }
   ],
   "kitCss": true
 }

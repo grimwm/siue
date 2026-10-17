@@ -19,6 +19,11 @@ source needs this folder beside it.
   file's 10-hex content hash (a `?v=` for a file the code fetches).
 - `kitCss`: `true` copies `_kit/kit.css` to `dist/kit.css` (see "The kit
   stylesheet").
+- `css`: `{ in, out }` compiles a Tailwind v4 entry (`in`, a CSS file) with
+  the pinned `@tailwindcss/cli` into `dist/<out>.css`, minified. The entry
+  says what it scans (`@import "tailwindcss" source(none);` then `@source`
+  lines), so only the classes a game's sources use are emitted. `--check`
+  covers the stylesheet like a bundle.
 
 - `inlined`: package names (resolved from `games/node_modules`) that a bundled
   dependency carries prebuilt inside itself, so esbuild never sees them. Their
@@ -177,6 +182,15 @@ stays injected by `install-page.ts` and does not need the sheet.
 that two or more games would repeat; each game's colors, fonts and layouts
 stay in the game. `test/kit-css.test.ts` fails on any selector without a
 `.kit-` class.
+
+## Build-time tools
+
+Run by the build, never shipped (only their output is): `esbuild` (MIT),
+`typescript` (Apache-2.0), `@resvg/resvg-js` (MPL-2.0), `tailwindcss` and
+`@tailwindcss/cli` (MIT; the compiled CSS carries Tailwind's own licence
+banner), `lightningcss` (MPL-2.0; Tailwind's CSS minifier, a transitive
+dependency of the CLI), `@types/node` (MIT). All but `lightningcss` are
+exact pins in `games/package.json`.
 
 ## Seeded generator (`rng.ts`)
 

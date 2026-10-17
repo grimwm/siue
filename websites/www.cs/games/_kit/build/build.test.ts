@@ -338,3 +338,77 @@ test('licenseFile prefers LICENSE over COPYING, whatever the order', async () =>
   assert.equal(licenseFile(['COPYING.txt', 'COPYING']), 'COPYING');
   assert.equal(licenseFile(['README.md']), undefined);
 });
+
+const withCss = (dir: string, css: unknown = { in: 'src/app.css', out: 'look' }, extra = ''): void => {
+  writeFileSync(join(dir, 'src/app.css'), `@import "tailwindcss" source(none);\n@source "./classes.txt";\n@theme static { --color-*: initial; --color-ink: #123456; }\n${extra}`);
+  writeFileSync(join(dir, 'src/classes.txt'), 'text-ink\n');
+  const cfg = JSON.parse(readFileSync(join(dir, 'build.json'), 'utf8'));
+  writeFileSync(join(dir, 'build.json'), JSON.stringify({ ...cfg, css }));
+};
+
+test('css: compiles the Tailwind entry to dist/<out>.css with only the classes the sources use', t => {
+  const dir = scratch(t);
+  withCss(dir);
+  const r = run(dir);
+  assert.equal(r.status, 0, r.stderr);
+  const css = readFileSync(join(dir, 'dist/look.css'), 'utf8');
+  assert.ok(css.startsWith('/*! tailwindcss v4.3.3 | MIT License'), 'keeps the licence banner');
+  assert.match(css, /\.text-ink\{color:var\(--color-ink\)\}/);
+  assert.match(css, /--color-ink:#123456/);
+  assert.doesNotMatch(css, /bg-red-500|--color-red/, 'the default palette is cleared');
+  assert.equal(run(dir, '--check').status, 0);
+});
+
+test('css: --check fails on a stale stylesheet, and a build brings it back', t => {
+  const dir = scratch(t);
+  withCss(dir);
+  run(dir);
+  writeFileSync(join(dir, 'src/classes.txt'), 'text-ink bg-ink\n');
+  const r = run(dir, '--check');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /dist\/look\.css is stale/);
+  assert.equal(run(dir).status, 0);
+  assert.match(readFileSync(join(dir, 'dist/look.css'), 'utf8'), /\.bg-ink\{/);
+  assert.equal(run(dir, '--check').status, 0);
+});
+
+test('css: deterministic and free of absolute paths', t => {
+  const dir = scratch(t);
+  withCss(dir);
+  run(dir);
+  const first = readFileSync(join(dir, 'dist/look.css'));
+  rmSync(join(dir, 'dist'), { recursive: true });
+  run(dir);
+  assert.ok(first.equals(readFileSync(join(dir, 'dist/look.css'))));
+  assert.doesNotMatch(first.toString('utf8'), /\/Users\/|\/home\/|[A-Z]:\\\\|file:\/\//);
+});
+
+test('css: a game without the key gets no stylesheet', t => {
+  const dir = scratch(t);
+  run(dir);
+  assert.deepEqual(readdirSync(join(dir, 'dist')).filter(f => f.endsWith('.css')), []);
+});
+
+test('css: a bad css entry is refused with a reason', t => {
+  const dir = scratch(t);
+  withCss(dir, { in: 'src/none.css', out: 'look' });
+  let r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /css `in` src\/none\.css does not exist/);
+  withCss(dir, { in: 'src/app.css', out: '../look' });
+  r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /css `out` \.\.\/look must match/);
+  withCss(dir, 'src/app.css');
+  assert.match(run(dir).stderr, /`css` must be/);
+});
+
+test('css: a Tailwind error fails the build, names the entry and writes nothing', t => {
+  const dir = scratch(t);
+  withCss(dir, undefined, '.x { @apply bg-nope; }\n');
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /src\/app\.css: tailwindcss failed/);
+  assert.match(r.stderr, /bg-nope/);
+  assert.ok(!existsSync(join(dir, 'dist')));
+});

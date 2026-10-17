@@ -11,6 +11,7 @@ import * as esbuild from 'esbuild';
 
 const GAMES = resolve(import.meta.dirname, '..', '..');
 const TSC = join(GAMES, 'node_modules', '.bin', 'tsc');
+const TAILWIND = join(GAMES, 'node_modules', '.bin', 'tailwindcss');
 const KIT = resolve(import.meta.dirname, '..');
 const KIT_CSS = 'kit.css';
 const OUT_RE = /^[a-z][a-z0-9-]*$/;
@@ -48,6 +49,13 @@ export function loadBuildJson(gameDir) {
     if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new BuildError(`build.json: version constant ${name} must be UPPER_CASE`);
     if (!existsSync(join(gameDir, file))) throw new BuildError(`build.json: version file ${file} does not exist`);
   }
+  if (cfg.css !== undefined) {
+    const c = cfg.css;
+    if (typeof c !== 'object' || c === null || Array.isArray(c)) throw new BuildError('build.json: `css` must be { in, out } with an optional `fonts` folder');
+    if (typeof c.in !== 'string' || !existsSync(join(gameDir, c.in))) throw new BuildError(`build.json: css \`in\` ${c.in} does not exist`);
+    if (typeof c.out !== 'string' || !OUT_RE.test(c.out)) throw new BuildError(`build.json: css \`out\` ${c.out} must match ${OUT_RE}`);
+    if (c.out === 'kit' && cfg.kitCss === true) throw new BuildError('build.json: css `out` kit would overwrite the kit stylesheet');
+  }
   return cfg;
 }
 
@@ -57,6 +65,14 @@ export function typecheck(gameDir, cfg) {
     const r = spawnSync(TSC, ['-p', join(gameDir, program), '--pretty', 'false'], { encoding: 'utf8' });
     if (r.status !== 0) throw new BuildError(`${relative(GAMES, join(gameDir, program))}:\n${r.stdout}${r.stderr}`);
   }
+}
+
+/** Compiles a game's Tailwind entry with the pinned CLI, minified; the entry's own @source lines say which files it scans. */
+export function compileCss(gameDir, css) {
+  const r = spawnSync(TAILWIND, ['--input', css.in, '--output', '-', '--minify'], { cwd: gameDir, encoding: 'utf8' });
+  if (r.error) throw new BuildError(`tailwindcss did not run (${r.error.message}); run npm ci in games/`);
+  if (r.status !== 0) throw new BuildError(`${css.in}: tailwindcss failed:\n${r.stderr}`);
+  return r.stdout;
 }
 
 const LICENSES_FILE = 'THIRD_PARTY_LICENSES.txt';
@@ -180,6 +196,7 @@ export async function bundle(gameDir, cfg) {
     }
   }
   if (cfg.kitCss === true) files.set(KIT_CSS, readFileSync(join(KIT, KIT_CSS), 'utf8'));
+  if (cfg.css) files.set(`${cfg.css.out}.css`, compileCss(gameDir, cfg.css));
   // Packages a bundled dependency carries prebuilt inside itself (OSMD's min.js inlines jszip, pako and more): esbuild never
   // sees them, so the notices come from the lockfile's runtime dependency closure of every package it did see,
   // plus any package build.json's `inlined` names (and their closures).

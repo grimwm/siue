@@ -1,0 +1,28 @@
+/* The server-rendered parts of the workroom pages (music/lib/Pages.php: the
+   header, the pieces list, the error page) keep their own class names; this
+   file gives them the console look from the tokens. error, empty and loading
+   are shared with the page script. */
+@layer base {
+  body { @apply min-h-dvh bg-ground font-body text-ink antialiased; }
+  a { @apply text-amber underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber; }
+}
+
+@layer components {
+  .console-head { @apply mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 border-b border-rule px-4 py-2; }
+  .console-head h1 { @apply font-display text-2xl font-semibold tracking-wide uppercase; }
+  .crumb a { @apply inline-flex min-h-11 items-center font-display text-sm font-semibold tracking-widest uppercase; }
+  .index-body { @apply mx-auto grid max-w-7xl gap-6 px-4 py-6; }
+  .waiting-total { @apply font-mono text-sm text-dim; }
+  h2.project { @apply border-b border-rule pb-1 font-display text-lg font-semibold tracking-widest uppercase text-dim; }
+  ul.pieces { @apply mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3; }
+  li.piece { @apply rounded-lg border border-rule bg-panel p-4; }
+  li.piece > a { @apply flex min-h-11 items-center font-display text-xl font-semibold break-words text-ink uppercase; }
+  li.piece .version { @apply font-mono text-xs text-dim; }
+  li.piece .waiting-count { @apply mr-2 font-mono text-xs text-amber; }
+  li.piece ul.changes { @apply mt-2 list-disc pl-5 text-sm text-dim; }
+  .error { @apply rounded-lg border border-record bg-panel p-4 text-ink; }
+  .empty { @apply text-dim; }
+  .loading { @apply font-mono text-sm text-dim; }
+  #workroom { @apply mx-auto block max-w-7xl px-4 pt-4 pb-24 lg:pb-6; }
+  #workroom:empty { display: none; }
+}

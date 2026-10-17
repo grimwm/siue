@@ -4,5 +4,6 @@
     { "in": "src/main.ts", "out": "workroom", "format": "esm" },
     { "in": "src/sheet.ts", "out": "sheet", "format": "esm" }
   ],
+  "css": { "in": "src/app.css", "out": "workroom", "fonts": "fonts" },
   "notInlined": ["readable-stream"]
 }

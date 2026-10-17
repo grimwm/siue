@@ -1,0 +1,10 @@
+{
+  "fonts": [
+    { "name": "Barlow", "source": "@fontsource/barlow 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-Barlow.txt",
+      "files": ["barlow-latin-400-normal.woff2", "barlow-latin-500-normal.woff2", "barlow-latin-600-normal.woff2"] },
+    { "name": "Barlow Condensed", "source": "@fontsource/barlow-condensed 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-BarlowCondensed.txt",
+      "files": ["barlow-condensed-latin-600-normal.woff2"] },
+    { "name": "IBM Plex Mono", "source": "@fontsource/ibm-plex-mono 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-IBMPlexMono.txt",
+      "files": ["ibm-plex-mono-latin-400-normal.woff2", "ibm-plex-mono-latin-500-normal.woff2"] }
+  ]
+}

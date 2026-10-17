@@ -1,0 +1,55 @@
+/* The workroom's look. Tailwind v4 compiles this at build time
+   (node _kit/build/build.mjs workroom) into dist/workroom.css with only the
+   classes src/ uses. Colours are tokens with a dark value (@theme) and a light
+   value (data-theme="light" on <html>, set by src/theme.ts); components name
+   tokens, never colours. src/tokens.ts mirrors the values for contrast
+   arithmetic and test/tokens.test.ts keeps the two equal. */
+@import "tailwindcss" source(none);
+@import "./shell.css";
+@source "./**/*.{ts,tsx}";
+
+@theme static {
+  --color-*: initial;
+  --font-*: initial;
+  --color-ground: #121519;
+  --color-panel: #1b1f25;
+  --color-well: #0d0f12;
+  --color-lane: #161a20;
+  --color-rule: #2a3039;
+  --color-ink: #e8eaee;
+  --color-dim: #9aa3b0;
+  --color-amber: #f5b942;
+  --color-go: #3ddc84;
+  --color-record: #e2574c;
+  --color-on-accent: #121519;
+  --color-paper: #ffffff;
+  --font-display: "Barlow Condensed", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --default-font-family: var(--font-body);
+  --default-mono-font-family: var(--font-mono);
+}
+
+:root { color-scheme: dark; }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-ground: #eef0f3;
+  --color-panel: #ffffff;
+  --color-well: #f7f8fa;
+  --color-lane: #e8ebef;
+  --color-rule: #cfd5dd;
+  --color-ink: #15191f;
+  --color-dim: #55606d;
+  --color-amber: #8f5d00;
+  --color-go: #1a7f47;
+  --color-record: #b8322a;
+  --color-on-accent: #ffffff;
+  --color-paper: #ffffff;
+}
+
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/barlow-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/barlow-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/barlow-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/barlow-condensed-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); }

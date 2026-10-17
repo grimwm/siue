@@ -375,6 +375,24 @@ test('a chip can name its key-table slot and stay out of the accessible name', (
   assert.equal(chip.getAttribute('aria-hidden'), 'true');
 });
 
+test('a tab is a key chip with the tab class; a class given is added after it', () => {
+  const root = mount();
+  render(h('p', null, h(KeyChip, { label: 'H', variant: 'tab' }), h(KeyChip, { label: 'Q', variant: 'tab', class: 'key', at: 'global:back', decorative: true })), root);
+  const [a, b] = chips(root);
+  assert.ok(a && b);
+  assert.deepEqual([a.className, a.textContent, b.className, b.textContent], ['kit-key-tab', 'H', 'kit-key-tab key', 'Q']);
+  assert.equal(b.getAttribute('data-keyhint'), 'global:back');
+  assert.equal(b.getAttribute('aria-hidden'), 'true');
+});
+
+test('the chip variant, named or not, keeps the chip class and a class given replaces it', () => {
+  const root = mount();
+  render(h('p', null, h(KeyChip, { label: 'A', variant: 'chip' }), h(KeyChip, { label: 'B', variant: 'chip', class: 'cap' })), root);
+  const [a, b] = chips(root);
+  assert.ok(a && b);
+  assert.deepEqual([a.className, b.className], ['kit-key-chip', 'cap']);
+});
+
 test('Tab skips controls the browser cannot focus: display:none, inert, a disabled fieldset', () => {
   const root = mount();
   render(dialog({ open: true }, [

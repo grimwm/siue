@@ -138,7 +138,7 @@ export function Dialog(p: DialogProps) {
     const dismiss = p.onDismiss;
     if (!p.open || !dismiss) return undefined;
     // Captured, and stopped there: an open dialog owns Q, so the game's own
-    // key router under it never also acts on it (Crete's Q is Quit).
+    // key router under it never also acts on it (Crete's Q opens its menu).
     const onKey = (ev: KeyboardEvent): void => {
       if (!isBackKey(ev) || typesText(ev.target)) return;
       ev.preventDefault();

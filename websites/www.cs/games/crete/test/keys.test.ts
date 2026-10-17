@@ -1,12 +1,15 @@
 // Crete's keyboard: Q is the kit's back key (it opens the menu, closes what is open, and the title card keeps it),
-// a letter typed into the seed box is only a letter, game keys wait while a card is up, and Escape is never bound.
+// a letter typed into a text box is only a letter, game keys wait while a card is up, and Escape is never bound.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import { fireDocument, installDocument } from '../../_kit/test/dom-stub.ts';
-import { ITEMS } from '../src/engine.ts';
-import type { Game } from '../src/engine.ts';
-import type { Controls, UiDeps } from '../src/ui.ts';
+import { TOOLS } from '../src/puzzle/tiles.ts';
+import { createProgress } from '../src/progress.ts';
+import type { Atlas } from '../src/board-plan.ts';
+import type { Board } from '../src/board.ts';
+import type { Game } from '../src/game.ts';
+import type { Controls } from '../src/ui.ts';
 
 installDocument();
 const { ui } = await importTsx<{ ui: typeof import('../src/ui.ts') }>(import.meta.dirname, { ui: '../src/ui.ts' });
@@ -15,17 +18,15 @@ const calls: string[] = [];
 const note = (name: string) => () => { calls.push(name); };
 // Only the members the key handler touches; the cast says so.
 const game = {
-  G: { over: false, auto: false },
-  toggleAuto: note('auto'), toggleAnswer: note('route'), hint: note('hint'), bash: note('bash'),
-  tryMove: note('move'), useItem: note('item'), stopAuto: note('stop'),
+  trial: 0, run: null, thread: null, playing: false, anim: null,
+  press: (a: unknown) => { calls.push(typeof a === 'string' ? a : (a as { kind: string; dir?: string; tool?: string }).dir ?? (a as { kind: string; tool?: string }).tool ?? (a as { kind: string }).kind); },
+  hint: note('hint'), route: note('route'), auto: note('auto'), stop: note('stop'), open: note('open'),
 } as unknown as Game;
 const controls: Controls = {
-  game, restart: note('restart'), toggleMute: note('mute'), toggleFullscreen: note('fullscreen'),
-  wake: note('wake'), quit: note('quit'), play: note('play'),
+  game, toggleMute: note('mute'), toggleFullscreen: note('fullscreen'), wake: note('wake'), quit: note('quit'), play: note('play'),
 };
-// createUi keeps these for drawing; the key handler reads only ITEMS.
-const deps = { ROWS: 1, COLS: 1, MAX_HP: 1, TOTAL_PAGES: 1, ITEMS, key: () => '', heart: () => {} } as unknown as UiDeps;
-const page = ui.createUi(deps);
+// createUi keeps these for drawing; the key handler reads none of them.
+const page = ui.createUi({ atlas: {} as Atlas, board: {} as Board, progress: createProgress(null) });
 page.bindControls(controls);
 
 beforeEach(() => { page.closeLayers(); });
@@ -47,12 +48,15 @@ test('Q opens the menu, the next Q closes it, and neither quits the game', () =>
   }
 });
 
-test('Q under the title card does nothing; N and M still reach the game', () => {
+test('Q under the title card does nothing; N opens the trial list and M still reaches the game', () => {
   page.showTitle(false);
   assert.deepEqual(press('q').calls, []);
   assert.equal(page.top(), 'title');
-  assert.deepEqual(press('n').calls, ['restart']);
+  assert.deepEqual(press('n').calls, []);
+  assert.equal(page.top(), 'trials');
   assert.deepEqual(press('m').calls, ['mute']);
+  press('q');
+  assert.equal(page.top(), 'title', 'Q goes back to where the list was opened from');
 });
 
 test('a held Q acts once, and a chord with Ctrl, Cmd or Alt is the browser\'s', () => {
@@ -66,7 +70,7 @@ test('a held Q acts once, and a chord with Ctrl, Cmd or Alt is the browser\'s', 
   assert.equal(page.top(), null);
 });
 
-test('keys typed into the seed box, or a textarea, do nothing, Q included', () => {
+test('keys typed into a text box do nothing, Q included', () => {
   for (const tagName of ['INPUT', 'TEXTAREA']) {
     for (const key of ['q', 'n', 'm', 'h', ' ', 'ArrowUp']) {
       const { ev, calls } = press(key, { target: { tagName, type: tagName === 'INPUT' ? 'text' : undefined } });
@@ -89,19 +93,40 @@ test('Escape does nothing, with nothing open and with the menu open', () => {
 
 test('game keys wait while a card is up; Q, N and M do not', () => {
   press('q');
-  for (const key of ['h', 'v', 't', ' ', 'ArrowUp']) assert.deepEqual(press(key).calls, [], key);
-  assert.deepEqual(press(ITEMS.shard.key.toLowerCase()).calls, []);
+  for (const key of ['h', 'v', 't', '.', 'u', 'r', 'ArrowUp']) assert.deepEqual(press(key).calls, [], key);
+  for (const tool of Object.values(TOOLS)) assert.deepEqual(press(tool.key.toLowerCase()).calls, [], tool.name);
   assert.deepEqual(press('m').calls, ['mute']);
-  assert.deepEqual(press('n').calls, ['restart']);
+  assert.deepEqual(press('n').calls, []);
+  assert.equal(page.top(), 'trials');
 });
 
-test('with nothing open, the other keys reach the game, and a tool key uses its tool', () => {
+test('with nothing open, the keys reach the game, and a tool key uses its tool', () => {
   assert.deepEqual(press('m').calls, ['mute']);
   assert.deepEqual(press('h').calls, ['hint']);
   assert.deepEqual(press('v').calls, ['route']);
   assert.deepEqual(press('t').calls, ['auto']);
-  assert.deepEqual(press('ArrowUp').calls, ['move']);
-  assert.deepEqual(press('s').calls, ['move']);
-  assert.deepEqual(press(' ').calls, ['bash']);
-  for (const kind of Object.keys(ITEMS) as (keyof typeof ITEMS)[]) assert.deepEqual(press(ITEMS[kind].key).calls, ['item'], kind);
+  assert.deepEqual(press('ArrowUp').calls, ['up']);
+  assert.deepEqual(press('s').calls, ['down']);
+  assert.deepEqual(press('.').calls, ['wait']);
+  assert.deepEqual(press('u').calls, ['undo']);
+  assert.deepEqual(press('r').calls, ['restart']);
+  for (const [tool, def] of Object.entries(TOOLS)) assert.deepEqual(press(def.key).calls, [tool], tool);
+  assert.deepEqual(press(' ').calls, []);
+});
+
+test('a card opening stops the play-out', () => {
+  calls.length = 0;
+  press('q');
+  assert.ok(calls.includes('stop'));
+});
+
+test('a chord with Ctrl, Cmd or Alt is the browser\'s: no game key acts on it or swallows it', () => {
+  for (const chord of ['ctrlKey', 'metaKey', 'altKey']) {
+    for (const key of ['r', 't', 'w', 'n', 'm', 'h', 'u', 'v', 'z', '.', 'ArrowUp']) {
+      const { ev, calls } = press(key, { [chord]: true });
+      assert.deepEqual(calls, [], `${chord} ${key}`);
+      assert.equal(ev.prevented, false, `${chord} ${key}`);
+    }
+  }
+  assert.equal(page.top(), null);
 });

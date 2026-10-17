@@ -174,8 +174,9 @@ stay in the game. `test/kit-css.test.ts` fails on any selector without a
 
 ## Seeded generator (`rng.ts`)
 
-`hashSeed(string)` and `mulberry32(seed)` are Crete's, which its mazes are
-pinned by (`crete/test/engine.test.ts`); a change to either changes every maze.
+`hashSeed(string)` and `mulberry32(seed)` are the kit's seeded generator; no
+game imports them now (Tankity's initials test uses `test/rng.ts`), and a
+change to either changes every sequence a seed gives.
 `test/rng.ts` re-exports `mulberry32` for tests, and `test/rng-compare.test.ts`
 shows it agrees bit for bit with an independently written mulberry32, over
 edge, negative and 10,000-seed ranges. Tankity's own `hashSeed` and
@@ -207,7 +208,7 @@ has a way in and a way out, standard or prefixed. Only the toggle and
 Q closes whatever is open: `isBackKey(ev)` is Q in either
 case with no Ctrl, Cmd or Alt and nothing being composed, and `typesText(target)`
 says when Q is a letter instead (a box that takes text). A held Q acts once:
-callers ignore `ev.repeat`. Crete's key router owns Q: with nothing open it opens the menu, and it closes whatever card is open; the install steps and the Share field own Q while they are open. It asks `isBackKey` for Q and `typesText` for the seed box; Cylon's ability keys skip a typing target through `typesText`. No game listens for
+callers ignore `ev.repeat`. Crete's key router owns Q: with nothing open it opens the menu, and it closes whatever card is open; the install steps and the Share field own Q while they are open. It asks `isBackKey` for Q; Cylon's ability keys skip a typing target through `typesText`. No game listens for
 Escape and no hint names it: Safari and Firefox always leave full screen on
 Esc, and no page can stop them (`tankity/test/fullscreen.test.ts` fails on a
 binding, listener or visible hint that asks for it).

@@ -72,10 +72,10 @@ cow), story page, block.
 - **Hearts:** shown as a heart with a number. Each level sets its starting
   hearts (3 unless it says otherwise); a honey cake gives one back, up to the
   level's start.
-- **Tools:** Medusa's mirror (Z) turns the Minotaur to stone for its next 3
-  turns, and while stone it is a wall to everyone. Honey cake (X) gives one
-  heart. Daedalus's cow (C) is set on the player's cell and becomes the
-  Minotaur's target until it reaches it.
+- **Tools:** Medusa's mirror (Z) turns the Minotaur to stone for the turn it is
+  raised and the 3 turns after (three free moves), and while stone it is a
+  wall to everyone. Honey cake (X) gives one heart. Daedalus's cow (C) is set
+  on the player's cell and becomes the Minotaur's target until it reaches it.
 - **Undo** steps back one turn, as far as the start; restart returns to the
   start. **Score** is the move count of the winning line; undone moves do not
   count.

@@ -106,11 +106,11 @@ function arrive(w: Work, at: Cell, ev: GameEvent[]): void {
   }
 }
 
-/** Ice and force floors under the player move them on, until the ride ends or would cross itself or the cell
- *  the move started from. */
-function ridePlayer(w: Work, d: Dir, origin: Cell, ev: GameEvent[]): void {
+/** Ice and force floors under the player move them on, until the ride ends or would cross itself. A ride may
+ *  carry the player back onto the cell the move started from. */
+function ridePlayer(w: Work, d: Dir, ev: GameEvent[]): void {
   let dir = d;
-  const seen = new Set<number>([index(w, origin), index(w, w.player)]);
+  const seen = new Set<number>([index(w, w.player)]);
   while (w.outcome === 'playing') {
     const def = TERRAIN[tAt(w, w.player)];
     if (def.carries && !w.gear.includes('suction')) dir = def.carries;
@@ -135,7 +135,7 @@ export function step(s: State, a: Action): StepResult {
     if (!enterAsPlayer(w, to, a.dir, false, ev)) return { state: s, events: [] };
     ev.push({ kind: 'moved', who: 'player', from, to });
     arrive(w, to, ev);
-    ridePlayer(w, a.dir, from, ev);
+    ridePlayer(w, a.dir, ev);
   } else if (a.kind === 'tool') {
     if (w.tools[a.tool] <= 0) return { state: s, events: [] };
     if (a.tool === 'cake') {
@@ -150,7 +150,9 @@ export function step(s: State, a: Action): StepResult {
     }
     w.tools[a.tool]--;
   }
-  if (w.outcome === 'playing') minotaurPhase(w, ev);
+  // The mirror turn is itself a stone turn: the Minotaur sits it out without spending any of the 3 that follow.
+  const raisedMirror = a.kind === 'tool' && a.tool === 'mirror';
+  if (w.outcome === 'playing' && !raisedMirror) minotaurPhase(w, ev);
   w.moves++;
   // A turn that left the terrain or the objects as they were shares the previous arrays.
   if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];

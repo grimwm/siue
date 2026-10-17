@@ -2,7 +2,7 @@
  * Only the top one is shown. Q takes the top one away; with nothing open it
  * opens the menu; the title card ignores it (nothing is under it to go back
  * to). DOM-free. */
-export type LayerName = "title" | "menu" | "story" | "end";
+export type LayerName = "title" | "menu" | "story" | "trials" | "start" | "end";
 /** What a Q press did: closed the top card, opened the menu, or left the title card be. */
 export type BackResult = "closed" | "opened" | "kept";
 

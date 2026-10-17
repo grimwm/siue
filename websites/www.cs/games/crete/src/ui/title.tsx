@@ -1,6 +1,6 @@
-// The Island of Crete: the title card. Shown when the page opens, after Quit, and under the ending card. Play
-// starts a run; Story and Settings open the story card and the menu when the page gives them; the kit's install
-// bar mounts into #title-install (src/install-slot.ts).
+// The Island of Crete: the title card. Shown when the page opens and after Quit. Play opens the trial list;
+// Story and Settings open the story card and the menu when the page gives them; the kit's install bar mounts
+// into #title-install (src/install-slot.ts).
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';
@@ -18,9 +18,9 @@ export interface TitleCardProps {
 
 export function TitleCard(p: TitleCardProps) {
   return (
-    <Dialog open={p.open} id="title-veil" veilClass="veil" panelClass="card" kicker="Minotaur chase" kickerClass="kicker"
+    <Dialog open={p.open} id="title-veil" veilClass="veil" panelClass="card" kicker="Eight trials" kickerClass="kicker"
       titleId="title-name" title="The Island of Crete" focusId="title-play">
-      <p>A text-based chase. Theseus (you) moves once. The Minotaur moves twice. Reach the exit alive.</p>
+      <p>Tile puzzles in the Labyrinth. Gather the relics, open the gate and reach the exit. The Minotaur takes two steps to your one.</p>
       {p.hint && <p id="title-hint" class="runstats" role="status">{EXIT_HINT}.</p>}
       <div class="title-actions">
         <Button id="title-play" onClick={p.onPlay}>{`▶ Play (${KEYS.new.label})`}</Button>

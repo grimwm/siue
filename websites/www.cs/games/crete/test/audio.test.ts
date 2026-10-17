@@ -6,9 +6,12 @@ import { createAudio } from '../src/audio.ts';
 import { createAudioCore } from '../../_kit/audio/core.ts';
 import { asAudioContext, fakeAudioContext, gainAt, nodeOf, nodesOf } from '../../_kit/test/audio.ts';
 import type { FakeContext, ParamCall } from '../../_kit/test/audio.ts';
-import type { SfxName } from '../src/engine.ts';
+import type { SfxName } from '../src/game.ts';
 
-const EVENTS: SfxName[] = ['move', 'bump', 'pickup', 'page', 'open', 'bash', 'hurt', 'win', 'lose', 'heart', 'hint', 'answerOn', 'answerOff'];
+const EVENTS: SfxName[] = [
+  'step', 'push', 'splash', 'sizzle', 'door', 'key', 'relic', 'gate', 'button', 'slide',
+  'caught', 'stone', 'win', 'lose', 'bump', 'pickup', 'page', 'hint',
+];
 const rig = (state?: string) => {
   const ctx = fakeAudioContext(state);
   return { ctx, audio: createAudio(createAudioCore({ createContext: () => asAudioContext(ctx) })) };
@@ -43,7 +46,7 @@ test('the win is four rising square notes a tenth of a second apart', () => {
 
 test('a note with no volume of its own plays at 0.04', () => {
   const { ctx, audio } = rig();
-  audio.sfx('move');
+  audio.sfx('step');
   assert.equal(firstCall(gainAt(nodeOf(ctx, 'osc').to, 0).gain.calls)[1], 0.04);
 });
 
@@ -55,7 +58,7 @@ test('muting silences every event; unmuting brings them back', () => {
   assert.equal(audio.toggleMute(), false);
   // Unmuting is a gesture, so the core's silent priming blip is already one oscillator.
   const primed = oscs(ctx).length;
-  audio.sfx('move');
+  audio.sfx('step');
   assert.equal(oscs(ctx).length, primed + 1);
 });
 

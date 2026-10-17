@@ -1,7 +1,6 @@
 // websites/www.cs/games/_kit/rng.ts
-// The seeded generator Crete's mazes are pinned by: a string hash and
-// mulberry32. Do not change a constant or an operation: every maze, and
-// crete/test/engine.test.ts and maze-rule tests with it, would change.
+// A seeded generator: a string hash and mulberry32. Do not change a constant
+// or an operation: every sequence a seed produces would change.
 // Tankity's hashSeed and mulberry32 are a separate TS/PHP parity twin
 // (tankity/src/sim.ts, server/sim.php) and do not come from here.
 // _kit/test/rng-compare.test.ts shows the test helper's generator and this one

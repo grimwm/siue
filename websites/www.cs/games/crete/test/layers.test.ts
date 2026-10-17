@@ -69,3 +69,17 @@ test('close and clear tell the page only when something changed', () => {
   assert.equal(layers.any(), false);
   assert.equal(changes(), 2);
 });
+
+test('the trial list opens over the title card or the ending card; Q returns to what it came from', () => {
+  const { layers } = make();
+  layers.open('title');
+  layers.open('trials');
+  assert.equal(layers.top(), 'trials');
+  assert.equal(layers.pressBack(), 'closed');
+  assert.equal(layers.top(), 'title');
+  layers.clear();
+  layers.open('end');
+  layers.open('trials');
+  assert.equal(layers.pressBack(), 'closed');
+  assert.equal(layers.top(), 'end');
+});

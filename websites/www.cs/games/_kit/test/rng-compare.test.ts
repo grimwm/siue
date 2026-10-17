@@ -1,7 +1,7 @@
-// The kit's mulberry32 (_kit/rng.ts, Crete's: its mazes are pinned by seed)
+// The kit's mulberry32 (_kit/rng.ts)
 // against an independently written mulberry32, bit for bit. The reference
 // below keeps the unsigned form, so this test shows the two agree for every
-// seed Crete can hand over: a number (negative and above 2^31 included) comes
+// seed a caller can hand over: a number (negative and above 2^31 included) comes
 // in through ToInt32/ToUint32 and the streams are the same.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,7 +36,7 @@ test('10,000 consecutive seeds give the same first 1,000 draws', () => {
   for (let seed = 0; seed < 10_000; seed++) sameStream(seed, 1000);
 });
 
-test('10,000 seeds as Crete makes them (hashSeed of a string) give the same first 1,000 draws', () => {
+test('10,000 seeds made by hashSeed of a string give the same first 1,000 draws', () => {
   for (let i = 0; i < 10_000; i++) {
     const seed = hashSeed(`island-${i}`);
     assert.ok(Number.isInteger(seed) && seed >= 0 && seed < 2 ** 32);
@@ -52,8 +52,8 @@ test('10,000 negative and wide seeds give the same first 1,000 draws', () => {
   }
 });
 
-test('the values Crete pins its mazes by', () => {
-  // The same pins crete/test/engine.test.ts holds, so the kit alone cannot drift from them.
+test('pinned hashSeed and mulberry32 values', () => {
+  // Fixed values, so the kit's generator cannot drift unnoticed.
   assert.equal(hashSeed('stefan-1984'), 1737770012);
   assert.equal(mulberry32(hashSeed('stefan-1984'))(), 0.33325220248661935);
 });

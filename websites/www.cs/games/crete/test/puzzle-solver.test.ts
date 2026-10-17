@@ -93,3 +93,17 @@ test('a cap of 1 returns capped without expanding', () => {
   assert.ok(!r.solved && r.capped);
   assert.equal(r.explored, 1);
 });
+
+test('of two equally short lines the solver keeps the one that waits in place', () => {
+  // Five turns win either way: the Minotaur must be let past the pillar, by a wait or by a step out and back.
+  const rows = ['######', '#M.#.#', '#E.#.#', '##P..#', '######'];
+  const r = solve(grid(rows));
+  assert.ok(r.solved);
+  assert.equal(r.line.length, 5);
+  assert.ok(r.line.some(a => a.kind === 'wait'));
+  assert.equal(replay(grid(rows), r.line).outcome, 'won');
+  // A wait-free line of the same length exists: out and back instead of the wait.
+  const wiggle = [mv('right'), mv('right'), mv('up'), mv('up'), mv('left')];
+  assert.equal(replay(grid(rows), wiggle).outcome, 'won');
+  assert.equal(wiggle.length, r.line.length);
+});

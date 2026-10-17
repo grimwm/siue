@@ -1,0 +1,42 @@
+/* The music workroom's index and shell pages. */
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 24px 16px 48px;
+  background: #0d0f12;
+  color: #e8ebf0;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 960px; margin: 0 auto; }
+h1 { margin: 0 0 8px; font-size: 1.6rem; }
+a { color: #ff6b6b; }
+a:hover, a:focus-visible { color: #ff9a9a; }
+.waiting-total { margin: 0 0 24px; color: #9aa3af; }
+.empty { color: #9aa3af; }
+h2.project {
+  margin: 32px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #e02020;
+  font-size: 1.15rem;
+  letter-spacing: .02em;
+}
+ul.pieces {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+ul.pieces > li {
+  padding: 14px 16px;
+  background: #161a20;
+  border: 1px solid #262c35;
+  border-left: 4px solid #e02020;
+  border-radius: 8px;
+}
+li.piece > a { font-weight: 600; text-decoration: none; }
+.waiting-count { margin-left: 8px; color: #e02020; font-size: .85rem; }
+ul.changes { margin: 8px 0 0; padding-left: 18px; color: #9aa3af; font-size: .85rem; }
+#workroom { min-height: 50vh; }

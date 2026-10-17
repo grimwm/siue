@@ -423,7 +423,8 @@ final class AdminPagesTest extends TestCase
         $body = $p->loginForm(req())->body;
         self::assertStringNotContainsString(Admin\Auth::ALLOWED, $body);
         self::assertStringNotContainsString('siue.edu', $body);
-        self::assertStringNotContainsString('name="email" value=', $body);
+        self::assertSame(1, preg_match('/<input\b[^>]*\bname="email"[^>]*>/', $body, $input), 'the form has an email input');
+        self::assertDoesNotMatchRegularExpression('/\bvalue\s*=/', $input[0], 'the email input carries no value');
         self::assertStringContainsString('Email me a link', $body);
     }
 

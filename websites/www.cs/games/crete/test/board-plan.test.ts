@@ -19,6 +19,24 @@ test('terrain is drawn row by row from the top, objects and figures after their 
   assert.deepEqual(list.find(d => d.sprite === 'wall'), { sprite: 'wall', frame: 0, x: 1, y: 0 });
 });
 
+test('a figure between two rows is drawn after the lower row, so no floor paints over it', () => {
+  const s = grid(['P#', '*M']);
+  const order = (r: number) => {
+    const list = drawList(s, { player: { r, c: 0 }, minotaur: null }, atlas, 0);
+    const me = list.findIndex(d => d.sprite === 'theseus');
+    const lastTerrainOfRow = (row: number) => list.reduce((n, d, i) => (d.y === row && (d.sprite === 'floor' || d.sprite === 'wall') ? i : n), -1);
+    return { me, row0: lastTerrainOfRow(0), row1: lastTerrainOfRow(1) };
+  };
+  const down = order(0.5);
+  assert.ok(down.me > down.row1, 'a move down, midway');
+  const up = order(0.4);
+  assert.ok(up.me > up.row1, 'a move up, midway');
+  const onRow = order(1);
+  assert.ok(onRow.me > onRow.row1, 'exactly on row 1');
+  const onZero = order(0);
+  assert.ok(onZero.row0 < onZero.me && onZero.me < onZero.row1, 'exactly on row 0 it stays before row 1');
+});
+
 test('the gate shows open once the relics are taken; a stone Minotaur and a standing cow have their own sprites', () => {
   const s = { ...grid(['P|M']), relicsLeft: 0, stone: 2, cow: { r: 0, c: 0 } };
   const names = drawList(s, { player: s.player, minotaur: s.minotaur }, atlas, 0).map(d => d.sprite);

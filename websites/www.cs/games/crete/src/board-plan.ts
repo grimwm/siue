@@ -1,7 +1,8 @@
 // websites/www.cs/games/crete/src/board-plan.ts
 /* The Island of Crete: what the board draws, as data. `drawList` lists the
  * sprites row by row from the top, so a wall's top (the sprite's rise) lies
- * over the row above; a row's objects and figures follow its terrain.
+ * over the row above; a row's objects follow its terrain. A figure between two
+ * rows draws after the lower one, so no floor paints over it.
  * `timeline` turns a turn's events into where the figures stand at each
  * moment: the player's moves and slides first, then each Minotaur step,
  * SLIDE_MS a cell; reduced motion snaps. DOM-free. */
@@ -34,7 +35,7 @@ export function drawList(s: State, fig: Figures, atlas: Atlas, ms: number): Draw
   const out: Draw[] = [];
   const put = (sprite: string, x: number, y: number) => out.push({ sprite, frame: frameAt(atlas, sprite, ms), x, y });
   const { rows, cols } = s.level;
-  const onRow = (p: Pos | null, r: number) => !!p && Math.round(p.r) === r;
+  const onRow = (p: Pos | null, r: number) => !!p && Math.ceil(p.r - 1e-9) === r;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const t = s.terrain[r * cols + c]!;

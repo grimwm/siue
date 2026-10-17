@@ -1,0 +1,5 @@
+{
+  // DOM-free program: the score model, layout, zoom, gestures and note building cannot reach the page. The Web Crypto modules have their own program, src/tsconfig.crypto.json. See games/_kit/README.md.
+  "extends": "../_kit/build/tsconfig.base.json",
+  "files": ["src/score.ts", "src/glossary.ts"]
+}

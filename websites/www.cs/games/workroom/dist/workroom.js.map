@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/main.ts"],
+  "sourcesContent": ["document.getElementById('workroom')!.textContent = 'Loading…';\n"],
+  "mappings": "AAAA,SAAS,eAAe,UAAU,EAAG,YAAc",
+  "names": []
+}

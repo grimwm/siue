@@ -12,12 +12,12 @@ intro: Ariadne's thread is in your hand, Theseus. The beast runs two steps to yo
 #...E.#
 #M..#.#
 #.#...#
-##...##
+##....#
 #P.##.#
 #######
 ` },
   { id: 'trial-2', text: `title: The Tribute Relics
-intro: The Athenian tribute left relics in the dark. Gather every one and the gate of Minos will open; the beast guards the last.
+intro: Two relics lie in the dark, and the gate of Minos opens for nothing less. The beast keeps watch over the far one: draw him away.
 
 #########
 #P.....*#
@@ -44,13 +44,13 @@ intro: Daedalus hung doors of every colour. A red or blue key is spent in its lo
 intro: The Naiads lend flippers for the water and Hephaestus lends boots for the fire. The beast prowls the shore between.
 
 ##########
-#.#~#..FE#
-###~.#.F##
+#.#~...FE#
+###~...F##
 #f.~...F##
 ##.~#.hF##
 #..~#M#F##
 #P.~#..F##
-###~..#F##
+###~...F##
 ##########
 ` },
   { id: 'trial-5', text: `title: The Slippery Halls
@@ -61,7 +61,7 @@ intro: Daedalus polished these halls to glass and set currents in the stones. Sk
 ##k.===##.#
 ##..=.#<#E#
 #.===u=..##
-#...=.#=<.#
+#...=..=<.#
 ###########
 ` },
   { id: 'trial-6', text: `title: The Sinking Stones
@@ -69,39 +69,38 @@ intro: Roll a stone into the deep and the water becomes a road. Tread the plate 
 
 ###########
 #.M..#._..#
-#.##.#..#.#
+#.#..#..#.#
 ##PO.~.#..#
 ##...#....#
-#.O.###..##
+#....#...##
 #....#.#T##
 #######.E##
 ###########
 ` },
   { id: 'trial-7', text: `title: The Gifts of Ariadne
-intro: Ariadne left you gifts: Medusa's mirror, a honey cake and Daedalus's cow. Rest on the sacred stones, where the beast cannot tread.
+intro: Ariadne left you gifts: Medusa's mirror, Daedalus's cow and a honey cake. Stone the beast to pass him, then set the cow where the walls will pin him.
 
-############
-#P...###...#
-###z#..M.#.#
-#...#..S#..#
-#.....####E#
-#.#.x.....##
-#...##S.#..#
-##.<..##.#.#
-############
+#########
+#..E..M.#
+##.....##
+#P##.##c#
+#x......#
+##S.z#..#
+####..S.#
+#########
 ` },
   { id: 'trial-8', text: `title: The Heart of the Labyrinth
-intro: Here Minos hid his last riddle: key and door, flood and ice, and the beast between. Pass it, and Athens owes no more tribute.
+intro: Here Minos hid his last riddle: key and door, a block in the flood, and ice, with the beast between. Pass it, and Athens owes no more tribute.
 
 ############
-#P..#...~==#
-###.#..#~=.#
-#.r.#.#.~=##
-#.#.R..#~=.#
-#..###f#~==#
-#.z.#...~#=#
-#..###.#~=O#
-#..##..M~=E#
+#P..#.M.~=##
+###.#...~=.#
+#.r.##..~..#
+#.#.R...~==#
+#.#.###.~==#
+#.z##..O~=.#
+#...#..~~=.#
+#...#.~f~=E#
 ############
 ` },
 ];

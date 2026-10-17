@@ -43,12 +43,12 @@ export function stateKey(s: State): string {
   ].join('|');
 }
 
-/** The actions a state offers, each as a small int: 0-3 a move (DIRS order), 4 a wait, 5-7 a tool. */
+/** The actions a state offers, each as a small int: 0-3 a move (DIRS order), 4 a wait, 5-7 a tool. The wait comes
+ *  first, so of two equally short lines the breadth-first search keeps the one that waits in place. */
 const TOOL_LIST: readonly Tool[] = ['mirror', 'cake', 'cow'];
 const WAIT_CODE = DIRS.length;
 function actionCodes(s: State): number[] {
-  const out = DIRS.map((_, i) => i);
-  out.push(WAIT_CODE);
+  const out = [WAIT_CODE, ...DIRS.map((_, i) => i)];
   TOOL_LIST.forEach((tool, i) => { if (s.tools[tool] > 0) out.push(WAIT_CODE + 1 + i); });
   return out;
 }

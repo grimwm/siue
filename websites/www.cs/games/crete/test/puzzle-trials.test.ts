@@ -9,7 +9,7 @@ import { step } from '../src/puzzle/step.ts';
 import type { GameEvent } from '../src/puzzle/step.ts';
 import { parse, serialize } from '../src/puzzle/level.ts';
 
-const SHORTEST: number[] = [10, 23, 36, 28, 38, 24, 41, 38];
+const SHORTEST: number[] = [10, 23, 36, 28, 38, 24, 22, 30];
 
 function solved(i: number) {
   const r = solve(initial(trialLevel(i)));
@@ -59,10 +59,18 @@ test('trials 2 to 8 each need their idea', () => {
   const t6 = solved(5);
   assert.ok(t6.kinds.has('pushed') && t6.kinds.has('flipped') && t6.kinds.has('sank'));
   const lv7 = trialLevel(6);
-  const toolless = { ...lv7, objects: lv7.objects.map(o => (o === 'mirror' || o === 'cake' || o === 'cow' ? null : o)) };
-  assert.equal(solve(initial(toolless)).solved, false, 'trial 7 needs a tool');
+  const without = (...gone: string[]) => initial({ ...lv7, objects: lv7.objects.map(o => (o && gone.includes(o) ? null : o)) });
+  assert.equal(solve(without('mirror', 'cow', 'cake')).solved, false, 'trial 7 needs a tool');
+  assert.equal(solve(without('cow')).solved, false, 'trial 7 needs the cow');
+  assert.equal(solve(without('mirror')).solved, false, 'trial 7 needs the mirror');
+  assert.ok(lv7.objects.includes('cake'), 'trial 7 has a cake');
   assert.ok(lv7.terrain.includes('safe'));
+  const t7 = solved(6);
+  const noSafe = solve(initial({ ...lv7, terrain: lv7.terrain.map(t => (t === 'safe' ? 'floor' : t)) }));
+  assert.ok(!noSafe.solved || noSafe.line.length > t7.line.length, 'the safe zones matter');
+  assert.ok(t7.kinds.has('stoned') && t7.took.has('cow'));
   const t8 = solved(7);
-  const ideas = [t8.kinds.has('opened'), t8.took.has('flippers') || t8.took.has('fire-boots'), t8.kinds.has('slid'), t8.kinds.has('pushed'), t8.events.some(e => e.kind === 'stoned')];
-  assert.ok(ideas.filter(Boolean).length >= 4, 'the finale combines at least four ideas');
+  const others = [t8.kinds.has('opened'), t8.took.has('flippers') || t8.took.has('fire-boots'), t8.kinds.has('slid'), t8.kinds.has('stoned')];
+  assert.ok(t8.kinds.has('pushed'), 'the finale pushes its block');
+  assert.ok(others.filter(Boolean).length >= 3, 'the finale combines at least three more ideas');
 });

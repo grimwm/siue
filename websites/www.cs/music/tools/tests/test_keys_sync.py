@@ -93,7 +93,7 @@ class SyncTest(unittest.TestCase):
         self.w.keys.pull()
         self.assertEqual(self.w.keys.status(), 0)
         text = "\n".join(self.w.out)
-        self.assertIn(fp[:4] + " " + fp[4:8], text)
+        self.assertIn(" ".join(fp[i:i + 4] for i in range(0, 64, 4)), text, "the whole fingerprint, grouped like the hub")
         self.assertIn("match", text)
         self.assertIn("music-pickup", text)
         _, pkcs8, _ = pool_key(0)

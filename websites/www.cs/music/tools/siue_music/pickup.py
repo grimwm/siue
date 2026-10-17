@@ -105,7 +105,8 @@ def _one(api, keyring, notes: Path, steps: Steps, report: Report, note_id: str, 
     try:
         opened = open_bundle(data, keyring)
     except NoteUnreadable as e:
-        report.left[note_id] = f"could not open ({e.reason}); left waiting"
+        report.left[note_id] = ("could not open: sealed to a key this computer doesn't have; git pull, then make keys-pull; left waiting"
+                                if e.reason == "unknown-key" else f"could not open ({e.reason}); left waiting")
         return
     problem = _shape_problem(opened.body, opened.audio)
     ext = _audio_extension(opened.body, opened.audio) if opened.audio else None

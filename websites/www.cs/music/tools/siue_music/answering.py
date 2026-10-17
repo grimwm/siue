@@ -24,7 +24,7 @@ def _missing(what: str, package: str) -> MissingDependency:
 
 # The demuxer is named explicitly from the saved file's extension: ffmpeg never sniffs untrusted note audio,
 # so a crafted file cannot turn into a playlist that reads other files or fetches URLs.
-INPUT_FORMATS = {".webm": "webm", ".m4a": "mp4", ".aiff": "aiff"}
+INPUT_FORMATS = {".webm": "webm", ".m4a": "mp4", ".ogg": "ogg"}
 FFMPEG_SECONDS = 120
 
 
@@ -33,7 +33,7 @@ def to_wav(src: Path, dst: Path, rate: int = 16_000) -> Path:
         return src
     fmt = INPUT_FORMATS.get(src.suffix.lower())
     if fmt is None:
-        raise ValueError(f"{src.name}: the audio format is not one this tool converts (webm, m4a)")
+        raise ValueError(f"{src.name}: the audio format is not one this tool converts (webm, m4a, ogg)")
     if shutil.which("ffmpeg") is None:
         raise _missing("converting audio", "ffmpeg")
     cmd = ["ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-protocol_whitelist", "file", "-f", fmt, "-i", str(src),

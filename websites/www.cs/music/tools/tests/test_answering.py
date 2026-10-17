@@ -71,7 +71,7 @@ class FfmpegIsLockedDownTest(unittest.TestCase):
     def test_an_unknown_format_is_refused_before_ffmpeg_runs(self):
         with mock.patch("subprocess.run") as run:
             with self.assertRaises(ValueError):
-                to_wav(Path("a.ogg"), Path("o.wav"))
+                to_wav(Path("a.mp3"), Path("o.wav"))
         run.assert_not_called()
 
     def test_a_timeout_is_a_clean_error(self):
@@ -123,7 +123,9 @@ class SpeechFixtureTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             aiff = Path(d) / "s.aiff"
             subprocess.run(["say", "-o", str(aiff), "make the horns louder"], check=True)
-            self.assertIn("louder", transcribe(aiff).lower())
+            ogg = Path(d) / "audio.ogg"
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(aiff), str(ogg)], check=True)
+            self.assertIn("louder", transcribe(ogg).lower())
 
 
 if __name__ == "__main__":

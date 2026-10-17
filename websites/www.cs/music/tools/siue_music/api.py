@@ -11,7 +11,7 @@ from typing import Callable, Mapping
 MAX_REQUEST_BYTES = 8_388_608  # what the server accepts in one draft request
 DRAFT_MAGIC = b"SIUED1"
 TIMEOUT_SECONDS = 30
-RATE_LIMIT_PAUSES = (2.0, 5.0, 15.0, 30.0)  # the server allows 60 calls a minute per key; a 429 waits, then tries again
+RATE_LIMIT_PAUSES = (2.0, 5.0, 15.0, 40.0)  # the server counts 60 calls in a sliding minute; the pauses add up to more than that, so a 429 clears
 MAX_RETRY_AFTER = 60.0
 _LOCAL_HOSTS = ("localhost", "127.0.0.1")
 

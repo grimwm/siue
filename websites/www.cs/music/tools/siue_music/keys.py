@@ -38,7 +38,7 @@ class NotUploaded(Exception):
 
 
 def display(fp: str) -> str:
-    return " ".join(fp[i:i + 4] for i in range(0, 16, 4))
+    return " ".join(fp[i:i + 4] for i in range(0, len(fp), 4))
 
 
 @dataclass
@@ -415,15 +415,25 @@ class Keys:
         write_public_files(self.public_json, self.public_ts, (fp, spki),
                            [(k, repo.spki[k]) for k in (old, *repo.previous)])
         self._remember(fp, pkcs8)
-        item = self._item(old)
-        title = item.get("title") or KEY_TITLE + old[:16]
-        if not title.endswith(PREVIOUS_SUFFIX):
-            self.op.retitle(item["id"], title + PREVIOUS_SUFFIX)
         self.out(f"Rotated to the notes key {display(fp)}; the earlier keys are kept.")
-        if not self._send(upload, {fp: pkcs8, **ring}, passphrase, first=False):
+        sent = self._send(upload, {fp: pkcs8, **ring}, passphrase, first=False)
+        self._retitle_previous(old)
+        if not sent:
             raise NotUploaded(f"Rotated to {display(fp)}; the keyring was not uploaded")
         self._next_steps()
         return fp
+
+    def _retitle_previous(self, old: str) -> None:
+        """Marking the old item "(previous)" is cosmetic: a failure is a warning, never a failed rotation."""
+        item_id = old
+        try:
+            item = self._item(old)
+            item_id = item["id"]
+            title = item.get("title") or KEY_TITLE + old[:16]
+            if not title.endswith(PREVIOUS_SUFFIX):
+                self.op.retitle(item_id, title + PREVIOUS_SUFFIX)
+        except Exception as e:  # noqa: BLE001
+            self.out(f"Could not retitle the old 1Password item ({e}): retitle it by hand, adding{PREVIOUS_SUFFIX}: {item_id}")
 
     def upload_keyring(self, upload: Upload) -> int:
         ring = self.keyring()

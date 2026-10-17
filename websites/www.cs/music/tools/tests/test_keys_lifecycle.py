@@ -6,7 +6,9 @@ rotation opens with the rotated keyring, and nothing secret reaches argv or
 output."""
 import base64
 import json
+import os
 import unittest
+from unittest import mock
 
 from support import World, pool_key
 from siue_music import sealing
@@ -74,6 +76,21 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(len(self.uploads), 2, "init uploaded a keyring of one, rotate the full keyring")
         self.assertIn(new, self.w.public_ts.read_text())
         self.assertIn(old, self.w.public_ts.read_text(), "PREVIOUS_KEYS keeps the old public key")
+
+    def test_a_failed_retitle_still_uploads_and_only_warns(self):
+        self.w.keys.init(self.uploads.append)
+        with mock.patch.dict(os.environ, {"FAKE_OP_FAIL_EDIT": "1"}):
+            new = self.w.keys.rotate(self.uploads.append)
+        self.assertEqual(len(self.uploads), 2)
+        self.assertIn(new[:4], "\n".join(self.w.out))
+        self.assertTrue(any("retitle it by hand" in line for line in self.w.out))
+
+    def test_a_failed_retitle_after_a_failed_upload_is_still_not_uploaded(self):
+        from siue_music.keys import NotUploaded
+        self.w.keys.init(self.uploads.append)
+        with mock.patch.dict(os.environ, {"FAKE_OP_FAIL_EDIT": "1"}):
+            with self.assertRaises(NotUploaded):
+                self.w.keys.rotate(None)
 
     def test_a_note_sealed_before_a_rotation_opens_with_the_rotated_keyring(self):
         old = self.w.keys.init(self.uploads.append)

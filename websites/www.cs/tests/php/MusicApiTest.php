@@ -320,6 +320,7 @@ final class MusicApiTest extends TestCase
         self::assertSame($second, $this->store->keyring()['locked'], 'a new upload replaces the stored keyring');
         foreach ([
             'weak KDF' => $this->keyring(['iterations' => 1000]),
+            'absurd KDF' => $this->keyring(['iterations' => 10000001]),
             'wrong version' => $this->keyring(['v' => 2]),
             'wrong KDF' => $this->keyring(['kdf' => 'scrypt']),
             'short salt' => $this->keyring(['salt' => base64_encode('short')]),
@@ -334,6 +335,18 @@ final class MusicApiTest extends TestCase
         self::assertSame($second, $this->store->keyring()['locked'], 'refused uploads change nothing');
         $drafts = $this->keys->create('drafts', ['drafts:publish']);
         self::assertSame(403, $this->uploadKeyring($drafts, $good)->status);
+    }
+
+    public function testTheKeyringsPythonAndTheTestKeyProduceAreAccepted(): void
+    {
+        $k = $this->keys->create('publish', ['keys:publish']);
+        $dir = dirname(__DIR__, 2) . '/games/workroom/test/fixtures/';
+        $fromPython = (string) file_get_contents($dir . 'keyring-by-python.json');
+        $testKey = json_encode(json_decode((string) file_get_contents($dir . 'test-key.json'), true)['keyring']);
+        foreach (['keyring-by-python.json' => $fromPython, 'test-key.json' => $testKey] as $name => $body) {
+            self::assertSame(201, $this->uploadKeyring($k, $body)->status, $name);
+            self::assertSame($body, $this->store->keyring()['locked'], $name);
+        }
     }
 
     public function testKeyringSizeLimitIsExactAndCheckedBeforeReading(): void

@@ -116,6 +116,10 @@ class ApiTest(unittest.TestCase):
         self.assertEqual((len(calls), len(naps)), (3, 2))
         self.assertTrue(all(n > 0 for n in naps))
 
+    def test_the_back_off_outlasts_the_servers_minute(self):
+        from siue_music.api import RATE_LIMIT_PAUSES
+        self.assertGreater(sum(RATE_LIMIT_PAUSES), 60)
+
     def test_a_429_that_never_clears_gives_up_with_an_api_error(self):
         def opener(request, timeout=None):
             raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {}, io.BytesIO(b'{"error":"rate_limited"}'))

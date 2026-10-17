@@ -59,6 +59,9 @@ def main(argv):
         print(json.dumps({"id": item["id"]}))
         return 0
     if argv[:2] == ["item", "edit"]:
+        if os.environ.get("FAKE_OP_FAIL_EDIT"):
+            print("fake op: edit refused", file=sys.stderr)
+            return 1
         for i in data["items"]:
             if i["id"] == argv[2] and i["vault"] == vault:
                 i["title"] = flag(argv, "--title") or i["title"]

@@ -50,6 +50,38 @@ The frame (`#frame`, a size container) fills the window and stacks the status ba
 
 The cards are a stack (`layers.ts`): title, menu, story, trial list, ending. Only the top one shows. Q (the kit's `isBackKey`) closes the top card; with nothing open it opens the menu; the title card ignores it. Play on the title card, and N anywhere, open the trial list over what is showing; Q returns to it. A trial's end opens the ending card once its last step has landed: after a win Next trial, Retry and Trials; after a loss Undo and Restart. While a card is up only Q, N and M reach the game. Esc is never bound and never leaves full screen: the full-screen toggle takes the Escape lock where the browser has Keyboard Lock (`_kit/app.ts`). The menu holds, in order, Sound and Full screen, the story log, How to play and Quit. Sound and full screen are kept in this browser under `crete-sound` and `crete-fullscreen`; Play enters full screen again when it was last on. Cleared trials are kept under `crete-progress`.
 
+## Keys
+
+| Key | Does |
+| --- | --- |
+| Arrows, WASD | Move (also closes the start card, then moves) |
+| `.` | Wait: the Minotaur moves, you stay |
+| U, R | Undo the last turn; restart the trial |
+| H, V, T | Hint (one step of the thread), Route (draw all of it), Auto (play it out) |
+| Z, X, C | Medusa's mirror, honey cake, Daedalus's cow |
+| Enter, Space | Begin, on the start card only |
+| N | Open the trial list |
+| M | Mute |
+| Q | Close the top card; with none open, open the menu; ignored on the title card |
+
+Esc is never bound. `src/keys.ts` is the one table: the key tabs, the help text and the bindings all read it; the tools' keys come from `TOOLS` in `src/puzzle/tiles.ts`. A chord (Ctrl, Cmd, Alt) is the browser's, never a game key.
+
+## The art
+
+Every sprite is rendered by Blender from scenes built in code: `fx/blender/render_tiles.py` writes one `.blend` per sprite beside it (Git LFS), renders each through one camera and light rig, and tiles the frames into `fx/sprites/tiles.png` with `tiles.json` naming where each sprite sits (`src/puzzle/tiles.ts` lists the names). It needs Blender 4.2 or newer (`brew install --cask blender`) and the system `python3` with Pillow. To regenerate, from `fx/blender/`:
+
+```
+/Applications/Blender.app/Contents/MacOS/Blender -b -P render_tiles.py -- --out ../sprites
+```
+
+`--only a,b` renders a few sprites into `<out>/_only/` for a quick look and leaves the atlas alone; every option is described at the top of the script. The script also writes `preview-16.png` (each sprite at 16 px) and `board-preview.png` beside itself. After a new atlas, rebuild and rerun `install-files.php` so `sw.js` hashes it. `fx/CREDITS.md` states that no outside images, models or fonts are used.
+
+`tiles-test.html` (entry `src/tiles-page.ts`, bundled to `dist/tiles-test.js`) is a test page, not deployed: it plays a level that holds every piece on the board canvas, and draws each sprite alone in a strip at a chosen size. Open it from the local site at `games/crete/tiles-test.html`.
+
+## Test hook
+
+`window.__creteTest` is `{ game, TRIALS, solve, initial, trialLevel }`: the real controller (`game.run.now` is the current state with `moves`, `hearts` and `outcome`), the eight levels, the exact solver, a state from a level, and trial `i`'s level. The browser specs read it to take the solver's winning line and press it through the page's own buttons and keys.
+
 ## Tests
 
-From this folder: `./test.sh` (the build check, its tests' type check included, `install-files.php --check` and the icon check), and `node --test test/*.test.ts` for the unit tests; `../units.sh` runs them with every other game's, as `make test` does, and fails on a folder with none. Run `npm ci` in `games/` first. Browser specs: `crete-play`, `crete-layout`, `games-hub`, `games-install` and `games-pwa` in `../../tests/e2e`.
+From this folder: `./test.sh` (the build check, its tests' type check included, `install-files.php --check` and the icon check), and `node --test test/*.test.ts` for the unit tests; `../units.sh` runs them with every other game's, as `make test` does, and fails on a folder with none. Run `npm ci` in `games/` first. Browser specs (from `websites/www.cs`, `make e2e E2E_ARGS="crete-play.spec.ts crete-layout.spec.ts"`): `crete-play` (the trial flow, the start card, keys, the cards, full screen and the Esc lock), `crete-layout` (ten screen sizes, the trial list and start card included), then `games-hub`, `games-install` and `games-pwa` in `../../tests/e2e`.

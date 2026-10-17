@@ -251,8 +251,9 @@ button:disabled { opacity: 0.45; cursor: default; }
     gap: 8px;
     padding: 10px 8px 8px;
   }
-  .strip button { min-width: 0; min-height: 40px; padding: 0 0.2rem; font-size: 0.8rem; }
-  .pad { grid-area: pad; grid-template-columns: repeat(3, 40px); gap: 4px; }
+  .strip button { min-width: 0; min-height: 40px; padding: 0 0.1rem; font-size: 0.68rem; }
+  .pad { grid-area: pad; grid-template-columns: repeat(3, 36px); gap: 4px; }
+  .pad button { min-width: 36px; }
   .actions { display: contents; }
   .turn, .thread, .tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
   .turn { grid-area: turn; }
@@ -260,7 +261,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   .tools { grid-area: tools; }
 }
 
-/* Landscape: the pad and the actions float over the maze's lower corners. */
+/* Landscape: the pad and the actions sit in the margins left and right of the board, over the board's row. */
 @container frame (orientation: landscape) and (max-height: 500px) {
   .status { padding: 2px 8px; }
   .hud { display: flex; flex-wrap: wrap; gap: 0 10px; }
@@ -268,7 +269,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   .stat dt { font-size: 0.7rem; }
   .stat dd { font-size: 0.85rem; }
   .menu-btn { min-height: 30px; padding: 0 0.6rem; }
-  .board { padding: 4px; }
+  .board { padding: 4px 220px 4px 148px; }
   .strip {
     position: absolute;
     left: 0;
@@ -280,9 +281,9 @@ button:disabled { opacity: 0.45; cursor: default; }
     border: 0;
     pointer-events: none;
   }
-  .strip button { pointer-events: auto; min-width: 40px; min-height: 40px; padding: 0 0.4rem; background: rgba(22, 27, 34, 0.92); }
+  .strip button { pointer-events: auto; min-width: 40px; min-height: 40px; padding: 0 0.3rem; font-size: 0.8rem; background: rgba(22, 27, 34, 0.92); }
   .pad { grid-template-columns: repeat(3, 40px); gap: 4px; }
-  .actions { max-width: 60%; justify-content: flex-end; gap: 4px 8px; }
+  .actions { flex-direction: column; align-items: flex-end; gap: 4px; }
   .turn, .thread, .tools { gap: 4px; }
 }
 

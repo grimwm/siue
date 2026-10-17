@@ -26,7 +26,7 @@ export function Key({ at, bare, cls }: { at: string; bare?: boolean; cls?: strin
   const hint = useContext(KeyHints);
   const [ctx = '', action = '', idx] = at.split(':');
   const cap = hint(ctx, action, Number(idx ?? 0));
-  if (bare) return <KeyChip label={cap} class="key" at={at} decorative />;
+  if (bare) return <KeyChip label={cap} class="key" variant="tab" at={at} decorative />;
   return <span class={cls} data-keyhint={at}>{cap}</span>;
 }
 
@@ -63,7 +63,7 @@ export function OverlayHead(p: OverlayHeadProps) {
       {p.onClose && (
         <button type="button" class="ov-x" id={p.closeId} aria-label="Close" title={esc ? `Close (${esc})` : 'Close'}
           onClick={ev => { ev.currentTarget.blur(); p.onClose?.(); }}>
-          <Key at="global:back" cls="key" />
+          <Key at="global:back" cls="kit-key-tab key" />
           <span class="x-glyph" aria-hidden="true">×</span>
         </button>
       )}

@@ -278,7 +278,7 @@ await test('css-fit-windowed', () => { assert.ok(/\nbody\s*\{[^}]*height:\s*100d
 await test('css-breakpoints', () => { assert.ok(['@container (max-width: 1100px)', '@container (max-width: 860px)', '@container (max-width: 760px)'].every(q => css.includes(q))); });
 await test('css-fit-fullscreen', () => { assert.ok(/#frame:fullscreen\s*\{[^}]*overflow:\s*hidden/.test(css)); });
 await test('key-hints', () => { assert.ok(html.includes('data-keyhint="global:fire" aria-hidden="true">Space<') && html.includes('data-keyhint="aim:driveLeft" aria-hidden="true">Shift+←<')); });
-await test('key-style', () => { assert.ok(/\n\.key\s*\{[^}]*background:\s*#14183a/.test(css) && /@media \(hover: hover\) and \(pointer: fine\)/.test(css)); });
+await test('key-style', () => { assert.ok(read('dist/kit.css').includes('--kit-key-tab-bg, #14183a') && /\n\.key\s*\{[^}]*display:\s*none/.test(css) && /@media \(hover: hover\) and \(pointer: fine\)/.test(css)); });
 // Panels live over the battle, never beside it; L/H/R flip them without pausing.
 await test('no-side-panels', () => { assert.ok(!/<aside/.test(html)); });
 for (const id of ['log-overlay', 'help-overlay', 'report-overlay', 'btn-log', 'btn-help']) {

@@ -1,0 +1,63 @@
+/* The games kit's opt-in stylesheet. Every selector carries a .kit- class and
+   every custom property starts with --kit-, so linking this file changes
+   nothing until an element wears a kit- class. A game links it before its own
+   CSS and restyles through the properties or with its own rules. */
+
+/* A key as the player presses it (ui/key-chip.tsx). :where() keeps the
+   specificity at zero, so any rule of the game's own wins. */
+:where(.kit-key-chip) {
+  display: inline-block;
+  box-sizing: border-box;
+  min-width: 1.6em;
+  padding: 0.05em 0.4em;
+  border: 1px solid var(--kit-key-border, currentColor);
+  border-bottom-width: 2px;
+  border-radius: 0.3em;
+  background: var(--kit-key-bg, rgba(255, 255, 255, 0.08));
+  color: var(--kit-key-color, inherit);
+  font-family: var(--kit-key-font, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.85em;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* A key as a small label pinned to a button's top corner (ui/key-chip.tsx,
+   variant 'tab'). The button must be positioned (position: relative). Zero
+   specificity, like the chip: any rule of a game's own wins. Hidden where no
+   keyboard is at hand (touch screens), in a game frame under 760px wide
+   (an ancestor with container-type: size), and when empty. */
+:where(.kit-key-tab) {
+  position: var(--kit-key-tab-position, absolute);
+  top: var(--kit-key-tab-top, -7px);
+  right: var(--kit-key-tab-right, -5px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: var(--kit-key-tab-height, 15px);
+  padding: var(--kit-key-tab-padding, 1px 5px 0);
+  font: 700 var(--kit-key-tab-size, 9px)/1 var(--kit-key-tab-font, system-ui, -apple-system, "Segoe UI", sans-serif);
+  letter-spacing: 0.02em;
+  color: var(--kit-key-tab-color, #eef0ff);
+  background: var(--kit-key-tab-bg, #14183a);
+  border: 1px solid var(--kit-key-tab-border, #3a3f78);
+  border-bottom: 2px solid var(--kit-key-tab-edge, #000);
+  border-radius: var(--kit-key-tab-radius, 4px);
+  box-shadow: 0 1px 0 var(--kit-key-tab-shine, rgba(255, 255, 255, 0.15));
+  white-space: nowrap;
+  flex: none;
+}
+:where(.kit-key-tab):empty {
+  display: none;
+}
+@media (hover: none), (pointer: coarse) {
+  :where(.kit-key-tab) {
+    display: none;
+  }
+}
+@container (max-width: 760px) {
+  :where(.kit-key-tab) {
+    display: none;
+  }
+}

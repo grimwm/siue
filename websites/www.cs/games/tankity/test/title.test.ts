@@ -56,7 +56,7 @@ test('Play, Play with friends, Tutorial and Settings, each with its key chip', (
   assert.match(byId(root, 'title-settings').textContent, /^Settings/);
   const chip = walk(byId(root, 'title-play')).find(n => n.localName === 'kbd');
   assert.ok(chip, 'a key chip');
-  assert.equal(chip.className, 'key');
+  assert.equal(chip.className, 'kit-key-tab key');
   assert.equal(chip.getAttribute('data-keyhint'), 'global:new');
   assert.equal(chip.getAttribute('aria-hidden'), 'true');
   assert.equal(chip.textContent, 'N');

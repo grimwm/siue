@@ -55,7 +55,7 @@ the vocabulary, and version 2 lets them edit the music themselves.
 The server stores only sealed notes, which it cannot open.
 
 - **Keys:** an RSA-4096 key pair. The private key's home is the owner's
-  1Password (an item in the `Private` vault, `OP_VAULT` to change), so any
+  1Password (an item in the `SIUE` vault, `OP_VAULT` to change), so any
   computer signed in to 1Password can open notes; a computer keeps a cached
   copy in `~/.config/siue/` (mode 0600) and never in git. The public key is
   committed in this repository (it is not secret) and built into the page's
@@ -71,7 +71,7 @@ The server stores only sealed notes, which it cannot open.
 - **No swapped padlock:** the page encrypts only to the built-in public key and
   checks it against the built-in fingerprint; the admin hub shows the
   fingerprint so the owner can compare it once with the Mac's
-  (`siue-music fingerprint`).
+  (`make keys-status`).
 - **The owner's view of their own notes:** the browser keeps a readable copy of
   each note it sealed (in this browser's storage) until the note is picked up,
   so the owner sees what they said; another browser sees only "3 notes waiting".
@@ -178,7 +178,7 @@ the game. The login guards the notes and the actions.
 
 Three PRs, each green on its own: the API and storage; the page with the four
 views and the glossary; the answering tools (notes, humming, reactions, energy)
-with the Mac tool. CI is not changed. The admin login lands first.
+with the owner's key tool. CI is not changed. The admin login lands first.
 
 ## Version 2 (later)
 

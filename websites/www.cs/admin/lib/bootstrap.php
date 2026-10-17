@@ -9,6 +9,8 @@ require_once __DIR__ . '/Pages.php';
 require_once __DIR__ . '/Request.php';
 require_once __DIR__ . '/Sessions.php';
 require_once __DIR__ . '/Headers.php';
+require_once __DIR__ . '/Mailer.php';
+require_once __DIR__ . '/MailTemplate.php';
 
 // The kit's StoreDir and StoreModes. Where the kit's source is present (a
 // checkout, the test suites, which share one process with the kit's own tests)

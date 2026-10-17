@@ -245,13 +245,20 @@ final class Pages
         } catch (\Throwable $e) {
             return self::healthResponse(false, false);
         }
-        return self::healthResponse(true, $this->mailHealthy());
+        $store = 'fallback';
+        try {
+            $file = (string) ($this->db->query('PRAGMA database_list')->fetch(\PDO::FETCH_ASSOC)['file'] ?? '');
+            $store = Db::storeKind(dirname($file));
+        } catch (\Throwable $e) {
+        }
+        return self::healthResponse(true, $this->mailHealthy(), $store);
     }
 
-    /** The probe's body: two words, nothing else. */
-    public static function healthResponse(bool $db, bool $mail): Response
+    /** The probe's body: yes or no for mail and db, and where the database lives (site or fallback); nothing else. */
+    public static function healthResponse(bool $db, bool $mail, string $store = 'fallback'): Response
     {
-        return self::make(200, '{"mail":"' . ($mail ? 'yes' : 'no') . '","db":"' . ($db ? 'yes' : 'no') . '"}', ['Content-Type' => 'application/json']);
+        $store = $store === 'site' ? 'site' : 'fallback';
+        return self::make(200, '{"mail":"' . ($mail ? 'yes' : 'no') . '","db":"' . ($db ? 'yes' : 'no') . '","store":"' . $store . '"}', ['Content-Type' => 'application/json']);
     }
 
     /** A redirect to login.php when there is no session, else null. */

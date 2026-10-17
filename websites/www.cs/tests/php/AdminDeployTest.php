@@ -107,10 +107,7 @@ final class AdminDeployTest extends TestCase
     public function testDeployMakesTheDataFolderAndNeverTouchesWhatIsInIt(): void
     {
         $src = (string) file_get_contents(self::site() . '/deploy.sh');
-        foreach (['-mkdir admin/data', 'chmod 2770 admin/data', 'chmod 2755 admin'] as $step) {
-            self::assertStringContainsString($step, $src, "deploy.sh runs: $step");
-        }
-        preg_match_all('/^.*admin\/data.*$/m', $src, $lines);
+                preg_match_all('/^.*admin\/data.*$/m', $src, $lines);
         foreach ($lines[0] as $line) {
             $code = trim($line);
             if ($code === '' || $code[0] === '#') {
@@ -119,4 +116,17 @@ final class AdminDeployTest extends TestCase
             self::assertDoesNotMatchRegularExpression('/\b(put|rm|-rm|rmdir|rename|ln)\b/', $code, "deploy.sh never writes or removes inside admin/data :: $code");
         }
     }
+
+    /** the admin-data batch makes the folder right after admin/, every line failure-tolerant, 770 before the setgid try */
+    public function testTheAdminDataBatchIsOrderedAndFailureTolerant(): void
+    {
+        $out = [];
+        exec('cd ' . escapeshellarg(self::site()) . ' && ADMIN_BATCH=1 ./deploy.sh 2>&1', $out, $code);
+        self::assertSame(0, $code);
+        self::assertSame(['-mkdir admin', '-mkdir admin/data', '-chmod 770 admin/data', '-chmod 2770 admin/data'], $out);
+        $src = (string) file_get_contents(self::site() . '/deploy.sh');
+        self::assertLessThan(strpos($src, "# 3. Upload the changed files."), strpos($src, 'admin_data_batch >"$work/admin-data"'), 'before the upload batch chmods admin/');
+        self::assertStringNotContainsString('chmod 2755 admin', $src);
+    }
+
 }

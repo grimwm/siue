@@ -49,6 +49,17 @@ final class Db
         return self::store()->pick(__DIR__ . '/../data', '/var/tmp/' . \Kit\StoreDir::username() . '-admin');
     }
 
+    /**
+     * "site" when $dir is the admin/data folder inside the site (or $siteDir), else "fallback":
+     * a place the host may wipe, or a configured one.
+     */
+    public static function storeKind(string $dir, ?string $siteDir = null): string
+    {
+        $site = realpath($siteDir ?? __DIR__ . '/../data');
+        $here = realpath($dir);
+        return $site !== false && $here !== false && $site === $here ? 'site' : 'fallback';
+    }
+
     /** Opens (creating it private when missing) the database in $dir and makes sure the schema exists. */
     public static function open(string $dir): \PDO
     {

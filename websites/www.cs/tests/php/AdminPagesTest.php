@@ -292,8 +292,8 @@ final class AdminPagesTest extends TestCase
     public function testHealthReportsOnlyYesOrNo(): void
     {
         [$p] = $this->pages();
-        self::assertSame('{"mail":"yes","db":"yes"}', $p->health()->body);
-        self::assertSame('{"mail":"no","db":"no"}', Admin\Pages::healthResponse(false, false)->body);
+        self::assertSame('{"mail":"yes","db":"yes","store":"fallback"}', $p->health()->body);
+        self::assertSame('{"mail":"no","db":"no","store":"fallback"}', Admin\Pages::healthResponse(false, false)->body);
     }
 
     public function testPageBodiesNeedNothingTheCspForbids(): void
@@ -392,7 +392,7 @@ final class AdminPagesTest extends TestCase
         });
         for ($i = 0; $i < 100; $i++) {
             $clock->now += 5;
-            self::assertSame('{"mail":"yes","db":"yes"}', $p->health()->body);
+            self::assertSame('{"mail":"yes","db":"yes","store":"fallback"}', $p->health()->body);
         }
         self::assertSame(1, $calls);
         $clock->now += 600;
@@ -413,7 +413,7 @@ final class AdminPagesTest extends TestCase
             $calls++;
             return true;
         });
-        self::assertSame('{"mail":"no","db":"no"}', $p->health()->body);
+        self::assertSame('{"mail":"no","db":"no","store":"fallback"}', $p->health()->body);
         self::assertSame(0, $calls);
     }
 
@@ -448,7 +448,7 @@ final class AdminPagesTest extends TestCase
         $holder->exec('BEGIN IMMEDIATE'); // another request holds the write lock
         $db->exec('PRAGMA busy_timeout = 0');
         try {
-            self::assertSame('{"mail":"yes","db":"yes"}', $p->health()->body);
+            self::assertSame('{"mail":"yes","db":"yes","store":"fallback"}', $p->health()->body);
         } finally {
             $holder->exec('ROLLBACK');
         }
@@ -457,5 +457,17 @@ final class AdminPagesTest extends TestCase
     public function testACookiePathSurvivesAnEncodedTilde(): void
     {
         self::assertSame('/~wgrim/', admin_cookie_path('https://www.cs.siue.edu/%7Ewgrim/admin/'));
+    }
+
+    public function testHealthNamesTheStoreSiteOrFallback(): void
+    {
+        self::assertSame('{"mail":"yes","db":"yes","store":"site"}', Admin\Pages::healthResponse(true, true, 'site')->body);
+        self::assertSame('{"mail":"yes","db":"yes","store":"fallback"}', Admin\Pages::healthResponse(true, true, 'fallback')->body);
+        self::assertSame('{"mail":"yes","db":"yes","store":"fallback"}', Admin\Pages::healthResponse(true, true, '/var/tmp/x')->body, 'never a path');
+        $site = admin_tmp_dir();
+        self::assertSame('site', Admin\Db::storeKind($site, $site));
+        self::assertSame('fallback', Admin\Db::storeKind(admin_tmp_dir(), $site));
+        [$p] = $this->pages();
+        self::assertStringContainsString('"store":"fallback"', $p->health()->body, 'a temp database is not the site folder');
     }
 }

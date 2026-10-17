@@ -112,6 +112,22 @@ sftp_batch() {
   sftp -q -oBatchMode=no "${mux[@]}" -b "$1" "$HOST" 2> >(tr -d '\r' | grep -v '^remote mkdir .*: Failure$' >&2) >/dev/null
 }
 
+# The admin login's database lives in admin/data/, the server's like the scores
+# file: made when missing, never staged, uploaded, overwritten or pruned (the
+# case arm above keeps it out of the manifest). PHP runs as the web user, not
+# the site account, so the folder is 770 and the group it inherits from the
+# setgid site root is what lets PHP in; other accounts cannot enter. Every
+# line is '-'-prefixed so a refusal (such as a setgid bit this account may not
+# set) never aborts the deploy; 770 comes first so a refused 2770 leaves 770. The folder is made right after admin/ and
+# before the upload batch's chmod 755 on admin/, which clears admin/'s setgid.
+admin_data_batch() {
+  printf '%s\n' '-mkdir admin' '-mkdir admin/data' '-chmod 770 admin/data' '-chmod 2770 admin/data'
+}
+if [ "${ADMIN_BATCH:-0}" = 1 ]; then
+  admin_data_batch
+  exit 0
+fi
+
 # 1. Stage.
 while IFS= read -r -d '' f; do
   [ -e "$f" ] || continue # deleted but still in the index
@@ -232,6 +248,9 @@ if [ "${DRY_RUN:-0}" = 1 ]; then
   exit 0
 fi
 
+admin_data_batch >"$work/admin-data"
+sftp_batch "$work/admin-data"
+
 # 3. Upload the changed files. sftp creates missing directories ('-' lets an
 # existing one pass) and put -p keeps the staged 644 file modes. mkdir lands
 # at the host umask (750, unreadable to the web server), so every staged
@@ -272,20 +291,6 @@ if ! grep -q "/$(basename "$SCORES")\$" <<<"$listing"; then
 fi
 printf 'chmod 666 %s\n' "$SCORES" >"$work/chmod"
 sftp_batch "$work/chmod"
-
-# The admin login's database lives in admin/data/, the server's like the scores
-# file: made when missing, never staged, uploaded, overwritten or pruned (the
-# case arm above keeps it out of the manifest). PHP runs as the web user, not
-# the site account, so the folder is 770 and the site root's group (setgid)
-# is what lets PHP in; other accounts cannot enter. A chmod 755 clears setgid,
-# so admin/ gets 2755 first and a folder made inside it inherits the group.
-cat >"$work/admin-data" <<'BATCH'
--mkdir admin
-chmod 2755 admin
--mkdir admin/data
-chmod 2770 admin/data
-BATCH
-sftp_batch "$work/admin-data"
 
 # 4. Stamp last.
 {

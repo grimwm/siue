@@ -12,7 +12,7 @@ login.
 | `index.php` | The hub: dashboard links, encryption-key fingerprints, sign out and sign out everywhere. |
 | `keys.php` | Create and revoke scoped API keys. A new key is shown once. |
 | `logout.php` | Ends the session (POST), or every session with `?all=1`. |
-| `health.php` | `{"mail":"yes\|no","db":"yes\|no"}` for a deploy check; reveals nothing else. |
+| `health.php` | `{"mail":"yes\|no","db":"yes\|no","store":"site\|fallback"}` for a deploy check; reveals nothing else. |
 
 `lib/` holds the code (deployed, never served: an `.htaccess` denies it). The SQLite database,
 `admin.sqlite`, lives in `data/` next to this file: on the host that is `admin/data/` inside the
@@ -93,7 +93,8 @@ container.
 curl -s https://www.cs.siue.edu/~wgrim/admin/health.php
 ```
 
-It should print `{"mail":"yes","db":"yes"}`. The mail answer is cached between probes, so a fresh
+It should print `{"mail":"yes","db":"yes","store":"site"}`. `"store":"fallback"` means PHP cannot use
+`admin/data/` (it is not writable by PHP) and the database sits where a php-fpm restart wipes it. The mail answer is cached between probes, so a fresh
 `no` can lag a recovery. Then request a link from the login page and sign in once.
 
 ## Build a dashboard

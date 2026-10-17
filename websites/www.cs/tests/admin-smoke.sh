@@ -115,6 +115,6 @@ expect "fetch-mode GET admin/" 403 "$(req fetch GET /admin/ -H 'Sec-Fetch-Mode: 
 
 # 10. The probe.
 expect "GET health.php" 200 "$(req health GET /admin/health.php)"
-grep -q '^{"mail":"\(yes\|no\)","db":"yes"}$' "$work/health.b" || fail "health.php said: $(cat "$work/health.b")"
+grep -q '^{"mail":"\(yes\|no\)","db":"yes","store":"\(site\|fallback\)"}$' "$work/health.b" || fail "health.php said: $(cat "$work/health.b")"
 
 echo ADMIN-SMOKE-OK

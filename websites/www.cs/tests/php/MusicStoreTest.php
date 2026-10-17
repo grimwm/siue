@@ -278,4 +278,65 @@ final class MusicStoreTest extends TestCase
     {
         self::assertSame('abab abab', substr(Music\PublicKeys::display(MUSIC_FP_CURRENT), 0, 9));
     }
+
+    public function testADraftRecordsItsProjectAndKind(): void
+    {
+        [$s, , , $clock] = music_world();
+        $s->putDraft('ch1-labyrinth', 1, ['score.json' => '{}'], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
+        $clock->now += 10;
+        $s->putDraft('cannon-fire', 1, ['score.json' => '{}'], ['project_id' => 'tankity', 'project_name' => 'Tankity', 'kind' => 'sound']);
+        $clock->now += 10;
+        $s->putDraft('bare', 1, ['score.json' => '{}']);
+        $rows = $s->drafts();
+        self::assertSame(['bare', 'cannon-fire', 'ch1-labyrinth'], array_column($rows, 'piece'), 'newest first');
+        self::assertSame(['', '', 'music'], [$rows[0]['project_id'], $rows[0]['project_name'], $rows[0]['kind']], 'no $about records no project');
+        self::assertSame(['tankity', 'Tankity', 'sound'], [$rows[1]['project_id'], $rows[1]['project_name'], $rows[1]['kind']]);
+        self::assertSame(['crete', 'Crete', 'music'], [$rows[2]['project_id'], $rows[2]['project_name'], $rows[2]['kind']]);
+        self::assertSame(['cannon-fire'], array_column($s->drafts('cannon-fire'), 'piece'), 'the piece filter still works');
+    }
+
+    public function testADraftWhoseProjectOrKindCannotBeKeptIsRefusedBeforeAnythingIsWritten(): void
+    {
+        [$s, , $dir] = music_world();
+        $ok = ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music'];
+        foreach ([
+            'kind' => ['kind' => 'noise'] + $ok,
+            'id with capitals' => ['project_id' => 'Crete'] + $ok,
+            'id with a slash' => ['project_id' => '../x'] + $ok,
+            'id 49 characters' => ['project_id' => str_repeat('a', 49)] + $ok,
+            'empty name' => ['project_name' => ''] + $ok,
+            'name of 81 characters' => ['project_name' => str_repeat('n', 81)] + $ok,
+            'missing key' => ['project_id' => 'crete', 'project_name' => 'Crete'],
+        ] as $why => $about) {
+            try {
+                $s->putDraft('ch1-labyrinth', 1, ['score.json' => '{}'], $about);
+                self::fail($why . ' must be refused');
+            } catch (Music\DraftRejected $e) {
+                self::assertSame('bad_score', $e->reason, $why);
+            }
+        }
+        self::assertSame([], $s->drafts());
+        self::assertDirectoryDoesNotExist("$dir/drafts/ch1-labyrinth");
+        $s->putDraft('edge', 1, ['score.json' => '{}'], ['project_id' => str_repeat('a', 48), 'project_name' => str_repeat('é', 80), 'kind' => 'sound']);
+        self::assertSame(str_repeat('é', 80), $s->drafts()[0]['project_name'], '80 characters, counted as characters');
+    }
+
+    public function testADatabaseFromBeforeTheProjectColumnsUpgradesInPlace(): void
+    {
+        $db = admin_tmp_db();
+        $db->exec('CREATE TABLE music_drafts (piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, size INTEGER NOT NULL, PRIMARY KEY (piece, version))');
+        $db->exec("INSERT INTO music_drafts (piece, version, published_at, size) VALUES ('old', 1, 5, 7)");
+        $dir = admin_tmp_dir() . '/music';
+        $clock = new FakeClock(1_800_000_000);
+        $s = new Music\Store($db, $dir, $clock, music_keys());
+        self::assertSame(
+            [['piece' => 'old', 'version' => 1, 'published_at' => 5, 'project_id' => '', 'project_name' => '', 'kind' => 'music']],
+            $s->drafts(),
+            'the old row is kept, with the column defaults',
+        );
+        $s->putDraft('new', 1, ['score.json' => '{}'], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
+        self::assertSame('crete', $s->drafts('new')[0]['project_id']);
+        new Music\Store($db, $dir, $clock, music_keys()); // opening it again changes nothing and does not trip over the columns
+        self::assertCount(2, $s->drafts());
+    }
 }

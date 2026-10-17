@@ -37,10 +37,12 @@ final class Store
     public const MAX_DRAFT_TOTAL_BYTES = 104_857_600;
     /** The locked keyring: about 4.5 KB per retained RSA-4096 key, room for a dozen rotations. */
     public const MAX_KEYRING_BYTES = 65_536;
+    public const KINDS = ['music', 'sound'];
     public const DRAFT_FILES = ['score.json', 'score.musicxml', 'audio.webm', 'audio.m4a', 'spectrogram.png'];
 
     private const ID = '/^[0-9a-f]{32}$/';
     private const PIECE = '/^[a-z0-9][a-z0-9-]{0,47}$/';
+    private const PROJECT = '/^[a-z0-9][a-z0-9-]{0,47}$/D';
     /** The magic, the 32-byte fingerprint and the two-byte key length: the least a sealed note can be. */
     private const HEADER_BYTES = 38;
 
@@ -54,7 +56,21 @@ final class Store
         $this->files->claim("$dir/notes", true);
         $this->files->claim("$dir/drafts", true);
         $this->db->exec('CREATE TABLE IF NOT EXISTS music_notes (id TEXT PRIMARY KEY, size INTEGER NOT NULL, sha256 TEXT NOT NULL, arrived_at INTEGER NOT NULL, picked_up_at INTEGER)');
-        $this->db->exec('CREATE TABLE IF NOT EXISTS music_drafts (piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, size INTEGER NOT NULL, PRIMARY KEY (piece, version))');
+        $this->db->exec("CREATE TABLE IF NOT EXISTS music_drafts (piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, size INTEGER NOT NULL, project_id TEXT NOT NULL DEFAULT '', project_name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'music', PRIMARY KEY (piece, version))");
+        // A database made before these columns existed gains them here; each is added only when the table lacks it.
+        $have = array_column($this->db->query('PRAGMA table_info(music_drafts)')->fetchAll(\PDO::FETCH_ASSOC), 'name');
+        foreach (['project_id' => "''", 'project_name' => "''", 'kind' => "'music'"] as $column => $default) {
+            if (in_array($column, $have, true)) {
+                continue;
+            }
+            try {
+                $this->db->exec("ALTER TABLE music_drafts ADD COLUMN $column TEXT NOT NULL DEFAULT $default");
+            } catch (\PDOException $e) {
+                if (!str_contains($e->getMessage(), 'duplicate column')) { // another request added it between the check and the ALTER
+                    throw $e;
+                }
+            }
+        }
         $this->db->exec('CREATE TABLE IF NOT EXISTS music_keyring (id INTEGER PRIMARY KEY CHECK (id = 1), locked TEXT NOT NULL, uploaded_at INTEGER NOT NULL)');
     }
 
@@ -165,9 +181,14 @@ final class Store
      * MAX_REQUEST_BYTES (too_large), when the draft exists, or when the new draft plus the newest KEEP_DRAFTS - 1
      * stored drafts (the ones that remain) total more than MAX_DRAFT_TOTAL_BYTES (over_quota). After the files
      * are written, deletes every draft (row and files) older than the newest KEEP_DRAFTS.
-     * @param array<string, string> $files published name => the file's bytes @throws DraftRejected
+     * $about is taken from the validated score.json: project_id (matches PROJECT), project_name (1 to 80 characters) and
+     * kind (one of KINDS); anything else throws DraftRejected('bad_score') before the transaction opens. null records no
+     * project: '' and '' and 'music' (a published draft always has one).
+     * @param array<string, string> $files published name => the file's bytes
+     * @param array{project_id: string, project_name: string, kind: string}|null $about
+     * @throws DraftRejected
      */
-    public function putDraft(string $piece, int $version, array $files): void
+    public function putDraft(string $piece, int $version, array $files, ?array $about = null): void
     {
         if (preg_match(self::PIECE, $piece) !== 1) {
             throw new DraftRejected('bad_piece');
@@ -183,7 +204,11 @@ final class Store
                 throw new DraftRejected('bad_file');
             }
         }
-        $evicted = $this->transaction(function () use ($piece, $version, $files): array {
+        $about ??= ['project_id' => '', 'project_name' => '', 'kind' => 'music'];
+        if (!self::aboutIsKeepable($about)) {
+            throw new DraftRejected('bad_score');
+        }
+        $evicted = $this->transaction(function () use ($piece, $version, $files, $about): array {
             $size = array_sum(array_map('strlen', $files));
             if ($size > self::MAX_REQUEST_BYTES) {
                 throw new DraftRejected('too_large');
@@ -199,8 +224,8 @@ final class Store
             }
             $this->writeDraftFiles($piece, $version, $files);
             try {
-                $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)')
-                    ->execute([$piece, $version, $this->clock->now(), $size]);
+                $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size, project_id, project_name, kind) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$piece, $version, $this->clock->now(), $size, $about['project_id'], $about['project_name'], $about['kind']]);
                 $old = $this->db->query('SELECT piece, version FROM music_drafts ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . self::KEEP_DRAFTS)->fetchAll(\PDO::FETCH_ASSOC);
                 $drop = $this->db->prepare('DELETE FROM music_drafts WHERE piece = ? AND version = ?');
                 foreach ($old as $row) {
@@ -217,15 +242,18 @@ final class Store
         }
     }
 
-    /** @return list<array{piece: string, version: int, published_at: int}> newest first */
+    /** @return list<array{piece: string, version: int, published_at: int, project_id: string, project_name: string, kind: string}> newest first */
     public function drafts(?string $piece = null): array
     {
-        $q = $this->db->prepare('SELECT piece, version, published_at FROM music_drafts WHERE (? IS NULL OR piece = ?) ORDER BY published_at DESC, rowid DESC');
+        $q = $this->db->prepare('SELECT piece, version, published_at, project_id, project_name, kind FROM music_drafts WHERE (? IS NULL OR piece = ?) ORDER BY published_at DESC, rowid DESC');
         $q->execute([$piece, $piece]);
         return array_map(static fn(array $r): array => [
             'piece' => (string) $r['piece'],
             'version' => (int) $r['version'],
             'published_at' => (int) $r['published_at'],
+            'project_id' => (string) $r['project_id'],
+            'project_name' => (string) $r['project_name'],
+            'kind' => (string) $r['kind'],
         ], $q->fetchAll(\PDO::FETCH_ASSOC));
     }
 
@@ -259,6 +287,21 @@ final class Store
     {
         $row = $this->db->query('SELECT locked, uploaded_at FROM music_keyring WHERE id = 1')->fetch(\PDO::FETCH_ASSOC);
         return $row === false ? null : ['locked' => (string) $row['locked'], 'uploaded_at' => (int) $row['uploaded_at']];
+    }
+
+    /** A recorded project is a valid id with a name of 1 to 80 characters; ('', '') is the one "no project" value. */
+    private static function aboutIsKeepable(array $about): bool
+    {
+        $id = $about['project_id'] ?? null;
+        $name = $about['project_name'] ?? null;
+        $kind = $about['kind'] ?? null;
+        if (!is_string($id) || !is_string($name) || !is_string($kind) || !in_array($kind, self::KINDS, true)) {
+            return false;
+        }
+        if ($id === '' && $name === '') {
+            return true;
+        }
+        return preg_match(self::PROJECT, $id) === 1 && mb_strlen($name) >= 1 && mb_strlen($name) <= 80;
     }
 
     private function noteExists(string $id): bool

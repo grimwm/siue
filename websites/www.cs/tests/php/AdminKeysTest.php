@@ -26,9 +26,9 @@ final class AdminKeysTest extends TestCase
         return req($with + ['headers' => ['authorization' => 'Bearer ' . $key]]);
     }
 
-    public function testProductionRegistryIsEmpty(): void
+    public function testProductionRegistryHoldsTheWorkroomScopes(): void
     {
-        self::assertSame([], Admin\Keys::SCOPES);
+        self::assertSame(['notes:pickup', 'drafts:publish', 'keys:publish'], Admin\Keys::SCOPES);
     }
 
     public function testCreateReturnsSixtyFourHexAndStoresOnlyItsHash(): void

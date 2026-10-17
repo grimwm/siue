@@ -5,6 +5,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../admin/lib/bootstrap.php';
 require_once __DIR__ . '/PublicKeys.php';
 require_once __DIR__ . '/Store.php';
+require_once __DIR__ . '/Http.php';
+require_once __DIR__ . '/Api.php';
 
 function music_public_keys(): ?Music\PublicKeys
 {

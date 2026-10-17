@@ -1,0 +1,114 @@
+/* The admin pages: the site's dark look, one centred card, fine down to 320 px. */
+:root {
+  --bg: #0c0e12;
+  --bg-elevated: #141820;
+  --surface: #1a1f2a;
+  --text: #e6e9ef;
+  --text-muted: #9aa3b2;
+  --rail-edge: #2a3344;
+  --crimson: #ff1a1a;
+  --crimson-dim: #8a0a0a;
+  --focus: #ff4444;
+  --link: #c9d4e3;
+  --font-display: "Orbitron", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(255, 30, 30, 0.07), transparent 55%),
+    linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg) 40%);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.card {
+  width: 100%;
+  max-width: 26rem;
+  padding: 1.5rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--rail-edge);
+  border-top: 3px solid var(--crimson);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.mark {
+  width: 5rem;
+  height: 1.1rem;
+  margin-bottom: 1.25rem;
+  padding: 0.3rem;
+  background: var(--bg);
+  border: 1px solid var(--rail-edge);
+  border-radius: 999px;
+}
+.mark span {
+  display: block;
+  width: 1.4rem;
+  height: 100%;
+  background: var(--crimson);
+  border-radius: 999px;
+  box-shadow: 0 0 10px var(--crimson);
+}
+
+h1, h2 { font-family: var(--font-display); letter-spacing: 0.04em; }
+h1 { margin: 0 0 1rem; font-size: 1.4rem; line-height: 1.25; overflow-wrap: anywhere; }
+h2 { margin: 1.5rem 0 0.5rem; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; }
+
+p { margin: 0 0 1rem; }
+
+label { display: block; margin-bottom: 0.35rem; color: var(--text-muted); font-size: 0.95rem; }
+
+input[type="email"] {
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--rail-edge);
+  border-radius: 6px;
+  font: inherit;
+}
+
+a { color: var(--link); text-underline-offset: 0.15em; }
+a:hover { color: #fff; }
+
+.button {
+  display: inline-block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--crimson-dim);
+  color: #fff;
+  border: 1px solid var(--crimson);
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.button:hover { background: var(--crimson); }
+.button.quiet { background: transparent; border-color: var(--rail-edge); color: var(--text); }
+.button.quiet:hover { background: var(--bg-elevated); }
+
+:is(a, button, input):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.links { margin: 0; padding: 0; list-style: none; }
+.links li { padding: 0.35rem 0; }
+
+.prints { margin: 0; }
+.prints dt { color: var(--text-muted); font-size: 0.9rem; }
+.prints dd { margin: 0 0 0.6rem; overflow-wrap: anywhere; }
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9rem; }
+
+.actions { display: grid; gap: 0.6rem; margin-top: 1.75rem; }

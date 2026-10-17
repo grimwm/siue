@@ -60,38 +60,61 @@ final class Sessions
         $this->db->exec('DELETE FROM sessions');
     }
 
-    /** A CSRF token bound to this session, stored hashed, replacing any earlier one; '' without a session. */
+    /**
+     * The session's current CSRF token, created when it has none; '' without a live
+     * session. The database keeps only a random nonce; the token is its HMAC under the
+     * session id, so it can be handed to every form on a page and is unknowable from
+     * the database alone. Only checkCsrf() replaces it.
+     */
     public function csrf(Request $r): string
     {
-        $hash = $this->hashOf($r);
-        if ($hash === null) {
+        $id = $this->idOf($r);
+        if ($id === null || !$this->live($id)) {
             return '';
         }
-        $token = bin2hex(random_bytes(32));
-        $st = $this->db->prepare('UPDATE sessions SET csrf_hash = ? WHERE id_hash = ?');
-        $st->execute([hash('sha256', $token), $hash]);
-        return $st->rowCount() === 1 ? $token : '';
-    }
-
-    /** True once for the token csrf() issued; every check, right or wrong, spends the stored token. */
-    public function checkCsrf(Request $r, string $given): bool
-    {
-        $hash = $this->hashOf($r);
-        if ($hash === null) {
-            return false;
-        }
+        $hash = hash('sha256', $id);
         $this->db->exec('BEGIN IMMEDIATE');
         try {
             $st = $this->db->prepare('SELECT csrf_hash FROM sessions WHERE id_hash = ?');
             $st->execute([$hash]);
-            $stored = $st->fetchColumn();
+            $nonce = $st->fetchColumn();
+            if (!is_string($nonce) || $nonce === '') {
+                $nonce = bin2hex(random_bytes(32));
+                $this->db->prepare('UPDATE sessions SET csrf_hash = ? WHERE id_hash = ?')->execute([$nonce, $hash]);
+            }
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->exec('ROLLBACK');
+            }
+            throw $e;
+        }
+        return hash_hmac('sha256', $nonce, $id);
+    }
+
+    /** True for the session's current token; every check, right or wrong, replaces it. False for an expired session. */
+    public function checkCsrf(Request $r, string $given): bool
+    {
+        $id = $this->idOf($r);
+        if ($id === null || !$this->live($id)) {
+            return false;
+        }
+        $hash = hash('sha256', $id);
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            $st = $this->db->prepare('SELECT csrf_hash FROM sessions WHERE id_hash = ?');
+            $st->execute([$hash]);
+            $nonce = $st->fetchColumn();
             $this->db->prepare('UPDATE sessions SET csrf_hash = NULL WHERE id_hash = ?')->execute([$hash]);
             $this->db->exec('COMMIT');
         } catch (\Throwable $e) {
-            $this->db->exec('ROLLBACK');
+            if ($this->db->inTransaction()) {
+                $this->db->exec('ROLLBACK');
+            }
             throw $e;
         }
-        return is_string($stored) && $given !== '' && hash_equals($stored, hash('sha256', $given));
+        return is_string($nonce) && $nonce !== '' && $given !== ''
+            && hash_equals(hash_hmac('sha256', $nonce, $id), $given);
     }
 
     /** The Set-Cookie value that remembers a trusted device for ninety days. */
@@ -115,7 +138,22 @@ final class Sessions
 
     private function hashOf(Request $r): ?string
     {
+        $id = $this->idOf($r);
+        return $id === null ? null : hash('sha256', $id);
+    }
+
+    private function idOf(Request $r): ?string
+    {
         $id = $r->cookies[self::COOKIE] ?? null;
-        return is_string($id) && $id !== '' ? hash('sha256', $id) : null;
+        return is_string($id) && $id !== '' ? $id : null;
+    }
+
+    /** True while the session is inside both limits; does not refresh it. */
+    private function live(string $id): bool
+    {
+        $now = $this->clock->now();
+        $st = $this->db->prepare('SELECT 1 FROM sessions WHERE id_hash = ? AND seen_at > ? AND created_at > ?');
+        $st->execute([hash('sha256', $id), $now - self::IDLE, $now - self::MAX]);
+        return $st->fetchColumn() !== false;
     }
 }

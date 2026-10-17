@@ -133,12 +133,25 @@ final class AdminSessionsTest extends TestCase
         self::assertFalse($s->checkCsrf($r, $token));
     }
 
-    public function testCsrfTokenIsStoredHashed(): void
+    public function testCsrfTokenIsNeverStoredAndIsStableUntilChecked(): void
     {
         [$s, $db] = $this->sessions();
         $r = $this->reqWith($s->start(req()));
         $token = $s->csrf($r);
-        self::assertSame([hash('sha256', $token)], $db->query('SELECT csrf_hash FROM sessions')->fetchAll(PDO::FETCH_COLUMN));
+        self::assertSame($token, $s->csrf($r));
+        self::assertNotContains($token, $db->query('SELECT csrf_hash FROM sessions')->fetchAll(PDO::FETCH_COLUMN));
+        self::assertTrue($s->checkCsrf($r, $token));
+        self::assertNotSame($token, $s->csrf($r));
+    }
+
+    public function testCsrfRefusesAnExpiredSession(): void
+    {
+        [$s, , $c] = $this->sessions();
+        $r = $this->reqWith($s->start(req()));
+        $token = $s->csrf($r);
+        $c->now += Admin\Sessions::IDLE + 1;
+        self::assertSame('', $s->csrf($r));
+        self::assertFalse($s->checkCsrf($r, $token));
     }
 
     public function testCsrfTokenFromAnotherSessionFails(): void

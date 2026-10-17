@@ -12,7 +12,8 @@ const TEXT = /\.(tsx?|mjs|js|php|html|css|svg)$/;
 function sources(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.isDirectory()) {
-      if (!SKIP.has(e.name)) sources(join(dir, e.name), out);
+      // .tmp-* are scratch builds other tests create and remove while this one runs.
+      if (!SKIP.has(e.name) && !e.name.startsWith('.tmp-')) sources(join(dir, e.name), out);
     } else if (TEXT.test(e.name)) {
       out.push(join(dir, e.name));
     }

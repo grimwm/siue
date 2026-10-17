@@ -64,11 +64,22 @@ function music_read_body(int $max): string
     return $body === false ? '' : $body;
 }
 
-/** First 10 hex of games/workroom/dist/workroom.js's SHA-256; '' while the file is missing. */
-function music_asset_version(): string
+/**
+ * First 10 hex of one SHA-256 over games/workroom/dist/workroom.js and sheet.js (the page script loads sheet.js
+ * with the same ?v=, so a change to either busts both); '' while either file is missing.
+ */
+function music_asset_version(?string $dist = null): string
 {
-    $hash = @hash_file('sha256', __DIR__ . '/../../games/workroom/dist/workroom.js');
-    return $hash === false ? '' : substr($hash, 0, 10);
+    $dist ??= __DIR__ . '/../../games/workroom/dist';
+    $hash = hash_init('sha256');
+    foreach (['workroom.js', 'sheet.js'] as $file) {
+        $bytes = @file_get_contents("$dist/$file");
+        if ($bytes === false) {
+            return '';
+        }
+        hash_update($hash, hash('sha256', $bytes, true));
+    }
+    return substr(hash_final($hash), 0, 10);
 }
 
 /**

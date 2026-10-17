@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <part-group type="start" number="1"/>
+    <score-part id="strings-low"><part-name>Low strings</part-name></score-part>
+    <score-part id='brass'><part-name>Brass</part-name></score-part>
+    <part-group type="stop" number="1"/>
+  </part-list>
+  <part id="strings-low"><measure number="1"><note><pitch><step>C</step><octave>2</octave></pitch><duration>4</duration></note></measure></part>
+  <part id='brass'><measure number="1"><note><pitch><step>G</step><octave>3</octave></pitch><duration>4</duration></note></measure></part>
+</score-partwise>

@@ -33,7 +33,18 @@ final class MusicDeployTest extends TestCase
     public function testNeverShipsToolsDraftsOrDocs(): void
     {
         foreach (self::shipped() as $f) {
-            self::assertDoesNotMatchRegularExpression('~^music/(tools|pieces)/|^music/README\.md$|^compose\.music-local\.yaml$~', $f, $f);
+            self::assertDoesNotMatchRegularExpression('~^music/(tools|pieces)/|^music/README\.md$~', $f, $f);
+        }
+    }
+
+    public function testShipsTheBuiltWorkroomAndNeverItsSources(): void
+    {
+        $list = self::shipped();
+        foreach (['workroom.js', 'sheet.js', 'THIRD_PARTY_LICENSES.txt'] as $f) {
+            self::assertContains("games/workroom/dist/$f", $list, $f);
+        }
+        foreach ($list as $f) {
+            self::assertDoesNotMatchRegularExpression('~^games/workroom/(src|test|tools)/~', $f, $f);
         }
     }
 

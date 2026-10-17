@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "kind": "music",
+  "project": { "id": "crete", "name": "Crete" },
+  "piece": { "id": "test-piece", "title": "Test piece: the Labyrinth wakes" },
+  "draft": 1,
+  "made": "2026-10-17T12:00:00Z",
+  "duration": 16,
+  "bars": 8,
+  "tempo": [{ "bar": 1, "bpm": 120, "beats": 4, "unit": 4 }],
+  "sections": [
+    { "id": "stirs", "name": "The Labyrinth stirs", "from_bar": 1, "to_bar": 4, "color": "#2e4057" },
+    { "id": "thread", "name": "Ariadne's thread", "from_bar": 5, "to_bar": 8, "color": "#6b4e16" }
+  ],
+  "lanes": [
+    { "id": "strings-low", "name": "Low strings", "family": "strings", "icon": "strings", "color": "#7a9cc6" },
+    { "id": "brass", "name": "Horns", "family": "brass", "icon": "brass", "color": "#c98b3a" }
+  ],
+  "characters": [
+    { "id": "ariadne", "name": "Ariadne", "color": "#d4a017" },
+    { "id": "minotaur", "name": "Minotaur", "color": "#c0392b" },
+    { "id": "daedalus", "name": "Daedalus", "color": "#b08d57" },
+    { "id": "athens", "name": "Athens", "color": "#3b6fb6" }
+  ],
+  "motifs": [
+    { "id": "ariadne", "character": "ariadne", "spans": [{ "lane": "brass", "from": 8, "to": 16 }] }
+  ],
+  "notes": [
+    { "lane": "strings-low", "start": 0, "length": 2, "pitch": 38, "velocity": 70, "motif": null },
+    { "lane": "strings-low", "start": 2, "length": 2, "pitch": 41, "velocity": 70, "motif": null },
+    { "lane": "strings-low", "start": 4, "length": 4, "pitch": 36, "velocity": 80, "motif": null },
+    { "lane": "brass", "start": 8, "length": 2, "pitch": 62, "velocity": 90, "motif": "ariadne" },
+    { "lane": "brass", "start": 10, "length": 2, "pitch": 65, "velocity": 95, "motif": "ariadne" },
+    { "lane": "brass", "start": 12, "length": 4, "pitch": 69, "velocity": 100, "motif": "ariadne" }
+  ],
+  "energy": [[0, 0.2], [8, 0.5], [16, 0.9]],
+  "glossary": [{ "term": "ostinato", "from": 0, "to": 4 }, { "term": "motif", "from": 8, "to": 12 }],
+  "audio": [{ "file": "audio.webm", "type": "audio/webm; codecs=opus" }],
+  "spectrogram": { "file": "spectrogram.png", "low_hz": 30, "high_hz": 16000, "scale": "log" },
+  "musicxml": "score.musicxml",
+  "changes": [{ "from_bar": 5, "to_bar": 8, "lane": "brass", "text": "Horns carry Ariadne's theme an octave higher.", "answers": [] }]
+}

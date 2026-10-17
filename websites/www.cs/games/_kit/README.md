@@ -20,6 +20,11 @@ source needs this folder beside it.
 - `kitCss`: `true` copies `_kit/kit.css` to `dist/kit.css` (see "The kit
   stylesheet").
 
+- `inlined`: package names (resolved from `games/node_modules`) that a bundled
+  dependency carries prebuilt inside itself, so esbuild never sees them. Their
+  licenses go into `THIRD_PARTY_LICENSES.txt` like the others; a name that is
+  not installed, or has no license file, fails the build.
+
 `--check` rebuilds in memory and fails on any stale, missing or extra file
 in `dist/`. Every tsconfig extends `build/tsconfig.base.json`: strict,
 `noUncheckedIndexedAccess`, `erasableSyntaxOnly` (so Node can run the
@@ -28,7 +33,8 @@ sources directly), imports written with their `.ts` extension.
 A game that bundles npm packages (Preact) also gets
 `dist/THIRD_PARTY_LICENSES.txt`: each package's name, version, license field
 and full license text, sorted by name, built from the packages' own files. A
-package without a license file fails the build. Every bundle containing npm
+package without a license file (`LICENSE`, `LICENCE` or `COPYING`, with `-MIT`
+or an `.md`, `.txt` or `.markdown` extension) fails the build. Every bundle containing npm
 code starts with `/*! Third-party licenses: THIRD_PARTY_LICENSES.txt */`, and
 `--check` covers the file like any other output. A game with no npm packages
 gets neither.

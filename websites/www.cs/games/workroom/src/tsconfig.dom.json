@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "lib": ["ES2022", "DOM"] },
+  "files": ["main.ts", "sheet.ts", "ui/surface.ts", "ui/parts.tsx", "ui/Workroom.tsx", "ui/ViewTabs.tsx", "ui/Timeline.tsx", "ui/PianoRoll.tsx", "ui/SoundPicture.tsx", "ui/Sheet.tsx", "ui/Glossary.tsx", "ui/Player.tsx"]
+}

@@ -1,0 +1,8 @@
+{
+  "programs": ["tsconfig.json", "src/tsconfig.dom.json", "tsconfig.test.json"],
+  "entries": [
+    { "in": "src/main.ts", "out": "workroom", "format": "esm" },
+    { "in": "src/sheet.ts", "out": "sheet", "format": "esm" }
+  ],
+  "notInlined": ["readable-stream"]
+}

@@ -193,6 +193,62 @@ final class MusicStoreTest extends TestCase
         self::assertSame(1_000_019, $s->draftBytes());
     }
 
+    public function testDraftInputsAreValidated(): void
+    {
+        [$s, , $dir] = music_world();
+        $cases = [
+            ['bad_piece', 'Bad Piece', 1, ['score.json' => 'x']],
+            ['bad_version', 'ok', 0, ['score.json' => 'x']],
+            ['bad_version', 'ok', 10000, ['score.json' => 'x']],
+            ['missing_file', 'ok', 1, []],
+            ['bad_file', 'ok', 1, ['../evil.json' => 'x']],
+        ];
+        foreach ($cases as [$reason, $piece, $version, $files]) {
+            try {
+                $s->putDraft($piece, $version, $files);
+                self::fail($reason);
+            } catch (Music\DraftRejected $e) {
+                self::assertSame($reason, $e->reason);
+            }
+        }
+        self::assertSame([], $s->drafts());
+        self::assertSame(['.', '..'], scandir("$dir/drafts"));
+    }
+
+    public function testDraftFileRefusesBadArguments(): void
+    {
+        [$s] = music_world();
+        $s->putDraft('ok', 1, ['score.json' => 'x']);
+        self::assertNotNull($s->draftFile('ok', 1, 'score.json'));
+        self::assertNull($s->draftFile('../ok', 1, 'score.json'));
+        self::assertNull($s->draftFile('ok', 0, 'score.json'));
+        self::assertNull($s->draftFile('ok', 10000, 'score.json'));
+        self::assertNull($s->draftFile('ok', 1, 'notes.txt'));
+        self::assertNull($s->draftFile('ok', 1, '../1/score.json'));
+    }
+
+    public function testDeletesToleratePlacesWhereTheFileIsAlreadyGone(): void
+    {
+        [$s, $db] = music_world();
+        $insert = $db->prepare('INSERT INTO music_notes VALUES (?, 1, ?, 0, NULL)');
+        foreach ([1, 2, 3] as $i) {
+            $insert->execute([sprintf('%032x', $i), str_repeat('0', 64)]);
+        }
+        self::assertTrue($s->deleteNote(sprintf('%032x', 1)));
+        self::assertSame(2, $s->deleteAllNotes());
+        self::assertSame(0, (int) $db->query('SELECT COUNT(*) FROM music_notes')->fetchColumn());
+    }
+
+    public function testALeftoverTempFileDoesNotBlockPublishing(): void
+    {
+        [$s, , $dir] = music_world();
+        mkdir("$dir/drafts/ok/1", 0700, true);
+        file_put_contents("$dir/drafts/ok/1/score.json.tmp", 'half');
+        $s->putDraft('ok', 1, ['score.json' => 'whole']);
+        self::assertSame('whole', file_get_contents((string) $s->draftFile('ok', 1, 'score.json')));
+        self::assertFileDoesNotExist("$dir/drafts/ok/1/score.json.tmp");
+    }
+
     public function testTheKeyringIsOneReplaceableDocument(): void
     {
         [$s, $db, , $clock] = music_world();

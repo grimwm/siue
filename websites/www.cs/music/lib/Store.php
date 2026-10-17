@@ -288,6 +288,7 @@ final class Store
     private function writeFile(string $path, string $bytes): void
     {
         $tmp = $path . '.tmp';
+        @unlink($tmp); // a leftover from a crash would fail the exclusive open
         $old = umask(0077);
         try {
             $fh = @fopen($tmp, 'x');

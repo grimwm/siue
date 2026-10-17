@@ -235,6 +235,17 @@ input[type="text"] {
   .strip { flex-wrap: wrap; justify-content: center; gap: 8px 12px; padding: 12px 10px 10px; }
   .actions { flex: 1 1 10rem; justify-content: center; gap: 8px; }
 }
+/* The narrowest phones (320 px): three stats a row, and the actions in two
+   columns beside a smaller pad, so the widest numbers and labels still fit. */
+@container frame (max-width: 400px) and (orientation: portrait) {
+  .hud { grid-template-columns: repeat(3, minmax(0, auto)); gap: 2px 10px; }
+  .stat dt { font-size: 0.7rem; }
+  .stat dd { font-size: 0.85rem; }
+  .strip { flex-wrap: nowrap; justify-content: space-between; gap: 8px; padding: 10px 8px 8px; }
+  .strip button { min-width: 40px; min-height: 40px; padding: 0 0.4rem; font-size: 0.9rem; }
+  .pad { grid-template-columns: repeat(3, 40px); gap: 4px; }
+  .actions { flex: 0 1 auto; display: grid; grid-template-columns: repeat(2, minmax(0, auto)); gap: 6px; }
+}
 
 /* Landscape: the pad and the actions float over the maze's lower corners. */
 @container frame (orientation: landscape) and (max-height: 500px) {

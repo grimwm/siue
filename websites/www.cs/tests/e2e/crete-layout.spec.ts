@@ -1,6 +1,7 @@
 // The Island of Crete on ten screens: the frame fills the window, nothing scrolls, every control is on screen
 // and not clipped, no control covers the board, the board keeps at least 8 px per cell, and key tabs show only
-// where a keyboard is at hand. The trial list and the start card are checked too. (a mouse, and a frame at least 760 px wide).
+// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The trial list and the start card are
+// checked too, and trial 8, the largest board, at the smallest phone sizes.
 import { test, expect } from '@playwright/test';
 import type { Browser } from '@playwright/test';
 
@@ -100,6 +101,23 @@ for (const device of DEVICES) {
     await expect(page.locator('#menu-veil')).toBeVisible();
     expect(await page.evaluate(cardFits, '#menu-veil .card'), 'menu on screen').toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 0.5)).toBe(true);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}
+
+// Trial 8 is the largest board (12 x 10): it must still keep 8 px cells and every control on the smallest phone.
+for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE'))) {
+  test(`${device[0]}: trial 8, the largest board, keeps 8 px cells and every control on screen`, async ({ browser }) => {
+    const { ctx, page, errors } = await open(browser, device);
+    await page.locator('#title-play').click();
+    await page.locator('#trial-8').click();
+    await page.locator('#start-begin').click();
+    await expect(page.locator('#start-veil')).toBeHidden();
+    await page.waitForSelector('#stage[data-cell]');
+    await page.evaluate(setWorst);
+    expect(await page.evaluate(measure)).toEqual([]);
+    expect(Number(await page.locator('#stage').getAttribute('data-cell'))).toBeGreaterThanOrEqual(8);
     expect(errors).toEqual([]);
     await ctx.close();
   });

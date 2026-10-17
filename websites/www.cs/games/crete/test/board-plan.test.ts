@@ -81,3 +81,26 @@ test('reduced motion snaps; a catch plays the Minotaur in, then throws the playe
 test('the board is the rows plus the rise of the top row', () => {
   assert.equal(boardRows({ rows: 10 }, atlas), 10 + atlas.rise / atlas.cell);
 });
+
+test('a pushed block is drawn between its cells during the player\'s segment, and not at its old cell', () => {
+  const s = grid(['PO...', '.....', '....M']);
+  const r = step(s, mv('right'));
+  const tl = timeline(s, r.events, false, r.state);
+  assert.equal(tl.playerEnd, SLIDE_MS);
+  assert.equal(tl.duration, 3 * SLIDE_MS);
+  const f = tl.at(SLIDE_MS / 2);
+  assert.deepEqual(f.blocks, [{ origin: { r: 0, c: 1 }, at: { r: 0, c: 1.5 } }]);
+  const blocks = drawList(s, f, atlas, 0).filter(d => d.sprite === 'block');
+  assert.deepEqual(blocks.map(d => [d.x, d.y]), [[1.5, 0]]);
+  assert.equal(tl.at(SLIDE_MS * 1.5).blocks, undefined);
+});
+
+test('a block that slides on after the push moves cell by cell and the Minotaur waits for it', () => {
+  const s = grid(['PO==.', '.....', '....M']);
+  const r = step(s, mv('right'));
+  const tl = timeline(s, r.events, false, r.state);
+  assert.ok(tl.playerEnd >= 2 * SLIDE_MS);
+  const late = tl.at(tl.playerEnd - 1);
+  assert.equal(late.blocks?.length, 1);
+  assert.deepEqual(tl.at(tl.playerEnd).minotaur, s.minotaur);
+});

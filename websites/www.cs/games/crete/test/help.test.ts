@@ -26,3 +26,15 @@ test('the move keys come from the table', () => {
   const keys = { ...KEYS, up: { label: '8', keys: ['8'] } };
   assert.match(text(helpLines(keys, TOOLS)), /Move with 8 ← ↓ → or 8 A S D;/);
 });
+
+test('the help states the rules\' key facts', () => {
+  const all = text(helpLines(KEYS, TOOLS));
+  assert.ok(all.indexOf('horizontal') >= 0 && all.indexOf('horizontal') < all.indexOf('vertical'), 'horizontal before vertical');
+  assert.doesNotMatch(all, /longer way/);
+  assert.match(all, /gate opens when you take the last/);
+  assert.match(all, /green key is kept/);
+  assert.match(all, /Red, blue and yellow keys are used up/);
+  assert.match(all, /flips every toggle wall/);
+  assert.match(all, /Hint \([^)]*\) plays one step/);
+  assert.doesNotMatch(all, /step onto the gate/);
+});

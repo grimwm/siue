@@ -42,7 +42,7 @@ export interface Anim {
   timeline: Timeline;
   /** `clock.now()` when the turn was played. */
   started: number;
-  /** The state the turn began from: it is drawn until the figures arrive. */
+  /** The state the turn began from: it is drawn while the player's own moves play. */
   before: State;
 }
 
@@ -68,13 +68,15 @@ export interface Game {
   finishAnim(): void;
 }
 
-/** What the board draws `ms` after the animation began: the state before the turn and the figures between
- *  cells while it plays (items vanish and doors open when the figure arrives), the state after it and the
- *  figures at rest once it ends. */
+/** What the board draws `ms` after the animation began: the state before the turn while the player's own
+ *  moves, slides and pushed block play (items vanish, doors open and a block lands as the figure arrives), the
+ *  state after it from then on, while the Minotaur's steps play, and the figures at rest once it ends. */
 export function frameOf(g: Pick<Game, 'run' | 'anim'>, ms: number): { state: State; figures: Figures; done: boolean } | null {
   if (!g.run) return null;
   const a = g.anim;
-  if (a && ms < a.timeline.duration) return { state: a.before, figures: a.timeline.at(ms), done: false };
+  if (a && ms < a.timeline.duration) {
+    return { state: ms < a.timeline.playerEnd ? a.before : g.run.now, figures: a.timeline.at(ms), done: false };
+  }
   return { state: g.run.now, figures: { player: g.run.now.player, minotaur: g.run.now.minotaur }, done: true };
 }
 

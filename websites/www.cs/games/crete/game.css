@@ -269,6 +269,8 @@ button:disabled { opacity: 0.45; cursor: default; }
   .stat dt { font-size: 0.7rem; }
   .stat dd { font-size: 0.85rem; }
   .menu-btn { min-height: 30px; padding: 0 0.6rem; }
+  /* The rails the board leaves clear: 148px on the left holds the 3-column pad (3 x 40px + 2 x 4px gaps) with its
+     8px edge, 220px on the right holds the widest action column ("Restart" with its key-tab chip) with its edge. */
   .board { padding: 4px 220px 4px 148px; }
   .strip {
     position: absolute;
@@ -285,6 +287,12 @@ button:disabled { opacity: 0.45; cursor: default; }
   .pad { grid-template-columns: repeat(3, 40px); gap: 4px; }
   .actions { flex-direction: column; align-items: flex-end; gap: 4px; }
   .turn, .thread, .tools { gap: 4px; }
+}
+
+/* A short frame this wide has room beside the board without reserving rails: the board is limited by height and
+   centred, far from the buttons at the frame's edges. */
+@container frame (orientation: landscape) and (max-height: 500px) and (min-width: 900px) {
+  .board { padding: 4px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

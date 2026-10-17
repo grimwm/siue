@@ -16,23 +16,23 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
   for (const t of Object.values(tools)) toolSegs.push({ strong: `${t.name} (${t.key})` }, ` ${t.desc} `);
   return [
     [
-      "Gather every ", { strong: "relic ✦" }, ", then step onto the ", { strong: "gate" },
-      " to open the way, and walk out through the ", { strong: "exit 🚪" }, ".",
+      "Gather every ", { strong: "relic ✦" }, ": the ", { strong: "gate" },
+      " opens when you take the last one. Then walk out through the ", { strong: "exit 🚪" }, ".",
     ],
     [
       "The ", { strong: "Minotaur 👹" }, " takes ", { strong: "two steps" },
-      " for every move you make, and always closes the distance by the longer way first. If it reaches you, you lose a heart.",
+      " for every move you make. Each step goes along the horizontal gap if that cell is open to it, else along the vertical gap. If it reaches you, you lose a heart.",
     ],
     [{ strong: "Safe zones 🛡️" }, " keep the Minotaur out. Hearts are all you have; none grow back unless you eat a honey cake."],
-    [{ strong: "Keys 🔑" }, " open the door of their own colour, and are used up. Pick them up on the way."],
+    [{ strong: "Keys 🔑" }, " open the door of their own colour. Red, blue and yellow keys are used up; a green key is kept."],
     [
       { strong: "Water" }, " needs flippers, ", { strong: "fire" }, " needs fire boots, ",
       { strong: "ice" }, " sends you sliding unless you wear skates, and ", { strong: "force floors" },
       " push you along unless you wear suction boots.",
     ],
     [
-      { strong: "Blocks" }, " can be pushed; set one on a ", { strong: "button" },
-      " to open what it holds shut. Stone blocks everyone.",
+      { strong: "Blocks" }, " can be pushed. Stepping on a ", { strong: "button" },
+      ", or pushing a block onto one, flips every toggle wall. Stone blocks everyone.",
     ],
     ["Three tools, one use each. ", ...toolSegs],
     [
@@ -44,7 +44,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ],
     [
       "Stuck? ",
-      { strong: `Hint (${k("hint")})` }, " flashes one step. ",
+      { strong: `Hint (${k("hint")})` }, " plays one step of the thread. ",
       { strong: `Route (${k("route")})` }, " draws the whole thread. ",
       { strong: `Auto (${k("auto")})` }, " plays it for you. ",
       { strong: k("mute") }, " toggles sound, ",

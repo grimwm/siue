@@ -68,7 +68,7 @@ test('trial 1 is won through the strip, with an undo on the way', async ({ page 
   expect(errors).toEqual([]);
 });
 
-test('the ending card shows over the trial list; Q closes it and the list shows', async ({ page }) => {
+test('the ending card shows on a win; Q closes it and nothing else opens', async ({ page }) => {
   const errors = await beginTrial1(page);
   for (const s of await line(page)) await page.keyboard.press(KEY[s]!);
   expect((await now(page)).outcome).toBe('won');
@@ -175,7 +175,47 @@ test('N opens the trial list, which has eight trials; M mutes and the menu remem
 test('a ?seed= link opens trial 1 with no title card', async ({ page }) => {
   await page.goto(`${PAGE}?seed=stefan-1984`);
   await expect(page.locator('#title-veil')).toBeHidden();
-  await expect(page.locator('#hud-trial')).not.toHaveText('');
+  await expect(page.locator('#hud-trial')).toHaveText('1/8');
+  await expect(page.locator('#start-veil')).toBeVisible();
+});
+
+test('a win leads on: Next trial shows trial 2\'s start card, and the list keeps "cleared · best N" through a reload', async ({ page }) => {
+  const errors = await beginTrial1(page);
+  const steps = await line(page);
+  for (const s of steps) await page.keyboard.press(KEY[s]!);
+  expect((await now(page)).outcome).toBe('won');
+  await expect(page.locator('#end-veil')).toBeVisible();
+  await page.locator('#end-next').click();
+  await expect(page.locator('#end-veil')).toBeHidden();
+  await expect(page.locator('#start-veil')).toBeVisible();
+  await expect(page.locator('#hud-trial')).toHaveText('2/8');
+  const cleared = `cleared · best ${steps.length}`;
+  await page.keyboard.press('n');
+  await expect(page.locator('#trial-1')).toContainText(cleared);
+  await page.reload();
+  await page.locator('#title-play').click();
+  await expect(page.locator('#trial-1')).toContainText(cleared);
+  expect(errors).toEqual([]);
+});
+
+test('the board paints: the canvas holds drawn pixels', async ({ page }) => {
+  await beginTrial1(page);
+  await page.waitForSelector('#stage[data-cell]');
+  await expect.poll(() => page.evaluate(() => {
+    const cv = document.getElementById('stage') as HTMLCanvasElement;
+    const px = cv.getContext('2d')!.getImageData(0, 0, cv.width, cv.height).data;
+    for (let i = 3; i < px.length; i += 4) if (px[i]! > 0) return true;
+    return false;
+  })).toBe(true);
+});
+
+test('a missing tiles.png says so, loudly, instead of leaving a blank board', async ({ page }) => {
+  const logged: string[] = [];
+  page.on('console', m => { if (m.type() === 'error') logged.push(m.text()); });
+  await page.route('**/fx/sprites/tiles.png*', route => route.abort());
+  await page.goto(PAGE);
+  await expect(page.locator('#atlas-error')).toHaveText(/did not load/);
+  expect(logged.some(t => /tiles\.png/.test(t))).toBe(true);
 });
 
 test('Quit in the menu ends the try and shows the title card in a browser tab; Play opens the trial list', async ({ page }) => {

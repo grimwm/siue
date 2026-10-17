@@ -5,7 +5,9 @@ import { createGame, frameOf } from '../src/game.ts';
 import { createProgress } from '../src/progress.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { DELTA } from '../src/puzzle/tiles.ts';
-import { SLIDE_MS } from '../src/board-plan.ts';
+import { SLIDE_MS, timeline } from '../src/board-plan.ts';
+import { step } from '../src/puzzle/step.ts';
+import { grid, mv } from './puzzle-grid.ts';
 
 function opened(reduced = false) {
   const m = manualClock();
@@ -54,4 +56,28 @@ test('reduced motion plays no animation', () => {
   const game = opened(true);
   game.press({ kind: 'wait' });
   assert.equal(game.anim, null);
+});
+
+test('the state after is drawn the moment the player\'s segments end, while the Minotaur still walks', () => {
+  const before = grid(['P....', '.....', '....M']);
+  const r = step(before, mv('right'));
+  const tl = timeline(before, r.events, false, r.state);
+  const g = { run: { now: r.state }, anim: { timeline: tl, started: 0, before } } as unknown as Parameters<typeof frameOf>[0];
+  const during = frameOf(g, SLIDE_MS / 2)!;
+  assert.equal(during.state, before);
+  const walking = frameOf(g, SLIDE_MS * 1.5)!;
+  assert.equal(walking.state, r.state);
+  assert.equal(walking.done, false);
+  assert.deepEqual(walking.figures.player, r.state.player);
+  assert.notDeepEqual(walking.figures.minotaur, r.state.minotaur);
+});
+
+test('mid-push the block is between cells and the player is not drawn on a block at its old cell', () => {
+  const before = grid(['PO...', '.....', '....M']);
+  const r = step(before, mv('right'));
+  const tl = timeline(before, r.events, false, r.state);
+  const g = { run: { now: r.state }, anim: { timeline: tl, started: 0, before } } as unknown as Parameters<typeof frameOf>[0];
+  const f = frameOf(g, SLIDE_MS / 2)!;
+  assert.equal(f.state, before);
+  assert.deepEqual(f.figures.blocks?.[0]?.at, { r: 0, c: 1.5 });
 });

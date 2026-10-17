@@ -119,6 +119,16 @@ function start(): void {
   else ui.showTitle(false);
   mountTitleInstall(window, document.getElementById('title-install'));
   image.onload = () => { requestAnimationFrame(loop); };
+  image.onerror = () => {
+    const msg = 'The board pictures did not load. Check your connection and reload the page.';
+    console.error(`Crete: ${image.src} failed to load`);
+    const note = document.createElement('div');
+    note.id = 'atlas-error';
+    note.className = 'toast show bad';
+    note.setAttribute('role', 'alert');
+    note.textContent = msg;
+    frame().appendChild(note);
+  };
   image.src = 'fx/sprites/tiles.png';
 }
 // A hidden tab runs no play-out; showing it again leaves it stopped.

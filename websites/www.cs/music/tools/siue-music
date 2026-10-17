@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from siue_music import cli
+except ModuleNotFoundError as e:
+    if e.name and e.name.split(".")[0] == "cryptography":
+        print("siue-music needs the cryptography package: make music-tools-venv (or pip install -r music/tools/requirements.txt)", file=sys.stderr)
+        sys.exit(1)
+    raise
+
+sys.exit(cli.main(sys.argv[1:]))

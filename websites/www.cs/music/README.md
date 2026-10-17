@@ -37,6 +37,25 @@ API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
   before the script reads the body); the newest 20 drafts are kept; a publish that would
   leave more than 100 MB stored is refused with 413.
 
+## The owner's key tool
+
+`music/tools/siue-music` keeps the notes keys in 1Password (vault `SIUE`, or
+`$OP_VAULT`; the `op` CLI must be 2.25 or newer) and a working copy in
+`~/.config/siue/music.json` (folder 0700, file 0600). Secrets reach `op` on
+standard input and are never printed.
+
+- `make music-tools-venv` makes the tool's virtualenv; `make music-tools-test` runs its tests.
+- `make keys-status` compares the repository's current public key with 1Password and the cache (exit 3 when they differ).
+- `make keys-pull` copies the keys and API keys from 1Password into the cache and checks the repository's current key is among them.
+- `make keys-init` (once) makes the RSA-4096 pair and the passphrase, saves them to 1Password first, writes `music/keys/public.json` and `games/workroom/src/public-key.ts`, and uploads a locked keyring of one with the `music-publish` API key (scope `keys:publish`). It then prints the build and commit steps. `make keys-init ADOPT=1` adopts a key item already in 1Password (made earlier, or left by an interrupted init) instead of making a new pair.
+- `make keys-rotate` makes a new pair under the same passphrase, retitles the old item `(previous)`, adds the old public key to `previous`, and uploads the full keyring, current key first, replacing the stored one. It refuses when neither the cache nor 1Password holds the private key for a retained key. It uploads before it retitles; a retitle that fails (the approval timed out) is a warning naming the item to retitle by hand. It exits 4 when the keyring was not uploaded: run `make keys-upload` before you commit or deploy.
+- `make keys-upload` locks and uploads the same full keyring again, for when the first upload could not happen (no API key yet, or the hub was unreachable). A 429 is retried after back-off pauses that add up to more than the server's one-minute window.
+- `make keys-forget` deletes the cache. A key removed from 1Password stays usable from this computer's cache (and `pull` keeps it, with a warning) until you run `make keys-forget`; every cached key is checked against its fingerprint before it is used.
+- `make api-key-set NAME=music-pickup` saves an API key made on the hub (pasted at the prompt) as a 1Password item, replacing any earlier one of that name.
+- `make music-pickup` downloads each waiting note with the `music-pickup` API key, checks its length and SHA-256 against the listing, opens it with the cached keyring and saves it under the notes folder (`~/Library/Application Support/siue-music/notes/` on macOS, `$XDG_DATA_HOME/siue-music/notes/` elsewhere on Unix, `%APPDATA%\siue-music\notes\` on Windows; `SIUE_MUSIC_NOTES_DIR` overrides; the tool refuses a folder inside the repository) as `<arrival date>-<id>/` with `note.json` and `audio.webm|m4a|ogg`. Only then does it mark the note picked up. A note whose download is corrupt or that will not open stays waiting, is reported with its reason, and the run goes on with the next; the exit code is 1 when any note was left. Every API call, the listing included, waits out a 429 and is retried; a 429 that never clears leaves that note waiting and the run goes on.
+- Speech notes (webm, m4a or ogg audio; ffmpeg is told the format and never sniffs it) also get `transcript.txt` (local Whisper, `faster-whisper`; `SIUE_MUSIC_WHISPER_MODEL` picks the model, default `small.en`) and hum notes `motif.mid` (`librosa.pyin` and `mido`). Both are optional: `music/tools/.venv/bin/pip install -r music/tools/requirements-answering.txt` and `brew install ffmpeg`. Without them pickup still opens and saves every note and prints one line naming what is missing.
+- `make music-publish PIECE=ch1-labyrinth [VERSION=3]` checks `music/pieces/<piece>/v<N>/score.json` with the page's rules (glossary ids from `games/workroom/src/glossary.json`), requires the audio, the spectrogram and, for music, `score.musicxml`, refuses a draft over 8 MB before sending, and publishes it with the `music-publish` API key. The newest version is the default.
+
 ## The local browser check
 
 `make music-e2e` (local only; CI never runs it) brings up its own docker project

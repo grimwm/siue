@@ -12,6 +12,7 @@ final class Api
 
     private const KEYRING_FIELDS = ['ct', 'iterations', 'iv', 'kdf', 'salt', 'v'];
     private const MIN_ITERATIONS = 600000;
+    private const MAX_ITERATIONS = 10000000;
 
     public function __construct(private Store $store, private \Admin\Keys $keys)
     {
@@ -251,7 +252,7 @@ final class Api
         return $fields === self::KEYRING_FIELDS
             && $k['v'] === 1
             && $k['kdf'] === 'PBKDF2-SHA-256'
-            && is_int($k['iterations']) && $k['iterations'] >= self::MIN_ITERATIONS
+            && is_int($k['iterations']) && $k['iterations'] >= self::MIN_ITERATIONS && $k['iterations'] <= self::MAX_ITERATIONS
             && self::base64Length($k['salt']) === 16
             && self::base64Length($k['iv']) === 12
             && (self::base64Length($k['ct']) ?? 0) >= 17;

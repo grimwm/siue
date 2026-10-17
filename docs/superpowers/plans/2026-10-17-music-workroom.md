@@ -4,7 +4,7 @@
 
 **Goal:** A signed-in page at `/music/` where the owner sees, hears and learns each draft of the game's music in four views that share one playhead, answers with notes sealed in the browser, and Claude picks the notes up and publishes the next draft through scoped API calls.
 
-**Architecture:** The server is plain PHP 8.4 in `websites/www.cs/music/` (namespace `Music`) on the admin login's `Request`, `Response`, `Sessions`, `Keys` and SQLite database (`Admin\Db`, `secure_delete` on); sealed notes and published drafts are files under the admin data directory, never served directly. The page is TypeScript and Preact built by the games kit's `build.mjs` from `games/workroom/` (a kit folder with a `build.json` and no `metadata.yaml`, so the games hub never lists it), with DOM-free modules for the score model, layout, zoom, hit testing, gestures, sealing, unlocking and the outbox, and thin Preact views. The owner's tool `music/tools/siue-music` (Python 3, `cryptography`, 1Password CLI v2) keeps the keys in step, picks notes up and publishes drafts; the Makefile calls it.
+**Architecture:** The server is plain PHP 8.4 in `websites/www.cs/music/` (namespace `Music`) on the admin login's `Request`, `Response`, `Sessions`, `Keys` and SQLite database (`Admin\Db`, `secure_delete` on); sealed notes and published drafts are files under the admin data directory, never served directly. The page is TypeScript and Preact built by the games kit's `build.mjs` from `games/workroom/` (a kit folder with a `build.json` and no `metadata.yaml`, so the games hub never lists it), with DOM-free modules for the score model, layout, zoom, hit testing, gestures and note building, Web Crypto modules in their own type-checked program for sealing, unlocking, the outbox and the page's API client, and thin Preact views. The owner's tool `music/tools/siue-music` (Python 3, `cryptography`, 1Password CLI v2) keeps the keys in step, picks notes up and publishes drafts; the Makefile calls it.
 
 **Tech Stack:** PHP 8.4, PDO SQLite, PHPUnit 12 (`--testsuite site`); TypeScript 7, Preact 11, esbuild 0.28 through `games/_kit/build/build.mjs`, `node:test` on Node 24 (Web Crypto as `globalThis.crypto.subtle`), OpenSheetMusicDisplay for notation; Python 3.11+, `cryptography`, optional `faster-whisper`, `librosa`, `mido`, `numpy`, `ffmpeg`; 1Password CLI (`op`) 2.25+; Playwright (local only).
 
@@ -15,13 +15,16 @@
 - Work starts from `main`, where the admin login is merged. Use its code exactly as it stands in `websites/www.cs/admin/lib/*.php`:
   - `Admin\Request`: public constructor `method, ip, https, host, headers, cookies, post, query, agent`; header names are lower-case (`authorization`, `x-csrf`, `sec-fetch-site`); `fromGlobals()` builds it. PHP keeps `CONTENT_LENGTH` out of the `HTTP_*` variables it reads, so `music_request()` (Task 4) adds the `content-length` header from `$_SERVER`.
   - `Admin\Response(int $status, array $headers, string $body, array $cookies = [])`, with public mutable properties.
-  - `Admin\Pages::requireAdmin(Request): ?Response` (a 303 to `login.php` without a session; a `PDOException` becomes the 503 page), and the statics `Pages::storageDown()` and `Pages::fromStorageError()`.
+  - `Admin\Pages::requireAdmin(Request): ?Response` (a 303 to the relative `login.php` without a session, which `Music\Pages` turns into the absolute admin login URL; a `PDOException` becomes the 503 page), and the statics `Pages::storageDown()` and `Pages::fromStorageError()`.
   - `Admin\Keys`: `__construct(PDO, Clock, ?array $scopes = null, ?string $baseUrl = null)`, `check(Request, string $scope): ?Response` (HTTPS, a Bearer header only, the per-key rate limit of 60 a minute, the scope), `create(string $label, array $scopes): string`, and `Keys::SCOPES`, which is the global constant `ADMIN_KEY_SCOPES` in `admin/lib/bootstrap.php`. It is `[]` on `main`; Task 2 fills it with the three music scopes and updates the admin test that asserts it empty.
-  - `Admin\Sessions`: `__construct(PDO, Clock, string $cookiePath)`, `start(Request): string` (the Set-Cookie value), `current(Request): bool`, `csrf(Request): string`, `checkCsrf(Request, string): bool`, and `Sessions::COOKIE` (`__Secure-admin`).
+  - `Admin\Sessions`: `__construct(PDO, Clock, string $cookiePath)`, `start(Request): string` (the Set-Cookie value), `current(Request): bool`, `csrf(Request): string`, `checkCsrf(Request, string): bool`, and `Sessions::COOKIE` (`__Secure-admin`). `checkCsrf` spends the session's token on every call, right or wrong; `csrf()` hands out the current token, or makes a fresh one when the last was spent. After any refused check the caller must ask `csrf()` again.
   - `Admin\Db::open(string $dir): PDO` and `Db::dataDir(): string`; `Admin\Headers::LIST` and `Headers::apply(array)`; `Admin\StorageUnavailable`; `Admin\Clock` and `Admin\SystemClock`; `Kit\StoreDir`.
   - The bootstrap functions `admin_base_url()`, `admin_cookie_path(string)`, `admin_mailer(...)`, `admin_refuse_plain_http(Request, string $baseUrl): ?Response`, `admin_refuse_script_fetch(Request): ?Response` and `admin_emit(Response)`.
   - The test helpers in `tests/php/AdminFakes.php`: `FakeClock`, `admin_tmp_dir()`, `admin_tmp_db()` and `req(array $with)`; and `MemoryMailer` (an `Admin\Mailer`) in `tests/php/AdminPagesTest.php`, which the music fakes `require_once`.
-- **Session pages use the admin pages' guards.** Every session route refuses plain HTTP with `admin_refuse_plain_http` and then calls `Admin\Pages::requireAdmin`. The two HTML pages (`index.php`, `piece.php`) also run `admin_refuse_script_fetch` (Fetch Metadata: only a browser navigation may load them). The JSON and byte routes that the page's own script fetches, and the draft files its `<audio>` and `<img>` elements load, run `Music\Http::refuseCrossSite` instead: a request whose `Sec-Fetch-Site` is present and not `same-origin` is refused with 403.
+- **Session pages use the admin pages' guards.** Every session route refuses plain HTTP with `admin_refuse_plain_http` and then calls `Admin\Pages::requireAdmin`. The two HTML pages (`index.php`, `piece.php`) also run `admin_refuse_script_fetch` (Fetch Metadata: only a browser navigation may load them). The JSON and byte routes that the page's own script fetches, and the draft files its `<audio>` and `<img>` elements load, run `Music\Http::refuseCrossSite` instead: a request whose `Sec-Fetch-Site` is present and not `same-origin` is refused with 403. The thin pages call `music_run` (Task 4), which runs the HTTPS gate and the matching Fetch Metadata gate **before** it opens the database, as `admin_serve` does, so a refused request gets its 403 even when storage is down; `Music\Pages` runs the same gates again.
+- **A signed-out visitor is sent to the absolute admin login.** `Admin\Pages::requireAdmin` redirects to the relative `login.php`, which under `/music/` is `/music/login.php` (a 404). `Music\Pages` rewrites that `Location` to `admin_base_url() . 'login.php'`; a test pins the header on every session route.
+- **Byte buffers are `Uint8Array<ArrayBuffer>`** wherever they reach `crypto.subtle`, `fetch` or a `Fetch` body: TypeScript 7 types a bare `Uint8Array` as `Uint8Array<ArrayBufferLike>`, which `BufferSource` and `BodyInit` reject. `new Uint8Array(n)`, `new Uint8Array(arrayBuffer)`, `Uint8Array.from(...)`, `.slice()` and `new TextEncoder().encode()` all give `Uint8Array<ArrayBuffer>`; wrap a `Buffer` with `Uint8Array.from(buffer)`.
+- **Two type-check programs for the page's pure modules.** `tsconfig.json` is DOM-free (`lib: ["ES2022"]`, `types: []`): the score model, layout, zoom, hit testing, gestures, player, loading, note building, energy and recorder modules. `src/tsconfig.crypto.json` (`lib: ["ES2022", "DOM"]`) holds the modules that use `crypto`, `CryptoKey` or `TextEncoder`, or import one that does (`seal.ts`, `unlock.ts`, `vault.ts`, `public-key.ts`, `api.ts`, `outbox.ts`, `history.ts`), because `tsc` checks every imported file under the importing program's `lib`. `src/tsconfig.dom.json` holds the DOM adapters and `.tsx` files.
 - Header lookups go through `Music\Http::header(Request $r, string $name): ?string`, case-insensitive, so nothing depends on how `Request` spells header names.
 - Sealing, in the browser with Web Crypto: per note a fresh AES-256-GCM key (12-byte IV) encrypts the whole note; RSA-OAEP with SHA-256 (MGF1-SHA-256) wraps that key to the committed **RSA-4096** public key. The fingerprint is the lowercase hex SHA-256 of the public key's SPKI DER, built into the page with the key; the page refuses to seal to a key whose computed fingerprint differs from the built-in one; every sealed note carries the fingerprint it was sealed to.
 - The server keeps per note only: a random id, the sealed bundle's size, its arrival time, the sealed bytes, the SHA-256 of the sealed bytes (derived from them, for the pickup check) and the picked-up time.
@@ -35,12 +38,12 @@
 - Opened notes go to `~/Library/Application Support/siue-music/notes/` on macOS, `$XDG_DATA_HOME/siue-music/notes/` (default `~/.local/share/siue-music/notes/`) elsewhere on Unix, `%APPDATA%\siue-music\notes\` on Windows; never inside the repository (the tool refuses a notes directory inside it). The key cache is `~/.config/siue/music.json`, directory 0700, file 0600.
 - Speech-to-text (local Whisper via `faster-whisper`) and humming-to-MIDI (`librosa.pyin` and `mido`) are optional: when missing, pickup still opens and saves every note and prints one line naming the missing package and the install command.
 - New Makefile targets only (`websites/www.cs/Makefile`): `keys-status`, `keys-pull`, `keys-init`, `keys-rotate`, `api-key-set NAME=...`, `keys-forget`, `music-pickup`, `music-publish PIECE=...`, plus `keys-upload`, `music-tools-venv`, `music-tools-test` and `music-e2e`. The `test` and `e2e` targets are never changed.
-- CI is not changed: no edits to `.github/`, `tests/e2e/select.ts`, `compose.yaml`, or the Makefile's `test` and `e2e` targets. PHPUnit files go in `tests/php/` (the `site` suite). Unit tests go in `games/workroom/test/`, which `games/units.sh` discovers because the folder has a `build.json`. No `*.spec.ts` is added to `tests/e2e/` (`select.ts --check` requires every spec there to be reachable from a rule); the browser check is `tests/e2e/workroom.local.ts`, run only by `make music-e2e` through `tests/e2e/local.config.ts`.
+- CI is not changed: no edits to `.github/`, `tests/e2e/select.ts`, `compose.yaml`, or the Makefile's `test` and `e2e` targets. The one change near CI is a single `env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS` line in `docker/php/Dockerfile` (Task 15), because FPM clears the worker environment; it does nothing unless the variable is set, and only `compose.music-local.yaml` sets it. PHPUnit files go in `tests/php/` (the `site` suite). Unit tests go in `games/workroom/test/`, which `games/units.sh` discovers because the folder has a `build.json`. No `*.spec.ts` is added to `tests/e2e/` (`select.ts --check` requires every spec there to be reachable from a rule); the browser check is `tests/e2e/workroom.local.ts`, run only by `make music-e2e` through `tests/e2e/local.config.ts`.
 - Never bind ports 3000, 5173, 8000 or 8080. Docker runs use a unique `COMPOSE_PROJECT_NAME` and are torn down with `docker compose -p <name> down -v`; never touch the `siue` project, never prune. Never SSH, SFTP or SCP to www.cs; deploys happen on merge.
 - Nothing secret is committed; the repository is public. Opened notes are never committed. Test keys under `games/workroom/test/fixtures/` are labelled test keys, used by nothing but tests.
 - Delivery: three PRs, each green on its own, in order: (1) the API and storage, (2) the page with the four views and the glossary, (3) the answering tools with the owner's key tool.
 - Comments and docs describe the current state, never history.
-- Commits end with:
+- Commits end with the committing session's attribution lines: a `Co-Authored-By:` line naming the model that commits and the session's `Claude-Session:` line. The commit blocks below show the shape with the lines this plan was written under:
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
@@ -155,7 +158,7 @@ The page refuses any other `schema` value with: "This draft uses score schema N,
 | `motifs` | `{ id, character, color, spans: [{ lane, from, to }] }`; `from` < `to` seconds within `[0, duration]`; `lane` names a lane; a known character has its fixed colour: Ariadne `#d4a017`, Minotaur `#c0392b`, Daedalus `#b08d57`, Athens `#3b6fb6` |
 | `notes` | `{ lane, start, length, pitch, velocity, motif }`; `start` ≥ 0 and `start + length` ≤ `duration` (seconds), `length` > 0; `pitch` MIDI integer 0–127; `velocity` integer 1–127; `motif` a motif id or `null` |
 | `energy` | ≥ 2 points `[seconds, value]`; times strictly increasing, first 0, last `duration`; values in [0, 1] |
-| `glossary` | `{ term, from, to }`; `term` is a page glossary id (`games/workroom/src/glossary.ts`); `0 ≤ from < to ≤ duration`, `to - from` ≤ 15 |
+| `glossary` | `{ term, from, to }`; `term` is a page glossary id (an `id` in `games/workroom/src/glossary.json`, the glossary's one source; the page and the tool both read it); `0 ≤ from < to ≤ duration`, `to - from` ≤ 15 |
 | `audio` | ≥ 1 of `{ file, type }`; `file` is `audio.webm` (type `audio/webm; codecs=opus`) or `audio.m4a` (type `audio/mp4; codecs=mp4a.40.2`) |
 | `spectrogram` | `{ file: "spectrogram.png", low_hz, high_hz, scale }`; 0 < `low_hz` < `high_hz`; `scale` `log` or `linear` |
 | `musicxml` | `"score.musicxml"`; each lane is the MusicXML part whose `id` equals the lane id |
@@ -175,7 +178,7 @@ websites/www.cs/
     music.css                     # the pages' look (dark site look)
     README.md                     # what it is, security model, schema, make targets, local check
     lib/.htaccess                 # Require all denied
-    lib/bootstrap.php             # requires admin/lib/bootstrap.php and the music classes; music_request/run/read_body helpers
+    lib/bootstrap.php             # requires admin/lib/bootstrap.php and the music classes; music_request/early_refusal/run/read_body helpers
     lib/PublicKeys.php            # Music\PublicKeys: public.json reader, fingerprints
     lib/Store.php                 # Music\Store, NoteRejected, DraftRejected: notes, drafts (limits), the locked keyring
     lib/Http.php                  # Music\Http: header(), declaredLength(), refuseCrossSite(), json(), finish() (headers + music CSP), serveFile() (Range)
@@ -189,9 +192,11 @@ websites/www.cs/
     tools/tests/fake_op.py tools/tests/support.py tools/tests/make_fixture.py tools/tests/test_*.py
   games/workroom/
     build.json tsconfig.json tsconfig.test.json test.sh
-    src/tsconfig.dom.json
+    src/tsconfig.dom.json src/tsconfig.crypto.json
+    src/glossary.json             # the glossary's one source (page and tool)
     src/score.ts tempo.ts zoom.ts timeline.ts hit.ts pianoroll.ts spectro.ts glossary.ts gestures.ts player.ts load.ts   # DOM-free (view)
-    src/note.ts seal.ts unlock.ts vault.ts public-key.ts answer.ts energy.ts outbox.ts api.ts history.ts recorder.ts    # DOM-free (answering)
+    src/note.ts answer.ts energy.ts recorder.ts                                   # DOM-free (answering)
+    src/seal.ts unlock.ts vault.ts public-key.ts api.ts outbox.ts history.ts     # Web Crypto types (src/tsconfig.crypto.json)
     src/idb.ts sheet.ts main.ts   # DOM adapters and the entry
     src/ui/{Workroom,ViewTabs,Timeline,PianoRoll,SoundPicture,Sheet,Glossary,Player}.tsx                              # views
     src/ui/{UnlockPanel,PinComposer,HumButton,ReactBar,EnergyEditor,History,PiecesWaiting}.tsx                          # answering
@@ -200,10 +205,11 @@ websites/www.cs/
     dist/                         # built: workroom.js sheet.js (+ maps, THIRD_PARTY_LICENSES.txt)
   admin/lib/bootstrap.php         # + dashboard, fingerprint, three scopes (ADMIN_KEY_SCOPES)
   tests/php/AdminKeysTest.php     # registry assertion
-  tests/php/MusicFakes.php MusicStoreTest.php MusicApiTest.php MusicPagesTest.php MusicDeployTest.php
+  tests/php/MusicFakes.php MusicStoreTest.php MusicApiTest.php MusicPagesTest.php MusicBootstrapTest.php MusicDeployTest.php
   tests/e2e/local.config.ts tests/e2e/workroom.local.ts
   compose.music-local.yaml
   docker/nginx/default.conf       # deny /music/lib/ /music/tools/ /music/pieces/ /music/keys/
+  docker/php/Dockerfile           # + env[MUSIC_PUBLIC_KEYS] (FPM clears the worker environment)
   deploy.sh  .gitignore  Makefile games/package.json games/package-lock.json
 ```
 
@@ -548,6 +554,7 @@ final class MusicStoreTest extends TestCase
     {
         [$s, $db] = music_world();
         $seed = $db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)');
+        // The seeded rows have no files on disk: eviction deletes the rows and skips what is not there.
         $seed->execute(['old', 1, 1, 100_000_000]); // the oldest of twenty: it goes when the next draft lands
         for ($v = 2; $v <= 20; $v++) {
             $seed->execute(['old', $v, $v, 1]);
@@ -628,8 +635,8 @@ function music_store(\PDO $db, Admin\Clock $clock): Music\Store
 - Constructor: `$sd = new \Kit\StoreDir('music storage:', \Admin\StorageUnavailable::class); $sd->claim($dir, true); $sd->claim("$dir/notes", true); $sd->claim("$dir/drafts", true);` then the three `CREATE TABLE IF NOT EXISTS` statements.
 - `addNote`: `strlen > MAX_NOTE_BYTES` → `too_large`; `$keys === null || $keys->current === ''` → `no_key`; `strlen < 38 || substr(0, 6) !== MAGIC` → `bad_header`; `bin2hex(substr(6, 32))` not in `$keys->all()` → `unknown_key`; `SELECT COUNT(*)` ≥ `MAX_NOTES` → `full`. Then `id = bin2hex(random_bytes(16))`; write `"$dir/notes/$id.tmp"` with `fopen(..., 'x')`, `chmod 0600`, `rename` to `$id.sealed`; insert the row. The count check and insert run inside `BEGIN IMMEDIATE` … `COMMIT`; on a failed insert the file is unlinked.
 - Every id parameter is checked against `/^[0-9a-f]{32}$/` first; a bad id returns null/false without touching the filesystem.
-- `deleteNote`: in one transaction `DELETE FROM music_notes WHERE id = ?`, then `unlink` the file; returns whether a row went. `deleteAllNotes`: select ids, delete rows, unlink each file, return the count.
-- `putDraft`: piece matches `/^[a-z0-9][a-z0-9-]{0,47}$/` else `bad_piece`; `1 ≤ version ≤ 9999` else `bad_version`; no files → `missing_file`; every key in `DRAFT_FILES` else `bad_file`. Then `BEGIN IMMEDIATE`; `$size = array_sum(array_map('strlen', $files))`; `$size > MAX_REQUEST_BYTES` → `too_large`; existing row → `exists`; `$size + COALESCE(SUM(size), 0)` over `SELECT size FROM music_drafts ORDER BY published_at DESC, rowid DESC LIMIT KEEP_DRAFTS - 1` greater than `MAX_DRAFT_TOTAL_BYTES` → `over_quota`. Each refusal rolls back and leaves no file and no directory. Then write each file into `"$dir/drafts/$piece/$version/"` (claimed private), mode 0600, insert the row with `size`, select the rows past `ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET KEEP_DRAFTS`, delete them and remove their directories (files first, then `rmdir`, then the piece directory when empty), and `COMMIT`. A failure while writing removes the half-written directory and rolls back.
+- `deleteNote`: in one transaction `DELETE FROM music_notes WHERE id = ?`, then `unlink` the file when it exists; returns whether a row went. `deleteAllNotes`: select ids, delete rows, unlink each file, return the count.
+- `putDraft`: piece matches `/^[a-z0-9][a-z0-9-]{0,47}$/` else `bad_piece`; `1 ≤ version ≤ 9999` else `bad_version`; no files → `missing_file`; every key in `DRAFT_FILES` else `bad_file`. Then `BEGIN IMMEDIATE`; `$size = array_sum(array_map('strlen', $files))`; `$size > MAX_REQUEST_BYTES` → `too_large`; existing row → `exists`; `$size + COALESCE(SUM(size), 0)` over `SELECT size FROM music_drafts ORDER BY published_at DESC, rowid DESC LIMIT KEEP_DRAFTS - 1` greater than `MAX_DRAFT_TOTAL_BYTES` → `over_quota`. Each refusal rolls back and leaves no file and no directory. Then write each file into `"$dir/drafts/$piece/$version/"` (claimed private), mode 0600, insert the row with `size`, select the rows past `ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET KEEP_DRAFTS`, delete them and remove their directories (files first, then `rmdir`, then the piece directory when empty), and `COMMIT`. Eviction deletes the rows it selected and skips every file or directory that is not there (the tests seed rows with no files), so a missing file is never an error. A failure while writing removes the half-written directory and rolls back.
 - `drafts`: rows ordered `published_at DESC, rowid DESC`. `draftBytes`: `COALESCE(SUM(size), 0)`.
 - `draftFile`: same piece/version checks, name in `DRAFT_FILES`, row exists, file exists → path.
 - `putKeyring`: `INSERT ... ON CONFLICT(id) DO UPDATE` on the single row `id = 1`. `keyring`: that row or null.
@@ -811,26 +818,28 @@ final class MusicApiTest extends TestCase
     public function testEveryRouteDemandsExactlyItsOwnScope(): void
     {
         $id = $this->store->addNote(music_sealed())['id'];
+        // Each route as [call, the status the key that holds its scope gets]. The empty draft and keyring bodies pass the scope
+        // and are refused as malformed (422), so the own-scope status proves the route ran past the key check.
         $routes = [
             'notes:pickup' => [
-                'listNotes' => fn(string $k) => $this->api->listNotes($this->as($k, ['query' => ['state' => 'waiting']])),
-                'getNote' => fn(string $k) => $this->api->getNote($this->as($k, ['query' => ['id' => $id]])),
-                'pickedUp' => fn(string $k) => $this->api->pickedUp($this->as($k, ['method' => 'POST', 'query' => ['id' => $id]])),
+                'listNotes' => [fn(string $k) => $this->api->listNotes($this->as($k, ['query' => ['state' => 'waiting']])), 200],
+                'getNote' => [fn(string $k) => $this->api->getNote($this->as($k, ['query' => ['id' => $id]])), 200],
+                'pickedUp' => [fn(string $k) => $this->api->pickedUp($this->as($k, ['method' => 'POST', 'query' => ['id' => $id]])), 200],
             ],
-            'drafts:publish' => ['publishDraft' => fn(string $k) => $this->api->publishDraft($this->post($k, [], ''), $this->reading(''))],
-            'keys:publish' => ['publishKeyring' => fn(string $k) => $this->api->publishKeyring($this->post($k, [], ''), $this->reading(''))],
+            'drafts:publish' => ['publishDraft' => [fn(string $k) => $this->api->publishDraft($this->post($k, [], ''), $this->reading('')), 422]],
+            'keys:publish' => ['publishKeyring' => [fn(string $k) => $this->api->publishKeyring($this->post($k, [], ''), $this->reading('')), 422]],
         ];
         $held = [];
         foreach (array_keys($routes) as $scope) {
             $held[$scope] = $this->keys->create("only-$scope", [$scope]);
         }
         foreach ($routes as $scope => $calls) {
-            foreach ($calls as $route => $call) {
+            foreach ($calls as $route => [$call, $ownStatus]) {
                 foreach ($held as $heldScope => $key) {
                     $reads = $this->reads;
                     $status = $call($key)->status;
                     if ($heldScope === $scope) {
-                        self::assertNotContains($status, [401, 403], "$route with its own scope $scope");
+                        self::assertSame($ownStatus, $status, "$route with its own scope $scope");
                     } else {
                         self::assertSame(403, $status, "$route with only $heldScope");
                         self::assertSame($reads, $this->reads, "$route read a body for a key without $scope");
@@ -1085,11 +1094,11 @@ Every method runs the same gates, in this order, and returns the first refusal t
 
 1. **HTTPS:** `admin_refuse_plain_http($r, $this->baseUrl)` (403 `HTTPS required.`; only a local base URL permits plain HTTP).
 2. **Who may ask:** the two HTML pages (`index`, `piece`) run `admin_refuse_script_fetch($r)`, the Fetch Metadata guard the admin pages run (403 `Open this page directly.` for any request a script, embed or frame made). The routes the workroom's own script fetches, and the draft files its `<audio>` and `<img>` elements load, run `Http::refuseCrossSite($r)` instead (403 `{"error":"cross_site"}` unless `Sec-Fetch-Site` is absent or `same-origin`).
-3. **Session:** `$this->admin->requireAdmin($r)` (its 303 to `login.php` passes through `Http::finish`).
-4. **CSRF**, for POST: `checkCsrf($r, Http::header($r, 'X-CSRF') ?? '')` false → 403 `{"error":"csrf"}`.
+3. **Session:** `$this->admin->requireAdmin($r)`. Its 303 points at the relative `login.php`, which under `/music/` is `/music/login.php` (404); `Pages` replaces that response's `Location` with `$this->baseUrl . 'login.php'`, the absolute admin login, and the 503 storage page passes through unchanged; either goes through `Http::finish`.
+4. **CSRF**, for POST: `checkCsrf($r, Http::header($r, 'X-CSRF') ?? '')` false → 403 `{"error":"csrf"}`. `checkCsrf` spends the session's token on every call, right or wrong, so after any refusal the session has no usable token until the caller fetches a fresh one from `csrf.php`.
 5. The work.
 
-Every POST success returns the next token from `$sessions->csrf($r)`. Upload errors: 413 `too_large`, 409 `full`, 422 `bad_header`/`unknown_key`, 503 `no_key`. The page shell (`piece`) is a full HTML document: `<body data-view="piece" data-piece="<id>" data-version="<n or empty>">`, `<meta name="csrf" content="...">`, `<link rel="stylesheet" href="music.css?v=...">`, `<main id="workroom"></main>`, `<script type="module" src="../games/workroom/dist/workroom.js?v=<assetVersion>"></script>`. `index` renders, server side, one row per piece (latest version; `piece.title` and the first three `changes[].text` read from that draft's `score.json`, all escaped with `htmlspecialchars(..., ENT_QUOTES)`), the total waiting count, and the same mount and script with `data-view="index"`. Draft files are served with `Content-Type` from a fixed map (`score.json` application/json, `score.musicxml` application/vnd.recordare.musicxml+xml, `audio.webm` audio/webm, `audio.m4a` audio/mp4, `spectrogram.png` image/png).
+Every POST success returns the next token from `$sessions->csrf($r)`. Upload errors: 413 `too_large`, 409 `full`, 422 `bad_header`/`unknown_key`, 503 `no_key`. The page shell (`piece`) is a full HTML document: `<body data-view="piece" data-piece="<id>" data-version="<n or empty>">`, `<meta name="csrf" content="...">`, `<link rel="stylesheet" href="music.css?v=...">`, `<main id="workroom"></main>`, `<script type="module" src="../games/workroom/dist/workroom.js?v=<assetVersion>"></script>`. `index` renders, server side, one row per piece (latest version; `piece.title` and the first three `changes[].text` read from that draft's `score.json`, all escaped with `htmlspecialchars(..., ENT_QUOTES)`), the total waiting count, and the same mount and script with `data-view="index"`. A row is `<li class="piece"><a href="piece.php?id=ID" data-waiting="ID">TITLE</a><span class="waiting-count"></span><ul class="changes">…</ul></li>`: the link is named by the piece title alone (the browser check clicks it by that name), and the `data-waiting` attribute and the empty span next to it are what `PiecesWaiting` (Task 15) fills. Draft files are served with `Content-Type` from a fixed map (`score.json` application/json, `score.musicxml` application/vnd.recordare.musicxml+xml, `audio.webm` audio/webm, `audio.m4a` audio/mp4, `spectrogram.png` image/png).
 
 A script on another user's `~folder` page is same-origin with www.cs, so `refuseCrossSite` stops cross-site pages only. What keeps a sibling page from reading the notes is that they are sealed to a key it does not have, and the keyring is locked under a passphrase it does not have; the CSRF token guards every change.
 
@@ -1136,10 +1145,14 @@ final class MusicPagesTest extends TestCase
     public function testEveryRouteNeedsASession(): void
     {
         $anon = req(['https' => true, 'query' => ['id' => str_repeat('0', 32), 'piece' => 'x', 'v' => '1', 'file' => 'score.json']]);
+        $login = self::BASE . 'login.php';
         foreach (['index', 'piece', 'csrf', 'note', 'keyring', 'drafts', 'draftFile', 'delete'] as $route) {
-            self::assertSame(303, $this->pages->$route($anon)->status, $route);
+            $res = $this->pages->$route($anon);
+            self::assertSame(303, $res->status, $route);
+            self::assertSame($login, $res->headers['Location'], "$route sends the browser to the admin login, not to /music/login.php");
         }
-        self::assertSame(303, $this->pages->notes($anon, '')->status);
+        $res = $this->pages->notes($anon, '');
+        self::assertSame([303, $login], [$res->status, $res->headers['Location']]);
     }
 
     public function testAnApiKeyIsNotASession(): void
@@ -1190,17 +1203,26 @@ final class MusicPagesTest extends TestCase
 
     public function testUploadNeedsCsrfAndReturnsTheNextToken(): void
     {
+        // Every check spends the session's token, right or wrong (Admin\Sessions::checkCsrf), so the order below matters.
         $r = music_signed_in($this->sessions, ['method' => 'POST']);
-        self::assertSame(403, $this->pages->notes($r, music_sealed())->status, 'no token');
+        $cookies = req(['https' => true, 'cookies' => $r->cookies]);
         $withToken = fn(string $t) => req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies, 'headers' => ['x-csrf' => $t]]);
-        $token = $this->csrfFor(req(['https' => true, 'cookies' => $r->cookies]));
+        self::assertSame(403, $this->pages->notes($r, music_sealed())->status, 'no token');
+        $token = $this->csrfFor($cookies);
         $res = $this->pages->notes($withToken($token), music_sealed());
         self::assertSame(201, $res->status);
         $body = json_decode($res->body, true);
         self::assertMatchesRegularExpression('/^[0-9a-f]{32}$/', $body['id']);
         self::assertNotSame($token, $body['csrf']);
+        // The token returned by a success is the next one and works at once.
+        $second = $this->pages->notes($withToken($body['csrf']), music_sealed());
+        self::assertSame(201, $second->status, 'the returned token works');
+        $next = json_decode($second->body, true)['csrf'];
+        // A spent token is refused, and that refusal spends the token the last success returned.
         self::assertSame(403, $this->pages->notes($withToken($token), music_sealed())->status, 'a token works once');
-        self::assertSame(201, $this->pages->notes($withToken($body['csrf']), music_sealed())->status, 'the returned token works');
+        self::assertSame(403, $this->pages->notes($withToken($next), music_sealed())->status, 'a refusal spends the current token too');
+        // The page's recovery: ask csrf.php for a fresh token, then retry.
+        self::assertSame(201, $this->pages->notes($withToken($this->csrfFor($cookies)), music_sealed())->status, 'a fresh token from csrf.php works');
     }
 
     public function testUploadLimitsAreReported(): void
@@ -1259,6 +1281,22 @@ final class MusicPagesTest extends TestCase
         self::assertSame(400, $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => '<script>']]))->status);
     }
 
+    public function testTheIndexListsEachPieceAsALinkNamedByItsTitle(): void
+    {
+        $score = ['schema' => 1, 'piece' => ['id' => 'test-piece', 'title' => 'Test piece: <the> Labyrinth wakes'], 'draft' => 1, 'changes' => [
+            ['text' => 'Horns carry the theme.'], ['text' => 'Strings < softer'], ['text' => 'Third change'], ['text' => 'Fourth-change-text'],
+        ]];
+        $this->store->putDraft('test-piece', 1, ['score.json' => json_encode($score)]);
+        $res = $this->pages->index(music_signed_in($this->sessions));
+        self::assertSame(200, $res->status);
+        self::assertStringContainsString(
+            '<a href="piece.php?id=test-piece" data-waiting="test-piece">Test piece: &lt;the&gt; Labyrinth wakes</a><span class="waiting-count"></span>',
+            $res->body,
+        );
+        self::assertStringContainsString('Strings &lt; softer', $res->body, 'change text is escaped');
+        self::assertStringNotContainsString('Fourth-change-text', $res->body, 'only the first three changes');
+    }
+
     public function testHubListsTheWorkroomAndItsFingerprint(): void
     {
         $db = admin_tmp_db();
@@ -1296,8 +1334,8 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ### Task 4: Thin pages, serving rules, deploy, docs; open PR 1
 
 **Files:**
-- Create: `music/index.php`, `piece.php`, `csrf.php`, `notes.php`, `note.php`, `delete.php`, `keyring.php`, `drafts.php`, `draft.php`, `api/notes.php`, `api/note.php`, `api/picked-up.php`, `api/drafts.php`, `api/keyring.php`, `music/.htaccess`, `music/music.css`, `music/README.md`, `tests/php/MusicDeployTest.php`
-- Modify: `music/lib/bootstrap.php` (`music_request`, `music_run`, `music_read_body`, `music_asset_version`), `docker/nginx/default.conf`, `deploy.sh`, `.gitignore`
+- Create: `music/index.php`, `piece.php`, `csrf.php`, `notes.php`, `note.php`, `delete.php`, `keyring.php`, `drafts.php`, `draft.php`, `api/notes.php`, `api/note.php`, `api/picked-up.php`, `api/drafts.php`, `api/keyring.php`, `music/.htaccess`, `music/music.css`, `music/README.md`, `tests/php/MusicBootstrapTest.php`, `tests/php/MusicDeployTest.php`
+- Modify: `music/lib/bootstrap.php` (`music_request`, `music_early_refusal`, `music_run`, `music_read_body`, `music_asset_version`), `docker/nginx/default.conf`, `deploy.sh`, `.gitignore`
 
 **Interfaces:**
 - Consumes: everything from Tasks 1–3, and `admin_base_url()`, `admin_cookie_path()`, `admin_mailer()`, `admin_emit()` from `admin/lib/bootstrap.php`.
@@ -1307,11 +1345,20 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 /** Admin\Request::fromGlobals() plus the content-length header: PHP keeps CONTENT_LENGTH out of the HTTP_* variables Request reads. */
 function music_request(): Admin\Request;
 /**
- * Builds the database, the key store, the sessions and the controllers the way admin_serve() does, runs $route,
- * and emits the response; StorageUnavailable and PDOException → Admin\Pages::storageDown() through Music\Http::finish.
- * The page guards (HTTPS, Fetch Metadata, session, CSRF) live in Music\Pages and Music\Api, per route.
+ * The gates that need no database, in admin_serve()'s order, as a finished response (Music\Http::finish) or null:
+ * plain HTTP is refused for every $kind (admin_refuse_plain_http against $baseUrl); then
+ * 'page' (index.php, piece.php) adds admin_refuse_script_fetch, 'data' (the session JSON and byte routes) adds
+ * Music\Http::refuseCrossSite, and 'api' (the API-key routes, which tools call) adds nothing. Any other $kind throws.
  */
-function music_run(callable $route): void; // $route(Music\Pages $pages, Music\Api $api, Admin\Request $r): Admin\Response
+function music_early_refusal(string $kind, Admin\Request $r, string $baseUrl): ?Admin\Response;
+/**
+ * Runs music_early_refusal($kind, ...) FIRST and emits a refusal without ever opening the database, so plain HTTP or a
+ * script fetch gets its 403 even when storage is refused (admin_serve does the same). Only then builds the database,
+ * the key store, the sessions and the controllers, runs $route, and emits the response; StorageUnavailable and
+ * PDOException → Admin\Pages::storageDown() through Music\Http::finish. Session, CSRF and scope checks live in
+ * Music\Pages and Music\Api, per route.
+ */
+function music_run(string $kind, callable $route): void; // $route(Music\Pages $pages, Music\Api $api, Admin\Request $r): Admin\Response
 /** Up to $max bytes of php://input. Callers that must tell "too large" apart ask for one byte more than their limit. */
 function music_read_body(int $max): string;
 /** First 10 hex of games/workroom/dist/workroom.js's SHA-256; '' while the file is missing (until PR 2 lands). */
@@ -1324,8 +1371,10 @@ Each thin page is three lines, for example `music/api/note.php`:
 <?php
 declare(strict_types=1);
 require __DIR__ . '/../lib/bootstrap.php';
-music_run(fn(Music\Pages $p, Music\Api $a, Admin\Request $r) => $a->getNote($r));
+music_run('api', fn(Music\Pages $p, Music\Api $a, Admin\Request $r) => $a->getNote($r));
 ```
+
+The first argument is the gate kind: `'page'` for `index.php` and `piece.php`; `'data'` for `csrf.php`, `notes.php`, `note.php`, `delete.php`, `keyring.php`, `drafts.php` and `draft.php`; `'api'` for everything under `api/`.
 
 `notes.php` passes `music_read_body(Music\Store::MAX_NOTE_BYTES + 1)`. `api/keyring.php` and `api/drafts.php` pass a reader, not a body: `fn(int $n) => music_read_body($n)`, so the API reads the body only after the key, the method and the declared `Content-Length` have passed (`$a->publishKeyring($r, fn(int $n) => music_read_body($n))`). There is no multipart handling anywhere: PHP parses a multipart body before the script runs, which would buffer an oversized upload first.
 
@@ -1388,9 +1437,65 @@ final class MusicDeployTest extends TestCase
 
 When `music/keys/public.json` exists (after `make keys-init` in PR 3), `testShipsThePagesApiAndLibrary` also expects it; add this line to that test in Task 12.
 
+`tests/php/MusicBootstrapTest.php` (the gates that run before the database opens):
+
+```php
+<?php
+// What music_run decides before it opens the database: plain HTTP is refused on
+// every route; a page load must be a browser navigation, a data route must be
+// same-origin, an API route (called by tools) needs nothing more. Each refusal
+// carries the admin headers and the music CSP.
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+
+require_once __DIR__ . '/MusicFakes.php';
+
+final class MusicBootstrapTest extends TestCase
+{
+    private const BASE = 'https://example.test/~wgrim/admin/';
+
+    public function testPlainHttpIsRefusedOnEveryKindOfRoute(): void
+    {
+        foreach (['page', 'data', 'api'] as $kind) {
+            $res = music_early_refusal($kind, req(['https' => false]), self::BASE);
+            self::assertNotNull($res, $kind);
+            self::assertSame(403, $res->status, $kind);
+            self::assertSame(Music\Http::csp(), $res->headers['Content-Security-Policy'], $kind);
+            self::assertNull(music_early_refusal($kind, req(['https' => false]), 'http://localhost/admin/'), "$kind on a local base");
+            self::assertNull(music_early_refusal($kind, req(['https' => true]), self::BASE), "$kind over HTTPS");
+        }
+    }
+
+    public function testAPageLoadMustBeANavigation(): void
+    {
+        $script = req(['https' => true, 'headers' => ['sec-fetch-mode' => 'cors', 'sec-fetch-dest' => 'empty', 'sec-fetch-site' => 'same-origin']]);
+        $navigation = req(['https' => true, 'headers' => ['sec-fetch-mode' => 'navigate', 'sec-fetch-dest' => 'document', 'sec-fetch-site' => 'none']]);
+        self::assertSame(403, music_early_refusal('page', $script, self::BASE)?->status);
+        self::assertNull(music_early_refusal('page', $navigation, self::BASE));
+        self::assertNull(music_early_refusal('page', req(['https' => true]), self::BASE), 'curl and older browsers send no Fetch Metadata');
+    }
+
+    public function testADataRouteMustBeSameOrigin(): void
+    {
+        $at = fn(string $site) => req(['https' => true, 'headers' => ['sec-fetch-site' => $site]]);
+        self::assertSame(403, music_early_refusal('data', $at('cross-site'), self::BASE)?->status);
+        self::assertSame(403, music_early_refusal('data', $at('same-site'), self::BASE)?->status);
+        self::assertNull(music_early_refusal('data', $at('same-origin'), self::BASE), "the page's own script");
+        self::assertNull(music_early_refusal('api', $at('cross-site'), self::BASE), 'API routes are for tools: only HTTPS and the key decide');
+    }
+
+    public function testAnUnknownKindIsABug(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        music_early_refusal('other', req(['https' => true]), self::BASE);
+    }
+}
+```
+
 - [ ] **Step 2: Run to see it fail**
 
-Run: `vendor/bin/phpunit tests/php/MusicDeployTest.php` — FAIL (nothing under `music/` ships; nginx has no music rules).
+Run: `vendor/bin/phpunit tests/php/MusicDeployTest.php tests/php/MusicBootstrapTest.php` — FAIL (nothing under `music/` ships; nginx has no music rules; `music_early_refusal` does not exist).
 
 - [ ] **Step 3: Implement**
 
@@ -1419,12 +1524,12 @@ Write the thin pages, `music.css` (dark site look: the site's `#0d0f12` backgrou
 
 - [ ] **Step 4: Run the gates**
 
-Run, from `websites/www.cs`: `vendor/bin/phpunit tests/php/MusicDeployTest.php` — PASS; `vendor/bin/phpunit --testsuite site` — PASS; `vendor/bin/phpunit --testsuite kit` — PASS. Then a local smoke on its own project: `name=music-api-$$; docker compose -f compose.yaml -p $name up -d --build www-cs-php www-cs-nginx; port=$(docker compose -f compose.yaml -p $name port www-cs-nginx 80); curl -s -o /dev/null -w '%{http_code}\n' "http://$port/music/lib/Store.php"` prints `403`; `curl -s -o /dev/null -w '%{http_code}\n' "http://$port/music/"` prints `403` (not HTTPS); `docker compose -f compose.yaml -p $name down -v`.
+Run, from `websites/www.cs`: `vendor/bin/phpunit tests/php/MusicDeployTest.php tests/php/MusicBootstrapTest.php` — PASS; `vendor/bin/phpunit --testsuite site` — PASS; `vendor/bin/phpunit --testsuite kit` — PASS. Then a local smoke on its own project: `name=music-api-$$; docker compose -f compose.yaml -p $name up -d --build www-cs-php www-cs-nginx; port=$(docker compose -f compose.yaml -p $name port www-cs-nginx 80); curl -s -o /dev/null -w '%{http_code}\n' "http://$port/music/lib/Store.php"` prints `403`; `curl -s -o /dev/null -w '%{http_code}\n' "http://$port/music/"` prints `403` (not HTTPS); `docker compose -f compose.yaml -p $name down -v`.
 
 - [ ] **Step 5: Commit and open PR 1**
 
 ```bash
-git add websites/www.cs/music websites/www.cs/tests/php/MusicDeployTest.php websites/www.cs/docker/nginx/default.conf websites/www.cs/deploy.sh websites/www.cs/.gitignore
+git add websites/www.cs/music websites/www.cs/tests/php/MusicBootstrapTest.php websites/www.cs/tests/php/MusicDeployTest.php websites/www.cs/docker/nginx/default.conf websites/www.cs/deploy.sh websites/www.cs/.gitignore
 git commit -m "Music workroom: pages, API files, serving and deploy rules
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -1442,7 +1547,7 @@ Start from `main` after PR 1 merged.
 ### Task 5: The workroom kit folder, the score model and the glossary
 
 **Files:**
-- Create: `websites/www.cs/games/workroom/build.json`, `tsconfig.json`, `tsconfig.test.json`, `test.sh`, `src/tsconfig.dom.json`, `src/score.ts`, `src/glossary.ts`, `src/main.ts`
+- Create: `websites/www.cs/games/workroom/build.json`, `tsconfig.json`, `tsconfig.test.json`, `test.sh`, `src/tsconfig.dom.json`, `src/score.ts`, `src/glossary.json`, `src/glossary.ts`, `src/main.ts`
 - Create: `games/workroom/test/score.test.ts`, `test/glossary.test.ts`, `test/committed-drafts.test.ts`, `test/fixtures/score-v1.json`
 - Create: `websites/www.cs/music/pieces/.gitkeep`
 - Modify: `music/README.md` (the score schema section, copied from this plan's "Formats")
@@ -1480,7 +1585,7 @@ export type Parsed = { ok: true; score: Score } | { ok: false; error: string };
 export function parseScore(raw: unknown): Parsed;
 export function unknownSchemaMessage(n: unknown): string;
 
-// src/glossary.ts (DOM-free)
+// src/glossary.ts (DOM-free; reads src/glossary.json, the glossary's one source: the Python tool reads the same file)
 export interface Term { id: string; word: string; lines: [string, string] }
 export const GLOSSARY: readonly Term[];
 export function term(id: string): Term | undefined;
@@ -1490,12 +1595,18 @@ export function termsIn(score: Score): { term: Term; from: number; to: number }[
 export function splitTerms(text: string): ({ text: string } | { term: Term; text: string })[];
 ```
 
-`GLOSSARY` holds at least these ids, each with its two plain-words lines: `ostinato`, `motif`, `theme`, `phrygian`, `crescendo`, `decrescendo`, `octave`, `chord`, `drone`, `pedal-point`, `tremolo`, `pizzicato`, `legato`, `staccato`, `tempo`, `bar`, `beat`, `dynamics`, `unison`, `minor`, `major`, `cadence`, `orchestration`, `swell`. For example:
+`src/glossary.json` holds at least these ids, each with its two plain-words lines: `ostinato`, `motif`, `theme`, `phrygian`, `crescendo`, `decrescendo`, `octave`, `chord`, `drone`, `pedal-point`, `tremolo`, `pizzicato`, `legato`, `staccato`, `tempo`, `bar`, `beat`, `dynamics`, `unison`, `minor`, `major`, `cadence`, `orchestration`, `swell`. The file is `{ "terms": [ ... ] }`, for example:
 
-```ts
-{ id: 'ostinato', word: 'ostinato', lines: ['A short pattern repeated over and over underneath the music.', 'It drives the piece forward, like footsteps in the dark.'] },
-{ id: 'phrygian', word: 'Phrygian', lines: ['A minor-sounding scale whose second note is only a half step up.', 'That half step gives an ancient, Mediterranean, uneasy colour.'] },
+```json
+{
+  "terms": [
+    { "id": "ostinato", "word": "ostinato", "lines": ["A short pattern repeated over and over underneath the music.", "It drives the piece forward, like footsteps in the dark."] },
+    { "id": "phrygian", "word": "Phrygian", "lines": ["A minor-sounding scale whose second note is only a half step up.", "That half step gives an ancient, Mediterranean, uneasy colour."] }
+  ]
+}
 ```
+
+`src/glossary.ts` imports it with `import data from './glossary.json' with { type: 'json' };` (Node 24 runs the tests, esbuild bundles it, `tsc` reads it under `moduleResolution: bundler`) and builds `GLOSSARY` by mapping each term to `{ id, word, lines: [lines[0]!, lines[1]!] }`, which gives the tuple type. `parseScore` checks `glossary[].term` against `GLOSSARY`, and `music/tools/siue_music/score.py` (Task 13) checks it against the same JSON file.
 
 Folder files:
 
@@ -1512,7 +1623,7 @@ Folder files:
 ```jsonc
 // tsconfig.json
 {
-  // DOM-free program: the score model, layout, sealing and stores cannot reach the page. See games/_kit/README.md.
+  // DOM-free program: the score model, layout, zoom, gestures and note building cannot reach the page. The Web Crypto modules have their own program, src/tsconfig.crypto.json. See games/_kit/README.md.
   "extends": "../_kit/build/tsconfig.base.json",
   "files": ["src/score.ts", "src/glossary.ts"]
 }
@@ -1546,7 +1657,7 @@ cd "$(dirname "$0")"
 node ../_kit/build/build.mjs workroom --check
 ```
 
-Every later task that adds a DOM-free module appends it to `tsconfig.json`'s `files`; every DOM module or `.tsx` goes in `src/tsconfig.dom.json`'s `files`.
+Every later task that adds a DOM-free module appends it to `tsconfig.json`'s `files`; every DOM module or `.tsx` goes in `src/tsconfig.dom.json`'s `files`. A module that uses `crypto`, `CryptoKey` or `TextEncoder`, or imports one that does, goes in `src/tsconfig.crypto.json` (Task 10 creates it): `tsc` checks every imported file under the importing program's `lib`, so such a module in the DOM-free program fails with TS2304.
 
 - [ ] **Step 1: Write the fixture** `games/workroom/test/fixtures/score-v1.json` (8 bars of 4/4 at 120 bpm: two seconds a bar):
 
@@ -1686,15 +1797,16 @@ import { join } from 'node:path';
 import { parseScore } from '../src/score.ts';
 
 const PIECES = join(import.meta.dirname, '..', '..', '..', 'music', 'pieces');
+assert.ok(existsSync(PIECES), 'music/pieces/ exists');
+const drafts = readdirSync(PIECES, { withFileTypes: true }).filter(d => d.isDirectory())
+  .flatMap(piece => readdirSync(join(PIECES, piece.name)).filter(n => /^v\d+$/.test(n)).map(v => ({ piece: piece.name, v })));
 
-test('every committed draft validates', () => {
-  assert.ok(existsSync(PIECES), 'music/pieces/ exists');
-  for (const piece of readdirSync(PIECES, { withFileTypes: true }).filter(d => d.isDirectory())) {
-    for (const v of readdirSync(join(PIECES, piece.name)).filter(n => /^v\d+$/.test(n))) {
-      const r = parseScore(JSON.parse(readFileSync(join(PIECES, piece.name, v, 'score.json'), 'utf8')));
-      assert.ok(r.ok, `${piece.name}/${v}: ${r.ok ? '' : r.error}`);
-      if (r.ok) assert.deepEqual([r.score.piece.id, `v${r.score.draft}`], [piece.name, v]);
-    }
+// A skipped test names why, so the empty folder is visible in the report instead of a green test that checked nothing.
+test('every committed draft validates', { skip: drafts.length === 0 ? 'no draft is committed under music/pieces/ yet' : false }, () => {
+  for (const { piece, v } of drafts) {
+    const r = parseScore(JSON.parse(readFileSync(join(PIECES, piece, v, 'score.json'), 'utf8')));
+    assert.ok(r.ok, `${piece}/${v}: ${r.ok ? '' : r.error}`);
+    if (r.ok) assert.deepEqual([r.score.piece.id, `v${r.score.draft}`], [piece, v]);
   }
 });
 ```
@@ -1704,7 +1816,7 @@ test('every committed draft validates', () => {
 Run, from `websites/www.cs/games`: `node --test workroom/test/*.test.ts`
 Expected: FAIL — cannot find `../src/score.ts`.
 
-- [ ] **Step 4: Implement** `score.ts` (a hand-written validator: one small checker per field, each returning a path-named message), `glossary.ts`, `main.ts` (for now: `document.getElementById('workroom')!.textContent = 'Loading…';`), the folder files above and `music/pieces/.gitkeep`. Run `node _kit/build/build.mjs workroom` to write `dist/`.
+- [ ] **Step 4: Implement** `score.ts` (a hand-written validator: one small checker per field, each returning a path-named message), `glossary.json` and `glossary.ts`, `main.ts` (for now: `document.getElementById('workroom')!.textContent = 'Loading…';`), the folder files above and `music/pieces/.gitkeep`. Run `node _kit/build/build.mjs workroom` to write `dist/`.
 
 - [ ] **Step 5: Run the tests and the build check**
 
@@ -1733,7 +1845,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ```ts
 // src/tempo.ts
 export interface TempoMap {
-  /** Seconds at which bar n (1-based) starts; bars past the last clamp to the end. */
+  /** Seconds at which bar n (1-based) starts; a bar past the last (n > score.bars) is the end of the piece, score.duration. */
   barStart(bar: number): number;
   /** The bar (1-based integer) playing at t seconds; clamped to [1, bars]. */
   barAt(t: number): number;
@@ -1795,6 +1907,7 @@ const score = (): Score => JSON.parse(readFileSync(new URL('./fixtures/score-v1.
 test('one tempo: two seconds a bar', () => {
   const m = tempoMap(score());
   assert.deepEqual([m.barStart(1), m.barStart(5), m.barStart(8)], [0, 8, 14]);
+  assert.deepEqual([m.barStart(9), m.barStart(99)], [16, 16], 'a bar past the last starts at the end of the piece (duration 16), not at the last bar');
   assert.deepEqual([m.barAt(0), m.barAt(7.99), m.barAt(8), m.barAt(16), m.barAt(99), m.barAt(-1)], [1, 4, 5, 8, 8, 1]);
 });
 
@@ -1933,7 +2046,7 @@ test('a span runs forward and keeps a shared lane only', () => {
 
 Run: `node --test workroom/test/tempo.test.ts workroom/test/zoom.test.ts workroom/test/timeline.test.ts workroom/test/hit.test.ts` — FAIL (modules missing).
 
-- [ ] **Step 3: Implement** the four modules. `tempoMap` precomputes each bar's start from the tempo list (`secondsPerBar = beats * 60 / bpm`). `layoutTimeline` lists every section and ribbon (SVG clips what is off screen) and only the bar ticks with `0 ≤ x < width`. `hitTimeline`: `time = clamp(xToTime(view, x), 0, duration)`; zone from y against the layout's bands; `laneId` from the lane whose rect contains y; `sectionId` from the section containing `bar` (any y).
+- [ ] **Step 3: Implement** the four modules. `tempoMap` precomputes each bar's start from the tempo list (`secondsPerBar = beats * 60 / bpm`); `barStart(n)` for `n > score.bars` returns `score.duration`, and `barAt` clamps to `[1, bars]`. `layoutTimeline` lists every section and ribbon (SVG clips what is off screen) and only the bar ticks with `0 ≤ x < width`. `hitTimeline`: `time = clamp(xToTime(view, x), 0, duration)`; zone from y against the layout's bands; `laneId` from the lane whose rect contains y; `sectionId` from the section containing `bar` (any y).
 
 - [ ] **Step 4: Run the tests** — PASS. Add the files to `tsconfig.json`, run `node _kit/build/build.mjs workroom --check` — exit 0.
 
@@ -2155,7 +2268,7 @@ export function clipDone(t: number, clip: Clip): boolean;
 export function follow(view: View, t: number, b: Bounds): View;
 
 // src/load.ts (DOM-free; fetch is a port)
-export type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: Uint8Array }) => Promise<{ ok: boolean; status: number; redirected: boolean; headers: { get(n: string): string | null }; json(): Promise<unknown>; arrayBuffer(): Promise<ArrayBuffer>; text(): Promise<string> }>;
+export type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: Uint8Array<ArrayBuffer> }) => Promise<{ ok: boolean; status: number; redirected: boolean; headers: { get(n: string): string | null }; json(): Promise<unknown>; arrayBuffer(): Promise<ArrayBuffer>; text(): Promise<string> }>;
 export const draftUrl = (piece: string, version: number, file: string) => string; // `draft.php?piece=..&v=..&file=..`
 export type Loaded = { ok: true; score: Score; version: number; versions: number[] } | { ok: false; error: string };
 /** Reads drafts.php for the versions, then score.json for the asked (or latest) one; unknown schema → its message; a redirect → "Your sign-in ended. Sign in again." */
@@ -2177,11 +2290,15 @@ export function Workroom(p: WorkroomProps): JSX.Element; // owns view (View), ti
 
 // src/ui/Timeline.tsx
 export interface TimelineProps { score: Score; tempo: TempoMap; view: View; time: number; onSeek(t: number): void; onView(v: View): void; onTerm(id: string): void; overlay?: ComponentChildren }
-// renders <svg class="tl"> with data-section, data-lane, data-motif attributes; section names run through splitTerms → <Glossary.Word>
+// renders <svg class="tl" data-timeline> with data-section, data-lane, data-motif attributes. Section names run through splitTerms and are drawn
+// as SVG text: a plain run is a <tspan>, a glossary word is a <tspan data-term="<id>" class="word" role="button" tabindex="0"> whose onClick (and
+// Enter or Space on keydown) calls onTerm(id). Its onPointerDown stops propagation, so tapping a word opens the card and does not also seek.
+// HTML buttons (Glossary.Word) are never placed inside the <svg>; they belong to the rows above and below it.
 
 // src/ui/PianoRoll.tsx   props { score, tempo, view, time, lanes?: ReadonlySet<string>, onSeek, onView }
 // src/ui/SoundPicture.tsx props { score, view, time, imageSrc: string, onSeek, onView }  (an <img> stretched by the view, the axis labels and the legend)
 // src/ui/Sheet.tsx       props { musicxmlSrc: string, laneId: string, lanes: Lane[], onLane(id: string): void }
+//                        (a lane picker, and one <div id="sheet"> that renderSheet draws the notation into; the browser check waits for `#sheet svg`)
 // src/ui/Glossary.tsx    export function Word(p: { term: Term; text: string; onOpen(id: string): void }): JSX.Element;
 //                        export function Card(p: { term: Term; clip: Clip | null; onHear(c: Clip): void; onClose(): void }): JSX.Element;
 // src/ui/Player.tsx      props { src: AudioSource[], audioSrc(file): string, time: number, onTime(t: number): void, clip: Clip | null, onClipDone(): void }
@@ -2304,6 +2421,21 @@ test('the timeline draws sections, lanes and the motif ribbon', () => {
   assert.match(root.textContent, /The Labyrinth stirs/);
 });
 
+test('a glossary word in a section name is SVG text that opens its card, not a button', () => {
+  const root = makeEl('root');
+  const opened: string[] = [];
+  const seeks: number[] = [];
+  const s: Score = { ...score, sections: [{ ...score.sections[0]!, name: 'A Phrygian stir' }, score.sections[1]!] };
+  render(h(ui.tl.Timeline, { score: s, tempo: tempoMap(s), view: fitView(16, 800), time: 0, onSeek: t => seeks.push(t), onView: () => {}, onTerm: id => opened.push(id) }), renderTarget(root));
+  const word = withAttr(root, 'data-term')[0]!;
+  assert.equal(word._attrs['data-term'], 'phrygian');
+  assert.notEqual(word.localName, 'button', 'buttons do not belong inside an <svg>');
+  assert.match(root.textContent, /A Phrygian stir/);
+  fire(word, 'click');
+  assert.deepEqual(opened, ['phrygian']);
+  assert.deepEqual(seeks, []);
+});
+
 test('a tap on the timeline seeks to that time', () => {
   const root = makeEl('root');
   const seeks: number[] = [];
@@ -2340,9 +2472,20 @@ The timeline's SVG carries `data-timeline=""`, and pointer coordinates are taken
 
 - [ ] **Step 2: Run to see them fail** — `node --test workroom/test/player.test.ts workroom/test/load.test.ts workroom/test/views.test.ts` — FAIL.
 
-- [ ] **Step 3: Add the notation library**: from `websites/www.cs/games`, `npm install --save-exact opensheetmusicdisplay@1`; confirm `node_modules/opensheetmusicdisplay/` has a `LICENSE` file (the build refuses a package without one).
+- [ ] **Step 3: Add the notation library**: from `websites/www.cs/games`, `npm install --save-exact opensheetmusicdisplay@1`. The build refuses to bundle ANY package that has no license file (`LICENSE`, `LICENCE`, with `.md` or `.txt`), so check `opensheetmusicdisplay` and every package it pulls in:
 
-- [ ] **Step 4: Implement** the modules and components. `Workroom` keeps one `time` for all four views and the `<audio>`: a view's `onSeek(t)` sets `audio.currentTime = t`; `timeupdate` and a `requestAnimationFrame` loop while playing set `time`; every view draws a playhead line at `timeToX(view, time)`. The Sound picture `<img>` is positioned with `style={{ left: \`${-view.start * view.pxPerSec}px\`, width: \`${score.duration * view.pxPerSec}px\` }}` (CSSOM, allowed by the CSP). `renderSheet` parses the MusicXML with `DOMParser`, removes every `<score-part>` and `<part>` whose `id` is not `laneId`, serialises it, and renders it with `new OpenSheetMusicDisplay(el, { autoResize: true, drawTitle: false }).load(xml)` then `.render()`. Styles go in `music/music.css` (never inline `<style>`).
+```bash
+node -e '
+const { execSync } = require("node:child_process"), fs = require("node:fs");
+const dirs = execSync("npm ls --all --omit=dev --parseable opensheetmusicdisplay", { encoding: "utf8" }).split("\n").filter(d => d.includes("node_modules"));
+const bad = dirs.filter(d => !fs.readdirSync(d).some(f => /^licen[sc]e(\.(md|txt))?$/i.test(f)));
+console.log(bad.length ? "no license file:\n" + bad.join("\n") : "all " + dirs.length + " packages have a license file");
+process.exit(bad.length ? 1 : 0);'
+```
+
+It must print `all N packages have a license file`. If it lists a package, stop and report the list: the notation library is then swapped for one whose bundled packages all carry a license file, which is a decision for the plan's owner, not something to work around in `build.mjs`.
+
+- [ ] **Step 4: Implement** the modules and components. `Workroom` keeps one `time` for all four views and the `<audio>`: a view's `onSeek(t)` sets `audio.currentTime = t`; `timeupdate` and a `requestAnimationFrame` loop while playing set `time`; every view draws a playhead line at `timeToX(view, time)`. The Sound picture `<img>` is positioned with `style={{ left: \`${-view.start * view.pxPerSec}px\`, width: \`${score.duration * view.pxPerSec}px\` }}` (CSSOM, allowed by the CSP). `Sheet` renders `<div id="sheet">` and passes it to `renderSheet`. `renderSheet` parses the MusicXML with `DOMParser`, removes every `<score-part>` and `<part>` whose `id` is not `laneId`, serialises it, and renders it with `new OpenSheetMusicDisplay(el, { autoResize: true, drawTitle: false }).load(xml)` then `.render()`. Styles go in `music/music.css` (never inline `<style>`).
 
 - [ ] **Step 5: Run the tests and build**
 
@@ -2382,7 +2525,7 @@ services:
       MUSIC_PUBLIC_KEYS: /var/www/html/games/workroom/test/fixtures/public.json
 ```
 
-(`games/workroom/test/fixtures/public.json` is written in Task 10; in PR 2 the server simply has no key, which the view-only check never needs.)
+(`games/workroom/test/fixtures/public.json` is written in Task 10; in PR 2 the server simply has no key, which the view-only check never needs. FPM clears the worker environment, so the variable only reaches PHP once Task 15 adds its `env[MUSIC_PUBLIC_KEYS]` line to `docker/php/Dockerfile`.)
 
 `tests/e2e/local.config.ts`:
 
@@ -2464,13 +2607,17 @@ ffmpeg -loglevel error -i audio.webm -lavfi showspectrumpic=s=800x200:legend=0 s
 // through the captured mail, publish a draft with an API key made on the hub,
 // open the piece, play, move the playhead, switch views, open a glossary card,
 // and never trip the content security policy.
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SITE = join(import.meta.dirname, '..', '..');
 const DRAFT = join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft');
+
+// The tests share one browser worker and one sign-in: the admin sign-in link is limited to three a hour per address,
+// so a run makes two link requests at most (this shared session, and the second device in the second test).
+test.describe.configure({ mode: 'serial' });
 
 // The admin mail is captured inside the PHP container (compose.admin-local.yaml), as in tests/admin-smoke.sh.
 function inPhp(command: string): string {
@@ -2510,6 +2657,21 @@ export async function createKey(page: Page, base: string, label: string, scopes:
   return (await page.locator('code.secret').textContent())!.trim();
 }
 
+type Session = Awaited<ReturnType<BrowserContext['storageState']>>;
+let session: Session | undefined;
+
+/** A fresh browser context signed in as the owner. The first call signs in and keeps the session; later calls reuse it. */
+export async function signedInPage(browser: Browser, base: string): Promise<{ context: BrowserContext; page: Page }> {
+  if (!session) {
+    const first = await browser.newContext();
+    await signIn(await first.newPage(), base);
+    session = await first.storageState();
+    await first.close();
+  }
+  const context = await browser.newContext({ storageState: session });
+  return { context, page: await context.newPage() };
+}
+
 /** The SIUED1 bundle (Formats): "SIUED1", a file count, then per file a name length, the name, a uint32 size and the bytes. */
 function draftBundle(files: Record<string, Buffer>): Buffer {
   const parts: Buffer[] = [Buffer.from('SIUED1'), Buffer.from([Object.keys(files).length])];
@@ -2530,13 +2692,13 @@ export async function publishFixtureDraft(request: APIRequestContext, base: stri
   expect([201, 409]).toContain(res.status());
 }
 
-test('open a piece, play, seek, switch views, read a term, no CSP violations', async ({ page, request, baseURL }) => {
+test('open a piece, play, seek, switch views, read a term, no CSP violations', async ({ browser, request, baseURL }) => {
   const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
   const bundle = process.env.WORKROOM_E2E_BUNDLE;
   if (bundle) await page.route('**/games/workroom/dist/workroom.js*', r => r.fulfill({ contentType: 'text/javascript', body: readFileSync(bundle, 'utf8') }));
   const violations: string[] = [];
   page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
-  await signIn(page, base);
   await publishFixtureDraft(request, base, await createKey(page, base, 'e2e publish', ['drafts:publish']));
 
   await page.goto(`${base}music/`);
@@ -2564,6 +2726,7 @@ test('open a piece, play, seek, switch views, read a term, no CSP violations', a
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('[data-timeline]')).toBeVisible();
   expect(violations).toEqual([]);
+  await context.close();
 });
 ```
 
@@ -2594,10 +2757,10 @@ Start from `main` after PR 2 merged.
 ### Task 10: Sealing and unlocking the keyring (TypeScript)
 
 **Files:**
-- Create: `games/workroom/src/note.ts`, `src/seal.ts`, `src/unlock.ts`, `src/vault.ts`, `src/public-key.ts`
+- Create: `games/workroom/src/note.ts`, `src/seal.ts`, `src/unlock.ts`, `src/vault.ts`, `src/public-key.ts`, `src/tsconfig.crypto.json`
 - Create: `games/workroom/tools/make-fixtures.ts`, `test/fixtures/test-key.json`, `test/fixtures/public.json`, `test/fixtures/note-text.sealed`, `test/fixtures/note-hum.sealed`
 - Create: `games/workroom/test/seal.test.ts`, `test/unlock.test.ts`, `test/vault.test.ts`, `test/no-storage.test.ts`, `test/public-key.test.ts`, `test/fixture-key.ts`
-- Modify: `games/workroom/test/fixtures/public-key.ts` (the test key), `tsconfig.json` (`note.ts`, `seal.ts`, `unlock.ts`, `vault.ts`, `public-key.ts`)
+- Modify: `games/workroom/test/fixtures/public-key.ts` (the test key), `tsconfig.json` (`note.ts`), `build.json` (the `src/tsconfig.crypto.json` program)
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks but the folder.
@@ -2623,13 +2786,13 @@ export class NoteUnreadable extends Error {
   readonly reason: 'format' | 'unknown-key' | 'tampered'; // a declared field: erasableSyntaxOnly forbids parameter properties
   constructor(reason: 'format' | 'unknown-key' | 'tampered');
 }
-export function fingerprintOf(spkiDer: Uint8Array): Promise<string>;
+export function fingerprintOf(spkiDer: Uint8Array<ArrayBuffer>): Promise<string>;
 export function headerFingerprint(bundle: Uint8Array): string | null;
 /** Checks the built-in fingerprint first; throws FingerprintMismatch and seals nothing when it differs. */
-export function seal(body: NoteBody, audio: Uint8Array | null, key: BuiltInKey): Promise<Uint8Array>;
-export interface Opened { fingerprint: string; body: NoteBody; audio: Uint8Array | null }
+export function seal(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null, key: BuiltInKey): Promise<Uint8Array<ArrayBuffer>>;
+export interface Opened { fingerprint: string; body: NoteBody; audio: Uint8Array<ArrayBuffer> | null }
 /** Picks the key the bundle's header names out of the keyring. */
-export function open(bundle: Uint8Array, keyring: ReadonlyMap<string, CryptoKey>): Promise<Opened>;
+export function open(bundle: Uint8Array<ArrayBuffer>, keyring: ReadonlyMap<string, CryptoKey>): Promise<Opened>;
 
 // src/unlock.ts
 export const ITERATIONS = 600_000;
@@ -2637,7 +2800,7 @@ export const KEYRING_AAD = 'siue-music-keyring-v1';
 export interface LockedKeyring { v: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ct: string }
 export class WrongPassphrase extends Error {}
 export class KeyringInvalid extends Error {}
-export function normalizePassphrase(p: string): Uint8Array; // NFC, trimmed, UTF-8
+export function normalizePassphrase(p: string): Uint8Array<ArrayBuffer>; // NFC, trimmed, UTF-8
 /**
  * Unlocks the whole keyring. `known` lists the public keys built into the page, the current one first. Every entry
  * whose fingerprint is in `known` becomes a non-extractable RSA-OAEP SHA-256 private key (usages ['decrypt']) proven
@@ -2648,7 +2811,7 @@ export function normalizePassphrase(p: string): Uint8Array; // NFC, trimmed, UTF
  */
 export function unlockKeyring(locked: LockedKeyring, passphrase: string, known: readonly BuiltInKey[]): Promise<Map<string, CryptoKey>>;
 /** The format Python's lock_keyring writes (current key first); the page never locks, tests and fixtures do. */
-export function lockKeyring(keys: readonly { fingerprint: string; pkcs8: Uint8Array }[], passphrase: string): Promise<LockedKeyring>;
+export function lockKeyring(keys: readonly { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[], passphrase: string): Promise<LockedKeyring>;
 
 // src/vault.ts: unlocked keys, in memory only
 export interface Vault {
@@ -2668,6 +2831,21 @@ export const PUBLIC_KEY: BuiltInKey | null;
 export const PREVIOUS_KEYS: readonly BuiltInKey[];
 ```
 
+Every byte buffer these functions hand to `crypto.subtle` is a `Uint8Array<ArrayBuffer>` (see Global Constraints): a bare `Uint8Array` is `Uint8Array<ArrayBufferLike>` under TypeScript 7 and `importKey`, `encrypt`, `decrypt`, `deriveKey` and `digest` reject it. `headerFingerprint(bundle: Uint8Array)` only reads, so it takes any `Uint8Array`.
+
+`src/tsconfig.crypto.json`, created in this task and added to `build.json`'s `programs` (`"programs": ["tsconfig.json", "src/tsconfig.dom.json", "src/tsconfig.crypto.json", "tsconfig.test.json"]`):
+
+```jsonc
+{
+  // Web Crypto modules: they use crypto, CryptoKey and TextEncoder, which the DOM-free program's lib does not have. See games/_kit/README.md.
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "lib": ["ES2022", "DOM"] },
+  "files": ["seal.ts", "unlock.ts", "vault.ts", "public-key.ts"]
+}
+```
+
+Task 14 appends `api.ts`, `outbox.ts` and `history.ts`. `note.ts` has no Web Crypto and goes in `tsconfig.json`'s `files`.
+
 `test/fixture-key.ts` (shared by the tests):
 
 ```ts
@@ -2681,8 +2859,8 @@ export interface TestKey { label: string; fingerprint: string; spki: string; pkc
 export const fx = JSON.parse(readFileSync(new URL('./fixtures/test-key.json', import.meta.url), 'utf8')) as TestKey;
 export const builtIn: BuiltInKey = { fingerprint: fx.fingerprint, spki: fx.spki };
 export const otherKey: BuiltInKey = { fingerprint: fx.other.fingerprint, spki: fx.other.spki };
-export const b64 = (s: string): Uint8Array => Uint8Array.from(Buffer.from(s, 'base64'));
-export const hex = (s: string): Uint8Array => Uint8Array.from(Buffer.from(s, 'hex'));
+export const b64 = (s: string): Uint8Array<ArrayBuffer> => Uint8Array.from(Buffer.from(s, 'base64'));
+export const hex = (s: string): Uint8Array<ArrayBuffer> => Uint8Array.from(Buffer.from(s, 'hex'));
 export const importPrivate = (pkcs8: string): Promise<CryptoKey> =>
   crypto.subtle.importKey('pkcs8', b64(pkcs8), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
 ```
@@ -2992,11 +3170,12 @@ console.log(`fixtures: test keys ${main.fingerprint} (current), ${other.fingerpr
 - `unlockKeyring`: before any key is derived, check `v === 1`, `kdf === 'PBKDF2-SHA-256'`, `Number.isInteger(iterations) && iterations >= ITERATIONS`, `salt` decoding to 16 bytes, `iv` to 12 bytes and `ct` to at least 17 bytes, and that `known` is not empty (else `KeyringInvalid`); derive `PBKDF2(SHA-256, salt, iterations)` → AES-GCM key; decrypt with `additionalData = UTF-8(KEYRING_AAD)`; failure → `WrongPassphrase`; parse the plaintext (`v === 1`, `keys` an array of `{ fingerprint: /^[0-9a-f]{64}$/, pkcs8: base64 }`, no fingerprint twice, else `KeyringInvalid`); the entries must include `known[0].fingerprint` (else `KeyringInvalid`); for each entry whose fingerprint is in `known`, import the PKCS8 with `extractable: false`, usages `['decrypt']`, and prove the pair: encrypt 32 random bytes with that entry's built-in public key, decrypt with the private key, compare (failure → `KeyringInvalid`); entries not in `known` are skipped.
 - `lockKeyring`: the inverse, for tests and fixtures: random 16-byte salt and 12-byte IV, `ITERATIONS` rounds, the plaintext JSON of Formats, the same additional data.
 - `vault.load` throws on any `key.extractable` and copies the map; `vault` has no other state and no storage.
+- Write `src/tsconfig.crypto.json` as above, add it to `build.json`'s `programs`, and add `src/note.ts` to `tsconfig.json`'s `files`.
 - `public-key.ts` starts as `export const PUBLIC_KEY: BuiltInKey | null = null; export const PREVIOUS_KEYS: readonly BuiltInKey[] = [];` with a comment that `siue-music keys init|rotate` writes it.
 
 Run `node workroom/tools/make-fixtures.ts` (writes the five fixture files, replacing `test/fixtures/public-key.ts`).
 
-- [ ] **Step 5: Run the tests** — PASS. `node _kit/build/build.mjs workroom` and `sh workroom/test.sh` — exit 0; `sh units.sh` — PASS.
+- [ ] **Step 5: Run the tests** — PASS. `node _kit/build/build.mjs workroom` (type-checks the crypto program under the DOM library) and `sh workroom/test.sh` — exit 0; `sh units.sh` — PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -3020,13 +3199,15 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 - Produces:
 
 ```python
-# siue_music/paths.py
+# siue_music/paths.py  (every function that reads the environment takes it as an argument; none reads os.environ itself)
 def repo_root() -> Path                      # git rev-parse --show-toplevel from this file's folder
 def site_dir() -> Path                       # <repo>/websites/www.cs
-def public_keys_path() -> Path               # $SIUE_MUSIC_PUBLIC_KEYS or <site>/music/keys/public.json
-def public_key_ts_path() -> Path             # <site>/games/workroom/src/public-key.ts
-def config_dir() -> Path                     # $SIUE_CONFIG_DIR or ~/.config/siue
-def notes_dir(platform: str = sys.platform, env: Mapping[str, str] = os.environ, home: Path = Path.home()) -> Path
+def public_keys_path(env: Mapping[str, str]) -> Path      # $SIUE_MUSIC_PUBLIC_KEYS or <site>/music/keys/public.json
+def public_key_ts_path(env: Mapping[str, str]) -> Path    # $SIUE_MUSIC_PUBLIC_KEY_TS or <site>/games/workroom/src/public-key.ts
+def glossary_path() -> Path                  # <site>/games/workroom/src/glossary.json (the page's glossary source; Task 13)
+def config_dir(env: Mapping[str, str], home: Path) -> Path    # $SIUE_CONFIG_DIR or <home>/.config/siue
+def api_base(env: Mapping[str, str]) -> str  # $SIUE_MUSIC_BASE or https://www.cs.siue.edu/~wgrim/music/ (every API call uses it)
+def notes_dir(platform: str, env: Mapping[str, str], home: Path) -> Path
 class NotesInsideRepo(Exception): ...
 def check_outside(path: Path, repo: Path) -> None   # raises NotesInsideRepo when path (resolved) is inside repo
 
@@ -3073,6 +3254,7 @@ class Keys:
     def __init__(self, op: Op, cache: Cache, public_json: Path, public_ts: Path, out: Callable[[str], None] = print): ...
     def status(self) -> int
     def pull(self) -> None
+    def pull_checked(self) -> None                # pull(), then ensure_synced(): KeyMismatch unless the pulled keys include the repository's current key
     def ensure_synced(self) -> dict[str, bytes]   # fp -> pkcs8 DER for every repo key it holds, the current one first (guaranteed present), then `previous` in repository order
     def forget(self) -> None
     def api_key_set(self, name: str, secret: str) -> None
@@ -3082,6 +3264,9 @@ class Keys:
 
 # siue_music/cli.py
 def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int
+# main reads every location from `env` through paths.* (public.json, public-key.ts, the config folder, the API base) and
+# OP_VAULT / SIUE_OP from it too; Path.home() is its only other outside input. Tests pass the env they want to cli.main
+# and to paths.* alike.
 ```
 
 1Password items. A key item: category `PASSWORD`, title `SIUE music notes key <first 16 hex>`, tags `["siue-music-key"]`, URL `WORKROOM_URL`, fields `password` (CONCEALED, purpose PASSWORD: the passphrase), `private_key` (CONCEALED: PKCS8 base64), `fingerprint` (STRING). An API key item: category `API_CREDENTIAL`, title `SIUE music API <name>`, tags `["siue-music-api"]`, fields `name` (STRING), `credential` (CONCEALED).
@@ -3217,6 +3402,7 @@ from siue_music.op import Op  # noqa: E402
 
 SITE = TOOLS.parents[1]
 FIXTURES = SITE / "games" / "workroom" / "test" / "fixtures"
+GLOSSARY_JSON = SITE / "games" / "workroom" / "src" / "glossary.json"
 _POOL: list[tuple[str, bytes, bytes]] = []
 
 
@@ -3347,6 +3533,24 @@ class SyncTest(unittest.TestCase):
         self.assertIn("holds a private key whose fingerprint is", str(e.exception))
         self.assertNotIn(fp, self.w.cache.load().get("keys", {}))
 
+    def test_pull_checks_the_pulled_key_against_the_repository(self):
+        known = self.w.add_key_to_op(0)
+        orphan, _, _ = pool_key(1)
+        self.w.write_repo(orphan)
+        with self.assertRaises(KeyMismatch) as e:
+            self.w.keys.pull_checked()
+        self.assertIn("git pull", str(e.exception), "1Password holds a key the repository does not name")
+        self.assertIn(known[:4], str(e.exception))
+        self.assertIn(known, self.w.cache.load()["keys"], "the pull itself still saved what 1Password holds")
+        self.w.write_repo(known)
+        self.w.keys.pull_checked()
+
+    def test_pull_with_no_repository_key_says_keys_init(self):
+        self.w.add_key_to_op(0)
+        with self.assertRaises(KeyMismatch) as e:
+            self.w.keys.pull_checked()
+        self.assertIn("make keys-init", str(e.exception))
+
     def test_status_names_fingerprints_and_never_a_secret(self):
         fp = self.w.add_key_to_op(0, passphrase="never print me")
         self.w.write_repo(fp)
@@ -3376,7 +3580,7 @@ import unittest
 from unittest import mock
 
 from support import World
-from siue_music.keys import Cache
+from siue_music.keys import Cache, KeysError
 from siue_music.op import OpError
 
 
@@ -3411,8 +3615,9 @@ class OpTest(unittest.TestCase):
         items = self.w.op.list_items("siue-music-api")
         self.assertEqual(len(items), 1)
         self.assertEqual(self.w.op.fields(items[0]["id"])["credential"], "b" * 64)
-        with self.assertRaises(Exception):
+        with self.assertRaises(KeysError):
             self.w.keys.api_key_set("music-pickup", "not hex")
+        self.assertEqual(len(self.w.op.list_items("siue-music-api")), 1, "a refused key changes nothing")
 
     def test_the_cache_is_private_and_forget_removes_it(self):
         cache = Cache(self.w.root / "c" / "siue" / "music.json")
@@ -3495,7 +3700,7 @@ import unittest
 from pathlib import Path
 
 from support import SITE
-from siue_music.paths import NotesInsideRepo, check_outside, notes_dir
+from siue_music.paths import NotesInsideRepo, api_base, check_outside, config_dir, notes_dir, public_key_ts_path, public_keys_path
 
 
 class PathsTest(unittest.TestCase):
@@ -3506,6 +3711,17 @@ class PathsTest(unittest.TestCase):
         self.assertEqual(notes_dir("linux", {"XDG_DATA_HOME": "/data"}, home), Path("/data/siue-music/notes"))
         self.assertEqual(notes_dir("win32", {"APPDATA": "C:/AppData"}, home), Path("C:/AppData/siue-music/notes"))
         self.assertEqual(notes_dir("darwin", {"SIUE_MUSIC_NOTES_DIR": "/elsewhere"}, home), Path("/elsewhere"))
+
+    def test_every_location_comes_from_the_env_it_is_given(self):
+        home = Path("/Users/me")
+        self.assertEqual(public_keys_path({}), SITE / "music" / "keys" / "public.json")
+        self.assertEqual(public_keys_path({"SIUE_MUSIC_PUBLIC_KEYS": "/x/p.json"}), Path("/x/p.json"))
+        self.assertEqual(public_key_ts_path({}), SITE / "games" / "workroom" / "src" / "public-key.ts")
+        self.assertEqual(public_key_ts_path({"SIUE_MUSIC_PUBLIC_KEY_TS": "/x/k.ts"}), Path("/x/k.ts"))
+        self.assertEqual(config_dir({}, home), home / ".config" / "siue")
+        self.assertEqual(config_dir({"SIUE_CONFIG_DIR": "/c"}, home), Path("/c"))
+        self.assertEqual(api_base({}), "https://www.cs.siue.edu/~wgrim/music/")
+        self.assertEqual(api_base({"SIUE_MUSIC_BASE": "http://localhost:5555/music/"}), "http://localhost:5555/music/")
 
     def test_inside_the_repository_is_refused(self):
         repo = SITE.parents[1]
@@ -3534,7 +3750,8 @@ Expected: FAIL — `ModuleNotFoundError: siue_music`.
   - `Keys.ensure_synced`: no `current` → `KeyMismatch("No notes key yet: run make keys-init")`; current in cache → return the cache's keys that the repository names, current first; else `pull()` and look again; still missing → the two messages: with keys in 1Password the repository does not know: `1Password holds a key the repository does not know (<display>). The repository may be out of date: git pull, then run this again. If it is up to date, the repository's key <display> was never saved to 1Password: run make keys-status.`; otherwise: `1Password (vault <V>) has no private key for the repository's public key <display>. Check OP_VAULT, or the key was never saved to 1Password: run make keys-status.`
   - `Keys.status`: prints the repository's current fingerprint (display form), 1Password's fingerprints (or "unreachable: <reason>"), the cache's, one line `match` / `out of date: <side>` per side, and `API keys: <names>` (names only); returns 0 when all match, 3 otherwise.
   - `Keys.api_key_set`: refuses anything but 64 lowercase hex (`KeysError`); archives an existing item with that name; creates the new one; does not touch the cache.
-  - `cli.main`: `keys status|pull|forget`, `api-key-set NAME` (the secret read with `getpass.getpass("API key (shown once on the hub): ")` when stdin is a terminal, else one line from stdin); `KeyMismatch` → message on stderr, exit 3; `KeysError`/`OpError` → message, exit 1. `OP_VAULT` defaults to `SIUE`; `SIUE_OP` overrides the `op` executable.
+  - `Keys.pull_checked`: `pull()` then `ensure_synced()`, so `keys pull` fails with the same two `KeyMismatch` messages when the pulled private keys do not include the repository's current public key (the spec's "then checks the private key matches the repository's public key"). With no repository key it says `make keys-init`.
+  - `cli.main`: `keys status|pull|forget` (`keys pull` runs `pull_checked`), `api-key-set NAME` (the secret read with `getpass.getpass("API key (shown once on the hub): ")` when stdin is a terminal, else one line from stdin); `KeyMismatch` → message on stderr, exit 3; `KeysError`/`OpError` → message, exit 1. `OP_VAULT` defaults to `SIUE`; `SIUE_OP` overrides the `op` executable. Every path comes from `paths.*(env)` with the `env` given to `main`: the `Cache` is `paths.config_dir(env, Path.home()) / "music.json"`, `Keys` gets `paths.public_keys_path(env)` and `paths.public_key_ts_path(env)`, and `notes_dir` is `paths.notes_dir(sys.platform, env, Path.home())`.
 
 - [ ] **Step 6: Run the tests** — `make music-tools-test` — PASS. Run `make keys-status` once on the real machine: it reports "No notes key yet: run make keys-init" (exit 3) without printing anything secret.
 
@@ -3608,7 +3825,7 @@ keys-upload:
 	@$(MUSIC_TOOL) keys upload
 ```
 
-The CLI builds the upload from `Api(base, keys.api_key("music-publish")).publish_keyring`, base `$SIUE_MUSIC_BASE` or `https://www.cs.siue.edu/~wgrim/music/`.
+The CLI builds the upload from `make_api(paths.api_base(env), keys.api_key("music-publish")).publish_keyring`. `paths.api_base(env)` (`$SIUE_MUSIC_BASE`, else `https://www.cs.siue.edu/~wgrim/music/`) is the one base for every API call the tool makes: the keyring upload here, and pickup and publish in Task 13. `cli.make_api(base: str, key: str) -> Api` is the one place the CLI builds an `Api`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3625,9 +3842,9 @@ import base64
 import json
 import unittest
 
-from support import World
+from support import World, pool_key
 from siue_music import sealing
-from siue_music.keys import KeysError
+from siue_music.keys import KeyMismatch, KeysError
 
 
 class LifecycleTest(unittest.TestCase):
@@ -3717,9 +3934,14 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(len(self.item_fields()), 1, "no new item was made")
 
     def test_rotate_refuses_on_a_mismatched_key(self):
-        with self.assertRaises(Exception):
+        self.w.add_key_to_op(0)
+        orphan, _, _ = pool_key(1)
+        self.w.write_repo(orphan)  # the repository names a key that 1Password never held
+        with self.assertRaises(KeyMismatch):
             self.w.keys.rotate(self.uploads.append)
-        self.assertEqual(self.uploads, [])
+        self.assertEqual(self.uploads, [], "nothing was uploaded")
+        self.assertEqual(len(self.item_fields()), 1, "no new item was made")
+        self.assertEqual(json.loads(self.w.public_json.read_text())["current"]["fingerprint"], orphan, "public.json is untouched")
 
 
 if __name__ == "__main__":
@@ -3895,12 +4117,14 @@ def default_steps() -> Steps
 def pickup(api, keyring: Mapping[str, bytes], notes: Path, repo: Path, steps: Steps) -> Report
 
 # siue_music/score.py
-def validate(obj: object, glossary_ids: frozenset[str] | None = None) -> list[str]   # the same rules and path names as the page's parseScore
+def glossary_ids(path: Path) -> frozenset[str]   # the term ids in games/workroom/src/glossary.json, the page's one glossary source
+def validate(obj: object, glossary_ids: frozenset[str]) -> list[str]   # the same rules and path names as the page's parseScore, including glossary[].term
 
 # siue_music/publish.py
+# `from .api import MAX_REQUEST_BYTES, draft_size` (module-level in api.py); the `api` parameter below is only an object with publish_draft.
 class PublishError(Exception): ...
 def latest_version(piece_dir: Path) -> int
-def publish(piece: str, version: int | None, pieces: Path, api) -> int
+def publish(piece: str, version: int | None, pieces: Path, api, glossary_ids: frozenset[str]) -> int
 ```
 
 Pickup, for each waiting note in arrival order: download; `len == size` and `sha256 == listed` (else left: `download did not match its hash; left waiting`); open with the keyring (else left: `could not open (<reason>); left waiting`); write `<notes>/<YYYY-MM-DD of arrival, UTC>-<id>/` through a `.partial` folder renamed into place: `note.json` (`{"id", "arrived_at", "fingerprint", "body"}`), `audio.<webm|m4a|ogg>` when there is audio; then the optional steps (`speech` → `transcript.txt`, `hum` → `motif.mid`); a `MissingDependency` adds its message to `notices` once; any other step error adds `could not transcribe <id>: <error>` and does not stop the mark, since the opened note is safely on disk; then `mark_picked_up`. `check_outside(notes, repo)` runs before the first request.
@@ -3913,7 +4137,9 @@ Pickup, for each waiting note in arrival order: download; `len == size` and `sha
 """Pickup verifies the download's hash and opens the note before marking it;
 a corrupt download or a note that will not open stays waiting; opened notes
 land outside the repository; a key mismatch never reaches the server."""
+import contextlib
 import hashlib
+import io
 import json
 import sys
 import tempfile
@@ -4028,16 +4254,49 @@ class RotationTest(unittest.TestCase):
 
 
 class MismatchNeverReachesTheServer(unittest.TestCase):
-    def test_pickup_stops_with_exit_3(self):
+    def env(self, w: World) -> dict[str, str]:
+        # Every location the CLI reads comes from this env, so the test never touches the owner's repository, cache or 1Password.
+        return {"OP_VAULT": "SIUE", "SIUE_MUSIC_PUBLIC_KEYS": str(w.public_json), "SIUE_MUSIC_PUBLIC_KEY_TS": str(w.public_ts),
+                "SIUE_CONFIG_DIR": str(w.root / "config" / "siue"), "SIUE_MUSIC_BASE": "https://example.test/music/",
+                "SIUE_OP": f"{sys.executable} {Path(__file__).parent / 'fake_op.py'}",
+                "FAKE_OP_LOG": str(w.log), "FAKE_OP_STORE": str(w.root / "op.json")}
+
+    def run_pickup(self, w: World) -> tuple[int, list, str]:
+        opened, err = [], io.StringIO()
+        with mock.patch("siue_music.cli.make_api", side_effect=lambda *a: opened.append(a)), contextlib.redirect_stderr(err):
+            code = cli.main(["pickup"], env=self.env(w))
+        return code, opened, err.getvalue()
+
+    def test_a_repository_key_1password_lacks_stops_with_exit_3(self):
         w = World(self)
         orphan, _, _ = pool_key(1)
         w.write_repo(orphan)
-        opened = []
-        with mock.patch("siue_music.cli.make_api", side_effect=lambda *a: opened.append(a)):
-            code = cli.main(["pickup"], env={"OP_VAULT": "SIUE", "SIUE_MUSIC_PUBLIC_KEYS": str(w.public_json),
-                                            "SIUE_CONFIG_DIR": str(w.root / "config" / "siue"), "SIUE_OP": f"{sys.executable} {Path(__file__).parent / 'fake_op.py'}",
-                                            "FAKE_OP_LOG": str(w.log), "FAKE_OP_STORE": str(w.root / "op.json")})
+        code, opened, err = self.run_pickup(w)
         self.assertEqual((code, opened), (3, []))
+        self.assertIn("has no private key for the repository's public key", err, "the mismatch, not merely 'no key yet'")
+        self.assertIn(orphan[:4], err)
+
+    def test_a_key_1password_holds_that_the_repository_lacks_stops_with_exit_3(self):
+        w = World(self)
+        w.add_key_to_op(0)
+        orphan, _, _ = pool_key(1)
+        w.write_repo(orphan)
+        code, opened, err = self.run_pickup(w)
+        self.assertEqual((code, opened), (3, []))
+        self.assertIn("git pull", err)
+
+    def test_the_base_comes_from_the_env_for_pickup(self):
+        w = World(self)
+        fp = w.add_key_to_op(0)
+        w.write_repo(fp)
+        w.keys.api_key_set("music-pickup", "c" * 64)
+        w.keys.pull()
+        bases = []
+        class Quiet:
+            def waiting(self): return []
+        with mock.patch("siue_music.cli.make_api", side_effect=lambda base, key: (bases.append((base, key)), Quiet())[1]), contextlib.redirect_stdout(io.StringIO()):
+            code = cli.main(["pickup"], env={**self.env(w), "SIUE_MUSIC_NOTES_DIR": str(w.root / "notes")})
+        self.assertEqual((code, bases), (0, [("https://example.test/music/", "c" * 64)]))
 
 
 if __name__ == "__main__":
@@ -4051,7 +4310,8 @@ if __name__ == "__main__":
 ```python
 """Speech and humming are optional: missing packages give one clear message;
 the pitch-track-to-notes step is exact on a small fixture; with the packages
-installed, a synthetic two-note hum becomes a two-note MIDI motif."""
+installed, a synthetic two-note hum (two tones with a 100 ms silence between)
+becomes a two-note MIDI motif, each note within a semitone of what was played."""
 import importlib.util
 import shutil
 import sys
@@ -4109,13 +4369,16 @@ class HumFixtureTest(unittest.TestCase):
         import soundfile
         rate = 16_000
         t = np.arange(int(rate * 0.5)) / rate
-        tone = np.concatenate([np.sin(2 * np.pi * 440 * t), np.sin(2 * np.pi * 493.88 * t)]) * 0.5
+        gap = np.zeros(int(rate * 0.1))  # 100 ms of silence, so pyin hears two notes and not a glide across a splice
+        tone = np.concatenate([np.sin(2 * np.pi * 440 * t), gap, np.sin(2 * np.pi * 493.88 * t)]) * 0.5
         with tempfile.TemporaryDirectory() as d:
             wav, mid = Path(d) / "hum.wav", Path(d) / "hum.mid"
             soundfile.write(wav, tone, rate)
             self.assertEqual(hum_to_midi(wav, mid), 2)
             pitches = [m.note for m in mido.MidiFile(mid).tracks[0] if m.type == "note_on" and m.velocity > 0]
-            self.assertEqual(pitches, [69, 71])
+            self.assertEqual(len(pitches), 2)
+            for got, want in zip(pitches, (69, 71)):  # A4 and B4, each within a semitone: pitch tracking is not exact
+                self.assertLessEqual(abs(got - want), 1, (pitches, want))
 
 
 @unittest.skipUnless(HAVE_SPEECH, "speech needs faster-whisper, ffmpeg and macOS say")
@@ -4143,9 +4406,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from support import FIXTURES
+from support import FIXTURES, GLOSSARY_JSON
 from siue_music.publish import PublishError, latest_version, publish
-from siue_music.score import validate
+from siue_music.score import glossary_ids, validate
 
 
 class FakeApi:
@@ -4164,6 +4427,7 @@ class PublishTest(unittest.TestCase):
         self.v1 = self.pieces / "test-piece" / "v1"
         shutil.copytree(FIXTURES / "draft", self.v1)
         self.api = FakeApi()
+        self.ids = glossary_ids(GLOSSARY_JSON)
 
     def test_publishes_the_newest_valid_draft(self):
         v2 = self.pieces / "test-piece" / "v2"
@@ -4171,7 +4435,7 @@ class PublishTest(unittest.TestCase):
         score = json.loads((v2 / "score.json").read_text())
         (v2 / "score.json").write_text(json.dumps({**score, "draft": 2}))
         self.assertEqual(latest_version(self.pieces / "test-piece"), 2)
-        self.assertEqual(publish("test-piece", None, self.pieces, self.api), 2)
+        self.assertEqual(publish("test-piece", None, self.pieces, self.api, self.ids), 2)
         self.assertEqual(self.api.sent, [("test-piece", 2, ["audio.webm", "score.json", "score.musicxml", "spectrogram.png"])])
 
     def test_an_invalid_score_never_leaves_the_computer(self):
@@ -4179,37 +4443,47 @@ class PublishTest(unittest.TestCase):
         score["sections"][1]["from_bar"] = 6
         (self.v1 / "score.json").write_text(json.dumps(score))
         with self.assertRaises(PublishError) as e:
-            publish("test-piece", 1, self.pieces, self.api)
+            publish("test-piece", 1, self.pieces, self.api, self.ids)
         self.assertIn("sections[1].from_bar", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+
+    def test_a_term_the_page_does_not_know_never_leaves_the_computer(self):
+        score = json.loads((self.v1 / "score.json").read_text())
+        score["glossary"][0]["term"] = "flibbertigibbet"
+        (self.v1 / "score.json").write_text(json.dumps(score))
+        with self.assertRaises(PublishError) as e:
+            publish("test-piece", 1, self.pieces, self.api, self.ids)
+        self.assertIn("glossary[0].term", str(e.exception))
         self.assertEqual(self.api.sent, [])
 
     def test_a_draft_past_the_servers_8_mb_never_leaves_the_computer(self):
         (self.v1 / "audio.webm").write_bytes(b"\x1a\x45\xdf\xa3" + b"0" * 8_388_608)
         with self.assertRaises(PublishError) as e:
-            publish("test-piece", 1, self.pieces, self.api)
+            publish("test-piece", 1, self.pieces, self.api, self.ids)
         self.assertIn("8 MB", str(e.exception))
         self.assertEqual(self.api.sent, [])
 
     def test_a_draft_without_audio_is_refused(self):
         (self.v1 / "audio.webm").unlink()
         with self.assertRaises(PublishError):
-            publish("test-piece", 1, self.pieces, self.api)
+            publish("test-piece", 1, self.pieces, self.api, self.ids)
 
     def test_python_and_the_page_name_the_same_paths(self):
         base = json.loads((FIXTURES / "score-v1.json").read_text())
-        self.assertEqual(validate(base), [])
+        self.assertEqual(validate(base, self.ids), [])
         cases = [
             (lambda s: s["piece"].__setitem__("id", "Bad Id"), "piece.id"),
             (lambda s: s["sections"][1].__setitem__("to_bar", 7), "sections[1].to_bar"),
             (lambda s: s["motifs"][0].__setitem__("color", "#ffffff"), "motifs[0].color"),
             (lambda s: s["notes"][0].__setitem__("lane", "violas"), "notes[0].lane"),
             (lambda s: s["energy"][1].__setitem__(1, 1.5), "energy[1]"),
+            (lambda s: s["glossary"][0].__setitem__("term", "flibbertigibbet"), "glossary[0].term"),
             (lambda s: s.__setitem__("schema", 2), "schema"),
         ]
         for change, path in cases:
             s = json.loads(json.dumps(base))
             change(s)
-            errors = validate(s)
+            errors = validate(s, self.ids)
             self.assertTrue(errors and path in errors[0], (path, errors))
 
 
@@ -4227,11 +4501,11 @@ music-publish:
 	@$(MUSIC_TOOL) publish "$(PIECE)" $(if $(VERSION),--version $(VERSION))
 ```
 
-Both run `ensure_synced()` first (exit 3 on a mismatch, before any request). `pickup` then uses the `music-pickup` API key and prints `Picked up N notes into <dir>.`, each left note with its reason, and each notice; `publish` uses `music-publish` and prints `Published <piece> v<N>.`.
+Both run `ensure_synced()` first (exit 3 on a mismatch, before any request), and both build their `Api` with `make_api(paths.api_base(env), key)`, so `SIUE_MUSIC_BASE` redirects pickup and publish exactly as it does the keyring upload. `pickup` then uses the `music-pickup` API key and prints `Picked up N notes into <dir>.`, each left note with its reason, and each notice; `publish` uses `music-publish` and prints `Published <piece> v<N>.`.
 
 - [ ] **Step 2: Run to see them fail** — `make music-tools-test` — FAIL (modules missing).
 
-- [ ] **Step 3: Implement.** `f0_to_notes`: a frame is voiced when it is a finite number > 0; MIDI = `round(69 + 12 * log2(f / 440))`; consecutive voiced frames with the same MIDI number form one note starting at `index * hop`; notes shorter than `min_seconds` are dropped. `hum_to_midi`: `to_wav`, `librosa.load(wav, sr=16000)`, `librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C6'), sr=16000, frame_length=1024, hop_length=160)`, `f0_to_notes(f0, 160 / 16000)`, then a one-track `mido.MidiFile` at 480 ticks per beat and 60 bpm (one beat a second) with `note_on`/`note_off` per note. Each optional import sits inside its function in `try: ... except ImportError: raise MissingDependency(f"... needs <package>: {INSTALL}")`; `shutil.which('ffmpeg') is None` raises `MissingDependency` too. `score.validate` follows the schema table rule by rule, in the same order as `parseScore`, with the same path spellings. `publish.publish` raises `PublishError("... is over the server's 8 MB limit for one draft")` before any request when `api.draft_size(files)` is over `api.MAX_REQUEST_BYTES`, so the server's 413 is the backstop, not the first answer.
+- [ ] **Step 3: Implement.** `f0_to_notes`: a frame is voiced when it is a finite number > 0; MIDI = `round(69 + 12 * log2(f / 440))`; consecutive voiced frames with the same MIDI number form one note starting at `index * hop`; notes shorter than `min_seconds` are dropped. `hum_to_midi`: `to_wav`, `librosa.load(wav, sr=16000)`, `librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C6'), sr=16000, frame_length=1024, hop_length=160)`, `f0_to_notes(f0, 160 / 16000)`, then a one-track `mido.MidiFile` at 480 ticks per beat and 60 bpm (one beat a second) with `note_on`/`note_off` per note. Each optional import sits inside its function in `try: ... except ImportError: raise MissingDependency(f"... needs <package>: {INSTALL}")`; `shutil.which('ffmpeg') is None` raises `MissingDependency` too. `score.validate(obj, glossary_ids)` follows the schema table rule by rule, in the same order as `parseScore`, with the same path spellings, including `glossary[i].term` against `glossary_ids`; `score.glossary_ids(path)` reads `games/workroom/src/glossary.json` (`{"terms": [{"id": ...}]}`), the same file the page's `glossary.ts` imports, so the tool and the page cannot disagree about which terms exist. `publish.publish(piece, version, pieces, api, glossary_ids)` validates `score.json` with those ids (the first error becomes a `PublishError` naming its path) and raises `PublishError("... is over the server's 8 MB limit for one draft")` before any request when the module function `draft_size(files)` (imported with `from .api import MAX_REQUEST_BYTES, draft_size`) is over `MAX_REQUEST_BYTES`, so the server's 413 is the backstop, not the first answer. The `api` argument is only the object whose `publish_draft` sends the draft; it has neither `draft_size` nor `MAX_REQUEST_BYTES`, which is why the `FakeApi` in `test_publish.py` needs neither. The CLI passes `score.glossary_ids(paths.glossary_path())`.
 
 - [ ] **Step 4: Run the tests** — `make music-tools-test` — PASS (the hum and speech fixture tests run when the optional packages are installed: `music/tools/.venv/bin/pip install -r music/tools/requirements-answering.txt` and `brew install ffmpeg`; run them once that way too and see them pass).
 
@@ -4245,12 +4519,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ```
 
-### Task 14: The answering modules: notes, energy, outbox, page API and history (DOM-free)
+### Task 14: The answering modules: notes, energy, outbox, page API and history (no page code)
 
 **Files:**
 - Create: `games/workroom/src/answer.ts`, `src/energy.ts`, `src/outbox.ts`, `src/api.ts`, `src/history.ts`, `src/recorder.ts`
 - Create: `games/workroom/test/answer.test.ts`, `test/energy.test.ts`, `test/outbox.test.ts`, `test/api.test.ts`, `test/history.test.ts`, `test/recorder.test.ts`
-- Modify: `games/workroom/tsconfig.json` (the six files)
+- Modify: `games/workroom/tsconfig.json` (`answer.ts`, `energy.ts`, `recorder.ts`), `games/workroom/src/tsconfig.crypto.json` (`api.ts`, `outbox.ts`, `history.ts`: they import `seal.ts`, `unlock.ts` or each other, so the DOM-free program cannot hold them)
 
 **Interfaces:**
 - Consumes: `NoteBody`, `Reaction`, `REACTION_IDS` (`note.ts`), `Span`, `TempoMap`, `Section`, `View`, `TIMELINE`, `Fetch` (`load.ts`), `Opened`, `NoteUnreadable`, `LockedKeyring`.
@@ -4276,12 +4550,12 @@ export function strokeFromPixels(points: readonly [number, number][], view: View
 
 // src/outbox.ts
 export type KeptReason = 'offline' | 'too_large' | 'full' | 'no_key' | 'bad_header' | 'unknown_key' | 'signed_out';
-export interface Pending { key: string; bundle: Uint8Array; made: string; reason: KeptReason | 'new' }
+export interface Pending { key: string; bundle: Uint8Array<ArrayBuffer>; made: string; reason: KeptReason | 'new' }
 export interface OutboxStore { all(): Promise<Pending[]>; put(p: Pending): Promise<void>; remove(key: string): Promise<void> }
 export function memoryOutbox(): OutboxStore;
 export interface FlushReport { sent: { key: string; id: string }[]; kept: { key: string; reason: KeptReason }[] }
 export const KEPT_MESSAGES: Readonly<Record<KeptReason, string>>;
-export interface Outbox { add(bundle: Uint8Array, made: string): Promise<FlushReport>; flush(): Promise<FlushReport>; pending(): Promise<Pending[]> }
+export interface Outbox { add(bundle: Uint8Array<ArrayBuffer>, made: string): Promise<FlushReport>; flush(): Promise<FlushReport>; pending(): Promise<Pending[]> }
 export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, newKey: () => string): Outbox;
 
 // src/api.ts
@@ -4290,14 +4564,19 @@ export class NoKeyring extends Error {} // keyring.php answered 404 no_keyring: 
 export interface ServerNote { id: string; size: number; arrived_at: number; picked_up_at: number | null }
 export type UploadResult = { kind: 'sent'; id: string } | { kind: 'refused'; reason: Exclude<KeptReason, 'offline' | 'signed_out'> };
 export interface PageApi {
-  upload(bundle: Uint8Array): Promise<UploadResult>;
+  upload(bundle: Uint8Array<ArrayBuffer>): Promise<UploadResult>;
   list(): Promise<ServerNote[]>;
-  bytes(id: string): Promise<Uint8Array>;
+  /** The note's sealed bytes: the one route that answers application/octet-stream. */
+  bytes(id: string): Promise<Uint8Array<ArrayBuffer>>;
   remove(id: string): Promise<number>;
   removeAll(): Promise<number>;
   keyring(): Promise<LockedKeyring>; // GET keyring.php → { keyring }
 }
-/** One POST at a time; each sends the token the previous POST returned; a 403 {"error":"csrf"} refreshes the token from csrf.php once and retries once; a redirect is SignedOut. */
+/**
+ * One POST at a time; each sends the token the previous POST returned; a 403 {"error":"csrf"} refreshes the token from csrf.php once and
+ * retries once. Sign-out is read from the status, never from the Content-Type: a redirect (the sign-in page), a 401, or any 403 other than the
+ * csrf refusal is SignedOut. Any other non-2xx status is an Error naming the status.
+ */
 export function createApi(fetch: Fetch, csrf: string): PageApi;
 
 // src/history.ts
@@ -4329,9 +4608,9 @@ import { NoKeyring, SignedOut, createApi } from '../src/api.ts';
 import type { Fetch } from '../src/load.ts';
 
 type Init = Parameters<Fetch>[1];
-const reply = (status: number, body: unknown, redirected = false) => ({
-  ok: status < 400, status, redirected, headers: { get: () => 'application/json' },
-  json: async () => body, text: async () => JSON.stringify(body), arrayBuffer: async () => new ArrayBuffer(0),
+const reply = (status: number, body: unknown, redirected = false, type = 'application/json') => ({
+  ok: status < 400, status, redirected, headers: { get: (n: string) => (n.toLowerCase() === 'content-type' ? type : null) },
+  json: async () => body, text: async () => JSON.stringify(body), arrayBuffer: async () => new Uint8Array([7, 8, 9]).buffer,
 });
 
 test('POSTs go one at a time with the token the last one returned', async () => {
@@ -4375,6 +4654,26 @@ test('a second refusal is not retried again', async () => {
 test('a sign-in redirect is SignedOut', async () => {
   const fetch: Fetch = async () => reply(200, '<html>', true);
   await assert.rejects(createApi(fetch, 'x').list(), SignedOut);
+});
+
+test('a 401 or a 403 other than the csrf refusal is SignedOut, whatever the Content-Type', async () => {
+  await assert.rejects(createApi(async () => reply(401, { error: 'unauthorized' }, false, 'text/html'), 'x').list(), SignedOut);
+  await assert.rejects(createApi(async () => reply(403, { error: 'cross_site' }), 'x').list(), SignedOut);
+  await assert.rejects(createApi(async () => reply(500, { error: 'boom' }), 'x').list(), (e: unknown) => e instanceof Error && !(e instanceof SignedOut) && /500/.test(e.message));
+});
+
+test('a JSON answer with an odd Content-Type is still read: sign-out is never decided by the type', async () => {
+  const fetch: Fetch = async () => reply(200, { notes: [{ id: 'a'.repeat(32), size: 5, arrived_at: 1, picked_up_at: null }] }, false, 'text/plain');
+  assert.equal((await createApi(fetch, 'x').list()).length, 1);
+});
+
+test('bytes() returns a note\'s octet-stream, and a redirect is still SignedOut', async () => {
+  const urls: string[] = [];
+  const ok: Fetch = async url => { urls.push(url); return reply(200, null, false, 'application/octet-stream'); };
+  assert.deepEqual([...(await createApi(ok, 'x').bytes('a'.repeat(32)))], [7, 8, 9]);
+  assert.deepEqual(urls, [`note.php?id=${'a'.repeat(32)}`]);
+  await assert.rejects(createApi(async () => reply(200, '<html>', true, 'text/html'), 'x').bytes('a'.repeat(32)), SignedOut);
+  await assert.rejects(createApi(async () => reply(200, '<html>', false, 'text/html'), 'x').bytes('a'.repeat(32)), (e: unknown) => e instanceof Error && !(e instanceof SignedOut) && /octet-stream/.test(e.message));
 });
 
 test('the keyring comes from keyring.php; before the first upload there is none', async () => {
@@ -4500,7 +4799,8 @@ test('a hum over 60 seconds is refused', () => {
   assert.equal(humNote(ctx, { time: 2, bar: 2, laneId: null }, { mime: 'audio/mp4', seconds: 60 }).kind, 'hum');
 });
 
-test('a reaction covers its section', () => {
+test('a reaction covers its section; the last section ends at the end of the piece', () => {
+  // Bar 9 does not exist (the piece has 8 bars): tempoMap.barStart(9) is the piece's end, 16 s, so the last section's `to` is 16.
   const n = reactNote(ctx, score.sections[1]!, tempoMap(score), score.duration, 'more-epic');
   assert.deepEqual([n.kind, n.from, n.to, n.fromBar, n.toBar, n.reaction], ['react', 8, 16, 5, 8, 'more-epic']);
   assert.deepEqual(REACTIONS.map(r => r.id), [...REACTION_IDS]);
@@ -4566,9 +4866,9 @@ test('recording stops at 60 seconds, unless cancelled', () => {
 
 - [ ] **Step 2: Run to see them fail** — `node --test workroom/test/{answer,energy,outbox,api,history,recorder}.test.ts` — FAIL.
 
-- [ ] **Step 3: Implement** the six modules. `createApi` keeps a `queue: Promise<unknown>` and chains each POST onto it; a POST sends `X-CSRF` and, for deletes, `Content-Type: application/x-www-form-urlencoded` with `id=<id>` or `all=1`; the upload sends the bundle as `application/octet-stream`. Every response is checked: `redirected` or a non-JSON `Content-Type` → `SignedOut`; `keyring()` maps a 404 `no_keyring` to `NoKeyring`. `createOutbox.add` puts the note first (`reason: 'new'`), then flushes; `flush` walks `all()` sorted by `made`, stops at the first `offline`, and rewrites a kept note's `reason`.
+- [ ] **Step 3: Implement** the six modules. `reactNote` covers the whole section: `from = tempo.barStart(section.from_bar)`, `to = min(tempo.barStart(section.to_bar + 1), duration)`, so the last section ends at the piece's end (`barStart` past the last bar is the duration, Task 6). `createApi` keeps a `queue: Promise<unknown>` and chains each POST onto it; a POST sends `X-CSRF` and, for deletes, `Content-Type: application/x-www-form-urlencoded` with `id=<id>` or `all=1`; the upload sends the bundle as `application/octet-stream`. Every response is checked by status, never by `Content-Type`: `redirected`, a 401, or a 403 whose JSON `error` is not `csrf` → `SignedOut`; another non-2xx status → an `Error` naming it; `keyring()` maps a 404 `no_keyring` to `NoKeyring`. `bytes(id)` fetches `note.php?id=<id>` with the same checks, then requires a 200 whose `Content-Type` starts `application/octet-stream` (else an `Error` saying so, not `SignedOut`) and returns `new Uint8Array(await res.arrayBuffer())`; the JSON routes parse their body whatever its type. `createOutbox.add` puts the note first (`reason: 'new'`), then flushes; `flush` walks `all()` sorted by `made`, stops at the first `offline`, and rewrites a kept note's `reason`.
 
-- [ ] **Step 4: Run the tests** — PASS. Add the files to `tsconfig.json`; `node _kit/build/build.mjs workroom --check` — exit 0.
+- [ ] **Step 4: Run the tests** — PASS. Add `answer.ts`, `energy.ts` and `recorder.ts` to `tsconfig.json`'s `files` and `api.ts`, `outbox.ts` and `history.ts` to `src/tsconfig.crypto.json`'s; `node _kit/build/build.mjs workroom --check` — exit 0 (it type-checks every program first; if it then reports a stale `dist/`, run `node _kit/build/build.mjs workroom` and check again).
 
 - [ ] **Step 5: Commit**
 
@@ -4584,7 +4884,7 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 
 **Files:**
 - Create: `games/workroom/src/idb.ts` (`indexedDbOutbox()`, the only IndexedDB use; it stores sealed bundles), `games/workroom/src/ui/UnlockPanel.tsx`, `src/ui/PinComposer.tsx`, `src/ui/HumButton.tsx`, `src/ui/ReactBar.tsx`, `src/ui/EnergyEditor.tsx`, `src/ui/History.tsx`, `src/ui/PiecesWaiting.tsx`, `games/workroom/test/answering-views.test.ts`
-- Modify: `games/workroom/src/main.ts`, `src/ui/Workroom.tsx` (the answering bar and notes on the timeline), `src/tsconfig.dom.json` (`idb.ts`), `tests/e2e/workroom.local.ts` (second test), `websites/www.cs/Makefile` (`music-e2e` passes `MUSIC_PY`), `music/music.css`, `music/README.md`
+- Modify: `games/workroom/src/main.ts`, `src/ui/Workroom.tsx` (the answering bar and notes on the timeline), `src/tsconfig.dom.json` (`idb.ts`), `tests/e2e/workroom.local.ts` (second test), `websites/www.cs/Makefile` (`music-e2e` passes `MUSIC_PY`), `websites/www.cs/docker/php/Dockerfile` (`env[MUSIC_PUBLIC_KEYS]`), `tests/php/MusicDeployTest.php` (pins that line), `music/music.css`, `music/README.md`
 
 **Interfaces:**
 - Consumes: everything in Tasks 10 and 14; `Workroom`, `Timeline` (Task 8); `make music-tools-venv` for the check.
@@ -4593,22 +4893,27 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 ```tsx
 export function UnlockPanel(p: { busy: boolean; error: string | null; onUnlock(passphrase: string): void }): JSX.Element;
   // a form with a hidden username field "siue-music" (autocomplete="username") and a password field labelled "Passphrase"
-  // (autocomplete="current-password") so 1Password fills it; button "Unlock notes"; no checkbox and nothing to remember: the passphrase is asked on every visit
+  // (autocomplete="current-password") so 1Password fills it; button "Unlock notes"; no checkbox and nothing to remember: the passphrase is asked on every visit.
+  // The typed value lives in component state set from the field's `input` event; submit reads that state, calls onUnlock(value) and clears it.
 export function PinComposer(p: { span: Span | null; recording: boolean; onSend(text: string): void; onRecord(): void; onStop(): void; onCancel(): void }): JSX.Element;
-  // "Select a moment or a span on the timeline" until span is set; textarea "Your note"; buttons "Send", "Record", "Stop", "Cancel"
+  // "Select a moment or a span on the timeline" until span is set; textarea "Your note"; buttons "Send", "Record", "Stop", "Cancel".
+  // "Send" is always rendered, and disabled until a span is set AND the textarea holds words (not only spaces)
 export function HumButton(p: { recording: boolean; seconds: number; onStart(): void; onStop(): void }): JSX.Element; // "Hum it" / "Stop (0:12 of 1:00)"
 export function ReactBar(p: { section: Section; onReact(r: Reaction): void }): JSX.Element; // the eight REACTIONS buttons
 export function EnergyEditor(p: { score: Score; view: View; onSend(curve: Curve): void }): JSX.Element; // drag over the energy band; "Send this shape" / "Start over"
 export function History(p: { items: HistoryItem[]; locked: boolean; kept: Pending[]; onDelete(id: string): void; onDeleteAll(): void }): JSX.Element;
+  // while `locked`: "Unlock to read your notes." and the kept outbox notes only (no list, no "Delete all"); otherwise
   // each item: when, state ("Waiting" / "Picked up"), its words or a player for its recording (blob: URL), or its problem; "Delete" each;
   // "Delete all" asks "Delete all N notes? This cannot be undone." with "Delete all notes" / "Keep them";
   // kept outbox notes listed with their KEPT_MESSAGES text
-export function PiecesWaiting(p: { counts: Map<string, number> }): JSX.Element; // fills each piece row's [data-waiting="<piece>"] on the index page
+export function PiecesWaiting(p: { counts: Map<string, number>; list: ParentNode }): JSX.Element | null;
+  // renders nothing itself: for each piece in counts it finds `a[data-waiting="<piece>"]` in `list` (the index page's server-rendered rows,
+  // Task 3) and sets the text of the `<span class="waiting-count">` that follows the link to "N waiting" ("" for 0)
 ```
 
 `Workroom` gains an answering bar under the player: "Pin a note" (switches the gestures to `select` and opens `PinComposer`), `HumButton`, "React" (opens `ReactBar` for the section under the playhead) and "Draw the energy" (opens `EnergyEditor` over the energy band); below the views, `History` for this piece.
 
-`main.ts` wiring (thin; everything decided lives in the DOM-free modules): read the CSRF token from `<meta name="csrf">`; `api = createApi(fetch, csrf)`; `vault = createVault()` (memory only; nothing is restored from anywhere); `outbox = createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID())`, `flush()` on load and on `online`; when `PUBLIC_KEY` is null the answering bar shows "No notes key yet (make keys-init)" and nothing seals. Until the vault holds keys the page shows `UnlockPanel`; on submit it fetches `api.keyring()` (`NoKeyring` → "No notes key has been uploaded yet (make keys-init)."), runs `unlockKeyring(locked, passphrase, [PUBLIC_KEY, ...PREVIOUS_KEYS])` and `vault.load(keys)` (`WrongPassphrase` → "That passphrase did not unlock the key."; `KeyringInvalid` → "The keyring on the server does not match this page's key. Reload the page; if it still fails, run make keys-upload."), then `api.list()`, `api.bytes(id)` and `open(bytes, vault.keyring())` per note into the history map (one failure never stops the rest; a note sealed to a fingerprint `vault.missing(...)` reports is shown as unreadable). Nothing about a key is stored: the passphrase field is cleared after submit and `main.ts` never touches `indexedDB`, `localStorage`, `sessionStorage` or cookies for keys; the only IndexedDB use is `indexedDbOutbox()` (database `siue-music`, store `outbox`), which holds sealed bundles. Sending: build the `NoteBody` with `answer.ts`, `seal(body, audio, PUBLIC_KEY)`, `outbox.add(bundle, body.made)`, show the report, refresh the history. The recorder uses `MediaRecorder` with `pickMime(MediaRecorder.isTypeSupported)` and `stopAfterLimit(window, stop)`.
+`main.ts` wiring (thin; everything decided lives in the pure modules): read the CSRF token from `<meta name="csrf">`; `api = createApi(fetch, csrf)`; `vault = createVault()` (memory only; nothing is restored from anywhere); `outbox = createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID())`, `flush()` on load and on `online`; when `PUBLIC_KEY` is null the answering bar shows "No notes key yet (make keys-init)" and nothing seals. Until the vault holds keys the page shows `UnlockPanel`; on submit it fetches `api.keyring()` (`NoKeyring` → "No notes key has been uploaded yet (make keys-init)."), runs `unlockKeyring(locked, passphrase, [PUBLIC_KEY, ...PREVIOUS_KEYS])` and `vault.load(keys)` (`WrongPassphrase` → "That passphrase did not unlock the key."; `KeyringInvalid` → "The keyring on the server does not match this page's key. Reload the page; if it still fails, run make keys-upload."), then, only now, `api.list()`, `api.bytes(id)` and `open(bytes, vault.keyring())` per note into the history map (notes are listed after an unlock and not before: until then `History` gets `locked: true`, the index page shows the server-rendered total waiting, and nothing says Waiting or Picked up) (one failure never stops the rest; a note sealed to a fingerprint `vault.missing(...)` reports is shown as unreadable). Nothing about a key is stored: the passphrase field is cleared after submit and `main.ts` never touches `indexedDB`, `localStorage`, `sessionStorage` or cookies for keys; the only IndexedDB use is `indexedDbOutbox()` (database `siue-music`, store `outbox`), which holds sealed bundles. Sending: build the `NoteBody` with `answer.ts`, `seal(body, audio, PUBLIC_KEY)`, `outbox.add(bundle, body.made)`, show the report, refresh the history. The recorder uses `MediaRecorder` with `pickMime(MediaRecorder.isTypeSupported)` and `stopAfterLimit(window, stop)`.
 
 - [ ] **Step 1: Write the failing component tests** (`test/answering-views.test.ts`)
 
@@ -4636,8 +4941,10 @@ const ui = await importTsx<{
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
 const button = (root: StubElement, text: string) => walk(root).find(e => e.localName === 'button' && e.textContent === text);
 const byAttr = (root: StubElement, name: string, value: string) => walk(root).find(e => e._attrs[name] === value);
+// Preact applies state updates asynchronously: after every event that changes state, await this before reading the tree or firing the next event.
+const flush = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r)); };
 
-test('the unlock form suits a password manager and offers nothing to remember', () => {
+test('the unlock form suits a password manager and offers nothing to remember', async () => {
   const root = makeEl('root');
   const calls: string[] = [];
   render(h(ui.unlock.UnlockPanel, { busy: false, error: null, onUnlock: p => calls.push(p) }), renderTarget(root));
@@ -4645,9 +4952,11 @@ test('the unlock form suits a password manager and offers nothing to remember', 
   assert.ok(byAttr(root, 'autocomplete', 'username'));
   pass.value = 'secret words';
   fire(pass, 'input', { target: pass });
+  await flush();
   assert.equal(walk(root).some(e => e._attrs.type === 'checkbox'), false, 'no remember-this-device checkbox');
   assert.doesNotMatch(root.textContent, /remember|forget/i);
   fire(walk(root).find(e => e.localName === 'form')!, 'submit', { preventDefault: () => {} });
+  await flush();
   assert.deepEqual(calls, ['secret words']);
 });
 
@@ -4657,7 +4966,7 @@ test('a wrong passphrase is shown, not thrown', () => {
   assert.match(root.textContent, /did not unlock the key/);
 });
 
-test('Delete all asks first', () => {
+test('Delete all asks first', async () => {
   const root = makeEl('root');
   let all = 0;
   const items: HistoryItem[] = [
@@ -4667,10 +4976,26 @@ test('Delete all asks first', () => {
   render(h(ui.history.History, { items, locked: false, kept: [], onDelete: () => {}, onDeleteAll: () => all++ }), renderTarget(root));
   assert.equal(button(root, 'Forget this device'), undefined, 'there is no remembered device to forget');
   fire(button(root, 'Delete all')!, 'click');
+  await flush();
   assert.equal(all, 0);
   assert.match(root.textContent, /Delete all 2 notes\? This cannot be undone\./);
+  fire(button(root, 'Keep them')!, 'click');
+  await flush();
+  assert.doesNotMatch(root.textContent, /This cannot be undone/);
+  assert.equal(all, 0);
+  fire(button(root, 'Delete all')!, 'click');
+  await flush();
   fire(button(root, 'Delete all notes')!, 'click');
+  await flush();
   assert.equal(all, 1);
+});
+
+test('a locked history asks for the passphrase instead of listing notes', () => {
+  const root = makeEl('root');
+  render(h(ui.history.History, { items: [], locked: true, kept: [], onDelete: () => {}, onDeleteAll: () => {} }), renderTarget(root));
+  assert.match(root.textContent, /Unlock to read your notes\./);
+  assert.equal(button(root, 'Delete all'), undefined);
+  assert.doesNotMatch(root.textContent, /Waiting|Picked up/);
 });
 
 test('eight reactions on a section', () => {
@@ -4682,40 +5007,84 @@ test('eight reactions on a section', () => {
   assert.deepEqual(got, ['love-it']);
 });
 
-test('Send waits for a span and words', () => {
+test('Send waits for a span and words', async () => {
   const root = makeEl('root');
-  render(h(ui.pin.PinComposer, { span: null, recording: false, onSend: () => {}, onRecord: () => {}, onStop: () => {}, onCancel: () => {} }), renderTarget(root));
+  const target = renderTarget(root);
+  const sent: string[] = [];
+  const span = { from: 9, to: 14, fromBar: 5, toBar: 8, laneId: 'brass' };
+  const props = { recording: false, onSend: (t: string) => sent.push(t), onRecord: () => {}, onStop: () => {}, onCancel: () => {} };
+  render(h(ui.pin.PinComposer, { ...props, span: null }), target);
   assert.match(root.textContent, /Select a moment or a span on the timeline/);
-  assert.equal(button(root, 'Send')?.disabled ?? true, true);
+  assert.ok(button(root, 'Send'), 'the Send button is always there');
+  assert.equal(button(root, 'Send')!.disabled, true, 'no span yet');
+  render(h(ui.pin.PinComposer, { ...props, span }), target);
+  await flush();
+  assert.equal(button(root, 'Send')!.disabled, true, 'a span but no words');
+  const box = walk(root).find(e => e.localName === 'textarea')!;
+  box.value = '   ';
+  fire(box, 'input', { target: box });
+  await flush();
+  assert.equal(button(root, 'Send')!.disabled, true, 'spaces are not words');
+  box.value = 'louder and slower right here';
+  fire(box, 'input', { target: box });
+  await flush();
+  assert.equal(button(root, 'Send')!.disabled, false, 'a span and words');
+  fire(button(root, 'Send')!, 'click');
+  await flush();
+  assert.deepEqual(sent, ['louder and slower right here']);
 });
 ```
 
-- [ ] **Step 2: Run to see it fail** — `node --test workroom/test/answering-views.test.ts` — FAIL.
+The local check needs the PHP worker to see `MUSIC_PUBLIC_KEYS`, and FPM clears the worker environment (`docker/php/Dockerfile` lists each variable it passes). Add to `tests/php/MusicDeployTest.php`:
 
-- [ ] **Step 3: Implement** the components, the `main.ts` wiring, `indexedDbOutbox()` (database `siue-music`, store `outbox`, keyed by `key`) and the styles. Notes on the timeline: each opened note of this piece draws a pin (a moment) or a band (a span) at its `from`/`to` in its lane row (or across all lanes), marked with its draft when it differs from the shown one; each `changes[]` entry draws a band on its bars with Claude's text, beside the pins of the notes in its `answers`.
+```php
+    public function testPhpWorkersSeeThePublicKeysVariable(): void
+    {
+        $docker = (string) file_get_contents(dirname(__DIR__, 2) . '/docker/php/Dockerfile');
+        self::assertStringContainsString('env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS', $docker, 'FPM clears the worker environment; compose.music-local.yaml sets this variable');
+    }
+```
+
+- [ ] **Step 2: Run to see it fail** — `node --test workroom/test/answering-views.test.ts` — FAIL; `vendor/bin/phpunit tests/php/MusicDeployTest.php` — FAIL (the Dockerfile has no such line).
+
+- [ ] **Step 3: Implement** the components, the `main.ts` wiring, `indexedDbOutbox()` (database `siue-music`, store `outbox`, keyed by `key`) and the styles. In `docker/php/Dockerfile`, end the `RUN echo 'env[...]'` chain with one more line, so the worker sees the variable (it does nothing when the variable is unset):
+
+```dockerfile
+    && echo 'env[ADMIN_MAIL_CAPTURE_DIR] = $ADMIN_MAIL_CAPTURE_DIR' >> /etc/php-fpm.d/www.conf \
+    && echo 'env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS' >> /etc/php-fpm.d/www.conf
+```
+
+Notes on the timeline: each opened note of this piece draws a pin (a moment) or a band (a span) at its `from`/`to` in its lane row (or across all lanes), marked with its draft when it differs from the shown one; each `changes[]` entry draws a band on its bars with Claude's text, beside the pins of the notes in its `answers`.
 
 - [ ] **Step 4: Run the unit tests and build** — `node --test workroom/test/*.test.ts` — PASS; `node _kit/build/build.mjs workroom`; `sh workroom/test.sh` — exit 0.
 
-- [ ] **Step 5: Extend the browser check.** In the Makefile's `music-e2e` recipe, export `MUSIC_PY=$(abspath $(MUSIC_PY))` to the check (`MUSIC_PY=... E2E_BASE_URL=... tests/e2e/run.sh -c local.config.ts`). Add this test to `tests/e2e/workroom.local.ts`, beside the first (same imports, plus `mkdtempSync`, `readdirSync` and `writeFileSync` from `node:fs` and `tmpdir` from `node:os`):
+- [ ] **Step 5: Extend the browser check.** In the Makefile, beside `MUSIC_PY`, add `MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))`: the venv's interpreter (a path) becomes absolute, which the check needs because it runs the tool from another directory, while the bare fallback `python3` stays a command name (`abspath` would turn it into `<cwd>/python3`). In the `music-e2e` recipe pass `MUSIC_PY=$(MUSIC_PY_ABS)` to the check (`MUSIC_PY=$(MUSIC_PY_ABS) E2E_BASE_URL=... tests/e2e/run.sh -c local.config.ts`). Add this test to `tests/e2e/workroom.local.ts`, beside the first (same imports, plus `mkdtempSync`, `readdirSync` and `writeFileSync` from `node:fs` and `tmpdir` from `node:os`):
 
 ```ts
 const FIXTURES = join(SITE, 'games', 'workroom', 'test', 'fixtures');
 const testKey = JSON.parse(readFileSync(join(FIXTURES, 'test-key.json'), 'utf8')) as { fingerprint: string; pkcs8: string; passphrase: string; keyring: object };
 
-test('pin a note, pick it up with the tool, read and delete it on a second device', async ({ browser, page, request, baseURL }) => {
+/** Notes are listed only after an unlock and nothing is remembered, so every load of a piece page starts by unlocking. */
+async function unlock(page: Page, passphrase: string): Promise<void> {
+  await page.getByLabel('Passphrase').fill(passphrase);
+  await page.getByRole('button', { name: 'Unlock notes' }).click();
+}
+
+test('pin a note, pick it up with the tool, read and delete it on a second device', async ({ browser, request, baseURL }) => {
   const base = baseURL!;
   const bundle = process.env.WORKROOM_E2E_BUNDLE!;
   const routeBundle = (p: Page) => p.route('**/games/workroom/dist/workroom.js*', r => r.fulfill({ contentType: 'text/javascript', body: readFileSync(bundle, 'utf8') }));
+  const { context, page } = await signedInPage(browser, base); // the shared sign-in: two sign-in links in the whole run, the second for the phone below
   await routeBundle(page);
-  await signIn(page, base);
   const publish = await createKey(page, base, 'e2e publish', ['drafts:publish', 'keys:publish']);
   const pickupKey = await createKey(page, base, 'e2e pickup', ['notes:pickup']);
   await publishFixtureDraft(request, base, publish);
   const up = await request.post(`${base}music/api/keyring.php`, { headers: { Authorization: `Bearer ${publish}` }, data: testKey.keyring });
   expect(up.status()).toBe(201);
 
-  // Pin a typed note on bars 5 to 7 of the horns.
+  // Unlock first: the page lists notes (Waiting, Picked up) only once the vault holds the keys. Then pin a typed note on bars 5 to 7 of the horns.
   await page.goto(`${base}music/piece.php?id=test-piece`);
+  await unlock(page, testKey.passphrase);
   await page.getByRole('button', { name: 'Pin a note' }).click();
   const tl = page.locator('[data-timeline]');
   const box = (await tl.boundingBox())!;
@@ -4739,7 +5108,8 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
   const [folder] = readdirSync(join(home, 'notes'));
   expect(JSON.parse(readFileSync(join(home, 'notes', folder!, 'note.json'), 'utf8')).body.text).toBe('louder and slower right here');
 
-  await page.reload();
+  await page.reload(); // nothing is remembered: unlock again to see the history
+  await unlock(page, testKey.passphrase);
   await expect(page.getByText('Picked up', { exact: true })).toBeVisible();
 
   // A second device: sign in, unlock with the passphrase, read, delete. Nothing is remembered: no key reaches browser storage and a reload asks again.
@@ -4777,6 +5147,7 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
   await p2.getByRole('button', { name: 'Delete', exact: true }).first().click();
   await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
   await phone.close();
+  await context.close();
 });
 ```
 
@@ -4787,7 +5158,7 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
 - [ ] **Step 8: Commit and open PR 3**
 
 ```bash
-git add websites/www.cs/games/workroom websites/www.cs/tests/e2e/workroom.local.ts websites/www.cs/Makefile websites/www.cs/music/music.css websites/www.cs/music/README.md
+git add websites/www.cs/games/workroom websites/www.cs/tests/e2e/workroom.local.ts websites/www.cs/tests/php/MusicDeployTest.php websites/www.cs/docker/php/Dockerfile websites/www.cs/Makefile websites/www.cs/music/music.css websites/www.cs/music/README.md
 git commit -m "Music workroom: pin, hum, react and draw the energy; unlock, history and delete
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

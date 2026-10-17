@@ -1,0 +1,6 @@
+{
+  // Web Crypto modules: they use crypto, CryptoKey and TextEncoder, which the DOM-free program's lib does not have. See games/_kit/README.md.
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "lib": ["ES2022", "DOM"] },
+  "files": ["seal.ts", "unlock.ts", "vault.ts", "public-key.ts"]
+}

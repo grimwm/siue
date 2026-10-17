@@ -6,7 +6,8 @@ Design references (owner-reviewed): the directions canvas, screen "B + C · Cons
 
 ## What the owner gets
 
-- **A dark studio console.** A graphite page, panels a step lighter, amber for time and the active control, green for "good / send / energy", red for recording and the Minotaur. Condensed uppercase labels, a monospace time readout, and plain body text.
+- **A studio console, dark or light.** Dark: a graphite page, panels a step lighter, amber for time and the active control, green for "good / send / energy", red for recording and the Minotaur. Light ("daylight"): the same console on pale grey and white for bright rooms and sunlight, with the accents deepened so they stay readable. Condensed uppercase labels, a monospace time readout, and plain body text.
+- **Choosing dark or light.** The workroom follows the device's setting by default. A three-way switch in the page header (System, Dark, Light) overrides it; the choice is remembered in this browser (localStorage, not a secret) and applied before the first paint so the page never flashes the wrong theme.
 - **The same screens, restyled:** the pieces list, the piece page (player, four view tabs, the views, the words in this piece, the change list), the glossary card, the sheet-music view and every error and empty state.
 - **Constellations in the Story view.** Each motif is drawn as stars over the instrument lanes: one star per note of that motif, left to right in time, higher for a higher pitch, a bigger star for a louder note, the stars joined by a line in the character's colour, the character's name beside the first star. The energy curve becomes a soft glowing band behind everything. Lanes keep their note bars, dimmed, so the constellations read first.
 - **"How to read this".** A button on every view opens a guided overlay of that view: numbered spots, one part lit at a time, a plain explanation, an everyday comparison and **Hear it**. Hear it plays a short clip cut from the piece's own audio at that part (the glossary's existing clip mechanism); where a part has no natural clip (for example "bar numbers") it plays a short built-in demo (Web Audio: counted clicks, a rising and a falling pair of notes, soft-to-loud). The guide opens by itself the first time each view is opened in this browser (a "seen" flag in localStorage, not a secret), and never again unless asked.
@@ -37,27 +38,27 @@ Design references (owner-reviewed): the directions canvas, screen "B + C · Cons
 
 ### Tokens
 
-Defined once in `src/app.css` with Tailwind's `@theme`, used everywhere by name:
+Defined once in `src/app.css` with Tailwind's `@theme`, used everywhere by name. Each colour token has a dark and a light value; components never name a colour directly, so every screen gets both themes for free:
 
-| Token | Value | Use |
-| --- | --- | --- |
-| `--color-ground` | `#121519` | page |
-| `--color-panel` | `#1b1f25` | cards, bars, the answer sheet |
-| `--color-well` | `#0d0f12` | the drawing surface of a view |
-| `--color-lane` | `#161a20` | one instrument lane |
-| `--color-rule` | `#2a3039` | borders, grid lines |
-| `--color-ink` | `#e8eaee` | body text |
-| `--color-dim` | `#9aa3b0` | labels, secondary text (≥ 4.5:1 on panel) |
-| `--color-amber` | `#f5b942` | time, playhead, active tab, selected |
-| `--color-go` | `#3ddc84` | send, saved, energy |
-| `--color-record` | `#e2574c` | record / hum |
+| Token | Dark | Light | Use |
+| --- | --- | --- | --- |
+| `--color-ground` | `#121519` | `#eef0f3` | page |
+| `--color-panel` | `#1b1f25` | `#ffffff` | cards, bars, the answer sheet |
+| `--color-well` | `#0d0f12` | `#f7f8fa` | the drawing surface of a view |
+| `--color-lane` | `#161a20` | `#e8ebef` | one instrument lane |
+| `--color-rule` | `#2a3039` | `#cfd5dd` | borders, grid lines |
+| `--color-ink` | `#e8eaee` | `#15191f` | body text |
+| `--color-dim` | `#9aa3b0` | `#55606d` | labels, secondary text (≥ 4.5:1 on panel in both) |
+| `--color-amber` | `#f5b942` | `#8f5d00` | time, playhead, active tab, selected |
+| `--color-go` | `#3ddc84` | `#1a7f47` | send, saved, energy |
+| `--color-record` | `#e2574c` | `#b8322a` | record / hum |
+
+The theme is chosen by `data-theme="dark"|"light"` on `<html>`, set by a tiny script at the top of `workroom.js` from the remembered choice or, for System, from `prefers-color-scheme` (and updated live when the device setting changes). Tailwind's `dark:` variant is not used; the tokens switch instead.
 | `--font-display` | Barlow Condensed | titles, tab labels (uppercase) |
 | `--font-body` | Barlow | everything else |
 | `--font-mono` | IBM Plex Mono | time, bar numbers, small caps labels |
 
-Character and lane colours stay data (`score.json` `characters[].color`, `lanes[].color`); the page lightens or darkens a data colour only to reach 3:1 against `--color-well` for marks and 4.5:1 for its label text, with a unit test on that adjustment.
-
-The workroom is dark only. A light mode is out of scope.
+Character and lane colours stay data (`score.json` `characters[].color`, `lanes[].color`); the page lightens or darkens a data colour only to reach 3:1 against the current theme's `--color-well` for marks and 4.5:1 for its label text, in both themes, with a unit test on that adjustment. The spectrogram image (Sound picture) is shown as rendered in both themes, framed by the panel.
 
 ### Components
 
@@ -84,10 +85,10 @@ This changes the music workroom plan's delivery:
 ## Testing
 
 - Kit: the CSS entry builds, `--check` fails on stale CSS, a game without `css` is unchanged (crete, cylon, tankity byte-identical).
-- Units: constellation placement and fallback; colour contrast adjustment; guide parts resolve to on-screen spots for both fixtures (music and sound); the "seen" flag.
-- Browser (`make music-e2e`): every screen at 390 px and 1280 px; the guide opens on first visit, Next walks every part, Hear it starts playback, Close returns focus; no element overflows the viewport at 390 px; the CSP allows the stylesheet and fonts (no console CSP errors).
-- Screenshots of every screen at both widths go to the owner before merge.
+- Units: constellation placement and fallback; colour contrast adjustment in both themes; every token pair meets its contrast floor in both themes; theme choice (System follows the device, Dark and Light override, the choice is remembered, a broken or missing localStorage falls back to System); guide parts resolve to on-screen spots for both fixtures (music and sound); the "seen" flag.
+- Browser (`make music-e2e`): every screen at 390 px and 1280 px, in dark and in light; switching the theme changes the page without a reload; the guide opens on first visit, Next walks every part, Hear it starts playback, Close returns focus; no element overflows the viewport at 390 px; the CSP allows the stylesheet and fonts (no console CSP errors).
+- Screenshots of every screen at both widths and in both themes go to the owner before merge.
 
 ## Out of scope
 
-A light mode; per-project themes; animation beyond the guide's highlight and the playhead; changing the admin login's own pages.
+Per-project themes; animation beyond the guide's highlight and the playhead; changing the admin login's own pages.

@@ -112,6 +112,38 @@ class PickupTest(unittest.TestCase):
         folder = self.notes / f"2027-01-15-{A}"
         self.assertEqual((self.notes.stat().st_mode & 0o777, folder.stat().st_mode & 0o777, (folder / "note.json").stat().st_mode & 0o777), (0o700, 0o700, 0o600))
 
+    def test_an_empty_existing_folder_is_rewritten(self):
+        (self.notes / f"2027-01-15-{A}").mkdir(parents=True)
+        api = FakeApi({A: self.sealed("x")})
+        pickup(api, self.ring, self.notes, self.repo, self.steps)
+        self.assertEqual(json.loads((self.notes / f"2027-01-15-{A}" / "note.json").read_text())["id"], A)
+        self.assertEqual(api.marked, [A])
+
+    def test_a_missing_transcript_is_made_for_a_folder_that_already_exists(self):
+        audio = b"\x1aE\xdf\xa3" + b"0" * 100
+        api = FakeApi({A: self.sealed(None, kind="speech", audio=audio)})
+        pickup(api, self.ring, self.notes, self.repo, self.steps)
+        folder = self.notes / f"2027-01-15-{A}"
+        self.assertFalse((folder / "transcript.txt").exists())
+        steps = Steps(transcribe=lambda p: "louder", hum_to_midi=missing)
+        pickup(api, self.ring, self.notes, self.repo, steps)
+        self.assertEqual((folder / "transcript.txt").read_text(), "louder\n")
+
+    def test_a_non_integer_arrival_time_does_not_stop_the_run(self):
+        api = FakeApi({A: self.sealed("a"), B: self.sealed("b")})
+        listing = api.waiting
+        api.waiting = lambda: [{**n, "arrived_at": "soon"} if n["id"] == A else n for n in listing()]
+        report = pickup(api, self.ring, self.notes, self.repo, self.steps)
+        self.assertIn(A, report.left)
+        self.assertEqual(report.picked, [B])
+
+    def test_a_failing_step_says_could_not_process(self):
+        def boom(_):
+            raise RuntimeError("bad audio")
+        api = FakeApi({A: self.sealed(None, kind="speech", audio=b"\x1aE\xdf\xa3" + b"0" * 100)})
+        report = pickup(api, self.ring, self.notes, self.repo, Steps(transcribe=boom, hum_to_midi=missing))
+        self.assertEqual((api.marked, report.notices), ([A], [f"could not process {A}: bad audio"]))
+
 
 class RotationTest(unittest.TestCase):
     def test_a_note_sealed_before_a_rotation_is_picked_up_with_the_rotated_keyring(self):

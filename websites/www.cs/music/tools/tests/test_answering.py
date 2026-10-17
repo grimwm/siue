@@ -11,7 +11,9 @@ from pathlib import Path
 from unittest import mock
 
 import support  # noqa: F401  (puts siue_music on the path)
-from siue_music.answering import MissingDependency, f0_to_notes, hum_to_midi, transcribe
+import subprocess
+from siue_music import answering
+from siue_music.answering import MissingDependency, f0_to_notes, hum_to_midi, to_wav, transcribe
 
 HAVE_HUM = all(importlib.util.find_spec(m) for m in ("librosa", "mido", "numpy", "soundfile"))
 HAVE_SPEECH = importlib.util.find_spec("faster_whisper") is not None and shutil.which("ffmpeg") and shutil.which("say")
@@ -49,6 +51,49 @@ class MissingPackagesTest(unittest.TestCase):
             wav = Path(d) / "a.wav"
             wav.write_bytes(b"RIFF")
             self.assertEqual(transcribe(wav, model_factory=Model), "louder at bar thirty three")
+
+
+class FfmpegIsLockedDownTest(unittest.TestCase):
+    def test_the_command_names_the_format_and_closes_every_other_door(self):
+        seen = {}
+        def fake_run(cmd, **kw):
+            seen["cmd"], seen["kw"] = cmd, kw
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        with mock.patch("shutil.which", return_value="/usr/bin/ffmpeg"), mock.patch("subprocess.run", fake_run):
+            to_wav(Path("a.m4a"), Path("o.wav"))
+        cmd = seen["cmd"]
+        self.assertIn("-nostdin", cmd)
+        self.assertEqual(cmd[cmd.index("-protocol_whitelist") + 1], "file")
+        self.assertEqual(cmd[cmd.index("-f") + 1], "mp4")
+        self.assertLess(cmd.index("-f"), cmd.index("-i"))
+        self.assertEqual(seen["kw"]["timeout"], answering.FFMPEG_SECONDS)
+
+    def test_an_unknown_format_is_refused_before_ffmpeg_runs(self):
+        with mock.patch("subprocess.run") as run:
+            with self.assertRaises(ValueError):
+                to_wav(Path("a.ogg"), Path("o.wav"))
+        run.assert_not_called()
+
+    def test_a_timeout_is_a_clean_error(self):
+        def slow(cmd, **kw):
+            raise subprocess.TimeoutExpired(cmd, 1)
+        with mock.patch("shutil.which", return_value="/usr/bin/ffmpeg"), mock.patch("subprocess.run", slow):
+            with self.assertRaises(RuntimeError) as e:
+                to_wav(Path("a.webm"), Path("o.wav"))
+        self.assertIn("longer than", str(e.exception))
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "needs ffmpeg")
+    def test_a_playlist_declared_as_webm_reads_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            sentinel = Path(d) / "sentinel.wav"
+            sentinel.write_bytes(b"RIFF")
+            playlist = Path(d) / "audio.webm"
+            playlist.write_text(f"#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nfile:{sentinel}\n#EXT-X-ENDLIST\n")
+            out = Path(d) / "out.wav"
+            with self.assertRaises(RuntimeError) as e:
+                to_wav(playlist, out)
+            self.assertFalse(out.exists())
+            self.assertNotIn("sentinel", str(e.exception).replace(str(playlist), ""))
 
 
 @unittest.skipUnless(HAVE_HUM, "humming needs " + "librosa, mido, numpy, soundfile")

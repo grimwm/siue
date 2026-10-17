@@ -22,13 +22,26 @@ def _missing(what: str, package: str) -> MissingDependency:
     return MissingDependency(f"{what} needs {package}: {INSTALL}")
 
 
+# The demuxer is named explicitly from the saved file's extension: ffmpeg never sniffs untrusted note audio,
+# so a crafted file cannot turn into a playlist that reads other files or fetches URLs.
+INPUT_FORMATS = {".webm": "webm", ".m4a": "mp4", ".aiff": "aiff"}
+FFMPEG_SECONDS = 120
+
+
 def to_wav(src: Path, dst: Path, rate: int = 16_000) -> Path:
     if src.suffix.lower() == ".wav":
         return src
+    fmt = INPUT_FORMATS.get(src.suffix.lower())
+    if fmt is None:
+        raise ValueError(f"{src.name}: the audio format is not one this tool converts (webm, m4a)")
     if shutil.which("ffmpeg") is None:
         raise _missing("converting audio", "ffmpeg")
-    done = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-ac", "1", "-ar", str(rate), str(dst)],
-                          capture_output=True, text=True)
+    cmd = ["ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-protocol_whitelist", "file", "-f", fmt, "-i", str(src),
+           "-ac", "1", "-ar", str(rate), str(dst)]
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=FFMPEG_SECONDS)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"ffmpeg took longer than {FFMPEG_SECONDS} s on {src.name}") from None
     if done.returncode != 0:
         raise RuntimeError(f"ffmpeg could not read {src.name}: {done.stderr.strip()[-200:]}")
     return dst

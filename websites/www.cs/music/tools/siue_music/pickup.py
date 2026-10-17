@@ -43,6 +43,21 @@ def _write(path: Path, data: bytes) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as f:
         f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _sync_dir(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _arrival(n) -> int:
+    value = n.get("arrived_at") if isinstance(n, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def _shape_problem(body: dict, audio: bytes) -> str | None:
@@ -59,7 +74,7 @@ def pickup(api, keyring: Mapping[str, bytes], notes: Path, repo: Path, steps: St
     check_outside(notes, repo)
     report = Report()
     listed = api.waiting()
-    for item in sorted(listed, key=lambda n: n.get("arrived_at", 0) if isinstance(n, dict) else 0):
+    for item in sorted(listed, key=_arrival):
         note_id = item.get("id") if isinstance(item, dict) else None
         if not (isinstance(note_id, str) and _NOTE_ID.fullmatch(note_id)):
             report.left[str(note_id)[:40]] = "the server listed an id that is not a note id; left waiting"
@@ -101,11 +116,19 @@ def _one(api, keyring, notes: Path, steps: Steps, report: Report, note_id: str, 
         return
 
     final = notes / f"{day}-{note_id}"
-    if not final.exists():
+    if not _saved(final, note_id):
+        shutil.rmtree(final, ignore_errors=True)
         _save(notes, final, note_id, arrived, opened, ext)
-        _derive(final, opened.body["kind"], ext, steps, report, note_id)
+    _derive(final, opened.body["kind"], ext, steps, report, note_id)
     api.mark_picked_up(note_id)
     report.picked.append(note_id)
+
+
+def _saved(final: Path, note_id: str) -> bool:
+    try:
+        return json.loads((final / "note.json").read_text(encoding="utf-8")).get("id") == note_id
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def _save(notes: Path, final: Path, note_id: str, arrived: int, opened, ext: str | None) -> None:
@@ -118,7 +141,9 @@ def _save(notes: Path, final: Path, note_id: str, arrived: int, opened, ext: str
         _write(partial / "note.json", json.dumps(record, indent=2).encode("utf-8"))
         if ext:
             _write(partial / f"audio.{ext}", opened.audio)
+        _sync_dir(partial)
         os.rename(partial, final)
+        _sync_dir(notes)
     except BaseException:
         shutil.rmtree(partial, ignore_errors=True)
         raise
@@ -129,6 +154,9 @@ def _derive(folder: Path, kind: str, ext: str | None, steps: Steps, report: Repo
     if ext is None or kind not in ("speech", "hum"):
         return
     audio = folder / f"audio.{ext}"
+    wanted = "transcript.txt" if kind == "speech" else "motif.mid"
+    if (folder / wanted).exists():
+        return
     try:
         if kind == "speech":
             _write(folder / "transcript.txt", (steps.transcribe(audio) + "\n").encode("utf-8"))
@@ -139,4 +167,4 @@ def _derive(folder: Path, kind: str, ext: str | None, steps: Steps, report: Repo
         if str(e) not in report.notices:
             report.notices.append(str(e))
     except Exception as e:  # noqa: BLE001 - any step failure leaves the opened note in place
-        report.notices.append(f"could not transcribe {note_id}: {e}")
+        report.notices.append(f"could not process {note_id}: {e}")

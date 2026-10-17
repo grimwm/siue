@@ -141,6 +141,16 @@ final class AdminAuthTest extends TestCase
         self::assertSame(45, strlen((string) $db->query('SELECT ip FROM link_requests')->fetchColumn()));
     }
 
+    public function testTheTableIsCappedAcrossAddressesAndHoldsNoStrangerEmail(): void
+    {
+        [$a, $db] = $this->auth();
+        for ($i = 0; $i < 1100; $i++) {
+            $a->requestLink('stranger@example.com', 'ip-' . $i);
+        }
+        self::assertSame(1000, (int) $db->query('SELECT COUNT(*) FROM link_requests')->fetchColumn());
+        self::assertSame([], $db->query("SELECT email FROM link_requests WHERE email LIKE '%stranger%'")->fetchAll());
+    }
+
     public function testRequestsPastTheIpLimitAddNoRows(): void
     {
         [$a, $db] = $this->auth();

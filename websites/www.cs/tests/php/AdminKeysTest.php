@@ -191,6 +191,19 @@ final class AdminKeysTest extends TestCase
         self::assertSame(401, $res?->status);
     }
 
+    public function testPagesRequireKeyDelegatesToTheGate(): void
+    {
+        $db = admin_tmp_db();
+        $clock = new FakeClock(1_000_000);
+        $keys = new Admin\Keys($db, $clock, self::SCOPES, self::BASE);
+        $key = $keys->create('a', ['notes:pickup']);
+        $p = new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true, $keys);
+        self::assertNull($p->requireKey($this->bearer($key), 'notes:pickup'));
+        self::assertSame(401, $p->requireKey(req(), 'notes:pickup')?->status);
+        $db->exec('DROP TABLE keys');
+        self::assertSame(503, $p->requireKey($this->bearer($key), 'notes:pickup')?->status);
+    }
+
     public function testAKeyAloneNeverSatisfiesRequireAdmin(): void
     {
         $db = admin_tmp_db();

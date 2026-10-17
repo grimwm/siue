@@ -271,6 +271,16 @@ final class Pages
         }
     }
 
+    /** Gate for a machine endpoint: null when the bearer key holds the scope, else the JSON error. */
+    public function requireKey(Request $r, string $scope): ?Response
+    {
+        try {
+            return $this->keys->check($r, $scope);
+        } catch (\PDOException $e) {
+            return self::fromStorageError($e);
+        }
+    }
+
     /** Sends the queued mail. A link that cannot be sent is deleted so it cannot be used. */
     public function flush(): void
     {

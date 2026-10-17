@@ -116,11 +116,11 @@ page in `admin_dashboards()` and its encryption-key fingerprint in `admin_key_fi
 (`lib/bootstrap.php`) so the hub shows it.
 
 Machine access takes a scoped key. Add the scope name to `ADMIN_KEY_SCOPES`, create a key with that
-scope on `keys.php`, and gate the endpoint with `Admin\Keys::check`, which returns `null` when
+scope on `keys.php`, and gate the endpoint with `$p->requireKey($r, $scope)` (it delegates to `Admin\Keys::check`), which returns `null` when
 allowed and the JSON error response (401, 403 or 429) otherwise:
 
 ```php
-$denied = (new Admin\Keys($db, new Admin\SystemClock()))->check($r, 'workroom-name');
+$denied = $p->requireKey($r, 'workroom-name');
 ```
 
 The caller sends `Authorization: Bearer <key>` over HTTPS.

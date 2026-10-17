@@ -15,6 +15,8 @@ final class Auth
     private const LIMIT_GLOBAL = 30;
     private const LIMIT_IP = 20;
     private const LIMIT_ADDRESS = 3;
+    /** Hard cap on link_requests rows, so rotating source addresses cannot grow the table. */
+    private const LIMIT_ROWS = 1000;
 
     public function __construct(private \PDO $db, private Clock $clock)
     {
@@ -56,10 +58,11 @@ final class Auth
             $perAddress = $this->count('SELECT COUNT(*) FROM links WHERE email = :e AND created_at > :since', [':e' => self::ALLOWED, ':since' => $since]);
 
             // Every request counts, allowed or not, until its address is over the limit: past it the
-            // window already holds, and a flood must not keep growing the table.
-            if ($perIp < self::LIMIT_IP) {
+            // window already holds, and a flood must not keep growing the table. The address column
+            // holds a constant, never what a stranger typed.
+            if ($perIp < self::LIMIT_IP && $global < self::LIMIT_ROWS) {
                 $this->db->prepare('INSERT INTO link_requests (ip, email, at) VALUES (:ip, :e, :at)')
-                    ->execute([':ip' => $ip, ':e' => substr(strtolower(trim($email)), 0, 254), ':at' => $now]);
+                    ->execute([':ip' => $ip, ':e' => $ok ? self::ALLOWED : '', ':at' => $now]);
             }
 
             $token = null;

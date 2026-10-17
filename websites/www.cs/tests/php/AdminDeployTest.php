@@ -9,6 +9,7 @@ final class AdminDeployTest extends TestCase
 {
     /** @var array{int, list<string>}|null the one deploy-list run, shared by every test */
     private static ?array $run = null;
+    private static string $suffix = '';
 
     private static function site(): string
     {
@@ -28,7 +29,8 @@ final class AdminDeployTest extends TestCase
             return self::$run;
         }
         $site = self::site();
-        $probes = ['admin/zz-probe.txt', 'admin/zz-sub/zz-probe.php', 'admin/lib/zz-probe.txt', 'admin/lib/zz-sub/zz-probe.php', 'admin/data/zz-deploy-probe.sqlite'];
+        $u = self::$suffix = bin2hex(random_bytes(6));
+        $probes = ["admin/zz-probe-$u.txt", "admin/zz-sub/zz-probe-$u.php", "admin/lib/zz-probe-$u.txt", "admin/lib/zz-sub/zz-probe-$u.php", "admin/data/zz-deploy-probe-$u.sqlite"];
         $made = [];
         $madeDirs = [];
         foreach ($probes as $f) {
@@ -37,8 +39,11 @@ final class AdminDeployTest extends TestCase
                 mkdir($dir, 0777, true);
                 $madeDirs[] = $dir;
             }
-            file_put_contents("$site/$f", "probe\n");
+            $h = fopen("$site/$f", 'x');
+            self::assertNotFalse($h, "probe $f is new");
             $made[] = $f;
+            fwrite($h, "probe\n");
+            fclose($h);
         }
         $index = tempnam(sys_get_temp_dir(), 'admin-deploy-index');
         $out = [];
@@ -47,7 +52,7 @@ final class AdminDeployTest extends TestCase
             $real = trim((string) shell_exec('cd ' . escapeshellarg($site) . ' && git rev-parse --path-format=absolute --git-path index'));
             self::assertTrue($real !== '' && copy($real, $index), 'the index is copied');
             $env = 'GIT_INDEX_FILE=' . escapeshellarg($index);
-            exec("cd " . escapeshellarg($site) . " && $env git add -f -- admin/data/zz-deploy-probe.sqlite 2>&1 && $env LIST=1 ./deploy.sh 2>&1", $out, $code);
+            exec("cd " . escapeshellarg($site) . " && $env git add -f -- admin/data/zz-deploy-probe-$u.sqlite 2>&1 && $env LIST=1 ./deploy.sh 2>&1", $out, $code);
         } finally {
             foreach ($made as $f) {
                 @unlink("$site/$f");
@@ -96,7 +101,8 @@ final class AdminDeployTest extends TestCase
     public function testAdminHomeOnlyFilesStayHome(): void
     {
         $set = self::set();
-        foreach (['admin/data/zz-deploy-probe.sqlite', 'admin/README.md', 'admin/zz-probe.txt', 'admin/zz-sub/zz-probe.php', 'admin/lib/zz-probe.txt', 'admin/lib/zz-sub/zz-probe.php', 'compose.admin-local.yaml'] as $f) {
+        $u = self::$suffix;
+        foreach (["admin/data/zz-deploy-probe-$u.sqlite", 'admin/README.md', "admin/zz-probe-$u.txt", "admin/zz-sub/zz-probe-$u.php", "admin/lib/zz-probe-$u.txt", "admin/lib/zz-sub/zz-probe-$u.php", 'compose.admin-local.yaml'] as $f) {
             self::assertTrue(!isset($set[$f]), "never ships $f");
         }
         $leaks = array_values(array_filter(array_keys($set), fn(string $f): bool => str_starts_with($f, 'admin/data/')));

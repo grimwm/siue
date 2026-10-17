@@ -83,8 +83,11 @@ The server stores only sealed notes, which it cannot open.
   only to a signed-in session. The unlocked key lives only in that page view's
   memory: www.cs is one browser origin shared by every user's `~folder`, so the
   key is never stored in the browser (1Password fills the passphrase on each
-  visit). `make keys-rotate` re-locks the new key, so every device keeps
-  working.
+  visit). The server holds one locked keyring: the current private key and
+  every retained earlier one, each tagged with its fingerprint, locked under
+  the same passphrase. The browser unlocks the whole keyring and picks the key
+  a note names, so notes sealed before a rotation open on a newly signed-in
+  device. `make keys-rotate` re-locks and uploads the full keyring.
 
 ## Pickup and the note history
 
@@ -92,8 +95,8 @@ A small HTTPS API under `/music/api/`, behind the admin kit's API keys:
 
 - `GET /music/api/notes?state=waiting`: ids, sizes and SHA-256 hashes of
   sealed notes not yet picked up (scope `notes:pickup`).
-- `GET /music/api/notes/{id}`: one sealed bundle.
-- `POST /music/api/notes/{id}/picked-up`: marks it picked up. The pickup tool
+- `GET /music/api/notes/{id}` (scope `notes:pickup`): one sealed bundle.
+- `POST /music/api/notes/{id}/picked-up` (scope `notes:pickup`): marks it picked up. The pickup tool
   calls this only after the download matches its hash and the note opens, so a
   failed download never loses a note.
 - **History:** notes stay sealed on the server until the owner deletes them.
@@ -103,7 +106,11 @@ A small HTTPS API under `/music/api/`, behind the admin kit's API keys:
   with `secure_delete` on, so removed rows are overwritten. The page's deletes
   need the signed-in session and its CSRF token; an API key cannot delete.
 - `POST /music/api/drafts` (scope `drafts:publish`): Claude publishes a draft
-  (the score data, audio and spectrogram) with its change list.
+  (the score data, audio and spectrogram) with its change list. Limits, all
+  enforced by the server: a request body over 8 MB is refused from its
+  declared length before anything is buffered; only the newest 20 drafts are
+  kept (older ones are deleted on each publish); a publish that would take
+  drafts past 100 MB in total is refused before it is written.
 - Upload limits: 60 seconds of audio, 2 MB per note, 2,000 notes stored; over
   that the page says so and keeps the note in the browser.
 
@@ -123,7 +130,7 @@ secret is passed to tools on standard input, never as a command-line argument
 | `make keys-status` | Fingerprints of the public key in the repository, in 1Password and in this computer's cache, whether they match, and which API keys are stored (labels only). |
 | `make keys-pull` | Fetches the private keys and API keys from 1Password into the cache, then checks the private key matches the repository's public key. |
 | `make keys-init` | First time only: makes the key pair and a passphrase, saves all three to 1Password, uploads the passphrase-locked private key for the browser, and writes the public key and fingerprint into the repository for a commit. Refuses if a key already exists. |
-| `make keys-rotate` | Makes a new pair; the old private key stays in 1Password as a previous key; the new locked private key is uploaded and the new public key goes into the repository. |
+| `make keys-rotate` | Makes a new pair; the old private key stays in 1Password as a previous key; the locked keyring (new key plus every retained one) is uploaded and the new public key goes into the repository. |
 | `make api-key-set NAME=music-pickup` | Prompts for an API key shown once on the admin hub and saves it to 1Password only. |
 | `make keys-forget` | Deletes this computer's cached copies (for a borrowed or shared computer). |
 | `make music-pickup` | Picks up waiting notes: syncs keys first, then downloads, verifies, opens and marks each picked up. |

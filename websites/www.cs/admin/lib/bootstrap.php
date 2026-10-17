@@ -41,7 +41,7 @@ function admin_key_fingerprints(?string $keysFile = null): array
 {
     require_once __DIR__ . '/../../music/lib/PublicKeys.php';
     try {
-        $k = Music\PublicKeys::fromFile($keysFile ?? __DIR__ . '/../../music/keys/public.json');
+        $k = Music\PublicKeys::fromFile($keysFile ?? Music\PublicKeys::defaultPath());
     } catch (RuntimeException) {
         return ['Music notes key' => 'invalid (see music/keys/public.json)'];
     }

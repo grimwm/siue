@@ -43,6 +43,44 @@ final class MusicBootstrapTest extends TestCase
         self::assertNull(music_early_refusal('api', $at('cross-site'), self::BASE), 'API routes are for tools: only HTTPS and the key decide');
     }
 
+    public function testABadKeyFileDisablesNoteUploadsOnly(): void
+    {
+        $dir = admin_tmp_dir();
+        $bad = "$dir/public.json";
+        file_put_contents($bad, '{not json');
+        putenv("MUSIC_PUBLIC_KEYS=$bad");
+        try {
+            $prev = ini_set('error_log', "$dir/php.log");
+            self::assertNull(music_public_keys());
+            $store = new Music\Store(admin_tmp_db(), "$dir/music", new FakeClock(1000), music_public_keys());
+            $this->expectException(Music\NoteRejected::class);
+            $this->expectExceptionMessage('no_key');
+            $store->addNote(music_sealed());
+        } finally {
+            putenv('MUSIC_PUBLIC_KEYS');
+            if (isset($prev) && $prev !== false) {
+                ini_set('error_log', $prev);
+            }
+        }
+    }
+
+    public function testKeyFileErrorsCarryNoFilesystemPath(): void
+    {
+        $dir = admin_tmp_dir();
+        self::assertNull(Music\PublicKeys::fromFile("$dir/absent.json"));
+        foreach (['{not json', '{"schema":1,"previous":[],"current":{"fingerprint":"' . str_repeat('a', 64) . '","spki":"AAAA"}}'] as $i => $content) {
+            $file = "$dir/bad$i.json";
+            file_put_contents($file, $content);
+            try {
+                Music\PublicKeys::fromFile($file);
+                self::fail("bad$i accepted");
+            } catch (RuntimeException $e) {
+                self::assertStringNotContainsString($dir, $e->getMessage());
+                self::assertStringNotContainsString('/', str_replace('music/keys/public.json', '', $e->getMessage()));
+            }
+        }
+    }
+
     public function testAnUnknownKindIsABug(): void
     {
         $this->expectException(InvalidArgumentException::class);

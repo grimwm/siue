@@ -37,6 +37,14 @@ final class MusicDeployTest extends TestCase
         }
     }
 
+    public function testApacheForwardsTheAuthorizationHeader(): void
+    {
+        $ht = (string) file_get_contents(dirname(__DIR__, 2) . '/music/.htaccess');
+        self::assertStringContainsString('SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1', $ht);
+        self::assertStringContainsString('HTTP_AUTHORIZATION', (string) file_get_contents(dirname(__DIR__, 2) . '/admin/lib/Request.php'));
+        self::assertStringContainsString('REDIRECT_HTTP_AUTHORIZATION', (string) file_get_contents(dirname(__DIR__, 2) . '/admin/lib/Request.php'));
+    }
+
     public function testNginxDeniesWhatApacheDenies(): void
     {
         $conf = (string) file_get_contents(dirname(__DIR__, 2) . '/docker/nginx/default.conf');

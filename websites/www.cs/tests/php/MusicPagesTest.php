@@ -27,7 +27,7 @@ final class MusicPagesTest extends TestCase
         $this->sessions = new Admin\Sessions($db, $clock, '/~wgrim/');
         $this->keys = new Admin\Keys($db, $clock, null, self::BASE);
         $admin = new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true, $this->keys);
-        $this->pages = new Music\Pages($this->store, $admin, $this->sessions, music_keys(), '0123456789', self::BASE);
+        $this->pages = new Music\Pages($this->store, $admin, $this->sessions, '0123456789', self::BASE);
     }
 
     private function csrfFor(Admin\Request $r): string
@@ -183,7 +183,7 @@ final class MusicPagesTest extends TestCase
         $res = $this->pages->index(music_signed_in($this->sessions));
         self::assertSame(200, $res->status);
         self::assertStringContainsString(
-            '<a href="piece.php?id=test-piece" data-waiting="test-piece">Test piece: &lt;the&gt; Labyrinth wakes</a><span class="waiting-count"></span>',
+            '<a href="piece.php?id=test-piece" data-waiting="test-piece">Test piece: &lt;the&gt; Labyrinth wakes</a><span class="waiting-count"></span><span class="version">v1</span>',
             $res->body,
         );
         self::assertStringContainsString('Strings &lt; softer', $res->body, 'change text is escaped');

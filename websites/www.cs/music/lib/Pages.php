@@ -26,7 +26,6 @@ final class Pages
         private Store $store,
         private \Admin\Pages $admin,
         private \Admin\Sessions $sessions,
-        private ?PublicKeys $keys,
         private string $assetVersion,
         private string $baseUrl,
     ) {
@@ -257,7 +256,7 @@ final class Pages
         }
         $id = Html::e($row['piece']);
         return '<li class="piece" data-kind="' . Html::e($row['kind']) . '"><a href="piece.php?id=' . $id . '" data-waiting="' . $id . '">'
-            . Html::e($title) . '</a><span class="waiting-count"></span><ul class="changes">' . $changes . '</ul></li>';
+            . Html::e($title) . '</a><span class="waiting-count"></span><span class="version">v' . (int) $row['version'] . '</span><ul class="changes">' . $changes . '</ul></li>';
     }
 
     private function errorPage(int $status, string $message): \Admin\Response

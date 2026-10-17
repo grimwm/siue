@@ -11,8 +11,13 @@ require_once __DIR__ . '/Pages.php';
 
 function music_public_keys(): ?Music\PublicKeys
 {
-    $path = getenv('MUSIC_PUBLIC_KEYS') ?: __DIR__ . '/../keys/public.json';
-    return Music\PublicKeys::fromFile($path);
+    try {
+        return Music\PublicKeys::fromFile(Music\PublicKeys::defaultPath());
+    } catch (RuntimeException $e) {
+        // Note uploads then answer no_key (503); every other route keeps working.
+        error_log('music: ' . $e->getMessage());
+        return null;
+    }
 }
 
 function music_store(\PDO $db, Admin\Clock $clock): Music\Store
@@ -89,7 +94,7 @@ function music_run(string $kind, callable $route): void
         $keys = new Admin\Keys($db, $clock, null, $base);
         $sessions = new Admin\Sessions($db, $clock, admin_cookie_path($base));
         $admin = new Admin\Pages($db, $clock, admin_mailer($r->host, null, $base), $base, null, $keys);
-        $pages = new Music\Pages($store, $admin, $sessions, music_public_keys(), music_asset_version(), $base);
+        $pages = new Music\Pages($store, $admin, $sessions, music_asset_version(), $base);
         $res = $route($pages, new Music\Api($store, $keys), $r);
     } catch (Admin\StorageUnavailable | PDOException $e) {
         error_log('music: storage unavailable: ' . $e->getMessage());

@@ -44,7 +44,7 @@ final class Store
     /** The shape of a piece id and of a project id. */
     private const PIECE = '/^[a-z0-9][a-z0-9-]{0,47}$/D';
     /** The magic, the 32-byte fingerprint and the two-byte key length: the least a sealed note can be. */
-    private const HEADER_BYTES = 38;
+    private const HEADER_BYTES = 40;
 
     private \Kit\StoreDir $files;
 

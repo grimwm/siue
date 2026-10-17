@@ -34,8 +34,14 @@ API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
 
 - A sealed note is at most 2,097,152 bytes; 2,000 notes are kept.
 - A draft request is at most 8 MB (declared `Content-Length`, refused with 413
-  before the body is read); the newest 20 drafts are kept; a publish that would
+  before the script reads the body); the newest 20 drafts are kept; a publish that would
   leave more than 100 MB stored is refused with 413.
+
+## After a deploy
+
+`curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer throwaway' https://www.cs.siue.edu/~wgrim/music/api/notes.php`
+must answer 403 (or 200 with a real key), never 401: a 401 means Apache is not
+handing the Authorization header to PHP.
 
 ## Make targets
 

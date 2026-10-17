@@ -15,6 +15,12 @@ final class PublicKeys
     {
     }
 
+    /** MUSIC_PUBLIC_KEYS when set (local runs), else the committed music/keys/public.json. */
+    public static function defaultPath(): string
+    {
+        return getenv('MUSIC_PUBLIC_KEYS') ?: __DIR__ . '/../keys/public.json';
+    }
+
     /** null when the file is missing; \RuntimeException when it is invalid or a fingerprint does not match its spki. */
     public static function fromFile(string $path): ?self
     {

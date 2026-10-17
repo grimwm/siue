@@ -18,7 +18,7 @@ final class AdminSessionsTest extends TestCase
 
     private function idOf(string $cookie): string
     {
-        self::assertSame(1, preg_match('/^__Host-admin=([0-9a-f]{64});/', $cookie, $m));
+        self::assertSame(1, preg_match('/^__Secure-admin=([0-9a-f]{64});/', $cookie, $m));
         return $m[1];
     }
 
@@ -31,7 +31,7 @@ final class AdminSessionsTest extends TestCase
     {
         [$s] = $this->sessions();
         $cookie = $s->start(req());
-        self::assertStringStartsWith('__Host-admin=', $cookie);
+        self::assertStringStartsWith('__Secure-admin=', $cookie);
         self::assertStringContainsString('; Secure', $cookie);
         self::assertStringContainsString('; HttpOnly', $cookie);
         self::assertStringContainsString('; SameSite=Strict', $cookie);
@@ -50,7 +50,7 @@ final class AdminSessionsTest extends TestCase
     {
         [$s, , $c] = $this->sessions();
         $r = $this->reqWith($s->start(req()));
-        $c->now += 7199;
+        $c->now += 1799;
         self::assertTrue($s->current($r));
     }
 
@@ -58,7 +58,7 @@ final class AdminSessionsTest extends TestCase
     {
         [$s, , $c] = $this->sessions();
         $r = $this->reqWith($s->start(req()));
-        $c->now += 7200;
+        $c->now += 1800;
         self::assertFalse($s->current($r));
     }
 
@@ -66,11 +66,11 @@ final class AdminSessionsTest extends TestCase
     {
         [$s, , $c] = $this->sessions();
         $r = $this->reqWith($s->start(req()));
-        for ($i = 0; $i < 167; $i++) {
-            $c->now += 3600;
-            self::assertTrue($s->current($r), "hour $i");
+        for ($i = 0; $i < 71; $i++) {
+            $c->now += 1200;
+            self::assertTrue($s->current($r), "step $i");
         }
-        $c->now += 3600;
+        $c->now += 1200;
         self::assertFalse($s->current($r));
     }
 
@@ -78,7 +78,7 @@ final class AdminSessionsTest extends TestCase
     {
         [$s, $db, $c] = $this->sessions();
         $r = $this->reqWith($s->start(req()));
-        $c->now += 7200;
+        $c->now += 1800;
         $s->current($r);
         self::assertSame(0, (int) $db->query('SELECT COUNT(*) FROM sessions')->fetchColumn());
     }
@@ -87,8 +87,8 @@ final class AdminSessionsTest extends TestCase
     {
         [$s] = $this->sessions();
         self::assertFalse($s->current(req()));
-        self::assertFalse($s->current(req(['cookies' => ['__Host-admin' => str_repeat('a', 64)]])));
-        self::assertFalse($s->current(req(['cookies' => ['__Host-admin' => ['x']]])));
+        self::assertFalse($s->current(req(['cookies' => ['__Secure-admin' => str_repeat('a', 64)]])));
+        self::assertFalse($s->current(req(['cookies' => ['__Secure-admin' => ['x']]])));
     }
 
     public function testEverySessionIdIsFresh(): void
@@ -105,7 +105,7 @@ final class AdminSessionsTest extends TestCase
         $expiring = $s->end($a);
         self::assertFalse($s->current($a));
         self::assertTrue($s->current($b));
-        self::assertStringStartsWith('__Host-admin=;', $expiring);
+        self::assertStringStartsWith('__Secure-admin=;', $expiring);
         self::assertStringContainsString('Max-Age=0', $expiring);
         self::assertStringContainsString('; Secure', $expiring);
         self::assertStringContainsString('; HttpOnly', $expiring);
@@ -139,7 +139,7 @@ final class AdminSessionsTest extends TestCase
         $r = $this->reqWith($s->start(req()));
         $token = $s->csrf($r);
         self::assertSame($token, $s->csrf($r));
-        self::assertNotContains($token, $db->query('SELECT csrf_hash FROM sessions')->fetchAll(PDO::FETCH_COLUMN));
+        self::assertNotContains($token, $db->query('SELECT csrf_nonce FROM sessions')->fetchAll(PDO::FETCH_COLUMN));
         self::assertTrue($s->checkCsrf($r, $token));
         self::assertNotSame($token, $s->csrf($r));
     }
@@ -184,9 +184,9 @@ final class AdminSessionsTest extends TestCase
 
     public function testDeviceCookieString(): void
     {
-        self::assertSame('__Host-admin-device', Admin\Sessions::DEVICE_COOKIE);
+        self::assertSame('__Secure-admin-device', Admin\Sessions::DEVICE_COOKIE);
         self::assertSame(
-            '__Host-admin-device=abc123; Max-Age=7776000; Path=/; Secure; HttpOnly; SameSite=Strict',
+            '__Secure-admin-device=abc123; Max-Age=7776000; Path=/; Secure; HttpOnly; SameSite=Strict',
             Admin\Sessions::deviceCookie('abc123'),
         );
     }
@@ -194,17 +194,17 @@ final class AdminSessionsTest extends TestCase
     public function testExpireDeviceCookieString(): void
     {
         self::assertSame(
-            '__Host-admin-device=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; Secure; HttpOnly; SameSite=Strict',
+            '__Secure-admin-device=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; Secure; HttpOnly; SameSite=Strict',
             Admin\Sessions::expireDeviceCookie(),
         );
     }
 
     public function testDeviceTokenIsReadFromTheCookie(): void
     {
-        self::assertSame('tok', Admin\Sessions::deviceToken(req(['cookies' => ['__Host-admin-device' => 'tok']])));
+        self::assertSame('tok', Admin\Sessions::deviceToken(req(['cookies' => ['__Secure-admin-device' => 'tok']])));
         self::assertNull(Admin\Sessions::deviceToken(req()));
-        self::assertNull(Admin\Sessions::deviceToken(req(['cookies' => ['__Host-admin-device' => ['x']]])));
-        self::assertNull(Admin\Sessions::deviceToken(req(['cookies' => ['__Host-admin-device' => '']])));
+        self::assertNull(Admin\Sessions::deviceToken(req(['cookies' => ['__Secure-admin-device' => ['x']]])));
+        self::assertNull(Admin\Sessions::deviceToken(req(['cookies' => ['__Secure-admin-device' => '']])));
     }
 
     public function testClientIpIsRemoteAddrOnly(): void
@@ -276,5 +276,17 @@ final class AdminSessionsTest extends TestCase
         $h = Admin\Headers::apply(['Content-Type' => 'text/html', 'Cache-Control' => 'public']);
         self::assertSame('text/html', $h['Content-Type']);
         self::assertSame('no-store', $h['Cache-Control']);
+    }
+
+    public function testCookiesCarryTheGivenPath(): void
+    {
+        $s = new Admin\Sessions(admin_tmp_db(), new FakeClock(), '/~wgrim/');
+        self::assertStringContainsString('; Path=/~wgrim/; Secure; HttpOnly; SameSite=Strict', $s->start(req()));
+        self::assertStringContainsString('; Path=/~wgrim/; Secure', $s->end(req()));
+        self::assertSame(
+            '__Secure-admin-device=t; Max-Age=7776000; Path=/~wgrim/; Secure; HttpOnly; SameSite=Strict',
+            Admin\Sessions::deviceCookie('t', '/~wgrim/'),
+        );
+        self::assertStringNotContainsString('Domain', Admin\Sessions::expireDeviceCookie('/~wgrim/'));
     }
 }

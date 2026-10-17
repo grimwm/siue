@@ -25,7 +25,7 @@ final class MemoryMailer implements Admin\Mailer
 
 final class AdminPagesTest extends TestCase
 {
-    private const BASE = 'https://www.cs.siue.edu/admin/';
+    private const BASE = 'https://www.cs.siue.edu/~wgrim/admin/';
 
     /** @return array{0:Admin\Pages,1:PDO,2:FakeClock,3:MemoryMailer} */
     private function pages(): array
@@ -228,7 +228,7 @@ final class AdminPagesTest extends TestCase
         self::assertSame(0, (int) $db->query('SELECT COUNT(*) FROM devices')->fetchColumn());
         self::assertNull((new Admin\Auth($db, new FakeClock()))->peek($token));
         self::assertNotNull($this->cookieValue($out, Admin\Sessions::COOKIE));
-        self::assertContains(Admin\Sessions::expireDeviceCookie(), $out->cookies);
+        self::assertContains(Admin\Sessions::expireDeviceCookie('/~wgrim/'), $out->cookies);
     }
 
     public function testSignInSetsTheDeviceCookieAndItSkipsTheSharedLimits(): void
@@ -324,15 +324,96 @@ final class AdminPagesTest extends TestCase
         self::assertInstanceOf(Admin\SmtpMailer::class, admin_mailer('www.cs.siue.edu', $dir));
         self::assertInstanceOf(Admin\SmtpMailer::class, admin_mailer('localhost.evil.com', $dir));
         self::assertInstanceOf(Admin\SmtpMailer::class, admin_mailer('localhost:8123@evil.com', $dir));
-        self::assertInstanceOf(Admin\CaptureMailer::class, admin_mailer('localhost:8123', $dir));
-        self::assertInstanceOf(Admin\CaptureMailer::class, admin_mailer('127.0.0.1', $dir));
-        self::assertInstanceOf(Admin\SmtpMailer::class, admin_mailer('127.0.0.1', null));
-        self::assertInstanceOf(Admin\SmtpMailer::class, admin_mailer('127.0.0.1', ''));
+        $local = 'http://localhost:8123/admin/';
+        self::assertInstanceOf(Admin\CaptureMailer::class, admin_mailer('localhost:8123', $dir, $local, 'cli-server'));
+        self::assertInstanceOf(Admin\CaptureMailer::class, admin_mailer('127.0.0.1', $dir, $local, 'fpm-fcgi'));
+        self::assertInstanceOf(Admin\SmtpMailer::class, admin_mailer('127.0.0.1', $dir, $local, 'cli'));
+        self::assertInstanceOf(Admin\SmtpMailer::class, admin_mailer('localhost', $dir, self::BASE, 'cli-server'), 'production config');
+        self::assertInstanceOf(Admin\SmtpMailer::class, admin_mailer('127.0.0.1', null, 'http://127.0.0.1/admin/', 'cli-server'));
+        self::assertInstanceOf(Admin\SmtpMailer::class, admin_mailer('127.0.0.1', '', 'http://127.0.0.1/admin/', 'cli-server'));
     }
 
     public function testBaseUrlIsFixedUnlessLocal(): void
     {
-        self::assertSame('https://www.cs.siue.edu/admin/', admin_base_url(req(['host' => 'evil.example'])));
-        self::assertSame('http://127.0.0.1:18123/admin/', admin_base_url(req(['host' => '127.0.0.1:18123', 'https' => false])));
+        putenv('ADMIN_BASE_URL');
+        self::assertSame('https://www.cs.siue.edu/~wgrim/admin/', admin_base_url());
+        putenv('ADMIN_BASE_URL=http://127.0.0.1:18123/admin/');
+        try {
+            self::assertSame('http://127.0.0.1:18123/admin/', admin_base_url());
+        } finally {
+            putenv('ADMIN_BASE_URL');
+        }
+    }
+
+    public function testAForgedLocalHostOnProductionConfigGetsNoPlainHttp(): void
+    {
+        $forged = req(['host' => 'localhost', 'https' => false]);
+        self::assertSame(403, admin_refuse_plain_http($forged, self::BASE)?->status);
+        self::assertNull(admin_refuse_plain_http(req(['https' => true]), self::BASE));
+        self::assertNull(admin_refuse_plain_http($forged, 'http://localhost:8123/admin/'));
+        // The mailed link follows the configured base, whatever Host said.
+        [$p, , , $m] = $this->pages();
+        $p->requestLink($this->post(['email' => 'wgrim@siue.edu'], ['host' => 'localhost', 'https' => false]));
+        $p->flush();
+        self::assertStringContainsString(self::BASE . 'verify.php?token=', quoted_printable_decode($m->sent[0]['mime']));
+    }
+
+    public function testCookiePathComesFromTheBaseUrl(): void
+    {
+        self::assertSame('/~wgrim/', admin_cookie_path('https://www.cs.siue.edu/~wgrim/admin/'));
+        self::assertSame('/', admin_cookie_path('http://localhost:8123/admin/'));
+        [$p, , , $m] = $this->pages();
+        $in = $this->signedIn($p, $m);
+        $p->requestLink($this->post(['email' => 'wgrim@siue.edu'], ['ip' => '198.51.100.5']));
+        $p->flush();
+        $confirm = $p->confirm(req(['query' => ['token' => $this->tokenOf($m)]]));
+        self::assertStringStartsWith('__Secure-admin-confirm=', $confirm->cookies[0]);
+        self::assertStringContainsString('Path=/~wgrim/;', $confirm->cookies[0]);
+        $out = $p->signOut($this->post(['csrf' => $this->csrfsIn($p->hub($in)->body)[0]], ['cookies' => $in->cookies]));
+        self::assertStringStartsWith('__Secure-admin=;', $out->cookies[0]);
+        self::assertStringContainsString('Path=/~wgrim/;', $out->cookies[0]);
+    }
+
+    public function testFailedSignInClearsTheConfirmCookie(): void
+    {
+        [$p] = $this->pages();
+        $r = $p->signIn($this->post(['token' => 'x', 'csrf' => 'y']));
+        self::assertSame(403, $r->status);
+        self::assertStringStartsWith('__Secure-admin-confirm=;', $r->cookies[0]);
+    }
+
+    public function testHealthProbesMailAtMostOncePerTenMinutes(): void
+    {
+        $clock = new FakeClock(1_000_000);
+        $calls = 0;
+        $p = new Admin\Pages(admin_tmp_db(), $clock, new MemoryMailer(), self::BASE, static function () use (&$calls): bool {
+            $calls++;
+            return true;
+        });
+        for ($i = 0; $i < 100; $i++) {
+            $clock->now += 5;
+            self::assertSame('{"mail":"yes","db":"yes"}', $p->health()->body);
+        }
+        self::assertSame(1, $calls);
+        $clock->now += 600;
+        $p->health();
+        self::assertSame(2, $calls);
+    }
+
+    public function testHealthWithADeadDatabaseProbesNothing(): void
+    {
+        $calls = 0;
+        $dead = new class ('sqlite::memory:') extends PDO {
+            public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
+            {
+                throw new PDOException('down');
+            }
+        };
+        $p = new Admin\Pages($dead, new FakeClock(), new MemoryMailer(), self::BASE, static function () use (&$calls): bool {
+            $calls++;
+            return true;
+        });
+        self::assertSame('{"mail":"no","db":"no"}', $p->health()->body);
+        self::assertSame(0, $calls);
     }
 }

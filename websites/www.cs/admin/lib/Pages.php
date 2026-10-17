@@ -19,10 +19,14 @@ final class Response
 final class Pages
 {
     /** Holds the random mark a confirm page's form must send back; there is no session yet to bind it to. */
-    public const CONFIRM_COOKIE = '__Host-admin-confirm';
+    public const CONFIRM_COOKIE = '__Secure-admin-confirm';
+
+    /** Seconds between live SMTP probes. */
+    public const PROBE_EVERY = 600;
 
     private Auth $auth;
     private Sessions $sessions;
+    private string $cookiePath;
     /** @var list<array{to:string,subject:string,mime:string,token:?string}> */
     private array $queue = [];
     /** @var callable():bool */
@@ -32,7 +36,8 @@ final class Pages
     public function __construct(private \PDO $db, private Clock $clock, private Mailer $mailer, private string $baseUrl, ?callable $mailProbe = null)
     {
         $this->auth = new Auth($db, $clock);
-        $this->sessions = new Sessions($db, $clock);
+        $this->cookiePath = admin_cookie_path($baseUrl);
+        $this->sessions = new Sessions($db, $clock, $this->cookiePath);
         $this->mailProbe = $mailProbe ?? self::smtpGreets(...);
     }
 
@@ -91,7 +96,7 @@ final class Pages
             }
             $mark = bin2hex(random_bytes(32));
             $form = Html::form('verify.php', ['token' => $token, 'csrf' => $mark], 'Sign in');
-            $cookie = self::CONFIRM_COOKIE . '=' . $mark . '; Max-Age=' . Auth::LINK_TTL . '; Path=/; Secure; HttpOnly; SameSite=Strict';
+            $cookie = self::CONFIRM_COOKIE . '=' . $mark . '; Max-Age=' . Auth::LINK_TTL . '; ' . Sessions::attributes($this->cookiePath);
             return self::html(200, 'Confirm sign-in', Html::p('Press the button to finish signing in.') . $form, [$cookie]);
         });
     }
@@ -103,16 +108,16 @@ final class Pages
             $mark = $r->cookies[self::CONFIRM_COOKIE] ?? null;
             $given = $r->post['csrf'] ?? null;
             if (!is_string($mark) || $mark === '' || !is_string($given) || !hash_equals($mark, $given)) {
-                return self::html(403, 'Form expired', Html::p('This form expired. Open the link again.'));
+                return self::html(403, 'Form expired', Html::p('This form expired. Open the link again.'), [$this->clearConfirm()]);
             }
             $token = $r->post['token'] ?? '';
             if (!is_string($token) || $this->auth->consume($token) === null) {
-                return self::html(403, 'Link not valid', Html::p('This link has expired or was already used. Request a new one.') . '<a class="button" href="login.php">Back to sign in</a>');
+                return self::html(403, 'Link not valid', Html::p('This link has expired or was already used. Request a new one.') . '<a class="button" href="login.php">Back to sign in</a>', [$this->clearConfirm()]);
             }
             $cookies = [
                 $this->sessions->start($r),
-                Sessions::deviceCookie($this->auth->issueDevice()),
-                self::CONFIRM_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; Secure; HttpOnly; SameSite=Strict',
+                Sessions::deviceCookie($this->auth->issueDevice(), $this->cookiePath),
+                $this->clearConfirm(),
             ];
             $mail = MailTemplate::notice($this->clock->now(), $r->ip, $r->agent, $this->baseUrl . 'index.php');
             $this->queue[] = ['to' => Auth::ALLOWED, 'subject' => $mail['subject'], 'mime' => $mail['mime'], 'token' => null];
@@ -144,7 +149,7 @@ final class Pages
             $this->sessions->endAll();
             $this->auth->forgetAll();
             $this->auth->forgetDevices();
-            return self::redirect('login.php', [$cookie, Sessions::expireDeviceCookie()]);
+            return self::redirect('login.php', [$cookie, Sessions::expireDeviceCookie($this->cookiePath)]);
         });
     }
 
@@ -186,16 +191,15 @@ final class Pages
         });
     }
 
-    /** GET health.php. */
+    /** GET health.php. Reports the database now and the mail server as last probed (see mailHealthy). */
     public function health(): Response
     {
-        $db = true;
         try {
             $this->db->query('SELECT 1')->fetchColumn();
         } catch (\Throwable $e) {
-            $db = false;
+            return self::healthResponse(false, false);
         }
-        return self::healthResponse($db, ($this->mailProbe)());
+        return self::healthResponse(true, $this->mailHealthy());
     }
 
     /** The probe's body: two words, nothing else. */
@@ -277,6 +281,47 @@ final class Pages
     private static function make(int $status, string $body, array $headers, array $cookies = []): Response
     {
         return new Response($status, Headers::apply($headers), $body, $cookies);
+    }
+
+    /**
+     * The SMTP server's last probe result, probed again at most once per PROBE_EVERY seconds across
+     * all requests. The first request past that age claims the slot inside an immediate transaction
+     * and probes after releasing it; the others read the earlier result without waiting.
+     */
+    private function mailHealthy(): bool
+    {
+        try {
+            $now = $this->clock->now();
+            $this->db->exec('BEGIN IMMEDIATE');
+            try {
+                $st = $this->db->query("SELECT ok, at FROM probes WHERE name = 'mail'");
+                $row = $st->fetch(\PDO::FETCH_ASSOC);
+                $fresh = is_array($row) && $now - (int) $row['at'] < self::PROBE_EVERY;
+                if (!$fresh) {
+                    $this->db->prepare("INSERT OR REPLACE INTO probes (name, ok, at) VALUES ('mail', ?, ?)")
+                        ->execute([is_array($row) ? (int) $row['ok'] : 0, $now]);
+                }
+                $this->db->exec('COMMIT');
+            } catch (\Throwable $e) {
+                if ($this->db->inTransaction()) {
+                    $this->db->exec('ROLLBACK');
+                }
+                throw $e;
+            }
+            if ($fresh) {
+                return (int) $row['ok'] === 1;
+            }
+            $ok = (bool) ($this->mailProbe)();
+            $this->db->prepare("UPDATE probes SET ok = ? WHERE name = 'mail'")->execute([$ok ? 1 : 0]);
+            return $ok;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private function clearConfirm(): string
+    {
+        return self::CONFIRM_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . Sessions::attributes($this->cookiePath);
     }
 
     private static function smtpGreets(): bool

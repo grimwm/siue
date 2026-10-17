@@ -98,6 +98,8 @@ a:hover { color: #fff; }
   cursor: pointer;
 }
 .button:hover { background: var(--crimson); }
+.button.danger { background: #b01010; border-color: var(--crimson); color: #fff; }
+.button.danger:hover { background: var(--crimson); }
 .button.quiet { background: transparent; border-color: var(--rail-edge); color: var(--text); }
 .button.quiet:hover { background: var(--bg-elevated); }
 

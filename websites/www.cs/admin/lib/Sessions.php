@@ -7,15 +7,23 @@ namespace Admin;
 
 final class Sessions
 {
-    public const COOKIE = '__Host-admin';
-    public const DEVICE_COOKIE = '__Host-admin-device';
-    public const IDLE = 7200;
-    public const MAX = 604800;
+    public const COOKIE = '__Secure-admin';
+    public const DEVICE_COOKIE = '__Secure-admin-device';
+    public const IDLE = 1800;
+    public const MAX = 86400;
 
-    private const ATTRIBUTES = 'Path=/; Secure; HttpOnly; SameSite=Strict';
-
-    public function __construct(private \PDO $db, private Clock $clock)
+    /**
+     * @param string $cookiePath the Path every cookie carries: the owner's folder, never wider (www.cs
+     *                           serves every user's pages from the same host, and __Host- would force Path=/)
+     */
+    public function __construct(private \PDO $db, private Clock $clock, private string $cookiePath = '/')
     {
+    }
+
+    /** The attributes every cookie carries; no Domain, so the browser keeps it to this host. */
+    public static function attributes(string $path): string
+    {
+        return 'Path=' . $path . '; Secure; HttpOnly; SameSite=Strict';
     }
 
     /** New session (always a fresh id); returns the cookie header value. */
@@ -25,7 +33,7 @@ final class Sessions
         $now = $this->clock->now();
         $this->db->prepare('INSERT INTO sessions (id_hash, created_at, seen_at, ip, agent) VALUES (?, ?, ?, ?, ?)')
             ->execute([hash('sha256', $id), $now, $now, substr($r->ip, 0, 45), substr($r->agent, 0, 255)]);
-        return self::COOKIE . '=' . $id . '; ' . self::ATTRIBUTES;
+        return self::COOKIE . '=' . $id . '; ' . self::attributes($this->cookiePath);
     }
 
     /** True when the request's cookie names a live session; refreshes seen_at. */
@@ -51,7 +59,7 @@ final class Sessions
         if ($hash !== null) {
             $this->db->prepare('DELETE FROM sessions WHERE id_hash = ?')->execute([$hash]);
         }
-        return self::COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . self::ATTRIBUTES;
+        return self::COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . self::attributes($this->cookiePath);
     }
 
     /** Ends every session. */
@@ -75,12 +83,12 @@ final class Sessions
         $hash = hash('sha256', $id);
         $this->db->exec('BEGIN IMMEDIATE');
         try {
-            $st = $this->db->prepare('SELECT csrf_hash FROM sessions WHERE id_hash = ?');
+            $st = $this->db->prepare('SELECT csrf_nonce FROM sessions WHERE id_hash = ?');
             $st->execute([$hash]);
             $nonce = $st->fetchColumn();
             if (!is_string($nonce) || $nonce === '') {
                 $nonce = bin2hex(random_bytes(32));
-                $this->db->prepare('UPDATE sessions SET csrf_hash = ? WHERE id_hash = ?')->execute([$nonce, $hash]);
+                $this->db->prepare('UPDATE sessions SET csrf_nonce = ? WHERE id_hash = ?')->execute([$nonce, $hash]);
             }
             $this->db->exec('COMMIT');
         } catch (\Throwable $e) {
@@ -102,10 +110,10 @@ final class Sessions
         $hash = hash('sha256', $id);
         $this->db->exec('BEGIN IMMEDIATE');
         try {
-            $st = $this->db->prepare('SELECT csrf_hash FROM sessions WHERE id_hash = ?');
+            $st = $this->db->prepare('SELECT csrf_nonce FROM sessions WHERE id_hash = ?');
             $st->execute([$hash]);
             $nonce = $st->fetchColumn();
-            $this->db->prepare('UPDATE sessions SET csrf_hash = NULL WHERE id_hash = ?')->execute([$hash]);
+            $this->db->prepare('UPDATE sessions SET csrf_nonce = NULL WHERE id_hash = ?')->execute([$hash]);
             $this->db->exec('COMMIT');
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -118,15 +126,15 @@ final class Sessions
     }
 
     /** The Set-Cookie value that remembers a trusted device for ninety days. */
-    public static function deviceCookie(string $token): string
+    public static function deviceCookie(string $token, string $path = '/'): string
     {
-        return self::DEVICE_COOKIE . '=' . $token . '; Max-Age=' . Auth::DEVICE_TTL . '; ' . self::ATTRIBUTES;
+        return self::DEVICE_COOKIE . '=' . $token . '; Max-Age=' . Auth::DEVICE_TTL . '; ' . self::attributes($path);
     }
 
     /** The Set-Cookie value that removes the trusted-device cookie. */
-    public static function expireDeviceCookie(): string
+    public static function expireDeviceCookie(string $path = '/'): string
     {
-        return self::DEVICE_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . self::ATTRIBUTES;
+        return self::DEVICE_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . self::attributes($path);
     }
 
     /** The trusted-device token the request carries, if any. */

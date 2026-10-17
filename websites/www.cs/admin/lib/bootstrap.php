@@ -44,26 +44,54 @@ function admin_is_local_host(string $host): bool
     return preg_match('/^(localhost|127\.0\.0\.1)(:\d{1,5})?$/D', $host) === 1;
 }
 
+/** The folder URL mail links point into: ADMIN_BASE_URL, else the live site. The request never feeds it. */
+function admin_base_url(): string
+{
+    $set = (string) getenv('ADMIN_BASE_URL');
+    return $set !== '' ? $set : 'https://www.cs.siue.edu/~wgrim/admin/';
+}
+
+/** True only when the configured base URL is plain HTTP on localhost or 127.0.0.1: a local development setup. */
+function admin_is_local_base(string $baseUrl): bool
+{
+    $parts = parse_url($baseUrl);
+    return is_array($parts) && ($parts['scheme'] ?? '') === 'http' && in_array($parts['host'] ?? '', ['localhost', '127.0.0.1'], true);
+}
+
 /**
- * The mailer for a request to $host. A capture directory (ADMIN_MAIL_CAPTURE_DIR) is
- * honoured only for a local host, so a stray setting can never divert real mail.
+ * The Path the admin cookies carry: the base URL's path up to and including its ~user folder, so the
+ * owner's other pages share them and no other user's pages see them; `/` for a base without one.
  */
-function admin_mailer(string $host, ?string $captureDir = null): Admin\Mailer
+function admin_cookie_path(string $baseUrl): string
+{
+    $path = (string) parse_url($baseUrl, PHP_URL_PATH);
+    return preg_match('#^/~[^/]+/#', $path, $m) === 1 ? $m[0] : '/';
+}
+
+/**
+ * The mailer for a request to $host. A capture directory (ADMIN_MAIL_CAPTURE_DIR) is honoured only
+ * when the configured base URL is local, the request host is exactly localhost or 127.0.0.1, and PHP
+ * runs under FPM or its built-in server; otherwise the SMTP mailer is used whatever is set.
+ */
+function admin_mailer(string $host, ?string $captureDir = null, ?string $baseUrl = null, ?string $sapi = null): Admin\Mailer
 {
     $captureDir ??= (string) getenv('ADMIN_MAIL_CAPTURE_DIR');
-    if ($captureDir !== '' && admin_is_local_host($host)) {
+    if ($captureDir !== ''
+        && admin_is_local_base($baseUrl ?? admin_base_url())
+        && admin_is_local_host($host)
+        && in_array($sapi ?? PHP_SAPI, ['fpm-fcgi', 'cli-server'], true)) {
         return new Admin\CaptureMailer($captureDir);
     }
     return new Admin\SmtpMailer();
 }
 
-/** The folder URL mail links point into: fixed in production, the request's own for a local host. */
-function admin_base_url(Admin\Request $r): string
+/** The 403 for plain HTTP, or null when the request may proceed. Only a local base URL permits plain HTTP. */
+function admin_refuse_plain_http(Admin\Request $r, string $baseUrl): ?Admin\Response
 {
-    if (admin_is_local_host($r->host)) {
-        return ($r->https ? 'https' : 'http') . '://' . $r->host . '/admin/';
+    if ($r->https || admin_is_local_base($baseUrl)) {
+        return null;
     }
-    return 'https://www.cs.siue.edu/admin/';
+    return new Admin\Response(403, Admin\Headers::apply(['Content-Type' => 'text/plain; charset=utf-8']), 'HTTPS required.');
 }
 
 /** Writes a response to the client. */
@@ -89,8 +117,10 @@ function admin_emit(Admin\Response $res): void
 function admin_serve(callable $handler, bool $health = false): void
 {
     $r = Admin\Request::fromGlobals();
-    if (!$r->https && !admin_is_local_host($r->host)) {
-        admin_emit(new Admin\Response(403, Admin\Headers::apply(['Content-Type' => 'text/plain; charset=utf-8']), 'HTTPS required.'));
+    $base = admin_base_url();
+    $refused = admin_refuse_plain_http($r, $base);
+    if ($refused !== null) {
+        admin_emit($refused);
         return;
     }
     try {
@@ -100,7 +130,7 @@ function admin_serve(callable $handler, bool $health = false): void
         admin_emit($health ? Admin\Pages::healthResponse(false, false) : Admin\Pages::fromStorageError($e));
         return;
     }
-    $pages = new Admin\Pages($db, new Admin\SystemClock(), admin_mailer($r->host), admin_base_url($r));
+    $pages = new Admin\Pages($db, new Admin\SystemClock(), admin_mailer($r->host, null, $base), $base);
     admin_emit($handler($pages, $r));
     if (function_exists('fastcgi_finish_request')) {
         fastcgi_finish_request();

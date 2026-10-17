@@ -13,7 +13,7 @@ final class AdminDbTest extends TestCase
     {
         $db = admin_tmp_db();
         $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
-        self::assertSame(['devices', 'key_hits', 'keys', 'link_requests', 'links', 'sessions'], $tables);
+        self::assertSame(['devices', 'key_hits', 'keys', 'link_requests', 'links', 'probes', 'sessions'], $tables);
         self::assertSame(1, (int) $db->query('PRAGMA secure_delete')->fetchColumn());
     }
 
@@ -81,5 +81,16 @@ final class AdminDbTest extends TestCase
         } finally {
             putenv('ADMIN_DATA_DIR');
         }
+    }
+
+    public function testAnOlderSessionsTableKeepsItsRowsUnderTheNewColumnName(): void
+    {
+        $dir = admin_tmp_dir();
+        $raw = new PDO('sqlite:' . $dir . '/' . Admin\Db::FILE);
+        $raw->exec('CREATE TABLE sessions (id_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL, seen_at INTEGER NOT NULL, ip TEXT NOT NULL, agent TEXT NOT NULL, csrf_hash TEXT)');
+        $raw->exec("INSERT INTO sessions VALUES ('h', 1, 1, 'i', 'a', 'n')");
+        $raw = null;
+        $db = Admin\Db::open($dir);
+        self::assertSame('n', $db->query('SELECT csrf_nonce FROM sessions')->fetchColumn());
     }
 }

@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "kind": "sound",
+  "project": { "id": "tankity", "name": "Tankity" },
+  "piece": { "id": "cannon-fire", "title": "Cannon fire" },
+  "draft": 1,
+  "made": "2026-10-17T12:30:00Z",
+  "duration": 0.4,
+  "sections": [
+    { "id": "blast", "name": "Blast", "from": 0, "to": 0.08, "color": "#c0392b" },
+    { "id": "echo", "name": "Echo", "from": 0.08, "to": 0.4, "color": "#2e4057" }
+  ],
+  "lanes": [
+    { "id": "boom", "name": "Boom", "family": "impact", "icon": "impact", "color": "#c0392b" },
+    { "id": "air", "name": "Air rush", "family": "whoosh", "icon": "whoosh", "color": "#7a9cc6" }
+  ],
+  "characters": [],
+  "motifs": [],
+  "notes": [],
+  "energy": [[0, 1], [0.08, 0.8], [0.4, 0]],
+  "glossary": [{ "term": "attack", "from": 0, "to": 0.08 }, { "term": "decay", "from": 0.08, "to": 0.4 }],
+  "audio": [{ "file": "audio.webm", "type": "audio/webm; codecs=opus" }],
+  "spectrogram": { "file": "spectrogram.png", "low_hz": 30, "high_hz": 16000, "scale": "log" },
+  "changes": [{ "from": 0, "to": 0.08, "lane": "boom", "text": "A sharper, shorter attack on the boom.", "answers": [] }]
+}

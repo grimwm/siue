@@ -1,4 +1,4 @@
-.PHONY: help deploy up down url parity test protocol sim-vectors e2e screenshots admin-smoke
+.PHONY: help deploy up down url parity test protocol sim-vectors e2e screenshots admin-smoke music-e2e
 
 .DEFAULT_TARGET := help
 
@@ -28,6 +28,7 @@ help:
 	@echo "           one run per machine at a time (E2E_ARGS passes to playwright)"
 	@echo "  e2e-changed - Only the browser specs your changes against origin/main need"
 	@echo "  admin-smoke - Sign in to the admin pages in a throwaway docker project and back out (prints ADMIN-SMOKE-OK)"
+	@echo "  music-e2e - The music workroom's browser check in a throwaway docker project (local only; prints MUSIC-E2E-OK)"
 	@echo "  screenshots - Recapture each game's Games-page picture (macOS sips)"
 
 deploy:
@@ -97,3 +98,20 @@ e2e-changed:
 # The admin login end to end in its own docker project (torn down afterwards).
 admin-smoke:
 	tests/admin-smoke.sh
+
+# The workroom's browser check against its own docker project, with the
+# admin mail capture. Local only.
+music-e2e:
+	@name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml -f compose.music-local.yaml"; \
+	export ADMIN_SMOKE_DIR=/tmp/$$name; \
+	trap 'docker compose $$files -p $$name down -v >/dev/null 2>&1' EXIT; \
+	docker compose $$files -p $$name up -d --build www-cs-php www-cs-nginx >/dev/null && \
+	addr=$$(docker compose $$files -p $$name port www-cs-nginx 80) && port=$${addr##*:} && \
+	ready=0; for i in $$(seq 1 60); do if curl -sf -o /dev/null -H 'Host: localhost' "http://127.0.0.1:$$port/admin/login.php"; then ready=1; break; fi; sleep 1; done; \
+	test $$ready = 1 || { echo "music-e2e: the stack did not answer" >&2; exit 1; }; \
+	docker compose $$files -p $$name exec -T -u apache www-cs-php mkdir -p $$ADMIN_SMOKE_DIR/mail && \
+	bundle=$$(mktemp "$${TMPDIR:-/tmp}/workroom-e2e.XXXXXX") && \
+	(cd games && npm ci --silent && node workroom/tools/e2e-bundle.ts "$$bundle") && \
+	MUSIC_E2E_COMPOSE="$$files" MUSIC_E2E_PROJECT=$$name MUSIC_E2E_MAIL_DIR=$$ADMIN_SMOKE_DIR/mail \
+	E2E_BASE_URL=http://localhost:$$port/ WORKROOM_E2E_BUNDLE=$$bundle tests/e2e/run.sh -c local.config.ts && \
+	rm -f "$$bundle" && echo MUSIC-E2E-OK

@@ -37,6 +37,19 @@ API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
   before the script reads the body); the newest 20 drafts are kept; a publish that would
   leave more than 100 MB stored is refused with 413.
 
+## The local browser check
+
+`make music-e2e` (local only; CI never runs it) brings up its own docker project
+with the admin mail capture, signs in through the captured email, publishes the
+fixture drafts with an API key made on the hub, and drives the page in Chrome:
+play, seek, the four views, a glossary card, the sheet music, a sound effect from
+a second project, and no content security policy violation. It prints
+`MUSIC-E2E-OK` and tears the project down. The page is bundled for the check by
+`games/workroom/tools/e2e-bundle.ts` (the test key built in), never into `dist/`.
+The admin sign-in link is limited to three a hour per address; one run asks for
+two. The fixtures under `games/workroom/test/fixtures/draft*/` come from
+`node games/workroom/tools/make-draft-fixture.ts` and `ffmpeg` (see that script).
+
 ## After a deploy
 
 `curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer throwaway' https://www.cs.siue.edu/~wgrim/music/api/notes.php`

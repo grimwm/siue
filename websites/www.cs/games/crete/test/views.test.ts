@@ -181,3 +181,20 @@ test('the story log lists every line; how to play comes from the help lines', ()
   assert.equal(help[0]!.children.length, helpLines(KEYS, ['Z']).length);
   assert.equal(maybeById(root, 'inventory'), undefined);
 });
+
+// ---- story ----
+test('the story card tells the myth, closes with a button, and waits hidden until opened', async () => {
+  const story = await importTsx<{ s: typeof import('../src/ui/story.tsx') }>(import.meta.dirname, { s: '../src/ui/story.tsx' });
+  const root = mount();
+  let closed = 0;
+  story.s.renderStoryCard(asElement(root), { open: false, onClose: () => { closed++; } });
+  assert.equal(byId(root, 'story-veil').hidden, true);
+  story.s.renderStoryCard(asElement(root), { open: true, onClose: () => { closed++; } });
+  assert.equal(byId(root, 'story-veil').hidden, false);
+  assert.equal(byId(root, 'story-title').textContent, 'The Labyrinth');
+  const text = walk(byId(root, 'story-veil')).filter(n => n.className === 'story-text').map(n => n.textContent).join(' ');
+  for (const word of ['Minos', 'Labyrinth', 'ship']) assert.ok(text.includes(word), word);
+  assert.equal(globalThis.__focused?.id, 'story-close');
+  click(byId(root, 'story-close'));
+  assert.equal(closed, 1);
+});

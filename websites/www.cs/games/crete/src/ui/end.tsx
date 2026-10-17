@@ -3,6 +3,7 @@
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';
+import { KEYS } from '../keys.ts';
 
 export interface EndView {
   open: boolean;
@@ -23,7 +24,7 @@ export function EndCard(p: EndCardProps) {
       kicker={p.kicker} kickerId="end-kicker" kickerClass="kicker" titleId="end-title" title={p.title} focusId="again">
       <p id="end-text">{p.text}</p>
       <p id="end-score" class="runstats">{p.score}</p>
-      <Button id="again" onClick={p.onAgain}>Play again (N)</Button>
+      <Button id="again" onClick={p.onAgain}>{`Play again (${KEYS.new.label})`}</Button>
     </Dialog>
   );
 }

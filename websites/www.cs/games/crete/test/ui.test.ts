@@ -10,6 +10,7 @@ import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import type { EndCardProps } from '../src/ui/end.tsx';
 import type { InventoryRow, InventoryProps } from '../src/ui/inventory.tsx';
 import type { TitleCardProps } from '../src/ui/title.tsx';
+import { KEYS } from '../src/keys.ts';
 
 installDocument();
 const ui = await importTsx<{
@@ -137,8 +138,29 @@ test('the title card names the game and focuses Play; Play calls back', () => {
   assert.equal(byId(root, 'title-name').textContent, 'The Island of Crete');
   assert.equal(maybeById(root, 'title-hint'), undefined);
   assert.equal(globalThis.__focused?.id, 'title-play');
+  assert.equal(byId(root, 'title-play').textContent, `▶ Play (${KEYS.new.label})`);
   click(byId(root, 'title-play'));
   assert.equal(played, 1);
+});
+
+test('Story and Settings appear when the page gives them, and call back', () => {
+  const root = makeEl('title-root');
+  renderTitleCard(root, { open: true, hint: false, onPlay() {} });
+  assert.equal(maybeById(root, 'title-story'), undefined);
+  assert.equal(maybeById(root, 'title-settings'), undefined);
+  const seen: string[] = [];
+  renderTitleCard(root, { open: true, hint: false, onPlay() {}, onStory: () => seen.push('story'), onSettings: () => seen.push('settings') });
+  assert.equal(byId(root, 'title-story').textContent, 'Story');
+  assert.equal(byId(root, 'title-settings').textContent, 'Settings');
+  click(byId(root, 'title-story'));
+  click(byId(root, 'title-settings'));
+  assert.deepEqual(seen, ['story', 'settings']);
+});
+
+test('the title card keeps a slot for the kit install bar', () => {
+  const root = makeEl('title-root');
+  renderTitleCard(root, { open: true, hint: false, onPlay() {} });
+  assert.equal(byId(root, 'title-install').className, 'title-install');
 });
 
 test('an installed app that could not close says how to', () => {

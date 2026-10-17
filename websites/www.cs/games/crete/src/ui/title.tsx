@@ -1,15 +1,19 @@
-// The Island of Crete: the title card, shown after Quit when the game cannot
-// close its own window. Play starts a new run on the seed box.
+// The Island of Crete: the title card. Shown when the page opens, after Quit, and under the ending card. Play
+// starts a run; Story and Settings open the story card and the menu when the page gives them; the kit's install
+// bar mounts into #title-install (src/install-slot.ts).
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';
 import { EXIT_HINT } from '../../../_kit/app.ts';
+import { KEYS } from '../keys.ts';
 
 export interface TitleCardProps {
   open: boolean;
   /** An installed app that could not close itself: say how to. */
   hint: boolean;
   onPlay: () => void;
+  onStory?: () => void;
+  onSettings?: () => void;
 }
 
 export function TitleCard(p: TitleCardProps) {
@@ -18,7 +22,12 @@ export function TitleCard(p: TitleCardProps) {
       titleId="title-name" title="The Island of Crete" focusId="title-play">
       <p>A text-based chase. Theseus (you) moves once. The Minotaur moves twice. Reach the exit alive.</p>
       {p.hint && <p id="title-hint" class="runstats" role="status">{EXIT_HINT}.</p>}
-      <Button id="title-play" onClick={p.onPlay}>▶ Play (N)</Button>
+      <div class="title-actions">
+        <Button id="title-play" onClick={p.onPlay}>{`▶ Play (${KEYS.new.label})`}</Button>
+        {p.onStory && <Button id="title-story" onClick={p.onStory}>Story</Button>}
+        {p.onSettings && <Button id="title-settings" onClick={p.onSettings}>Settings</Button>}
+      </div>
+      <div id="title-install" class="title-install" />
     </Dialog>
   );
 }

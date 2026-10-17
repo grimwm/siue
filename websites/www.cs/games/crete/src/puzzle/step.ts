@@ -1,7 +1,6 @@
 // websites/www.cs/games/crete/src/puzzle/step.ts
 /* The Island of Crete: one turn. `step(state, action)` plays the player's
- * action and then the Minotaur's two steps, and returns the new state and
- * what happened, for the log, the sounds and the board's animation. A bump
+ * action and returns the new state and what happened, for the log, the sounds and the board's animation. A bump
  * (an action that cannot happen) returns the same state object and no
  * events, and costs no turn. DOM-free. */
 import { TERRAIN } from './tiles.ts';
@@ -25,11 +24,12 @@ function blockMayEnter(w: Work, x: Cell): boolean {
     && !same(x, w.player) && !same(x, w.minotaur) && !same(x, w.cow);
 }
 
-/** A block has just entered `at` heading `d`: it sinks, presses, slides or is carried. */
-function settleBlock(w: Work, at: Cell, d: Dir, ev: GameEvent[]): void {
+/** A block has just entered `at` heading `d`: it sinks, presses, slides or is carried. It never enters `pusher`,
+ *  the cell the player is stepping into. */
+function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell, ev: GameEvent[]): void {
   let here = at;
   let dir = d;
-  const seen = new Set<number>([index(w, here)]);
+  const seen = new Set<number>([index(w, here), index(w, pusher)]);
   for (;;) {
     const t = tAt(w, here);
     if (t === 'water') {
@@ -74,7 +74,7 @@ function enterAsPlayer(w: Work, to: Cell, d: Dir, riding: boolean, ev: GameEvent
     w.objects[index(w, to)] = null;
     w.objects[index(w, beyond)] = 'block';
     ev.push({ kind: 'pushed', from: to, to: beyond });
-    settleBlock(w, beyond, d, ev);
+    settleBlock(w, beyond, d, to, ev);
   }
   return true;
 }
@@ -101,10 +101,11 @@ function arrive(w: Work, at: Cell, ev: GameEvent[]): void {
   }
 }
 
-/** Ice and force floors under the player move them on, until the ride ends or would cross itself. */
-function ridePlayer(w: Work, d: Dir, ev: GameEvent[]): void {
+/** Ice and force floors under the player move them on, until the ride ends or would cross itself or the cell
+ *  the move started from. */
+function ridePlayer(w: Work, d: Dir, origin: Cell, ev: GameEvent[]): void {
   let dir = d;
-  const seen = new Set<number>([index(w, w.player)]);
+  const seen = new Set<number>([index(w, origin), index(w, w.player)]);
   while (w.outcome === 'playing') {
     const def = TERRAIN[tAt(w, w.player)];
     if (def.carries && !w.gear.includes('suction')) dir = def.carries;
@@ -127,9 +128,9 @@ export function step(s: State, a: Action): StepResult {
     if (!enterAsPlayer(w, to, a.dir, false, ev)) return { state: s, events: [] };
     ev.push({ kind: 'moved', who: 'player', from, to });
     arrive(w, to, ev);
-    ridePlayer(w, a.dir, ev);
+    ridePlayer(w, a.dir, from, ev);
   } else if (a.kind === 'tool') {
-    return { state: s, events: [] }; // Task 3 adds the tools.
+    return { state: s, events: [] }; // a tool action is a bump
   }
   w.moves++;
   return { state: w, events: ev };

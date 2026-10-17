@@ -119,3 +119,14 @@ test('a step never changes the state it was given', () => {
   play(s, mv('right'), mv('right'));
   assert.equal(JSON.stringify(s), before);
 });
+
+test('a pushed block is never carried into the cell the player is entering', () => {
+  const r = play(grid(['PO<.']), mv('right'));
+  assert.deepEqual(r.state.player, { r: 0, c: 1 });
+  assert.equal(r.state.objects[1], null);
+  assert.equal(r.state.objects[2], 'block');
+});
+
+test('a ride never brings the player back onto the cell the move started from', () => {
+  assert.deepEqual(play(grid(['P<.']), mv('right')).state.player, { r: 0, c: 1 });
+});

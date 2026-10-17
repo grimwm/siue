@@ -142,6 +142,8 @@ while IFS= read -r -d '' f; do
     # never staged, so never uploaded, never chmodded, and never in the
     # manifest a PRUNE reads.
     games/tankity/data/*) continue ;;
+    # The admin login's storage (its database) likewise.
+    admin/data/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;

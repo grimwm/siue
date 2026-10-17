@@ -10,11 +10,12 @@ final class MailTemplate
     /** @return array{subject:string,mime:string} */
     public static function link(string $url, int $minutes): array
     {
+        $good = 'Good for ' . $minutes . ($minutes === 1 ? ' minute' : ' minutes') . ', once.';
         $text = "Sign in\r\n\r\n"
-            . "Good for $minutes minutes, once.\r\n\r\n"
+            . "$good\r\n\r\n"
             . $url . "\r\n\r\n"
             . "If you did not ask for this, ignore it.\r\n";
-        $body = self::p("Good for $minutes minutes, once.")
+        $body = self::p($good)
             . self::button($url, 'Sign in')
             . self::p('If you did not ask for this, ignore it.', true);
         return ['subject' => 'Your sign-in link', 'mime' => self::multipart($text, self::page('Sign in', $body))];
@@ -44,13 +45,13 @@ final class MailTemplate
 
     private static function e(string $s): string
     {
-        return htmlspecialchars($s, ENT_QUOTES);
+        return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE);
     }
 
     /** One printable line of at most $max characters; control characters become spaces. */
     private static function oneLine(string $s, int $max): string
     {
-        $s = preg_replace('/[\x00-\x1f\x7f]+/', ' ', $s) ?? '';
+        $s = preg_replace('/[\x00-\x1f\x7f]+/', ' ', mb_scrub($s, 'UTF-8')) ?? '';
         return trim(mb_substr($s, 0, $max, 'UTF-8'));
     }
 
@@ -107,14 +108,14 @@ final class MailTemplate
             . "\r\n"
             . "--$boundary\r\n"
             . "Content-Type: text/plain; charset=utf-8\r\n"
-            . "Content-Transfer-Encoding: 8bit\r\n"
+            . "Content-Transfer-Encoding: quoted-printable\r\n"
             . "\r\n"
-            . $text . "\r\n"
+            . quoted_printable_encode($text) . "\r\n"
             . "--$boundary\r\n"
             . "Content-Type: text/html; charset=utf-8\r\n"
-            . "Content-Transfer-Encoding: 8bit\r\n"
+            . "Content-Transfer-Encoding: quoted-printable\r\n"
             . "\r\n"
-            . $html . "\r\n"
+            . quoted_printable_encode($html) . "\r\n"
             . "--$boundary--\r\n";
     }
 }

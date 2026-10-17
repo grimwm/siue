@@ -21,7 +21,12 @@ final class AdminMailTest extends TestCase
         self::assertStringStartsWith("--\r\n", $chunks[3]);
         self::assertStringContainsString('Content-Type: text/plain', $chunks[1]);
         self::assertStringContainsString('Content-Type: text/html', $chunks[2]);
-        return [$chunks[1], $chunks[2]];
+        $decode = static function (string $chunk): string {
+            self::assertStringContainsString('Content-Transfer-Encoding: quoted-printable', $chunk);
+            $body = substr($chunk, strpos($chunk, "\r\n\r\n") + 4);
+            return quoted_printable_decode(substr($body, 0, -2));
+        };
+        return [$decode($chunks[1]), $decode($chunks[2])];
     }
 
     public function testLinkMessage(): void
@@ -41,6 +46,86 @@ final class AdminMailTest extends TestCase
         self::assertStringContainsString('#0d0f12', $html);
         self::assertStringContainsString('<meta name="color-scheme" content="dark">', $html);
         self::assertStringNotContainsString('<img', $html);
+    }
+
+    public function testNoLineExceedsTheSmtpLimitAndTheLinkSurvives(): void
+    {
+        $url = 'https://www.cs.siue.edu/admin/verify.php?t=' . str_repeat('ab', 32);
+        foreach ([Admin\MailTemplate::link($url, 15), Admin\MailTemplate::notice(1_700_000_000, '1.2.3.4', str_repeat('é', 300), $url)] as $m) {
+            $full = Admin\SmtpMailer::data('wgrim@siue.edu', 'wgrim@siue.edu', $m['subject'], $m['mime'], 1);
+            foreach (explode("\r\n", $full) as $line) {
+                self::assertLessThanOrEqual(998, strlen($line));
+                if (preg_match('/^(Message-ID|Content-Type):/', $line) !== 1) {
+                    self::assertLessThanOrEqual(76, strlen($line));
+                }
+            }
+            [$text, $html] = $this->parts($m['mime']);
+            self::assertSame(1, substr_count($text, $url));
+            self::assertStringContainsString('href="' . $url . '"', $html);
+        }
+    }
+
+    public function testMinutesArePluralisedAndInvalidUtf8IsScrubbed(): void
+    {
+        [$text] = $this->parts(Admin\MailTemplate::link('https://h.example/', 1)['mime']);
+        self::assertStringContainsString('Good for 1 minute, once.', $text);
+        $m = Admin\MailTemplate::notice(1_700_000_000, '1.2.3.4', "bad\xff agent", 'https://h.example/');
+        [$t, $h] = $this->parts($m['mime']);
+        self::assertTrue(mb_check_encoding($t, 'UTF-8'));
+        self::assertStringContainsString('agent', $h);
+    }
+
+    /** @return resource */
+    private function stream(string $replies)
+    {
+        $fp = fopen('php://memory', 'w+');
+        fwrite($fp, $replies);
+        rewind($fp);
+        return $fp;
+    }
+
+    public function testExpectReadsMultiLineAndBareCodes(): void
+    {
+        Admin\SmtpMailer::expect($this->stream("250-smtp.example\r\n250-8BITMIME\r\n250 OK\r\n"), '2');
+        Admin\SmtpMailer::expect($this->stream("354\r\n"), '3');
+        Admin\SmtpMailer::expect($this->stream("250"), '2');
+        $this->addToAssertionCount(1);
+    }
+
+    public function testExpectThrowsOnErrorsAndEof(): void
+    {
+        foreach (["450 try later\r\n", "550-no\r\n550 no such user\r\n", "250 OK\r\n"] as $i => $replies) {
+            try {
+                Admin\SmtpMailer::expect($this->stream($replies), $i === 2 ? '3' : '2');
+                self::fail('expected an error');
+            } catch (RuntimeException $e) {
+                self::assertStringContainsString('SMTP error', $e->getMessage());
+            }
+        }
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('no reply');
+        Admin\SmtpMailer::expect($this->stream(''), '2');
+    }
+
+    public function testSmtpRefusesNonAsciiSubjectBeforeConnecting(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('ASCII');
+        (new Admin\SmtpMailer('127.0.0.1', 1))->send('wgrim@siue.edu', "Caf\u{e9}", 'MIME-Version: 1.0');
+    }
+
+    public function testCaptureRefusesOtherRecipientsAndFailedWrites(): void
+    {
+        $dir = admin_tmp_dir();
+        try {
+            (new Admin\CaptureMailer($dir))->send('x@siue.edu', 'Hi', 'm');
+            self::fail('expected a refusal');
+        } catch (RuntimeException $e) {
+            self::assertStringContainsString('recipient', $e->getMessage());
+        }
+        self::assertSame([], glob($dir . '/*.eml'));
+        $this->expectException(RuntimeException::class);
+        (new Admin\CaptureMailer($dir . '/missing'))->send('wgrim@siue.edu', 'Hi', 'm');
     }
 
     public function testNoticeMessageEscapesTheAgent(): void

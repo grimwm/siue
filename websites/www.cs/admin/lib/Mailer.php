@@ -48,12 +48,12 @@ final class SmtpMailer implements Mailer
         stream_set_timeout($fp, $this->timeout);
         try {
             self::expect($fp, '2');
-            self::command($fp, 'EHLO localhost', '2');
+            self::command($fp, 'EHLO www.cs.siue.edu', '2');
             self::command($fp, "MAIL FROM:<{$this->from}>", '2');
             self::command($fp, "RCPT TO:<$to>", '2');
             self::command($fp, 'DATA', '3');
             self::command($fp, $data . "\r\n.", '2');
-            fwrite($fp, "QUIT\r\n");
+            self::write($fp, "QUIT\r\n");
         } finally {
             fclose($fp);
         }
@@ -97,17 +97,34 @@ final class SmtpMailer implements Mailer
     /** @param resource $fp */
     private static function command($fp, string $line, string $want): void
     {
-        fwrite($fp, $line . "\r\n");
+        self::write($fp, $line . "\r\n");
         self::expect($fp, $want);
     }
 
     /**
-     * Reads one full reply, through its continuation lines ("250-..." to "250 ..."), and
-     * requires the class $want ('2' or '3').
+     * Writes all of $bytes or throws.
      *
      * @param resource $fp
      */
-    private static function expect($fp, string $want): void
+    private static function write($fp, string $bytes): void
+    {
+        $len = strlen($bytes);
+        for ($done = 0; $done < $len;) {
+            $n = @fwrite($fp, substr($bytes, $done));
+            if ($n === false || $n === 0) {
+                throw new \RuntimeException('SMTP write failed');
+            }
+            $done += $n;
+        }
+    }
+
+    /**
+     * Reads one full reply, through its continuation lines ("250-..." to "250 ..."), and
+     * requires the class $want ('2' or '3'). Public so tests can feed it a memory stream.
+     *
+     * @param resource $fp
+     */
+    public static function expect($fp, string $want): void
     {
         $last = '';
         for ($i = 0; $i < 20; $i++) {
@@ -116,7 +133,7 @@ final class SmtpMailer implements Mailer
                 break;
             }
             $last = $line;
-            if (preg_match('/^(\d{3}) /', $line, $m) === 1) {
+            if (preg_match('/^(\d{3})([ -]|\r?\n?$)/', $line, $m) === 1 && $m[2] !== '-') {
                 if ($m[1][0] === $want) {
                     return;
                 }
@@ -135,9 +152,12 @@ final class CaptureMailer implements Mailer
 
     public function send(string $to, string $subject, string $mime): void
     {
+        if (!Auth::allowed($to)) {
+            throw new \RuntimeException('refused: recipient not allowed');
+        }
         $name = $this->dir . '/' . time() . '-' . bin2hex(random_bytes(4)) . '.eml';
         $eml = SmtpMailer::data(Auth::ALLOWED, $to, $subject, $mime, time());
-        if (file_put_contents($name, $eml) === false) {
+        if (@file_put_contents($name, $eml) === false) {
             throw new \RuntimeException('capture failed');
         }
     }

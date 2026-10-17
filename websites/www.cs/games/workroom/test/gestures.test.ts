@@ -57,3 +57,56 @@ test('ctrl+wheel zooms about the pointer, wheel pans', () => {
   apply(g.wheel(200, 100, 0, false));
   assert.ok(Math.abs(view().start - 3) < 1e-9);
 });
+
+test('three fingers: lifting one leaves the other two pinching', () => {
+  const { g, apply, view } = setup();
+  apply(g.down({ id: 1, x: 100, y: 50, t: 0 }));
+  apply(g.down({ id: 2, x: 300, y: 50, t: 1 }));
+  apply(g.down({ id: 3, x: 700, y: 50, t: 2 }));
+  apply(g.up({ id: 1, x: 100, y: 50, t: 3 }));
+  apply(g.move({ id: 2, x: 200, y: 50, t: 4 }));
+  apply(g.move({ id: 3, x: 800, y: 50, t: 4 }));
+  assert.ok(Math.abs(view().pxPerSec - 50 * 600 / 400) < 1e-9, `${view().pxPerSec}`);
+});
+
+test('pinch, lift one, then a second finger lands: the pair pinches again', () => {
+  const { g, apply, view } = setup();
+  apply(g.down({ id: 1, x: 100, y: 50, t: 0 }));
+  apply(g.down({ id: 2, x: 300, y: 50, t: 1 }));
+  apply(g.move({ id: 1, x: 0, y: 50, t: 2 }));
+  apply(g.move({ id: 2, x: 400, y: 50, t: 2 }));
+  apply(g.up({ id: 2, x: 400, y: 50, t: 3 }));
+  apply(g.down({ id: 3, x: 500, y: 50, t: 4 }));
+  const before = view().pxPerSec;
+  apply(g.move({ id: 3, x: 700, y: 50, t: 5 }));
+  assert.ok(view().pxPerSec > before, 'fingers moving apart zoom in');
+});
+
+test('a jittery tap emits only a tap and leaves the view alone', () => {
+  const { g, apply, view } = setup();
+  const v0 = view();
+  assert.deepEqual(apply(g.down({ id: 1, x: 100, y: 50, t: 0 })), []);
+  assert.deepEqual(apply(g.move({ id: 1, x: 105, y: 52, t: 30 })), []);
+  assert.deepEqual(apply(g.up({ id: 1, x: 104, y: 51, t: 100 })), [{ kind: 'tap', x: 104, y: 51 }]);
+  assert.deepEqual(view(), v0);
+});
+
+test('select mode: a press with no movement is a tap, not a select', () => {
+  const { g } = setup('select');
+  g.down({ id: 1, x: 100, y: 120, t: 0 });
+  assert.deepEqual(g.up({ id: 1, x: 100, y: 120, t: 80 }), [{ kind: 'tap', x: 100, y: 120 }]);
+});
+
+test('select mode: a preview is closed when a second finger lands or the touch is cancelled', () => {
+  const a = setup('select');
+  a.g.down({ id: 1, x: 100, y: 120, t: 0 });
+  a.g.move({ id: 1, x: 300, y: 120, t: 50 });
+  assert.deepEqual(a.g.down({ id: 2, x: 500, y: 120, t: 60 }), [{ kind: 'select', x0: 100, x1: 300, y: 120, done: true, cancelled: true }]);
+  const b = setup('select');
+  b.g.down({ id: 1, x: 100, y: 120, t: 0 });
+  b.g.move({ id: 1, x: 300, y: 120, t: 50 });
+  assert.deepEqual(b.g.cancel(1), [{ kind: 'select', x0: 100, x1: 300, y: 120, done: true, cancelled: true }]);
+  const c = setup('select');
+  c.g.down({ id: 1, x: 100, y: 120, t: 0 });
+  assert.deepEqual(c.g.cancel(1), [], 'nothing was shown, nothing to close');
+});

@@ -76,3 +76,33 @@ test('a sound piece with notes draws them in seconds and hits them with no bar',
   const hit = hitRoll(r, v, tempoMap(s), s, n.rect.x + 2, n.rect.y + 1);
   assert.deepEqual([hit.noteIndex, hit.pitch, hit.laneId, hit.bar], [0, 36, 'boom', null]);
 });
+
+test('row height clamps at both ends', () => {
+  const one: Score = { ...score, notes: [{ lane: 'brass', start: 0, length: 1, pitch: 60, velocity: 80, motif: null }] };
+  const a = layoutRoll(one, view, 280);
+  assert.deepEqual([a.rowH, a.height], [14, 42]);
+  const wide: Score = { ...score, notes: [
+    { lane: 'brass', start: 0, length: 1, pitch: 0, velocity: 80, motif: null },
+    { lane: 'brass', start: 1, length: 1, pitch: 127, velocity: 80, motif: null },
+  ] };
+  const b = layoutRoll(wide, view, 280);
+  assert.deepEqual([b.rowH, b.height], [4, 130 * 4]);
+});
+
+test('an empty roll has no height', () => {
+  assert.equal(layoutRoll(sound, fitView(sound.duration, 800), 280).height, 0);
+});
+
+test('a very short note is still tappable, the nearest note wins', () => {
+  const s: Score = { ...sound, notes: [
+    { lane: 'boom', start: 1, length: 0.1, pitch: 60, velocity: 80, motif: null },
+    { lane: 'air', start: 1.5, length: 0.1, pitch: 60, velocity: 80, motif: null },
+  ] };
+  const v = fitView(16, 800); // 50 px/s: a note is 5 px wide
+  const r = layoutRoll(s, v, 280);
+  const [a, b] = r.notes as [typeof r.notes[number], typeof r.notes[number]];
+  const cy = a.rect.y + a.rect.h / 2;
+  assert.equal(hitRoll(r, v, tempoMap(s), s, a.rect.x + 2.5 + 8, cy).noteIndex, 0, '8 px off the centre');
+  assert.equal(hitRoll(r, v, tempoMap(s), s, b.rect.x - 4, cy).noteIndex, 1, 'nearer the second');
+  assert.equal(hitRoll(r, v, tempoMap(s), s, a.rect.x + 2.5 + 40, cy).noteIndex, null, 'far away');
+});

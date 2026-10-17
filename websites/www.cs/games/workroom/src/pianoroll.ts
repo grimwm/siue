@@ -22,10 +22,10 @@ export function pitchName(midi: number): string {
   return `${NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 }
 
-/** Pitch range = the shown notes' lowest - 1 .. highest + 1; higher pitch is higher (smaller y); colour = the motif's character colour from the score (motifColor), else lane colour. With no shown notes (a sound piece may have none) rows and notes are empty and rowH is 0. */
+/** Pitch range = the shown notes' lowest - 1 .. highest + 1; higher pitch is higher (smaller y); colour = the motif's character colour from the score (motifColor), else lane colour. rowH is the row height clamped to ROLL's range and height is rows * rowH. With no shown notes (a sound piece may have none) rows and notes are empty and rowH and height are 0. */
 export function layoutRoll(score: Score, view: View, height: number, lanes?: ReadonlySet<string>): RollLayout {
   const shown = score.notes.map((n, index) => ({ n, index })).filter(({ n }) => !lanes || lanes.has(n.lane));
-  if (shown.length === 0) return { low: 0, high: 0, rowH: 0, height, rows: [], notes: [] };
+  if (shown.length === 0) return { low: 0, high: 0, rowH: 0, height: 0, rows: [], notes: [] };
   const low = Math.min(...shown.map(s => s.n.pitch)) - 1;
   const high = Math.max(...shown.map(s => s.n.pitch)) + 1;
   const count = high - low + 1;
@@ -46,15 +46,29 @@ export function layoutRoll(score: Score, view: View, height: number, lanes?: Rea
   return { low, high, rowH, height: count * rowH, rows, notes };
 }
 
-/** What is under a pixel: the time and bar (null on a sound piece), the row's pitch, and the note if any (the later-drawn one on top). */
+/** A note's hit area is at least this wide and tall around its centre, so a note a pixel or two across can still be tapped. */
+export const MIN_HIT_PX = 24;
+
+/** What is under a pixel: the time and bar (null on a sound piece), the row's pitch, and the note if any. A point inside a note's rect finds that note; otherwise the note whose centre is nearest among those whose padded area (at least MIN_HIT_PX square) holds the point. */
 export function hitRoll(roll: RollLayout, view: View, tempo: TempoMap, score: Score, x: number, y: number): Hit & { pitch: number | null; noteIndex: number | null } {
   const time = Math.min(score.duration, Math.max(0, xToTime(view, x)));
   const row = roll.rows.find(r => y >= r.y && y < r.y + roll.rowH);
-  let note: RollLayout['notes'][number] | undefined;
-  for (const n of roll.notes) {
-    const r = n.rect;
-    if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) note = n;
-  }
+  const nearest = (pad: boolean): RollLayout['notes'][number] | undefined => {
+    let best: RollLayout['notes'][number] | undefined;
+    let bestD = Infinity;
+    for (const n of roll.notes) {
+      const r = n.rect;
+      const w = pad ? Math.max(r.w, MIN_HIT_PX) : r.w;
+      const h = pad ? Math.max(r.h, MIN_HIT_PX) : r.h;
+      const cx = r.x + r.w / 2;
+      const cy = r.y + r.h / 2;
+      if (x < cx - w / 2 || x >= cx + w / 2 || y < cy - h / 2 || y >= cy + h / 2) continue;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d <= bestD) { best = n; bestD = d; }
+    }
+    return best;
+  };
+  const note = nearest(false) ?? nearest(true);
   return {
     time, bar: tempo.barAt(time), zone: note ? 'lanes' : 'none', laneId: note?.lane ?? null, sectionId: null,
     pitch: row?.pitch ?? null, noteIndex: note?.index ?? null,

@@ -64,6 +64,10 @@ test('the last heart lost ends the try', () => {
 test('you cannot walk into it; as stone it is a wall to you too', () => {
   const s = grid(['PM.']);
   assert.equal(step(s, mv('right')).state, s);
+  const near = play(grid(['Pz..M']), mv('right'));
+  const stoned = play(near.state, tool('mirror'));
+  assert.ok(stoned.kinds.includes('stoned'));
+  assert.equal(step(stoned.state, mv('right')).state, stoned.state);
 });
 
 test("Medusa's mirror stones it for its next 3 turns", () => {

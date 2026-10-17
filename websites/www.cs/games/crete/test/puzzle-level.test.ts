@@ -86,3 +86,9 @@ test('every piece has a distinct legend character and a sprite on the list', () 
 test('blank lines after the grid are fine', () => {
   assert.doesNotThrow(() => parse('title: t\nintro: i\n\nP.\n\n\n'));
 });
+
+test('serialize refuses a title or intro that would span lines', () => {
+  const lv = parse('title: t\nintro: i\n\nP*E\n');
+  assert.throws(() => serialize({ ...lv, title: 'a\nb' }), /one line/);
+  assert.throws(() => serialize({ ...lv, intro: 'a\r\nb' }), /one line/);
+});

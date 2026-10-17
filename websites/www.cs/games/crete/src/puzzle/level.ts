@@ -101,6 +101,7 @@ export function parse(text: string): Level {
 }
 
 export function serialize(lv: Level): string {
+  if (/[\r\n]/.test(lv.title) || /[\r\n]/.test(lv.intro)) throw new Error('title and intro must be one line');
   const relicsOnGrid = lv.objects.filter(o => o === 'relic').length;
   const head = [`title: ${lv.title}`, `intro: ${lv.intro}`];
   if (lv.hearts !== 3) head.push(`hearts: ${lv.hearts}`);

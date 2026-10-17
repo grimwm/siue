@@ -1,4 +1,5 @@
 """Where the tool reads and writes. Every function that depends on the environment takes it as an argument."""
+import os
 import subprocess
 from pathlib import Path
 from typing import Mapping
@@ -59,6 +60,16 @@ def notes_dir(platform: str, env: Mapping[str, str], home: Path) -> Path:
 def check_outside(path: Path, repo: Path) -> None:
     resolved = path.resolve()
     root = repo.resolve()
-    if resolved == root or root in resolved.parents:
+    inside = resolved == root or root in resolved.parents
+    if not inside:
+        # A case-insensitive filesystem keeps the spelling it was given, so compare file identity too.
+        for p in (resolved, *resolved.parents):
+            try:
+                if os.path.samefile(p, root):
+                    inside = True
+                    break
+            except OSError:
+                continue
+    if inside:
         raise NotesInsideRepo(f"{resolved} is inside the repository {root}: opened notes must never be committed; "
                               "set SIUE_MUSIC_NOTES_DIR to a folder outside it")

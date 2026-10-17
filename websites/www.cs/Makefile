@@ -53,6 +53,7 @@ parity:
 
 test:
 	cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json
+	$(MAKE) --no-print-directory music-tools-test
 	node tests/e2e/select-test.ts
 	node tests/e2e/shard-test.ts
 	node tests/e2e/select.ts --check

@@ -70,6 +70,17 @@ test('tampering fails with a reason', async () => {
   await assert.rejects(open(bundle, new Map()), isReason('unknown-key'));
 });
 
+test('a sealed body that does not match the note contract is refused as tampered', async () => {
+  const keyring = new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)]]);
+  const forgeries: unknown[] = [
+    { ...body, curve: 'x' }, { ...body, curve: [[1, 'a']] }, { ...body, text: 5 }, { ...body, from: '8' },
+    { ...body, reaction: 'meh' }, { ...body, audio: { mime: 1, seconds: 2 } }, { ...body, piece: undefined }, { ...body, made: null },
+  ];
+  for (const f of forgeries) {
+    await assert.rejects(open(await seal(f as NoteBody, null, builtIn), keyring), isReason('tampered'));
+  }
+});
+
 test('the committed fixture notes still open (the format is stable)', async () => {
   const keyring = new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)]]);
   const text = await open(new Uint8Array(readFileSync(new URL('./fixtures/note-text.sealed', import.meta.url))), keyring);

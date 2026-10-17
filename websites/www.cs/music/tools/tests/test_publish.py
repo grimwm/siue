@@ -66,8 +66,29 @@ class PublishTest(unittest.TestCase):
 
     def test_a_draft_without_audio_is_refused(self):
         (self.v1 / "audio.webm").unlink()
-        with self.assertRaises(PublishError):
+        with self.assertRaises(PublishError) as e:
             publish("test-piece", 1, self.pieces, self.api, self.ids)
+        self.assertIn("no audio.webm or audio.m4a", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+
+    def test_a_symlinked_draft_file_or_folder_never_leaves_the_computer(self):
+        secret = self.pieces / "secret.webm"
+        secret.write_bytes(b"\x1a\x45\xdf\xa3secret")
+        (self.v1 / "audio.webm").unlink()
+        (self.v1 / "audio.webm").symlink_to(secret)
+        with self.assertRaises(PublishError) as e:
+            publish("test-piece", 1, self.pieces, self.api, self.ids)
+        self.assertIn("symbolic link", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+        (self.v1 / "audio.webm").unlink()
+        (self.v1 / "audio.webm").write_bytes(b"\x1a\x45\xdf\xa3")
+        moved = self.pieces / "elsewhere"
+        self.v1.rename(moved)
+        self.v1.symlink_to(moved, target_is_directory=True)
+        with self.assertRaises(PublishError) as e:
+            publish("test-piece", 1, self.pieces, self.api, self.ids)
+        self.assertIn("symbolic link", str(e.exception))
+        self.assertEqual(self.api.sent, [])
 
     def test_a_sound_effect_publishes_without_musicxml(self):
         shutil.copytree(FIXTURES / "draft-sound", self.pieces / "cannon-fire" / "v1")
@@ -115,7 +136,7 @@ class PublishTest(unittest.TestCase):
             s = json.loads(json.dumps(base))
             change(s)
             errors = validate(s, self.ids)
-            self.assertTrue(errors and path in errors[0], (path, errors))
+            self.assertTrue(errors and errors[0].split(": ", 1)[0].startswith(path), (path, errors))
 
     def test_python_and_the_page_name_the_same_sound_paths(self):
         base = json.loads((FIXTURES / "score-sound-v1.json").read_text())
@@ -141,7 +162,7 @@ class PublishTest(unittest.TestCase):
             s = json.loads(json.dumps(base))
             change(s)
             errors = validate(s, self.ids)
-            self.assertTrue(errors and path in errors[0], (path, errors))
+            self.assertTrue(errors and errors[0].split(": ", 1)[0].startswith(path), (path, errors))
 
     def test_either_kind_may_use_any_lane_family(self):
         music = json.loads((FIXTURES / "score-v1.json").read_text())

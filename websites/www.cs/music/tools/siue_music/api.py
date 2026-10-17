@@ -1,5 +1,6 @@
 """The workroom's HTTP API as the owner's tool speaks it: Bearer key, HTTPS, raw bodies with their length declared."""
 import json
+import math
 import struct
 import time
 import urllib.error
@@ -121,5 +122,7 @@ def _pause(e: urllib.error.HTTPError, default: float) -> float:
     try:
         asked = float(e.headers.get("Retry-After", ""))
     except (TypeError, ValueError, AttributeError):
+        return default
+    if not math.isfinite(asked):
         return default
     return min(max(asked, default), MAX_RETRY_AFTER)

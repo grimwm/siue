@@ -24,12 +24,18 @@ def latest_version(piece_dir: Path) -> int:
 def publish(piece: str, version: int | None, pieces: Path, api, glossary_ids: frozenset[str]) -> int:
     if not ID_RE.fullmatch(piece):
         raise PublishError(f"{piece!r} is not a piece id (lowercase letters, digits and hyphens)")
-    piece_dir = Path(pieces) / piece
+    pieces = Path(pieces)
+    piece_dir = pieces / piece
     if version is None:
         version = latest_version(piece_dir)
     if not isinstance(version, int) or isinstance(version, bool) or version < 1:
         raise PublishError(f"{version!r} is not a draft version")
     folder = piece_dir / f"v{version}"
+    for directory in (pieces, piece_dir, folder):
+        if directory.is_symlink():
+            raise PublishError(f"{directory} is a symbolic link; publish needs real folders")
+    if (folder / "score.json").is_symlink():
+        raise PublishError(f"{folder / 'score.json'} is a symbolic link; publish sends only regular files")
     try:
         score = json.loads((folder / "score.json").read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -39,7 +45,13 @@ def publish(piece: str, version: int | None, pieces: Path, api, glossary_ids: fr
         raise PublishError(f"score.json is not valid: {errors[0]}")
     if score["piece"]["id"] != piece or score["draft"] != version:
         raise PublishError(f"score.json says piece {score['piece']['id']} draft {score['draft']}, not {piece} v{version}")
-    files = {name: folder / name for name in DRAFT_FILES if (folder / name).is_file()}
+    files = {}
+    for name in DRAFT_FILES:
+        path = folder / name
+        if path.is_symlink():
+            raise PublishError(f"{path} is a symbolic link; publish sends only regular files")
+        if path.is_file():
+            files[name] = path
     if score["kind"] == "music" and "score.musicxml" not in files:
         raise PublishError(f"a music draft needs score.musicxml, which {folder} lacks")
     if "audio.webm" not in files and "audio.m4a" not in files:

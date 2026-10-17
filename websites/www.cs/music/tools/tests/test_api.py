@@ -116,6 +116,20 @@ class ApiTest(unittest.TestCase):
         self.assertEqual((len(calls), len(naps)), (3, 2))
         self.assertTrue(all(n > 0 for n in naps))
 
+    def test_a_non_finite_retry_after_falls_back_to_the_default_pause(self):
+        for value in ("nan", "inf", "-inf"):
+            naps, calls = [], []
+
+            def opener(request, timeout=None):
+                calls.append(request)
+                if len(calls) < 2:
+                    raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {"Retry-After": value}, io.BytesIO(b"{}"))
+                return FakeResponse(b"{}")
+
+            Api("https://example.test/music/", "k" * 64, opener, sleep=naps.append).publish_keyring({"v": 1})
+            self.assertEqual(len(naps), 1, value)
+            self.assertTrue(0 < naps[0] <= 60, (value, naps))
+
     def test_the_back_off_outlasts_the_servers_minute(self):
         from siue_music.api import RATE_LIMIT_PAUSES
         self.assertGreater(sum(RATE_LIMIT_PAUSES), 60)

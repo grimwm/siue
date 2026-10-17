@@ -34,6 +34,14 @@ class PathsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             check_outside(Path(d), repo)
 
+    def test_a_differently_cased_spelling_of_the_repository_is_refused(self):
+        repo = SITE.parents[1]
+        swapped = Path(str(repo).swapcase())
+        if swapped == repo or not swapped.exists():
+            self.skipTest("this filesystem is case-sensitive")
+        with self.assertRaises(NotesInsideRepo):
+            check_outside(swapped / "notes", repo)
+
 
 if __name__ == "__main__":
     unittest.main()

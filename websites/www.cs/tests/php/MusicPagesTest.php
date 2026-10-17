@@ -226,4 +226,89 @@ final class MusicPagesTest extends TestCase
         self::assertStringContainsString('href="../music/"', $hub->body);
         self::assertStringContainsString('Music notes key', $hub->body);
     }
+
+    public function testAMalformedPublicKeyFileDoesNotBreakTheHub(): void
+    {
+        $file = admin_tmp_dir() . '/public.json';
+        file_put_contents($file, '{not json');
+        self::assertSame(['Music notes key' => 'invalid (see music/keys/public.json)'], admin_key_fingerprints($file));
+        self::assertSame(['Music notes key' => 'not made yet (make keys-init)'], admin_key_fingerprints(admin_tmp_dir() . '/absent.json'));
+    }
+
+    public function testACorruptStoredKeyringIsABadKeyringNotAMissingOne(): void
+    {
+        $this->store->putKeyring('not json');
+        $res = $this->pages->keyring(music_signed_in($this->sessions));
+        self::assertSame(500, $res->status);
+        self::assertSame(['error' => 'bad_keyring'], json_decode($res->body, true));
+    }
+
+    public function testDraftFilesAreServedWithTheirTypeAndRanges(): void
+    {
+        $files = ['score.json' => '{"piece":{"title":"T"}}', 'audio.webm' => '0123456789', 'spectrogram.png' => 'png', 'audio.m4a' => 'm4a', 'score.musicxml' => '<x/>'];
+        $this->store->putDraft('p1', 1, $files, ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
+        $get = fn(string $file, array $headers = [], string $v = '1') => $this->pages->draftFile(music_signed_in($this->sessions, ['query' => ['piece' => 'p1', 'v' => $v, 'file' => $file], 'headers' => $headers]));
+        $types = ['score.json' => 'application/json', 'score.musicxml' => 'application/vnd.recordare.musicxml+xml', 'audio.webm' => 'audio/webm', 'audio.m4a' => 'audio/mp4', 'spectrogram.png' => 'image/png'];
+        foreach ($types as $name => $mime) {
+            $res = $get($name);
+            self::assertSame([200, $mime, $files[$name]], [$res->status, $res->headers['Content-Type'], $res->body], $name);
+        }
+        $part = $get('audio.webm', ['range' => 'bytes=2-4']);
+        self::assertSame([206, '234', 'bytes 2-4/10'], [$part->status, $part->body, $part->headers['Content-Range']]);
+        self::assertSame(404, $get('audio.webm', [], '2')->status, 'unknown version');
+        self::assertSame(400, $get('../score.json')->status, 'a name outside the fixed set');
+        self::assertSame(400, $get('score.json', [], '0')->status);
+    }
+
+    public function testAWrongMethodWithASessionIs405(): void
+    {
+        $post = music_signed_in($this->sessions, ['method' => 'POST']);
+        foreach (['csrf', 'note', 'keyring', 'drafts', 'draftFile'] as $route) {
+            self::assertSame(405, $this->pages->$route($post)->status, $route);
+        }
+        self::assertSame(405, $this->pages->notes(music_signed_in($this->sessions, ['method' => 'PUT']), '')->status);
+        self::assertSame(405, $this->pages->delete(music_signed_in($this->sessions))->status, 'delete takes POST only');
+    }
+
+    public function testStorageDownIsThe503Page(): void
+    {
+        $r = music_signed_in($this->sessions, ['query' => ['piece' => 'p1']]);
+        $this->store->drafts(); // the table exists now; drop it so the next read fails
+        (new ReflectionProperty($this->store, 'db'))->getValue($this->store)->exec('DROP TABLE music_drafts');
+        $res = $this->pages->drafts($r);
+        self::assertSame(503, $res->status);
+        self::assertSame(Music\Http::csp(), $res->headers['Content-Security-Policy']);
+    }
+
+    public function testABadIdDeleteIs400AndKeepsTheNotes(): void
+    {
+        $r = music_signed_in($this->sessions);
+        $id = $this->store->addNote(music_sealed())['id'];
+        $res = $this->pages->delete(req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies, 'headers' => ['x-csrf' => $this->csrfFor($r)], 'post' => ['id' => 'nope']]));
+        self::assertSame(400, $res->status);
+        self::assertNotNull($this->store->noteBytes($id));
+    }
+
+    public function testTheIndexHasANoProjectGroupAndAnEmptyState(): void
+    {
+        $empty = $this->pages->index(music_signed_in($this->sessions));
+        self::assertStringContainsString('No drafts have been published yet.', $empty->body);
+        $this->store->putDraft('loose', 1, ['score.json' => '{"piece":{"title":"Loose"}}'], ['project_id' => '', 'project_name' => '', 'kind' => 'music']);
+        $this->clock->now += 10;
+        $this->store->putDraft('ch1', 1, ['score.json' => '{"piece":{"title":"C"}}'], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
+        $this->clock->now += 10;
+        $this->store->putDraft('loose2', 1, ['score.json' => '{"piece":{"title":"Loose2"}}'], ['project_id' => '', 'project_name' => '', 'kind' => 'music']);
+        $body = $this->pages->index(music_signed_in($this->sessions))->body;
+        preg_match_all('~<h2 class="project">(.*?)</h2>~', $body, $h);
+        self::assertSame(['Crete', 'No project'], $h[1], 'the unprojected group is last whatever its recency');
+    }
+
+    public function testTheNoSuchPiecePageMountsNothing(): void
+    {
+        $res = $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => '<script>']]));
+        self::assertSame(400, $res->status);
+        self::assertStringContainsString('No such piece.', $res->body);
+        self::assertStringNotContainsString('workroom', $res->body);
+        self::assertStringNotContainsString('<script', $res->body);
+    }
 }

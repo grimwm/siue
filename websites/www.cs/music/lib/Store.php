@@ -40,7 +40,7 @@ final class Store
     public const KINDS = ['music', 'sound'];
     public const DRAFT_FILES = ['score.json', 'score.musicxml', 'audio.webm', 'audio.m4a', 'spectrogram.png'];
 
-    private const ID = '/^[0-9a-f]{32}$/';
+    private const ID = '/^[0-9a-f]{32}$/D';
     /** The shape of a piece id and of a project id. */
     private const PIECE = '/^[a-z0-9][a-z0-9-]{0,47}$/D';
     /** The magic, the 32-byte fingerprint and the two-byte key length: the least a sealed note can be. */
@@ -292,6 +292,18 @@ final class Store
     public static function validPieceId(mixed $id): bool
     {
         return is_string($id) && preg_match(self::PIECE, $id) === 1;
+    }
+
+    /** A note id: 32 lowercase hex digits. */
+    public static function validNoteId(mixed $id): bool
+    {
+        return is_string($id) && preg_match(self::ID, $id) === 1;
+    }
+
+    /** A draft version: 1 to 9999 without leading zeros. */
+    public static function validVersion(mixed $v): bool
+    {
+        return is_string($v) && preg_match('/^[1-9]\d{0,3}$/D', $v) === 1;
     }
 
     public static function validProjectId(mixed $id): bool

@@ -19,7 +19,6 @@ final class Pages
         'spectrogram.png' => 'image/png',
     ];
     private const NOTE_ERRORS = ['too_large' => 413, 'full' => 409, 'bad_header' => 422, 'unknown_key' => 422, 'no_key' => 503];
-    private const ID = '/^[0-9a-f]{32}$/D';
     private const LISTED_CHANGES = 3;
 
     /** $assetVersion: 10 hex of games/workroom/dist/workroom.js (the ?v= on the script); $baseUrl: admin_base_url(). */
@@ -74,8 +73,8 @@ final class Pages
         return $this->guarded($r, true, false, function () use ($r): \Admin\Response {
             $id = $r->query['id'] ?? null;
             $v = $r->query['v'] ?? '';
-            if (!Store::validPieceId($id) || !is_string($v) || ($v !== '' && preg_match('/^[1-9]\d{0,3}$/D', $v) !== 1)) {
-                return $this->shell(400, 'No such piece.', 'index', '', '', '<p>No such piece.</p>', $r);
+            if (!Store::validPieceId($id) || ($v !== '' && !Store::validVersion($v))) {
+                return $this->errorPage(400, 'No such piece.');
             }
             return $this->shell(200, 'Music workroom', 'piece', $id, $v, '', $r);
         });
@@ -114,7 +113,7 @@ final class Pages
     {
         return $this->guarded($r, false, false, function () use ($r): \Admin\Response {
             $id = $r->query['id'] ?? null;
-            if (!is_string($id) || preg_match(self::ID, $id) !== 1) {
+            if (!Store::validNoteId($id)) {
                 return Http::json(400, ['error' => 'bad_id']);
             }
             $bytes = $this->store->noteBytes($id);
@@ -132,7 +131,7 @@ final class Pages
             $id = $r->post['id'] ?? null;
             if (($r->post['all'] ?? null) === '1') {
                 $deleted = $this->store->deleteAllNotes();
-            } elseif (is_string($id) && preg_match(self::ID, $id) === 1) {
+            } elseif (Store::validNoteId($id)) {
                 $deleted = $this->store->deleteNote($id) ? 1 : 0;
             } else {
                 return $this->refuseWithToken(400, 'bad_id', $r);
@@ -147,7 +146,14 @@ final class Pages
         return $this->guarded($r, false, false, function (): \Admin\Response {
             $row = $this->store->keyring();
             $keyring = $row === null ? null : json_decode($row['locked'], true);
-            return is_array($keyring) ? Http::json(200, ['keyring' => $keyring]) : Http::json(404, ['error' => 'no_keyring']);
+            if ($row === null) {
+                return Http::json(404, ['error' => 'no_keyring']);
+            }
+            if (!is_array($keyring)) {
+                error_log('music: the stored keyring is not valid JSON');
+                return Http::json(500, ['error' => 'bad_keyring']);
+            }
+            return Http::json(200, ['keyring' => $keyring]);
         }, 'GET');
     }
 
@@ -174,7 +180,7 @@ final class Pages
             $piece = $r->query['piece'] ?? null;
             $v = $r->query['v'] ?? null;
             $file = $r->query['file'] ?? null;
-            if (!Store::validPieceId($piece) || !is_string($v) || preg_match('/^[1-9]\d{0,3}$/D', $v) !== 1 || !is_string($file) || !isset(self::MIME[$file])) {
+            if (!Store::validPieceId($piece) || !Store::validVersion($v) || !is_string($file) || !isset(self::MIME[$file])) {
                 return Http::json(400, ['error' => 'bad_request']);
             }
             $path = $this->store->draftFile($piece, (int) $v, $file);
@@ -252,6 +258,15 @@ final class Pages
         $id = Html::e($row['piece']);
         return '<li class="piece" data-kind="' . Html::e($row['kind']) . '"><a href="piece.php?id=' . $id . '" data-waiting="' . $id . '">'
             . Html::e($title) . '</a><span class="waiting-count"></span><ul class="changes">' . $changes . '</ul></li>';
+    }
+
+    private function errorPage(int $status, string $message): \Admin\Response
+    {
+        $html = '<!doctype html>' . "\n"
+            . '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<meta name="robots" content="noindex, nofollow"><title>' . Html::e($message) . '</title></head>'
+            . '<body><p>' . Html::e($message) . '</p></body></html>';
+        return Http::finish(new \Admin\Response($status, ['Content-Type' => 'text/html; charset=utf-8'], $html));
     }
 
     private function shell(int $status, string $title, string $view, string $piece, string $version, string $body, \Admin\Request $r): \Admin\Response

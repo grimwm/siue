@@ -37,10 +37,14 @@ function admin_dashboards(): array
 }
 
 /** Encryption-key fingerprints for the hub, label => fingerprint. Workrooms add their own here. */
-function admin_key_fingerprints(): array
+function admin_key_fingerprints(?string $keysFile = null): array
 {
     require_once __DIR__ . '/../../music/lib/PublicKeys.php';
-    $k = Music\PublicKeys::fromFile(__DIR__ . '/../../music/keys/public.json');
+    try {
+        $k = Music\PublicKeys::fromFile($keysFile ?? __DIR__ . '/../../music/keys/public.json');
+    } catch (RuntimeException) {
+        return ['Music notes key' => 'invalid (see music/keys/public.json)'];
+    }
     return ['Music notes key' => $k === null ? 'not made yet (make keys-init)' : Music\PublicKeys::display($k->current)];
 }
 

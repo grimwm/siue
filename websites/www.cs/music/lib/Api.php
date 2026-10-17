@@ -10,7 +10,6 @@ final class Api
 {
     public const DRAFT_MAGIC = 'SIUED1';
 
-    private const ID = '/^[0-9a-f]{32}$/D';
     private const KEYRING_FIELDS = ['ct', 'iterations', 'iv', 'kdf', 'salt', 'v'];
     private const MIN_ITERATIONS = 600000;
 
@@ -82,7 +81,7 @@ final class Api
         if (!Store::validPieceId($piece)) {
             return Http::json(422, ['error' => 'bad_piece']);
         }
-        if (!is_string($version) || preg_match('/^[1-9]\d{0,3}$/D', $version) !== 1) {
+        if (!Store::validVersion($version)) {
             return Http::json(422, ['error' => 'bad_version']);
         }
         $about = null;
@@ -132,7 +131,7 @@ final class Api
     private function noteId(\Admin\Request $r): ?string
     {
         $id = $r->query['id'] ?? null;
-        return is_string($id) && preg_match(self::ID, $id) === 1 ? $id : null;
+        return Store::validNoteId($id) ? $id : null;
     }
 
     /**

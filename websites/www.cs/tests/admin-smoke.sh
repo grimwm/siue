@@ -11,12 +11,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 name="admin-smoke-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
+# The database and captured mail live in a folder of the container's own filesystem, never in the
+# bind-mounted admin/data a developer's local data sits in; the container goes away with the project.
+export ADMIN_SMOKE_DIR="/tmp/admin-smoke-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
 dc=(docker compose -p "$name" -f ../../compose.yaml -f compose.admin-local.yaml)
 work=$(mktemp -d "${TMPDIR:-/tmp}/admin-smoke.XXXXXX")
 
 cleanup() {
-  # The container wrote admin/data into the bind-mounted tree; take it back out.
-  "${dc[@]}" exec -T www-cs-php rm -rf /var/www/html/admin/data >/dev/null 2>&1 || true
   "${dc[@]}" down >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -56,13 +57,13 @@ for h in cache-control referrer-policy x-robots-tag x-content-type-options conte
 done
 
 # 2. Ask for the link. The capture folder sits in the data folder the first request made.
-"${dc[@]}" exec -T -u apache www-cs-php mkdir -p /var/www/html/admin/data/mail
+"${dc[@]}" exec -T -u apache www-cs-php mkdir -p "$ADMIN_SMOKE_DIR/mail"
 expect "POST login.php" 200 "$(req ask POST /admin/login.php --data-urlencode 'email=wgrim@siue.edu')"
 
 # 3. The mail is written after the reply: wait for it, take the newest.
 eml=
 for _ in $(seq 1 20); do
-  if eml=$("${dc[@]}" exec -T www-cs-php sh -c 'ls -t /var/www/html/admin/data/mail/*.eml 2>/dev/null | head -1') && [ -n "$eml" ]; then break; fi
+  if eml=$("${dc[@]}" exec -T www-cs-php sh -c 'ls -t '"$ADMIN_SMOKE_DIR"'/mail/*.eml 2>/dev/null | head -1') && [ -n "$eml" ]; then break; fi
   sleep 0.5
 done
 [ -n "$eml" ] || fail "no captured mail"

@@ -14,12 +14,12 @@ require_once __DIR__ . '/Headers.php';
 require_once __DIR__ . '/Mailer.php';
 require_once __DIR__ . '/MailTemplate.php';
 
-// The kit's StoreDir and StoreModes. Where the kit's source is present (a
-// checkout, the test suites, which share one process with the kit's own tests)
-// its files are the ones loaded, so a class is never declared twice; the
-// deployed site ships the copies in this folder instead.
+// The kit's StoreDir and StoreModes. The command-line test suites share one
+// process with the kit's own tests and load the kit's files, so a class is never
+// declared twice; every web request loads the copies in this folder, which the
+// deploy ships and a drift test keeps identical to the kit's.
 $kitPhp = __DIR__ . '/../../games/_kit/php';
-if (is_file($kitPhp . '/score-guard.php')) {
+if (PHP_SAPI === 'cli' && is_file($kitPhp . '/score-guard.php')) {
     require_once $kitPhp . '/score-guard.php';
 } elseif (!class_exists(\Kit\StoreDir::class, false)) {
     require_once __DIR__ . '/store-modes.php';
@@ -68,7 +68,7 @@ function admin_is_local_base(string $baseUrl): bool
  */
 function admin_cookie_path(string $baseUrl): string
 {
-    $path = (string) parse_url($baseUrl, PHP_URL_PATH);
+    $path = rawurldecode((string) parse_url($baseUrl, PHP_URL_PATH));
     return preg_match('#^/~[^/]+/#', $path, $m) === 1 ? $m[0] : '/';
 }
 

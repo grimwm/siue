@@ -6,4 +6,5 @@ services:
   www-cs-php:
     environment:
       ADMIN_BASE_URL: http://localhost/admin/
-      ADMIN_MAIL_CAPTURE_DIR: /var/www/html/admin/data/mail
+      ADMIN_DATA_DIR: ${ADMIN_SMOKE_DIR:?set by tests/admin-smoke.sh}
+      ADMIN_MAIL_CAPTURE_DIR: ${ADMIN_SMOKE_DIR:?set by tests/admin-smoke.sh}/mail

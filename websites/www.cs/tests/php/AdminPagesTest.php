@@ -416,4 +416,46 @@ final class AdminPagesTest extends TestCase
         self::assertSame('{"mail":"no","db":"no"}', $p->health()->body);
         self::assertSame(0, $calls);
     }
+
+    public function testTheLoginFormIsPrefilledAndOffersToEmailALink(): void
+    {
+        [$p] = $this->pages();
+        $body = $p->loginForm(req())->body;
+        self::assertStringContainsString('value="wgrim@siue.edu"', $body);
+        self::assertStringContainsString('Email me a link', $body);
+    }
+
+    public function testSigningInEndsTheSessionTheBrowserAlreadyHad(): void
+    {
+        [$p, $db, , $m] = $this->pages();
+        $old = $this->signedIn($p, $m);
+        $p->requestLink($this->post(['email' => 'wgrim@siue.edu']));
+        $p->flush();
+        $token = $this->tokenOf($m);
+        $mark = $this->cookieValue($p->confirm(req(['query' => ['token' => $token]])), Admin\Pages::CONFIRM_COOKIE);
+        $p->signIn($this->post(['token' => $token, 'csrf' => $mark], ['cookies' => $old->cookies + [Admin\Pages::CONFIRM_COOKIE => $mark]]));
+        self::assertSame(1, (int) $db->query('SELECT COUNT(*) FROM sessions')->fetchColumn());
+        self::assertSame(303, $p->hub($old)->status, 'the old session no longer opens the hub');
+    }
+
+    public function testAFreshHealthResultIsReadWithoutTheWriteLock(): void
+    {
+        $db = admin_tmp_db();
+        $clock = new FakeClock(1_000_000);
+        $p = new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true);
+        $p->health();
+        $holder = new PDO('sqlite:' . $db->query('PRAGMA database_list')->fetch(PDO::FETCH_ASSOC)['file']);
+        $holder->exec('BEGIN IMMEDIATE'); // another request holds the write lock
+        $db->exec('PRAGMA busy_timeout = 0');
+        try {
+            self::assertSame('{"mail":"yes","db":"yes"}', $p->health()->body);
+        } finally {
+            $holder->exec('ROLLBACK');
+        }
+    }
+
+    public function testACookiePathSurvivesAnEncodedTilde(): void
+    {
+        self::assertSame('/~wgrim/', admin_cookie_path('https://www.cs.siue.edu/%7Ewgrim/admin/'));
+    }
 }

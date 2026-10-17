@@ -29,7 +29,7 @@ final class MailTemplate
         $agent = self::oneLine($agent, 120);
         $text = "New sign-in\r\n\r\n"
             . "When: $at\r\nIP: $ip\r\nBrowser: $agent\r\n\r\n"
-            . "If this was not you, sign out everywhere:\r\n$hubUrl\r\n";
+            . "If this was not you, sign in, then sign out everywhere:\r\n$hubUrl\r\n";
         $rows = '';
         foreach (['When' => $at, 'IP' => $ip, 'Browser' => $agent] as $label => $value) {
             $rows .= '<tr><td style="padding:6px 16px 6px 0;font-family:\'Source Sans 3\',Arial,sans-serif;color:#9aa3b2;font-size:14px;vertical-align:top;white-space:nowrap;">'
@@ -38,8 +38,8 @@ final class MailTemplate
         }
         $body = self::p('Someone signed in to your admin pages.')
             . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px 0;">' . $rows . '</table>'
-            . self::p('If this was not you, sign out everywhere.', true, false)
-            . self::button($hubUrl, 'Sign out everywhere');
+            . self::p('If this was not you, sign in and press Sign out everywhere.', true, false)
+            . self::button($hubUrl, 'Open the admin pages');
         return ['subject' => 'New sign-in to your admin pages', 'mime' => self::multipart($text, self::page('New sign-in', $body))];
     }
 

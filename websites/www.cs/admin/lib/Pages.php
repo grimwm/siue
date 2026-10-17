@@ -63,8 +63,8 @@ final class Pages
     {
         $form = '<form method="post" action="login.php">'
             . '<label for="email">Email</label>'
-            . '<input id="email" type="email" name="email" autocomplete="username" autofocus required>'
-            . '<button type="submit" class="button">Send link</button></form>';
+            . '<input id="email" type="email" name="email" value="' . Html::e(Auth::ALLOWED) . '" autocomplete="username" required>'
+            . '<button type="submit" class="button">Email me a link</button></form>';
         return self::html(200, 'Sign in', $form);
     }
 
@@ -119,6 +119,8 @@ final class Pages
             if (!is_string($token) || $this->auth->consume($token) === null) {
                 return self::html(403, 'Link not valid', Html::p('This link has expired or was already used. Request a new one.') . '<a class="button" href="login.php">Back to sign in</a>', [$this->clearConfirm()]);
             }
+            // A browser that already carries a session does not keep it alive beside the new one.
+            $this->sessions->end($r);
             $cookies = [
                 $this->sessions->start($r),
                 Sessions::deviceCookie($this->auth->issueDevice(), $this->cookiePath),
@@ -219,8 +221,8 @@ final class Pages
             }
             if (($r->post['do'] ?? '') === 'revoke') {
                 $id = $r->post['id'] ?? '';
-                if (is_string($id) && ctype_digit($id)) {
-                    $this->keys->revoke((int) $id);
+                if (!is_string($id) || !ctype_digit($id) || !$this->keys->revoke((int) $id)) {
+                    return $this->keysPage(404, $r, 'No active key has that id.');
                 }
                 return $this->keysPage(200, $r);
             }
@@ -392,10 +394,15 @@ final class Pages
     {
         try {
             $now = $this->clock->now();
+            // A fresh result is read without taking the write lock.
+            $row = $this->db->query("SELECT ok, at FROM probes WHERE name = 'mail'")->fetch(\PDO::FETCH_ASSOC);
+            if (is_array($row) && $now - (int) $row['at'] < self::PROBE_EVERY) {
+                return (int) $row['ok'] === 1;
+            }
             $this->db->exec('BEGIN IMMEDIATE');
             try {
-                $st = $this->db->query("SELECT ok, at FROM probes WHERE name = 'mail'");
-                $row = $st->fetch(\PDO::FETCH_ASSOC);
+                // Read again under the lock: another request may have claimed the slot meanwhile.
+                $row = $this->db->query("SELECT ok, at FROM probes WHERE name = 'mail'")->fetch(\PDO::FETCH_ASSOC);
                 $fresh = is_array($row) && $now - (int) $row['at'] < self::PROBE_EVERY;
                 if (!$fresh) {
                     $this->db->prepare("INSERT OR REPLACE INTO probes (name, ok, at) VALUES ('mail', ?, ?)")

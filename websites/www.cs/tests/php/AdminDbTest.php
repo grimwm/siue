@@ -83,14 +83,30 @@ final class AdminDbTest extends TestCase
         }
     }
 
-    public function testAnOlderSessionsTableKeepsItsRowsUnderTheNewColumnName(): void
+    /** on the host PHP runs as the web user, while the site account owns admin/data (group-writable for PHP) */
+    public function testTheOwnershipModelOfADataFolderTheSiteAccountOwns(): void
     {
-        $dir = admin_tmp_dir();
-        $raw = new PDO('sqlite:' . $dir . '/' . Admin\Db::FILE);
-        $raw->exec('CREATE TABLE sessions (id_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL, seen_at INTEGER NOT NULL, ip TEXT NOT NULL, agent TEXT NOT NULL, csrf_hash TEXT)');
-        $raw->exec("INSERT INTO sessions VALUES ('h', 1, 1, 'i', 'a', 'n')");
-        $raw = null;
-        $db = Admin\Db::open($dir);
-        self::assertSame('n', $db->query('SELECT csrf_nonce FROM sessions')->fetchColumn());
+        $web = 48;
+        $site = 1000;
+        $other = 1001;
+        self::assertTrue(Kit\StoreDir::ownerTrusted($web, $site, $web), 'a file PHP made');
+        self::assertTrue(Kit\StoreDir::ownerTrusted($site, $site, $web), 'a file the site account put there');
+        self::assertFalse(Kit\StoreDir::ownerTrusted($other, $site, $web), 'another account\'s file');
+        self::assertFalse(Kit\StoreDir::ownerTrusted($other, null, $web), 'no directory to vouch for it');
+    }
+
+    public function testAGroupWritableDataFolderIsChosenAndTheDatabaseIsPrivate(): void
+    {
+        $base = admin_tmp_dir();
+        $data = "$base/data";
+        mkdir($data, 0770);
+        chmod($data, 0770);
+        $picked = (new Kit\StoreDir('admin storage:', Admin\StorageUnavailable::class))->pick($data, "$base/fallback");
+        self::assertSame($data, $picked);
+        self::assertFileDoesNotExist("$base/fallback");
+        $db = Admin\Db::open($picked);
+        self::assertNotFalse($db->query('SELECT 1'));
+        self::assertSame(0600, fileperms("$data/" . Admin\Db::FILE) & 0777);
+        self::assertTrue(Kit\StoreDir::trustedOwner((int) fileowner("$data/" . Admin\Db::FILE), "$data/" . Admin\Db::FILE));
     }
 }

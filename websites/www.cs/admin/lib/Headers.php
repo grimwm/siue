@@ -15,14 +15,16 @@ final class Headers
     ];
 
     /**
-     * $headers with every required header set; a required header already present
-     * is replaced, others are kept.
+     * $headers with every required header set; a required header already present,
+     * whatever its letter case, is replaced, others are kept.
      *
      * @param array<string,string> $headers
      * @return array<string,string>
      */
     public static function apply(array $headers): array
     {
-        return self::LIST + array_diff_key($headers, self::LIST);
+        $required = array_change_key_case(self::LIST);
+        $kept = array_filter($headers, static fn(string $name): bool => !isset($required[strtolower($name)]), ARRAY_FILTER_USE_KEY);
+        return self::LIST + $kept;
     }
 }

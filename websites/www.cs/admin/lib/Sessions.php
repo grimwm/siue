@@ -40,13 +40,13 @@ final class Sessions
     public function current(Request $r): bool
     {
         $hash = $this->hashOf($r);
+        if ($hash === null) {
+            return false; // an anonymous request writes nothing
+        }
         $now = $this->clock->now();
         // A session past either limit is deleted, whoever it belongs to.
         $this->db->prepare('DELETE FROM sessions WHERE seen_at <= ? OR created_at <= ?')
             ->execute([$now - self::IDLE, $now - self::MAX]);
-        if ($hash === null) {
-            return false;
-        }
         $st = $this->db->prepare('UPDATE sessions SET seen_at = ? WHERE id_hash = ?');
         $st->execute([$now, $hash]);
         return $st->rowCount() === 1;

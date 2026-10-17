@@ -305,4 +305,69 @@ final class AdminKeysTest extends TestCase
         [$p, , $in] = $this->panel();
         self::assertStringContainsString('href="keys.php"', $p->hub($in)->body);
     }
+
+    public function testNonStringScopesAreDroppedWithoutAWarning(): void
+    {
+        [$k] = $this->keys();
+        $warnings = [];
+        set_error_handler(static function (int $no, string $msg) use (&$warnings): bool {
+            $warnings[] = $msg;
+            return true;
+        });
+        try {
+            $key = $k->create('x', [['nested'], 'notes:pickup', 7, 'notes:pickup']);
+            try {
+                $k->create('y', [['nested']]);
+                self::fail('only non-string scopes must leave none');
+            } catch (InvalidArgumentException) {
+            }
+        } finally {
+            restore_error_handler();
+        }
+        self::assertSame([], $warnings);
+        self::assertSame(['notes:pickup'], $k->list()[0]['scopes']);
+        self::assertNotSame('', $key);
+    }
+
+    public function testWrongScopeRequestsCountTowardTheRateLimit(): void
+    {
+        [$k] = $this->keys();
+        $key = $k->create('a', ['notes:pickup']);
+        for ($i = 0; $i < Admin\Keys::PER_MINUTE; $i++) {
+            self::assertSame(403, $k->check($this->bearer($key), 'drafts:publish')?->status, "request $i");
+        }
+        self::assertSame(429, $k->check($this->bearer($key), 'drafts:publish')?->status);
+        self::assertSame(429, $k->check($this->bearer($key), 'notes:pickup')?->status, 'the limit is the key\'s, not the scope\'s');
+    }
+
+    public function testAMissingOrBadKeyAnswers401WithBearerChallenge(): void
+    {
+        [$k] = $this->keys();
+        foreach ([req(), $this->bearer(str_repeat('a', 64))] as $in) {
+            $res = $k->check($in, 'notes:pickup');
+            self::assertSame(401, $res?->status);
+            self::assertSame('Bearer', $res->headers['WWW-Authenticate']);
+        }
+        $key = $k->create('a', ['notes:pickup']);
+        self::assertArrayNotHasKey('WWW-Authenticate', $k->check($this->bearer($key), 'drafts:publish')->headers, '403 is not a challenge');
+    }
+
+    public function testRevokeReportsWhetherAnActiveKeyWasRevoked(): void
+    {
+        [$k] = $this->keys();
+        $k->create('a', ['notes:pickup']);
+        $id = $k->list()[0]['id'];
+        self::assertTrue($k->revoke($id));
+        self::assertFalse($k->revoke($id), 'already revoked');
+        self::assertFalse($k->revoke(9999), 'unknown');
+    }
+
+    public function testRevokingAnUnknownIdShowsAMessage(): void
+    {
+        [$p, , $in] = $this->panel();
+        $csrf = $this->csrfIn($p->keysPanel($in)->body);
+        $res = $p->keysAction($this->post($in, ['do' => 'revoke', 'id' => '9999', 'csrf' => $csrf]));
+        self::assertSame(404, $res->status);
+        self::assertStringContainsString('No active key has that id.', $res->body);
+    }
 }

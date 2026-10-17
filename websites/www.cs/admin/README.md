@@ -14,8 +14,15 @@ login.
 | `logout.php` | Ends the session (POST), or every session with `?all=1`. |
 | `health.php` | `{"mail":"yes\|no","db":"yes\|no"}` for a deploy check; reveals nothing else. |
 
-`lib/` holds the code and `data/` the SQLite database. Neither is ever served or deployed (`data/`
-is created by PHP, private to it, and gitignored).
+`lib/` holds the code (deployed, never served: an `.htaccess` denies it). The SQLite database,
+`admin.sqlite`, lives in `data/` next to this file: on the host that is `admin/data/` inside the
+site. The deploy creates the folder (mode 2770, group of the site root, so PHP's user can write and
+other accounts cannot enter) and never uploads, overwrites or prunes anything in it; the database
+survives deploys and php-fpm restarts, and you can fetch or inspect it by sftp. If PHP cannot use
+`admin/data/`, it falls back to `/var/tmp/<account>-admin/`, which the host wipes whenever php-fpm
+restarts (sessions, links, keys and trusted devices would vanish). `ADMIN_DATA_DIR` moves the
+database elsewhere, but reaches PHP only where the server passes environment through (an FPM pool
+`env[]` line); on the host the default applies. Locally `data/` is gitignored.
 
 ## Security model
 
@@ -35,12 +42,35 @@ is created by PHP, private to it, and gitignored).
   `ADMIN_KEY_SCOPES`, a per-minute limit and revocation. They are read from the `Authorization:
   Bearer` header only.
 
+### Shared host
+
+www.cs runs every user's PHP as the same system user (`apache`), with no `open_basedir`. **Any
+account holder's PHP can read and write what this site's PHP stores**, including the admin
+database: it could forge a session, mint an API key or edit stored rows without ever using a link,
+a session or a CSRF token. No code on this host can prevent that, and the owner has accepted it. It
+cannot change the site's pages or scripts (deployed files are not writable by PHP) and cannot read
+end-to-end-encrypted notes. Treat anything stored on the server alone as readable by other
+accounts, and give a key only the access that risk can bear.
+
 ### Shared origin
 
 www.cs serves every user's `~folder` from one browser origin. Cookies are scoped to `/~wgrim/`, so
 other users' pages never receive them, but a script on another user's page, running while the owner
 is signed in, shares the origin and could act as the owner. Short sessions and the Fetch Metadata
 guard narrow that window. The owner chose to stay on www.cs with this caveat.
+
+Another user's page can also set a cookie with the same name on a deeper path
+(`__Secure-admin=junk; Path=/~wgrim/admin/`). The browser then sends that one first, so the owner
+bounces to the login page, and the trusted-device cookie can be shadowed the same way; clearing the
+site's cookies recovers.
+
+### Logs and headers
+
+`verify.php?token=` appears in the web server's access log, and opening the link does not spend it,
+so anyone who can read that log can use a link within its 15 minutes. The logs are not readable by
+other accounts. `.htaccess` sets the security headers with `Header always set` so that errors raised
+before PHP runs carry them too; a page PHP sends can therefore show each header twice, with the same
+value.
 
 ## Run the local smoke test
 
@@ -51,9 +81,11 @@ make admin-smoke
 
 It starts the docker stack in its own throwaway project (an ephemeral port, never one a dev server
 uses) with `compose.admin-local.yaml`, which sets `ADMIN_BASE_URL=http://localhost/admin/` and
-captures mail to `admin/data/mail`. It then requests a link, reads the captured mail, signs in,
+captures mail to a folder of the container's own filesystem (`/tmp/admin-smoke-<random>`), with the
+database beside it, so it never touches a developer's `admin/data/`. It then requests a link, reads the captured mail, signs in,
 loads the hub, signs out, and checks that `lib/`, `data/` and script-made requests are refused and
-that `health.php` reports the database. It prints `ADMIN-SMOKE-OK` and removes the project.
+that `health.php` reports the database. It prints `ADMIN-SMOKE-OK` and removes the project and its
+container.
 
 ## After a deploy
 

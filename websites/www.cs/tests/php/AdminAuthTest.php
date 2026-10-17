@@ -140,4 +140,14 @@ final class AdminAuthTest extends TestCase
         $a->requestLink('x@example.com', str_repeat('1', 100));
         self::assertSame(45, strlen((string) $db->query('SELECT ip FROM link_requests')->fetchColumn()));
     }
+
+    public function testRequestsPastTheIpLimitAddNoRows(): void
+    {
+        [$a, $db] = $this->auth();
+        for ($i = 0; $i < 200; $i++) {
+            $a->requestLink('x@example.com', '9.9.9.9');
+        }
+        self::assertSame(20, (int) $db->query('SELECT COUNT(*) FROM link_requests')->fetchColumn());
+        self::assertNull($a->requestLink('wgrim@siue.edu', '9.9.9.9'), 'the address stays limited');
+    }
 }

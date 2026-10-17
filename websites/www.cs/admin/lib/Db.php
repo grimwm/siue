@@ -24,6 +24,7 @@ final class Db
         'CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, label TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)',
         'CREATE TABLE IF NOT EXISTS key_hits (key_id INTEGER NOT NULL, at INTEGER NOT NULL)',
         'CREATE INDEX IF NOT EXISTS link_requests_at ON link_requests(at)',
+        'CREATE INDEX IF NOT EXISTS link_requests_ip_at ON link_requests(ip, at)',
         'CREATE INDEX IF NOT EXISTS key_hits_key_at ON key_hits(key_id, at)',
     ];
 
@@ -35,7 +36,9 @@ final class Db
     /**
      * Where the admin files live. ADMIN_DATA_DIR is used exactly (created and
      * claimed private, refused when it is a link or not ours); unset, admin/data/
-     * when PHP can write it, else /var/tmp/<username>-admin/.
+     * when PHP can write it (on the host the deploy makes it group-writable for PHP's
+     * user, which owns the files PHP puts there), else /var/tmp/<username>-admin/,
+     * which the host wipes whenever php-fpm restarts.
      */
     public static function dataDir(): string
     {
@@ -64,11 +67,6 @@ final class Db
             $db->exec('PRAGMA foreign_keys = ON');
             foreach (self::SCHEMA as $sql) {
                 $db->exec($sql);
-            }
-            // A database made when the nonce column was named csrf_hash keeps its rows.
-            $cols = $db->query('SELECT name FROM pragma_table_info(\'sessions\')')->fetchAll(\PDO::FETCH_COLUMN);
-            if (in_array('csrf_hash', $cols, true) && !in_array('csrf_nonce', $cols, true)) {
-                $db->exec('ALTER TABLE sessions RENAME COLUMN csrf_hash TO csrf_nonce');
             }
         } finally {
             umask($old);

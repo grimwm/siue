@@ -74,6 +74,17 @@ Tightened here:
   Host header. What path scoping cannot stop: a script on another `~user` page
   that the owner visits while signed in runs on the same origin. The short
   sessions narrow that window; the owner chose to stay on www.cs with it.
+- **Shared PHP (accepted):** on www.cs every user's PHP runs as the same
+  system user (`apache`), with no `open_basedir`. Any account holder's PHP can
+  therefore read and write whatever this site's PHP stores, the admin database
+  included: it could forge a session, mint an API key or tamper with stored
+  rows, bypassing links, sessions and CSRF. No code on this host can prevent
+  that, and the owner accepts it in writing. What it cannot do: change the
+  site's pages or scripts (deployed files are not writable by PHP) or read the
+  workroom's notes, which are end-to-end encrypted before they reach the
+  server. Key-gated write access (`drafts:publish`) therefore trusts every
+  www.cs account holder as much as it trusts the owner's database; nothing
+  stored on the server alone should be treated as secret.
 - **Rate limits beyond the address:** at most 20 link requests per hour per IP
   and 30 in all, so the form cannot be used to flood the mailbox.
 - **No secrets in git.** Nothing secret is committed: the database (tokens,
@@ -92,7 +103,14 @@ Tightened here:
   `frame-ancestors 'none'`.
 - **Storage:** the kit's `StoreDir` rules (a configurable `data_dir`, the deny
   file when the directory is under the web root, the server's group-write
-  ownership), with the database file never served.
+  ownership), with the database file never served. On the host the database
+  is `admin/data/admin.sqlite` inside the site: the deploy creates `admin/data`
+  (mode 2770, group of the site root, so PHP's user can write and other
+  accounts cannot enter) and never uploads, overwrites or prunes anything in
+  it. `/var/tmp/<account>-admin/` is only the fallback when `admin/data` is
+  unusable; the host wipes it whenever php-fpm restarts. `ADMIN_DATA_DIR`
+  overrides the location, but reaches PHP only where the server passes
+  environment through (an FPM pool `env[]` line).
 - **Logging:** sign-ins and key use are recorded as counts and times only; no
   token, key or session id is ever logged.
 

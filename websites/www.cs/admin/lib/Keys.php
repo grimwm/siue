@@ -45,12 +45,12 @@ final class Keys
         if ($label === '' || mb_strlen($label) > self::LABEL_MAX) {
             throw new \InvalidArgumentException('A key needs a label of 1 to ' . self::LABEL_MAX . ' characters.');
         }
-        $scopes = array_values(array_unique($scopes));
+        $scopes = array_values(array_unique(array_filter($scopes, 'is_string')));
         if ($scopes === []) {
             throw new \InvalidArgumentException('A key needs at least one scope.');
         }
         foreach ($scopes as $s) {
-            if (!is_string($s) || !in_array($s, $this->registry, true)) {
+            if (!in_array($s, $this->registry, true)) {
                 throw new \InvalidArgumentException('Unknown scope.');
             }
         }
@@ -74,9 +74,12 @@ final class Keys
         ], $rows);
     }
 
-    public function revoke(int $id): void
+    /** True when an active key was revoked; false for an unknown or already revoked id. */
+    public function revoke(int $id): bool
     {
-        $this->db->prepare('UPDATE keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL')->execute([$this->clock->now(), $id]);
+        $st = $this->db->prepare('UPDATE keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL');
+        $st->execute([$this->clock->now(), $id]);
+        return $st->rowCount() === 1;
     }
 
     /**
@@ -99,12 +102,9 @@ final class Keys
         if ($row === false) {
             return self::error(401, 'A valid API key is required.');
         }
-        $scopes = json_decode((string) $row['scopes'], true);
-        if (!is_array($scopes) || !in_array($scope, $scopes, true)) {
-            return self::error(403, 'This key lacks the scope.');
-        }
         $id = (int) $row['id'];
         $now = $this->clock->now();
+        // Every request with a live key counts toward its limit, a wrong-scope one included.
         $this->db->exec('BEGIN IMMEDIATE');
         try {
             $this->db->prepare('DELETE FROM key_hits WHERE at <= ?')->execute([$now - 60]);
@@ -113,6 +113,10 @@ final class Keys
             $over = (int) $st->fetchColumn() >= self::PER_MINUTE;
             if (!$over) {
                 $this->db->prepare('INSERT INTO key_hits (key_id, at) VALUES (?, ?)')->execute([$id, $now]);
+            }
+            $scopes = json_decode((string) $row['scopes'], true);
+            $allowed = is_array($scopes) && in_array($scope, $scopes, true);
+            if (!$over && $allowed) {
                 $this->db->prepare('UPDATE keys SET last_used_at = ? WHERE id = ?')->execute([$now, $id]);
             }
             $this->db->exec('COMMIT');
@@ -122,11 +126,18 @@ final class Keys
             }
             throw $e;
         }
-        return $over ? self::error(429, 'Too many requests.') : null;
+        if ($over) {
+            return self::error(429, 'Too many requests.');
+        }
+        return $allowed ? null : self::error(403, 'This key lacks the scope.');
     }
 
     private static function error(int $status, string $message): Response
     {
-        return new Response($status, Headers::apply(['Content-Type' => 'application/json']), json_encode(['error' => $message], JSON_THROW_ON_ERROR));
+        $headers = ['Content-Type' => 'application/json'];
+        if ($status === 401) {
+            $headers['WWW-Authenticate'] = 'Bearer';
+        }
+        return new Response($status, Headers::apply($headers), json_encode(['error' => $message], JSON_THROW_ON_ERROR));
     }
 }

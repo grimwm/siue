@@ -55,9 +55,12 @@ final class Auth
             $perIp = $this->count('SELECT COUNT(*) FROM link_requests WHERE ip = :ip', [':ip' => $ip]);
             $perAddress = $this->count('SELECT COUNT(*) FROM links WHERE email = :e AND created_at > :since', [':e' => self::ALLOWED, ':since' => $since]);
 
-            // Every request counts, allowed or not.
-            $this->db->prepare('INSERT INTO link_requests (ip, email, at) VALUES (:ip, :e, :at)')
-                ->execute([':ip' => $ip, ':e' => substr(strtolower(trim($email)), 0, 254), ':at' => $now]);
+            // Every request counts, allowed or not, until its address is over the limit: past it the
+            // window already holds, and a flood must not keep growing the table.
+            if ($perIp < self::LIMIT_IP) {
+                $this->db->prepare('INSERT INTO link_requests (ip, email, at) VALUES (:ip, :e, :at)')
+                    ->execute([':ip' => $ip, ':e' => substr(strtolower(trim($email)), 0, 254), ':at' => $now]);
+            }
 
             $token = null;
             if ($ok && $perIp < self::LIMIT_IP

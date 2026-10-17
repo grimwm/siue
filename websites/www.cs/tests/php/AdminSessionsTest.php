@@ -289,4 +289,22 @@ final class AdminSessionsTest extends TestCase
         );
         self::assertStringNotContainsString('Domain', Admin\Sessions::expireDeviceCookie('/~wgrim/'));
     }
+
+    public function testHeadersApplyReplacesARequiredHeaderWhateverItsCase(): void
+    {
+        $h = Admin\Headers::apply(['cache-control' => 'public', 'CONTENT-SECURITY-POLICY' => 'x', 'Content-Type' => 'text/html']);
+        self::assertSame('no-store', $h['Cache-Control']);
+        self::assertSame(Admin\Headers::LIST['Content-Security-Policy'], $h['Content-Security-Policy']);
+        self::assertSame('text/html', $h['Content-Type']);
+        self::assertCount(count(Admin\Headers::LIST) + 1, $h, 'no duplicate under another case');
+    }
+
+    public function testAnAnonymousRequestWritesNothing(): void
+    {
+        [$s, $db, $c] = $this->sessions();
+        $s->start(req());
+        $c->now += 1800;
+        self::assertFalse($s->current(req()));
+        self::assertSame(1, (int) $db->query('SELECT COUNT(*) FROM sessions')->fetchColumn(), 'expired rows wait for a request that carries a cookie');
+    }
 }

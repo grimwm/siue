@@ -142,7 +142,8 @@ final class AdminMailTest extends TestCase
             self::assertStringContainsString('203.0.113.9', $p);
             self::assertSame(1, substr_count($p, $hub));
         }
-        self::assertStringContainsString('Sign out everywhere', $html);
+        self::assertStringContainsString('sign in and press Sign out everywhere', $html);
+        self::assertStringContainsString('sign in, then sign out everywhere', $text);
     }
 
     public function testAgentIsTrimmedTo120Characters(): void

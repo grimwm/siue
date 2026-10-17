@@ -17,7 +17,7 @@ final class AdminDeployTest extends TestCase
 
     /**
      * The set of files deploy.sh ships (LIST=1 ./deploy.sh), run once with probes: untracked files
-     * under admin/ (a stray file, a nested page, a stray lib file) and one under admin/data/, which
+     * under admin/ (a stray file, a nested page, a stray lib file, a PHP file in a lib subfolder) and one under admin/data/, which
      * .gitignore hides, so it is force-added to a scratch copy of the index the run reads.
      *
      * @return array{int, list<string>} exit code and output lines
@@ -28,7 +28,7 @@ final class AdminDeployTest extends TestCase
             return self::$run;
         }
         $site = self::site();
-        $probes = ['admin/zz-probe.txt', 'admin/zz-sub/zz-probe.php', 'admin/lib/zz-probe.txt', 'admin/data/zz-deploy-probe.sqlite'];
+        $probes = ['admin/zz-probe.txt', 'admin/zz-sub/zz-probe.php', 'admin/lib/zz-probe.txt', 'admin/lib/zz-sub/zz-probe.php', 'admin/data/zz-deploy-probe.sqlite'];
         $made = [];
         $madeDirs = [];
         foreach ($probes as $f) {
@@ -96,10 +96,27 @@ final class AdminDeployTest extends TestCase
     public function testAdminHomeOnlyFilesStayHome(): void
     {
         $set = self::set();
-        foreach (['admin/data/zz-deploy-probe.sqlite', 'admin/README.md', 'admin/zz-probe.txt', 'admin/zz-sub/zz-probe.php', 'admin/lib/zz-probe.txt', 'compose.admin-local.yaml'] as $f) {
+        foreach (['admin/data/zz-deploy-probe.sqlite', 'admin/README.md', 'admin/zz-probe.txt', 'admin/zz-sub/zz-probe.php', 'admin/lib/zz-probe.txt', 'admin/lib/zz-sub/zz-probe.php', 'compose.admin-local.yaml'] as $f) {
             self::assertTrue(!isset($set[$f]), "never ships $f");
         }
         $leaks = array_values(array_filter(array_keys($set), fn(string $f): bool => str_starts_with($f, 'admin/data/')));
         self::assertTrue($leaks === [], 'nothing under admin/data/ ships :: ' . implode(', ', $leaks));
+    }
+
+    /** the deploy makes admin/data group-writable for PHP and never sends, removes or lists anything in it */
+    public function testDeployMakesTheDataFolderAndNeverTouchesWhatIsInIt(): void
+    {
+        $src = (string) file_get_contents(self::site() . '/deploy.sh');
+        foreach (['-mkdir admin/data', 'chmod 2770 admin/data', 'chmod 2755 admin'] as $step) {
+            self::assertStringContainsString($step, $src, "deploy.sh runs: $step");
+        }
+        preg_match_all('/^.*admin\/data.*$/m', $src, $lines);
+        foreach ($lines[0] as $line) {
+            $code = trim($line);
+            if ($code === '' || $code[0] === '#') {
+                continue;
+            }
+            self::assertDoesNotMatchRegularExpression('/\b(put|rm|-rm|rmdir|rename|ln)\b/', $code, "deploy.sh never writes or removes inside admin/data :: $code");
+        }
     }
 }

@@ -145,7 +145,9 @@ while IFS= read -r -d '' f; do
     # The admin login's storage (its database) likewise.
     admin/data/*) continue ;;
     # The admin login's pages, stylesheet, libraries and their .htaccess files
-    # ship; its notes (README.md) and anything else under admin/ do not.
+    # ship; its notes (README.md) and anything else under admin/ do not. A case
+    # pattern's * crosses slashes, so a library's subfolder is refused first.
+    admin/lib/*/*) continue ;;
     admin/lib/*.php | admin/lib/.htaccess) ;;
     admin/*/*) continue ;;
     admin/*.php | admin/admin.css | admin/.htaccess) ;;
@@ -270,6 +272,20 @@ if ! grep -q "/$(basename "$SCORES")\$" <<<"$listing"; then
 fi
 printf 'chmod 666 %s\n' "$SCORES" >"$work/chmod"
 sftp_batch "$work/chmod"
+
+# The admin login's database lives in admin/data/, the server's like the scores
+# file: made when missing, never staged, uploaded, overwritten or pruned (the
+# case arm above keeps it out of the manifest). PHP runs as the web user, not
+# the site account, so the folder is 770 and the site root's group (setgid)
+# is what lets PHP in; other accounts cannot enter. A chmod 755 clears setgid,
+# so admin/ gets 2755 first and a folder made inside it inherits the group.
+cat >"$work/admin-data" <<'BATCH'
+-mkdir admin
+chmod 2755 admin
+-mkdir admin/data
+chmod 2770 admin/data
+BATCH
+sftp_batch "$work/admin-data"
 
 # 4. Stamp last.
 {

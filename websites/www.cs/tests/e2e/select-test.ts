@@ -1,5 +1,5 @@
 // Tests for select.ts. Run: node select-test.ts (exit 0 when all pass).
-import { select } from './select.ts';
+import { helpOnlyChange, select } from './select.ts';
 import type { Selection } from './select.ts';
 
 const S = 'websites/www.cs/';
@@ -82,6 +82,44 @@ check('kit-test-program-and-runner-run-no-browser-specs', select([`${S}games/_ki
 check('games-unit-runner-runs-no-browser-specs', select([`${S}games/units.sh`]), 'NONE');
 check('kit-build-and-icon-tests-run-no-browser-specs', select([`${S}games/_kit/build/build.test.ts`, `${S}games/_kit/build/build.test.mjs`, `${S}games/_kit/build/icons.test.ts`]), 'NONE');
 check('kit-build-tool-still-runs-everything', select([`${S}games/_kit/build/build.mjs`]), 'ALL');
+check('music-key-tool-runs-nothing', select([`${S}music/tools/siue-music`, `${S}music/tools/siue_music/answering.py`, `${S}music/tools/tests/test_x.py`, `${S}music/tools/requirements.txt`]), 'NONE');
+check('music-pages-still-run-everything', select([`${S}music/index.php`]), 'ALL');
+check('markdown-anywhere-runs-nothing', select(['README.md', 'docs/superpowers/specs/x.md', `${S}music/README.md`, `${S}music/tools/README.md`, `${S}games/crete/docs/plan.md`]), 'NONE');
+check('markdown-with-a-source-file-runs-the-source-specs', select([`${S}music/README.md`, `${S}music/tools/siue-music`, `${S}site.css`]).includes('home-eye.spec.ts'), true);
+
+const MK = `.PHONY: help up
+
+##@ Help
+help: ## Show this list
+\t@awk '/^##@ /{print}' $(MAKEFILE_LIST)
+\t@echo ""
+
+##@ Local docker
+up: ## Build and start every site
+\tdocker compose up -d --build
+
+down:
+\tdocker compose down
+`;
+const edit = (a: string, b: string) => MK.replace(a, b);
+check('help-text-reworded', helpOnlyChange(MK, edit('Build and start every site', 'Start everything')), true);
+check('help-heading-renamed', helpOnlyChange(MK, edit('##@ Local docker', '##@ Docker')), true);
+check('help-description-added', helpOnlyChange(MK, edit('down:\n', 'down: ## Stop it\n')), true);
+check('help-recipe-rewritten', helpOnlyChange(MK, edit("\t@awk '/^##@ /{print}' $(MAKEFILE_LIST)\n\t@echo \"\"", "\t@awk '/^##@ /{n++}' $(MAKEFILE_LIST)")), true);
+check('help-heading-added', helpOnlyChange(MK, edit('down:', '##@ Stop\ndown:')), true);
+check('recipe-change-is-not-help', helpOnlyChange(MK, edit('docker compose up -d --build', 'docker compose up -d')), false);
+check('prerequisite-change-is-not-help', helpOnlyChange(MK, edit('up: ## Build', 'up: down ## Build')), false);
+check('new-target-is-not-help', helpOnlyChange(MK, MK + 'extra: ## New\n\techo hi\n'), false);
+check('phony-change-is-not-help', helpOnlyChange(MK, edit('.PHONY: help up', '.PHONY: help up down')), false);
+check('variable-change-is-not-help', helpOnlyChange(MK, MK + 'X := 1\n'), false);
+check('edit-after-help-recipe-is-not-help', helpOnlyChange(MK, edit('\t@echo ""\n', '\t@echo ""\nX = 1\n')), false);
+const helpOnly = (p: string) => p === 'Makefile';
+check('help-only-makefile-runs-nothing', select(['Makefile'], { helpOnly }), 'NONE');
+check('help-only-site-makefile-runs-nothing', select([`${S}Makefile`], { helpOnly: () => true }), 'NONE');
+check('other-makefile-change-runs-everything', select(['Makefile'], { helpOnly: () => false }), 'ALL');
+check('makefile-without-a-diff-check-runs-everything', select(['Makefile']), 'ALL');
+check('help-only-makefile-with-a-source-still-runs-its-specs', select(['Makefile', `${S}site.css`], { helpOnly }).includes('home-eye.spec.ts'), true);
+check('one-help-only-and-one-real-makefile-runs-everything', select(['Makefile', `${S}Makefile`], { helpOnly }), 'ALL');
 check('a-removed-spec-is-dropped', select([`${S}tests/e2e/gone-away.spec.ts`]), 'NONE');
 
 console.log(fail ? `E2E-SELECT-TEST-FAIL ${fail}` : 'E2E-SELECT-TEST-OK');

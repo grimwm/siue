@@ -25,11 +25,9 @@ KEY_TITLE = "SIUE music notes key "
 PREVIOUS_SUFFIX = " (previous)"
 PUBLISH_KEY = "music-publish"
 PICKUP_KEY = "music-pickup"
-KEY_KINDS = ("Two kinds of key are involved. The NOTES KEY (made by make music-setup) is the encryption key: its public half is built into\n"
-             "the page so notes are sealed before they leave the phone; its private half and passphrase live in 1Password, and a\n"
-             "locked copy goes to the server so any device can open notes with the passphrase. API KEYS (music-publish, music-pickup)\n"
-             "are not encryption: they are passwords that let this tool talk to the server (publish uploads drafts and the locked\n"
-             "copy; pickup downloads waiting notes).")
+KEY_KINDS = ("Two kinds of key:\n"
+             "  NOTES KEY  seals your notes so only you can open them (kept in 1Password).\n"
+             "  API KEYS   (music-publish, music-pickup) let this tool talk to the server.")
 PUBLISH_SCOPES = ("drafts:publish", "keys:publish")
 PICKUP_SCOPES = ("notes:pickup",)
 REPO_PATHS = ("music/keys/public.json", "games/workroom/src/public-key.ts", "games/workroom/dist/")
@@ -274,7 +272,10 @@ class Keys:
     def status(self, check: ApiCheck | None = None) -> int:
         repo = read_repo_keys(self.public_json)
         if repo.current is None:
-            self.out("No notes key yet: run make music-setup")
+            if not self.cache.load()["api"]:
+                self.out("Nothing is set up yet.\nNext: make music-setup")
+                return 3
+            self.out("No notes key yet.")
             self._checklist(repo, False, False, set(self.cache.load()["api"]))
             return 3
         self.out(f"Repository key: {display(repo.current)}")
@@ -367,7 +368,7 @@ class Keys:
         up = self.cache.load().get("uploaded") or {}
         line(self.upload_covers(repo), f"The locked copy of your key is on the server (uploaded {up.get('at', '')}).",
              "The locked copy of your key is not on the server yet.")
-        self.out("\nWhat's left:\n" + KEY_KINDS)
+        self.out("\nWhat's left:")
         for text in lines:
             self.out(text)
         self.out("Setup is complete. Notes you leave in the workroom will be sealed to this key; pick them up with make music-pickup."

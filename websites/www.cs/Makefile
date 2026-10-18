@@ -127,7 +127,7 @@ music-setup: ## Guided setup: API keys, notes key, pull request (safe to re-run)
 	@music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt
 	@music/tools/.venv/bin/python music/tools/siue-music setup
 music-status: ## Show what is set up and what is missing
-	@$(MUSIC_TOOL) keys status
+	@$(MUSIC_TOOL) keys status || [ $$? -eq 3 ]
 music-pickup: ## Download, open and save your waiting notes
 	@$(MUSIC_TOOL) pickup
 music-publish: ## Upload a draft (PIECE=<id> [VERSION=n])

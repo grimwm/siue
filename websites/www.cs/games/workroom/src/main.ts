@@ -1,9 +1,12 @@
 // The workroom page: starts the theme switch, reads which view and piece the
 // server rendered, loads the draft over the session and draws it. The index view has nothing to draw yet.
 import { render, h } from 'preact';
-import { browserThemePorts } from './browser.ts';
+import { createAudioCore } from '../../_kit/audio/core.ts';
+import { browserStorage, browserThemePorts } from './browser.ts';
+import { guideStore } from './guide.ts';
 import { draftUrl, loadDraft } from './load.ts';
 import { startTheme } from './theme.ts';
+import { demoPlayer } from './ui/demo-player.ts';
 import { ThemeRoot, ThemeSwitch } from './ui/ThemeSwitch.tsx';
 import { Workroom } from './ui/Workroom.tsx';
 
@@ -12,6 +15,7 @@ const switchHost = document.getElementById('theme-switch');
 if (switchHost) render(h(ThemeSwitch, { handle: theme }), switchHost);
 
 const root = document.getElementById('workroom')!;
+const playDemo = demoPlayer(createAudioCore());
 const { view, piece, version } = document.body.dataset;
 
 function say(text: string, role = 'alert'): void {
@@ -34,6 +38,9 @@ if (view === 'piece' && piece) {
       version: loaded.version,
       versions: loaded.versions,
       audioSrc: file => draftUrl(piece, loaded.version, file),
+      guide: guideStore(browserStorage()),
+      playDemo,
+      stopDemo: playDemo.stop,
       onVersion: v => { location.search = `?id=${encodeURIComponent(piece)}&v=${v}`; },
     })), root);
   }

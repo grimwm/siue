@@ -10,6 +10,8 @@ import { act } from 'preact/test-utils';
 import { fire, installDocument, makeEl, document as stubDocument, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
+import { memoryStorage } from '../../_kit/test/record.ts';
+import { guideStore } from '../src/guide.ts';
 import type { Score } from '../src/score.ts';
 
 installDocument();
@@ -55,9 +57,9 @@ stubDocument.createElementNS = (ns, tag) => {
 const ui = await importTsx<{ room: typeof import('../src/ui/Workroom.tsx') }>(import.meta.dirname, { room: '../src/ui/Workroom.tsx' });
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
 
-const mount = async (): Promise<StubElement> => {
+const mount = async (extra: Record<string, unknown> = {}): Promise<StubElement> => {
   const root = makeEl('root');
-  await act(() => { render(h(ui.room.Workroom, { score, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {} }), renderTarget(root)); });
+  await act(() => { render(h(ui.room.Workroom, { score, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {}, ...extra }), renderTarget(root)); });
   return root;
 };
 const named = (root: StubElement, attr: string): StubElement => walk(root).find(e => e._attrs[attr] !== undefined)!;
@@ -247,4 +249,83 @@ test('the drawing is measured again when the stage changes width without a windo
   } finally {
     delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
   }
+});
+
+const overlay = (root: StubElement) => walk(root).find(e => e._attrs['data-guide-overlay'] !== undefined);
+
+test('the guide opens by itself on a first visit, once, and Close gives focus to How to read this', async () => {
+  const storage = memoryStorage();
+  const root = await mount({ guide: guideStore(storage) });
+  assert.ok(overlay(root), 'opened on the first visit');
+  assert.equal(storage.data.get('workroom-guide-story'), 'seen');
+  await act(() => { fire(button(root, 'Close'), 'click'); });
+  assert.equal(overlay(root), undefined);
+  assert.equal(globalThis.__focused?._attrs['data-guide-open'], '');
+  unmount(root);
+  const again = await mount({ guide: guideStore(storage) });
+  assert.equal(overlay(again), undefined, 'never again by itself');
+  await act(() => { fire(button(again, 'How to read this'), 'click'); });
+  assert.ok(overlay(again), 'but on request');
+  unmount(again);
+});
+
+test('without a guide store nothing opens by itself', async () => {
+  const root = await mount();
+  assert.equal(overlay(root), undefined);
+  unmount(root);
+});
+
+test('storage that throws never breaks the page', async () => {
+  const broken = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() { throw new Error('blocked'); } };
+  const root = await mount({ guide: guideStore(broken) });
+  assert.ok(overlay(root), 'treated as not seen');
+  unmount(root);
+});
+
+test('each view has its own first visit', async () => {
+  const storage = memoryStorage({ 'workroom-guide-story': 'seen' });
+  const root = await mount({ guide: guideStore(storage) });
+  assert.equal(overlay(root), undefined);
+  const rollTab = walk(root).find(e => e._attrs['role'] === 'tab' && e.textContent === 'Piano roll')!;
+  await act(() => { fire(rollTab, 'click'); });
+  assert.ok(overlay(root));
+  assert.match(root.textContent, /Part 1 of 5/);
+  unmount(root);
+});
+
+test('a demo’s Hear it pauses the piece first and plays the demo once; Close stops it', async () => {
+  const log: string[] = [];
+  const root = await mount({ playDemo: (id: string) => log.push(id), stopDemo: () => log.push('stop') });
+  await act(() => { fire(button(root, 'Play'), 'click'); });
+  const audio = audios[audios.length - 1]!;
+  assert.equal(audio.paused, false);
+  await act(() => { fire(button(root, 'How to read this'), 'click'); });
+  for (let n = 1; n < 7; n++) await act(() => { fire(button(root, 'Next'), 'click'); });
+  log.length = 0;
+  await act(() => { fire(button(root, 'Hear it'), 'click'); });
+  assert.deepEqual(log, ['stop', 'clicks'], 'any demo already sounding is stopped first');
+  assert.equal(audio.paused, true);
+  log.length = 0;
+  await act(() => { fire(button(root, 'Back'), 'click'); });
+  assert.deepEqual(log, ['stop'], 'moving on stops the demo');
+  await act(() => { fire(button(root, 'Hear it'), 'click'); });
+  log.length = 0;
+  await act(() => { fire(button(root, 'Close'), 'click'); });
+  assert.deepEqual(log, ['stop'], 'closing stops it');
+  unmount(root);
+});
+
+test('a piece part’s Hear it plays the piece from the clip’s start; Next stops it and a demo stops it', async () => {
+  const demos: string[] = [];
+  const root = await mount({ playDemo: (id: string) => demos.push(id), stopDemo: () => {} });
+  await act(() => { fire(button(root, 'How to read this'), 'click'); });
+  const audio = audios[audios.length - 1]!;
+  const before = audio.played;
+  await act(() => { fire(button(root, 'Hear it'), 'click'); });
+  assert.equal(audio.played, before + 1);
+  assert.equal(audio.currentTime, 0, 'the first section starts at 0');
+  assert.equal(audio.paused, false);
+  await act(() => { fire(button(root, 'Next'), 'click'); });
+  assert.equal(audio.paused, true, 'moving on stops the clip');
+  unmount(root);
 });

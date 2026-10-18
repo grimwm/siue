@@ -8,7 +8,7 @@ import type { AudioSource } from '../score.ts';
 import { Button } from './console/Button.tsx';
 import { Readout } from './console/Readout.tsx';
 
-export interface PlayerProps { src: AudioSource[]; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void }
+export interface PlayerProps { src: AudioSource[]; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void; pauseRef?: { current: (() => void) | null } }
 
 export function Player(p: PlayerProps) {
   const audio = useRef<HTMLAudioElement>(null);
@@ -46,6 +46,14 @@ export function Player(p: PlayerProps) {
     };
     return () => { ref.current = null; };
   }, [p.clipRef]);
+
+  // A demo in the guide pauses the piece first.
+  useEffect(() => {
+    const ref = p.pauseRef;
+    if (!ref) return;
+    ref.current = () => { audio.current?.pause(); };
+    return () => { ref.current = null; };
+  }, [p.pauseRef]);
 
   useEffect(() => { p.onPlaying?.(playing); }, [playing]);
 

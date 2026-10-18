@@ -8,6 +8,9 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { formatSeconds } from '../axis.ts';
 import { splitTerms, term, termsIn } from '../glossary.ts';
+import { ALWAYS_SEEN, guideParts } from '../guide.ts';
+import type { GuideClip, GuideStore } from '../guide.ts';
+import type { DemoId } from '../demo.ts';
 import { follow } from '../player.ts';
 import type { Clip } from '../player.ts';
 import type { Change, Score } from '../score.ts';
@@ -16,7 +19,9 @@ import type { Tab } from '../tabs.ts';
 import { changeTimes, tempoMap } from '../tempo.ts';
 import { boundsFor, clampView, fitView, timeToX } from '../zoom.ts';
 import type { View } from '../zoom.ts';
+import { Button } from './console/Button.tsx';
 import { Chip } from './console/Chip.tsx';
+import { GuideOverlay } from './console/GuideOverlay.tsx';
 import { Legend } from './console/Legend.tsx';
 import { Sheet } from './console/Sheet.tsx';
 import { panelId, tabId } from './console/Tabs.tsx';
@@ -28,7 +33,7 @@ import { SoundPicture } from './SoundPicture.tsx';
 import { Timeline } from './Timeline.tsx';
 import { ViewTabs } from './ViewTabs.tsx';
 
-export interface WorkroomProps { score: Score; version: number; versions: number[]; audioSrc: (file: string) => string; onVersion(v: number): void; children?: ComponentChildren }
+export interface WorkroomProps { score: Score; version: number; versions: number[]; audioSrc: (file: string) => string; onVersion(v: number): void; guide?: GuideStore; playDemo?(id: DemoId): void; stopDemo?(): void; children?: ComponentChildren }
 
 const FALLBACK_WIDTH = 720;
 
@@ -57,11 +62,21 @@ export function Workroom(p: WorkroomProps) {
   const [holding, setHolding] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const guide = p.guide ?? ALWAYS_SEEN;
+  const [guideOpen, setGuideOpen] = useState(false);
+  const howTo = useRef<HTMLButtonElement>(null);
+  const pauseAudio = useRef<(() => void) | null>(null);
   const seekAudio = useRef<((t: number) => void) | null>(null);
   const playClip = useRef<((c: Clip) => void) | null>(null);
   const cardRef = useRef<HTMLElement>(null);
   const opener = useRef<Element | null>(null);
   const tab = pickTab(tabs, wanted);
+  // A view's guide opens by itself the first time this browser shows that view.
+  useEffect(() => {
+    if (guide.seen(tab)) return;
+    guide.markSeen(tab);
+    setGuideOpen(true);
+  }, [tab]);
   const bounds = useMemo(() => boundsFor(score.duration, width), [score.duration, width]);
 
   // The views are as wide as the stage: measured on mount and whenever the stage changes width (a window resize, a scrollbar appearing, the sheet opening). A browser without ResizeObserver falls back to the window's resize.
@@ -91,6 +106,14 @@ export function Workroom(p: WorkroomProps) {
   const seek = (t: number): void => { seekAudio.current?.(t); setClip(null); setTime(t); setView(v => follow(v, t, bounds)); };
   // Hear it plays inside the tap itself: iOS refuses sound started later.
   const hear = (c: Clip): void => { playClip.current?.(c); setClip(c); setTime(c.from); setView(v => follow(v, c.from, bounds)); };
+  // Only one sound at a time: a demo pauses the piece and the demo before it; a piece clip silences a demo.
+  const quietGuide = (): void => { pauseAudio.current?.(); setClip(null); p.stopDemo?.(); };
+  const openGuide = (): void => { guide.markSeen(tab); setGuideOpen(true); };
+  const closeGuide = (): void => { setGuideOpen(false); howTo.current?.focus(); };
+  const hearPart = (c: GuideClip): void => {
+    if (c.kind === 'piece') { p.stopDemo?.(); hear({ from: c.from, to: c.to }); }
+    else { quietGuide(); p.playDemo?.(c.id); }
+  };
   const openTerm = open === null ? undefined : term(open);
   const openClip = openTerm ? uses.find(u => u.term.id === openTerm.id) : undefined;
   const seen = [...new Map(uses.map(u => [u.term.id, u.term])).values()];
@@ -130,7 +153,7 @@ export function Workroom(p: WorkroomProps) {
             </select>
           </label>
         </header>
-        <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} />
+        <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} />
         <ViewTabs tabs={tabs} tab={tab} onTab={setWanted} />
         <div role="tabpanel" id={panelId('view')} aria-labelledby={tabId('view', tab)} class="grid gap-2">
           {tab === 'roll' ? (
@@ -144,7 +167,10 @@ export function Workroom(p: WorkroomProps) {
             {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram.file)} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
             {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane} /> : null}
           </div>
-          <div class="flex flex-wrap items-center justify-between gap-2"><Legend items={LEGENDS[tab]} /></div>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <Legend items={LEGENDS[tab]} />
+            <Button variant="ghost" buttonRef={howTo} data={{ 'data-guide-open': '' }} onClick={openGuide}>How to read this</Button>
+          </div>
         </div>
       </div>
       <Sheet title="Notes" count={score.changes.length} open={sheetOpen} onToggle={setSheetOpen}>
@@ -170,6 +196,7 @@ export function Workroom(p: WorkroomProps) {
         ) : null}
         {p.children}
       </Sheet>
+      {guideOpen ? <GuideOverlay parts={guideParts({ tab, score, tempo, view, time, lanes })} onHear={hearPart} onStop={quietGuide} onClose={closeGuide} /> : null}
     </div>
   );
 }

@@ -41,6 +41,11 @@ browser (`workroom-theme` in localStorage); `dist/theme.js`, the first script
 in the head, applies it before the first paint. Colours are tokens in
 `app.css`; a score's own colours are nudged to stay readable on either theme.
 
+Every view has a legend line and a **How to read this** button: a guided walk
+through the view's parts, one lit at a time, each with Hear it (a clip of the
+piece, or a built-in demo). It opens by itself the first time each view is
+shown in a browser (`workroom-guide-<view>` in localStorage).
+
 ## Limits
 
 - A sealed note is at most 2,097,152 bytes; 2,000 notes are kept.

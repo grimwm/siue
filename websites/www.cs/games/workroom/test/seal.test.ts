@@ -45,7 +45,7 @@ test('the words are not in the bundle, and two seals differ', async () => {
   assert.notDeepEqual(a, b);
 });
 
-test('a public key whose fingerprint differs from the built-in one is refused', async () => {
+test('a public key whose fingerprint differs from the one it names is refused', async () => {
   await assert.rejects(seal(body, null, { fingerprint: fx.fingerprint, spki: fx.other.spki }), FingerprintMismatch);
 });
 
@@ -115,7 +115,7 @@ test('an independent opener (node:crypto, additional data = bytes 0..37) reads t
   assert.equal(plain.length, 4 + j);
 });
 
-test('a built-in key that is not RSA-4096 is refused', async () => {
+test('a public key that is not RSA-4096 is refused', async () => {
   const small = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['encrypt', 'decrypt']);
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', small.publicKey));
   await assert.rejects(seal(body, null, { fingerprint: await fingerprintOf(spki), spki: Buffer.from(spki).toString('base64') }), FingerprintMismatch);

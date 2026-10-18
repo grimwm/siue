@@ -2,7 +2,7 @@
 // current public key of the unlocked keyring, and the header names the key the note was sealed to. The server only
 // ever stores the result.
 import type { NoteBody } from './note.ts';
-import { NOTE_KINDS, REACTION_IDS } from './note.ts';
+import { isNoteBody } from './note.ts';
 
 export const MAGIC = 'SIUEN1';
 const MAGIC_BYTES = new TextEncoder().encode(MAGIC);
@@ -72,23 +72,6 @@ export async function seal(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null
 }
 
 export interface Opened { fingerprint: string; body: NoteBody; audio: Uint8Array<ArrayBuffer> | null }
-
-function isNoteBody(x: unknown): x is NoteBody {
-  if (typeof x !== 'object' || x === null) return false;
-  const b = x as Record<string, unknown>;
-  const num = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
-  const numOrNull = (v: unknown): boolean => v === null || num(v);
-  const strOrNull = (v: unknown): boolean => v === null || typeof v === 'string';
-  const curve = b['curve'];
-  const audio = b['audio'] as Record<string, unknown> | null;
-  return b['v'] === 1 && NOTE_KINDS.includes(b['kind'] as never)
-    && typeof b['piece'] === 'string' && num(b['draft']) && num(b['from']) && num(b['to'])
-    && numOrNull(b['fromBar']) && numOrNull(b['toBar']) && strOrNull(b['lane']) && strOrNull(b['text'])
-    && typeof b['made'] === 'string'
-    && (b['reaction'] === null || REACTION_IDS.includes(b['reaction'] as never))
-    && (curve === null || (Array.isArray(curve) && curve.every((p) => Array.isArray(p) && p.length === 2 && num(p[0]) && num(p[1]))))
-    && (audio === null || (typeof audio === 'object' && typeof audio['mime'] === 'string' && num(audio['seconds'])));
-}
 
 /** Picks the key the bundle's header names out of the keyring. */
 export async function open(bundle: Uint8Array<ArrayBuffer>, keyring: ReadonlyMap<string, CryptoKey>): Promise<Opened> {

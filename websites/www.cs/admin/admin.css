@@ -127,11 +127,6 @@ legend { color: var(--text-muted); font-size: 0.95rem; }
 .key strong { overflow-wrap: anywhere; }
 .key form { margin-top: 0.5rem; }
 .key.isnew { border-color: var(--crimson); background: var(--bg-elevated); }
-.tag { display: inline-block; margin-left: 0.4rem; padding: 0.1rem 0.5rem; border: 1px solid var(--crimson); border-radius: 999px; font-size: 0.85rem; }
-.replaces { margin: 0 0 1rem; }
-.another { margin: 0 0 1.5rem; }
-.another summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--text-muted); }
-.key.isnew { border-color: var(--crimson); background: var(--bg-elevated); }
 .tag { display: inline-block; margin-left: 0.4rem; padding: 0.1rem 0.5rem; border: 1px solid var(--crimson); border-radius: 999px; font-size: 0.85rem; color: var(--text); }
 .replaces { margin: 0 0 1rem; }
 .another { margin: 0 0 1.5rem; }

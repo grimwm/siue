@@ -104,9 +104,9 @@ The server stores only sealed notes, which it cannot open.
   when it arrived. Nothing else.
 - **No swapped padlock:** the page encrypts only to the built-in public key and
   checks it against the built-in fingerprint; the admin hub shows the
-  fingerprint so the owner can compare it once with `make keys-status`.
+  fingerprint so the owner can compare it once with `make music-status`.
 - **Opening notes on any device, a phone included:** the private key is also
-  stored on the server, locked. `make keys-init` encrypts it with AES-256-GCM
+  stored on the server, locked. `make music-setup` encrypts it with AES-256-GCM
   under a key derived from a long random passphrase (PBKDF2-SHA-256, 600,000
   rounds, random salt); the passphrase lives in the same 1Password item, so
   1Password fills it in on any device. After sign-in the workroom asks for it;
@@ -120,7 +120,7 @@ The server stores only sealed notes, which it cannot open.
   every retained earlier one, each tagged with its fingerprint, locked under
   the same passphrase. The browser unlocks the whole keyring and picks the key
   a note names, so notes sealed before a rotation open on a newly signed-in
-  device. `make keys-rotate` re-locks and uploads the full keyring.
+  device. `make music-rotate` re-locks and uploads the full keyring.
 
 ## Pickup and the note history
 
@@ -160,12 +160,11 @@ secret is passed to tools on standard input, never as a command-line argument
 
 | Command | What it does |
 | --- | --- |
-| `make keys-status` | Fingerprints of the public key in the repository, in 1Password and in this computer's cache, whether they match, and which API keys are stored (labels only). |
-| `make keys-pull` | Fetches the private keys and API keys from 1Password into the cache, then checks the private key matches the repository's public key. |
-| `make keys-init` | First time only: makes the key pair and a passphrase, saves all three to 1Password, uploads the passphrase-locked private key for the browser, and writes the public key and fingerprint into the repository for a commit. Refuses if a key already exists. |
-| `make keys-rotate` | Makes a new pair; the old private key stays in 1Password as a previous key; the locked keyring (new key plus every retained one) is uploaded and the new public key goes into the repository. |
-| `make api-key-set NAME=music-pickup` | Prompts for an API key shown once on the admin hub and saves it to 1Password only. |
-| `make keys-forget` | Deletes this computer's cached copies (for a borrowed or shared computer). |
+| `make music-setup` | Everything to get started, guided and safe to re-run: checks `op`; for each missing, misnamed or revoked API key opens the hub's key form filled in and saves the pasted key to 1Password; makes (or adopts) the notes key; uploads the passphrase-locked private key for the browser; rebuilds the page and, after one question, commits the public key on `music/notes-key-<fingerprint>` through a temporary worktree and opens the pull request. Builds the tool's virtualenv when missing or broken. |
+| `make music-status` | Fingerprints of the public key in the repository, in 1Password and in this computer's cache, whether they match, whether each saved API key still works and has the right permission (checked against the server), and a "What's left" checklist ending in `Next: make music-setup` while anything is missing. |
+| `make music-rotate` | Makes a new pair; the old private key stays in 1Password as a previous key; the locked keyring (new key plus every retained one) is uploaded and the new public key goes into the repository. |
+| `make music-forget` | Deletes this computer's cached copies (for a borrowed or shared computer). |
+| `make music-test` | The key tool's tests. |
 | `make music-pickup` | Picks up waiting notes: syncs keys first, then downloads, verifies, opens and marks each picked up. |
 | `make music-publish PIECE=...` | Publishes a rendered draft through the API. |
 
@@ -238,7 +237,7 @@ the project's game or site. The login guards the notes and the actions.
 - Python: publish validates a music draft and a sound draft with the page's
   rules; pickup verifies the hash and opens the note before marking it picked
   up; a corrupt download is not marked; opened notes land outside the
-  repository; `keys-init` and `keys-rotate` write the locked private key that
+  repository; `music-setup` and `music-rotate` write the locked private key that
   the browser can unlock.
 - Browser (locally, `make e2e`): sign in, open a piece, play, move the
   playhead, pin a typed note, see it waiting, pick it up with the tool against

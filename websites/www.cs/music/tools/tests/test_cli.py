@@ -27,7 +27,7 @@ class CliTest(unittest.TestCase):
 
     def test_status_without_a_key_exits_3_and_names_the_remedy(self):
         code, out, _ = self.run_cli("keys", "status")
-        self.assertEqual((code, "make keys-init" in out), (3, True))
+        self.assertEqual((code, "make music-setup" in out), (3, True))
 
     def test_pull_then_status_then_forget(self):
         fp = self.w.add_key_to_op(0)
@@ -72,13 +72,13 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(sent[0], ("http://127.0.0.1:1/music/", "d" * 64))
         self.assertEqual(sent[1]["iterations"], 600_000)
-        self.assertIn("games && node _kit/build/build.mjs workroom", out)
-        self.assertIn("make keys-status", out)
+        self.assertIn("Uploaded the locked copy", out)
 
     def test_keys_init_without_an_api_key_still_succeeds_and_says_how_to_upload(self):
         code, out, _ = self.run_cli("keys", "init")
         self.assertEqual(code, 0)
-        self.assertIn("make api-key-set NAME=music-publish && make keys-upload", out)
+        self.assertIn("make music-setup", out)
+        self.assertIn("no music-publish API key", out)
         self.assertEqual(self.run_cli("keys", "init")[0], 1, "a second init is refused")
 
     def test_keys_upload_without_a_key_exits_1(self):
@@ -86,6 +86,14 @@ class CliTest(unittest.TestCase):
         code, _, err = self.run_cli("keys", "upload")
         self.assertEqual(code, 1)
         self.assertIn("music-publish", err)
+
+    def test_a_missing_api_key_says_to_run_music_setup(self):
+        self.run_cli("keys", "init")
+        for argv, name in ((("keys", "upload"), "music-publish"), (("pickup",), "music-pickup"), (("publish", "ch1-labyrinth"), "music-publish")):
+            code, _, err = self.run_cli(*argv)
+            self.assertEqual(code, 1, argv)
+            self.assertIn(f"There is no API key named {name}", err)
+            self.assertIn("Run make music-setup", err)
 
     def test_a_failed_init_upload_exits_0_and_a_failed_rotate_upload_exits_4(self):
         class Failing:
@@ -102,7 +110,7 @@ class CliTest(unittest.TestCase):
             self.assertIn("network down", out)
             code, out, err = self.run_cli("keys", "rotate")
         self.assertEqual(code, 4)
-        self.assertIn("make keys-upload before you commit or deploy", out)
+        self.assertIn("make music-setup", out)
         self.assertNotIn("Then commit", out)
         self.assertIn("not uploaded", err)
 

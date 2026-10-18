@@ -8,7 +8,7 @@ try:
     from siue_music import cli
 except ModuleNotFoundError as e:
     if e.name and e.name.split(".")[0] == "cryptography":
-        print("siue-music needs the cryptography package: make music-tools-venv (or pip install -r music/tools/requirements.txt)", file=sys.stderr)
+        print("siue-music needs the cryptography package: make music-setup (or pip install -r music/tools/requirements.txt)", file=sys.stderr)
         sys.exit(1)
     raise
 

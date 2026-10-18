@@ -60,14 +60,11 @@ shown in a browser (`workroom-guide-<view>` in localStorage).
 `~/.config/siue/music.json` (folder 0700, file 0600). Secrets reach `op` on
 standard input and are never printed.
 
-- `make music-tools-venv` makes the tool's virtualenv; `make music-tools-test` runs its tests.
-- `make keys-status` compares the repository's current public key with 1Password and the cache (exit 3 when they differ).
-- `make keys-pull` copies the keys and API keys from 1Password into the cache and checks the repository's current key is among them.
-- `make keys-init` (once) makes the RSA-4096 pair and the passphrase, saves them to 1Password first, writes `music/keys/public.json` and `games/workroom/src/public-key.ts`, and uploads a locked keyring of one with the `music-publish` API key (scope `keys:publish`). It then prints the build and commit steps. `make keys-init ADOPT=1` adopts a key item already in 1Password (made earlier, or left by an interrupted init) instead of making a new pair.
-- `make keys-rotate` makes a new pair under the same passphrase, retitles the old item `(previous)`, adds the old public key to `previous`, and uploads the full keyring, current key first, replacing the stored one. It refuses when neither the cache nor 1Password holds the private key for a retained key. It uploads before it retitles; a retitle that fails (the approval timed out) is a warning naming the item to retitle by hand. It exits 4 when the keyring was not uploaded: run `make keys-upload` before you commit or deploy.
-- `make keys-upload` locks and uploads the same full keyring again, for when the first upload could not happen (no API key yet, or the hub was unreachable). A 429 is retried after back-off pauses that add up to more than the server's one-minute window.
-- `make keys-forget` deletes the cache. A key removed from 1Password stays usable from this computer's cache (and `pull` keeps it, with a warning) until you run `make keys-forget`; every cached key is checked against its fingerprint before it is used.
-- `make api-key-set NAME=music-pickup` saves an API key made on the hub (pasted at the prompt) as a 1Password item, replacing any earlier one of that name.
+- `make music-setup` is the one command that gets everything started; run it again any time, it skips what is done. It checks `op` is installed and signed in; for each API key not yet saved (and any saved under the wrong name, or revoked) it opens the hub's API key page with the label and boxes filled in, asks you to press Create and paste the key (not echoed), and saves it to 1Password; makes the notes key if neither the repository nor 1Password has one (adopts the one 1Password holds); uploads the locked copy if the cache's record says the current key is not uploaded; rebuilds the page and, after one `[Y/n]` question naming the branch `music/notes-key-<fingerprint>`, commits exactly `music/keys/public.json`, `games/workroom/src/public-key.ts` and `games/workroom/dist/` through a temporary worktree cut from `origin/main` (your checkout is never switched or committed on), pushes it (never forced), opens the pull request or reports the open one, then puts your checkout's copies of those files back to what git holds. Without a terminal it asks nothing and says to run `make music-setup` in one. A failed push keeps the commit on the branch; the next run pushes it. It makes the tool's virtualenv when missing or broken. Merge the pull request once its checks pass; the deploy is automatic.
+- `make music-status` compares the repository's current public key with 1Password and the cache (exit 3 when they differ), asks the server (so it needs the network) whether each saved API key still works and has the right permission, and ends with a "What's left" checklist (done or not): key in the repository, key committed, key in 1Password and the cache, both API keys saved, locked copy uploaded. It ends with `Next: make music-setup` while anything is missing and says setup is complete otherwise. After the deploy, compare its "Repository key" with the "Music notes key" line on the admin hub (`https://www.cs.siue.edu/~wgrim/admin/`).
+- `make music-rotate` makes a new pair under the same passphrase, retitles the old item `(previous)`, adds the old public key to `previous`, and uploads the full keyring, current key first, replacing the stored one. It refuses when neither the cache nor 1Password holds the private key for a retained key. It uploads before it retitles; a retitle that fails (the approval timed out) is a warning naming the item to retitle by hand. It exits 4 when the keyring was not uploaded: run `make music-setup`, which uploads it, before you commit or deploy. A 429 on any API call is retried after back-off pauses that add up to more than the server's one-minute window.
+- `make music-forget` deletes the cache. A key removed from 1Password stays usable from this computer's cache until you run it; every cached key is checked against its fingerprint before it is used.
+- `make music-test` runs the tool's tests.
 - `make music-pickup` downloads each waiting note with the `music-pickup` API key, checks its length and SHA-256 against the listing, opens it with the cached keyring and saves it under the notes folder (`~/Library/Application Support/siue-music/notes/` on macOS, `$XDG_DATA_HOME/siue-music/notes/` elsewhere on Unix, `%APPDATA%\siue-music\notes\` on Windows; `SIUE_MUSIC_NOTES_DIR` overrides; the tool refuses a folder inside the repository) as `<arrival date>-<id>/` with `note.json` and `audio.webm|m4a|ogg`. Only then does it mark the note picked up. A note whose download is corrupt or that will not open stays waiting, is reported with its reason, and the run goes on with the next; the exit code is 1 when any note was left. Every API call, the listing included, waits out a 429 and is retried; a 429 that never clears leaves that note waiting and the run goes on.
 - Speech notes (webm, m4a or ogg audio; ffmpeg is told the format and never sniffs it) also get `transcript.txt` (local Whisper, `faster-whisper`; `SIUE_MUSIC_WHISPER_MODEL` picks the model, default `small.en`) and hum notes `motif.mid` (`librosa.pyin` and `mido`). Both are optional: `music/tools/.venv/bin/pip install -r music/tools/requirements-answering.txt` and `brew install ffmpeg`. Without them pickup still opens and saves every note and prints one line naming what is missing.
 - `make music-publish PIECE=ch1-labyrinth [VERSION=3]` checks `music/pieces/<piece>/v<N>/score.json` with the page's rules (glossary ids from `games/workroom/src/glossary.json`), requires the audio, the spectrogram and, for music, `score.musicxml`, refuses a draft over 8 MB before sending, and publishes it with the `music-publish` API key. The newest version is the default.
@@ -120,12 +117,15 @@ The page refuses any other `schema` value with: "This draft uses score schema N,
 
 Colours everywhere match `^#[0-9a-f]{6}$`. Ids everywhere match `^[a-z0-9][a-z0-9-]{0,47}$`. The server checks only what it records or must refuse (`schema`, `kind`, `project`, `piece`, `draft`, the file set and the file signatures); the page and the tool check every rule in the table.
 
-## Make targets
+## Setup
 
-None yet; the answering tools bring their own.
-
-## API keys
-
-Sign in at the admin hub, open the API key panel and create two keys: one with
-`notes:pickup` (pickup of notes) and one with `drafts:publish` and `keys:publish`
-(publishing drafts and the locked keyring). A key is shown once.
+Run `make music-setup` (in `websites/www.cs`). Two kinds of key are involved. The
+**notes key** is the encryption key: its public half is built into the page so notes are
+sealed before they leave the phone; its private half and passphrase live in 1Password,
+and a locked copy goes to the server so any device can open notes with the passphrase.
+**API keys** are not encryption: they are passwords that let the key tool talk to the
+server. `music-publish` (boxes `drafts:publish` and `keys:publish`) uploads drafts and
+the locked copy; `music-pickup` (box `notes:pickup`) downloads waiting notes. They are
+made on the admin hub's API keys page (`https://www.cs.siue.edu/~wgrim/admin/keys.php`,
+which accepts `?label=` and `?scopes=a,b` to fill the form in; it never creates a key
+from a GET); a key is shown once.

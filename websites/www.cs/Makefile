@@ -31,19 +31,14 @@ help:
 	@echo "  music-e2e - The music workroom's browser check in a throwaway docker project (local only; prints MUSIC-E2E-OK)"
 	@echo "  screenshots - Recapture each game's Games-page picture (macOS sips)"
 	@echo ""
-	@echo "Music workroom keys and notes (keys live in the 1Password SIUE vault; OP_VAULT overrides):"
-	@echo "  keys-status - Fingerprints of the notes key in the repository, 1Password and this computer's cache, and the API keys stored"
-	@echo "  keys-pull   - Copy the private keys and API keys from 1Password to this computer; checks them against the repository's key"
-	@echo "  keys-init   - First time only: make the notes key and passphrase in 1Password, upload the locked keyring,"
-	@echo "                write the public key for a commit (ADOPT=1 finishes an interrupted init)"
-	@echo "  keys-rotate - Make a new notes key; earlier keys are kept so old notes still open (exit 4: run keys-upload)"
-	@echo "  keys-upload - Upload the locked keyring again (after a failed init or rotate upload)"
-	@echo "  keys-forget - Delete this computer's cached keys (a borrowed or shared computer)"
-	@echo "  api-key-set NAME=music-pickup - Save an API key shown once on the admin hub to 1Password"
-	@echo "  music-pickup - Download, open and save your waiting notes; marks each picked up once it opens"
+	@echo "Music workroom (keys live in the 1Password SIUE vault; OP_VAULT overrides):"
+	@echo "  music-setup   - Everything to get started, guided and safe to re-run: API keys, the notes key, the pull request"
+	@echo "  music-status  - What is set up and what is missing"
+	@echo "  music-pickup  - Download, open and save your waiting notes; marks each picked up once it opens"
 	@echo "  music-publish PIECE=<id> [VERSION=n] - Upload a rendered draft to the workroom"
-	@echo "  music-tools-venv - Make the tool's virtualenv (music/tools/.venv)"
-	@echo "  music-tools-test - The tool's own tests"
+	@echo "  music-rotate  - Make a new notes key; earlier keys are kept so old notes still open"
+	@echo "  music-forget  - Delete this computer's cached keys (a borrowed or shared computer)"
+	@echo "  music-test    - The key tool's tests"
 
 deploy:
 	@HOST="$(HOST)" SSHPASS_FILE="$(SSHPASS_FILE)" ./deploy.sh
@@ -128,35 +123,24 @@ music-e2e:
 	E2E_BASE_URL=http://localhost:$$port/ tests/e2e/run.sh -c local.config.ts && \
 	echo MUSIC-E2E-OK
 
-# The music workroom's key and note tool (music/tools/siue-music). Its own
-# virtualenv when make music-tools-venv made one, else python3.
-.PHONY: keys-status keys-pull keys-init keys-rotate keys-upload keys-forget api-key-set music-pickup music-publish music-tools-venv music-tools-test
+# The music workroom's key and note tool (music/tools/siue-music), run in its own virtualenv.
+.PHONY: music-setup music-status music-pickup music-publish music-rotate music-forget music-test
 MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
 MUSIC_TOOL = $(MUSIC_PY) music/tools/siue-music
 
-keys-status:
+music-setup:
+	@music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt
+	@music/tools/.venv/bin/python music/tools/siue-music setup
+music-status:
 	@$(MUSIC_TOOL) keys status
-keys-pull:
-	@$(MUSIC_TOOL) keys pull
-keys-init:
-	@$(MUSIC_TOOL) keys init $(if $(ADOPT),--adopt)
-keys-rotate:
-	@$(MUSIC_TOOL) keys rotate
-keys-upload:
-	@$(MUSIC_TOOL) keys upload
-keys-forget:
-	@$(MUSIC_TOOL) keys forget
-api-key-set:
-	@test -n "$(NAME)" || { echo "usage: make api-key-set NAME=music-pickup" >&2; exit 1; }
-	@$(MUSIC_TOOL) api-key-set "$(NAME)"
 music-pickup:
 	@$(MUSIC_TOOL) pickup
 music-publish:
 	@test -n "$(PIECE)" || { echo "usage: make music-publish PIECE=ch1-labyrinth [VERSION=3]" >&2; exit 1; }
 	@$(MUSIC_TOOL) publish "$(PIECE)" $(if $(VERSION),--version $(VERSION))
-music-tools-venv:
-	python3 -m venv music/tools/.venv
-	music/tools/.venv/bin/pip install --quiet -r music/tools/requirements.txt
-	@echo "Speech and humming (optional): music/tools/.venv/bin/pip install -r music/tools/requirements-answering.txt; brew install ffmpeg"
-music-tools-test:
+music-rotate:
+	@$(MUSIC_TOOL) keys rotate
+music-forget:
+	@$(MUSIC_TOOL) keys forget
+music-test:
 	$(MUSIC_PY) -m unittest discover -s music/tools/tests -t music/tools/tests

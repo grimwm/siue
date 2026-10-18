@@ -45,7 +45,7 @@ function admin_key_fingerprints(?string $keysFile = null): array
     } catch (RuntimeException) {
         return ['Music notes key' => 'invalid (see music/keys/public.json)'];
     }
-    return ['Music notes key' => $k === null ? 'not made yet (make keys-init)' : Music\PublicKeys::display($k->current)];
+    return ['Music notes key' => $k === null ? 'not made yet (make music-setup)' : Music\PublicKeys::display($k->current)];
 }
 
 /** True for exactly `localhost` or `127.0.0.1`, with an optional port. */

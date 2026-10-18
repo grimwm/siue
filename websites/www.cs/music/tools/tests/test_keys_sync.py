@@ -16,7 +16,7 @@ class SyncTest(unittest.TestCase):
     def test_no_key_yet_says_keys_init(self):
         with self.assertRaises(KeyMismatch) as e:
             self.w.keys.ensure_synced()
-        self.assertIn("make keys-init", str(e.exception))
+        self.assertIn("make music-setup", str(e.exception))
 
     def test_a_cached_current_key_needs_no_1password(self):
         fp = self.w.add_key_to_op(0)
@@ -84,7 +84,7 @@ class SyncTest(unittest.TestCase):
         self.w.add_key_to_op(0)
         with self.assertRaises(KeyMismatch) as e:
             self.w.keys.pull_checked()
-        self.assertIn("make keys-init", str(e.exception))
+        self.assertIn("make music-setup", str(e.exception))
 
     def test_status_names_fingerprints_and_never_a_secret(self):
         fp = self.w.add_key_to_op(0, passphrase="never print me")

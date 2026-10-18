@@ -479,4 +479,18 @@ final class MusicApiTest extends TestCase
         self::assertSame(['bad_length', 400], [$this->body($res)['error'], $res->status]);
         self::assertNull($this->store->keyring());
     }
+
+    /** The key tool probes with a GET: 403 means the scope is missing, 405 means the key is accepted. */
+    public function testAGetProbeSaysWhetherTheKeyHoldsTheScope(): void
+    {
+        $lacking = $this->keys->create('pickup', ['notes:pickup']);
+        $holding = $this->keys->create('publish', ['drafts:publish', 'keys:publish']);
+        $read = $this->reading('');
+        foreach (['publishKeyring', 'publishDraft'] as $route) {
+            self::assertSame(403, $this->api->$route($this->as($lacking), $read)->status, "$route without its scope");
+            self::assertSame(405, $this->api->$route($this->as($holding), $read)->status, "$route with its scope");
+            self::assertSame(401, $this->api->$route($this->as(str_repeat('0', 64)), $read)->status, "$route with an unknown key");
+        }
+        self::assertSame(0, $this->reads, 'a probe reads no body');
+    }
 }

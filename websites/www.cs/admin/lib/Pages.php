@@ -198,12 +198,12 @@ final class Pages
         });
     }
 
-    /** GET keys.php: the key list and the create form. */
+    /** GET keys.php: the key list and the create form; ?label= and ?scopes=a,b only prefill the form, nothing is created. */
     public function keysPanel(Request $r): Response
     {
         return $this->guard(function () use ($r): Response {
             $gate = $this->requireAdmin($r);
-            return $gate ?? $this->keysPage(200, $r);
+            return $gate ?? $this->keysPage(200, $r, null, null, true);
         });
     }
 
@@ -303,7 +303,7 @@ final class Pages
     }
 
     /** The keys page; $newKey is shown once, $error explains a refused create. */
-    private function keysPage(int $status, Request $r, ?string $error = null, ?string $newKey = null): Response
+    private function keysPage(int $status, Request $r, ?string $error = null, ?string $newKey = null, bool $prefill = false): Response
     {
         $csrf = $this->sessions->csrf($r);
         if ($csrf === '') {
@@ -321,12 +321,14 @@ final class Pages
         if ($registry === []) {
             $body .= Html::p('No scopes are defined yet, so no key can be created.');
         } else {
+            $label = $prefill && is_string($r->query['label'] ?? null) ? mb_substr(trim($r->query['label']), 0, Keys::LABEL_MAX) : '';
+            $ticked = $prefill && is_string($r->query['scopes'] ?? null) ? array_map('trim', explode(',', $r->query['scopes'])) : [];
             $body .= '<form method="post" action="keys.php"><input type="hidden" name="do" value="create">'
                 . '<input type="hidden" name="csrf" value="' . Html::e($csrf) . '">'
-                . '<label for="label">Label</label><input id="label" type="text" name="label" maxlength="' . Keys::LABEL_MAX . '" required>'
+                . '<label for="label">Label</label><input id="label" type="text" name="label" maxlength="' . Keys::LABEL_MAX . '" value="' . Html::e($label) . '" required>'
                 . '<fieldset><legend>Scopes</legend>';
             foreach ($registry as $scope) {
-                $body .= '<label class="check"><input type="checkbox" name="scopes[]" value="' . Html::e($scope) . '"> ' . Html::e($scope) . '</label>';
+                $body .= '<label class="check"><input type="checkbox" name="scopes[]" value="' . Html::e($scope) . '"' . (in_array($scope, $ticked, true) ? ' checked' : '') . '> ' . Html::e($scope) . '</label>';
             }
             $body .= '</fieldset><button type="submit" class="button">Create key</button></form>';
         }

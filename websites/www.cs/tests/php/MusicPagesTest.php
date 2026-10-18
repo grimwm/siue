@@ -234,7 +234,7 @@ final class MusicPagesTest extends TestCase
         $file = admin_tmp_dir() . '/public.json';
         file_put_contents($file, '{not json');
         self::assertSame(['Music notes key' => 'invalid (see music/keys/public.json)'], admin_key_fingerprints($file));
-        self::assertSame(['Music notes key' => 'not made yet (make keys-init)'], admin_key_fingerprints(admin_tmp_dir() . '/absent.json'));
+        self::assertSame(['Music notes key' => 'not made yet (make music-setup)'], admin_key_fingerprints(admin_tmp_dir() . '/absent.json'));
     }
 
     public function testACorruptStoredKeyringIsABadKeyringNotAMissingOne(): void

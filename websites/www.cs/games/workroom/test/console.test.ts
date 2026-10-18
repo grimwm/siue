@@ -8,7 +8,7 @@ import { act } from 'preact/test-utils';
 import { fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
-import { LEGENDS } from '../src/tabs.ts';
+import { LEGENDS, legendFor } from '../src/tabs.ts';
 
 installDocument();
 const c = await importTsx<{
@@ -86,6 +86,23 @@ test('Chip: a glossary word carries its term; a toggle carries aria-pressed', as
   assert.equal(n, 1);
 });
 
+test('Chip: an inline word reads as text with a dotted accent underline and keeps a 44 px hit area without changing the line', async () => {
+  const root = await mount(h(c.chip.Chip, { term: 'motif', inline: true, onClick: () => {} }, 'motif'));
+  const w = walk(root).find(e => e.localName === 'button')!;
+  const cls = classes(w);
+  assert.ok(cls.includes('underline') && cls.includes('decoration-dotted') && cls.includes('decoration-amber'));
+  assert.ok(!cls.includes('rounded-full') && !cls.includes('border-dashed') && !cls.includes('min-h-11'), 'no oval, no tall box');
+  assert.ok(cls.includes('inline') && cls.includes('py-3') && cls.includes('-my-3'), 'padding and negative margin make the hit area, the line stays as tall as the text');
+  assert.ok(cls.includes('[font:inherit]'));
+});
+
+test('Chip: a listed word is a compact single-line rounded-md chip, not an oval', async () => {
+  const root = await mount(h(c.chip.Chip, { term: 'motif', onClick: () => {} }, 'motif'));
+  const cls = classes(walk(root).find(e => e.localName === 'button')!);
+  assert.ok(cls.includes('rounded-md') && cls.includes('whitespace-nowrap') && cls.includes('min-h-11'));
+  assert.ok(!cls.includes('rounded-full'));
+});
+
 test('Panel: a section with an optional heading', async () => {
   const root = await mount(h(c.panel.Panel, { title: 'Words', data: { 'data-card': '' } }, 'body'));
   const s = walk(root).find(e => e.localName === 'section')!;
@@ -95,10 +112,11 @@ test('Panel: a section with an optional heading', async () => {
 
 test('Sheet: the phone handle says what it holds and opens or closes it', async () => {
   const toggles: boolean[] = [];
-  const root = await mount(h(c.sheet.Sheet, { title: 'Notes', count: 3, open: false, onToggle: (o: boolean) => toggles.push(o) }, 'inside'));
+  const root = await mount(h(c.sheet.Sheet, { title: 'Words & changes', open: false, onToggle: (o: boolean) => toggles.push(o) }, 'inside'));
   const handle = walk(root).find(e => e.localName === 'button' && e._attrs['aria-expanded'] !== undefined)!;
   assert.equal(handle._attrs['aria-expanded'], 'false');
-  assert.match(handle.textContent, /Notes.*3/);
+  assert.match(handle.textContent, /Words & changes/);
+  assert.doesNotMatch(handle.textContent, /\d/, 'no bare number in the header');
   const body = walk(root).find(e => e._attrs['data-sheet-body'] !== undefined)!;
   assert.ok(classes(body).includes('hidden') && classes(body).includes('lg:grid'), 'closed on a phone, always shown from 1024 px');
   fire(handle, 'click');
@@ -120,6 +138,10 @@ test('Legend: the spec’s line for every view', async () => {
     sound: ['bottom = low sounds', 'top = high', 'brighter = louder'],
     sheet: ['five lines = a staff', 'higher on it = higher note'],
   });
+  assert.deepEqual(legendFor('story', 'music'), LEGENDS.story);
+  assert.deepEqual(legendFor('story', 'sound'), ['row = a layer', 'coloured block = a moment', 'glow = strength over time']);
+  for (const tab of ['roll', 'sound', 'sheet'] as const) assert.deepEqual(legendFor(tab, 'sound'), LEGENDS[tab]);
+  for (const l of legendFor('story', 'sound')) assert.doesNotMatch(l, /star|note|higher|bigger/, 'a sound has no stars or pitch rows');
   const root = await mount(h(c.legend.Legend, { items: LEGENDS.story }));
   assert.equal(walk(root).find(e => e._attrs['data-legend'] !== undefined)!.textContent, 'star = a note · higher = higher note · bigger = louder · glow = energy');
 });

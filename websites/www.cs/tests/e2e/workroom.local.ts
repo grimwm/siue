@@ -342,6 +342,38 @@ test('the guide at phone width: the card clears the lit part and stays on screen
     await context.close();
   }
 });
+test('on a phone every time view opens with the whole piece on screen', async ({ browser, request, baseURL }) => {
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    const key = await createKey(page, base, 'e2e phone fit', ['drafts:publish']);
+    await publishFixtureDraft(request, base, key);
+    await publishFixtureDraft(request, base, key, 'draft-sound');
+    await page.setViewportSize({ width: 390, height: 844 });
+    const stageRight = (): Promise<number> => page.locator('[data-guide="view"]').evaluate(el => el.getBoundingClientRect().right);
+    const reach = (sel: string): Promise<number> => page.locator(sel).last().evaluate(el => el.getBoundingClientRect().right);
+    for (const [id, last] of [['test-piece', '[data-section="thread"]'], ['cannon-fire', '[data-section="echo"]']] as const) {
+      await page.goto(`${base}music/piece.php?id=${id}`);
+      await expect(page.locator('[data-timeline]')).toBeVisible();
+      const right = await stageRight();
+      await expect.poll(async () => Math.abs((await reach(last)) - right), { message: `${id} story: the last section ends at the right edge` }).toBeLessThan(3);
+      await expect.poll(() => reach('[data-tick]')).toBeLessThanOrEqual(right + 1);
+      await page.getByRole('tab', { name: 'Sound picture' }).click();
+      await expect(page.locator('img[data-spectrogram]')).toBeVisible();
+      await expect.poll(async () => Math.abs((await reach('img[data-spectrogram]')) - right), { message: `${id} sound picture fills the stage` }).toBeLessThan(3);
+    }
+    await page.goto(`${base}music/piece.php?id=test-piece`);
+    await page.getByRole('tab', { name: 'Piano roll' }).click();
+    await expect(page.locator('[data-roll]')).toBeVisible();
+    const right = await stageRight();
+    const notesEnd = await page.locator('[data-note]').evaluateAll(els => Math.max(...els.map(e => e.getBoundingClientRect().right)));
+    expect(notesEnd).toBeLessThanOrEqual(right + 1);
+    expect(notesEnd).toBeGreaterThan(right * 0.9);
+  } finally {
+    await context.close();
+  }
+});
+
 interface Box { left: number; top: number; right: number; bottom: number }
 
 const SHOTS = process.env.MUSIC_E2E_SHOTS ?? '';

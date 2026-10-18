@@ -14,10 +14,10 @@ import type { DemoId } from '../demo.ts';
 import { follow } from '../player.ts';
 import type { Clip } from '../player.ts';
 import type { Change, Score } from '../score.ts';
-import { LEGENDS, pickTab, tabsFor } from '../tabs.ts';
+import { legendFor, pickTab, tabsFor } from '../tabs.ts';
 import type { Tab } from '../tabs.ts';
 import { changeTimes, tempoMap } from '../tempo.ts';
-import { boundsFor, clampView, fitView, timeToX } from '../zoom.ts';
+import { boundsFor, fitView, resizeView, timeToX } from '../zoom.ts';
 import type { View } from '../zoom.ts';
 import { Button } from './console/Button.tsx';
 import { Chip } from './console/Chip.tsx';
@@ -92,12 +92,12 @@ export function Workroom(p: WorkroomProps) {
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, []);
-  // A new piece or width: the whole piece fits at first; a zoomed view stays where it is.
+  // A new piece fits whole; a new width refits a view that is still the whole piece (the first measure replaces the fallback width) and leaves a zoomed one where it is.
   const fitted = useRef<{ score: Score; width: number } | null>(null);
   useLayoutEffect(() => {
     const was = fitted.current;
     fitted.current = { score, width };
-    setView(v => (!was || was.score !== score ? fitView(score.duration, width) : clampView({ ...v, width }, boundsFor(score.duration, width))));
+    setView(v => (!was || was.score !== score ? fitView(score.duration, width) : resizeView(v, was.width, width, score.duration)));
   }, [score, width]);
   // While playing, the playhead stays on screen, a page at a time, except while a finger or the mouse is on a view (a pan is not undone every frame). A paused view stays where the owner put it.
   useEffect(() => { if (playing && !holding) setView(v => follow(v, time, bounds)); }, [time, bounds, holding, playing]);
@@ -154,7 +154,13 @@ export function Workroom(p: WorkroomProps) {
           </label>
         </header>
         <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} />
-        <ViewTabs tabs={tabs} tab={tab} onTab={setWanted} />
+        <div class="flex flex-wrap items-end justify-end gap-x-3 gap-y-2 lg:flex-nowrap">
+          <div class="min-w-0 flex-1 basis-full lg:basis-0"><ViewTabs tabs={tabs} tab={tab} onTab={setWanted} /></div>
+          <Button variant="secondary" buttonRef={howTo} data={{ 'data-guide-open': '' }} onClick={openGuide}>
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5" /><path d="M6.2 6.2a1.9 1.9 0 1 1 2.7 1.7c-.6.3-.9.7-.9 1.4" /><path d="M8 11.6v.1" /></svg>
+            How to read this
+          </Button>
+        </div>
         <div role="tabpanel" id={panelId('view')} aria-labelledby={tabId('view', tab)} class="grid gap-2">
           {tab === 'roll' ? (
             <div class="lane-picker flex flex-wrap gap-2" role="group" aria-label="Lanes shown" data-guide="lane-picker">
@@ -167,13 +173,10 @@ export function Workroom(p: WorkroomProps) {
             {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram.file)} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
             {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane} /> : null}
           </div>
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <Legend items={LEGENDS[tab]} />
-            <Button variant="ghost" buttonRef={howTo} data={{ 'data-guide-open': '' }} onClick={openGuide}>How to read this</Button>
-          </div>
+          <Legend items={legendFor(tab, score.kind)} />
         </div>
       </div>
-      <Sheet title="Notes" count={score.changes.length} open={sheetOpen} onToggle={setSheetOpen}>
+      <Sheet title="Words & changes" open={sheetOpen} onToggle={setSheetOpen}>
         {openTerm ? <Card cardRef={cardRef} term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={closeCard} /> : null}
         {seen.length > 0 ? (
           <div class="words grid gap-2" aria-label="Words in this piece">
@@ -183,12 +186,12 @@ export function Workroom(p: WorkroomProps) {
         ) : null}
         {score.changes.length > 0 ? (
           <div class="grid gap-2">
-            <span class={SMALL_CAPS}>Claude's changes</span>
+            <span class={SMALL_CAPS}>Claude's changes <span class="ml-1 font-mono text-amber">{score.changes.length === 1 ? '1 change' : `${score.changes.length} changes`}</span></span>
             <ol class="changes grid list-decimal gap-2 pl-5 text-sm marker:font-mono marker:text-dim" aria-label="Claude's changes">
               {score.changes.map((c, i) => (
                 <li data-change={i}>
                   <button type="button" data-where="" class="where mr-1 inline-flex min-h-11 min-w-11 items-center font-mono text-amber underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-amber" onClick={() => seek(changeTimes(c, tempo, score.duration).from)}>{changeLabel(c)}</button>{' '}
-                  {splitTerms(c.text).map(part => 'term' in part ? <Word term={part.term} text={part.text} onOpen={openCard} /> : part.text)}
+                  {splitTerms(c.text).map(part => 'term' in part ? <Word term={part.term} text={part.text} inline onOpen={openCard} /> : part.text)}
                 </li>
               ))}
             </ol>

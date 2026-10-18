@@ -7,8 +7,9 @@ import { Button } from './console/Button.tsx';
 import { Chip } from './console/Chip.tsx';
 import { Panel } from './console/Panel.tsx';
 
-export function Word(p: { term: Term; text: string; onOpen(id: string): void }) {
-  return <Chip term={p.term.id} onClick={() => p.onOpen(p.term.id)}>{p.text}</Chip>;
+/** A glossary word: a compact chip in a list, or (inline) text inside a sentence. */
+export function Word(p: { term: Term; text: string; inline?: boolean; onOpen(id: string): void }) {
+  return <Chip term={p.term.id} inline={p.inline} onClick={() => p.onOpen(p.term.id)}>{p.text}</Chip>;
 }
 
 export function Card(p: { cardRef?: Ref<HTMLElement>; term: Term; clip: Clip | null; onHear(c: Clip): void; onClose(): void }) {

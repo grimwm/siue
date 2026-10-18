@@ -14,6 +14,13 @@ export function fitView(duration: number, width: number): View {
   return { start: 0, pxPerSec: Math.max(1, width) / duration, width: Math.max(1, width) };
 }
 
+/** The width changed from prevWidth to width: a view that was the whole piece stays the whole piece; one the owner zoomed or panned keeps its zoom (clamped). */
+export function resizeView(v: View, prevWidth: number, width: number, duration: number): View {
+  const was = fitView(duration, prevWidth);
+  const atFit = v.start === 0 && Math.abs(v.pxPerSec - was.pxPerSec) <= was.pxPerSec * 1e-9;
+  return atFit ? fitView(duration, width) : clampView({ ...v, width }, boundsFor(duration, width));
+}
+
 export const timeToX = (v: View, t: number): number => (t - v.start) * v.pxPerSec;
 export const xToTime = (v: View, x: number): number => v.start + x / v.pxPerSec;
 

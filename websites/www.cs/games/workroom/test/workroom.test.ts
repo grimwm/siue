@@ -347,3 +347,89 @@ test('Next and Close leave the owner’s own music playing; a demo’s Hear it p
   assert.equal(audio.paused, true, 'a demo pauses the piece');
   unmount(root);
 });
+
+/** A stage whose width the test sets, then the observer is fired. */
+const resizeTo = async (root: StubElement, observers: { fire: () => void }[], width: number): Promise<void> => {
+  const stage = walk(root).find(e => e._attrs['data-guide'] === 'view')!;
+  stage.getBoundingClientRect = () => ({ width, height: 460 });
+  await act(() => { observers[0]!.fire(); });
+};
+const withObserver = async (run: (observers: { fire: () => void }[]) => Promise<void>): Promise<void> => {
+  const observers: { fire: () => void }[] = [];
+  class Obs { constructor(cb: () => void) { observers.push({ fire: cb }); } observe(): void {} disconnect(): void {} }
+  Object.assign(globalThis, { ResizeObserver: Obs });
+  try { await run(observers); } finally { delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver; }
+};
+const sound = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
+const lastSection = (root: StubElement): { right: number } => {
+  const rects = walk(root).filter(e => e._attrs['data-section'] !== undefined);
+  const el = rects.at(-1)!;
+  const parent = walk(root).find(e => e.children?.includes(el)) ?? el;
+  return { right: Number(parent._attrs['x']) + Number(parent._attrs['width']) };
+};
+
+test('the Story opens with the whole piece in the width the stage measures, at 390, 320 and 1280', async () => {
+  for (const sc of [score, sound]) for (const width of [390, 320, 1280]) {
+    await withObserver(async observers => {
+      const root = makeEl('root');
+      await act(() => { render(h(ui.room.Workroom, { score: sc, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {} }), renderTarget(root)); });
+      await resizeTo(root, observers, width);
+      assert.equal(Number(named(root, 'data-timeline')._attrs['width']), width);
+      const end = lastSection(root).right;
+      assert.ok(end <= width + 1, `${sc.kind} at ${width}: the last section ends inside the drawing (${end})`);
+      assert.ok(end >= width * 0.5, `${sc.kind} at ${width}: and the piece is not squeezed into a corner (${end})`);
+      const fits = sc.sections.at(-1)!;
+      if (sc.kind === 'music') assert.ok(end > width - 1, 'the music runs to the right edge');
+      else assert.ok(fits !== undefined);
+      unmount(root);
+    });
+  }
+});
+
+test('the stage measured after the first draw refits a piece the owner has not zoomed; a zoomed one keeps its zoom', async () => {
+  await withObserver(async observers => {
+    const root = await mount();
+    await resizeTo(root, observers, 390);
+    const secs = walk(root).filter(e => e._attrs['data-section'] !== undefined);
+    assert.ok(secs.length >= 2);
+    assert.ok(lastSection(root).right <= 391 && lastSection(root).right > 380, `the 8 bars fill 390 px, got ${lastSection(root).right}`);
+    await zoomAndPan(root);
+    const before = ticks(root);
+    await resizeTo(root, observers, 360);
+    assert.ok(before.length > 0);
+    assert.ok(lastSection(root).right > 360 * 2, 'still zoomed in after a resize');
+    unmount(root);
+  });
+});
+
+test('the How to read this button is a visible secondary button with an icon, 44 px tall', async () => {
+  const root = await mount();
+  const b = button(root, 'How to read this');
+  const cls = (b._attrs['class'] ?? b.className ?? '').split(/\s+/);
+  assert.ok(cls.includes('min-h-11') && cls.includes('bg-panel') && cls.includes('border-rule'), 'secondary variant');
+  const svg = walk(b).find(e => e.localName === 'svg')!;
+  assert.equal(svg._attrs['aria-hidden'], 'true');
+  unmount(root);
+});
+
+test('the notes panel is "Words & changes"; the change count is on the changes heading only', async () => {
+  const root = await mount();
+  const aside = named(root, 'data-sheet');
+  assert.equal(aside._attrs['aria-label'], 'Words & changes');
+  assert.doesNotMatch(walk(aside).find(e => e.localName === 'h2')!.textContent, /\d/);
+  assert.match(aside.textContent, /Claude's changes\s*1 change(?!s)/);
+  const many = makeEl('root');
+  const two = { ...score, changes: [score.changes[0]!, score.changes[0]!] };
+  await act(() => { render(h(ui.room.Workroom, { score: two, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {} }), renderTarget(many)); });
+  assert.match(named(many, 'data-sheet').textContent, /2 changes/);
+  unmount(root); unmount(many);
+});
+
+test('a sound piece’s Story legend describes layers and moments, not stars', async () => {
+  const root = makeEl('root');
+  await act(() => { render(h(ui.room.Workroom, { score: sound, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {} }), renderTarget(root)); });
+  const legend = named(root, 'data-legend').textContent;
+  assert.match(legend, /row = a layer/);
+  assert.doesNotMatch(legend, /star|higher/);
+  unmount(root);
+});

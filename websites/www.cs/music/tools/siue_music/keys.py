@@ -272,12 +272,7 @@ class Keys:
     def status(self, check: ApiCheck | None = None) -> int:
         repo = read_repo_keys(self.public_json)
         if repo.current is None:
-            if not self.cache.load()["api"]:
-                self.out("Nothing is set up yet.\nNext: make music-setup")
-                return 3
-            self.out("No notes key yet.")
-            self._checklist(repo, False, False, set(self.cache.load()["api"]))
-            return 3
+            return self._status_without_repo_key(check)
         self.out(f"Repository key: {display(repo.current)}")
         ok = True
         in_op = False
@@ -311,6 +306,105 @@ class Keys:
                         problems[name] = problem
         self._checklist(repo, in_op, in_cache, set(secrets), problems)
         return 0 if ok else 3
+
+    def _status_without_repo_key(self, check: ApiCheck | None) -> int:
+        """The repository has no music/keys/public.json: report a key made elsewhere (1Password, the cache) and where its public half waits."""
+        cache = self.cache.load()
+        secrets = dict(cache["api"])
+        held: dict[str, tuple[str, dict[str, str]]] = {}
+        op_problem = None
+        try:
+            self._ready()
+            held = self._held()
+            secrets.update(self.api_secrets())
+        except (OpError, KeysError, KeyMismatch) as e:
+            op_problem = str(e)
+        known = sorted(set(held) | set(cache["keys"]))
+        if not known:
+            if not secrets:
+                self.out("Nothing is set up yet.\nNext: make music-setup")
+                return 3
+            self.out("No notes key yet.")
+            self._checklist(RepoKeys(None), False, False, set(secrets))
+            return 3
+        uploaded = (cache.get("uploaded") or {}).get("fingerprints")
+        uploaded = uploaded if isinstance(uploaded, list) else []
+        fp = next((k for k in known if k in uploaded), known[0])
+        in_op, in_cache = fp in held, fp in cache["keys"]
+        self.out(f"Notes key: {display(fp)}")
+        problems: dict[str, str] = {}
+        if check is not None:
+            for name in (PUBLISH_KEY, PICKUP_KEY):
+                if name in secrets:
+                    problem = api_problem(name, probe_states(check(secrets[name])))
+                    if problem:
+                        problems[name] = problem
+        done, todo = "\u2713", "\u2192"
+        left = 0
+        lines = [f"  {done} The notes key is made ({display(fp)})."]
+
+        def line(ok: bool, did: str, todo_text: str) -> None:
+            nonlocal left
+            left += not ok
+            lines.append(f"  {done} {did}" if ok else f"  {todo} {todo_text}")
+
+        if op_problem is not None:
+            lines.append(f"  ? 1Password could not be checked: {op_problem}")
+            left += 1
+        else:
+            line(in_op, "The key is saved in 1Password.", "The key is not saved in 1Password.")
+        line(in_cache, "The key is in this computer's cache.", "The key is not in this computer's cache.")
+        for name in (PUBLISH_KEY, PICKUP_KEY):
+            problem = problems.get(name)
+            line(name in secrets and problem is None, f"The {name} API key is saved.", problem or f"The {name} API key is not saved.")
+        up = cache.get("uploaded") or {}
+        line(fp in uploaded, f"The locked copy of your key is on the server (uploaded {up.get('at', '')}).",
+             "The locked copy of your key is not on the server yet.")
+        where, next_step = self._pending_public_key(fp)
+        lines.append(where)
+        self.out("\nWhat's left:")
+        for text in lines:
+            self.out(text)
+        self.out(next_step if left == 0 else "Next: make music-setup")
+        return 3
+
+    def _pending_public_key(self, fp: str) -> tuple[str, str]:
+        """(the checklist line, the next step) for a public key that is not in the repository yet."""
+        todo = "\u2192"
+        branch = f"music/notes-key-{fp[:8]}"
+        folder = str(self.public_json.parent)
+        generic = (f"  {todo} The public key is not committed anywhere yet: make music-setup", "Next: make music-setup")
+
+        def git(*args: str) -> subprocess.CompletedProcess | None:
+            try:
+                out = self.run(["git", "-C", folder, *args], capture_output=True, text=True, timeout=20)
+            except (OSError, subprocess.SubprocessError):
+                return None
+            return out if out.returncode == 0 else None
+
+        local = git("branch", "-a", "--format=%(refname:short)")
+        names = {n.strip() for n in (local.stdout.splitlines() if local else [])}
+        remote = git("ls-remote", "--heads", "origin", branch)
+        exists = branch in names or f"origin/{branch}" in names or bool(remote and remote.stdout.strip())
+        if not exists:
+            return generic
+        pr = None
+        try:
+            seen = self.run(["gh", "pr", "list", "--head", branch, "--state", "all", "--json", "number,url,state"],
+                            cwd=folder, capture_output=True, text=True, timeout=20)
+            if seen.returncode == 0:
+                found = json.loads(seen.stdout)
+                opened = [p for p in found if isinstance(p, dict) and p.get("state") == "OPEN"]
+                pr = (opened or [None])[0]
+                if not pr and any(isinstance(p, dict) and p.get("state") == "MERGED" for p in found):
+                    return (f"  {todo} The public key's pull request is merged: update this checkout (git pull), then make music-setup",
+                            "Next: git pull, then make music-setup")
+        except (OSError, subprocess.SubprocessError, ValueError, TypeError):
+            pr = None
+        if pr and pr.get("number") and pr.get("url"):
+            return (f"  {todo} The public key is waiting in pull request #{pr['number']}: {pr['url']} \u2014 merge it, then the workroom can take your notes.",
+                    f"Next: merge pull request #{pr['number']} ({pr['url']})")
+        return (f"  {todo} The public key is on branch {branch} (no pull request yet): make music-setup opens one", "Next: make music-setup")
 
     def _git_state(self) -> str:
         """"committed", "uncommitted", or "unknown" for the public key files, from git in the key file's folder."""

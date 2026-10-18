@@ -453,7 +453,7 @@ class Keys:
         fp, passphrase = sealing.fingerprint(spki), sealing.new_passphrase()
         self._create_key_item(pkcs8, fp, passphrase)
         self.pull()
-        self.out(f"Done: your notes key is made and saved in 1Password (vault {self.op.vault}).\n"
+        self.out(f"Made your notes key and saved it in 1Password (vault {self.op.vault}).\n"
                  f"Its fingerprint, an ID to compare later: {display(fp)}\n\n" + KEY_KINDS)
         return True
 

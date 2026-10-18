@@ -52,6 +52,18 @@ class CliTest(unittest.TestCase):
         for call in self.w.op_calls():
             self.assertNotIn("c" * 64, " ".join(call))
 
+    def test_read_secret_raises_at_end_of_input_but_a_blank_line_is_a_paste(self):
+        with mock.patch.object(sys, "stdin", io.StringIO("")):
+            with self.assertRaises(EOFError):
+                cli.read_secret("key: ")
+        with mock.patch.object(sys, "stdin", io.StringIO("\n")):
+            self.assertEqual(cli.read_secret("key: "), "")
+
+    def test_api_key_set_with_nothing_on_stdin_exits_1_without_a_traceback(self):
+        code, _, err = self.run_cli("api-key-set", "music-pickup", stdin="")
+        self.assertEqual(code, 1)
+        self.assertIn("No key was given", err)
+
     def test_rotate_uploads_with_the_music_publish_key(self):
         server = ServerApi()
         made = []

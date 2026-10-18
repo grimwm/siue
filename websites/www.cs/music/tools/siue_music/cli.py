@@ -52,7 +52,10 @@ def open_browser(url: str) -> bool:
 def read_secret(prompt: str) -> str:
     if sys.stdin.isatty():
         return getpass.getpass(prompt)
-    return sys.stdin.readline().strip()
+    line = sys.stdin.readline()
+    if line == "":
+        raise EOFError
+    return line.strip()
 
 
 def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
@@ -96,7 +99,12 @@ def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
             print(f"Published {args[1]} v{done}.")
             return 0
         if args[:1] == ["api-key-set"] and len(args) == 2:
-            keys.api_key_set(args[1], read_secret("API key (shown once on the hub): "))
+            try:
+                secret = read_secret("API key (shown once on the hub): ")
+            except EOFError:
+                print("No key was given on standard input.", file=sys.stderr)
+                return 1
+            keys.api_key_set(args[1], secret)
             return 0
     except KeyMismatch as e:
         print(str(e), file=sys.stderr)

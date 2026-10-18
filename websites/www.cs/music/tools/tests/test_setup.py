@@ -1,8 +1,11 @@
 """make music-setup: each step is skipped when it is already done. Fake op, fake server, fake browser; no git, no build."""
+import io
+import sys
 import unittest
 from unittest import mock
 
 from support import ServerApi, World, pool_key
+from siue_music import cli
 from siue_music.keys import PICKUP_KEY, PUBLISH_KEY
 from siue_music.setup import Setup
 
@@ -93,6 +96,7 @@ class SetupTest(unittest.TestCase):
                      "locked copy on the server, its current key checked"):
             self.assertIn("✓ " + line, text)
         self.assertIn("Next: open the workroom, https://www.cs.siue.edu/~wgrim/music/", text)
+        self.assertEqual(text.count("Done:"), 1, "only the closing checklist says Done")
         for word in ("pull request", "branch", "commit", "[Y/n]"):
             self.assertNotIn(word, text)
         secrets_seen = text + " ".join(self.opened) + " ".join(self.prompts)
@@ -100,6 +104,13 @@ class SetupTest(unittest.TestCase):
             self.assertNotIn(secret, secrets_seen)
             for call in self.w.op_calls():
                 self.assertNotIn(secret, " ".join(call))
+
+    def test_end_of_input_at_the_paste_prompt_stops_after_one_try(self):
+        setup = Setup(self.w.keys, self.server.api, cli.read_secret, lambda url: True, out=self.w.out.append)
+        with mock.patch.object(sys, "stdin", io.StringIO("")):
+            self.assertEqual(setup.run_all(), 1)
+        self.assertIn("No key was pasted. Run make music-setup again when you have it.", self.text())
+        self.assertNotIn("That is not an API key", self.text())
 
     def test_a_second_run_does_nothing_and_asks_nothing(self):
         self.everything_done()

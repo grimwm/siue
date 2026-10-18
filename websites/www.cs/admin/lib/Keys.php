@@ -52,7 +52,7 @@ final class Keys
      * the same transaction, so a guided label has one active key.
      *
      * @param list<string> $scopes
-     * @return array{key:string,replaced:int} replaced counts the keys this call revoked
+     * @return array{key:string,id:int,replaced:int} id is the new key's row id; replaced counts the keys this call revoked
      * @throws \InvalidArgumentException as create() does
      */
     public function createReplacing(string $label, array $scopes, bool $replace = true): array
@@ -82,6 +82,7 @@ final class Keys
             }
             $this->db->prepare('INSERT INTO keys (label, key_hash, scopes, created_at) VALUES (?, ?, ?, ?)')
                 ->execute([$label, hash('sha256', $key), json_encode($scopes, JSON_THROW_ON_ERROR), $now]);
+            $id = (int) $this->db->lastInsertId();
             $this->db->exec('COMMIT');
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -89,7 +90,7 @@ final class Keys
             }
             throw $e;
         }
-        return ['key' => $key, 'replaced' => $replaced];
+        return ['key' => $key, 'id' => $id, 'replaced' => $replaced];
     }
 
     /** @return list<array{id:int,label:string,scopes:list<string>,created_at:int,last_used_at:?int,revoked_at:?int}> */

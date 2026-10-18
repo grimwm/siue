@@ -347,6 +347,51 @@ final class AdminKeysTest extends TestCase
         self::assertCount(2, array_filter($keys->list(), static fn(array $k): bool => $k['label'] === 'laptop' && $k['revoked_at'] === null));
     }
 
+    public function testTheJustMadeKeysCardIsMarkedAsTheKeyShownAboveAndNoOtherCardIs(): void
+    {
+        [$p, $keys, $in] = $this->panel();
+        $keys->create('laptop', ['notes:pickup']);
+        $old = $keys->create('music-pickup', ['notes:pickup']);
+        $csrf = $this->csrfIn($p->keysPanel($in)->body);
+        $res = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'music-pickup', 'scopes' => ['notes:pickup'], 'csrf' => $csrf]));
+        self::assertSame(1, substr_count($res->body, 'New: the key shown above'));
+        self::assertSame(1, substr_count($res->body, 'class="key isnew"'));
+        self::assertMatchesRegularExpression('~<div class="key isnew"><strong>music-pickup</strong> <span class="tag">New: the key shown above</span>~', $res->body);
+        $active = array_filter($keys->list(), static fn(array $k): bool => $k['label'] === 'music-pickup' && $k['revoked_at'] === null);
+        self::assertCount(1, $active, 'one active key, not two');
+        self::assertStringNotContainsString('New: the key shown above', $p->keysPanel($in)->body);
+        self::assertNotNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $old]]), 'notes:pickup'));
+    }
+
+    public function testCreateAnotherKeyIsAClosedDetailsUnderTheNewKey(): void
+    {
+        [$p, , $in] = $this->panel();
+        $csrf = $this->csrfIn($p->keysPanel($in)->body);
+        $body = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'laptop', 'scopes' => ['notes:pickup'], 'csrf' => $csrf]))->body;
+        self::assertSame(1, preg_match('~<details class="another"><summary>Create another key</summary><form method="post" action="keys.php">.*?Create key</button></form></details>~s', $body));
+        self::assertStringNotContainsString('<details class="another" open', $body);
+        self::assertStringNotContainsString('<h2>Create another key</h2>', $body);
+    }
+
+    public function testTheGuidedPageNamesTheKeyItWillReplaceOnlyWhenOneIsActive(): void
+    {
+        [$p, $keys, $in] = $this->panel();
+        $query = req(['cookies' => $in->cookies, 'query' => ['label' => 'music-pickup', 'scopes' => 'notes:pickup']]);
+        $none = $p->keysPanel($query)->body;
+        self::assertStringNotContainsString('This replaces', $none);
+        self::assertStringNotContainsString('Will be replaced', $none);
+        $keys->create('music-pickup', ['notes:pickup']);
+        $keys->create('laptop', ['notes:pickup']);
+        $body = $p->keysPanel($query)->body;
+        self::assertStringContainsString('This replaces your current music-pickup key (created 1970-01-12 13:46 UTC); the old one stops working.', $body);
+        self::assertSame(1, substr_count($body, 'Will be replaced'));
+        self::assertMatchesRegularExpression('~<strong>music-pickup</strong> <span class="tag">Will be replaced</span>~', $body);
+        $keys->revoke(1);
+        $revoked = $p->keysPanel($query)->body;
+        self::assertStringNotContainsString('This replaces', $revoked, 'a revoked key is not replaced');
+        self::assertStringNotContainsString('Will be replaced', $revoked);
+    }
+
     public function testExistingKeysListNewestFirstWithLastUsedProminent(): void
     {
         [$p, $keys, $in] = $this->panel();

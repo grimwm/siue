@@ -10,7 +10,7 @@ login.
 | `login.php` | Asks for the address and mails a one-time link to the allowed address only. The reply is the same whoever asks. |
 | `verify.php` | The mailed link opens a page with a button; pressing it spends the link and starts a session. |
 | `index.php` | The hub: dashboard links, encryption-key fingerprints (with a "Remove the notes key" control while one is stored), sign out and sign out everywhere. |
-| `keys.php` | Create and revoke scoped API keys. A new key is shown once. |
+| `keys.php` | Create and revoke scoped API keys. A new key is shown once, and its card in the list is tagged as that key. For `music-publish` and `music-pickup` the page says which active key creating replaces. |
 | `logout.php` | Ends the session (POST), or every session with `?all=1`. |
 | `health.php` | `{"mail":"yes\|no","db":"yes\|no","store":"site\|fallback"}` for a deploy check; reveals nothing else. |
 

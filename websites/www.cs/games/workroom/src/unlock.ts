@@ -1,7 +1,8 @@
-// Unlocking the locked keyring in the browser: PBKDF2 over the passphrase, AES-GCM, and a proof that every key pairs
-// with the public key built into the page. The unlocked keys are non-extractable.
+// Unlocking the locked keyring in the browser: PBKDF2 over the passphrase, AES-GCM, and the public half of every key
+// derived from the private key itself, so the key notes are sealed to is vouched for by the passphrase. The unlocked
+// keys are non-extractable.
 import { fingerprintOf } from './seal.ts';
-import type { BuiltInKey } from './seal.ts';
+import type { PublicKey } from './seal.ts';
 
 export const ITERATIONS = 600_000;
 export const MAX_ITERATIONS = 10_000_000;
@@ -10,6 +11,7 @@ const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 const RSA = { name: 'RSA-OAEP', hash: 'SHA-256' } as const;
+const RSA_BITS = 4096;
 
 export interface LockedKeyring { v: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ct: string }
 export class WrongPassphrase extends Error {}
@@ -41,17 +43,21 @@ async function deriveKey(passphrase: string, salt: Uint8Array<ArrayBuffer>, iter
   return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, base, { name: 'AES-GCM', length: 256 }, false, [usage]);
 }
 
+export interface Unlocked {
+  /** The public key to seal new notes to: the keyring's first entry. */
+  current: PublicKey;
+  /** Every entry's non-extractable RSA-OAEP SHA-256 private key (usages ['decrypt']), by fingerprint, in keyring order. */
+  ring: Map<string, CryptoKey>;
+}
+
 /**
- * Unlocks the whole keyring. `known` lists the public keys built into the page, the current one first. Every entry
- * whose fingerprint is in `known` becomes a non-extractable RSA-OAEP SHA-256 private key (usages ['decrypt']) proven
- * to pair with that public key; entries the page has no public key for are skipped. The result is in keyring order.
- * KeyringInvalid when the envelope is weak or malformed, the plaintext is malformed or repeats a fingerprint, the
- * keyring lacks known[0] (the current key), or an entry does not pair with its public key; WrongPassphrase when
- * the passphrase does not decrypt it.
+ * Unlocks the whole keyring. Each entry's public half is derived from its private key and its SHA-256 SPKI
+ * fingerprint must equal the entry's; the private key is then proven to decrypt what that public half encrypts.
+ * The first entry is the current key. KeyringInvalid when the envelope is weak or malformed, the plaintext is
+ * malformed, empty or repeats a fingerprint, or an entry is not RSA-4096 or does not match its fingerprint;
+ * WrongPassphrase when the passphrase does not decrypt it.
  */
-export async function unlockKeyring(locked: LockedKeyring, passphrase: string, known: readonly BuiltInKey[]): Promise<Map<string, CryptoKey>> {
-  const current = known[0];
-  if (current === undefined) throw new KeyringInvalid('the page has no notes key');
+export async function unlockKeyring(locked: LockedKeyring, passphrase: string): Promise<Unlocked> {
   const salt = fromBase64(locked.salt);
   const iv = fromBase64(locked.iv);
   const ct = fromBase64(locked.ct);
@@ -70,18 +76,20 @@ export async function unlockKeyring(locked: LockedKeyring, passphrase: string, k
 
   const entries = parseEntries(plain);
   plain.fill(0);
-  if (!entries.some((e) => e.fingerprint === current.fingerprint)) throw new KeyringInvalid('the keyring lacks the current key');
+  if (entries.length === 0) throw new KeyringInvalid('the keyring has no keys');
 
   const ring = new Map<string, CryptoKey>();
-  for (const entry of entries) {
-    const pub = known.find((k) => k.fingerprint === entry.fingerprint);
-    try {
-      if (pub !== undefined) ring.set(entry.fingerprint, await importPaired(entry.pkcs8, pub));
-    } finally {
-      entry.pkcs8.fill(0);
+  let current: PublicKey | undefined;
+  try {
+    for (const entry of entries) {
+      const { pub, priv } = await importPaired(entry);
+      current ??= pub;
+      ring.set(entry.fingerprint, priv);
     }
+  } finally {
+    for (const entry of entries) entry.pkcs8.fill(0);
   }
-  return ring;
+  return { current: current!, ring };
 }
 
 function parseEntries(plain: Uint8Array): { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[] {
@@ -108,19 +116,29 @@ function parseEntries(plain: Uint8Array): { fingerprint: string; pkcs8: Uint8Arr
   return entries;
 }
 
-/** Imports the private key non-extractable and proves it decrypts what the built-in public key encrypts. */
-async function importPaired(pkcs8: Uint8Array<ArrayBuffer>, pub: BuiltInKey): Promise<CryptoKey> {
+/**
+ * Derives the entry's public key from its private key, checks the fingerprint and the modulus, and returns the
+ * private key imported non-extractable once it is proven to decrypt what the public half encrypts. The extractable
+ * import lives only long enough to export the JWK.
+ */
+async function importPaired(entry: { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }): Promise<{ pub: PublicKey; priv: CryptoKey }> {
+  const fail = (): KeyringInvalid => new KeyringInvalid(`the keyring entry ${entry.fingerprint.slice(0, 16)} does not match its key`);
   try {
-    const priv = await crypto.subtle.importKey('pkcs8', pkcs8, RSA, false, ['decrypt']);
-    const spki = Uint8Array.from(atob(pub.spki), (c) => c.charCodeAt(0));
-    if ((await fingerprintOf(spki)) !== pub.fingerprint) throw new Error('fingerprint');
-    const pubKey = await crypto.subtle.importKey('spki', spki, RSA, false, ['encrypt']);
+    const temp = await crypto.subtle.importKey('pkcs8', entry.pkcs8, RSA, true, ['decrypt']);
+    const jwk = await crypto.subtle.exportKey('jwk', temp);
+    if (jwk.kty !== 'RSA' || typeof jwk.n !== 'string' || typeof jwk.e !== 'string') throw new Error('not RSA');
+    const pubKey = await crypto.subtle.importKey('jwk', { kty: 'RSA', n: jwk.n, e: jwk.e, alg: 'RSA-OAEP-256', ext: true }, RSA, true, ['encrypt']);
+    delete jwk.d; delete jwk.p; delete jwk.q; delete jwk.dp; delete jwk.dq; delete jwk.qi;
+    if ((pubKey.algorithm as RsaHashedKeyAlgorithm).modulusLength !== RSA_BITS) throw new Error('modulus');
+    const spki = new Uint8Array(await crypto.subtle.exportKey('spki', pubKey));
+    if ((await fingerprintOf(spki)) !== entry.fingerprint) throw new Error('fingerprint');
+    const priv = await crypto.subtle.importKey('pkcs8', entry.pkcs8, RSA, false, ['decrypt']);
     const probe = crypto.getRandomValues(new Uint8Array(32));
     const back = new Uint8Array(await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, priv, await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pubKey, probe)));
     if (back.length !== probe.length || back.some((b, i) => b !== probe[i])) throw new Error('mismatch');
-    return priv;
+    return { pub: { fingerprint: entry.fingerprint, spki: toBase64(spki) }, priv };
   } catch {
-    throw new KeyringInvalid(`the key ${pub.fingerprint} does not pair with its public key`);
+    throw fail();
   }
 }
 

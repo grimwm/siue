@@ -120,9 +120,10 @@ Colours everywhere match `^#[0-9a-f]{6}$`. Ids everywhere match `^[a-z0-9][a-z0-
 ## Setup
 
 Run `make music-setup` (in `websites/www.cs`). Two kinds of key are involved. The
-**notes key** is the encryption key: its public half is built into the page so notes are
-sealed before they leave the phone; its private half and passphrase live in 1Password,
+**notes key** is the encryption key: its private half and passphrase live in 1Password,
 and a locked copy goes to the server so any device can open notes with the passphrase.
+The page takes the public half it seals to from that unlocked copy, so notes are sealed
+before they leave the phone and the server cannot swap the key.
 **API keys** are not encryption: they are passwords that let the key tool talk to the
 server. `music-publish` (boxes `drafts:publish` and `keys:publish`) uploads drafts and
 the locked copy; `music-pickup` (box `notes:pickup`) downloads waiting notes. They are

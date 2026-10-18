@@ -26,8 +26,6 @@ const fixture = {
 };
 writeFileSync(join(dir, 'test-key.json'), JSON.stringify(fixture, null, 2) + '\n');
 const publicOf = (k: { fingerprint: string; spki: string }) => ({ fingerprint: k.fingerprint, spki: k.spki });
-writeFileSync(join(dir, 'public.json'), JSON.stringify({ schema: 1, current: publicOf(main), previous: [publicOf(other)] }, null, 2) + '\n');
-writeFileSync(join(dir, 'public-key.ts'), `// The test keys' public halves, built into the page only by tools/e2e-bundle.ts.\nexport const PUBLIC_KEY = ${JSON.stringify(publicOf(main))};\nexport const PREVIOUS_KEYS = [${JSON.stringify(publicOf(other))}];\n`);
 const key = publicOf(main);
 const base = { v: 1 as const, piece: 'test-piece', draft: 1, from: 64, to: 78, fromBar: 33, toBar: 40, lane: 'brass', reaction: null, curve: null, made: '2026-10-17T12:00:00.000Z' };
 writeFileSync(join(dir, 'note-text.sealed'), await seal({ ...base, kind: 'text', text: 'Fixture note: louder at bar 33', audio: null }, null, key));

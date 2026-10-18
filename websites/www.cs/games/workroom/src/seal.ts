@@ -1,5 +1,6 @@
 // Sealing a note in the browser: a fresh AES-256-GCM key encrypts the note, RSA-OAEP (SHA-256) wraps that key to the
-// built-in public key, and the header names the key the note was sealed to. The server only ever stores the result.
+// current public key of the unlocked keyring, and the header names the key the note was sealed to. The server only
+// ever stores the result.
 import type { NoteBody } from './note.ts';
 import { NOTE_KINDS, REACTION_IDS } from './note.ts';
 
@@ -13,7 +14,7 @@ const RSA_BITS = 4096;
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 
-export interface BuiltInKey { fingerprint: string; spki: string } // spki: base64 DER
+export interface PublicKey { fingerprint: string; spki: string } // spki: base64 DER
 
 export class FingerprintMismatch extends Error {}
 export class NoteUnreadable extends Error {
@@ -38,10 +39,10 @@ export function headerFingerprint(bundle: Uint8Array): string | null {
   return toHex(bundle.subarray(MAGIC_BYTES.length, MAGIC_BYTES.length + FP_LENGTH));
 }
 
-/** Checks the built-in fingerprint first; throws FingerprintMismatch and seals nothing when it differs. */
-export async function seal(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null, key: BuiltInKey): Promise<Uint8Array<ArrayBuffer>> {
+/** The key comes from the unlocked keyring (`unlocked.current`), never from the page. Checks its fingerprint first; throws FingerprintMismatch and seals nothing when it differs. */
+export async function seal(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null, key: PublicKey): Promise<Uint8Array<ArrayBuffer>> {
   const spki = fromBase64(key.spki);
-  if ((await fingerprintOf(spki)) !== key.fingerprint) throw new FingerprintMismatch('the public key does not match its built-in fingerprint');
+  if ((await fingerprintOf(spki)) !== key.fingerprint) throw new FingerprintMismatch('the public key does not match its fingerprint');
   const pub = await crypto.subtle.importKey('spki', spki, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
   if ((pub.algorithm as RsaHashedKeyAlgorithm).modulusLength !== RSA_BITS) throw new FingerprintMismatch(`the public key is not RSA-${RSA_BITS}`);
   const aes = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);

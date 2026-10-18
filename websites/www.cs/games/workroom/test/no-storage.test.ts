@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { createVault } from '../src/vault.ts';
 import { unlockKeyring } from '../src/unlock.ts';
 import { open, seal } from '../src/seal.ts';
-import { builtIn, fx, otherKey } from './fixture-key.ts';
+import { fx } from './fixture-key.ts';
 
 const touched: string[] = [];
 const trap = (name: string) => new Proxy({}, {
@@ -24,15 +24,16 @@ Object.defineProperty(globalThis, 'document', {
 
 test('unlocking, using and clearing the vault touch no browser storage', async () => {
   const vault = createVault();
-  vault.load(await unlockKeyring(fx.keyring, fx.passphrase, [builtIn, otherKey]));
-  const sealed = await seal({ v: 1, kind: 'text', piece: 'p', draft: 1, from: 0, to: 1, fromBar: 1, toBar: 1, lane: null, text: 'hi', reaction: null, curve: null, audio: null, made: '2026-10-20T00:00:00.000Z' }, null, builtIn);
+  const unlocked = await unlockKeyring(fx.keyring, fx.passphrase);
+  vault.load(unlocked.ring);
+  const sealed = await seal({ v: 1, kind: 'text', piece: 'p', draft: 1, from: 0, to: 1, fromBar: 1, toBar: 1, lane: null, text: 'hi', reaction: null, curve: null, audio: null, made: '2026-10-20T00:00:00.000Z' }, null, unlocked.current);
   assert.equal((await open(sealed, vault.keyring())).body.text, 'hi');
   vault.clear();
   assert.deepEqual(touched, []);
 });
 
 test('the modules that handle keys never name a browser store', () => {
-  for (const file of ['note', 'seal', 'unlock', 'vault', 'public-key']) {
+  for (const file of ['note', 'seal', 'unlock', 'vault']) {
     const source = readFileSync(new URL(`../src/${file}.ts`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /indexedDB|localStorage|sessionStorage|document\.cookie|\bcaches\b/, `${file}.ts`);
   }

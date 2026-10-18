@@ -232,6 +232,75 @@ final class MusicPagesTest extends TestCase
         self::assertStringContainsString('Music notes key', $hub->body);
     }
 
+    private function adminPages(): Admin\Pages
+    {
+        return new Admin\Pages($this->db, $this->clock, new MemoryMailer(), self::BASE, static fn(): bool => true, $this->keys);
+    }
+
+    private function hubCsrf(Admin\Request $in): string
+    {
+        preg_match('/name="csrf" value="([0-9a-f]{64})"/', $this->adminPages()->hub($in)->body, $m);
+        return $m[1];
+    }
+
+    public function testTheHubOffersToRemoveTheNotesKeyOnlyWhileOneIsStored(): void
+    {
+        $in = music_signed_in($this->sessions);
+        $with = $this->adminPages()->hub($in)->body;
+        self::assertStringContainsString('<details class="remover"><summary>Remove the notes key</summary>', $with);
+        self::assertStringContainsString('1Password is not touched.', $with);
+        self::assertStringContainsString('name="do" value="remove-key"', $with);
+        $this->db->exec('DELETE FROM music_keyring');
+        $without = $this->adminPages()->hub($in)->body;
+        self::assertStringNotContainsString('Remove the notes key', $without);
+        self::assertStringContainsString('not made yet (make music-setup)', $without);
+    }
+
+    public function testRemovingTheNotesKeyNeedsASessionAndAFreshToken(): void
+    {
+        $in = music_signed_in($this->sessions);
+        $csrf = $this->hubCsrf($in);
+        $post = ['do' => 'remove-key', 'label' => 'Music notes key'];
+        $anon = $this->adminPages()->removeKey(req(['https' => true, 'method' => 'POST', 'post' => $post + ['csrf' => $csrf]]));
+        self::assertSame([303, 'login.php'], [$anon->status, $anon->headers['Location']]);
+        $wrong = $this->adminPages()->removeKey(music_signed_in($this->sessions, ['method' => 'POST', 'post' => $post + ['csrf' => 'nope']]));
+        self::assertSame(403, $wrong->status);
+        self::assertNotNull(Music\Store::fingerprintsIn($this->db), 'a refused request removes nothing');
+    }
+
+    public function testRemovingTheNotesKeyForgetsTheKeyringAndTheHubSaysNotMadeYet(): void
+    {
+        $in = music_signed_in($this->sessions);
+        $csrf = $this->hubCsrf($in);
+        $done = $this->adminPages()->removeKey($this->postAs($in, ['do' => 'remove-key', 'label' => 'Music notes key', 'csrf' => $csrf]));
+        self::assertSame([303, 'index.php?removed=1'], [$done->status, $done->headers['Location']]);
+        self::assertNull(Music\Store::fingerprintsIn($this->db));
+        self::assertNull($this->store->keyring());
+        $hub = $this->adminPages()->hub($in);
+        self::assertStringContainsString('not made yet (make music-setup)', $hub->body);
+        self::assertStringNotContainsString('Remove the notes key', $hub->body);
+    }
+
+    public function testRemovingAKeyTheHubDoesNotListIsNotFound(): void
+    {
+        $in = music_signed_in($this->sessions);
+        $csrf = $this->hubCsrf($in);
+        $res = $this->adminPages()->removeKey($this->postAs($in, ['do' => 'remove-key', 'label' => 'Other', 'csrf' => $csrf]));
+        self::assertSame(404, $res->status);
+    }
+
+    public function testRemoveKeyringToleratesAMissingTableAndReportsWhetherARowWent(): void
+    {
+        self::assertFalse(Music\Store::removeKeyring(admin_tmp_db()), 'a database the workroom never touched');
+        self::assertTrue(Music\Store::removeKeyring($this->db));
+        self::assertFalse(Music\Store::removeKeyring($this->db), 'nothing left to remove');
+    }
+
+    private function postAs(Admin\Request $in, array $post): Admin\Request
+    {
+        return req(['https' => true, 'method' => 'POST', 'cookies' => $in->cookies, 'post' => $post]);
+    }
+
     public function testTheHubShowsTheStoredFingerprintInGroupsOfFour(): void
     {
         self::assertSame(['Music notes key' => implode(' ', array_fill(0, 16, 'abab'))], admin_key_fingerprints($this->db));

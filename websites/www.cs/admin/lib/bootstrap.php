@@ -49,6 +49,35 @@ function admin_key_fingerprints(\PDO $db): array
     return ['Music notes key' => $prints === null ? 'not made yet (make music-setup)' : Music\Store::displayFingerprint($prints['current'])];
 }
 
+/**
+ * Keys the hub can remove, label => ['summary', 'explain', 'button', 'remove']; a label appears only while its key is stored.
+ * `remove` takes the PDO and returns true when something was removed. Workrooms add their own here.
+ *
+ * @return array<string, array{summary: string, explain: list<string>, button: string, remove: callable(\PDO): bool}>
+ */
+function admin_key_removers(\PDO $db): array
+{
+    require_once __DIR__ . '/../../music/lib/Store.php';
+    try {
+        if (Music\Store::fingerprintsIn($db) === null) {
+            return [];
+        }
+    } catch (PDOException) {
+        return [];
+    }
+    return ['Music notes key' => [
+        'summary' => 'Remove the notes key',
+        'explain' => [
+            'The server forgets its locked copy of the key and its fingerprints.',
+            'Notes cannot be sent until make music-setup runs again.',
+            'Notes already on the server stay, but can only be opened with the old key from 1Password.',
+            '1Password is not touched.',
+        ],
+        'button' => 'Remove the notes key',
+        'remove' => static fn(\PDO $d): bool => Music\Store::removeKeyring($d),
+    ]];
+}
+
 /** True for exactly `localhost` or `127.0.0.1`, with an optional port. */
 function admin_is_local_host(string $host): bool
 {

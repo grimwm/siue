@@ -447,8 +447,8 @@ class Keys:
             server = api.keyring_fingerprints()  # type: ignore[attr-defined]
             if server is not None:
                 raise KeysError(f"The server already holds a keyring (current key {display(server['current'])}) but 1Password "
-                                f"(vault {self.op.vault}) has no notes key. Check OP_VAULT. To start over on purpose, remove the "
-                                "notes key on the admin hub first; notes sealed to the old key stay unreadable.")
+                                f"(vault {self.op.vault}) has no notes key. Check OP_VAULT. To start over on purpose, remove it "
+                                f"on the admin hub ({self.hub_url()}: Music notes key \u2192 Remove the notes key) first; notes sealed to the old key stay unreadable.")
         pkcs8, spki = sealing.generate()
         fp, passphrase = sealing.fingerprint(spki), sealing.new_passphrase()
         self._create_key_item(pkcs8, fp, passphrase)

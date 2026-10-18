@@ -173,6 +173,9 @@ final class Pages
                 return self::redirect('login.php');
             }
             $body = '';
+            if (($r->query['removed'] ?? '') === '1') {
+                $body .= Html::p('The key was removed.');
+            }
             $dashboards = admin_dashboards();
             if ($dashboards !== []) {
                 $body .= '<h2>Dashboards</h2><ul class="links">';
@@ -189,12 +192,37 @@ final class Pages
                     $body .= '<dt>' . Html::e($label) . '</dt><dd><code>' . Html::e($print) . '</code></dd>';
                 }
                 $body .= '</dl>';
+                foreach (admin_key_removers($this->db) as $label => $remover) {
+                    $body .= '<details class="remover"><summary>' . Html::e($remover['summary']) . '</summary>';
+                    foreach ($remover['explain'] as $line) {
+                        $body .= Html::p($line);
+                    }
+                    $body .= Html::form('index.php', ['csrf' => $csrf, 'do' => 'remove-key', 'label' => $label], $remover['button'], 'button quiet') . '</details>';
+                }
             }
             $body .= '<div class="actions">'
                 . Html::form('logout.php', ['csrf' => $csrf], 'Sign out', 'button quiet')
                 . Html::form('logout.php?all=1', ['csrf' => $csrf], 'Sign out everywhere', 'button danger')
                 . '</div>';
             return self::html(200, 'Admin', $body);
+        });
+    }
+
+    /** POST index.php: remove a key the hub lists, then back to the hub. */
+    public function removeKey(Request $r): Response
+    {
+        return $this->guard(function () use ($r): Response {
+            $refused = $this->refuseSignOut($r);
+            if ($refused !== null) {
+                return $refused;
+            }
+            $label = $r->post['label'] ?? '';
+            $remover = is_string($label) ? (admin_key_removers($this->db)[$label] ?? null) : null;
+            if (($r->post['do'] ?? '') !== 'remove-key' || $remover === null) {
+                return self::html(404, 'Not found', Html::p('That key is not stored.') . '<a class="button" href="index.php">Back</a>');
+            }
+            $remover['remove']($this->db);
+            return self::redirect('index.php?removed=1');
         });
     }
 

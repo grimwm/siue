@@ -43,6 +43,7 @@ class LifecycleTest(unittest.TestCase):
         with self.assertRaises(KeysError) as e:
             self.w.keys.ensure_key(self.server)
         self.assertIn("OP_VAULT", str(e.exception))
+        self.assertIn(f"remove it on the admin hub ({self.w.keys.hub_url()}: Music notes key \u2192 Remove the notes key) first", str(e.exception))
         self.assertEqual(self.item_fields(), [], "no key was made")
 
     def test_upload_posts_the_wrapper_with_the_fingerprints_and_a_keyring_the_passphrase_opens(self):

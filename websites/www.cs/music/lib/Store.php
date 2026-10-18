@@ -333,13 +333,19 @@ final class Store
         return ['current' => (string) $row['current_fp'], 'previous' => self::decodePrevious((string) $row['previous_fps'])];
     }
 
-    /** Forgets the locked keyring and its fingerprints. True when a keyring was stored; false when none was or the table does not exist. */
+    /**
+     * Forgets the locked keyring and its fingerprints. True when a keyring was stored; false when none was or the table
+     * does not exist. Any other storage error (a busy or read-only database) is thrown.
+     */
     public static function removeKeyring(\PDO $db): bool
     {
         try {
             return $db->exec('DELETE FROM music_keyring WHERE id = 1') > 0;
-        } catch (\PDOException) {
-            return false;
+        } catch (\PDOException $e) {
+            if (str_contains($e->getMessage(), 'no such table')) {
+                return false;
+            }
+            throw $e;
         }
     }
 

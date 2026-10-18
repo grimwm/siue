@@ -296,6 +296,13 @@ final class MusicPagesTest extends TestCase
         self::assertFalse(Music\Store::removeKeyring($this->db), 'nothing left to remove');
     }
 
+    public function testRemoveKeyringThrowsAStorageErrorRatherThanReportNothingRemoved(): void
+    {
+        $this->db->exec("CREATE TRIGGER keep_keyring BEFORE DELETE ON music_keyring BEGIN SELECT RAISE(ABORT, 'database is locked'); END");
+        $this->expectException(PDOException::class);
+        Music\Store::removeKeyring($this->db);
+    }
+
     private function postAs(Admin\Request $in, array $post): Admin\Request
     {
         return req(['https' => true, 'method' => 'POST', 'cookies' => $in->cookies, 'post' => $post]);

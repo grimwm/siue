@@ -246,7 +246,8 @@ class ApiTest(unittest.TestCase):
 
     def test_the_keyring_route_answers_200_or_404_to_a_key_that_may_publish_keys(self):
         self.assertEqual(self.probe("keys:publish", 200), "yes")
-        self.assertEqual(self.probe("keys:publish", 404), "yes", "no keyring stored yet")
+        self.assertEqual(self.probe("keys:publish", 404, b'{"error":"no_keyring"}'), "yes", "no keyring stored yet")
+        self.assertEqual(self.probe("keys:publish", 404, b"<html>Not Found</html>"), "unknown", "a wrong address is not the music API")
         self.assertEqual(self.probe("keys:publish", 405), "yes")
         self.assertEqual(self.probe("drafts:publish", 404), "unknown", "only the keyring route reports 404 for a valid key")
 
@@ -262,12 +263,14 @@ class ApiTest(unittest.TestCase):
         self.assertEqual((seen["url"], seen["method"], seen["auth"]), ("https://example.test/music/api/keyring.php", "GET", "Bearer " + "k" * 64))
 
     def test_keyring_fingerprints_is_none_on_404_and_raises_on_other_errors(self):
-        def refusing(code):
+        def refusing(code, body=b'{"error":"no_keyring"}'):
             def opener(request, timeout=None):
-                raise urllib.error.HTTPError(request.full_url, code, "reason", {}, io.BytesIO(b'{"error":"no_keyring"}'))
+                raise urllib.error.HTTPError(request.full_url, code, "reason", {}, io.BytesIO(body))
             return opener
 
         self.assertIsNone(Api("https://example.test/music/", "k" * 64, refusing(404)).keyring_fingerprints())
+        with self.assertRaises(ApiError, msg="a web server's own 404 (a wrong address) is not 'no keyring'"):
+            Api("https://example.test/music/", "k" * 64, refusing(404, b"<html>Not Found</html>")).keyring_fingerprints()
         with self.assertRaises(ApiError) as ctx:
             Api("https://example.test/music/", "k" * 64, refusing(403)).keyring_fingerprints()
         self.assertEqual(ctx.exception.status, 403)

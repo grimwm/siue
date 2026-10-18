@@ -119,7 +119,7 @@ class Api:
             self._request("GET", route, query)
             return "yes"
         except ApiError as e:
-            if (e.status == 405 and scope != "notes:pickup") or (e.status == 404 and scope == "keys:publish"):
+            if (e.status == 405 and scope != "notes:pickup") or (e.status == 404 and scope == "keys:publish" and _no_keyring(e)):
                 return "yes"
             if e.status == 403 and "HTTPS required" in str(e):
                 return "https"
@@ -135,9 +135,14 @@ class Api:
         try:
             return json.loads(self._request("GET", "api/keyring.php"))
         except ApiError as e:
-            if e.status == 404:
+            if e.status == 404 and _no_keyring(e):
                 return None
             raise
+
+
+def _no_keyring(e: ApiError) -> bool:
+    """A 404 the music API sent on purpose because no keyring is stored, not a wrong address or a web server's own 404."""
+    return str(e).endswith(": no_keyring")
 
 
 def _error_text(e: urllib.error.HTTPError) -> str:

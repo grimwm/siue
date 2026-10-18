@@ -250,7 +250,9 @@ final class Pages
             if (($r->post['do'] ?? '') !== 'remove-key' || $remover === null) {
                 return self::html(404, 'Not found', Html::p('That key is not stored.') . '<a class="button" href="index.php">Back</a>');
             }
-            $remover['remove']($this->db);
+            if (!$remover['remove']($this->db)) {
+                return self::html(404, 'Not found', Html::p('That key is not stored.') . '<a class="button" href="index.php">Back</a>');
+            }
             return self::redirect('index.php?removed=1');
         });
     }

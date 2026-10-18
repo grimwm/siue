@@ -296,12 +296,95 @@ final class AdminKeysTest extends TestCase
         $res = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'laptop', 'scopes' => ['notes:pickup'], 'csrf' => $csrf]));
         self::assertSame(200, $res->status);
         self::assertSame(1, preg_match('/<code[^>]*>([0-9a-f]{64})<\/code>/', $res->body, $m));
-        self::assertStringContainsString('will not be shown again', $res->body);
+        self::assertStringContainsString('It is shown only this once.', $res->body);
+        self::assertStringContainsString('<h1>Your new key</h1><div class="newkey"><button type="button" id="copykey" class="copykey"><code class="secret bigkey">' . $m[1], $res->body);
+        self::assertStringContainsString('<span class="copyhint">Copy key</span>', $res->body);
+        self::assertStringContainsString('role="status" aria-live="polite"', $res->body);
+        self::assertStringContainsString('<script src="admin.js" defer></script>', $res->body);
+        self::assertStringNotContainsString('<script src', $p->keysPanel($in)->body, 'only the new-key page loads the script');
+        self::assertStringContainsString('make music-setup', $res->body);
         self::assertSame(hash('sha256', $m[1]), (new PDO('sqlite::memory:'))->query("SELECT '" . hash('sha256', $m[1]) . "'")->fetchColumn());
         self::assertNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $m[1]]]), 'notes:pickup'));
         $again = $p->keysPanel($in);
         self::assertStringNotContainsString($m[1], $again->body);
-        self::assertStringNotContainsString('will not be shown again', $again->body);
+        self::assertStringNotContainsString('shown only this once', $again->body);
+    }
+
+    public function testAPrefilledPageLeadsWithTheCalloutAndTheFormUnderIt(): void
+    {
+        [$p, , $in] = $this->panel();
+        $body = $p->keysPanel(req(['cookies' => $in->cookies, 'query' => ['label' => 'music-publish', 'scopes' => 'drafts:publish']]))->body;
+        self::assertStringContainsString('<main class="card"><div class="mark" aria-hidden="true"><span></span></div><h1>API keys</h1><div class="callout"><p class="lead">Make the <strong>music-publish</strong> key: press <strong>Create key</strong>.</p><form', $body);
+        self::assertLessThan(strpos($body, 'Existing keys'), strpos($body, 'Create key</button>'));
+        self::assertStringNotContainsString('Create a key', $body);
+        self::assertStringNotContainsString('<div class="callout">', $p->keysPanel($in)->body, 'no label, no callout');
+    }
+
+    public function testCreatingAGuidedKeyRevokesEveryOlderActiveOneWithTheLabel(): void
+    {
+        [$p, $keys, $in] = $this->panel();
+        $a = $keys->create('music-publish', ['drafts:publish']);
+        $b = $keys->create('music-publish', ['drafts:publish']);
+        $keys->create('music-publish', ['drafts:publish']);
+        $keys->revoke(3);
+        $other = $keys->create('laptop', ['notes:pickup']);
+        $csrf = $this->csrfIn($p->keysPanel($in)->body);
+        $res = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'music-publish', 'scopes' => ['drafts:publish'], 'csrf' => $csrf]));
+        self::assertStringContainsString('Replaced 2 older music-publish keys.', $res->body);
+        self::assertNotNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $a]]), 'drafts:publish'), 'older key refused');
+        self::assertNotNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $b]]), 'drafts:publish'), 'older key refused');
+        $active = array_filter($keys->list(), static fn(array $k): bool => $k['label'] === 'music-publish' && $k['revoked_at'] === null);
+        self::assertCount(1, $active);
+        preg_match('/<code[^>]*>([0-9a-f]{64})<\/code>/', $res->body, $m);
+        self::assertNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $m[1]]]), 'drafts:publish'));
+        self::assertNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $other]]), 'notes:pickup'), 'unrelated label untouched');
+        $csrf = $this->csrfIn($p->keysPanel($in)->body);
+        $again = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'music-publish', 'scopes' => ['drafts:publish'], 'csrf' => $csrf]));
+        self::assertStringContainsString('Replaced 1 older music-publish key.', $again->body, 'revoked keys are not counted');
+        $csrf = $this->csrfIn($p->keysPanel($in)->body);
+        $dup = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'laptop', 'scopes' => ['notes:pickup'], 'csrf' => $csrf]));
+        self::assertStringNotContainsString('Replaced', $dup->body);
+        self::assertCount(2, array_filter($keys->list(), static fn(array $k): bool => $k['label'] === 'laptop' && $k['revoked_at'] === null));
+    }
+
+    public function testExistingKeysListNewestFirstWithLastUsedProminent(): void
+    {
+        [$p, $keys, $in] = $this->panel();
+        $keys->create('first-one', ['notes:pickup']);
+        $keys->create('second-one', ['notes:pickup']);
+        $body = $p->keysPanel($in)->body;
+        self::assertLessThan(strpos($body, 'first-one'), strpos($body, 'second-one'));
+        self::assertStringContainsString('<p class="lastused">Last used: <strong>never</strong></p>', $body);
+    }
+
+    public function testAnUnknownLabelPrefillsThePlainFormWithoutTheCallout(): void
+    {
+        [$p, , $in] = $this->panel();
+        $body = $p->keysPanel(req(['cookies' => $in->cookies, 'query' => ['label' => 'Click here <b>now</b>']]))->body;
+        self::assertStringNotContainsString('class="callout"', $body);
+        self::assertStringNotContainsString('Make the', $body);
+        self::assertStringContainsString('<h2>Create a key</h2>', $body);
+        self::assertStringContainsString('value="Click here &lt;b&gt;now&lt;/b&gt;"', $body);
+        foreach (Admin\Keys::GUIDED_LABELS as $known) {
+            self::assertStringContainsString('class="callout"', $p->keysPanel(req(['cookies' => $in->cookies, 'query' => ['label' => $known]]))->body);
+        }
+    }
+
+    public function testRevokedKeysSitInACollapsedDetailsBelowTheExistingKeys(): void
+    {
+        [$p, $keys, $in] = $this->panel();
+        $keys->create('live-one', ['notes:pickup']);
+        $old = $keys->create('old-one', ['notes:pickup']);
+        $id = (int) array_values(array_filter($keys->list(), static fn(array $k): bool => $k['label'] === 'old-one'))[0]['id'];
+        self::assertTrue($keys->revoke($id));
+        $body = $p->keysPanel($in)->body;
+        self::assertStringContainsString('<h2>Existing keys</h2>', $body);
+        self::assertStringContainsString('<details class="revoked"><summary>Revoked keys (1)</summary>', $body);
+        self::assertStringNotContainsString('<details class="revoked" open', $body);
+        $open = strpos($body, '<details');
+        self::assertLessThan($open, strpos($body, 'live-one'));
+        self::assertGreaterThan($open, strpos($body, 'old-one'));
+        self::assertStringNotContainsString($old, $body);
     }
 
     public function testCreateAndRevokeNeedAFreshCsrfToken(): void

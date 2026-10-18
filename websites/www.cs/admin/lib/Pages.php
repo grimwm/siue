@@ -61,7 +61,9 @@ final class Pages
     /** GET login.php. */
     public function loginForm(Request $r): Response
     {
+        $next = self::safeNext($r->query['next'] ?? null);
         $form = '<form method="post" action="login.php">'
+            . ($next === '' ? '' : '<input type="hidden" name="next" value="' . Html::e($next) . '">')
             . '<label for="email">Email</label>'
             . '<input id="email" type="email" name="email" autocomplete="username" required>'
             . '<button type="submit" class="button">Email me a link</button></form>';
@@ -82,7 +84,9 @@ final class Pages
                 $this->auth->isTrustedDevice(Sessions::deviceToken($r)),
             );
             if ($token !== null) {
-                $mail = MailTemplate::link($this->baseUrl . 'verify.php?token=' . $token, intdiv(Auth::LINK_TTL, 60));
+                $next = self::safeNext($r->post['next'] ?? null);
+                $url = $this->baseUrl . 'verify.php?token=' . $token . ($next === '' ? '' : '&next=' . rawurlencode($next));
+                $mail = MailTemplate::link($url, intdiv(Auth::LINK_TTL, 60));
                 $this->queue[] = ['to' => Auth::ALLOWED, 'subject' => $mail['subject'], 'mime' => $mail['mime'], 'token' => $token];
             }
         } catch (\Throwable $e) {
@@ -100,7 +104,8 @@ final class Pages
                 return self::html(403, 'Link not valid', Html::p('This link has expired or was already used. Request a new one.') . '<a class="button" href="login.php">Back to sign in</a>');
             }
             $mark = bin2hex(random_bytes(32));
-            $form = Html::form('verify.php', ['token' => $token, 'csrf' => $mark], 'Sign in');
+            $next = self::safeNext($r->query['next'] ?? null);
+            $form = Html::form('verify.php', ['token' => $token, 'csrf' => $mark] + ($next === '' ? [] : ['next' => $next]), 'Sign in');
             $cookie = self::CONFIRM_COOKIE . '=' . $mark . '; Max-Age=' . Auth::LINK_TTL . '; ' . Sessions::attributes($this->cookiePath);
             return self::html(200, 'Confirm sign-in', Html::p('Press the button to finish signing in.') . $form, [$cookie]);
         });
@@ -128,8 +133,32 @@ final class Pages
             ];
             $mail = MailTemplate::notice($this->clock->now(), $r->ip, $r->agent, $this->baseUrl . 'index.php');
             $this->queue[] = ['to' => Auth::ALLOWED, 'subject' => $mail['subject'], 'mime' => $mail['mime'], 'token' => null];
-            return self::redirect('index.php', $cookies);
+            return self::redirect(self::safeNext($r->post['next'] ?? null) ?: 'index.php', $cookies);
         });
+    }
+
+    /**
+     * The page to return to after sign-in: index.php or keys.php with an optional query string,
+     * else ''. No path separators, scheme, backslash or control character can pass, so the value
+     * can only ever point at a sibling page of the one that sent it.
+     */
+    public static function safeNext(mixed $next): string
+    {
+        if (!is_string($next) || strlen($next) > 300) {
+            return '';
+        }
+        if (preg_match('/^(?:index|keys)\.php(?:\?[A-Za-z0-9_.~%=&,+\-\[\]:]*)?$/D', $next) !== 1) {
+            return '';
+        }
+        return $next;
+    }
+
+    /** The sign-in redirect for a signed-out visit to $page, remembering the page and its query. */
+    private static function toLogin(string $page, Request $r): Response
+    {
+        $back = $page . ($r->query === [] ? '' : '?' . http_build_query($r->query, '', '&', PHP_QUERY_RFC3986));
+        $next = self::safeNext($back);
+        return self::redirect('login.php' . ($next === '' ? '' : '?next=' . rawurlencode($next)));
     }
 
     /** POST logout.php: ends this session. */
@@ -230,7 +259,7 @@ final class Pages
     public function keysPanel(Request $r): Response
     {
         return $this->guard(function () use ($r): Response {
-            $gate = $this->requireAdmin($r);
+            $gate = $this->requireAdmin($r, 'keys.php');
             return $gate ?? $this->keysPage(200, $r, null, null, true);
         });
     }
@@ -257,11 +286,11 @@ final class Pages
             $label = $r->post['label'] ?? '';
             $scopes = $r->post['scopes'] ?? [];
             try {
-                $key = $this->keys->create(is_string($label) ? $label : '', is_array($scopes) ? array_values($scopes) : []);
+                $made = $this->keys->createReplacing(is_string($label) ? $label : '', is_array($scopes) ? array_values($scopes) : []);
             } catch (\InvalidArgumentException $e) {
                 return $this->keysPage(400, $r, $e->getMessage());
             }
-            return $this->keysPage(200, $r, null, $key);
+            return $this->keysPage(200, $r, null, $made['key'], false, $made['replaced'], trim(is_string($label) ? $label : ''));
         });
     }
 
@@ -290,10 +319,10 @@ final class Pages
     }
 
     /** A redirect to login.php when there is no session, else null. */
-    public function requireAdmin(Request $r): ?Response
+    public function requireAdmin(Request $r, string $page = ''): ?Response
     {
         try {
-            return $this->sessions->current($r) ? null : self::redirect('login.php');
+            return $this->sessions->current($r) ? null : ($page === '' ? self::redirect('login.php') : self::toLogin($page, $r));
         } catch (\PDOException $e) {
             return self::fromStorageError($e);
         }
@@ -330,8 +359,8 @@ final class Pages
         }
     }
 
-    /** The keys page; $newKey is shown once, $error explains a refused create. */
-    private function keysPage(int $status, Request $r, ?string $error = null, ?string $newKey = null, bool $prefill = false): Response
+    /** The keys page; $newKey is shown once, at the top, $error explains a refused create. */
+    private function keysPage(int $status, Request $r, ?string $error = null, ?string $newKey = null, bool $prefill = false, int $replaced = 0, string $madeLabel = ''): Response
     {
         $csrf = $this->sessions->csrf($r);
         if ($csrf === '') {
@@ -341,46 +370,67 @@ final class Pages
         if ($error !== null) {
             $body .= Html::p($error, 'error');
         }
+        $title = 'API keys';
         if ($newKey !== null) {
-            $body .= '<h2>New key</h2><p>Copy it now; it will not be shown again.</p><p><code class="secret">' . Html::e($newKey) . '</code></p>';
+            $title = 'Your new key';
+            $body .= '<div class="newkey"><button type="button" id="copykey" class="copykey"><code class="secret bigkey">' . Html::e($newKey) . '</code>'
+                . '<span class="copyhint">Copy key</span></button>'
+                . '<p id="copystatus" class="copystatus" role="status" aria-live="polite"></p>'
+                . ($replaced > 0 ? Html::p('Replaced ' . $replaced . ' older ' . $madeLabel . ' ' . ($replaced === 1 ? 'key' : 'keys') . '.', 'replaced') : '')
+                . '<p>Copy this and paste it into the terminal where <code>make music-setup</code> is waiting. It is shown only this once.</p></div>';
         }
-        $body .= '<h2>Create a key</h2>';
         $registry = $this->keys->registry();
+        $label = $prefill && is_string($r->query['label'] ?? null) ? mb_substr(trim($r->query['label']), 0, Keys::LABEL_MAX) : '';
+        $ticked = $prefill && is_string($r->query['scopes'] ?? null) ? array_map('trim', explode(',', $r->query['scopes'])) : [];
         if ($registry === []) {
-            $body .= Html::p('No scopes are defined yet, so no key can be created.');
+            $body .= '<h2>Create a key</h2>' . Html::p('No scopes are defined yet, so no key can be created.');
         } else {
-            $label = $prefill && is_string($r->query['label'] ?? null) ? mb_substr(trim($r->query['label']), 0, Keys::LABEL_MAX) : '';
-            $ticked = $prefill && is_string($r->query['scopes'] ?? null) ? array_map('trim', explode(',', $r->query['scopes'])) : [];
-            $body .= '<form method="post" action="keys.php"><input type="hidden" name="do" value="create">'
+            $form = '<form method="post" action="keys.php"><input type="hidden" name="do" value="create">'
                 . '<input type="hidden" name="csrf" value="' . Html::e($csrf) . '">'
                 . '<label for="label">Label</label><input id="label" type="text" name="label" maxlength="' . Keys::LABEL_MAX . '" value="' . Html::e($label) . '" required>'
                 . '<fieldset><legend>Scopes</legend>';
             foreach ($registry as $scope) {
-                $body .= '<label class="check"><input type="checkbox" name="scopes[]" value="' . Html::e($scope) . '"' . (in_array($scope, $ticked, true) ? ' checked' : '') . '> ' . Html::e($scope) . '</label>';
+                $form .= '<label class="check"><input type="checkbox" name="scopes[]" value="' . Html::e($scope) . '"' . (in_array($scope, $ticked, true) ? ' checked' : '') . '> ' . Html::e($scope) . '</label>';
             }
-            $body .= '</fieldset><button type="submit" class="button">Create key</button></form>';
+            $form .= '</fieldset><button type="submit" class="button primary">Create key</button></form>';
+            if ($newKey !== null) {
+                $body .= '<h2>Create another key</h2>' . $form;
+            } elseif (in_array($label, Keys::GUIDED_LABELS, true)) {
+                $body = '<div class="callout"><p class="lead">Make the <strong>' . Html::e($label) . '</strong> key: press <strong>Create key</strong>.</p>' . $form . '</div>' . $body;
+            } else {
+                $body .= '<h2>Create a key</h2>' . $form;
+            }
         }
-        $body .= '<h2>Keys</h2>';
-        $list = $this->keys->list();
-        if ($list === []) {
-            $body .= Html::p('No keys yet.');
-        }
-        foreach ($list as $k) {
-            $body .= '<div class="key"><strong>' . Html::e($k['label']) . '</strong><dl class="prints">'
+        $active = '';
+        $revoked = '';
+        $nActive = 0;
+        $nRevoked = 0;
+        $all = $this->keys->list();
+        usort($all, static fn(array $a, array $b): int => [$b['created_at'], $b['id']] <=> [$a['created_at'], $a['id']]);
+        foreach ($all as $k) {
+            $card = '<div class="key"><strong>' . Html::e($k['label']) . '</strong>'
+                . '<p class="lastused">Last used: <strong>' . ($k['last_used_at'] === null ? 'never' : self::when($k['last_used_at'])) . '</strong></p><dl class="prints">'
                 . '<dt>Scopes</dt><dd>' . Html::e(implode(', ', $k['scopes'])) . '</dd>'
-                . '<dt>Created</dt><dd>' . self::when($k['created_at']) . '</dd>'
-                . '<dt>Last used</dt><dd>' . ($k['last_used_at'] === null ? 'never' : self::when($k['last_used_at'])) . '</dd>'
-                . '<dt>Revoked</dt><dd>' . ($k['revoked_at'] === null ? 'no' : self::when($k['revoked_at'])) . '</dd></dl>';
+                . '<dt>Created</dt><dd>' . self::when($k['created_at']) . '</dd>';
             if ($k['revoked_at'] === null) {
-                $body .= '<form method="post" action="keys.php"><input type="hidden" name="do" value="revoke">'
+                $card .= '</dl><form method="post" action="keys.php"><input type="hidden" name="do" value="revoke">'
                     . '<input type="hidden" name="id" value="' . $k['id'] . '">'
                     . '<input type="hidden" name="csrf" value="' . Html::e($csrf) . '">'
-                    . '<button type="submit" class="button danger">Revoke</button></form>';
+                    . '<button type="submit" class="button danger">Revoke</button></form></div>';
+                $active .= $card;
+                $nActive++;
+            } else {
+                $card .= '<dt>Revoked</dt><dd>' . self::when($k['revoked_at']) . '</dd></dl></div>';
+                $revoked .= $card;
+                $nRevoked++;
             }
-            $body .= '</div>';
+        }
+        $body .= '<h2>Existing keys</h2>' . ($nActive === 0 ? Html::p('No active keys.') : $active);
+        if ($nRevoked > 0) {
+            $body .= '<details class="revoked"><summary>Revoked keys (' . $nRevoked . ')</summary>' . $revoked . '</details>';
         }
         $body .= '<p><a href="index.php">Back to the hub</a></p>';
-        return self::html($status, 'API keys', $body);
+        return self::html($status, $title, $body, [], $newKey !== null);
     }
 
     private static function when(int $t): string
@@ -412,9 +462,9 @@ final class Pages
     }
 
     /** @param list<string> $cookies */
-    private static function html(int $status, string $title, string $body, array $cookies = []): Response
+    private static function html(int $status, string $title, string $body, array $cookies = [], bool $script = false): Response
     {
-        return self::make($status, Html::page($title, $body), ['Content-Type' => 'text/html; charset=utf-8'], $cookies);
+        return self::make($status, Html::page($title, $body, $script), ['Content-Type' => 'text/html; charset=utf-8'], $cookies);
     }
 
     /** @param list<string> $cookies */

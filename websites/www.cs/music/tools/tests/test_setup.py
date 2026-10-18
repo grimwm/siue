@@ -85,7 +85,7 @@ class SetupTest(unittest.TestCase):
         text = self.text()
         self.assertIn("The key saved as music-pickup is really the music-publish key: filing it under that name.", text)
         self.assertEqual(self.opened, [HUB + "?label=music-pickup&scopes=notes:pickup"])
-        self.assertEqual(self.prompts, ["Press Create on that page, copy the key and paste it here: "])
+        self.assertEqual(self.prompts, ["In the browser, press Create key, then copy the key from \"Your new key\" and paste it here: "])
         [sent] = self.server.uploads
         self.assertEqual(sent["current"], self.w.keys.cache.load()["current"])
         self.assertEqual(sent["previous"], [])
@@ -158,7 +158,7 @@ class SetupTest(unittest.TestCase):
     def test_a_fresh_start_makes_the_notes_key_after_both_api_keys(self):
         self.pastes = [PUB, PICK]
         self.assertEqual(self.go(), 0, self.text())
-        self.assertEqual(self.prompts.count("Press Create on that page, copy the key and paste it here: "), 2)
+        self.assertEqual(self.prompts.count("In the browser, press Create key, then copy the key from \"Your new key\" and paste it here: "), 2)
         self.assertEqual(len(self.w.op.list_items("siue-music-key")), 1)
         self.assertEqual(len(self.server.uploads), 1)
 

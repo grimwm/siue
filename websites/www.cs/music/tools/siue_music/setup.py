@@ -85,7 +85,7 @@ class Setup:
             self.out("Open that address in a browser and sign in.")
         for _ in range(MAX_PASTES):
             try:
-                pasted = self.secret("Press Create on that page, copy the key and paste it here: ").strip()
+                pasted = self.secret("In the browser, press Create key, then copy the key from \"Your new key\" and paste it here: ").strip()
             except EOFError:
                 raise SetupAbort("No key was pasted. Run make music-setup again when you have it.") from None
             if not _API_KEY.fullmatch(pasted):

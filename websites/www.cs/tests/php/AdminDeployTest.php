@@ -85,7 +85,7 @@ final class AdminDeployTest extends TestCase
     {
         $set = self::set();
         $site = self::site();
-        $expected = ['admin/.htaccess', 'admin/admin.css', 'admin/index.php', 'admin/login.php', 'admin/verify.php', 'admin/logout.php',
+        $expected = ['admin/.htaccess', 'admin/admin.css', 'admin/admin.js', 'admin/index.php', 'admin/login.php', 'admin/verify.php', 'admin/logout.php',
             'admin/health.php', 'admin/keys.php', 'admin/lib/.htaccess', 'admin/lib/bootstrap.php', 'admin/lib/Auth.php', 'admin/lib/Pages.php',
             'admin/lib/store-dir.php', 'admin/lib/store-modes.php'];
         foreach ($expected as $f) {

@@ -2,8 +2,6 @@
 // the plain-words labels beside it. DOM-free.
 import type { Spectrogram } from './score.ts';
 
-export const BRIGHTNESS_LEGEND: readonly [string, string] = ['dark: quiet', 'bright: loud'];
-
 const TICKS: readonly { hz: number; text: string }[] = [
   { hz: 10000, text: '10 kHz' },
   { hz: 1000, text: '1 kHz' },
@@ -24,3 +22,6 @@ export function spectroAxis(spec: Spectrogram, height: number): { y: number; tex
     .map(t => ({ y: freqToY(spec, t.hz, height), text: t.text }));
   return [{ y: 0, text: 'high' }, ...inside, { y: height, text: 'low' }];
 }
+
+/** The sound picture's drawing height. */
+export const PICTURE_H = 200;

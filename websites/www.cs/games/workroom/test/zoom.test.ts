@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boundsFor, fitView, panBy, pinch, timeToX, xToTime, zoomAt, MAX_PX_PER_SEC } from '../src/zoom.ts';
+import { boundsFor, fitView, resizeView, panBy, pinch, timeToX, xToTime, zoomAt, MAX_PX_PER_SEC } from '../src/zoom.ts';
 
 const b = boundsFor(16, 800);
 const fit = fitView(16, 800);
@@ -49,4 +49,16 @@ test('a zero-width measurement still gives a usable view', () => {
   const c = zoomAt(zv, 0, 2, zb);
   assert.ok(Number.isFinite(c.start) && Number.isFinite(c.pxPerSec));
   assert.deepEqual(panBy({ start: NaN, pxPerSec: NaN, width: 0 }, 5, zb), { start: 0, pxPerSec: zb.minPxPerSec, width: 1 });
+});
+
+test('a view at fit refits when the width changes; a zoomed or panned view keeps its zoom', () => {
+  for (const [duration, from, to] of [[16, 720, 390], [0.4, 720, 390], [16, 390, 1280], [0.4, 320, 1280]] as const) {
+    const fitted = resizeView(fitView(duration, from), from, to, duration);
+    assert.deepEqual(fitted, fitView(duration, to), `${duration} s, ${from} -> ${to}`);
+    assert.equal(timeToX(fitted, duration), to, 'the end of the piece is the right edge');
+  }
+  const zoomed = zoomAt(fitView(16, 720), 100, 4, boundsFor(16, 720));
+  const kept = resizeView(zoomed, 720, 390, 16);
+  assert.equal(kept.pxPerSec, zoomed.pxPerSec, 'the owner’s zoom survives');
+  assert.equal(kept.width, 390);
 });

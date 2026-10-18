@@ -18,7 +18,8 @@ const ui = await importTsx<{
   gl: typeof import('../src/ui/Glossary.tsx');
   tabs: typeof import('../src/ui/ViewTabs.tsx');
   roll: typeof import('../src/ui/PianoRoll.tsx');
-}>(import.meta.dirname, { tl: '../src/ui/Timeline.tsx', gl: '../src/ui/Glossary.tsx', tabs: '../src/ui/ViewTabs.tsx', roll: '../src/ui/PianoRoll.tsx' });
+  ctx: typeof import('../src/ui/theme-context.ts');
+}>(import.meta.dirname, { tl: '../src/ui/Timeline.tsx', gl: '../src/ui/Glossary.tsx', tabs: '../src/ui/ViewTabs.tsx', roll: '../src/ui/PianoRoll.tsx', ctx: '../src/ui/theme-context.ts' });
 
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
 const sound = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
@@ -193,6 +194,63 @@ test('a piano roll with no C in its range still shows pitch names', () => {
   const root = makeEl('root');
   const narrow: Score = { ...score, notes: [62, 64].map((pitch, i) => ({ lane: 'brass', start: i, length: 1, pitch, velocity: 80, motif: null })) };
   render(h(ui.roll.PianoRoll, { score: narrow, tempo: tempoMap(narrow), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {} }), renderTarget(root));
-  const names = walk(root).filter(e => e.className === 'pitch-name').map(e => e.textContent);
+  const names = walk(root).filter(e => e._attrs['data-pitch-name'] !== undefined).map(e => e.textContent);
   assert.deepEqual(names, ['F4', 'C#4']);
+});
+
+test('the view tabs are a tab list, the chosen one selected', () => {
+  const root = makeEl('root');
+  render(h(ui.tabs.ViewTabs, { tabs: tabsFor(score), tab: 'roll', onTab: () => {} }), renderTarget(root));
+  const tabs = walk(root).filter(e => e._attrs['role'] === 'tab');
+  assert.deepEqual(tabs.map(t => t.textContent), ['Story', 'Piano roll', 'Sound picture', 'Sheet music']);
+  assert.deepEqual(tabs.map(t => t._attrs['aria-selected']), ['false', 'true', 'false', 'false']);
+});
+
+test('a roll note is drawn in a colour readable on the light well', () => {
+  const root = makeEl('root');
+  const gold = { ...score, characters: score.characters.map(c => ({ ...c, color: '#ffe680' })) };
+  render(h(ui.ctx.ThemeContext.Provider, { value: 'light' }, h(ui.roll.PianoRoll, { score: gold, tempo: tempoMap(gold), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {} })), renderTarget(root));
+  const fills = withAttr(root, 'data-note').filter(e => e._attrs['data-lane'] === 'brass').map(e => e._attrs['fill']);
+  assert.ok(fills.length > 0 && fills.every(f => f !== '#ffe680'), 'pale gold is darkened on daylight');
+});
+
+test('the story draws stars joined by a line, the character named, lane notes dimmed, and a glow', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  assert.equal(withAttr(root, 'data-star').length, 3);
+  assert.equal(withAttr(root, 'data-constellation-line').length, 1);
+  assert.equal(withAttr(root, 'data-character-name')[0]!.textContent, 'Ariadne');
+  assert.equal(withAttr(root, 'data-lane-note').length, 6);
+  assert.equal(withAttr(root, 'data-glow').length, 1);
+  assert.equal(withAttr(root, 'data-ribbon').length, 0, 'a span with stars draws no ribbon');
+});
+
+test('the glow is painted first, behind the sections, the lanes, the lane notes and the stars', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  const all = walk(root);
+  const glow = all.findIndex(e => e._attrs['data-glow'] !== undefined);
+  assert.ok(glow >= 0, 'there is a glow');
+  for (const attr of ['data-section', 'data-lane', 'data-lane-note', 'data-star']) {
+    const first = all.findIndex(e => e._attrs[attr] !== undefined);
+    assert.ok(first > glow, `${attr} is drawn after (on top of) the glow`);
+  }
+});
+
+test('a constellation is named for assistive technology and its decoration is hidden', () => {
+  const root = makeEl('root');
+  render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+  assert.equal(withAttr(root, 'data-motif')[0]!._attrs['aria-label'], "Ariadne's tune: 3 notes, rising");
+  for (const a of ['data-glow', 'data-star', 'data-constellation-line']) {
+    for (const e of withAttr(root, a)) assert.equal(e._attrs['aria-hidden'], 'true', a);
+  }
+});
+
+test('two timelines get their own glow filter', () => {
+  const ids = [0, 1].map(() => {
+    const root = makeEl('root');
+    render(h(ui.tl.Timeline, { score, tempo: tempoMap(score), view: fitView(16, 800), time: 0, onSeek: () => {}, onView: () => {}, onTerm: () => {} }), renderTarget(root));
+    return withAttr(root, 'data-glow')[0]!._attrs['filter'];
+  });
+  assert.notEqual(ids[0], ids[1]);
 });

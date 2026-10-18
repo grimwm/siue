@@ -144,8 +144,10 @@ while IFS= read -r -d '' f; do
     # Tankity's puzzle bench bundle (tools/pow-bench.html loads it),
     # and the TypeScript build setup (package*.json, tsconfig.json, tsconfig.test.json,
     # node_modules; the built dist/ ships, the TypeScript sources in src/ do
-    # not).
-    games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/*/test/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/tankity/audio/music/build_music.sh | games/*/fx-editor.* | games/*/fx/blender/* | games/*/dist/pow-bench.*) continue ;;
+    # not). The workroom's font sources (games/workroom/fonts/: the build copies
+    # them into dist/fonts/, which ships) are named exactly, because a pattern's *
+    # crosses slashes and games/*/fonts/* would also match dist/fonts/.
+    games/*-test.* | games/*/test.sh | games/README.md | games/*/README.md | games/*/tools/* | games/*/test/* | games/*/protocol/* | games/tankity/game.yaml | games/tankity/audio/sfx/build_sfx.sh | games/tankity/audio/music/build_music.sh | games/*/fx-editor.* | games/*/fx/blender/* | games/*/dist/pow-bench.* | games/workroom/fonts/*) continue ;;
     games/*/package.json | games/*/package-lock.json | games/*/tsconfig.json | games/*/tsconfig.test.json | games/*/node_modules/* | games/*/.gitignore) continue ;;
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;
     # TypeScript in games/*/src/): never served.
@@ -168,13 +170,13 @@ while IFS= read -r -d '' f; do
     admin/*/*) continue ;;
     admin/*.php | admin/admin.css | admin/.htaccess) ;;
     admin/*) continue ;;
-    # The music workroom: its pages, API, library, styles and the public key
-    # (PHP reads it). Its tools, committed drafts and README stay home. A case
+    # The music workroom: its pages, API, library and the public key
+    # (PHP reads it; its stylesheet, scripts and fonts ship from games/workroom/dist/). Its tools, committed drafts and README stay home. A case
     # pattern's * also matches /, so each folder is named and anything deeper skipped.
     music/api/*/* | music/lib/*/* | music/keys/*/*) continue ;;
     music/api/*.php | music/lib/*.php | music/lib/.htaccess | music/keys/public.json) ;;
     music/*/*) continue ;;
-    music/*.php | music/.htaccess | music/music.css) ;;
+    music/*.php | music/.htaccess) ;;
     music/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).

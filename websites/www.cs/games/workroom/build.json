@@ -2,7 +2,9 @@
   "programs": ["tsconfig.json", "src/tsconfig.dom.json", "src/tsconfig.crypto.json", "tsconfig.test.json"],
   "entries": [
     { "in": "src/main.ts", "out": "workroom", "format": "esm" },
-    { "in": "src/sheet.ts", "out": "sheet", "format": "esm" }
+    { "in": "src/sheet.ts", "out": "sheet", "format": "esm" },
+    { "in": "src/theme-boot.ts", "out": "theme", "format": "iife" }
   ],
+  "css": { "in": "src/app.css", "out": "workroom", "fonts": "fonts" },
   "notInlined": ["readable-stream"]
 }

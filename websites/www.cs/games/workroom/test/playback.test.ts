@@ -44,8 +44,8 @@ stubDocument.createElementNS = (ns, tag) => {
 
 const ui = await (await import('../../_kit/test/tsx.ts')).importTsx<{
   player: typeof import('../src/ui/Player.tsx');
-  sheet: typeof import('../src/ui/Sheet.tsx');
-}>(import.meta.dirname, { player: '../src/ui/Player.tsx', sheet: '../src/ui/Sheet.tsx' });
+  sheet: typeof import('../src/ui/SheetMusic.tsx');
+}>(import.meta.dirname, { player: '../src/ui/Player.tsx', sheet: '../src/ui/SheetMusic.tsx' });
 const { createSheet } = await import('../src/sheetlife.ts');
 
 const SRC = [{ file: 'audio.webm' as const, type: 'audio/webm; codecs=opus' }];
@@ -154,14 +154,14 @@ test('switching lanes twice leaves one drawing, and leaving the view removes the
   };
   const root = makeEl('root');
   const props = (laneId: string) => ({ musicxmlSrc: 'score.musicxml', laneId, lanes, onLane: () => {}, ports });
-  await act(() => { render(h(ui.sheet.Sheet, props('a')), renderTarget(root)); });
+  await act(() => { render(h(ui.sheet.SheetMusic, props('a')), renderTarget(root)); });
   assert.match(root.textContent, /Loading sheet music/);
   await settle();
   const sheet = walk(root).find(e => e.id === 'sheet')!;
   assert.equal(sheet.children.length, 1);
-  await act(() => { render(h(ui.sheet.Sheet, props('b')), renderTarget(root)); });
+  await act(() => { render(h(ui.sheet.SheetMusic, props('b')), renderTarget(root)); });
   await settle();
-  await act(() => { render(h(ui.sheet.Sheet, props('a')), renderTarget(root)); });
+  await act(() => { render(h(ui.sheet.SheetMusic, props('a')), renderTarget(root)); });
   await settle();
   assert.deepEqual(shown, ['a', 'b', 'a']);
   assert.equal(sheet.children.length, 1, 'one drawing after two lane switches');
@@ -176,7 +176,7 @@ test('switching lanes twice leaves one drawing, and leaving the view removes the
 test('a renderer that fails to load says so, readably', async () => {
   const ports = { fetchText: async () => '<xml/>', loadModule: async () => { throw new Error('The sheet music renderer did not load. Check the connection and reload the page.'); } };
   const root = makeEl('root');
-  await act(() => { render(h(ui.sheet.Sheet, { musicxmlSrc: 'score.musicxml', laneId: 'a', lanes, onLane: () => {}, ports }), renderTarget(root)); });
+  await act(() => { render(h(ui.sheet.SheetMusic, { musicxmlSrc: 'score.musicxml', laneId: 'a', lanes, onLane: () => {}, ports }), renderTarget(root)); });
   await settle();
   assert.match(root.textContent, /renderer did not load/);
   assert.doesNotMatch(root.textContent, /Loading sheet music/);
@@ -194,7 +194,7 @@ test('a view left before its file arrives mounts nothing and rejects nothing', a
   const note = (e: unknown): void => { unhandled.push(e); };
   process.on('unhandledRejection', note);
   const root = makeEl('root');
-  await act(() => { render(h(ui.sheet.Sheet, { musicxmlSrc: 'score.musicxml', laneId: 'a', lanes, onLane: () => {}, ports }), renderTarget(root)); });
+  await act(() => { render(h(ui.sheet.SheetMusic, { musicxmlSrc: 'score.musicxml', laneId: 'a', lanes, onLane: () => {}, ports }), renderTarget(root)); });
   await act(() => { render(null, renderTarget(root)); });
   arrive('<xml/>');
   await settle();

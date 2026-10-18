@@ -1,5 +1,5 @@
 <?php
-// What deploy.sh ships of the workroom: its pages, API, library, styles and
+// What deploy.sh ships of the workroom: its pages, API, library and
 // the public key file; never its tools, committed drafts, README or the local
 // compose override. nginx denies what Apache's .htaccess denies.
 declare(strict_types=1);
@@ -25,7 +25,7 @@ final class MusicDeployTest extends TestCase
     {
         $list = self::shipped();
         foreach (['music/index.php', 'music/piece.php', 'music/notes.php', 'music/delete.php', 'music/keyring.php', 'music/api/note.php', 'music/api/picked-up.php', 'music/api/keyring.php',
-            'music/lib/Store.php', 'music/lib/.htaccess', 'music/.htaccess', 'music/music.css'] as $f) {
+            'music/lib/Store.php', 'music/lib/.htaccess', 'music/.htaccess'] as $f) {
             self::assertContains($f, $list, $f);
         }
         if (is_file(dirname(__DIR__, 2) . '/music/keys/public.json')) {
@@ -43,12 +43,16 @@ final class MusicDeployTest extends TestCase
     public function testShipsTheBuiltWorkroomAndNeverItsSources(): void
     {
         $list = self::shipped();
-        foreach (['workroom.js', 'sheet.js', 'THIRD_PARTY_LICENSES.txt'] as $f) {
+        $built = ['workroom.js', 'sheet.js', 'theme.js', 'workroom.css', 'THIRD_PARTY_LICENSES.txt',
+            'fonts/barlow-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', 'fonts/barlow-latin-600-normal.woff2',
+            'fonts/barlow-condensed-latin-600-normal.woff2', 'fonts/ibm-plex-mono-latin-400-normal.woff2', 'fonts/ibm-plex-mono-latin-500-normal.woff2'];
+        foreach ($built as $f) {
             self::assertContains("games/workroom/dist/$f", $list, $f);
         }
         foreach ($list as $f) {
-            self::assertDoesNotMatchRegularExpression('~^games/workroom/(src|test|tools)/~', $f, $f);
+            self::assertDoesNotMatchRegularExpression('~^games/workroom/(src|test|tools|fonts)/~', $f, $f);
         }
+        self::assertNotContains('music/music.css', $list, 'the workroom stylesheet ships from games/workroom/dist/');
     }
 
     public function testApacheForwardsTheAuthorizationHeader(): void

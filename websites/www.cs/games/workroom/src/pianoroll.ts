@@ -86,3 +86,6 @@ export function hitRoll(roll: RollLayout, view: View, tempo: TempoMap, score: Sc
     pitch: row?.pitch ?? null, noteIndex: note?.index ?? null,
   };
 }
+
+/** The piano roll's drawing height. */
+export const ROLL_H = 280;

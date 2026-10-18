@@ -135,6 +135,15 @@ The server stores only sealed notes, which it cannot open.
   the full keyring under it and uploads it, so a passphrase that leaked can
   neither unlock nor forge the keyring after a rotation.
 
+- **What this does not protect against:** www.cs is one browser origin for
+  every `~user`. A hostile `~user` whose page the owner visits can run script
+  as that origin in the owner's browser (a service worker scoped to `/`, or a
+  window it opens onto the workroom) and so read the passphrase as it is typed
+  or change what the page seals to. Nothing on the server can prevent that,
+  because the attack happens in the browser. The admin sign-in shares the same
+  exposure. Closing it means serving the page from an origin only the owner
+  controls, with www.cs as storage behind a cross-origin API.
+
 ## Pickup and the note history
 
 A small HTTPS API under `/music/api/`, behind the admin kit's API keys:

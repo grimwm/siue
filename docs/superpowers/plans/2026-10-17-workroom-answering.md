@@ -6,7 +6,7 @@
 
 **Architecture:** DOM-free modules decide everything (`answer.ts` builds note bodies, `energy.ts` redraws curves, `recorder.ts` drives a recorder through ports, `hit.ts` finds the section under a time); Web Crypto modules talk to the server and keep notes (`api.ts`, `outbox.ts`, `history.ts`, `notes-session.ts`); `idb.ts` is the only IndexedDB code and holds sealed bundles only; thin Preact components in the Studio Console look (`Button`, `Panel`, `Chip`, `Sheet`, `Legend`, `GuideOverlay`, tokens only) render them; `main.ts` wires the browser in. The server side is unchanged: PR 1 already serves `notes.php`, `note.php`, `delete.php`, `keyring.php` and `csrf.php`.
 
-**Tech Stack:** TypeScript 7, Preact 11, Tailwind v4 (tokens in `src/app.css`), esbuild 0.28 through `games/_kit/build/build.mjs`, `node:test` on Node 24 (Web Crypto as `globalThis.crypto.subtle`), the kit's DOM stub (`games/_kit/test/dom-stub.ts`) and `importTsx` (`games/_kit/test/tsx.ts`); PHPUnit 12 for one deploy pin; Playwright (local only, `make music-e2e`); the owner's Python tool (`music/tools/siue-music`) for the pickup step of the browser check.
+**Tech Stack:** TypeScript 7, Preact 11, Tailwind v4 (tokens in `src/app.css`), esbuild 0.28 through `games/_kit/build/build.mjs`, `node:test` on Node 24 (Web Crypto as `globalThis.crypto.subtle`), the kit's DOM stub (`games/_kit/test/dom-stub.ts`) and `importTsx` (`games/_kit/test/tsx.ts`); `fake-indexeddb` (exact-pinned devDependency of `games/`, test-only) for the IndexedDB outbox; PHPUnit 12 for one deploy pin; Playwright (local only, `make music-e2e`); the owner's Python tool (`music/tools/siue-music`) for the pickup step of the browser check.
 
 **Spec:** `docs/superpowers/specs/2026-10-17-music-workroom-design.md` (the answering features, notes sealed until the owner deletes them, phone first) and `docs/superpowers/specs/2026-10-17-workroom-theme-design.md` (the look: tokens, components, the guide, legends, dark and daylight). It replaces Tasks 14 and 15 of `docs/superpowers/plans/2026-10-17-music-workroom.md`, re-derived against the code on `main` after PRs 1–4 (#158–#161).
 
@@ -18,15 +18,16 @@ The code and tests in Tasks 1–16 and the unit test and browser-check code of T
 
 - **Work on branch `music/answer-ui`** in the worktree `.claude/worktrees/music-answer-ui`. Never commit to `main`.
 - **Keys never touch browser storage.** The passphrase, the locked keyring and the unlocked keys are never written to IndexedDB, `localStorage`, `sessionStorage`, a cookie or the Cache API; www.cs is one origin shared by every user's `~folder`. The passphrase is asked on every visit (1Password fills it). The unlocked keys live only in the vault (`src/vault.ts`), in memory. **Only sealed notes waiting to be sent live in IndexedDB** (database `siue-music`, store `outbox`, records `{ key, bundle, made, reason }`): nothing in the clear about a note (no piece, no words, no span) is stored in the browser.
-- **Limits** (spec): a recording is at most **60 s** (the recorder stops itself); a sealed note is at most **2,097,152** bytes (`MAX_NOTE_BYTES`, equal to `Store::MAX_NOTE_BYTES`); the server keeps **2,000** notes. A note over a limit, or refused by the server, stays in the outbox with a plain message; nothing is ever dropped without the owner pressing **Discard**. A typed note holds at most **4,000** characters; an energy shape at most **512** points.
+- **Limits** (spec): a recording is at most **60 s** (the recorder stops itself); a sealed note is at most **2,097,152** bytes (`MAX_NOTE_BYTES`, equal to `Store::MAX_NOTE_BYTES`); the server keeps **2,000** notes. A note over a limit, or refused by the server, stays in the outbox with a plain message; nothing is ever dropped without the owner pressing **Discard**. A typed note holds at most **4,000** characters; an energy shape at most **512** points (a longer curve, drawn or the piece's own, is resampled to 512 evenly spaced points before it is sealed, so it can always be sent).
 - **The server is not changed.** Session routes (all same-origin, signed in): `GET notes.php` → `{ notes: [{ id, size, arrived_at, picked_up_at }] }` (oldest first); `POST notes.php` (raw `application/octet-stream` sealed bundle, `X-CSRF` header) → `201 { id, csrf }` or a refusal `{ error, csrf }` with 413 `too_large`, 409 `full`, 422 `bad_header` / `unknown_key`, 503 `no_key`; `GET note.php?id=` → the sealed bytes (`application/octet-stream`); `POST delete.php` (`application/x-www-form-urlencoded`, `id=<32 hex>` or `all=1`, `X-CSRF`) → `{ deleted, csrf }`; `GET keyring.php` → `{ keyring }` or 404 `{ error: "no_keyring" }`; `GET csrf.php` → `{ csrf }`. **`checkCsrf` spends the token on every check, right or wrong**; a refused check answers `403 { "error": "csrf" }` with no new token, so the page fetches `csrf.php` and retries once. A signed-out request is redirected to the admin sign-in (`fetch` reports `redirected`), or answers 401/403.
-- **The look** (theme spec): components only from `src/ui/console/` (`Button`, `Tabs`, `Chip`, `Panel`, `Sheet`, `Readout`, `Legend`, `GuideOverlay`); colours only through tokens (`ground`, `panel`, `well`, `lane`, `rule`, `ink`, `dim`, `amber`, `go`, `record`, `on-accent`, `paper`); **no hex literal and no Tailwind palette class** in `src/ui/**` or `src/main.ts` (`test/tokens.test.ts` scans them); score colours go through `readableOn(theme, color, 'mark' | 'text')`; **every tap target at least 44 px** (`min-h-11 min-w-11`; `Button` already is); **no `style="…"` attribute** (the CSP blocks it; Preact `style` props and SVG attributes are fine); **no Escape handler anywhere** (Escape is never bound); `record` (red) is the colour of recording only, `amber` of time and selection, `go` of sending and energy.
+- **The look** (theme spec): components only from `src/ui/console/` (`Button`, `Tabs`, `Chip`, `Panel`, `Sheet`, `Readout`, `Legend`, `GuideOverlay`); colours only through tokens (`ground`, `panel`, `well`, `lane`, `rule`, `ink`, `dim`, `amber`, `go`, `record`, `on-accent`, `paper`); **no hex literal and no Tailwind palette class** in `src/ui/**` or `src/main.ts` (`test/tokens.test.ts` scans them); score colours go through `readableOn(theme, color, 'mark' | 'text')`; **every tap target at least 44 px** (`min-h-11 min-w-11`; `Button` already is); **no `style="…"` attribute** (the CSP blocks it; Preact `style` props and SVG attributes are fine); **no Escape handler anywhere** (Escape is never bound; each new composer, question and overlay is tested at run time by pressing Escape at every one of its elements and at every window and document key listener, as `test/guide-overlay.test.ts` does for the guide); `record` (red) is the colour of recording only (this page's UI uses it for the Record and Stop buttons and the recording strip), `amber` of time and selection, `go` of sending and energy. A destructive action is a plain secondary button with explicit words ("Delete all 12 notes"), and an error line has an `amber` border: never the red `error` class.
 - **Guide and legends:** anything the answering UI draws that a view did not draw before gets a legend item and a "How to read this" part (notes on the Story timeline; the energy drawing). The guide opens by itself the first time a browser shows a view (`workroom-guide-<view>` flags in localStorage are not secrets and stay).
-- **Phone first.** Below 1024 px one column; the notes panel is the bottom sheet. The answer bar and its composers sit under the views in the main column (the owner must see the timeline while picking a span); the sheet holds the unlock form, the note history, the outbox, the words and Claude's changes. Text inputs are `text-base` (16 px) so iOS does not zoom.
+- **Phone first.** Below 1024 px one column; the notes panel is the bottom sheet. The answer bar sits under the player in the main column. **Pinning keeps the timeline on screen:** Pin a note scrolls the Story view to the top of the screen, and what needs the owner right now (the pin composer, the Stop button of a recording, a recording kept but not yet stored) sits in the bar's dock, fixed at the bottom of a phone's screen above the sheet handle (`fixed inset-x-0 bottom-11`), at most 40 dvh tall and scrolling inside itself; from 1024 px the dock is in the page's flow. The sheet holds the unlock form, the note history, the outbox, the words and Claude's changes. Text inputs are `text-base` (16 px) so iOS does not zoom.
 - **iOS audio.** `getUserMedia` is called synchronously inside the tap that starts a recording (no `await` before it). The recorder picks the first type `MediaRecorder` supports from `audio/webm;codecs=opus`, `audio/mp4`, `audio/ogg;codecs=opus`. Where `navigator.audioSession` exists the recorder sets it to `'play-and-record'` while recording and `'auto'` afterwards; the `'playback'` trick in `src/ui/demo-player.ts` stays for playback only.
+- **Nothing the owner typed or recorded is cleared until the sealed note is stored.** A typed note stays in its box until the sealed bundle is in the outbox's store (IndexedDB, or this page view's memory when the browser refuses it; the kept note's message then adds a one-line notice that it lives only until the page closes). A note that cannot be sealed (for example `crypto.subtle` is missing on a page that is not secure) leaves the composer open with its words and a plain message. A recording always has a visible Stop; moving to another mode while recording stops the microphone and keeps the recording to **Send recording** or **Discard recording**; a recording that cannot be stored stays the same way.
 - **Type-check programs.** Every new `src` file joins one program: DOM-free `tsconfig.json` (`answer.ts`, `energy.ts`, `recorder.ts`); Web Crypto `src/tsconfig.crypto.json` (`api.ts`, `outbox.ts`, `history.ts`, `notes-session.ts`, which import `seal.ts`, `unlock.ts` or each other); DOM `src/tsconfig.dom.json` (`idb.ts`, `ui/*.tsx`, `ui/waiting.ts`). A DOM-free module must not import a Web Crypto one. Byte buffers that reach `crypto.subtle`, `fetch` or IndexedDB are `Uint8Array<ArrayBuffer>`.
 - **The built page is committed.** After changing anything under `games/workroom/src`, run `node _kit/build/build.mjs workroom` and commit `games/workroom/dist/` with the task; `node _kit/build/build.mjs workroom --check` (type-checks every program, then compares `dist/`) must exit 0 before each commit.
-- **CI is not changed:** no edits to `.github/`, `tests/e2e/select.ts`, `compose.yaml`, `tests/e2e/playwright.config.ts`, or the Makefile's `test` and `e2e` targets. The local check's files may change: `tests/e2e/workroom.local.ts`, `tests/e2e/local.config.ts`, a new `compose.music-local.yaml`, the Makefile's `music-e2e` recipe. The one line near CI is `env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS` in `docker/php/Dockerfile` (FPM clears the worker environment; it does nothing unless the variable is set, and only `compose.music-local.yaml` sets it).
+- **CI is not changed:** no edits to `.github/`, `tests/e2e/select.ts`, `compose.yaml`, `tests/e2e/playwright.config.ts`, or the Makefile's `test` and `e2e` targets. The local check's files may change: `tests/e2e/workroom.local.ts`, `tests/e2e/local.config.ts`, a new `compose.music-local.yaml`, the Makefile's `music-e2e` recipe. The one other file CI reads that this plan changes is `games/package.json` with its lock file: `fake-indexeddb` joins `devDependencies`, exact-pinned (Task 7). The one line near CI is `env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS` in `docker/php/Dockerfile` (FPM clears the worker environment; it does nothing unless the variable is set, and only `compose.music-local.yaml` sets it).
 - **Ports and docker:** never bind 3000, 5173, 8000 or 8080; docker runs use a unique project name and are torn down with `docker compose -p <name> down -v`; never touch the `siue` project; never prune. Never SSH, SFTP or SCP to www.cs; deploys happen on merge.
 - **Nothing secret is committed;** the repository is public. Test keys under `games/workroom/test/fixtures/` are labelled test keys. Screenshots go to a scratch folder outside the repository.
 - **Comments and docs describe the current state, never history** ("kept from when…", "now does…", "changed to…" are not allowed).
@@ -43,18 +44,22 @@ The code and tests in Tasks 1–16 and the unit test and browser-check code of T
 3. **An iPhone records:** Safari has no WebM recording, refuses a microphone asked for after an `await`, and goes silent under a `'playback'` audio session: the recorder picks `audio/mp4`, asks for the microphone first thing in the tap, switches the session to `'play-and-record'` while recording, and the 60 s cap stops and keeps the recording. Pinned in Task 5 (`recorder.test.ts`).
 4. **A tap exactly on a section boundary** (or a playhead resting on one) must react to a section, never to none or to the one before: floating-point round trips through pixels land a hair either side. Pinned in Task 1 (`hit.test.ts`).
 5. **A note from another draft or another piece, a damaged note, or a note sealed to a key the page lacks:** the history shows each with its draft or its problem, never fails the whole list, and validates every opened body's shape before rendering it. Pinned in Task 3 (`note.test.ts`), Task 8 (`history.test.ts`) and Task 9 (`notes-session.test.ts`).
+6. **Nothing typed or recorded is lost, and a recording can always be stopped:** the words stay in the box and the recording stays on screen until the sealed note is stored; a note that cannot be sealed says so and keeps the composer; a browser that refuses IndexedDB keeps the note in memory with a notice; leaving a mode while recording stops the microphone and keeps the recording to Send or Discard; a recorder that fails after the microphone was granted releases it. Pinned in Task 5 (`recorder.test.ts`), Task 7 (`idb.test.ts`), Task 12 (`composers.test.ts`) and Task 15 (`workroom-answer.test.ts`).
+7. **Two tabs open on one outbox:** a kept note is uploaded once, because the flush runs under the Web Locks lock `workroom-outbox`. Pinned in Task 7 (`outbox.test.ts`).
 
 ## Decisions this plan makes (the specs leave them open)
 
 - **The body check lives in `note.ts` and is reused.** `seal.ts` already refuses a body that fails a private `isNoteBody` before `open()` returns, so the history never receives an unchecked body. The check moves to `note.ts` (DOM-free, exported), gains ranges (ids, non-negative times in order, bars together or not at all, text ≤ 4,000, curve values in [0, 1] and ≤ 512 points, audio 0–60 s, an ISO time) and per-kind requirements (`text` has words, `speech`/`hum` audio, `react` a reaction, `energy` a curve), and `seal.ts` imports it. A body that fails it opens as `NoteUnreadable('tampered')`.
 - **The section under a time comes from seconds, not pixels.** `hit.ts` gains `BOUNDARY_EPS = 1e-9` s and `spanIndexAt`: spans are inclusive at both ends within the epsilon, and on a shared boundary the later span wins. `hitTimeline` and the new `sectionAt` both use it, and the timeline layout carries each section's seconds.
-- **Pinning happens on the Story view.** "Pin a note" switches to Story and puts its gestures in select mode: a drag picks a span (and the lane when both ends are in one lane), a tap picks a moment (and moves the playhead). The other views keep panning.
-- **Drawing the energy has its own surface.** The 48 px energy band is too small for a finger, so "Draw the energy" swaps the view for a 160 px drawing well over the same time axis: the energy now as a dashed line, the owner's shape in `go`, faint sections for orientation, its own legend and its own "How to read this" (guide view `energy`, flag `workroom-guide-energy`). Each stroke replaces the curve under its time span; Send seals the whole curve.
-- **The history lists this piece by default.** Two chips switch between This piece and All pieces; a note that cannot be opened is listed under both (its piece is unknown, and it must stay deletable). **Delete all** deletes every note on every piece and its question says so. Notes are listed only after an unlock; before it the panel shows the unlock form and the outbox.
+- **Pinning happens on the Story view, with the timeline on screen.** "Pin a note" switches to Story, scrolls the stage to the top of the screen and puts its gestures in select mode: a drag picks a span (and the lane only when the drag starts and ends in the same lane), a tap picks a moment (and moves the playhead). The other views keep panning. The composer is docked at the bottom of a phone (at most 40 dvh, scrolling inside itself, above the notes handle), so the timeline and the picked span stay visible; the browser check asserts both at 390 × 844.
+- **Drawing the energy has its own surface.** The 48 px energy band is too small for a finger, so "Draw the energy" swaps the view for a 160 px drawing well over the same time axis: the energy now as a dashed line, the owner's shape in `go`, faint sections for orientation, its own legend and its own "How to read this" (guide view `energy`, flag `workroom-guide-energy`). Each stroke replaces the curve under its time span; Send seals the whole curve, resampled to at most 512 points. While a stroke is in progress the drawing holds the playhead's follow, as the other views do.
+- **The history lists this piece by default.** Two chips switch between This piece and All pieces; a note that cannot be opened is listed under both (its piece is unknown, and it must stay deletable). **Delete** (one note), **Delete all** and **Discard** each ask first, inline, in words that name what goes (“Delete this note?”, “Delete all 12 notes, on every piece?”); every button involved is a plain secondary button, because red belongs to recording. **Delete all** deletes every note on every piece and its question says so. Notes are listed only after an unlock; before it the panel shows the unlock form and the outbox.
 - **Notes on the timeline** are drawn (after an unlock) as outlines in their lane, or across all lanes, numbered in the order they were made; a moment is a thin line. Energy notes are not drawn (they cover the whole piece); they are listed. Claude's changes keep their amber tabs, and each history item names the changes that answer it.
-- **The notes panel is "Notes & answers"** and holds, in order: Your notes (unlock / history / not sent yet), an opened word card, Words in this piece, Claude's changes.
-- **"Draft limits" means the composer's own limits:** the 4,000-character text (a count appears from 3,500), the 60 s recording, the 512-point shape; the server's draft-publishing limits are not page concerns.
-- **No key built in yet** (`PUBLIC_KEY === null`, before `make keys-init`): the answer bar says "Notes are off: this page has no notes key yet (make keys-init)." and nothing seals; the pieces list keeps the server's total.
+- **The notes panel is "Notes & answers"** and holds, in order: Your notes (unlock / history / not sent yet), an opened word card, Words in this piece, Claude's changes. The panel holding the history is named “Notes & answers” and the typed note's box is the textbox “Your note”, so no two controls share a name and the browser check can tell them apart by role.
+- **A reaction is one tap.** The bar stays open after it with “Sent. It is waiting for pickup.” in its status line, so several reactions go one after another; every other note closes its composer once it is stored.
+- **The unlock form keeps its hidden `siue-music` username beside the `current-password` field** so 1Password fills it. Chrome's own password manager may offer to save that pair; the owner dismisses the prompt (Never). The page cannot suppress it without breaking 1Password, and the passphrase is never stored by the page itself.
+- **"Draft limits" means the composer's own limits:** the 4,000-character text (a count appears from 3,500 characters, when 500 are left), the 60 s recording, the 512-point shape; the server's draft-publishing limits are not page concerns.
+- **No key built in yet** (`PUBLIC_KEY === null`, before `make music-setup`): the answer bar says "Notes are off: this page has no notes key yet (make music-setup)." and nothing seals; the pieces list keeps the server's total.
 - **The pieces list shows per-piece waiting counts after an unlock** on that page (the server cannot know a sealed note's piece); before it, only the server's total.
 - **The browser check uses a test-key bundle.** `games/workroom/tools/e2e-bundle.ts` builds `src/main.ts` with `src/public-key.ts` replaced by `test/fixtures/public-key.ts` into a temporary folder outside the repository; the check routes `dist/workroom.js` to it. The shipped bundle is never built with a test key. `compose.music-local.yaml` points the server at `games/workroom/test/fixtures/public.json`; Chrome runs with a fake microphone (`tests/e2e/local.config.ts`).
 - **The recorder asks for 64 kb/s,** so a minute of speech is about 0.5 MB sealed, well under 2 MB.
@@ -73,22 +78,24 @@ websites/www.cs/
     src/recorder.ts            # MIME choice, 60 s cap, recorder over ports (Task 5)
     src/api.ts                 # the page's API client (Task 6)
     src/outbox.ts              # sealed notes waiting to be sent (Task 7)
-    src/idb.ts                 # the outbox in IndexedDB (Task 7)
+    src/idb.ts                 # the outbox in IndexedDB, memory where it refuses (Task 7)
     src/history.ts             # history items, counts, timeline marks (Task 8)
     src/notes-session.ts       # unlock, history, send, delete over the ports (Task 9)
     src/guide.ts src/tabs.ts   # energy guide, "your notes" part, legends (Task 10)
-    src/browser.ts             # + browserMedia() (Task 16)
+    src/browser.ts             # + browserMedia(), browserLock() (Task 16)
     src/main.ts                # wiring (Task 16)
     src/ui/console/{Button,Panel,Sheet}.tsx            # submit buttons, names, aria-controls (Task 2)
     src/ui/{UnlockPanel,History,Answers}.tsx            # Task 11
     src/ui/{PinComposer,RecordButton,ReactBar}.tsx      # Task 12
     src/ui/EnergyEditor.tsx                             # Task 13
     src/ui/surface.ts src/ui/Timeline.tsx               # select mode, marks (Task 14)
-    src/ui/{AnswerBar,Workroom}.tsx                     # Task 15
+    src/ui/{AnswerBar,Workroom}.tsx                     # Task 15 (the AnswerBar's dock holds the composer, the Stop and a kept recording)
     src/ui/{PiecesIndex.tsx,waiting.ts}                 # Task 16
     tsconfig.json src/tsconfig.crypto.json src/tsconfig.dom.json
     tools/e2e-bundle.ts                                 # Task 17
-    test/{hit,console,note,answer,energy,recorder,api,outbox,history,notes-session,guide-answer,answering-views,composers,energy-editor,timeline-select,workroom-answer,waiting,no-storage,workroom}.test.ts
+    test/{hit,console,note,answer,energy,recorder,api,outbox,idb,history,notes-session,guide-answer,answering-views,composers,energy-editor,timeline-select,workroom-answer,waiting,no-storage,workroom}.test.ts
+    test/e2e-bundle.test.ts                             # Task 17
+  games/package.json games/package-lock.json            # + fake-indexeddb, exact-pinned devDependency (Task 7)
     dist/                                               # rebuilt with each task
   compose.music-local.yaml       # MUSIC_PUBLIC_KEYS for the local check (Task 17)
   docker/php/Dockerfile          # + env[MUSIC_PUBLIC_KEYS] (Task 17)
@@ -285,7 +292,7 @@ export const MAX_TEXT = 4000;
 export const MAX_AUDIO_SECONDS = 60;
 export const MAX_CURVE_POINTS = 512;
 export const MAX_NOTE_BYTES = 2_097_152; // music/lib/Store.php MAX_NOTE_BYTES
-export const MAX_NOTES = 2000;           // music/lib/Store.php MAX_NOTES
+export const MAX_NOTES = 2000;           // music/lib/Store.php MAX_NOTES; outbox.ts names it in the "server is full" message
 export function isNoteBody(x: unknown): x is NoteBody;
 
 // src/answer.ts
@@ -299,7 +306,9 @@ export function textNote(c: Context, span: Span, text: string): NoteBody;
 export function speechNote(c: Context, span: Span, audio: Audio): NoteBody;
 export function humNote(c: Context, at: { time: number; bar: number | null; laneId: string | null }, audio: Audio): NoteBody;
 export function reactNote(c: Context, section: Section, tempo: TempoMap, duration: number, reaction: Reaction): NoteBody;
-export function energyNote(c: Context, curve: readonly [number, number][], duration: number, bars: number | null): NoteBody;
+export function energyNote(c: Context, curve: readonly [number, number][], duration: number, bars: number | null): NoteBody; // the curve is resampled to at most MAX_CURVE_POINTS
+/** A curve of at most `max` points (default MAX_CURVE_POINTS): a longer one is resampled at evenly spaced times between its first and last, interpolating; a shorter one is only put in time order. */
+export function resampleCurve(curve: readonly [number, number][], max?: number): [number, number][];
 export function wholePiece(score: Score): Section;  // id 'whole-piece'
 export function spanLabel(s: { from: number; to: number; fromBar: number | null; toBar: number | null }): string;
 export function recordClock(seconds: number): string;   // "0:07"
@@ -371,8 +380,8 @@ test('opening a sealed note uses this check and no other', () => {
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { NoteEmpty, NoteTooLong, REACTIONS, energyNote, humNote, reactNote, recordClock, spanLabel, speechNote, textNote, wholePiece } from '../src/answer.ts';
-import { REACTION_IDS, isNoteBody } from '../src/note.ts';
+import { NoteEmpty, NoteTooLong, REACTIONS, energyNote, humNote, reactNote, recordClock, resampleCurve, spanLabel, speechNote, textNote, wholePiece } from '../src/answer.ts';
+import { MAX_CURVE_POINTS, REACTION_IDS, isNoteBody } from '../src/note.ts';
 import { tempoMap } from '../src/tempo.ts';
 import type { Score } from '../src/score.ts';
 
@@ -408,10 +417,21 @@ test('a reaction covers its section; the last section ends at the end of the pie
   assert.deepEqual(REACTIONS.map(r => r.label), ['More epic', 'Calmer', 'Darker', 'Brighter', 'Longer', 'Shorter', 'Love it', 'Not this']);
 });
 
-test('a redrawn energy curve covers the whole piece; too many points are refused', () => {
+test('a redrawn energy curve covers the whole piece; a long one is resampled to 512 points, never refused', () => {
   const n = energyNote(ctx, [[0, 0.1], [16, 1]], 16, 8);
   assert.deepEqual([n.kind, n.from, n.to, n.fromBar, n.toBar, n.curve], ['energy', 0, 16, 1, 8, [[0, 0.1], [16, 1]]]);
-  assert.throws(() => energyNote(ctx, Array.from({ length: 513 }, (_, i): [number, number] => [i * 0.01, 0.5]), 16, 8), NoteTooLong);
+  const ramp = Array.from({ length: 3001 }, (_, i): [number, number] => [(i * 16) / 3000, i / 3000]);
+  const long = energyNote(ctx, ramp, 16, 8);
+  assert.equal(long.curve!.length, MAX_CURVE_POINTS);
+  assert.deepEqual([long.curve![0], long.curve!.at(-1)], [[0, 0], [16, 1]], 'the ends stay where they were');
+  assert.ok(long.curve!.every(([t, v], i, all) => (i === 0 || t > all[i - 1]![0]) && Math.abs(v - t / 16) < 1e-9), 'in time order, following the ramp');
+  assert.equal(isNoteBody(long), true);
+  const noisy = Array.from({ length: 2000 }, (_, i): [number, number] => [(i * 8) / 1999, i % 2]);
+  const thin = resampleCurve(noisy);
+  assert.equal(thin.length, MAX_CURVE_POINTS);
+  assert.ok(thin.every(([, v]) => v >= 0 && v <= 1));
+  assert.deepEqual(resampleCurve([[2, 0.5], [0, 0.1], [1, 0.2]]), [[0, 0.1], [1, 0.2], [2, 0.5]], 'a short curve is only put in time order');
+  assert.equal(resampleCurve(Array.from({ length: 600 }, (_, i): [number, number] => [i, 0.5]), 100).length, 100);
 });
 
 test('notes on a sound effect carry seconds only', () => {
@@ -549,9 +569,27 @@ export function reactNote(c: Context, section: Section, tempo: TempoMap, duratio
   return { ...base(c, 'react', from, to, bars[0], bars[1], null), reaction };
 }
 
+/** A curve of at most `max` points: one with more is resampled at evenly spaced times between its first and last, interpolating between its points, so a long drawing or a finely sampled energy line still fits a note. */
+export function resampleCurve(curve: readonly [number, number][], max: number = MAX_CURVE_POINTS): [number, number][] {
+  const pts = curve.map(([t, v]): [number, number] => [t, v]).sort((a, b) => a[0] - b[0]);
+  if (pts.length <= max) return pts;
+  const t0 = pts[0]![0];
+  const t1 = pts[pts.length - 1]![0];
+  const out: [number, number][] = [];
+  let j = 0;
+  for (let i = 0; i < max; i++) {
+    const t = i === max - 1 ? t1 : t0 + ((t1 - t0) * i) / (max - 1);
+    while (j < pts.length - 2 && pts[j + 1]![0] < t) j++;
+    const [ta, va] = pts[j]!;
+    const [tb, vb] = pts[j + 1]!;
+    const v = tb > ta ? va + ((vb - va) * (Math.min(Math.max(t, ta), tb) - ta)) / (tb - ta) : vb;
+    out.push([t, Math.min(1, Math.max(0, v))]);
+  }
+  return out;
+}
+
 export function energyNote(c: Context, curve: readonly [number, number][], duration: number, bars: number | null): NoteBody {
-  if (curve.length > MAX_CURVE_POINTS) throw new NoteTooLong('This shape has too many points. Start over and draw it in fewer strokes.');
-  return { ...base(c, 'energy', 0, duration, bars === null ? null : 1, bars, null), curve: curve.map(([t, v]): [number, number] => [t, v]) };
+  return { ...base(c, 'energy', 0, duration, bars === null ? null : 1, bars, null), curve: resampleCurve(curve) };
 }
 
 /** A section spanning the whole piece, for a reaction when no section is under the playhead (a sound may have none). */
@@ -725,7 +763,7 @@ export interface Recording { mime: string; seconds: number; bytes: Uint8Array<Ar
 export class RecorderProblem extends Error {}
 export const RECORDER_MESSAGES: { unsupported: string; denied: string; failed: string };
 export interface Recorder {
-  /** Call straight from the tap: the microphone is asked for before anything awaits. Rejects with RecorderProblem. */
+  /** Call straight from the tap: the microphone is asked for before anything awaits. Rejects with RecorderProblem; whatever fails after the microphone was granted (the recorder will not be made or started) stops its tracks and hands the audio session back. */
   start(): Promise<void>;
   /** Stops and gives the recording. After the cap it stopped by itself and gives the same recording. */
   stop(): Promise<Recording>;
@@ -760,7 +798,7 @@ test('the first supported recording type wins', () => {
 interface FakeRec extends RecorderLike { state: string; emit(bytes: number[]): void }
 interface Fake { ports: MediaPorts; log: string[]; timers: { f: () => void; ms: number; id: number }[]; clock: { ms: number }; recorder: () => FakeRec; session: { type: string } }
 
-function fake(opts: { supported?: (m: string) => boolean; deny?: string } = {}): Fake {
+function fake(opts: { supported?: (m: string) => boolean; deny?: string; breakAt?: 'make' | 'start' } = {}): Fake {
   const log: string[] = [];
   const timers: { f: () => void; ms: number; id: number }[] = [];
   const clock = { ms: 1000 };
@@ -776,9 +814,10 @@ function fake(opts: { supported?: (m: string) => boolean; deny?: string } = {}):
     isTypeSupported: opts.supported ?? (m => m === 'audio/mp4'),
     makeRecorder: (_s, mime) => {
       log.push(`recorder ${mime}`);
+      if (opts.breakAt === 'make') throw new Error('MediaRecorder refused');
       const r: FakeRec = {
         state: 'inactive', ondataavailable: null, onstop: null,
-        start(slice?: number) { r.state = 'recording'; log.push(`start ${slice}`); },
+        start(slice?: number) { if (opts.breakAt === 'start') throw new Error('start refused'); r.state = 'recording'; log.push(`start ${slice}`); },
         stop() { r.state = 'inactive'; log.push('stop'); r.onstop?.(); },
         emit(bytes: number[]) { r.ondataavailable?.({ data: blob(bytes) }); },
       };
@@ -834,6 +873,18 @@ test('the cap stops the recording by itself and hands it on', async () => {
   assert.equal(r.seconds, 60, 'never over the cap');
   assert.deepEqual([...r.bytes], [9]);
   assert.equal(await rec.stop(), r, 'a late Stop gets the same recording');
+});
+
+test('a recorder that will not start after the microphone was granted releases the microphone and the audio session', async () => {
+  for (const breakAt of ['make', 'start'] as const) {
+    const f = fake({ breakAt });
+    const rec = createRecorder(f.ports, () => {});
+    await assert.rejects(rec.start(), (e: unknown) => e instanceof RecorderProblem && e.message === RECORDER_MESSAGES.failed, breakAt);
+    assert.ok(f.log.includes('track stopped'), `${breakAt}: the microphone is released`);
+    assert.equal(f.session.type, 'auto', `${breakAt}: the audio session is handed back`);
+    assert.equal(rec.recording, false);
+    assert.equal(f.timers.length, 0, `${breakAt}: no cap timer is left running`);
+  }
 });
 
 test('no recordable type, a refused microphone, and cancel', async () => {
@@ -946,15 +997,22 @@ export function createRecorder(ports: MediaPorts, onLimit: (r: Promise<Recording
       const asked = ports.getUserMedia(); // first, inside the tap: Safari grants the microphone only there
       return asked.then(s => {
         stream = s;
-        chunks = [];
-        done = null;
-        mime = picked;
-        const r = ports.makeRecorder(s, picked);
-        r.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-        r.start(1000);
-        rec = r;
-        started = ports.now();
-        cancelCap = stopAfterLimit(ports.timers, () => onLimit(finish()));
+        try {
+          chunks = [];
+          done = null;
+          mime = picked;
+          const r = ports.makeRecorder(s, picked);
+          r.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+          r.start(1000);
+          rec = r;
+          started = ports.now();
+          cancelCap = stopAfterLimit(ports.timers, () => onLimit(finish()));
+        } catch {
+          // The microphone was granted but the recorder would not start: nothing may keep listening.
+          rec = null;
+          release();
+          throw new RecorderProblem(RECORDER_MESSAGES.failed);
+        }
       }, (e: unknown) => {
         release();
         const name = typeof e === 'object' && e !== null ? (e as { name?: unknown }).name : undefined;
@@ -992,7 +1050,7 @@ export function createRecorder(ports: MediaPorts, onLimit: (r: Promise<Recording
 
 ```ts
 export class SignedOut extends Error {}
-export class NoKeyring extends Error {}   // keyring.php answered 404 no_keyring: make keys-init has not uploaded one
+export class NoKeyring extends Error {}   // keyring.php answered 404 no_keyring: make music-setup has not uploaded one
 export type RefusedReason = 'too_large' | 'full' | 'no_key' | 'bad_header' | 'unknown_key';
 export const REFUSED_REASONS: readonly RefusedReason[];
 export interface ServerNote { id: string; size: number; arrived_at: number; picked_up_at: number | null }
@@ -1262,8 +1320,8 @@ export function createApi(fetch: Fetch, csrf: string): PageApi {
 
 **Files:**
 - Create: `games/workroom/src/outbox.ts`, `games/workroom/src/idb.ts`
-- Modify: `games/workroom/src/tsconfig.crypto.json` (`outbox.ts`), `games/workroom/src/tsconfig.dom.json` (`idb.ts`)
-- Test: `games/workroom/test/outbox.test.ts`
+- Modify: `games/workroom/src/tsconfig.crypto.json` (`outbox.ts`), `games/workroom/src/tsconfig.dom.json` (`idb.ts`), `games/package.json` and `games/package-lock.json` (`fake-indexeddb`, test-only)
+- Test: `games/workroom/test/outbox.test.ts`, `games/workroom/test/idb.test.ts`
 
 **Interfaces:**
 - Consumes: `PageApi`, `SignedOut`, `RefusedReason` (Task 6); `MAX_NOTE_BYTES` (Task 3).
@@ -1274,24 +1332,35 @@ export function createApi(fetch: Fetch, csrf: string): PageApi {
 export type KeptReason = RefusedReason | 'offline' | 'signed_out' | 'server';
 /** A sealed note on this device waiting to be sent. Nothing in the clear about the note is kept: only its sealed bytes and when it was made. */
 export interface Pending { key: string; bundle: Uint8Array<ArrayBuffer>; made: string; reason: KeptReason | 'new' }
-export interface OutboxStore { all(): Promise<Pending[]>; put(p: Pending): Promise<void>; remove(key: string): Promise<void> }
-export function memoryOutbox(): OutboxStore;
+export interface OutboxStore {
+  all(): Promise<Pending[]>;
+  put(p: Pending): Promise<void>;
+  remove(key: string): Promise<void>;
+  /** True when the notes are held only in this page view's memory: no IndexedDB, or the browser refused to open it or to store a note. */
+  memoryOnly(): boolean;
+}
+export function memoryOutbox(): OutboxStore; // memoryOnly() is always true
 export interface FlushReport { sent: { key: string; id: string }[]; kept: { key: string; reason: KeptReason }[] }
 /** A flush after adding a note: `key` is the added note's, so the page can say what became of it. */
-export interface AddReport extends FlushReport { key: string }
-export const KEPT_MESSAGES: Readonly<Record<KeptReason, string>>;
+export interface AddReport extends FlushReport { key: string; memoryOnly: boolean } // memoryOnly: the store held the added note only in memory
+/** Runs `work` under the page's cross-tab lock. */
+export type OutboxLock = <T>(work: () => Promise<T>) => Promise<T>;
+export const KEPT_MESSAGES: Readonly<Record<KeptReason, string>>; // "full" names MAX_NOTES
 export const SENT_MESSAGE = 'Sent. It is waiting for pickup.';
+export const MEMORY_NOTICE: string;      // added to a kept note's message when AddReport.memoryOnly
+export const SEND_MESSAGES: { readonly sealFailed: string }; // a note that could not be sealed: nothing stored, the words and recording still on screen
 export interface Outbox {
   add(bundle: Uint8Array<ArrayBuffer>, made: string): Promise<AddReport>; // stored first, then a flush
   flush(): Promise<FlushReport>;
   pending(): Promise<Pending[]>;   // in the order they were made
   discard(key: string): Promise<void>;
 }
-export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, newKey: () => string): Outbox;
+/** `lock`: where the browser has Web Locks, every flush runs under it, so two tabs never upload one kept note twice. */
+export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, newKey: () => string, lock?: OutboxLock | null): Outbox;
 // src/idb.ts
 export const OUTBOX_DB = 'siue-music';
 export const OUTBOX_STORE = 'outbox';
-/** The outbox in IndexedDB; this page view's memory where IndexedDB is missing or refuses (some private windows). */
+/** The outbox in IndexedDB; a note the browser will not store there (IndexedDB missing, refusing to open, or refusing the write) is kept in this page view's memory, and memoryOnly() says so. */
 export function indexedDbOutbox(idb?: IDBFactory | null): OutboxStore;
 ```
 
@@ -1305,6 +1374,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { KEPT_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
+import type { OutboxLock } from '../src/outbox.ts';
 import { SignedOut, type UploadResult } from '../src/api.ts';
 import { MAX_NOTE_BYTES } from '../src/note.ts';
 
@@ -1318,7 +1388,7 @@ test('a note is in the store while it is sent, and leaves it once sent', async (
   const box = createOutbox(store, { upload: async () => { seen.push((await store.all()).length); return SENT(); } }, keys());
   const r = await box.add(one(1), '2026-10-20T00:00:00.000Z');
   assert.deepEqual(seen, [1]);
-  assert.deepEqual(r, { key: 'k1', sent: [{ key: 'k1', id: 'f'.repeat(32) }], kept: [] });
+  assert.deepEqual(r, { key: 'k1', memoryOnly: true, sent: [{ key: 'k1', id: 'f'.repeat(32) }], kept: [] });
   assert.deepEqual(await store.all(), []);
 });
 
@@ -1383,6 +1453,29 @@ test('two sends at once never send a note twice', async () => {
   assert.deepEqual(uploaded, [1, 2]);
 });
 
+test('the 2,000-note limit is named from the limit itself', () => {
+  assert.match(KEPT_MESSAGES.full, /holds 2,000 notes/);
+});
+
+test('with a lock, two tabs on one store upload each kept note once; without it they can upload it twice', async () => {
+  const mutex = (): OutboxLock => { let tail: Promise<unknown> = Promise.resolve(); return work => { const next = tail.then(work, work); tail = next.catch(() => undefined); return next; }; };
+  const run = async (lock: OutboxLock | null): Promise<number[]> => {
+    const store = memoryOutbox();
+    const uploaded: number[] = [];
+    let online = false;
+    const api = { upload: async (b: Uint8Array<ArrayBuffer>): Promise<UploadResult> => { if (!online) throw new TypeError('offline'); await new Promise(r => setTimeout(r, 5)); uploaded.push(b[0]!); return SENT(); } };
+    const tabA = createOutbox(store, api, keys(), lock);
+    const tabB = createOutbox(store, api, () => 'other', lock);
+    await tabA.add(one(1), '2026-10-20T00:00:01.000Z');
+    await tabA.add(one(2), '2026-10-20T00:00:02.000Z');
+    online = true;
+    await Promise.all([tabA.flush(), tabB.flush()]);
+    return uploaded;
+  };
+  assert.deepEqual(await run(mutex()), [1, 2], 'each note once, in order');
+  assert.ok((await run(null)).length > 2, 'the control: without the lock the same notes go twice');
+});
+
 test('Discard drops an unsent note; pending lists the rest in order', async () => {
   const store = memoryOutbox();
   const box = createOutbox(store, { upload: async () => { throw new TypeError('offline'); } }, keys());
@@ -1412,26 +1505,42 @@ test('only idb.ts names IndexedDB, and it keeps nothing but the pending record',
 // a lost connection, a lost sign-in or a refusal never loses it; it stays with
 // the reason and goes on the next flush (page load, back online, Try again).
 // Only Discard drops an unsent note. The store holds the sealed bytes and when
-// the note was made, nothing else. One add or flush runs at a time.
+// the note was made, nothing else. One add or flush runs at a time in a page,
+// and only one tab at a time uploads (the page's lock, where the browser has one).
 import { SignedOut } from './api.ts';
 import type { PageApi, RefusedReason } from './api.ts';
-import { MAX_NOTE_BYTES } from './note.ts';
+import { MAX_NOTES, MAX_NOTE_BYTES } from './note.ts';
 
 export type KeptReason = RefusedReason | 'offline' | 'signed_out' | 'server';
 export interface Pending { key: string; bundle: Uint8Array<ArrayBuffer>; made: string; reason: KeptReason | 'new' }
-export interface OutboxStore { all(): Promise<Pending[]>; put(p: Pending): Promise<void>; remove(key: string): Promise<void> }
+export interface OutboxStore {
+  all(): Promise<Pending[]>;
+  put(p: Pending): Promise<void>;
+  remove(key: string): Promise<void>;
+  /** True when the notes are held only in this page view's memory: the browser has no IndexedDB, or refused to open it or to store a note. */
+  memoryOnly(): boolean;
+}
 export interface FlushReport { sent: { key: string; id: string }[]; kept: { key: string; reason: KeptReason }[] }
-export interface AddReport extends FlushReport { key: string }
+/** `memoryOnly`: the store held the note only in memory (OutboxStore.memoryOnly) when it was added. */
+export interface AddReport extends FlushReport { key: string; memoryOnly: boolean }
+/** Runs `work` while holding the page's cross-tab lock, so two tabs never upload the same kept note. */
+export type OutboxLock = <T>(work: () => Promise<T>) => Promise<T>;
 export interface Outbox { add(bundle: Uint8Array<ArrayBuffer>, made: string): Promise<AddReport>; flush(): Promise<FlushReport>; pending(): Promise<Pending[]>; discard(key: string): Promise<void> }
 
 export const SENT_MESSAGE = 'Sent. It is waiting for pickup.';
+/** What the owner is told when a note cannot be sealed in this browser; nothing was stored, and the words or recording are still on screen. */
+export const SEND_MESSAGES = {
+  sealFailed: 'This note could not be sealed here (the browser blocked encryption, or the page is not secure). Nothing was sent, and your note is still here.',
+} as const;
+/** Added to a kept note's message when the browser would not store it on this device. */
+export const MEMORY_NOTICE = 'This browser would not save it on this device, so it is kept only until this page is closed or reloaded.';
 
 export const KEPT_MESSAGES: Readonly<Record<KeptReason, string>> = {
   offline: 'No connection: this note is kept on this device and will be sent when you are back online.',
   signed_out: 'Your sign-in ended. Sign in again; the note stays on this device.',
   server: 'The server had a problem. This note stays on this device and is sent on the next try.',
   too_large: 'This note is over 2 MB, so it stays on this device. Record a shorter one, then discard this one.',
-  full: 'The workroom holds 2,000 notes. Delete some old ones; this note stays on this device until then.',
+  full: `The workroom holds ${MAX_NOTES.toLocaleString('en-US')} notes. Delete some old ones; this note stays on this device until then.`,
   no_key: 'The workroom has no notes key yet, so this note stays on this device.',
   bad_header: 'The server did not accept this note’s key. Reload the page; the note stays on this device.',
   unknown_key: 'The server did not accept this note’s key. Reload the page; the note stays on this device.',
@@ -1446,12 +1555,13 @@ export function memoryOutbox(): OutboxStore {
     all: async () => [...notes.values()].map(p => ({ ...p })),
     put: async p => { notes.set(p.key, { ...p }); },
     remove: async key => { notes.delete(key); },
+    memoryOnly: () => true,
   };
 }
 
 const byMade = (a: Pending, b: Pending): number => (a.made < b.made ? -1 : a.made > b.made ? 1 : 0);
 
-export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, newKey: () => string): Outbox {
+export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, newKey: () => string, lock: OutboxLock | null = null): Outbox {
   let chain: Promise<unknown> = Promise.resolve();
   const serial = <T>(work: () => Promise<T>): Promise<T> => {
     const next = chain.then(work, work);
@@ -1483,27 +1593,29 @@ export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, n
     }
     return report;
   };
+  const locked = <T>(work: () => Promise<T>): Promise<T> => (lock ? lock(work) : work());
   return {
     add: (bundle, made) => serial(async () => {
       const key = newKey();
       await store.put({ key, bundle, made, reason: 'new' });
-      return { key, ...(await flushNow()) };
+      return { key, memoryOnly: store.memoryOnly(), ...(await locked(flushNow)) };
     }),
-    flush: () => serial(flushNow),
+    flush: () => serial(() => locked(flushNow)),
     pending: async () => (await store.all()).sort(byMade),
     discard: key => serial(() => store.remove(key)),
   };
 }
 ```
 
-- [ ] **Step 4: Implement `src/idb.ts`** (and add `"idb.ts"` to `src/tsconfig.dom.json`). It is the only file that names IndexedDB; there is no unit test for it (Node has no IndexedDB): the browser check (Task 17) sends through it, reloads, and lists the origin's stores.
+- [ ] **Step 4: Implement `src/idb.ts`** (and add `"idb.ts"` to `src/tsconfig.dom.json`). It is the only file that names IndexedDB. `test/idb.test.ts` (Step 5) runs it against `fake-indexeddb`; the browser check (Task 17) sends through it, reloads, and lists the origin's stores.
 
 ```ts
 // The outbox's home in the browser: IndexedDB database "siue-music", store
 // "outbox", one record per sealed note waiting to be sent ({ key, bundle,
 // made, reason }). Nothing of any key, and nothing in the clear about a note,
-// is ever stored here. Where IndexedDB is missing or refuses to open (some
-// private windows), the outbox lives in this page view's memory.
+// is ever stored here. Where IndexedDB is missing, refuses to open, or refuses
+// to store a note (some private windows, a full disk), that note lives in this
+// page view's memory instead and memoryOnly() says so.
 import { memoryOutbox } from './outbox.ts';
 import type { OutboxStore, Pending } from './outbox.ts';
 
@@ -1517,16 +1629,18 @@ const isPending = (x: unknown): x is Pending => {
 
 export function indexedDbOutbox(idb: IDBFactory | null = typeof indexedDB === 'undefined' ? null : indexedDB): OutboxStore {
   const fallback = memoryOutbox();
-  if (!idb) return fallback;
+  let inMemory = !idb;
+  if (!idb) return { ...fallback, memoryOnly: () => true };
   let db: Promise<IDBDatabase | null> | null = null;
   const open = (): Promise<IDBDatabase | null> => (db ??= new Promise(resolve => {
     try {
       const req = idb.open(OUTBOX_DB, 1);
       req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(OUTBOX_STORE)) req.result.createObjectStore(OUTBOX_STORE, { keyPath: 'key' }); };
       req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-      req.onblocked = () => resolve(null);
+      req.onerror = () => { inMemory = true; resolve(null); };
+      req.onblocked = () => { inMemory = true; resolve(null); };
     } catch {
+      inMemory = true;
       resolve(null);
     }
   }));
@@ -1540,25 +1654,116 @@ export function indexedDbOutbox(idb: IDBFactory | null = typeof indexedDB === 'u
   return {
     async all() {
       const d = await open();
-      return d ? (await run(d, 'readonly', s => s.getAll())).filter(isPending) : fallback.all();
+      const stored = d ? (await run(d, 'readonly', s => s.getAll())).filter(isPending) : [];
+      const held = new Map(stored.map(p => [p.key, p]));
+      for (const p of await fallback.all()) held.set(p.key, p); // a note this view could only keep in memory
+      return [...held.values()];
     },
     async put(p) {
       const d = await open();
-      if (d) await run(d, 'readwrite', s => s.put({ key: p.key, bundle: p.bundle, made: p.made, reason: p.reason }));
-      else await fallback.put(p);
+      if (d) {
+        try {
+          await run(d, 'readwrite', s => s.put({ key: p.key, bundle: p.bundle, made: p.made, reason: p.reason }));
+          await fallback.remove(p.key);
+          return;
+        } catch {
+          // The browser refused to store it (a full disk, a locked-down window): keep it in memory rather than lose it.
+        }
+      }
+      inMemory = true;
+      await fallback.put(p);
     },
     async remove(key) {
       const d = await open();
       if (d) await run(d, 'readwrite', s => s.delete(key));
-      else await fallback.remove(key);
+      await fallback.remove(key);
     },
+    memoryOnly: () => inMemory,
   };
 }
 ```
 
-- [ ] **Step 5: Run the test** — `node --test workroom/test/outbox.test.ts` — PASS; rebuild and `--check` — exit 0.
+- [ ] **Step 5: Test `idb.ts` against a fake IndexedDB.** From `websites/www.cs/games` install the test-only dependency, exact-pinned: `npm install --save-exact --save-dev fake-indexeddb@6.2.6` (`package.json` lists `"fake-indexeddb": "6.2.6"` under `devDependencies`; `package-lock.json` changes with it). Then write `test/idb.test.ts`:
 
-- [ ] **Step 6: Commit** — "Music workroom: the outbox (sealed notes wait on this device until they are sent)" with the trailers.
+```ts
+// The outbox in IndexedDB, against a fake IndexedDB (fake-indexeddb, a test-only
+// dependency): notes survive a reload, nothing but the pending record is
+// stored, and where IndexedDB is missing, refuses to open, or refuses a note,
+// the note is kept in memory and the outbox says so.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { IDBFactory, IDBObjectStore } from 'fake-indexeddb';
+import { OUTBOX_DB, OUTBOX_STORE, indexedDbOutbox } from '../src/idb.ts';
+import type { Pending } from '../src/outbox.ts';
+
+const pending = (key: string, bytes: number[], reason: Pending['reason'] = 'new'): Pending => ({ key, bundle: new Uint8Array(bytes), made: `2026-10-20T00:00:0${key.length}.000Z`, reason });
+const bytesOf = (all: Pending[]): [string, number[], string][] => all.map((p): [string, number[], string] => [p.key, [...p.bundle], p.reason]).sort();
+
+test('a stored note is there after a reload, with its reason; remove forgets it', async () => {
+  const factory = new IDBFactory();
+  const first = indexedDbOutbox(factory as unknown as globalThis.IDBFactory);
+  await first.put(pending('a', [1, 2, 3]));
+  await first.put(pending('bb', [4]));
+  await first.put({ ...pending('a', [1, 2, 3]), reason: 'offline' });
+  assert.equal(first.memoryOnly(), false);
+  const reloaded = indexedDbOutbox(factory as unknown as globalThis.IDBFactory);
+  assert.deepEqual(bytesOf(await reloaded.all()), [['a', [1, 2, 3], 'offline'], ['bb', [4], 'new']]);
+  assert.ok((await reloaded.all()).every(p => p.bundle instanceof Uint8Array));
+  await reloaded.remove('a');
+  assert.deepEqual(bytesOf(await indexedDbOutbox(factory as unknown as globalThis.IDBFactory).all()), [['bb', [4], 'new']]);
+});
+
+test('the database holds one store of records with exactly key, bundle, made and reason', async () => {
+  const factory = new IDBFactory();
+  await indexedDbOutbox(factory as unknown as globalThis.IDBFactory).put(pending('a', [9]));
+  assert.deepEqual((await factory.databases()).map(d => d.name), [OUTBOX_DB]);
+  const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = factory.open(OUTBOX_DB); r.onsuccess = () => resolve(r.result as unknown as IDBDatabase); r.onerror = () => reject(r.error); });
+  assert.deepEqual([...db.objectStoreNames], [OUTBOX_STORE]);
+  const rows = await new Promise<unknown[]>((resolve, reject) => { const q = db.transaction(OUTBOX_STORE).objectStore(OUTBOX_STORE).getAll(); q.onsuccess = () => resolve(q.result); q.onerror = () => reject(q.error); });
+  db.close();
+  assert.equal(rows.length, 1);
+  assert.deepEqual(Object.keys(rows[0] as object).sort(), ['bundle', 'key', 'made', 'reason']);
+});
+
+test('no IndexedDB: notes are kept in memory, and the outbox says so', async () => {
+  const box = indexedDbOutbox(null);
+  assert.equal(box.memoryOnly(), true);
+  await box.put(pending('a', [1]));
+  assert.deepEqual(bytesOf(await box.all()), [['a', [1], 'new']]);
+  await box.remove('a');
+  assert.deepEqual(await box.all(), []);
+});
+
+test('IndexedDB that refuses to open: notes are kept in memory', async () => {
+  const refusing = { open() { throw new Error('SecurityError'); } } as unknown as globalThis.IDBFactory;
+  const box = indexedDbOutbox(refusing);
+  await box.put(pending('a', [7]));
+  assert.equal(box.memoryOnly(), true);
+  assert.deepEqual(bytesOf(await box.all()), [['a', [7], 'new']]);
+});
+
+test('IndexedDB that refuses to store a note: that note is kept in memory, the stored ones stay, and the outbox says so', async () => {
+  const factory = new IDBFactory();
+  const box = indexedDbOutbox(factory as unknown as globalThis.IDBFactory);
+  await box.put(pending('a', [1]));
+  assert.equal(box.memoryOnly(), false);
+  const put = IDBObjectStore.prototype.put;
+  IDBObjectStore.prototype.put = function refuse() { throw new DOMException('The disk is full.', 'QuotaExceededError'); };
+  try {
+    await box.put(pending('bb', [2]));
+  } finally {
+    IDBObjectStore.prototype.put = put;
+  }
+  assert.equal(box.memoryOnly(), true);
+  assert.deepEqual(bytesOf(await box.all()), [['a', [1], 'new'], ['bb', [2], 'new']]);
+  await box.remove('bb');
+  assert.deepEqual(bytesOf(await box.all()), [['a', [1], 'new']]);
+});
+```
+
+- [ ] **Step 6: Run the tests** — `node --test workroom/test/outbox.test.ts workroom/test/idb.test.ts` — PASS (the idb test also fails on an `idb.ts` whose `put` has no memory fallback); rebuild and `--check` — exit 0.
+
+- [ ] **Step 7: Commit** — `git add websites/www.cs/games/workroom websites/www.cs/games/package.json websites/www.cs/games/package-lock.json`; "Music workroom: the outbox (sealed notes wait on this device until they are sent)" with the trailers.
 
 ### Task 8: The note history
 
@@ -1717,7 +1922,7 @@ export function answeredBy(changes: readonly Change[], id: string): number[] {
 - Test: `games/workroom/test/notes-session.test.ts`
 
 **Interfaces:**
-- Consumes: `PageApi`, `SignedOut`, `NoKeyring` (Task 6); `Outbox`, `AddReport`, `FlushReport`, `Pending` (Task 7); `buildHistory`, `HistoryItem`, `OpenOutcome` (Task 8); `seal`, `open`, `NoteUnreadable`, `BuiltInKey` (`seal.ts`); `unlockKeyring`, `WrongPassphrase`, `KeyringInvalid` (`unlock.ts`); `Vault` (`vault.ts`).
+- Consumes: `PageApi`, `SignedOut`, `NoKeyring` (Task 6); `Outbox`, `AddReport`, `FlushReport`, `Pending`, `SEND_MESSAGES` (Task 7); `buildHistory`, `HistoryItem`, `OpenOutcome` (Task 8); `seal`, `open`, `NoteUnreadable`, `BuiltInKey` (`seal.ts`); `unlockKeyring`, `WrongPassphrase`, `KeyringInvalid` (`unlock.ts`); `Vault` (`vault.ts`).
 - Produces:
 
 ```ts
@@ -1730,7 +1935,7 @@ export interface NotesSession {
   unlock(passphrase: string): Promise<string | null>;
   /** Every server note, opened; one failure never stops the rest. Throws SignedOut; throws when locked. */
   history(): Promise<HistoryItem[]>;
-  send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<AddReport>;  // seal, then the outbox
+  send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<AddReport>;  // seal, then the outbox; a note that cannot be sealed rejects with Error(SEND_MESSAGES.sealFailed) and stores nothing
   flush(): Promise<FlushReport>;
   kept(): Promise<Pending[]>;
   discard(key: string): Promise<void>;
@@ -1752,7 +1957,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NoKeyring, type PageApi } from '../src/api.ts';
 import { UNLOCK_MESSAGES, createNotesSession } from '../src/notes-session.ts';
-import { createOutbox, memoryOutbox } from '../src/outbox.ts';
+import { SEND_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
 import { PROBLEMS } from '../src/history.ts';
 import { seal } from '../src/seal.ts';
 import { createVault } from '../src/vault.ts';
@@ -1831,6 +2036,15 @@ test('delete one, delete all, and lock forgets the keys', async () => {
   assert.equal(notes.unlocked(), false);
 });
 
+test('a note that cannot be sealed here is a plain message, and nothing is stored', async () => {
+  const s = server();
+  const outbox = createOutbox(memoryOutbox(), s.api, () => 'k');
+  const notes = createNotesSession({ api: s.api, vault: createVault(), outbox, keys: { current: { ...builtIn, spki: 'AAAA' }, previous: [] } });
+  await assert.rejects(notes.send(note('x'), null), (e: unknown) => e instanceof Error && e.message === SEND_MESSAGES.sealFailed);
+  assert.deepEqual(await outbox.pending(), []);
+  assert.equal(s.notes.length, 0);
+});
+
 test('without a key built in nothing seals', async () => {
   const s = server();
   const notes = createNotesSession({ api: s.api, vault: createVault(), outbox: createOutbox(memoryOutbox(), s.api, () => 'k'), keys: { current: null, previous: [] } });
@@ -1855,6 +2069,7 @@ import type { PageApi } from './api.ts';
 import { buildHistory } from './history.ts';
 import type { HistoryItem, OpenOutcome } from './history.ts';
 import type { NoteBody } from './note.ts';
+import { SEND_MESSAGES } from './outbox.ts';
 import type { AddReport, FlushReport, Outbox, Pending } from './outbox.ts';
 import { NoteUnreadable, open, seal } from './seal.ts';
 import type { BuiltInKey } from './seal.ts';
@@ -1862,9 +2077,9 @@ import { KeyringInvalid, WrongPassphrase, unlockKeyring } from './unlock.ts';
 import type { Vault } from './vault.ts';
 
 export const UNLOCK_MESSAGES = {
-  noKeyring: 'No notes key has been uploaded yet (make keys-init).',
+  noKeyring: 'No notes key has been uploaded yet (make music-setup).',
   wrong: 'That passphrase did not unlock the key.',
-  invalid: "The keyring on the server does not match this page's key. Reload the page; if it still fails, run make keys-upload.",
+  invalid: "The keyring on the server does not match this page's key. Reload the page; if it still fails, run make music-setup.",
   signedOut: 'Your sign-in ended. Sign in again.',
   offline: 'Could not reach the server. Check the connection and try again.',
 } as const;
@@ -1937,7 +2152,13 @@ export function createNotesSession(d: SessionDeps): NotesSession {
     async send(body, audio) {
       const key = d.keys.current;
       if (!key) throw new Error('This page has no notes key built in.');
-      return d.outbox.add(await seal(body, audio, key), body.made);
+      let bundle: Uint8Array<ArrayBuffer>;
+      try {
+        bundle = await seal(body, audio, key);
+      } catch {
+        throw new Error(SEND_MESSAGES.sealFailed);
+      }
+      return d.outbox.add(bundle, body.made);
     },
     flush: () => d.outbox.flush(),
     kept: () => d.outbox.pending(),
@@ -2145,7 +2366,7 @@ export function energyLegend(score: Score): readonly string[] {
 ```tsx
 export function UnlockPanel(p: { busy: boolean; error: string | null; onUnlock(passphrase: string): void }): JSX.Element;
 export interface HistoryProps {
-  items: readonly HistoryItem[];  // already in scope
+  items: readonly HistoryItem[];  // already in scope; Delete, Delete all and Discard each ask first (“Delete it” / “Delete all 12 notes” / “Discard this note”, with Keep), all plain secondary buttons
   total: number;                  // every note on the server (Delete all)
   scope: 'piece' | 'all'; onScope(s: 'piece' | 'all'): void;
   version: number;                // the draft on screen
@@ -2158,7 +2379,7 @@ export interface HistoryProps {
 export function History(p: HistoryProps): JSX.Element;
 export function Kept(p: { kept: readonly Pending[]; busy: boolean; onDiscard(key: string): void; onRetry(): void }): JSX.Element | null;
 export interface AnswersProps { notes: NotesSession; score: Score; version: number; refresh: number; onItems(items: readonly HistoryItem[]): void }
-/** The "Your notes" panel: the unlock form until unlocked, then the history; the notes not sent yet either way. Flushes the outbox on mount and whenever the browser comes back online. */
+/** The "Your notes" panel (accessible name “Notes & answers”): the unlock form until unlocked, then the history; the notes not sent yet either way. Flushes the outbox on mount and whenever the browser comes back online. */
 export function Answers(p: AnswersProps): JSX.Element;
 ```
 
@@ -2167,14 +2388,14 @@ export function Answers(p: AnswersProps): JSX.Element;
 ```ts
 // The notes panel: the unlock form suits a password manager and keeps nothing;
 // the history says waiting or picked up, names a damaged note, marks another
-// draft, plays a recording; Delete all and Discard ask first; the notes not
-// sent yet say why.
+// draft, plays a recording; Delete, Delete all and Discard each ask first, in
+// words that name what goes, and none is red; the notes not sent yet say why.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { h, render } from 'preact';
 import { act } from 'preact/test-utils';
-import { fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
+import { fire, installDocument, makeEl, document as stubDocument, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import type { ComponentChild } from 'preact';
@@ -2186,7 +2407,12 @@ import type { Pending } from '../src/outbox.ts';
 import type { Score } from '../src/score.ts';
 
 installDocument();
-Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} } });
+// Every key listener the panel puts on the window or the document, so the Escape test can press Escape at each.
+const keyListeners: unknown[] = [];
+const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); };
+Object.assign(globalThis, { window: { addEventListener: listen, removeEventListener() {} } });
+const addToDocument = stubDocument.addEventListener;
+stubDocument.addEventListener = (type, f) => { listen(type, f); addToDocument(type, f); };
 const ui = await importTsx<{
   unlock: typeof import('../src/ui/UnlockPanel.tsx');
   history: typeof import('../src/ui/History.tsx');
@@ -2228,7 +2454,7 @@ test('a wrong passphrase is shown, not thrown', async () => {
   assert.equal(byAttr(root, 'role', 'alert')!.textContent, 'That passphrase did not unlock the key.');
 });
 
-test('each note: when, waiting or picked up, its words, where, another draft, a problem, Delete', async () => {
+test('each note: when, waiting or picked up, its words, where, another draft, a problem; Delete asks first', async () => {
   const deleted: string[] = [];
   const items = [
     item('a', {}, { draft: 2 }),
@@ -2247,7 +2473,14 @@ test('each note: when, waiting or picked up, its words, where, another draft, a 
   const del = walk(notes[2]!).find(e => e.localName === 'button')!;
   assert.equal(del.textContent, 'Delete');
   assert.match(del._attrs['aria-label'] ?? '', /^Delete note from /);
-  fire(del, 'click');
+  await act(() => { fire(del, 'click'); });
+  assert.deepEqual(deleted, [], 'one tap only asks');
+  assert.match(notes[2]!.textContent, /Delete this note\? This cannot be undone\./);
+  await act(() => { fire(button(notes[2]!, 'Keep it')!, 'click'); });
+  assert.deepEqual(deleted, []);
+  assert.doesNotMatch(notes[2]!.textContent, /cannot be undone/);
+  await act(() => { fire(button(notes[2]!, 'Delete')!, 'click'); });
+  await act(() => { fire(button(notes[2]!, 'Delete it')!, 'click'); });
   assert.deepEqual(deleted, ['c'.repeat(32)]);
 });
 
@@ -2261,17 +2494,27 @@ test('a recording plays from a blob: URL', async () => {
   assert.match(player._attrs['src'] ?? (player as unknown as { src: string }).src, /^blob:/);
 });
 
-test('Delete all asks first, names the count, and says it is every piece', async () => {
+test('Delete all asks first, names the count on its button, and says it is every piece', async () => {
   let all = 0;
-  const root = await mount(h(ui.history.History, historyProps({ items: [item('a'), item('b')], total: 5, onDeleteAll: () => all++ })));
+  const root = await mount(h(ui.history.History, historyProps({ items: [item('a'), item('b')], total: 12, onDeleteAll: () => all++ })));
   await act(() => { fire(button(root, 'Delete all')!, 'click'); });
   assert.equal(all, 0);
-  assert.match(root.textContent, /Delete all 5 notes, on every piece\? This cannot be undone\./);
+  assert.match(root.textContent, /Delete all 12 notes, on every piece\? This cannot be undone\./);
   await act(() => { fire(button(root, 'Keep them')!, 'click'); });
   assert.doesNotMatch(root.textContent, /cannot be undone/);
   await act(() => { fire(button(root, 'Delete all')!, 'click'); });
-  await act(() => { fire(button(root, 'Delete all notes')!, 'click'); });
+  await act(() => { fire(button(root, 'Delete all 12 notes')!, 'click'); });
   assert.equal(all, 1);
+});
+
+test('nothing in the notes panel is red: destructive actions are plain buttons with explicit words', async () => {
+  const pending: Pending[] = [{ key: 'k1', bundle: new Uint8Array(1), made: '2026-10-20T00:00:00.000Z', reason: 'offline' }];
+  const root = await mount(h(ui.history.History, historyProps({ items: [item('a')], total: 3, kept: pending })));
+  await act(() => { fire(button(root, 'Delete all')!, 'click'); });
+  await act(() => { fire(button(root, 'Delete')!, 'click'); });
+  await act(() => { fire(button(root, 'Discard')!, 'click'); });
+  assert.ok(button(root, 'Delete all 3 notes') && button(root, 'Delete it') && button(root, 'Discard this note'));
+  assert.doesNotMatch(walk(root).map(e => e._attrs['class'] ?? '').join(' '), /record/, 'red is the colour of recording');
 });
 
 test('the scope chips switch between this piece and all pieces', async () => {
@@ -2294,10 +2537,29 @@ test('notes not sent yet say why; Discard asks first; Try again flushes', async 
   const first = walk(root).find(e => e._attrs['data-kept-note'] === 'k1')!;
   await act(() => { fire(walk(first).find(e => e.localName === 'button' && e.textContent === 'Discard')!, 'click'); });
   assert.deepEqual(discarded, []);
-  await act(() => { fire(button(root, 'Discard it')!, 'click'); });
+  await act(() => { fire(button(root, 'Discard this note')!, 'click'); });
   assert.deepEqual(discarded, ['k1']);
   fire(button(root, 'Try again')!, 'click');
   assert.equal(retries, 1);
+});
+
+test('the questions that ask before deleting or discarding take no Escape: the question stays until it is answered', async () => {
+  const calls: string[] = [];
+  const kept: Pending[] = [{ key: 'k1', bundle: new Uint8Array(1), made: '2026-10-20T00:00:00.000Z', reason: 'offline' }];
+  const root = await mount(h(ui.history.History, historyProps({ items: [item('a')], total: 4, kept, onDelete: () => calls.push('delete'), onDeleteAll: () => calls.push('all'), onDiscard: () => calls.push('discard') })));
+  await act(() => { fire(button(root, 'Delete all')!, 'click'); });
+  await act(() => { fire(button(root, 'Delete')!, 'click'); });
+  await act(() => { fire(button(root, 'Discard')!, 'click'); });
+  assert.equal(walk(root).filter(e => e._attrs['role'] === 'group' && /^Delete/.test(e._attrs['aria-label'] ?? '')).length, 2, 'both questions are open');
+  let taken = 0;
+  for (const el of [root, ...walk(root)]) for (const type of ['keydown', 'keyup', 'keypress']) fire(el, type, { key: 'Escape', code: 'Escape', keyCode: 27, preventDefault: () => { taken++; }, stopPropagation: () => { taken++; } });
+  for (const f of keyListeners) {
+    const ev = { type: 'keydown', key: 'Escape', preventDefault: () => { taken++; }, stopPropagation: () => { taken++; } };
+    (f as (e: typeof ev) => void)(ev);
+  }
+  assert.equal(taken, 0);
+  assert.ok(button(root, 'Delete all 4 notes') && button(root, 'Delete it') && button(root, 'Discard this note'), 'the questions are still open');
+  assert.deepEqual(calls, []);
 });
 
 function fakeSession(over: Partial<NotesSession> = {}): NotesSession & { calls: string[] } {
@@ -2308,7 +2570,7 @@ function fakeSession(over: Partial<NotesSession> = {}): NotesSession & { calls: 
     unlocked: () => open,
     unlock: async p => { calls.push(`unlock ${p}`); if (p !== 'right') return 'That passphrase did not unlock the key.'; open = true; return null; },
     history: async () => { calls.push('history'); return [item('a'), item('e', {}, { piece: 'other-piece' })]; },
-    send: async () => ({ key: 'k', sent: [], kept: [] }),
+    send: async () => ({ key: 'k', memoryOnly: false, sent: [], kept: [] }),
     flush: async () => { calls.push('flush'); return { sent: [], kept: [] }; },
     kept: async () => [],
     discard: async () => {},
@@ -2324,7 +2586,7 @@ test('the notes panel: locked it asks for the passphrase and lists nothing; unlo
   const seen: number[] = [];
   const root = await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, onItems: (i: readonly HistoryItem[]) => seen.push(i.length) }));
   await settle();
-  assert.equal(byAttr(root, 'aria-label', 'Your notes')!.localName, 'section', 'the panel is named by its title');
+  assert.equal(byAttr(root, 'aria-label', 'Notes & answers')!.localName, 'section', 'the panel is "Notes & answers", not the name of the note box');
   assert.ok(byAttr(root, 'autocomplete', 'current-password'));
   assert.doesNotMatch(root.textContent, /Waiting|Picked up|Delete all/);
   assert.deepEqual(notes.calls, ['flush'], 'the outbox is flushed on mount; nothing is listed before an unlock');
@@ -2341,6 +2603,7 @@ test('the notes panel: locked it asks for the passphrase and lists nothing; unlo
   assert.equal(walk(root).filter(e => e._attrs['data-note'] !== undefined).length, 1, 'this piece only');
   assert.deepEqual(seen, [2], 'the Workroom gets every note, for the timeline');
   await act(() => { fire(walk(root).find(e => e.localName === 'button' && e.textContent === 'Delete')!, 'click'); });
+  await act(() => { fire(button(root, 'Delete it')!, 'click'); });
   await settle();
   assert.ok(notes.calls.includes('remove a'));
 });
@@ -2353,8 +2616,9 @@ test('the notes panel: locked it asks for the passphrase and lists nothing; unlo
 ```tsx
 // The passphrase form that unlocks the notes on this page view. A password
 // manager fills it (a username it never shows, and a current-password field).
-// Nothing is remembered: the field is cleared on submit and the passphrase is
-// asked on every visit.
+// Nothing is remembered by the page: the field is cleared on submit and the
+// passphrase is asked on every visit. Chrome's own password manager may offer
+// to save the pair; the owner dismisses that prompt.
 import { useState } from 'preact/hooks';
 import { Button } from './console/Button.tsx';
 
@@ -2375,7 +2639,7 @@ export function UnlockPanel(p: UnlockPanelProps) {
         <input type="password" name="password" autocomplete="current-password" required value={value} onInput={e => setValue(e.currentTarget.value)}
           class="min-h-11 rounded-md border border-rule bg-well px-3 font-body text-base tracking-normal text-ink normal-case focus-visible:outline-2 focus-visible:outline-amber" />
       </label>
-      {p.error ? <p class="error" role="alert">{p.error}</p> : null}
+      {p.error ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{p.error}</p> : null}
       <Button variant="primary" submit disabled={p.busy}>{p.busy ? 'Unlocking…' : 'Unlock notes'}</Button>
     </form>
   );
@@ -2387,8 +2651,9 @@ export function UnlockPanel(p: UnlockPanelProps) {
 ```tsx
 // The owner's notes: this piece's or all of them, newest first, each waiting or
 // picked up, with its words, its recording, its shape or why it could not be
-// opened, and Delete. Delete all asks first. Below, the notes not sent yet,
-// with why, Discard (which asks first) and Try again.
+// opened, and Delete. Delete, Delete all and Discard each ask first, in words
+// that name what goes; none is red (red is the colour of recording). Below, the
+// notes not sent yet, with why, and Try again.
 import { useEffect, useState } from 'preact/hooks';
 import { KIND_LABELS, REACTION_LABELS, spanLabel } from '../answer.ts';
 import type { HistoryItem } from '../history.ts';
@@ -2469,7 +2734,7 @@ export function Kept(p: { kept: readonly Pending[]; busy: boolean; onDiscard(key
             <p class="text-sm">{k.reason === 'new' ? 'Sending…' : KEPT_MESSAGES[k.reason]}</p>
             {asking === k.key ? (
               <div class="flex flex-wrap gap-2">
-                <Button variant="record" disabled={p.busy} onClick={() => { setAsking(null); p.onDiscard(k.key); }}>Discard it</Button>
+                <Button disabled={p.busy} onClick={() => { setAsking(null); p.onDiscard(k.key); }}>Discard this note</Button>
                 <Button variant="ghost" onClick={() => setAsking(null)}>Keep it</Button>
               </div>
             ) : <div class="flex justify-end"><Button variant="ghost" disabled={p.busy} onClick={() => setAsking(k.key)}>Discard</Button></div>}
@@ -2482,9 +2747,11 @@ export function Kept(p: { kept: readonly Pending[]; busy: boolean; onDiscard(key
 }
 
 const deleteAllQuestion = (n: number): string => (n === 1 ? 'Delete the one note? This cannot be undone.' : `Delete all ${n} notes, on every piece? This cannot be undone.`);
+const deleteAllLabel = (n: number): string => (n === 1 ? 'Delete the one note' : `Delete all ${n} notes`);
 
 export function History(p: HistoryProps) {
   const [asking, setAsking] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   return (
     <div data-history="" class="grid gap-3">
       <div class="flex flex-wrap gap-2" role="group" aria-label="Which notes">
@@ -2506,19 +2773,29 @@ export function History(p: HistoryProps) {
                   ? <Summary body={i.opened.body} audio={i.opened.audio} version={p.version} lane={i.opened.body.lane ? p.laneName(i.opened.body.lane) : null} />
                   : <p class="text-sm text-dim">{i.problem ?? 'Opening…'}</p>}
                 {answered ? <p class="text-sm text-amber">{answered}</p> : null}
-                <div class="flex justify-end">
-                  <Button variant="ghost" label={`Delete note from ${arrivedAt(i.arrived)}`} disabled={p.busy} onClick={() => p.onDelete(i.id)}>Delete</Button>
-                </div>
+                {deleting === i.id ? (
+                  <div role="group" aria-label={`Delete note from ${arrivedAt(i.arrived)}`} class="grid gap-2 rounded-md border border-amber p-3">
+                    <p>Delete this note? This cannot be undone.</p>
+                    <div class="flex flex-wrap gap-2">
+                      <Button disabled={p.busy} onClick={() => { setDeleting(null); p.onDelete(i.id); }}>Delete it</Button>
+                      <Button variant="ghost" onClick={() => setDeleting(null)}>Keep it</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div class="flex justify-end">
+                    <Button variant="ghost" label={`Delete note from ${arrivedAt(i.arrived)}`} disabled={p.busy} onClick={() => setDeleting(i.id)}>Delete</Button>
+                  </div>
+                )}
               </li>
             );
           })}
         </ol>
       )}
       {p.total > 0 ? (asking ? (
-        <div role="group" aria-label="Delete all notes" class="grid gap-2 rounded-md border border-record p-3">
+        <div role="group" aria-label="Delete all notes" class="grid gap-2 rounded-md border border-amber p-3">
           <p>{deleteAllQuestion(p.total)}</p>
           <div class="flex flex-wrap gap-2">
-            <Button variant="record" disabled={p.busy} onClick={() => { setAsking(false); p.onDeleteAll(); }}>Delete all notes</Button>
+            <Button disabled={p.busy} onClick={() => { setAsking(false); p.onDeleteAll(); }}>{deleteAllLabel(p.total)}</Button>
             <Button variant="ghost" onClick={() => setAsking(false)}>Keep them</Button>
           </div>
         </div>
@@ -2599,7 +2876,7 @@ export function Answers(p: AnswersProps) {
   const numbers = new Map(timelineMarks(items, piece, p.score.duration).map(m => [m.id, m.n]));
   const keptList = <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key))} onRetry={() => void act(() => p.notes.flush())} />;
   return (
-    <Panel title="Your notes" class="grid gap-3" data={{ 'data-answers': '' }}>
+    <Panel title="Your notes" label="Notes & answers" class="grid gap-3" data={{ 'data-answers': '' }}>
       {!unlocked ? (
         <>
           <UnlockPanel busy={busy} error={error} onUnlock={pass => void unlock(pass)} />
@@ -2607,7 +2884,7 @@ export function Answers(p: AnswersProps) {
         </>
       ) : (
         <>
-          {error ? <p class="error" role="alert">{error}</p> : null}
+          {error ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{error}</p> : null}
           <History items={scope === 'piece' ? forPiece(items, piece) : items} total={items.length} scope={scope} onScope={setScope} version={p.version}
             laneName={id => p.score.lanes.find(l => l.id === id)?.name ?? null}
             numberOf={id => numbers.get(id) ?? null}
@@ -2643,12 +2920,18 @@ export function Answers(p: AnswersProps) {
 
 ```tsx
 export function RecordButton(p: { recording: boolean; seconds: number; disabled?: boolean; idle?: string; onStart(): void; onStop(): void }): JSX.Element;
-  // idle text (default "Hum it"); recording: "Stop (0:12 of 1:00)", the record variant, aria-pressed
-export interface PinComposerProps { span: Span | null; laneName: string | null; recording: boolean; seconds: number; canRecord: boolean; busy: boolean; onSend(text: string): void; onRecord(): void; onStop(): void; onCancel(): void }
+  // idle text (default "Hum it"); recording: "Stop (0:12 of 1:00)", the record variant, aria-pressed. The answer bar's dock shows the Stop.
+export interface PinComposerProps {
+  span: Span | null; laneName: string | null; recording: boolean; canRecord: boolean; busy: boolean;
+  status: string | null;                      // what became of the last send, in the composer where the owner is looking (role="status")
+  onSend(text: string): Promise<boolean>;     // true once the note is stored; false leaves the words in the box
+  onRecord(): void; onCancel(): void;
+}
 export function PinComposer(p: PinComposerProps): JSX.Element;
   // "Drag across the Story view to pick a span, or tap one moment." until a span is set, then "For Bars 5–7 · 8 s – 13.6 s · Horns" (the lane's name);
-  // a textarea labelled "Your note" (maxlength 4000; "N characters left" under 500 left); Send (disabled until a span AND words),
-  // Record / Stop (when the browser can record; Record disabled until a span), Cancel. Send clears the text.
+  // a textarea inside <label>Your note</label> (maxlength 4000; "N characters left" from the last 500, i.e. from 3,500 characters), Send (disabled until a span AND words),
+  // Record (when the browser can record; disabled until a span; "Recording…" and disabled while one runs; its Stop is in the dock), Cancel.
+  // The words are cleared only after onSend resolves true.
 export function ReactBar(p: { section: Section; whole: boolean; busy: boolean; onReact(r: Reaction): void }): JSX.Element;
   // "React to: <section name>" or "React to the whole piece"; the eight reactions, nothing else
 ```
@@ -2656,22 +2939,28 @@ export function ReactBar(p: { section: Section; whole: boolean; busy: boolean; o
 - [ ] **Step 1: Write the failing test** (`test/composers.test.ts`):
 
 ```ts
-// The composers are thin: Send waits for a span and words; Record waits for a
-// span; a recording shows its clock against the minute; the eight reactions
-// and nothing else; no key is bound.
+// The composers are thin: Send waits for a span and words and keeps the words
+// until the note is stored; Record waits for a span; a recording shows its
+// clock against the minute; the eight reactions and nothing else; and no
+// control answers Escape, to the element or to any window or document key listener.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { h, render } from 'preact';
 import type { ComponentChild } from 'preact';
 import { act } from 'preact/test-utils';
-import { fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
+import { fire, installDocument, makeEl, document as stubDocument, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import type { Score } from '../src/score.ts';
 
 installDocument();
+// Every key listener the components put on the window or the document, so the Escape test can press Escape at each.
+const keyListeners: unknown[] = [];
+const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); };
+Object.assign(globalThis, { window: { addEventListener: listen, removeEventListener() {} } });
+const addToDocument = stubDocument.addEventListener;
+stubDocument.addEventListener = (type, f) => { listen(type, f); addToDocument(type, f); };
 const ui = await importTsx<{
   pin: typeof import('../src/ui/PinComposer.tsx');
   rec: typeof import('../src/ui/RecordButton.tsx');
@@ -2681,18 +2970,20 @@ const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import
 const buttons = (root: StubElement) => walk(root).filter(e => e.localName === 'button');
 const button = (root: StubElement, text: string) => buttons(root).find(e => e.textContent === text);
 const mountInto = async (target: StubElement, vnode: ComponentChild): Promise<void> => { await act(() => { render(vnode, renderTarget(target)); }); };
+const settle = async (): Promise<void> => { for (let i = 0; i < 5; i++) await act(async () => { await new Promise(r => setImmediate(r)); }); };
 
 const span = { from: 8, to: 13.6, fromBar: 5, toBar: 7, laneId: 'brass' };
-const pinProps = (extra: Record<string, unknown> = {}) => ({ span: null, laneName: null, recording: false, seconds: 0, canRecord: true, busy: false, onSend: () => {}, onRecord: () => {}, onStop: () => {}, onCancel: () => {}, ...extra });
+const pinProps = (extra: Record<string, unknown> = {}) => ({ span: null, laneName: null, recording: false, canRecord: true, busy: false, status: null, onSend: async () => true, onRecord: () => {}, onCancel: () => {}, ...extra });
 
-test('Send waits for a span and words, sends the words, and clears the box', async () => {
+test('Send waits for a span and words, sends the words, and clears the box once the note is stored', async () => {
   const root = makeEl('root');
   const sent: string[] = [];
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ onSend: (t: string) => sent.push(t) })));
+  const onSend = async (t: string): Promise<boolean> => { sent.push(t); return true; };
+  await mountInto(root, h(ui.pin.PinComposer, pinProps({ onSend })));
   assert.match(root.textContent, /Drag across the Story view to pick a span, or tap one moment\./);
   assert.equal(button(root, 'Send')!.disabled, true, 'no span yet');
   assert.equal(button(root, 'Record')!.disabled, true, 'nothing to record against yet');
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, laneName: 'Horns', onSend: (t: string) => sent.push(t) })));
+  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, laneName: 'Horns', onSend })));
   assert.match(root.textContent, /For Bars 5–7 · 8 s – 13\.6 s · Horns/);
   assert.equal(button(root, 'Send')!.disabled, true, 'a span but no words');
   const box = walk(root).find(e => e.localName === 'textarea')!;
@@ -2704,31 +2995,54 @@ test('Send waits for a span and words, sends the words, and clears the box', asy
   await act(() => { fire(box, 'input'); });
   assert.equal(button(root, 'Send')!.disabled, false);
   await act(() => { fire(button(root, 'Send')!, 'click'); });
+  await settle();
   assert.deepEqual(sent, ['louder and slower right here']);
   assert.equal(box.value, '');
 });
 
-test('a long note counts down the characters left', async () => {
+test('a note that was not stored keeps its words in the box', async () => {
+  const root = makeEl('root');
+  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onSend: async () => false })));
+  const box = walk(root).find(e => e.localName === 'textarea')!;
+  box.value = 'do not lose me';
+  await act(() => { fire(box, 'input'); });
+  await act(() => { fire(button(root, 'Send')!, 'click'); });
+  await settle();
+  assert.equal(box.value, 'do not lose me');
+  assert.equal(button(root, 'Send')!.disabled, false, 'it can be sent again');
+});
+
+test('the box is the textbox "Your note", and the composer shows what became of the last send', async () => {
+  const root = makeEl('root');
+  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, status: 'No connection: this note is kept on this device.' })));
+  const label = walk(root).find(e => e.localName === 'label')!;
+  assert.match(label.textContent, /^Your note/);
+  assert.equal(walk(label).filter(e => e.localName === 'textarea').length, 1);
+  assert.equal(walk(root).find(e => e._attrs['role'] === 'status')!.textContent, 'No connection: this note is kept on this device.');
+});
+
+test('the characters left show from the last 500 and count down', async () => {
   const root = makeEl('root');
   await mountInto(root, h(ui.pin.PinComposer, pinProps({ span })));
   const box = walk(root).find(e => e.localName === 'textarea')!;
-  box.value = 'x'.repeat(3700);
-  await act(() => { fire(box, 'input'); });
-  assert.match(root.textContent, /300 characters left/);
+  for (const [length, shown] of [[3499, null], [3500, '500 characters left'], [3700, '300 characters left']] as const) {
+    box.value = 'x'.repeat(length);
+    await act(() => { fire(box, 'input'); });
+    if (shown === null) assert.doesNotMatch(root.textContent, /characters left/, `${length} characters`);
+    else assert.match(root.textContent, new RegExp(shown), `${length} characters`);
+  }
 });
 
-test('recording: Record, then Stop with the clock against the minute; no Record where the browser cannot', async () => {
+test('recording: Record starts it; while it runs the composer says so and offers no second recording', async () => {
   const root = makeEl('root');
   const calls: string[] = [];
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onRecord: () => calls.push('record'), onStop: () => calls.push('stop') })));
+  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onRecord: () => calls.push('record') })));
   fire(button(root, 'Record')!, 'click');
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, recording: true, seconds: 12.4, onRecord: () => calls.push('record'), onStop: () => calls.push('stop') })));
-  const stop = button(root, 'Stop (0:12 of 1:00)')!;
-  assert.equal(stop._attrs['aria-pressed'], 'true');
-  assert.ok((stop._attrs['class'] ?? stop.className).includes('bg-record'));
+  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, recording: true, onRecord: () => calls.push('record') })));
+  assert.equal(button(root, 'Recording…')!.disabled, true);
   assert.equal(button(root, 'Send')!.disabled, true, 'no sending while recording');
-  fire(stop, 'click');
-  assert.deepEqual(calls, ['record', 'stop']);
+  assert.equal(buttons(root).some(b => /^Stop/.test(b.textContent)), false, 'Stop lives in the answer bar\'s dock');
+  assert.deepEqual(calls, ['record']);
   await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, canRecord: false })));
   assert.equal(button(root, 'Record'), undefined);
 });
@@ -2739,6 +3053,10 @@ test('Hum it is a record button with its own clock', async () => {
   await mountInto(root, h(ui.rec.RecordButton, { recording: false, seconds: 0, onStart: () => started++, onStop: () => {} }));
   fire(button(root, 'Hum it')!, 'click');
   assert.equal(started, 1);
+  await mountInto(root, h(ui.rec.RecordButton, { recording: true, seconds: 12.4, onStart: () => {}, onStop: () => {} }));
+  const stop = button(root, 'Stop (0:12 of 1:00)')!;
+  assert.equal(stop._attrs['aria-pressed'], 'true');
+  assert.ok((stop._attrs['class'] ?? stop.className).includes('bg-record'));
   await mountInto(root, h(ui.rec.RecordButton, { recording: true, seconds: 61, onStart: () => {}, onStop: () => {} }));
   assert.ok(button(root, 'Stop (1:00 of 1:00)'), 'the clock stops at the minute');
 });
@@ -2756,10 +3074,35 @@ test('eight reactions on a section, and the whole piece when there is none', asy
   assert.match(root.textContent, /React to the whole piece/);
 });
 
-test('no answering control binds a key, Escape least of all', () => {
-  const dir = join(import.meta.dirname, '..', 'src', 'ui');
-  const files = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? files(join(d, e.name)) : e.name.endsWith('.tsx') ? [join(d, e.name)] : []));
-  for (const f of files(dir)) assert.doesNotMatch(readFileSync(f, 'utf8'), /['"`]Escape['"`]|['"`]Esc['"`]/, f);
+test('no composer takes Escape: not on any of its elements, nor at any window or document key listener', async () => {
+  const calls: string[] = [];
+  const root = makeEl('root');
+  const mounts: ComponentChild[] = [
+    h(ui.pin.PinComposer, pinProps({ span, onRecord: () => calls.push('record'), onCancel: () => calls.push('cancel'), onSend: async () => { calls.push('send'); return true; } })),
+    h(ui.pin.PinComposer, pinProps({ span, recording: true, onCancel: () => calls.push('cancel') })),
+    h(ui.rec.RecordButton, { recording: true, seconds: 3, onStart: () => calls.push('start'), onStop: () => calls.push('stop') }),
+    h(ui.react.ReactBar, { section: score.sections[1]!, whole: false, busy: false, onReact: () => calls.push('react') }),
+  ];
+  for (const vnode of mounts) {
+    await mountInto(root, vnode);
+    const before = walk(root).length;
+    let taken = 0;
+    for (const el of [root, ...walk(root)]) {
+      for (const type of ['keydown', 'keyup', 'keypress']) {
+        const ev = { key: 'Escape', code: 'Escape', keyCode: 27, preventDefault: () => { taken++; }, stopPropagation: () => { taken++; } };
+        fire(el, type, ev);
+      }
+    }
+    const pressed = keyListeners.map(f => {
+      const ev = { type: 'keydown', key: 'Escape', prevented: false, stopped: false, preventDefault() { ev.prevented = true; }, stopPropagation() { ev.stopped = true; } };
+      (f as (e: typeof ev) => void)(ev);
+      return ev;
+    });
+    assert.equal(taken, 0, 'no element takes Escape');
+    assert.ok(pressed.every(ev => !ev.prevented && !ev.stopped), 'no global key listener takes Escape');
+    assert.equal(walk(root).length, before, 'the component is still there');
+  }
+  assert.deepEqual(calls, [], 'Escape triggered nothing');
 });
 ```
 
@@ -2791,14 +3134,23 @@ export function RecordButton(p: RecordButtonProps) {
 ```tsx
 // Pinning a typed or spoken note on the moment or span picked on the Story
 // view (and its lane, when both ends were in one): the words, or a recording.
+// The words stay in the box until the sealed note is stored, so a note that
+// could not be sealed or kept is never lost. The Stop button of a recording
+// lives in the answer bar's dock (AnswerBar.tsx), which is always on screen.
 import { useState } from 'preact/hooks';
 import { spanLabel } from '../answer.ts';
 import type { Span } from '../hit.ts';
 import { MAX_TEXT } from '../note.ts';
 import { Button } from './console/Button.tsx';
-import { RecordButton } from './RecordButton.tsx';
 
-export interface PinComposerProps { span: Span | null; laneName: string | null; recording: boolean; seconds: number; canRecord: boolean; busy: boolean; onSend(text: string): void; onRecord(): void; onStop(): void; onCancel(): void }
+export interface PinComposerProps {
+  span: Span | null; laneName: string | null; recording: boolean; canRecord: boolean; busy: boolean;
+  /** What became of the last send (or why it failed), shown inside the composer where the owner is looking. */
+  status: string | null;
+  /** Resolves true once the note is stored; false leaves the words in the box. */
+  onSend(text: string): Promise<boolean>;
+  onRecord(): void; onCancel(): void;
+}
 
 export function PinComposer(p: PinComposerProps) {
   const [text, setText] = useState('');
@@ -2811,12 +3163,13 @@ export function PinComposer(p: PinComposerProps) {
         <textarea rows={3} maxLength={MAX_TEXT} value={text} onInput={e => setText(e.currentTarget.value)}
           class="min-h-24 rounded-md border border-rule bg-well p-3 font-body text-base tracking-normal text-ink normal-case focus-visible:outline-2 focus-visible:outline-amber" />
       </label>
-      {left < 500 ? <p class="font-mono text-xs text-dim">{`${left} characters left`}</p> : null}
+      {left <= 500 ? <p class="font-mono text-xs text-dim">{`${left} characters left`}</p> : null}
       <div class="flex flex-wrap gap-2">
-        <Button variant="primary" disabled={!p.span || text.trim() === '' || p.busy || p.recording} onClick={() => { const t = text; setText(''); p.onSend(t); }}>Send</Button>
-        {p.canRecord ? <RecordButton recording={p.recording} seconds={p.seconds} idle="Record" disabled={!p.span || p.busy} onStart={p.onRecord} onStop={p.onStop} /> : null}
+        <Button variant="primary" disabled={!p.span || text.trim() === '' || p.busy || p.recording} onClick={() => { void p.onSend(text).then(stored => { if (stored) setText(''); }); }}>Send</Button>
+        {p.canRecord ? <Button variant="record" disabled={!p.span || p.busy || p.recording} onClick={p.onRecord}>{p.recording ? 'Recording…' : 'Record'}</Button> : null}
         <Button variant="ghost" onClick={p.onCancel}>Cancel</Button>
       </div>
+      <p role="status" data-answer-status="" class="min-h-5 text-sm">{p.status ?? ''}</p>
     </div>
   );
 }
@@ -2865,7 +3218,7 @@ export function ReactBar(p: ReactBarProps) {
 - Produces:
 
 ```tsx
-export interface EnergyEditorProps { score: Score; tempo: TempoMap; view: View; busy: boolean; onSend(curve: Curve): void; onCancel(): void }
+export interface EnergyEditorProps { score: Score; tempo: TempoMap; view: View; busy: boolean; onSend(curve: Curve): void; onCancel(): void; onHold?(held: boolean): void } // onHold: true while a stroke is in progress (the playhead's follow is held), false when it ends or is cancelled
 /** A 160 px drawing well on the shared view: the energy now dashed, the owner's shape in go, the live stroke in amber, the sections faint, the time axis; Send this shape / Start over / Cancel under it (data-guide="energy-actions"). */
 export function EnergyEditor(p: EnergyEditorProps): JSX.Element;
 ```
@@ -2894,9 +3247,9 @@ const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import
 const button = (root: StubElement, text: string) => walk(root).find(e => e.localName === 'button' && e.textContent === text)!;
 const named = (root: StubElement, attr: string) => walk(root).filter(e => e._attrs[attr] !== undefined);
 
-const mount = async (onSend: (c: [number, number][]) => void = () => {}) => {
+const mount = async (onSend: (c: [number, number][]) => void = () => {}, onHold?: (held: boolean) => void) => {
   const root = makeEl('root');
-  await act(() => { render(h(ui.editor.EnergyEditor, { score, tempo: tempoMap(score), view: fitView(16, 720), busy: false, onSend, onCancel: () => {} }), renderTarget(root)); });
+  await act(() => { render(h(ui.editor.EnergyEditor, { score, tempo: tempoMap(score), view: fitView(16, 720), busy: false, onSend, onHold, onCancel: () => {} }), renderTarget(root)); });
   return root;
 };
 const drag = async (svg: StubElement, points: [number, number][], end: 'pointerup' | 'pointercancel' = 'pointerup') => {
@@ -2933,6 +3286,22 @@ test('a drag draws a shape; Send sends the whole curve from 0 to the end', async
   assert.ok(curve.every(([, v]) => v >= 0 && v <= 1));
 });
 
+test('a stroke in progress holds the playhead\'s follow, and lets go when it ends or is cancelled', async () => {
+  const holds: boolean[] = [];
+  const root = await mount(() => {}, held => holds.push(held));
+  const svg = named(root, 'data-energy-editor')[0]!;
+  await act(() => { fire(svg, 'pointerdown', { pointerId: 1, clientX: 100, clientY: 100 }); });
+  assert.deepEqual(holds, [true]);
+  await act(() => { fire(svg, 'pointermove', { pointerId: 1, clientX: 200, clientY: 60 }); });
+  await act(() => { fire(svg, 'pointerup', { pointerId: 1, clientX: 200, clientY: 60 }); });
+  assert.deepEqual(holds, [true, false]);
+  await act(() => { fire(svg, 'pointerdown', { pointerId: 1, clientX: 100, clientY: 100 }); });
+  await act(() => { fire(svg, 'pointercancel', { pointerId: 1 }); });
+  assert.deepEqual(holds, [true, false, true, false]);
+  await act(() => { fire(svg, 'pointercancel', { pointerId: 1 }); });
+  assert.deepEqual(holds, [true, false, true, false], 'a cancel with no stroke holds nothing');
+});
+
 test('Start over brings the line back; a cancelled pointer draws nothing', async () => {
   const root = await mount();
   const svg = named(root, 'data-energy-editor')[0]!;
@@ -2953,8 +3322,10 @@ test('Start over brings the line back; a cancelled pointer draws nothing', async
 // Drawing the energy the owner wants: a 160 px well over the shared time axis,
 // the energy now as a dashed line, each stroke replacing the curve under its
 // own time span, the sections faint behind for orientation. Pointer only; the
-// buttons under it send the shape, start over or leave.
-import { useMemo, useRef, useState } from 'preact/hooks';
+// buttons under it send the shape, start over or leave. While a stroke is in
+// progress it holds the playhead's follow (onHold), as the other views do, so
+// playback never scrolls the drawing under the finger.
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { axisTicks } from '../axis.ts';
 import { readableOn } from '../color.ts';
 import { ENERGY_EDIT_H, curveToPixels, redraw, strokeFromPixels } from '../energy.ts';
@@ -2968,7 +3339,7 @@ import { Button } from './console/Button.tsx';
 import { AXIS_H, Axis } from './parts.tsx';
 import { useTheme } from './theme-context.ts';
 
-export interface EnergyEditorProps { score: Score; tempo: TempoMap; view: View; busy: boolean; onSend(curve: Curve): void; onCancel(): void }
+export interface EnergyEditorProps { score: Score; tempo: TempoMap; view: View; busy: boolean; onSend(curve: Curve): void; onCancel(): void; /** true while a stroke is being drawn, false once it ends or is cancelled. */ onHold?(held: boolean): void }
 
 interface PointerLike { pointerId: number; clientX: number; clientY: number; currentTarget: Element }
 const local = (e: PointerLike): [number, number] => {
@@ -2985,12 +3356,17 @@ export function EnergyEditor(p: EnergyEditorProps) {
   const [drawn, setDrawn] = useState(false);
   const [live, setLive] = useState<[number, number][]>([]);
   const stroke = useRef<[number, number][] | null>(null);
+  const latest = useRef(p);
+  latest.current = p;
+  // A drawing left mid-stroke never sees its release.
+  useEffect(() => () => { if (stroke.current) latest.current.onHold?.(false); }, []);
   const sections = useMemo(() => score.sections.map(s => ({ ...sectionTimes(s, p.tempo, score.duration), id: s.id, fill: readableOn(theme, s.color, 'mark') })), [score, p.tempo, theme]);
   const height = ENERGY_EDIT_H + AXIS_H;
   const end = (): void => {
     const s = stroke.current;
     stroke.current = null;
     setLive([]);
+    if (s) p.onHold?.(false);
     if (!s || s.length === 0) return;
     setCurve(c => redraw(c, strokeFromPixels(s, view), score.duration));
     setDrawn(true);
@@ -2999,10 +3375,10 @@ export function EnergyEditor(p: EnergyEditorProps) {
     <div class="grid gap-2">
       <svg data-energy-editor="" data-guide="energy-editor" class="block max-w-full cursor-crosshair touch-none select-none" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`}
         role="img" aria-label="The energy drawing: drag across it to draw the shape you want"
-        onPointerDown={(e: PointerLike) => { e.currentTarget.setPointerCapture?.(e.pointerId); stroke.current = [local(e)]; setLive([local(e)]); }}
+        onPointerDown={(e: PointerLike) => { e.currentTarget.setPointerCapture?.(e.pointerId); stroke.current = [local(e)]; setLive([local(e)]); p.onHold?.(true); }}
         onPointerMove={(e: PointerLike) => { const s = stroke.current; if (!s) return; s.push(local(e)); setLive(s.slice()); }}
         onPointerUp={end}
-        onPointerCancel={() => { stroke.current = null; setLive([]); }}>
+        onPointerCancel={() => { if (stroke.current) p.onHold?.(false); stroke.current = null; setLive([]); }}>
         <rect class="fill-well" x={0} y={0} width={view.width} height={ENERGY_EDIT_H} />
         {sections.map(s => <rect class="pointer-events-none opacity-20" data-energy-section={s.id} x={timeToX(view, s.from)} y={0} width={Math.max(0, (s.to - s.from) * view.pxPerSec)} height={ENERGY_EDIT_H} fill={s.fill} />)}
         <polyline data-energy-now="" class="pointer-events-none stroke-dim" fill="none" stroke-width={2} stroke-dasharray="6 4" points={points(curveToPixels(score.energy, view))} />
@@ -3037,7 +3413,7 @@ export function EnergyEditor(p: EnergyEditorProps) {
 ```ts
 // src/ui/surface.ts: SurfaceProps gains
 mode?: 'pan' | 'select';                                                        // default 'pan'
-onSelect?(x0: number, x1: number, y: number, done: boolean, cancelled: boolean): void;
+onSelect?(x0: number, x1: number, y0: number, y1: number, done: boolean, cancelled: boolean): void; // from (x0, y0) to where the pointer is now (x1, y1)
 onTap?(x: number, y: number): void;                                             // after onSeek
 // src/ui/Timeline.tsx
 export interface TimelineSelect { span: Span | null; onPick(span: Span | null, done: boolean): void } // null: the preview was cancelled
@@ -3099,6 +3475,20 @@ test('a drag in select mode picks a span with its bars and lane, previewed as it
   assert.deepEqual([span!.fromBar, span!.toBar, span!.laneId], [5, 7, 'brass']);
 });
 
+test('a drag keeps the lane only when it starts and ends in the same lane', async () => {
+  const r = await mount();
+  const svg = svgOf(r);
+  await act(() => { fire(svg, 'pointerdown', at(360, 120, 0)); });
+  await act(() => { fire(svg, 'pointermove', at(500, 85, 50)); });
+  await act(() => { fire(svg, 'pointerup', at(612, 80, 100)); });
+  const diagonal = r.picks.at(-1)![0]!;
+  assert.deepEqual([diagonal.fromBar, diagonal.toBar, diagonal.laneId], [5, 7, null], 'brass to the strings below: no lane');
+  await act(() => { fire(svg, 'pointerdown', at(360, 115, 200)); });
+  await act(() => { fire(svg, 'pointermove', at(500, 140, 250)); });
+  await act(() => { fire(svg, 'pointerup', at(612, 145, 300)); });
+  assert.equal(r.picks.at(-1)![0]!.laneId, 'brass', 'both ends in brass, at different heights: the lane stays');
+});
+
 test('a tap in select mode picks a moment and still moves the playhead', async () => {
   const r = await mount();
   const svg = svgOf(r);
@@ -3150,20 +3540,20 @@ test('the picked span is drawn in its lane; the owner\'s notes are drawn numbere
 ```ts
   /** 'select' (pinning): one finger picks a span instead of panning; two still pinch. */
   mode?: 'pan' | 'select';
-  /** A span being picked (x in surface pixels); done closes it; cancelled drops the preview. */
-  onSelect?(x0: number, x1: number, y: number, done: boolean, cancelled: boolean): void;
+  /** A span being picked (x and y in surface pixels): it starts at (x0, y0) and the pointer is now at (x1, y1); done closes it; cancelled drops the preview. */
+  onSelect?(x0: number, x1: number, y0: number, y1: number, done: boolean, cancelled: boolean): void;
   /** A tap, after onSeek, with where it landed. */
   onTap?(x: number, y: number): void;
 ```
 
-  Create the machine with `createGestures(() => live.current.view, () => live.current.bounds, () => live.current.mode ?? 'pan')`, and in `apply` handle the other two outputs:
+  Create the machine with `createGestures(() => live.current.view, () => live.current.bounds, () => live.current.mode ?? 'pan')`. The gesture machine's `select` output carries the y where the drag started; where it ends is the pointer's own y, so `apply` takes it as a second argument, `apply = (outs: GestureOut[], y?: number)`, and the move and up handlers pass it (`onPointerMove: e => apply(g.move(at(e)), at(e).y)`, `onPointerUp(e) { apply(g.up(at(e)), at(e).y); … }`; the other callers pass nothing). `apply` handles the other two outputs:
 
 ```ts
       if (o.kind === 'tap') {
         onSeek(Math.min(duration, Math.max(0, xToTime(view, o.x))));
         live.current.onTap?.(o.x, o.y);
       } else if (o.kind === 'select') {
-        live.current.onSelect?.(o.x0, o.x1, o.y, o.done, o.cancelled === true);
+        live.current.onSelect?.(o.x0, o.x1, o.y, y ?? o.y, o.done, o.cancelled === true);
       } else if (o.kind === 'view') { /* unchanged */ }
 ```
 
@@ -3185,9 +3575,9 @@ function band(layout: TimelineLayout, laneId: string | null): { y: number; h: nu
   const surface = useSurface({
     view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold,
     mode: p.select ? 'select' : 'pan',
-    onSelect: (x0, x1, y, done, cancelled) => {
+    onSelect: (x0, x1, y0, y1, done, cancelled) => {
       if (!p.select) return;
-      p.select.onPick(cancelled ? null : spanBetween(hitAt(x0, y), hitAt(x1, y), tempo), done);
+      p.select.onPick(cancelled ? null : spanBetween(hitAt(x0, y0), hitAt(x1, y1), tempo), done); // the lane survives only when both ends are in one
     },
     onTap: (x, y) => {
       if (!p.select) return;
@@ -3242,12 +3632,12 @@ export type AnswerMode = 'none' | 'pin' | 'react' | 'energy';
 export interface AnswerBarProps {
   score: Score; tempo: TempoMap; version: number; time: number; span: Span | null;
   mode: AnswerMode; onMode(m: AnswerMode): void;
-  sealing: boolean;              // false: "Notes are off: this page has no notes key yet (make keys-init)."
+  sealing: boolean;              // false: "Notes are off: this page has no notes key yet (make music-setup)."
   media: MediaPorts | null;      // null: no Hum it, no Record
   now(): Date; busy: boolean;
-  send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<void>;
+  send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean>; // true once the note is stored (sent, or kept on this device); false when it is not
   say(message: string): void;
-  status: string | null;         // shown in the bar's role="status" line
+  status: string | null;         // shown in the bar's role="status" line (inside the pin composer while it is open)
 }
 export function AnswerBar(p: AnswerBarProps): JSX.Element;
 // WorkroomProps gains:
@@ -3263,7 +3653,9 @@ now?(): Date;
 // sends a typed note on it; React reacts to the section under the playhead;
 // Draw the energy swaps the view for the drawing, with its own legend and
 // guide; Hum it records at the playhead; a kept note says why; the notes
-// panel is "Notes & answers" with Your notes first.
+// panel is "Notes & answers" with Your notes first. Pinning keeps the timeline
+// on screen above a docked composer; nothing typed or recorded is lost before
+// the note is stored; a recording always has a Stop; no key takes Escape.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -3276,13 +3668,18 @@ import { memoryStorage } from '../../_kit/test/record.ts';
 import { guideStore } from '../src/guide.ts';
 import type { NoteBody } from '../src/note.ts';
 import type { NotesSession } from '../src/notes-session.ts';
-import { KEPT_MESSAGES, SENT_MESSAGE } from '../src/outbox.ts';
+import { KEPT_MESSAGES, MEMORY_NOTICE, SENT_MESSAGE, SEND_MESSAGES } from '../src/outbox.ts';
 import type { AddReport } from '../src/outbox.ts';
 import type { MediaPorts, RecorderLike } from '../src/recorder.ts';
 import type { Score } from '../src/score.ts';
 
 installDocument();
-Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} } });
+// Every key listener the page puts on the window or the document, so the Escape test can press Escape at each.
+const keyListeners: unknown[] = [];
+const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); };
+Object.assign(globalThis, { window: { addEventListener: listen, removeEventListener() {} } });
+const addToDocument = stubDocument.addEventListener;
+stubDocument.addEventListener = (type, f) => { listen(type, f); addToDocument(type, f); };
 Object.assign(globalThis, { requestAnimationFrame: () => 0, cancelAnimationFrame: () => {} });
 const originalNS = stubDocument.createElementNS;
 const originalEl = stubDocument.createElement;
@@ -3298,20 +3695,27 @@ const button = (root: StubElement, text: string) => walk(root).find(e => e.local
 const settle = async (): Promise<void> => { for (let i = 0; i < 20; i++) await act(async () => { await new Promise(r => setImmediate(r)); }); };
 const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 
-function fakeNotes(answer: (key: string) => AddReport = key => ({ key, sent: [{ key, id: 'f'.repeat(32) }], kept: [] })) {
+/** `failures`: how many sends reject first, with the message of a note that could not be sealed. */
+function fakeNotes(answer: (key: string) => AddReport = key => ({ key, memoryOnly: false, sent: [{ key, id: 'f'.repeat(32) }], kept: [] }), failures = 0) {
   const sent: { body: NoteBody; audio: Uint8Array | null }[] = [];
+  let failing = failures;
   const session: NotesSession = {
     sealing: true, unlocked: () => false, unlock: async () => null, history: async () => [],
-    send: async (body, audio) => { sent.push({ body, audio }); return answer(`k${sent.length}`); },
+    send: async (body, audio) => {
+      if (failing > 0) { failing--; throw new Error(SEND_MESSAGES.sealFailed); }
+      sent.push({ body, audio });
+      return answer(`k${sent.length}`);
+    },
     flush: async () => ({ sent: [], kept: [] }), kept: async () => [], discard: async () => {}, remove: async () => {}, removeAll: async () => 0, lock() {},
   };
   return { session, sent };
 }
 
-function fakeMedia(): { ports: MediaPorts; clock: { ms: number } } {
+function fakeMedia(): { ports: MediaPorts; clock: { ms: number }; released: { tracks: number } } {
   const clock = { ms: 0 };
+  const released = { tracks: 0 };
   const ports: MediaPorts = {
-    getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }),
+    getUserMedia: async () => ({ getTracks: () => [{ stop() { released.tracks++; } }] }),
     isTypeSupported: m => m === 'audio/mp4',
     makeRecorder: () => {
       const r: RecorderLike & { state: string } = {
@@ -3325,7 +3729,7 @@ function fakeMedia(): { ports: MediaPorts; clock: { ms: number } } {
     now: () => clock.ms,
     audioSession: null,
   };
-  return { ports, clock };
+  return { ports, clock, released };
 }
 
 const mount = async (extra: Record<string, unknown> = {}): Promise<StubElement> => {
@@ -3343,7 +3747,7 @@ test('without notes there is no answer bar; with no key built in, notes are off'
   assert.equal(named(none, 'data-answer-off'), undefined);
   unmount(none);
   const off = await mount({ notes: null });
-  assert.match(named(off, 'data-answer-off')!.textContent, /Notes are off: this page has no notes key yet \(make keys-init\)\./);
+  assert.match(named(off, 'data-answer-off')!.textContent, /Notes are off: this page has no notes key yet \(make music-setup\)\./);
   assert.equal(button(off, 'Pin a note'), undefined);
   unmount(off);
 });
@@ -3361,8 +3765,13 @@ test('the notes panel is "Notes & answers", with Your notes first', async () => 
 test('Pin a note: from another view it goes to Story, a drag picks the span, Send seals a typed note on it', async () => {
   const { session, sent } = fakeNotes();
   const root = await mount({ notes: session });
+  let scrolled = 0;
+  const stage = walk(root).find(e => e._attrs['data-guide'] === 'view')!;
+  Object.assign(stage, { scrollIntoView: () => { scrolled++; } });
   await act(() => { fire(walk(root).find(e => e._attrs['role'] === 'tab' && e.textContent === 'Piano roll')!, 'click'); });
+  assert.equal(scrolled, 0);
   await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  assert.equal(scrolled, 1, 'the timeline is scrolled into view to pick on');
   assert.equal(button(root, 'Pin a note')!._attrs['aria-pressed'], 'true');
   const svg = named(root, 'data-timeline')!;
   assert.ok(svg, 'the Story view is shown for pinning');
@@ -3372,6 +3781,7 @@ test('Pin a note: from another view it goes to Story, a drag picks the span, Sen
   assert.match(named(root, 'data-pin-span')!.textContent, /^For Bars 5–7 · 8 s – 13\.6 s · Horns$/, 'the lane by its name');
   assert.ok(named(root, 'data-selection'));
   const box = walk(root).find(e => e.localName === 'textarea')!;
+  assert.equal(box.parentElement?.localName, 'label');
   box.value = 'louder and slower right here';
   await act(() => { fire(box, 'input'); });
   await act(() => { fire(button(root, 'Send')!, 'click'); });
@@ -3444,12 +3854,181 @@ test('Hum it records at the playhead and sends a hum with its recording', async 
 });
 
 test('a note kept on this device says why', async () => {
-  const { session } = fakeNotes(key => ({ key, sent: [], kept: [{ key, reason: 'offline' }] }));
+  const { session } = fakeNotes(key => ({ key, memoryOnly: false, sent: [], kept: [{ key, reason: 'offline' }] }));
   const root = await mount({ notes: session });
   await act(() => { fire(button(root, 'React')!, 'click'); });
   await act(() => { fire(button(root, 'Calmer')!, 'click'); });
   await settle();
   assert.equal(named(root, 'data-answer-status')!.textContent, KEPT_MESSAGES.offline);
+  unmount(root);
+});
+
+/** Pins a span on the Story view: Pin a note, then a drag across the brass lane (bars 5–7). */
+async function pinSpan(root: StubElement): Promise<StubElement> {
+  await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  const svg = named(root, 'data-timeline')!;
+  await act(() => { fire(svg, 'pointerdown', at(360, 120, 0)); });
+  await act(() => { fire(svg, 'pointermove', at(612, 120, 50)); });
+  await act(() => { fire(svg, 'pointerup', at(612, 120, 100)); });
+  return svg;
+}
+
+test('the pin composer is docked at the bottom of a phone, above the notes handle, and scrolls inside itself', async () => {
+  const { session } = fakeNotes();
+  const root = await mount({ notes: session });
+  assert.equal(named(root, 'data-answer-dock'), undefined, 'nothing is docked until something needs the owner');
+  await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  const dock = named(root, 'data-answer-dock')!;
+  for (const c of ['fixed', 'bottom-11', 'max-h-[40dvh]', 'overflow-y-auto', 'lg:static']) assert.ok((dock._attrs['class'] ?? dock.className).split(' ').includes(c), c);
+  assert.ok(walk(dock).includes(named(root, 'data-pin-composer')!), 'the composer is in the dock');
+  await act(() => { fire(button(root, 'Cancel')!, 'click'); });
+  assert.equal(named(root, 'data-answer-dock'), undefined);
+  unmount(root);
+});
+
+test('a drag that starts in one lane and ends in another pins the span without a lane', async () => {
+  const { session } = fakeNotes();
+  const root = await mount({ notes: session });
+  await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  const svg = named(root, 'data-timeline')!;
+  await act(() => { fire(svg, 'pointerdown', at(360, 120, 0)); });
+  await act(() => { fire(svg, 'pointermove', at(612, 80, 50)); });
+  await act(() => { fire(svg, 'pointerup', at(612, 80, 100)); });
+  assert.match(named(root, 'data-pin-span')!.textContent, /^For Bars 5–7 · 8 s – 13\.6 s$/, 'no lane named');
+  unmount(root);
+});
+
+test('a note that cannot be sealed leaves the words in the box and says so where the owner is looking', async () => {
+  const { session, sent } = fakeNotes(undefined, 1);
+  const root = await mount({ notes: session });
+  await pinSpan(root);
+  const box = walk(root).find(e => e.localName === 'textarea')!;
+  box.value = 'this must survive';
+  await act(() => { fire(box, 'input'); });
+  await act(() => { fire(button(root, 'Send')!, 'click'); });
+  await settle();
+  assert.equal(box.value, 'this must survive');
+  assert.ok(named(root, 'data-pin-composer'), 'the composer stays open');
+  assert.equal(named(root, 'data-answer-status')!.textContent, SEND_MESSAGES.sealFailed);
+  assert.equal(sent.length, 0);
+  await act(() => { fire(button(root, 'Send')!, 'click'); });
+  await settle();
+  assert.equal(sent[0]!.body.text, 'this must survive', 'the same words go on the next try');
+  assert.equal(named(root, 'data-pin-composer'), undefined);
+  unmount(root);
+});
+
+test('a recording always has a Stop; Record in the composer starts it and the dock shows Stop', async () => {
+  const { session, sent } = fakeNotes();
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  await pinSpan(root);
+  await act(() => { fire(button(root, 'Record')!, 'click'); });
+  await settle();
+  assert.ok(walk(named(root, 'data-recording-strip')!).some(e => e.localName === 'button' && /^Stop \(/.test(e.textContent)), 'Stop sits in the dock');
+  assert.equal(button(root, 'Recording…')!.disabled, true);
+  media.clock.ms += 4000;
+  await act(() => { fire(walk(root).find(e => e.localName === 'button' && /^Stop \(/.test(e.textContent))!, 'click'); });
+  await settle();
+  const { body, audio } = sent[0]!;
+  assert.deepEqual([body.kind, body.fromBar, body.toBar, body.lane, body.audio], ['speech', 5, 7, 'brass', { mime: 'audio/mp4', seconds: 4 }]);
+  assert.deepEqual([...(audio ?? [])], [1, 2, 3]);
+  assert.equal(media.released.tracks, 1, 'the microphone is released');
+  unmount(root);
+});
+
+test('switching to React or Draw while recording stops the microphone and keeps the recording to Send or Discard', async () => {
+  const { session, sent } = fakeNotes();
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  await pinSpan(root);
+  await act(() => { fire(button(root, 'Record')!, 'click'); });
+  await settle();
+  media.clock.ms += 7000;
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  await settle();
+  assert.equal(media.released.tracks, 1, 'the microphone is off');
+  assert.equal(named(root, 'data-recording-strip'), undefined);
+  assert.equal(sent.length, 0, 'nothing was sent behind the owner\'s back');
+  const held = named(root, 'data-held-recording')!;
+  assert.match(held.textContent, /A 0:07 recording is waiting here, not sent yet\./);
+  await act(() => { fire(button(held, 'Send recording')!, 'click'); });
+  await settle();
+  assert.deepEqual([sent[0]!.body.kind, sent[0]!.body.fromBar, sent[0]!.body.toBar, sent[0]!.body.audio!.seconds], ['speech', 5, 7, 7]);
+  assert.equal(named(root, 'data-held-recording'), undefined, 'gone once stored');
+  await act(() => { fire(button(root, 'Hum it')!, 'click'); });
+  await settle();
+  await act(() => { fire(button(root, 'Draw the energy')!, 'click'); });
+  await settle();
+  const again = named(root, 'data-held-recording')!;
+  assert.ok(again, 'a hum is kept the same way');
+  await act(() => { fire(button(again, 'Discard recording')!, 'click'); });
+  assert.equal(named(root, 'data-held-recording'), undefined);
+  assert.equal(sent.length, 1);
+  unmount(root);
+});
+
+test('a recording that could not be stored stays held and goes on the next Send', async () => {
+  const { session, sent } = fakeNotes(undefined, 1);
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  await act(() => { fire(button(root, 'Hum it')!, 'click'); });
+  await settle();
+  await act(() => { fire(walk(root).find(e => e.localName === 'button' && /^Stop \(/.test(e.textContent))!, 'click'); });
+  await settle();
+  assert.equal(sent.length, 0);
+  const held = named(root, 'data-held-recording')!;
+  assert.ok(held, 'the recording is kept');
+  assert.equal(named(root, 'data-answer-status')!.textContent, SEND_MESSAGES.sealFailed);
+  await act(() => { fire(button(held, 'Send recording')!, 'click'); });
+  await settle();
+  assert.equal(sent[0]!.body.kind, 'hum');
+  assert.equal(named(root, 'data-held-recording'), undefined);
+  unmount(root);
+});
+
+test('a reaction is one tap and the bar stays open for the next', async () => {
+  const { session, sent } = fakeNotes();
+  const root = await mount({ notes: session });
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  await act(() => { fire(button(root, 'Love it')!, 'click'); });
+  await settle();
+  assert.equal(named(root, 'data-answer-status')!.textContent, SENT_MESSAGE);
+  assert.ok(named(root, 'data-react-bar'), 'still open');
+  await act(() => { fire(button(root, 'Calmer')!, 'click'); });
+  await settle();
+  assert.deepEqual(sent.map(s => s.body.reaction), ['love-it', 'calmer']);
+  assert.equal(button(root, 'React')!._attrs['aria-pressed'], 'true');
+  unmount(root);
+});
+
+test('a note this browser could only keep in memory says so', async () => {
+  const { session } = fakeNotes(key => ({ key, memoryOnly: true, sent: [], kept: [{ key, reason: 'offline' }] }));
+  const root = await mount({ notes: session });
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  await act(() => { fire(button(root, 'Calmer')!, 'click'); });
+  await settle();
+  assert.equal(named(root, 'data-answer-status')!.textContent, `${KEPT_MESSAGES.offline} ${MEMORY_NOTICE}`);
+  unmount(root);
+});
+
+test('no key takes Escape while a composer is open and a recording runs', async () => {
+  const { session, sent } = fakeNotes();
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  await pinSpan(root);
+  await act(() => { fire(button(root, 'Record')!, 'click'); });
+  await settle();
+  let taken = 0;
+  for (const el of [root, ...walk(root)]) for (const type of ['keydown', 'keyup', 'keypress']) fire(el, type, { key: 'Escape', code: 'Escape', keyCode: 27, preventDefault: () => { taken++; }, stopPropagation: () => { taken++; } });
+  for (const f of keyListeners) {
+    const ev = { type: 'keydown', key: 'Escape', preventDefault: () => { taken++; }, stopPropagation: () => { taken++; } };
+    (f as (e: typeof ev) => void)(ev);
+  }
+  assert.equal(taken, 0);
+  assert.ok(named(root, 'data-pin-composer'), 'the composer is still open');
+  assert.ok(named(root, 'data-recording-strip'), 'the recording goes on');
+  assert.equal(sent.length, 0);
   unmount(root);
 });
 ```
@@ -3458,15 +4037,19 @@ test('a note kept on this device says why', async () => {
 
 - [ ] **Step 2: Run to see it fail** — `node --test workroom/test/workroom-answer.test.ts workroom/test/workroom.test.ts` — FAIL.
 
-- [ ] **Step 3: Implement `src/ui/AnswerBar.tsx`** (and add it to `src/tsconfig.dom.json`):
+- [ ] **Step 3: Implement `src/ui/AnswerBar.tsx`** (and add it to `src/tsconfig.dom.json`). The dock (`data-answer-dock`) is where what needs the owner right now sits: the recording strip with its Stop (the only Stop button on the page), a recording kept but not stored (Send recording / Discard recording), and the pin composer. On a phone it is fixed at the bottom above the sheet handle (`bottom-11` is the handle's 44 px), at most 40 dvh, scrolling inside itself; from 1024 px it is in the page's flow. A change of mode while recording stops the recording and holds it; the hum button is disabled while anything records or is held.
 
 ```tsx
 // The answer bar under the player: Pin a note, Hum it, React and Draw the
-// energy; the composer that is open; and what became of the last note sent.
-// A recording starts inside the tap (the recorder asks for the microphone
-// before anything awaits).
+// energy; and what became of the last note sent. What needs the owner's
+// attention right now sits in the dock, fixed at the bottom of a phone's
+// screen above the notes handle (in the page's flow from 1024 px): the Stop
+// button of a recording, a recording kept but not yet stored, and the pin
+// composer. A recording starts inside the tap (the recorder asks for the
+// microphone before anything awaits). Switching to another mode while
+// recording stops the recording and keeps it, to Send or Discard.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { humNote, reactNote, speechNote, textNote, wholePiece } from '../answer.ts';
+import { humNote, recordClock, reactNote, speechNote, textNote, wholePiece } from '../answer.ts';
 import type { Context } from '../answer.ts';
 import { sectionAt } from '../hit.ts';
 import type { Span } from '../hit.ts';
@@ -3485,44 +4068,66 @@ export interface AnswerBarProps {
   score: Score; tempo: TempoMap; version: number; time: number; span: Span | null;
   mode: AnswerMode; onMode(m: AnswerMode): void;
   sealing: boolean; media: MediaPorts | null; now(): Date; busy: boolean;
-  send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<void>;
+  /** Seals and stores the note; true once it is stored (sent, or kept on this device), false when it is not. */
+  send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean>;
   say(message: string): void;
   status: string | null;
 }
 
 type Kind = 'speech' | 'hum';
+/** A recording that is made but not stored yet, with where in the piece it was made. */
+interface Held { kind: Kind; recording: Recording; at: { time: number; bar: number | null; laneId: string | null } | null; span: Span | null }
 const messageOf = (e: unknown): string => (e instanceof Error && e.message ? e.message : RECORDER_MESSAGES.failed);
 
 export function AnswerBar(p: AnswerBarProps) {
   const live = useRef(p);
   live.current = p;
   const [recording, setRecording] = useState<Kind | null>(null);
+  const [held, setHeld] = useState<Held | null>(null);
   const [seconds, setSeconds] = useState(0);
   const kind = useRef<Kind | null>(null);
-  const humAt = useRef<{ time: number; bar: number | null; laneId: string | null } | null>(null);
+  const humAt = useRef<Held['at']>(null);
   const spanAt = useRef<Span | null>(null);
+  const lastMode = useRef(p.mode);
   const ctx = (): Context => ({ piece: live.current.score.piece.id, draft: live.current.version, now: live.current.now });
-  const finish = async (k: Kind, rec: Promise<Recording>): Promise<void> => {
+  const bodyOf = (h: Held): NoteBody => (h.kind === 'hum' ? humNote(ctx(), h.at!, h.recording) : speechNote(ctx(), h.span!, h.recording));
+  /** Stores a recording; one that cannot be stored stays held, to try again or discard. */
+  const store = async (h: Held): Promise<void> => {
+    try {
+      const stored = await live.current.send(bodyOf(h), h.recording.bytes);
+      setHeld(stored ? null : h);
+    } catch (e) {
+      live.current.say(messageOf(e));
+      setHeld(h);
+    }
+  };
+  const finish = async (k: Kind, rec: Promise<Recording>, keepOnly: boolean): Promise<void> => {
     setRecording(null);
     try {
-      const r = await rec;
-      const body = k === 'hum' ? humNote(ctx(), humAt.current!, r) : speechNote(ctx(), spanAt.current!, r);
-      await live.current.send(body, r.bytes);
+      const h: Held = { kind: k, recording: await rec, at: humAt.current, span: spanAt.current };
+      if (keepOnly) setHeld(h); else await store(h);
     } catch (e) {
       live.current.say(messageOf(e));
     }
   };
-  const recorder = useMemo(() => (p.media ? createRecorder(p.media, r => { const k = kind.current; if (k) void finish(k, r); }) : null), [p.media]);
+  const recorder = useMemo(() => (p.media ? createRecorder(p.media, r => { const k = kind.current; if (k) void finish(k, r, false); }) : null), [p.media]);
   useEffect(() => () => recorder?.cancel(), [recorder]);
   useEffect(() => {
     if (!recording || !recorder) return;
     const id = setInterval(() => setSeconds(recorder.elapsed()), 250);
     return () => clearInterval(id);
   }, [recording, recorder]);
+  // Moving to another mode while recording must not leave a microphone open with nothing on screen to stop it.
+  useEffect(() => {
+    const changed = lastMode.current !== p.mode;
+    lastMode.current = p.mode;
+    const k = kind.current;
+    if (changed && k && recorder?.recording) void finish(k, recorder.stop(), true);
+  }, [p.mode]);
 
   /** Runs inside the tap: the recorder asks for the microphone before anything awaits. */
   const start = (k: Kind): void => {
-    if (!recorder || recording) return;
+    if (!recorder || recording || held) return;
     kind.current = k;
     humAt.current = { time: p.time, bar: p.tempo.barAt(p.time), laneId: p.span?.laneId ?? null };
     spanAt.current = p.span;
@@ -3530,7 +4135,7 @@ export function AnswerBar(p: AnswerBarProps) {
   };
   const stop = (): void => {
     const k = kind.current;
-    if (recorder && k) void finish(k, recorder.stop());
+    if (recorder && k) void finish(k, recorder.stop(), false);
   };
   const cancelPin = (): void => {
     if (recording === 'speech') { recorder?.cancel(); setRecording(null); }
@@ -3538,34 +4143,54 @@ export function AnswerBar(p: AnswerBarProps) {
   };
   const toggle = (m: AnswerMode): void => p.onMode(p.mode === m ? 'none' : m);
 
-  if (!p.sealing) return <p data-answer-off="" class="text-sm text-dim">Notes are off: this page has no notes key yet (make keys-init).</p>;
+  if (!p.sealing) return <p data-answer-off="" class="text-sm text-dim">Notes are off: this page has no notes key yet (make music-setup).</p>;
   const section = sectionAt(p.score, p.tempo, p.time);
   const target = section ?? wholePiece(p.score);
   const laneId = p.span?.laneId ?? null;
   const laneName = laneId ? p.score.lanes.find(l => l.id === laneId)?.name ?? null : null;
-  const sendText = (text: string): void => {
-    try { void p.send(textNote(ctx(), p.span!, text), null); } catch (e) { p.say(messageOf(e)); }
+  const sendText = async (text: string): Promise<boolean> => {
+    try { return await p.send(textNote(ctx(), p.span!, text), null); } catch (e) { p.say(messageOf(e)); return false; }
   };
+  const docked = recording !== null || held !== null || p.mode === 'pin';
   return (
     <div data-answer-bar="" class="grid gap-3">
       <div role="group" aria-label="Answer" class="flex flex-wrap gap-2">
         <Button pressed={p.mode === 'pin'} onClick={() => toggle('pin')}>Pin a note</Button>
-        {recorder ? <RecordButton recording={recording === 'hum'} seconds={seconds} disabled={recording === 'speech' || p.busy} onStart={() => start('hum')} onStop={stop} /> : null}
+        {recorder ? <RecordButton recording={false} seconds={0} disabled={recording !== null || held !== null || p.busy} onStart={() => start('hum')} onStop={stop} /> : null}
         <Button pressed={p.mode === 'react'} onClick={() => toggle('react')}>React</Button>
         <Button pressed={p.mode === 'energy'} onClick={() => toggle('energy')}>Draw the energy</Button>
       </div>
-      {p.mode === 'pin' ? <PinComposer span={p.span} laneName={laneName} recording={recording === 'speech'} seconds={seconds} canRecord={recorder !== null} busy={p.busy}
-        onSend={sendText} onRecord={() => start('speech')} onStop={stop} onCancel={cancelPin} /> : null}
+      {docked ? (
+        <div data-answer-dock="" class="fixed inset-x-0 bottom-11 z-10 grid max-h-[40dvh] gap-2 overflow-y-auto bg-ground px-3 pt-2 pb-2 lg:static lg:z-auto lg:max-h-none lg:overflow-visible lg:bg-transparent lg:p-0">
+          {recording ? (
+            <div data-recording-strip="" class="sticky top-0 flex flex-wrap items-center gap-3 rounded-lg border border-record bg-panel p-3">
+              <RecordButton recording seconds={seconds} onStart={() => {}} onStop={stop} />
+              <span class="text-sm">{recording === 'hum' ? 'Humming at the playhead.' : 'Recording your note.'}</span>
+            </div>
+          ) : null}
+          {held ? (
+            <div data-held-recording="" role="group" aria-label="Recording not sent" class="grid gap-2 rounded-lg border border-amber bg-panel p-3">
+              <p class="text-sm">{`A ${recordClock(held.recording.seconds)} recording is waiting here, not sent yet.`}</p>
+              <div class="flex flex-wrap gap-2">
+                <Button variant="primary" disabled={p.busy} onClick={() => void store(held)}>Send recording</Button>
+                <Button disabled={p.busy} onClick={() => setHeld(null)}>Discard recording</Button>
+              </div>
+            </div>
+          ) : null}
+          {p.mode === 'pin' ? <PinComposer span={p.span} laneName={laneName} recording={recording === 'speech'} canRecord={recorder !== null && held === null} busy={p.busy} status={p.status}
+            onSend={sendText} onRecord={() => start('speech')} onCancel={cancelPin} /> : null}
+        </div>
+      ) : null}
       {p.mode === 'react' ? <ReactBar section={target} whole={section === null} busy={p.busy}
         onReact={r => void p.send(reactNote(ctx(), target, p.tempo, p.score.duration, r), null)} /> : null}
-      <p role="status" data-answer-status="" class="min-h-5 text-sm">{p.status ?? ''}</p>
+      {p.mode !== 'pin' ? <p role="status" data-answer-status="" class="min-h-5 text-sm">{p.status ?? ''}</p> : null}
     </div>
   );
 }
 ```
 
 - [ ] **Step 4: Wire the Workroom** (`src/ui/Workroom.tsx`). Keep every existing behaviour; add:
-  - Imports: `energyNote` (`../answer.ts`); `energyGuideParts` and `type GuideView` (`../guide.ts`); `type Span` (`../hit.ts`); `timelineMarks` and `type HistoryItem` (`../history.ts`); `type NoteBody` (`../note.ts`); `type NotesSession` (`../notes-session.ts`); `KEPT_MESSAGES`, `SENT_MESSAGE` (`../outbox.ts`); `type MediaPorts` (`../recorder.ts`); `energyLegend` beside `legendFor` (`../tabs.ts`); `AnswerBar`, `type AnswerMode` (`./AnswerBar.tsx`); `Answers` (`./Answers.tsx`); `EnergyEditor` (`./EnergyEditor.tsx`).
+  - Imports: `energyNote` (`../answer.ts`); `energyGuideParts` and `type GuideView` (`../guide.ts`); `type Span` (`../hit.ts`); `timelineMarks` and `type HistoryItem` (`../history.ts`); `type NoteBody` (`../note.ts`); `type NotesSession` (`../notes-session.ts`); `KEPT_MESSAGES`, `MEMORY_NOTICE`, `SENT_MESSAGE`, `SEND_MESSAGES` (`../outbox.ts`); `type MediaPorts` (`../recorder.ts`); `energyLegend` beside `legendFor` (`../tabs.ts`); `AnswerBar`, `type AnswerMode` (`./AnswerBar.tsx`); `Answers` (`./Answers.tsx`); `EnergyEditor` (`./EnergyEditor.tsx`).
   - `WorkroomProps` gains `notes?: NotesSession | null; media?: MediaPorts | null; now?(): Date;` and the file's top comment gains one sentence: "With a notes session it also holds the answering: the answer bar, the span being picked, the energy drawing and the owner's notes on the Story view."
   - State and handlers, after the existing state:
 
@@ -3587,30 +4212,34 @@ export function AnswerBar(p: AnswerBarProps) {
     if (m !== 'pin') setSpan(null);
     if (m === 'pin') setWanted('story');
   };
+  // Pinning picks on the Story view's timeline: bring it on screen, above the composer.
+  useEffect(() => { if (mode === 'pin') stage.current?.scrollIntoView?.({ block: 'start' }); }, [mode]);
   const pick = (s: Span | null, done: boolean): void => {
     if (s === null) setPreview(null);
     else if (done) { setSpan(s); setPreview(null); }
     else setPreview(s);
   };
-  const send = async (body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<void> => {
-    if (!notes) return;
+  /** Seals and stores a note: true once it is stored (sent, or kept on this device), false when it is not, with the words and recordings still the owner's. A reaction leaves the bar open for the next one. */
+  const send = async (body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean> => {
+    if (!notes) return false;
     setSending(true);
     setStatus('Sealing and sending…');
     try {
       const r = await notes.send(body, audio);
       const kept = r.kept.find(k => k.key === r.key);
-      setStatus(kept ? KEPT_MESSAGES[kept.reason] : SENT_MESSAGE);
-      changeMode('none');
+      setStatus(kept ? `${KEPT_MESSAGES[kept.reason]}${r.memoryOnly ? ` ${MEMORY_NOTICE}` : ''}` : SENT_MESSAGE);
+      if (body.kind !== 'react') changeMode('none');
+      return true;
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'This note could not be sealed.');
+      setStatus(e instanceof Error ? e.message : SEND_MESSAGES.sealFailed);
+      return false;
     } finally {
       setSending(false);
       setRefresh(n => n + 1);
     }
   };
   const sendEnergy = (curve: [number, number][]): void => {
-    try { void send(energyNote({ piece: score.piece.id, draft: p.version, now }, curve, score.duration, score.bars ?? null), null); }
-    catch (e) { setStatus(e instanceof Error ? e.message : 'This shape could not be sent.'); }
+    void send(energyNote({ piece: score.piece.id, draft: p.version, now }, curve, score.duration, score.bars ?? null), null);
   };
 ```
 
@@ -3618,7 +4247,7 @@ export function AnswerBar(p: AnswerBarProps) {
   - Under `<Player … />`: `{answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} sealing={notes?.sealing ?? false} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} /> : null}`.
   - `ViewTabs`' `onTab` becomes `t => { setWanted(t); if (mode === 'pin' || mode === 'energy') changeMode('none'); }`.
   - The lane picker shows only when `tab === 'roll' && mode !== 'energy'`.
-  - Inside the stage `div`, the energy drawing replaces the view: `{mode === 'energy' ? <EnergyEditor score={score} tempo={tempo} view={view} busy={sending} onSend={sendEnergy} onCancel={() => changeMode('none')} /> : <>…the four existing views…</>}`; the Story view gets `select={mode === 'pin' ? { span: preview ?? span, onPick: pick } : undefined}` and `marks={marks}`.
+  - Inside the stage `div`, the energy drawing replaces the view: `{mode === 'energy' ? <EnergyEditor score={score} tempo={tempo} view={view} busy={sending} onSend={sendEnergy} onHold={setHolding} onCancel={() => changeMode('none')} /> : <>…the four existing views…</>}` (`onHold={setHolding}` is what the other views pass: playback does not scroll the drawing under a stroke); the Story view gets `select={mode === 'pin' ? { span: preview ?? span, onPick: pick } : undefined}` and `marks={marks}`.
   - The legend: `<Legend items={mode === 'energy' ? energyLegend(score) : legendFor(tab, score, { notes: marks.length > 0 })} />`.
   - The sheet: `title="Notes & answers"`, and its first child `{notes ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} onItems={setItems} /> : null}`.
 
@@ -3634,13 +4263,15 @@ export function AnswerBar(p: AnswerBarProps) {
 - Test: `games/workroom/test/waiting.test.ts`
 
 **Interfaces:**
-- Consumes: `createApi` (Task 6), `createOutbox` (Task 7), `indexedDbOutbox` (Task 7), `createNotesSession` (Task 9), `createVault`, `PUBLIC_KEY`, `PREVIOUS_KEYS`, `waitingByPiece` (Task 8), `UnlockPanel`, `Kept` (Task 11), `MediaPorts`, `RecorderLike` (Task 5).
+- Consumes: `createApi` (Task 6), `createOutbox`, `OutboxLock` (Task 7), `indexedDbOutbox` (Task 7), `createNotesSession` (Task 9), `createVault`, `PUBLIC_KEY`, `PREVIOUS_KEYS`, `waitingByPiece` (Task 8), `UnlockPanel`, `Kept` (Task 11), `MediaPorts`, `RecorderLike` (Task 5).
 - Produces:
 
 ```ts
 // src/browser.ts
 /** The browser's microphone and MediaRecorder as the recorder's ports (64 kb/s), or null where the browser cannot record. */
 export function browserMedia(): MediaPorts | null;
+/** The outbox's cross-tab lock (navigator.locks, name "workroom-outbox"), or null where the browser has no Web Locks (the outbox then flushes as it is). */
+export function browserLock(): OutboxLock | null;
 // src/ui/waiting.ts
 /** Writes "N waiting" (or nothing) into the .waiting-count after each a[data-waiting] of the server-rendered pieces list. */
 export function showWaiting(list: ParentNode, counts: ReadonlyMap<string, number>): void;
@@ -3758,10 +4389,17 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
 }
 ```
 
-- [ ] **Step 5: Add `browserMedia` to `src/browser.ts`:**
+- [ ] **Step 5: Add `browserMedia` and `browserLock` to `src/browser.ts`:**
 
 ```ts
+import type { OutboxLock } from './outbox.ts';
 import type { MediaPorts, RecorderLike, StreamLike } from './recorder.ts';
+
+/** The Web Locks lock the outbox flushes under, so two tabs never upload one kept note twice; null where the browser has no Web Locks (the outbox then flushes as it is). */
+export function browserLock(): OutboxLock | null {
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+  return locks && typeof locks.request === 'function' ? work => locks.request('workroom-outbox', work) : null;
+}
 
 /** Speech and humming at 64 kb/s: a minute is about half a megabyte sealed. */
 const BITS_PER_SECOND = 64_000;
@@ -3794,7 +4432,7 @@ export function browserMedia(): MediaPorts | null {
 import { render, h } from 'preact';
 import { createAudioCore } from '../../_kit/audio/core.ts';
 import { createApi } from './api.ts';
-import { browserMedia, browserStorage, browserThemePorts } from './browser.ts';
+import { browserLock, browserMedia, browserStorage, browserThemePorts } from './browser.ts';
 import { guideStore } from './guide.ts';
 import { indexedDbOutbox } from './idb.ts';
 import { draftUrl, loadDraft } from './load.ts';
@@ -3822,7 +4460,7 @@ const fetcher = window.fetch.bind(window);
 function notesSession(): NotesSession | null {
   if (PUBLIC_KEY === null) return null;
   const api = createApi(fetcher, document.querySelector('meta[name="csrf"]')?.getAttribute('content') ?? '');
-  return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID()), keys: { current: PUBLIC_KEY, previous: PREVIOUS_KEYS } });
+  return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock()), keys: { current: PUBLIC_KEY, previous: PREVIOUS_KEYS } });
 }
 const notes = notesSession();
 
@@ -3877,7 +4515,7 @@ if (view === 'piece' && piece) {
 - Modify: `docker/php/Dockerfile:36`, `tests/php/MusicDeployTest.php`, `Makefile` (`music-e2e` recipe and `MUSIC_PY_ABS`), `tests/e2e/local.config.ts`, `tests/e2e/workroom.local.ts`
 
 **Interfaces:**
-- Consumes: the page as built in Tasks 1–16; `test/fixtures/{public-key.ts,public.json,test-key.json}` (committed TEST keys); `music/tools/siue-music pickup` and its environment (`SIUE_CONFIG_DIR`, `SIUE_MUSIC_NOTES_DIR`, `SIUE_MUSIC_BASE`, `SIUE_MUSIC_PUBLIC_KEYS`; the cache file `music.json` is `{ "v": 1, "keys": { <fingerprint>: <pkcs8 base64> }, "api": { "music-pickup": <key> } }`); `make music-tools-venv` (once, for `cryptography`).
+- Consumes: the page as built in Tasks 1–16; `test/fixtures/{public-key.ts,public.json,test-key.json}` (committed TEST keys); `music/tools/siue-music pickup` and its environment (`SIUE_CONFIG_DIR`, `SIUE_MUSIC_NOTES_DIR`, `SIUE_MUSIC_BASE`, `SIUE_MUSIC_PUBLIC_KEYS`; the cache file `music.json` is `{ "v": 1, "keys": { <fingerprint>: <pkcs8 base64> }, "api": { "music-pickup": <key> } }`); `music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt` (once, for `cryptography`: the command `make music-setup` runs first).
 - Produces: `node workroom/tools/e2e-bundle.ts` (from `games/`) prints the path of a test-key `workroom.js` in a fresh temporary folder; `make music-e2e` runs every `*.local.ts` test with the server on the test public keys, the page routed to that bundle in the answering tests, and Chrome's fake microphone.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -4035,7 +4673,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 7: The answering tests** (`tests/e2e/workroom.local.ts`). Update the file's top comment to add "…; then answering with the test keys: pin a typed note, pick it up with the owner's tool, read and delete it on a second device; hum, react, draw the energy, and a note made offline that waits and then goes". Extend the `node:fs` import with `mkdtempSync`, `readdirSync`, `writeFileSync` and add `import { tmpdir } from 'node:os';`. Rename `VIEW_TABS` to `GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const` (the energy drawing has a guide too) and use it in `signedInPage`. Add these helpers after `publishFixtureDraft`:
+- [ ] **Step 7: The answering tests** (`tests/e2e/workroom.local.ts`). Update the file's top comment to add "…; then answering with the test keys: pin a typed note, pick it up with the owner's tool, read and delete it on a second device; hum (and find a recording kept, not lost, when the mode changes mid-recording), react, draw the energy, and a note made offline that waits and then goes". Extend the `node:fs` import with `mkdtempSync`, `readdirSync`, `writeFileSync` and add `import { tmpdir } from 'node:os';`. Rename `VIEW_TABS` to `GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const` (the energy drawing has a guide too) and use it in `signedInPage`. Add these helpers after `publishFixtureDraft`:
 
 ```ts
 const FIXTURES = join(SITE, 'games', 'workroom', 'test', 'fixtures');
@@ -4066,6 +4704,22 @@ async function unlock(page: Page, passphrase: string): Promise<void> {
   await page.getByRole('button', { name: 'Unlock notes' }).click();
 }
 
+/** The pin composer's textbox, by its role and name: the panel that lists the notes has another name. */
+const noteBox = (page: Page) => page.getByRole('textbox', { name: 'Your note', exact: true });
+
+/** Pinning keeps the timeline on screen: Pin a note scrolls the Story view into view, and the picked span stays in view above the composer (docked at the bottom of a phone, in the page's flow from 1024 px). */
+async function pinSpan(page: Page, x0: number, x1: number): Promise<void> {
+  await page.getByRole('button', { name: 'Pin a note' }).click();
+  await expect(page.locator('[data-timeline]')).toBeInViewport();
+  await dragAcross(page, '[data-timeline]', x0, x1, 120);
+  await expect(page.locator('[data-selection]')).toBeVisible();
+  const viewport = page.viewportSize()!;
+  const selection = (await page.locator('[data-selection]').boundingBox())!;
+  const composer = (await page.locator('[data-pin-composer]').boundingBox())!;
+  expect(selection.y).toBeGreaterThanOrEqual(0);
+  expect(selection.y + selection.height).toBeLessThanOrEqual(Math.min(viewport.height, composer.y) + 1);
+}
+
 /** Drags across a drawing from (x0, y) to (x1, y), as fractions of its width and pixels from its top. */
 async function dragAcross(page: Page, selector: string, x0: number, x1: number, y0: number, y1 = y0): Promise<void> {
   const box = (await page.locator(selector).boundingBox())!;
@@ -4093,11 +4747,9 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
     await page.goto(`${base}music/piece.php?id=test-piece`);
     await unlock(page, testKey.passphrase);
     await expect(page.locator('[data-history]')).toBeVisible();
-    await page.getByRole('button', { name: 'Pin a note' }).click();
-    await dragAcross(page, '[data-timeline]', 0.5 + 0.005, 0.85, 120);
+    await pinSpan(page, 0.5 + 0.005, 0.85);
     await expect(page.locator('[data-pin-span]')).toHaveText(/^For Bars 5–7 · .* · Horns$/);
-    await expect(page.locator('[data-selection]')).toBeVisible();
-    await page.getByLabel('Your note').fill('louder and slower right here');
+    await noteBox(page).fill('louder and slower right here');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByRole('status')).toHaveText('Sent. It is waiting for pickup.');
     const mine = page.locator('[data-note]', { hasText: 'louder and slower right here' });
@@ -4187,10 +4839,21 @@ test('hum, react and draw the energy; a note made offline waits on this device a
     await expect(hum).toHaveCount(1);
     await expect(hum.locator('audio[data-note-audio]')).toHaveAttribute('src', /^blob:/);
 
+    // Switching to another mode while humming stops the microphone and keeps the recording to send or discard.
+    await page.getByRole('button', { name: 'Hum it' }).click();
+    await expect(page.getByRole('button', { name: /^Stop \(/ })).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: 'React' }).click();
+    await expect(page.locator('[data-held-recording]')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Stop \(/ })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Discard recording' }).click();
+    await expect(page.locator('[data-held-recording]')).toHaveCount(0);
+    await expect(hum).toHaveCount(1);
+
+    // A reaction is one tap, and the bar stays open for the next.
     await expect(page.locator('[data-react-bar]')).toContainText('React to: The Labyrinth stirs');
     await page.getByRole('button', { name: 'Love it' }).click();
     await expect(page.locator('[data-note]', { hasText: 'Reaction: Love it' })).toHaveCount(1);
+    await expect(page.locator('[data-react-bar]')).toBeVisible();
 
     await page.getByRole('button', { name: 'Draw the energy' }).click();
     await expect(page.locator('[data-energy-editor]')).toBeVisible();
@@ -4202,10 +4865,11 @@ test('hum, react and draw the energy; a note made offline waits on this device a
 
     await context.setOffline(true);
     await page.getByRole('button', { name: 'Pin a note' }).click();
+    await expect(page.locator('[data-timeline]')).toBeInViewport();
     const box = (await page.locator('[data-timeline]').boundingBox())!;
     await page.locator('[data-timeline]').click({ position: { x: box.width * 0.25, y: 90 } });
     await expect(page.locator('[data-pin-span]')).toHaveText(/^For Bar \d+ · /);
-    await page.getByLabel('Your note').fill('made with no connection');
+    await noteBox(page).fill('made with no connection');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('No connection');
     await expect(page.locator('[data-kept-note]')).toHaveCount(1);
@@ -4226,7 +4890,7 @@ test('hum, react and draw the energy; a note made offline waits on this device a
 
 - [ ] **Step 8: Run the unit and PHP tests** — `node --test workroom/test/e2e-bundle.test.ts` — PASS; `vendor/bin/phpunit tests/php/MusicDeployTest.php` — PASS; `cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json` — exit 0; `node tests/e2e/select.ts --check` — exit 0 (no spec was added).
 
-- [ ] **Step 9: Run the check** — from `websites/www.cs`: `make music-tools-venv` (once), then `make music-e2e` — every test passes and `MUSIC-E2E-OK` prints; afterwards `docker compose ls` lists no `music-e2e-*` project and no `workroom-e2e-*` folder is left in the temporary directory. Never run it against port 3000, 5173, 8000 or 8080: nginx's host port is ephemeral.
+- [ ] **Step 9: Run the check** — from `websites/www.cs`: `music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt` (once; it makes the tool's virtualenv, which `MUSIC_PY` then finds), then `make music-e2e` — every test passes and `MUSIC-E2E-OK` prints; afterwards `docker compose ls` lists no `music-e2e-*` project and no `workroom-e2e-*` folder is left in the temporary directory. Never run it against port 3000, 5173, 8000 or 8080: nginx's host port is ephemeral.
 
 - [ ] **Step 10: Commit**
 
@@ -4254,10 +4918,8 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
   { name: 'notes', path: 'music/piece.php?id=test-piece', ready: async p => { await unlock(p, testKey.passphrase); await expect(p.locator('[data-history]')).toBeVisible(); } },
   { name: 'pin', path: 'music/piece.php?id=test-piece', ready: async p => {
     await expect(p.locator('[data-timeline]')).toBeVisible();
-    await p.getByRole('button', { name: 'Pin a note' }).click();
-    await dragAcross(p, '[data-timeline]', 0.5, 0.85, 120);
-    await p.getByLabel('Your note').fill('More horns here, and hold the last chord longer.');
-    await expect(p.locator('[data-selection]')).toBeVisible();
+    await pinSpan(p, 0.5, 0.85);
+    await noteBox(p).fill('More horns here, and hold the last chord longer.');
   } },
   { name: 'react', path: 'music/piece.php?id=test-piece', ready: async p => { await p.getByRole('button', { name: 'React' }).click(); await expect(p.locator('[data-react-bar]')).toBeVisible(); } },
   { name: 'energy', path: 'music/piece.php?id=test-piece', ready: async p => {
@@ -4277,18 +4939,18 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 
   In the screens test: raise its timeout to `600_000`; make the key with `['drafts:publish', 'keys:publish']`, call `await uploadTestKeyring(request, base, key)` after the drafts, and `await withTestKeys(page)` before the loop, so every screen shows the page as it is once a key is built in. The test's existing checks (no sideways scroll at 390 px, every button, link, select and tab at least 44 px, no CSP errors, the theme set) now cover the answering screens too.
 
-- [ ] **Step 2: Run the screens** — from `websites/www.cs`: `MUSIC_E2E_SHOTS=/private/tmp/workroom-answer-shots make music-e2e` (any scratch folder outside the repository) — all tests pass, `MUSIC-E2E-OK` prints, and the folder holds `<screen>-<390|1280>-<dark|light>.png` for every screen, the nine new ones included. Look at each new one at both widths and both themes: tokens only (no stray colours), the composer and the bar fit at 390 px, the bottom sheet's handle stays reachable, the energy drawing is not clipped, the record button is the only red, Waiting is amber and Picked up green.
+- [ ] **Step 2: Run the screens** — from `websites/www.cs`: `MUSIC_E2E_SHOTS=/private/tmp/workroom-answer-shots make music-e2e` (any scratch folder outside the repository) — all tests pass, `MUSIC-E2E-OK` prints, and the folder holds `<screen>-<390|1280>-<dark|light>.png` for every screen, the nine new ones included. Look at each new one at both widths and both themes: tokens only (no stray colours), the composer is docked above the handle at 390 px with the timeline and the picked span visible above it (the `pin` screen asserts it; look at it too), the bottom sheet's handle stays reachable, the energy drawing is not clipped, the record and Stop buttons are the only red (Delete, Discard and error lines are not), Waiting is amber and Picked up green.
 
 - [ ] **Step 3: The README** (`music/README.md`), describing what is, never what changed:
-  - A new section **Answering**, after "The look": the answer bar (Pin a note, Hum it, React, Draw the energy) and what each sends; notes are sealed in the browser to the key built into the page; pinning picks a span on the Story view (a drag, or a tap for one moment; the lane when both ends are in one); the recorder (60 s, the first type the browser records, the microphone asked for inside the tap, 64 kb/s); the energy drawing and its own guide (`workroom-guide-energy`); the notes panel "Notes & answers" (unlock with the passphrase on every visit, the history of this piece or all pieces, Delete and Delete all, the notes not sent yet); the outbox (IndexedDB `siue-music` / `outbox`, sealed bundles only, sent on load and when the browser is back online, Discard to drop one); the pieces list's per-piece counts after an unlock; with no key built in, "Notes are off".
+  - A new section **Answering**, after "The look": the answer bar (Pin a note, Hum it, React, Draw the energy) and what each sends; notes are sealed in the browser to the key built into the page; pinning scrolls the Story view into view and picks a span on it (a drag, or a tap for one moment; the lane only when the drag starts and ends in one lane), with the composer docked at the bottom of a phone so the timeline stays visible; the recorder (60 s, the first type the browser records, the microphone asked for inside the tap, 64 kb/s); the energy drawing and its own guide (`workroom-guide-energy`); the notes panel "Notes & answers" (unlock with the passphrase on every visit, the history of this piece or all pieces, Delete, Delete all and Discard, each asking first in plain words; the notes not sent yet); Chrome may offer to save the unlock form's username and passphrase, and the owner answers Never (1Password fills the form either way); the outbox (IndexedDB `siue-music` / `outbox`, sealed bundles only, sent on load and when the browser is back online, one tab at a time under the Web Locks lock `workroom-outbox`, Discard to drop one; a browser that refuses IndexedDB keeps the note in memory and says so); nothing typed or recorded is cleared until the note is stored, and a recording that is not stored stays on screen to Send or Discard; the pieces list's per-piece counts after an unlock; with no key built in, "Notes are off".
   - **Security model** gains: "The only browser storage the workroom writes besides the theme and the guide flags is the outbox: sealed notes waiting to be sent. Nothing of any key, and nothing in the clear about a note, is stored in the browser."
-  - **The local browser check**: it also uploads the test keyring, routes the page to a test-key build (`node games/workroom/tools/e2e-bundle.ts`, written outside the repository), points the server at the test public keys (`compose.music-local.yaml`), records with Chrome's fake microphone, pins a typed note, picks it up with `siue-music pickup` (needs `make music-tools-venv`), reads and deletes it on a second, phone-sized device, hums, reacts, draws the energy, and sends a note made offline once the connection is back; the shipped `dist/workroom.js` never carries a test key. `MUSIC_E2E_SHOTS=<folder>` saves every screen.
+  - **The local browser check**: it also uploads the test keyring, routes the page to a test-key build (`node games/workroom/tools/e2e-bundle.ts`, written outside the repository), points the server at the test public keys (`compose.music-local.yaml`), records with Chrome's fake microphone, pins a typed note, picks it up with `siue-music pickup` (needs the tool's virtualenv, which `make music-setup` also makes), reads and deletes it on a second, phone-sized device, hums, reacts, draws the energy, and sends a note made offline once the connection is back; the shipped `dist/workroom.js` never carries a test key. `MUSIC_E2E_SHOTS=<folder>` saves every screen.
 
-- [ ] **Step 4: Gates** — from `websites/www.cs`: `sh games/units.sh`; `(cd games && npm ci --silent && npm run --silent check)`; `vendor/bin/phpunit --testsuite site`; `vendor/bin/phpunit --testsuite kit`; `make music-tools-test`; `cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json`; `node tests/e2e/select.ts --check`; then `make test` (its docker steps under a unique project name). All exit 0. `git status` shows no stray files (no `.tmp-*` folders from `importTsx`, no screenshots, no test bundles).
+- [ ] **Step 4: Gates** — from `websites/www.cs`: `sh games/units.sh`; `(cd games && npm ci --silent && npm run --silent check)`; `vendor/bin/phpunit --testsuite site`; `vendor/bin/phpunit --testsuite kit`; `make music-test`; `cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json`; `node tests/e2e/select.ts --check`; then `make test` (its docker steps under a unique project name). All exit 0. `git status` shows no stray files (no `.tmp-*` folders from `importTsx`, no screenshots, no test bundles).
 
 - [ ] **Step 5: Commit** — `git add websites/www.cs/tests/e2e/workroom.local.ts websites/www.cs/music/README.md` and commit "Music workroom: the answering screens and the README" with the trailers.
 
-- [ ] **Step 6: Open the pull request** — `git push -u origin music/answer-ui`, then `gh pr create --base main --head music/answer-ui --title "Music workroom: answering in the page (pin, hum, react, energy, history, outbox)"` with a body that has: a summary (the answer bar, the composers, the energy drawing, unlock and the history, Delete and Delete all, the outbox, per-piece counts, the guide and legends for the new parts); the spec and plan paths; the results of `sh games/units.sh`, `npm run check`, the PHP suites and `make music-e2e`; where the screenshots are and that they go to the owner before merge (theme spec); and **the owner's first-run steps after merge and deploy, which this PR's code does not do**: make the `music-pickup` (`notes:pickup`) and `music-publish` (`drafts:publish`, `keys:publish`) API keys on the admin hub; `make api-key-set NAME=music-pickup` and `make api-key-set NAME=music-publish`; `make keys-init`; rebuild (`cd games && node _kit/build/build.mjs workroom`) and commit the key files through a PR; after that deploy, compare the hub's notes key fingerprint with `make keys-status`; unlock once on the phone with 1Password. End the body with the PR attribution lines. Then hand the PR to the foundry `pr-fix-loop`.
+- [ ] **Step 6: Open the pull request** — `git push -u origin music/answer-ui`, then `gh pr create --base main --head music/answer-ui --title "Music workroom: answering in the page (pin, hum, react, energy, history, outbox)"` with a body that has: a summary (the answer bar, the composers, the energy drawing, unlock and the history, Delete and Delete all, the outbox, per-piece counts, the guide and legends for the new parts); the spec and plan paths; the results of `sh games/units.sh`, `npm run check`, the PHP suites and `make music-e2e`; where the screenshots are and that they go to the owner before merge (theme spec); and **the owner's first-run steps after merge and deploy, which this PR's code does not do**: run `make music-setup` (it guides the `music-pickup` and `music-publish` API keys, makes the notes key, uploads the locked copy, rebuilds the page and opens the key pull request); merge that pull request once its checks pass; after its deploy, compare the hub's notes key fingerprint with `make music-status`; unlock once on the phone with 1Password, and answer Never if Chrome offers to save the passphrase. End the body with the PR attribution lines. Then hand the PR to the foundry `pr-fix-loop`.
 
 ---
 
@@ -4297,3 +4959,4 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 - **Spec coverage.** Pin a note, typed or spoken, on a moment or span and optionally a lane: Tasks 3, 12, 14, 15. Hum up to 60 s: Tasks 3, 5, 12, 15. React on a section (eight reactions, the whole piece when there is no section): Tasks 1, 3, 12, 15. Draw the energy: Tasks 4, 13, 15. Each note tied to its draft, bars and seconds on music, seconds on sound: Task 3. Sealed in the browser, server sees only sealed bytes: Task 9 (seal before the outbox). Notes stay sealed until the owner deletes; history on any device after unlock, waiting or picked up, Delete and Delete all: Tasks 8, 9, 11. Upload limits (60 s, 2 MB, 2,000) with the note kept in the browser and a plain message: Tasks 3, 5, 7. Keys never in browser storage, passphrase every visit: Tasks 9, 11, 17. Pieces list's waiting counts: Task 16. Claude's changes beside the notes they answer: Tasks 8, 11 (and the existing change pins). The look (tokens, components, 44 px, no Escape, dark and daylight), the guide and legends for the new parts: Tasks 2, 10–15, 18. Phone first (the composers in the main column, the notes in the bottom sheet): Task 15, checked at 390 px in Task 18. Screenshots to the owner: Task 18.
 - **Carried rulings.** The body check before the history renders (reused and tightened from `seal.ts`): Task 3. The section-boundary epsilon: Task 1. Panel's name, the Sheet's `aria-controls`, the Sheet open class and Tabs focus tests: Task 2. The recorder (60 s, MIME order, the tap, the audio session): Task 5. The test public key path and the FPM `env[]` line: Task 17. Post-deploy steps only in the PR body: Task 18.
 - **Types used across tasks.** `Span` (`hit.ts`), `NoteBody`/`isNoteBody` (`note.ts`), `NoteMark` (`answer.ts`, made by `history.ts`, read by `Timeline.tsx` and `guide.ts`), `Curve` (`energy.ts`), `MediaPorts`/`Recording` (`recorder.ts`), `PageApi`/`ServerNote` (`api.ts`), `Pending`/`AddReport`/`KEPT_MESSAGES`/`SENT_MESSAGE` (`outbox.ts`), `HistoryItem` (`history.ts`), `NotesSession` (`notes-session.ts`), `GuideView` (`guide.ts`), `AnswerMode` (`AnswerBar.tsx`), `TimelineSelect` (`Timeline.tsx`) are each defined once and named the same wherever they are used.
+- **Pre-flight rulings.** Pinning keeps the timeline on screen (scrolled into view, composer docked, asserted in the browser check at 390 × 844): Tasks 12, 15, 17, 18. Distinct names, the “Your note” textbox against the “Notes & answers” panel: Tasks 11, 12, 17. A recording always has a visible Stop, and a mode change keeps the recording: Tasks 12, 15, 17. The recorder releases the microphone on any failure: Task 5. A drawn or the piece's own energy curve is resampled to 512 points: Task 3. Nothing typed or recorded is cleared until the note is stored; an IndexedDB write failure falls back to memory with a notice; a seal failure keeps the composer: Tasks 7, 9, 12, 15. Red only for recording, destructive buttons secondary with explicit words: Tasks 11, 18. `idb.ts` tested against `fake-indexeddb`: Task 7. One Delete asks first: Task 11. The outbox flush runs under a Web Locks lock: Tasks 7, 16. The energy drawing holds the playhead's follow while a stroke is drawn: Tasks 13, 15. The pinned lane needs both drag ends in one lane: Task 14. File map, `MAX_NOTES` (the “server is full” message) and the “3,500” count agree with the code. Escape is checked at run time for every new composer, question and overlay: Tasks 11, 12, 15. The unlock form keeps the hidden username for 1Password: Task 11. A reaction is one tap and the bar stays open: Task 15.

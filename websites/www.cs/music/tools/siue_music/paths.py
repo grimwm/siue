@@ -21,14 +21,6 @@ def site_dir() -> Path:
     return repo_root() / "websites" / "www.cs"
 
 
-def public_keys_path(env: Mapping[str, str]) -> Path:
-    return Path(env["SIUE_MUSIC_PUBLIC_KEYS"]) if env.get("SIUE_MUSIC_PUBLIC_KEYS") else site_dir() / "music" / "keys" / "public.json"
-
-
-def public_key_ts_path(env: Mapping[str, str]) -> Path:
-    return Path(env["SIUE_MUSIC_PUBLIC_KEY_TS"]) if env.get("SIUE_MUSIC_PUBLIC_KEY_TS") else site_dir() / "games" / "workroom" / "src" / "public-key.ts"
-
-
 def glossary_path() -> Path:
     return site_dir() / "games" / "workroom" / "src" / "glossary.json"
 

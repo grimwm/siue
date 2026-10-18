@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from support import SITE, World, pool_key
+from support import SITE, ServerApi, World, pool_key
 from siue_music import cli, sealing
 from siue_music.answering import MissingDependency, Steps
 from siue_music.paths import NotesInsideRepo
@@ -148,10 +148,9 @@ class PickupTest(unittest.TestCase):
 class RotationTest(unittest.TestCase):
     def test_a_note_sealed_before_a_rotation_is_picked_up_with_the_rotated_keyring(self):
         w = World(self)
-        uploads: list[dict] = []
-        old = w.keys.init(uploads.append)
+        old = w.add_key_to_op(0)
         old_spki = sealing.spki_of(w.keys.keyring()[old])
-        w.keys.rotate(uploads.append)
+        w.keys.rotate(ServerApi())
         body = {"v": 1, "kind": "text", "piece": "test-piece", "draft": 1, "from": 0, "to": 1, "fromBar": 1, "toBar": 1, "lane": None,
                 "text": "sealed before the rotation", "reaction": None, "curve": None, "audio": None, "made": "2027-01-15T08:00:00.000Z"}
         api = FakeApi({A: sealing.seal(body, b"", old_spki)})
@@ -165,9 +164,8 @@ class RotationTest(unittest.TestCase):
 
 class MismatchNeverReachesTheServer(unittest.TestCase):
     def env(self, w: World) -> dict[str, str]:
-        # Every location the CLI reads comes from this env, so the test never touches the owner's repository, cache or 1Password.
-        return {"OP_VAULT": "SIUE", "SIUE_MUSIC_PUBLIC_KEYS": str(w.public_json), "SIUE_MUSIC_PUBLIC_KEY_TS": str(w.public_ts),
-                "SIUE_CONFIG_DIR": str(w.root / "config" / "siue"), "SIUE_MUSIC_BASE": "https://example.test/music/",
+        # Every location the CLI reads comes from this env, so the test never touches the owner's cache or 1Password.
+        return {"OP_VAULT": "SIUE", "SIUE_CONFIG_DIR": str(w.root / "config" / "siue"), "SIUE_MUSIC_BASE": "https://example.test/music/",
                 "SIUE_OP": f"{sys.executable} {Path(__file__).parent / 'fake_op.py'}",
                 "FAKE_OP_LOG": str(w.log), "FAKE_OP_STORE": str(w.root / "op.json")}
 
@@ -177,28 +175,28 @@ class MismatchNeverReachesTheServer(unittest.TestCase):
             code = cli.main(["pickup"], env=self.env(w))
         return code, opened, err.getvalue()
 
-    def test_a_repository_key_1password_lacks_stops_with_exit_3(self):
+    def test_a_cache_key_1password_no_longer_holds_stops_with_exit_3(self):
         w = World(self)
-        orphan, _, _ = pool_key(1)
-        w.write_repo(orphan)
+        fp = w.add_key_to_op(0)
+        w.keys.pull()
+        for item in w.op.list_items("siue-music-key"):
+            w.op.archive(item["id"])
         code, opened, err = self.run_pickup(w)
         self.assertEqual((code, opened), (3, []))
-        self.assertIn("has no private key for the repository's public key", err, "the mismatch, not merely 'no key yet'")
-        self.assertIn(orphan[:4], err)
+        self.assertIn("1Password (vault SIUE) holds no notes key", err)
+        self.assertIn(fp[:4], err)
 
-    def test_a_key_1password_holds_that_the_repository_lacks_stops_with_exit_3(self):
+    def test_two_current_keys_in_1password_stop_with_exit_1(self):
         w = World(self)
         w.add_key_to_op(0)
-        orphan, _, _ = pool_key(1)
-        w.write_repo(orphan)
+        w.add_key_to_op(1)
         code, opened, err = self.run_pickup(w)
-        self.assertEqual((code, opened), (3, []))
-        self.assertIn("git pull", err)
+        self.assertEqual((code, opened), (1, []))
+        self.assertIn("(previous)", err)
 
     def test_the_base_comes_from_the_env_for_pickup(self):
         w = World(self)
-        fp = w.add_key_to_op(0)
-        w.write_repo(fp)
+        w.add_key_to_op(0)
         w.keys.api_key_set("music-pickup", "c" * 64)
         w.keys.pull()
         bases = []

@@ -56,7 +56,8 @@ for h in cache-control referrer-policy x-robots-tag x-content-type-options conte
   grep -qi "^$h:" "$work/login.h" || fail "login.php lacks the $h header"
 done
 
-# latest_link: waits for a captured mail newer than the ones in $seen and prints the sign-in path in it.
+# latest_link: waits for a captured mail newer than the ones in $seen and sets $path to the sign-in path in it.
+# Called directly, never in $(...), so its update to $seen persists.
 seen=0
 latest_link() {
   local eml= n
@@ -80,7 +81,7 @@ print(m.group(0) if m else "")
 PY
 )
   [ -n "$l" ] || fail "no sign-in link in the mail"
-  printf '%s' "${l#http://localhost}"
+  path=${l#http://localhost}
 }
 
 # 2. Ask for the link. The capture folder sits in the data folder the first request made.
@@ -91,7 +92,7 @@ pending=$(cookie_of ask __Secure-admin-pending)
 tr -d '\r' <"$work/ask.h" | grep -i '^set-cookie: __Secure-admin-pending=' | grep -qi 'samesite=lax' || fail "the pending cookie is not SameSite=Lax"
 
 # 3. The mail is written after the reply: wait for it, take the newest.
-path=$(latest_link)
+latest_link
 
 # 4. A browser that did not ask (a mail scanner, another device) opens the link: a form and the confirm cookie.
 expect "GET link" 200 "$(req confirm GET "$path")"
@@ -121,7 +122,7 @@ grep -qi '^location: login\.php' "$work/after.h" || fail "signed-out visit does 
 # 7b. The browser that asked opens a new link and is signed in with no button: a page, not a redirect.
 expect "POST login.php again" 200 "$(req ask2 POST /admin/login.php --data-urlencode 'email=wgrim@siue.edu')"
 pending=$(cookie_of ask2 __Secure-admin-pending)
-path=$(latest_link)
+latest_link
 expect "GET link, no cookie" 200 "$(req stranger GET "$path")"
 grep -q '<form' "$work/stranger.b" || fail "a stranger did not get the button"
 expect "GET link, asking browser" 200 "$(req direct GET "$path" -H "Cookie: $pending")"

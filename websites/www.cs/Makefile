@@ -1,6 +1,6 @@
-.PHONY: help deploy up down url parity test protocol sim-vectors e2e screenshots admin-smoke music-e2e
+.PHONY: help deploy up down live-url url parity test protocol sim-vectors e2e e2e-changed screenshots admin-smoke music-e2e
 
-.DEFAULT_TARGET := help
+.DEFAULT_GOAL := help
 
 SSHPASS_FILE ?= $(HOME)/.ssh/.passwd.siue
 HOST ?= wgrim@www.cs.siue.edu
@@ -11,56 +11,48 @@ COMPOSE ?= docker compose -f ../../compose.yaml
 SERVICES := www-cs-php www-cs-nginx
 export COMPOSE
 
-help:
-	@echo "Available targets:"
-	@echo "  help   - Show this help message"
-	@echo "  deploy - Upload what changed to www.cs.siue.edu (skips when its"
-	@echo "           .deploy-hash matches; FORCE=1 sends all, DRY_RUN=1 sends none,"
-	@echo "           PRUNE=1 deletes files the last deploy sent that are now gone)"
-	@echo "  up     - Run the site locally in docker (PHP matches the server)"
-	@echo "  down   - Stop the local site"
-	@echo "  url    - Print the local site's URL (its port is ephemeral)"
-	@echo "  parity - Check the docker PHP against www.cs.siue.edu's modules/ini"
-	@echo "  test   - Unit suites: the site's TypeScript build, games hub, site game pages, home-page versions, deploy set, each game's tools, Tankity (incl. game.yaml, its kit build check and unit tests), Cylon (its kit build check, unit tests and scores PHPUnit), Crete (its kit build check and engine tests) (needs make up)"
-	@echo "  protocol - Rewrite the Tankity room protocol fixtures (needs make up)"
-	@echo "  sim-vectors - Rewrite the Tankity shared sim test vectors (needs make up)"
-	@echo "  e2e    - Real-browser suite against the local site, or E2E_BASE_URL;"
-	@echo "           one run per machine at a time (E2E_ARGS passes to playwright)"
-	@echo "  e2e-changed - Only the browser specs your changes against origin/main need"
-	@echo "  admin-smoke - Sign in to the admin pages in a throwaway docker project and back out (prints ADMIN-SMOKE-OK)"
-	@echo "  music-e2e - The music workroom's browser check in a throwaway docker project (local only; prints MUSIC-E2E-OK)"
-	@echo "  screenshots - Recapture each game's Games-page picture (macOS sips)"
-	@echo ""
-	@echo "Music workroom (keys live in the 1Password SIUE vault; OP_VAULT overrides):"
-	@echo "  music-setup   - Everything to get started, guided and safe to re-run: API keys, the notes key, the pull request"
-	@echo "  music-status  - What is set up and what is missing"
-	@echo "  music-pickup  - Download, open and save your waiting notes; marks each picked up once it opens"
-	@echo "  music-publish PIECE=<id> [VERSION=n] - Upload a rendered draft to the workroom"
-	@echo "  music-rotate  - Make a new notes key; earlier keys are kept so old notes still open"
-	@echo "  music-forget  - Delete this computer's cached keys (a borrowed or shared computer)"
-	@echo "  music-test    - The key tool's tests"
+##@ Help
+help: ## Show this list
+	@color=; if [ -t 1 ] && [ -z "$$NO_COLOR" ]; then color=1; fi; \
+	awk -v color="$$color" '\
+		/^##@ / { n++; head[n] = substr($$0, 5); next } \
+		/^[a-z][a-z0-9-]*:.*##/ { \
+			i = index($$0, "##"); d = substr($$0, i + 2); sub(/^ +/, "", d); \
+			name = substr($$0, 1, index($$0, ":") - 1); \
+			m++; sec[m] = n; nm[m] = name; ds[m] = d; \
+			if (length(name) > w) w = length(name) } \
+		END { for (k = 1; k <= m; k++) { \
+			if (sec[k] != last) { last = sec[k]; \
+				if (k > 1) print ""; \
+				printf(color ? "\033[1m%s\033[0m\n" : "%s\n", head[last]) } \
+			printf(color ? "  \033[36m%-" w "s\033[0m  %s\n" : "  %-" w "s  %s\n", nm[k], ds[k]) } }' $(MAKEFILE_LIST)
 
-deploy:
+##@ Site
+deploy: ## Upload what changed to www.cs.siue.edu (options: see README)
 	@HOST="$(HOST)" SSHPASS_FILE="$(SSHPASS_FILE)" ./deploy.sh
 
-up:
+up: ## Run the site locally in docker
 	$(COMPOSE) up -d --build $(SERVICES)
 	@$(MAKE) --no-print-directory url
 
-down:
+down: ## Stop the local site
 	$(COMPOSE) rm --stop --force $(SERVICES)
 
-url:
+live-url: ## Print the live site's URL
+	@echo "https://www.cs.siue.edu/~wgrim/"
+
+url: ## Print the local docker copy's URL (its port is ephemeral)
 	@if port=$$($(COMPOSE) port www-cs-nginx 80 2>/dev/null) && [ -n "$$port" ]; then \
 		echo "http://$$port/"; \
 	else \
-		echo "www.cs is not running (make up)" >&2; exit 1; \
+		echo "the local docker copy is not running (make up)" >&2; exit 1; \
 	fi
 
-parity:
+parity: ## Check docker PHP against the server's modules and ini
 	./docker/check-parity.sh
 
-test:
+##@ Tests
+test: ## Run all unit suites (needs make up; see README)
 	cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json
 	node tests/e2e/select-test.ts
 	node tests/e2e/shard-test.ts
@@ -83,34 +75,36 @@ test:
 	if [ $$status -ne 0 ] || [ "$$last" != WEB-OK ]; then printf '%s\n' "$$out" | grep '^FAIL' >&2; echo "rooms-web-test failed (curl $$status)" >&2; exit 1; fi
 	@url=$$($(MAKE) --no-print-directory -s url) && tests/tankity-data-deny.sh "$$url"
 
-protocol:
+##@ Tankity fixtures
+protocol: ## Rewrite the Tankity room protocol fixtures (needs make up)
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/generate.php'
 
-sim-vectors:
+sim-vectors: ## Rewrite the Tankity sim test vectors (needs make up)
 	$(COMPOSE) exec -T www-cs-php sh -c 'cd /var/www/html/games/tankity && php protocol/sim-vectors.php'
 
-e2e:
+##@ Browser
+e2e: ## Browser suite against the local site (E2E_BASE_URL, E2E_ARGS)
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
 	E2E_BASE_URL=$$url tests/e2e/run.sh $(E2E_ARGS)
 
-screenshots:
+screenshots: ## Recapture the Games-page pictures (macOS)
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
 	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url node screenshots.ts $(GAMES)
 
 # The specs this branch's changes need (committed, uncommitted and new files
 # against origin/main), picked by tests/e2e/select.ts; nothing when none.
-e2e-changed:
+e2e-changed: ## Only the browser specs your changes need
 	@specs=$$( { git diff --name-only origin/main...HEAD; git diff --name-only HEAD; git ls-files --others --exclude-standard | sed 's|^|websites/www.cs/|'; } | sort -u | node tests/e2e/select.ts ) && \
 	echo "e2e: $$specs" && \
 	case "$$specs" in NONE) ;; ALL) $(MAKE) --no-print-directory e2e ;; *) $(MAKE) --no-print-directory e2e E2E_ARGS="$$specs" ;; esac
 
 # The admin login end to end in its own docker project (torn down afterwards).
-admin-smoke:
+admin-smoke: ## Admin sign-in check in a throwaway docker project
 	tests/admin-smoke.sh
 
 # The workroom's browser check against its own docker project, with the
 # admin mail capture. Local only.
-music-e2e:
+music-e2e: ## Music workroom browser check in a throwaway docker project
 	@name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml"; \
 	export ADMIN_SMOKE_DIR=/tmp/$$name; \
 	trap 'docker compose $$files -p $$name down -v >/dev/null 2>&1' EXIT; \
@@ -128,19 +122,20 @@ music-e2e:
 MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
 MUSIC_TOOL = $(MUSIC_PY) music/tools/siue-music
 
-music-setup:
+##@ Music workroom
+music-setup: ## Guided setup: API keys, notes key, pull request (safe to re-run)
 	@music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt
 	@music/tools/.venv/bin/python music/tools/siue-music setup
-music-status:
-	@$(MUSIC_TOOL) keys status
-music-pickup:
+music-status: ## Show what is set up and what is missing
+	@$(MUSIC_TOOL) keys status || [ $$? -eq 3 ]
+music-pickup: ## Download, open and save your waiting notes
 	@$(MUSIC_TOOL) pickup
-music-publish:
+music-publish: ## Upload a draft (PIECE=<id> [VERSION=n])
 	@test -n "$(PIECE)" || { echo "usage: make music-publish PIECE=ch1-labyrinth [VERSION=3]" >&2; exit 1; }
 	@$(MUSIC_TOOL) publish "$(PIECE)" $(if $(VERSION),--version $(VERSION))
-music-rotate:
+music-rotate: ## Make a new notes key (earlier notes still open)
 	@$(MUSIC_TOOL) keys rotate
-music-forget:
+music-forget: ## Delete this computer's cached keys
 	@$(MUSIC_TOOL) keys forget
-music-test:
+music-test: ## Run the key tool's tests
 	$(MUSIC_PY) -m unittest discover -s music/tools/tests -t music/tools/tests

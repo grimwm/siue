@@ -61,17 +61,14 @@ class GuideTest(unittest.TestCase):
         self.w.keys.init(None)
         text = self.text()
         self.assertIn("Run make music-setup to finish", text)
-        self.assertIn("NOTES KEY (made by make music-setup) is the encryption key", text)
-        self.assertIn("API KEYS (music-publish, music-pickup)", text)
+        self.assertIn("NOTES KEY  seals your notes", text)
+        self.assertIn("API KEYS   (music-publish, music-pickup)", text)
         self.assertNotIn(SECRET, text)
 
     def test_status_when_nothing_is_done(self):
-        code, left = self.checklist()
+        code = self.w.keys.status()
         self.assertEqual(code, 3)
-        self.assertIn("→ The notes key is not made yet.", left)
-        self.assertNotIn("✓", left)
-        self.assertTrue(left.rstrip().endswith("Next: make music-setup"))
-        self.assertIn("NOTES KEY", left)
+        self.assertEqual(self.text().strip(), "Nothing is set up yet.\nNext: make music-setup")
 
     def test_status_with_the_key_made_but_not_committed_and_nothing_else(self):
         self.make_repo()

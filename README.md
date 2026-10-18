@@ -75,7 +75,7 @@ From the repository root:
 | `make ps` | shows the running containers |
 | `make down` | stops and removes the containers |
 
-For one site, run the same names inside it: `make -C websites/www.cs up | down | url`. These touch only that site's services (`www-cs-php`, `www-cs-nginx`). `make -C websites/www.cs help` lists every target.
+For one site, run the same names inside it: `make -C websites/www.cs up | down | url`. These touch only that site's services (`www-cs-php`, `www-cs-nginx`). `make -C websites/www.cs help` lists every target. `make help` prints each target's one-line description, taken from the `## description` on its rule line in the Makefile (plain text when piped or when `NO_COLOR` is set); a target's longer details live in this README.
 
 nginx publishes on `127.0.0.1` with an ephemeral host port (`127.0.0.1::80` in `compose.yaml`), never a fixed one, so a running dev server is never displaced. Ask for the URL with `make urls` or `make -C websites/www.cs url`.
 

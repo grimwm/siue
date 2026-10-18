@@ -108,7 +108,7 @@ function story(i: GuideInput): GuidePart[] {
     if (box) parts.push({ id: 'stars', title: "A character's tune as stars", what: 'The joined stars are one character’s tune. Each star marks one note on that lane. Higher on the screen is a higher note, and a bigger star is louder. The line shows the shape of the tune at a glance.', like: 'Like a line drawn through the tune’s notes: when it climbs, the tune climbs.', spot: view(box), clip: pieceClip(tune.from, tune.to, score.duration) });
   }
   const peak = score.energy.reduce((best, e) => (e[1] > best[1] ? e : best), score.energy[0] ?? [0, 0]);
-  parts.push({ id: 'energy', title: 'The energy glow', what: `The soft green band shows ${music ? 'how intense the music feels. Low and thin is calm; high is tense or exciting.' : 'how strong the sound is over time. Low is faint; high is strong.'}`, like: 'Like the volume and pace of a scene building to its climax.', spot: view({ x: 0, y: 0, w, h }), clip: pieceClip(peak[0] - CLIP_MAX / 2, peak[0] + CLIP_MAX / 2, score.duration) });
+  parts.push({ id: 'energy', title: 'The energy glow', what: `The soft green band shows ${music ? 'how intense the music feels. Low and thin is calm; high is tense or exciting.' : 'how strong the sound is over time. Low is faint; high is strong.'}`, like: music ? 'Like the volume and pace of a scene building to its climax.' : 'Like the needle on a volume meter.', spot: view({ x: 0, y: 0, w, h }), clip: pieceClip(peak[0] - CLIP_MAX / 2, peak[0] + CLIP_MAX / 2, score.duration) });
   parts.push(playhead(i, h));
   parts.push(ruler(score, w, h));
   return parts;

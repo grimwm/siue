@@ -118,7 +118,7 @@ test('Legend: the spec’s line for every view', async () => {
     story: ['star = a note', 'higher = higher note', 'bigger = louder', 'glow = energy'],
     roll: ['block = a note', 'higher = higher note', 'longer = held longer', 'colour = instrument'],
     sound: ['bottom = low sounds', 'top = high', 'brighter = louder'],
-    sheet: ['each line is a staff; notes higher on it are higher'],
+    sheet: ['five lines = a staff', 'higher on it = higher note'],
   });
   const root = await mount(h(c.legend.Legend, { items: LEGENDS.story }));
   assert.equal(walk(root).find(e => e._attrs['data-legend'] !== undefined)!.textContent, 'star = a note · higher = higher note · bigger = louder · glow = energy');

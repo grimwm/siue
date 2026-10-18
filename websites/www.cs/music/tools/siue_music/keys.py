@@ -537,8 +537,14 @@ class Keys:
         self.out(("Done: your notes key is " + ("taken from" if adopt else "made and saved in")
                   + f" 1Password (vault {self.op.vault}).\n"
                   f"Its fingerprint, an ID to compare later: {display(fp)}\n\n" + KEY_KINDS))
-        self._send(upload, {fp: pkcs8}, passphrase, first=True)
+        if not (adopt and self._already_uploaded(fp)):
+            self._send(upload, {fp: pkcs8}, passphrase, first=True)
         return fp
+
+    def _already_uploaded(self, fp: str) -> bool:
+        """True when the last successful upload held `fp` (a rerun adopting the key before its pull request merges)."""
+        up = self.cache.load().get("uploaded") or {}
+        return isinstance(up.get("fingerprints"), list) and fp in up["fingerprints"]
 
     def _adopt(self, items: list[dict]) -> tuple[str, bytes, bytes, str]:
         if len(items) != 1:

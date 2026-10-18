@@ -47,9 +47,16 @@ class FakeRun:
         self.pr_open = False
         self.calls: list[list[str]] = []
         self.worktrees: list[Path] = []
+        self.timeouts: dict[tuple, object] = {}
+        self.hang: tuple | None = None
 
     def __call__(self, argv, **kw):
         self.calls.append(list(argv))
+        if argv[0] == "git":
+            head = tuple(argv[3:5] if argv[1] == "-C" else argv[1:3])
+            self.timeouts[head] = kw.get("timeout")
+            if head == self.hang:
+                raise subprocess.TimeoutExpired(argv, kw.get("timeout") or 0)
         done = lambda out="", code=0: subprocess.CompletedProcess(argv, code, out, "")  # noqa: E731
         if argv[0] == "node":
             (self.repo / "games" / "workroom" / "dist").mkdir(parents=True, exist_ok=True)
@@ -223,6 +230,33 @@ class SetupTest(unittest.TestCase):
         self.run.state = "uncommitted"
         self.assertEqual(self.go(), 0, self.text())
         self.assertEqual(self.server.uploads, [], "the record says the current key is already uploaded")
+
+    def test_a_rerun_before_the_merge_does_not_upload_the_locked_copy_again(self):
+        self.everything_done()
+        self.run.state = "uncommitted"
+        self.w.keys.public_json.unlink()
+        self.assertEqual(self.go(), 0, self.text())
+        self.assertIn("1Password already holds a notes key; using it.", self.text())
+        self.assertEqual(self.server.uploads, [])
+        self.assertNotIn("was not uploaded", self.text())
+
+    def test_the_remaining_git_calls_have_timeouts(self):
+        self.pastes = [PUB, PICK]
+        self.go()
+        self.assertTrue(self.run.timeouts[("diff", "--cached")])
+        self.assertTrue(self.run.timeouts[("worktree", "remove")])
+
+    def test_a_worktree_removal_that_hangs_is_reported_not_a_traceback(self):
+        self.run.hang = ("worktree", "remove")
+        self.pastes = [PUB, PICK]
+        self.assertEqual(self.go(), 0, self.text())
+        self.assertIn("Could not remove the temporary worktree", self.text())
+
+    def test_a_git_call_that_hangs_stops_with_a_plain_line(self):
+        self.run.hang = ("diff", "--cached")
+        self.pastes = [PUB, PICK]
+        self.assertEqual(self.go(), 1, self.text())
+        self.assertIn("A command did not finish", self.text())
 
     def test_a_revoked_key_is_replaced_in_the_guided_way(self):
         self.everything_done()

@@ -235,7 +235,7 @@ class Setup:
                     shutil.copy2(path, target)
             rels = [str(p.resolve().relative_to(top.resolve())) for p in self._paths()]
             self._step(["git", "add", "-A", "--", *rels], tree, "git add")
-            if self.run(["git", "diff", "--cached", "--quiet"], cwd=tree, capture_output=True, text=True).returncode != 0:
+            if self.run(["git", "diff", "--cached", "--quiet"], cwd=tree, capture_output=True, text=True, timeout=120).returncode != 0:
                 fp = read_repo_keys(keys.public_json).current or ""
                 self._step(["git", "commit", "-m", f"Music workroom: notes key {display(fp)[:19]}"], tree, "git commit")
             pushed = self.run(["git", "push", "-u", "origin", "HEAD"], cwd=tree, capture_output=True, text=True, timeout=300)
@@ -246,7 +246,10 @@ class Setup:
             self.done.append("public key committed and pushed")
             self._pull_request(branch, tree)
         finally:
-            self.run(["git", "worktree", "remove", "--force", str(tree)], cwd=top, capture_output=True, text=True)
+            try:
+                self.run(["git", "worktree", "remove", "--force", str(tree)], cwd=top, capture_output=True, text=True, timeout=120)
+            except (OSError, subprocess.SubprocessError):
+                self.out(f"Could not remove the temporary worktree {tree}: run git worktree prune in your checkout.")
             shutil.rmtree(holder, ignore_errors=True)
         self._restore(top)
 
@@ -293,6 +296,9 @@ class Setup:
             return 3
         except (KeysError, OpError, ApiError) as e:
             self.out(str(e))
+            return 1
+        except (OSError, subprocess.SubprocessError) as e:
+            self.out(f"A command did not finish: {e}. Run make music-setup again.")
             return 1
         self.out("\nDone:")
         for line in self.done:

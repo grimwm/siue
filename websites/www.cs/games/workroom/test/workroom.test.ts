@@ -318,11 +318,11 @@ test('a demo’s Hear it pauses the piece first and plays the demo once; Close s
   unmount(root);
 });
 
-test('a piece part’s Hear it plays the piece from the clip’s start; Next stops it and a demo stops it', async () => {
-  const demos: string[] = [];
-  const root = await mount({ playDemo: (id: string) => demos.push(id), stopDemo: () => {} });
+test('a piece part’s Hear it plays the piece from the clip’s start; Next stops it', async () => {
+  const root = await mount();
   await act(() => { fire(button(root, 'How to read this'), 'click'); });
   const audio = audios[audios.length - 1]!;
+  audio.currentTime = 5;
   const before = audio.played;
   await act(() => { fire(button(root, 'Hear it'), 'click'); });
   assert.equal(audio.played, before + 1);
@@ -381,9 +381,7 @@ test('the Story opens with the whole piece in the width the stage measures, at 3
       const end = lastSection(root).right;
       assert.ok(end <= width + 1, `${sc.kind} at ${width}: the last section ends inside the drawing (${end})`);
       assert.ok(end >= width * 0.5, `${sc.kind} at ${width}: and the piece is not squeezed into a corner (${end})`);
-      const fits = sc.sections.at(-1)!;
-      if (sc.kind === 'music') assert.ok(end > width - 1, 'the music runs to the right edge');
-      else assert.ok(fits !== undefined);
+      assert.ok(end > width - 1, `${sc.kind} runs to the right edge`);
       unmount(root);
     });
   }

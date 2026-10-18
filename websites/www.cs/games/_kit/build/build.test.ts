@@ -453,7 +453,10 @@ test('fonts: their licences follow the package notices, under a header that name
   assert.ok(text.startsWith("Third-party code bundled into this game's scripts, and the fonts in fonts/.\n\n"));
   assert.ok(text.includes('Test Sans (test 1.0)\nLicense: OFL-1.1\n\nCopyright Test\nSIL OPEN FONT LICENSE Version 1.1\n'));
   assert.ok(!text.includes('\r'));
-  assert.ok(text.indexOf(`preact ${preactVersion}`) < text.indexOf('Test Sans'));
+  const notice = text.indexOf(`preact ${preactVersion}`);
+  assert.ok(notice >= 0, 'the package notice is present');
+  assert.ok(text.includes('Test Sans'));
+  assert.ok(notice < text.indexOf('Test Sans'));
 });
 
 test('fonts: a game without fonts keeps the plain header', t => {

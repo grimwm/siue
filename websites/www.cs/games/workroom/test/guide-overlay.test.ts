@@ -80,7 +80,11 @@ test('focus starts on the card; Escape does nothing, on the card or to any windo
   const card = walk(root).find(e => e._attrs['data-guide-card'] !== undefined)!;
   assert.equal(card._attrs['role'], 'dialog');
   assert.equal(globalThis.__focused, card);
+  const overlay = walk(root).find(e => e._attrs['data-guide-overlay'] !== undefined)!;
+  let prevented = false;
+  fire(overlay, 'keydown', { key: 'Escape', preventDefault: () => { prevented = true; } });
   fire(card, 'keydown', { key: 'Escape' });
+  assert.equal(prevented, false, 'the overlay does not take Escape');
   const pressed = keyListeners.map(f => {
     const ev = { type: 'keydown', key: 'Escape', prevented: false, stopped: false, preventDefault() { ev.prevented = true; }, stopPropagation() { ev.stopped = true; } };
     (f as (e: typeof ev) => void)(ev);

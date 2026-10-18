@@ -76,7 +76,7 @@ export function Timeline(p: TimelineProps) {
           <text class="lane-name pointer-events-none font-display text-[11px] font-semibold tracking-wider uppercase" x={8 + LANE_ICON_SIZE + 4} y={l.rect.y + 15} fill={marks.lane.get(l.id)?.text}>{l.name}</text>
         </g>
       ))}
-      {layout.notes.map(n => <rect class="pointer-events-none opacity-35" data-lane-note={n.index} x={n.rect.x} y={n.rect.y} width={Math.max(1, n.rect.w)} height={n.rect.h} rx={1} fill={marks.lane.get(n.lane)?.mark} />)}
+      {layout.notes.map(n => <rect class="pointer-events-none" data-lane-note={n.index} x={n.rect.x} y={n.rect.y} width={Math.max(1, n.rect.w)} height={n.rect.h} rx={1} fill={marks.lane.get(n.lane)?.mark} />)}
       {stars.map(c => {
         const mark = marks.color.get(c.color)?.mark ?? c.color;
         const text = marks.color.get(c.color)?.text ?? c.color;
@@ -84,7 +84,7 @@ export function Timeline(p: TimelineProps) {
         return (
           <g class="pointer-events-none" data-motif={c.motif} data-character={c.character} role="img" aria-label={tuneLabel(c.name, c.stars.map(s => s.y))}>
             {c.ribbon ? <rect data-ribbon="" x={c.ribbon.x} y={c.ribbon.y} width={Math.max(0, c.ribbon.w)} height={c.ribbon.h} fill={mark} /> : null}
-            {c.stars.length > 1 ? <polyline data-constellation-line="" aria-hidden="true" fill="none" stroke={mark} stroke-width={1.5} stroke-opacity={0.85} stroke-linejoin="round" points={c.stars.map(s => `${s.x},${s.y}`).join(' ')} /> : null}
+            {c.stars.length > 1 ? <polyline data-constellation-line="" aria-hidden="true" fill="none" stroke={mark} stroke-width={1.5} stroke-linejoin="round" points={c.stars.map(s => `${s.x},${s.y}`).join(' ')} /> : null}
             {c.stars.map(s => <circle data-star={s.note} aria-hidden="true" cx={s.x} cy={s.y} r={STAR_R[s.size]} fill={mark} />)}
             {first ? <text data-character-name="" class="font-display text-[11px] font-semibold tracking-wider uppercase" x={first.x + 7} y={Math.max(first.y - 6, layout.lanes[0]?.rect.y ?? 0) + 2} fill={text}>{c.name}</text> : null}
           </g>

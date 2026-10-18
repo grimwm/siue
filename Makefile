@@ -34,12 +34,14 @@ down: ## Stop and remove every site's containers
 ps: ## Show running containers
 	docker compose ps
 
-urls: ## Print each site's local URL (ports are ephemeral)
+urls: ## Print each site's live URL and its local docker copy's URL
 	@for s in $(SITES); do \
+		live=$$($(MAKE) -s --no-print-directory -C $$s live-url 2>/dev/null || true); \
+		printf '%-12s %-6s %s\n' "$$(basename $$s)" "live" "$${live:-(none)}"; \
 		if u=$$($(MAKE) -s --no-print-directory -C $$s url 2>/dev/null); then \
-			printf '%-12s %s\n%-12s %s\n' "$$(basename $$s)" "running" "" "$$u"; \
+			printf '%-12s %-6s %s\n' "" "local" "$$u"; \
 		else \
-			printf '%-12s %s\n' "$$(basename $$s)" "not running"; \
+			printf '%-12s %-6s %s\n' "" "local" "not running (make up)"; \
 		fi; \
 	done
 

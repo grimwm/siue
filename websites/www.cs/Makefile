@@ -1,4 +1,4 @@
-.PHONY: help deploy up down url parity test protocol sim-vectors e2e e2e-changed screenshots admin-smoke music-e2e
+.PHONY: help deploy up down live-url url parity test protocol sim-vectors e2e e2e-changed screenshots admin-smoke music-e2e
 
 .DEFAULT_GOAL := help
 
@@ -38,11 +38,14 @@ up: ## Run the site locally in docker
 down: ## Stop the local site
 	$(COMPOSE) rm --stop --force $(SERVICES)
 
-url: ## Print the local site's URL (its port is ephemeral)
+live-url: ## Print the live site's URL
+	@echo "https://www.cs.siue.edu/~wgrim/"
+
+url: ## Print the local docker copy's URL (its port is ephemeral)
 	@if port=$$($(COMPOSE) port www-cs-nginx 80 2>/dev/null) && [ -n "$$port" ]; then \
 		echo "http://$$port/"; \
 	else \
-		echo "www.cs is not running (make up)" >&2; exit 1; \
+		echo "the local docker copy is not running (make up)" >&2; exit 1; \
 	fi
 
 parity: ## Check docker PHP against the server's modules and ini

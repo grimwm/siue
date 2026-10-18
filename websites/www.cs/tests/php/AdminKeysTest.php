@@ -320,6 +320,43 @@ final class AdminKeysTest extends TestCase
         self::assertStringNotContainsString('<div class="callout">', $p->keysPanel($in)->body, 'no label, no callout');
     }
 
+    public function testCreatingAGuidedKeyRevokesEveryOlderActiveOneWithTheLabel(): void
+    {
+        [$p, $keys, $in] = $this->panel();
+        $a = $keys->create('music-publish', ['drafts:publish']);
+        $b = $keys->create('music-publish', ['drafts:publish']);
+        $keys->create('music-publish', ['drafts:publish']);
+        $keys->revoke(3);
+        $other = $keys->create('laptop', ['notes:pickup']);
+        $csrf = $this->csrfIn($p->keysPanel($in)->body);
+        $res = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'music-publish', 'scopes' => ['drafts:publish'], 'csrf' => $csrf]));
+        self::assertStringContainsString('Replaced 2 older music-publish keys.', $res->body);
+        self::assertNotNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $a]]), 'drafts:publish'), 'older key refused');
+        self::assertNotNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $b]]), 'drafts:publish'), 'older key refused');
+        $active = array_filter($keys->list(), static fn(array $k): bool => $k['label'] === 'music-publish' && $k['revoked_at'] === null);
+        self::assertCount(1, $active);
+        preg_match('/<code[^>]*>([0-9a-f]{64})<\/code>/', $res->body, $m);
+        self::assertNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $m[1]]]), 'drafts:publish'));
+        self::assertNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $other]]), 'notes:pickup'), 'unrelated label untouched');
+        $csrf = $this->csrfIn($p->keysPanel($in)->body);
+        $again = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'music-publish', 'scopes' => ['drafts:publish'], 'csrf' => $csrf]));
+        self::assertStringContainsString('Replaced 1 older music-publish key.', $again->body, 'revoked keys are not counted');
+        $csrf = $this->csrfIn($p->keysPanel($in)->body);
+        $dup = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'laptop', 'scopes' => ['notes:pickup'], 'csrf' => $csrf]));
+        self::assertStringNotContainsString('Replaced', $dup->body);
+        self::assertCount(2, array_filter($keys->list(), static fn(array $k): bool => $k['label'] === 'laptop' && $k['revoked_at'] === null));
+    }
+
+    public function testExistingKeysListNewestFirstWithLastUsedProminent(): void
+    {
+        [$p, $keys, $in] = $this->panel();
+        $keys->create('first-one', ['notes:pickup']);
+        $keys->create('second-one', ['notes:pickup']);
+        $body = $p->keysPanel($in)->body;
+        self::assertLessThan(strpos($body, 'first-one'), strpos($body, 'second-one'));
+        self::assertStringContainsString('<p class="lastused">Last used: <strong>never</strong></p>', $body);
+    }
+
     public function testAnUnknownLabelPrefillsThePlainFormWithoutTheCallout(): void
     {
         [$p, , $in] = $this->panel();

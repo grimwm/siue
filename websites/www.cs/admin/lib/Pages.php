@@ -258,11 +258,11 @@ final class Pages
             $label = $r->post['label'] ?? '';
             $scopes = $r->post['scopes'] ?? [];
             try {
-                $key = $this->keys->create(is_string($label) ? $label : '', is_array($scopes) ? array_values($scopes) : []);
+                $made = $this->keys->createReplacing(is_string($label) ? $label : '', is_array($scopes) ? array_values($scopes) : []);
             } catch (\InvalidArgumentException $e) {
                 return $this->keysPage(400, $r, $e->getMessage());
             }
-            return $this->keysPage(200, $r, null, $key);
+            return $this->keysPage(200, $r, null, $made['key'], false, $made['replaced'], trim(is_string($label) ? $label : ''));
         });
     }
 
@@ -332,7 +332,7 @@ final class Pages
     }
 
     /** The keys page; $newKey is shown once, at the top, $error explains a refused create. */
-    private function keysPage(int $status, Request $r, ?string $error = null, ?string $newKey = null, bool $prefill = false): Response
+    private function keysPage(int $status, Request $r, ?string $error = null, ?string $newKey = null, bool $prefill = false, int $replaced = 0, string $madeLabel = ''): Response
     {
         $csrf = $this->sessions->csrf($r);
         if ($csrf === '') {
@@ -348,6 +348,7 @@ final class Pages
             $body .= '<div class="newkey"><button type="button" id="copykey" class="copykey"><code class="secret bigkey">' . Html::e($newKey) . '</code>'
                 . '<span class="copyhint">Copy key</span></button>'
                 . '<p id="copystatus" class="copystatus" role="status" aria-live="polite"></p>'
+                . ($replaced > 0 ? Html::p('Replaced ' . $replaced . ' older ' . $madeLabel . ' ' . ($replaced === 1 ? 'key' : 'keys') . '.', 'replaced') : '')
                 . '<p>Copy this and paste it into the terminal where <code>make music-setup</code> is waiting. It is shown only this once.</p></div>';
         }
         $registry = $this->keys->registry();
@@ -376,11 +377,13 @@ final class Pages
         $revoked = '';
         $nActive = 0;
         $nRevoked = 0;
-        foreach ($this->keys->list() as $k) {
-            $card = '<div class="key"><strong>' . Html::e($k['label']) . '</strong><dl class="prints">'
+        $all = $this->keys->list();
+        usort($all, static fn(array $a, array $b): int => [$b['created_at'], $b['id']] <=> [$a['created_at'], $a['id']]);
+        foreach ($all as $k) {
+            $card = '<div class="key"><strong>' . Html::e($k['label']) . '</strong>'
+                . '<p class="lastused">Last used: <strong>' . ($k['last_used_at'] === null ? 'never' : self::when($k['last_used_at'])) . '</strong></p><dl class="prints">'
                 . '<dt>Scopes</dt><dd>' . Html::e(implode(', ', $k['scopes'])) . '</dd>'
-                . '<dt>Created</dt><dd>' . self::when($k['created_at']) . '</dd>'
-                . '<dt>Last used</dt><dd>' . ($k['last_used_at'] === null ? 'never' : self::when($k['last_used_at'])) . '</dd>';
+                . '<dt>Created</dt><dd>' . self::when($k['created_at']) . '</dd>';
             if ($k['revoked_at'] === null) {
                 $card .= '</dl><form method="post" action="keys.php"><input type="hidden" name="do" value="revoke">'
                     . '<input type="hidden" name="id" value="' . $k['id'] . '">'

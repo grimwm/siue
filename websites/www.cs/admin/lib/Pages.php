@@ -182,7 +182,7 @@ final class Pages
                 $body .= '</ul>';
             }
             $body .= '<h2>API keys</h2><ul class="links"><li><a href="keys.php">Manage API keys</a></li></ul>';
-            $prints = admin_key_fingerprints();
+            $prints = admin_key_fingerprints($this->db);
             if ($prints !== []) {
                 $body .= '<h2>Encryption keys</h2><dl class="prints">';
                 foreach ($prints as $label => $print) {

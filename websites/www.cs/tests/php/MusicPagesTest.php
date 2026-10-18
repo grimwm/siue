@@ -17,12 +17,14 @@ final class MusicPagesTest extends TestCase
     private Music\Store $store;
     private Admin\Sessions $sessions;
     private Admin\Keys $keys;
+    private PDO $db;
     private FakeClock $clock;
     private string $dir;
 
     protected function setUp(): void
     {
         [$this->store, $db, $this->dir, $clock] = music_world();
+        $this->db = $db;
         $this->clock = $clock;
         $this->sessions = new Admin\Sessions($db, $clock, '/~wgrim/');
         $this->keys = new Admin\Keys($db, $clock, null, self::BASE);
@@ -52,7 +54,7 @@ final class MusicPagesTest extends TestCase
     {
         $key = $this->keys->create('all', ['notes:pickup', 'drafts:publish', 'keys:publish']);
         $id = $this->store->addNote(music_sealed())['id'];
-        $this->store->putKeyring('{"v":1}');
+        $this->store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
         $bearer = ['authorization' => "Bearer $key"];
         self::assertSame(303, $this->pages->delete(req(['https' => true, 'method' => 'POST', 'headers' => $bearer, 'post' => ['id' => $id]]))->status);
         self::assertNotNull($this->store->noteBytes($id), 'an API key cannot delete');
@@ -82,7 +84,7 @@ final class MusicPagesTest extends TestCase
 
     public function testDataRoutesRefuseCrossSiteRequests(): void
     {
-        $this->store->putKeyring('{"v":1}');
+        $this->store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
         foreach (['cross-site', 'same-site'] as $site) {
             $r = music_signed_in($this->sessions, ['headers' => ['sec-fetch-site' => $site]]);
             foreach (['csrf', 'notes', 'keyring', 'drafts'] as $route) {
@@ -147,11 +149,12 @@ final class MusicPagesTest extends TestCase
     public function testTheKeyringAndTheHistoryGoToTheSession(): void
     {
         $r = music_signed_in($this->sessions);
+        $this->db->exec('DELETE FROM music_keyring');
         $none = $this->pages->keyring($r);
         self::assertSame(404, $none->status);
         self::assertSame('no_keyring', json_decode($none->body, true)['error']);
         $locked = ['v' => 1, 'kdf' => 'PBKDF2-SHA-256', 'iterations' => 600000, 'salt' => 'c2FsdA==', 'iv' => 'aXY=', 'ct' => 'Y3Q='];
-        $this->store->putKeyring(json_encode($locked));
+        $this->store->putKeyring(json_encode($locked), MUSIC_FP_CURRENT, []);
         $res = $this->pages->keyring($r);
         self::assertSame(200, $res->status);
         self::assertSame($locked, json_decode($res->body, true)['keyring']);
@@ -229,17 +232,29 @@ final class MusicPagesTest extends TestCase
         self::assertStringContainsString('Music notes key', $hub->body);
     }
 
-    public function testAMalformedPublicKeyFileDoesNotBreakTheHub(): void
+    public function testTheHubShowsTheStoredFingerprintInGroupsOfFour(): void
     {
-        $file = admin_tmp_dir() . '/public.json';
-        file_put_contents($file, '{not json');
-        self::assertSame(['Music notes key' => 'invalid (see music/keys/public.json)'], admin_key_fingerprints($file));
-        self::assertSame(['Music notes key' => 'not made yet (make music-setup)'], admin_key_fingerprints(admin_tmp_dir() . '/absent.json'));
+        self::assertSame(['Music notes key' => implode(' ', array_fill(0, 16, 'abab'))], admin_key_fingerprints($this->db));
+        $this->store->putKeyring('{"v":1}', str_repeat('0123456789abcdef', 4), []);
+        self::assertSame(['Music notes key' => implode(' ', array_fill(0, 4, '0123 4567 89ab cdef'))], admin_key_fingerprints($this->db));
+    }
+
+    public function testTheHubSaysNotMadeYetWithoutAKeyringOrItsTable(): void
+    {
+        $this->db->exec('DELETE FROM music_keyring');
+        self::assertSame(['Music notes key' => 'not made yet (make music-setup)'], admin_key_fingerprints($this->db));
+        self::assertSame(['Music notes key' => 'not made yet (make music-setup)'], admin_key_fingerprints(admin_tmp_db()), 'a database the workroom never touched');
+    }
+
+    public function testTheHubShowsOnlyNotMadeYetForARowWithoutAFingerprint(): void
+    {
+        $this->db->exec("UPDATE music_keyring SET current_fp = ''");
+        self::assertSame(['Music notes key' => 'not made yet (make music-setup)'], admin_key_fingerprints($this->db));
     }
 
     public function testACorruptStoredKeyringIsABadKeyringNotAMissingOne(): void
     {
-        $this->store->putKeyring('not json');
+        $this->store->putKeyring('not json', MUSIC_FP_CURRENT, []);
         $res = $this->pages->keyring(music_signed_in($this->sessions));
         self::assertSame(500, $res->status);
         self::assertSame(['error' => 'bad_keyring'], json_decode($res->body, true));

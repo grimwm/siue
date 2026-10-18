@@ -296,12 +296,45 @@ final class AdminKeysTest extends TestCase
         $res = $p->keysAction($this->post($in, ['do' => 'create', 'label' => 'laptop', 'scopes' => ['notes:pickup'], 'csrf' => $csrf]));
         self::assertSame(200, $res->status);
         self::assertSame(1, preg_match('/<code[^>]*>([0-9a-f]{64})<\/code>/', $res->body, $m));
-        self::assertStringContainsString('will not be shown again', $res->body);
+        self::assertStringContainsString('It is shown only this once.', $res->body);
+        self::assertStringContainsString('<h1>Your new key</h1><div class="newkey"><button type="button" id="copykey" class="copykey"><code class="secret bigkey">' . $m[1], $res->body);
+        self::assertStringContainsString('<span class="copyhint">Copy key</span>', $res->body);
+        self::assertStringContainsString('role="status" aria-live="polite"', $res->body);
+        self::assertStringContainsString('<script src="admin.js" defer></script>', $res->body);
+        self::assertStringNotContainsString('<script src', $p->keysPanel($in)->body, 'only the new-key page loads the script');
+        self::assertStringContainsString('make music-setup', $res->body);
         self::assertSame(hash('sha256', $m[1]), (new PDO('sqlite::memory:'))->query("SELECT '" . hash('sha256', $m[1]) . "'")->fetchColumn());
         self::assertNull($keys->check(req(['headers' => ['authorization' => 'Bearer ' . $m[1]]]), 'notes:pickup'));
         $again = $p->keysPanel($in);
         self::assertStringNotContainsString($m[1], $again->body);
-        self::assertStringNotContainsString('will not be shown again', $again->body);
+        self::assertStringNotContainsString('shown only this once', $again->body);
+    }
+
+    public function testAPrefilledPageLeadsWithTheCalloutAndTheFormUnderIt(): void
+    {
+        [$p, , $in] = $this->panel();
+        $body = $p->keysPanel(req(['cookies' => $in->cookies, 'query' => ['label' => 'music-publish', 'scopes' => 'drafts:publish']]))->body;
+        self::assertStringContainsString('<main class="card"><div class="mark" aria-hidden="true"><span></span></div><h1>API keys</h1><div class="callout"><p class="lead">Make the <strong>music-publish</strong> key: press <strong>Create key</strong>.</p><form', $body);
+        self::assertLessThan(strpos($body, 'Existing keys'), strpos($body, 'Create key</button>'));
+        self::assertStringNotContainsString('Create a key', $body);
+        self::assertStringNotContainsString('<div class="callout">', $p->keysPanel($in)->body, 'no label, no callout');
+    }
+
+    public function testRevokedKeysSitInACollapsedDetailsBelowTheExistingKeys(): void
+    {
+        [$p, $keys, $in] = $this->panel();
+        $keys->create('live-one', ['notes:pickup']);
+        $old = $keys->create('old-one', ['notes:pickup']);
+        $id = (int) array_values(array_filter($keys->list(), static fn(array $k): bool => $k['label'] === 'old-one'))[0]['id'];
+        self::assertTrue($keys->revoke($id));
+        $body = $p->keysPanel($in)->body;
+        self::assertStringContainsString('<h2>Existing keys</h2>', $body);
+        self::assertStringContainsString('<details class="revoked"><summary>Revoked keys (1)</summary>', $body);
+        self::assertStringNotContainsString('<details class="revoked" open', $body);
+        $open = strpos($body, '<details');
+        self::assertLessThan($open, strpos($body, 'live-one'));
+        self::assertGreaterThan($open, strpos($body, 'old-one'));
+        self::assertStringNotContainsString($old, $body);
     }
 
     public function testCreateAndRevokeNeedAFreshCsrfToken(): void

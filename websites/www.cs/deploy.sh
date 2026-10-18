@@ -168,7 +168,7 @@ while IFS= read -r -d '' f; do
     admin/lib/*/*) continue ;;
     admin/lib/*.php | admin/lib/.htaccess) ;;
     admin/*/*) continue ;;
-    admin/*.php | admin/admin.css | admin/.htaccess) ;;
+    admin/*.php | admin/admin.css | admin/admin.js | admin/.htaccess) ;;
     admin/*) continue ;;
     # The music workroom: its pages, API, library and the public key
     # (PHP reads it; its stylesheet, scripts and fonts ship from games/workroom/dist/). Its tools, committed drafts and README stay home. A case

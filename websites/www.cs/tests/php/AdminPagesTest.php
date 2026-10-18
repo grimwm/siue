@@ -85,6 +85,57 @@ final class AdminPagesTest extends TestCase
         return $found[1];
     }
 
+    public function testASignedOutVisitToKeysCarriesItsQueryThroughSignIn(): void
+    {
+        [$p, , , $m] = $this->pages();
+        $gate = $p->keysPanel(req(['query' => ['label' => 'music-publish', 'scopes' => 'drafts:publish,keys:publish']]));
+        self::assertSame(303, $gate->status);
+        $next = 'keys.php?label=music-publish&scopes=drafts%3Apublish%2Ckeys%3Apublish';
+        self::assertSame('login.php?next=' . rawurlencode($next), $gate->headers['Location']);
+
+        self::assertStringContainsString('<input type="hidden" name="next" value="' . htmlspecialchars($next) . '">', $p->loginForm(req(['query' => ['next' => $next]]))->body);
+        $p->requestLink($this->post(['email' => 'wgrim@siue.edu', 'next' => $next]));
+        $p->flush();
+        $mime = quoted_printable_decode($m->sent[0]['mime']);
+        self::assertStringContainsString('&next=' . rawurlencode($next), $mime);
+        $token = $this->tokenOf($m);
+        $confirm = $p->confirm(req(['query' => ['token' => $token, 'next' => $next]]));
+        self::assertStringContainsString('name="next" value="' . htmlspecialchars($next) . '"', $confirm->body);
+        $mark = $this->cookieValue($confirm, Admin\Pages::CONFIRM_COOKIE);
+        $done = $p->signIn($this->post(['token' => $token, 'csrf' => $mark, 'next' => $next], ['cookies' => [Admin\Pages::CONFIRM_COOKIE => $mark]]));
+        self::assertSame(303, $done->status);
+        self::assertSame($next, $done->headers['Location']);
+    }
+
+    /** @return array<string,array{0:mixed}> */
+    public static function unsafeNexts(): array
+    {
+        return [
+            'absolute' => ['https://evil.example/'], 'scheme-relative' => ['//evil.example/'], 'backslash' => ['\\evil.example'],
+            'path' => ['/~wgrim/music/'], 'parent' => ['../music/'], 'subdir' => ['x/keys.php'], 'encoded slash' => ['%2f%2fevil.example'],
+            'javascript' => ['javascript:alert(1)'], 'newline' => ["keys.php?a=1\r\nSet-Cookie: x=1"], 'loop' => ['login.php'],
+            'verify' => ['verify.php?token=x'], 'not a page' => ['keys'], 'too long' => ['keys.php?' . str_repeat('a', 400)],
+            'array' => [['keys.php']], 'empty' => [''], 'space' => ['keys.php?a b'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('unsafeNexts')]
+    public function testAnUnsafeNextFallsBackToTheHub(mixed $next): void
+    {
+        [$p, , , $m] = $this->pages();
+        self::assertSame('', Admin\Pages::safeNext($next));
+        self::assertStringNotContainsString('name="next"', $p->loginForm(req(['query' => ['next' => $next]]))->body);
+        $p->requestLink($this->post(['email' => 'wgrim@siue.edu', 'next' => $next]));
+        $p->flush();
+        self::assertStringNotContainsString('next=', quoted_printable_decode($m->sent[0]['mime']));
+        $token = $this->tokenOf($m);
+        $confirm = $p->confirm(req(['query' => ['token' => $token, 'next' => $next]]));
+        self::assertStringNotContainsString('name="next"', $confirm->body);
+        $mark = $this->cookieValue($confirm, Admin\Pages::CONFIRM_COOKIE);
+        $done = $p->signIn($this->post(['token' => $token, 'csrf' => $mark, 'next' => $next], ['cookies' => [Admin\Pages::CONFIRM_COOKIE => $mark]]));
+        self::assertSame('index.php', $done->headers['Location']);
+    }
+
     public function testLinkRequestRepliesTheSameAndMailsOnlyTheOwner(): void
     {
         [$p, , , $m] = $this->pages();

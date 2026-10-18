@@ -168,7 +168,7 @@ class SetupTest(unittest.TestCase):
         text = self.text()
         self.assertIn("The key saved as music-pickup is really the music-publish key: filing it under that name.", text)
         self.assertEqual(self.opened, [HUB + "?label=music-pickup&scopes=notes:pickup"])
-        self.assertEqual(self.prompts, ["Press Create on that page, copy the key and paste it here: "])
+        self.assertEqual(self.prompts, ["In the browser, press Create key, then copy the key from \"Your new key\" and paste it here: "])
         self.assertEqual(len(self.server.uploads), 1)
         branch = self.made_branch()
         self.assertRegex(branch, r"^music/notes-key-[0-9a-f]{8}$")

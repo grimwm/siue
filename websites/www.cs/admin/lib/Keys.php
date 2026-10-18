@@ -10,6 +10,9 @@ final class Keys
     public const PER_MINUTE = 60;
     public const LABEL_MAX = 80;
 
+    /** The labels the music tool's setup sends people here to make (PUBLISH_KEY and PICKUP_KEY in siue_music/keys.py). */
+    public const GUIDED_LABELS = ['music-publish', 'music-pickup'];
+
     /** The scopes a key may carry (bootstrap.php's ADMIN_KEY_SCOPES). */
     public const SCOPES = \ADMIN_KEY_SCOPES;
 
@@ -34,12 +37,25 @@ final class Keys
     }
 
     /**
-     * Makes a key and returns it; this is the only time it exists in the clear.
+     * Makes a key and returns it; this is the only time it exists in the clear. Older keys are left alone.
      *
      * @param list<string> $scopes
      * @throws \InvalidArgumentException for a bad label, no scopes or a scope outside the registry
      */
     public function create(string $label, array $scopes): string
+    {
+        return $this->createReplacing($label, $scopes, false)['key'];
+    }
+
+    /**
+     * Like create(), and for a guided label also revokes every older active key with that label, in
+     * the same transaction, so a guided label has one active key.
+     *
+     * @param list<string> $scopes
+     * @return array{key:string,replaced:int} replaced counts the keys this call revoked
+     * @throws \InvalidArgumentException as create() does
+     */
+    public function createReplacing(string $label, array $scopes, bool $replace = true): array
     {
         $label = trim($label);
         if ($label === '' || mb_strlen($label) > self::LABEL_MAX) {
@@ -55,9 +71,25 @@ final class Keys
             }
         }
         $key = bin2hex(random_bytes(32));
-        $this->db->prepare('INSERT INTO keys (label, key_hash, scopes, created_at) VALUES (?, ?, ?, ?)')
-            ->execute([$label, hash('sha256', $key), json_encode($scopes, JSON_THROW_ON_ERROR), $this->clock->now()]);
-        return $key;
+        $now = $this->clock->now();
+        $replaced = 0;
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            if ($replace && in_array($label, self::GUIDED_LABELS, true)) {
+                $old = $this->db->prepare('UPDATE keys SET revoked_at = ? WHERE label = ? AND revoked_at IS NULL');
+                $old->execute([$now, $label]);
+                $replaced = $old->rowCount();
+            }
+            $this->db->prepare('INSERT INTO keys (label, key_hash, scopes, created_at) VALUES (?, ?, ?, ?)')
+                ->execute([$label, hash('sha256', $key), json_encode($scopes, JSON_THROW_ON_ERROR), $now]);
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->exec('ROLLBACK');
+            }
+            throw $e;
+        }
+        return ['key' => $key, 'replaced' => $replaced];
     }
 
     /** @return list<array{id:int,label:string,scopes:list<string>,created_at:int,last_used_at:?int,revoked_at:?int}> */

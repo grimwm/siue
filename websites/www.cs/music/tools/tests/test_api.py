@@ -218,5 +218,43 @@ class ApiTest(unittest.TestCase):
         self.assertIsNone(seen["target_auth"])
 
 
+    def probe(self, scope, code, body=b'{"error":"x"}'):
+        """Api.holds against a server that answers every request with `code` (200 = success)."""
+        def opener(request, timeout=None):
+            if code == 200:
+                return FakeResponse(b"{}")
+            raise urllib.error.HTTPError(request.full_url, code, "reason", {}, io.BytesIO(body))
+
+        api = Api("https://example.test/music/", "k" * 64, opener=opener, sleep=lambda _s: None)
+        return api.holds(scope)
+
+    def test_holds_reads_the_status_of_a_get_probe(self):
+        self.assertEqual(self.probe("notes:pickup", 200), "yes")
+        self.assertEqual(self.probe("notes:pickup", 403), "no")
+        self.assertEqual(self.probe("notes:pickup", 401), "invalid")
+        for scope in ("keys:publish", "drafts:publish"):
+            self.assertEqual(self.probe(scope, 405), "yes", scope)
+            self.assertEqual(self.probe(scope, 403), "no", scope)
+            self.assertEqual(self.probe(scope, 401), "invalid", scope)
+            self.assertEqual(self.probe(scope, 429), "unknown", scope)
+            self.assertEqual(self.probe(scope, 302), "unknown", scope)
+        self.assertEqual(self.probe("notes:pickup", 405), "unknown", "a pickup route never answers 405")
+
+    def test_a_403_about_https_is_not_a_missing_permission(self):
+        self.assertEqual(self.probe("keys:publish", 403, b'{"error":"HTTPS required."}'), "https")
+
+    def test_holds_only_makes_get_requests(self):
+        methods = []
+
+        def opener(request, timeout=None):
+            methods.append(request.get_method())
+            raise urllib.error.HTTPError(request.full_url, 405, "m", {}, io.BytesIO(b"{}"))
+
+        api = Api("https://example.test/music/", "k" * 64, opener=opener)
+        for scope in ("notes:pickup", "keys:publish", "drafts:publish"):
+            api.holds(scope)
+        self.assertEqual(set(methods), {"GET"})
+
+
 if __name__ == "__main__":
     unittest.main()

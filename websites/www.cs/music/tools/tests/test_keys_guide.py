@@ -17,7 +17,7 @@ class FakeKey:
     """What the server says about one API key."""
 
     def __init__(self, pickup, publish):
-        self.states = {"notes:pickup": pickup, "keys:publish": publish}
+        self.states = {"notes:pickup": pickup, "keys:publish": publish, "drafts:publish": publish}
 
     def holds(self, scope):
         return self.states[scope]
@@ -39,13 +39,19 @@ class GuideTest(unittest.TestCase):
     def make_repo(self):
         git(self.w.repo, "init", "-q")
 
+    def commit(self):
+        dist = self.w.repo / "games" / "workroom" / "dist"
+        dist.mkdir(parents=True, exist_ok=True)
+        (dist / "index.js").write_text("built")
+        git(self.w.repo, "add", "-A")
+        git(self.w.repo, "commit", "-qm", "key")
+
     def finish(self):
         self.make_repo()
         self.w.keys.api_key_set(PUBLISH_KEY, SECRET)
         self.w.keys.api_key_set(PICKUP_KEY, "f" * 64)
         self.w.keys.init(self.uploads.append)
-        git(self.w.repo, "add", "-A")
-        git(self.w.repo, "commit", "-qm", "key")
+        self.commit()
 
     def test_the_hub_address_follows_the_music_base(self):
         self.w.keys.base = "http://127.0.0.1:9/~me/music/"
@@ -104,8 +110,7 @@ class GuideTest(unittest.TestCase):
         self.w.keys.api_key_set(PUBLISH_KEY, SECRET)
         self.w.keys.api_key_set(PICKUP_KEY, "f" * 64)
         self.w.keys.init(None)
-        git(self.w.repo, "add", "-A")
-        git(self.w.repo, "commit", "-qm", "key")
+        self.commit()
         _, left = self.checklist()
         self.assertEqual(left.count("→"), 1)
         self.assertIn("The locked copy of your key is not on the server yet.", left)
@@ -146,8 +151,7 @@ class GuideTest(unittest.TestCase):
     def test_status_reports_a_misnamed_key_from_the_server(self):
         self.finish()
         self.w.cache.save({**self.w.cache.load(), "api": {}})
-        check = lambda secret: FakeKey("no", "yes") if secret == "f" * 64 else FakeKey("no", "yes")  # noqa: E731
-        _, left = self.checklist(check)
+        _, left = self.checklist(lambda secret: FakeKey("no", "yes"))
         self.assertIn("→ The key saved as music-pickup is really the music-publish key", left)
         self.assertNotIn("f" * 64, self.text())
 

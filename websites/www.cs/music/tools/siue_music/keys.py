@@ -38,29 +38,38 @@ Upload = Callable[[dict], None]
 ApiCheck = Callable[[str], "object"]  # secret -> something with holds(scope)
 
 
+SCOPE_ROUTES = ("notes:pickup", "keys:publish", "drafts:publish")
+WANT = {PICKUP_KEY: ("notes:pickup",), PUBLISH_KEY: ("keys:publish", "drafts:publish")}
+
+
 def probe_states(api: object) -> dict[str, str]:
-    """What the server says this API key may do: scope -> yes | no | invalid | unknown."""
-    return {scope: api.holds(scope) for scope in ("notes:pickup", "keys:publish")}  # type: ignore[attr-defined]
+    """What the server says this API key may do: scope -> yes | no | invalid | https | unknown."""
+    return {scope: api.holds(scope) for scope in SCOPE_ROUTES}  # type: ignore[attr-defined]
+
+
+def _other(name: str) -> str:
+    return PUBLISH_KEY if name == PICKUP_KEY else PICKUP_KEY
+
+
+def is_misnamed(name: str, states: dict[str, str]) -> bool:
+    """The key saved as `name` lacks what `name` needs and has everything the other key needs."""
+    lacks = any(states[s] == "no" for s in WANT[name])
+    return lacks and all(states[s] == "yes" for s in WANT[_other(name)])
 
 
 def api_problem(name: str, states: dict[str, str]) -> str | None:
     """One line on why the key saved as `name` does not do its job, or None when it does (or cannot be checked)."""
-    want = "notes:pickup" if name == PICKUP_KEY else "keys:publish"
-    other = "keys:publish" if want == "notes:pickup" else "notes:pickup"
-    other_name = PUBLISH_KEY if name == PICKUP_KEY else PICKUP_KEY
-    if states[want] == "yes" or (states[want] == "unknown" and states[other] != "invalid"):
-        return None
-    if states[want] == "invalid" or states[other] == "invalid":
+    if "https" in states.values():
+        return ("The server refused the check because the address is not https:// "
+                "(set SIUE_MUSIC_BASE to the https:// workroom address).")
+    if "invalid" in states.values():
         return f"The {name} API key no longer works (revoked or mistyped)."
-    if states[other] == "yes":
-        return f"The key saved as {name} is really the {other_name} key (it has the {other} permission, not {want})."
-    return f"The {name} API key lacks the {want} permission."
-
-
-def is_misnamed(name: str, states: dict[str, str]) -> bool:
-    want = "notes:pickup" if name == PICKUP_KEY else "keys:publish"
-    other = "keys:publish" if want == "notes:pickup" else "notes:pickup"
-    return states[want] == "no" and states[other] == "yes"
+    missing = [s for s in WANT[name] if states[s] == "no"]
+    if not missing:
+        return None
+    if is_misnamed(name, states):
+        return f"The key saved as {name} is really the {_other(name)} key (it has that key's permissions, not {name}'s)."
+    return f"The {name} API key lacks the {' and '.join(missing)} permission."
 
 
 class KeyMismatch(Exception):
@@ -305,7 +314,7 @@ class Keys:
     def _git_state(self) -> str:
         """"committed", "uncommitted", or "unknown" for the public key files, from git in the key file's folder."""
         folder = self.public_json.parent
-        paths = [self.public_json, self.public_ts]
+        paths = [self.public_json, self.public_ts, self.public_ts.parents[1] / "dist"]
         try:
             if not self.public_json.exists():
                 return "uncommitted"
@@ -374,6 +383,13 @@ class Keys:
             raise KeysError("an API key is 64 lowercase hex characters, as the hub shows it once")
         self._ready()
         old = [item_id for item_id, existing in self._api_items() if existing == name]
+        self.api_item_add(name, secret)
+        for item_id in old:
+            self.op.archive(item_id)
+        self.out(f"Saved the API key {name} to 1Password (vault {self.op.vault}).")
+
+    def api_item_add(self, name: str, secret: str) -> str:
+        """Makes the 1Password item for an API key and reads it back; an item that was not stored as sent is removed."""
         new_id = self.op.create(f"SIUE music API {name}", "API_CREDENTIAL", [API_TAG], [
             {"id": "name", "type": "STRING", "label": "name", "value": name},
             {"id": "credential", "type": "CONCEALED", "label": "credential", "value": secret},
@@ -384,9 +400,7 @@ class Keys:
                 self.op.archive(new_id)
                 raise KeysError(f"1Password did not store the API key's {label} field as sent; the new item was removed "
                                 "and the old key (if any) is untouched")
-        for item_id in old:
-            self.op.archive(item_id)
-        self.out(f"Saved the API key {name} to 1Password (vault {self.op.vault}).")
+        return new_id
 
     def api_secrets(self) -> dict[str, str]:
         """name -> API key for every API key saved in 1Password."""

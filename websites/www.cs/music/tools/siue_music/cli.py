@@ -61,7 +61,7 @@ def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
         keys = build_keys(env)
         if args == ["setup"]:
             return Setup(keys, lambda secret: make_api(paths.api_base(env), secret), input,
-                         lambda prompt: read_secret(prompt), open_browser, out=print).run_all()
+                         lambda prompt: read_secret(prompt), open_browser, out=print, interactive=sys.stdin.isatty()).run_all()
         if args[:1] == ["keys"] and args[1:2] in (["status"], ["pull"], ["forget"]) and len(args) == 2:
             if args[1] == "status":
                 return keys.status(lambda secret: make_api(paths.api_base(env), secret))

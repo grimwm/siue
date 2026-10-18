@@ -129,7 +129,7 @@ MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/
 MUSIC_TOOL = $(MUSIC_PY) music/tools/siue-music
 
 music-setup:
-	@test -x music/tools/.venv/bin/python || { python3 -m venv music/tools/.venv && music/tools/.venv/bin/pip install --quiet -r music/tools/requirements.txt; }
+	@music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt
 	@music/tools/.venv/bin/python music/tools/siue-music setup
 music-status:
 	@$(MUSIC_TOOL) keys status

@@ -1,6 +1,9 @@
 """`siue-music setup`: the one guided command. Every step checks what is already done and skips it, so it can be run again."""
+import json
 import re
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlencode
@@ -22,7 +25,8 @@ class SetupAbort(Exception):
 class Setup:
     def __init__(self, keys: Keys, make_api: Callable[[str], Api], ask: Callable[[str], str], secret: Callable[[str], str],
                  open_url: Callable[[str], bool], run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
-                 out: Callable[[str], None] = print):
+                 out: Callable[[str], None] = print, interactive: bool = True):
+        self.interactive = interactive
         self.keys = keys
         self.make_api = make_api
         self.ask = ask
@@ -44,16 +48,26 @@ class Setup:
                              "the 1Password app's CLI integration and sign in, then run make music-setup again.") from None
 
     def _refile(self, secrets: dict[str, str], states: dict[str, dict[str, str]]) -> None:
-        """A key saved under the wrong name is saved again under the right one and the wrong item archived."""
-        for wrong, right in ((PICKUP_KEY, PUBLISH_KEY), (PUBLISH_KEY, PICKUP_KEY)):
-            if wrong in secrets and is_misnamed(wrong, states[wrong]) and (right not in secrets or api_problem(right, states[right])):
-                self.out(f"The key saved as {wrong} is really the {right} key: filing it under that name.")
-                wrong_ids = [i for i, n in self.keys._api_items() if n == wrong]
-                self.keys.api_key_set(right, secrets[wrong])
-                for item_id in wrong_ids:
-                    self.keys.op.archive(item_id)
-                secrets[right], states[right] = secrets.pop(wrong), states.pop(wrong)
-                return
+        """Keys saved under the wrong name are saved again under the right one (both, when they are swapped), and only
+        then are the wrongly named items archived, so a stop half-way never loses a key."""
+        moves = [(wrong, right) for wrong, right in ((PICKUP_KEY, PUBLISH_KEY), (PUBLISH_KEY, PICKUP_KEY))
+                 if wrong in secrets and is_misnamed(wrong, states[wrong])
+                 and (right not in secrets or api_problem(right, states[right]) is not None)]
+        if not moves:
+            return
+        old_names = {name for move in moves for name in move}
+        old_ids = [item_id for item_id, name in self.keys._api_items() if name in old_names]
+        moved = {right: (secrets[wrong], states[wrong]) for wrong, right in moves}
+        for wrong, right in moves:
+            self.out(f"The key saved as {wrong} is really the {right} key: filing it under that name.")
+            self.keys.api_item_add(right, secrets[wrong])
+        for item_id in old_ids:
+            self.keys.op.archive(item_id)
+        for wrong, _ in moves:
+            secrets.pop(wrong, None)
+            states.pop(wrong, None)
+        for right, (secret, state) in moved.items():
+            secrets[right], states[right] = secret, state
 
     def _api_keys(self) -> None:
         secrets = self.keys.api_secrets()
@@ -150,6 +164,92 @@ class Setup:
     def _paths(self) -> list[Path]:
         return [self.keys.public_json, self.keys.public_ts, self.keys.public_ts.parents[1] / "dist"]
 
+    def _confirm(self, prompt: str, finish: str) -> bool:
+        """The answer to a yes/no question; no terminal, end of input or n means no (and `finish` says how to go on)."""
+        if not self.interactive:
+            self.out(f"Not asking, because this is not a terminal. To finish, {finish}")
+            return False
+        try:
+            answer = self.ask(prompt)
+        except EOFError:
+            self.out(f"No answer was given. To finish, {finish}")
+            return False
+        return answer.strip().lower() not in ("n", "no")
+
+    def _pull_request(self, branch: str, cwd: Path) -> None:
+        """Reports the branch's open pull request, or opens one; without gh it prints the address that opens one."""
+        url = None
+        try:
+            seen = self.run(["gh", "pr", "view", branch, "--json", "url"], cwd=cwd, capture_output=True, text=True, timeout=120)
+            if seen.returncode == 0:
+                url = json.loads(seen.stdout).get("url")
+                if url:
+                    self.out(f"The pull request is already open: {url}")
+            if not url:
+                made = self.run(["gh", "pr", "create", "--fill"], cwd=cwd, capture_output=True, text=True, timeout=120)
+                if made.returncode == 0:
+                    url = (made.stdout.strip().splitlines() or [""])[-1]
+                    self.out(f"Opened the pull request: {url}")
+                    self.done.append("pull request opened")
+        except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+            url = None
+        if url:
+            self.pr_url = url
+            return
+        remote = self._git("remote", "get-url", "origin").stdout.strip()
+        m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", remote)
+        where = f"https://github.com/{m.group(1)}/pull/new/{branch}" if m else "your repository's pull request page"
+        self.out(f"The branch {branch} is pushed. Open the pull request here: {where}")
+
+    def _restore(self, top: Path) -> None:
+        """Puts the user's checkout back to what git holds for the key files, so a later pull does not conflict."""
+        rel = lambda p: str(p.resolve().relative_to(top.resolve()))  # noqa: E731
+        tracked = self._git("ls-files", "--error-unmatch", "--", str(self.keys.public_json)).returncode == 0
+        if tracked:
+            self._git("checkout", "--", rel(self.keys.public_json), cwd=top)
+        else:
+            self.keys.public_json.unlink(missing_ok=True)
+        dist = rel(self.keys.public_ts.parents[1] / "dist")
+        self._git("checkout", "--", rel(self.keys.public_ts), dist, cwd=top)
+        self._git("clean", "-fdq", "--", dist, cwd=top)
+        self.out("Your checkout is back to main's files; they arrive with the merge.")
+
+    def _publish(self, top: Path, branch: str) -> None:
+        """Commits the key files on `branch` in a temporary worktree cut from origin/main, pushes it and removes the worktree."""
+        keys = self.keys
+        self._step(["git", "fetch", "origin", "main"], top, "git fetch")
+        holder = Path(tempfile.mkdtemp(prefix="siue-music-"))
+        tree = holder / "tree"
+        have = self._git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=top).returncode == 0
+        add = ["git", "worktree", "add", str(tree), branch] if have else ["git", "worktree", "add", str(tree), "-b", branch, "origin/main"]
+        try:
+            self._step(add, top, "git worktree add")
+            for path in self._paths():
+                rel = path.resolve().relative_to(top.resolve())
+                target = tree / rel
+                if path.is_dir():
+                    shutil.rmtree(target, ignore_errors=True)
+                    shutil.copytree(path, target)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(path, target)
+            rels = [str(p.resolve().relative_to(top.resolve())) for p in self._paths()]
+            self._step(["git", "add", "-A", "--", *rels], tree, "git add")
+            if self.run(["git", "diff", "--cached", "--quiet"], cwd=tree, capture_output=True, text=True).returncode != 0:
+                fp = read_repo_keys(keys.public_json).current or ""
+                self._step(["git", "commit", "-m", f"Music workroom: notes key {display(fp)[:19]}"], tree, "git commit")
+            pushed = self.run(["git", "push", "-u", "origin", "HEAD"], cwd=tree, capture_output=True, text=True, timeout=300)
+            if pushed.returncode != 0:
+                tail = ((pushed.stderr or "") + (pushed.stdout or "")).strip().splitlines()[-3:]
+                raise SetupAbort("The push failed:\n  " + "\n  ".join(tail) + f"\nThe commit is kept on branch {branch}. "
+                                 "Run make music-setup again to retry.")
+            self.done.append("public key committed and pushed")
+            self._pull_request(branch, tree)
+        finally:
+            self.run(["git", "worktree", "remove", "--force", str(tree)], cwd=top, capture_output=True, text=True)
+            shutil.rmtree(holder, ignore_errors=True)
+        self._restore(top)
+
     def _repository(self) -> None:
         keys = self.keys
         state = keys._git_state()
@@ -161,41 +261,21 @@ class Setup:
         if state == "unknown":
             self.out(f"git is not available here. Rebuild the page and commit these yourself: {names}")
             return
-        self._build()
-        top = Path(self._git("rev-parse", "--show-toplevel").stdout.strip())
-        mine = {p.resolve() for p in self._paths()}
-        staged = [Path(top, n).resolve() for n in self._git("diff", "--cached", "--name-only", cwd=top).stdout.splitlines() if n]
-        stray = [p for p in staged if p not in mine and not any(m in p.parents for m in mine)]
-        if stray:
-            raise SetupAbort(f"Something else is staged for commit ({stray[0].name}...). Unstage it with `git restore --staged .` "
-                             "(your edits stay), then run make music-setup again.")
-        if self.ask("Commit the public key and open a pull request? [Y/n] ").strip().lower() in ("n", "no"):
-            self.out(f"Left uncommitted. Build is done; commit {names} when you are ready.")
-            return
         fp = read_repo_keys(keys.public_json).current or ""
-        branch = self._git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-        if branch in ("main", "master", "HEAD"):
-            branch = f"music/notes-key-{fp[:8]}"
-            self._step(["git", "switch", "-c", branch], keys.public_json.parent, "git switch")
-        rel = [str(p) for p in self._paths()]
-        self._step(["git", "add", "--", *rel], keys.public_json.parent, "git add")
-        self._step(["git", "commit", "-m", f"Music workroom: notes key {display(fp)[:19]}", "--", *rel], keys.public_json.parent, "git commit")
-        self._step(["git", "push", "-u", "origin", "HEAD"], keys.public_json.parent, "git push")
-        self.done.append("public key committed and pushed")
-        try:
-            made = self.run(["gh", "pr", "create", "--fill"], cwd=keys.public_json.parent, capture_output=True, text=True, timeout=120)
-            ok = made.returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            made, ok = None, False
-        if ok:
-            self.pr_url = (made.stdout.strip().splitlines() or [""])[-1]
-            self.out(f"Opened the pull request: {self.pr_url}")
-            self.done.append("pull request opened")
-        else:
-            remote = self._git("remote", "get-url", "origin").stdout.strip()
-            m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", remote)
-            where = f"https://github.com/{m.group(1)}/pull/new/{branch}" if m else "your repository's pull request page"
-            self.out(f"The branch {branch} is pushed. Open the pull request here: {where}")
+        branch = f"music/notes-key-{fp[:8]}"
+        top = Path(self._git("rev-parse", "--show-toplevel").stdout.strip())
+        if self._git("ls-remote", "--exit-code", "--heads", "origin", branch).returncode == 0:
+            self.out(f"The public key is already on branch {branch}.")
+            self.done.append("public key pushed")
+            self._pull_request(branch, top)
+            self._restore(top)
+            return
+        self._build()
+        finish = "run make music-setup in a terminal."
+        if not self._confirm(f"Commit the public key on branch {branch} and open a pull request? [Y/n] ", finish):
+            self.out(f"Left uncommitted; the page is built. Commit {names} when you are ready.")
+            return
+        self._publish(top, branch)
 
     # -- the whole run
 

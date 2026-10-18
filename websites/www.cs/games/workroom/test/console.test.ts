@@ -116,7 +116,7 @@ test('Readout: time always, the bar only on a music piece', async () => {
 test('Legend: the spec’s line for every view', async () => {
   assert.deepEqual(LEGENDS, {
     story: ['star = a note', 'higher = higher note', 'bigger = louder', 'glow = energy'],
-    roll: ['bar = a note', 'higher = higher note', 'longer = held longer', 'colour = instrument'],
+    roll: ['block = a note', 'higher = higher note', 'longer = held longer', 'colour = instrument'],
     sound: ['bottom = low sounds', 'top = high', 'brighter = louder'],
     sheet: ['each line is a staff; notes higher on it are higher'],
   });

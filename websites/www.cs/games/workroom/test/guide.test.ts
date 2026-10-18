@@ -10,7 +10,7 @@ import { AXIS_H } from '../src/axis.ts';
 import { layoutTimeline } from '../src/timeline.ts';
 import { ROLL_H } from '../src/pianoroll.ts';
 import { PICTURE_H } from '../src/spectro.ts';
-import { tabsFor } from '../src/tabs.ts';
+import { LEGENDS, tabsFor } from '../src/tabs.ts';
 import { tempoMap } from '../src/tempo.ts';
 import { boundsFor, fitView, zoomAt } from '../src/zoom.ts';
 import type { Score } from '../src/score.ts';
@@ -40,7 +40,7 @@ const checkParts = (i: GuideInput): void => {
     if (p.clip.kind === 'piece') {
       assert.ok(p.clip.from >= 0 && p.clip.to <= i.score.duration && p.clip.to > p.clip.from, `${at}: inside the piece`);
       assert.ok(p.clip.to - p.clip.from <= CLIP_MAX + 1e-9, `${at}: short`);
-    } else assert.ok(['clicks', 'updown', 'swell'].includes(p.clip.id), at);
+    } else assert.ok(['clicks', 'ticks', 'updown', 'swell'].includes(p.clip.id), at);
   }
 };
 
@@ -104,4 +104,25 @@ test('the seen flags: per view, remembered, and safe with broken storage', () =>
 
 test('a sound effect’s parts never mention bars or sheet music', () => {
   for (const tab of tabsFor(sound)) for (const p of guideParts(input(sound, tab))) assert.doesNotMatch(`${p.title} ${p.what} ${p.like}`, /\bbars?\b|sheet music/i, `${tab} ${p.id}`);
+});
+
+test('"dark row" is not said: the rows are shaded in both themes', () => {
+  for (const sc of [crete, sound]) for (const p of guideParts(input(sc, 'story'))) assert.doesNotMatch(`${p.title} ${p.what} ${p.like}`, /dark row/i);
+});
+
+test('"bar" keeps its musical meaning: only the ruler and Sheet parts use it; drawn rectangles are blocks', () => {
+  const musical = /\bbars?\b/i;
+  for (const tab of tabsFor(crete)) for (const p of guideParts(input(crete, tab))) {
+    const said = `${p.title} ${p.what} ${p.like}`;
+    if (p.id === 'ruler' || p.id === 'bars') assert.match(said, musical);
+    else assert.doesNotMatch(said, musical, `${tab} ${p.id}`);
+  }
+  for (const [tab, lines] of Object.entries(LEGENDS)) for (const l of lines) assert.doesNotMatch(l, musical, tab);
+  assert.ok(LEGENDS.roll.includes('block = a note'));
+});
+
+test('the sound pieces’ ruler plays even ticks and the texts name no fixture sound', () => {
+  const parts = guideParts(input(sound, 'story'));
+  assert.deepEqual(parts.find(p => p.id === 'ruler')!.clip, { kind: 'demo', id: 'ticks' });
+  for (const p of parts) assert.doesNotMatch(`${p.what} ${p.like}`, /boom|echo after|air around/i);
 });

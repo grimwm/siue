@@ -21,7 +21,7 @@ export function pickTab(tabs: readonly Tab[], wanted: Tab): Tab {
 /** The one-line legend under each view. */
 export const LEGENDS: Readonly<Record<Tab, readonly string[]>> = {
   story: ['star = a note', 'higher = higher note', 'bigger = louder', 'glow = energy'],
-  roll: ['bar = a note', 'higher = higher note', 'longer = held longer', 'colour = instrument'],
+  roll: ['block = a note', 'higher = higher note', 'longer = held longer', 'colour = instrument'],
   sound: ['bottom = low sounds', 'top = high', 'brighter = louder'],
   sheet: ['each line is a staff; notes higher on it are higher'],
 };

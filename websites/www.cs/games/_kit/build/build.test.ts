@@ -403,6 +403,18 @@ test('css: a bad css entry is refused with a reason', t => {
   assert.match(run(dir).stderr, /`css` must be/);
 });
 
+test('css: an out that a bundled entry already produces is refused, naming both', t => {
+  const dir = scratch(t);
+  writeFileSync(join(dir, 'src/own.css'), '.own { color: red; }\n');
+  writeFileSync(join(dir, 'src/main.ts'), `import './own.css';\n${readFileSync(join(dir, 'src/main.ts'), 'utf8')}`);
+  withCss(dir, { in: 'src/app.css', out: 'main' });
+  const r = run(dir);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /css `out` main collides with the bundle's own main\.css/);
+  withCss(dir, { in: 'src/app.css', out: 'look' });
+  assert.equal(run(dir).status, 0, 'a different out builds');
+});
+
 test('css: a Tailwind error fails the build, names the entry and writes nothing', t => {
   const dir = scratch(t);
   withCss(dir, undefined, '.x { @apply bg-nope; }\n');

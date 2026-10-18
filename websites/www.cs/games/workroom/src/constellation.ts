@@ -1,7 +1,7 @@
 // Each character's tune drawn as stars over its lane: one star per note of a
 // motif span (the notes of that lane between the span's from and to), left
 // to right in time, higher for a higher pitch (on the lane's own pitch scale,
-// the one its note bars use, so each star sits on its note and a repeated
+// the one its note blocks use, so each star sits on its note and a repeated
 // tune keeps its shape), bigger for a louder note, joined in time order. A span with no notes in its lane keeps its ribbon. DOM-free.
 import { motifColor } from './score.ts';
 import type { Score } from './score.ts';

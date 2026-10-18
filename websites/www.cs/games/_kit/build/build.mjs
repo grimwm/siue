@@ -257,7 +257,9 @@ export async function bundle(gameDir, cfg) {
     if (missing.length) throw new BuildError(`${cfg.css.in}: ${missing.join(', ')} is not in ${cfg.css.fonts ?? 'fonts'}/fonts.json`);
     const unused = [...shipped.keys()].filter(p => !used.has(p));
     if (unused.length) throw new BuildError(`${cfg.css.fonts}/fonts.json: ${unused.join(', ')} is not used by ${cfg.css.in}`);
-    files.set(`${cfg.css.out}.css`, css);
+    const cssName = `${cfg.css.out}.css`;
+    if (files.has(cssName)) throw new BuildError(`build.json: css \`out\` ${cfg.css.out} collides with the bundle's own ${cssName} (an entry's stylesheet); pick another css out`);
+    files.set(cssName, css);
     for (const [p, bytes] of shipped) files.set(p, bytes);
   }
   // Packages a bundled dependency carries prebuilt inside itself (OSMD's min.js inlines jszip, pako and more): esbuild never

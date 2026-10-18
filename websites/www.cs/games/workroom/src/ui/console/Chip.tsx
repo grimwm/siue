@@ -1,8 +1,9 @@
 // A small button: a glossary word (term set; opens its card) or a toggle
 // (aria-pressed, filled amber when on). A listed word is a compact dashed chip;
 // an inline word reads as the sentence's own text with a dotted accent
-// underline, its 44 px hit area made of padding and negative margin so the
-// line keeps the text's height.
+// underline, its 44 px hit area made of padding and negative margin so the line keeps the
+// text's height. The line is tall enough (the caller's leading) that the hit
+// area reaches no further than half the line gap into the next line.
 import type { ComponentChildren } from 'preact';
 import { cx } from './cx.ts';
 

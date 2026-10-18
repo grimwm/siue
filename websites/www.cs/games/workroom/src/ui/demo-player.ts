@@ -15,6 +15,8 @@ export function demoPlayer(core: AudioCore): DemoPlayer {
   const stop = (): void => { current?.stop(); current = null; };
   const play = (id: DemoId): void => {
     stop();
+    // iOS mutes Web Audio under the silent switch unless the page plays as media, as the <audio> clips do.
+    try { const s = (navigator as unknown as { audioSession?: { type: string } }).audioSession; if (s) s.type = 'playback'; } catch { /* no audio session API */ }
     core.unlock();
     const ctx = core.context();
     if (!ctx) return;

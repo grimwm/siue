@@ -73,10 +73,10 @@ export function Workroom(p: WorkroomProps) {
   const tab = pickTab(tabs, wanted);
   // A view's guide opens by itself the first time this browser shows that view.
   useEffect(() => {
-    if (guide.seen(tab)) return;
-    guide.markSeen(tab);
+    if (guide.seen(tab, score.kind)) return;
+    guide.markSeen(tab, score.kind);
     setGuideOpen(true);
-  }, [tab]);
+  }, [tab, score.kind]);
   const bounds = useMemo(() => boundsFor(score.duration, width), [score.duration, width]);
 
   // The views are as wide as the stage: measured on mount and whenever the stage changes width (a window resize, a scrollbar appearing, the sheet opening). A browser without ResizeObserver falls back to the window's resize.
@@ -104,11 +104,19 @@ export function Workroom(p: WorkroomProps) {
 
   // The audio moves first, in this call, so the next frame reports the new time. A jump the owner asked for (a change, a clip) brings its time on screen even while paused.
   const seek = (t: number): void => { seekAudio.current?.(t); setClip(null); setTime(t); setView(v => follow(v, t, bounds)); };
+  // A change's "where" moves the playhead; under the phone's bottom sheet that would be unseen, so the sheet closes and the stage scrolls into view.
+  const where = (t: number): void => {
+    seek(t);
+    const wide = typeof matchMedia === 'function' ? matchMedia('(min-width: 1024px)').matches : false;
+    if (wide) return;
+    setSheetOpen(false);
+    stage.current?.scrollIntoView({ block: 'nearest' });
+  };
   // Hear it plays inside the tap itself: iOS refuses sound started later.
   const hear = (c: Clip): void => { playClip.current?.(c); setClip(c); setTime(c.from); setView(v => follow(v, c.from, bounds)); };
   // Only one sound at a time: a demo pauses the piece and the demo before it; a piece clip silences a demo.
   const quietGuide = (): void => { if (clip) { pauseAudio.current?.(); setClip(null); } p.stopDemo?.(); };
-  const openGuide = (): void => { guide.markSeen(tab); setGuideOpen(true); };
+  const openGuide = (): void => { guide.markSeen(tab, score.kind); setGuideOpen(true); };
   const closeGuide = (): void => { setGuideOpen(false); howTo.current?.focus(); };
   const hearPart = (c: GuideClip): void => {
     if (c.kind === 'piece') { p.stopDemo?.(); hear({ from: c.from, to: c.to }); }
@@ -173,7 +181,7 @@ export function Workroom(p: WorkroomProps) {
             {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram.file)} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
             {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane} /> : null}
           </div>
-          <Legend items={legendFor(tab, score.kind)} />
+          <Legend items={legendFor(tab, score)} />
         </div>
       </div>
       <Sheet title="Words & changes" open={sheetOpen} onToggle={setSheetOpen}>
@@ -189,8 +197,8 @@ export function Workroom(p: WorkroomProps) {
             <span class={SMALL_CAPS}>Claude's changes <span class="ml-1 font-mono text-amber">{score.changes.length === 1 ? '1 change' : `${score.changes.length} changes`}</span></span>
             <ol class="changes grid list-decimal gap-2 pl-5 text-sm marker:font-mono marker:text-dim" aria-label="Claude's changes">
               {score.changes.map((c, i) => (
-                <li data-change={i}>
-                  <button type="button" data-where="" class="where mr-1 inline-flex min-h-11 min-w-11 items-center font-mono text-amber underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-amber" onClick={() => seek(changeTimes(c, tempo, score.duration).from)}>{changeLabel(c)}</button>{' '}
+                <li data-change={i} class="leading-8">
+                  <button type="button" data-where="" class="where relative z-10 mr-1 inline-flex min-h-11 min-w-11 items-center font-mono text-amber underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-amber" onClick={() => where(changeTimes(c, tempo, score.duration).from)}>{changeLabel(c)}</button>{' '}
                   {splitTerms(c.text).map(part => 'term' in part ? <Word term={part.term} text={part.text} inline onOpen={openCard} /> : part.text)}
                 </li>
               ))}

@@ -1,6 +1,7 @@
 // The console components: what they render, what they report, and the
 // keyboard: tabs move with the arrows, Home and End; nothing answers Escape.
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
 import type { ComponentChild } from 'preact';
@@ -8,6 +9,7 @@ import { act } from 'preact/test-utils';
 import { fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
+import type { Score } from '../src/score.ts';
 import { LEGENDS, legendFor } from '../src/tabs.ts';
 
 installDocument();
@@ -92,7 +94,7 @@ test('Chip: an inline word reads as text with a dotted accent underline and keep
   const cls = classes(w);
   assert.ok(cls.includes('underline') && cls.includes('decoration-dotted') && cls.includes('decoration-amber'));
   assert.ok(!cls.includes('rounded-full') && !cls.includes('border-dashed') && !cls.includes('min-h-11'), 'no oval, no tall box');
-  assert.ok(cls.includes('inline') && cls.includes('py-3') && cls.includes('-my-3'), 'padding and negative margin make the hit area, the line stays as tall as the text');
+  assert.ok(cls.includes('inline') && cls.includes('py-3') && cls.includes('-my-3'), 'padding and negative margin make the 44 px hit area, the line stays as tall as the text');
   assert.ok(cls.includes('[font:inherit]'));
 });
 
@@ -131,17 +133,21 @@ test('Readout: time always, the bar only on a music piece', async () => {
   assert.equal(walk(sound).filter(e => e._attrs['data-bar'] !== undefined).length, 0);
 });
 
-test('Legend: the spec’s line for every view', async () => {
-  assert.deepEqual(LEGENDS, {
-    story: ['star = a note', 'higher = higher note', 'bigger = louder', 'glow = energy'],
-    roll: ['block = a note', 'higher = higher note', 'longer = held longer', 'colour = instrument'],
-    sound: ['bottom = low sounds', 'top = high', 'brighter = louder'],
-    sheet: ['five lines = a staff', 'higher on it = higher note'],
-  });
-  assert.deepEqual(legendFor('story', 'music'), LEGENDS.story);
-  assert.deepEqual(legendFor('story', 'sound'), ['row = a layer', 'coloured block = a moment', 'glow = strength over time']);
-  for (const tab of ['roll', 'sound', 'sheet'] as const) assert.deepEqual(legendFor(tab, 'sound'), LEGENDS[tab]);
-  for (const l of legendFor('story', 'sound')) assert.doesNotMatch(l, /star|note|higher|bigger/, 'a sound has no stars or pitch rows');
-  const root = await mount(h(c.legend.Legend, { items: LEGENDS.story }));
-  assert.equal(walk(root).find(e => e._attrs['data-legend'] !== undefined)!.textContent, 'star = a note · higher = higher note · bigger = louder · glow = energy');
+test('Legend: only what each view draws', async () => {
+  const music = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
+  const soundScore = JSON.parse(readFileSync(new URL('./fixtures/score-sound-v1.json', import.meta.url), 'utf8')) as Score;
+  const noMotifs: Score = { ...music, motifs: [] };
+  const withNotes: Score = { ...soundScore, notes: music.notes };
+  assert.deepEqual(LEGENDS.roll, ['block = a note', 'higher = higher note', 'longer = held longer', 'colour = instrument']);
+  assert.deepEqual(LEGENDS.sound, ['bottom = low sounds', 'top = high', 'brighter = louder']);
+  assert.deepEqual(LEGENDS.sheet, ['five lines = a staff', 'higher on it = higher note']);
+  assert.ok(music.motifs.length > 0);
+  assert.deepEqual(legendFor('story', music), ['block = a note', 'star = a note', 'higher = higher note', 'bigger = louder', 'glow = energy'], 'music with motifs');
+  assert.deepEqual(legendFor('story', noMotifs), ['block = a note', 'glow = energy'], 'music without motifs draws no stars');
+  assert.deepEqual(legendFor('story', soundScore), ['row = a layer', 'coloured block = a moment', 'glow = strength over time'], 'sound without notes');
+  assert.deepEqual(legendFor('story', withNotes), ['row = a layer', 'coloured block = a moment', 'block = a note', 'glow = strength over time'], 'sound with notes');
+  for (const tab of ['roll', 'sound', 'sheet'] as const) assert.deepEqual(legendFor(tab, soundScore), LEGENDS[tab]);
+  for (const l of legendFor('story', soundScore)) assert.doesNotMatch(l, /star|note|higher|bigger/, 'a sound has no stars or pitch rows');
+  const root = await mount(h(c.legend.Legend, { items: legendFor('story', noMotifs) }));
+  assert.equal(walk(root).find(e => e._attrs['data-legend'] !== undefined)!.textContent, 'block = a note · glow = energy');
 });

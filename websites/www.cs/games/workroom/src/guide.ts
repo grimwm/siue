@@ -12,7 +12,7 @@ import { layoutConstellations } from './constellation.ts';
 import type { DemoId } from './demo.ts';
 import { demoLength } from './demo.ts';
 import { layoutRoll, ROLL_H } from './pianoroll.ts';
-import type { Score } from './score.ts';
+import type { Kind, Score } from './score.ts';
 import { PICTURE_H } from './spectro.ts';
 import type { Tab } from './tabs.ts';
 import { sectionTimes } from './tempo.ts';
@@ -126,7 +126,7 @@ function roll(i: GuideInput): GuidePart[] {
   const at = (k: number) => score.notes[k]!;
   return [
     { id: 'note', title: 'A note', what: 'Each block is one note. Left to right is when it plays.', like: 'Like one key pressed on a piano.', spot: view(first.rect), clip: pieceClip(at(first.n.index).start, at(first.n.index).start + CLIP_MAX, score.duration) },
-    { id: 'pitch', title: 'Higher is higher', what: 'A block higher up is a higher note. The names at the left, such as C3 and C4, mark the notes called C, from low to high.', like: 'Like the keys of a piano stood on end: the low keys at the bottom.', spot: view({ x: 0, y: 0, w: Math.min(w, 32), h }), clip: { kind: 'demo', id: 'updown' } },
+    { id: 'pitch', title: 'Higher is higher', what: 'A block higher up is a higher note. The names at the left, such as C3 and C4, are note names, from low to high.', like: 'Like the keys of a piano stood on end: the low keys at the bottom.', spot: view({ x: 0, y: 0, w: Math.min(w, 32), h }), clip: { kind: 'demo', id: 'updown' } },
     { id: 'length', title: 'Longer is held longer', what: 'A longer block is a note held for longer.', like: 'Like holding a key down instead of tapping it.', spot: view(longest.rect), clip: pieceClip(at(longest.n.index).start, at(longest.n.index).start + at(longest.n.index).length, score.duration) },
     { id: 'colour', title: 'Colour is the instrument', what: 'Each colour is one instrument group, or the character whose tune it is. The buttons above the roll show or hide each group.', like: 'Like coloured pens, one per musician.', spot: { anchor: 'lane-picker', rect: null }, clip: pieceClip(at(first.n.index).start, at(first.n.index).start + CLIP_MAX, score.duration) },
     ruler(score, w, h),
@@ -162,18 +162,19 @@ export function guideParts(i: GuideInput): GuidePart[] {
   }
 }
 
-export interface GuideStore { seen(tab: Tab): boolean; markSeen(tab: Tab): void }
+export interface GuideStore { seen(tab: Tab, kind: Kind): boolean; markSeen(tab: Tab, kind: Kind): void }
 export const GUIDE_KEY_PREFIX = 'workroom-guide-';
 
-/** Whether this browser has seen each view's guide (localStorage `workroom-guide-<tab>` = `seen`); broken storage holds the flag for this page view. */
+/** Whether this browser has seen each view's guide for a kind of piece (localStorage `workroom-guide-<tab>` for music, `workroom-guide-sound-<tab>` for sound = `seen`); broken storage holds the flag for this page view. */
 export function guideStore(storage: StorageLike | null): GuideStore {
-  const flags = new Map<Tab, Pref<string>>();
-  const flag = (tab: Tab) => {
-    let f = flags.get(tab);
-    if (!f) { f = pref(`${GUIDE_KEY_PREFIX}${tab}`, '', text, storage); flags.set(tab, f); }
+  const flags = new Map<string, Pref<string>>();
+  const flag = (tab: Tab, kind: Kind) => {
+    const key = `${GUIDE_KEY_PREFIX}${kind === 'sound' ? 'sound-' : ''}${tab}`;
+    let f = flags.get(key);
+    if (!f) { f = pref(key, '', text, storage); flags.set(key, f); }
     return f;
   };
-  return { seen: tab => flag(tab).get() === 'seen', markSeen: tab => flag(tab).set('seen') };
+  return { seen: (tab, kind) => flag(tab, kind).get() === 'seen', markSeen: (tab, kind) => flag(tab, kind).set('seen') };
 }
 
 /** A store for which every guide is already seen: nothing opens by itself. */

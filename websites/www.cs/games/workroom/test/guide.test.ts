@@ -85,21 +85,25 @@ test('pieceClip keeps a clip inside the piece and at most 4 s', () => {
   assert.deepEqual(pieceClip(0.4, 0.4, 0.4), { kind: 'piece', from: 0, to: 0.4 });
 });
 
-test('the seen flags: per view, remembered, and safe with broken storage', () => {
+test('the seen flags: per view and kind, remembered, and safe with broken storage', () => {
   const storage = memoryStorage();
   const g = guideStore(storage);
-  assert.equal(g.seen('story'), false);
-  g.markSeen('story');
-  assert.equal(g.seen('story'), true);
-  assert.equal(g.seen('roll'), false);
+  assert.equal(g.seen('story', 'music'), false);
+  g.markSeen('story', 'music');
+  assert.equal(g.seen('story', 'music'), true);
+  assert.equal(g.seen('roll', 'music'), false);
+  assert.equal(g.seen('story', 'sound'), false, 'a sound piece’s Story has its own first visit');
   assert.equal(storage.data.get(`${GUIDE_KEY_PREFIX}story`), 'seen');
-  assert.equal(guideStore(storage).seen('story'), true, 'the next page view remembers');
+  g.markSeen('story', 'sound');
+  assert.equal(storage.data.get(`${GUIDE_KEY_PREFIX}sound-story`), 'seen');
+  assert.equal(guideStore(storage).seen('story', 'music'), true, 'the next page view remembers');
+  assert.equal(guideStore(storage).seen('story', 'sound'), true);
   const broken = guideStore(throwingStorage());
-  assert.equal(broken.seen('sound'), false);
-  broken.markSeen('sound');
-  assert.equal(broken.seen('sound'), true, 'held for this page view');
-  assert.equal(guideStore(null).seen('sheet'), false);
-  assert.equal(ALWAYS_SEEN.seen('story'), true);
+  assert.equal(broken.seen('sound', 'music'), false);
+  broken.markSeen('sound', 'music');
+  assert.equal(broken.seen('sound', 'music'), true, 'held for this page view');
+  assert.equal(guideStore(null).seen('sheet', 'music'), false);
+  assert.equal(ALWAYS_SEEN.seen('story', 'sound'), true);
 });
 
 test('a sound effect’s parts never mention bars or sheet music', () => {

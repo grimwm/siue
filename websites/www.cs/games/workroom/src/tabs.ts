@@ -1,5 +1,5 @@
 // Which views a piece offers. DOM-free.
-import type { Kind, Score } from './score.ts';
+import type { Score } from './score.ts';
 
 export type Tab = 'story' | 'roll' | 'sound' | 'sheet';
 export const TAB_LABELS: Readonly<Record<Tab, string>> = { story: 'Story', roll: 'Piano roll', sound: 'Sound picture', sheet: 'Sheet music' };
@@ -20,16 +20,20 @@ export function pickTab(tabs: readonly Tab[], wanted: Tab): Tab {
 
 /** The one-line legend under each view of a music piece. */
 export const LEGENDS: Readonly<Record<Tab, readonly string[]>> = {
-  story: ['star = a note', 'higher = higher note', 'bigger = louder', 'glow = energy'],
+  story: ['block = a note', 'star = a note', 'higher = higher note', 'bigger = louder', 'glow = energy'],
   roll: ['block = a note', 'higher = higher note', 'longer = held longer', 'colour = instrument'],
   sound: ['bottom = low sounds', 'top = high', 'brighter = louder'],
   sheet: ['five lines = a staff', 'higher on it = higher note'],
 };
 
-/** A sound piece's Story has layers, moments and the glow, no stars or pitch rows; every other view reads the same for both kinds. */
-const SOUND_STORY: readonly string[] = ['row = a layer', 'coloured block = a moment', 'glow = strength over time'];
+/** The stars of a music piece's Story (and the pitch and loudness they carry) exist only when the score has motifs. */
+const STAR_ITEMS: readonly string[] = ['star = a note', 'higher = higher note', 'bigger = louder'];
 
-/** The legend for a view of a piece of this kind: only what that view draws. */
-export function legendFor(tab: Tab, kind: Kind): readonly string[] {
-  return kind === 'sound' && tab === 'story' ? SOUND_STORY : LEGENDS[tab];
+/** The legend for a view of this piece: only what that view draws. A music Story always draws dimmed note blocks and the glow, and stars only when the score has motifs; a sound Story has layers, moments and the glow, plus note blocks only when the sound has notes. */
+export function legendFor(tab: Tab, score: Score): readonly string[] {
+  if (tab !== 'story') return LEGENDS[tab];
+  if (score.kind === 'sound') {
+    return ['row = a layer', 'coloured block = a moment', ...(score.notes.length > 0 ? ['block = a note'] : []), 'glow = strength over time'];
+  }
+  return ['block = a note', ...(score.motifs.length > 0 ? STAR_ITEMS : []), 'glow = energy'];
 }

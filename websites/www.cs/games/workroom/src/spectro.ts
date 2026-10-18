@@ -2,7 +2,6 @@
 // the plain-words labels beside it. DOM-free.
 import type { Spectrogram } from './score.ts';
 
-
 const TICKS: readonly { hz: number; text: string }[] = [
   { hz: 10000, text: '10 kHz' },
   { hz: 1000, text: '1 kHz' },

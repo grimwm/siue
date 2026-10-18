@@ -192,7 +192,7 @@ test('the piece page: two columns from 1024 px, the notes in a sheet, a legend u
   assert.ok(page, 'a grid that becomes two columns at lg');
   const sheet = named(root, 'data-sheet');
   assert.ok(walk(sheet).some(e => e._attrs['data-change'] !== undefined), 'the change list is in the sheet');
-  assert.equal(named(root, 'data-legend').textContent, 'star = a note · higher = higher note · bigger = louder · glow = energy');
+  assert.equal(named(root, 'data-legend').textContent, 'block = a note · star = a note · higher = higher note · bigger = louder · glow = energy');
   assert.ok(named(root, 'data-guide'), 'the view stage is marked for the guide');
   unmount(root);
 });
@@ -222,6 +222,9 @@ test('a change that names one bar still has a 44 px tap target', async () => {
   assert.equal(where.textContent, 'Bar 3');
   const cls = (where._attrs['class'] ?? where.className ?? '').split(/\s+/);
   assert.ok(cls.includes('min-h-11') && cls.includes('min-w-11'), 'tall and wide enough for a thumb, whatever the label');
+  assert.ok(cls.includes('relative') && cls.includes('z-10'), 'paints above the inline word beside it, so a word never steals its taps');
+  const li = walk(root).find(e => e._attrs['data-change'] !== undefined && e.localName === 'li')!;
+  assert.ok((li._attrs['class'] ?? li.className ?? '').split(/\s+/).includes('leading-8'), 'a line tall enough that a word’s 44 px hit area stays within half a line gap of its text');
   unmount(root);
 });
 
@@ -431,5 +434,49 @@ test('a sound piece’s Story legend describes layers and moments, not stars', a
   const legend = named(root, 'data-legend').textContent;
   assert.match(legend, /row = a layer/);
   assert.doesNotMatch(legend, /star|higher/);
+  unmount(root);
+});
+
+const withMedia = async (wide: boolean, run: () => Promise<void>): Promise<void> => {
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'matchMedia');
+  Object.defineProperty(globalThis, 'matchMedia', { value: (q: string) => ({ matches: wide && q === '(min-width: 1024px)' }), configurable: true });
+  try { await run(); } finally { if (had) Object.defineProperty(globalThis, 'matchMedia', had); else delete (globalThis as { matchMedia?: unknown }).matchMedia; }
+};
+
+const tapWhere = async (wide: boolean): Promise<{ expanded: string | undefined; scrolls: unknown[] }> => {
+  let out = { expanded: undefined as string | undefined, scrolls: [] as unknown[] };
+  await withMedia(wide, async () => {
+    const root = await mount();
+    const stage = named(root, 'data-guide');
+    const scrolls: unknown[] = [];
+    (stage as unknown as { scrollIntoView(o: unknown): void }).scrollIntoView = o => { scrolls.push(o); };
+    const handle = walk(named(root, 'data-sheet')).find(e => e._attrs['aria-expanded'] !== undefined)!;
+    await act(() => { fire(handle, 'click'); });
+    assert.equal(handle._attrs['aria-expanded'], 'true');
+    await act(() => { fire(named(root, 'data-where'), 'click'); });
+    out = { expanded: handle._attrs['aria-expanded'], scrolls };
+    unmount(root);
+  });
+  return out;
+};
+
+test('at phone width a where tap closes the bottom sheet and scrolls the stage into view', async () => {
+  const r = await tapWhere(false);
+  assert.equal(r.expanded, 'false');
+  assert.deepEqual(r.scrolls, [{ block: 'nearest' }]);
+});
+
+test('at desktop width a where tap leaves the side column alone', async () => {
+  const r = await tapWhere(true);
+  assert.equal(r.expanded, 'true');
+  assert.deepEqual(r.scrolls, []);
+});
+
+test('a sound piece’s Story guide opens by itself even when the music Story guide was seen', async () => {
+  const storage = memoryStorage({ 'workroom-guide-story': 'seen' });
+  const root = makeEl('root');
+  await act(() => { render(h(ui.room.Workroom, { score: sound, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {}, guide: guideStore(storage) }), renderTarget(root)); });
+  assert.ok(overlay(root), 'first visit for a sound piece');
+  assert.equal(storage.data.get('workroom-guide-sound-story'), 'seen');
   unmount(root);
 });

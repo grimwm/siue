@@ -75,7 +75,7 @@ export async function signedInPage(browser: Browser, base: string, opts: { guide
   }
   const context = await browser.newContext({ storageState: session });
   if (opts.guideSeen ?? true) {
-    await context.addInitScript((tabs: readonly string[]) => { for (const t of tabs) localStorage.setItem(`workroom-guide-${t}`, 'seen'); }, VIEW_TABS);
+    await context.addInitScript((tabs: readonly string[]) => { for (const t of tabs) { localStorage.setItem(`workroom-guide-${t}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${t}`, 'seen'); } }, VIEW_TABS);
   }
   return { context, page: await context.newPage() };
 }

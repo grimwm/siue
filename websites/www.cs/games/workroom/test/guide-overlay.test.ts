@@ -102,6 +102,35 @@ test('the demo player plays every tone of a demo', () => {
   assert.deepEqual(oscs.slice(1).map(o => o.frequency.value), DEMOS.clicks.map(t => t.freq));
 });
 
+test('the demo player sets the audio session to playback before it schedules or unlocks', () => {
+  const order: string[] = [];
+  const session = { _t: '', get type() { return this._t; }, set type(v: string) { this._t = v; order.push(`type=${v}`); } };
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { value: { audioSession: session }, configurable: true });
+  try {
+    const ctx = fakeAudioContext();
+    const core = createAudioCore({ createContext: () => { order.push('context'); return asAudioContext(ctx); } });
+    ui.d.demoPlayer(core)('clicks');
+    assert.equal(session.type, 'playback');
+    assert.equal(order[0], 'type=playback', 'set before the context is made and the tones scheduled');
+    assert.ok(nodesOf(ctx, 'osc').length > 1);
+  } finally {
+    if (had) Object.defineProperty(globalThis, 'navigator', had); else delete (globalThis as { navigator?: unknown }).navigator;
+  }
+});
+
+test('a browser without an audio session still plays', () => {
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true });
+  try {
+    const ctx = fakeAudioContext();
+    ui.d.demoPlayer(createAudioCore({ createContext: () => asAudioContext(ctx) }))('swell');
+    assert.ok(nodesOf(ctx, 'osc').length > 1);
+  } finally {
+    if (had) Object.defineProperty(globalThis, 'navigator', had); else delete (globalThis as { navigator?: unknown }).navigator;
+  }
+});
+
 test('playing a demo stops the one before; stop fades the current one', () => {
   const ctx = fakeAudioContext();
   const play = ui.d.demoPlayer(createAudioCore({ createContext: () => asAudioContext(ctx) }));

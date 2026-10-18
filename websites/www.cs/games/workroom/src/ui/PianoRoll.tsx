@@ -1,4 +1,4 @@
-// The piano roll: notes as bars, pitch up, on the same view as the timeline.
+// The piano roll: notes as blocks, pitch up, on the same view as the timeline.
 import { axisTicks } from '../axis.ts';
 import { readableOn } from '../color.ts';
 import { ROLL_H, labelRows, layoutRoll } from '../pianoroll.ts';

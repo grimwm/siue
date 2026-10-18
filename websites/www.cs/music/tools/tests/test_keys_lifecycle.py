@@ -57,7 +57,7 @@ class LifecycleTest(unittest.TestCase):
             raise OSError("network down")
         fp = self.w.keys.init(fail)
         self.assertIn(fp, self.w.cache.load()["keys"])
-        self.assertIn("make keys-upload", "\n".join(self.w.out))
+        self.assertIn("make music-setup", "\n".join(self.w.out))
         self.assertEqual(self.w.keys.upload_keyring(self.uploads.append), 1)
 
     def test_rotate_uploads_the_full_keyring_and_keeps_the_passphrase(self):
@@ -168,7 +168,7 @@ class LifecycleTest(unittest.TestCase):
         with self.assertRaises(NotUploaded):
             self.w.keys.rotate(fail)
         text = "\n".join(self.w.out)
-        self.assertIn("make keys-upload before you commit or deploy", text)
+        self.assertIn("make music-setup", text)
         self.assertNotIn("Then commit", text)
 
     def test_a_read_back_failure_archives_the_new_item(self):
@@ -186,7 +186,7 @@ class LifecycleTest(unittest.TestCase):
         fp = self.w.add_key_to_op(0, passphrase="orphan passphrase")
         with self.assertRaises(KeysError) as ctx:
             self.w.keys.init(self.uploads.append)
-        self.assertIn("ADOPT=1", str(ctx.exception))
+        self.assertIn("make music-setup", str(ctx.exception))
         self.assertIn(fp[:16], str(ctx.exception))
         self.assertFalse(self.w.public_json.exists())
         self.assertEqual(self.w.keys.init(self.uploads.append, adopt=True), fp)
@@ -214,7 +214,7 @@ class LifecycleTest(unittest.TestCase):
         for action in (lambda: self.w.keys.rotate(self.uploads.append), lambda: self.w.keys.upload_keyring(self.uploads.append)):
             with self.assertRaises(KeysError) as ctx:
                 action()
-            self.assertIn("make keys-forget", str(ctx.exception))
+            self.assertIn("make music-forget", str(ctx.exception))
             self.assertIn(old[:4], str(ctx.exception))
         data["keys"][old] = "not base64 !!"
         self.w.cache.save(data)
@@ -235,7 +235,7 @@ class LifecycleTest(unittest.TestCase):
             self.w.keys.init(self.uploads.append)
         self.w.op.fields, self.w.op.archive = original_fields, original_archive
         self.assertTrue(str(ctx.exception).startswith("op died"))
-        self.assertIn("ADOPT=1", str(ctx.exception))
+        self.assertIn("make music-setup", str(ctx.exception))
         self.assertIsInstance(ctx.exception.__cause__, OSError)
 
 

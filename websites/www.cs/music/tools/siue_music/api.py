@@ -106,6 +106,22 @@ class Api:
             raise ApiError(f"the draft is {size} bytes; the server accepts at most {MAX_REQUEST_BYTES}")
         self._request("POST", "api/drafts.php", {"piece": piece, "version": version}, draft_container(files))
 
+    def holds(self, scope: str) -> str:
+        """Whether this key holds `scope`, by a request that changes nothing: "yes", "no" (403), "invalid" (401: revoked or
+        mistyped) or "unknown" (the server could not be asked). Only notes:pickup and keys:publish can be probed."""
+        try:
+            if scope == "notes:pickup":
+                self._request("GET", "api/notes.php", {"state": "waiting"})
+            elif scope == "keys:publish":
+                self._request("GET", "api/keyring.php")  # a GET is refused with 405 once the key is accepted
+            else:
+                raise ValueError(f"cannot probe {scope}")
+            return "yes"
+        except ApiError as e:
+            if scope == "keys:publish" and e.status == 405:
+                return "yes"
+            return {401: "invalid", 403: "no"}.get(e.status, "unknown")
+
     def publish_keyring(self, locked: dict) -> None:
         self._request("POST", "api/keyring.php", body=json.dumps(locked).encode(), content_type="application/json")
 

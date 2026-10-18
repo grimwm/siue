@@ -263,6 +263,32 @@ final class AdminKeysTest extends TestCase
         self::assertDoesNotMatchRegularExpression('/\son[a-z]+=/', $res->body);
     }
 
+    public function testTheCreateFormCanBePrefilledFromTheQueryAndNeverCreatesAKey(): void
+    {
+        [$p, $keys, $in] = $this->panel();
+        $res = $p->keysPanel(req(['cookies' => $in->cookies, 'query' => ['label' => 'music-publish', 'scopes' => 'drafts:publish, notes:pickup,nope']]));
+        self::assertSame(200, $res->status);
+        self::assertStringContainsString('name="label" maxlength="80" value="music-publish"', $res->body);
+        self::assertMatchesRegularExpression('/value="drafts:publish" checked/', $res->body);
+        self::assertMatchesRegularExpression('/value="notes:pickup" checked/', $res->body);
+        self::assertStringNotContainsString('nope', $res->body);
+        self::assertSame([], $keys->list(), 'a GET creates nothing');
+        $plain = $p->keysPanel($in)->body;
+        self::assertStringNotContainsString(' checked', $plain);
+        self::assertStringContainsString('value=""', $plain);
+    }
+
+    public function testPrefillEscapesTheLabelAndIgnoresNonStrings(): void
+    {
+        [$p, , $in] = $this->panel();
+        $res = $p->keysPanel(req(['cookies' => $in->cookies, 'query' => ['label' => '"><script>alert(1)</script>']]));
+        self::assertStringNotContainsString('<script>alert', $res->body);
+        self::assertStringContainsString('&lt;script&gt;', $res->body);
+        $odd = $p->keysPanel(req(['cookies' => $in->cookies, 'query' => ['label' => ['x'], 'scopes' => ['notes:pickup']]]));
+        self::assertSame(200, $odd->status);
+        self::assertStringNotContainsString(' checked', $odd->body);
+    }
+
     public function testCreatingShowsTheKeyOnceOnTheResponseOnly(): void
     {
         [$p, $keys, $in] = $this->panel();

@@ -78,7 +78,7 @@ class PickupTest(unittest.TestCase):
         api = FakeApi({A: self.sealed("x", spki=other_spki)})
         report = pickup(api, self.ring, self.notes, self.repo, self.steps)
         self.assertEqual(api.marked, [])
-        self.assertIn("git pull, then make keys-pull", report.left[A])
+        self.assertIn("git pull, then make music-setup", report.left[A])
 
     def test_one_bad_note_does_not_stop_the_rest(self):
         api = FakeApi({A: self.sealed("bad"), B: self.sealed("good")}, corrupt=frozenset({A}))

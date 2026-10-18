@@ -35,9 +35,11 @@ final class Auth
      * Records the request; returns the plain token when a link may be sent, else
      * null (not allowed, or a limit hit). A trusted device skips the address and
      * global limits (so strangers cannot lock the owner out) but keeps the per-IP
-     * limit. Opens its own BEGIN IMMEDIATE transaction: callers must not hold one.
+     * limit. $browserHash (the SHA-256 of the requesting browser's pending mark) is stored with
+     * the link so only that browser can open it signed in. Opens its own BEGIN IMMEDIATE
+     * transaction: callers must not hold one.
      */
-    public function requestLink(string $email, string $ip, bool $trustedDevice = false): ?string
+    public function requestLink(string $email, string $ip, bool $trustedDevice = false, ?string $browserHash = null): ?string
     {
         $ip = substr($ip, 0, 45);
         $now = $this->clock->now();
@@ -69,8 +71,8 @@ final class Auth
             if ($ok && $perIp < self::LIMIT_IP
                 && ($trustedDevice || ($global < self::LIMIT_GLOBAL && $perAddress < self::LIMIT_ADDRESS))) {
                 $token = bin2hex(random_bytes(32));
-                $this->db->prepare('INSERT INTO links (token_hash, email, created_at, expires_at, used_at) VALUES (:h, :e, :c, :x, NULL)')
-                    ->execute([':h' => hash('sha256', $token), ':e' => self::ALLOWED, ':c' => $now, ':x' => $now + self::LINK_TTL]);
+                $this->db->prepare('INSERT INTO links (token_hash, email, created_at, expires_at, used_at, browser_hash) VALUES (:h, :e, :c, :x, NULL, :b)')
+                    ->execute([':h' => hash('sha256', $token), ':e' => self::ALLOWED, ':c' => $now, ':x' => $now + self::LINK_TTL, ':b' => $browserHash]);
             }
             $this->db->exec('COMMIT');
         } catch (\Throwable $e) {
@@ -120,6 +122,18 @@ final class Auth
         $st->execute([':h' => hash('sha256', $token), ':now' => $this->clock->now()]);
         $email = $st->fetchColumn();
         return is_string($email) ? $email : null;
+    }
+
+    /** True when the token is live and was requested by the browser holding $mark; never consumes. */
+    public function peekFor(string $token, string $mark): bool
+    {
+        if (!self::wellFormed($token) || !self::wellFormed($mark)) {
+            return false;
+        }
+        $st = $this->db->prepare('SELECT browser_hash FROM links WHERE token_hash = :h AND used_at IS NULL AND expires_at > :now');
+        $st->execute([':h' => hash('sha256', $token), ':now' => $this->clock->now()]);
+        $bound = $st->fetchColumn();
+        return is_string($bound) && hash_equals($bound, hash('sha256', $mark));
     }
 
     /** Consumes a valid token once; the address, or null. */

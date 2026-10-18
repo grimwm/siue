@@ -21,9 +21,9 @@ final class Sessions
     }
 
     /** The attributes every cookie carries; no Domain, so the browser keeps it to this host. */
-    public static function attributes(string $path): string
+    public static function attributes(string $path, string $sameSite = 'Strict'): string
     {
-        return 'Path=' . $path . '; Secure; HttpOnly; SameSite=Strict';
+        return 'Path=' . $path . '; Secure; HttpOnly; SameSite=' . $sameSite;
     }
 
     /** New session (always a fresh id); returns the cookie header value. */

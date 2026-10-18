@@ -21,6 +21,9 @@ final class Pages
     /** Holds the random mark a confirm page's form must send back; there is no session yet to bind it to. */
     public const CONFIRM_COOKIE = '__Secure-admin-confirm';
 
+    /** Names the browser that asked for a link: the link signs in only where this mark is sent back. */
+    public const PENDING_COOKIE = '__Secure-admin-pending';
+
     /** Seconds between live SMTP probes. */
     public const PROBE_EVERY = 600;
 
@@ -72,16 +75,20 @@ final class Pages
 
     /**
      * POST login.php. The reply is the same whether or not a link was issued, and
-     * whether or not storage failed; the mail goes out in flush(), after the reply.
+     * whether or not storage failed (the pending cookie included); the mail goes out in flush(), after the reply.
      */
     public function requestLink(Request $r): Response
     {
         $email = $r->post['email'] ?? '';
+        $mark = bin2hex(random_bytes(32));
+        // Lax, not Strict: the mail app's click is a cross-site navigation, and the cookie must ride along.
+        $pending = self::PENDING_COOKIE . '=' . $mark . '; Max-Age=' . Auth::LINK_TTL . '; ' . Sessions::attributes($this->cookiePath, 'Lax');
         try {
             $token = $this->auth->requestLink(
                 is_string($email) ? $email : '',
                 $r->ip,
                 $this->auth->isTrustedDevice(Sessions::deviceToken($r)),
+                hash('sha256', $mark),
             );
             if ($token !== null) {
                 $next = self::safeNext($r->post['next'] ?? null);
@@ -92,16 +99,35 @@ final class Pages
         } catch (\Throwable $e) {
             error_log('admin: link request failed: ' . get_class($e));
         }
-        return self::html(200, 'Check your email', Html::p('If that address may sign in, a link is on its way. It works once, for fifteen minutes.'));
+        return self::html(200, 'Check your email', Html::p('If that address may sign in, a link is on its way. It works once, for fifteen minutes.'), [$pending]);
     }
 
-    /** GET verify.php?token=: a button form; opening the link never spends it. */
+    /**
+     * GET verify.php?token=: in the browser that asked for the link, signs in; anywhere else a button
+     * form, and opening the link there never spends it (mail scanners fetch every link).
+     */
     public function confirm(Request $r): Response
     {
         return $this->guard(function () use ($r): Response {
             $token = $r->query['token'] ?? '';
             if (!is_string($token) || $this->auth->peek($token) === null) {
                 return self::html(403, 'Link not valid', Html::p('This link has expired or was already used. Request a new one.') . '<a class="button" href="login.php">Back to sign in</a>');
+            }
+            $pending = $r->cookies[self::PENDING_COOKIE] ?? null;
+            if (is_string($pending) && $this->auth->peekFor($token, $pending) && $this->auth->consume($token) !== null) {
+                // A page, not a redirect: the session cookie is SameSite=Strict, and a browser drops it on
+                // a navigation whose redirect chain began on another site (the mail client). The page's own
+                // refresh is a same-origin navigation. A meta refresh is not script, so the CSP allows it.
+                $next = self::safeNext($r->query['next'] ?? null) ?: 'index.php';
+                $to = Html::e($next);
+                return self::html(
+                    200,
+                    'Signed in',
+                    Html::p('You are signed in.') . '<a class="button" href="' . $to . '">Continue</a>',
+                    $this->startSession($r, [$this->clearPending()]),
+                    false,
+                    '<meta http-equiv="refresh" content="0;url=' . $to . '">',
+                );
             }
             $mark = bin2hex(random_bytes(32));
             $next = self::safeNext($r->query['next'] ?? null);
@@ -124,17 +150,31 @@ final class Pages
             if (!is_string($token) || $this->auth->consume($token) === null) {
                 return self::html(403, 'Link not valid', Html::p('This link has expired or was already used. Request a new one.') . '<a class="button" href="login.php">Back to sign in</a>', [$this->clearConfirm()]);
             }
-            // A browser that already carries a session does not keep it alive beside the new one.
-            $this->sessions->end($r);
-            $cookies = [
-                $this->sessions->start($r),
-                Sessions::deviceCookie($this->auth->issueDevice(), $this->cookiePath),
-                $this->clearConfirm(),
-            ];
-            $mail = MailTemplate::notice($this->clock->now(), $r->ip, $r->agent, $this->baseUrl . 'index.php');
-            $this->queue[] = ['to' => Auth::ALLOWED, 'subject' => $mail['subject'], 'mime' => $mail['mime'], 'token' => null];
-            return self::redirect(self::safeNext($r->post['next'] ?? null) ?: 'index.php', $cookies);
+            return self::redirect(self::safeNext($r->post['next'] ?? null) ?: 'index.php', $this->startSession($r));
         });
+    }
+
+    /**
+     * The steps both sign-in paths share once a link is spent: end the session the browser already
+     * had, start a new one with a trusted-device cookie, clear the one-shot cookies, queue the notice.
+     * Returns the Set-Cookie values.
+     *
+     * @param list<string> $more cookies to set alongside
+     * @return list<string>
+     */
+    private function startSession(Request $r, array $more = []): array
+    {
+        // A browser that already carries a session does not keep it alive beside the new one.
+        $this->sessions->end($r);
+        $cookies = [
+            $this->sessions->start($r),
+            Sessions::deviceCookie($this->auth->issueDevice(), $this->cookiePath),
+            $this->clearConfirm(),
+            ...$more,
+        ];
+        $mail = MailTemplate::notice($this->clock->now(), $r->ip, $r->agent, $this->baseUrl . 'index.php');
+        $this->queue[] = ['to' => Auth::ALLOWED, 'subject' => $mail['subject'], 'mime' => $mail['mime'], 'token' => null];
+        return $cookies;
     }
 
     /**
@@ -464,9 +504,9 @@ final class Pages
     }
 
     /** @param list<string> $cookies */
-    private static function html(int $status, string $title, string $body, array $cookies = [], bool $script = false): Response
+    private static function html(int $status, string $title, string $body, array $cookies = [], bool $script = false, string $head = ''): Response
     {
-        return self::make($status, Html::page($title, $body, $script), ['Content-Type' => 'text/html; charset=utf-8'], $cookies);
+        return self::make($status, Html::page($title, $body, $script, $head), ['Content-Type' => 'text/html; charset=utf-8'], $cookies);
     }
 
     /** @param list<string> $cookies */
@@ -528,6 +568,11 @@ final class Pages
     private function clearConfirm(): string
     {
         return self::CONFIRM_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . Sessions::attributes($this->cookiePath);
+    }
+
+    private function clearPending(): string
+    {
+        return self::PENDING_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . Sessions::attributes($this->cookiePath, 'Lax');
     }
 
     private static function smtpGreets(): bool

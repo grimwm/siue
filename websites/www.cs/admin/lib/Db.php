@@ -16,7 +16,7 @@ final class Db
     public const FILE = 'admin.sqlite';
 
     private const SCHEMA = [
-        'CREATE TABLE IF NOT EXISTS links (token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER)',
+        'CREATE TABLE IF NOT EXISTS links (token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER, browser_hash TEXT)',
         'CREATE TABLE IF NOT EXISTS link_requests (id INTEGER PRIMARY KEY, ip TEXT NOT NULL, email TEXT NOT NULL, at INTEGER NOT NULL)',
         'CREATE TABLE IF NOT EXISTS devices (token_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)',
         'CREATE TABLE IF NOT EXISTS sessions (id_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL, seen_at INTEGER NOT NULL, ip TEXT NOT NULL, agent TEXT NOT NULL, csrf_nonce TEXT)',
@@ -78,6 +78,11 @@ final class Db
             $db->exec('PRAGMA foreign_keys = ON');
             foreach (self::SCHEMA as $sql) {
                 $db->exec($sql);
+            }
+            // A database made before a column existed gets it added; CREATE TABLE IF NOT EXISTS leaves it alone.
+            $have = array_column($db->query('PRAGMA table_info(links)')->fetchAll(\PDO::FETCH_ASSOC), 'name');
+            if (!in_array('browser_hash', $have, true)) {
+                $db->exec('ALTER TABLE links ADD COLUMN browser_hash TEXT');
             }
         } finally {
             umask($old);

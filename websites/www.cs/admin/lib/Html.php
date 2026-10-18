@@ -12,8 +12,8 @@ final class Html
         return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
-    /** A complete page: $body is trusted markup built with e(). $script adds the one same-origin script. */
-    public static function page(string $title, string $body, bool $script = false): string
+    /** A complete page: $body is trusted markup built with e(). $script adds the one same-origin script; $head is trusted markup for the head. */
+    public static function page(string $title, string $body, bool $script = false, string $head = ''): string
     {
         $t = self::e($title);
         return '<!doctype html>' . "\n"
@@ -24,6 +24,7 @@ final class Html
             . "<title>$t</title>"
             . '<link rel="stylesheet" href="admin.css">'
             . ($script ? '<script src="admin.js" defer></script>' : '')
+            . $head
             . '</head><body><main class="card">'
             . '<div class="mark" aria-hidden="true"><span></span></div>'
             . "<h1>$t</h1>"

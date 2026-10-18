@@ -83,10 +83,13 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(len(titles), 2)
         self.assertTrue(any(t.endswith("(previous)") and old[:16] in t for t in titles))
         self.assertTrue(any(not t.endswith("(previous)") and new[:16] in t for t in titles))
-        self.assertEqual(len({f["password"] for f in self.item_fields()}), 1, "one passphrase, so every device keeps working")
+        fresh = self.w.keys.passphrase()
+        self.assertNotEqual(fresh, "pp", "a rotation changes the passphrase, so a leaked one stops working")
         [sent] = self.server.uploads
         self.assertEqual((sent["current"], sent["previous"]), (new, [old]))
-        self.assertEqual(list(sealing.unlock_keyring(sent["keyring"], "pp")), [new, old])
+        self.assertEqual(list(sealing.unlock_keyring(sent["keyring"], fresh)), [new, old])
+        with self.assertRaises(sealing.WrongPassphrase):
+            sealing.unlock_keyring(sent["keyring"], "pp")
         self.assertEqual(list(self.w.keys.keyring()), [new, old])
 
     def test_a_second_rotation_keeps_every_earlier_key(self):
@@ -100,7 +103,7 @@ class LifecycleTest(unittest.TestCase):
         old = self.w.add_key_to_op(0, passphrase="pp")
         note = sealing.seal({"v": 1, "kind": "text", "text": "before the rotation"}, b"", sealing.spki_of(self.w.keys.keyring()[old]))
         new = self.w.keys.rotate(self.server)
-        for ring in (self.w.keys.ensure_synced(), sealing.unlock_keyring(self.server.uploads[-1]["keyring"], "pp")):
+        for ring in (self.w.keys.ensure_synced(), sealing.unlock_keyring(self.server.uploads[-1]["keyring"], self.w.keys.passphrase())):
             self.assertEqual(sealing.open_bundle(note, ring).body["text"], "before the rotation")
         after = sealing.seal({"v": 1, "kind": "text", "text": "after"}, b"", sealing.spki_of(self.w.keys.keyring()[new]))
         self.assertEqual(sealing.open_bundle(after, self.w.keys.ensure_synced()).body["text"], "after")

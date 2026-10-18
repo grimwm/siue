@@ -485,11 +485,12 @@ class Keys:
                             "so nothing was changed")
 
     def rotate(self, api: object | None) -> str:
-        """A new key becomes current in 1Password, the old one is marked previous, and the keyring is uploaded."""
+        """A new key under a new passphrase becomes current in 1Password, the old one is marked previous, and the keyring,
+        every key in it, is uploaded locked under the new passphrase."""
         ring = self.keyring()
         if api is not None:
             self._refuse_to_lose(api, ring)
-        passphrase = self.passphrase()
+        passphrase = sealing.new_passphrase()  # a passphrase that leaked cannot unlock, or forge, the rotated keyring
         old = next(iter(ring))
         pkcs8, spki = sealing.generate()
         fp = sealing.fingerprint(spki)

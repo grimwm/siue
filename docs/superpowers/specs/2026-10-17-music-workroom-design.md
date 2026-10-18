@@ -131,7 +131,9 @@ The server stores only sealed notes, which it cannot open.
   every retained earlier one, each tagged with its fingerprint, locked under
   the same passphrase. The browser unlocks the whole keyring and picks the key
   a note names, so notes sealed before a rotation open on a newly signed-in
-  device. `make music-rotate` re-locks and uploads the full keyring.
+  device. `make music-rotate` makes a new passphrase with the new key, re-locks
+  the full keyring under it and uploads it, so a passphrase that leaked can
+  neither unlock nor forge the keyring after a rotation.
 
 ## Pickup and the note history
 

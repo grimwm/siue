@@ -27,6 +27,7 @@ function base(c: Context, kind: NoteKind, from: number, to: number, fromBar: num
 }
 
 function checkAudio(a: Audio): Audio {
+  if (a.mime === '' || a.mime.length > 100) throw new NoteEmpty('The recording has no usable format. Record it again.');
   if (!(a.seconds > 0)) throw new NoteEmpty('The recording is empty. Record it again.');
   if (a.seconds > MAX_AUDIO_SECONDS) throw new NoteTooLong('A recording is at most one minute long.');
   return { mime: a.mime, seconds: a.seconds };
@@ -55,8 +56,9 @@ export function reactNote(c: Context, section: Section, tempo: TempoMap, duratio
 
 /** A curve of at most `max` points: one with more is resampled at evenly spaced times between its first and last, interpolating between its points, so a long drawing or a finely sampled energy line still fits a note. */
 export function resampleCurve(curve: readonly [number, number][], max: number = MAX_CURVE_POINTS): [number, number][] {
-  const pts = curve.map(([t, v]): [number, number] => [t, v]).sort((a, b) => a[0] - b[0]);
+  const pts = curve.filter(([t, v]) => Number.isFinite(t) && Number.isFinite(v)).map(([t, v]): [number, number] => [t, v]).sort((a, b) => a[0] - b[0]);
   if (pts.length <= max) return pts;
+  if (max < 2) return pts.slice(0, Math.max(0, max));
   const t0 = pts[0]![0];
   const t1 = pts[pts.length - 1]![0];
   const out: [number, number][] = [];
@@ -73,7 +75,9 @@ export function resampleCurve(curve: readonly [number, number][], max: number = 
 }
 
 export function energyNote(c: Context, curve: readonly [number, number][], duration: number, bars: number | null): NoteBody {
-  return { ...base(c, 'energy', 0, duration, bars === null ? null : 1, bars, null), curve: resampleCurve(curve) };
+  const points = resampleCurve(curve).map(([t, v]): [number, number] => [Math.min(Math.max(t, 0), duration), Math.min(1, Math.max(0, v))]);
+  if (points.length < 2) throw new NoteEmpty('Draw the energy line first.');
+  return { ...base(c, 'energy', 0, duration, bars === null ? null : 1, bars, null), curve: points };
 }
 
 /** A section spanning the whole piece, for a reaction when no section is under the playhead (a sound may have none). */

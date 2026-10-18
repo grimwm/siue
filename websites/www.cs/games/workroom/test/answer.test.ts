@@ -78,3 +78,20 @@ test('labels say where a note sits in the words the piece is counted in', () => 
   assert.equal(spanLabel({ from: 0.08, to: 0.08, fromBar: null, toBar: null }), '80 ms');
   assert.deepEqual([recordClock(0), recordClock(7.9), recordClock(60)], ['0:00', '0:07', '1:00']);
 });
+
+test('every builder yields a body the shape check accepts, and energy refuses what it cannot make', () => {
+  const t = tempoMap(score);
+  const ok = (n: unknown) => assert.equal(isNoteBody(n), true, JSON.stringify(n)?.slice(0, 160));
+  ok(reactNote(ctx, score.sections[0]!, t, score.duration, 'calmer'));
+  ok(reactNote(ctx, wholePiece(score), t, score.duration, 'love-it'));
+  ok(reactNote({ ...ctx, piece: 'cannon-fire' }, wholePiece(sound), tempoMap(sound), sound.duration, 'love-it'));
+  ok(energyNote(ctx, [[0, 0.1], [16, 1]], 16, 8));
+  ok(energyNote({ ...ctx, piece: 'cannon-fire' }, [[0, 1], [0.4, 0]], 0.4, null));
+  const messy = energyNote(ctx, [[8, 3], [0, -1], [4, Number.NaN], [16, 0.5]], 16, 8);
+  assert.deepEqual(messy.curve, [[0, 0], [8, 1], [16, 0.5]], 'clamped, sorted, non-finite dropped');
+  ok(messy);
+  assert.throws(() => energyNote(ctx, [], 16, 8), NoteEmpty);
+  assert.throws(() => energyNote(ctx, [[1, 0.5], [2, Number.NaN]], 16, 8), NoteEmpty);
+  assert.throws(() => humNote(ctx, { time: 1, bar: 1, laneId: null }, { mime: '', seconds: 3 }), NoteEmpty);
+  assert.deepEqual(resampleCurve([[0, 0], [1, 1], [2, 0]], 1), [[0, 0]]);
+});

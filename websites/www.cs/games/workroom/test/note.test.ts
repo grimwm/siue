@@ -2,9 +2,10 @@
 // in order, bars together, the limits, and what each kind must carry.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { MAX_CURVE_POINTS, MAX_TEXT, isNoteBody } from '../src/note.ts';
 import type { NoteBody } from '../src/note.ts';
+import { NoteUnreadable, open, seal } from '../src/seal.ts';
+import { builtIn, fx, importPrivate } from './fixture-key.ts';
 
 const ok: NoteBody = {
   v: 1, kind: 'text', piece: 'test-piece', draft: 2, from: 8, to: 12, fromBar: 5, toBar: 6, lane: 'brass',
@@ -36,13 +37,15 @@ test('a body out of shape is refused', () => {
     { ...ok, kind: 'react', reaction: null }, { ...ok, reaction: 'meh' },
     { ...ok, kind: 'energy', curve: [[0, 0.5]] }, { ...ok, kind: 'energy', curve: [[0, 1.5], [1, 0]] }, { ...ok, kind: 'energy', curve: [[-1, 0.5], [1, 0]] },
     { ...ok, kind: 'energy', curve: Array.from({ length: MAX_CURVE_POINTS + 1 }, (_, i) => [i, 0]) },
-    { ...ok, made: '2026-10-20 14:03' }, { ...ok, made: null },
+    { ...ok, made: '2026-10-20 14:03' }, { ...ok, made: null }, { ...ok, made: '2026-13-45T99:99:99Z' },
+    { ...ok, kind: 'energy', curve: [[4, 0.5], [2, 0.1]] }, { ...ok, kind: 'energy', to: 12, curve: [[0, 0.5], [13, 0.1]] },
   ];
   for (const b of bad) assert.equal(isNoteBody(b), false, JSON.stringify(b)?.slice(0, 120));
 });
 
-test('opening a sealed note uses this check and no other', () => {
-  const seal = readFileSync(new URL('../src/seal.ts', import.meta.url), 'utf8');
-  assert.match(seal, /import \{[^}]*\bisNoteBody\b[^}]*\} from '\.\/note\.ts'/);
-  assert.doesNotMatch(seal, /function isNoteBody/);
+test('opening a sealed note refuses a malformed body', async () => {
+  const keyring = new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)]]);
+  const bad = { ...ok, made: '2026-13-45T99:99:99Z' };
+  await assert.rejects(open(await seal(bad, null, builtIn), keyring), (e: unknown) => e instanceof NoteUnreadable && e.reason === 'tampered');
+  assert.deepEqual((await open(await seal(ok, null, builtIn), keyring)).body, ok);
 });

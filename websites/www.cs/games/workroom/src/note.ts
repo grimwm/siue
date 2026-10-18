@@ -55,13 +55,15 @@ export function isNoteBody(x: unknown): x is NoteBody {
   if (!(text === null || (typeof text === 'string' && text.length <= MAX_TEXT))) return false;
   if (!(reaction === null || REACTION_IDS.includes(reaction as Reaction))) return false;
   const curveOk = curve === null || (Array.isArray(curve) && curve.length >= 2 && curve.length <= MAX_CURVE_POINTS
-    && curve.every(p => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1]) && p[0] >= 0 && p[1] >= 0 && p[1] <= 1));
+    && curve.every((p, i, all) => Array.isArray(p) && p.length === 2 && finite(p[0]) && finite(p[1]) && p[0] >= 0 && p[1] >= 0 && p[1] <= 1
+      && (i === 0 || p[0] >= (all[i - 1] as number[])[0]!)
+      && (b['kind'] !== 'energy' || p[0] <= to)));
   if (!curveOk) return false;
   const a = audio as Record<string, unknown> | null;
   const audioOk = a === null || (typeof a === 'object' && !Array.isArray(a) && typeof a['mime'] === 'string' && a['mime'].length <= 100
     && finite(a['seconds']) && a['seconds'] > 0 && a['seconds'] <= MAX_AUDIO_SECONDS);
   if (!audioOk) return false;
-  if (typeof b['made'] !== 'string' || !ISO_UTC.test(b['made'])) return false;
+  if (typeof b['made'] !== 'string' || !ISO_UTC.test(b['made']) || !Number.isFinite(Date.parse(b['made']))) return false;
   switch (b['kind'] as NoteKind) {
     case 'text': return typeof text === 'string' && text.trim() !== '';
     case 'speech':

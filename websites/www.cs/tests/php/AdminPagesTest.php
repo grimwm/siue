@@ -192,6 +192,146 @@ final class AdminPagesTest extends TestCase
         self::assertSame(403, $p->confirm(req(['query' => ['token' => str_repeat('0', 64)]]))->status);
     }
 
+    /** @return array{0:Admin\Pages,1:PDO,2:MemoryMailer,3:string,4:string} pages, db, mailer, token, the asking browser's pending mark */
+    private function asked(): array
+    {
+        [$p, $db, , $m] = $this->pages();
+        $reply = $p->requestLink($this->post(['email' => 'wgrim@siue.edu']));
+        $p->flush();
+        $mark = $this->cookieValue($reply, Admin\Pages::PENDING_COOKIE);
+        self::assertNotNull($mark);
+        $m->sent = [$m->sent[0]];
+        return [$p, $db, $m, $this->tokenOf($m), $mark];
+    }
+
+    private function spent(PDO $db): int
+    {
+        return (int) $db->query('SELECT COUNT(*) FROM links WHERE used_at IS NOT NULL')->fetchColumn();
+    }
+
+    public function testTheRequestingBrowserSignsInByOpeningTheLink(): void
+    {
+        [$p, $db, $m, $token, $mark] = $this->asked();
+        $m->sent = [];
+        $r = $p->confirm(req(['query' => ['token' => $token], 'cookies' => [Admin\Pages::PENDING_COOKIE => $mark]]));
+        self::assertSame(200, $r->status);
+        self::assertArrayNotHasKey('Location', $r->headers, 'a redirect would lose the Strict session cookie');
+        self::assertNotNull($this->cookieValue($r, Admin\Sessions::COOKIE));
+        self::assertNotNull($this->cookieValue($r, Admin\Sessions::DEVICE_COOKIE));
+        self::assertSame('', $this->cookieValue($r, Admin\Pages::PENDING_COOKIE));
+        self::assertSame('', $this->cookieValue($r, Admin\Pages::CONFIRM_COOKIE));
+        self::assertSame(1, $this->spent($db));
+        self::assertStringContainsString('<meta http-equiv="refresh" content="0;url=index.php">', $r->body);
+        self::assertStringContainsString('<a class="button" href="index.php">Continue</a>', $r->body);
+        self::assertStringNotContainsString('<form', $r->body);
+        $p->flush();
+        self::assertCount(1, $m->sent);
+        self::assertSame('New sign-in to your admin pages', $m->sent[0]['subject']);
+        // The session works.
+        $session = [Admin\Sessions::COOKIE => $this->cookieValue($r, Admin\Sessions::COOKIE)];
+        self::assertSame(200, $p->hub(req(['cookies' => $session]))->status);
+        // The link is spent: opening it again, even by the same browser, is not valid.
+        self::assertSame(403, $p->confirm(req(['query' => ['token' => $token], 'cookies' => [Admin\Pages::PENDING_COOKIE => $mark]]))->status);
+    }
+
+    public function testTheSignedInPageContinuesToTheSafeNext(): void
+    {
+        [$p, , , $token, $mark] = $this->asked();
+        $r = $p->confirm(req(['query' => ['token' => $token, 'next' => 'keys.php?made=1'], 'cookies' => [Admin\Pages::PENDING_COOKIE => $mark]]));
+        self::assertSame(200, $r->status);
+        self::assertStringContainsString('content="0;url=keys.php?made=1"', $r->body);
+        [$p, , , $token, $mark] = $this->asked();
+        $r = $p->confirm(req(['query' => ['token' => $token, 'next' => '//evil.example/'], 'cookies' => [Admin\Pages::PENDING_COOKIE => $mark]]));
+        self::assertStringContainsString('content="0;url=index.php"', $r->body);
+        self::assertStringNotContainsString('evil', $r->body);
+    }
+
+    public static function strangers(): array
+    {
+        return [
+            'no cookie' => [null],
+            'a different mark' => [str_repeat('a', 64)],
+            'a malformed mark' => ['nope'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('strangers')]
+    public function testAnyOtherOpenerGetsTheButtonAndTheLinkSurvives(?string $cookie): void
+    {
+        [$p, $db, , $token] = $this->asked();
+        $r = $p->confirm(req(['query' => ['token' => $token], 'cookies' => $cookie === null ? [] : [Admin\Pages::PENDING_COOKIE => $cookie]]));
+        self::assertSame(200, $r->status);
+        self::assertStringContainsString('method="post"', $r->body);
+        self::assertNull($this->cookieValue($r, Admin\Sessions::COOKIE));
+        self::assertNotNull($this->cookieValue($r, Admin\Pages::CONFIRM_COOKIE));
+        self::assertSame(0, $this->spent($db));
+    }
+
+    public function testAnotherRequestsMarkDoesNotOpenThisLink(): void
+    {
+        [$p, $db, , $token] = $this->asked();
+        $other = $this->cookieValue($p->requestLink($this->post(['email' => 'x@siue.edu'])), Admin\Pages::PENDING_COOKIE);
+        $r = $p->confirm(req(['query' => ['token' => $token], 'cookies' => [Admin\Pages::PENDING_COOKIE => $other]]));
+        self::assertStringContainsString('method="post"', $r->body);
+        self::assertSame(0, $this->spent($db));
+    }
+
+    public function testALinkWithoutABrowserHashFallsBackToTheButton(): void
+    {
+        [$p, $db, , $token, $mark] = $this->asked();
+        $db->exec('UPDATE links SET browser_hash = NULL');
+        $r = $p->confirm(req(['query' => ['token' => $token], 'cookies' => [Admin\Pages::PENDING_COOKIE => $mark]]));
+        self::assertStringContainsString('method="post"', $r->body);
+        self::assertNull($this->cookieValue($r, Admin\Sessions::COOKIE));
+        self::assertSame(0, $this->spent($db));
+    }
+
+    public function testAnExpiredLinkIsNotValidEvenForTheRequestingBrowser(): void
+    {
+        [$p, $db, $clock, $m] = $this->pages();
+        $reply = $p->requestLink($this->post(['email' => 'wgrim@siue.edu']));
+        $p->flush();
+        $mark = $this->cookieValue($reply, Admin\Pages::PENDING_COOKIE);
+        $clock->now += Admin\Auth::LINK_TTL + 1;
+        $r = $p->confirm(req(['query' => ['token' => $this->tokenOf($m)], 'cookies' => [Admin\Pages::PENDING_COOKIE => $mark]]));
+        self::assertSame(403, $r->status);
+        self::assertSame(0, $this->spent($db));
+    }
+
+    public function testThePendingCookieIsLaxSecureHttpOnlyAndScopedToTheAdminPath(): void
+    {
+        [$p] = $this->pages();
+        $reply = $p->requestLink($this->post(['email' => 'wgrim@siue.edu']));
+        $cookie = null;
+        foreach ($reply->cookies as $c) {
+            if (str_starts_with($c, Admin\Pages::PENDING_COOKIE . '=')) {
+                $cookie = $c;
+            }
+        }
+        self::assertNotNull($cookie);
+        self::assertMatchesRegularExpression('/^__Secure-admin-pending=[0-9a-f]{64}; /', $cookie);
+        self::assertStringContainsString('Max-Age=' . Admin\Auth::LINK_TTL, $cookie);
+        self::assertStringContainsString('Path=/~wgrim/', $cookie);
+        self::assertStringContainsString('; Secure', $cookie);
+        self::assertStringContainsString('; HttpOnly', $cookie);
+        self::assertStringContainsString('SameSite=Lax', $cookie);
+        self::assertStringNotContainsString('Strict', $cookie);
+    }
+
+    public function testTheLoginReplyIsIndistinguishableForAnAddressThatMayNotSignIn(): void
+    {
+        [$p, $db] = $this->pages();
+        $good = $p->requestLink($this->post(['email' => 'wgrim@siue.edu']));
+        $bad = $p->requestLink($this->post(['email' => 'x@siue.edu']));
+        self::assertSame($good->body, $bad->body);
+        self::assertSame($good->status, $bad->status);
+        $shape = static fn(Admin\Response $r): array => array_map(static fn(string $c): string => preg_replace('/=[0-9a-f]{64}/', '=M', $c), $r->cookies);
+        self::assertSame($shape($good), $shape($bad));
+        self::assertNotNull($this->cookieValue($bad, Admin\Pages::PENDING_COOKIE));
+        self::assertSame(1, (int) $db->query('SELECT COUNT(*) FROM links')->fetchColumn(), 'only the allowed address gets a link');
+        self::assertSame(1, (int) $db->query('SELECT COUNT(*) FROM links WHERE browser_hash IS NOT NULL')->fetchColumn());
+    }
+
     public function testSignInChecksCsrfConsumesOnceStartsASessionAndMailsANotice(): void
     {
         [$p, , , $m] = $this->pages();

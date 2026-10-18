@@ -17,6 +17,19 @@ final class AdminDbTest extends TestCase
         self::assertSame(1, (int) $db->query('PRAGMA secure_delete')->fetchColumn());
     }
 
+    public function testADatabaseMadeBeforeTheBrowserHashColumnGainsIt(): void
+    {
+        $dir = admin_tmp_dir();
+        $old = new PDO('sqlite:' . $dir . '/' . Admin\Db::FILE);
+        $old->exec('CREATE TABLE links (token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER)');
+        $old->exec("INSERT INTO links VALUES ('h', 'wgrim@siue.edu', 1, 2, NULL)");
+        unset($old);
+        $db = Admin\Db::open($dir);
+        self::assertContains('browser_hash', array_column($db->query('PRAGMA table_info(links)')->fetchAll(PDO::FETCH_ASSOC), 'name'));
+        self::assertNull($db->query('SELECT browser_hash FROM links')->fetchColumn(), 'the old row has no hash');
+        Admin\Db::open($dir);
+    }
+
     public function testDatabaseFileIsPrivate(): void
     {
         $dir = admin_tmp_dir();

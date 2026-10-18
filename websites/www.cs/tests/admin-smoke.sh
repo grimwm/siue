@@ -56,19 +56,23 @@ for h in cache-control referrer-policy x-robots-tag x-content-type-options conte
   grep -qi "^$h:" "$work/login.h" || fail "login.php lacks the $h header"
 done
 
-# 2. Ask for the link. The capture folder sits in the data folder the first request made.
-"${dc[@]}" exec -T -u apache www-cs-php mkdir -p "$ADMIN_SMOKE_DIR/mail"
-expect "POST login.php" 200 "$(req ask POST /admin/login.php --data-urlencode 'email=wgrim@siue.edu')"
-
-# 3. The mail is written after the reply: wait for it, take the newest.
-eml=
-for _ in $(seq 1 20); do
-  if eml=$("${dc[@]}" exec -T www-cs-php sh -c 'ls -t '"$ADMIN_SMOKE_DIR"'/mail/*.eml 2>/dev/null | head -1') && [ -n "$eml" ]; then break; fi
-  sleep 0.5
-done
-[ -n "$eml" ] || fail "no captured mail"
-"${dc[@]}" exec -T www-cs-php cat "$eml" >"$work/mail.eml"
-link=$(python3 -I - "$work/mail.eml" <<'PY'
+# latest_link: waits for a captured mail newer than the ones in $seen and sets $path to the sign-in path in it.
+# Called directly, never in $(...), so its update to $seen persists.
+seen=0
+latest_link() {
+  local eml= n
+  for _ in $(seq 1 20); do
+    if eml=$("${dc[@]}" exec -T www-cs-php sh -c 'ls -t '"$ADMIN_SMOKE_DIR"'/mail/*.eml 2>/dev/null | head -1') && [ -n "$eml" ]; then
+      n=$("${dc[@]}" exec -T www-cs-php sh -c 'ls '"$ADMIN_SMOKE_DIR"'/mail/*.eml | wc -l')
+      [ "$n" -gt "$seen" ] && break
+    fi
+    sleep 0.5
+  done
+  [ -n "$eml" ] && [ "$n" -gt "$seen" ] || fail "no captured mail"
+  seen=$n
+  "${dc[@]}" exec -T www-cs-php cat "$eml" >"$work/mail.eml"
+  local l
+  l=$(python3 -I - "$work/mail.eml" <<'PY'
 import email, email.policy, re, sys
 msg = email.message_from_binary_file(open(sys.argv[1], "rb"), policy=email.policy.default)
 text = msg.get_body(preferencelist=("plain",)).get_content()
@@ -76,10 +80,21 @@ m = re.search(r"http://localhost/admin/verify\.php\?token=[0-9a-f]+", text)
 print(m.group(0) if m else "")
 PY
 )
-[ -n "$link" ] || fail "no sign-in link in the mail"
-path=${link#http://localhost}
+  [ -n "$l" ] || fail "no sign-in link in the mail"
+  path=${l#http://localhost}
+}
 
-# 4. Open the link: a form and the confirm cookie.
+# 2. Ask for the link. The capture folder sits in the data folder the first request made.
+"${dc[@]}" exec -T -u apache www-cs-php mkdir -p "$ADMIN_SMOKE_DIR/mail"
+expect "POST login.php" 200 "$(req ask POST /admin/login.php --data-urlencode 'email=wgrim@siue.edu')"
+pending=$(cookie_of ask __Secure-admin-pending)
+[ -n "$pending" ] || fail "no pending cookie"
+tr -d '\r' <"$work/ask.h" | grep -i '^set-cookie: __Secure-admin-pending=' | grep -qi 'samesite=lax' || fail "the pending cookie is not SameSite=Lax"
+
+# 3. The mail is written after the reply: wait for it, take the newest.
+latest_link
+
+# 4. A browser that did not ask (a mail scanner, another device) opens the link: a form and the confirm cookie.
 expect "GET link" 200 "$(req confirm GET "$path")"
 grep -q '<form' "$work/confirm.b" || fail "the link page has no form"
 csrf=$(sed -n 's/.*name="csrf" value="\([0-9a-f]*\)".*/\1/p' "$work/confirm.b" | head -1)
@@ -103,6 +118,20 @@ csrf=$(sed -n 's/.*name="csrf" value="\([0-9a-f]*\)".*/\1/p' "$work/hub.b" | hea
 expect "POST logout.php" 303 "$(req out POST /admin/logout.php -H "Cookie: $session" --data-urlencode "csrf=$csrf")"
 expect "GET admin/ signed out" 303 "$(req after GET /admin/ -H "Cookie: $session")"
 grep -qi '^location: login\.php' "$work/after.h" || fail "signed-out visit does not redirect to login.php"
+
+# 7b. The browser that asked opens a new link and is signed in with no button: a page, not a redirect.
+expect "POST login.php again" 200 "$(req ask2 POST /admin/login.php --data-urlencode 'email=wgrim@siue.edu')"
+pending=$(cookie_of ask2 __Secure-admin-pending)
+latest_link
+expect "GET link, no cookie" 200 "$(req stranger GET "$path")"
+grep -q '<form' "$work/stranger.b" || fail "a stranger did not get the button"
+expect "GET link, asking browser" 200 "$(req direct GET "$path" -H "Cookie: $pending")"
+session=$(cookie_of direct __Secure-admin)
+[ -n "$session" ] || fail "opening the link in the asking browser started no session"
+grep -qi '^location:' "$work/direct.h" && fail "the signed-in page redirected"
+grep -q 'http-equiv="refresh" content="0;url=index.php"' "$work/direct.b" || fail "the signed-in page does not move on to index.php"
+expect "GET admin/ after the link" 200 "$(req hub2 GET /admin/ -H "Cookie: $session")"
+expect "GET spent link" 403 "$(req spent GET "$path" -H "Cookie: $pending")"
 
 # 8. Libraries and storage are not served.
 for p in /admin/lib/Auth.php /admin/data/; do

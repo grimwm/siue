@@ -7,8 +7,8 @@ login.
 
 | Page | What it does |
 | --- | --- |
-| `login.php` | Asks for the address and mails a one-time link to the allowed address only. The reply is the same whoever asks. |
-| `verify.php` | The mailed link opens a page with a button; pressing it spends the link and starts a session. |
+| `login.php` | Asks for the address and mails a one-time link to the allowed address only. The reply, a `__Secure-admin-pending` cookie included, is the same whoever asks. |
+| `verify.php` | Opened in the browser that asked for the link, the mailed link signs in at once and the page moves on to `index.php` (or the page the visit came from). Opened anywhere else, it shows a button; pressing it spends the link and starts a session. |
 | `index.php` | The hub: dashboard links, encryption-key fingerprints (with a "Remove the notes key" control while one is stored), sign out and sign out everywhere. |
 | `keys.php` | Create and revoke scoped API keys. A new key is shown once. |
 | `logout.php` | Ends the session (POST), or every session with `?all=1`. |
@@ -26,8 +26,13 @@ database elsewhere, but reaches PHP only where the server passes environment thr
 
 ## Security model
 
-- Links are random, stored only as SHA-256, good for 15 minutes and once. Opening a link never
-  spends it; the button does, behind a CSRF mark tied to a cookie.
+- Links are random, stored only as SHA-256, good for 15 minutes and once. Requesting a link
+  sets a `__Secure-admin-pending` cookie (a random mark, `SameSite=Lax` so the mail app's click carries it,
+  15 minutes) and stores only the mark's SHA-256 with the link. Opening the link signs in only when that
+  cookie matches; the sign-in answers with a page that moves on by a same-origin refresh, because a redirect
+  that began on another site would make the browser drop the `SameSite=Strict` session cookie. Any other
+  opener, such as a mail scanner, gets a button; opening the link there never spends it, and the button
+  does, behind a CSRF mark tied to a cookie.
 - Sessions are server-side, last 30 minutes idle and 24 hours at most. Cookies are `__Secure-admin*`,
   `Secure`, `HttpOnly`, `SameSite=Strict`, with `Path` taken from `ADMIN_BASE_URL` (`/~wgrim/` on
   the host). Each sign-in mails the owner a notice.
@@ -66,8 +71,8 @@ site's cookies recovers.
 
 ### Logs and headers
 
-`verify.php?token=` appears in the web server's access log, and opening the link does not spend it,
-so anyone who can read that log can use a link within its 15 minutes. The logs are not readable by
+`verify.php?token=` appears in the web server's access log, and opening the link outside the browser that asked for it does not spend it,
+so anyone who can read that log can use a link within its 15 minutes, through the button. The logs are not readable by
 other accounts. `.htaccess` sets the security headers with `Header always set` so that errors raised
 before PHP runs carry them too; a page PHP sends can therefore show each header twice, with the same
 value.
@@ -82,8 +87,8 @@ make admin-smoke
 It starts the docker stack in its own throwaway project (an ephemeral port, never one a dev server
 uses) with `compose.admin-local.yaml`, which sets `ADMIN_BASE_URL=http://localhost/admin/` and
 captures mail to a folder of the container's own filesystem (`/tmp/admin-smoke-<random>`), with the
-database beside it, so it never touches a developer's `admin/data/`. It then requests a link, reads the captured mail, signs in,
-loads the hub, signs out, and checks that `lib/`, `data/` and script-made requests are refused and
+database beside it, so it never touches a developer's `admin/data/`. It then requests a link, reads the captured mail, signs in with the button,
+loads the hub, signs out, signs in again by opening a second link in the browser that asked for it (a stranger still gets the button), and checks that `lib/`, `data/` and script-made requests are refused and
 that `health.php` reports the database. It prints `ADMIN-SMOKE-OK` and removes the project and its
 container.
 

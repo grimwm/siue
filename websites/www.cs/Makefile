@@ -30,6 +30,20 @@ help:
 	@echo "  admin-smoke - Sign in to the admin pages in a throwaway docker project and back out (prints ADMIN-SMOKE-OK)"
 	@echo "  music-e2e - The music workroom's browser check in a throwaway docker project (local only; prints MUSIC-E2E-OK)"
 	@echo "  screenshots - Recapture each game's Games-page picture (macOS sips)"
+	@echo ""
+	@echo "Music workroom keys and notes (keys live in the 1Password SIUE vault; OP_VAULT overrides):"
+	@echo "  keys-status - Fingerprints of the notes key in the repository, 1Password and this computer's cache, and the API keys stored"
+	@echo "  keys-pull   - Copy the private keys and API keys from 1Password to this computer; checks them against the repository's key"
+	@echo "  keys-init   - First time only: make the notes key and passphrase in 1Password, upload the locked keyring,"
+	@echo "                write the public key for a commit (ADOPT=1 finishes an interrupted init)"
+	@echo "  keys-rotate - Make a new notes key; earlier keys are kept so old notes still open (exit 4: run keys-upload)"
+	@echo "  keys-upload - Upload the locked keyring again (after a failed init or rotate upload)"
+	@echo "  keys-forget - Delete this computer's cached keys (a borrowed or shared computer)"
+	@echo "  api-key-set NAME=music-pickup - Save an API key shown once on the admin hub to 1Password"
+	@echo "  music-pickup - Download, open and save your waiting notes; marks each picked up once it opens"
+	@echo "  music-publish PIECE=<id> [VERSION=n] - Upload a rendered draft to the workroom"
+	@echo "  music-tools-venv - Make the tool's virtualenv (music/tools/.venv)"
+	@echo "  music-tools-test - The tool's own tests"
 
 deploy:
 	@HOST="$(HOST)" SSHPASS_FILE="$(SSHPASS_FILE)" ./deploy.sh

@@ -11,11 +11,6 @@ require_once __DIR__ . '/../../music/lib/bootstrap.php';
 const MUSIC_FP_CURRENT = 'abababababababababababababababababababababababababababababababab';
 const MUSIC_FP_PREVIOUS = 'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd';
 
-function music_keys(): Music\PublicKeys
-{
-    return new Music\PublicKeys(MUSIC_FP_CURRENT, [MUSIC_FP_PREVIOUS]);
-}
-
 /** A bundle with a real header and $body random bytes after it. */
 function music_sealed(string $fpHex = MUSIC_FP_CURRENT, int $body = 64): string
 {
@@ -32,13 +27,17 @@ function music_draft_bundle(array $files): string
     return $out;
 }
 
-/** @return array{Music\Store, PDO, string, FakeClock} store, database, music dir, clock */
-function music_world(?Music\PublicKeys $keys = null): array
+/** @return array{Music\Store, PDO, string, FakeClock} store, database, music dir, clock; $keyed stores a keyring naming the fixed fingerprints */
+function music_world(bool $keyed = true): array
 {
     $clock = new FakeClock(1_800_000_000);
     $db = admin_tmp_db();
     $dir = admin_tmp_dir() . '/music';
-    return [new Music\Store($db, $dir, $clock, $keys ?? music_keys()), $db, $dir, $clock];
+    $store = new Music\Store($db, $dir, $clock);
+    if ($keyed) {
+        $store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, [MUSIC_FP_PREVIOUS]);
+    }
+    return [$store, $db, $dir, $clock];
 }
 
 /** A request with a live session cookie (and HTTPS). */

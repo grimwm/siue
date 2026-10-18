@@ -4,6 +4,7 @@
 // lit part, never over it. Focus moves to the card and Tab stays inside it;
 // Close is the way out (Escape is never bound).
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { cardPlacement } from '../../guide-place.ts';
 import { clipLength } from '../../guide.ts';
 import type { GuideClip, GuidePart, GuideSpot } from '../../guide.ts';
 import { Button } from './Button.tsx';
@@ -21,7 +22,7 @@ export interface GuideOverlayProps {
 
 /** A shadow far larger than the screen dims everything outside the lit spot. */
 const VEIL = 'shadow-[0_0_0_9999px_color-mix(in_oklab,var(--color-well)_80%,transparent)]';
-const FALLBACK_HEIGHT = 800;
+const FALLBACK = { width: 390, height: 800 };
 
 /** The spot on screen: the anchor element's box, offset by the part's rect when it has one. */
 export function locateSpot(spot: GuideSpot): SpotBox | null {
@@ -41,10 +42,8 @@ export function GuideOverlay(p: GuideOverlayProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const part = p.parts[Math.min(at, p.parts.length - 1)]!;
   const box = (p.locate ?? locateSpot)(part.spot);
-  // The card takes the half of the screen the lit part is not in.
-  const below = box ? box.top + box.height / 2 < (window.innerHeight || FALLBACK_HEIGHT) / 2 : true;
+  const placed = box ? cardPlacement(box, window.innerWidth || FALLBACK.width, window.innerHeight || FALLBACK.height) : null;
 
-  useEffect(() => { card.current?.focus(); }, []);
   // The lit spot follows the page when it scrolls or resizes.
   useEffect(() => {
     const again = (): void => redraw(n => n + 1);
@@ -54,7 +53,12 @@ export function GuideOverlay(p: GuideOverlayProps) {
   }, []);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   // A new part brings its spot on screen.
-  useEffect(() => { document.querySelectorAll(`[data-guide="${part.spot.anchor}"]`)[0]?.scrollIntoView({ block: 'nearest' }); redraw(n => n + 1); }, [at]);
+  // Focus goes to the card, on opening and on every part change: a button that has just become disabled (Next on the last part) would otherwise drop it out of the card.
+  useEffect(() => {
+    document.querySelectorAll(`[data-guide="${part.spot.anchor}"]`)[0]?.scrollIntoView({ block: 'nearest' });
+    card.current?.focus({ preventScroll: true });
+    redraw(n => n + 1);
+  }, [at]);
 
   const quiet = (): void => {
     if (timer.current) clearTimeout(timer.current);
@@ -89,8 +93,9 @@ export function GuideOverlay(p: GuideOverlayProps) {
           <span class="absolute -top-3 -left-3 grid size-7 place-items-center rounded-full bg-amber font-mono text-xs font-semibold text-on-accent">{at + 1}</span>
         </div>
       ) : <div aria-hidden="true" class="fixed inset-0 bg-well/80" />}
-      <Panel role="dialog" label={part.title} tabIndex={-1} panelRef={card} data={{ 'data-guide-card': '' }} accent
-        class={`fixed inset-x-4 mx-auto grid max-h-[50vh] max-w-md gap-3 overflow-y-auto shadow-lg ${below ? 'bottom-4' : 'top-4'}`}>
+      <Panel role="dialog" modal label={part.title} tabIndex={-1} panelRef={card} data={{ 'data-guide-card': '' }} accent
+        style={{ maxHeight: `${placed?.maxHeight ?? 400}px` }}
+        class={`fixed inset-x-4 mx-auto grid max-w-md gap-3 overflow-y-auto shadow-lg ${placed?.side === 'above' ? 'top-4' : 'bottom-4'}`}>
         <p class="font-mono text-xs tracking-widest uppercase text-dim">Part {at + 1} of {p.parts.length}</p>
         <h2 class="font-display text-2xl font-semibold uppercase">{part.title}</h2>
         <p>{part.what}</p>

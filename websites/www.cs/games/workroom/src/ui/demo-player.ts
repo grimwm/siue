@@ -3,7 +3,7 @@
 // starting another, or calling stop(), fades the current one out within 30 ms.
 import type { AudioCore } from '../../../_kit/audio/core.ts';
 import { scheduleDemo } from '../demo.ts';
-import type { DemoContext, DemoId, DemoRun } from '../demo.ts';
+import type { DemoId, DemoRun } from '../demo.ts';
 
 /** Seconds between the tap and the first tone, so the context has started. */
 const LEAD = 0.02;
@@ -18,7 +18,7 @@ export function demoPlayer(core: AudioCore): DemoPlayer {
     core.unlock();
     const ctx = core.context();
     if (!ctx) return;
-    current = scheduleDemo(ctx as unknown as DemoContext, id, ctx.currentTime + LEAD);
+    current = scheduleDemo(ctx, id, ctx.currentTime + LEAD);
   };
   return Object.assign(play, { stop });
 }

@@ -329,3 +329,21 @@ test('a piece part’s Hear it plays the piece from the clip’s start; Next sto
   assert.equal(audio.paused, true, 'moving on stops the clip');
   unmount(root);
 });
+
+test('Next and Close leave the owner’s own music playing; a demo’s Hear it pauses it', async () => {
+  const log: string[] = [];
+  const root = await mount({ playDemo: (id: string) => log.push(id), stopDemo: () => log.push('stop') });
+  await act(() => { fire(button(root, 'Play'), 'click'); });
+  const audio = audios[audios.length - 1]!;
+  await act(() => { fire(button(root, 'How to read this'), 'click'); });
+  await act(() => { fire(button(root, 'Next'), 'click'); });
+  await act(() => { fire(button(root, 'Back'), 'click'); });
+  assert.equal(audio.paused, false, 'the music plays on while the guide is walked');
+  await act(() => { fire(button(root, 'Close'), 'click'); });
+  assert.equal(audio.paused, false, 'and after it closes');
+  await act(() => { fire(button(root, 'How to read this'), 'click'); });
+  for (let n = 1; n < 7; n++) await act(() => { fire(button(root, 'Next'), 'click'); });
+  await act(() => { fire(button(root, 'Hear it'), 'click'); });
+  assert.equal(audio.paused, true, 'a demo pauses the piece');
+  unmount(root);
+});

@@ -117,3 +117,17 @@ test('playing a demo stops the one before; stop fades the current one', () => {
   assert.ok(second[0]!.stopped! <= 0.2 + 0.03 + 1e-9);
   assert.doesNotThrow(() => play.stop());
 });
+
+test('focus stays in the card when Next or Back becomes disabled, and Tab stays in it', async () => {
+  const root = await mount();
+  const card = walk(root).find(e => e._attrs['data-guide-card'] !== undefined)!;
+  const inCard = (e: unknown): boolean => e === card || walk(card).includes(e as StubElement);
+  await act(() => { fire(button(root, 'Next'), 'click'); });
+  await act(() => { fire(button(root, 'Next'), 'click'); });
+  assert.ok(isDisabled(button(root, 'Next')));
+  assert.ok(inCard(globalThis.__focused), 'focus is in the card, not lost with the disabled button');
+  await act(() => { fire(button(root, 'Back'), 'click'); });
+  await act(() => { fire(button(root, 'Back'), 'click'); });
+  assert.ok(isDisabled(button(root, 'Back')));
+  assert.ok(inCard(globalThis.__focused));
+});

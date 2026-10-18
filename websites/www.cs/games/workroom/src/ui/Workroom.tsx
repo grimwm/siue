@@ -107,12 +107,12 @@ export function Workroom(p: WorkroomProps) {
   // Hear it plays inside the tap itself: iOS refuses sound started later.
   const hear = (c: Clip): void => { playClip.current?.(c); setClip(c); setTime(c.from); setView(v => follow(v, c.from, bounds)); };
   // Only one sound at a time: a demo pauses the piece and the demo before it; a piece clip silences a demo.
-  const quietGuide = (): void => { pauseAudio.current?.(); setClip(null); p.stopDemo?.(); };
+  const quietGuide = (): void => { if (clip) { pauseAudio.current?.(); setClip(null); } p.stopDemo?.(); };
   const openGuide = (): void => { guide.markSeen(tab); setGuideOpen(true); };
   const closeGuide = (): void => { setGuideOpen(false); howTo.current?.focus(); };
   const hearPart = (c: GuideClip): void => {
     if (c.kind === 'piece') { p.stopDemo?.(); hear({ from: c.from, to: c.to }); }
-    else { quietGuide(); p.playDemo?.(c.id); }
+    else { pauseAudio.current?.(); setClip(null); p.stopDemo?.(); p.playDemo?.(c.id); }
   };
   const openTerm = open === null ? undefined : term(open);
   const openClip = openTerm ? uses.find(u => u.term.id === openTerm.id) : undefined;

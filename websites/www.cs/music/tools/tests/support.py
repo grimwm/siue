@@ -1,5 +1,4 @@
-"""Shared test world: a temporary repository with music/keys/public.json, the
-fake op, a key cache, and a small pool of RSA-4096 test keys (made once per run)."""
+"""Shared test world: the fake op, a key cache, a fake server, and a small pool of RSA-4096 test keys (made once per run)."""
 import base64
 import json
 import os
@@ -12,7 +11,7 @@ TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
 
 from siue_music import sealing  # noqa: E402
-from siue_music.keys import Cache, Keys, KEY_TAG, WORKROOM_URL  # noqa: E402
+from siue_music.keys import Cache, Keys, KEY_TAG, PREVIOUS_SUFFIX, WORKROOM_URL  # noqa: E402
 from siue_music.op import Op  # noqa: E402
 
 SITE = TOOLS.parents[1]
@@ -34,11 +33,6 @@ class World:
         tmp = tempfile.TemporaryDirectory()
         case.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        self.repo = self.root / "repo"
-        (self.repo / "music" / "keys").mkdir(parents=True)
-        (self.repo / "games" / "workroom" / "src").mkdir(parents=True)
-        self.public_json = self.repo / "music" / "keys" / "public.json"
-        self.public_ts = self.repo / "games" / "workroom" / "src" / "public-key.ts"
         self.log = self.root / "op.log"
         env = mock.patch.dict(os.environ, {"FAKE_OP_LOG": str(self.log), "FAKE_OP_STORE": str(self.root / "op.json")})
         env.start()
@@ -46,8 +40,7 @@ class World:
         self.op = Op("SIUE", exe=(sys.executable, str(TOOLS / "tests" / "fake_op.py")))
         self.cache = Cache(self.root / "config" / "siue" / "music.json")
         self.out: list[str] = []
-        self.keys = Keys(self.op, self.cache, self.public_json, self.public_ts, out=self.out.append)
-        self.spki: dict[str, bytes] = {}
+        self.keys = Keys(self.op, self.cache, out=self.out.append)
 
     def op_calls(self) -> list[list[str]]:
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
@@ -55,19 +48,32 @@ class World:
     def clear_op_log(self) -> None:
         self.log.unlink(missing_ok=True)
 
-    def add_key_to_op(self, i: int, passphrase: str = "a test passphrase", private_key: bytes | None = None) -> str:
-        fp, pkcs8, spki = pool_key(i)
-        self.spki[fp] = spki
-        self.op.create(f"SIUE music notes key {fp[:16]}", "PASSWORD", [KEY_TAG], [
+    def add_key_to_op(self, i: int, passphrase: str = "a test passphrase", private_key: bytes | None = None, previous: bool = False) -> str:
+        """A notes key item in 1Password, titled as the tool titles it (plus " (previous)" when `previous`)."""
+        fp, pkcs8, _ = pool_key(i)
+        self.op.create(f"SIUE music notes key {fp[:16]}" + (PREVIOUS_SUFFIX if previous else ""), "PASSWORD", [KEY_TAG], [
             {"id": "password", "type": "CONCEALED", "purpose": "PASSWORD", "label": "password", "value": passphrase},
             {"id": "private_key", "type": "CONCEALED", "label": "private_key", "value": base64.b64encode(private_key or pkcs8).decode()},
             {"id": "fingerprint", "type": "STRING", "label": "fingerprint", "value": fp},
         ], urls=[WORKROOM_URL])
         return fp
 
-    def write_repo(self, current: str, previous: tuple[str, ...] = ()) -> None:
-        for fp in (current, *previous):
-            if fp not in self.spki:
-                self.spki[fp] = next(s for f, _, s in _POOL if f == fp)
-        entry = lambda fp: {"fingerprint": fp, "spki": base64.b64encode(self.spki[fp]).decode()}  # noqa: E731
-        self.public_json.write_text(json.dumps({"schema": 1, "current": entry(current), "previous": [entry(p) for p in previous]}))
+
+class ServerApi:
+    """The workroom's API as one API key sees it: `scopes` maps each scope to what holds() answers, and the keyring
+    route keeps what is posted."""
+
+    def __init__(self, scopes: dict[str, str] | None = None):
+        self.scopes = scopes or {"notes:pickup": "yes", "keys:publish": "yes", "drafts:publish": "yes"}
+        self.uploads: list[dict] = []  # {"keyring", "current", "previous"} per call
+        self.stored: dict | None = None
+
+    def holds(self, scope: str) -> str:
+        return self.scopes[scope]
+
+    def publish_keyring(self, locked: dict, current: str, previous: list[str]) -> None:
+        self.uploads.append({"keyring": locked, "current": current, "previous": list(previous)})
+        self.stored = {"current": current, "previous": list(previous), "uploaded_at": 1}
+
+    def keyring_fingerprints(self) -> dict | None:
+        return self.stored

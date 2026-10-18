@@ -35,8 +35,8 @@ final class Store
     public const KEEP_DRAFTS = 20;
     /** The most the kept drafts may hold in total: 100 MB. */
     public const MAX_DRAFT_TOTAL_BYTES = 104_857_600;
-    /** The locked keyring: about 4.5 KB per retained RSA-4096 key, room for a dozen rotations. */
-    public const MAX_KEYRING_BYTES = 65_536;
+    /** The upload: the locked keyring (about 4.5 KB per retained RSA-4096 key, room for a dozen rotations, 64 KB) plus the fingerprints beside it. */
+    public const MAX_KEYRING_BYTES = 65_536 + 33 * 70;
     public const KINDS = ['music', 'sound'];
     public const DRAFT_FILES = ['score.json', 'score.musicxml', 'audio.webm', 'audio.m4a', 'spectrogram.png'];
 
@@ -49,7 +49,7 @@ final class Store
     private \Kit\StoreDir $files;
 
     /** $dir is <admin data dir>/music; claimed private (0700) with notes/ and drafts/ inside; creates the music tables. */
-    public function __construct(private \PDO $db, private string $dir, private \Admin\Clock $clock, private ?PublicKeys $keys)
+    public function __construct(private \PDO $db, private string $dir, private \Admin\Clock $clock)
     {
         $this->files = new \Kit\StoreDir('music storage:', \Admin\StorageUnavailable::class);
         $this->files->claim($dir, true);
@@ -71,7 +71,21 @@ final class Store
                 }
             }
         }
-        $this->db->exec('CREATE TABLE IF NOT EXISTS music_keyring (id INTEGER PRIMARY KEY CHECK (id = 1), locked TEXT NOT NULL, uploaded_at INTEGER NOT NULL)');
+        $this->db->exec("CREATE TABLE IF NOT EXISTS music_keyring (id INTEGER PRIMARY KEY CHECK (id = 1), locked TEXT NOT NULL, uploaded_at INTEGER NOT NULL, current_fp TEXT NOT NULL DEFAULT '', previous_fps TEXT NOT NULL DEFAULT '[]')");
+        // A keyring table made before the fingerprints were kept gains them here; its stored row counts as no key.
+        $have = array_column($this->db->query('PRAGMA table_info(music_keyring)')->fetchAll(\PDO::FETCH_ASSOC), 'name');
+        foreach (['current_fp' => "''", 'previous_fps' => "'[]'"] as $column => $default) {
+            if (in_array($column, $have, true)) {
+                continue;
+            }
+            try {
+                $this->db->exec("ALTER TABLE music_keyring ADD COLUMN $column TEXT NOT NULL DEFAULT $default");
+            } catch (\PDOException $e) {
+                if (!str_contains($e->getMessage(), 'duplicate column')) { // another request added it between the check and the ALTER
+                    throw $e;
+                }
+            }
+        }
     }
 
     /** @return array{id: string, size: int, sha256: string, arrived_at: int} @throws NoteRejected */
@@ -81,13 +95,14 @@ final class Store
         if ($size > self::MAX_NOTE_BYTES) {
             throw new NoteRejected('too_large');
         }
-        if ($this->keys === null || $this->keys->current === '') {
+        $prints = self::fingerprintsIn($this->db);
+        if ($prints === null) {
             throw new NoteRejected('no_key');
         }
         if ($size < self::HEADER_BYTES || !str_starts_with($sealed, self::MAGIC)) {
             throw new NoteRejected('bad_header');
         }
-        if (!in_array(bin2hex(substr($sealed, 6, 32)), $this->keys->all(), true)) {
+        if (!in_array(bin2hex(substr($sealed, 6, 32)), [$prints['current'], ...$prints['previous']], true)) {
             throw new NoteRejected('unknown_key');
         }
         $id = bin2hex(random_bytes(16));
@@ -275,18 +290,76 @@ final class Store
         return $known->fetchColumn() !== false && is_file($path) ? $path : null;
     }
 
-    /** Keeps the one locked keyring, replacing the stored one. The server never reads inside it. */
-    public function putKeyring(string $lockedJson): void
+    /**
+     * Keeps the one locked keyring and the fingerprints its uploader named, replacing what was stored. The server
+     * never reads inside the keyring and cannot check the fingerprints against it.
+     *
+     * @param list<string> $previous
+     */
+    public function putKeyring(string $lockedJson, string $current, array $previous): void
     {
-        $this->db->prepare('INSERT INTO music_keyring (id, locked, uploaded_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET locked = excluded.locked, uploaded_at = excluded.uploaded_at')
-            ->execute([$lockedJson, $this->clock->now()]);
+        $this->db->prepare('INSERT INTO music_keyring (id, locked, uploaded_at, current_fp, previous_fps) VALUES (1, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET locked = excluded.locked, uploaded_at = excluded.uploaded_at, current_fp = excluded.current_fp, previous_fps = excluded.previous_fps')
+            ->execute([$lockedJson, $this->clock->now(), $current, json_encode(array_values($previous))]);
     }
 
-    /** @return array{locked: string, uploaded_at: int}|null */
+    /** @return array{locked: string, uploaded_at: int, current: string, previous: list<string>}|null */
     public function keyring(): ?array
     {
-        $row = $this->db->query('SELECT locked, uploaded_at FROM music_keyring WHERE id = 1')->fetch(\PDO::FETCH_ASSOC);
-        return $row === false ? null : ['locked' => (string) $row['locked'], 'uploaded_at' => (int) $row['uploaded_at']];
+        $row = $this->db->query('SELECT locked, uploaded_at, current_fp, previous_fps FROM music_keyring WHERE id = 1')->fetch(\PDO::FETCH_ASSOC);
+        if ($row === false) {
+            return null;
+        }
+        return [
+            'locked' => (string) $row['locked'],
+            'uploaded_at' => (int) $row['uploaded_at'],
+            'current' => (string) $row['current_fp'],
+            'previous' => self::decodePrevious((string) $row['previous_fps']),
+        ];
+    }
+
+    /** The fingerprints notes may be sealed to, or null when no keyring has been uploaded with a current one. */
+    public function fingerprints(): ?array
+    {
+        return self::fingerprintsIn($this->db);
+    }
+
+    /** @return array{current: string, previous: list<string>}|null as fingerprints(), for callers with a database and no store */
+    public static function fingerprintsIn(\PDO $db): ?array
+    {
+        $row = $db->query('SELECT current_fp, previous_fps FROM music_keyring WHERE id = 1')->fetch(\PDO::FETCH_ASSOC);
+        if ($row === false || $row['current_fp'] === '') {
+            return null;
+        }
+        return ['current' => (string) $row['current_fp'], 'previous' => self::decodePrevious((string) $row['previous_fps'])];
+    }
+
+    /**
+     * Forgets the locked keyring and its fingerprints. True when a keyring was stored; false when none was or the table
+     * does not exist. Any other storage error (a busy or read-only database) is thrown.
+     */
+    public static function removeKeyring(\PDO $db): bool
+    {
+        try {
+            return $db->exec('DELETE FROM music_keyring WHERE id = 1') > 0;
+        } catch (\PDOException $e) {
+            if (str_contains($e->getMessage(), 'no such table')) {
+                return false;
+            }
+            throw $e;
+        }
+    }
+
+    /** "abcd ef01 ..." groups of four for people to compare. */
+    public static function displayFingerprint(string $hex): string
+    {
+        return implode(' ', str_split($hex, 4));
+    }
+
+    /** @return list<string> */
+    private static function decodePrevious(string $json): array
+    {
+        $list = json_decode($json, true);
+        return is_array($list) ? array_values(array_filter($list, 'is_string')) : [];
     }
 
     public static function validPieceId(mixed $id): bool

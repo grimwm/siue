@@ -1,6 +1,6 @@
 <?php
-// What deploy.sh ships of the workroom: its pages, API, library and
-// the public key file; never its tools, committed drafts, README or the local
+// What deploy.sh ships of the workroom: its pages, API and library;
+// never its tools, committed drafts, README or the local
 // compose override. nginx denies what Apache's .htaccess denies.
 declare(strict_types=1);
 
@@ -28,15 +28,12 @@ final class MusicDeployTest extends TestCase
             'music/lib/Store.php', 'music/lib/.htaccess', 'music/.htaccess'] as $f) {
             self::assertContains($f, $list, $f);
         }
-        if (is_file(dirname(__DIR__, 2) . '/music/keys/public.json')) {
-            self::assertContains('music/keys/public.json', $list);
-        }
     }
 
     public function testNeverShipsToolsDraftsOrDocs(): void
     {
         foreach (self::shipped() as $f) {
-            self::assertDoesNotMatchRegularExpression('~^music/(tools|pieces)/|^music/README\.md$~', $f, $f);
+            self::assertDoesNotMatchRegularExpression('~^music/(tools|pieces|keys)/|^music/README\.md$~', $f, $f);
         }
     }
 

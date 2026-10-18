@@ -123,7 +123,7 @@ MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/
 MUSIC_TOOL = $(MUSIC_PY) music/tools/siue-music
 
 ##@ Music workroom
-music-setup: ## Guided setup: API keys, notes key, pull request (safe to re-run)
+music-setup: ## Guided setup: API keys and notes key (safe to re-run)
 	@music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt
 	@music/tools/.venv/bin/python music/tools/siue-music setup
 music-status: ## Show what is set up and what is missing

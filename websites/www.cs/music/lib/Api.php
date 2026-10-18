@@ -11,6 +11,7 @@ final class Api
     public const DRAFT_MAGIC = 'SIUED1';
 
     private const KEYRING_FIELDS = ['ct', 'iterations', 'iv', 'kdf', 'salt', 'v'];
+    private const MAX_PREVIOUS = 32;
     private const MIN_ITERATIONS = 600000;
     private const MAX_ITERATIONS = 10000000;
 
@@ -102,31 +103,42 @@ final class Api
         return Http::json(201, ['piece' => $piece, 'version' => (int) $version]);
     }
 
-    /** POST, keys:publish; the body is the locked keyring JSON. $read as for publishDraft. */
+    /**
+     * keys:publish. GET answers the stored fingerprints (never the locked keyring). POST takes
+     * {"keyring": <locked envelope>, "current": <hex>, "previous": [<hex>, ...]}. $read as for publishDraft.
+     */
     public function publishKeyring(\Admin\Request $r, \Closure $read): \Admin\Response
     {
-        if ($res = $this->gate($r, 'keys:publish', 'POST')) {
+        if ($res = $this->gate($r, 'keys:publish', ['GET', 'POST'])) {
             return $res;
+        }
+        if ($r->method === 'GET') {
+            $row = $this->store->keyring();
+            if ($row === null || $row['current'] === '') {
+                return Http::json(404, ['error' => 'no_keyring']);
+            }
+            return Http::json(200, ['current' => $row['current'], 'previous' => $row['previous'], 'uploaded_at' => $row['uploaded_at']]);
         }
         $body = $this->body($r, $read, Store::MAX_KEYRING_BYTES, $res);
         if ($body === null) {
             return $res;
         }
-        if (!self::keyringIsWellFormed($body)) {
+        $parsed = self::keyringUpload($body);
+        if ($parsed === null) {
             return Http::json(422, ['error' => 'bad_keyring']);
         }
-        $this->store->putKeyring($body);
+        $this->store->putKeyring($parsed['locked'], $parsed['current'], $parsed['previous']);
         return Http::json(201, ['uploaded' => true]);
     }
 
-    /** The refusal for a bad key, scope or method (in that order), or null. */
-    private function gate(\Admin\Request $r, string $scope, string $method): ?\Admin\Response
+    /** The refusal for a bad key, scope or method (in that order), or null. $methods is one method or the allowed list. */
+    private function gate(\Admin\Request $r, string $scope, string|array $methods): ?\Admin\Response
     {
         $deny = $this->keys->check($r, $scope);
         if ($deny !== null) {
             return Http::finish($deny);
         }
-        return $r->method === $method ? null : Http::json(405, ['error' => 'method']);
+        return in_array($r->method, (array) $methods, true) ? null : Http::json(405, ['error' => 'method']);
     }
 
     private function noteId(\Admin\Request $r): ?string
@@ -238,6 +250,39 @@ final class Api
         }
         $about = ['project_id' => $id, 'project_name' => $name, 'kind' => $score['kind']];
         return null;
+    }
+
+    /**
+     * The upload wrapper: exactly keyring, current and previous; a well-formed envelope; 64-hex fingerprints, none
+     * repeated, at most MAX_PREVIOUS earlier ones. The envelope comes back re-encoded for storage.
+     *
+     * @return array{locked: string, current: string, previous: list<string>}|null
+     */
+    private static function keyringUpload(string $body): ?array
+    {
+        $doc = json_decode($body, true);
+        if (!is_array($doc)) {
+            return null;
+        }
+        $fields = array_keys($doc);
+        sort($fields);
+        if ($fields !== ['current', 'keyring', 'previous'] || !is_array($doc['keyring']) || !is_array($doc['previous']) || !array_is_list($doc['previous'])) {
+            return null;
+        }
+        $prints = [$doc['current'], ...$doc['previous']];
+        foreach ($prints as $fp) {
+            if (!is_string($fp) || preg_match('/^[0-9a-f]{64}$/D', $fp) !== 1) {
+                return null;
+            }
+        }
+        if (count($doc['previous']) > self::MAX_PREVIOUS || count(array_unique($prints)) !== count($prints)) {
+            return null;
+        }
+        $locked = json_encode($doc['keyring'], JSON_UNESCAPED_SLASHES);
+        if ($locked === false || !self::keyringIsWellFormed($locked)) {
+            return null;
+        }
+        return ['locked' => $locked, 'current' => $doc['current'], 'previous' => $doc['previous']];
     }
 
     /** The envelope check: exactly the six fields, the pinned KDF and strength, and correctly sized base64 parts. */

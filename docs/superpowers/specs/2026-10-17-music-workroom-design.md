@@ -91,20 +91,31 @@ The server stores only sealed notes, which it cannot open.
 - **Keys:** an RSA-4096 key pair. The private key's home is the owner's
   1Password (an item in the `SIUE` vault, `OP_VAULT` to change), so any
   computer signed in to 1Password can open notes; a computer keeps a cached
-  copy in `~/.config/siue/` (mode 0600) and never in git. The public key is
-  committed in this repository (it is not secret) and built into the page's
-  script, together with its SHA-256 fingerprint. Each sealed note names the
-  fingerprint it was sealed to, and the keyring keeps earlier private keys
-  after a rotation, so a note sealed before a rotation still opens.
+  copy in `~/.config/siue/` (mode 0600) and never in git. Nothing of the
+  key is in this repository. A key's fingerprint is the SHA-256 of its public
+  half (SPKI DER). Each sealed note names the fingerprint it was sealed to, and
+  the keyring keeps earlier private keys after a rotation, so a note sealed
+  before a rotation still opens.
 - **Sealing, in the browser** (Web Crypto API): for each note, a fresh
   AES-256-GCM key encrypts the whole note (its text or audio and all its
   details: draft version, time span, lane, kind, words); RSA-OAEP with SHA-256
-  wraps that AES key with the public key. Only the sealed bundle is uploaded.
+  wraps that AES key with the current public key. Only the sealed bundle is
+  uploaded. The page seals only after the keyring is unlocked (below), so
+  sending a note asks for the passphrase as reading one does.
 - **What the server knows:** a random note id, the sealed bundle's size, and
   when it arrived. Nothing else.
-- **No swapped padlock:** the page encrypts only to the built-in public key and
-  checks it against the built-in fingerprint; the admin hub shows the
-  fingerprint so the owner can compare it once with `make music-status`.
+- **No swapped padlock:** the passphrase is the one secret the server never
+  sees, so it is what vouches for the key. The page takes the public key it
+  seals to from the unlocked keyring, never from the server: it derives each
+  public half from its private key, checks it against the entry's fingerprint,
+  and seals to the first entry (the current key). AES-GCM under the
+  passphrase-derived key authenticates the whole keyring, so anyone who can
+  write to the server (www.cs runs every user's PHP as one account) cannot
+  substitute a key without the passphrase. Serving an older keyring the owner
+  uploaded earlier yields an older key the owner still holds, never a
+  stranger's. The server also keeps the fingerprints the last upload named,
+  only to refuse notes sealed to other keys and to show the current one on the
+  admin hub; `make music-status` shows the same fingerprint for comparison.
 - **Opening notes on any device, a phone included:** the private key is also
   stored on the server, locked. `make music-setup` encrypts it with AES-256-GCM
   under a key derived from a long random passphrase (PBKDF2-SHA-256, 600,000
@@ -120,7 +131,18 @@ The server stores only sealed notes, which it cannot open.
   every retained earlier one, each tagged with its fingerprint, locked under
   the same passphrase. The browser unlocks the whole keyring and picks the key
   a note names, so notes sealed before a rotation open on a newly signed-in
-  device. `make music-rotate` re-locks and uploads the full keyring.
+  device. `make music-rotate` makes a new passphrase with the new key, re-locks
+  the full keyring under it and uploads it, so a passphrase that leaked can
+  neither unlock nor forge the keyring after a rotation.
+
+- **What this does not protect against:** www.cs is one browser origin for
+  every `~user`. A hostile `~user` whose page the owner visits can run script
+  as that origin in the owner's browser (a service worker scoped to `/`, or a
+  window it opens onto the workroom) and so read the passphrase as it is typed
+  or change what the page seals to. Nothing on the server can prevent that,
+  because the attack happens in the browser. The admin sign-in shares the same
+  exposure. Closing it means serving the page from an origin only the owner
+  controls, with www.cs as storage behind a cross-origin API.
 
 ## Pickup and the note history
 
@@ -160,20 +182,19 @@ secret is passed to tools on standard input, never as a command-line argument
 
 | Command | What it does |
 | --- | --- |
-| `make music-setup` | Everything to get started, guided and safe to re-run: checks `op`; for each missing, misnamed or revoked API key opens the hub's key form filled in and saves the pasted key to 1Password; makes (or adopts) the notes key; uploads the passphrase-locked private key for the browser; rebuilds the page and, after one question, commits the public key on `music/notes-key-<fingerprint>` through a temporary worktree and opens the pull request. Builds the tool's virtualenv when missing or broken. |
-| `make music-status` | Fingerprints of the public key in the repository, in 1Password and in this computer's cache, whether they match, whether each saved API key still works and has the right permission (checked against the server), and a "What's left" checklist ending in `Next: make music-setup` while anything is missing. |
-| `make music-rotate` | Makes a new pair; the old private key stays in 1Password as a previous key; the locked keyring (new key plus every retained one) is uploaded and the new public key goes into the repository. |
+| `make music-setup` | Everything to get started, guided and safe to re-run: checks `op`; for each missing, misnamed or revoked API key opens the hub's key form filled in and saves the pasted key to 1Password; makes (or adopts) the notes key; uploads the passphrase-locked keyring and its fingerprints to the server. No commit and no pull request. Builds the tool's virtualenv when missing or broken. |
+| `make music-status` | Fingerprints of the current notes key in 1Password, in this computer's cache and on the server, whether they match, whether each saved API key still works and has the right permission (checked against the server), and a "What's left" checklist ending in `Next: make music-setup` while anything is missing. |
+| `make music-rotate` | Makes a new pair; the old private key stays in 1Password as a previous key; the locked keyring (new key first, then every retained one) and its fingerprints are uploaded. |
 | `make music-forget` | Deletes this computer's cached copies (for a borrowed or shared computer). |
 | `make music-test` | The key tool's tests. |
 | `make music-pickup` | Picks up waiting notes: syncs keys first, then downloads, verifies, opens and marks each picked up. |
 | `make music-publish PIECE=...` | Publishes a rendered draft through the API. |
 
-**Staying in sync:** every `music-*` target first compares the repository's
-public key fingerprint with the cached private key. When they differ (a pull
-brought a rotated key), it fetches from 1Password and checks again; when they
-still differ, it stops and says which side is out of date. Nothing proceeds on
-a mismatched key, and the page refuses to seal to a key whose fingerprint
-differs from the one built into it. Speech is turned into text with a local Whisper model; humming into
+**Staying in sync:** every `music-*` target first compares this computer's
+cached current key with 1Password's. When they differ (another computer
+rotated), it fetches from 1Password and checks again; when they still differ,
+it stops and says which side is out of date. Nothing proceeds on a mismatched
+key. Speech is turned into text with a local Whisper model; humming into
 pitches and rhythm (a pitch tracker such as pYIN), written as a small MIDI motif
 that the next draft can use. Notes are never committed: this repository is
 public.
@@ -224,21 +245,23 @@ the project's game or site. The login guards the notes and the actions.
   and milliseconds on a sound piece's axis and fits a 0.4-second sound to the
   full width, the Sheet music tab is hidden for sound and the Piano roll for a
   sound piece without notes; sealing round-trips with a test key pair and refuses a public key whose
-  fingerprint differs, unlocking the private key with the passphrase (a wrong
-  passphrase fails cleanly), and nothing of the key is written to browser
-  storage.
+  fingerprint differs; unlocking the keyring with the passphrase yields the
+  current public key derived from its private key (a wrong passphrase fails
+  cleanly, and an entry whose fingerprint is not its key's is refused); and
+  nothing of the key is written to browser storage.
 - PHPUnit: every API route needs the right key scope and HTTPS; a sealed note's
   size and count limits; marking picked up; the page's delete removes row and
   file and needs a session and CSRF; an API key cannot delete; the locked
-  private key is served only to a session; the pages need a session; a music draft without MusicXML is refused and a
+  keyring is served only to a session; a keyring upload names its
+  fingerprints, and a note sealed to any other key is refused; the pages need a session; a music draft without MusicXML is refused and a
   sound draft without it is kept; each draft's project and kind are recorded
   from its score; the pieces list groups pieces under two projects, newest
   first.
 - Python: publish validates a music draft and a sound draft with the page's
   rules; pickup verifies the hash and opens the note before marking it picked
   up; a corrupt download is not marked; opened notes land outside the
-  repository; `music-setup` and `music-rotate` write the locked private key that
-  the browser can unlock.
+  repository; `music-setup` and `music-rotate` upload the locked keyring, current key
+  first, that the browser can unlock, with its fingerprints.
 - Browser (locally, `make e2e`): sign in, open a piece, play, move the
   playhead, pin a typed note, see it waiting, pick it up with the tool against
   the docker stack, see it marked picked up, then unlock the key in a second

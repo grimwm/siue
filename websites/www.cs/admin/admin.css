@@ -110,6 +110,8 @@ a:hover { color: #fff; }
 
 .prints { margin: 0; }
 .prints dt { color: var(--text-muted); font-size: 0.9rem; }
+.remover { margin: 0 0 1rem; }
+.remover summary { cursor: pointer; color: var(--text-muted); font-size: 0.9rem; }
 .prints dd { margin: 0 0 0.6rem; overflow-wrap: anywhere; }
 code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9rem; }
 

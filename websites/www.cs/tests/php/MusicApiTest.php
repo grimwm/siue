@@ -83,6 +83,12 @@ final class MusicApiTest extends TestCase
             'iv' => base64_encode(random_bytes(12)), 'ct' => base64_encode(random_bytes(2400))];
     }
 
+    /** The upload wrapper for $envelope naming the fixed fingerprints, with $over replacing its fields. */
+    private function wrapper(?array $envelope = null, array $over = []): string
+    {
+        return json_encode(array_replace(['keyring' => $envelope ?? $this->keyring(), 'current' => MUSIC_FP_CURRENT, 'previous' => [MUSIC_FP_PREVIOUS]], $over), JSON_UNESCAPED_SLASHES);
+    }
+
     private function uploadKeyring(string $key, string $body, ?int $length = null): Admin\Response
     {
         return $this->api->publishKeyring($this->post($key, [], $body, $length), $this->reading($body));
@@ -120,7 +126,10 @@ final class MusicApiTest extends TestCase
                 'pickedUp' => [fn(string $k) => $this->api->pickedUp($this->as($k, ['method' => 'POST', 'query' => ['id' => $id]])), 200],
             ],
             'drafts:publish' => ['publishDraft' => [fn(string $k) => $this->api->publishDraft($this->post($k, [], ''), $this->reading('')), 422]],
-            'keys:publish' => ['publishKeyring' => [fn(string $k) => $this->api->publishKeyring($this->post($k, [], ''), $this->reading('')), 422]],
+            'keys:publish' => [
+                'publishKeyring' => [fn(string $k) => $this->api->publishKeyring($this->post($k, [], ''), $this->reading('')), 422],
+                'keyringFingerprints' => [fn(string $k) => $this->api->publishKeyring($this->as($k), $this->reading('')), 200],
+            ],
         ];
         $held = [];
         foreach (array_keys($routes) as $scope) {
@@ -312,12 +321,13 @@ final class MusicApiTest extends TestCase
     public function testKeyringUploadNeedsKeysScopeAndAWellFormedEnvelope(): void
     {
         $k = $this->keys->create('publish', ['keys:publish']);
-        $good = json_encode($this->keyring());
-        self::assertSame(201, $this->uploadKeyring($k, $good)->status);
-        self::assertSame($good, $this->store->keyring()['locked']);
-        $second = json_encode($this->keyring());
-        self::assertSame(201, $this->uploadKeyring($k, $second)->status);
-        self::assertSame($second, $this->store->keyring()['locked'], 'a new upload replaces the stored keyring');
+        $env = $this->keyring();
+        self::assertSame(201, $this->uploadKeyring($k, $this->wrapper($env))->status);
+        self::assertSame(json_encode($env, JSON_UNESCAPED_SLASHES), $this->store->keyring()['locked']);
+        $second = $this->keyring();
+        self::assertSame(201, $this->uploadKeyring($k, $this->wrapper($second))->status);
+        $kept = $this->store->keyring()['locked'];
+        self::assertSame(json_encode($second, JSON_UNESCAPED_SLASHES), $kept, 'a new upload replaces the stored keyring');
         foreach ([
             'weak KDF' => $this->keyring(['iterations' => 1000]),
             'absurd KDF' => $this->keyring(['iterations' => 10000001]),
@@ -329,23 +339,80 @@ final class MusicApiTest extends TestCase
             'ct too short' => $this->keyring(['ct' => base64_encode(random_bytes(16))]),
             'extra field' => $this->keyring(['fingerprint' => MUSIC_FP_CURRENT]),
         ] as $why => $bad) {
-            self::assertSame(422, $this->uploadKeyring($k, json_encode($bad))->status, $why);
+            self::assertSame(422, $this->uploadKeyring($k, $this->wrapper($bad))->status, $why);
         }
         self::assertSame(422, $this->uploadKeyring($k, 'not json')->status);
-        self::assertSame($second, $this->store->keyring()['locked'], 'refused uploads change nothing');
+        self::assertSame(422, $this->uploadKeyring($k, json_encode($env))->status, 'a bare envelope is not the wrapper');
+        self::assertSame($kept, $this->store->keyring()['locked'], 'refused uploads change nothing');
         $drafts = $this->keys->create('drafts', ['drafts:publish']);
-        self::assertSame(403, $this->uploadKeyring($drafts, $good)->status);
+        self::assertSame(403, $this->uploadKeyring($drafts, $this->wrapper())->status);
+    }
+
+    public function testKeyringUploadChecksTheNamedFingerprints(): void
+    {
+        $k = $this->keys->create('publish', ['keys:publish']);
+        $other = str_repeat('ef', 32);
+        $env = $this->keyring();
+        self::assertSame(201, $this->uploadKeyring($k, $this->wrapper($env, ['previous' => []]))->status, 'no earlier keys');
+        self::assertSame(201, $this->uploadKeyring($k, $this->wrapper($env, ['previous' => array_map(static fn(int $i): string => sprintf('%064x', $i + 1), range(1, 32))]))->status, '32 earlier keys');
+        $kept = $this->store->keyring();
+        $bad = [
+            'no current' => json_encode(['keyring' => $env, 'previous' => []]),
+            'no previous' => json_encode(['keyring' => $env, 'current' => MUSIC_FP_CURRENT]),
+            'no keyring' => json_encode(['current' => MUSIC_FP_CURRENT, 'previous' => []]),
+            'extra key' => $this->wrapper($env, ['extra' => 1]),
+            'upper-case hex' => $this->wrapper($env, ['current' => strtoupper($other)]),
+            'short hex' => $this->wrapper($env, ['current' => substr($other, 1)]),
+            'non-hex' => $this->wrapper($env, ['current' => str_repeat('g', 64)]),
+            'current not a string' => $this->wrapper($env, ['current' => 5]),
+            'previous not a list' => $this->wrapper($env, ['previous' => ['a' => $other]]),
+            'bad previous entry' => $this->wrapper($env, ['previous' => [$other, 'zz']]),
+            'previous repeats current' => $this->wrapper($env, ['previous' => [MUSIC_FP_CURRENT]]),
+            'previous repeats itself' => $this->wrapper($env, ['previous' => [$other, $other]]),
+            '33 earlier keys' => $this->wrapper($env, ['previous' => array_map(static fn(int $i): string => sprintf('%064x', $i + 1), range(1, 33))]),
+            'envelope not an object' => $this->wrapper($env, ['keyring' => 'x']),
+        ];
+        foreach ($bad as $why => $body) {
+            $res = $this->uploadKeyring($k, $body);
+            self::assertSame([422, 'bad_keyring'], [$res->status, $this->body($res)['error'] ?? null], $why);
+        }
+        self::assertSame($kept, $this->store->keyring(), 'refused uploads change nothing');
+    }
+
+    public function testKeyringGetAnswersTheFingerprintsAndNeverTheLockedKeyring(): void
+    {
+        $k = $this->keys->create('publish', ['keys:publish']);
+        $this->db->exec('DELETE FROM music_keyring');
+        $none = $this->api->publishKeyring($this->as($k), $this->reading(''));
+        self::assertSame([404, 'no_keyring'], [$none->status, $this->body($none)['error']]);
+        $this->uploadKeyring($k, $this->wrapper());
+        $reads = $this->reads;
+        $res = $this->api->publishKeyring($this->as($k), $this->reading(''));
+        self::assertSame(200, $res->status);
+        self::assertSame(['current' => MUSIC_FP_CURRENT, 'previous' => [MUSIC_FP_PREVIOUS], 'uploaded_at' => 1_800_000_000], $this->body($res));
+        self::assertStringNotContainsString('ct', $res->body);
+        $drafts = $this->keys->create('drafts', ['drafts:publish']);
+        self::assertSame(403, $this->api->publishKeyring($this->as($drafts), $this->reading(''))->status);
+        self::assertSame(405, $this->api->publishKeyring($this->as($k, ['method' => 'DELETE']), $this->reading(''))->status);
+        self::assertSame($reads, $this->reads, 'a GET reads no body');
+    }
+
+    public function testAKeyringUploadedWithoutFingerprintsReadsAsNone(): void
+    {
+        $k = $this->keys->create('publish', ['keys:publish']);
+        $this->db->exec("UPDATE music_keyring SET current_fp = '', previous_fps = '[]'");
+        self::assertSame(404, $this->api->publishKeyring($this->as($k), $this->reading(''))->status);
     }
 
     public function testTheKeyringsPythonAndTheTestKeyProduceAreAccepted(): void
     {
         $k = $this->keys->create('publish', ['keys:publish']);
         $dir = dirname(__DIR__, 2) . '/games/workroom/test/fixtures/';
-        $fromPython = (string) file_get_contents($dir . 'keyring-by-python.json');
-        $testKey = json_encode(json_decode((string) file_get_contents($dir . 'test-key.json'), true)['keyring']);
-        foreach (['keyring-by-python.json' => $fromPython, 'test-key.json' => $testKey] as $name => $body) {
-            self::assertSame(201, $this->uploadKeyring($k, $body)->status, $name);
-            self::assertSame($body, $this->store->keyring()['locked'], $name);
+        $fromPython = json_decode((string) file_get_contents($dir . 'keyring-by-python.json'), true);
+        $testKey = json_decode((string) file_get_contents($dir . 'test-key.json'), true)['keyring'];
+        foreach (['keyring-by-python.json' => $fromPython, 'test-key.json' => $testKey] as $name => $envelope) {
+            self::assertSame(201, $this->uploadKeyring($k, $this->wrapper($envelope))->status, $name);
+            self::assertSame($envelope, json_decode($this->store->keyring()['locked'], true), $name);
         }
     }
 
@@ -353,13 +420,13 @@ final class MusicApiTest extends TestCase
     {
         $k = $this->keys->create('publish', ['keys:publish']);
         $base = $this->keyring(['ct' => '']);
-        $room = Music\Store::MAX_KEYRING_BYTES - strlen(json_encode($base, JSON_UNESCAPED_SLASHES));
-        $envelope = json_encode(['ct' => str_repeat('A', 4 * intdiv($room, 4))] + $base, JSON_UNESCAPED_SLASHES);
-        $body = $envelope . str_repeat(' ', Music\Store::MAX_KEYRING_BYTES - strlen($envelope));
-        self::assertSame(65_536, strlen($body));
+        $room = Music\Store::MAX_KEYRING_BYTES - strlen($this->wrapper($base));
+        $wrapped = $this->wrapper(['ct' => str_repeat('A', 4 * intdiv($room, 4))] + $base);
+        $body = $wrapped . str_repeat(' ', Music\Store::MAX_KEYRING_BYTES - strlen($wrapped));
+        self::assertSame(Music\Store::MAX_KEYRING_BYTES, strlen($body));
         self::assertSame(201, $this->uploadKeyring($k, $body)->status);
         $reads = $this->reads;
-        self::assertSame(413, $this->uploadKeyring($k, '', 65_537)->status);
+        self::assertSame(413, $this->uploadKeyring($k, '', Music\Store::MAX_KEYRING_BYTES + 1)->status);
         self::assertSame($reads, $this->reads, 'an oversized keyring is refused from its declared length');
     }
 
@@ -474,10 +541,11 @@ final class MusicApiTest extends TestCase
         $none = $this->as($k, ['method' => 'POST']);
         self::assertSame(411, $this->api->publishKeyring($none, $this->reading(''))->status);
         self::assertSame(0, $this->reads);
-        $body = json_encode($this->keyring());
+        $body = $this->wrapper();
+        $before = $this->store->keyring();
         $res = $this->api->publishKeyring($this->post($k, [], $body, strlen($body) + 5), $this->reading($body));
         self::assertSame(['bad_length', 400], [$this->body($res)['error'], $res->status]);
-        self::assertNull($this->store->keyring());
+        self::assertSame($before, $this->store->keyring());
     }
 
     /** The key tool probes with a GET: 403 means the scope is missing, 405 means the key is accepted. */
@@ -488,7 +556,7 @@ final class MusicApiTest extends TestCase
         $read = $this->reading('');
         foreach (['publishKeyring', 'publishDraft'] as $route) {
             self::assertSame(403, $this->api->$route($this->as($lacking), $read)->status, "$route without its scope");
-            self::assertSame(405, $this->api->$route($this->as($holding), $read)->status, "$route with its scope");
+            self::assertSame($route === 'publishKeyring' ? 200 : 405, $this->api->$route($this->as($holding), $read)->status, "$route with its scope");
             self::assertSame(401, $this->api->$route($this->as(str_repeat('0', 64)), $read)->status, "$route with an unknown key");
         }
         self::assertSame(0, $this->reads, 'a probe reads no body');

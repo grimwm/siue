@@ -13,6 +13,9 @@ import support  # noqa: F401  (puts siue_music on the path)
 from siue_music.api import MAX_REQUEST_BYTES, Api, ApiError, draft_container, draft_size
 
 
+CURRENT, EARLIER = "a" * 64, "b" * 64
+
+
 class FakeResponse:
     status = 201
 
@@ -96,9 +99,10 @@ class ApiTest(unittest.TestCase):
             return FakeResponse(b'{"uploaded":true}')
 
         locked = {"v": 1, "kdf": "PBKDF2-SHA-256", "iterations": 600000, "salt": "s", "iv": "i", "ct": "c"}
-        Api("https://example.test/~wgrim/music/", "k" * 64, opener).publish_keyring(locked)
+        Api("https://example.test/~wgrim/music/", "k" * 64, opener).publish_keyring(locked, CURRENT, [EARLIER])
         self.assertEqual(seen["url"], "https://example.test/~wgrim/music/api/keyring.php")
-        self.assertEqual((seen["method"], json.loads(seen["data"])), ("POST", locked))
+        self.assertEqual((seen["method"], json.loads(seen["data"])), ("POST", {"keyring": locked, "current": CURRENT, "previous": [EARLIER]}))
+        self.assertEqual(seen["headers"]["Content-type"], "application/json")
         self.assertEqual(seen["headers"]["Content-length"], str(len(seen["data"])))
         self.assertEqual(seen["headers"]["Authorization"], "Bearer " + "k" * 64)
         self.assertNotIn("k" * 64, seen["url"])
@@ -112,7 +116,7 @@ class ApiTest(unittest.TestCase):
                 raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {}, io.BytesIO(b'{"error":"rate_limited"}'))
             return FakeResponse(b'{"uploaded":true}')
 
-        Api("https://example.test/music/", "k" * 64, opener, sleep=naps.append).publish_keyring({"v": 1})
+        Api("https://example.test/music/", "k" * 64, opener, sleep=naps.append).publish_keyring({"v": 1}, CURRENT, [])
         self.assertEqual((len(calls), len(naps)), (3, 2))
         self.assertTrue(all(n > 0 for n in naps))
 
@@ -126,7 +130,7 @@ class ApiTest(unittest.TestCase):
                     raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {"Retry-After": value}, io.BytesIO(b"{}"))
                 return FakeResponse(b"{}")
 
-            Api("https://example.test/music/", "k" * 64, opener, sleep=naps.append).publish_keyring({"v": 1})
+            Api("https://example.test/music/", "k" * 64, opener, sleep=naps.append).publish_keyring({"v": 1}, CURRENT, [])
             self.assertEqual(len(naps), 1, value)
             self.assertTrue(0 < naps[0] <= 60, (value, naps))
 
@@ -139,7 +143,7 @@ class ApiTest(unittest.TestCase):
             raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {}, io.BytesIO(b'{"error":"rate_limited"}'))
 
         with self.assertRaises(ApiError) as ctx:
-            Api("https://example.test/music/", "k" * 64, opener, sleep=lambda _s: None).publish_keyring({"v": 1})
+            Api("https://example.test/music/", "k" * 64, opener, sleep=lambda _s: None).publish_keyring({"v": 1}, CURRENT, [])
         self.assertEqual(ctx.exception.status, 429)
 
     def test_another_error_status_raises_with_the_servers_error_and_is_not_retried(self):
@@ -150,7 +154,7 @@ class ApiTest(unittest.TestCase):
             raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, io.BytesIO(b'{"error":"scope"}'))
 
         with self.assertRaises(ApiError) as ctx:
-            Api("https://example.test/music/", "k" * 64, opener, sleep=lambda _s: None).publish_keyring({"v": 1})
+            Api("https://example.test/music/", "k" * 64, opener, sleep=lambda _s: None).publish_keyring({"v": 1}, CURRENT, [])
         self.assertEqual((ctx.exception.status, len(calls)), (403, 1))
         self.assertIn("scope", str(ctx.exception))
 
@@ -177,8 +181,8 @@ class ApiTest(unittest.TestCase):
         threading.Thread(target=server.serve_forever, daemon=True).start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
-        Api(f"http://127.0.0.1:{server.server_port}/music/", "k" * 64).publish_keyring({"v": 1})
-        self.assertEqual((json.loads(got["body"]), got["length"], got["auth"]), ({"v": 1}, str(len(got["body"])), "Bearer " + "k" * 64))
+        Api(f"http://127.0.0.1:{server.server_port}/music/", "k" * 64).publish_keyring({"v": 1}, CURRENT, [])
+        self.assertEqual((json.loads(got["body"]), got["length"], got["auth"]), ({"keyring": {"v": 1}, "current": CURRENT, "previous": []}, str(len(got["body"])), "Bearer " + "k" * 64))
 
 
     def test_a_redirect_is_refused_and_the_key_never_follows_it(self):
@@ -212,7 +216,7 @@ class ApiTest(unittest.TestCase):
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         with self.assertRaises(ApiError) as ctx:
-            Api(f"http://127.0.0.1:{server.server_port}/music/", "k" * 64).publish_keyring({"v": 1})
+            Api(f"http://127.0.0.1:{server.server_port}/music/", "k" * 64).publish_keyring({"v": 1}, CURRENT, [])
         self.assertEqual(ctx.exception.status, 302)
         self.assertFalse(seen["target_hit"], "the redirect target was never contacted")
         self.assertIsNone(seen["target_auth"])
@@ -239,6 +243,37 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(self.probe(scope, 429), "unknown", scope)
             self.assertEqual(self.probe(scope, 302), "unknown", scope)
         self.assertEqual(self.probe("notes:pickup", 405), "unknown", "a pickup route never answers 405")
+
+    def test_the_keyring_route_answers_200_or_404_to_a_key_that_may_publish_keys(self):
+        self.assertEqual(self.probe("keys:publish", 200), "yes")
+        self.assertEqual(self.probe("keys:publish", 404, b'{"error":"no_keyring"}'), "yes", "no keyring stored yet")
+        self.assertEqual(self.probe("keys:publish", 404, b"<html>Not Found</html>"), "unknown", "a wrong address is not the music API")
+        self.assertEqual(self.probe("keys:publish", 405), "yes")
+        self.assertEqual(self.probe("drafts:publish", 404), "unknown", "only the keyring route reports 404 for a valid key")
+
+    def test_keyring_fingerprints_reads_what_the_server_stores(self):
+        seen = {}
+
+        def opener(request, timeout=None):
+            seen["url"], seen["method"], seen["auth"] = request.full_url, request.get_method(), request.get_header("Authorization")
+            return FakeResponse(json.dumps({"current": CURRENT, "previous": [EARLIER], "uploaded_at": 1}).encode())
+
+        got = Api("https://example.test/music/", "k" * 64, opener).keyring_fingerprints()
+        self.assertEqual(got, {"current": CURRENT, "previous": [EARLIER], "uploaded_at": 1})
+        self.assertEqual((seen["url"], seen["method"], seen["auth"]), ("https://example.test/music/api/keyring.php", "GET", "Bearer " + "k" * 64))
+
+    def test_keyring_fingerprints_is_none_on_404_and_raises_on_other_errors(self):
+        def refusing(code, body=b'{"error":"no_keyring"}'):
+            def opener(request, timeout=None):
+                raise urllib.error.HTTPError(request.full_url, code, "reason", {}, io.BytesIO(body))
+            return opener
+
+        self.assertIsNone(Api("https://example.test/music/", "k" * 64, refusing(404)).keyring_fingerprints())
+        with self.assertRaises(ApiError, msg="a web server's own 404 (a wrong address) is not 'no keyring'"):
+            Api("https://example.test/music/", "k" * 64, refusing(404, b"<html>Not Found</html>")).keyring_fingerprints()
+        with self.assertRaises(ApiError) as ctx:
+            Api("https://example.test/music/", "k" * 64, refusing(403)).keyring_fingerprints()
+        self.assertEqual(ctx.exception.status, 403)
 
     def test_a_403_about_https_is_not_a_missing_permission(self):
         self.assertEqual(self.probe("keys:publish", 403, b'{"error":"HTTPS required."}'), "https")

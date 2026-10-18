@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { constants, createDecipheriv, createPrivateKey, createPublicKey, privateDecrypt, publicEncrypt } from 'node:crypto';
 import { FingerprintMismatch, NoteUnreadable, fingerprintOf, headerFingerprint, open, seal } from '../src/seal.ts';
 import type { NoteBody } from '../src/note.ts';
-import { b64, builtIn, fx, hex, importPrivate } from './fixture-key.ts';
+import { b64, current, fx, hex, importPrivate } from './fixture-key.ts';
 
 const body: NoteBody = {
   v: 1, kind: 'text', piece: 'test-piece', draft: 1, from: 8, to: 12, fromBar: 5, toBar: 6, lane: 'brass',
@@ -21,7 +21,7 @@ test('the fingerprint is the SHA-256 of the SPKI DER', async () => {
 
 test('seal then open gives back the note and its audio', async () => {
   const audio = new Uint8Array([1, 2, 3, 4, 5]);
-  const bundle = await seal({ ...body, kind: 'hum', audio: { mime: 'audio/webm', seconds: 1 } }, audio, builtIn);
+  const bundle = await seal({ ...body, kind: 'hum', audio: { mime: 'audio/webm', seconds: 1 } }, audio, current);
   assert.equal(new TextDecoder().decode(bundle.slice(0, 6)), 'SIUEN1');
   assert.equal(headerFingerprint(bundle), fx.fingerprint);
   assert.equal((bundle[38]! << 8) | bundle[39]!, 512, 'RSA-4096 wraps to 512 bytes');
@@ -33,19 +33,19 @@ test('seal then open gives back the note and its audio', async () => {
 
 test('a note on a sound effect carries seconds only', async () => {
   const sound: NoteBody = { ...body, piece: 'cannon-fire', from: 0.02, to: 0.2, fromBar: null, toBar: null, lane: 'boom', text: 'a sharper attack' };
-  const opened = await open(await seal(sound, null, builtIn), new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)]]));
+  const opened = await open(await seal(sound, null, current), new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)]]));
   assert.deepEqual(opened.body, sound);
   assert.deepEqual([opened.body.fromBar, opened.body.toBar], [null, null]);
 });
 
 test('the words are not in the bundle, and two seals differ', async () => {
-  const a = await seal(body, null, builtIn);
-  const b = await seal(body, null, builtIn);
+  const a = await seal(body, null, current);
+  const b = await seal(body, null, current);
   assert.ok(!Buffer.from(a).includes(Buffer.from('louder')));
   assert.notDeepEqual(a, b);
 });
 
-test('a public key whose fingerprint differs from the built-in one is refused', async () => {
+test('a public key whose fingerprint differs from the one it names is refused', async () => {
   await assert.rejects(seal(body, null, { fingerprint: fx.fingerprint, spki: fx.other.spki }), FingerprintMismatch);
 });
 
@@ -58,7 +58,7 @@ test('open picks the key the header names out of a keyring of several', async ()
 
 test('tampering fails with a reason', async () => {
   const keyring = new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)], [fx.other.fingerprint, await importPrivate(fx.other.pkcs8)]]);
-  const bundle = await seal(body, null, builtIn);
+  const bundle = await seal(body, null, current);
   const flipped = bundle.slice();
   flipped[flipped.length - 1] = flipped[flipped.length - 1]! ^ 1;
   await assert.rejects(open(flipped, keyring), isReason('tampered'));
@@ -77,7 +77,7 @@ test('a sealed body that does not match the note contract is refused as tampered
     { ...body, reaction: 'meh' }, { ...body, audio: { mime: 1, seconds: 2 } }, { ...body, piece: undefined }, { ...body, made: null },
   ];
   for (const f of forgeries) {
-    await assert.rejects(open(await seal(f as NoteBody, null, builtIn), keyring), isReason('tampered'));
+    await assert.rejects(open(await seal(f as NoteBody, null, current), keyring), isReason('tampered'));
   }
 });
 
@@ -91,7 +91,7 @@ test('the committed fixture notes still open (the format is stable)', async () =
 });
 
 test('a note re-wrapped to another key under another header does not open (the header is authenticated)', async () => {
-  const bundle = await seal(body, null, builtIn);
+  const bundle = await seal(body, null, current);
   const aesRaw = privateDecrypt({ key: createPrivateKey({ key: Buffer.from(fx.pkcs8, 'base64'), format: 'der', type: 'pkcs8' }), oaepHash: 'sha256', padding: constants.RSA_PKCS1_OAEP_PADDING }, bundle.subarray(40, 40 + 512));
   const otherPub = createPublicKey({ key: Buffer.from(fx.other.spki, 'base64'), format: 'der', type: 'spki' });
   const rewrapped = publicEncrypt({ key: otherPub, oaepHash: 'sha256', padding: constants.RSA_PKCS1_OAEP_PADDING }, aesRaw);
@@ -115,7 +115,7 @@ test('an independent opener (node:crypto, additional data = bytes 0..37) reads t
   assert.equal(plain.length, 4 + j);
 });
 
-test('a built-in key that is not RSA-4096 is refused', async () => {
+test('a public key that is not RSA-4096 is refused', async () => {
   const small = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['encrypt', 'decrypt']);
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', small.publicKey));
   await assert.rejects(seal(body, null, { fingerprint: await fingerprintOf(spki), spki: Buffer.from(spki).toString('base64') }), FingerprintMismatch);

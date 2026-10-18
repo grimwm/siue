@@ -3,26 +3,14 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../admin/lib/bootstrap.php';
-require_once __DIR__ . '/PublicKeys.php';
 require_once __DIR__ . '/Store.php';
 require_once __DIR__ . '/Http.php';
 require_once __DIR__ . '/Api.php';
 require_once __DIR__ . '/Pages.php';
 
-function music_public_keys(): ?Music\PublicKeys
-{
-    try {
-        return Music\PublicKeys::fromFile(Music\PublicKeys::defaultPath());
-    } catch (RuntimeException $e) {
-        // Note uploads then answer no_key (503); every other route keeps working.
-        error_log('music: ' . $e->getMessage());
-        return null;
-    }
-}
-
 function music_store(\PDO $db, Admin\Clock $clock): Music\Store
 {
-    return new Music\Store($db, Admin\Db::dataDir() . '/music', $clock, music_public_keys());
+    return new Music\Store($db, Admin\Db::dataDir() . '/music', $clock);
 }
 
 /** Admin\Request::fromGlobals() plus the content-length header: PHP keeps CONTENT_LENGTH out of the HTTP_* variables Request reads. */

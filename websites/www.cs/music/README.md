@@ -7,8 +7,8 @@ its project, its kind (`music` or `sound`) and its characters.
 ## Security model
 
 - Notes are sealed in the browser (AES-256-GCM per note, key wrapped with RSA-OAEP
-  to the committed public key). The server stores sealed bytes only and never
-  decrypts; www.cs PHP has no sodium and needs none.
+  to the current public key, which the browser takes from the unlocked keyring). The
+  server stores sealed bytes only and never decrypts; www.cs PHP has no sodium and needs none.
 - The private keys live in one locked keyring (PBKDF2-SHA-256, 600,000 rounds,
   AES-256-GCM) that only a signed-in session can fetch; it is unlocked in the
   browser, in memory, and never stored there.
@@ -16,9 +16,11 @@ its project, its kind (`music` or `sound`) and its characters.
   and byte routes refuse cross-site requests; every POST needs the session's
   CSRF token. All routes refuse plain HTTP.
 - API keys are made on the admin hub and carry scopes. A key cannot delete.
-- `lib/`, `tools/`, `pieces/` and `keys/` are never served (`.htaccess` on Apache,
-  `docker/nginx/default.conf` locally). `deploy.sh` ships the pages, `api/`, `lib/` and
-  `keys/public.json` only; the page's script, stylesheet, theme boot and fonts ship
+- The server also keeps the fingerprints the uploader named (current and earlier), only
+  to refuse notes sealed to other keys and to show the current one on the admin hub.
+- `lib/`, `tools/` and `pieces/` are never served (`.htaccess` on Apache,
+  `docker/nginx/default.conf` locally). `deploy.sh` ships the pages, `api/` and `lib/`
+  only; the page's script, stylesheet, theme boot and fonts ship
   from `games/workroom/dist/`.
 
 ## Routes
@@ -29,7 +31,8 @@ Session routes (same-origin, signed in): `index.php`, `piece.php?id=&v=` (pages)
 
 API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
 `api/picked-up.php` (POST) need `notes:pickup`; `api/drafts.php` (POST) needs
-`drafts:publish`; `api/keyring.php` (POST) needs `keys:publish`.
+`drafts:publish`; `api/keyring.php` needs `keys:publish` (POST uploads
+`{keyring, current, previous}`; GET answers the stored fingerprints).
 
 ## The look
 
@@ -60,9 +63,9 @@ shown in a browser (`workroom-guide-<view>` in localStorage).
 `~/.config/siue/music.json` (folder 0700, file 0600). Secrets reach `op` on
 standard input and are never printed.
 
-- `make music-setup` is the one command that gets everything started; run it again any time, it skips what is done. It checks `op` is installed and signed in; for each API key not yet saved (and any saved under the wrong name, or revoked) it opens the hub's API key page with the label and boxes filled in, asks you to press Create and paste the key (not echoed), and saves it to 1Password; makes the notes key if neither the repository nor 1Password has one (adopts the one 1Password holds); uploads the locked copy if the cache's record says the current key is not uploaded; rebuilds the page and, after one `[Y/n]` question naming the branch `music/notes-key-<fingerprint>`, commits exactly `music/keys/public.json`, `games/workroom/src/public-key.ts` and `games/workroom/dist/` through a temporary worktree cut from `origin/main` (your checkout is never switched or committed on), pushes it (never forced), opens the pull request or reports the open one, then puts your checkout's copies of those files back to what git holds. Without a terminal it asks nothing and says to run `make music-setup` in one. A failed push keeps the commit on the branch; the next run pushes it. It makes the tool's virtualenv when missing or broken. Merge the pull request once its checks pass; the deploy is automatic.
-- `make music-status` compares the repository's current public key with 1Password and the cache (exit 3 when they differ), asks the server (so it needs the network) whether each saved API key still works and has the right permission, and ends with a "What's left" checklist (done or not): key in the repository, key committed, key in 1Password and the cache, both API keys saved, locked copy uploaded. It ends with `Next: make music-setup` while anything is missing and says setup is complete otherwise. After the deploy, compare its "Repository key" with the "Music notes key" line on the admin hub (`https://www.cs.siue.edu/~wgrim/admin/`).
-- `make music-rotate` makes a new pair under the same passphrase, retitles the old item `(previous)`, adds the old public key to `previous`, and uploads the full keyring, current key first, replacing the stored one. It refuses when neither the cache nor 1Password holds the private key for a retained key. It uploads before it retitles; a retitle that fails (the approval timed out) is a warning naming the item to retitle by hand. It exits 4 when the keyring was not uploaded: run `make music-setup`, which uploads it, before you commit or deploy. A 429 on any API call is retried after back-off pauses that add up to more than the server's one-minute window.
+- `make music-setup` is the one command that gets everything started; run it again any time, it skips what is done. It checks `op` is installed and signed in; for each API key not yet saved (and any saved under the wrong name, or revoked) it opens the hub's API key page with the label and boxes filled in, asks you to press Create and paste the key (not echoed), and saves it to 1Password; makes the notes key if 1Password has none (adopts the current one it holds); uploads the locked keyring with its fingerprints unless the server already holds exactly this computer's current and previous keys, then reads the fingerprints back to check the server's current key is yours. It refuses to make a key while the server holds a keyring this computer cannot open (to start over on purpose, press Remove the notes key under Music notes key on the admin hub, then run it again). It touches no git, builds nothing and asks no question; it ends by naming the workroom address to open. It makes the tool's virtualenv when missing or broken.
+- `make music-status` prints the current notes key in 1Password, in this computer's cache and on the server (it asks the server, so it needs the network), whether they match (exit 3 when they differ or the server cannot be asked), whether each saved API key still works and has the right permission, and ends with a "What's left" checklist (done or not): key in 1Password, key in the cache, both API keys saved, the server's current key is yours. It ends with `Next: make music-setup` while anything is missing and says setup is complete otherwise. The "Notes key on the server" line is the one the admin hub shows as "Music notes key" (`https://www.cs.siue.edu/~wgrim/admin/`).
+- `make music-rotate` makes a new pair under a new passphrase (so a passphrase that leaked can neither unlock nor forge the new keyring); the new item becomes current in 1Password and the old one is retitled `(previous)`, and the full keyring, current key first, is uploaded with its fingerprints (current, then previous), replacing the stored one, and read back to check it. 1Password decides which key is current: the one `siue-music-key` item whose title does not end in `(previous)`; none, or more than one, stops every command with what to fix in the titles. It refuses when the server holds a key neither 1Password nor the cache has the private key for. A retitle that fails (the approval timed out) stops before the upload and names the item to retitle by hand. It exits 4 when the keyring was not uploaded: run `make music-setup`, which uploads it. A 429 on any API call is retried after back-off pauses that add up to more than the server's one-minute window.
 - `make music-forget` deletes the cache. A key removed from 1Password stays usable from this computer's cache until you run it; every cached key is checked against its fingerprint before it is used.
 - `make music-test` runs the tool's tests.
 - `make music-pickup` downloads each waiting note with the `music-pickup` API key, checks its length and SHA-256 against the listing, opens it with the cached keyring and saves it under the notes folder (`~/Library/Application Support/siue-music/notes/` on macOS, `$XDG_DATA_HOME/siue-music/notes/` elsewhere on Unix, `%APPDATA%\siue-music\notes\` on Windows; `SIUE_MUSIC_NOTES_DIR` overrides; the tool refuses a folder inside the repository) as `<arrival date>-<id>/` with `note.json` and `audio.webm|m4a|ogg`. Only then does it mark the note picked up. A note whose download is corrupt or that will not open stays waiting, is reported with its reason, and the run goes on with the next; the exit code is 1 when any note was left. Every API call, the listing included, waits out a 429 and is retried; a 429 that never clears leaves that note waiting and the run goes on.
@@ -120,9 +123,10 @@ Colours everywhere match `^#[0-9a-f]{6}$`. Ids everywhere match `^[a-z0-9][a-z0-
 ## Setup
 
 Run `make music-setup` (in `websites/www.cs`). Two kinds of key are involved. The
-**notes key** is the encryption key: its public half is built into the page so notes are
-sealed before they leave the phone; its private half and passphrase live in 1Password,
+**notes key** is the encryption key: its private half and passphrase live in 1Password,
 and a locked copy goes to the server so any device can open notes with the passphrase.
+The page takes the public half it seals to from that unlocked copy, so notes are sealed
+before they leave the phone and the server cannot swap the key.
 **API keys** are not encryption: they are passwords that let the key tool talk to the
 server. `music-publish` (boxes `drafts:publish` and `keys:publish`) uploads drafts and
 the locked copy; `music-pickup` (box `notes:pickup`) downloads waiting notes. They are

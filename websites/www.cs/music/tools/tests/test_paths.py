@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from support import SITE
-from siue_music.paths import NotesInsideRepo, api_base, check_outside, config_dir, notes_dir, public_key_ts_path, public_keys_path
+from siue_music.paths import NotesInsideRepo, api_base, check_outside, config_dir, notes_dir
 
 
 class PathsTest(unittest.TestCase):
@@ -18,10 +18,6 @@ class PathsTest(unittest.TestCase):
 
     def test_every_location_comes_from_the_env_it_is_given(self):
         home = Path("/Users/me")
-        self.assertEqual(public_keys_path({}), SITE / "music" / "keys" / "public.json")
-        self.assertEqual(public_keys_path({"SIUE_MUSIC_PUBLIC_KEYS": "/x/p.json"}), Path("/x/p.json"))
-        self.assertEqual(public_key_ts_path({}), SITE / "games" / "workroom" / "src" / "public-key.ts")
-        self.assertEqual(public_key_ts_path({"SIUE_MUSIC_PUBLIC_KEY_TS": "/x/k.ts"}), Path("/x/k.ts"))
         self.assertEqual(config_dir({}, home), home / ".config" / "siue")
         self.assertEqual(config_dir({"SIUE_CONFIG_DIR": "/c"}, home), Path("/c"))
         self.assertEqual(api_base({}), "https://www.cs.siue.edu/~wgrim/music/")

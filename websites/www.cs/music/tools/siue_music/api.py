@@ -109,7 +109,7 @@ class Api:
     def holds(self, scope: str) -> str:
         """Whether this key holds `scope`, by a GET that changes nothing: "yes", "no" (403), "invalid" (401: revoked or
         mistyped), "https" (403 because the address is not https://) or "unknown" (the server could not be asked).
-        The publish routes answer a GET 405 once the key is accepted."""
+        The publish routes answer a GET 405 once the key is accepted; the keyring route answers 200, or 404 while none is stored."""
         routes = {"notes:pickup": ("api/notes.php", {"state": "waiting"}), "keys:publish": ("api/keyring.php", None),
                   "drafts:publish": ("api/drafts.php", None)}
         if scope not in routes:
@@ -119,14 +119,30 @@ class Api:
             self._request("GET", route, query)
             return "yes"
         except ApiError as e:
-            if scope != "notes:pickup" and e.status == 405:
+            if (e.status == 405 and scope != "notes:pickup") or (e.status == 404 and scope == "keys:publish" and _no_keyring(e)):
                 return "yes"
             if e.status == 403 and "HTTPS required" in str(e):
                 return "https"
             return {401: "invalid", 403: "no"}.get(e.status, "unknown")
 
-    def publish_keyring(self, locked: dict) -> None:
-        self._request("POST", "api/keyring.php", body=json.dumps(locked).encode(), content_type="application/json")
+    def publish_keyring(self, locked: dict, current: str, previous: list[str]) -> None:
+        """Uploads the locked keyring with the fingerprints of the key it holds: the current one, then the earlier ones."""
+        body = {"keyring": locked, "current": current, "previous": previous}
+        self._request("POST", "api/keyring.php", body=json.dumps(body).encode(), content_type="application/json")
+
+    def keyring_fingerprints(self) -> dict | None:
+        """{"current", "previous", "uploaded_at"} as the server stores them, or None while no keyring is stored."""
+        try:
+            return json.loads(self._request("GET", "api/keyring.php"))
+        except ApiError as e:
+            if e.status == 404 and _no_keyring(e):
+                return None
+            raise
+
+
+def _no_keyring(e: ApiError) -> bool:
+    """A 404 the music API sent on purpose because no keyring is stored, not a wrong address or a web server's own 404."""
+    return str(e).endswith(": no_keyring")
 
 
 def _error_text(e: urllib.error.HTTPError) -> str:

@@ -19,7 +19,7 @@ from .score import glossary_ids
 from .setup import Setup
 
 USAGE = """usage: siue-music setup
-       siue-music keys status|pull|forget|init [--adopt]|rotate|upload
+       siue-music keys status|pull|forget|rotate
        siue-music pickup
        siue-music publish PIECE [--version N]
        siue-music api-key-set NAME   (the key is read from the terminal, or one line of stdin)"""
@@ -28,7 +28,7 @@ USAGE = """usage: siue-music setup
 def build_keys(env: Mapping[str, str], out=print) -> Keys:
     op = Op(env.get("OP_VAULT") or "SIUE", exe=tuple(shlex.split(env.get("SIUE_OP") or "op")))
     cache = Cache(paths.config_dir(env, Path.home()) / "music.json")
-    return Keys(op, cache, paths.public_keys_path(env), paths.public_key_ts_path(env), out=out, base=paths.api_base(env))
+    return Keys(op, cache, out=out, base=paths.api_base(env))
 
 
 def make_api(base: str, key: str) -> Api:
@@ -36,8 +36,8 @@ def make_api(base: str, key: str) -> Api:
 
 
 def publisher(keys: Keys, env: Mapping[str, str], rerun: str | None = None):
-    """The keyring upload, built from the music-publish API key in 1Password."""
-    return make_api(paths.api_base(env), keys.api_key(PUBLISH_KEY, rerun)).publish_keyring
+    """The server as the music-publish API key in 1Password sees it."""
+    return make_api(paths.api_base(env), keys.api_key(PUBLISH_KEY, rerun))
 
 
 def open_browser(url: str) -> bool:
@@ -60,30 +60,22 @@ def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
     try:
         keys = build_keys(env)
         if args == ["setup"]:
-            return Setup(keys, lambda secret: make_api(paths.api_base(env), secret), input,
-                         lambda prompt: read_secret(prompt), open_browser, out=print, interactive=sys.stdin.isatty()).run_all()
+            return Setup(keys, lambda secret: make_api(paths.api_base(env), secret), read_secret, open_browser, out=print).run_all()
         if args[:1] == ["keys"] and args[1:2] in (["status"], ["pull"], ["forget"]) and len(args) == 2:
             if args[1] == "status":
                 return keys.status(lambda secret: make_api(paths.api_base(env), secret))
             if args[1] == "pull":
                 keys.pull_checked()
-                keys.out("Pulled the keys from 1Password and checked them against the repository.")
+                keys.out("Pulled the keys from 1Password.")
             else:
                 keys.forget()
             return 0
-        if args[:1] == ["keys"] and (args[1:] in (["init"], ["rotate"], ["init", "--adopt"])):
+        if args == ["keys", "rotate"]:
             try:
-                upload = publisher(keys, env, None)
+                api = publisher(keys, env, None)
             except (KeysError, ApiError):
-                upload = None
-            if args[1] == "init":
-                keys.init(upload, adopt=args[2:] == ["--adopt"])
-            else:
-                keys.rotate(upload)
-            return 0
-        if args[:1] == ["keys"] and args[1:] == ["upload"]:
-            count = keys.upload_keyring(publisher(keys, env))
-            keys.out(f"Uploaded the locked copy of your notes key{'' if count == 1 else 's'} to the server ({count} key{'' if count == 1 else 's'}).")
+                api = None
+            keys.rotate(api)
             return 0
         if args == ["pickup"]:
             ring = keys.ensure_synced()

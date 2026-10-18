@@ -1,18 +1,15 @@
-"""The notes keys: 1Password is the home, the cache holds a working copy, the repository's public.json says which key is current."""
+"""The notes keys: 1Password is the home and says which key is current (the item not marked "(previous)"); the cache holds a working copy."""
 import base64
 import binascii
 import json
 import os
 import hmac
 import re
-import subprocess
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Callable
 from urllib.parse import urljoin
-from datetime import datetime, timezone
 
 from . import sealing
+from .api import ApiError
 from .op import Op, OpError
 from .paths import DEFAULT_BASE
 
@@ -30,9 +27,7 @@ KEY_KINDS = ("Two kinds of key:\n"
              "  API KEYS   (music-publish, music-pickup) let this tool talk to the server.")
 PUBLISH_SCOPES = ("drafts:publish", "keys:publish")
 PICKUP_SCOPES = ("notes:pickup",)
-REPO_PATHS = ("music/keys/public.json", "games/workroom/src/public-key.ts", "games/workroom/dist/")
 
-Upload = Callable[[dict], None]
 ApiCheck = Callable[[str], "object"]  # secret -> something with holds(scope)
 
 
@@ -71,7 +66,7 @@ def api_problem(name: str, states: dict[str, str]) -> str | None:
 
 
 class KeyMismatch(Exception):
-    """The repository, 1Password and the cache disagree about the current key. Exit code 3."""
+    """1Password and the cache disagree about the current key, or one of them has none. Exit code 3."""
 
 
 class KeysError(Exception):
@@ -86,63 +81,9 @@ def display(fp: str) -> str:
     return " ".join(fp[i:i + 4] for i in range(0, len(fp), 4))
 
 
-@dataclass
-class RepoKeys:
-    current: str | None
-    previous: list[str] = field(default_factory=list)
-    spki: dict[str, bytes] = field(default_factory=dict)
-
-
-def read_repo_keys(path: Path) -> RepoKeys:
-    if not path.exists():
-        return RepoKeys(None, [], {})
-    try:
-        data = json.loads(path.read_text())
-    except ValueError:
-        raise KeysError(f"{path} is not JSON") from None
-    if not isinstance(data, dict) or data.get("schema") != 1:
-        raise KeysError(f"{path} is not a schema 1 public key file")
-    spki: dict[str, bytes] = {}
-
-    def entry(e: object) -> str:
-        fp = e.get("fingerprint") if isinstance(e, dict) else None
-        try:
-            der = base64.b64decode(e.get("spki", ""), validate=True) if isinstance(e, dict) else b""
-        except (binascii.Error, ValueError):
-            der = b""
-        if not isinstance(fp, str) or not der or sealing.fingerprint(der) != fp:
-            raise KeysError(f"{path} names a public key whose fingerprint does not match its key")
-        spki[fp] = der
-        return fp
-
-    current = entry(data["current"]) if data.get("current") else None
-    previous = [entry(e) for e in data.get("previous") or []]
-    return RepoKeys(current, previous, spki)
-
-
-def _write_atomic(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text)
-    os.replace(tmp, path)
-
-
-def write_public_files(json_path: Path, ts_path: Path, current: tuple[str, bytes], previous: list[tuple[str, bytes]]) -> None:
-    """music/keys/public.json and the page's built-in public-key.ts, from the same public halves."""
-    entry = lambda k: {"fingerprint": k[0], "spki": base64.b64encode(k[1]).decode("ascii")}  # noqa: E731
-    now, before = entry(current), [entry(k) for k in previous]
-    _write_atomic(json_path, json.dumps({"schema": 1, "current": now, "previous": before}, indent=2) + "\n")
-    compact = lambda v: json.dumps(v, separators=(",", ":"))  # noqa: E731
-    _write_atomic(ts_path, "// The notes key built into the page: written by `siue-music keys init|rotate`\n"
-                  "// from music/keys/public.json (a unit test keeps them equal). Not secret.\n"
-                  "import type { BuiltInKey } from './seal.ts';\n\n"
-                  f"export const PUBLIC_KEY: BuiltInKey | null = {compact(now)};\n"
-                  f"export const PREVIOUS_KEYS: readonly BuiltInKey[] = {compact(before)};\n")
-
-
 class Cache:
-    """<config>/music.json: {"v": 1, "keys": {fingerprint: pkcs8 base64}, "api": {name: key}, "uploaded": {"fingerprints": [...], "at": iso}}; folder 0700, file 0600.
-    "uploaded" is not secret: it records which keys the last successful keyring upload covered."""
+    """<config>/music.json: {"v": 1, "keys": {fingerprint: pkcs8 base64}, "api": {name: key}, "current": fingerprint, "previous": [fingerprint, ...]}; folder 0700, file 0600.
+    "current" and "previous" are not secret: they record which keys 1Password named when the cache was last filled."""
 
     def __init__(self, path: Path):
         self.path = path
@@ -182,14 +123,10 @@ class Cache:
 
 
 class Keys:
-    def __init__(self, op: Op, cache: Cache, public_json: Path, public_ts: Path, out: Callable[[str], None] = print,
-                 base: str = DEFAULT_BASE, run: Callable[..., subprocess.CompletedProcess] = subprocess.run):
+    def __init__(self, op: Op, cache: Cache, out: Callable[[str], None] = print, base: str = DEFAULT_BASE):
         self.op = op
         self.cache = cache
-        self.public_json = public_json
-        self.public_ts = public_ts
         self.out = out
-        self.run = run
         self.base = base if base.endswith("/") else base + "/"
 
     def _ready(self) -> None:
@@ -213,24 +150,39 @@ class Keys:
             held[actual] = (title, f)
         return held
 
+    def _roles(self, held: dict[str, tuple[str, dict[str, str]]]) -> tuple[str | None, list[str]]:
+        """(the current key, the previous keys): the current one is the item whose title does not end in "(previous)"."""
+        current = [fp for fp, (title, _) in held.items() if not title.endswith(PREVIOUS_SUFFIX)]
+        previous = [fp for fp, (title, _) in held.items() if title.endswith(PREVIOUS_SUFFIX)]
+        if len(current) > 1:
+            titles = ", ".join(held[fp][0] for fp in current)
+            raise KeysError(f"1Password (vault {self.op.vault}) has {len(current)} notes key items that are not marked{PREVIOUS_SUFFIX} ({titles}). "
+                            f"Only the current key may lack it: add{PREVIOUS_SUFFIX} to the title of every other one.")
+        if held and not current:
+            raise KeysError(f"Every notes key item in 1Password (vault {self.op.vault}) is marked{PREVIOUS_SUFFIX}, so none is current. "
+                            f"Remove{PREVIOUS_SUFFIX} from the title of the key to use now.")
+        return (current[0] if current else None), previous
+
     def _api_items(self) -> list[tuple[str, str]]:
         return [(item["id"], self.op.fields(item["id"]).get("name", "")) for item in self.op.list_items(API_TAG)]
 
     def pull(self) -> None:
         self._ready()
         held = self._held()
+        current, previous = self._roles(held)
         api: dict[str, str] = {}
         for item in self.op.list_items(API_TAG):
             f = self.op.fields(item["id"])
             if f.get("name") and f.get("credential"):
                 api[f["name"]] = f["credential"]
-        cached = self.cache.load()["keys"]
-        for fp in cached:
-            if fp not in held:
-                self._verified(fp, cached[fp])
-                self.out(f"Only this computer holds key {display(fp)}; it is kept.")
         data = self.cache.load()
-        data.update({"keys": {**cached, **{fp: f["private_key"] for fp, (_, f) in held.items()}}, "api": api})
+        cached = data["keys"]
+        only_here = [fp for fp in cached if fp not in held]
+        for fp in only_here:
+            self._verified(fp, cached[fp])
+            self.out(f"Only this computer holds key {display(fp)}; it is kept.")
+        data.update({"keys": {**cached, **{fp: f["private_key"] for fp, (_, f) in held.items()}}, "api": api,
+                     "current": current, "previous": [*previous, *only_here]})
         self.cache.save(data)
 
     @staticmethod
@@ -251,192 +203,105 @@ class Keys:
         self.ensure_synced()
 
     def ensure_synced(self) -> dict[str, bytes]:
-        repo = read_repo_keys(self.public_json)
-        if repo.current is None:
+        """fingerprint -> PKCS#8 DER, the current key first, then the previous ones. The cache is refilled from 1Password once
+        when it names another current key; a mismatch that remains stops with the side that is out of date."""
+        self._ready()
+        current, _ = self._roles(self._held())
+        cache = self.cache.load()
+        if current is None:
+            held_here = sorted(cache["keys"])
+            if held_here:
+                raise KeyMismatch(f"1Password (vault {self.op.vault}) holds no notes key, but this computer's cache holds "
+                                  f"{', '.join(display(fp) for fp in held_here)}. 1Password is out of date: check OP_VAULT, "
+                                  "or the key was never saved there; run make music-status.")
             raise KeyMismatch("No notes key yet: run make music-setup")
-        wanted = [repo.current, *repo.previous]
-        cached = self.cache.load()["keys"]
-        if repo.current not in cached:
+        if cache.get("current") != current or current not in cache["keys"]:
             self.pull()
-            cached = self.cache.load()["keys"]
-        if repo.current not in cached:
-            unknown = [fp for fp in cached if fp not in wanted]
-            if unknown:
-                raise KeyMismatch(f"This computer or 1Password holds a key the repository does not know ({', '.join(display(fp) for fp in unknown)}). "
-                                  "The repository may be out of date: git pull, then run this again. If it is up to date, "
-                                  f"the repository's key {display(repo.current)} was never saved to 1Password: run make music-status.")
-            raise KeyMismatch(f"1Password (vault {self.op.vault}) has no private key for the repository's public key "
-                              f"{display(repo.current)}. Check OP_VAULT, or the key was never saved to 1Password: run make music-status.")
-        return {fp: self._verified(fp, cached[fp]) for fp in wanted if fp in cached}
+            cache = self.cache.load()
+        if cache.get("current") != current or current not in cache["keys"]:
+            raise KeyMismatch(f"1Password names {display(current)} as the current notes key, but this computer's cache could not be "
+                              "brought up to date: make music-forget, then make music-setup")
+        wanted = [current, *(fp for fp in cache.get("previous") or [] if fp != current)]
+        return {fp: self._verified(fp, cache["keys"][fp]) for fp in wanted if fp in cache["keys"]}
 
     def status(self, check: ApiCheck | None = None) -> int:
-        repo = read_repo_keys(self.public_json)
-        if repo.current is None:
-            return self._status_without_repo_key(check)
-        self.out(f"Repository key: {display(repo.current)}")
-        ok = True
-        in_op = False
-        secrets = dict(self.cache.load()["api"])
-        try:
-            self._ready()
-            held = sorted(self._held())
-            self.out("1Password (vault " + self.op.vault + "): " + (", ".join(display(fp) for fp in held) or "no keys"))
-            in_op = repo.current in held
-            self.out("1Password: match" if in_op else "1Password: out of date: the repository's key is not saved there; run make music-setup or check OP_VAULT")
-            ok &= in_op
-            secrets.update(self.api_secrets())
-            only_here = [fp for fp in self.cache.load()["keys"] if fp not in held]
-            if only_here:
-                self.out("Only this computer holds: " + ", ".join(display(fp) for fp in only_here) + " (not in 1Password)")
-        except (OpError, KeysError, KeyMismatch) as e:
-            self.out(f"1Password: unreachable: {e}")
-            ok = False
-        cache = self.cache.load()
-        self.out("Cache: " + (", ".join(display(fp) for fp in cache["keys"]) or "no keys"))
-        in_cache = repo.current in cache["keys"]
-        self.out("Cache: match" if in_cache else "Cache: out of date: run make music-setup")
-        ok &= in_cache
-        self.out("API keys: " + (", ".join(sorted(cache["api"])) or "none"))
-        problems: dict[str, str] = {}
-        if check is not None:
-            for name in (PUBLISH_KEY, PICKUP_KEY):
-                if name in secrets:
-                    problem = api_problem(name, probe_states(check(secrets[name])))
-                    if problem:
-                        problems[name] = problem
-        self._checklist(repo, in_op, in_cache, set(secrets), problems)
-        return 0 if ok else 3
-
-    def _status_without_repo_key(self, check: ApiCheck | None) -> int:
-        """The repository has no music/keys/public.json: report a key made elsewhere (1Password, the cache) and where its public half waits."""
         cache = self.cache.load()
         secrets = dict(cache["api"])
         held: dict[str, tuple[str, dict[str, str]]] = {}
+        op_current: str | None = None
+        op_previous: list[str] = []
         op_problem = None
         try:
             self._ready()
             held = self._held()
+            op_current, op_previous = self._roles(held)
             secrets.update(self.api_secrets())
         except (OpError, KeysError, KeyMismatch) as e:
             op_problem = str(e)
-        known = sorted(set(held) | set(cache["keys"]))
-        if not known:
-            if not secrets:
-                self.out("Nothing is set up yet.\nNext: make music-setup")
-                return 3
-            self.out("No notes key yet.")
-            self._checklist(RepoKeys(None), False, False, set(secrets))
+        cache_current = cache.get("current")
+        if op_problem is None and op_current is None and not cache["keys"] and not secrets:
+            self.out("Nothing is set up yet.\nNext: make music-setup")
             return 3
-        uploaded = (cache.get("uploaded") or {}).get("fingerprints")
-        uploaded = uploaded if isinstance(uploaded, list) else []
-        fp = next((k for k in known if k in uploaded), known[0])
-        in_op, in_cache = fp in held, fp in cache["keys"]
-        self.out(f"Notes key: {display(fp)}")
-        problems: dict[str, str] = {}
-        if check is not None:
-            for name in (PUBLISH_KEY, PICKUP_KEY):
-                if name in secrets:
-                    problem = api_problem(name, probe_states(check(secrets[name])))
-                    if problem:
-                        problems[name] = problem
-        done, todo = "\u2713", "\u2192"
-        left = 0
-        lines = [f"  {done} The notes key is made ({display(fp)})."]
-
-        def line(ok: bool, did: str, todo_text: str) -> None:
-            nonlocal left
-            left += not ok
-            lines.append(f"  {done} {did}" if ok else f"  {todo} {todo_text}")
-
         if op_problem is not None:
-            lines.append(f"  ? 1Password could not be checked: {op_problem}")
-            left += 1
+            self.out(f"Notes key in 1Password (vault {self.op.vault}): could not be checked: {op_problem}")
         else:
-            line(in_op, "The key is saved in 1Password.", "The key is not saved in 1Password.")
-        line(in_cache, "The key is in this computer's cache.", "The key is not in this computer's cache.")
+            self.out(f"Notes key in 1Password (vault {self.op.vault}): " + (display(op_current) if op_current else "none yet"))
+        in_op = op_current is not None
+        in_cache = in_op and cache_current == op_current and op_current in cache["keys"]
+        if cache_current is None:
+            self.out("Notes key in this computer's cache: none yet")
+        elif op_problem is not None:
+            self.out(f"Notes key in this computer's cache: {display(cache_current)}")
+        else:
+            self.out(f"Notes key in this computer's cache: {display(cache_current)}" + (" (matches 1Password)" if in_cache else
+                     " (does not match 1Password: run make music-setup)"))
+        only_here = [fp for fp in cache["keys"] if fp not in held] if op_problem is None else []
+        if only_here:
+            self.out("Only this computer holds: " + ", ".join(display(fp) for fp in only_here) + " (not in 1Password)")
+        self.out("API keys: " + (", ".join(sorted(cache["api"])) or "none"))
+        problems: dict[str, str] = {}
+        publish_api = None
         for name in (PUBLISH_KEY, PICKUP_KEY):
-            problem = problems.get(name)
-            line(name in secrets and problem is None, f"The {name} API key is saved.", problem or f"The {name} API key is not saved.")
-        up = cache.get("uploaded") or {}
-        line(fp in uploaded, f"The locked copy of your key is on the server (uploaded {up.get('at', '')}).",
-             "The locked copy of your key is not on the server yet.")
-        where, next_step = self._pending_public_key(fp)
-        lines.append(where)
-        self.out("\nWhat's left:")
-        for text in lines:
-            self.out(text)
-        self.out(next_step if left == 0 else "Next: make music-setup")
-        return 3
+            if name in secrets and check is not None:
+                api = check(secrets[name])
+                states = probe_states(api)
+                problem = api_problem(name, states)
+                if problem:
+                    problems[name] = problem
+                elif name == PUBLISH_KEY and states["keys:publish"] == "yes":
+                    publish_api = api
+        on_server = self._server_line(publish_api, op_current, [*op_previous, *only_here], op_problem is None)
+        self._checklist(in_op, in_cache, set(secrets), problems, on_server)
+        return 0 if in_op and in_cache and on_server else 3
 
-    def _pending_public_key(self, fp: str) -> tuple[str, str]:
-        """(the checklist line, the next step) for a public key that is not in the repository yet."""
-        todo = "\u2192"
-        branch = f"music/notes-key-{fp[:8]}"
-        folder = str(self.public_json.parent)
-        generic = (f"  {todo} The public key is not committed anywhere yet: make music-setup", "Next: make music-setup")
-
-        def git(*args: str) -> subprocess.CompletedProcess | None:
-            try:
-                out = self.run(["git", "-C", folder, *args], capture_output=True, text=True, timeout=20)
-            except (OSError, subprocess.SubprocessError):
-                return None
-            return out if out.returncode == 0 else None
-
-        local = git("branch", "-a", "--format=%(refname:short)")
-        names = {n.strip() for n in (local.stdout.splitlines() if local else [])}
-        remote = git("ls-remote", "--heads", "origin", branch)
-        exists = branch in names or f"origin/{branch}" in names or bool(remote and remote.stdout.strip())
-        if not exists:
-            return generic
-        pr = None
+    def _server_line(self, api: object | None, current: str | None, previous: list[str], known: bool) -> bool:
+        """Prints what the server holds and returns True when it is the current key and the same earlier keys as 1Password."""
+        if api is None:
+            self.out("Notes key on the server: not checked (no working music-publish API key)")
+            return False
         try:
-            seen = self.run(["gh", "pr", "list", "--head", branch, "--state", "all", "--json", "number,url,state"],
-                            cwd=folder, capture_output=True, text=True, timeout=20)
-            if seen.returncode == 0:
-                found = json.loads(seen.stdout)
-                opened = [p for p in found if isinstance(p, dict) and p.get("state") == "OPEN"]
-                pr = (opened or [None])[0]
-                if not pr and any(isinstance(p, dict) and p.get("state") == "MERGED" for p in found):
-                    return (f"  {todo} The public key's pull request is merged: update this checkout (git pull), then make music-setup",
-                            "Next: git pull, then make music-setup")
-        except (OSError, subprocess.SubprocessError, ValueError, TypeError):
-            pr = None
-        if pr and pr.get("number") and pr.get("url"):
-            return (f"  {todo} The public key is waiting in pull request #{pr['number']}: {pr['url']} \u2014 merge it, then the workroom can take your notes.",
-                    f"Next: merge pull request #{pr['number']} ({pr['url']})")
-        return (f"  {todo} The public key is on branch {branch} (no pull request yet): make music-setup opens one", "Next: make music-setup")
+            server = api.keyring_fingerprints()  # type: ignore[attr-defined]
+        except ApiError as e:
+            self.out(f"Notes key on the server: could not be checked: {e}")
+            return False
+        if server is None:
+            self.out("Notes key on the server: none yet" + (": make music-setup uploads it" if known else ""))
+            return False
+        shown = display(server["current"])
+        if not known or current is None:
+            self.out(f"Notes key on the server: {shown}")
+            return False
+        if server["current"] != current:
+            self.out(f"Notes key on the server: {shown} (does not match 1Password: run make music-setup)")
+            return False
+        if set(server.get("previous") or []) != set(previous):
+            self.out(f"Notes key on the server: {shown} (the earlier keys differ from 1Password: run make music-setup)")
+            return False
+        self.out(f"Notes key on the server: {shown} (matches 1Password)")
+        return True
 
-    def _git_state(self) -> str:
-        """"committed", "uncommitted", or "unknown" for the public key files, from git in the key file's folder."""
-        folder = self.public_json.parent
-        paths = [self.public_json, self.public_ts, self.public_ts.parents[1] / "dist"]
-        try:
-            if not self.public_json.exists():
-                return "uncommitted"
-            tracked = self.run(["git", "-C", str(folder), "ls-files", "--error-unmatch", "--", *map(str, paths)],
-                                     capture_output=True, text=True, timeout=20)
-            if tracked.returncode != 0:
-                probe = self.run(["git", "-C", str(folder), "rev-parse", "--is-inside-work-tree"],
-                                       capture_output=True, text=True, timeout=20)
-                return "uncommitted" if probe.returncode == 0 else "unknown"
-            dirty = self.run(["git", "-C", str(folder), "status", "--porcelain", "--", *map(str, paths)],
-                                   capture_output=True, text=True, timeout=20)
-            if dirty.returncode != 0:
-                return "unknown"
-            return "uncommitted" if dirty.stdout.strip() else "committed"
-        except (OSError, subprocess.SubprocessError):
-            return "unknown"
-
-    def upload_covers(self, repo: RepoKeys) -> bool:
-        """True when the last successful upload held the repository's current key and every retained one."""
-        up = self.cache.load().get("uploaded") or {}
-        return isinstance(up.get("fingerprints"), list) and repo.current is not None \
-            and all(fp in up["fingerprints"] for fp in (repo.current, *repo.previous))
-
-    def _checklist(self, repo: RepoKeys, in_op: bool, in_cache: bool, api_names: set[str],
-                   problems: dict[str, str] | None = None) -> None:
+    def _checklist(self, in_op: bool, in_cache: bool, api_names: set[str], problems: dict[str, str], on_server: bool) -> None:
         """What's left, from what this tool can see: each line is done or points at make music-setup."""
-        problems = problems or {}
         done, todo = "\u2713", "\u2192"
         left = 0
         lines: list[str] = []
@@ -446,22 +311,13 @@ class Keys:
             left += not ok
             lines.append(f"  {done} {did}" if ok else f"  {todo} {todo_text}")
 
-        line(repo.current is not None, "The notes key is in the repository (music/keys/public.json).", "The notes key is not made yet.")
-        git = self._git_state() if repo.current is not None else "uncommitted"
-        if git == "unknown":
-            lines.append("  ? Check that music/keys/public.json is committed (git is not available here).")
-            left += 1
-        else:
-            line(git == "committed", "The notes key is committed.", "The public key is not committed yet.")
-        line(in_op, "The key is saved in 1Password.", "The key is not saved in 1Password.")
+        line(in_op, "The notes key is saved in 1Password.", "The notes key is not made or saved in 1Password yet.")
         line(in_cache, "The key is in this computer's cache.", "The key is not in this computer's cache.")
         for name in (PUBLISH_KEY, PICKUP_KEY):
             problem = problems.get(name)
-            line(name in api_names and problem is None, f"The {name} API key is saved.",
-                 problem or f"The {name} API key is not saved.")
-        up = self.cache.load().get("uploaded") or {}
-        line(self.upload_covers(repo), f"The locked copy of your key is on the server (uploaded {up.get('at', '')}).",
-             "The locked copy of your key is not on the server yet.")
+            line(name in api_names and problem is None, f"The {name} API key is saved.", problem or f"The {name} API key is not saved.")
+        line(on_server, "The locked copy of your key is on the server and its current key is yours.",
+             "The locked copy of your key is not on the server, or the server's current key is not yours.")
         self.out("\nWhat's left:")
         for text in lines:
             self.out(text)
@@ -518,29 +374,26 @@ class Keys:
                             + (f", then run {rerun} again." if rerun else "."))
         return api[name]
 
+    def hub_url(self) -> str:
+        """The admin hub, a sibling of the music folder: https://host/~user/admin/"""
+        return urljoin(self.base, "../admin/")
+
     def passphrase(self) -> str:
-        repo = read_repo_keys(self.public_json)
-        if repo.current is None:
-            raise KeyMismatch("No notes key yet: run make music-setup")
         self._ready()
         held = self._held()
-        if repo.current not in held:
-            raise KeyMismatch(f"1Password (vault {self.op.vault}) has no private key for the repository's public key "
-                              f"{display(repo.current)}. Check OP_VAULT, or the key was never saved to 1Password: run make music-status.")
-        password = held[repo.current][1].get("password")
+        current, _ = self._roles(held)
+        if current is None:
+            raise KeyMismatch("No notes key yet: run make music-setup")
+        password = held[current][1].get("password")
         if not password:
-            raise KeysError(f"The 1Password item {held[repo.current][0]} has no password field: fix the item")
+            raise KeysError(f"The 1Password item {held[current][0]} has no password field: fix the item")
         return password
 
     def keyring(self) -> dict[str, bytes]:
-        """fingerprint -> PKCS#8 DER for the current key, then every retained one; a key the cache lacks is an error, never skipped."""
+        """fingerprint -> PKCS#8 DER for the current key, then every previous one; a key the cache lacks is an error, never skipped."""
         ring = self.ensure_synced()
-        repo = read_repo_keys(self.public_json)
-        missing = [fp for fp in (repo.current, *repo.previous) if fp not in ring]
-        if missing:
-            self.pull()
-            ring = self.ensure_synced()
-            missing = [fp for fp in (repo.current, *repo.previous) if fp not in ring]
+        cache = self.cache.load()
+        missing = [fp for fp in (cache.get("current"), *(cache.get("previous") or [])) if fp and fp not in ring]
         if missing:
             raise KeysError("1Password holds no private key for " + ", ".join(display(fp) for fp in missing)
                             + ": a keyring without it would stop opening the notes sealed to it, so nothing was changed")
@@ -581,99 +434,85 @@ class Keys:
             return f" The new 1Password item {item_id} could not be removed ({e}): remove it by hand, or run make music-setup to adopt it."
         return ""
 
-    def _remember(self, fp: str, pkcs8: bytes) -> None:
-        data = self.cache.load()
-        data["keys"][fp] = base64.b64encode(pkcs8).decode("ascii")
-        self.cache.save(data)
-
-    def hub_url(self) -> str:
-        """The admin hub, a sibling of the music folder: https://host/~user/admin/"""
-        return urljoin(self.base, "../admin/")
-
-    def _record_upload(self, fingerprints: list[str]) -> None:
-        data = self.cache.load()
-        data["uploaded"] = {"fingerprints": sorted(fingerprints), "at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}
-        self.cache.save(data)
-
-    def _send(self, upload: Upload | None, ring: dict[str, bytes], passphrase: str, first: bool) -> bool:
-        locked = sealing.lock_keyring(ring, passphrase)
-        reason = "no music-publish API key"
-        if upload is not None:
-            try:
-                upload(locked)
-                self._record_upload(list(ring))
-                self.out(f"Uploaded the locked copy of your notes key{'' if len(ring) == 1 else 's'} to the server ({len(ring)} key{'' if len(ring) == 1 else 's'}).\n"
-                         "Any device can now open your notes once you type the passphrase from 1Password.")
-                return True
-            except Exception as e:  # any failure leaves the keys safe in 1Password; the retry is make music-setup
-                reason = str(e) or type(e).__name__
-        self.out(f"The locked copy of your notes key was not uploaded ({reason}). Run make music-setup to finish; "
-                 "until then other devices cannot open notes" + (" sealed to the new key." if not first else "."))
-        return False
-
-    def init(self, upload: Upload | None, adopt: bool = False) -> str:
+    def ensure_key(self, api: object | None = None) -> bool:
+        """The cache holds 1Password's current key afterwards. Makes a key when 1Password has none (True), else adopts the one it has.
+        With `api`, refuses to make a key while the server holds a keyring this computer cannot open."""
         self._ready()
-        if read_repo_keys(self.public_json).current is not None:
-            raise KeysError("A notes key already exists in the repository: use make music-rotate")
         items = self.op.list_items(KEY_TAG)
-        if adopt:
-            fp, pkcs8, spki, passphrase = self._adopt(items)
-        else:
-            if items:
-                names = ", ".join(i.get("title", i["id"]) for i in items)
-                raise KeysError(f"1Password already holds a notes key ({names}) but the repository has no music/keys/public.json "
-                                "(an earlier init stopped part-way, or the repository is out of date: git pull). "
-                                "To adopt that key: run make music-setup")
-            pkcs8, spki = sealing.generate()
-            fp, passphrase = sealing.fingerprint(spki), sealing.new_passphrase()
-            self._create_key_item(pkcs8, fp, passphrase)
-        write_public_files(self.public_json, self.public_ts, (fp, spki), [])
-        self._remember(fp, pkcs8)
-        self.out(("Done: your notes key is " + ("taken from" if adopt else "made and saved in")
-                  + f" 1Password (vault {self.op.vault}).\n"
-                  f"Its fingerprint, an ID to compare later: {display(fp)}\n\n" + KEY_KINDS))
-        if not (adopt and self._already_uploaded(fp)):
-            self._send(upload, {fp: pkcs8}, passphrase, first=True)
-        return fp
-
-    def _already_uploaded(self, fp: str) -> bool:
-        """True when the last successful upload held `fp` (a rerun adopting the key before its pull request merges)."""
-        up = self.cache.load().get("uploaded") or {}
-        return isinstance(up.get("fingerprints"), list) and fp in up["fingerprints"]
-
-    def _adopt(self, items: list[dict]) -> tuple[str, bytes, bytes, str]:
-        if len(items) != 1:
-            raise KeysError(f"--adopt needs exactly one notes key item in 1Password (vault {self.op.vault}); found {len(items)}")
-        [(fp, (title, fields))] = self._held().items()
-        passphrase = fields.get("password")
-        if not passphrase:
-            raise KeysError(f"The 1Password item {title} has no password field: fix the item")
-        pkcs8 = base64.b64decode(fields["private_key"])
-        return fp, pkcs8, sealing.spki_of(pkcs8), passphrase
-
-    def rotate(self, upload: Upload | None) -> str:
-        self.ensure_synced()
+        if items:
+            self._roles(self._held())
+            self.pull()
+            return False
+        if api is not None:
+            server = api.keyring_fingerprints()  # type: ignore[attr-defined]
+            if server is not None:
+                raise KeysError(f"The server already holds a keyring (current key {display(server['current'])}) but 1Password "
+                                f"(vault {self.op.vault}) has no notes key. Check OP_VAULT. To start over on purpose, remove it "
+                                f"on the admin hub ({self.hub_url()}: Music notes key \u2192 Remove the notes key) first; notes sealed to the old key stay unreadable.")
+        pkcs8, spki = sealing.generate()
+        fp, passphrase = sealing.fingerprint(spki), sealing.new_passphrase()
+        self._create_key_item(pkcs8, fp, passphrase)
         self.pull()
+        self.out(f"Done: your notes key is made and saved in 1Password (vault {self.op.vault}).\n"
+                 f"Its fingerprint, an ID to compare later: {display(fp)}\n\n" + KEY_KINDS)
+        return True
+
+    def server_holds_ours(self, api: object) -> bool:
+        """True when the server's current and previous fingerprints are exactly this computer's keyring."""
+        current, *previous = self.keyring()
+        server = api.keyring_fingerprints()  # type: ignore[attr-defined]
+        return server is not None and server["current"] == current and set(server.get("previous") or []) == set(previous)
+
+    def upload_keyring(self, api: object) -> int:
+        """Locks the keyring (current key first), posts it with its fingerprints, and reads the fingerprints back to check
+        the server kept it. Refuses when the server holds a key this keyring lacks, because that would orphan its notes."""
         ring = self.keyring()
-        repo = read_repo_keys(self.public_json)
-        assert repo.current is not None
-        passphrase = self.passphrase()
-        old = repo.current
+        current, *previous = ring
+        self._refuse_to_lose(api, ring)
+        api.publish_keyring(sealing.lock_keyring(ring, self.passphrase()), current, previous)  # type: ignore[attr-defined]
+        server = api.keyring_fingerprints()  # type: ignore[attr-defined]
+        if server is None or server["current"] != current or set(server.get("previous") or []) != set(previous):
+            raise KeysError("The server did not keep the keyring (its current key is "
+                            + (display(server["current"]) if server else "missing") + "): run make music-setup again")
+        return len(ring)
+
+    def _refuse_to_lose(self, api: object, ring: dict[str, bytes]) -> None:
+        server = api.keyring_fingerprints()  # type: ignore[attr-defined]
+        lost = [fp for fp in ([server["current"], *(server.get("previous") or [])] if server else []) if fp not in ring]
+        if lost:
+            raise KeysError("The server's keyring holds " + ", ".join(display(fp) for fp in lost) + ", which neither 1Password nor this "
+                            "computer holds a private key for: a keyring without it would stop opening the notes sealed to it, "
+                            "so nothing was changed")
+
+    def rotate(self, api: object | None) -> str:
+        """A new key under a new passphrase becomes current in 1Password, the old one is marked previous, and the keyring,
+        every key in it, is uploaded locked under the new passphrase."""
+        ring = self.keyring()
+        if api is not None:
+            self._refuse_to_lose(api, ring)
+        passphrase = sealing.new_passphrase()  # a passphrase that leaked cannot unlock, or forge, the rotated keyring
+        old = next(iter(ring))
         pkcs8, spki = sealing.generate()
         fp = sealing.fingerprint(spki)
         self._create_key_item(pkcs8, fp, passphrase)
-        write_public_files(self.public_json, self.public_ts, (fp, spki),
-                           [(k, repo.spki[k]) for k in (old, *repo.previous)])
-        self._remember(fp, pkcs8)
-        self.out(f"Rotated to the notes key {display(fp)}; the earlier keys are kept.")
-        sent = self._send(upload, {fp: pkcs8, **ring}, passphrase, first=False)
         self._retitle_previous(old)
-        if not sent:
-            raise NotUploaded(f"Rotated to {display(fp)}; the keyring was not uploaded")
-        return fp
+        self.pull()
+        self.out(f"Rotated to the notes key {display(fp)}; the earlier keys are kept.")
+        reason = "no music-publish API key"
+        if api is not None:
+            try:
+                self.upload_keyring(api)
+                self.out("Uploaded the locked copy of your notes keys to the server.\n"
+                         "Any device can now open your notes once you type the passphrase from 1Password.")
+                return fp
+            except Exception as e:  # any failure leaves the keys safe in 1Password; the retry is make music-setup
+                reason = str(e) or type(e).__name__
+        self.out(f"The locked copy of your notes key was not uploaded ({reason}). Run make music-setup to finish; "
+                 "until then other devices cannot open notes sealed to the new key.")
+        raise NotUploaded(f"Rotated to {display(fp)}; the keyring was not uploaded")
 
     def _retitle_previous(self, old: str) -> None:
-        """Marking the old item "(previous)" is cosmetic: a failure is a warning, never a failed rotation."""
+        """Two current keys in 1Password would stop every command, so a failed retitle is an error that names the item."""
         item_id = old
         try:
             item = self._item(old)
@@ -682,10 +521,5 @@ class Keys:
             if not title.endswith(PREVIOUS_SUFFIX):
                 self.op.retitle(item_id, title + PREVIOUS_SUFFIX)
         except Exception as e:  # noqa: BLE001
-            self.out(f"Could not retitle the old 1Password item ({e}): retitle it by hand, adding{PREVIOUS_SUFFIX}: {item_id}")
-
-    def upload_keyring(self, upload: Upload) -> int:
-        ring = self.keyring()
-        upload(sealing.lock_keyring(ring, self.passphrase()))
-        self._record_upload(list(ring))
-        return len(ring)
+            raise KeysError(f"The new key is saved, but the old 1Password item ({item_id}) could not be retitled ({e}). "
+                            f"Add{PREVIOUS_SUFFIX} to its title by hand, then run make music-setup.") from None

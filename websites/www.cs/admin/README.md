@@ -9,7 +9,7 @@ login.
 | --- | --- |
 | `login.php` | Asks for the address and mails a one-time link to the allowed address only. The reply is the same whoever asks. |
 | `verify.php` | The mailed link opens a page with a button; pressing it spends the link and starts a session. |
-| `index.php` | The hub: dashboard links, encryption-key fingerprints, sign out and sign out everywhere. |
+| `index.php` | The hub: dashboard links, encryption-key fingerprints (with a "Remove the notes key" control while one is stored), sign out and sign out everywhere. |
 | `keys.php` | Create and revoke scoped API keys. A new key is shown once. |
 | `logout.php` | Ends the session (POST), or every session with `?all=1`. |
 | `health.php` | `{"mail":"yes\|no","db":"yes\|no","store":"site\|fallback"}` for a deploy check; reveals nothing else. |
@@ -113,7 +113,7 @@ admin_serve(static function (Admin\Pages $p, Admin\Request $r): Admin\Response {
 
 `requireAdmin` returns a redirect to `login.php` when there is no session, else `null`. Register the
 page in `admin_dashboards()` and its encryption-key fingerprint in `admin_key_fingerprints()`
-(`lib/bootstrap.php`) so the hub shows it.
+(`lib/bootstrap.php`) so the hub shows it. A key the owner may need to start over on is offered for removal by adding it to `admin_key_removers()` (same file): it lists the key only while it is stored, with the explanation, the button label and a callable that takes the PDO.
 
 Machine access takes a scoped key. Add the scope name to `ADMIN_KEY_SCOPES`, create a key with that
 scope on `keys.php`, and gate the endpoint with `$p->requireKey($r, $scope)` (it delegates to `Admin\Keys::check`), which returns `null` when

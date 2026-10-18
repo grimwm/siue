@@ -2,10 +2,12 @@
 // through the captured mail, publish a draft with an API key made on the hub,
 // open the piece, play, move the playhead, switch views, open a glossary card,
 // and never trip the content security policy; then a sound effect from another
-// project: two projects on the list, a seconds axis, no sheet music.
+// project: two projects on the list, a seconds axis, no sheet music; then the
+// theme switch, the guide, and every screen at phone and desktop width in both
+// themes.
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SITE = join(import.meta.dirname, '..', '..');
@@ -61,8 +63,10 @@ export async function createKey(page: Page, base: string, label: string, scopes:
 type Session = Awaited<ReturnType<BrowserContext['storageState']>>;
 let session: Session | undefined;
 
-/** A fresh browser context signed in as the owner. The first call signs in and keeps the session; later calls reuse it. */
-export async function signedInPage(browser: Browser, base: string): Promise<{ context: BrowserContext; page: Page }> {
+const VIEW_TABS = ['story', 'roll', 'sound', 'sheet'] as const;
+
+/** A fresh browser context signed in as the owner. The first call signs in and keeps the session; later calls reuse it. Unless guideSeen is false, every view's guide counts as seen, so none opens over the page. */
+export async function signedInPage(browser: Browser, base: string, opts: { guideSeen?: boolean } = {}): Promise<{ context: BrowserContext; page: Page }> {
   if (!session) {
     const first = await browser.newContext();
     await signIn(await first.newPage(), base);
@@ -70,6 +74,9 @@ export async function signedInPage(browser: Browser, base: string): Promise<{ co
     await first.close();
   }
   const context = await browser.newContext({ storageState: session });
+  if (opts.guideSeen ?? true) {
+    await context.addInitScript((tabs: readonly string[]) => { for (const t of tabs) localStorage.setItem(`workroom-guide-${t}`, 'seen'); }, VIEW_TABS);
+  }
   return { context, page: await context.newPage() };
 }
 
@@ -124,12 +131,12 @@ test('open a piece, play, seek, switch views, read a term, no CSP violations', a
     await expect(page.getByText('A short pattern repeated over and over underneath the music.')).toBeVisible();
     await page.getByRole('button', { name: 'Hear it' }).click();
 
-    for (const tab of ['Piano roll', 'Sound picture', 'Sheet music', 'Story']) await page.getByRole('button', { name: tab }).click();
-    await page.getByRole('button', { name: 'Sheet music' }).click();
+    for (const tab of ['Piano roll', 'Sound picture', 'Sheet music', 'Story']) await page.getByRole('tab', { name: tab }).click();
+    await page.getByRole('tab', { name: 'Sheet music' }).click();
     await expect(page.locator('#sheet svg')).toBeVisible({ timeout: 15_000 });
 
     // The timeline belongs to the Story view alone.
-    await page.getByRole('button', { name: 'Story' }).click();
+    await page.getByRole('tab', { name: 'Story' }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator('[data-timeline]')).toBeVisible();
     expect(violations).toEqual([]);
@@ -155,12 +162,246 @@ test('a sound effect from another project: grouped list, seconds on the axis, no
     await expect(page.locator('[data-lane="air"]')).toBeVisible();
     await expect(page.locator('[data-section="blast"]')).toBeVisible();
     await expect(page.locator('[data-tick]').nth(1)).toHaveText('50 ms');
-    await expect(page.getByRole('button', { name: 'Sheet music' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Piano roll' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Sound picture' }).click();
+    await expect(page.getByRole('tab', { name: 'Sheet music' })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Piano roll' })).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Sound picture' }).click();
     await expect(page.locator('img[data-spectrogram]')).toBeVisible();
     await page.getByRole('button', { name: 'Play' }).click();
     await expect.poll(() => page.locator('audio').evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(0.05);
+    expect(violations).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('the theme switch restyles the page without a reload, is remembered, and the fonts load', async ({ browser, request, baseURL }) => {
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    await publishFixtureDraft(request, base, await createKey(page, base, 'e2e theme', ['drafts:publish']));
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto(`${base}music/piece.php?id=test-piece`);
+    await expect(page.locator('[data-timeline]')).toBeVisible();
+    const html = page.locator('html');
+    const ground = (): Promise<string> => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    expect(await ground()).toBe('rgb(18, 21, 25)');
+    await page.evaluate(() => { document.body.dataset.stayed = 'yes'; });
+    const themes = page.getByRole('group', { name: 'Theme' });
+    await themes.getByRole('button', { name: 'Light' }).click();
+    await expect(html).toHaveAttribute('data-theme', 'light');
+    expect(await ground()).toBe('rgb(238, 240, 243)');
+    expect(await page.evaluate(() => document.body.dataset.stayed)).toBe('yes');
+    await page.reload();
+    await expect(html).toHaveAttribute('data-theme', 'light');
+    await themes.getByRole('button', { name: 'System' }).click();
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expect(html).toHaveAttribute('data-theme', 'light');
+    const loaded = await page.evaluate(async () => {
+      await document.fonts.ready;
+      return [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family.replace(/"/g, ''));
+    });
+    for (const family of ['Barlow', 'Barlow Condensed', 'IBM Plex Mono']) expect(loaded).toContain(family);
+  } finally {
+    await context.close();
+  }
+});
+
+test('a remembered theme is on the page before it first paints', async ({ browser, request, baseURL }) => {
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    await publishFixtureDraft(request, base, await createKey(page, base, 'e2e flash', ['drafts:publish']));
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto(`${base}music/piece.php?id=test-piece`);
+    await page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Light' }).click();
+    // Recorded by the page itself at the earliest moments a script can see: the parser reaching the body, DOMContentLoaded, the first frame.
+    await page.addInitScript(() => {
+      const seen: Record<string, string | null> = {};
+      const w = window as unknown as { __themeSeen: typeof seen };
+      w.__themeSeen = seen;
+      const mark = (k: string): void => { seen[k] = document.documentElement.getAttribute('data-theme'); };
+      document.addEventListener('DOMContentLoaded', () => mark('dcl'));
+      requestAnimationFrame(() => mark('frame'));
+      new MutationObserver((_m, o) => { if (document.body) { mark('body'); o.disconnect(); } }).observe(document, { childList: true, subtree: true });
+    });
+    await page.reload();
+    await expect(page.locator('[data-timeline]')).toBeVisible();
+    const seen = await page.evaluate(() => (window as unknown as { __themeSeen: Record<string, string | null> }).__themeSeen);
+    expect(seen).toEqual({ body: 'light', dcl: 'light', frame: 'light' });
+  } finally {
+    await context.close();
+  }
+});
+
+test('the guide opens on a first visit, walks every part, plays, ignores Escape and gives focus back', async ({ browser, request, baseURL }) => {
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base, { guideSeen: false });
+  try {
+    await publishFixtureDraft(request, base, await createKey(page, base, 'e2e guide', ['drafts:publish']));
+    await page.goto(`${base}music/piece.php?id=test-piece`);
+    const card = page.locator('[data-guide-card]');
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Part 1 of 7');
+    await card.getByRole('button', { name: 'Hear it' }).click();
+    await expect.poll(() => page.locator('audio').evaluate(a => ((a as HTMLAudioElement).paused ? -1 : (a as HTMLAudioElement).currentTime))).toBeGreaterThan(0);
+    await page.keyboard.press('Escape');
+    await expect(card).toBeVisible();
+    for (let n = 2; n <= 7; n++) {
+      await card.getByRole('button', { name: 'Next' }).click();
+      await expect(card).toContainText(`Part ${n} of 7`);
+    }
+    await expect(card.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await card.getByRole('button', { name: 'Close' }).click();
+    await expect(card).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'How to read this' })).toBeFocused();
+    await page.reload();
+    await expect(page.locator('[data-timeline]')).toBeVisible();
+    await expect(card).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Piano roll' }).click();
+    await expect(card).toContainText('Part 1 of 5');
+  } finally {
+    await context.close();
+  }
+});
+
+test('the guide at phone width: the card clears the lit part and stays on screen, Tab stays in the card, stepping keeps the piece playing', async ({ browser, request, baseURL }) => {
+  test.setTimeout(240_000);
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    const key = await createKey(page, base, 'e2e guide geometry', ['drafts:publish']);
+    await publishFixtureDraft(request, base, key);
+    await publishFixtureDraft(request, base, key, 'draft-sound');
+    await page.setViewportSize({ width: 390, height: 844 });
+    const card = page.locator('[data-guide-card]');
+    const problems: string[] = [];
+    const geometry = (): Promise<{ card: Box; spot: Box | null; view: { w: number; h: number } }> => page.evaluate(() => {
+      const box = (el: Element): Box => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; };
+      const spot = document.querySelector('[data-guide-spot]');
+      return { card: box(document.querySelector('[data-guide-card]')!), spot: spot ? box(spot) : null, view: { w: window.innerWidth, h: window.innerHeight } };
+    });
+    for (const id of ['test-piece', 'cannon-fire']) {
+      await page.goto(`${base}music/piece.php?id=${id}`);
+      await expect(page.getByRole('tab').first()).toBeVisible();
+      const names = (await page.getByRole('tab').allTextContents()).map(n => n.trim());
+      expect(names.length).toBeGreaterThan(1);
+      for (const name of names) {
+        await page.getByRole('tab', { name, exact: true }).click();
+        await page.getByRole('button', { name: 'How to read this' }).click();
+        await expect(card).toBeVisible();
+        const total = Number(/of (\d+)/.exec((await card.textContent()) ?? '')![1]);
+        for (let n = 1; n <= total; n++) {
+          await expect(card).toContainText(`Part ${n} of ${total}`);
+          const g = await geometry();
+          const where = `${id} / ${name} / part ${n}`;
+          if (g.card.left < 0 || g.card.top < 0 || g.card.right > g.view.w + 0.5 || g.card.bottom > g.view.h + 0.5) problems.push(`${where}: card outside the screen ${JSON.stringify(g.card)}`);
+          if (g.spot) {
+            // The documented exception: a lit part so tall that neither side of it has room for a card.
+            const room = Math.max(g.spot.top, g.view.h - g.spot.bottom) - 24;
+            const overlap = g.card.left < g.spot.right && g.card.right > g.spot.left && g.card.top < g.spot.bottom - 0.5 && g.card.bottom > g.spot.top + 0.5;
+            if (overlap && room >= 120) problems.push(`${where}: card ${JSON.stringify(g.card)} overlaps the spot ${JSON.stringify(g.spot)}`);
+          }
+          if (n < total) await card.getByRole('button', { name: 'Next' }).click();
+        }
+        await expect(card.getByRole('button', { name: 'Next' })).toBeDisabled();
+        const inCard = (): Promise<boolean> => page.evaluate(() => document.querySelector('[data-guide-card]')!.contains(document.activeElement));
+        expect(await inCard(), `${id} / ${name}: focus left the card after the last part`).toBe(true);
+        await card.getByRole('button', { name: 'Close' }).focus();
+        await page.keyboard.press('Tab');
+        expect(await inCard(), `${id} / ${name}: Tab from the last control left the card`).toBe(true);
+        await expect(card.getByRole('button', { name: 'Hear it' })).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
+        await expect(card.getByRole('button', { name: 'Close' })).toBeFocused();
+        await card.getByRole('button', { name: 'Close' }).click();
+        await expect(card).toHaveCount(0);
+      }
+    }
+    expect(problems).toEqual([]);
+
+    // Started with Play, the piece keeps playing while the guide is stepped through.
+    await page.goto(`${base}music/piece.php?id=test-piece`);
+    await expect(page.locator('[data-timeline]')).toBeVisible();
+    await page.getByRole('button', { name: 'Play' }).click();
+    const audio = page.locator('audio');
+    await expect.poll(() => audio.evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(0.2);
+    await page.getByRole('button', { name: 'How to read this' }).click();
+    await expect(card).toBeVisible();
+    for (let n = 2; n <= 4; n++) {
+      await card.getByRole('button', { name: 'Next' }).click();
+      await expect(card).toContainText(`Part ${n} of`);
+    }
+    await card.getByRole('button', { name: 'Back' }).click();
+    const before = await audio.evaluate(a => (a as HTMLAudioElement).currentTime);
+    await expect.poll(() => audio.evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(before + 0.3);
+    expect(await audio.evaluate(a => (a as HTMLAudioElement).paused)).toBe(false);
+    await card.getByRole('button', { name: 'Close' }).click();
+    expect(await audio.evaluate(a => (a as HTMLAudioElement).paused)).toBe(false);
+  } finally {
+    await context.close();
+  }
+});
+interface Box { left: number; top: number; right: number; bottom: number }
+
+const SHOTS = process.env.MUSIC_E2E_SHOTS ?? '';
+interface Screen { name: string; path: string; ready(page: Page): Promise<void> }
+const tab = (name: string, then: (p: Page) => Promise<void>) => async (p: Page) => { await p.getByRole('tab', { name }).click(); await then(p); };
+const SCREENS: Screen[] = [
+  { name: 'pieces', path: 'music/', ready: p => expect(p.locator('li.piece').first()).toBeVisible() },
+  { name: 'story', path: 'music/piece.php?id=test-piece', ready: p => expect(p.locator('[data-timeline]')).toBeVisible() },
+  { name: 'piano-roll', path: 'music/piece.php?id=test-piece', ready: tab('Piano roll', p => expect(p.locator('[data-roll]')).toBeVisible()) },
+  { name: 'sound-picture', path: 'music/piece.php?id=test-piece', ready: tab('Sound picture', p => expect(p.locator('img[data-spectrogram]')).toBeVisible()) },
+  { name: 'sheet-music', path: 'music/piece.php?id=test-piece', ready: tab('Sheet music', p => expect(p.locator('#sheet svg')).toBeVisible({ timeout: 15_000 })) },
+  { name: 'word-card', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await expect(p.locator('[data-timeline]')).toBeVisible();
+    const handle = p.locator('[data-sheet] > button[aria-expanded]');
+    if (await handle.isVisible()) await handle.click();
+    await p.locator('[data-sheet] button[data-term="ostinato"]').first().click();
+    await expect(p.locator('[data-card]')).toBeVisible();
+  } },
+  { name: 'guide', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await p.getByRole('button', { name: 'How to read this' }).click();
+    await expect(p.locator('[data-guide-card]')).toBeVisible();
+  } },
+  { name: 'sound-story', path: 'music/piece.php?id=cannon-fire', ready: p => expect(p.locator('[data-lane="boom"]')).toBeVisible() },
+  { name: 'sound-sound-picture', path: 'music/piece.php?id=cannon-fire', ready: tab('Sound picture', p => expect(p.locator('img[data-spectrogram]')).toBeVisible()) },
+  { name: 'missing-piece', path: 'music/piece.php?id=no-such-piece', ready: p => expect(p.locator('.error')).toBeVisible() },
+  { name: 'bad-request', path: 'music/piece.php?id=%3Cscript%3E', ready: p => expect(p.locator('.error')).toBeVisible() },
+];
+
+test('every screen at 390 and 1280 px, dark and light: no sideways scroll, 44 px targets, no CSP errors', async ({ browser, request, baseURL }) => {
+  test.setTimeout(240_000);
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    const violations: string[] = [];
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
+    const key = await createKey(page, base, 'e2e screens', ['drafts:publish']);
+    await publishFixtureDraft(request, base, key);
+    await publishFixtureDraft(request, base, key, 'draft-sound');
+    if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+    for (const theme of ['dark', 'light'] as const) {
+      for (const width of [390, 1280]) {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+        for (const s of SCREENS) {
+          await page.goto(`${base}music/`);
+          await page.evaluate(t => localStorage.setItem('workroom-theme', t), theme);
+          await page.goto(`${base}${s.path}`);
+          await s.ready(page);
+          await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+          const sideways = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+          expect(sideways, `${s.name} at ${width} px scrolls sideways`).toBeLessThanOrEqual(0);
+          const small = await page.evaluate(() => [...document.querySelectorAll('button, a, select, [role="tab"]')]
+            .filter(el => !el.closest('svg'))
+            .map(el => ({ el, r: el.getBoundingClientRect() }))
+            .filter(({ r }) => r.width > 0 && r.height > 0 && (r.width < 44 || r.height < 44))
+            .map(({ el, r }) => `${el.tagName.toLowerCase()} "${(el.textContent ?? '').trim().slice(0, 30)}" ${Math.round(r.width)}x${Math.round(r.height)}`));
+          expect(small, `${s.name} at ${width} px, ${theme}: tap targets under 44 px`).toEqual([]);
+          if (SHOTS) await page.screenshot({ path: join(SHOTS, `${s.name}-${width}-${theme}.png`), fullPage: true });
+        }
+      }
+    }
     expect(violations).toEqual([]);
   } finally {
     await context.close();

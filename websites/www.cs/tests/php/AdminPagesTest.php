@@ -114,7 +114,7 @@ final class AdminPagesTest extends TestCase
             'absolute' => ['https://evil.example/'], 'scheme-relative' => ['//evil.example/'], 'backslash' => ['\\evil.example'],
             'path' => ['/~wgrim/music/'], 'parent' => ['../music/'], 'subdir' => ['x/keys.php'], 'encoded slash' => ['%2f%2fevil.example'],
             'javascript' => ['javascript:alert(1)'], 'newline' => ["keys.php?a=1\r\nSet-Cookie: x=1"], 'loop' => ['login.php'],
-            'verify' => ['verify.php?token=x'], 'not a page' => ['keys'], 'too long' => ['keys.php?' . str_repeat('a', 400)],
+            'verify' => ['verify.php?token=x'], 'health' => ['health.php'], 'other page' => ['future.php?a=1'], 'not a page' => ['keys'], 'too long' => ['keys.php?' . str_repeat('a', 400)],
             'array' => [['keys.php']], 'empty' => [''], 'space' => ['keys.php?a b'],
         ];
     }

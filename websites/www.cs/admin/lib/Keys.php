@@ -10,6 +10,9 @@ final class Keys
     public const PER_MINUTE = 60;
     public const LABEL_MAX = 80;
 
+    /** The labels the music tool's setup sends people here to make (PUBLISH_KEY and PICKUP_KEY in siue_music/keys.py). */
+    public const GUIDED_LABELS = ['music-publish', 'music-pickup'];
+
     /** The scopes a key may carry (bootstrap.php's ADMIN_KEY_SCOPES). */
     public const SCOPES = \ADMIN_KEY_SCOPES;
 

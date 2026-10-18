@@ -138,7 +138,7 @@ final class Pages
     }
 
     /**
-     * The page to return to after sign-in: a bare admin page name with an optional query string,
+     * The page to return to after sign-in: index.php or keys.php with an optional query string,
      * else ''. No path separators, scheme, backslash or control character can pass, so the value
      * can only ever point at a sibling page of the one that sent it.
      */
@@ -147,7 +147,7 @@ final class Pages
         if (!is_string($next) || strlen($next) > 300) {
             return '';
         }
-        if (preg_match('/^(?!(?:login|verify|logout)\.php)[a-z]+\.php(?:\?[A-Za-z0-9_.~%=&,+\-\[\]:]*)?$/D', $next) !== 1) {
+        if (preg_match('/^(?:index|keys)\.php(?:\?[A-Za-z0-9_.~%=&,+\-\[\]:]*)?$/D', $next) !== 1) {
             return '';
         }
         return $next;
@@ -366,7 +366,7 @@ final class Pages
             $form .= '</fieldset><button type="submit" class="button primary">Create key</button></form>';
             if ($newKey !== null) {
                 $body .= '<h2>Create another key</h2>' . $form;
-            } elseif ($label !== '') {
+            } elseif (in_array($label, Keys::GUIDED_LABELS, true)) {
                 $body = '<div class="callout"><p class="lead">Make the <strong>' . Html::e($label) . '</strong> key: press <strong>Create key</strong>.</p>' . $form . '</div>' . $body;
             } else {
                 $body .= '<h2>Create a key</h2>' . $form;

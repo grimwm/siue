@@ -320,6 +320,19 @@ final class AdminKeysTest extends TestCase
         self::assertStringNotContainsString('<div class="callout">', $p->keysPanel($in)->body, 'no label, no callout');
     }
 
+    public function testAnUnknownLabelPrefillsThePlainFormWithoutTheCallout(): void
+    {
+        [$p, , $in] = $this->panel();
+        $body = $p->keysPanel(req(['cookies' => $in->cookies, 'query' => ['label' => 'Click here <b>now</b>']]))->body;
+        self::assertStringNotContainsString('class="callout"', $body);
+        self::assertStringNotContainsString('Make the', $body);
+        self::assertStringContainsString('<h2>Create a key</h2>', $body);
+        self::assertStringContainsString('value="Click here &lt;b&gt;now&lt;/b&gt;"', $body);
+        foreach (Admin\Keys::GUIDED_LABELS as $known) {
+            self::assertStringContainsString('class="callout"', $p->keysPanel(req(['cookies' => $in->cookies, 'query' => ['label' => $known]]))->body);
+        }
+    }
+
     public function testRevokedKeysSitInACollapsedDetailsBelowTheExistingKeys(): void
     {
         [$p, $keys, $in] = $this->panel();

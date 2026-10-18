@@ -332,7 +332,7 @@ final class Pages
             } catch (\InvalidArgumentException $e) {
                 return $this->keysPage(400, $r, $e->getMessage());
             }
-            return $this->keysPage(200, $r, null, $made['key'], false, $made['replaced'], trim(is_string($label) ? $label : ''));
+            return $this->keysPage(200, $r, null, $made['key'], false, $made['replaced'], trim(is_string($label) ? $label : ''), $made['id']);
         });
     }
 
@@ -401,8 +401,8 @@ final class Pages
         }
     }
 
-    /** The keys page; $newKey is shown once, at the top, $error explains a refused create. */
-    private function keysPage(int $status, Request $r, ?string $error = null, ?string $newKey = null, bool $prefill = false, int $replaced = 0, string $madeLabel = ''): Response
+    /** The keys page; $newKey is shown once, at the top, with $newId its row in the list; $error explains a refused create. */
+    private function keysPage(int $status, Request $r, ?string $error = null, ?string $newKey = null, bool $prefill = false, int $replaced = 0, string $madeLabel = '', ?int $newId = null): Response
     {
         $csrf = $this->sessions->csrf($r);
         if ($csrf === '') {
@@ -422,6 +422,8 @@ final class Pages
                 . '<p>Copy this and paste it into the terminal where <code>make music-setup</code> is waiting. It is shown only this once.</p></div>';
         }
         $registry = $this->keys->registry();
+        $all = $this->keys->list();
+        $replacing = [];
         $label = $prefill && is_string($r->query['label'] ?? null) ? mb_substr(trim($r->query['label']), 0, Keys::LABEL_MAX) : '';
         $ticked = $prefill && is_string($r->query['scopes'] ?? null) ? array_map('trim', explode(',', $r->query['scopes'])) : [];
         if ($registry === []) {
@@ -435,22 +437,30 @@ final class Pages
                 $form .= '<label class="check"><input type="checkbox" name="scopes[]" value="' . Html::e($scope) . '"' . (in_array($scope, $ticked, true) ? ' checked' : '') . '> ' . Html::e($scope) . '</label>';
             }
             $form .= '</fieldset><button type="submit" class="button primary">Create key</button></form>';
+            if ($newKey === null && in_array($label, Keys::GUIDED_LABELS, true)) {
+                $replacing = array_values(array_filter($all, static fn(array $k): bool => $k['label'] === $label && $k['revoked_at'] === null));
+            }
             if ($newKey !== null) {
-                $body .= '<h2>Create another key</h2>' . $form;
+                $body .= '<details class="another"><summary>Create another key</summary>' . $form . '</details>';
             } elseif (in_array($label, Keys::GUIDED_LABELS, true)) {
-                $body = '<div class="callout"><p class="lead">Make the <strong>' . Html::e($label) . '</strong> key: press <strong>Create key</strong>.</p>' . $form . '</div>' . $body;
+                $note = $replacing === [] ? '' : Html::p('This replaces your current ' . $label . ' key (created ' . self::when(max(array_column($replacing, 'created_at'))) . '); the old one stops working.', 'replaces');
+                $body = '<div class="callout"><p class="lead">Make the <strong>' . Html::e($label) . '</strong> key: press <strong>Create key</strong>.</p>' . $note . $form . '</div>' . $body;
             } else {
                 $body .= '<h2>Create a key</h2>' . $form;
             }
         }
+        $replacingIds = array_column($replacing, 'id');
         $active = '';
         $revoked = '';
         $nActive = 0;
         $nRevoked = 0;
-        $all = $this->keys->list();
         usort($all, static fn(array $a, array $b): int => [$b['created_at'], $b['id']] <=> [$a['created_at'], $a['id']]);
         foreach ($all as $k) {
-            $card = '<div class="key"><strong>' . Html::e($k['label']) . '</strong>'
+            $isNew = $newId !== null && $k['id'] === $newId;
+            $willReplace = $k['revoked_at'] === null && in_array($k['id'], $replacingIds, true);
+            $card = '<div class="key' . ($isNew ? ' isnew' : '') . '"><strong>' . Html::e($k['label']) . '</strong>'
+                . ($isNew ? ' <span class="tag">New: the key shown above</span>' : '')
+                . ($willReplace ? ' <span class="tag">Will be replaced</span>' : '')
                 . '<p class="lastused">Last used: <strong>' . ($k['last_used_at'] === null ? 'never' : self::when($k['last_used_at'])) . '</strong></p><dl class="prints">'
                 . '<dt>Scopes</dt><dd>' . Html::e(implode(', ', $k['scopes'])) . '</dd>'
                 . '<dt>Created</dt><dd>' . self::when($k['created_at']) . '</dd>';

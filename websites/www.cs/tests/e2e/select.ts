@@ -5,12 +5,17 @@
 //     prints NONE, ALL, or the spec files to run (one line, space-separated)
 //   node select.ts --check
 //     fails if some spec in this folder is not reachable from a source rule
+//   ... | node select.ts --base <sha>
+//     also reads each Makefile as it was at <sha>: a Makefile whose only
+//     change is help text selects NONE (see helpOnlyChange). Without --base
+//     every Makefile change selects ALL.
 //
 // Paths are relative to the repository root. Every touched file is matched
 // against the rules in order; the first matching rule wins for that file,
 // and the specs of all files are unioned. A file under websites/www.cs/ that
 // no rule knows runs everything: the selector errs toward testing, never
 // toward skipping.
+import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +33,7 @@ const shell = ['games-hub.spec.ts', 'games-pwa.spec.ts', 'games-install.spec.ts'
    the regex match returning a list. */
 const RULES: [RegExp, Selection | ((m: RegExpMatchArray) => string[])][] = [
   // Nothing a browser sees.
+  [new RegExp(`^${SITE}music/tools/`), 'NONE'], // the owner's key tool and its tests; never served
   [/\.md$/, 'NONE'],
   [/(^|\/)LICENSE$/, 'NONE'],
   [/^(docs|\.beads|scripts)\//, 'NONE'],
@@ -88,9 +94,42 @@ const RULES: [RegExp, Selection | ((m: RegExpMatchArray) => string[])][] = [
   [/./, 'NONE'],
 ];
 
-export function select(files: string[]): Selection {
+/** The Makefiles whose help-only edits skip the browser suite. */
+const MAKEFILES = new RegExp(`^(${SITE})?Makefile$`);
+
+/** What `make help` is built from, removed so the rest can be compared: the
+    `##@` section headings, the trailing ` ## description` of a rule line, and
+    the help recipe (every tab-indented line under `help:`). */
+function withoutHelp(text: string): string[] {
+  const out: string[] = [];
+  let inHelp = false;
+  for (const line of text.split('\n')) {
+    if (inHelp && (line.startsWith('\t') || line.trim() === '')) continue;
+    inHelp = false;
+    if (line.startsWith('##@')) continue;
+    if (/^help:/.test(line)) inHelp = true;
+    out.push(line.replace(/^([^\t\s#][^#=]*:(?!=)[^#]*?)\s*##(?!@).*$/, '$1'));
+  }
+  // Blank lines around a dropped heading or recipe carry no meaning.
+  return out.filter(l => l.trim() !== '');
+}
+
+/** True when two versions of a Makefile differ only in help text. */
+export function helpOnlyChange(before: string, after: string): boolean {
+  const a = withoutHelp(before);
+  const b = withoutHelp(after);
+  return a.length === b.length && a.every((l, i) => l === b[i]);
+}
+
+export interface Options {
+  /** Whether a Makefile (by path) changed only in help text. Absent: no Makefile qualifies. */
+  helpOnly?: (path: string) => boolean;
+}
+
+export function select(files: string[], opts: Options = {}): Selection {
   const picked = new Set<string>();
   for (const f of files.map(s => s.trim()).filter(Boolean)) {
+    if (MAKEFILES.test(f) && opts.helpOnly?.(f)) continue;
     for (const [re, run] of RULES) {
       const m = f.match(re);
       if (!m) continue;
@@ -123,7 +162,21 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (process.argv.includes('--check')) {
     check();
   } else {
-    const out = select(readFileSync(0, 'utf8').split('\n'));
+    const bi = process.argv.indexOf('--base');
+    const base = bi > 0 ? process.argv[bi + 1] : undefined;
+    // Compares the Makefile at the base commit with the one on disk. Any
+    // failure to read either side means it is not a help-only change.
+    const helpOnly = base
+      ? (path: string) => {
+          try {
+            const before = execFileSync('git', ['show', `${base}:${path}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+            return helpOnlyChange(before, readFileSync(path, 'utf8'));
+          } catch {
+            return false;
+          }
+        }
+      : undefined;
+    const out = select(readFileSync(0, 'utf8').split('\n'), { helpOnly });
     console.log(Array.isArray(out) ? out.join(' ') : out);
   }
 }

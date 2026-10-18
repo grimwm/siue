@@ -138,7 +138,9 @@ jobs:
 
       # Only the specs this change can affect: websites/www.cs/tests/e2e/
       # select.ts maps touched files to specs (NONE, ALL, or a list) and
-      # runs everything for any site file it does not know.
+      # runs everything for any site file it does not know. With --base it
+      # also reads each Makefile as it was at the base, so one that changed
+      # only in help text selects NONE.
       - name: Pick the specs
         id: scope
         env:
@@ -151,7 +153,7 @@ jobs:
           fi
           changed=$(git diff --name-only "$BASE"...HEAD)
           printf '%s\n' "$changed"
-          specs=$(printf '%s\n' "$changed" | node websites/www.cs/tests/e2e/select.ts)
+          specs=$(printf '%s\n' "$changed" | node websites/www.cs/tests/e2e/select.ts --base "$BASE")
           echo "selected: $specs"
           case "$specs" in
             NONE) ;;

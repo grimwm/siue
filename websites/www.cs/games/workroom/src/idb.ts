@@ -26,8 +26,15 @@ export function indexedDbOutbox(idb: IDBFactory | null = typeof indexedDB === 'u
   let db: Promise<IDBDatabase | null> | null = null;
   const open = (): Promise<IDBDatabase | null> => {
     if (db) return db;
-    const opening: Promise<IDBDatabase | null> = new Promise(resolve => {
-      const failed = (): void => { if (db === opening) db = null; resolve(null); };
+    let opening: Promise<IDBDatabase | null> | null = null;
+    /** Set when opening failed before the promise was stored (idb.open threw): it is not cached, so the next use tries again. */
+    let failedAtOnce = false;
+    opening = new Promise<IDBDatabase | null>(resolve => {
+      const failed = (): void => {
+        if (opening === null) failedAtOnce = true;
+        else if (db === opening) db = null;
+        resolve(null);
+      };
       try {
         const req = idb.open(OUTBOX_DB, 1);
         req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(OUTBOX_STORE)) req.result.createObjectStore(OUTBOX_STORE, { keyPath: 'key' }); };
@@ -43,7 +50,7 @@ export function indexedDbOutbox(idb: IDBFactory | null = typeof indexedDB === 'u
         failed();
       }
     });
-    db = opening;
+    if (!failedAtOnce) db = opening;
     return opening;
   };
   const run = <T>(d: IDBDatabase, mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {
@@ -57,7 +64,13 @@ export function indexedDbOutbox(idb: IDBFactory | null = typeof indexedDB === 'u
   const transact = async <T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> => {
     for (let tries = 1; ; tries++) {
       const opening = open();
-      const d = await opening;
+      let d: IDBDatabase | null;
+      try {
+        d = await opening;
+      } catch {
+        d = null;
+      }
+      if (!d && db === opening) db = null;
       if (!d) throw new Unavailable();
       try {
         return await run(d, mode, work);

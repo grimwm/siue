@@ -53,6 +53,12 @@ test('IndexedDB that refuses to open: notes are kept in memory', async () => {
   assert.equal(await box.put(pending('a', [7])), true);
   assert.equal(box.memoryOnly(), true);
   assert.deepEqual(bytesOf(await box.all()), [['a', [7], 'new']]);
+  assert.equal(await box.put(pending('bb', [8])), true);
+  await box.remove('a');
+  assert.deepEqual(bytesOf(await box.all()), [['bb', [8], 'new']]);
+  await box.remove('bb');
+  assert.deepEqual(await box.all(), []);
+  assert.equal(box.memoryOnly(), false);
 });
 
 test('IndexedDB that refuses to store a note: that note is kept in memory, the stored ones stay, and the outbox says so', async () => {

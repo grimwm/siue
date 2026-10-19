@@ -1,6 +1,6 @@
-/* The Island of Crete: the eight trials, in the level text (src/puzzle/level.ts).
- * Each teaches one idea; the solver proves each winnable (test/puzzle-trials.test.ts).
- * DOM-free. */
+/* The Island of Crete: the trials, Chapter 1's levels, in the level text (src/puzzle/level.ts).
+ * Eight so far; levels 9 and 10 join them to make the chapter's ten. Each teaches
+ * one idea; the solver proves each winnable (test/puzzle-trials.test.ts). DOM-free. */
 import { parse } from './level.ts';
 import type { Level } from './level.ts';
 
@@ -91,8 +91,8 @@ intro: Ariadne left you gifts: Medusa's mirror, Daedalus's cow and a honey cake.
 ####..S.#
 #########
 ` },
-  { id: 'trial-8', text: `title: The Heart of the Labyrinth
-intro: Here Minos hid his last riddle: a locked door, a block to sink in the pool, a flood to swim, and the beast between. Pass it, and Athens owes no more tribute.
+  { id: 'trial-8', text: `title: The Riddle of Minos
+intro: Here Minos hid a harder riddle: a locked door, a block to sink in the pool, a flood to swim, and the beast between. The halls beyond grow no kinder.
 
 ############
 #P..#.M.~.##

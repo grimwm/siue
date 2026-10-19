@@ -9,6 +9,8 @@ import { createGame, frameOf } from './game.ts';
 import { initial } from './puzzle/state.ts';
 import { solve } from './puzzle/solver.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
+import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS } from './campaign/chapters.ts';
+import { createFoundPages } from './pages.ts';
 import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
 import { createSettings } from './settings.ts';
@@ -43,6 +45,8 @@ const game = createGame({
   sfx: audio.sfx,
   say: ui.say,
   progress,
+  pages: createFoundPages(browserStorage()),
+  levels: CAMPAIGN_LEVELS,
   timers: browserTimers,
   clock,
   reducedMotion: () => reduced,
@@ -137,4 +141,4 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else start();
 
 /* Test hook for automated checks: drives the real game logic, no copy. */
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel };
+window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS };

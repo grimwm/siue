@@ -3,6 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../src/game.ts';
+import { createFoundPages } from '../src/pages.ts';
+import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createProgress } from '../src/progress.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { solve, stateKey } from '../src/puzzle/solver.ts';
@@ -10,6 +12,8 @@ import { step } from '../src/puzzle/step.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { trialLevel, TRIALS } from '../src/puzzle/trials.ts';
+import { parse } from '../src/puzzle/level.ts';
+import { mv } from './puzzle-grid.ts';
 import { DELTA } from '../src/puzzle/tiles.ts';
 import type { Action } from '../src/puzzle/step.ts';
 
@@ -18,7 +22,7 @@ function harness() {
   const m = manualClock();
   const progress = createProgress(null);
   const game = createGame({
-    sfx: n => sounds.push(n), say() {}, progress, timers: m.timers, clock: m.clock, reducedMotion: () => false, changed() {},
+    sfx: n => sounds.push(n), say() {}, progress, pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock, reducedMotion: () => false, changed() {},
   });
   return { game, sounds, progress, advance: m.advance };
 }
@@ -129,7 +133,7 @@ function losingLine(): Action[] {
 test('V turns off when a turn ends the try', () => {
   const m = manualClock();
   const game = createGame({
-    sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => false, changed() {},
+    sfx() {}, say() {}, progress: createProgress(null), pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock, reducedMotion: () => false, changed() {},
   });
   game.open(0);
   game.route();
@@ -154,4 +158,73 @@ test('a goes-slack press neither assists nor draws; a finished try ignores Hint,
   assert.equal(h.game.thread, null);
   assert.equal(h.game.playing, false);
   assert.equal(run!.assisted, false);
+});
+
+/* A two-page level served through a stub `levels`: a is on the short way to the exit, b is off it. */
+const PAGED = parse('title: t\nintro: i\npages: a b\n\n######\n#Pp.E#\n#...p#\n######\n');
+const R = mv('right'), D = mv('down'), U = mv('up');
+function paged() {
+  const m = manualClock();
+  const added: string[][] = [];
+  const store = createFoundPages(null);
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    pages: { has: store.has, all: store.all, add: ids => { added.push([...ids]); return store.add(ids); } },
+    levels: { count: 1, id: () => 'paged', level: () => PAGED },
+  });
+  game.open(0);
+  return { game, added };
+}
+
+test('winning with one page taken records it once and exposes it as found', () => {
+  const { game, added } = paged();
+  for (const a of [R, R, R]) game.press(a);
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.deepEqual(added, [['a']]);
+  assert.deepEqual(game.found, ['a']);
+});
+
+test('a page taken and then undone away records nothing; restart and open clear found', () => {
+  const { game, added } = paged();
+  game.press(R);
+  game.press('undo');
+  for (const a of [D, R, R, U, R]) game.press(a);
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.deepEqual(added, [[]]);
+  assert.deepEqual(game.found, []);
+  const w = paged();
+  for (const a of [R, R, R]) w.game.press(a);
+  assert.deepEqual(w.game.found, ['a']);
+  w.game.press('restart');
+  assert.deepEqual(w.game.found, []);
+  for (const a of [R, R, R]) w.game.press(a);
+  assert.deepEqual(w.game.found, [], 'already kept, so not new');
+  w.game.open(0);
+  assert.deepEqual(w.game.found, []);
+});
+
+test('a win with the thread used still records the page', () => {
+  const { game, added } = paged();
+  game.press(R);
+  game.hint();
+  assert.equal(game.run!.assisted, true);
+  game.stop();
+  while (game.run!.now.outcome === 'playing') game.press(R);
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.deepEqual(added.flat(), ['a']);
+});
+
+test('a lost try records nothing', () => {
+  const m = manualClock();
+  const added: string[][] = [];
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    pages: { has: () => false, all: () => [], add: ids => { added.push([...ids]); return [...ids]; } },
+    levels: { count: 1, id: () => 'doomed', level: () => parse('title: t\nintro: i\npages: a\n\n#####\n#PpM#\n#####\n') },
+  });
+  game.open(0);
+  for (let i = 0; i < 30 && game.run!.now.outcome === 'playing'; i++) game.press({ kind: 'wait' });
+  assert.equal(game.run!.now.outcome, 'lost');
+  assert.deepEqual(added, []);
+  assert.deepEqual(game.found, []);
 });

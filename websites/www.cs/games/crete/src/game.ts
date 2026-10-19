@@ -5,15 +5,17 @@
 import type { Clock, Timers } from '../../_kit/ports.ts';
 import { SLIDE_MS, timeline } from './board-plan.ts';
 import type { Figures, Timeline } from './board-plan.ts';
+import type { Levels } from './campaign/chapters.ts';
+import type { FoundPages } from './pages.ts';
 import type { Progress } from './progress.ts';
 import { act, assist, restart, startRun, undo } from './puzzle/run.ts';
 import type { Run } from './puzzle/run.ts';
 import { solve } from './puzzle/solver.ts';
+import { pagesTaken } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
 import { step } from './puzzle/step.ts';
 import type { Action, GameEvent } from './puzzle/step.ts';
 import type { Cell } from './puzzle/tiles.ts';
-import { TRIALS, trialLevel } from './puzzle/trials.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
@@ -29,6 +31,10 @@ export interface GameDeps {
   sfx(name: SfxName): void;
   say(text: string, tone?: Tone): void;
   progress: Progress;
+  /** The story pages found, kept in this browser. */
+  pages: FoundPages;
+  /** The levels played, by index. */
+  levels: Levels;
   /** For the T play-out. */
   timers: Timers;
   /** The animation's time. */
@@ -57,6 +63,8 @@ export interface Game {
   /** T is playing the line out. */
   readonly playing: boolean;
   readonly anim: Anim | null;
+  /** The pages the last win recorded as new; empty after open, undo and restart. */
+  readonly found: readonly string[];
   /** Starts trial `i` fresh (clears assisted). */
   open(i: number): void;
   press(a: Action | 'undo' | 'restart'): void;
@@ -87,6 +95,7 @@ export function createGame(deps: GameDeps): Game {
   let thread: readonly Cell[] | null = null;
   let anim: Anim | null = null;
   let tick: number | null = null;
+  let found: readonly string[] = [];
   /** V is on: the line from the try as it stands stays drawn through every turn. */
   let threadOn = false;
 
@@ -153,7 +162,10 @@ export function createGame(deps: GameDeps): Game {
     voice(r.events, before, run.now);
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
     anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before } : null;
-    if (run.now.outcome === 'won') deps.progress.record(TRIALS[trial]!.id, run.now.moves, run.assisted);
+    if (run.now.outcome === 'won') {
+      deps.progress.record(deps.levels.id(trial), run.now.moves, run.assisted);
+      found = deps.pages.add(pagesTaken(run.now));
+    }
     redraw();
     deps.changed();
     return true;
@@ -223,10 +235,12 @@ export function createGame(deps: GameDeps): Game {
     get thread() { return thread; },
     get playing() { return tick !== null; },
     get anim() { return anim; },
+    get found() { return found; },
     open(i) {
       stop();
       trial = i;
-      run = startRun(trialLevel(i));
+      run = startRun(deps.levels.level(i));
+      found = [];
       threadOn = false;
       thread = null;
       anim = null;
@@ -239,6 +253,7 @@ export function createGame(deps: GameDeps): Game {
       stop();
       if (a === 'undo' || a === 'restart') {
         run = a === 'undo' ? undo(run) : restart(run);
+        found = [];
         redraw();
         deps.changed();
         return;

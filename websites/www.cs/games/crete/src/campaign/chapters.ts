@@ -3,6 +3,7 @@
  * play order; a level index is a place in it. DOM-free. */
 import type { ChapterLore } from './lore.ts';
 import { CHAPTER_1 } from './chapter-1.ts';
+import type { Level } from '../puzzle/level.ts';
 import { TRIALS, trialLevel } from '../puzzle/trials.ts';
 
 export interface Chapter { n: number; name: string; released: boolean; levelIds: readonly string[]; lore: ChapterLore | null }
@@ -19,6 +20,16 @@ export const CHAPTERS: readonly Chapter[] = [
 ];
 
 export const LEVEL_IDS: readonly string[] = CHAPTERS.filter(c => c.released).flatMap(c => c.levelIds);
+
+/** What the controller plays: a count, and each level's id and level by index. */
+export interface Levels { readonly count: number; id(i: number): string; level(i: number): Level }
+
+/** LEVEL_IDS, each built from its trial. */
+export const CAMPAIGN_LEVELS: Levels = {
+  count: LEVEL_IDS.length,
+  id: i => LEVEL_IDS[i]!,
+  level: i => trialLevel(TRIALS.findIndex(t => t.id === LEVEL_IDS[i])),
+};
 
 /** The chapter that holds level `levelIndex`, and the level's 0-based place in it. */
 export function chapterOf(levelIndex: number): { chapter: Chapter; within: number } {

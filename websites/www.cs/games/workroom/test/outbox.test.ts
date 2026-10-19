@@ -1,0 +1,127 @@
+// The outbox: a note is stored before it is sent, so nothing is lost; offline,
+// over the limits, signed out or refused, it stays with a reason; online again,
+// it goes, in the order the notes were made; only Discard drops one.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { KEPT_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
+import type { OutboxLock } from '../src/outbox.ts';
+import { SignedOut, type UploadResult } from '../src/api.ts';
+import { MAX_NOTE_BYTES } from '../src/note.ts';
+
+const keys = () => { let k = 0; return () => `k${++k}`; };
+const one = (b: number) => new Uint8Array([b]);
+const SENT = (id = 'f'.repeat(32)): UploadResult => ({ kind: 'sent', id });
+
+test('a note is in the store while it is sent, and leaves it once sent', async () => {
+  const store = memoryOutbox();
+  const seen: number[] = [];
+  const box = createOutbox(store, { upload: async () => { seen.push((await store.all()).length); return SENT(); } }, keys());
+  const r = await box.add(one(1), '2026-10-20T00:00:00.000Z');
+  assert.deepEqual(seen, [1]);
+  assert.deepEqual(r, { key: 'k1', memoryOnly: true, sent: [{ key: 'k1', id: 'f'.repeat(32) }], kept: [] });
+  assert.deepEqual(await store.all(), []);
+});
+
+test('offline keeps every note and stops trying after the first failure', async () => {
+  const store = memoryOutbox();
+  let calls = 0;
+  const box = createOutbox(store, { upload: async () => { calls++; throw new TypeError('Failed to fetch'); } }, keys());
+  await box.add(one(1), '2026-10-20T00:00:01.000Z');
+  const r = await box.add(one(2), '2026-10-20T00:00:02.000Z');
+  assert.deepEqual(r.kept, [{ key: 'k1', reason: 'offline' }, { key: 'k2', reason: 'offline' }]);
+  assert.equal(calls, 2, 'one try per flush: the second flush stopped at the first note');
+  assert.deepEqual((await store.all()).map(p => p.reason), ['offline', 'offline']);
+  assert.match(KEPT_MESSAGES.offline, /kept on this device/);
+});
+
+test('refusals, a lost session and a server error keep the note with their reason', async () => {
+  const cases: [() => Promise<UploadResult>, string][] = [
+    [async () => ({ kind: 'refused', reason: 'too_large' }), 'too_large'],
+    [async () => ({ kind: 'refused', reason: 'full' }), 'full'],
+    [async () => ({ kind: 'refused', reason: 'unknown_key' }), 'unknown_key'],
+    [async () => { throw new SignedOut('x'); }, 'signed_out'],
+    [async () => { throw new Error('The server answered 500.'); }, 'server'],
+  ];
+  for (const [upload, reason] of cases) {
+    const store = memoryOutbox();
+    const r = await createOutbox(store, { upload }, keys()).add(one(1), 'a');
+    assert.deepEqual(r.kept.map(x => x.reason), [reason]);
+    assert.equal((await store.all())[0]?.reason, reason);
+    assert.ok(KEPT_MESSAGES[reason as keyof typeof KEPT_MESSAGES].length > 0);
+  }
+});
+
+test('a note over 2 MB is never sent and does not hold up the next one', async () => {
+  const store = memoryOutbox();
+  const sizes: number[] = [];
+  const box = createOutbox(store, { upload: async b => { sizes.push(b.length); return SENT(); } }, keys());
+  const big = await box.add(new Uint8Array(MAX_NOTE_BYTES + 1), '2026-10-20T00:00:01.000Z');
+  assert.deepEqual(big.kept, [{ key: 'k1', reason: 'too_large' }]);
+  const small = await box.add(one(2), '2026-10-20T00:00:02.000Z');
+  assert.deepEqual([small.sent.map(s => s.key), small.kept], [['k2'], [{ key: 'k1', reason: 'too_large' }]]);
+  assert.deepEqual(sizes, [1]);
+  assert.match(KEPT_MESSAGES.too_large, /2 MB/);
+});
+
+test('back online, kept notes go in the order they were made', async () => {
+  const store = memoryOutbox();
+  let online = false;
+  const sent: number[] = [];
+  const box = createOutbox(store, { upload: async b => { if (!online) throw new TypeError('offline'); sent.push(b[0]!); return SENT(); } }, keys());
+  await box.add(one(2), '2026-10-20T00:00:02.000Z');
+  await box.add(one(1), '2026-10-20T00:00:01.000Z');
+  online = true;
+  const r = await box.flush();
+  assert.deepEqual([sent, r.sent.length, (await store.all()).length], [[1, 2], 2, 0]);
+});
+
+test('two sends at once never send a note twice', async () => {
+  const store = memoryOutbox();
+  const uploaded: number[] = [];
+  const box = createOutbox(store, { upload: async b => { await new Promise(r => setTimeout(r, 5)); uploaded.push(b[0]!); return SENT(); } }, keys());
+  await Promise.all([box.add(one(1), 'a'), box.add(one(2), 'b'), box.flush()]);
+  assert.deepEqual(uploaded, [1, 2]);
+});
+
+test('the 2,000-note limit is named from the limit itself', () => {
+  assert.match(KEPT_MESSAGES.full, /holds 2,000 notes/);
+});
+
+test('with a lock, two tabs on one store upload each kept note once; without it they can upload it twice', async () => {
+  const mutex = (): OutboxLock => { let tail: Promise<unknown> = Promise.resolve(); return work => { const next = tail.then(work, work); tail = next.catch(() => undefined); return next; }; };
+  const run = async (lock: OutboxLock | null): Promise<number[]> => {
+    const store = memoryOutbox();
+    const uploaded: number[] = [];
+    let online = false;
+    const api = { upload: async (b: Uint8Array<ArrayBuffer>): Promise<UploadResult> => { if (!online) throw new TypeError('offline'); await new Promise(r => setTimeout(r, 5)); uploaded.push(b[0]!); return SENT(); } };
+    const tabA = createOutbox(store, api, keys(), lock);
+    const tabB = createOutbox(store, api, () => 'other', lock);
+    await tabA.add(one(1), '2026-10-20T00:00:01.000Z');
+    await tabA.add(one(2), '2026-10-20T00:00:02.000Z');
+    online = true;
+    await Promise.all([tabA.flush(), tabB.flush()]);
+    return uploaded;
+  };
+  assert.deepEqual(await run(mutex()), [1, 2], 'each note once, in order');
+  assert.ok((await run(null)).length > 2, 'the control: without the lock the same notes go twice');
+});
+
+test('Discard drops an unsent note; pending lists the rest in order', async () => {
+  const store = memoryOutbox();
+  const box = createOutbox(store, { upload: async () => { throw new TypeError('offline'); } }, keys());
+  await box.add(one(1), '2026-10-20T00:00:02.000Z');
+  await box.add(one(2), '2026-10-20T00:00:01.000Z');
+  assert.deepEqual((await box.pending()).map(p => p.key), ['k2', 'k1']);
+  await box.discard('k1');
+  assert.deepEqual((await box.pending()).map(p => p.key), ['k2']);
+});
+
+test('only idb.ts names IndexedDB, and it keeps nothing but the pending record', () => {
+  const outbox = readFileSync(new URL('../src/outbox.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(outbox, /indexedDB|localStorage|sessionStorage|document\.cookie|\bcaches\b/);
+  const idb = readFileSync(new URL('../src/idb.ts', import.meta.url), 'utf8');
+  assert.match(idb, /'siue-music'/);
+  assert.match(idb, /'outbox'/);
+  assert.doesNotMatch(idb, /localStorage|sessionStorage|document\.cookie|\bcaches\b|passphrase|keyring|CryptoKey/);
+});

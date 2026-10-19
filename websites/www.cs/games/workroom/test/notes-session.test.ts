@@ -135,10 +135,12 @@ test('a lock wins against a history still downloading', async () => {
   await notes.send(note('a'), null);
   let release!: () => void;
   const gate = new Promise<void>(r => { release = r; });
+  let reached!: () => void;
+  const downloading = new Promise<void>(r => { reached = r; });
   const bytes = s.api.bytes;
-  s.api.bytes = async id => { await gate; return bytes(id); };
+  s.api.bytes = async id => { reached(); await gate; return bytes(id); };
   const pending = notes.history();
-  await new Promise(r => setTimeout(r, 10));
+  await downloading;
   notes.lock();
   release();
   assert.deepEqual((await pending).map(i => i.opened), [null]);

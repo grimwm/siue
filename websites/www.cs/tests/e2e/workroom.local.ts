@@ -139,8 +139,10 @@ function pickup(base: string, pickupKey: string): { run: SpawnSyncReturns<string
     ],
   }] }), { mode: 0o600 });
   const python = process.env.MUSIC_PY ?? 'python3';
+  // spawnSync blocks the event loop, so Playwright's own timeout cannot end a stuck pickup: this one does.
   const run = spawnSync(python, [join(TOOLS, 'siue-music'), 'pickup'], {
     encoding: 'utf8',
+    timeout: 180_000,
     env: {
       ...process.env,
       SIUE_CONFIG_DIR: home, SIUE_MUSIC_NOTES_DIR: join(home, 'notes'), SIUE_MUSIC_BASE: `${base}music/`,
@@ -518,42 +520,45 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
 
     // A second device: a phone signs in, unlocks with the passphrase, reads, deletes. Nothing of a key is stored.
     const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    await phone.addInitScript((views: readonly string[]) => { for (const v of views) { localStorage.setItem(`workroom-guide-${v}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${v}`, 'seen'); } }, GUIDE_VIEWS);
-    const p2 = await phone.newPage();
-    await signIn(p2, base);
-    await p2.goto(`${base}music/piece.php?id=test-piece`);
-    await unlock(p2, 'not it');
-    await expect(p2.getByText('That passphrase did not unlock the key.')).toBeVisible();
-    await p2.getByLabel('Passphrase').fill(testKey.passphrase);
-    await p2.getByRole('button', { name: 'Unlock notes' }).click();
-    await expect(p2.getByText('louder and slower right here')).toBeVisible();
-    const stored = await p2.evaluate(async () => {
-      const stores: string[] = [];
-      for (const info of await indexedDB.databases()) {
-        if (!info.name) continue;
-        const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open(info.name!); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-        stores.push(...Array.from(db.objectStoreNames).map(s => `${info.name}/${s}`));
-        db.close();
-      }
-      const local = Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)]));
-      return { local, session: Object.keys(sessionStorage), stores, cookies: document.cookie, caches: typeof caches === 'undefined' ? [] : await caches.keys() };
-    });
-    expect(Object.keys(stored.local).filter(k => !/^workroom-(guide-|theme$)/.test(k))).toEqual([]);
-    expect(stored.session).toEqual([]);
-    expect(stored.stores.filter(s => s !== 'siue-music/outbox')).toEqual([]);
-    expect(stored.cookies).toBe('');
-    expect(stored.caches).toEqual([]);
-    expect(JSON.stringify(stored)).not.toContain(testKey.passphrase);
-    await p2.reload();
-    await openNotes(p2);
-    await expect(p2.getByRole('button', { name: 'Unlock notes' })).toBeVisible();
-    await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
-    await unlock(p2, testKey.passphrase);
-    await p2.locator('[data-note]', { hasText: 'louder and slower right here' }).getByRole('button', { name: /^Delete note from/ }).click();
-    // Delete asks first, in words.
-    await p2.getByRole('group', { name: /^Delete note from/ }).getByRole('button', { name: 'Delete it' }).click();
-    await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
-    await phone.close();
+    try {
+      await phone.addInitScript((views: readonly string[]) => { for (const v of views) { localStorage.setItem(`workroom-guide-${v}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${v}`, 'seen'); } }, GUIDE_VIEWS);
+      const p2 = await phone.newPage();
+      await signIn(p2, base);
+      await p2.goto(`${base}music/piece.php?id=test-piece`);
+      await unlock(p2, 'not it');
+      await expect(p2.getByText('That passphrase did not unlock the key.')).toBeVisible();
+      await p2.getByLabel('Passphrase').fill(testKey.passphrase);
+      await p2.getByRole('button', { name: 'Unlock notes' }).click();
+      await expect(p2.getByText('louder and slower right here')).toBeVisible();
+      const stored = await p2.evaluate(async () => {
+        const stores: string[] = [];
+        for (const info of await indexedDB.databases()) {
+          if (!info.name) continue;
+          const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open(info.name!); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+          stores.push(...Array.from(db.objectStoreNames).map(s => `${info.name}/${s}`));
+          db.close();
+        }
+        const local = Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)]));
+        return { local, session: Object.keys(sessionStorage), stores, cookies: document.cookie, caches: typeof caches === 'undefined' ? [] : await caches.keys() };
+      });
+      expect(Object.keys(stored.local).filter(k => !/^workroom-(guide-|theme$)/.test(k))).toEqual([]);
+      expect(stored.session).toEqual([]);
+      expect(stored.stores.filter(s => s !== 'siue-music/outbox')).toEqual([]);
+      expect(stored.cookies).toBe('');
+      expect(stored.caches).toEqual([]);
+      expect(JSON.stringify(stored)).not.toContain(testKey.passphrase);
+      await p2.reload();
+      await openNotes(p2);
+      await expect(p2.getByRole('button', { name: 'Unlock notes' })).toBeVisible();
+      await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
+      await unlock(p2, testKey.passphrase);
+      await p2.locator('[data-note]', { hasText: 'louder and slower right here' }).getByRole('button', { name: /^Delete note from/ }).click();
+      // Delete asks first, in words.
+      await p2.getByRole('group', { name: /^Delete note from/ }).getByRole('button', { name: 'Delete it' }).click();
+      await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
+    } finally {
+      await phone.close();
+    }
   } finally {
     await context.close();
   }

@@ -79,7 +79,7 @@ export function Kept(p: { kept: readonly Pending[]; busy: boolean; onDiscard(key
       <span class={SMALL_CAPS}>Not sent yet</span>
       <ul class="grid gap-2">
         {p.kept.map(k => (
-          <li data-kept-note={k.key} class="grid gap-1 rounded-md border border-rule bg-well p-3">
+          <li key={k.key} data-kept-note={k.key} class="grid gap-1 rounded-md border border-rule bg-well p-3">
             <span class="font-mono text-xs text-dim">Made {stamp(new Date(k.made))}</span>
             <p class="text-sm">{k.reason === 'new' ? 'Sending…' : KEPT_MESSAGES[k.reason]}</p>
             {asking === k.key ? (
@@ -114,7 +114,7 @@ export function History(p: HistoryProps) {
             const n = p.numberOf(i.id);
             const answered = p.answers(i.id);
             return (
-              <li data-note={i.id} class="grid gap-1 rounded-md border border-rule bg-well p-3">
+              <li key={i.id} data-note={i.id} class="grid gap-1 rounded-md border border-rule bg-well p-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <span class="font-mono text-xs text-dim">{n !== null ? `#${n} · ` : ''}{arrivedAt(i.arrived)}</span>
                   <span data-state={i.state} class={cx('font-mono text-xs tracking-widest uppercase', i.state === 'waiting' ? 'text-amber' : 'text-go')}>{i.state === 'waiting' ? 'Waiting' : 'Picked up'}</span>

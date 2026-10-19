@@ -4,7 +4,7 @@
 // then the history of this piece (or all pieces). The notes not sent yet are
 // listed either way. The outbox is flushed when the panel opens and
 // whenever the browser comes back online.
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { SignedOut } from '../api.ts';
 import { answeredBy, forPiece, timelineMarks } from '../history.ts';
 import type { HistoryItem } from '../history.ts';
@@ -44,6 +44,7 @@ export function Answers(p: AnswersProps) {
     if (!p.notes.unlocked()) { setUnlocked(false); return; }
     try {
       const all = await p.notes.history();
+      if (!p.notes.unlocked()) { setItems([]); setUnlocked(false); return; }
       setItems(all);
       p.onItems(all);
       setError(null);
@@ -56,7 +57,9 @@ export function Answers(p: AnswersProps) {
     try { await work(); } catch (e) { fail(e); } finally { setBusy(false); }
     await load();
   };
-  useEffect(() => { void load(); }, [p.refresh]);
+  const mounted = useRef(false);
+  // The first load follows the mount's flush below; a later refresh loads at once.
+  useEffect(() => { if (mounted.current) void load(); mounted.current = true; }, [p.refresh]);
   useEffect(() => {
     void p.notes.flush().then(load, load);
     const again = (): void => { void p.notes.flush().then(load, load); };

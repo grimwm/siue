@@ -253,3 +253,21 @@ test('an unlock overtaken by a lock does not open the panel', async () => {
   assert.equal(unlockedCalls, 0);
   assert.ok(byAttr(root, 'autocomplete', 'current-password'));
 });
+
+test('a lock that overtakes the history in flight leaves the unlock form, not the unopened notes', async () => {
+  let open = true;
+  const seen: number[] = [];
+  const notes = fakeSession({ unlocked: () => open, history: async () => { open = false; return [item('a')]; } });
+  const root = await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: (i: readonly HistoryItem[]) => seen.push(i.length) }));
+  await settle();
+  assert.ok(byAttr(root, 'autocomplete', 'current-password'), 'the unlock form is up');
+  assert.equal(walk(root).some(e => e._attrs['data-note'] !== undefined), false);
+  assert.deepEqual(seen, []);
+});
+
+test('opening the panel loads the notes once', async () => {
+  const notes = fakeSession({ unlocked: () => true });
+  await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: () => {} }));
+  await settle();
+  assert.equal(notes.calls.filter(c => c === 'history').length, 1);
+});

@@ -19,7 +19,7 @@ declare global {
   interface Window { __creteTest: CreteTest }
 }
 
-/** Title card, Play, the trial list, trial 1: the start card is up when this returns. */
+/** Title card, Play, the chapter card, Enter the halls: level 1's start card is up when this returns. */
 async function openTrial1(page: Page): Promise<string[]> {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -27,15 +27,25 @@ async function openTrial1(page: Page): Promise<string[]> {
   await page.goto(PAGE);
   await expect(page.locator('#title-veil')).toBeVisible();
   await page.locator('#title-play').click();
-  await expect(page.locator('#trials-veil')).toBeVisible();
-  await page.locator('#trial-1').click();
-  await expect(page.locator('#trials-veil')).toBeHidden();
-  await expect(page.locator('#start-veil'), 'a trial opens on its start card').toBeVisible();
+  await expect(page.locator('#chapter-veil'), 'Play opens the chapter card').toBeVisible();
+  await expect(page.locator('#chapter-title')).toHaveText('The Outer Halls');
+  await page.locator('#chapter-enter').click();
+  await expect(page.locator('#chapter-veil')).toBeHidden();
+  await expect(page.locator('#start-veil'), 'a level opens on its start card').toBeVisible();
+  await expect(page.locator('#start-veil .kicker')).toHaveText('Chapter 1 · Level 1');
   await expect(page.locator('#start-intro')).not.toHaveText('');
   return errors;
 }
 
-/** Opens trial 1 and closes its start card with Begin. */
+/** N, then level 1 from the list: the chapter card shows first, and Enter the halls opens level 1. */
+async function openLevel1FromList(page: Page): Promise<void> {
+  await page.keyboard.press('n');
+  await page.locator('#level-1').click();
+  await expect(page.locator('#chapter-veil')).toBeVisible();
+  await page.locator('#chapter-enter').click();
+}
+
+/** Opens level 1 and closes its start card with Begin. */
 async function beginTrial1(page: Page): Promise<string[]> {
   const errors = await openTrial1(page);
   await page.locator('#start-begin').click();
@@ -106,16 +116,14 @@ test('the start card: Begin, Enter, a move key and Q each close it; a move key a
   expect((await now(page)).moves).toBe(0);
 
   await page.locator('#btn-restart').click();
-  await page.keyboard.press('n');
-  await page.locator('#trial-1').click();
+  await openLevel1FromList(page);
   await expect(page.locator('#start-veil')).toBeVisible();
   const step = (await line(page)).find(s => s !== 'wait' && s !== 'tool')!; // a move key, not a wait
   await page.keyboard.press(KEY[step]!);
   await expect(page.locator('#start-veil')).toBeHidden();
   expect((await now(page)).moves).toBe(1);
 
-  await page.keyboard.press('n');
-  await page.locator('#trial-1').click();
+  await openLevel1FromList(page);
   await expect(page.locator('#start-veil')).toBeVisible();
   await page.keyboard.press('q');
   await expect(page.locator('#start-veil')).toBeHidden();
@@ -156,13 +164,15 @@ test('Hint, Route, Auto and a tool answer; Restart begins the trial again', asyn
   expect(errors).toEqual([]);
 });
 
-test('N opens the trial list, which has eight trials; M mutes and the menu remembers it', async ({ page }) => {
+test('N opens the level list, which has ten levels and ten chapter tabs; M mutes and the menu remembers it', async ({ page }) => {
   const errors = await beginTrial1(page);
   await page.keyboard.press('n');
-  await expect(page.locator('#trials-veil')).toBeVisible();
-  for (let i = 1; i <= 8; i++) await expect(page.locator(`#trial-${i}`)).toBeVisible();
+  await expect(page.locator('#levels-veil')).toBeVisible();
+  for (let i = 1; i <= 10; i++) await expect(page.locator(`#level-${i}`)).toBeVisible();
+  for (let n = 1; n <= 10; n++) await expect(page.locator(`#levels-tab-${n}`)).toBeVisible();
+  await expect(page.locator('#levels-tab-2')).toBeDisabled();
   await page.keyboard.press('q');
-  await expect(page.locator('#trials-veil')).toBeHidden();
+  await expect(page.locator('#levels-veil')).toBeHidden();
   await page.keyboard.press('m');
   await page.keyboard.press('q');
   await expect(page.locator('#mute')).toContainText('Muted');
@@ -172,10 +182,23 @@ test('N opens the trial list, which has eight trials; M mutes and the menu remem
   expect(errors).toEqual([]);
 });
 
-test('a ?seed= link opens trial 1 with no title card', async ({ page }) => {
+test('a ?seed= link opens Chapter 1\'s card with no title card, and Enter starts level 1', async ({ page }) => {
   await page.goto(`${PAGE}?seed=stefan-1984`);
   await expect(page.locator('#title-veil')).toBeHidden();
+  await expect(page.locator('#chapter-veil')).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#chapter-veil')).toBeHidden();
   await expect(page.locator('#hud-trial')).toHaveText('1/10');
+  await expect(page.locator('#start-veil')).toBeVisible();
+});
+
+test('Enter the halls starts the first level this browser has not cleared', async ({ page }) => {
+  await page.goto(PAGE);
+  await page.evaluate(() => localStorage.setItem('crete-progress', JSON.stringify({ 'trial-1': { cleared: true, best: 20 }, 'trial-2': { cleared: true, best: null } })));
+  await page.reload();
+  await page.locator('#title-play').click();
+  await page.locator('#chapter-enter').click();
+  await expect(page.locator('#hud-trial')).toHaveText('3/10');
   await expect(page.locator('#start-veil')).toBeVisible();
 });
 
@@ -191,10 +214,11 @@ test('a win leads on: Next trial shows trial 2\'s start card, and the list keeps
   await expect(page.locator('#hud-trial')).toHaveText('2/10');
   const cleared = `cleared · best ${steps.length}`;
   await page.keyboard.press('n');
-  await expect(page.locator('#trial-1')).toContainText(cleared);
+  await expect(page.locator('#level-1')).toContainText(cleared);
   await page.reload();
   await page.locator('#title-play').click();
-  await expect(page.locator('#trial-1')).toContainText(cleared);
+  await page.locator('#chapter-levels').click();
+  await expect(page.locator('#level-1')).toContainText(cleared);
   expect(errors).toEqual([]);
 });
 
@@ -218,7 +242,7 @@ test('a missing tiles.png says so, loudly, instead of leaving a blank board', as
   expect(logged.some(t => /tiles\.png/.test(t))).toBe(true);
 });
 
-test('Quit in the menu ends the try and shows the title card in a browser tab; Play opens the trial list', async ({ page }) => {
+test('Quit in the menu ends the try and shows the title card in a browser tab; Play opens Chapter 1\'s card', async ({ page }) => {
   const errors = await beginTrial1(page);
   await page.keyboard.press('q');
   await page.locator('#quit').click();
@@ -226,7 +250,7 @@ test('Quit in the menu ends the try and shows the title card in a browser tab; P
   await expect(page.locator('#menu-veil')).toBeHidden();
   await expect(page.locator('#title-hint')).toHaveCount(0);
   await page.locator('#title-play').click();
-  await expect(page.locator('#trials-veil')).toBeVisible();
+  await expect(page.locator('#chapter-veil')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -279,7 +303,7 @@ test('Full screen from the menu takes the Esc lock; Esc changes nothing and the 
   page.on('console', m => { if (/Keyboard Lock refused/.test(m.text())) errors.push(m.text()); });
   await page.goto(PAGE);
   await page.locator('#title-play').click();
-  await page.locator('#trial-1').click();
+  await page.locator('#chapter-enter').click();
   await page.keyboard.press('q'); // closes the start card
   await page.keyboard.press('q');
   await page.locator('#fullscreen').click();

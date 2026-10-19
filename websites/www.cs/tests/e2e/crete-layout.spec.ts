@@ -1,9 +1,9 @@
 // The Island of Crete on ten screens: the frame fills the window, nothing scrolls, every control is on screen
 // and not clipped, no control covers the board, the board keeps at least 8 px per cell, and key tabs show only
-// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The trial list and the start card are
-// checked too, and trial 8, the largest board, at the smallest phone sizes.
+// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The chapter card, the level list and the start card are
+// checked too, and level 8, the largest board, at the smallest phone sizes.
 import { test, expect } from '@playwright/test';
-import type { Browser } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 
 type Device = [name: string, width: number, height: number, touch: boolean];
 const DEVICES: Device[] = [
@@ -28,7 +28,7 @@ async function open(browser: Browser, [, width, height, touch]: Device) {
 /** The widest values the status bar can show. */
 function setWorst() {
   const put = (id: string, v: string) => { document.getElementById(id)!.textContent = v; };
-  put('hud-trial', '8/8'); put('hud-hearts', '♥ 99'); put('hud-relics', '99/99'); put('hud-keys', '9 9 9 9');
+  put('hud-trial', '10/10'); put('hud-hearts', '♥ 99'); put('hud-relics', '99/99'); put('hud-keys', '9 9 9 9');
   put('hud-gear', 'fire ice water'); put('hud-moves', '99999');
 }
 
@@ -67,6 +67,14 @@ const cardFits = (sel: string) => {
   return card.left >= -0.5 && card.top >= -0.5 && card.right <= innerWidth + 0.5 && card.bottom <= innerHeight + 0.5;
 };
 
+/** Play, the chapter card's Levels, then level `n`; level 1 shows the chapter card first, so Enter the halls follows. */
+async function openLevel(page: Page, n: number): Promise<void> {
+  await page.locator('#title-play').click();
+  await page.locator('#chapter-levels').click();
+  await page.locator(`#level-${n}`).click();
+  if (n === 1) await page.locator('#chapter-enter').click();
+}
+
 for (const device of DEVICES) {
   const [name, width, , touch] = device;
   test(`${name}: the frame fits, the board keeps 8 px cells, tabs follow the keyboard`, async ({ browser }) => {
@@ -76,11 +84,21 @@ for (const device of DEVICES) {
     expect(await page.evaluate(cardFits, '#title-veil .card'), 'title card on screen').toBe(true);
     for (const id of ['title-play', 'title-story', 'title-settings']) await expect(page.locator(`#${id}`)).toBeVisible();
     await page.locator('#title-play').click();
-    await expect(page.locator('#trials-veil')).toBeVisible();
-    expect(await page.evaluate(cardFits, '#trials-veil .card'), 'trial list on screen').toBe(true);
-    for (let i = 1; i <= 8; i++) await expect(page.locator(`#trial-${i}`)).toBeVisible();
-    await page.locator('#trial-1').click();
-    await expect(page.locator('#trials-veil')).toBeHidden();
+    // Play opens Chapter 1's card, with both its buttons on screen; Levels opens the list over it.
+    await expect(page.locator('#chapter-veil')).toBeVisible();
+    expect(await page.evaluate(cardFits, '#chapter-veil .card'), 'chapter card on screen').toBe(true);
+    for (const id of ['chapter-enter', 'chapter-levels']) await expect(page.locator(`#${id}`)).toBeVisible();
+    await page.locator('#chapter-levels').click();
+    await expect(page.locator('#levels-veil')).toBeVisible();
+    expect(await page.evaluate(cardFits, '#levels-veil .card'), 'level list on screen').toBe(true);
+    for (let n = 1; n <= 10; n++) await expect(page.locator(`#levels-tab-${n}`)).toBeVisible();
+    for (let i = 1; i <= 10; i++) await expect(page.locator(`#level-${i}`)).toBeVisible();
+    // Level 1 from the list shows the chapter card first; Enter the halls opens it.
+    await page.locator('#level-1').click();
+    await expect(page.locator('#levels-veil')).toBeHidden();
+    await expect(page.locator('#chapter-veil')).toBeVisible();
+    await page.locator('#chapter-enter').click();
+    await expect(page.locator('#chapter-veil')).toBeHidden();
 
     // The start card sits over the board with its Begin button on screen.
     await expect(page.locator('#start-veil')).toBeVisible();
@@ -106,12 +124,11 @@ for (const device of DEVICES) {
   });
 }
 
-// Trial 8 is the largest board (12 x 10): it must still keep 8 px cells and every control on the smallest phone.
+// Level 8 is the largest board of the first eight (12 x 10): it must still keep 8 px cells and every control on the smallest phone.
 for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE'))) {
-  test(`${device[0]}: trial 8, the largest board, keeps 8 px cells and every control on screen`, async ({ browser }) => {
+  test(`${device[0]}: level 8, the largest board, keeps 8 px cells and every control on screen`, async ({ browser }) => {
     const { ctx, page, errors } = await open(browser, device);
-    await page.locator('#title-play').click();
-    await page.locator('#trial-8').click();
+    await openLevel(page, 8);
     await page.locator('#start-begin').click();
     await expect(page.locator('#start-veil')).toBeHidden();
     await page.waitForSelector('#stage[data-cell]');
@@ -129,8 +146,7 @@ for (const device of DEVICES) {
     const { ctx, page, errors } = await open(browser, device);
     for (let i = 1; i <= 9; i++) {
       await page.goto('games/crete/');
-      await page.locator('#title-play').click();
-      await page.locator(`#trial-${i}`).click();
+      await openLevel(page, i);
       await page.locator('#start-begin').click();
       await expect(page.locator('#start-veil')).toBeHidden();
       await page.waitForSelector('#stage[data-cell]');
@@ -167,8 +183,7 @@ const MOVE: Record<string, string> = { up: '.mv-up', down: '.mv-down', left: '.m
 for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') || d[0].startsWith('iPhone 15, portrait'))) {
   test(`${device[0]}: level 10 scrolls inside the board and keeps Theseus in view`, async ({ browser }) => {
     const { ctx, page, errors } = await open(browser, device);
-    await page.locator('#title-play').click();
-    await page.locator('#trial-10').click();
+    await openLevel(page, 10);
     await page.locator('#start-begin').click();
     await expect(page.locator('#start-veil')).toBeHidden();
     await page.waitForSelector('#stage[data-cell]');

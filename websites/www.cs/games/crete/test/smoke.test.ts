@@ -47,6 +47,12 @@ test('the game reaches no function the site script defines', { skip: !existsSync
   assert.deepEqual(reached, []);
 });
 
+test('Play and a ?seed= link open the chapter card', () => {
+  const main = read('src/main.ts');
+  assert.match(main, /function play\(\)[^}]*ui\.showChapter\(1, false\)/);
+  assert.match(main, /if \(direct\) \{[^}]*ui\.showChapter\(1, false\)/);
+});
+
 test('the entry follows the page: hidden ends the play-out', () => {
   const main = read('src/main.ts');
   assert.match(main, /followPage\(\{ doc: document, win: window \}, \{ hide: game\.stop, show: \(\) => \{\} \}\)/);
@@ -60,7 +66,7 @@ test('the page is one frame: no header, side panels or seed form, the board is a
   const frame = html.slice(html.indexOf('<div id="frame"'), html.indexOf('<script type="module"'));
   assert.ok(frame.length > 0, 'a #frame');
   assert.match(frame, /<canvas id="stage" class="stage" role="img" aria-label="The labyrinth"><\/canvas>/);
-  for (const id of ['status-root', 'board', 'stage', 'toast', 'strip-root', 'title-root', 'menu-root', 'trials-root', 'start-root', 'story-root', 'end-root']) {
+  for (const id of ['status-root', 'board', 'stage', 'toast', 'strip-root', 'title-root', 'menu-root', 'levels-root', 'chapter-root', 'start-root', 'story-root', 'end-root']) {
     assert.ok(frame.includes(`id="${id}"`), `${id} inside #frame`);
   }
 });

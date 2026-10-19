@@ -30,7 +30,7 @@ export const KEYS: Record<Action, KeyDef> = {
   route: { label: "V", keys: ["v"] },
   auto: { label: "T", keys: ["t"] },
   mute: { label: "M", keys: ["m"] },
-  /** Opens the trial list. */
+  /** Opens the level list. */
   new: { label: "N", keys: ["n"] },
   // Q is read with isBackKey; this row only names it.
   menu: { label: BACK_KEY, keys: [] },

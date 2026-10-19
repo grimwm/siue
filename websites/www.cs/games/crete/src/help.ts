@@ -48,7 +48,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
       { strong: `Route (${k("route")})` }, " draws the whole thread. ",
       { strong: `Auto (${k("auto")})` }, " plays it for you. ",
       { strong: k("mute") }, " toggles sound, ",
-      { strong: k("new") }, " opens the trial list, and ",
+      { strong: k("new") }, " opens the level list, and ",
       { strong: k("menu") }, " opens this menu and closes whatever is open.",
     ],
   ];

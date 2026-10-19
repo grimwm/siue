@@ -70,16 +70,33 @@ test('close and clear tell the page only when something changed', () => {
   assert.equal(changes(), 2);
 });
 
-test('the trial list opens over the title card or the ending card; Q returns to what it came from', () => {
+test('the levels list opens over the title card or the ending card; Q returns to what it came from', () => {
   const { layers } = make();
   layers.open('title');
-  layers.open('trials');
-  assert.equal(layers.top(), 'trials');
+  layers.open('levels');
+  assert.equal(layers.top(), 'levels');
   assert.equal(layers.pressBack(), 'closed');
   assert.equal(layers.top(), 'title');
   layers.clear();
   layers.open('end');
-  layers.open('trials');
+  layers.open('levels');
   assert.equal(layers.pressBack(), 'closed');
   assert.equal(layers.top(), 'end');
+});
+
+test('the chapter card is closed by Q like any other card, and the levels list opens over it', () => {
+  const { layers } = make();
+  layers.open('title');
+  layers.open('chapter');
+  assert.equal(layers.pressBack(), 'closed');
+  assert.equal(layers.top(), 'title');
+  layers.open('chapter');
+  layers.open('levels');
+  assert.equal(layers.top(), 'levels');
+  assert.equal(layers.pressBack(), 'closed');
+  assert.equal(layers.top(), 'chapter');
+  layers.clear();
+  layers.open('chapter');
+  assert.equal(layers.pressBack(), 'closed');
+  assert.equal(layers.any(), false);
 });

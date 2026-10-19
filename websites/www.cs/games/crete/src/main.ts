@@ -1,4 +1,4 @@
-/* Entry: wires the game, the board, audio and the UI, opens the title card (or, with ?seed=, the first trial),
+/* Entry: wires the game, the board, audio and the UI, opens the title card (or, with ?seed=, Chapter 1's card over it),
  * and exposes window.__creteTest for the browser specs. */
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
 import { createAudio } from './audio.ts';
@@ -80,10 +80,10 @@ function onFullscreenChange(): void {
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
-/* Play on the title card opens the trial list. A click is the gesture that lets a remembered full screen return. */
+/* Play on the title card opens Chapter 1's card. A click is the gesture that lets a remembered full screen return. */
 function play(): void {
   if (settings.fullscreen.get() === 'on' && !appEnv.fullscreenElement()) toggleFullscreen();
-  ui.showTrials();
+  ui.showChapter(1, false);
 }
 
 /* Quit (the menu's): the cards close; an installed app closes where it may, and otherwise
@@ -119,8 +119,10 @@ function start(): void {
   } catch (_) {
     /* ignore */
   }
-  if (direct) game.open(0);
-  else ui.showTitle(false);
+  ui.showTitle(false);
+  if (direct) {
+    ui.showChapter(1, false);
+  }
   mountTitleInstall(window, document.getElementById('title-install'));
   image.onload = () => { requestAnimationFrame(loop); };
   image.onerror = () => {

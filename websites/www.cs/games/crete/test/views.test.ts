@@ -16,18 +16,28 @@ import { helpLines } from '../src/help.ts';
 import type { StatusProps } from '../src/ui/status.tsx';
 import type { StripProps, ToolRow } from '../src/ui/strip.tsx';
 import type { MenuProps } from '../src/ui/menu.tsx';
-import type { TrialsProps } from '../src/ui/trials.tsx';
+import type { LevelsProps } from '../src/ui/levels.tsx';
+import type { ChapterCardProps } from '../src/ui/chapter.tsx';
+import type { StartProps } from '../src/ui/start.tsx';
+import { CHAPTERS, nextChapter } from '../src/campaign/chapters.ts';
 
 installDocument();
 const views = await importTsx<{
   status: typeof import('../src/ui/status.tsx');
   strip: typeof import('../src/ui/strip.tsx');
   menu: typeof import('../src/ui/menu.tsx');
-  trials: typeof import('../src/ui/trials.tsx');
-}>(import.meta.dirname, { status: '../src/ui/status.tsx', strip: '../src/ui/strip.tsx', menu: '../src/ui/menu.tsx', trials: '../src/ui/trials.tsx' });
+  levels: typeof import('../src/ui/levels.tsx');
+  chapter: typeof import('../src/ui/chapter.tsx');
+  start: typeof import('../src/ui/start.tsx');
+}>(import.meta.dirname, {
+  status: '../src/ui/status.tsx', strip: '../src/ui/strip.tsx', menu: '../src/ui/menu.tsx', levels: '../src/ui/levels.tsx',
+  chapter: '../src/ui/chapter.tsx', start: '../src/ui/start.tsx',
+});
 const renderStatus = (root: StubElement, p: StatusProps): void => views.status.renderStatus(asElement(root), p);
 const renderStrip = (root: StubElement, p: StripProps): void => views.strip.renderStrip(asElement(root), p);
-const renderTrials = (root: StubElement, p: TrialsProps): void => views.trials.renderTrials(asElement(root), p);
+const renderLevels = (root: StubElement, p: LevelsProps): void => views.levels.renderLevels(asElement(root), p);
+const renderChapter = (root: StubElement, p: ChapterCardProps): void => views.chapter.renderChapterCard(asElement(root), p);
+const renderStart = (root: StubElement, p: StartProps): void => views.start.renderStart(asElement(root), p);
 const renderMenu = (root: StubElement, p: MenuProps): void => views.menu.renderMenu(asElement(root), p);
 const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));
 
@@ -44,13 +54,14 @@ const tabsOf = (el: StubElement) => walk(el).filter(n => n.localName === 'kbd');
 // ---- status bar ----
 const VIEW = statusView({ trial: '3/8', hearts: 2, relicsLeft: 1, keys: { red: 1, blue: 0, yellow: 0, green: 2 }, gear: ['flippers'], moves: 12, stone: 0 });
 
-test('the status bar shows Trial, Hearts, Relics, Keys, Gear and Moves, and a Menu button with its Q tab', () => {
+test('the status bar shows Level, Hearts, Relics, Keys, Gear and Moves, and a Menu button with its Q tab', () => {
   const root = mount();
   let opened = 0;
   renderStatus(root, { view: VIEW, menuKey: KEYS.menu.label, onMenu: () => { opened++; } });
   assert.deepEqual(['hud-trial', 'hud-hearts', 'hud-relics', 'hud-keys', 'hud-gear', 'hud-moves'].map(id => byId(root, id).textContent),
     ['3/8', '♥ 2', '1', '🔴1 🟢2', 'flippers', '12']);
   const menu = byId(root, 'btn-menu');
+  assert.equal((byId(root, 'hud-trial').parentNode as StubElement).textContent.startsWith('Level'), true, 'the first stat is labelled Level');
   assert.equal(menu.className, 'menu-btn');
   const [tab] = tabsOf(menu);
   assert.ok(tab);
@@ -188,42 +199,115 @@ test('the story log lists every line; how to play comes from the help lines', ()
   assert.equal(help[0]!.children.length, helpLines(KEYS, TOOLS).length);
 });
 
-// ---- trial list ----
-const TRIAL_ROWS = [
+// ---- chapter card ----
+const CH1 = CHAPTERS[0]!;
+function chapterProps(over: Partial<ChapterCardProps> = {}): ChapterCardProps {
+  return { open: true, chapter: CH1, closing: false, next: nextChapter(1), onEnter: noop, onLevels: noop, onClose: noop, ...over };
+}
+
+test('the opening chapter card shows the kicker, name, words and quotation, with Enter the halls and Levels', () => {
+  const root = mount();
+  const seen: string[] = [];
+  renderChapter(root, chapterProps({ open: false }));
+  assert.equal(byId(root, 'chapter-veil').hidden, true);
+  renderChapter(root, chapterProps({ onEnter: () => seen.push('enter'), onLevels: () => seen.push('levels') }));
+  assert.equal(byId(root, 'chapter-veil').hidden, false);
+  assert.equal(byId(root, 'chapter-kicker').textContent, 'Chapter 1 of 10');
+  assert.equal(byId(root, 'chapter-title').textContent, 'The Outer Halls');
+  assert.equal(byId(root, 'chapter-text').textContent, CH1.lore!.opening.text);
+  const quote = walk(byId(root, 'chapter-veil')).find(n => n.localName === 'blockquote');
+  assert.ok(quote, 'a blockquote');
+  assert.ok(quote.textContent.includes(CH1.lore!.opening.quote!.text));
+  const cite = walk(quote).find(n => n.localName === 'cite');
+  assert.equal(cite?.textContent, CH1.lore!.opening.quote!.cite);
+  assert.equal(globalThis.__focused?.id, 'chapter-enter');
+  assert.equal(tabsOf(byId(root, 'chapter-enter'))[0]?.textContent, KEYS.begin.label);
+  assert.equal(tabsOf(byId(root, 'chapter-levels'))[0]?.textContent, KEYS.new.label);
+  assert.ok(byId(root, 'chapter-enter').textContent.includes('Enter the halls'));
+  assert.ok(byId(root, 'chapter-levels').textContent.includes('Levels'));
+  click(byId(root, 'chapter-enter'));
+  click(byId(root, 'chapter-levels'));
+  assert.deepEqual(seen, ['enter', 'levels']);
+  assert.equal(maybeById(root, 'chapter-continue'), undefined);
+  assert.equal(maybeById(root, 'chapter-next'), undefined);
+});
+
+test('the closing chapter card shows the closing words, says the next chapter is not yet released, and has only Continue', () => {
+  const root = mount();
+  let closed = 0;
+  renderChapter(root, chapterProps({ closing: true, onClose: () => { closed++; } }));
+  assert.equal(byId(root, 'chapter-text').textContent, CH1.lore!.closing.text);
+  const quote = walk(byId(root, 'chapter-veil')).find(n => n.localName === 'blockquote');
+  assert.ok(quote?.textContent.includes(CH1.lore!.closing.quote!.text));
+  assert.equal(byId(root, 'chapter-next').textContent, 'Chapter 2 is not yet released');
+  assert.equal(maybeById(root, 'chapter-enter'), undefined);
+  assert.equal(maybeById(root, 'chapter-levels'), undefined);
+  assert.equal(globalThis.__focused?.id, 'chapter-continue');
+  click(byId(root, 'chapter-continue'));
+  assert.equal(closed, 1);
+});
+
+// ---- levels list ----
+const LEVEL_ROWS = [
   { title: 'The Mouth of the Labyrinth', status: 'cleared · best 14' },
   { title: 'The Tribute Relics', status: 'cleared with help' },
   { title: 'The Doors of Daedalus', status: 'not yet' },
 ];
-function trialsProps(over: Partial<TrialsProps> = {}): TrialsProps {
-  return { open: true, rows: TRIAL_ROWS, current: -1, onPick: noop, onClose: noop, ...over };
+function levelsProps(over: Partial<LevelsProps> = {}): LevelsProps {
+  return { open: true, chapters: CHAPTERS, shown: 1, rows: LEVEL_ROWS, current: -1, onPick: noop, onTab: noop, onClose: noop, ...over };
 }
 
-test('the trial list has a button per trial with its title and standing, and picking one reports its index', () => {
+test('the levels list has a button per level with its title and standing, and picking one reports its index', () => {
   const root = mount();
   const seen: number[] = [];
-  renderTrials(root, trialsProps({ onPick: i => seen.push(i) }));
-  assert.equal(byId(root, 'trials-veil').hidden, false);
-  assert.equal(byId(root, 'trials-title').textContent, 'The Eight Trials');
-  TRIAL_ROWS.forEach((r, i) => {
-    const b = byId(root, `trial-${i + 1}`);
+  renderLevels(root, levelsProps({ onPick: i => seen.push(i) }));
+  assert.equal(byId(root, 'levels-veil').hidden, false);
+  assert.equal(byId(root, 'levels-title').textContent, 'Levels');
+  LEVEL_ROWS.forEach((r, i) => {
+    const b = byId(root, `level-${i + 1}`);
     assert.ok(b.textContent.includes(r.title), r.title);
     assert.ok(b.textContent.includes(r.status), r.status);
+    assert.equal(b.disabled, false);
     click(b);
   });
   assert.deepEqual(seen, [0, 1, 2]);
 });
 
-test('the trial list waits hidden, focuses the trial in play, and closes with a button tabbed with Q', () => {
+test('the levels list has ten chapter tabs: chapter 1 pressed, the rest disabled and marked soon', () => {
+  const root = mount();
+  const seen: number[] = [];
+  renderLevels(root, levelsProps({ onTab: n => seen.push(n) }));
+  for (let n = 1; n <= 10; n++) {
+    const tab = byId(root, `levels-tab-${n}`);
+    assert.equal(tab.getAttribute('aria-pressed'), n === 1 ? 'true' : 'false', `tab ${n}`);
+    assert.equal(tab.disabled, n !== 1, `tab ${n}`);
+    assert.equal(tab.textContent, n === 1 ? 'Ch 1' : `Ch ${n} · soon`, `tab ${n}`);
+  }
+  click(byId(root, 'levels-tab-1'));
+  assert.deepEqual(seen, [1]);
+});
+
+test('the levels list waits hidden, focuses the level in play, and closes with a button tabbed with Q', () => {
   const root = mount();
   let closed = 0;
-  renderTrials(root, trialsProps({ open: false }));
-  assert.equal(byId(root, 'trials-veil').hidden, true);
-  renderTrials(root, trialsProps({ current: 1, onClose: () => { closed++; } }));
-  assert.equal(globalThis.__focused?.id, 'trial-2');
-  assert.equal(byId(root, 'trial-2').getAttribute('aria-pressed'), 'true');
-  assert.equal(tabsOf(byId(root, 'trials-close'))[0]?.textContent, KEYS.menu.label);
-  click(byId(root, 'trials-close'));
+  renderLevels(root, levelsProps({ open: false }));
+  assert.equal(byId(root, 'levels-veil').hidden, true);
+  renderLevels(root, levelsProps({ current: 1, onClose: () => { closed++; } }));
+  assert.equal(globalThis.__focused?.id, 'level-2');
+  assert.equal(byId(root, 'level-2').getAttribute('aria-pressed'), 'true');
+  assert.equal(byId(root, 'level-1').getAttribute('aria-pressed'), 'false');
+  assert.equal(tabsOf(byId(root, 'levels-close'))[0]?.textContent, KEYS.menu.label);
+  click(byId(root, 'levels-close'));
   assert.equal(closed, 1);
+});
+
+// ---- start card ----
+test('the start card names the chapter and the level in its kicker', () => {
+  const root = mount();
+  renderStart(root, { open: true, chapter: 1, number: 3, title: 'The Doors of Daedalus', intro: 'Doors.', onBegin: noop });
+  assert.equal(byId(root, 'start-veil').hidden, false);
+  assert.equal(walk(byId(root, 'start-veil')).find(n => n.className === 'kicker')?.textContent, 'Chapter 1 · Level 3');
+  assert.equal(byId(root, 'start-title').textContent, 'The Doors of Daedalus');
 });
 
 // ---- story ----

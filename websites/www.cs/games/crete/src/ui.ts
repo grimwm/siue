@@ -16,11 +16,12 @@ import type { Progress } from "./progress.ts";
 import type { State } from "./puzzle/state.ts";
 import { TOOLS } from "./puzzle/tiles.ts";
 import type { Tool } from "./puzzle/tiles.ts";
-import { TRIALS, trialLevel } from "./puzzle/trials.ts";
+import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
 import { cellFor } from "./fit.ts";
 import { follow } from "./follow.ts";
 import { helpLines } from "./help.ts";
+import { renderChapterCard } from "./ui/chapter.tsx";
 import { renderEndCard } from "./ui/end.tsx";
 import type { EndView } from "./ui/end.tsx";
 import { renderMenu } from "./ui/menu.tsx";
@@ -31,8 +32,8 @@ import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
 import { renderTitleCard } from "./ui/title.tsx";
-import { renderTrials } from "./ui/trials.tsx";
-import type { TrialRow } from "./ui/trials.tsx";
+import { renderLevels } from "./ui/levels.tsx";
+import type { LevelRow } from "./ui/levels.tsx";
 
 /** What the page borrows at run time. */
 export interface UiDeps {
@@ -50,7 +51,7 @@ export interface Controls {
   wake(): void;
   /** Leave the game (the menu's Quit). */
   quit(): void;
-  /** Play on the title card. */
+  /** Play on the title card: opens Chapter 1's card. */
   play(): void;
 }
 
@@ -63,8 +64,11 @@ export interface Ui {
   bindControls(controls: Controls): void;
   /** The title card, alone; `hint` adds how to close an installed app. */
   showTitle(hint: boolean): void;
-  /** The trial list, over whatever is showing. */
-  showTrials(): void;
+  /** The level list, over whatever is showing. */
+  showLevels(): void;
+  /** Chapter `n`'s card, over whatever is showing: the opening one (Enter starts the first level this browser
+   *  has not cleared), or the closing one. */
+  showChapter(n: number, closing: boolean): void;
   /** Closes every card. */
   closeLayers(): void;
   /** The card showing now, if any. */
@@ -95,25 +99,65 @@ export function createUi(deps: UiDeps): Ui {
   let sized = "";
   /** The opening the start card was last shown for. */
   let shownOpen = 0;
+  /** The chapter card's chapter, whether it is the closing card, and the level Enter on it starts. */
+  let chapterN = 1;
+  let chapterClosing = false;
+  let chapterTarget = 0;
+  /** The chapter the level list shows. */
+  let listed = 1;
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
     drawLayers();
   });
 
-  function trialRows(): TrialRow[] {
-    return TRIALS.map((t, i) => {
-      const p = progress.get(t.id);
+  /** The campaign index of chapter `n`'s first level. */
+  function firstOf(n: number): number {
+    return CHAPTERS.filter((c) => c.n < n && c.released).reduce((sum, c) => sum + c.levelIds.length, 0);
+  }
+
+  function levelRows(n: number): LevelRow[] {
+    const first = firstOf(n);
+    return CHAPTERS[n - 1]!.levelIds.map((id, i) => {
+      const p = progress.get(id);
       return {
-        title: trialLevel(i).title,
+        title: CAMPAIGN_LEVELS.level(first + i).title,
         status: !p.cleared ? "not yet" : p.assisted ? "cleared with help" : `cleared · best ${p.best}`,
       };
     });
   }
 
-  function pick(i: number): void {
+  /** The first level of chapter `n` this browser has not cleared; the chapter's first when it has cleared all. */
+  function resumeOf(n: number): number {
+    const c = CHAPTERS[n - 1]!;
+    const i = c.levelIds.findIndex((id) => !progress.get(id).cleared);
+    return firstOf(n) + Math.max(0, i);
+  }
+
+  function showChapter(n: number, closing: boolean, target = resumeOf(n)): void {
+    chapterN = n;
+    chapterClosing = closing;
+    chapterTarget = target;
+    layers.open("chapter");
+  }
+
+  function open(i: number): void {
     layers.clear();
     controls?.game.open(i);
+  }
+
+  /** A level picked from the list or the chapter card: a chapter's first level shows the chapter card first. */
+  function pick(i: number): void {
+    const { chapter, within } = chapterOf(i);
+    if (within === 0) {
+      layers.clear();
+      showChapter(chapter.n, false, i);
+    } else open(i);
+  }
+
+  /** Enter on the opening card starts the level it was opened for. */
+  function enter(): void {
+    open(chapterTarget);
   }
 
   function drawLayers(): void {
@@ -125,17 +169,34 @@ export function createUi(deps: UiDeps): Ui {
       onStory: () => layers.open("story"),
       onSettings: () => layers.open("menu"),
     });
-    renderTrials($("trials-root"), {
-      open: layers.isOpen("trials"),
-      rows: trialRows(),
-      current: g?.trial ?? -1,
-      onPick: pick,
-      onClose: () => layers.close("trials"),
+    const playing = g && g.trial >= 0 ? chapterOf(g.trial) : null;
+    renderChapterCard($("chapter-root"), {
+      open: layers.isOpen("chapter"),
+      chapter: CHAPTERS[chapterN - 1]!,
+      closing: chapterClosing,
+      next: nextChapter(chapterN),
+      onEnter: enter,
+      onLevels: () => layers.open("levels"),
+      onClose: () => layers.close("chapter"),
+    });
+    renderLevels($("levels-root"), {
+      open: layers.isOpen("levels"),
+      chapters: CHAPTERS,
+      shown: listed,
+      rows: levelRows(listed),
+      current: playing && playing.chapter.n === listed ? playing.within : -1,
+      onPick: (i) => pick(firstOf(listed) + i),
+      onTab: (n) => {
+        listed = n;
+        drawLayers();
+      },
+      onClose: () => layers.close("levels"),
     });
     const lv = g?.run?.now.level;
     renderStart($("start-root"), {
       open: layers.isOpen("start"),
-      number: (g?.trial ?? 0) + 1,
+      chapter: playing?.chapter.n ?? 1,
+      number: (playing?.within ?? 0) + 1,
       title: lv?.title ?? "",
       intro: lv?.intro ?? "",
       onBegin: () => layers.close("start"),
@@ -143,9 +204,9 @@ export function createUi(deps: UiDeps): Ui {
     renderEndCard($("end-root"), {
       ...end,
       open: layers.isOpen("end"),
-      onNext: () => pick((g?.trial ?? 0) + 1),
-      onRetry: () => pick(g?.trial ?? 0),
-      onTrials: () => layers.open("trials"),
+      onNext: () => open((g?.trial ?? 0) + 1),
+      onRetry: () => open(g?.trial ?? 0),
+      onTrials: () => layers.open("levels"),
       onUndo: () => g?.press("undo"),
       onRestart: () => g?.press("restart"),
     });
@@ -255,9 +316,9 @@ export function createUi(deps: UiDeps): Ui {
         text: "Your last heart is gone. Undo a turn or begin the trial again.", score: `${s.moves} moves`,
       };
     }
-    const best = progress.get(TRIALS[g.trial]!.id).best;
+    const best = progress.get(LEVEL_IDS[g.trial]!).best;
     return {
-      open: true, won, hasNext: g.trial + 1 < TRIALS.length, kicker: `Trial ${g.trial + 1} cleared`, title: s.level.title,
+      open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, kicker: `Trial ${g.trial + 1} cleared`, title: s.level.title,
       text: run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.",
       score: [`${s.moves} moves`, best !== null ? `best ${best}` : "", run.assisted ? "with help" : ""].filter(Boolean).join(" · "),
     };
@@ -273,7 +334,7 @@ export function createUi(deps: UiDeps): Ui {
     const s = run.now;
     if (sized !== `${s.level.cols}x${s.level.rows}`) fit();
     else followPlayer(s);
-    // A trial opened: the start card shows (a restart does not); the story log keeps its words.
+    // A level opened: the start card shows (a restart does not); the story log keeps its words.
     if (g.opens !== shownOpen) {
       shownOpen = g.opens;
       log.push({ text: `${s.level.title}: ${s.level.intro}`, tone: "info" });
@@ -282,7 +343,7 @@ export function createUi(deps: UiDeps): Ui {
 
     renderStatus($("status-root"), {
       view: statusView({
-        trial: `${g.trial + 1}/${TRIALS.length}`,
+        trial: `${chapterOf(g.trial).within + 1}/${chapterOf(g.trial).chapter.levelIds.length}`,
         hearts: s.hearts,
         relicsLeft: s.relicsLeft,
         keys: s.keys,
@@ -352,11 +413,19 @@ export function createUi(deps: UiDeps): Ui {
       const action = actionFor(k);
       if (action === "new") {
         ev.preventDefault();
-        layers.open("trials");
+        layers.open("levels");
         return;
       }
       if (action === "mute") {
         c.toggleMute();
+        return;
+      }
+      // Begin on the chapter card: the opening one starts a level, the closing one goes on. Tabbed to Levels,
+      // Enter presses that button instead.
+      if (layers.isOpen("chapter") && action === "begin" && (ev.target as HTMLElement | null)?.id !== "chapter-levels") {
+        ev.preventDefault();
+        if (chapterClosing) layers.close("chapter");
+        else enter();
         return;
       }
       // The start card closes on Begin and on a move, which then also moves; it blocks nothing else.
@@ -409,7 +478,8 @@ export function createUi(deps: UiDeps): Ui {
     render,
     bindControls,
     showTitle,
-    showTrials: () => layers.open("trials"),
+    showLevels: () => layers.open("levels"),
+    showChapter: (n, closing) => showChapter(n, closing),
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
     setMuted: (m) => {

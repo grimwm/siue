@@ -5,17 +5,28 @@ import assert from 'node:assert/strict';
 import { render as preactRender } from 'preact';
 import type { ComponentChildren } from 'preact';
 import { importTsx } from '../../_kit/test/tsx.ts';
-import { asElement, byId, childEl, click, document, installDocument, makeEl, maybeById, renderTarget } from '../../_kit/test/dom-stub.ts';
+import { asElement, byId, childEl, click, document, installDocument, makeEl, maybeById, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import type { EndCardProps } from '../src/ui/end.tsx';
 import type { TitleCardProps } from '../src/ui/title.tsx';
 import { KEYS } from '../src/keys.ts';
+import { manualClock } from '../../_kit/test/clock.ts';
+import { fireDocument } from '../../_kit/test/dom-stub.ts';
+import { createGame } from '../src/game.ts';
+import type { Game } from '../src/game.ts';
+import { createFoundPages } from '../src/pages.ts';
+import { CAMPAIGN_LEVELS, LEVEL_IDS } from '../src/campaign/chapters.ts';
+import type { Progress } from '../src/progress.ts';
+import type { Atlas } from '../src/board-plan.ts';
+import type { Board } from '../src/board.ts';
 
 installDocument();
 const ui = await importTsx<{
   end: typeof import('../src/ui/end.tsx');
   title: typeof import('../src/ui/title.tsx');
-}>(import.meta.dirname, { end: '../src/ui/end.tsx', title: '../src/ui/title.tsx' });
+  page: typeof import('../src/ui.ts');
+}>(import.meta.dirname, { end: '../src/ui/end.tsx', title: '../src/ui/title.tsx', page: '../src/ui.ts' });
+(globalThis as { getComputedStyle?: unknown }).getComputedStyle = () => ({ paddingLeft: '0', paddingRight: '0', paddingTop: '0', paddingBottom: '0', display: 'block' });
 // The overlays render into a DOM Element; the stub stands in for one.
 const renderEndCard = (root: StubElement, props: EndCardProps): void => ui.end.renderEndCard(asElement(root), props);
 const renderTitleCard = (root: StubElement, props: TitleCardProps): void => ui.title.renderTitleCard(asElement(root), props);
@@ -121,4 +132,108 @@ test('an installed app that could not close says how to', () => {
   const root = makeEl('title-root');
   renderTitleCard(root, { open: true, hint: true, onPlay() {} });
   assert.equal(byId(root, 'title-hint').textContent, 'Swipe the app away to close it.');
+});
+
+test('the title card reads its kicker from Chapter 1', () => {
+  const root = makeEl('title-root');
+  renderTitleCard(root, { open: true, hint: false, onPlay() {} });
+  const kicker = walk(byId(root, 'title-veil')).find(n => n.className === 'kicker');
+  assert.equal(kicker?.textContent, 'Chapter 1 · The Outer Halls');
+  assert.doesNotMatch(byId(root, 'title-veil').textContent, /Eight/);
+});
+
+// ---- the title -> chapter card -> level flow, on the real page and game ----
+const cleared = new Set<string>();
+const progress: Progress = {
+  get: id => ({ cleared: cleared.has(id), assisted: false, best: cleared.has(id) ? 20 : null }),
+  record: id => { cleared.add(id); return progress.get(id); },
+};
+const m = manualClock();
+const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress });
+const game: Game = createGame({
+  sfx() {}, say() {}, progress, pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock,
+  reducedMotion: () => true, changed: () => flow.render(game),
+});
+flow.bindControls({ game, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play: () => flow.showChapter(1, false) });
+const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
+const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
+const reset = () => { cleared.clear(); flow.closeLayers(); game.stop(); };
+
+test('Play opens the chapter card, and Enter on it starts level 1 when nothing is cleared', () => {
+  reset();
+  flow.showTitle(false);
+  flow.showChapter(1, false);
+  assert.equal(flow.top(), 'chapter');
+  key('Enter');
+  assert.equal(game.trial, 0);
+  assert.equal(flow.top(), 'start');
+});
+
+test('Enter on the chapter card starts the first level this browser has not cleared', () => {
+  reset();
+  for (const id of LEVEL_IDS.slice(0, 3)) cleared.add(id);
+  flow.showChapter(1, false);
+  key('Enter');
+  assert.equal(game.trial, 3);
+  assert.equal(flow.top(), 'start');
+});
+
+test('with every level cleared, Enter starts level 1', () => {
+  reset();
+  for (const id of LEVEL_IDS) cleared.add(id);
+  flow.showChapter(1, false);
+  key('Enter');
+  assert.equal(game.trial, 0);
+});
+
+test('Q closes the chapter card and Levels on it opens the list', () => {
+  reset();
+  flow.showChapter(1, false);
+  key('q');
+  assert.equal(flow.top(), null);
+  flow.showChapter(1, false);
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  key('q');
+  assert.equal(flow.top(), 'chapter');
+});
+
+test('picking level 1 from the list shows the chapter card first, and Enter then opens level 1', () => {
+  reset();
+  for (const id of LEVEL_IDS.slice(0, 3)) cleared.add(id);
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  pick(1);
+  assert.equal(flow.top(), 'chapter');
+  key('Enter');
+  assert.equal(game.trial, 0);
+  assert.equal(flow.top(), 'start');
+});
+
+test('picking any other level opens it directly', () => {
+  reset();
+  key('n');
+  pick(5);
+  assert.equal(game.trial, 4);
+  assert.equal(flow.top(), 'start');
+});
+
+test('N opens the levels list over a level in play', () => {
+  reset();
+  game.open(2);
+  key('Enter');
+  assert.equal(flow.top(), null);
+  key('n');
+  assert.equal(flow.top(), 'levels');
+});
+
+test('the closing card takes Enter as Continue, and does not start a level', () => {
+  reset();
+  const opened = game.opens;
+  flow.showChapter(1, true);
+  assert.equal(flow.top(), 'chapter');
+  assert.match(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /Chapter 2 is not yet released/);
+  key('Enter');
+  assert.equal(flow.top(), null);
+  assert.equal(game.opens, opened);
 });

@@ -202,7 +202,7 @@ test('Enter the halls starts the first level this browser has not cleared', asyn
   await expect(page.locator('#start-veil')).toBeVisible();
 });
 
-test('a win leads on: Next trial shows trial 2\'s start card, and the list keeps "cleared · best N" through a reload', async ({ page }) => {
+test('a win leads on: Next level shows level 2\'s start card, and the list keeps "cleared · best N" through a reload', async ({ page }) => {
   const errors = await beginTrial1(page);
   const steps = await line(page);
   for (const s of steps) await page.keyboard.press(KEY[s]!);

@@ -36,6 +36,7 @@ const VOICES: Record<SfxName, Voice[]> = {
   bump: [[90, 0.09, "sine", 0.06]],
   pickup: [[660, 0.06], [880, 0.08, "square", 0.04, 0.06]],
   page: [[523, 0.08, "sine"], [659, 0.08, "sine", 0.04, 0.08], [784, 0.1, "sine", 0.04, 0.16]],
+  chapter: [[196, 0.5, "triangle", 0.05], [294, 0.5, "triangle", 0.04, 0.12], [392, 0.7, "triangle", 0.04, 0.24]],
   hint: [[980, 0.07, "sine", 0.04]],
 };
 

@@ -8,11 +8,13 @@ import { isBackKey, typesText } from "../../_kit/keys.ts";
 import type { Board } from "./board.ts";
 import { boardRows } from "./board-plan.ts";
 import type { Atlas } from "./board-plan.ts";
-import type { Game, Tone } from "./game.ts";
+import type { Game, SfxName, Tone } from "./game.ts";
 import { KEYS, actionFor, isMove, itemFor } from "./keys.ts";
 import { createLayers } from "./layers.ts";
 import type { LayerName } from "./layers.ts";
+import type { FoundPages } from "./pages.ts";
 import type { Progress } from "./progress.ts";
+import { pagesTaken } from "./puzzle/state.ts";
 import type { State } from "./puzzle/state.ts";
 import { TOOLS } from "./puzzle/tiles.ts";
 import type { Tool } from "./puzzle/tiles.ts";
@@ -24,6 +26,8 @@ import { helpLines } from "./help.ts";
 import { renderChapterCard } from "./ui/chapter.tsx";
 import { renderEndCard } from "./ui/end.tsx";
 import type { EndView } from "./ui/end.tsx";
+import { renderLore } from "./ui/lore.tsx";
+import type { LoreEntry } from "./ui/lore.tsx";
 import { renderMenu } from "./ui/menu.tsx";
 import type { LogLine } from "./ui/menu.tsx";
 import { renderStatus } from "./ui/status.tsx";
@@ -40,6 +44,10 @@ export interface UiDeps {
   atlas: Atlas;
   board: Board;
   progress: Progress;
+  /** The story pages found in this browser, for the Lore book. */
+  pages: FoundPages;
+  /** Voices an event (the chapter card's sound). */
+  sfx?(name: SfxName): void;
 }
 
 /** What a key press or click asks of the page. */
@@ -84,7 +92,7 @@ const TOAST_MS = 3000;
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
 export function createUi(deps: UiDeps): Ui {
-  const { atlas, board, progress } = deps;
+  const { atlas, board, progress, pages, sfx } = deps;
 
   const log: LogLine[] = [];
   let muted = false;
@@ -93,7 +101,7 @@ export function createUi(deps: UiDeps): Ui {
   let controls: Controls | null = null;
   let game: Game | null = null;
   let titleHint = false;
-  let end: EndView = { open: false, won: false, hasNext: false, kicker: "", title: "", text: "", score: "" };
+  let end: EndView = { open: false, won: false, hasNext: false, pages: [], kicker: "", title: "", text: "", score: "" };
   /** The try whose ending card has been shown, so closing the card does not bring it back. */
   let endFor: unknown = null;
   let sized = "";
@@ -105,6 +113,8 @@ export function createUi(deps: UiDeps): Ui {
   let chapterTarget = 0;
   /** The chapter the level list shows. */
   let listed = 1;
+  /** The Lore book's open entry, or null for its list. */
+  let loreShown: LoreEntry | null = null;
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
@@ -138,6 +148,7 @@ export function createUi(deps: UiDeps): Ui {
     chapterN = n;
     chapterClosing = closing;
     chapterTarget = target;
+    sfx?.("chapter");
     layers.open("chapter");
   }
 
@@ -210,6 +221,21 @@ export function createUi(deps: UiDeps): Ui {
       onUndo: () => g?.press("undo"),
       onRestart: () => g?.press("restart"),
     });
+    renderLore($("lore-root"), {
+      open: layers.isOpen("lore"),
+      chapters: CHAPTERS,
+      found: pages.has,
+      closingSeen: (n) => {
+        const last = CHAPTERS[n - 1]?.levelIds.at(-1);
+        return last !== undefined && progress.get(last).cleared;
+      },
+      shown: loreShown,
+      onShow: (e) => {
+        loreShown = e;
+        drawLayers();
+      },
+      onClose: () => layers.close("lore"),
+    });
     renderStoryCard($("story-root"), { open: layers.isOpen("story"), onClose: () => layers.close("story") });
     renderMenu($("menu-root"), {
       open: layers.isOpen("menu"),
@@ -222,6 +248,10 @@ export function createUi(deps: UiDeps): Ui {
         controls?.toggleMute();
       },
       onFullscreen: () => controls?.toggleFullscreen(),
+      onLore: () => {
+        loreShown = null;
+        layers.open("lore");
+      },
       onQuit: () => {
         controls?.wake();
         controls?.quit();
@@ -312,13 +342,16 @@ export function createUi(deps: UiDeps): Ui {
     const won = s.outcome === "won";
     if (!won) {
       return {
-        open: true, won, hasNext: false, kicker: "Trial failed", title: "The Minotaur has you",
+        open: true, won, hasNext: false, pages: [], kicker: "Level failed", title: "The Minotaur has you",
         text: "Your last heart is gone. Undo a turn or begin the trial again.", score: `${s.moves} moves`,
       };
     }
     const best = progress.get(LEVEL_IDS[g.trial]!).best;
+    // Every page this win took, not only the new ones: a replayed win still shows its page line.
+    const titles = CHAPTERS.flatMap((c) => c.lore?.pages ?? []);
+    const pages = pagesTaken(s).map((id) => titles.find((p) => p.id === id)?.title ?? id);
     return {
-      open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, kicker: `Trial ${g.trial + 1} cleared`, title: s.level.title,
+      open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, pages, kicker: `Level ${chapterOf(g.trial).within + 1} cleared`, title: s.level.title,
       text: run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.",
       score: [`${s.moves} moves`, best !== null ? `best ${best}` : "", run.assisted ? "with help" : ""].filter(Boolean).join(" · "),
     };
@@ -385,6 +418,9 @@ export function createUi(deps: UiDeps): Ui {
       endFor = run;
       end = endView(g);
       layers.open("end");
+      // A chapter's last level won: its closing card opens over the end card, which waits under it.
+      const { chapter, within } = chapterOf(g.trial);
+      if (end.won && within === chapter.levelIds.length - 1) showChapter(chapter.n, true);
     }
     drawLayers();
   }
@@ -404,7 +440,12 @@ export function createUi(deps: UiDeps): Ui {
       c.wake();
       if (isBackKey(ev)) {
         ev.preventDefault();
-        if (!ev.repeat) layers.pressBack();
+        if (ev.repeat) return;
+        // An open Lore entry goes back to the list; the next Q closes the book.
+        if (layers.isOpen("lore") && loreShown) {
+          loreShown = null;
+          drawLayers();
+        } else layers.pressBack();
         return;
       }
       // A chord is the browser's (Cmd+R reloads, Ctrl+T opens a tab), never a game key.

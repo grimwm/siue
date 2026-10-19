@@ -27,6 +27,7 @@ const page = ui.createUi({
   atlas: { cell: 16, rise: 8, sprites: {} } as Atlas,
   board: { size() {}, paint() {} } as Board,
   progress: createProgress(null),
+  pages: createFoundPages(null),
 });
 game = createGame({
   sfx() {}, say: t => said.push(t), progress: createProgress(null), pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock, reducedMotion: () => true,

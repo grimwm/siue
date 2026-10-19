@@ -10,7 +10,7 @@ import type { SfxName } from '../src/game.ts';
 
 const EVENTS: SfxName[] = [
   'step', 'push', 'splash', 'sizzle', 'door', 'key', 'relic', 'gate', 'button', 'slide',
-  'caught', 'stone', 'win', 'lose', 'bump', 'pickup', 'page', 'hint',
+  'caught', 'stone', 'win', 'lose', 'bump', 'pickup', 'page', 'hint', 'chapter',
 ];
 const rig = (state?: string) => {
   const ctx = fakeAudioContext(state);

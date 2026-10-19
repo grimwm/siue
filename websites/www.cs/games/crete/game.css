@@ -55,7 +55,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   background: var(--bg);
   overflow: hidden;
 }
-#title-root, #menu-root, #chapter-root, #levels-root, #start-root, #story-root, #end-root { display: contents; }
+#title-root, #menu-root, #chapter-root, #levels-root, #start-root, #story-root, #end-root, #lore-root { display: contents; }
 
 /* ---- status bar ---- */
 .status {
@@ -228,6 +228,14 @@ button:disabled { opacity: 0.45; cursor: default; }
 .level-name { grid-area: name; }
 .level-status { grid-area: status; color: var(--dim); font-size: 0.8rem; font-weight: 400; }
 .card .close { float: right; margin: -0.3rem -0.3rem 0 0.5rem; }
+.lore .close { position: absolute; top: 0.7rem; right: 0.7rem; float: none; margin: 0; }
+.lore h3 { margin: 0.8rem 0 0.3rem; font-size: 1rem; color: var(--accent); }
+.lore .story { color: var(--dim); }
+.lore-entries { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.lore-pick { width: 100%; display: flex; justify-content: space-between; gap: 0.5rem; text-align: left; background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+.lore-pick:disabled { opacity: 0.6; }
+.lore-where { color: var(--dim); font-size: 0.8rem; font-weight: 400; }
+.lore-soon { margin: 0.5rem 0 0; color: var(--dim); font-size: 0.85rem; }
 
 .menu h3 { margin: 0 0 0.3rem; font-size: 1rem; color: var(--accent); }
 .menu-sec { margin: 0.9rem 0 0; }

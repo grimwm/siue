@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import { fireDocument, installDocument } from '../../_kit/test/dom-stub.ts';
 import { TOOLS } from '../src/puzzle/tiles.ts';
+import { createFoundPages } from '../src/pages.ts';
 import { createProgress } from '../src/progress.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
@@ -26,7 +27,7 @@ const controls: Controls = {
   game, toggleMute: note('mute'), toggleFullscreen: note('fullscreen'), wake: note('wake'), quit: note('quit'), play: note('play'),
 };
 // createUi keeps these for drawing; the key handler reads none of them.
-const page = ui.createUi({ atlas: {} as Atlas, board: {} as Board, progress: createProgress(null) });
+const page = ui.createUi({ atlas: {} as Atlas, board: {} as Board, progress: createProgress(null), pages: createFoundPages(null) });
 page.bindControls(controls);
 
 beforeEach(() => { page.closeLayers(); });

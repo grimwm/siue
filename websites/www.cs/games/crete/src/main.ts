@@ -34,7 +34,8 @@ const appEnv = browserAppEnv();
 const image = new Image();
 const board = createBoard(document.getElementById('stage') as HTMLCanvasElement, atlas, image);
 const progress = createProgress(browserStorage());
-const ui = createUi({ atlas, board, progress });
+const pages = createFoundPages(browserStorage());
+const ui = createUi({ atlas, board, progress, pages, sfx: audio.sfx });
 
 /* The reduced-motion preference, followed live. */
 const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -45,7 +46,7 @@ const game = createGame({
   sfx: audio.sfx,
   say: ui.say,
   progress,
-  pages: createFoundPages(browserStorage()),
+  pages,
   levels: CAMPAIGN_LEVELS,
   timers: browserTimers,
   clock,

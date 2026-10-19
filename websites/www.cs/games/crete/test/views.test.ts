@@ -19,6 +19,7 @@ import type { MenuProps } from '../src/ui/menu.tsx';
 import type { LevelsProps } from '../src/ui/levels.tsx';
 import type { ChapterCardProps } from '../src/ui/chapter.tsx';
 import type { StartProps } from '../src/ui/start.tsx';
+import type { LoreProps, LoreEntry } from '../src/ui/lore.tsx';
 import { CHAPTERS, nextChapter } from '../src/campaign/chapters.ts';
 
 installDocument();
@@ -29,14 +30,16 @@ const views = await importTsx<{
   levels: typeof import('../src/ui/levels.tsx');
   chapter: typeof import('../src/ui/chapter.tsx');
   start: typeof import('../src/ui/start.tsx');
+  lore: typeof import('../src/ui/lore.tsx');
 }>(import.meta.dirname, {
   status: '../src/ui/status.tsx', strip: '../src/ui/strip.tsx', menu: '../src/ui/menu.tsx', levels: '../src/ui/levels.tsx',
-  chapter: '../src/ui/chapter.tsx', start: '../src/ui/start.tsx',
+  chapter: '../src/ui/chapter.tsx', start: '../src/ui/start.tsx', lore: '../src/ui/lore.tsx',
 });
 const renderStatus = (root: StubElement, p: StatusProps): void => views.status.renderStatus(asElement(root), p);
 const renderStrip = (root: StubElement, p: StripProps): void => views.strip.renderStrip(asElement(root), p);
 const renderLevels = (root: StubElement, p: LevelsProps): void => views.levels.renderLevels(asElement(root), p);
 const renderChapter = (root: StubElement, p: ChapterCardProps): void => views.chapter.renderChapterCard(asElement(root), p);
+const renderLore = (root: StubElement, p: LoreProps): void => views.lore.renderLore(asElement(root), p);
 const renderStart = (root: StubElement, p: StartProps): void => views.start.renderStart(asElement(root), p);
 const renderMenu = (root: StubElement, p: MenuProps): void => views.menu.renderMenu(asElement(root), p);
 const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));
@@ -154,7 +157,7 @@ function menuProps(over: Partial<MenuProps> = {}): MenuProps {
     open: true, muted: false, fullscreen: false,
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onFullscreen: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onFullscreen: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 
@@ -164,8 +167,17 @@ test('the menu holds sound and full screen, the story log, how to play and Quit,
   const veil = byId(root, 'menu-veil');
   assert.equal(veil.hidden, false);
   assert.equal(byId(root, 'menu-title').textContent, 'Menu');
-  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'log', 'help', 'quit']);
+  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'lore', 'log', 'help', 'quit']);
   for (const gone of ['seed-form', 'seed-input', 'random-run', 'run-stats']) assert.equal(maybeById(root, gone), undefined, gone);
+});
+
+test('the menu has a Lore book button that calls back', () => {
+  const root = mount();
+  let opened = 0;
+  renderMenu(root, menuProps({ onLore: () => { opened++; } }));
+  assert.ok(byId(root, 'menu-lore').textContent.includes('Lore book'));
+  click(byId(root, 'menu-lore'));
+  assert.equal(opened, 1);
 });
 
 test('the menu waits hidden until opened, and a first button takes focus so Q still closes it', () => {
@@ -324,5 +336,85 @@ test('the story card tells the myth, closes with a button, and waits hidden unti
   for (const word of ['Minos', 'Labyrinth', 'ship']) assert.ok(text.includes(word), word);
   assert.equal(globalThis.__focused?.id, 'story-close');
   click(byId(root, 'story-close'));
+  assert.equal(closed, 1);
+});
+
+// ---- lore book ----
+function loreProps(over: Partial<LoreProps> = {}): LoreProps {
+  return { open: true, chapters: CHAPTERS, found: () => false, closingSeen: () => false, shown: null, onShow: noop, onClose: noop, ...over };
+}
+const PAGES = CH1.lore!.pages;
+
+test('the Lore book lists Chapter 1 with its opening card, and chapters 2 to 10 as not yet released', () => {
+  const root = mount();
+  renderLore(root, loreProps({ open: false }));
+  assert.equal(byId(root, 'lore-veil').hidden, true);
+  renderLore(root, loreProps());
+  assert.equal(byId(root, 'lore-title').textContent, 'Lore book');
+  const text = byId(root, 'lore-veil').textContent;
+  assert.ok(text.includes('Chapter 1'));
+  assert.ok(text.includes('The Outer Halls'));
+  assert.ok(byId(root, 'lore-opening-1').textContent.includes('Opening'));
+  assert.equal(maybeById(root, 'lore-closing-1'), undefined, 'the closing card waits until it has been seen');
+  const soon = walk(byId(root, 'lore-veil')).filter(n => n.className === 'lore-soon');
+  assert.equal(soon.length, 9);
+  assert.ok(soon.every(n => n.textContent.includes('Not yet released')));
+});
+
+test('a found page shows its title and where it was found; a missing one shows ? ? ? and where it hides', () => {
+  const root = mount();
+  renderLore(root, loreProps({ found: id => id === PAGES[0]!.id }));
+  const got = byId(root, `lore-page-${PAGES[0]!.id}`);
+  assert.ok(got.textContent.includes(PAGES[0]!.title));
+  assert.ok(got.textContent.includes('found in level 9'));
+  const lost = byId(root, `lore-page-${PAGES[1]!.id}`);
+  assert.ok(lost.textContent.includes('? ? ?'));
+  assert.ok(lost.textContent.includes('hides in level 10'));
+  assert.ok(!lost.textContent.includes(PAGES[1]!.title));
+  assert.equal(lost.disabled, true, 'a page not yet found cannot be opened');
+});
+
+test('the closing card is listed once it has been seen', () => {
+  const root = mount();
+  renderLore(root, loreProps({ closingSeen: n => n === 1 }));
+  assert.ok(byId(root, 'lore-closing-1').textContent.includes('Closing'));
+});
+
+test('picking an entry reports it', () => {
+  const root = mount();
+  const seen: (LoreEntry | null)[] = [];
+  renderLore(root, loreProps({ found: () => true, closingSeen: () => true, onShow: e => seen.push(e) }));
+  click(byId(root, 'lore-opening-1'));
+  click(byId(root, 'lore-closing-1'));
+  click(byId(root, `lore-page-${PAGES[0]!.id}`));
+  assert.deepEqual(seen, [
+    { kind: 'card', which: 'opening', chapter: 1 },
+    { kind: 'card', which: 'closing', chapter: 1 },
+    { kind: 'page', id: PAGES[0]!.id },
+  ]);
+});
+
+test('an open entry shows its full text, quotation and citation, with a Back button to the list', () => {
+  const root = mount();
+  const seen: (LoreEntry | null)[] = [];
+  renderLore(root, loreProps({ found: () => true, shown: { kind: 'page', id: PAGES[0]!.id }, onShow: e => seen.push(e) }));
+  assert.equal(byId(root, 'lore-entry-title').textContent, PAGES[0]!.title);
+  assert.equal(byId(root, 'lore-entry-text').textContent, PAGES[0]!.text);
+  const quote = walk(byId(root, 'lore-veil')).find(n => n.localName === 'blockquote');
+  assert.ok(quote?.textContent.includes(PAGES[0]!.quote!.text));
+  assert.equal(walk(quote!).find(n => n.localName === 'cite')?.textContent, PAGES[0]!.quote!.cite);
+  assert.equal(maybeById(root, 'lore-opening-1'), undefined, 'the list is not shown under an entry');
+  click(byId(root, 'lore-back'));
+  assert.deepEqual(seen, [null]);
+  renderLore(root, loreProps({ shown: { kind: 'card', which: 'closing', chapter: 1 } }));
+  assert.equal(byId(root, 'lore-entry-text').textContent, CH1.lore!.closing.text);
+});
+
+test('the Lore book closes with a button tabbed with Q', () => {
+  const root = mount();
+  let closed = 0;
+  renderLore(root, loreProps({ onClose: () => { closed++; } }));
+  assert.equal(tabsOf(byId(root, 'lore-close'))[0]?.textContent, KEYS.menu.label);
+  click(byId(root, 'lore-close'));
   assert.equal(closed, 1);
 });

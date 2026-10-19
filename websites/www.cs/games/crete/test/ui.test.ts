@@ -15,6 +15,9 @@ import { fireDocument } from '../../_kit/test/dom-stub.ts';
 import { createGame } from '../src/game.ts';
 import type { Game } from '../src/game.ts';
 import { createFoundPages } from '../src/pages.ts';
+import { initial } from '../src/puzzle/state.ts';
+import { solve } from '../src/puzzle/solver.ts';
+import { trialLevel } from '../src/puzzle/trials.ts';
 import { CAMPAIGN_LEVELS, LEVEL_IDS } from '../src/campaign/chapters.ts';
 import type { Progress } from '../src/progress.ts';
 import type { Atlas } from '../src/board-plan.ts';
@@ -32,8 +35,8 @@ const renderEndCard = (root: StubElement, props: EndCardProps): void => ui.end.r
 const renderTitleCard = (root: StubElement, props: TitleCardProps): void => ui.title.renderTitleCard(asElement(root), props);
 const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));
 
-const WON = { won: true, hasNext: true, kicker: 'Trial 1 cleared', title: 'The Mouth of the Labyrinth', text: 'You found the way on your own.', score: '14 moves · best 14' };
-const LOST = { won: false, hasNext: false, kicker: 'Trial failed', title: 'The Minotaur has you', text: 'Your last heart is gone.', score: '9 moves' };
+const WON = { won: true, hasNext: true, pages: [] as string[], kicker: 'Level 1 cleared', title: 'The Mouth of the Labyrinth', text: 'You found the way on your own.', score: '14 moves · best 14' };
+const LOST = { won: false, hasNext: false, pages: [] as string[], kicker: 'Level failed', title: 'The Minotaur has you', text: 'Your last heart is gone.', score: '9 moves' };
 const calls = (seen: string[]) => ({
   onNext: () => seen.push('next'), onRetry: () => seen.push('retry'), onTrials: () => seen.push('trials'),
   onUndo: () => seen.push('undo'), onRestart: () => seen.push('restart'),
@@ -48,6 +51,23 @@ afterEach(() => {
   globalThis.__focused = null;
 });
 
+test('a won card names the pages found in this win, and shows no such line without any', () => {
+  const root = mount();
+  renderEndCard(root, { open: true, ...WON, pages: ["A note in Daedalus's hand"], ...calls([]) });
+  assert.equal(byId(root, 'end-pages').textContent, "You found a page: A note in Daedalus's hand. It is in the Lore book.");
+  renderEndCard(root, { open: true, ...WON, pages: ['One', 'Two'], ...calls([]) });
+  assert.equal(byId(root, 'end-pages').textContent, 'You found pages: One, Two. They are in the Lore book.');
+  renderEndCard(root, { open: true, ...WON, pages: [], ...calls([]) });
+  assert.equal(maybeById(root, 'end-pages'), undefined);
+});
+
+test('the Levels button on a won card is worded Levels', () => {
+  const root = mount();
+  renderEndCard(root, { open: true, ...WON, ...calls([]) });
+  assert.ok(byId(root, 'end-trials').textContent.startsWith('Levels'));
+  assert.ok(byId(root, 'end-next').textContent.includes('Next level'));
+});
+
 test('the ending card waits hidden until a trial ends', () => {
   const root = mount();
   renderEndCard(root, { open: false, ...WON, ...calls([]) });
@@ -55,7 +75,7 @@ test('the ending card waits hidden until a trial ends', () => {
   assert.equal(byId(root, 'end-veil').className, 'veil');
 });
 
-test('a won trial offers Next trial, Retry and Trials, and focuses Next trial', () => {
+test('a won level offers Next level, Retry and Levels, and focuses Next level', () => {
   const root = mount();
   const seen: string[] = [];
   renderEndCard(root, { open: false, ...WON, ...calls(seen) });
@@ -74,14 +94,14 @@ test('a won trial offers Next trial, Retry and Trials, and focuses Next trial', 
   assert.equal(maybeById(root, 'end-restart'), undefined);
 });
 
-test('after the last trial there is no Next trial, and Retry takes the focus', () => {
+test('after the last level there is no Next level, and Retry takes the focus', () => {
   const root = mount();
   renderEndCard(root, { open: true, ...WON, hasNext: false, ...calls([]) });
   assert.equal(maybeById(root, 'end-next'), undefined);
   assert.equal(document.activeElement?.id, 'end-retry');
 });
 
-test('a lost trial offers Undo and Restart only', () => {
+test('a lost level offers Undo and Restart only', () => {
   const root = mount();
   const seen: string[] = [];
   renderEndCard(root, { open: true, ...LOST, ...calls(seen) });
@@ -149,15 +169,30 @@ const progress: Progress = {
   record: id => { cleared.add(id); return progress.get(id); },
 };
 const m = manualClock();
-const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress });
+const heard: string[] = [];
+const found = createFoundPages(null);
+const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, sfx: n => heard.push(n) });
 const game: Game = createGame({
-  sfx() {}, say() {}, progress, pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock,
+  sfx() {}, say() {}, progress, pages: found, levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock,
   reducedMotion: () => true, changed: () => flow.render(game),
 });
 flow.bindControls({ game, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play: () => flow.showChapter(1, false) });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
-const reset = () => { cleared.clear(); flow.closeLayers(); game.stop(); };
+const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); };
+// Elements of unmounted overlay tests linger in the stub by id, so a page element is looked up inside its root.
+const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
+const el = (id: string) => maybeById(rootOf(id), id);
+const text = (id: string) => byId(rootOf(id), id).textContent;
+/** Opens level `i`, closes its start card and plays the solver's line to the win. */
+function win(i: number): void {
+  game.open(i);
+  key('Enter');
+  const r = solve(initial(trialLevel(i)));
+  assert.ok(r.solved);
+  for (const a of r.line) game.press(a);
+  assert.equal(game.run!.now.outcome, 'won');
+}
 
 test('Play opens the chapter card, and Enter on it starts level 1 when nothing is cleared', () => {
   reset();
@@ -236,4 +271,94 @@ test('the closing card takes Enter as Continue, and does not start a level', () 
   key('Enter');
   assert.equal(flow.top(), null);
   assert.equal(game.opens, opened);
+});
+
+test('the end card words a win as Level N cleared and a loss as Level failed', () => {
+  reset();
+  win(0);
+  assert.equal(flow.top(), 'end');
+  assert.equal(text('end-kicker'), 'Level 1 cleared');
+  assert.ok(text('end-next').includes('Next level'));
+  assert.ok(text('end-trials').startsWith('Levels'));
+});
+
+test('a win that takes a page names it on the end card, and a replayed win still does', () => {
+  reset();
+  // Level 9 with its page made a relic: the solver's line must take it, and the same line wins the real level.
+  const lv = trialLevel(8);
+  const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
+  const r = solve(initial(copy));
+  assert.ok(r.solved);
+  for (let round = 0; round < 2; round++) {
+    game.open(8);
+    key('Enter');
+    for (const a of r.line) game.press(a);
+    assert.equal(game.run!.now.outcome, 'won');
+    assert.equal(flow.top(), 'end');
+    assert.equal(text('end-pages'), "You found a page: A Tribute's Marks. It is in the Lore book.");
+  }
+});
+
+test('a win that takes no page has no page line', () => {
+  reset();
+  win(0);
+  assert.equal(el('end-pages'), undefined);
+});
+
+test('winning level 10 opens the closing card over the end card, and the end card waits until Continue', () => {
+  reset();
+  win(9);
+  assert.equal(flow.top(), 'chapter');
+  assert.match(text('chapter-text'), /Labyrinth begins here/);
+  assert.equal(byId(rootOf('end-veil'), 'end-veil').hidden, true);
+  key('Enter');
+  assert.equal(flow.top(), 'end');
+  assert.equal(el('end-next'), undefined);
+  assert.equal(text('end-kicker'), 'Level 10 cleared');
+});
+
+test('Q also puts the closing card away and shows the end card', () => {
+  reset();
+  win(9);
+  key('q');
+  assert.equal(flow.top(), 'end');
+});
+
+test('a chapter card opening makes the chapter sound once', () => {
+  reset();
+  flow.showChapter(1, false);
+  assert.deepEqual(heard, ['chapter']);
+  key('Enter');
+  assert.deepEqual(heard, ['chapter']);
+  win(9);
+  assert.equal(heard.filter(n => n === 'chapter').length, 2, 'the closing card makes it once more');
+});
+
+test('the menu opens the Lore book; Q leaves an open entry for the list, and Q again closes the book', () => {
+  reset();
+  key('q');
+  assert.equal(flow.top(), 'menu');
+  click(byId(rootOf('menu-lore'), 'menu-lore'));
+  assert.equal(flow.top(), 'lore');
+  assert.ok(text('lore-veil').includes('Lore book'));
+  click(byId(rootOf('lore-opening-1'), 'lore-opening-1'));
+  assert.equal(text('lore-entry-title'), 'The Outer Halls');
+  key('q');
+  assert.equal(flow.top(), 'lore');
+  assert.ok(el('lore-opening-1'), 'back on the list');
+  key('q');
+  assert.equal(flow.top(), 'menu');
+});
+
+test('the Lore book lists the closing card once level 10 is cleared', () => {
+  reset();
+  key('q');
+  click(byId(rootOf('menu-lore'), 'menu-lore'));
+  assert.equal(el('lore-closing-1'), undefined);
+  flow.closeLayers();
+  win(9);
+  flow.closeLayers();
+  key('q');
+  click(byId(rootOf('menu-lore'), 'menu-lore'));
+  assert.ok(el('lore-closing-1'));
 });

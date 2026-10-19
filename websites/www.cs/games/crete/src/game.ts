@@ -19,7 +19,7 @@ import type { Cell } from './puzzle/tiles.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
-  | 'caught' | 'stone' | 'win' | 'lose' | 'bump' | 'pickup' | 'page' | 'hint';
+  | 'caught' | 'stone' | 'win' | 'lose' | 'bump' | 'pickup' | 'page' | 'hint' | 'chapter';
 
 export type Tone = 'info' | 'good' | 'bad';
 

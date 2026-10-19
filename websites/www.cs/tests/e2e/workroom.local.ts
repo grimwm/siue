@@ -4,10 +4,15 @@
 // and never trip the content security policy; then a sound effect from another
 // project: two projects on the list, a seconds axis, no sheet music; then the
 // theme switch, the guide, and every screen at phone and desktop width in both
-// themes.
+// themes; then answering with the TEST keyring uploaded and unlocked: pin a
+// typed note, pick it up with the owner's tool, read and delete it on a second
+// device; a composer that asks for the unlock first; hum (and find a recording
+// kept, not lost, when the mode changes mid-recording), react, draw the energy,
+// and a note made offline that waits and then goes.
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const SITE = join(import.meta.dirname, '..', '..');
@@ -47,8 +52,8 @@ export async function signIn(page: Page, base: string): Promise<void> {
     }
     return token;
   }, { timeout: 20_000 }).not.toBe('');
-  await page.goto(`${base}admin/verify.php?token=${token}`); // the mailed link names http://localhost/ with no port
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  // The mailed link names http://localhost/ with no port. Opened in the browser that asked for it, it signs in at once.
+  await page.goto(`${base}admin/verify.php?token=${token}`);
   await expect(page).toHaveURL(/admin\/(index\.php)?$/);
 }
 
@@ -63,7 +68,7 @@ export async function createKey(page: Page, base: string, label: string, scopes:
 type Session = Awaited<ReturnType<BrowserContext['storageState']>>;
 let session: Session | undefined;
 
-const VIEW_TABS = ['story', 'roll', 'sound', 'sheet'] as const;
+const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
 
 /** A fresh browser context signed in as the owner. The first call signs in and keeps the session; later calls reuse it. Unless guideSeen is false, every view's guide counts as seen, so none opens over the page. */
 export async function signedInPage(browser: Browser, base: string, opts: { guideSeen?: boolean } = {}): Promise<{ context: BrowserContext; page: Page }> {
@@ -75,7 +80,7 @@ export async function signedInPage(browser: Browser, base: string, opts: { guide
   }
   const context = await browser.newContext({ storageState: session });
   if (opts.guideSeen ?? true) {
-    await context.addInitScript((tabs: readonly string[]) => { for (const t of tabs) { localStorage.setItem(`workroom-guide-${t}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${t}`, 'seen'); } }, VIEW_TABS);
+    await context.addInitScript((tabs: readonly string[]) => { for (const t of tabs) { localStorage.setItem(`workroom-guide-${t}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${t}`, 'seen'); } }, GUIDE_VIEWS);
   }
   return { context, page: await context.newPage() };
 }
@@ -100,6 +105,99 @@ export async function publishFixtureDraft(request: APIRequestContext, base: stri
     data: draftBundle(files),
   });
   expect([201, 409]).toContain(res.status());
+}
+
+const FIXTURES = join(SITE, 'games', 'workroom', 'test', 'fixtures');
+const TOOLS = join(SITE, 'music', 'tools');
+const testKey = JSON.parse(readFileSync(join(FIXTURES, 'test-key.json'), 'utf8')) as { fingerprint: string; pkcs8: string; passphrase: string; keyring: object; other: { fingerprint: string } };
+/** The answer bar's reason for the unlock (UNLOCK_FIRST in games/workroom/src/notes-session.ts). */
+const UNLOCK_FIRST = 'Unlock your notes first: each note is sealed to your notes key, and the passphrase unlocks it.';
+
+/** Uploads the TEST keyring with its fingerprints, as make music-setup uploads the owner's: the server then accepts notes sealed to the test key, and the page seals to it once the TEST passphrase unlocks the keyring. */
+async function uploadTestKeyring(request: APIRequestContext, base: string, key: string): Promise<void> {
+  const up = await request.post(`${base}music/api/keyring.php`, {
+    headers: { Authorization: `Bearer ${key}` },
+    data: { keyring: testKey.keyring, current: testKey.fingerprint, previous: [testKey.other.fingerprint] },
+  });
+  expect(up.status()).toBe(201);
+}
+
+/**
+ * Claude's side: the owner's tool (`siue-music pickup`) against this docker stack, from a fresh config folder. Its
+ * cache holds the TEST key and the pickup API key; 1Password is the tool's own stand-in (music/tools/tests/fake_op.py)
+ * holding the TEST key's item, so the run never reaches the owner's 1Password or cache. The caller removes `home`.
+ */
+function pickup(base: string, pickupKey: string): { run: SpawnSyncReturns<string>; home: string } {
+  const home = mkdtempSync(join(tmpdir(), 'siue-music-e2e-'));
+  writeFileSync(join(home, 'music.json'), JSON.stringify({ v: 1, keys: { [testKey.fingerprint]: testKey.pkcs8 }, api: { 'music-pickup': pickupKey }, current: testKey.fingerprint, previous: [] }), { mode: 0o600 });
+  writeFileSync(join(home, 'op.json'), JSON.stringify({ items: [{
+    id: 'testkey', vault: 'SIUE', title: `SIUE music notes key ${testKey.fingerprint.slice(0, 16)}`, category: 'PASSWORD', tags: ['siue-music-key'], urls: [],
+    fields: [
+      { id: 'password', type: 'CONCEALED', purpose: 'PASSWORD', label: 'password', value: testKey.passphrase },
+      { id: 'private_key', type: 'CONCEALED', label: 'private_key', value: testKey.pkcs8 },
+      { id: 'fingerprint', type: 'STRING', label: 'fingerprint', value: testKey.fingerprint },
+    ],
+  }] }), { mode: 0o600 });
+  const python = process.env.MUSIC_PY ?? 'python3';
+  const run = spawnSync(python, [join(TOOLS, 'siue-music'), 'pickup'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      SIUE_CONFIG_DIR: home, SIUE_MUSIC_NOTES_DIR: join(home, 'notes'), SIUE_MUSIC_BASE: `${base}music/`,
+      OP_VAULT: 'SIUE', SIUE_OP: `'${python}' '${join(TOOLS, 'tests', 'fake_op.py')}'`, FAKE_OP_STORE: join(home, 'op.json'), FAKE_OP_LOG: join(home, 'op.log'),
+    },
+  });
+  return { run, home };
+}
+
+/** On a phone the notes panel is the bottom sheet: open it. The page renders after the load, so first wait for the closed sheet's handle or the open panel's passphrase field. */
+async function openNotes(page: Page): Promise<void> {
+  const handle = page.locator('[data-sheet] > button[aria-expanded="false"]');
+  await expect(handle.or(page.getByLabel('Passphrase')).filter({ visible: true }).first()).toBeVisible();
+  if (await handle.isVisible()) await handle.click();
+}
+
+/** Notes are listed, and notes can be sealed, only after an unlock, and nothing is remembered: every load of a page starts by unlocking. */
+async function unlock(page: Page, passphrase: string): Promise<void> {
+  await openNotes(page);
+  await page.getByLabel('Passphrase').fill(passphrase);
+  await page.getByRole('button', { name: 'Unlock notes' }).click();
+}
+
+/** The pin composer's textbox, by its role and name: the panel that lists the notes has another name. */
+const noteBox = (page: Page) => page.getByRole('textbox', { name: 'Your note', exact: true });
+
+/** Pinning keeps the timeline on screen: Pin a note scrolls the Story view into view, and the picked span and the composer are both on screen, neither over the other (the composer is docked at the bottom of a phone, under the span; from 1024 px it is in the page's flow, above the stage). */
+async function pinSpan(page: Page, x0: number, x1: number): Promise<void> {
+  await page.getByRole('button', { name: 'Pin a note' }).click();
+  await expect(page.locator('[data-timeline]')).toBeInViewport();
+  await dragAcross(page, '[data-timeline]', x0, x1, 120);
+  await expect(page.locator('[data-selection]')).toBeVisible();
+  const viewport = page.viewportSize()!;
+  const selection = (await page.locator('[data-selection]').boundingBox())!;
+  const composer = (await page.locator('[data-pin-composer]').boundingBox())!;
+  for (const box of [selection, composer]) {
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
+  }
+  expect(selection.y + selection.height <= composer.y + 1 || composer.y + composer.height <= selection.y + 1, 'the composer covers the picked span').toBe(true);
+}
+
+/** Drags across a drawing from (x0, y) to (x1, y), as fractions of its width and pixels from its top. */
+async function dragAcross(page: Page, selector: string, x0: number, x1: number, y0: number, y1 = y0): Promise<void> {
+  const box = (await page.locator(selector).boundingBox())!;
+  await page.mouse.move(box.x + box.width * x0, box.y + y0);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * x1, box.y + y1, { steps: 10 });
+  await page.mouse.up();
+}
+
+/** Every page view starts locked: unlock, then on a phone close the bottom sheet again so the answer bar is in reach. */
+async function unlockThenClose(page: Page): Promise<void> {
+  await unlock(page, testKey.passphrase);
+  await expect(page.locator('[data-history]')).toBeVisible();
+  const open = page.locator('[data-sheet] > button[aria-expanded="true"]');
+  if (await open.isVisible()) await open.click();
 }
 
 test('open a piece, play, seek, switch views, read a term, no CSP violations', async ({ browser, request, baseURL }) => {
@@ -374,6 +472,179 @@ test('on a phone every time view opens with the whole piece on screen', async ({
   }
 });
 
+test('pin a note, pick it up with the tool, read and delete it on a second device', async ({ browser, request, baseURL }) => {
+  test.setTimeout(240_000);
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    const publish = await createKey(page, base, 'e2e answer publish', ['drafts:publish', 'keys:publish']);
+    const pickupKey = await createKey(page, base, 'e2e answer pickup', ['notes:pickup']);
+    await publishFixtureDraft(request, base, publish);
+    await uploadTestKeyring(request, base, publish);
+
+    // Pinned at phone size, where the composer is docked over the bottom of the screen.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${base}music/piece.php?id=test-piece`);
+    await unlock(page, testKey.passphrase);
+    await expect(page.locator('[data-history]')).toBeVisible();
+    await pinSpan(page, 0.5 + 0.005, 0.85);
+    await expect(page.locator('[data-pin-span]')).toHaveText(/^For Bars 5–7 · .* · Horns$/);
+    await noteBox(page).fill('louder and slower right here');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Sent. It is waiting for pickup.');
+    const mine = page.locator('[data-note]', { hasText: 'louder and slower right here' });
+    await expect(mine.locator('[data-state]')).toHaveText('Waiting');
+    await expect(page.locator('[data-note-mark]').first()).toBeVisible();
+
+    // The pieces list counts per piece once unlocked.
+    await page.goto(`${base}music/`);
+    await unlock(page, testKey.passphrase);
+    await expect(page.locator('a[data-waiting="test-piece"] + .waiting-count')).toHaveText('1 waiting');
+
+    // Claude's side: the owner's tool picks it up from this docker stack.
+    const { run, home } = pickup(base, pickupKey);
+    try {
+      expect(run.status, run.stderr).toBe(0);
+      expect(run.stdout).toMatch(/Picked up 1 note into/);
+      const [folder] = readdirSync(join(home, 'notes'));
+      expect(JSON.parse(readFileSync(join(home, 'notes', folder!, 'note.json'), 'utf8')).body.text).toBe('louder and slower right here');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+
+    await page.goto(`${base}music/piece.php?id=test-piece`);
+    await unlock(page, testKey.passphrase);
+    await expect(mine.locator('[data-state]')).toHaveText('Picked up');
+
+    // A second device: a phone signs in, unlocks with the passphrase, reads, deletes. Nothing of a key is stored.
+    const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await phone.addInitScript((views: readonly string[]) => { for (const v of views) { localStorage.setItem(`workroom-guide-${v}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${v}`, 'seen'); } }, GUIDE_VIEWS);
+    const p2 = await phone.newPage();
+    await signIn(p2, base);
+    await p2.goto(`${base}music/piece.php?id=test-piece`);
+    await unlock(p2, 'not it');
+    await expect(p2.getByText('That passphrase did not unlock the key.')).toBeVisible();
+    await p2.getByLabel('Passphrase').fill(testKey.passphrase);
+    await p2.getByRole('button', { name: 'Unlock notes' }).click();
+    await expect(p2.getByText('louder and slower right here')).toBeVisible();
+    const stored = await p2.evaluate(async () => {
+      const stores: string[] = [];
+      for (const info of await indexedDB.databases()) {
+        if (!info.name) continue;
+        const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open(info.name!); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+        stores.push(...Array.from(db.objectStoreNames).map(s => `${info.name}/${s}`));
+        db.close();
+      }
+      const local = Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)]));
+      return { local, session: Object.keys(sessionStorage), stores, cookies: document.cookie, caches: typeof caches === 'undefined' ? [] : await caches.keys() };
+    });
+    expect(Object.keys(stored.local).filter(k => !/^workroom-(guide-|theme$)/.test(k))).toEqual([]);
+    expect(stored.session).toEqual([]);
+    expect(stored.stores.filter(s => s !== 'siue-music/outbox')).toEqual([]);
+    expect(stored.cookies).toBe('');
+    expect(stored.caches).toEqual([]);
+    expect(JSON.stringify(stored)).not.toContain(testKey.passphrase);
+    await p2.reload();
+    await openNotes(p2);
+    await expect(p2.getByRole('button', { name: 'Unlock notes' })).toBeVisible();
+    await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
+    await unlock(p2, testKey.passphrase);
+    await p2.locator('[data-note]', { hasText: 'louder and slower right here' }).getByRole('button', { name: /^Delete note from/ }).click();
+    // Delete asks first, in words.
+    await p2.getByRole('group', { name: /^Delete note from/ }).getByRole('button', { name: 'Delete it' }).click();
+    await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
+    await phone.close();
+  } finally {
+    await context.close();
+  }
+});
+
+test('a composer asks for the unlock first; hum, react and draw the energy; a note made offline waits on this device and goes when the connection is back', async ({ browser, request, baseURL }) => {
+  test.setTimeout(240_000);
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    const publish = await createKey(page, base, 'e2e answer more', ['drafts:publish', 'keys:publish']);
+    await publishFixtureDraft(request, base, publish);
+    await uploadTestKeyring(request, base, publish);
+    await page.goto(`${base}music/piece.php?id=test-piece`);
+
+    // Before an unlock nothing can be sealed: React opens the notes panel at the unlock form with the reason, and the reactions after the unlock.
+    await page.getByRole('button', { name: 'React' }).click();
+    await expect(page.locator('[data-unlock-reason]')).toHaveText(UNLOCK_FIRST);
+    await expect(page.locator('[data-react-bar]')).toHaveCount(0);
+    await page.getByLabel('Passphrase').fill(testKey.passphrase);
+    await page.getByRole('button', { name: 'Unlock notes' }).click();
+    await expect(page.locator('[data-react-bar]')).toBeVisible();
+    await expect(page.locator('[data-unlock-reason]')).toHaveCount(0);
+    await expect(page.locator('[data-history]')).toBeVisible();
+    await page.getByRole('button', { name: 'React' }).click();
+    await expect(page.locator('[data-react-bar]')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Hum it' }).click();
+    await expect(page.getByRole('button', { name: 'Stop (0:01 of 1:00)' })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /^Stop \(/ }).click();
+    const hum = page.locator('[data-note]', { hasText: 'Humming' });
+    await expect(hum).toHaveCount(1);
+    await expect(hum.locator('audio[data-note-audio]')).toHaveAttribute('src', /^blob:/);
+
+    // Switching to another mode while humming stops the microphone and keeps the recording to send or discard.
+    await page.getByRole('button', { name: 'Hum it' }).click();
+    await expect(page.getByRole('button', { name: /^Stop \(/ })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'React' }).click();
+    await expect(page.locator('[data-held-recording]')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Stop \(/ })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Discard recording' }).click();
+    await expect(page.locator('[data-held-recording]')).toHaveCount(0);
+    await expect(hum).toHaveCount(1);
+
+    // A reaction is one tap, and the bar stays open for the next.
+    await expect(page.locator('[data-react-bar]')).toContainText('React to: The Labyrinth stirs');
+    await page.getByRole('button', { name: 'Love it' }).click();
+    await expect(page.locator('[data-note]', { hasText: 'Reaction: Love it' })).toHaveCount(1);
+    await expect(page.locator('[data-react-bar]')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Draw the energy' }).click();
+    await expect(page.locator('[data-energy-editor]')).toBeVisible();
+    await expect(page.locator('[data-legend]')).toHaveText('dashed = the energy now · green = your shape · higher = more intense');
+    await dragAcross(page, '[data-energy-editor]', 0.2, 0.8, 140, 20);
+    await page.getByRole('button', { name: 'Send this shape' }).click();
+    await expect(page.locator('[data-note]', { hasText: 'Energy shape' })).toHaveCount(1);
+    await expect(page.locator('[data-timeline]')).toBeVisible();
+
+    await context.setOffline(true);
+    await page.getByRole('button', { name: 'Pin a note' }).click();
+    await expect(page.locator('[data-timeline]')).toBeInViewport();
+    const box = (await page.locator('[data-timeline]').boundingBox())!;
+    await page.locator('[data-timeline]').click({ position: { x: box.width * 0.25, y: 90 } });
+    await expect(page.locator('[data-pin-span]')).toHaveText(/^For Bar \d+ · /);
+    await noteBox(page).fill('made with no connection');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('No connection');
+    await expect(page.locator('[data-kept-note]')).toHaveCount(1);
+    // The outbox holds the sealed note only: exactly key, bundle, made and reason, and the typed words are nowhere in the bytes.
+    const waiting = await page.evaluate(words => new Promise<{ keys: string[]; plain: boolean }[]>((resolve, reject) => {
+      const r = indexedDB.open('siue-music');
+      r.onsuccess = () => {
+        const q = r.result.transaction('outbox').objectStore('outbox').getAll();
+        q.onsuccess = () => {
+          const needle = new TextEncoder().encode(words);
+          const has = (b: Uint8Array): boolean => { for (let i = 0; i + needle.length <= b.length; i++) if (needle.every((x, j) => b[i + j] === x)) return true; return false; };
+          resolve((q.result as Record<string, unknown>[]).map(rec => ({ keys: Object.keys(rec).sort(), plain: has(rec.bundle as Uint8Array) })));
+        };
+        q.onerror = () => reject(q.error);
+      };
+      r.onerror = () => reject(r.error);
+    }), 'made with no connection');
+    expect(waiting).toEqual([{ keys: ['bundle', 'key', 'made', 'reason'], plain: false }]);
+    await context.setOffline(false);
+    await expect(page.locator('[data-kept-note]')).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.locator('[data-note]', { hasText: 'made with no connection' })).toHaveCount(1);
+  } finally {
+    await context.close();
+  }
+});
+
 interface Box { left: number; top: number; right: number; bottom: number }
 
 const SHOTS = process.env.MUSIC_E2E_SHOTS ?? '';
@@ -396,6 +667,31 @@ const SCREENS: Screen[] = [
     await p.getByRole('button', { name: 'How to read this' }).click();
     await expect(p.locator('[data-guide-card]')).toBeVisible();
   } },
+  { name: 'notes-locked', path: 'music/piece.php?id=test-piece', ready: async p => { await openNotes(p); await expect(p.getByRole('button', { name: 'Unlock notes' })).toBeVisible(); } },
+  { name: 'unlock-first', path: 'music/piece.php?id=test-piece', ready: async p => { await p.getByRole('button', { name: 'Pin a note' }).click(); await expect(p.locator('[data-unlock-reason]')).toBeVisible(); } },
+  { name: 'notes', path: 'music/piece.php?id=test-piece', ready: async p => { await unlock(p, testKey.passphrase); await expect(p.locator('[data-history]')).toBeVisible(); } },
+  { name: 'pin', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await unlockThenClose(p);
+    await expect(p.locator('[data-timeline]')).toBeVisible();
+    await pinSpan(p, 0.5, 0.85);
+    await noteBox(p).fill('More horns here, and hold the last chord longer.');
+  } },
+  { name: 'react', path: 'music/piece.php?id=test-piece', ready: async p => { await unlockThenClose(p); await p.getByRole('button', { name: 'React' }).click(); await expect(p.locator('[data-react-bar]')).toBeVisible(); } },
+  { name: 'energy', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await unlockThenClose(p);
+    await p.getByRole('button', { name: 'Draw the energy' }).click();
+    await dragAcross(p, '[data-energy-editor]', 0.3, 0.7, 140, 30);
+    await expect(p.locator('[data-energy-drawn]')).toBeVisible();
+  } },
+  { name: 'energy-guide', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await unlockThenClose(p);
+    await p.getByRole('button', { name: 'Draw the energy' }).click();
+    await p.getByRole('button', { name: 'How to read this' }).click();
+    await expect(p.locator('[data-guide-card]')).toContainText('Part 1 of 4');
+  } },
+  { name: 'hum-recording', path: 'music/piece.php?id=test-piece', ready: async p => { await unlockThenClose(p); await p.getByRole('button', { name: 'Hum it' }).click(); await expect(p.getByRole('button', { name: /^Stop \(/ })).toBeVisible(); } },
+  { name: 'pieces-unlocked', path: 'music/', ready: async p => { await unlock(p, testKey.passphrase); await expect(p.locator('[data-pieces-notes]')).toContainText('Each piece shows'); } },
+  { name: 'sound-react', path: 'music/piece.php?id=cannon-fire', ready: async p => { await unlockThenClose(p); await p.getByRole('button', { name: 'React' }).click(); await expect(p.locator('[data-react-bar]')).toBeVisible(); } },
   { name: 'sound-story', path: 'music/piece.php?id=cannon-fire', ready: p => expect(p.locator('[data-lane="boom"]')).toBeVisible() },
   { name: 'sound-sound-picture', path: 'music/piece.php?id=cannon-fire', ready: tab('Sound picture', p => expect(p.locator('img[data-spectrogram]')).toBeVisible()) },
   { name: 'missing-piece', path: 'music/piece.php?id=no-such-piece', ready: p => expect(p.locator('.error')).toBeVisible() },
@@ -403,15 +699,16 @@ const SCREENS: Screen[] = [
 ];
 
 test('every screen at 390 and 1280 px, dark and light: no sideways scroll, 44 px targets, no CSP errors', async ({ browser, request, baseURL }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(600_000);
   const base = baseURL!;
   const { context, page } = await signedInPage(browser, base);
   try {
     const violations: string[] = [];
     page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
-    const key = await createKey(page, base, 'e2e screens', ['drafts:publish']);
+    const key = await createKey(page, base, 'e2e screens', ['drafts:publish', 'keys:publish']);
     await publishFixtureDraft(request, base, key);
     await publishFixtureDraft(request, base, key, 'draft-sound');
+    await uploadTestKeyring(request, base, key);
     if (SHOTS) mkdirSync(SHOTS, { recursive: true });
     for (const theme of ['dark', 'light'] as const) {
       for (const width of [390, 1280]) {

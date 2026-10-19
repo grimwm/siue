@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { h, render } from 'preact';
 import type { ComponentChild } from 'preact';
 import { act } from 'preact/test-utils';
-import { fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
+import { document as stubDocument, fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import type { Score } from '../src/score.ts';
@@ -150,4 +150,45 @@ test('Legend: only what each view draws', async () => {
   for (const l of legendFor('story', soundScore)) assert.doesNotMatch(l, /star|note|higher|bigger/, 'a sound has no stars or pitch rows');
   const root = await mount(h(c.legend.Legend, { items: legendFor('story', noMotifs) }));
   assert.equal(walk(root).find(e => e._attrs['data-legend'] !== undefined)!.textContent, 'block = a note · glow = energy');
+});
+
+test('Button: submit makes a submit button; otherwise it never submits a form', async () => {
+  const plain = walk(await mount(h(c.button.Button, {}, 'Go'))).find(e => e.localName === 'button')!;
+  const submit = walk(await mount(h(c.button.Button, { submit: true }, 'Unlock'))).find(e => e.localName === 'button')!;
+  assert.equal(plain._attrs['type'], 'button');
+  assert.equal(submit._attrs['type'], 'submit');
+});
+
+test('Panel: the heading names the panel when no label is given; a label wins', async () => {
+  const titled = walk(await mount(h(c.panel.Panel, { title: 'Your notes' }, 'x'))).find(e => e.localName === 'section')!;
+  assert.equal(titled._attrs['aria-label'], 'Your notes');
+  const labelled = walk(await mount(h(c.panel.Panel, { title: 'Your notes', label: 'Notes for this piece' }, 'x'))).find(e => e.localName === 'section')!;
+  assert.equal(labelled._attrs['aria-label'], 'Notes for this piece');
+});
+
+test('Sheet: the handle controls the body; open, the body is a grid on a phone too', async () => {
+  const root = await mount(h(c.sheet.Sheet, { title: 'Notes & answers', open: true, onToggle: () => {} }, 'inside'));
+  const handle = walk(root).find(e => e.localName === 'button' && e._attrs['aria-expanded'] !== undefined)!;
+  const body = walk(root).find(e => e._attrs['data-sheet-body'] !== undefined)!;
+  assert.equal(body.id, c.sheet.SHEET_BODY_ID);
+  assert.equal(handle._attrs['aria-controls'], c.sheet.SHEET_BODY_ID);
+  assert.equal(handle._attrs['aria-expanded'], 'true');
+  assert.ok(classes(body).includes('grid') && !classes(body).includes('hidden'), 'open: shown at every width');
+});
+
+test('Tabs: the arrows, Home and End move the focus with the selection', async () => {
+  const items = [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }];
+  const root = await mount(h(c.tabs.Tabs, { label: 'Views', idPrefix: 'f', items, value: 'b', onChange: () => {} }));
+  const tabs = walk(root).filter(e => e._attrs['role'] === 'tab');
+  fire(tabs[1]!, 'keydown', { key: 'ArrowRight' });
+  assert.equal(stubDocument.activeElement, tabs[2]);
+  fire(tabs[1]!, 'keydown', { key: 'Home' });
+  assert.equal(stubDocument.activeElement, tabs[0]);
+  fire(tabs[1]!, 'keydown', { key: 'End' });
+  assert.equal(stubDocument.activeElement, tabs[2]);
+  // The tabs move from the selected one (value), whichever button the key lands on.
+  const first = await mount(h(c.tabs.Tabs, { label: 'Views', idPrefix: 'g', items, value: 'a', onChange: () => {} }));
+  const wrap = walk(first).filter(e => e._attrs['role'] === 'tab');
+  fire(wrap[0]!, 'keydown', { key: 'ArrowLeft' });
+  assert.equal(stubDocument.activeElement, wrap[2], 'wraps');
 });

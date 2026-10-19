@@ -1,5 +1,5 @@
 // Pointer events on a drawing surface, handed to the gesture machine: a tap
-// seeks, a drag pans, two fingers or ctrl+wheel zoom. A cancelled or lost
+// seeks, a drag pans (in select mode it picks a span), two fingers or ctrl+wheel zoom. A cancelled or lost
 // pointer capture cancels the machine, so a missed pointerup cannot wedge it.
 import { useEffect, useRef } from 'preact/hooks';
 import { createGestures } from '../gestures.ts';
@@ -15,6 +15,12 @@ export interface SurfaceProps {
   onView(v: View): void;
   /** true while any pointer is down on the surface, false once all are up or cancelled. */
   onHold?(held: boolean): void;
+  /** 'select' (pinning): one finger picks a span instead of panning; two still pinch. */
+  mode?: 'pan' | 'select';
+  /** A span being picked (x and y in surface pixels): it starts at (x0, y0) and the pointer is now at (x1, y1); done closes it; cancelled drops the preview. */
+  onSelect?(x0: number, x1: number, y0: number, y1: number, done: boolean, cancelled: boolean): void;
+  /** A tap, after onSeek, with where it landed. */
+  onTap?(x: number, y: number): void;
 }
 interface PointerLike { pointerId: number; clientX: number; clientY: number; timeStamp: number; currentTarget: Element }
 interface WheelLike { clientX: number; deltaX: number; deltaY: number; ctrlKey: boolean; currentTarget: Element; preventDefault(): void }
@@ -38,7 +44,7 @@ export function useSurface(p: SurfaceProps): SurfaceHandlers {
   const live = useRef(p);
   live.current = p;
   const machine = useRef<Gestures | null>(null);
-  machine.current ??= createGestures(() => live.current.view, () => live.current.bounds, () => 'pan');
+  machine.current ??= createGestures(() => live.current.view, () => live.current.bounds, () => live.current.mode ?? 'pan');
   const g = machine.current;
   const down = useRef(new Set<number>());
   // A view left with a pointer still down never sees its release.
@@ -51,12 +57,16 @@ export function useSurface(p: SurfaceProps): SurfaceHandlers {
   };
 
   /** Hands the gesture's outputs on; true when one of them changed the view. */
-  const apply = (outs: GestureOut[]): boolean => {
+  const apply = (outs: GestureOut[], y?: number): boolean => {
     let moved = false;
     for (const o of outs) {
       const { view, duration, onSeek, onView } = live.current;
-      if (o.kind === 'tap') onSeek(Math.min(duration, Math.max(0, xToTime(view, o.x))));
-      else if (o.kind === 'view') {
+      if (o.kind === 'tap') {
+        onSeek(Math.min(duration, Math.max(0, xToTime(view, o.x))));
+        live.current.onTap?.(o.x, o.y);
+      } else if (o.kind === 'select') {
+        live.current.onSelect?.(o.x0, o.x1, o.y, y ?? o.y, o.done, o.cancelled === true);
+      } else if (o.kind === 'view') {
         if (o.view.start !== view.start || o.view.pxPerSec !== view.pxPerSec) moved = true;
         onView(o.view);
       }
@@ -70,8 +80,8 @@ export function useSurface(p: SurfaceProps): SurfaceHandlers {
       hold(e.pointerId, true);
       apply(g.down(at(e)));
     },
-    onPointerMove: e => apply(g.move(at(e))),
-    onPointerUp(e) { apply(g.up(at(e))); hold(e.pointerId, false); },
+    onPointerMove: e => apply(g.move(at(e)), at(e).y),
+    onPointerUp(e) { apply(g.up(at(e)), at(e).y); hold(e.pointerId, false); },
     onPointerCancel(e) { apply(g.cancel(e.pointerId)); hold(e.pointerId, false); },
     onLostPointerCapture(e) { apply(g.cancel(e.pointerId)); hold(e.pointerId, false); },
     onWheel(e) {

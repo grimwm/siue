@@ -5,18 +5,25 @@ import type { ComponentChildren } from 'preact';
 import { useMemo } from 'preact/hooks';
 import { readableOn } from '../color.ts';
 import { layoutTimeline, TIMELINE } from '../timeline.ts';
+import type { TimelineLayout } from '../timeline.ts';
+import { hitTimeline, spanBetween } from '../hit.ts';
+import type { Span } from '../hit.ts';
+import type { NoteMark } from '../answer.ts';
 import { layoutConstellations, STAR_R } from '../constellation.ts';
 import { splitTerms } from '../glossary.ts';
 import { axisTicks } from '../axis.ts';
 import type { Score } from '../score.ts';
 import type { TempoMap } from '../tempo.ts';
-import { boundsFor } from '../zoom.ts';
+import { boundsFor, timeToX } from '../zoom.ts';
 import type { View } from '../zoom.ts';
 import { useSurface } from './surface.ts';
 import { useTheme } from './theme-context.ts';
 import { AXIS_H, Axis, LANE_ICON_SIZE, LaneIcon, Playhead } from './parts.tsx';
 
-export interface TimelineProps { score: Score; tempo: TempoMap; view: View; time: number; onSeek(t: number): void; onView(v: View): void; onTerm(id: string): void; onHold?(held: boolean): void; overlay?: ComponentChildren }
+/** Select mode: a drag or tap picks a span; span is the pick so far, null once dropped. */
+export interface TimelineSelect { span: Span | null; onPick(span: Span | null, done: boolean): void }  // null: the preview was cancelled
+
+export interface TimelineProps { select?: TimelineSelect; marks?: readonly NoteMark[]; score: Score; tempo: TempoMap; view: View; time: number; onSeek(t: number): void; onView(v: View): void; onTerm(id: string): void; onHold?(held: boolean): void; overlay?: ComponentChildren }
 
 /** A section's name as SVG text: plain runs are tspans, glossary words are tspans that open their card (a button cannot live inside an svg). */
 function SectionName(p: { name: string; onTerm(id: string): void }) {
@@ -36,6 +43,13 @@ function SectionName(p: { name: string; onTerm(id: string): void }) {
   );
 }
 
+/** The rows a span or a note covers: its lane's row, or every lane. */
+function band(layout: TimelineLayout, laneId: string | null): { y: number; h: number } {
+  const lane = layout.lanes.find(l => l.id === laneId);
+  const top = TIMELINE.energyH + TIMELINE.sectionH;
+  return lane ? { y: lane.rect.y, h: lane.rect.h } : { y: top, h: layout.height - top };
+}
+
 let glowCount = 0;
 
 /** "<Name>'s tune: 3 notes, rising", from the first star against the last. */
@@ -50,7 +64,20 @@ export function Timeline(p: TimelineProps) {
   const { score, tempo, view } = p;
   const layout = layoutTimeline(score, tempo, view);
   const stars = layoutConstellations(score, layout, view);
-  const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold });
+  const hitAt = (x: number, y: number) => hitTimeline(layout, view, tempo, x, y);
+  const surface = useSurface({
+    view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold,
+    mode: p.select ? 'select' : 'pan',
+    onSelect: (x0, x1, y0, y1, done, cancelled) => {
+      if (!p.select) return;
+      p.select.onPick(cancelled ? null : spanBetween(hitAt(x0, y0), hitAt(x1, y1), tempo), done); // the lane survives only when both ends are in one
+    },
+    onTap: (x, y) => {
+      if (!p.select) return;
+      const hit = hitAt(x, y);
+      p.select.onPick(spanBetween(hit, hit, tempo), true);
+    },
+  });
   const theme = useTheme();
   // Readable colours depend on the theme and the score's own colours, not on the view, so panning and zooming reuse them.
   const marks = useMemo(() => {
@@ -90,6 +117,24 @@ export function Timeline(p: TimelineProps) {
           </g>
         );
       })}
+      {(p.marks ?? []).map(m => {
+        const b = band(layout, m.lane);
+        const x = timeToX(view, m.from);
+        const w = (m.to - m.from) * view.pxPerSec;
+        return (
+          <g class="pointer-events-none" data-note-mark={m.id}>
+            {w >= 2
+              ? <rect class="fill-none stroke-ink" stroke-width={1.5} stroke-dasharray="4 3" rx={3} x={x} y={b.y + 1} width={w} height={b.h - 2} />
+              : <line class="stroke-ink" stroke-width={2} x1={x} x2={x} y1={b.y} y2={b.y + b.h} />}
+            <text class="fill-ink font-mono text-[10px]" x={x + 3} y={b.y + 11}>{m.n}</text>
+          </g>
+        );
+      })}
+      {p.select?.span ? (() => {
+        const s = p.select.span;
+        const b = band(layout, s.laneId);
+        return <rect data-selection="" class="pointer-events-none fill-amber/20 stroke-amber" stroke-width={1.5} x={timeToX(view, s.from)} y={b.y} width={Math.max(2, (s.to - s.from) * view.pxPerSec)} height={b.h} />;
+      })() : null}
       {p.overlay}
       <Axis ticks={axisTicks(score, tempo, view)} height={layout.height} />
       <Playhead view={view} time={p.time} height={layout.height} />

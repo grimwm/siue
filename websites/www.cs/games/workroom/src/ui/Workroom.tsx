@@ -3,28 +3,48 @@
 // the time axis, the playing time, the tab, the lane filter, the open word, the
 // notes sheet) and holds no logic the DOM-free modules can hold. From 1024 px
 // the views and the notes sheet sit side by side; narrower, the sheet is a
-// bottom sheet and the page keeps room under its content for the sheet's handle.
+// bottom sheet and the page keeps room under its content for the sheet's handle,
+// and whenever the answer bar's dock shows (pinning, a recording running or
+// waiting to be sent) for the dock too, so the Story view can scroll to the
+// top of the screen above it.
+// With a notes session it also holds the answering: the answer bar, the span
+// being picked, the energy drawing and the owner's notes on the Story view;
+// before an unlock the bar's buttons open the notes panel at the unlock form.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { energyNote } from '../answer.ts';
 import { formatSeconds } from '../axis.ts';
 import { splitTerms, term, termsIn } from '../glossary.ts';
-import { ALWAYS_SEEN, guideParts } from '../guide.ts';
-import type { GuideClip, GuideStore } from '../guide.ts';
+import { ALWAYS_SEEN, energyGuideParts, guideParts } from '../guide.ts';
+import type { GuideClip, GuideStore, GuideView } from '../guide.ts';
+import type { Span } from '../hit.ts';
+import { timelineMarks } from '../history.ts';
+import type { HistoryItem } from '../history.ts';
+import { guardLeaving, unsavedWork } from '../leave.ts';
+import type { NoteBody } from '../note.ts';
+import { UNLOCK_FIRST } from '../notes-session.ts';
+import type { NotesSession } from '../notes-session.ts';
+import { KEPT_MESSAGES, MEMORY_NOTICE, SENT_MESSAGE, SEND_MESSAGES } from '../outbox.ts';
 import type { DemoId } from '../demo.ts';
 import { follow } from '../player.ts';
 import type { Clip } from '../player.ts';
+import type { MediaPorts } from '../recorder.ts';
 import type { Change, Score } from '../score.ts';
-import { legendFor, pickTab, tabsFor } from '../tabs.ts';
+import { energyLegend, legendFor, pickTab, tabsFor } from '../tabs.ts';
 import type { Tab } from '../tabs.ts';
 import { changeTimes, tempoMap } from '../tempo.ts';
 import { boundsFor, fitView, resizeView, timeToX } from '../zoom.ts';
 import type { View } from '../zoom.ts';
+import { AnswerBar, HUM_AFTER_UNLOCK } from './AnswerBar.tsx';
+import type { AnswerMode, Asked } from './AnswerBar.tsx';
+import { Answers } from './Answers.tsx';
 import { Button } from './console/Button.tsx';
 import { Chip } from './console/Chip.tsx';
 import { GuideOverlay } from './console/GuideOverlay.tsx';
 import { Legend } from './console/Legend.tsx';
 import { Sheet } from './console/Sheet.tsx';
 import { panelId, tabId } from './console/Tabs.tsx';
+import { EnergyEditor } from './EnergyEditor.tsx';
 import { Card, Word } from './Glossary.tsx';
 import { PianoRoll } from './PianoRoll.tsx';
 import { Player } from './Player.tsx';
@@ -33,7 +53,13 @@ import { SoundPicture } from './SoundPicture.tsx';
 import { Timeline } from './Timeline.tsx';
 import { ViewTabs } from './ViewTabs.tsx';
 
-export interface WorkroomProps { score: Score; version: number; versions: number[]; audioSrc: (file: string) => string; onVersion(v: number): void; guide?: GuideStore; playDemo?(id: DemoId): void; stopDemo?(): void; children?: ComponentChildren }
+export interface WorkroomProps { score: Score; version: number; versions: number[]; audioSrc: (file: string) => string; onVersion(v: number): void; guide?: GuideStore; playDemo?(id: DemoId): void; stopDemo?(): void; children?: ComponentChildren;
+  /** The owner's notes: undefined, the page has no answering. */
+  notes?: NotesSession;
+  /** The microphone: null or undefined, no Hum it and no Record. */
+  media?: MediaPorts | null;
+  now?(): Date;
+}
 
 const FALLBACK_WIDTH = 720;
 
@@ -71,12 +97,108 @@ export function Workroom(p: WorkroomProps) {
   const cardRef = useRef<HTMLElement>(null);
   const opener = useRef<Element | null>(null);
   const tab = pickTab(tabs, wanted);
+  const notes = p.notes ?? null;
+  const answering = notes !== null;
+  const now = p.now ?? ((): Date => new Date());
+  const [unlocked, setUnlocked] = useState(notes?.unlocked() ?? false);
+  const [keyring, setKeyring] = useState(true);
+  const [asked, setAsked] = useState<Asked | null>(null);
+  const [mode, setMode] = useState<AnswerMode>('none');
+  const [span, setSpan] = useState<Span | null>(null);
+  const [preview, setPreview] = useState<Span | null>(null);
+  const [items, setItems] = useState<readonly HistoryItem[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  /** The words in the pin composer: they outlive the composer, and only the words a stored note sent are cleared. */
+  const [draft, setDraft] = useState('');
+  const draftNow = useRef(draft);
+  draftNow.current = draft;
+  /** A recording running (live) or made and not stored yet (held), as the answer bar reports it. */
+  const [rec, setRec] = useState({ live: false, held: false });
+  const recNow = useRef(rec);
+  recNow.current = rec;
+  const docked = mode === 'pin' || rec.live || rec.held;
+  // Leaving the page (another draft, a link, a reload) asks first while something made here would be lost.
+  useEffect(() => guardLeaving(window, () => unsavedWork({ draft: draftNow.current, recording: recNow.current.live, held: recNow.current.held, memoryOnly: notes?.memoryOnly() ?? false })), [notes]);
+  const marks = useMemo(() => timelineMarks(items, score.piece.id, score.duration), [items, score]);
+  const modeNow = useRef(mode);
+  modeNow.current = mode;
+  const changeMode = (m: AnswerMode): void => {
+    setMode(m);
+    setPreview(null);
+    if (m !== 'pin') setSpan(null);
+    if (m === 'pin') setWanted('story');
+  };
+  // Pinning picks on the Story view's timeline: bring it on screen. On a phone the composer is docked under it, so the stage goes to the top; from 1024 px the composer sits in the page above the stage, so the answer bar goes to the top and both stay in view.
+  useEffect(() => {
+    if (mode !== 'pin') return;
+    const wide = typeof matchMedia === 'function' ? matchMedia('(min-width: 1024px)').matches : false;
+    const top = wide ? stage.current?.closest('main, body')?.querySelector('[data-answer-dock]') ?? stage.current : stage.current;
+    top?.scrollIntoView?.({ block: 'start' });
+  }, [mode]);
+  const pick = (s: Span | null, done: boolean): void => {
+    if (s === null) setPreview(null);
+    else if (done) { setSpan(s); setPreview(null); }
+    else setPreview(s);
+  };
+  /** The bar is open only while the session says so: a lock anywhere (a sign-in that ended) turns it back to asking for the unlock. */
+  const syncLock = (): void => setUnlocked(notes?.unlocked() ?? false);
+  /** Seals and stores a note: true once it is stored (sent, or kept on this device), false when it is not, with the words and recordings still the owner's. A stored note closes only the mode it came from: a typed note its composer (unless more words were typed while it was sent), a shape the drawing. A reaction, a hum and a spoken note close nothing, so the next reaction is one tap and words typed beside a recording stay in the box. */
+  const send = async (body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean> => {
+    if (!notes) return false;
+    setSending(true);
+    setStatus('Sealing and sending…');
+    try {
+      const r = await notes.send(body, audio);
+      const kept = r.kept.find(k => k.key === r.key);
+      setStatus(kept ? `${KEPT_MESSAGES[kept.reason]}${r.memoryOnly ? ` ${MEMORY_NOTICE}` : ''}` : SENT_MESSAGE);
+      // The note is stored; a sign-in that ended locks the notes until the owner signs in and unlocks again.
+      if (r.kept.some(k => k.reason === 'signed_out')) notes.lock();
+      const from: AnswerMode | null = body.kind === 'text' ? 'pin' : body.kind === 'energy' ? 'energy' : null;
+      const typedSince = body.kind === 'text' && draftNow.current.trim() !== body.text;
+      if (from !== null && modeNow.current === from && !typedSince) changeMode('none');
+      return true;
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : SEND_MESSAGES.sealFailed);
+      return false;
+    } finally {
+      setSending(false);
+      syncLock();
+      setRefresh(n => n + 1);
+    }
+  };
+  const sendEnergy = (curve: [number, number][]): void => {
+    let body: NoteBody;
+    try {
+      body = energyNote({ piece: score.piece.id, draft: p.version, now }, curve, score.duration, score.bars ?? null);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : SEND_MESSAGES.sealFailed);
+      return;
+    }
+    void send(body, null);
+  };
+  // A server with no keyring (make music-setup has not run) turns the bar off.
+  useEffect(() => { if (notes) void notes.hasKeyring().then(setKeyring); }, [notes]);
+  /** Before an unlock nothing can be sealed: the notes panel opens at the unlock form, with the reason, and remembers what was asked for. */
+  const askUnlock = (what: Asked): void => { setAsked(what); setSheetOpen(true); };
+  /** After the unlock the bar opens what was asked for, with the sheet closed so the timeline shows; Hum it waits for the next tap (iOS grants the microphone only inside one). */
+  const unlockedNow = (): void => {
+    syncLock();
+    const what = asked;
+    setAsked(null);
+    if (what === 'hum') setStatus(HUM_AFTER_UNLOCK);
+    else if (what !== null) { setSheetOpen(false); changeMode(what); }
+  };
+  const access = !keyring ? 'off' : unlocked && notes?.unlocked() ? 'open' : 'locked';
+  // The guide follows the energy drawing while it replaces the view.
+  const guideView: GuideView = mode === 'energy' ? 'energy' : tab;
   // A view's guide opens by itself the first time this browser shows that view.
   useEffect(() => {
-    if (guide.seen(tab, score.kind)) return;
-    guide.markSeen(tab, score.kind);
+    if (guide.seen(guideView, score.kind)) return;
+    guide.markSeen(guideView, score.kind);
     setGuideOpen(true);
-  }, [tab, score.kind]);
+  }, [guideView, score.kind]);
   const bounds = useMemo(() => boundsFor(score.duration, width), [score.duration, width]);
 
   // The views are as wide as the stage: measured on mount and whenever the stage changes width (a window resize, a scrollbar appearing, the sheet opening). A browser without ResizeObserver falls back to the window's resize.
@@ -116,7 +238,7 @@ export function Workroom(p: WorkroomProps) {
   const hear = (c: Clip): void => { playClip.current?.(c); setClip(c); setTime(c.from); setView(v => follow(v, c.from, bounds)); };
   // Only one sound at a time: a demo pauses the piece and the demo before it; a piece clip silences a demo.
   const quietGuide = (): void => { if (clip) { pauseAudio.current?.(); setClip(null); } p.stopDemo?.(); };
-  const openGuide = (): void => { guide.markSeen(tab, score.kind); setGuideOpen(true); };
+  const openGuide = (): void => { guide.markSeen(guideView, score.kind); setGuideOpen(true); };
   const closeGuide = (): void => { setGuideOpen(false); howTo.current?.focus(); };
   const hearPart = (c: GuideClip): void => {
     if (c.kind === 'piece') { p.stopDemo?.(); hear({ from: c.from, to: c.to }); }
@@ -148,7 +270,7 @@ export function Workroom(p: WorkroomProps) {
   });
 
   return (
-    <div class="workroom grid gap-4 pb-14 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:pb-0">
+    <div class={`workroom grid gap-4 ${docked ? 'pb-[calc(40dvh+3.5rem)]' : 'pb-14'} lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:pb-0`}>
       <div class="grid min-w-0 gap-3">
         <header class="piece-head flex flex-wrap items-end justify-between gap-3">
           <div class="min-w-0">
@@ -162,29 +284,36 @@ export function Workroom(p: WorkroomProps) {
           </label>
         </header>
         <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} />
+        {answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} access={access} onLocked={askUnlock} onFront={() => setSheetOpen(false)} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} draft={draft} onDraft={setDraft} onRecording={r => setRec(was => (was.live === r.live && was.held === r.held ? was : r))} /> : null}
         <div class="flex flex-wrap items-end justify-end gap-x-3 gap-y-2 lg:flex-nowrap">
-          <div class="min-w-0 flex-1 basis-full lg:basis-0"><ViewTabs tabs={tabs} tab={tab} onTab={setWanted} /></div>
+          <div class="min-w-0 flex-1 basis-full lg:basis-0"><ViewTabs tabs={tabs} tab={tab} onTab={t => { setWanted(t); if (mode === 'pin' || mode === 'energy') changeMode('none'); }} /></div>
           <Button variant="secondary" buttonRef={howTo} data={{ 'data-guide-open': '' }} onClick={openGuide}>
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5" /><path d="M6.2 6.2a1.9 1.9 0 1 1 2.7 1.7c-.6.3-.9.7-.9 1.4" /><path d="M8 11.6v.1" /></svg>
             How to read this
           </Button>
         </div>
         <div role="tabpanel" id={panelId('view')} aria-labelledby={tabId('view', tab)} class="grid gap-2">
-          {tab === 'roll' ? (
+          {tab === 'roll' && mode !== 'energy' ? (
             <div class="lane-picker flex flex-wrap gap-2" role="group" aria-label="Lanes shown" data-guide="lane-picker">
               {score.lanes.map(l => <Chip pressed={!lanes || lanes.has(l.id)} onClick={() => toggleLane(l.id)}>{l.name}</Chip>)}
             </div>
           ) : null}
           <div ref={stage} data-guide="view" class="overflow-hidden rounded-lg bg-well ring-1 ring-rule">
-            {tab === 'story' ? <Timeline score={score} tempo={tempo} view={view} time={time} onSeek={seek} onView={setView} onHold={setHolding} onTerm={openCard} overlay={pins} /> : null}
-            {tab === 'roll' ? <PianoRoll score={score} tempo={tempo} view={view} time={time} lanes={lanes} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
-            {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram.file)} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
-            {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane} /> : null}
+            {mode === 'energy' ? <EnergyEditor score={score} tempo={tempo} view={view} busy={sending} onSend={sendEnergy} onHold={setHolding} onCancel={() => changeMode('none')} /> : (
+              <>
+                {tab === 'story' ? <Timeline score={score} tempo={tempo} view={view} time={time} onSeek={seek} onView={setView} onHold={setHolding} onTerm={openCard} overlay={pins}
+                  select={mode === 'pin' ? { span: preview ?? span, onPick: pick } : undefined} marks={marks} /> : null}
+                {tab === 'roll' ? <PianoRoll score={score} tempo={tempo} view={view} time={time} lanes={lanes} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
+                {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram.file)} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
+                {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane} /> : null}
+              </>
+            )}
           </div>
-          <Legend items={legendFor(tab, score)} />
+          <Legend items={mode === 'energy' ? energyLegend(score) : legendFor(tab, score, { notes: marks.length > 0 })} />
         </div>
       </div>
-      <Sheet title="Words & changes" open={sheetOpen} onToggle={setSheetOpen}>
+      <Sheet title="Notes & answers" open={sheetOpen} onToggle={setSheetOpen}>
+        {notes ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} ask={asked ? UNLOCK_FIRST : null} onUnlocked={unlockedNow} onLocked={syncLock} onItems={setItems} /> : null}
         {openTerm ? <Card cardRef={cardRef} term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={closeCard} /> : null}
         {seen.length > 0 ? (
           <div class="words grid gap-2" aria-label="Words in this piece">
@@ -207,7 +336,7 @@ export function Workroom(p: WorkroomProps) {
         ) : null}
         {p.children}
       </Sheet>
-      {guideOpen ? <GuideOverlay parts={guideParts({ tab, score, tempo, view, time, lanes })} onHear={hearPart} onStop={quietGuide} onClose={closeGuide} /> : null}
+      {guideOpen ? <GuideOverlay parts={mode === 'energy' ? energyGuideParts({ score, tempo, view }) : guideParts({ tab, score, tempo, view, time, lanes, marks })} onHear={hearPart} onStop={quietGuide} onClose={closeGuide} /> : null}
     </div>
   );
 }

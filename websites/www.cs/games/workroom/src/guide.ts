@@ -3,21 +3,24 @@
 // a control), a plain explanation, an everyday comparison and what Hear it
 // plays (a short clip of the piece at that part, or a built-in demo). Parts
 // with nothing to show on this piece are left out. Also the per-view "seen"
-// flags that open the guide by itself on a first visit. DOM-free.
+// flags that open the guide by itself on a first visit. The energy drawing has
+// its own guide beside the views. DOM-free.
 import { pref, text } from '../../_kit/prefs.ts';
 import type { Pref } from '../../_kit/prefs.ts';
 import type { StorageLike } from '../../_kit/ports.ts';
+import type { NoteMark } from './answer.ts';
 import { AXIS_H } from './axis.ts';
 import { layoutConstellations } from './constellation.ts';
 import type { DemoId } from './demo.ts';
 import { demoLength } from './demo.ts';
+import { ENERGY_EDIT_H } from './energy.ts';
 import { layoutRoll, ROLL_H } from './pianoroll.ts';
 import type { Kind, Score } from './score.ts';
 import { PICTURE_H } from './spectro.ts';
 import type { Tab } from './tabs.ts';
 import { sectionTimes } from './tempo.ts';
 import type { TempoMap } from './tempo.ts';
-import { layoutTimeline } from './timeline.ts';
+import { layoutTimeline, TIMELINE } from './timeline.ts';
 import type { Rect } from './timeline.ts';
 import { timeToX } from './zoom.ts';
 import type { View } from './zoom.ts';
@@ -25,11 +28,13 @@ import type { View } from './zoom.ts';
 /** The longest piece clip, in seconds. */
 export const CLIP_MAX = 4;
 export type GuideClip = { kind: 'piece'; from: number; to: number } | { kind: 'demo'; id: DemoId };
-export type GuideAnchor = 'view' | 'lane-picker' | 'sheet';
+/** A view's guide, or the energy drawing's. */
+export type GuideView = Tab | 'energy';
+export type GuideAnchor = 'view' | 'lane-picker' | 'sheet' | 'energy-editor' | 'energy-actions';
 /** rect is in the anchor element's own pixels (the drawing's, for 'view'); null lights the whole element. */
 export interface GuideSpot { anchor: GuideAnchor; rect: Rect | null }
 export interface GuidePart { id: string; title: string; what: string; like: string; spot: GuideSpot; clip: GuideClip }
-export interface GuideInput { tab: Tab; score: Score; tempo: TempoMap; view: View; time: number; lanes?: ReadonlySet<string> }
+export interface GuideInput { tab: Tab; score: Score; tempo: TempoMap; view: View; time: number; lanes?: ReadonlySet<string>; marks?: readonly NoteMark[] }
 
 /** A clip of the piece from `from`, at most CLIP_MAX long, inside 0..duration; an empty one becomes the CLIP_MAX (or less) before the end. */
 export function pieceClip(from: number, to: number, duration: number): GuideClip {
@@ -54,10 +59,10 @@ function onDrawing(r: Rect, w: number, h: number): Rect | null {
 }
 const view = (rect: Rect | null): GuideSpot => ({ anchor: 'view', rect });
 
-function ruler(score: Score, width: number, top: number): GuidePart {
+function ruler(score: Score, width: number, top: number, anchor: GuideAnchor = 'view'): GuidePart {
   return score.kind === 'music'
-    ? { id: 'ruler', title: 'Bar numbers', what: 'The numbers along the bottom are the music’s ruler. A bar is a short group of counted beats, often four: one, two, three, four. Musicians say “bar 13” the way you would say “page 13”. Your notes can point at bars.', like: 'Like page numbers, so we can both point at the same moment.', spot: view({ x: 0, y: top, w: width, h: AXIS_H }), clip: { kind: 'demo', id: 'clicks' } }
-    : { id: 'ruler', title: 'Seconds', what: 'The numbers along the bottom are the sound’s ruler, in seconds, or thousandths of a second (ms) for a very short sound. Your notes can point at a time.', like: 'Like the timer on a stopwatch.', spot: view({ x: 0, y: top, w: width, h: AXIS_H }), clip: { kind: 'demo', id: 'ticks' } };
+    ? { id: 'ruler', title: 'Bar numbers', what: 'The numbers along the bottom are the music’s ruler. A bar is a short group of counted beats, often four: one, two, three, four. Musicians say “bar 13” the way you would say “page 13”. Your notes can point at bars.', like: 'Like page numbers, so we can both point at the same moment.', spot: { anchor, rect: { x: 0, y: top, w: width, h: AXIS_H } }, clip: { kind: 'demo', id: 'clicks' } }
+    : { id: 'ruler', title: 'Seconds', what: 'The numbers along the bottom are the sound’s ruler, in seconds, or thousandths of a second (ms) for a very short sound. Your notes can point at a time.', like: 'Like the timer on a stopwatch.', spot: { anchor, rect: { x: 0, y: top, w: width, h: AXIS_H } }, clip: { kind: 'demo', id: 'ticks' } };
 }
 
 function playhead(i: GuideInput, height: number): GuidePart {
@@ -106,6 +111,20 @@ function story(i: GuideInput): GuidePart[] {
     const ys = tune.stars.map(s => s.y);
     const box = onDrawing({ x: Math.min(...xs), y: Math.min(...ys) - 10, w: Math.max(...xs) - Math.min(...xs) + 60, h: Math.max(...ys) - Math.min(...ys) + 14 }, w, h);
     if (box) parts.push({ id: 'stars', title: "A character's tune as stars", what: 'The joined stars are one character’s tune. Each star marks one note on that lane. Higher on the screen is a higher note, and a bigger star is louder. The line shows the shape of the tune at a glance.', like: 'Like a line drawn through the tune’s notes: when it climbs, the tune climbs.', spot: view(box), clip: pieceClip(tune.from, tune.to, score.duration) });
+  }
+  const lanesTop = TIMELINE.energyH + TIMELINE.sectionH;
+  const mark = (i.marks ?? []).map(m => {
+    const lane = layout.lanes.find(l => l.id === m.lane);
+    const r = { x: timeToX(v, m.from), y: lane ? lane.rect.y : lanesTop, w: Math.max(2, (m.to - m.from) * v.pxPerSec), h: lane ? lane.rect.h : h - lanesTop };
+    return { m, r: r.x <= w && r.x + r.w >= 0 ? onDrawing(r, w, h) : null };
+  }).find(x => x.r !== null);
+  if (mark) {
+    parts.push({
+      id: 'your-notes', title: 'Your notes',
+      what: 'Each dashed outline is a note you pinned: it starts and ends where you picked. A thin line is a note on one moment. The number matches your list of notes.',
+      like: 'Like sticky notes on the pages of a book.',
+      spot: view(mark.r), clip: pieceClip(mark.m.from, mark.m.to > mark.m.from ? mark.m.to : mark.m.from + CLIP_MAX, score.duration),
+    });
   }
   const peak = score.energy.reduce((best, e) => (e[1] > best[1] ? e : best), score.energy[0] ?? [0, 0]);
   parts.push({ id: 'energy', title: 'The energy glow', what: `The soft green band shows ${music ? 'how intense the music feels. Low and thin is calm; high is tense or exciting.' : 'how strong the sound is over time. Low is faint; high is strong.'}`, like: music ? 'Like the volume and pace of a scene building to its climax.' : 'Like the needle on a volume meter.', spot: view({ x: 0, y: 0, w, h }), clip: pieceClip(peak[0] - CLIP_MAX / 2, peak[0] + CLIP_MAX / 2, score.duration) });
@@ -162,19 +181,40 @@ export function guideParts(i: GuideInput): GuidePart[] {
   }
 }
 
-export interface GuideStore { seen(tab: Tab, kind: Kind): boolean; markSeen(tab: Tab, kind: Kind): void }
+/** The energy drawing's parts: the line as it is, how to draw, its ruler, and Send or Start over. */
+export function energyGuideParts(i: { score: Score; tempo: TempoMap; view: View }): GuidePart[] {
+  const { score } = i;
+  const music = score.kind === 'music';
+  const w = i.view.width;
+  const whole: GuideSpot = { anchor: 'energy-editor', rect: { x: 0, y: 0, w, h: ENERGY_EDIT_H } };
+  const peak = score.energy.reduce((best, e) => (e[1] > best[1] ? e : best), score.energy[0] ?? [0, 0]);
+  return [
+    { id: 'energy-now', title: music ? 'The energy now' : 'The strength now',
+      what: music ? 'The dashed line is how intense the music is now: calm at the bottom, most intense at the top.' : 'The dashed line is how strong the sound is now: faint at the bottom, strongest at the top.',
+      like: 'Like a skyline drawn over the piece.', spot: whole, clip: pieceClip(peak[0] - CLIP_MAX / 2, peak[0] + CLIP_MAX / 2, score.duration) },
+    { id: 'energy-draw', title: 'Draw the shape you want',
+      what: `Drag a finger or the mouse across the drawing. ${music ? 'Higher is more intense, lower is calmer.' : 'Higher is stronger, lower is fainter.'} Each stroke replaces the line under it and leaves the rest as it was.`,
+      like: 'Like tracing a new skyline over the old one.', spot: whole, clip: { kind: 'demo', id: 'swell' } },
+    ruler(score, w, ENERGY_EDIT_H, 'energy-editor'),
+    { id: 'energy-send', title: 'Send or start over',
+      what: 'Send this shape sends your line to Claude as a note on this draft. Start over brings back the line as it is now.',
+      like: 'Like handing over a sketch, or rubbing it out to begin again.', spot: { anchor: 'energy-actions', rect: null }, clip: pieceClip(0, CLIP_MAX, score.duration) },
+  ];
+}
+
+export interface GuideStore { seen(view: GuideView, kind: Kind): boolean; markSeen(view: GuideView, kind: Kind): void }
 export const GUIDE_KEY_PREFIX = 'workroom-guide-';
 
-/** Whether this browser has seen each view's guide for a kind of piece (localStorage `workroom-guide-<tab>` for music, `workroom-guide-sound-<tab>` for sound = `seen`); broken storage holds the flag for this page view. */
+/** Whether this browser has seen each view's guide for a kind of piece (localStorage `workroom-guide-<view>` for music, `workroom-guide-sound-<view>` for sound = `seen`; the energy drawing is a view of its own here); broken storage holds the flag for this page view. */
 export function guideStore(storage: StorageLike | null): GuideStore {
   const flags = new Map<string, Pref<string>>();
-  const flag = (tab: Tab, kind: Kind) => {
-    const key = `${GUIDE_KEY_PREFIX}${kind === 'sound' ? 'sound-' : ''}${tab}`;
+  const flag = (view: GuideView, kind: Kind) => {
+    const key = `${GUIDE_KEY_PREFIX}${kind === 'sound' ? 'sound-' : ''}${view}`;
     let f = flags.get(key);
     if (!f) { f = pref(key, '', text, storage); flags.set(key, f); }
     return f;
   };
-  return { seen: (tab, kind) => flag(tab, kind).get() === 'seen', markSeen: (tab, kind) => flag(tab, kind).set('seen') };
+  return { seen: (view, kind) => flag(view, kind).get() === 'seen', markSeen: (view, kind) => flag(view, kind).set('seen') };
 }
 
 /** A store for which every guide is already seen: nothing opens by itself. */

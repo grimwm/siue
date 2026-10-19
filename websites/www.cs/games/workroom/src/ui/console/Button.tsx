@@ -20,6 +20,8 @@ export interface ButtonProps {
   pressed?: boolean;
   /** The accessible name, for a button whose text is a symbol. */
   label?: string;
+  /** A form's submit button (type="submit"); every other button is type="button" and never submits. */
+  submit?: boolean;
   class?: string;
   buttonRef?: Ref<HTMLButtonElement>;
   data?: Record<`data-${string}`, string>;
@@ -28,7 +30,7 @@ export interface ButtonProps {
 
 export function Button(p: ButtonProps) {
   return (
-    <button type="button" ref={p.buttonRef} class={cx(BASE, VARIANTS[p.variant ?? 'secondary'], p.class)} disabled={p.disabled}
+    <button type={p.submit ? 'submit' : 'button'} ref={p.buttonRef} class={cx(BASE, VARIANTS[p.variant ?? 'secondary'], p.class)} disabled={p.disabled}
       aria-pressed={p.pressed} aria-label={p.label} onClick={() => p.onClick?.()} {...p.data}>{p.children}</button>
   );
 }

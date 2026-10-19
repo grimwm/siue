@@ -15,6 +15,9 @@ its project, its kind (`music` or `sound`) and its characters.
 - Pages need the admin session. Page loads must be browser navigations; the JSON
   and byte routes refuse cross-site requests; every POST needs the session's
   CSRF token. All routes refuse plain HTTP.
+- The only browser storage the workroom writes besides the theme and the guide
+  flags is the outbox: sealed notes waiting to be sent. Nothing of any key, and
+  nothing in the clear about a note, is stored in the browser.
 - API keys are made on the admin hub and carry scopes. A key cannot delete.
 - The server also keeps the fingerprints the uploader named (current and earlier), only
   to refuse notes sealed to other keys and to show the current one on the admin hub.
@@ -49,6 +52,48 @@ through the view's parts, one lit at a time, each with Hear it (a clip of the
 piece, or a built-in demo). It opens by itself the first time each view is
 shown in a browser (`workroom-guide-<view>` in localStorage).
 
+## Answering
+
+The answer bar sits under the player on a piece's page, with four buttons: **Pin
+a note** (typed or spoken words on a moment or span, optionally one lane), **Hum
+it** (a recording of up to 60 s at the playhead), **React** (one of eight
+reactions to the section at the playhead, or to the whole piece when there is no
+section) and **Draw the energy** (a curve for how intense the piece should be).
+Each note is tied to its draft, in bars and seconds on music and in seconds on a
+sound.
+
+Notes are sealed in the browser to the current key of the keyring the passphrase
+unlocks. Before an unlock each of the four asks for it: the notes panel opens at
+the unlock form with one line saying why, and Pin a note, React or Draw the
+energy opens once unlocked. Hum it waits for the next tap, since iOS grants the
+microphone only inside one. With no keyring on the server (before `make
+music-setup`) the bar says "Notes are off until a notes key is uploaded (make
+music-setup)."
+
+- **Pinning** scrolls the Story view into view and picks a span on it: a drag, or a
+  tap for one moment; the lane only when the drag starts and ends in one lane. On a
+  phone the composer is docked at the bottom of the screen, above the notes handle,
+  so the timeline and the picked span stay visible above it.
+- **The recorder** records 60 s at most, in the first type the browser records, at
+  64 kb/s; the microphone is asked for inside the tap. A recording that is not
+  stored stays on screen to Send or Discard.
+- **The energy drawing** has its own guide (`workroom-guide-energy` in localStorage).
+- **Notes & answers** is the notes panel: the passphrase unlocks it on every
+  visit, it lists the notes of this piece or of all pieces, and each note has
+  Delete; Delete, Delete all and Discard (for a note not sent yet) each ask
+  first, in plain words. Notes on the server are marked Waiting until they are
+  picked up; notes this browser has not sent yet are listed under Not sent yet.
+- **The outbox** is IndexedDB `siue-music`, store `outbox`, and holds sealed
+  bundles only. It is sent on load and when the browser is back online, one tab at
+  a time under the Web Locks lock `workroom-outbox`; Discard drops one. A browser
+  that refuses IndexedDB keeps the note in memory and says so.
+- Nothing typed or recorded is cleared until the note is stored. Typed words
+  stay when the composer closes, and leaving the page asks first while words, a
+  recording or a note kept only in memory would be lost.
+- The pieces list shows each piece's waiting count after an unlock.
+- Chrome may offer to save the unlock form's username and passphrase; the owner
+  answers Never (1Password fills the form either way).
+
 ## Limits
 
 - A sealed note is at most 2,097,152 bytes; 2,000 notes are kept.
@@ -78,7 +123,17 @@ standard input and are never printed.
 with the admin mail capture, signs in through the captured email, publishes the
 fixture drafts with an API key made on the hub, and drives the page in Chrome:
 play, seek, the four views, a glossary card, the sheet music, a sound effect from
-a second project, and no content security policy violation. It prints
+a second project, and no content security policy violation. It also uploads the
+committed TEST keyring (`games/workroom/test/fixtures/test-key.json`) with its
+fingerprints through `music/api/keyring.php`, unlocks it in the shipped page with
+the TEST passphrase, records with Chrome's fake microphone, pins a typed note,
+picks it up with `siue-music pickup` from a temporary config folder whose cache
+holds the TEST key, with the tool's 1Password stand-in
+(`music/tools/tests/fake_op.py`), so the run never touches the owner's 1Password or
+cache (it needs the tool's virtualenv, which `make music-setup` also makes), reads
+and deletes it on a second, phone-sized device, finds a composer asking for the
+unlock first, hums, reacts, draws the energy, and sends a note made offline once
+the connection is back. `MUSIC_E2E_SHOTS=<folder>` saves every screen. It prints
 `MUSIC-E2E-OK` and tears the project down. The page it drives is the shipped
 `games/workroom/dist/workroom.js`.
 The admin sign-in link is limited to three a hour per address; one run asks for

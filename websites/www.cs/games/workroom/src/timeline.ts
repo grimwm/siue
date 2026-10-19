@@ -20,7 +20,7 @@ export function pitchY(pitch: number, lo: number, hi: number, top: number, h: nu
 export interface TimelineLayout {
   height: number;
   energy: { rect: Rect; points: [number, number][] };            // pixel points, y = energyH * (1 - value)
-  sections: { id: string; name: string; color: string; rect: Rect }[];
+  sections: { id: string; name: string; color: string; from: number; to: number; rect: Rect }[];  // from and to in seconds
   lanes: { id: string; name: string; icon: Family; color: string; rect: Rect }[];   // rect spans the view width
   ribbons: { motif: string; character: string; color: string; lane: string; rect: Rect }[]; // at the bottom of their lane; character is the character id, color that character's colour from the score
   notes: { index: number; lane: string; color: string; rect: Rect }[];   // every note in its lane, scaled to that lane's pitch range; color is the lane's colour
@@ -35,7 +35,7 @@ export function layoutTimeline(score: Score, tempo: TempoMap, view: View): Timel
 
   const sections = score.sections.map(s => {
     const { from, to } = sectionTimes(s, tempo, score.duration);
-    return { id: s.id, name: s.name, color: s.color, rect: { ...span(from, to), y: energyH, h: sectionH } };
+    return { id: s.id, name: s.name, color: s.color, from, to, rect: { ...span(from, to), y: energyH, h: sectionH } };
   });
   const lanes = score.lanes.map((l, i) => ({ id: l.id, name: l.name, icon: l.icon, color: l.color, rect: { x: 0, y: lanesTop + i * laneH, w: view.width, h: laneH } }));
   const ribbons = score.motifs.flatMap(m => {

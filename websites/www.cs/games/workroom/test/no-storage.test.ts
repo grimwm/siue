@@ -33,7 +33,7 @@ test('unlocking, using and clearing the vault touch no browser storage', async (
 });
 
 test('the modules that handle keys never name a browser store', () => {
-  for (const file of ['note', 'seal', 'unlock', 'vault']) {
+  for (const file of ['note', 'seal', 'unlock', 'vault', 'answer', 'api', 'outbox', 'history', 'notes-session', 'recorder', 'energy']) {
     const source = readFileSync(new URL(`../src/${file}.ts`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /indexedDB|localStorage|sessionStorage|document\.cookie|\bcaches\b/, `${file}.ts`);
   }

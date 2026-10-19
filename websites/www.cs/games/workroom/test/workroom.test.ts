@@ -413,10 +413,10 @@ test('the How to read this button is a visible secondary button with an icon, 44
   unmount(root);
 });
 
-test('the notes panel is "Words & changes"; the change count is on the changes heading only', async () => {
+test('the notes panel is "Notes & answers"; the change count is on the changes heading only', async () => {
   const root = await mount();
   const aside = named(root, 'data-sheet');
-  assert.equal(aside._attrs['aria-label'], 'Words & changes');
+  assert.equal(aside._attrs['aria-label'], 'Notes & answers');
   assert.doesNotMatch(walk(aside).find(e => e.localName === 'h2')!.textContent, /\d/);
   assert.match(aside.textContent, /Claude's changes\s*1 change(?!s)/);
   const many = makeEl('root');

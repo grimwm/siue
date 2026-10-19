@@ -1,12 +1,22 @@
 // The workroom page: starts the theme switch, reads which view and piece the
-// server rendered, loads the draft over the session and draws it. The index view has nothing to draw yet.
+// server rendered, and draws it: a piece (its views, the answer bar and the
+// notes panel), or on the pieces list the unlock that fills in each piece's
+// waiting count. Notes are sealed to the current key of the keyring the
+// passphrase unlocks on this page view; nothing seals before that unlock.
 import { render, h } from 'preact';
 import { createAudioCore } from '../../_kit/audio/core.ts';
-import { browserStorage, browserThemePorts } from './browser.ts';
+import { createApi } from './api.ts';
+import { browserLock, browserMedia, browserStorage, browserThemePorts } from './browser.ts';
 import { guideStore } from './guide.ts';
+import { indexedDbOutbox } from './idb.ts';
 import { draftUrl, loadDraft } from './load.ts';
+import { createNotesSession } from './notes-session.ts';
+import type { NotesSession } from './notes-session.ts';
+import { createOutbox } from './outbox.ts';
 import { startTheme } from './theme.ts';
+import { createVault } from './vault.ts';
 import { demoPlayer } from './ui/demo-player.ts';
+import { PiecesIndex } from './ui/PiecesIndex.tsx';
 import { ThemeRoot, ThemeSwitch } from './ui/ThemeSwitch.tsx';
 import { Workroom } from './ui/Workroom.tsx';
 
@@ -17,6 +27,14 @@ if (switchHost) render(h(ThemeSwitch, { handle: theme }), switchHost);
 const root = document.getElementById('workroom')!;
 const playDemo = demoPlayer(createAudioCore());
 const { view, piece, version } = document.body.dataset;
+const fetcher = window.fetch.bind(window);
+
+/** The notes on this page view: the keys stay in memory, the outbox in IndexedDB holds sealed notes only. */
+function notesSession(): NotesSession {
+  const api = createApi(fetcher, document.querySelector('meta[name="csrf"]')?.getAttribute('content') ?? '');
+  return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock()) });
+}
+const notes = notesSession();
 
 function say(text: string, role = 'alert'): void {
   const p = document.createElement('p');
@@ -29,7 +47,7 @@ function say(text: string, role = 'alert'): void {
 if (view === 'piece' && piece) {
   root.textContent = 'Loading…';
   const wanted = version && /^\d+$/.test(version) ? Number(version) : null;
-  const loaded = await loadDraft(window.fetch.bind(window), piece, wanted);
+  const loaded = await loadDraft(fetcher, piece, wanted);
   if (!loaded.ok) say(loaded.error);
   else {
     root.textContent = '';
@@ -42,8 +60,14 @@ if (view === 'piece' && piece) {
       playDemo,
       stopDemo: playDemo.stop,
       onVersion: v => { location.search = `?id=${encodeURIComponent(piece)}&v=${v}`; },
+      notes,
+      media: browserMedia(),
     })), root);
   }
+} else if (view === 'index') {
+  root.textContent = '';
+  const list = document.querySelector('.index-body');
+  if (list) render(h(ThemeRoot, { handle: theme }, h(PiecesIndex, { notes, list })), root);
 } else {
   root.textContent = '';
 }

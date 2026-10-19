@@ -1,5 +1,5 @@
 {
   // DOM-free program: the engine cannot reach the page. See games/_kit/README.md.
   "extends": "../_kit/build/tsconfig.base.json",
-  "files": ["src/board-plan.ts", "src/keys.ts", "src/layers.ts", "src/status.ts", "src/fit.ts", "src/help.ts", "src/settings.ts", "src/progress.ts", "src/game.ts", "src/puzzle/tiles.ts", "src/puzzle/level.ts", "src/puzzle/state.ts", "src/puzzle/work.ts", "src/puzzle/step.ts", "src/puzzle/minotaur.ts", "src/puzzle/run.ts", "src/puzzle/solver.ts", "src/puzzle/trials.ts", "src/campaign/lore.ts", "src/campaign/chapter-1.ts", "src/campaign/chapters.ts"]
+  "files": ["src/board-plan.ts", "src/keys.ts", "src/layers.ts", "src/status.ts", "src/fit.ts", "src/follow.ts", "src/help.ts", "src/settings.ts", "src/progress.ts", "src/game.ts", "src/puzzle/tiles.ts", "src/puzzle/level.ts", "src/puzzle/state.ts", "src/puzzle/work.ts", "src/puzzle/step.ts", "src/puzzle/minotaur.ts", "src/puzzle/run.ts", "src/puzzle/solver.ts", "src/puzzle/trials.ts", "src/campaign/lore.ts", "src/campaign/chapter-1.ts", "src/campaign/chapters.ts"]
 }

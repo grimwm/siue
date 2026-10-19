@@ -39,7 +39,7 @@ php tools/install-files.php                # then rewrite the ?v= versions and s
 
 ## The seam
 
-The rules never name the page. `game.ts` takes everything it needs as `GameDeps` (`sfx`, `say`, `progress`, `timers`, `clock`, `reducedMotion`, `changed`), so `test/game.test.ts` plays whole levels against recording hooks and a manual clock. `ui.ts` and `audio.ts` are the other ends of those hooks.
+The rules never name the page. `game.ts` takes everything it needs as `GameDeps` (`sfx`, `say`, `progress`, `pages`, `levels`, `timers`, `clock`, `reducedMotion`, `changed`), so `test/game.test.ts` plays whole levels against recording hooks and a manual clock. `ui.ts` and `audio.ts` are the other ends of those hooks.
 
 A turn that animates draws the state *before* it while the figures walk (`frameOf` in `game.ts`), so an item vanishes and a door opens when the figure arrives, and the state after it once the last step lands. A key during a slide finishes it and acts at once, exactly once. Reduced motion is read live from `prefers-reduced-motion` and snaps the figures. The thread solves with a cap of 200,000 states; when none is found in that, or the try cannot be won, the toast says the thread goes slack and to undo or restart.
 

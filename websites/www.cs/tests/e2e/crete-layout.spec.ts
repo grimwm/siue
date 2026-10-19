@@ -147,6 +147,7 @@ for (const device of DEVICES) {
     for (let i = 1; i <= 9; i++) {
       await page.goto('games/crete/');
       await openLevel(page, i);
+      await expect(page.locator('#start-veil .kicker')).toHaveText(`Chapter 1 · Level ${i}`);
       await page.locator('#start-begin').click();
       await expect(page.locator('#start-veil')).toBeHidden();
       await page.waitForSelector('#stage[data-cell]');
@@ -162,6 +163,12 @@ for (const device of DEVICES) {
     await ctx.close();
   });
 }
+
+/** The turn count and outcome of the run. */
+const runState = () => {
+  const t = (window as unknown as { __creteTest: { game: { run: { now: { moves: number; outcome: string } } } } }).__creteTest;
+  return { moves: t.game.run.now.moves, outcome: t.game.run.now.outcome };
+};
 
 /** The player's cell is inside the board's visible rect. */
 const playerVisible = () => {
@@ -208,7 +215,9 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
     let flipped = false;
     let toasted = false;
     for (const [i, s] of steps.entries()) {
+      const before = await page.evaluate(runState);
       await page.locator(MOVE[s] ?? `#${s}`).click();
+      await expect.poll(() => page.evaluate(runState), `step ${i + 1} (${s}) is a turn`).toMatchObject({ moves: before.moves + 1 });
       expect(await page.evaluate(playerVisible), `step ${i + 1} (${s})`).toBe(true);
       // Once the board has scrolled, a toast is still inside the board's visible rect (it does not scroll away).
       if (!toasted && device[0].startsWith('iPhone 15') && await page.evaluate(() => document.getElementById('board')!.scrollLeft > 0)) {
@@ -232,6 +241,7 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
         await expect.poll(() => page.evaluate(playerVisible), 'back to portrait').toBe(true);
       }
     }
+    await expect.poll(() => page.evaluate(runState), 'the route ends in a win').toMatchObject({ outcome: 'won' });
     if (device[0].startsWith('iPhone 15')) expect(toasted, 'the board scrolled, so the toast was checked').toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();

@@ -167,9 +167,9 @@ test("level 9, The Bull's Horns: the quickest way through takes one catch, and a
   assert.ok(t9.kinds.has('sank'), 'the shortest line sinks a block to make dirt');
   assert.ok(!t9.took.has('page'), 'the page lies off the shortest line');
   const noBlock = solve(initial(withoutObjects(lv, ['block'])));
-  assert.ok(!noBlock.solved || noBlock.line.length > t9.line.length, 'the dirt opens the path');
+  assert.ok(noBlock.solved ? noBlock.line.length > t9.line.length : !noBlock.capped, 'the dirt opens the path');
   const free = solveNoCatch(initial(lv), 2_000_000);
-  assert.ok(!free.solved || free.line.length > t9.line.length, `a catch-free line is longer (${free.solved ? free.line.length : 'none'})`);
+  assert.ok(free.solved ? free.line.length > t9.line.length : !free.capped, `a catch-free line is longer (${free.solved ? free.line.length : 'none'})`);
 });
 
 test('level 10, The Great Hall: keys, gear, a block and a button, a tool and the Minotaur, two routes to the gate', () => {
@@ -186,7 +186,8 @@ test('level 10, The Great Hall: keys, gear, a block and a button, a tool and the
   for (const k of routes) {
     assert.ok(solve(initial(withoutObjects(lv, [k])), GREAT_HALL_CAP).solved, `level 10 is won without the ${k}`);
   }
-  assert.ok(!solve(initial(withoutObjects(lv, routes)), GREAT_HALL_CAP).solved, 'level 10 needs one of its two routes');
-  for (const k of ['key-red', 'block', 'mirror'] as const) assert.ok(!solve(initial(withoutObjects(lv, [k])), GREAT_HALL_CAP).solved, `level 10 needs the ${k}`);
+  const unwinnable = (r: SolveResult): boolean => !r.solved && !r.capped;
+  assert.ok(unwinnable(solve(initial(withoutObjects(lv, routes)), GREAT_HALL_CAP)), 'level 10 needs one of its two routes');
+  for (const k of ['key-red', 'block', 'mirror'] as const) assert.ok(unwinnable(solve(initial(withoutObjects(lv, [k])), GREAT_HALL_CAP)), `level 10 needs the ${k}`);
   assert.ok(!t10.took.has('page'), 'the page lies off the shortest line');
 });

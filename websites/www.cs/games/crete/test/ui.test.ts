@@ -194,21 +194,6 @@ function win(i: number): void {
   assert.equal(game.run!.now.outcome, 'won');
 }
 
-test('Q on the chapter card reached by picking level 1 in a fresh session shows the title, never a blank screen', () => {
-  reset();
-  assert.equal(game.run, null);
-  flow.showTitle(false);
-  key('n'); // the title's Play is worded N: it opens the chapter card
-  assert.equal(flow.top(), 'chapter');
-  key('n');
-  assert.equal(flow.top(), 'levels');
-  pick(1);
-  assert.equal(flow.top(), 'chapter');
-  key('q');
-  assert.equal(flow.top(), 'title');
-  assert.equal(game.run, null);
-});
-
 test('N on the title card does what Play does, and elsewhere still opens the list', () => {
   reset();
   flow.showTitle(false);

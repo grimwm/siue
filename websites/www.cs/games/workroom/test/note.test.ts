@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { MAX_CURVE_POINTS, MAX_TEXT, isNoteBody } from '../src/note.ts';
 import type { NoteBody } from '../src/note.ts';
 import { NoteUnreadable, open, seal } from '../src/seal.ts';
-import { builtIn, fx, importPrivate } from './fixture-key.ts';
+import { current, fx, importPrivate } from './fixture-key.ts';
 
 const ok: NoteBody = {
   v: 1, kind: 'text', piece: 'test-piece', draft: 2, from: 8, to: 12, fromBar: 5, toBar: 6, lane: 'brass',
@@ -46,6 +46,6 @@ test('a body out of shape is refused', () => {
 test('opening a sealed note refuses a malformed body', async () => {
   const keyring = new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)]]);
   const bad = { ...ok, made: '2026-13-45T99:99:99Z' };
-  await assert.rejects(open(await seal(bad, null, builtIn), keyring), (e: unknown) => e instanceof NoteUnreadable && e.reason === 'tampered');
-  assert.deepEqual((await open(await seal(ok, null, builtIn), keyring)).body, ok);
+  await assert.rejects(open(await seal(bad, null, current), keyring), (e: unknown) => e instanceof NoteUnreadable && e.reason === 'tampered');
+  assert.deepEqual((await open(await seal(ok, null, current), keyring)).body, ok);
 });

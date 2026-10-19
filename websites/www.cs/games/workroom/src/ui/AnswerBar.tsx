@@ -38,6 +38,8 @@ export interface AnswerBarProps {
   /** off: the server holds no keyring; locked: a tap asks for the unlock (onLocked) instead; open: notes can be sealed. */
   access: 'off' | 'locked' | 'open';
   onLocked(asked: Asked): void;
+  /** The bar needs the screen (a mode opens or a recording starts): the phone's notes sheet, which would cover the timeline and the dock, closes. */
+  onFront(): void;
   media: MediaPorts | null; now(): Date; busy: boolean;
   /** Seals and stores the note; true once it is stored (sent, or kept on this device), false when it is not. */
   send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean>;
@@ -104,6 +106,7 @@ export function AnswerBar(p: AnswerBarProps) {
   /** Runs inside the tap: the recorder asks for the microphone before anything awaits. The bar shows a recording only once the microphone is granted. */
   const start = (k: Kind): void => {
     if (!recorder || recording || asking || held) return;
+    p.onFront();
     kind.current = k;
     humAt.current = { time: p.time, bar: p.tempo.barAt(p.time), laneId: p.span?.laneId ?? null };
     spanAt.current = p.span;
@@ -119,7 +122,11 @@ export function AnswerBar(p: AnswerBarProps) {
   };
   const locked = p.access === 'locked';
   /** Closing an open mode needs no unlock; opening one before an unlock asks for it. */
-  const toggle = (m: Exclude<AnswerMode, 'none'>): void => (p.mode === m ? p.onMode('none') : locked ? p.onLocked(m) : p.onMode(m));
+  const toggle = (m: Exclude<AnswerMode, 'none'>): void => {
+    if (p.mode === m) p.onMode('none');
+    else if (locked) p.onLocked(m);
+    else { p.onFront(); p.onMode(m); }
+  };
 
   if (p.access === 'off') return <p data-answer-off="" class="text-sm text-dim">{NOTES_OFF}</p>;
   const section = sectionAt(p.score, p.tempo, p.time);

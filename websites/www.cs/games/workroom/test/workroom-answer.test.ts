@@ -174,6 +174,21 @@ test('the notes panel is "Notes & answers", with Your notes first', async () => 
   unmount(root);
 });
 
+test('on a phone the open notes panel closes when the bar needs the screen: a mode opens or a recording starts', async () => {
+  for (const what of ['Pin a note', 'React', 'Draw the energy', 'Hum it']) {
+    const { session } = fakeNotes();
+    const media = fakeMedia();
+    const root = await mount({ notes: session, media: media.ports });
+    const handle = walk(named(root, 'data-sheet')!).find(e => e.localName === 'button' && e._attrs['aria-controls'] !== undefined)!;
+    await act(() => { fire(handle, 'click'); });
+    assert.equal(String(handle._attrs['aria-expanded']), 'true');
+    await act(() => { fire(button(root, what)!, 'click'); });
+    await settle();
+    assert.equal(String(handle._attrs['aria-expanded']), 'false', `${what}: the panel closes so the timeline and the dock show`);
+    unmount(root);
+  }
+});
+
 test('Pin a note: from another view it goes to Story, a drag picks the span, Send seals a typed note on it', async () => {
   const { session, sent } = fakeNotes();
   const root = await mount({ notes: session });
@@ -298,6 +313,21 @@ test('the pin composer is docked at the bottom of a phone, above the notes handl
   unmount(root);
 });
 
+/** The page's room under its content while pinning: the dock's most (40 dvh) above the notes handle (bottom-11) and a gap. */
+const PIN_ROOM = 'pb-[calc(40dvh+3.5rem)]';
+test('while pinning, a phone\'s page keeps room under its content for the dock, so the Story view can scroll to the top above the composer', async () => {
+  const { session } = fakeNotes();
+  const root = await mount({ notes: session });
+  const page = walk(root).find(e => (e._attrs['class'] ?? e.className ?? '').split(' ').includes('workroom'))!;
+  const classes = (): string[] => (page._attrs['class'] ?? page.className).split(' ');
+  assert.ok(classes().includes('pb-14') && !classes().includes(PIN_ROOM), 'room for the notes handle only');
+  await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  assert.ok(classes().includes(PIN_ROOM) && !classes().includes('pb-14'), 'room for the dock (at most 40 dvh) above the handle');
+  assert.ok(classes().includes('lg:pb-0'), 'from 1024 px the dock is in the page\'s flow');
+  await act(() => { fire(button(root, 'Cancel')!, 'click'); });
+  assert.ok(classes().includes('pb-14') && !classes().includes(PIN_ROOM));
+  unmount(root);
+});
 test('a drag that starts in one lane and ends in another pins the span without a lane', async () => {
   const { session } = fakeNotes();
   const root = await mount({ notes: session });

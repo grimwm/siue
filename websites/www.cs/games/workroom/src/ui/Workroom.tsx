@@ -3,7 +3,9 @@
 // the time axis, the playing time, the tab, the lane filter, the open word, the
 // notes sheet) and holds no logic the DOM-free modules can hold. From 1024 px
 // the views and the notes sheet sit side by side; narrower, the sheet is a
-// bottom sheet and the page keeps room under its content for the sheet's handle.
+// bottom sheet and the page keeps room under its content for the sheet's handle,
+// and while pinning for the docked composer too, so the Story view can scroll
+// to the top of the screen above it.
 // With a notes session it also holds the answering: the answer bar, the span
 // being picked, the energy drawing and the owner's notes on the Story view;
 // before an unlock the bar's buttons open the notes panel at the unlock form.
@@ -249,7 +251,7 @@ export function Workroom(p: WorkroomProps) {
   });
 
   return (
-    <div class="workroom grid gap-4 pb-14 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:pb-0">
+    <div class={`workroom grid gap-4 ${mode === 'pin' ? 'pb-[calc(40dvh+3.5rem)]' : 'pb-14'} lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:pb-0`}>
       <div class="grid min-w-0 gap-3">
         <header class="piece-head flex flex-wrap items-end justify-between gap-3">
           <div class="min-w-0">
@@ -263,7 +265,7 @@ export function Workroom(p: WorkroomProps) {
           </label>
         </header>
         <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} />
-        {answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} access={access} onLocked={askUnlock} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} /> : null}
+        {answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} access={access} onLocked={askUnlock} onFront={() => setSheetOpen(false)} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} /> : null}
         <div class="flex flex-wrap items-end justify-end gap-x-3 gap-y-2 lg:flex-nowrap">
           <div class="min-w-0 flex-1 basis-full lg:basis-0"><ViewTabs tabs={tabs} tab={tab} onTab={t => { setWanted(t); if (mode === 'pin' || mode === 'energy') changeMode('none'); }} /></div>
           <Button variant="secondary" buttonRef={howTo} data={{ 'data-guide-open': '' }} onClick={openGuide}>

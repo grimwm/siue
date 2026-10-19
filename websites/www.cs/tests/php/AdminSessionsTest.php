@@ -37,6 +37,7 @@ final class AdminSessionsTest extends TestCase
         self::assertStringContainsString('; SameSite=Strict', $cookie);
         self::assertStringContainsString('; Path=/', $cookie);
         self::assertStringNotContainsString('Domain', $cookie);
+        self::assertStringContainsString('Max-Age=2592000;', $cookie, 'survives closing the browser, up to the absolute limit');
     }
 
     public function testDatabaseHoldsOnlyTheHashOfTheId(): void
@@ -50,7 +51,7 @@ final class AdminSessionsTest extends TestCase
     {
         [$s, , $c] = $this->sessions();
         $r = $this->reqWith($s->start(req()));
-        $c->now += 1799;
+        $c->now += 604799;
         self::assertTrue($s->current($r));
     }
 
@@ -58,7 +59,7 @@ final class AdminSessionsTest extends TestCase
     {
         [$s, , $c] = $this->sessions();
         $r = $this->reqWith($s->start(req()));
-        $c->now += 1800;
+        $c->now += 604800;
         self::assertFalse($s->current($r));
     }
 
@@ -66,11 +67,11 @@ final class AdminSessionsTest extends TestCase
     {
         [$s, , $c] = $this->sessions();
         $r = $this->reqWith($s->start(req()));
-        for ($i = 0; $i < 71; $i++) {
-            $c->now += 1200;
+        for ($i = 0; $i < 4; $i++) {
+            $c->now += 518400;
             self::assertTrue($s->current($r), "step $i");
         }
-        $c->now += 1200;
+        $c->now += 518400;
         self::assertFalse($s->current($r));
     }
 
@@ -78,7 +79,7 @@ final class AdminSessionsTest extends TestCase
     {
         [$s, $db, $c] = $this->sessions();
         $r = $this->reqWith($s->start(req()));
-        $c->now += 1800;
+        $c->now += 604800;
         $s->current($r);
         self::assertSame(0, (int) $db->query('SELECT COUNT(*) FROM sessions')->fetchColumn());
     }
@@ -303,7 +304,7 @@ final class AdminSessionsTest extends TestCase
     {
         [$s, $db, $c] = $this->sessions();
         $s->start(req());
-        $c->now += 1800;
+        $c->now += 604800;
         self::assertFalse($s->current(req()));
         self::assertSame(1, (int) $db->query('SELECT COUNT(*) FROM sessions')->fetchColumn(), 'expired rows wait for a request that carries a cookie');
     }

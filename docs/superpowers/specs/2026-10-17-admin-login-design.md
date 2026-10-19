@@ -60,8 +60,8 @@ Tightened here:
 - **Own sessions, not PHP's.** Sessions live in the kit's SQLite database, not
   in PHP's shared session directory: the cookie (`__Secure-admin`, `Secure`,
   `HttpOnly`, `SameSite=Strict`, `Path=/~wgrim/`) holds a random 32-byte id,
-  and the server stores only its hash. A session ends after 30 minutes idle or
-  24 hours in all; **Sign out** deletes it; **Sign out everywhere** deletes them
+  and the server stores only its hash. A session ends after 7 days idle or
+  30 days in all; **Sign out** deletes it; **Sign out everywhere** deletes them
   all, every unused link and every trusted device.
 - **Trusted devices:** a sign-in also sets `__Secure-admin-device` (same
   attributes, 90 days, stored as a hash). A link request from a trusted device

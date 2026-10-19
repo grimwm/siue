@@ -175,7 +175,7 @@ test('N opens the trial list, which has eight trials; M mutes and the menu remem
 test('a ?seed= link opens trial 1 with no title card', async ({ page }) => {
   await page.goto(`${PAGE}?seed=stefan-1984`);
   await expect(page.locator('#title-veil')).toBeHidden();
-  await expect(page.locator('#hud-trial')).toHaveText('1/8');
+  await expect(page.locator('#hud-trial')).toHaveText('1/10');
   await expect(page.locator('#start-veil')).toBeVisible();
 });
 
@@ -188,7 +188,7 @@ test('a win leads on: Next trial shows trial 2\'s start card, and the list keeps
   await page.locator('#end-next').click();
   await expect(page.locator('#end-veil')).toBeHidden();
   await expect(page.locator('#start-veil')).toBeVisible();
-  await expect(page.locator('#hud-trial')).toHaveText('2/8');
+  await expect(page.locator('#hud-trial')).toHaveText('2/10');
   const cleared = `cleared · best ${steps.length}`;
   await page.keyboard.press('n');
   await expect(page.locator('#trial-1')).toContainText(cleared);

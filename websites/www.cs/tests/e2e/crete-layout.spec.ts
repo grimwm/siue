@@ -122,3 +122,88 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE'))) {
     await ctx.close();
   });
 }
+
+// Levels up to 12 x 12 fit their board exactly: #board never scrolls, on every device.
+for (const device of DEVICES) {
+  test(`${device[0]}: levels 1 to 9 keep the board unscrolled`, async ({ browser }) => {
+    const { ctx, page, errors } = await open(browser, device);
+    for (let i = 1; i <= 9; i++) {
+      await page.goto('games/crete/');
+      await page.locator('#title-play').click();
+      await page.locator(`#trial-${i}`).click();
+      await page.locator('#start-begin').click();
+      await expect(page.locator('#start-veil')).toBeHidden();
+      await page.waitForSelector('#stage[data-cell]');
+      const board = await page.evaluate(() => {
+        const b = document.getElementById('board')!;
+        return { sw: b.scrollWidth - b.clientWidth, sh: b.scrollHeight - b.clientHeight, scrolls: b.classList.contains('scrolls') };
+      });
+      expect(board, `level ${i}`).toEqual({ sw: expect.any(Number), sh: expect.any(Number), scrolls: false });
+      expect(board.sw, `level ${i} wide`).toBeLessThanOrEqual(0);
+      expect(board.sh, `level ${i} tall`).toBeLessThanOrEqual(0);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}
+
+/** The player's cell is inside the board's visible rect. */
+const playerVisible = () => {
+  const t = (window as unknown as { __creteTest: { game: { run: { now: { player: { r: number; c: number } } } } } }).__creteTest;
+  const p = t.game.run.now.player;
+  const stage = document.getElementById('stage')!;
+  const sr = stage.getBoundingClientRect();
+  const cell = Number(stage.dataset.cell);
+  const rows = (window as unknown as { __creteTest: { game: { run: { now: { level: { rows: number } } } } } }).__creteTest.game.run.now.level.rows;
+  const rise = sr.height - rows * cell;
+  const left = sr.left + p.c * cell;
+  const top = sr.top + rise + p.r * cell;
+  const b = document.getElementById('board')!.getBoundingClientRect();
+  return left >= b.left - 0.5 && top >= b.top - 0.5 && left + cell <= b.right + 0.5 && top + cell <= b.bottom + 0.5;
+};
+
+// Level 10 (18 x 11) is wider than a phone: it scrolls inside #board, never the page, and follows Theseus.
+const MOVE: Record<string, string> = { up: '.mv-up', down: '.mv-down', left: '.mv-left', right: '.mv-right', wait: '#btn-wait' };
+for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') || d[0].startsWith('iPhone 15, portrait'))) {
+  test(`${device[0]}: level 10 scrolls inside the board and keeps Theseus in view`, async ({ browser }) => {
+    const { ctx, page, errors } = await open(browser, device);
+    await page.locator('#title-play').click();
+    await page.locator('#trial-10').click();
+    await page.locator('#start-begin').click();
+    await expect(page.locator('#start-veil')).toBeHidden();
+    await page.waitForSelector('#stage[data-cell]');
+    const probs = await page.evaluate(() => {
+      const out: string[] = [];
+      const doc = document.documentElement;
+      if (doc.scrollHeight > innerHeight + 0.5) out.push('page taller than the screen');
+      if (doc.scrollWidth > innerWidth + 0.5) out.push('page wider than the screen');
+      const b = document.getElementById('board')!;
+      if (!(b.scrollWidth > b.clientWidth)) out.push('the board does not scroll sideways');
+      return out;
+    });
+    expect(probs).toEqual([]);
+    expect(await page.evaluate(playerVisible), 'visible at the start').toBe(true);
+
+    const steps = await page.evaluate(() => {
+      const t = (window as unknown as { __creteTest: { game: { run: { now: unknown } }; solve(s: unknown): { solved: boolean; line: { kind: string; dir?: string; tool?: string }[] } } }).__creteTest;
+      const r = t.solve(t.game.run.now);
+      return r.solved ? r.line.map(a => (a.kind === 'move' ? a.dir! : a.kind === 'tool' ? `tool-${a.tool}` : a.kind)) : [];
+    });
+    expect(steps.length).toBeGreaterThan(0);
+    let flipped = false;
+    for (const [i, s] of steps.entries()) {
+      await page.locator(MOVE[s] ?? `#${s}`).click();
+      expect(await page.evaluate(playerVisible), `step ${i + 1} (${s})`).toBe(true);
+      // Half way through, a phone turned sideways and back keeps the player in view.
+      if (!flipped && i >= steps.length / 2 && device[0].startsWith('iPhone 15')) {
+        flipped = true;
+        await page.setViewportSize({ width: 852, height: 393 });
+        await expect.poll(() => page.evaluate(playerVisible), 'landscape').toBe(true);
+        await page.setViewportSize({ width: 393, height: 852 });
+        await expect.poll(() => page.evaluate(playerVisible), 'back to portrait').toBe(true);
+      }
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}

@@ -92,6 +92,11 @@ button:disabled { opacity: 0.45; cursor: default; }
   padding: 6px;
   overflow: hidden;
 }
+/* A big level (more than 12 in a direction) keeps cells of at least 32px and scrolls inside the board; src/ui.ts
+   follows the player. The canvas is centred on the axis where it fits. */
+.board.scrolls { display: flex; overflow: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.board.scrolls::-webkit-scrollbar { display: none; }
+.board.scrolls .stage { flex: none; margin: auto; }
 /* The board is a canvas: src/ui.ts has it sized in whole device pixels (src/board.ts) to the largest cell that
    fits, and the browser never rescales it. */
 .stage {

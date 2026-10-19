@@ -13,11 +13,13 @@ import { KEYS, actionFor, isMove, itemFor } from "./keys.ts";
 import { createLayers } from "./layers.ts";
 import type { LayerName } from "./layers.ts";
 import type { Progress } from "./progress.ts";
+import type { State } from "./puzzle/state.ts";
 import { TOOLS } from "./puzzle/tiles.ts";
 import type { Tool } from "./puzzle/tiles.ts";
 import { TRIALS, trialLevel } from "./puzzle/trials.ts";
 import { statusView } from "./status.ts";
-import { fitCell } from "./fit.ts";
+import { cellFor } from "./fit.ts";
+import { follow } from "./follow.ts";
 import { helpLines } from "./help.ts";
 import { renderEndCard } from "./ui/end.tsx";
 import type { EndView } from "./ui/end.tsx";
@@ -179,24 +181,55 @@ export function createUi(deps: UiDeps): Ui {
   }
 
   /** The cell size: the largest whole pixel count whose canvas, as the board actually sizes it
-   *  (whole device pixels), fits the space the board has left. */
+   *  (whole device pixels), fits the space the board has left. A big level (src/fit.ts) keeps cells of at least
+   *  32 px instead and scrolls inside the board. */
   function fit(): void {
     const run = game?.run;
     if (!run) return;
     const { cols, rows } = run.now.level;
     const holder = $("board");
     const canvas = $("stage");
+    setScrolls(holder, false); // measured as if it did not scroll: a scroll bar must not change the answer
     const bs = getComputedStyle(holder);
     const w = holder.clientWidth - parseFloat(bs.paddingLeft) - parseFloat(bs.paddingRight);
     const h = holder.clientHeight - parseFloat(bs.paddingTop) - parseFloat(bs.paddingBottom);
-    let cell = Math.max(1, fitCell(w, h, cols, boardRows(run.now.level, atlas), 0));
+    const fitted = cellFor(w, h, cols, boardRows(run.now.level, atlas), 0);
+    let cell = Math.max(1, fitted.cell);
     board.size(cols, rows, cell);
     // The board snaps a cell to whole device pixels, which can round it up: read what it made.
-    while (cell > 1 && (parseFloat(canvas.style.width) > w || parseFloat(canvas.style.height) > h)) {
+    while (!fitted.scrolls && cell > 1 && (parseFloat(canvas.style.width) > w || parseFloat(canvas.style.height) > h)) {
       cell--;
       board.size(cols, rows, cell);
     }
+    setScrolls(holder, fitted.scrolls);
     sized = `${cols}x${rows}`;
+    followPlayer(run.now);
+  }
+
+  function setScrolls(holder: HTMLElement, on: boolean): void {
+    const rest = holder.className.split(" ").filter((c) => c && c !== "scrolls");
+    holder.className = (on ? [...rest, "scrolls"] : rest).join(" ");
+  }
+
+  /** Scrolls a big board, instantly, to keep the player two cells inside the view. */
+  function followPlayer(s: State): void {
+    const holder = $("board");
+    if (!holder.className.split(" ").includes("scrolls")) {
+      holder.scrollLeft = 0;
+      holder.scrollTop = 0;
+      return;
+    }
+    const canvas = $("stage");
+    const cell = parseFloat(canvas.style.width) / s.level.cols;
+    const rise = parseFloat(canvas.style.height) - s.level.rows * cell;
+    const to = follow(
+      { x: holder.scrollLeft, y: holder.scrollTop, w: holder.clientWidth, h: holder.clientHeight },
+      { w: holder.scrollWidth, h: holder.scrollHeight },
+      { left: canvas.offsetLeft + s.player.c * cell, top: canvas.offsetTop + rise + s.player.r * cell, size: cell },
+      2 * cell,
+    );
+    holder.scrollLeft = to.x;
+    holder.scrollTop = to.y;
   }
 
   function toolRows(g: Game): ToolRow[] {
@@ -239,6 +272,7 @@ export function createUi(deps: UiDeps): Ui {
     }
     const s = run.now;
     if (sized !== `${s.level.cols}x${s.level.rows}`) fit();
+    else followPlayer(s);
     // A trial opened: the start card shows (a restart does not); the story log keeps its words.
     if (g.opens !== shownOpen) {
       shownOpen = g.opens;

@@ -33,7 +33,7 @@ database elsewhere, but reaches PHP only where the server passes environment thr
   that began on another site would make the browser drop the `SameSite=Strict` session cookie. Any other
   opener, such as a mail scanner, gets a button; opening the link there never spends it, and the button
   does, behind a CSRF mark tied to a cookie.
-- Sessions are server-side, last 30 minutes idle and 24 hours at most. Cookies are `__Secure-admin*`,
+- Sessions are server-side, last 7 days idle and 30 days at most, and survive closing the browser. Cookies are `__Secure-admin*`,
   `Secure`, `HttpOnly`, `SameSite=Strict`, with `Path` taken from `ADMIN_BASE_URL` (`/~wgrim/` on
   the host). Each sign-in mails the owner a notice.
 - Requests and limits: every response carries the security headers (`lib/Headers.php`, mirrored in
@@ -61,8 +61,8 @@ accounts, and give a key only the access that risk can bear.
 
 www.cs serves every user's `~folder` from one browser origin. Cookies are scoped to `/~wgrim/`, so
 other users' pages never receive them, but a script on another user's page, running while the owner
-is signed in, shares the origin and could act as the owner. Short sessions and the Fetch Metadata
-guard narrow that window. The owner chose to stay on www.cs with this caveat.
+is signed in, shares the origin and could act as the owner. Sessions last up to 30 days, so that
+window is long; the Fetch Metadata guard and **Sign out** narrow it. The owner chose to stay on www.cs with this caveat.
 
 Another user's page can also set a cookie with the same name on a deeper path
 (`__Secure-admin=junk; Path=/~wgrim/admin/`). The browser then sends that one first, so the owner

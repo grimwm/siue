@@ -9,8 +9,8 @@ final class Sessions
 {
     public const COOKIE = '__Secure-admin';
     public const DEVICE_COOKIE = '__Secure-admin-device';
-    public const IDLE = 1800;
-    public const MAX = 86400;
+    public const IDLE = 604800;
+    public const MAX = 2592000;
 
     /**
      * @param string $cookiePath the Path every cookie carries: the owner's folder, never wider (www.cs
@@ -26,14 +26,14 @@ final class Sessions
         return 'Path=' . $path . '; Secure; HttpOnly; SameSite=' . $sameSite;
     }
 
-    /** New session (always a fresh id); returns the cookie header value. */
+    /** New session (always a fresh id); returns the cookie header value, kept across browser restarts up to MAX. */
     public function start(Request $r): string
     {
         $id = bin2hex(random_bytes(32));
         $now = $this->clock->now();
         $this->db->prepare('INSERT INTO sessions (id_hash, created_at, seen_at, ip, agent) VALUES (?, ?, ?, ?, ?)')
             ->execute([hash('sha256', $id), $now, $now, substr($r->ip, 0, 45), substr($r->agent, 0, 255)]);
-        return self::COOKIE . '=' . $id . '; ' . self::attributes($this->cookiePath);
+        return self::COOKIE . '=' . $id . '; Max-Age=' . self::MAX . '; ' . self::attributes($this->cookiePath);
     }
 
     /** True when the request's cookie names a live session; refreshes seen_at. */

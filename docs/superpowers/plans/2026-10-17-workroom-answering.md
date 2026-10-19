@@ -2,23 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The owner answers in the workroom page itself, on a phone first: pins a typed or spoken note on a moment or a span (optionally a lane), hums up to a minute, reacts to a section with one tap, redraws the energy curve, reads every note (waiting or picked up) once the key is unlocked, deletes notes, and never loses a note: a sealed note that cannot be sent waits in the outbox on this device.
+**Goal:** The owner answers in the workroom page itself, on a phone first: pins a typed or spoken note on a moment or a span (optionally a lane), hums up to a minute, reacts to a section with one tap, redraws the energy curve, reads every note (waiting or picked up), all of it once the keyring is unlocked with the passphrase, deletes notes, and never loses a note: a sealed note that cannot be sent waits in the outbox on this device.
 
 **Architecture:** DOM-free modules decide everything (`answer.ts` builds note bodies, `energy.ts` redraws curves, `recorder.ts` drives a recorder through ports, `hit.ts` finds the section under a time); Web Crypto modules talk to the server and keep notes (`api.ts`, `outbox.ts`, `history.ts`, `notes-session.ts`); `idb.ts` is the only IndexedDB code and holds sealed bundles only; thin Preact components in the Studio Console look (`Button`, `Panel`, `Chip`, `Sheet`, `Legend`, `GuideOverlay`, tokens only) render them; `main.ts` wires the browser in. The server side is unchanged: PR 1 already serves `notes.php`, `note.php`, `delete.php`, `keyring.php` and `csrf.php`.
 
-**Tech Stack:** TypeScript 7, Preact 11, Tailwind v4 (tokens in `src/app.css`), esbuild 0.28 through `games/_kit/build/build.mjs`, `node:test` on Node 24 (Web Crypto as `globalThis.crypto.subtle`), the kit's DOM stub (`games/_kit/test/dom-stub.ts`) and `importTsx` (`games/_kit/test/tsx.ts`); `fake-indexeddb` (exact-pinned devDependency of `games/`, test-only) for the IndexedDB outbox; PHPUnit 12 for one deploy pin; Playwright (local only, `make music-e2e`); the owner's Python tool (`music/tools/siue-music`) for the pickup step of the browser check.
+**Tech Stack:** TypeScript 7, Preact 11, Tailwind v4 (tokens in `src/app.css`), esbuild 0.28 through `games/_kit/build/build.mjs`, `node:test` on Node 24 (Web Crypto as `globalThis.crypto.subtle`), the kit's DOM stub (`games/_kit/test/dom-stub.ts`) and `importTsx` (`games/_kit/test/tsx.ts`); `fake-indexeddb` (exact-pinned devDependency of `games/`, test-only) for the IndexedDB outbox; Playwright (local only, `make music-e2e`); the owner's Python tool (`music/tools/siue-music`) for the pickup step of the browser check.
 
 **Spec:** `docs/superpowers/specs/2026-10-17-music-workroom-design.md` (the answering features, notes sealed until the owner deletes them, phone first) and `docs/superpowers/specs/2026-10-17-workroom-theme-design.md` (the look: tokens, components, the guide, legends, dark and daylight). It replaces Tasks 14 and 15 of `docs/superpowers/plans/2026-10-17-music-workroom.md`, re-derived against the code on `main` after PRs 1–4 (#158–#161).
 
 Paths below are relative to `websites/www.cs/` unless they start with `docs/`. Node commands run from `websites/www.cs/games`.
 
-The code and tests in Tasks 1–16 and the unit test and browser-check code of Task 17 were applied to a copy of `main` while this plan was written: every `games/workroom` unit test passes, the four type-check programs and `tests/e2e`'s program are clean. `make music-e2e` itself has not been run against them; Task 17 runs it.
+Tasks 1–3 are on the branch. The code and tests of Tasks 6–9 compile and pass against the branch's `src` (`unlock.ts` returns `{ current, ring }`, `seal()` takes `current`); the code of Tasks 4, 5 and 10–17 is written against the same `src` and is checked by each task's own test run. `make music-e2e` runs in Task 17.
 
 ## Global Constraints
 
 - **Work on branch `music/answer-ui`** in the worktree `.claude/worktrees/music-answer-ui`. Never commit to `main`.
-- **Keys never touch browser storage.** The passphrase, the locked keyring and the unlocked keys are never written to IndexedDB, `localStorage`, `sessionStorage`, a cookie or the Cache API; www.cs is one origin shared by every user's `~folder`. The passphrase is asked on every visit (1Password fills it). The unlocked keys live only in the vault (`src/vault.ts`), in memory. **Only sealed notes waiting to be sent live in IndexedDB** (database `siue-music`, store `outbox`, records `{ key, bundle, made, reason }`): nothing in the clear about a note (no piece, no words, no span) is stored in the browser.
+- **Keys never touch browser storage.** The passphrase, the locked keyring and the unlocked keys are never written to IndexedDB, `localStorage`, `sessionStorage`, a cookie or the Cache API; www.cs is one origin shared by every user's `~folder`. The passphrase is asked on every visit (1Password fills it). The unlocked private keys live only in the vault (`src/vault.ts`), and the current public key notes are sealed to only in the notes session (`src/notes-session.ts`), both in memory. **Only sealed notes waiting to be sent live in IndexedDB** (database `siue-music`, store `outbox`, records `{ key, bundle, made, reason }`): nothing in the clear about a note (no piece, no words, no span) is stored in the browser.
 - **Limits** (spec): a recording is at most **60 s** (the recorder stops itself); a sealed note is at most **2,097,152** bytes (`MAX_NOTE_BYTES`, equal to `Store::MAX_NOTE_BYTES`); the server keeps **2,000** notes. A note over a limit, or refused by the server, stays in the outbox with a plain message; nothing is ever dropped without the owner pressing **Discard**. A typed note holds at most **4,000** characters; an energy shape at most **512** points (a longer curve, drawn or the piece's own, is resampled to 512 evenly spaced points before it is sealed, so it can always be sent).
+- **Sealing needs the unlocked keyring.** The page seals to `unlockKeyring(…).current`, the keyring's first entry, whose public half is derived from its private key and checked against its fingerprint; the key comes from the keyring the passphrase unlocks, never from the page's code or the server's word. Before an unlock, and after `lock()`, nothing is sealed. The server knows the fingerprints from the keyring's upload (`POST music/api/keyring.php`, scope `keys:publish`, `{ keyring, current, previous }`) and refuses a note sealed to any other key (422 `unknown_key`); with no keyring stored it answers 503 `no_key` to a note and 404 `no_keyring` to `GET keyring.php`.
 - **The server is not changed.** Session routes (all same-origin, signed in): `GET notes.php` → `{ notes: [{ id, size, arrived_at, picked_up_at }] }` (oldest first); `POST notes.php` (raw `application/octet-stream` sealed bundle, `X-CSRF` header) → `201 { id, csrf }` or a refusal `{ error, csrf }` with 413 `too_large`, 409 `full`, 422 `bad_header` / `unknown_key`, 503 `no_key`; `GET note.php?id=` → the sealed bytes (`application/octet-stream`); `POST delete.php` (`application/x-www-form-urlencoded`, `id=<32 hex>` or `all=1`, `X-CSRF`) → `{ deleted, csrf }`; `GET keyring.php` → `{ keyring }` or 404 `{ error: "no_keyring" }`; `GET csrf.php` → `{ csrf }`. **`checkCsrf` spends the token on every check, right or wrong**; a refused check answers `403 { "error": "csrf" }` with no new token, so the page fetches `csrf.php` and retries once. A signed-out request is redirected to the admin sign-in (`fetch` reports `redirected`), or answers 401/403.
 - **The look** (theme spec): components only from `src/ui/console/` (`Button`, `Tabs`, `Chip`, `Panel`, `Sheet`, `Readout`, `Legend`, `GuideOverlay`); colours only through tokens (`ground`, `panel`, `well`, `lane`, `rule`, `ink`, `dim`, `amber`, `go`, `record`, `on-accent`, `paper`); **no hex literal and no Tailwind palette class** in `src/ui/**` or `src/main.ts` (`test/tokens.test.ts` scans them); score colours go through `readableOn(theme, color, 'mark' | 'text')`; **every tap target at least 44 px** (`min-h-11 min-w-11`; `Button` already is); **no `style="…"` attribute** (the CSP blocks it; Preact `style` props and SVG attributes are fine); **no Escape handler anywhere** (Escape is never bound; each new composer, question and overlay is tested at run time by pressing Escape at every one of its elements and at every window and document key listener, as `test/guide-overlay.test.ts` does for the guide); `record` (red) is the colour of recording only (this page's UI uses it for the Record and Stop buttons and the recording strip), `amber` of time and selection, `go` of sending and energy. A destructive action is a plain secondary button with explicit words ("Delete all 12 notes"), and an error line has an `amber` border: never the red `error` class.
 - **Guide and legends:** anything the answering UI draws that a view did not draw before gets a legend item and a "How to read this" part (notes on the Story timeline; the energy drawing). The guide opens by itself the first time a browser shows a view (`workroom-guide-<view>` flags in localStorage are not secrets and stay).
@@ -27,14 +28,14 @@ The code and tests in Tasks 1–16 and the unit test and browser-check code of T
 - **Nothing the owner typed or recorded is cleared until the sealed note is stored.** A typed note stays in its box until the sealed bundle is in the outbox's store (IndexedDB, or this page view's memory when the browser refuses it; the kept note's message then adds a one-line notice that it lives only until the page closes). A note that cannot be sealed (for example `crypto.subtle` is missing on a page that is not secure) leaves the composer open with its words and a plain message. A recording always has a visible Stop; moving to another mode while recording stops the microphone and keeps the recording to **Send recording** or **Discard recording**; a recording that cannot be stored stays the same way.
 - **Type-check programs.** Every new `src` file joins one program: DOM-free `tsconfig.json` (`answer.ts`, `energy.ts`, `recorder.ts`); Web Crypto `src/tsconfig.crypto.json` (`api.ts`, `outbox.ts`, `history.ts`, `notes-session.ts`, which import `seal.ts`, `unlock.ts` or each other); DOM `src/tsconfig.dom.json` (`idb.ts`, `ui/*.tsx`, `ui/waiting.ts`). A DOM-free module must not import a Web Crypto one. Byte buffers that reach `crypto.subtle`, `fetch` or IndexedDB are `Uint8Array<ArrayBuffer>`.
 - **The built page is committed.** After changing anything under `games/workroom/src`, run `node _kit/build/build.mjs workroom` and commit `games/workroom/dist/` with the task; `node _kit/build/build.mjs workroom --check` (type-checks every program, then compares `dist/`) must exit 0 before each commit.
-- **CI is not changed:** no edits to `.github/`, `tests/e2e/select.ts`, `compose.yaml`, `tests/e2e/playwright.config.ts`, or the Makefile's `test` and `e2e` targets. The local check's files may change: `tests/e2e/workroom.local.ts`, `tests/e2e/local.config.ts`, a new `compose.music-local.yaml`, the Makefile's `music-e2e` recipe. The one other file CI reads that this plan changes is `games/package.json` with its lock file: `fake-indexeddb` joins `devDependencies`, exact-pinned (Task 7). The one line near CI is `env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS` in `docker/php/Dockerfile` (FPM clears the worker environment; it does nothing unless the variable is set, and only `compose.music-local.yaml` sets it).
+- **CI is not changed:** no edits to `.github/`, `tests/e2e/select.ts`, `compose.yaml`, `docker/`, `tests/e2e/playwright.config.ts`, or the Makefile's `test` and `e2e` targets. The local check's files may change: `tests/e2e/workroom.local.ts`, `tests/e2e/local.config.ts`, the Makefile's `music-e2e` recipe. The one other file CI reads that this plan changes is `games/package.json` with its lock file: `fake-indexeddb` joins `devDependencies`, exact-pinned (Task 7).
 - **Ports and docker:** never bind 3000, 5173, 8000 or 8080; docker runs use a unique project name and are torn down with `docker compose -p <name> down -v`; never touch the `siue` project; never prune. Never SSH, SFTP or SCP to www.cs; deploys happen on merge.
-- **Nothing secret is committed;** the repository is public. Test keys under `games/workroom/test/fixtures/` are labelled test keys. Screenshots go to a scratch folder outside the repository.
+- **Nothing secret is committed;** the repository is public. The only keys in it are the labelled TEST keys in `games/workroom/test/fixtures/test-key.json`; the browser check uploads that keyring to its own throwaway docker stack. Screenshots go to a scratch folder outside the repository.
 - **Comments and docs describe the current state, never history** ("kept from when…", "now does…", "changed to…" are not allowed).
 - **Commits** end with the committing session's attribution lines, in this shape:
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-  Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb
+  Claude-Session: https://claude.ai/code/session_01MZY9onuQ93N1EWMbg7JJs4
   ```
 
 ## Review Focus
@@ -43,9 +44,10 @@ The code and tests in Tasks 1–16 and the unit test and browser-check code of T
 2. **A double tap on Send or Delete, or a stale tab, spends the one-time CSRF token twice:** the API client sends one POST at a time, carries the token each answer returns, and on `403 {"error":"csrf"}` fetches `csrf.php` once and retries once. Pinned in Task 6 (`api.test.ts`).
 3. **An iPhone records:** Safari has no WebM recording, refuses a microphone asked for after an `await`, and goes silent under a `'playback'` audio session: the recorder picks `audio/mp4`, asks for the microphone first thing in the tap, switches the session to `'play-and-record'` while recording, and the 60 s cap stops and keeps the recording. Pinned in Task 5 (`recorder.test.ts`).
 4. **A tap exactly on a section boundary** (or a playhead resting on one) must react to a section, never to none or to the one before: floating-point round trips through pixels land a hair either side. Pinned in Task 1 (`hit.test.ts`).
-5. **A note from another draft or another piece, a damaged note, or a note sealed to a key the page lacks:** the history shows each with its draft or its problem, never fails the whole list, and validates every opened body's shape before rendering it. Pinned in Task 3 (`note.test.ts`), Task 8 (`history.test.ts`) and Task 9 (`notes-session.test.ts`).
+5. **A note from another draft or another piece, a damaged note, or a note sealed to a key the keyring lacks:** the history shows each with its draft or its problem, never fails the whole list, and validates every opened body's shape before rendering it. Pinned in Task 3 (`note.test.ts`), Task 8 (`history.test.ts`) and Task 9 (`notes-session.test.ts`).
 6. **Nothing typed or recorded is lost, and a recording can always be stopped:** the words stay in the box and the recording stays on screen until the sealed note is stored; a note that cannot be sealed says so and keeps the composer; a browser that refuses IndexedDB keeps the note in memory with a notice; leaving a mode while recording stops the microphone and keeps the recording to Send or Discard; a recorder that fails after the microphone was granted releases it. Pinned in Task 5 (`recorder.test.ts`), Task 7 (`idb.test.ts`), Task 12 (`composers.test.ts`) and Task 15 (`workroom-answer.test.ts`).
 7. **Two tabs open on one outbox:** a kept note is uploaded once, because the flush runs under the Web Locks lock `workroom-outbox`. Pinned in Task 7 (`outbox.test.ts`).
+8. **A note sealed before an unlock, after a lock, or to a key the keyring did not vouch for:** the session seals only to the current key the passphrase unlocked; locked, `send` rejects and stores nothing, and the answer bar's buttons ask for the unlock instead of opening a composer or a microphone. Pinned in Task 9 (`notes-session.test.ts`), Task 15 (`workroom-answer.test.ts`) and Task 17 (the browser test that taps React before unlocking).
 
 ## Decisions this plan makes (the specs leave them open)
 
@@ -59,9 +61,10 @@ The code and tests in Tasks 1–16 and the unit test and browser-check code of T
 - **A reaction is one tap.** The bar stays open after it with “Sent. It is waiting for pickup.” in its status line, so several reactions go one after another; every other note closes its composer once it is stored.
 - **The unlock form keeps its hidden `siue-music` username beside the `current-password` field** so 1Password fills it. Chrome's own password manager may offer to save that pair; the owner dismisses the prompt (Never). The page cannot suppress it without breaking 1Password, and the passphrase is never stored by the page itself.
 - **"Draft limits" means the composer's own limits:** the 4,000-character text (a count appears from 3,500 characters, when 500 are left), the 60 s recording, the 512-point shape; the server's draft-publishing limits are not page concerns.
-- **No key built in yet** (`PUBLIC_KEY === null`, before `make music-setup`): the answer bar says "Notes are off: this page has no notes key yet (make music-setup)." and nothing seals; the pieces list keeps the server's total.
+- **Before an unlock the composers ask for it.** A note is sealed to the unlocked keyring's current key, so nothing can be sealed before the passphrase is entered on this page view. The unlock form lives in the Notes & answers panel; a tap on Pin a note, Hum it, React or Draw the energy before an unlock opens nothing and starts no microphone: it opens the panel (the bottom sheet on a phone) at the unlock form with one line above it, "Unlock your notes first: each note is sealed to your notes key, and the passphrase unlocks it." After the unlock the panel closes on a phone and the bar opens what was asked for (Pin a note, React, Draw the energy); Hum it shows "Unlocked. Tap Hum it to start recording." instead, because iOS grants the microphone only inside a tap. The session keeps the current public key itself (the vault keeps the private keys), and `send` while locked rejects with that same line and stores nothing.
+- **No keyring on the server** (404 `no_keyring`, before `make music-setup`): the page asks `notes.hasKeyring()` on load; the answer bar then says "Notes are off until a notes key is uploaded (make music-setup)." and shows no buttons, and the unlock form answers "No notes key has been uploaded yet (make music-setup)."; the pieces list keeps the server's total.
 - **The pieces list shows per-piece waiting counts after an unlock** on that page (the server cannot know a sealed note's piece); before it, only the server's total.
-- **The browser check uses a test-key bundle.** `games/workroom/tools/e2e-bundle.ts` builds `src/main.ts` with `src/public-key.ts` replaced by `test/fixtures/public-key.ts` into a temporary folder outside the repository; the check routes `dist/workroom.js` to it. The shipped bundle is never built with a test key. `compose.music-local.yaml` points the server at `games/workroom/test/fixtures/public.json`; Chrome runs with a fake microphone (`tests/e2e/local.config.ts`).
+- **The browser check uses the shipped page and the TEST keyring.** It uploads `games/workroom/test/fixtures/test-key.json`'s locked keyring with its fingerprints through `POST music/api/keyring.php` (an API key made on the hub with `drafts:publish` and `keys:publish`), and the shipped `dist/workroom.js` unlocks it with the TEST passphrase, so nothing is rebuilt or routed for the check. Pickup runs the real tool against the docker stack from a temporary `SIUE_CONFIG_DIR` whose cache holds the TEST key, with `SIUE_OP` pointing at the tool's 1Password stand-in (`music/tools/tests/fake_op.py`) holding the TEST key item, because pickup asks 1Password which key is current and must never reach the owner's. Chrome runs with a fake microphone (`tests/e2e/local.config.ts`).
 - **The recorder asks for 64 kb/s,** so a minute of speech is about 0.5 MB sealed, well under 2 MB.
 
 ## File map
@@ -80,7 +83,7 @@ websites/www.cs/
     src/outbox.ts              # sealed notes waiting to be sent (Task 7)
     src/idb.ts                 # the outbox in IndexedDB, memory where it refuses (Task 7)
     src/history.ts             # history items, counts, timeline marks (Task 8)
-    src/notes-session.ts       # unlock, history, send, delete over the ports (Task 9)
+    src/notes-session.ts       # unlock, history, send (sealed to the unlocked keyring's current key), delete (Task 9)
     src/guide.ts src/tabs.ts   # energy guide, "your notes" part, legends (Task 10)
     src/browser.ts             # + browserMedia(), browserLock() (Task 16)
     src/main.ts                # wiring (Task 16)
@@ -92,17 +95,12 @@ websites/www.cs/
     src/ui/{AnswerBar,Workroom}.tsx                     # Task 15 (the AnswerBar's dock holds the composer, the Stop and a kept recording)
     src/ui/{PiecesIndex.tsx,waiting.ts}                 # Task 16
     tsconfig.json src/tsconfig.crypto.json src/tsconfig.dom.json
-    tools/e2e-bundle.ts                                 # Task 17
     test/{hit,console,note,answer,energy,recorder,api,outbox,idb,history,notes-session,guide-answer,answering-views,composers,energy-editor,timeline-select,workroom-answer,waiting,no-storage,workroom}.test.ts
-    test/e2e-bundle.test.ts                             # Task 17
-  games/package.json games/package-lock.json            # + fake-indexeddb, exact-pinned devDependency (Task 7)
     dist/                                               # rebuilt with each task
-  compose.music-local.yaml       # MUSIC_PUBLIC_KEYS for the local check (Task 17)
-  docker/php/Dockerfile          # + env[MUSIC_PUBLIC_KEYS] (Task 17)
-  tests/php/MusicDeployTest.php  # pins that line (Task 17)
+  games/package.json games/package-lock.json            # + fake-indexeddb, exact-pinned devDependency (Task 7)
   tests/e2e/local.config.ts      # fake microphone (Task 17)
-  tests/e2e/workroom.local.ts    # answering tests and screens (Tasks 17, 18)
-  Makefile                       # music-e2e: the overlay, the test bundle, MUSIC_PY (Task 17)
+  tests/e2e/workroom.local.ts    # the TEST keyring upload, pickup, answering tests and screens (Tasks 17, 18)
+  Makefile                       # music-e2e: MUSIC_PY for pickup (Task 17)
   music/README.md                # answering, the local check (Task 18)
 ```
 
@@ -197,7 +195,7 @@ git add websites/www.cs/games/workroom
 git commit -m "Music workroom: the section under a time, exact at its boundaries
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
+Claude-Session: https://claude.ai/code/session_01MZY9onuQ93N1EWMbg7JJs4"
 ```
 
 ### Task 2: Console components the answering UI needs
@@ -1541,9 +1539,9 @@ export const KEPT_MESSAGES: Readonly<Record<KeptReason, string>> = {
   server: 'The server had a problem. This note stays on this device and is sent on the next try.',
   too_large: 'This note is over 2 MB, so it stays on this device. Record a shorter one, then discard this one.',
   full: `The workroom holds ${MAX_NOTES.toLocaleString('en-US')} notes. Delete some old ones; this note stays on this device until then.`,
-  no_key: 'The workroom has no notes key yet, so this note stays on this device.',
+  no_key: 'The workroom has no notes key yet (make music-setup), so this note stays on this device.',
   bad_header: 'The server did not accept this note’s key. Reload the page; the note stays on this device.',
-  unknown_key: 'The server did not accept this note’s key. Reload the page; the note stays on this device.',
+  unknown_key: 'The server does not take notes sealed to this key, so this note stays on this device. Run make music-status to compare the notes keys.',
 };
 
 /** Reasons that would be the same for every note after this one: the walk stops there. */
@@ -1869,7 +1867,7 @@ export interface HistoryItem { id: string; arrived: number; pickedUp: number | n
 export type OpenOutcome = Opened | NoteUnreadable | 'download';
 export const PROBLEMS: Readonly<Record<NoteUnreadable['reason'] | 'download', string>> = {
   format: 'Could not open this note: it is not a sealed note.',
-  'unknown-key': 'Could not open this note: it was sealed to a key this page does not hold.',
+  'unknown-key': 'Could not open this note: it was sealed to a key your keyring does not hold.',
   tampered: 'Could not open this note: it was damaged or changed.',
   download: 'Could not download this note. Reload the page to try again.',
 };
@@ -1922,86 +1920,113 @@ export function answeredBy(changes: readonly Change[], id: string): number[] {
 - Test: `games/workroom/test/notes-session.test.ts`
 
 **Interfaces:**
-- Consumes: `PageApi`, `SignedOut`, `NoKeyring` (Task 6); `Outbox`, `AddReport`, `FlushReport`, `Pending`, `SEND_MESSAGES` (Task 7); `buildHistory`, `HistoryItem`, `OpenOutcome` (Task 8); `seal`, `open`, `NoteUnreadable`, `BuiltInKey` (`seal.ts`); `unlockKeyring`, `WrongPassphrase`, `KeyringInvalid` (`unlock.ts`); `Vault` (`vault.ts`).
+- Consumes: `PageApi`, `SignedOut`, `NoKeyring` (Task 6); `Outbox`, `AddReport`, `FlushReport`, `Pending`, `SEND_MESSAGES` (Task 7); `buildHistory`, `HistoryItem`, `OpenOutcome` (Task 8); `seal`, `open`, `NoteUnreadable`, `PublicKey` (`seal.ts`); `unlockKeyring` (its `Unlocked { current, ring }`), `WrongPassphrase`, `KeyringInvalid` (`unlock.ts`); `Vault` (`vault.ts`).
 - Produces:
 
 ```ts
 export const UNLOCK_MESSAGES: { noKeyring: string; wrong: string; invalid: string; signedOut: string; offline: string };
-export interface SessionDeps { api: PageApi; vault: Vault; outbox: Outbox; keys: { current: BuiltInKey | null; previous: readonly BuiltInKey[] } }
+/** Why a note cannot be made yet: it is sealed to the key the passphrase unlocks. The one line the notes panel shows above the unlock form when a composer asked for it. */
+export const UNLOCK_FIRST: string;
+export interface SessionDeps { api: PageApi; vault: Vault; outbox: Outbox }
 export interface NotesSession {
-  readonly sealing: boolean;                  // the page has a notes key built in
+  /** False only when the server answers that it holds no keyring (404 no_keyring: make music-setup has not run); true when it holds one or could not be asked (unlocking then says why). */
+  hasKeyring(): Promise<boolean>;
   unlocked(): boolean;
-  /** Unlocks with the passphrase (kept nowhere). Resolves to null, or the message to show. */
+  /** Unlocks with the passphrase (kept nowhere): the private keys go to the vault, the current public key is what send() seals to. Resolves to null, or the message to show. */
   unlock(passphrase: string): Promise<string | null>;
   /** Every server note, opened; one failure never stops the rest. Throws SignedOut; throws when locked. */
   history(): Promise<HistoryItem[]>;
-  send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<AddReport>;  // seal, then the outbox; a note that cannot be sealed rejects with Error(SEND_MESSAGES.sealFailed) and stores nothing
+  send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<AddReport>;  // seal to the unlocked keyring's current key, then the outbox; locked, it rejects with Error(UNLOCK_FIRST); a note that cannot be sealed rejects with Error(SEND_MESSAGES.sealFailed); either way nothing is stored
   flush(): Promise<FlushReport>;
   kept(): Promise<Pending[]>;
   discard(key: string): Promise<void>;
   remove(id: string): Promise<void>;
   removeAll(): Promise<number>;
-  /** Forgets the unlocked keys and the opened notes. */
+  /** Forgets the unlocked keys, the key notes are sealed to, and the opened notes. */
   lock(): void;
 }
 export function createNotesSession(d: SessionDeps): NotesSession;
 ```
 
+  The session keeps the current public key itself (from `unlockKeyring`'s result, beside `vault.load(ring)`), so `vault.ts` is unchanged: the vault holds the private keys, the session the one public key it seals to, both in this page view's memory only.
+
 - [ ] **Step 1: Write the failing test** (`test/notes-session.test.ts`):
 
 ```ts
 // The notes session with the test keys: unlocking says what went wrong in plain
-// words, sent notes come back opened, a damaged or missing note never stops the
-// rest, an earlier key's note still opens, deletes forget what they removed.
+// words, nothing is sealed before an unlock and every note after it is sealed
+// to the keyring's current key, sent notes come back opened, a damaged or
+// missing note never stops the rest, an earlier key's note still opens,
+// deletes forget what they removed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NoKeyring, type PageApi } from '../src/api.ts';
-import { UNLOCK_MESSAGES, createNotesSession } from '../src/notes-session.ts';
+import { UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession } from '../src/notes-session.ts';
 import { SEND_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
 import { PROBLEMS } from '../src/history.ts';
-import { seal } from '../src/seal.ts';
+import { headerFingerprint, seal } from '../src/seal.ts';
+import type { LockedKeyring } from '../src/unlock.ts';
 import { createVault } from '../src/vault.ts';
 import type { NoteBody } from '../src/note.ts';
-import { builtIn, fx, otherKey } from './fixture-key.ts';
+import { fx, otherKey } from './fixture-key.ts';
 
 const note = (text: string, piece = 'test-piece'): NoteBody => ({ v: 1, kind: 'text', piece, draft: 1, from: 0, to: 1, fromBar: 1, toBar: 1, lane: null, text, reaction: null, curve: null, audio: null, made: '2026-10-20T00:00:00.000Z' });
 
 function server() {
   const notes: { id: string; bytes: Uint8Array<ArrayBuffer>; arrived: number; picked: number | null }[] = [];
   let n = 0;
-  const state = { failKeyring: null as unknown, broken: new Set<string>(), downloads: 0 };
+  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, broken: new Set<string>(), downloads: 0 };
   const api: PageApi = {
     upload: async b => { const id = (++n).toString(16).padStart(32, '0'); notes.push({ id, bytes: b, arrived: n, picked: null }); return { kind: 'sent', id }; },
     list: async () => notes.map(x => ({ id: x.id, size: x.bytes.length, arrived_at: x.arrived, picked_up_at: x.picked })),
     bytes: async id => { state.downloads++; if (state.broken.has(id)) throw new Error('The server answered 500.'); return notes.find(x => x.id === id)!.bytes; },
     remove: async id => { const i = notes.findIndex(x => x.id === id); if (i >= 0) notes.splice(i, 1); return i >= 0 ? 1 : 0; },
     removeAll: async () => { const k = notes.length; notes.length = 0; return k; },
-    keyring: async () => { if (state.failKeyring) throw state.failKeyring; return fx.keyring; },
+    keyring: async () => { if (state.failKeyring) throw state.failKeyring; return state.keyring; },
   };
   return { api, notes, state };
 }
-const session = (s = server(), current = builtIn) => ({ s, notes: createNotesSession({ api: s.api, vault: createVault(), outbox: createOutbox(memoryOutbox(), s.api, () => crypto.randomUUID()), keys: { current, previous: [otherKey] } }) });
+const session = (s = server()) => ({ s, notes: createNotesSession({ api: s.api, vault: createVault(), outbox: createOutbox(memoryOutbox(), s.api, () => crypto.randomUUID()) }) });
+const locked = (e: unknown): boolean => e instanceof Error && e.message === UNLOCK_FIRST;
 
-test('unlock: no keyring yet, a wrong passphrase, a keyring without this page\'s key, then the right passphrase', async () => {
+test('unlock: no keyring yet, a damaged keyring, a wrong passphrase, then the right passphrase', async () => {
   const { s, notes } = session();
   s.state.failKeyring = new NoKeyring('none');
+  assert.equal(await notes.hasKeyring(), false);
   assert.equal(await notes.unlock(fx.passphrase), UNLOCK_MESSAGES.noKeyring);
+  s.state.failKeyring = new TypeError('Failed to fetch');
+  assert.equal(await notes.hasKeyring(), true, 'a server that cannot be asked is not a server without a keyring');
   s.state.failKeyring = null;
+  assert.equal(await notes.hasKeyring(), true);
+  s.state.keyring = { ...fx.keyring, iterations: 1000 };
+  assert.equal(await notes.unlock(fx.passphrase), UNLOCK_MESSAGES.invalid);
+  s.state.keyring = fx.keyring;
   assert.equal(await notes.unlock('not it'), UNLOCK_MESSAGES.wrong);
   assert.equal(notes.unlocked(), false);
   await assert.rejects(notes.history(), /locked/);
-  const stranger = session(server(), { fingerprint: 'ab'.repeat(32), spki: builtIn.spki });
-  assert.equal(await stranger.notes.unlock(fx.passphrase), UNLOCK_MESSAGES.invalid);
   assert.equal(await notes.unlock(fx.passphrase), null);
   assert.equal(notes.unlocked(), true);
 });
 
+test('nothing is sealed before an unlock or after a lock; an unlocked session seals to the keyring\'s current key', async () => {
+  const { s, notes } = session();
+  await assert.rejects(notes.send(note('too soon'), null), locked);
+  assert.equal(s.notes.length, 0);
+  assert.deepEqual(await notes.kept(), [], 'nothing waits in the outbox either');
+  await notes.unlock(fx.passphrase);
+  await notes.send(note('sealed'), null);
+  assert.equal(headerFingerprint(s.notes[0]!.bytes), fx.fingerprint, 'the first keyring entry is the current key');
+  notes.lock();
+  await assert.rejects(notes.send(note('after the lock'), null), locked);
+  assert.equal(s.notes.length, 1);
+});
+
 test('sent notes come back opened, newest first; a picked-up note says so', async () => {
   const { s, notes } = session();
+  await notes.unlock(fx.passphrase);
   assert.deepEqual((await notes.send(note('first'), null)).kept, []);
   await notes.send(note('second'), null);
   s.notes[0]!.picked = 9;
-  await notes.unlock(fx.passphrase);
   const items = await notes.history();
   assert.deepEqual(items.map(i => [i.opened?.body.text, i.state]), [['second', 'waiting'], ['first', 'picked-up']]);
   const before = s.state.downloads;
@@ -2011,12 +2036,12 @@ test('sent notes come back opened, newest first; a picked-up note says so', asyn
 
 test('a damaged note and a failed download never stop the rest; an earlier key\'s note opens', async () => {
   const { s, notes } = session();
+  await notes.unlock(fx.passphrase);
   await notes.send(note('fine'), null);
   await s.api.upload(new TextEncoder().encode('not a sealed note'));
   await s.api.upload(await seal(note('sealed before a rotation'), null, otherKey));
   await notes.send(note('download fails'), null);
   s.state.broken.add(s.notes[3]!.id);
-  await notes.unlock(fx.passphrase);
   const items = await notes.history();
   assert.deepEqual(items.map(i => i.opened?.body.text ?? i.problem), [PROBLEMS.download, 'sealed before a rotation', PROBLEMS.format, 'fine']);
   s.state.broken.clear();
@@ -2025,36 +2050,32 @@ test('a damaged note and a failed download never stop the rest; an earlier key\'
 
 test('delete one, delete all, and lock forgets the keys', async () => {
   const { s, notes } = session();
+  await notes.unlock(fx.passphrase);
   await notes.send(note('a'), null);
   await notes.send(note('b'), null);
-  await notes.unlock(fx.passphrase);
   await notes.remove(s.notes[0]!.id);
   assert.deepEqual((await notes.history()).map(i => i.opened?.body.text), ['b']);
   assert.equal(await notes.removeAll(), 1);
   assert.deepEqual(await notes.history(), []);
   notes.lock();
   assert.equal(notes.unlocked(), false);
+  await assert.rejects(notes.history(), /locked/);
 });
 
-test('a note that cannot be sealed here is a plain message, and nothing is stored', async () => {
+test('a note that cannot be sealed here is a plain message, and nothing is stored', async t => {
   const s = server();
   const outbox = createOutbox(memoryOutbox(), s.api, () => 'k');
-  const notes = createNotesSession({ api: s.api, vault: createVault(), outbox, keys: { current: { ...builtIn, spki: 'AAAA' }, previous: [] } });
+  const notes = createNotesSession({ api: s.api, vault: createVault(), outbox });
+  await notes.unlock(fx.passphrase);
+  // As on a page with no usable Web Crypto: sealing fails after the unlock.
+  t.mock.method(crypto.subtle, 'generateKey', async () => { throw new Error('no AES-GCM here'); });
   await assert.rejects(notes.send(note('x'), null), (e: unknown) => e instanceof Error && e.message === SEND_MESSAGES.sealFailed);
   assert.deepEqual(await outbox.pending(), []);
   assert.equal(s.notes.length, 0);
 });
-
-test('without a key built in nothing seals', async () => {
-  const s = server();
-  const notes = createNotesSession({ api: s.api, vault: createVault(), outbox: createOutbox(memoryOutbox(), s.api, () => 'k'), keys: { current: null, previous: [] } });
-  assert.equal(notes.sealing, false);
-  await assert.rejects(notes.send(note('x'), null), /no notes key/);
-  assert.equal(s.notes.length, 0);
-});
 ```
 
-  In `test/no-storage.test.ts`, the second test's file list becomes `['note', 'seal', 'unlock', 'vault', 'public-key', 'answer', 'api', 'outbox', 'history', 'notes-session', 'recorder', 'energy']`.
+  In `test/no-storage.test.ts`, the second test's file list becomes `['note', 'seal', 'unlock', 'vault', 'answer', 'api', 'outbox', 'history', 'notes-session', 'recorder', 'energy']`.
 
 - [ ] **Step 2: Run to see it fail** — `node --test workroom/test/notes-session.test.ts workroom/test/no-storage.test.ts` — FAIL (no module).
 
@@ -2062,8 +2083,10 @@ test('without a key built in nothing seals', async () => {
 
 ```ts
 // The owner's notes on this page view: unlock the keyring with the passphrase
-// (used once, kept nowhere), list and open every note, send a new one through
-// the outbox, delete. The unlocked keys live in the vault, in memory only.
+// (used once, kept nowhere), list and open every note, seal a new one to the
+// unlocked keyring's current key and send it through the outbox, delete. The
+// unlocked private keys live in the vault and the current public key here,
+// both in memory only; before an unlock nothing can be sealed.
 import { NoKeyring, SignedOut } from './api.ts';
 import type { PageApi } from './api.ts';
 import { buildHistory } from './history.ts';
@@ -2072,21 +2095,23 @@ import type { NoteBody } from './note.ts';
 import { SEND_MESSAGES } from './outbox.ts';
 import type { AddReport, FlushReport, Outbox, Pending } from './outbox.ts';
 import { NoteUnreadable, open, seal } from './seal.ts';
-import type { BuiltInKey } from './seal.ts';
+import type { PublicKey } from './seal.ts';
 import { KeyringInvalid, WrongPassphrase, unlockKeyring } from './unlock.ts';
 import type { Vault } from './vault.ts';
 
 export const UNLOCK_MESSAGES = {
   noKeyring: 'No notes key has been uploaded yet (make music-setup).',
   wrong: 'That passphrase did not unlock the key.',
-  invalid: "The keyring on the server does not match this page's key. Reload the page; if it still fails, run make music-setup.",
+  invalid: 'The notes key on the server is damaged or does not match its fingerprints. Run make music-setup, then reload the page.',
   signedOut: 'Your sign-in ended. Sign in again.',
   offline: 'Could not reach the server. Check the connection and try again.',
 } as const;
 
-export interface SessionDeps { api: PageApi; vault: Vault; outbox: Outbox; keys: { current: BuiltInKey | null; previous: readonly BuiltInKey[] } }
+export const UNLOCK_FIRST = 'Unlock your notes first: each note is sealed to your notes key, and the passphrase unlocks it.';
+
+export interface SessionDeps { api: PageApi; vault: Vault; outbox: Outbox }
 export interface NotesSession {
-  readonly sealing: boolean;
+  hasKeyring(): Promise<boolean>;
   unlocked(): boolean;
   unlock(passphrase: string): Promise<string | null>;
   history(): Promise<HistoryItem[]>;
@@ -2104,8 +2129,8 @@ const AT_ONCE = 6;
 
 export function createNotesSession(d: SessionDeps): NotesSession {
   const outcomes = new Map<string, OpenOutcome>();
-  let unlocked = false;
-  const known = (): BuiltInKey[] => (d.keys.current ? [d.keys.current, ...d.keys.previous] : []);
+  /** The unlocked keyring's current public key: what new notes are sealed to. Null while locked. */
+  let current: PublicKey | null = null;
   const say = (e: unknown): string => (e instanceof NoKeyring ? UNLOCK_MESSAGES.noKeyring
     : e instanceof WrongPassphrase ? UNLOCK_MESSAGES.wrong
     : e instanceof KeyringInvalid ? UNLOCK_MESSAGES.invalid
@@ -2127,20 +2152,27 @@ export function createNotesSession(d: SessionDeps): NotesSession {
     }
   };
   return {
-    sealing: d.keys.current !== null,
-    unlocked: () => unlocked,
+    async hasKeyring() {
+      try {
+        await d.api.keyring();
+        return true;
+      } catch (e) {
+        return !(e instanceof NoKeyring);
+      }
+    },
+    unlocked: () => current !== null,
     async unlock(passphrase) {
       try {
-        const locked = await d.api.keyring();
-        d.vault.load(await unlockKeyring(locked, passphrase, known()));
-        unlocked = true;
+        const unlocked = await unlockKeyring(await d.api.keyring(), passphrase);
+        d.vault.load(unlocked.ring);
+        current = unlocked.current;
         return null;
       } catch (e) {
         return say(e);
       }
     },
     async history() {
-      if (!unlocked) throw new Error('The notes are locked.');
+      if (current === null) throw new Error('The notes are locked.');
       const server = await d.api.list();
       const ring = d.vault.keyring();
       const todo = server.filter(n => { const o = outcomes.get(n.id); return o === undefined || o === 'download'; }).map(n => n.id);
@@ -2150,8 +2182,8 @@ export function createNotesSession(d: SessionDeps): NotesSession {
       return buildHistory(server, outcomes);
     },
     async send(body, audio) {
-      const key = d.keys.current;
-      if (!key) throw new Error('This page has no notes key built in.');
+      const key = current;
+      if (key === null) throw new Error(UNLOCK_FIRST);
       let bundle: Uint8Array<ArrayBuffer>;
       try {
         bundle = await seal(body, audio, key);
@@ -2175,7 +2207,7 @@ export function createNotesSession(d: SessionDeps): NotesSession {
     lock() {
       d.vault.clear();
       outcomes.clear();
-      unlocked = false;
+      current = null;
     },
   };
 }
@@ -2360,7 +2392,7 @@ export function energyLegend(score: Score): readonly string[] {
 - Test: `games/workroom/test/answering-views.test.ts`
 
 **Interfaces:**
-- Consumes: `NotesSession`, `UNLOCK_MESSAGES` (Task 9); `HistoryItem`, `forPiece`, `timelineMarks`, `answeredBy` (Task 8); `Pending`, `KEPT_MESSAGES` (Task 7); `SignedOut` (Task 6); `KIND_LABELS`, `REACTION_LABELS`, `spanLabel` (Task 3); `Button` (with `submit`), `Chip`, `Panel` (Task 2).
+- Consumes: `NotesSession`, `UNLOCK_MESSAGES`, `UNLOCK_FIRST` (Task 9); `HistoryItem`, `forPiece`, `timelineMarks`, `answeredBy` (Task 8); `Pending`, `KEPT_MESSAGES` (Task 7); `SignedOut` (Task 6); `KIND_LABELS`, `REACTION_LABELS`, `spanLabel` (Task 3); `Button` (with `submit`), `Chip`, `Panel` (Task 2).
 - Produces:
 
 ```tsx
@@ -2378,8 +2410,13 @@ export interface HistoryProps {
 }
 export function History(p: HistoryProps): JSX.Element;
 export function Kept(p: { kept: readonly Pending[]; busy: boolean; onDiscard(key: string): void; onRetry(): void }): JSX.Element | null;
-export interface AnswersProps { notes: NotesSession; score: Score; version: number; refresh: number; onItems(items: readonly HistoryItem[]): void }
-/** The "Your notes" panel (accessible name “Notes & answers”): the unlock form until unlocked, then the history; the notes not sent yet either way. Flushes the outbox on mount and whenever the browser comes back online. */
+export interface AnswersProps {
+  notes: NotesSession; score: Score; version: number; refresh: number;
+  ask: string | null;             // while locked: the one line above the unlock form saying why a composer needs it (UNLOCK_FIRST), or nothing
+  onUnlocked(): void;             // after a successful unlock, so the answer bar opens what was asked for
+  onItems(items: readonly HistoryItem[]): void;
+}
+/** The "Your notes" panel (accessible name “Notes & answers”): the unlock form until unlocked (with `ask` above it), then the history; the notes not sent yet either way. Flushes the outbox on mount and whenever the browser comes back online. */
 export function Answers(p: AnswersProps): JSX.Element;
 ```
 
@@ -2401,6 +2438,7 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 import type { ComponentChild } from 'preact';
 import type { HistoryItem } from '../src/history.ts';
 import type { NoteBody } from '../src/note.ts';
+import { UNLOCK_FIRST } from '../src/notes-session.ts';
 import type { NotesSession } from '../src/notes-session.ts';
 import { KEPT_MESSAGES } from '../src/outbox.ts';
 import type { Pending } from '../src/outbox.ts';
@@ -2566,7 +2604,8 @@ function fakeSession(over: Partial<NotesSession> = {}): NotesSession & { calls: 
   const calls: string[] = [];
   let open = false;
   return {
-    calls, sealing: true,
+    calls,
+    hasKeyring: async () => true,
     unlocked: () => open,
     unlock: async p => { calls.push(`unlock ${p}`); if (p !== 'right') return 'That passphrase did not unlock the key.'; open = true; return null; },
     history: async () => { calls.push('history'); return [item('a'), item('e', {}, { piece: 'other-piece' })]; },
@@ -2581,13 +2620,15 @@ function fakeSession(over: Partial<NotesSession> = {}): NotesSession & { calls: 
   };
 }
 
-test('the notes panel: locked it asks for the passphrase and lists nothing; unlocked it lists this piece', async () => {
+test('the notes panel: locked it asks for the passphrase (and says why when a composer asked) and lists nothing; unlocked it lists this piece', async () => {
   const notes = fakeSession();
   const seen: number[] = [];
-  const root = await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, onItems: (i: readonly HistoryItem[]) => seen.push(i.length) }));
+  let unlockedCalls = 0;
+  const root = await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, ask: UNLOCK_FIRST, onUnlocked: () => unlockedCalls++, onItems: (i: readonly HistoryItem[]) => seen.push(i.length) }));
   await settle();
   assert.equal(byAttr(root, 'aria-label', 'Notes & answers')!.localName, 'section', 'the panel is "Notes & answers", not the name of the note box');
   assert.ok(byAttr(root, 'autocomplete', 'current-password'));
+  assert.equal(byAttr(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST, 'the reason sits above the form');
   assert.doesNotMatch(root.textContent, /Waiting|Picked up|Delete all/);
   assert.deepEqual(notes.calls, ['flush'], 'the outbox is flushed on mount; nothing is listed before an unlock');
   const pass = byAttr(root, 'autocomplete', 'current-password')!;
@@ -2596,10 +2637,13 @@ test('the notes panel: locked it asks for the passphrase and lists nothing; unlo
   await act(() => { fire(walk(root).find(e => e.localName === 'form')!, 'submit'); });
   await settle();
   assert.match(root.textContent, /did not unlock the key/);
+  assert.equal(unlockedCalls, 0);
   pass.value = 'right';
   await act(() => { fire(pass, 'input'); });
   await act(() => { fire(walk(root).find(e => e.localName === 'form')!, 'submit'); });
   await settle();
+  assert.equal(unlockedCalls, 1, 'the Workroom hears of the unlock');
+  assert.equal(byAttr(root, 'data-unlock-reason'), undefined);
   assert.equal(walk(root).filter(e => e._attrs['data-note'] !== undefined).length, 1, 'this piece only');
   assert.deepEqual(seen, [2], 'the Workroom gets every note, for the timeline');
   await act(() => { fire(walk(root).find(e => e.localName === 'button' && e.textContent === 'Delete')!, 'click'); });
@@ -2633,7 +2677,7 @@ export function UnlockPanel(p: UnlockPanelProps) {
       setValue('');
       if (v.trim() !== '') p.onUnlock(v);
     }}>
-      <p class="text-sm text-dim">Unlock to read your notes. Your password manager fills the passphrase in; this device never keeps it.</p>
+      <p class="text-sm text-dim">Unlock to write and read your notes. Your password manager fills the passphrase in; this device never keeps it.</p>
       <input type="text" name="username" autocomplete="username" value="siue-music" readOnly tabIndex={-1} aria-hidden="true" class="sr-only" />
       <label class="grid gap-1 font-mono text-xs tracking-widest text-dim uppercase">Passphrase
         <input type="password" name="password" autocomplete="current-password" required value={value} onInput={e => setValue(e.currentTarget.value)}
@@ -2810,8 +2854,9 @@ export function History(p: HistoryProps) {
 
 ```tsx
 // "Your notes" in the notes panel: the unlock form until the notes are
-// unlocked, then the history of this piece (or all pieces). The notes not sent
-// yet are listed either way. The outbox is flushed when the panel opens and
+// unlocked (with the reason above it when a composer asked for the unlock),
+// then the history of this piece (or all pieces). The notes not sent yet are
+// listed either way. The outbox is flushed when the panel opens and
 // whenever the browser comes back online.
 import { useEffect, useState } from 'preact/hooks';
 import { SignedOut } from '../api.ts';
@@ -2825,7 +2870,12 @@ import { Panel } from './console/Panel.tsx';
 import { History, Kept } from './History.tsx';
 import { UnlockPanel } from './UnlockPanel.tsx';
 
-export interface AnswersProps { notes: NotesSession; score: Score; version: number; refresh: number; onItems(items: readonly HistoryItem[]): void }
+export interface AnswersProps {
+  notes: NotesSession; score: Score; version: number; refresh: number;
+  ask: string | null;
+  onUnlocked(): void;
+  onItems(items: readonly HistoryItem[]): void;
+}
 
 const problemOf = (e: unknown): string => (e instanceof SignedOut ? UNLOCK_MESSAGES.signedOut : UNLOCK_MESSAGES.offline);
 
@@ -2869,6 +2919,7 @@ export function Answers(p: AnswersProps) {
     setBusy(false);
     if (problem) { setError(problem); return; }
     setUnlocked(true);
+    p.onUnlocked();
     await load();
   };
 
@@ -2879,6 +2930,7 @@ export function Answers(p: AnswersProps) {
     <Panel title="Your notes" label="Notes & answers" class="grid gap-3" data={{ 'data-answers': '' }}>
       {!unlocked ? (
         <>
+          {p.ask ? <p data-unlock-reason="" class="text-sm">{p.ask}</p> : null}
           <UnlockPanel busy={busy} error={error} onUnlock={pass => void unlock(pass)} />
           {keptList}
         </>
@@ -3624,15 +3676,20 @@ function band(layout: TimelineLayout, laneId: string | null): { y: number; h: nu
 - Test: `games/workroom/test/workroom-answer.test.ts`
 
 **Interfaces:**
-- Consumes: everything above: `NotesSession` (Task 9), `MediaPorts`, `createRecorder` (Task 5), the builders (Task 3), `sectionAt` (Task 1), `timelineMarks` (Task 8), `KEPT_MESSAGES`, `SENT_MESSAGE` (Task 7), `energyGuideParts`, `GuideView`, `legendFor(…, { notes })`, `energyLegend` (Task 10), `Answers` (Task 11), the composers (Task 12), `EnergyEditor` (Task 13), `Timeline` `select` and `marks` (Task 14).
+- Consumes: everything above: `NotesSession`, `UNLOCK_FIRST` (Task 9), `MediaPorts`, `createRecorder` (Task 5), the builders (Task 3), `sectionAt` (Task 1), `timelineMarks` (Task 8), `KEPT_MESSAGES`, `SENT_MESSAGE` (Task 7), `energyGuideParts`, `GuideView`, `legendFor(…, { notes })`, `energyLegend` (Task 10), `Answers` (Task 11), the composers (Task 12), `EnergyEditor` (Task 13), `Timeline` `select` and `marks` (Task 14).
 - Produces:
 
 ```tsx
 export type AnswerMode = 'none' | 'pin' | 'react' | 'energy';
+/** What a tap before an unlock asked for. */
+export type Asked = Exclude<AnswerMode, 'none'> | 'hum';
+export const NOTES_OFF = 'Notes are off until a notes key is uploaded (make music-setup).';
+export const HUM_AFTER_UNLOCK = 'Unlocked. Tap Hum it to start recording.';
 export interface AnswerBarProps {
   score: Score; tempo: TempoMap; version: number; time: number; span: Span | null;
   mode: AnswerMode; onMode(m: AnswerMode): void;
-  sealing: boolean;              // false: "Notes are off: this page has no notes key yet (make music-setup)."
+  access: 'off' | 'locked' | 'open'; // off: the server holds no keyring (NOTES_OFF, no buttons); locked: the buttons ask for the unlock; open: the keyring is unlocked
+  onLocked(asked: Asked): void;  // a tap on Pin a note, Hum it, React or Draw the energy while locked: nothing opens, nothing records
   media: MediaPorts | null;      // null: no Hum it, no Record
   now(): Date; busy: boolean;
   send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean>; // true once the note is stored (sent, or kept on this device); false when it is not
@@ -3641,7 +3698,7 @@ export interface AnswerBarProps {
 }
 export function AnswerBar(p: AnswerBarProps): JSX.Element;
 // WorkroomProps gains:
-notes?: NotesSession | null;  // undefined: no answering at all (the view tests); null: no key built in
+notes?: NotesSession;         // undefined: no answering at all (the view tests)
 media?: MediaPorts | null;
 now?(): Date;
 ```
@@ -3653,9 +3710,12 @@ now?(): Date;
 // sends a typed note on it; React reacts to the section under the playhead;
 // Draw the energy swaps the view for the drawing, with its own legend and
 // guide; Hum it records at the playhead; a kept note says why; the notes
-// panel is "Notes & answers" with Your notes first. Pinning keeps the timeline
-// on screen above a docked composer; nothing typed or recorded is lost before
-// the note is stored; a recording always has a Stop; no key takes Escape.
+// panel is "Notes & answers" with Your notes first. Before an unlock a tap on
+// any of them opens the notes panel at the unlock form, with the reason, and
+// what was asked for opens after the unlock; with no keyring on the server,
+// notes are off. Pinning keeps the timeline on screen above a docked composer;
+// nothing typed or recorded is lost before the note is stored; a recording
+// always has a Stop; no key takes Escape.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -3667,6 +3727,7 @@ import { importTsx } from '../../_kit/test/tsx.ts';
 import { memoryStorage } from '../../_kit/test/record.ts';
 import { guideStore } from '../src/guide.ts';
 import type { NoteBody } from '../src/note.ts';
+import { UNLOCK_FIRST } from '../src/notes-session.ts';
 import type { NotesSession } from '../src/notes-session.ts';
 import { KEPT_MESSAGES, MEMORY_NOTICE, SENT_MESSAGE, SEND_MESSAGES } from '../src/outbox.ts';
 import type { AddReport } from '../src/outbox.ts';
@@ -3695,13 +3756,18 @@ const button = (root: StubElement, text: string) => walk(root).find(e => e.local
 const settle = async (): Promise<void> => { for (let i = 0; i < 20; i++) await act(async () => { await new Promise(r => setImmediate(r)); }); };
 const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 
-/** `failures`: how many sends reject first, with the message of a note that could not be sealed. */
-function fakeNotes(answer: (key: string) => AddReport = key => ({ key, memoryOnly: false, sent: [{ key, id: 'f'.repeat(32) }], kept: [] }), failures = 0) {
+/** `failures`: how many sends reject first, with the message of a note that could not be sealed. Unlocked unless `opts.unlocked` is false (any passphrase then unlocks); the server holds a keyring unless `opts.keyring` is false. */
+function fakeNotes(answer: (key: string) => AddReport = key => ({ key, memoryOnly: false, sent: [{ key, id: 'f'.repeat(32) }], kept: [] }), failures = 0, opts: { unlocked?: boolean; keyring?: boolean } = {}) {
   const sent: { body: NoteBody; audio: Uint8Array | null }[] = [];
   let failing = failures;
+  let open = opts.unlocked ?? true;
   const session: NotesSession = {
-    sealing: true, unlocked: () => false, unlock: async () => null, history: async () => [],
+    hasKeyring: async () => opts.keyring ?? true,
+    unlocked: () => open,
+    unlock: async () => { open = true; return null; },
+    history: async () => [],
     send: async (body, audio) => {
+      if (!open) throw new Error(UNLOCK_FIRST);
       if (failing > 0) { failing--; throw new Error(SEND_MESSAGES.sealFailed); }
       sent.push({ body, audio });
       return answer(`k${sent.length}`);
@@ -3741,15 +3807,64 @@ const mount = async (extra: Record<string, unknown> = {}): Promise<StubElement> 
 const unmount = (root: StubElement): void => { render(null, renderTarget(root)); };
 const at = (x: number, y: number, t: number) => ({ pointerId: 1, clientX: x, clientY: y, timeStamp: t });
 
-test('without notes there is no answer bar; with no key built in, notes are off', async () => {
+test('without notes there is no answer bar; with no keyring on the server, notes are off', async () => {
   const none = await mount();
   assert.equal(named(none, 'data-answer-bar'), undefined);
   assert.equal(named(none, 'data-answer-off'), undefined);
   unmount(none);
-  const off = await mount({ notes: null });
-  assert.match(named(off, 'data-answer-off')!.textContent, /Notes are off: this page has no notes key yet \(make music-setup\)\./);
+  const { session } = fakeNotes(undefined, 0, { unlocked: false, keyring: false });
+  const off = await mount({ notes: session });
+  assert.equal(named(off, 'data-answer-off')!.textContent, 'Notes are off until a notes key is uploaded (make music-setup).');
   assert.equal(button(off, 'Pin a note'), undefined);
   unmount(off);
+});
+
+/** Unlocks through the notes panel's form, as the owner does (the fake takes any passphrase). */
+async function unlockInPanel(root: StubElement): Promise<void> {
+  const pass = walk(root).find(e => e._attrs['autocomplete'] === 'current-password')!;
+  pass.value = 'the passphrase';
+  await act(() => { fire(pass, 'input'); });
+  await act(() => { fire(walk(root).find(e => e.localName === 'form')!, 'submit'); });
+  await settle();
+}
+
+test('before an unlock, Pin a note opens the notes panel at the unlock form with the reason, and the composer opens after the unlock', async () => {
+  const { session, sent } = fakeNotes(undefined, 0, { unlocked: false });
+  const root = await mount({ notes: session });
+  const handle = walk(named(root, 'data-sheet')!).find(e => e.localName === 'button' && e._attrs['aria-controls'] !== undefined)!;
+  assert.equal(String(handle._attrs['aria-expanded']), 'false');
+  await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  assert.equal(named(root, 'data-pin-composer'), undefined, 'nothing to compose before an unlock');
+  assert.equal(String(handle._attrs['aria-expanded']), 'true', 'the notes panel opens');
+  assert.equal(named(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST);
+  await unlockInPanel(root);
+  assert.equal(named(root, 'data-unlock-reason'), undefined);
+  assert.ok(named(root, 'data-pin-composer'), 'Pin a note goes on from where it stopped');
+  assert.equal(button(root, 'Pin a note')!._attrs['aria-pressed'], 'true');
+  assert.equal(String(handle._attrs['aria-expanded']), 'false', 'the panel closes so the timeline and the composer show');
+  assert.equal(sent.length, 0);
+  unmount(root);
+});
+
+test('before an unlock, React and Draw the energy ask for it too; Hum it opens no microphone and waits for a tap after the unlock', async () => {
+  const { session } = fakeNotes(undefined, 0, { unlocked: false });
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  assert.equal(named(root, 'data-react-bar'), undefined);
+  await act(() => { fire(button(root, 'Draw the energy')!, 'click'); });
+  assert.equal(named(root, 'data-energy-editor'), undefined);
+  await act(() => { fire(button(root, 'Hum it')!, 'click'); });
+  await settle();
+  assert.equal(named(root, 'data-recording-strip'), undefined, 'no microphone before an unlock');
+  assert.equal(named(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST);
+  await unlockInPanel(root);
+  assert.equal(named(root, 'data-recording-strip'), undefined, 'iOS grants the microphone only inside a tap: the next one starts it');
+  assert.equal(named(root, 'data-answer-status')!.textContent, 'Unlocked. Tap Hum it to start recording.');
+  await act(() => { fire(button(root, 'Hum it')!, 'click'); });
+  await settle();
+  assert.ok(named(root, 'data-recording-strip'));
+  unmount(root);
 });
 
 test('the notes panel is "Notes & answers", with Your notes first', async () => {
@@ -4041,7 +4156,10 @@ test('no key takes Escape while a composer is open and a recording runs', async 
 
 ```tsx
 // The answer bar under the player: Pin a note, Hum it, React and Draw the
-// energy; and what became of the last note sent. What needs the owner's
+// energy; and what became of the last note sent. Notes are sealed to the
+// unlocked keyring's key, so before an unlock each button asks for it
+// (onLocked) and opens nothing; with no keyring on the server the bar says
+// notes are off. What needs the owner's
 // attention right now sits in the dock, fixed at the bottom of a phone's
 // screen above the notes handle (in the page's flow from 1024 px): the Stop
 // button of a recording, a recording kept but not yet stored, and the pin
@@ -4064,10 +4182,18 @@ import { ReactBar } from './ReactBar.tsx';
 import { RecordButton } from './RecordButton.tsx';
 
 export type AnswerMode = 'none' | 'pin' | 'react' | 'energy';
+/** What a tap before an unlock asked for. */
+export type Asked = Exclude<AnswerMode, 'none'> | 'hum';
+export const NOTES_OFF = 'Notes are off until a notes key is uploaded (make music-setup).';
+/** After an unlock that Hum it asked for: iOS grants the microphone only inside a tap, so the recording waits for the next one. */
+export const HUM_AFTER_UNLOCK = 'Unlocked. Tap Hum it to start recording.';
 export interface AnswerBarProps {
   score: Score; tempo: TempoMap; version: number; time: number; span: Span | null;
   mode: AnswerMode; onMode(m: AnswerMode): void;
-  sealing: boolean; media: MediaPorts | null; now(): Date; busy: boolean;
+  /** off: the server holds no keyring; locked: a tap asks for the unlock (onLocked) instead; open: notes can be sealed. */
+  access: 'off' | 'locked' | 'open';
+  onLocked(asked: Asked): void;
+  media: MediaPorts | null; now(): Date; busy: boolean;
   /** Seals and stores the note; true once it is stored (sent, or kept on this device), false when it is not. */
   send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean>;
   say(message: string): void;
@@ -4141,9 +4267,10 @@ export function AnswerBar(p: AnswerBarProps) {
     if (recording === 'speech') { recorder?.cancel(); setRecording(null); }
     p.onMode('none');
   };
-  const toggle = (m: AnswerMode): void => p.onMode(p.mode === m ? 'none' : m);
+  const locked = p.access === 'locked';
+  const toggle = (m: Exclude<AnswerMode, 'none'>): void => (locked ? p.onLocked(m) : p.onMode(p.mode === m ? 'none' : m));
 
-  if (!p.sealing) return <p data-answer-off="" class="text-sm text-dim">Notes are off: this page has no notes key yet (make music-setup).</p>;
+  if (p.access === 'off') return <p data-answer-off="" class="text-sm text-dim">{NOTES_OFF}</p>;
   const section = sectionAt(p.score, p.tempo, p.time);
   const target = section ?? wholePiece(p.score);
   const laneId = p.span?.laneId ?? null;
@@ -4156,7 +4283,7 @@ export function AnswerBar(p: AnswerBarProps) {
     <div data-answer-bar="" class="grid gap-3">
       <div role="group" aria-label="Answer" class="flex flex-wrap gap-2">
         <Button pressed={p.mode === 'pin'} onClick={() => toggle('pin')}>Pin a note</Button>
-        {recorder ? <RecordButton recording={false} seconds={0} disabled={recording !== null || held !== null || p.busy} onStart={() => start('hum')} onStop={stop} /> : null}
+        {recorder ? <RecordButton recording={false} seconds={0} disabled={recording !== null || held !== null || p.busy} onStart={() => (locked ? p.onLocked('hum') : start('hum'))} onStop={stop} /> : null}
         <Button pressed={p.mode === 'react'} onClick={() => toggle('react')}>React</Button>
         <Button pressed={p.mode === 'energy'} onClick={() => toggle('energy')}>Draw the energy</Button>
       </div>
@@ -4191,13 +4318,17 @@ export function AnswerBar(p: AnswerBarProps) {
 
 - [ ] **Step 4: Wire the Workroom** (`src/ui/Workroom.tsx`). Keep every existing behaviour; add:
   - Imports: `energyNote` (`../answer.ts`); `energyGuideParts` and `type GuideView` (`../guide.ts`); `type Span` (`../hit.ts`); `timelineMarks` and `type HistoryItem` (`../history.ts`); `type NoteBody` (`../note.ts`); `type NotesSession` (`../notes-session.ts`); `KEPT_MESSAGES`, `MEMORY_NOTICE`, `SENT_MESSAGE`, `SEND_MESSAGES` (`../outbox.ts`); `type MediaPorts` (`../recorder.ts`); `energyLegend` beside `legendFor` (`../tabs.ts`); `AnswerBar`, `type AnswerMode` (`./AnswerBar.tsx`); `Answers` (`./Answers.tsx`); `EnergyEditor` (`./EnergyEditor.tsx`).
-  - `WorkroomProps` gains `notes?: NotesSession | null; media?: MediaPorts | null; now?(): Date;` and the file's top comment gains one sentence: "With a notes session it also holds the answering: the answer bar, the span being picked, the energy drawing and the owner's notes on the Story view."
+  - Imports also: `UNLOCK_FIRST` (`../notes-session.ts`); `HUM_AFTER_UNLOCK`, `type Asked` beside `AnswerBar` (`./AnswerBar.tsx`).
+  - `WorkroomProps` gains `notes?: NotesSession; media?: MediaPorts | null; now?(): Date;` and the file's top comment gains one sentence: "With a notes session it also holds the answering: the answer bar, the span being picked, the energy drawing and the owner's notes on the Story view; before an unlock the bar's buttons open the notes panel at the unlock form."
   - State and handlers, after the existing state:
 
 ```tsx
   const notes = p.notes ?? null;
-  const answering = p.notes !== undefined;
+  const answering = notes !== null;
   const now = p.now ?? ((): Date => new Date());
+  const [unlocked, setUnlocked] = useState(notes?.unlocked() ?? false);
+  const [keyring, setKeyring] = useState(true);
+  const [asked, setAsked] = useState<Asked | null>(null);
   const [mode, setMode] = useState<AnswerMode>('none');
   const [span, setSpan] = useState<Span | null>(null);
   const [preview, setPreview] = useState<Span | null>(null);
@@ -4241,15 +4372,27 @@ export function AnswerBar(p: AnswerBarProps) {
   const sendEnergy = (curve: [number, number][]): void => {
     void send(energyNote({ piece: score.piece.id, draft: p.version, now }, curve, score.duration, score.bars ?? null), null);
   };
+  // A server with no keyring (make music-setup has not run) turns the bar off.
+  useEffect(() => { if (notes) void notes.hasKeyring().then(setKeyring); }, [notes]);
+  /** Before an unlock nothing can be sealed: the notes panel opens at the unlock form, with the reason, and remembers what was asked for. */
+  const askUnlock = (what: Asked): void => { setAsked(what); setSheetOpen(true); };
+  /** After the unlock the bar opens what was asked for, with the sheet closed so the timeline shows; Hum it waits for the next tap (iOS grants the microphone only inside one). */
+  const unlockedNow = (): void => {
+    setUnlocked(true);
+    const what = asked;
+    setAsked(null);
+    if (what === 'hum') setStatus(HUM_AFTER_UNLOCK);
+    else if (what !== null) { setSheetOpen(false); changeMode(what); }
+  };
 ```
 
   - The guide follows the energy drawing: `const guideView: GuideView = mode === 'energy' ? 'energy' : tab;`; the auto-open effect and `openGuide` use `guideView` in place of `tab` (`guide.seen(guideView, score.kind)`, `guide.markSeen(guideView, score.kind)`, dependencies `[guideView, score.kind]`); the overlay's parts are `mode === 'energy' ? energyGuideParts({ score, tempo, view }) : guideParts({ tab, score, tempo, view, time, lanes, marks })`.
-  - Under `<Player … />`: `{answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} sealing={notes?.sealing ?? false} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} /> : null}`.
+  - Under `<Player … />`: `{answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} access={!keyring ? 'off' : unlocked ? 'open' : 'locked'} onLocked={askUnlock} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} /> : null}`.
   - `ViewTabs`' `onTab` becomes `t => { setWanted(t); if (mode === 'pin' || mode === 'energy') changeMode('none'); }`.
   - The lane picker shows only when `tab === 'roll' && mode !== 'energy'`.
   - Inside the stage `div`, the energy drawing replaces the view: `{mode === 'energy' ? <EnergyEditor score={score} tempo={tempo} view={view} busy={sending} onSend={sendEnergy} onHold={setHolding} onCancel={() => changeMode('none')} /> : <>…the four existing views…</>}` (`onHold={setHolding}` is what the other views pass: playback does not scroll the drawing under a stroke); the Story view gets `select={mode === 'pin' ? { span: preview ?? span, onPick: pick } : undefined}` and `marks={marks}`.
   - The legend: `<Legend items={mode === 'energy' ? energyLegend(score) : legendFor(tab, score, { notes: marks.length > 0 })} />`.
-  - The sheet: `title="Notes & answers"`, and its first child `{notes ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} onItems={setItems} /> : null}`.
+  - The sheet: `title="Notes & answers"`, and its first child `{notes ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} ask={asked ? UNLOCK_FIRST : null} onUnlocked={unlockedNow} onItems={setItems} /> : null}`.
 
 - [ ] **Step 5: Run the tests** — `node --test workroom/test/workroom-answer.test.ts workroom/test/workroom.test.ts workroom/test/views.test.ts workroom/test/playback.test.ts workroom/test/console.test.ts workroom/test/tokens.test.ts` — PASS; rebuild and `--check` — exit 0.
 
@@ -4263,7 +4406,7 @@ export function AnswerBar(p: AnswerBarProps) {
 - Test: `games/workroom/test/waiting.test.ts`
 
 **Interfaces:**
-- Consumes: `createApi` (Task 6), `createOutbox`, `OutboxLock` (Task 7), `indexedDbOutbox` (Task 7), `createNotesSession` (Task 9), `createVault`, `PUBLIC_KEY`, `PREVIOUS_KEYS`, `waitingByPiece` (Task 8), `UnlockPanel`, `Kept` (Task 11), `MediaPorts`, `RecorderLike` (Task 5).
+- Consumes: `createApi` (Task 6), `createOutbox`, `OutboxLock` (Task 7), `indexedDbOutbox` (Task 7), `createNotesSession` (Task 9), `createVault` (`vault.ts`), `waitingByPiece` (Task 8), `UnlockPanel`, `Kept` (Task 11), `MediaPorts`, `RecorderLike` (Task 5).
 - Produces:
 
 ```ts
@@ -4427,8 +4570,8 @@ export function browserMedia(): MediaPorts | null {
 // The workroom page: starts the theme switch, reads which view and piece the
 // server rendered, and draws it: a piece (its views, the answer bar and the
 // notes panel), or on the pieces list the unlock that fills in each piece's
-// waiting count. Notes are sealed to the key built into the page
-// (public-key.ts); with none built in, the page offers no note tools.
+// waiting count. Notes are sealed to the current key of the keyring the
+// passphrase unlocks on this page view; nothing seals before that unlock.
 import { render, h } from 'preact';
 import { createAudioCore } from '../../_kit/audio/core.ts';
 import { createApi } from './api.ts';
@@ -4439,7 +4582,6 @@ import { draftUrl, loadDraft } from './load.ts';
 import { createNotesSession } from './notes-session.ts';
 import type { NotesSession } from './notes-session.ts';
 import { createOutbox } from './outbox.ts';
-import { PREVIOUS_KEYS, PUBLIC_KEY } from './public-key.ts';
 import { startTheme } from './theme.ts';
 import { createVault } from './vault.ts';
 import { demoPlayer } from './ui/demo-player.ts';
@@ -4457,10 +4599,9 @@ const { view, piece, version } = document.body.dataset;
 const fetcher = window.fetch.bind(window);
 
 /** The notes on this page view: the keys stay in memory, the outbox in IndexedDB holds sealed notes only. */
-function notesSession(): NotesSession | null {
-  if (PUBLIC_KEY === null) return null;
+function notesSession(): NotesSession {
   const api = createApi(fetcher, document.querySelector('meta[name="csrf"]')?.getAttribute('content') ?? '');
-  return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock()), keys: { current: PUBLIC_KEY, previous: PREVIOUS_KEYS } });
+  return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock()) });
 }
 const notes = notesSession();
 
@@ -4492,7 +4633,7 @@ if (view === 'piece' && piece) {
       media: browserMedia(),
     })), root);
   }
-} else if (view === 'index' && notes) {
+} else if (view === 'index') {
   root.textContent = '';
   const list = document.querySelector('.index-body');
   if (list) render(h(ThemeRoot, { handle: theme }, h(PiecesIndex, { notes, list })), root);
@@ -4507,153 +4648,16 @@ if (view === 'piece' && piece) {
 
 - [ ] **Step 8: Commit** — "Music workroom: the page wiring, the microphone, and per-piece waiting counts" with the trailers.
 
-### Task 17: The local browser check: test keys, the microphone, and answering end to end
+### Task 17: The local browser check: the test keyring, the microphone, and answering end to end
 
 **Files:**
-- Create: `games/workroom/tools/e2e-bundle.ts`, `compose.music-local.yaml`
-- Create: `games/workroom/test/e2e-bundle.test.ts`
-- Modify: `docker/php/Dockerfile:36`, `tests/php/MusicDeployTest.php`, `Makefile` (`music-e2e` recipe and `MUSIC_PY_ABS`), `tests/e2e/local.config.ts`, `tests/e2e/workroom.local.ts`
+- Modify: `Makefile` (`music-e2e` recipe and `MUSIC_PY_ABS`), `tests/e2e/local.config.ts`, `tests/e2e/workroom.local.ts`
 
 **Interfaces:**
-- Consumes: the page as built in Tasks 1–16; `test/fixtures/{public-key.ts,public.json,test-key.json}` (committed TEST keys); `music/tools/siue-music pickup` and its environment (`SIUE_CONFIG_DIR`, `SIUE_MUSIC_NOTES_DIR`, `SIUE_MUSIC_BASE`, `SIUE_MUSIC_PUBLIC_KEYS`; the cache file `music.json` is `{ "v": 1, "keys": { <fingerprint>: <pkcs8 base64> }, "api": { "music-pickup": <key> } }`); `music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt` (once, for `cryptography`: the command `make music-setup` runs first).
-- Produces: `node workroom/tools/e2e-bundle.ts` (from `games/`) prints the path of a test-key `workroom.js` in a fresh temporary folder; `make music-e2e` runs every `*.local.ts` test with the server on the test public keys, the page routed to that bundle in the answering tests, and Chrome's fake microphone.
+- Consumes: the page as built in Tasks 1–16 (the shipped `games/workroom/dist/workroom.js`; nothing is rebuilt or routed for the check); `games/workroom/test/fixtures/test-key.json` (the committed TEST keys: `fingerprint`, `pkcs8`, `passphrase`, the locked `keyring` (the current key first, then `other`) and `other.fingerprint`); `POST music/api/keyring.php` (an API key with `keys:publish`; body `{ "keyring": <locked envelope>, "current": <64 hex>, "previous": [<64 hex>, …] }` → `201 { "uploaded": true }`; the server then accepts notes sealed to those fingerprints only); `createKey`, `publishFixtureDraft`, `signIn`, `signedInPage` (already in `tests/e2e/workroom.local.ts`); `music/tools/siue-music pickup` and its environment: `SIUE_CONFIG_DIR` (the cache `<dir>/music.json`: `{ "v": 1, "keys": { <fingerprint>: <pkcs8 base64> }, "api": { "music-pickup": <key> }, "current": <fingerprint>, "previous": [<fingerprint>, …] }`), `SIUE_MUSIC_NOTES_DIR`, `SIUE_MUSIC_BASE` (`http://` is allowed for `localhost` only), and `OP_VAULT` / `SIUE_OP` (pickup first asks 1Password which key is current; the check points `SIUE_OP` at the tool's own stand-in `music/tools/tests/fake_op.py`, whose items live in `FAKE_OP_STORE` and whose calls are logged to `FAKE_OP_LOG`, so the run never reaches the owner's 1Password or cache); `music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt` (once, for `cryptography`: the command `make music-setup` runs first).
+- Produces: `make music-e2e` runs every `*.local.ts` test against the shipped page with Chrome's fake microphone; the answering tests upload the TEST keyring with its fingerprints and unlock with the TEST passphrase, and pickup runs the real tool against the docker stack.
 
-- [ ] **Step 1: Write the failing tests.**
-
-`test/e2e-bundle.test.ts`:
-
-```ts
-// The browser check's page has the TEST notes keys built in, and the shipped
-// page never does.
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { fx } from './fixture-key.ts';
-
-const workroom = join(import.meta.dirname, '..');
-
-test('the shipped page carries no test key', () => {
-  assert.doesNotMatch(readFileSync(join(workroom, 'dist', 'workroom.js'), 'utf8'), new RegExp(fx.fingerprint));
-});
-
-test('the check\'s bundle carries the test key, outside the repository', () => {
-  const run = spawnSync(process.execPath, [join(workroom, 'tools', 'e2e-bundle.ts')], { encoding: 'utf8' });
-  assert.equal(run.status, 0, run.stderr);
-  const out = run.stdout.trim();
-  try {
-    assert.ok(out.startsWith(tmpdir()), out);
-    assert.match(readFileSync(out, 'utf8'), new RegExp(fx.fingerprint));
-  } finally {
-    rmSync(dirname(out), { recursive: true, force: true });
-  }
-});
-```
-
-Add to `tests/php/MusicDeployTest.php` (beside its other tests):
-
-```php
-    public function testPhpWorkersSeeThePublicKeysVariable(): void
-    {
-        $docker = (string) file_get_contents(dirname(__DIR__, 2) . '/docker/php/Dockerfile');
-        self::assertStringContainsString('env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS', $docker, 'FPM clears the worker environment; compose.music-local.yaml sets this variable');
-        $local = (string) file_get_contents(dirname(__DIR__, 2) . '/compose.music-local.yaml');
-        self::assertStringContainsString('MUSIC_PUBLIC_KEYS: /var/www/html/games/workroom/test/fixtures/public.json', $local);
-    }
-```
-
-- [ ] **Step 2: Run to see them fail** — `node --test workroom/test/e2e-bundle.test.ts` — FAIL (no tool); from `websites/www.cs`, `vendor/bin/phpunit tests/php/MusicDeployTest.php` — FAIL.
-
-- [ ] **Step 3: Implement the tool** (`games/workroom/tools/e2e-bundle.ts`):
-
-```ts
-// Builds the workroom page with the TEST notes keys built in
-// (test/fixtures/public-key.ts in place of src/public-key.ts) into a fresh
-// folder outside the repository, and prints the script's path. Only the local
-// browser check (make music-e2e) uses it; dist/ is never built with a test key.
-// Usage, from websites/www.cs/games: node workroom/tools/e2e-bundle.ts
-import * as esbuild from 'esbuild';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-const root = join(import.meta.dirname, '..');
-const src = join(root, 'src');
-const testKey = join(root, 'test', 'fixtures', 'public-key.ts');
-const out = join(mkdtempSync(join(tmpdir(), 'workroom-e2e-')), 'workroom.js');
-await esbuild.build({
-  absWorkingDir: root,
-  entryPoints: [join(src, 'main.ts')],
-  outfile: out,
-  bundle: true,
-  format: 'esm',
-  platform: 'browser',
-  target: 'es2022',
-  jsx: 'automatic',
-  jsxImportSource: 'preact',
-  charset: 'utf8',
-  logLevel: 'warning',
-  plugins: [{
-    name: 'test-key',
-    setup(b) {
-      b.onResolve({ filter: /(^|\/)public-key\.ts$/ }, a => (a.importer.startsWith(src) ? { path: testKey } : undefined));
-    },
-  }],
-});
-console.log(out);
-```
-
-- [ ] **Step 4: The server's test keys.** `compose.music-local.yaml`:
-
-```yaml
-# Local only (make music-e2e); CI and the host never read it. Points the
-# workroom's server at the TEST public keys, so notes sealed by the check's
-# test-key page (games/workroom/tools/e2e-bundle.ts) are accepted. Used with
-# compose.admin-local.yaml.
-services:
-  www-cs-php:
-    environment:
-      MUSIC_PUBLIC_KEYS: /var/www/html/games/workroom/test/fixtures/public.json
-```
-
-  In `docker/php/Dockerfile`, end the `RUN echo 'env[...]'` chain with one more line (FPM clears the worker environment; the line does nothing when the variable is unset):
-
-```dockerfile
-    && echo 'env[ADMIN_MAIL_CAPTURE_DIR] = $ADMIN_MAIL_CAPTURE_DIR' >> /etc/php-fpm.d/www.conf \
-    && echo 'env[MUSIC_PUBLIC_KEYS] = $MUSIC_PUBLIC_KEYS' >> /etc/php-fpm.d/www.conf
-```
-
-- [ ] **Step 5: The Makefile.** Beside `MUSIC_PY ?= …` add:
-
-```make
-# The tool's interpreter as an absolute path when it is one (the browser check runs it from tests/e2e); a bare python3 stays a command name.
-MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))
-```
-
-  The `music-e2e` recipe becomes (same gates and teardown; the third compose file, the test-key bundle, and the two variables are new):
-
-```make
-music-e2e:
-	@name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml -f compose.music-local.yaml"; bundle_dir=; \
-	export ADMIN_SMOKE_DIR=/tmp/$$name; \
-	trap 'docker compose $$files -p $$name down -v >/dev/null 2>&1; [ -z "$$bundle_dir" ] || rm -rf "$$bundle_dir"' EXIT; \
-	bundle=$$(cd games && node workroom/tools/e2e-bundle.ts) && bundle_dir=$$(dirname "$$bundle") && \
-	docker compose $$files -p $$name up -d --build www-cs-php www-cs-nginx >/dev/null && \
-	addr=$$(docker compose $$files -p $$name port www-cs-nginx 80) && port=$${addr##*:} && \
-	ready=0; for i in $$(seq 1 60); do if curl -sf -o /dev/null -H 'Host: localhost' "http://127.0.0.1:$$port/admin/login.php"; then ready=1; break; fi; sleep 1; done; \
-	test $$ready = 1 || { echo "music-e2e: the stack did not answer" >&2; exit 1; }; \
-	docker compose $$files -p $$name exec -T -u apache www-cs-php mkdir -p $$ADMIN_SMOKE_DIR/mail && \
-	MUSIC_E2E_COMPOSE="$$files" MUSIC_E2E_PROJECT=$$name MUSIC_E2E_MAIL_DIR=$$ADMIN_SMOKE_DIR/mail \
-	WORKROOM_E2E_BUNDLE=$$bundle MUSIC_PY=$(MUSIC_PY_ABS) \
-	E2E_BASE_URL=http://localhost:$$port/ tests/e2e/run.sh -c local.config.ts && \
-	echo MUSIC-E2E-OK
-```
-
-  Update the `help` line: `music-e2e - The music workroom's browser check (test keys, fake microphone) in a throwaway docker project (local only; prints MUSIC-E2E-OK)`.
-
-- [ ] **Step 6: The fake microphone** (`tests/e2e/local.config.ts`):
+- [ ] **Step 1: The fake microphone** (`tests/e2e/local.config.ts`):
 
 ```ts
 // Checks that need a local-only docker override (make music-e2e). The main
@@ -4673,22 +4677,75 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 7: The answering tests** (`tests/e2e/workroom.local.ts`). Update the file's top comment to add "…; then answering with the test keys: pin a typed note, pick it up with the owner's tool, read and delete it on a second device; hum (and find a recording kept, not lost, when the mode changes mid-recording), react, draw the energy, and a note made offline that waits and then goes". Extend the `node:fs` import with `mkdtempSync`, `readdirSync`, `writeFileSync` and add `import { tmpdir } from 'node:os';`. Rename `VIEW_TABS` to `GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const` (the energy drawing has a guide too) and use it in `signedInPage`. Add these helpers after `publishFixtureDraft`:
+- [ ] **Step 2: The Makefile.** Beside `MUSIC_PY ?= …` add:
+
+```make
+# The tool's interpreter as an absolute path when it is one (the browser check runs it from tests/e2e); a bare python3 stays a command name.
+MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))
+```
+
+  The `music-e2e` recipe passes the interpreter to the tests (the same compose files, gates and teardown; `MUSIC_PY` is the one new variable), and its `##` comment becomes `Music workroom browser check (test keyring, fake microphone) in a throwaway docker project`:
+
+```make
+music-e2e: ## Music workroom browser check (test keyring, fake microphone) in a throwaway docker project
+	@name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml"; \
+	export ADMIN_SMOKE_DIR=/tmp/$$name; \
+	trap 'docker compose $$files -p $$name down -v >/dev/null 2>&1' EXIT; \
+	docker compose $$files -p $$name up -d --build www-cs-php www-cs-nginx >/dev/null && \
+	addr=$$(docker compose $$files -p $$name port www-cs-nginx 80) && port=$${addr##*:} && \
+	ready=0; for i in $$(seq 1 60); do if curl -sf -o /dev/null -H 'Host: localhost' "http://127.0.0.1:$$port/admin/login.php"; then ready=1; break; fi; sleep 1; done; \
+	test $$ready = 1 || { echo "music-e2e: the stack did not answer" >&2; exit 1; }; \
+	docker compose $$files -p $$name exec -T -u apache www-cs-php mkdir -p $$ADMIN_SMOKE_DIR/mail && \
+	MUSIC_E2E_COMPOSE="$$files" MUSIC_E2E_PROJECT=$$name MUSIC_E2E_MAIL_DIR=$$ADMIN_SMOKE_DIR/mail \
+	MUSIC_PY=$(MUSIC_PY_ABS) \
+	E2E_BASE_URL=http://localhost:$$port/ tests/e2e/run.sh -c local.config.ts && \
+	echo MUSIC-E2E-OK
+```
+
+- [ ] **Step 3: The answering tests** (`tests/e2e/workroom.local.ts`). Update the file's top comment to add "…; then answering with the TEST keyring uploaded and unlocked: pin a typed note, pick it up with the owner's tool, read and delete it on a second device; a composer that asks for the unlock first; hum (and find a recording kept, not lost, when the mode changes mid-recording), react, draw the energy, and a note made offline that waits and then goes". Extend the `node:child_process` import with `type SpawnSyncReturns`, the `node:fs` import with `mkdtempSync`, `readdirSync`, `rmSync`, `writeFileSync`, and add `import { tmpdir } from 'node:os';`. Rename `VIEW_TABS` to `GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const` (the energy drawing has a guide too) and use it in `signedInPage`. Add these helpers after `publishFixtureDraft`:
 
 ```ts
 const FIXTURES = join(SITE, 'games', 'workroom', 'test', 'fixtures');
-const testKey = JSON.parse(readFileSync(join(FIXTURES, 'test-key.json'), 'utf8')) as { fingerprint: string; pkcs8: string; passphrase: string; keyring: object };
+const TOOLS = join(SITE, 'music', 'tools');
+const testKey = JSON.parse(readFileSync(join(FIXTURES, 'test-key.json'), 'utf8')) as { fingerprint: string; pkcs8: string; passphrase: string; keyring: object; other: { fingerprint: string } };
+/** The answer bar's reason for the unlock (UNLOCK_FIRST in games/workroom/src/notes-session.ts). */
+const UNLOCK_FIRST = 'Unlock your notes first: each note is sealed to your notes key, and the passphrase unlocks it.';
 
-/** The page with the TEST notes keys built in (games/workroom/tools/e2e-bundle.ts) in place of the shipped script. */
-async function withTestKeys(page: Page): Promise<void> {
-  const bundle = process.env.WORKROOM_E2E_BUNDLE;
-  if (!bundle) throw new Error('WORKROOM_E2E_BUNDLE is not set: run this through make music-e2e');
-  await page.route('**/games/workroom/dist/workroom.js*', r => r.fulfill({ contentType: 'text/javascript', body: readFileSync(bundle, 'utf8') }));
+/** Uploads the TEST keyring with its fingerprints, as make music-setup uploads the owner's: the server then accepts notes sealed to the test key, and the page seals to it once the TEST passphrase unlocks the keyring. */
+async function uploadTestKeyring(request: APIRequestContext, base: string, key: string): Promise<void> {
+  const up = await request.post(`${base}music/api/keyring.php`, {
+    headers: { Authorization: `Bearer ${key}` },
+    data: { keyring: testKey.keyring, current: testKey.fingerprint, previous: [testKey.other.fingerprint] },
+  });
+  expect(up.status()).toBe(201);
 }
 
-async function uploadTestKeyring(request: APIRequestContext, base: string, key: string): Promise<void> {
-  const up = await request.post(`${base}music/api/keyring.php`, { headers: { Authorization: `Bearer ${key}` }, data: testKey.keyring });
-  expect(up.status()).toBe(201);
+/**
+ * Claude's side: the owner's tool (`siue-music pickup`) against this docker stack, from a fresh config folder. Its
+ * cache holds the TEST key and the pickup API key; 1Password is the tool's own stand-in (music/tools/tests/fake_op.py)
+ * holding the TEST key's item, so the run never reaches the owner's 1Password or cache. The caller removes `home`.
+ */
+function pickup(base: string, pickupKey: string): { run: SpawnSyncReturns<string>; home: string } {
+  const home = mkdtempSync(join(tmpdir(), 'siue-music-e2e-'));
+  writeFileSync(join(home, 'music.json'), JSON.stringify({ v: 1, keys: { [testKey.fingerprint]: testKey.pkcs8 }, api: { 'music-pickup': pickupKey }, current: testKey.fingerprint, previous: [] }), { mode: 0o600 });
+  writeFileSync(join(home, 'op.json'), JSON.stringify({ items: [{
+    id: 'testkey', vault: 'SIUE', title: `SIUE music notes key ${testKey.fingerprint.slice(0, 16)}`, category: 'PASSWORD', tags: ['siue-music-key'], urls: [],
+    fields: [
+      { id: 'password', type: 'CONCEALED', purpose: 'PASSWORD', label: 'password', value: testKey.passphrase },
+      { id: 'private_key', type: 'CONCEALED', label: 'private_key', value: testKey.pkcs8 },
+      { id: 'fingerprint', type: 'STRING', label: 'fingerprint', value: testKey.fingerprint },
+    ],
+  }] }), { mode: 0o600 });
+  const python = process.env.MUSIC_PY ?? 'python3';
+  const run = spawnSync(python, [join(TOOLS, 'siue-music'), 'pickup'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      SIUE_CONFIG_DIR: home, SIUE_MUSIC_NOTES_DIR: join(home, 'notes'), SIUE_MUSIC_BASE: `${base}music/`,
+      OP_VAULT: 'SIUE', SIUE_OP: `'${python}' '${join(TOOLS, 'tests', 'fake_op.py')}'`, FAKE_OP_STORE: join(home, 'op.json'), FAKE_OP_LOG: join(home, 'op.log'),
+    },
+  });
+  return { run, home };
 }
 
 /** On a phone the notes panel is the bottom sheet: open it. */
@@ -4697,7 +4754,7 @@ async function openNotes(page: Page): Promise<void> {
   if (await handle.isVisible()) await handle.click();
 }
 
-/** Notes are listed only after an unlock, and nothing is remembered: every load of a page starts by unlocking. */
+/** Notes are listed, and notes can be sealed, only after an unlock, and nothing is remembered: every load of a page starts by unlocking. */
 async function unlock(page: Page, passphrase: string): Promise<void> {
   await openNotes(page);
   await page.getByLabel('Passphrase').fill(passphrase);
@@ -4738,7 +4795,6 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
   const base = baseURL!;
   const { context, page } = await signedInPage(browser, base);
   try {
-    await withTestKeys(page);
     const publish = await createKey(page, base, 'e2e answer publish', ['drafts:publish', 'keys:publish']);
     const pickupKey = await createKey(page, base, 'e2e answer pickup', ['notes:pickup']);
     await publishFixtureDraft(request, base, publish);
@@ -4762,16 +4818,15 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
     await expect(page.locator('a[data-waiting="test-piece"] + .waiting-count')).toHaveText('1 waiting');
 
     // Claude's side: the owner's tool picks it up from this docker stack.
-    const home = mkdtempSync(join(tmpdir(), 'siue-music-e2e-'));
-    writeFileSync(join(home, 'music.json'), JSON.stringify({ v: 1, keys: { [testKey.fingerprint]: testKey.pkcs8 }, api: { 'music-pickup': pickupKey } }), { mode: 0o600 });
-    const run = spawnSync(process.env.MUSIC_PY ?? 'python3', [join(SITE, 'music', 'tools', 'siue-music'), 'pickup'], {
-      encoding: 'utf8',
-      env: { ...process.env, SIUE_CONFIG_DIR: home, SIUE_MUSIC_NOTES_DIR: join(home, 'notes'), SIUE_MUSIC_BASE: `${base}music/`, SIUE_MUSIC_PUBLIC_KEYS: join(FIXTURES, 'public.json') },
-    });
-    expect(run.status, run.stderr).toBe(0);
-    expect(run.stdout).toMatch(/Picked up 1 note into/);
-    const [folder] = readdirSync(join(home, 'notes'));
-    expect(JSON.parse(readFileSync(join(home, 'notes', folder!, 'note.json'), 'utf8')).body.text).toBe('louder and slower right here');
+    const { run, home } = pickup(base, pickupKey);
+    try {
+      expect(run.status, run.stderr).toBe(0);
+      expect(run.stdout).toMatch(/Picked up 1 note into/);
+      const [folder] = readdirSync(join(home, 'notes'));
+      expect(JSON.parse(readFileSync(join(home, 'notes', folder!, 'note.json'), 'utf8')).body.text).toBe('louder and slower right here');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
 
     await page.goto(`${base}music/piece.php?id=test-piece`);
     await unlock(page, testKey.passphrase);
@@ -4781,7 +4836,6 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
     const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
     await phone.addInitScript((views: readonly string[]) => { for (const v of views) { localStorage.setItem(`workroom-guide-${v}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${v}`, 'seen'); } }, GUIDE_VIEWS);
     const p2 = await phone.newPage();
-    await withTestKeys(p2);
     await signIn(p2, base);
     await p2.goto(`${base}music/piece.php?id=test-piece`);
     await unlock(p2, 'not it');
@@ -4819,18 +4873,27 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
   }
 });
 
-test('hum, react and draw the energy; a note made offline waits on this device and goes when the connection is back', async ({ browser, request, baseURL }) => {
+test('a composer asks for the unlock first; hum, react and draw the energy; a note made offline waits on this device and goes when the connection is back', async ({ browser, request, baseURL }) => {
   test.setTimeout(240_000);
   const base = baseURL!;
   const { context, page } = await signedInPage(browser, base);
   try {
-    await withTestKeys(page);
     const publish = await createKey(page, base, 'e2e answer more', ['drafts:publish', 'keys:publish']);
     await publishFixtureDraft(request, base, publish);
     await uploadTestKeyring(request, base, publish);
     await page.goto(`${base}music/piece.php?id=test-piece`);
-    await unlock(page, testKey.passphrase);
+
+    // Before an unlock nothing can be sealed: React opens the notes panel at the unlock form with the reason, and the reactions after the unlock.
+    await page.getByRole('button', { name: 'React' }).click();
+    await expect(page.locator('[data-unlock-reason]')).toHaveText(UNLOCK_FIRST);
+    await expect(page.locator('[data-react-bar]')).toHaveCount(0);
+    await page.getByLabel('Passphrase').fill(testKey.passphrase);
+    await page.getByRole('button', { name: 'Unlock notes' }).click();
+    await expect(page.locator('[data-react-bar]')).toBeVisible();
+    await expect(page.locator('[data-unlock-reason]')).toHaveCount(0);
     await expect(page.locator('[data-history]')).toBeVisible();
+    await page.getByRole('button', { name: 'React' }).click();
+    await expect(page.locator('[data-react-bar]')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Hum it' }).click();
     await expect(page.getByRole('button', { name: 'Stop (0:01 of 1:00)' })).toBeVisible({ timeout: 10_000 });
@@ -4888,18 +4951,18 @@ test('hum, react and draw the energy; a note made offline waits on this device a
 });
 ```
 
-- [ ] **Step 8: Run the unit and PHP tests** — `node --test workroom/test/e2e-bundle.test.ts` — PASS; `vendor/bin/phpunit tests/php/MusicDeployTest.php` — PASS; `cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json` — exit 0; `node tests/e2e/select.ts --check` — exit 0 (no spec was added).
+- [ ] **Step 4: Type-check** — from `websites/www.cs`: `cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json` — exit 0; `node tests/e2e/select.ts --check` — exit 0 (no spec was added).
 
-- [ ] **Step 9: Run the check** — from `websites/www.cs`: `music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt` (once; it makes the tool's virtualenv, which `MUSIC_PY` then finds), then `make music-e2e` — every test passes and `MUSIC-E2E-OK` prints; afterwards `docker compose ls` lists no `music-e2e-*` project and no `workroom-e2e-*` folder is left in the temporary directory. Never run it against port 3000, 5173, 8000 or 8080: nginx's host port is ephemeral.
+- [ ] **Step 5: Run the check** — from `websites/www.cs`: `music/tools/ensure-venv music/tools/.venv music/tools/requirements.txt` (once; it makes the tool's virtualenv, which `MUSIC_PY` then finds), then `make music-e2e` — every test passes and `MUSIC-E2E-OK` prints; afterwards `docker compose ls` lists no `music-e2e-*` project and no `siue-music-e2e-*` folder is left in the temporary directory. Never run it against port 3000, 5173, 8000 or 8080: nginx's host port is ephemeral.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add websites/www.cs/games/workroom/tools/e2e-bundle.ts websites/www.cs/games/workroom/test/e2e-bundle.test.ts websites/www.cs/compose.music-local.yaml websites/www.cs/docker/php/Dockerfile websites/www.cs/tests/php/MusicDeployTest.php websites/www.cs/Makefile websites/www.cs/tests/e2e/local.config.ts websites/www.cs/tests/e2e/workroom.local.ts
-git commit -m "Music workroom: the browser check answers with the test keys and a fake microphone
+git add websites/www.cs/Makefile websites/www.cs/tests/e2e/local.config.ts websites/www.cs/tests/e2e/workroom.local.ts
+git commit -m "Music workroom: the browser check answers with the test keyring and a fake microphone
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
+Claude-Session: https://claude.ai/code/session_01MZY9onuQ93N1EWMbg7JJs4"
 ```
 
 ### Task 18: The answering screens, the README, the gates and the pull request
@@ -4911,52 +4974,68 @@ Claude-Session: https://claude.ai/code/session_01FoKMADRSwpF9h73QiHq2Hb"
 - Consumes: Tasks 1–17.
 - Produces: screenshots of every screen (old and new) at 390 and 1280 px in dark and light, in a scratch folder outside the repository; the pull request.
 
-- [ ] **Step 1: The answering screens.** In `tests/e2e/workroom.local.ts`, add to `SCREENS` (after `guide`, before `sound-story`):
+- [ ] **Step 1: The answering screens.** In `tests/e2e/workroom.local.ts`, add after `dragAcross`:
+
+```ts
+/** Every page view starts locked: unlock, then on a phone close the bottom sheet again so the answer bar is in reach. */
+async function unlockThenClose(page: Page): Promise<void> {
+  await unlock(page, testKey.passphrase);
+  await expect(page.locator('[data-history]')).toBeVisible();
+  const open = page.locator('[data-sheet] > button[aria-expanded="true"]');
+  if (await open.isVisible()) await open.click();
+}
+```
+
+  and add to `SCREENS` (after `guide`, before `sound-story`):
 
 ```ts
   { name: 'notes-locked', path: 'music/piece.php?id=test-piece', ready: async p => { await openNotes(p); await expect(p.getByRole('button', { name: 'Unlock notes' })).toBeVisible(); } },
+  { name: 'unlock-first', path: 'music/piece.php?id=test-piece', ready: async p => { await p.getByRole('button', { name: 'Pin a note' }).click(); await expect(p.locator('[data-unlock-reason]')).toBeVisible(); } },
   { name: 'notes', path: 'music/piece.php?id=test-piece', ready: async p => { await unlock(p, testKey.passphrase); await expect(p.locator('[data-history]')).toBeVisible(); } },
   { name: 'pin', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await unlockThenClose(p);
     await expect(p.locator('[data-timeline]')).toBeVisible();
     await pinSpan(p, 0.5, 0.85);
     await noteBox(p).fill('More horns here, and hold the last chord longer.');
   } },
-  { name: 'react', path: 'music/piece.php?id=test-piece', ready: async p => { await p.getByRole('button', { name: 'React' }).click(); await expect(p.locator('[data-react-bar]')).toBeVisible(); } },
+  { name: 'react', path: 'music/piece.php?id=test-piece', ready: async p => { await unlockThenClose(p); await p.getByRole('button', { name: 'React' }).click(); await expect(p.locator('[data-react-bar]')).toBeVisible(); } },
   { name: 'energy', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await unlockThenClose(p);
     await p.getByRole('button', { name: 'Draw the energy' }).click();
     await dragAcross(p, '[data-energy-editor]', 0.3, 0.7, 140, 30);
     await expect(p.locator('[data-energy-drawn]')).toBeVisible();
   } },
   { name: 'energy-guide', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await unlockThenClose(p);
     await p.getByRole('button', { name: 'Draw the energy' }).click();
     await p.getByRole('button', { name: 'How to read this' }).click();
     await expect(p.locator('[data-guide-card]')).toContainText('Part 1 of 4');
   } },
-  { name: 'hum-recording', path: 'music/piece.php?id=test-piece', ready: async p => { await p.getByRole('button', { name: 'Hum it' }).click(); await expect(p.getByRole('button', { name: /^Stop \(/ })).toBeVisible(); } },
+  { name: 'hum-recording', path: 'music/piece.php?id=test-piece', ready: async p => { await unlockThenClose(p); await p.getByRole('button', { name: 'Hum it' }).click(); await expect(p.getByRole('button', { name: /^Stop \(/ })).toBeVisible(); } },
   { name: 'pieces-unlocked', path: 'music/', ready: async p => { await unlock(p, testKey.passphrase); await expect(p.locator('[data-pieces-notes]')).toContainText('Each piece shows'); } },
-  { name: 'sound-react', path: 'music/piece.php?id=cannon-fire', ready: async p => { await p.getByRole('button', { name: 'React' }).click(); await expect(p.locator('[data-react-bar]')).toBeVisible(); } },
+  { name: 'sound-react', path: 'music/piece.php?id=cannon-fire', ready: async p => { await unlockThenClose(p); await p.getByRole('button', { name: 'React' }).click(); await expect(p.locator('[data-react-bar]')).toBeVisible(); } },
 ```
 
-  In the screens test: raise its timeout to `600_000`; make the key with `['drafts:publish', 'keys:publish']`, call `await uploadTestKeyring(request, base, key)` after the drafts, and `await withTestKeys(page)` before the loop, so every screen shows the page as it is once a key is built in. The test's existing checks (no sideways scroll at 390 px, every button, link, select and tab at least 44 px, no CSP errors, the theme set) now cover the answering screens too.
+  In the screens test: raise its timeout to `600_000`; make the key with `['drafts:publish', 'keys:publish']` and call `await uploadTestKeyring(request, base, key)` after the drafts, so every screen shows the page as it is once the owner's keyring is uploaded (locked until a screen unlocks it). The test's existing checks (no sideways scroll at 390 px, every button, link, select and tab at least 44 px, no CSP errors, the theme set) now cover the answering screens too.
 
-- [ ] **Step 2: Run the screens** — from `websites/www.cs`: `MUSIC_E2E_SHOTS=/private/tmp/workroom-answer-shots make music-e2e` (any scratch folder outside the repository) — all tests pass, `MUSIC-E2E-OK` prints, and the folder holds `<screen>-<390|1280>-<dark|light>.png` for every screen, the nine new ones included. Look at each new one at both widths and both themes: tokens only (no stray colours), the composer is docked above the handle at 390 px with the timeline and the picked span visible above it (the `pin` screen asserts it; look at it too), the bottom sheet's handle stays reachable, the energy drawing is not clipped, the record and Stop buttons are the only red (Delete, Discard and error lines are not), Waiting is amber and Picked up green.
+- [ ] **Step 2: Run the screens** — from `websites/www.cs`: `MUSIC_E2E_SHOTS=/private/tmp/workroom-answer-shots make music-e2e` (any scratch folder outside the repository) — all tests pass, `MUSIC-E2E-OK` prints, and the folder holds `<screen>-<390|1280>-<dark|light>.png` for every screen, the ten new ones included. Look at each new one at both widths and both themes: tokens only (no stray colours), the composer is docked above the handle at 390 px with the timeline and the picked span visible above it (the `pin` screen asserts it; look at it too), the bottom sheet's handle stays reachable, the energy drawing is not clipped, the record and Stop buttons are the only red (Delete, Discard and error lines are not), Waiting is amber and Picked up green.
 
 - [ ] **Step 3: The README** (`music/README.md`), describing what is, never what changed:
-  - A new section **Answering**, after "The look": the answer bar (Pin a note, Hum it, React, Draw the energy) and what each sends; notes are sealed in the browser to the key built into the page; pinning scrolls the Story view into view and picks a span on it (a drag, or a tap for one moment; the lane only when the drag starts and ends in one lane), with the composer docked at the bottom of a phone so the timeline stays visible; the recorder (60 s, the first type the browser records, the microphone asked for inside the tap, 64 kb/s); the energy drawing and its own guide (`workroom-guide-energy`); the notes panel "Notes & answers" (unlock with the passphrase on every visit, the history of this piece or all pieces, Delete, Delete all and Discard, each asking first in plain words; the notes not sent yet); Chrome may offer to save the unlock form's username and passphrase, and the owner answers Never (1Password fills the form either way); the outbox (IndexedDB `siue-music` / `outbox`, sealed bundles only, sent on load and when the browser is back online, one tab at a time under the Web Locks lock `workroom-outbox`, Discard to drop one; a browser that refuses IndexedDB keeps the note in memory and says so); nothing typed or recorded is cleared until the note is stored, and a recording that is not stored stays on screen to Send or Discard; the pieces list's per-piece counts after an unlock; with no key built in, "Notes are off".
+  - A new section **Answering**, after "The look": the answer bar (Pin a note, Hum it, React, Draw the energy) and what each sends; notes are sealed in the browser to the current key of the keyring the passphrase unlocks, so before an unlock each of the four asks for it (the notes panel opens at the unlock form with one line saying why, and Pin a note, React or Draw the energy opens once unlocked; Hum it waits for the next tap, since iOS grants the microphone only inside one); pinning scrolls the Story view into view and picks a span on it (a drag, or a tap for one moment; the lane only when the drag starts and ends in one lane), with the composer docked at the bottom of a phone so the timeline stays visible; the recorder (60 s, the first type the browser records, the microphone asked for inside the tap, 64 kb/s); the energy drawing and its own guide (`workroom-guide-energy`); the notes panel "Notes & answers" (unlock with the passphrase on every visit, the history of this piece or all pieces, Delete, Delete all and Discard, each asking first in plain words; the notes not sent yet); Chrome may offer to save the unlock form's username and passphrase, and the owner answers Never (1Password fills the form either way); the outbox (IndexedDB `siue-music` / `outbox`, sealed bundles only, sent on load and when the browser is back online, one tab at a time under the Web Locks lock `workroom-outbox`, Discard to drop one; a browser that refuses IndexedDB keeps the note in memory and says so); nothing typed or recorded is cleared until the note is stored, and a recording that is not stored stays on screen to Send or Discard; the pieces list's per-piece counts after an unlock; with no keyring on the server (before `make music-setup`), "Notes are off until a notes key is uploaded (make music-setup)."
   - **Security model** gains: "The only browser storage the workroom writes besides the theme and the guide flags is the outbox: sealed notes waiting to be sent. Nothing of any key, and nothing in the clear about a note, is stored in the browser."
-  - **The local browser check**: it also uploads the test keyring, routes the page to a test-key build (`node games/workroom/tools/e2e-bundle.ts`, written outside the repository), points the server at the test public keys (`compose.music-local.yaml`), records with Chrome's fake microphone, pins a typed note, picks it up with `siue-music pickup` (needs the tool's virtualenv, which `make music-setup` also makes), reads and deletes it on a second, phone-sized device, hums, reacts, draws the energy, and sends a note made offline once the connection is back; the shipped `dist/workroom.js` never carries a test key. `MUSIC_E2E_SHOTS=<folder>` saves every screen.
+  - **The local browser check**: it also uploads the committed TEST keyring (`games/workroom/test/fixtures/test-key.json`) with its fingerprints through `music/api/keyring.php`, unlocks it in the shipped page with the TEST passphrase, records with Chrome's fake microphone, pins a typed note, picks it up with `siue-music pickup` from a temporary config folder whose cache holds the TEST key, with the tool's 1Password stand-in (`music/tools/tests/fake_op.py`), so the run never touches the owner's 1Password or cache (it needs the tool's virtualenv, which `make music-setup` also makes), reads and deletes it on a second, phone-sized device, finds a composer asking for the unlock first, hums, reacts, draws the energy, and sends a note made offline once the connection is back. `MUSIC_E2E_SHOTS=<folder>` saves every screen.
 
-- [ ] **Step 4: Gates** — from `websites/www.cs`: `sh games/units.sh`; `(cd games && npm ci --silent && npm run --silent check)`; `vendor/bin/phpunit --testsuite site`; `vendor/bin/phpunit --testsuite kit`; `make music-test`; `cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json`; `node tests/e2e/select.ts --check`; then `make test` (its docker steps under a unique project name). All exit 0. `git status` shows no stray files (no `.tmp-*` folders from `importTsx`, no screenshots, no test bundles).
+- [ ] **Step 4: Gates** — from `websites/www.cs`: `sh games/units.sh`; `(cd games && npm ci --silent && npm run --silent check)`; `vendor/bin/phpunit --testsuite site`; `vendor/bin/phpunit --testsuite kit`; `make music-test`; `cd tests/e2e && npm ci --silent && node_modules/.bin/tsc -p tsconfig.json`; `node tests/e2e/select.ts --check`; then `make test` (its docker steps under a unique project name). All exit 0. `git status` shows no stray files (no `.tmp-*` folders from `importTsx`, no screenshots).
 
 - [ ] **Step 5: Commit** — `git add websites/www.cs/tests/e2e/workroom.local.ts websites/www.cs/music/README.md` and commit "Music workroom: the answering screens and the README" with the trailers.
 
-- [ ] **Step 6: Open the pull request** — `git push -u origin music/answer-ui`, then `gh pr create --base main --head music/answer-ui --title "Music workroom: answering in the page (pin, hum, react, energy, history, outbox)"` with a body that has: a summary (the answer bar, the composers, the energy drawing, unlock and the history, Delete and Delete all, the outbox, per-piece counts, the guide and legends for the new parts); the spec and plan paths; the results of `sh games/units.sh`, `npm run check`, the PHP suites and `make music-e2e`; where the screenshots are and that they go to the owner before merge (theme spec); and **the owner's first-run steps after merge and deploy, which this PR's code does not do**: run `make music-setup` (it guides the `music-pickup` and `music-publish` API keys, makes the notes key, uploads the locked copy, rebuilds the page and opens the key pull request); merge that pull request once its checks pass; after its deploy, compare the hub's notes key fingerprint with `make music-status`; unlock once on the phone with 1Password, and answer Never if Chrome offers to save the passphrase. End the body with the PR attribution lines. Then hand the PR to the foundry `pr-fix-loop`.
+- [ ] **Step 6: Open the pull request** — `git push -u origin music/answer-ui`, then `gh pr create --base main --head music/answer-ui --title "Music workroom: answering in the page (pin, hum, react, energy, history, outbox)"` with a body that has: a summary (the answer bar, the composers, the energy drawing, unlock and the history, Delete and Delete all, the outbox, per-piece counts, the guide and legends for the new parts); the spec and plan paths; the results of `sh games/units.sh`, `npm run check`, the PHP suites and `make music-e2e`; where the screenshots are and that they go to the owner before merge (theme spec); and **the owner's first-run steps after merge and deploy, which this PR's code does not do**: run `make music-setup` if it has not run (it guides the `music-pickup` and `music-publish` API keys, makes the notes key in 1Password and uploads the locked keyring with its fingerprints; until then the answer bar says notes are off); compare the hub's notes key fingerprint with `make music-status`; unlock once on the phone with 1Password, and answer Never if Chrome offers to save the passphrase. End the body with the PR attribution lines. Then hand the PR to the foundry `pr-fix-loop`.
 
 ---
 
 ## Self-review
 
-- **Spec coverage.** Pin a note, typed or spoken, on a moment or span and optionally a lane: Tasks 3, 12, 14, 15. Hum up to 60 s: Tasks 3, 5, 12, 15. React on a section (eight reactions, the whole piece when there is no section): Tasks 1, 3, 12, 15. Draw the energy: Tasks 4, 13, 15. Each note tied to its draft, bars and seconds on music, seconds on sound: Task 3. Sealed in the browser, server sees only sealed bytes: Task 9 (seal before the outbox). Notes stay sealed until the owner deletes; history on any device after unlock, waiting or picked up, Delete and Delete all: Tasks 8, 9, 11. Upload limits (60 s, 2 MB, 2,000) with the note kept in the browser and a plain message: Tasks 3, 5, 7. Keys never in browser storage, passphrase every visit: Tasks 9, 11, 17. Pieces list's waiting counts: Task 16. Claude's changes beside the notes they answer: Tasks 8, 11 (and the existing change pins). The look (tokens, components, 44 px, no Escape, dark and daylight), the guide and legends for the new parts: Tasks 2, 10–15, 18. Phone first (the composers in the main column, the notes in the bottom sheet): Task 15, checked at 390 px in Task 18. Screenshots to the owner: Task 18.
-- **Carried rulings.** The body check before the history renders (reused and tightened from `seal.ts`): Task 3. The section-boundary epsilon: Task 1. Panel's name, the Sheet's `aria-controls`, the Sheet open class and Tabs focus tests: Task 2. The recorder (60 s, MIME order, the tap, the audio session): Task 5. The test public key path and the FPM `env[]` line: Task 17. Post-deploy steps only in the PR body: Task 18.
+- **Spec coverage.** Pin a note, typed or spoken, on a moment or span and optionally a lane: Tasks 3, 12, 14, 15. Hum up to 60 s: Tasks 3, 5, 12, 15. React on a section (eight reactions, the whole piece when there is no section): Tasks 1, 3, 12, 15. Draw the energy: Tasks 4, 13, 15. Each note tied to its draft, bars and seconds on music, seconds on sound: Task 3. Sealed in the browser to the unlocked keyring's current key, server sees only sealed bytes: Task 9 (seal before the outbox, nothing sealed while locked). The composers ask for the unlock first, and notes are off with no keyring on the server: Tasks 11, 15, 17. Notes stay sealed until the owner deletes; history on any device after unlock, waiting or picked up, Delete and Delete all: Tasks 8, 9, 11. Upload limits (60 s, 2 MB, 2,000) with the note kept in the browser and a plain message: Tasks 3, 5, 7. Keys never in browser storage, passphrase every visit: Tasks 9, 11, 17. Pieces list's waiting counts: Task 16. Claude's changes beside the notes they answer: Tasks 8, 11 (and the existing change pins). The look (tokens, components, 44 px, no Escape, dark and daylight), the guide and legends for the new parts: Tasks 2, 10–15, 18. Phone first (the composers in the main column, the notes in the bottom sheet): Task 15, checked at 390 px in Task 18. Screenshots to the owner: Task 18.
+- **Carried rulings.** The body check before the history renders (reused and tightened from `seal.ts`): Task 3. The section-boundary epsilon: Task 1. Panel's name, the Sheet's `aria-controls`, the Sheet open class and Tabs focus tests: Task 2. The recorder (60 s, MIME order, the tap, the audio session): Task 5. The browser check on the shipped page with the TEST keyring uploaded through `keyring.php`, and pickup from a temporary config with the tool's 1Password stand-in: Task 17. Post-deploy steps only in the PR body: Task 18.
 - **Types used across tasks.** `Span` (`hit.ts`), `NoteBody`/`isNoteBody` (`note.ts`), `NoteMark` (`answer.ts`, made by `history.ts`, read by `Timeline.tsx` and `guide.ts`), `Curve` (`energy.ts`), `MediaPorts`/`Recording` (`recorder.ts`), `PageApi`/`ServerNote` (`api.ts`), `Pending`/`AddReport`/`KEPT_MESSAGES`/`SENT_MESSAGE` (`outbox.ts`), `HistoryItem` (`history.ts`), `NotesSession` (`notes-session.ts`), `GuideView` (`guide.ts`), `AnswerMode` (`AnswerBar.tsx`), `TimelineSelect` (`Timeline.tsx`) are each defined once and named the same wherever they are used.
 - **Pre-flight rulings.** Pinning keeps the timeline on screen (scrolled into view, composer docked, asserted in the browser check at 390 × 844): Tasks 12, 15, 17, 18. Distinct names, the “Your note” textbox against the “Notes & answers” panel: Tasks 11, 12, 17. A recording always has a visible Stop, and a mode change keeps the recording: Tasks 12, 15, 17. The recorder releases the microphone on any failure: Task 5. A drawn or the piece's own energy curve is resampled to 512 points: Task 3. Nothing typed or recorded is cleared until the note is stored; an IndexedDB write failure falls back to memory with a notice; a seal failure keeps the composer: Tasks 7, 9, 12, 15. Red only for recording, destructive buttons secondary with explicit words: Tasks 11, 18. `idb.ts` tested against `fake-indexeddb`: Task 7. One Delete asks first: Task 11. The outbox flush runs under a Web Locks lock: Tasks 7, 16. The energy drawing holds the playhead's follow while a stroke is drawn: Tasks 13, 15. The pinned lane needs both drag ends in one lane: Task 14. File map, `MAX_NOTES` (the “server is full” message) and the “3,500” count agree with the code. Escape is checked at run time for every new composer, question and overlay: Tasks 11, 12, 15. The unlock form keeps the hidden username for 1Password: Task 11. A reaction is one tap and the bar stays open: Task 15.

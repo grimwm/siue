@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { KEPT_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
-import type { OutboxLock } from '../src/outbox.ts';
+import type { OutboxLock, OutboxStore } from '../src/outbox.ts';
 import { SignedOut, type UploadResult } from '../src/api.ts';
 import { MAX_NOTE_BYTES } from '../src/note.ts';
 
@@ -124,4 +124,51 @@ test('only idb.ts names IndexedDB, and it keeps nothing but the pending record',
   assert.match(idb, /'siue-music'/);
   assert.match(idb, /'outbox'/);
   assert.doesNotMatch(idb, /localStorage|sessionStorage|document\.cookie|\bcaches\b|passphrase|keyring|CryptoKey/);
+});
+
+/** A memory store whose reads or removes can be made to fail, as a dropped IndexedDB connection does. */
+function flaky() {
+  const inner = memoryOutbox();
+  const fail = { all: false, remove: false };
+  const store: OutboxStore = {
+    all: () => (fail.all ? Promise.reject(new DOMException('The connection is closing.', 'InvalidStateError')) : inner.all()),
+    put: p => inner.put(p),
+    remove: key => (fail.remove ? Promise.reject(new DOMException('The connection is closing.', 'InvalidStateError')) : inner.remove(key)),
+    memoryOnly: () => inner.memoryOnly(),
+  };
+  return { store, inner, fail };
+}
+
+test('a stored note whose flush cannot read the store is reported kept, not thrown: the words can be cleared', async () => {
+  const { store, inner, fail } = flaky();
+  fail.all = true;
+  const r = await createOutbox(store, { upload: async () => SENT() }, keys()).add(one(1), 'a');
+  assert.deepEqual(r, { key: 'k1', memoryOnly: true, sent: [], kept: [{ key: 'k1', reason: 'server' }] });
+  assert.equal((await inner.all()).length, 1, 'the note is in the store');
+});
+
+test('a note uploaded but not removed from the store counts as sent, and is never uploaded again', async () => {
+  const { store, fail } = flaky();
+  let uploads = 0;
+  const box = createOutbox(store, { upload: async () => { uploads++; return SENT(); } }, keys());
+  fail.remove = true;
+  const r = await box.add(one(1), 'a');
+  assert.deepEqual([r.sent.map(s => s.key), r.kept], [['k1'], []]);
+  assert.deepEqual(await box.pending(), [], 'not listed as waiting to be sent');
+  await box.flush();
+  assert.equal(uploads, 1, 'the next flush does not send it twice');
+  fail.remove = false;
+  await box.flush();
+  assert.deepEqual(await store.all(), [], 'removed once the store works again');
+  assert.equal(uploads, 1);
+});
+
+test('the outbox says while a note is held only in memory', async () => {
+  const store = memoryOutbox();
+  const box = createOutbox(store, { upload: async () => { throw new TypeError('offline'); } }, keys());
+  assert.equal(box.memoryOnly(), false);
+  await box.add(one(1), 'a');
+  assert.equal(box.memoryOnly(), true);
+  await box.discard('k1');
+  assert.equal(box.memoryOnly(), false);
 });

@@ -39,8 +39,9 @@ test('the database holds one store of records with exactly key, bundle, made and
 
 test('no IndexedDB: notes are kept in memory, and the outbox says so', async () => {
   const box = indexedDbOutbox(null);
+  assert.equal(box.memoryOnly(), false, 'nothing held yet');
+  assert.equal(await box.put(pending('a', [1])), true);
   assert.equal(box.memoryOnly(), true);
-  await box.put(pending('a', [1]));
   assert.deepEqual(bytesOf(await box.all()), [['a', [1], 'new']]);
   await box.remove('a');
   assert.deepEqual(await box.all(), []);
@@ -49,7 +50,7 @@ test('no IndexedDB: notes are kept in memory, and the outbox says so', async () 
 test('IndexedDB that refuses to open: notes are kept in memory', async () => {
   const refusing = { open() { throw new Error('SecurityError'); } } as unknown as globalThis.IDBFactory;
   const box = indexedDbOutbox(refusing);
-  await box.put(pending('a', [7]));
+  assert.equal(await box.put(pending('a', [7])), true);
   assert.equal(box.memoryOnly(), true);
   assert.deepEqual(bytesOf(await box.all()), [['a', [7], 'new']]);
 });
@@ -70,4 +71,75 @@ test('IndexedDB that refuses to store a note: that note is kept in memory, the s
   assert.deepEqual(bytesOf(await box.all()), [['a', [1], 'new'], ['bb', [2], 'new']]);
   await box.remove('bb');
   assert.deepEqual(bytesOf(await box.all()), [['a', [1], 'new']]);
+});
+
+/** A factory that hands every connection it opens to the test, so a test can drop one as Safari does. */
+function watched(factory: IDBFactory): { idb: globalThis.IDBFactory; conns: IDBDatabase[] } {
+  const conns: IDBDatabase[] = [];
+  const idb = { open: (name: string, version?: number) => { const r = factory.open(name, version); r.addEventListener('success', () => conns.push(r.result as unknown as IDBDatabase)); return r; } } as unknown as globalThis.IDBFactory;
+  return { idb, conns };
+}
+
+test('a connection the browser dropped is opened again: the stored notes are read, and new ones stored, removed', async () => {
+  const factory = new IDBFactory();
+  const { idb, conns } = watched(factory);
+  const box = indexedDbOutbox(idb);
+  assert.equal(await box.put(pending('a', [1])), false);
+  conns[0]!.close();
+  assert.deepEqual(bytesOf(await box.all()), [['a', [1], 'new']]);
+  conns.at(-1)!.close();
+  assert.equal(await box.put(pending('bb', [2])), false, 'stored in IndexedDB, not memory');
+  assert.equal(box.memoryOnly(), false);
+  conns.at(-1)!.close();
+  await box.remove('a');
+  assert.deepEqual(bytesOf(await indexedDbOutbox(factory as unknown as globalThis.IDBFactory).all()), [['bb', [2], 'new']]);
+});
+
+test('another tab upgrading the database closes this connection instead of blocking it', async () => {
+  const factory = new IDBFactory();
+  const { idb, conns } = watched(factory);
+  const box = indexedDbOutbox(idb);
+  await box.put(pending('a', [1]));
+  const upgrade = factory.open(OUTBOX_DB, 2);
+  const blocked = await new Promise<boolean>(resolve => {
+    upgrade.onblocked = () => resolve(true);
+    upgrade.onsuccess = () => resolve(false);
+  });
+  for (const c of conns) c.close(); // lets a blocked upgrade finish, so the test ends either way
+  await new Promise(resolve => { if (upgrade.readyState === 'done') resolve(null); else upgrade.addEventListener('success', resolve); });
+  (upgrade.result as unknown as IDBDatabase).close();
+  assert.equal(blocked, false, 'the upgrade was not blocked by this page');
+});
+
+test('a read that keeps failing answers with the notes held in memory rather than failing', async () => {
+  const factory = new IDBFactory();
+  const box = indexedDbOutbox(factory as unknown as globalThis.IDBFactory);
+  await box.put(pending('a', [1]));
+  const put = IDBObjectStore.prototype.put;
+  const getAll = IDBObjectStore.prototype.getAll;
+  IDBObjectStore.prototype.put = function refuse() { throw new DOMException('The disk is full.', 'QuotaExceededError'); };
+  try {
+    assert.equal(await box.put(pending('bb', [2])), true);
+    IDBObjectStore.prototype.getAll = function broken() { throw new DOMException('The connection is closing.', 'InvalidStateError'); };
+    assert.deepEqual(bytesOf(await box.all()), [['bb', [2], 'new']]);
+  } finally {
+    IDBObjectStore.prototype.put = put;
+    IDBObjectStore.prototype.getAll = getAll;
+  }
+});
+
+test('whether a note went to memory is said per note: a later note stored in IndexedDB is not reported as memory-only', async () => {
+  const factory = new IDBFactory();
+  const box = indexedDbOutbox(factory as unknown as globalThis.IDBFactory);
+  const put = IDBObjectStore.prototype.put;
+  IDBObjectStore.prototype.put = function refuse() { throw new DOMException('The disk is full.', 'QuotaExceededError'); };
+  try {
+    assert.equal(await box.put(pending('a', [1])), true);
+  } finally {
+    IDBObjectStore.prototype.put = put;
+  }
+  assert.equal(box.memoryOnly(), true, 'a note is held only in memory');
+  assert.equal(await box.put(pending('bb', [2])), false, 'this one is on the device');
+  await box.remove('a');
+  assert.equal(box.memoryOnly(), false, 'nothing is held only in memory any more');
 });

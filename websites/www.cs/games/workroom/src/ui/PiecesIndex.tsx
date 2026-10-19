@@ -11,13 +11,18 @@ import { Kept } from './History.tsx';
 import { UnlockPanel } from './UnlockPanel.tsx';
 import { showWaiting } from './waiting.ts';
 
+const problemOf = (e: unknown): string => (e instanceof SignedOut ? UNLOCK_MESSAGES.signedOut : UNLOCK_MESSAGES.offline);
+
 export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [counted, setCounted] = useState(false);
   const [keyring, setKeyring] = useState(true);
   const [kept, setKept] = useState<readonly Pending[]>([]);
-  const refreshKept = async (): Promise<void> => { setKept(await p.notes.kept()); };
+  const [problem, setProblem] = useState<string | null>(null);
+  const refreshKept = async (): Promise<void> => {
+    try { setKept(await p.notes.kept()); } catch { /* the browser's store could not be read just now; the list stays as it was */ }
+  };
   useEffect(() => { void p.notes.hasKeyring().then(setKeyring, () => setKeyring(true)); }, [p.notes]);
   useEffect(() => {
     const again = (): void => { void p.notes.flush().then(refreshKept, refreshKept); };
@@ -34,13 +39,14 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
       showWaiting(p.list, waitingByPiece(await p.notes.history()));
       setCounted(true);
     } catch (e) {
-      setError(e instanceof SignedOut ? UNLOCK_MESSAGES.signedOut : UNLOCK_MESSAGES.offline);
+      setError(problemOf(e));
     }
     setBusy(false);
   };
   const act = async (work: () => Promise<unknown>): Promise<void> => {
     setBusy(true);
-    try { await work(); } finally { setBusy(false); }
+    setProblem(null);
+    try { await work(); } catch (e) { setProblem(problemOf(e)); } finally { setBusy(false); }
     await refreshKept();
   };
   return (
@@ -50,6 +56,7 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
         : counted
           ? <p class="text-sm text-dim">Each piece shows how many of your notes wait for pickup.</p>
           : <UnlockPanel busy={busy} error={error} onUnlock={pass => void unlock(pass)} />}
+      {problem ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{problem}</p> : null}
       <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key))} onRetry={() => void act(() => p.notes.flush())} />
     </Panel>
   );

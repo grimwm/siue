@@ -12,17 +12,24 @@ export type KeptReason = RefusedReason | 'offline' | 'signed_out' | 'server';
 export interface Pending { key: string; bundle: Uint8Array<ArrayBuffer>; made: string; reason: KeptReason | 'new' }
 export interface OutboxStore {
   all(): Promise<Pending[]>;
-  put(p: Pending): Promise<void>;
+  /** Resolves true when this note is held only in this page view's memory (the browser has no IndexedDB, or refused to open it or to store the note), false when it is stored on the device. */
+  put(p: Pending): Promise<boolean>;
   remove(key: string): Promise<void>;
-  /** True when the notes are held only in this page view's memory: the browser has no IndexedDB, or refused to open it or to store a note. */
+  /** True while a note is held only in this page view's memory, so closing the page would lose it. */
   memoryOnly(): boolean;
 }
 export interface FlushReport { sent: { key: string; id: string }[]; kept: { key: string; reason: KeptReason }[] }
-/** `memoryOnly`: the store held the note only in memory (OutboxStore.memoryOnly) when it was added. */
+/** `memoryOnly`: the store could keep this note only in this page view's memory. */
 export interface AddReport extends FlushReport { key: string; memoryOnly: boolean }
 /** Runs `work` while holding the page's cross-tab lock, so two tabs never upload the same kept note. */
 export type OutboxLock = <T>(work: () => Promise<T>) => Promise<T>;
-export interface Outbox { add(bundle: Uint8Array<ArrayBuffer>, made: string): Promise<AddReport>; flush(): Promise<FlushReport>; pending(): Promise<Pending[]>; discard(key: string): Promise<void> }
+export interface Outbox {
+  /** Stores the note, then flushes. Rejects only when the note could not be stored; a flush that fails reports the note kept. */
+  add(bundle: Uint8Array<ArrayBuffer>, made: string): Promise<AddReport>;
+  flush(): Promise<FlushReport>; pending(): Promise<Pending[]>; discard(key: string): Promise<void>;
+  /** True while a note not sent yet is held only in this page view's memory (OutboxStore.memoryOnly). */
+  memoryOnly(): boolean;
+}
 
 export const SENT_MESSAGE = 'Sent. It is waiting for pickup.';
 /** What the owner is told when a note cannot be sealed in this browser; nothing was stored, and the words or recording are still on screen. */
@@ -50,9 +57,9 @@ export function memoryOutbox(): OutboxStore {
   const notes = new Map<string, Pending>();
   return {
     all: async () => [...notes.values()].map(p => ({ ...p })),
-    put: async p => { notes.set(p.key, { ...p }); },
+    put: async p => { notes.set(p.key, { ...p }); return true; },
     remove: async key => { notes.delete(key); },
-    memoryOnly: () => true,
+    memoryOnly: () => notes.size > 0,
   };
 }
 
@@ -65,17 +72,28 @@ export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, n
     chain = next.catch(() => undefined);
     return next;
   };
+  /** Notes the server took whose record the store would not remove: never uploaded again, and removed on a later flush. */
+  const sentKeys = new Set<string>();
+  const forget = async (key: string): Promise<void> => {
+    try {
+      await store.remove(key);
+      sentKeys.delete(key);
+    } catch {
+      sentKeys.add(key);
+    }
+  };
   const flushNow = async (): Promise<FlushReport> => {
     const report: FlushReport = { sent: [], kept: [] };
     let stopped: KeptReason | null = null;
     for (const p of (await store.all()).sort(byMade)) {
+      if (sentKeys.has(p.key)) { await forget(p.key); continue; }
       let reason: KeptReason | null = stopped;
       if (reason === null && p.bundle.length > MAX_NOTE_BYTES) reason = 'too_large';
       if (reason === null) {
         try {
           const r = await api.upload(p.bundle);
           if (r.kind === 'sent') {
-            await store.remove(p.key);
+            await forget(p.key);
             report.sent.push({ key: p.key, id: r.id });
             continue;
           }
@@ -85,7 +103,7 @@ export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, n
         }
         if (STOPS.has(reason)) stopped = reason;
       }
-      if (p.reason !== reason) await store.put({ ...p, reason });
+      if (p.reason !== reason) await store.put({ ...p, reason }).catch(() => undefined); // the reason is shown again on the next flush
       report.kept.push({ key: p.key, reason });
     }
     return report;
@@ -94,11 +112,17 @@ export function createOutbox(store: OutboxStore, api: Pick<PageApi, 'upload'>, n
   return {
     add: (bundle, made) => serial(async () => {
       const key = newKey();
-      await store.put({ key, bundle, made, reason: 'new' });
-      return { key, memoryOnly: store.memoryOnly(), ...(await locked(flushNow)) };
+      const memoryOnly = await store.put({ key, bundle, made, reason: 'new' });
+      try {
+        return { key, memoryOnly, ...(await locked(flushNow)) };
+      } catch {
+        // Stored, but the store could not be read back to send it: it goes on the next flush.
+        return { key, memoryOnly, sent: [], kept: [{ key, reason: 'server' }] };
+      }
     }),
     flush: () => serial(() => locked(flushNow)),
-    pending: async () => (await store.all()).sort(byMade),
+    pending: async () => (await store.all()).filter(p => !sentKeys.has(p.key)).sort(byMade),
     discard: key => serial(() => store.remove(key)),
+    memoryOnly: () => store.memoryOnly(),
   };
 }

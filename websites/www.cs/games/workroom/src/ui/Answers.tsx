@@ -43,7 +43,11 @@ export function Answers(p: AnswersProps) {
     if (!p.notes.unlocked()) p.onLocked?.();
   };
   const load = async (): Promise<void> => {
-    setKept(await p.notes.kept());
+    try {
+      setKept(await p.notes.kept());
+    } catch {
+      // The browser's store could not be read just now: the list stays as it was, and the history still loads.
+    }
     if (!p.notes.unlocked()) { setUnlocked(false); p.onLocked?.(); return; }
     try {
       const all = await p.notes.history();

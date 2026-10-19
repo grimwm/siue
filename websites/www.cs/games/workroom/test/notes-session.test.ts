@@ -161,3 +161,14 @@ test('a signed-out download ends the history; unlock and hasKeyring report sign-
   s.state.failKeyring = new TypeError('Failed to fetch');
   assert.equal(await notes.unlock(fx.passphrase), UNLOCK_MESSAGES.offline);
 });
+
+test('the session says while a note not sent yet is held only in memory', async () => {
+  const outbox = createOutbox(memoryOutbox(), { upload: async () => { throw new TypeError('offline'); } }, () => 'k');
+  const notes = createNotesSession({ api: server().api, vault: createVault(), outbox });
+  await notes.unlock(fx.passphrase);
+  assert.equal(notes.memoryOnly(), false);
+  await notes.send(note('x'), null);
+  assert.equal(notes.memoryOnly(), true);
+  await notes.discard('k');
+  assert.equal(notes.memoryOnly(), false);
+});

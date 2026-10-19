@@ -30,8 +30,9 @@ const ui = await importTsx<{
   unlock: typeof import('../src/ui/UnlockPanel.tsx');
   history: typeof import('../src/ui/History.tsx');
   answers: typeof import('../src/ui/Answers.tsx');
+  index: typeof import('../src/ui/PiecesIndex.tsx');
   api: typeof import('../src/api.ts');
-}>(import.meta.dirname, { unlock: '../src/ui/UnlockPanel.tsx', history: '../src/ui/History.tsx', answers: '../src/ui/Answers.tsx', api: '../src/api.ts' });
+}>(import.meta.dirname, { unlock: '../src/ui/UnlockPanel.tsx', history: '../src/ui/History.tsx', answers: '../src/ui/Answers.tsx', index: '../src/ui/PiecesIndex.tsx', api: '../src/api.ts' });
 
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
 const button = (root: StubElement, text: string) => walk(root).find(e => e.localName === 'button' && e.textContent === text);
@@ -192,6 +193,7 @@ function fakeSession(over: Partial<NotesSession> = {}): NotesSession & { calls: 
     remove: async id => { calls.push(`remove ${id[0]}`); },
     removeAll: async () => 2,
     lock() {},
+    memoryOnly: () => false,
     ...over,
   };
 }
@@ -270,4 +272,40 @@ test('opening the panel loads the notes once', async () => {
   await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: () => {} }));
   await settle();
   assert.equal(notes.calls.filter(c => c === 'history').length, 1);
+});
+
+/** Counts the promise rejections nobody handled while `work` runs. */
+async function unhandledDuring(work: () => Promise<void>): Promise<number> {
+  let n = 0;
+  const count = (): void => { n++; };
+  process.on('unhandledRejection', count);
+  try { await work(); await settle(); } finally { process.off('unhandledRejection', count); }
+  return n;
+}
+
+test('a store that cannot list the notes not sent yet still lets the panel load the history', async () => {
+  const notes = fakeSession({ unlocked: () => true, kept: async () => { throw new DOMException('The connection is closing.', 'InvalidStateError'); } });
+  let root: StubElement | null = null;
+  const unhandled = await unhandledDuring(async () => {
+    root = await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: () => {} }));
+  });
+  assert.equal(unhandled, 0);
+  assert.equal(notes.calls.filter(c => c === 'history').length, 1, 'the history is loaded');
+  assert.equal(walk(root!).filter(e => e._attrs['data-note'] !== undefined).length, 1);
+});
+
+test('on the pieces list, a Discard that fails says so in plain words and lists the notes not sent yet again', async () => {
+  const waiting: Pending = { key: 'k1', bundle: new Uint8Array([1]), made: '2026-10-20T00:00:00.000Z', reason: 'offline' };
+  let listed = 0;
+  const notes = fakeSession({ kept: async () => { listed++; return [waiting]; }, discard: async () => { throw new DOMException('The connection is closing.', 'InvalidStateError'); } });
+  let root: StubElement | null = null;
+  const unhandled = await unhandledDuring(async () => {
+    root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+    await settle();
+    await act(() => { fire(button(root!, 'Discard')!, 'click'); });
+    await act(() => { fire(walk(root!).filter(e => e.localName === 'button' && /^Discard/.test(e.textContent)).at(-1)!, 'click'); });
+  });
+  assert.equal(unhandled, 0);
+  assert.ok(listed >= 2, 'listed again after the failure');
+  assert.ok(walk(root!).some(e => e._attrs['role'] === 'alert' && /not be done|try again/i.test(e.textContent)), 'a plain message');
 });

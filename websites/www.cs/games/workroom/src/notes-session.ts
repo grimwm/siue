@@ -38,6 +38,8 @@ export interface NotesSession {
   remove(id: string): Promise<void>;
   removeAll(): Promise<number>;
   lock(): void;
+  /** True while a note not sent yet is held only in this page view's memory: closing the page would lose it. */
+  memoryOnly(): boolean;
 }
 
 /** Notes opened at once while listing. */
@@ -120,6 +122,7 @@ export function createNotesSession(d: SessionDeps): NotesSession {
     flush: () => d.outbox.flush(),
     kept: () => d.outbox.pending(),
     discard: key => d.outbox.discard(key),
+    memoryOnly: () => d.outbox.memoryOnly(),
     async remove(id) {
       await d.api.remove(id);
       outcomes.delete(id);

@@ -1,7 +1,8 @@
 // Pinning a typed or spoken note on the moment or span picked on the Story
 // view (and its lane, when both ends were in one): the words, or a recording.
 // The words stay in the box until the sealed note is stored, so a note that
-// could not be sealed or kept is never lost. The Stop button of a recording
+// could not be sealed or kept is never lost, and words typed while it is being
+// sent stay once it is stored. The Stop button of a recording
 // lives in the answer bar's dock (AnswerBar.tsx), which is always on screen.
 import { useState } from 'preact/hooks';
 import { spanLabel } from '../answer.ts';
@@ -20,7 +21,18 @@ export interface PinComposerProps {
 
 export function PinComposer(p: PinComposerProps) {
   const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
   const left = MAX_TEXT - text.length;
+  /** One note per tap: only the words sent are cleared, and only once they are stored; a send that fails outright keeps them too. */
+  const send = async (): Promise<void> => {
+    if (sending) return;
+    const sent = text;
+    setSending(true);
+    let stored = false;
+    try { stored = await p.onSend(sent); } catch { stored = false; }
+    setSending(false);
+    if (stored) setText(t => (t === sent ? '' : t));
+  };
   const where = p.span ? `For ${spanLabel(p.span)}${p.laneName ? ` · ${p.laneName}` : ''}` : 'Drag across the Story view to pick a span, or tap one moment.';
   return (
     <div data-pin-composer="" class="grid gap-2 rounded-lg border border-amber bg-panel p-3">
@@ -31,7 +43,7 @@ export function PinComposer(p: PinComposerProps) {
       </label>
       {left <= 500 ? <p class="font-mono text-xs text-dim">{`${left} characters left`}</p> : null}
       <div class="flex flex-wrap gap-2">
-        <Button variant="primary" disabled={!p.span || text.trim() === '' || p.busy || p.recording} onClick={() => { void p.onSend(text).then(stored => { if (stored) setText(''); }); }}>Send</Button>
+        <Button variant="primary" disabled={!p.span || text.trim() === '' || p.busy || p.recording || sending} onClick={() => void send()}>Send</Button>
         {p.canRecord ? <Button variant="record" disabled={!p.span || p.busy || p.recording} onClick={p.onRecord}>{p.recording ? 'Recording…' : 'Record'}</Button> : null}
         <Button variant="ghost" onClick={p.onCancel}>Cancel</Button>
       </div>

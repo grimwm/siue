@@ -71,6 +71,50 @@ test('a note that was not stored keeps its words in the box', async () => {
   assert.equal(button(root, 'Send')!.disabled, false, 'it can be sent again');
 });
 
+test('words typed while a note is being sent stay in the box once it is stored', async () => {
+  const root = makeEl('root');
+  let done: (stored: boolean) => void = () => {};
+  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onSend: () => new Promise<boolean>(r => { done = r; }) })));
+  const box = walk(root).find(e => e.localName === 'textarea')!;
+  box.value = 'first thought';
+  await act(() => { fire(box, 'input'); });
+  await act(() => { fire(button(root, 'Send')!, 'click'); });
+  box.value = 'first thought, and a second';
+  await act(() => { fire(box, 'input'); });
+  await act(() => { done(true); });
+  await settle();
+  assert.equal(box.value, 'first thought, and a second');
+});
+
+test('a send that fails outright keeps the words, and Send works again', async () => {
+  const root = makeEl('root');
+  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onSend: async () => { throw new Error('no'); } })));
+  const box = walk(root).find(e => e.localName === 'textarea')!;
+  box.value = 'keep me';
+  await act(() => { fire(box, 'input'); });
+  await act(() => { fire(button(root, 'Send')!, 'click'); });
+  await settle();
+  assert.equal(box.value, 'keep me');
+  assert.equal(button(root, 'Send')!.disabled, false);
+});
+
+test('Send is one note: a second tap while it is being sent sends nothing', async () => {
+  const root = makeEl('root');
+  const sent: string[] = [];
+  let done: (stored: boolean) => void = () => {};
+  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onSend: (t: string) => { sent.push(t); return new Promise<boolean>(r => { done = r; }); } })));
+  const box = walk(root).find(e => e.localName === 'textarea')!;
+  box.value = 'once';
+  await act(() => { fire(box, 'input'); });
+  await act(() => { fire(button(root, 'Send')!, 'click'); });
+  assert.equal(button(root, 'Send')!.disabled, true, 'busy while sending');
+  await act(() => { fire(button(root, 'Send')!, 'click'); });
+  await act(() => { done(true); });
+  await settle();
+  assert.deepEqual(sent, ['once']);
+  assert.equal(button(root, 'Send')!.disabled, true, 'the box is empty again');
+});
+
 test('the box is the textbox "Your note", and the composer shows what became of the last send', async () => {
   const root = makeEl('root');
   await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, status: 'No connection: this note is kept on this device.' })));

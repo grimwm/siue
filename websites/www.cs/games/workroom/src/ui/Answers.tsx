@@ -20,6 +20,8 @@ export interface AnswersProps {
   notes: NotesSession; score: Score; version: number; refresh: number;
   ask: string | null;
   onUnlocked(): void;
+  /** The notes are locked again (a sign-in that ended, or a lock that overtook a load). */
+  onLocked?(): void;
   onItems(items: readonly HistoryItem[]): void;
 }
 
@@ -38,13 +40,14 @@ export function Answers(p: AnswersProps) {
     if (e instanceof SignedOut) { p.notes.lock(); setItems([]); }
     setError(problemOf(e));
     setUnlocked(p.notes.unlocked());
+    if (!p.notes.unlocked()) p.onLocked?.();
   };
   const load = async (): Promise<void> => {
     setKept(await p.notes.kept());
-    if (!p.notes.unlocked()) { setUnlocked(false); return; }
+    if (!p.notes.unlocked()) { setUnlocked(false); p.onLocked?.(); return; }
     try {
       const all = await p.notes.history();
-      if (!p.notes.unlocked()) { setItems([]); setUnlocked(false); return; }
+      if (!p.notes.unlocked()) { setItems([]); setUnlocked(false); p.onLocked?.(); return; }
       setItems(all);
       p.onItems(all);
       setError(null);

@@ -12,7 +12,7 @@ const unreleased = (n: number): Chapter => ({ n, name: '', released: false, leve
 export const CHAPTERS: readonly Chapter[] = [
   {
     n: 1, name: 'The Outer Halls', released: true,
-    levelIds: ['trial-1', 'trial-2', 'trial-3', 'trial-4', 'trial-5', 'trial-6', 'trial-7', 'trial-8'],
+    levelIds: ['trial-1', 'trial-2', 'trial-3', 'trial-4', 'trial-5', 'trial-6', 'trial-7', 'trial-8', 'trial-9', 'trial-10'],
     lore: CHAPTER_1,
   },
   ...Array.from({ length: 9 }, (_, i) => unreleased(i + 2)),

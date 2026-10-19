@@ -1,6 +1,6 @@
 /* The Island of Crete: the trials, Chapter 1's levels, in the level text (src/puzzle/level.ts).
- * Eight so far; levels 9 and 10 join them to make the chapter's ten. Each teaches
- * one idea; the solver proves each winnable (test/puzzle-trials.test.ts). DOM-free. */
+ * Ten levels: each teaches one idea, and the tenth, wider than the screen, puts them
+ * together; the solver proves each winnable (test/puzzle-trials.test.ts). DOM-free. */
 import { parse } from './level.ts';
 import type { Level } from './level.ts';
 
@@ -104,6 +104,35 @@ intro: Here Minos hid a harder riddle: a locked door, a block to sink in the poo
 #...#..~~..#
 #...#.~f~.E#
 ############
+` },
+  { id: 'trial-9', text: `title: The Bull's Horns
+intro: The beast cannot tread the marked stones. If he catches you, you lose a heart but wake on the last mark you stood on, still holding all you took.
+pages: ch1-tribute-marks
+
+############
+#P.S..S.S|E#
+########.###
+##*...#...##
+#.#...~O..##
+#M#...~##p##
+#.....######
+############
+` },
+  { id: 'trial-10', text: `title: The Great Hall
+intro: This hall runs wider than your sight, with more than one way across. At its far end stands a sealed gate, and the relic that opens it lies in the beast's own den.
+pages: ch1-chalk
+
+##################
+#....#...#f~~~~~##
+#.P..#...#.####~##
+#....R.O.~T##.#S##
+#r...#...#.#..#.##
+#....#._z#.#....|E
+##########.#M...##
+######p....#*#S.##
+##########.###F###
+##########hFFFF###
+##################
 ` },
 ];
 

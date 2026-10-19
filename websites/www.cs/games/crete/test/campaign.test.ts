@@ -21,7 +21,7 @@ test('ten chapters, numbered 1 to 10; Chapter 1 is The Outer Halls and released'
   assert.deepEqual(one!.levelIds.slice(0, 8), Array.from({ length: 8 }, (_, i) => `trial-${i + 1}`));
 });
 
-test('Chapter 1 holds ten levels, trial-1 to trial-10', { todo: 'Task 3 adds levels 9 and 10' }, () => {
+test('Chapter 1 holds ten levels, trial-1 to trial-10', () => {
   assert.deepEqual(CHAPTERS[0]!.levelIds, Array.from({ length: 10 }, (_, i) => `trial-${i + 1}`));
 });
 
@@ -81,7 +81,7 @@ test('pageHome finds no level for a page nobody names', () => {
   assert.deepEqual(pageHome('no-such-page'), []);
 });
 
-test('every lore page is named by exactly one level', { todo: 'Task 3 places the pages in levels 9 and 10' }, () => {
+test('every lore page is named by exactly one level', () => {
   released.forEach(c => c.lore!.pages.forEach(p => assert.equal(pageHome(p.id).length, 1, `page ${p.id}`)));
 });
 

@@ -8,7 +8,7 @@
 // notes are off. Pinning keeps the timeline on screen above a docked composer;
 // nothing typed or recorded is lost before the note is stored; a recording
 // always has a Stop; no key takes Escape.
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { h, render } from 'preact';
@@ -91,24 +91,28 @@ function fakeMedia(): { ports: MediaPorts; clock: { ms: number }; released: { tr
   return { ports, clock, released };
 }
 
+/** Every root a test mounts; each is unmounted after its test, even one that failed, so no recording clock outlives it. */
+const mounted: StubElement[] = [];
 const mount = async (extra: Record<string, unknown> = {}): Promise<StubElement> => {
   const root = makeEl('root');
+  mounted.push(root);
   await act(() => { render(h(ui.room.Workroom, { score, version: 1, versions: [1], audioSrc: (f: string) => f, onVersion: () => {}, now: NOW, ...extra }), renderTarget(root)); });
   await settle();
   return root;
 };
 const unmount = (root: StubElement): void => { render(null, renderTarget(root)); };
+afterEach(() => { for (const root of mounted.splice(0)) unmount(root); });
 const at = (x: number, y: number, t: number) => ({ pointerId: 1, clientX: x, clientY: y, timeStamp: t });
 
 test('without notes there is no answer bar; with no keyring on the server, notes are off', async () => {
   const none = await mount();
-  assert.equal(named(none, 'data-answer-bar'), undefined);
-  assert.equal(named(none, 'data-answer-off'), undefined);
+  assert.ok(named(none, 'data-answer-bar') === undefined);
+  assert.ok(named(none, 'data-answer-off') === undefined);
   unmount(none);
   const { session } = fakeNotes(undefined, 0, { unlocked: false, keyring: false });
   const off = await mount({ notes: session });
   assert.equal(named(off, 'data-answer-off')!.textContent, 'Notes are off until a notes key is uploaded (make music-setup).');
-  assert.equal(button(off, 'Pin a note'), undefined);
+  assert.ok(button(off, 'Pin a note') === undefined);
   unmount(off);
 });
 
@@ -127,11 +131,11 @@ test('before an unlock, Pin a note opens the notes panel at the unlock form with
   const handle = walk(named(root, 'data-sheet')!).find(e => e.localName === 'button' && e._attrs['aria-controls'] !== undefined)!;
   assert.equal(String(handle._attrs['aria-expanded']), 'false');
   await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
-  assert.equal(named(root, 'data-pin-composer'), undefined, 'nothing to compose before an unlock');
+  assert.ok(named(root, 'data-pin-composer') === undefined, 'nothing to compose before an unlock');
   assert.equal(String(handle._attrs['aria-expanded']), 'true', 'the notes panel opens');
   assert.equal(named(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST);
   await unlockInPanel(root);
-  assert.equal(named(root, 'data-unlock-reason'), undefined);
+  assert.ok(named(root, 'data-unlock-reason') === undefined);
   assert.ok(named(root, 'data-pin-composer'), 'Pin a note goes on from where it stopped');
   assert.equal(button(root, 'Pin a note')!._attrs['aria-pressed'], 'true');
   assert.equal(String(handle._attrs['aria-expanded']), 'false', 'the panel closes so the timeline and the composer show');
@@ -144,15 +148,15 @@ test('before an unlock, React and Draw the energy ask for it too; Hum it opens n
   const media = fakeMedia();
   const root = await mount({ notes: session, media: media.ports });
   await act(() => { fire(button(root, 'React')!, 'click'); });
-  assert.equal(named(root, 'data-react-bar'), undefined);
+  assert.ok(named(root, 'data-react-bar') === undefined);
   await act(() => { fire(button(root, 'Draw the energy')!, 'click'); });
-  assert.equal(named(root, 'data-energy-editor'), undefined);
+  assert.ok(named(root, 'data-energy-editor') === undefined);
   await act(() => { fire(button(root, 'Hum it')!, 'click'); });
   await settle();
-  assert.equal(named(root, 'data-recording-strip'), undefined, 'no microphone before an unlock');
+  assert.ok(named(root, 'data-recording-strip') === undefined, 'no microphone before an unlock');
   assert.equal(named(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST);
   await unlockInPanel(root);
-  assert.equal(named(root, 'data-recording-strip'), undefined, 'iOS grants the microphone only inside a tap: the next one starts it');
+  assert.ok(named(root, 'data-recording-strip') === undefined, 'iOS grants the microphone only inside a tap: the next one starts it');
   assert.equal(named(root, 'data-answer-status')!.textContent, 'Unlocked. Tap Hum it to start recording.');
   await act(() => { fire(button(root, 'Hum it')!, 'click'); });
   await settle();
@@ -199,7 +203,7 @@ test('Pin a note: from another view it goes to Story, a drag picks the span, Sen
   close(b.from, 8);
   close(b.to, 13.6);
   assert.equal(named(root, 'data-answer-status')!.textContent, SENT_MESSAGE);
-  assert.equal(named(root, 'data-pin-composer'), undefined, 'the composer closes once the note is safe');
+  assert.ok(named(root, 'data-pin-composer') === undefined, 'the composer closes once the note is safe');
   unmount(root);
 });
 
@@ -219,7 +223,7 @@ test('Draw the energy: the drawing replaces the view with its own legend; Send s
   const { session, sent } = fakeNotes();
   const root = await mount({ notes: session });
   await act(() => { fire(button(root, 'Draw the energy')!, 'click'); });
-  assert.equal(named(root, 'data-timeline'), undefined);
+  assert.ok(named(root, 'data-timeline') === undefined);
   const editor = named(root, 'data-energy-editor')!;
   assert.equal(named(root, 'data-legend')!.textContent, 'dashed = the energy now · green = your shape · higher = more intense');
   await act(() => { fire(editor, 'pointerdown', { pointerId: 1, clientX: 180, clientY: 150 }); });
@@ -238,7 +242,7 @@ test('the energy drawing\'s guide opens by itself the first time', async () => {
   for (const v of ['story', 'roll', 'sound', 'sheet']) storage.setItem(`workroom-guide-${v}`, 'seen');
   const { session } = fakeNotes();
   const root = await mount({ notes: session, guide: guideStore(storage) });
-  assert.equal(named(root, 'data-guide-card'), undefined);
+  assert.ok(named(root, 'data-guide-card') === undefined);
   await act(() => { fire(button(root, 'Draw the energy')!, 'click'); });
   assert.match(named(root, 'data-guide-card')!.textContent, /Part 1 of 4/);
   assert.equal(storage.getItem('workroom-guide-energy'), 'seen');
@@ -284,13 +288,13 @@ async function pinSpan(root: StubElement): Promise<StubElement> {
 test('the pin composer is docked at the bottom of a phone, above the notes handle, and scrolls inside itself', async () => {
   const { session } = fakeNotes();
   const root = await mount({ notes: session });
-  assert.equal(named(root, 'data-answer-dock'), undefined, 'nothing is docked until something needs the owner');
+  assert.ok(named(root, 'data-answer-dock') === undefined, 'nothing is docked until something needs the owner');
   await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
   const dock = named(root, 'data-answer-dock')!;
   for (const c of ['fixed', 'bottom-11', 'max-h-[40dvh]', 'overflow-y-auto', 'lg:static']) assert.ok((dock._attrs['class'] ?? dock.className).split(' ').includes(c), c);
   assert.ok(walk(dock).includes(named(root, 'data-pin-composer')!), 'the composer is in the dock');
   await act(() => { fire(button(root, 'Cancel')!, 'click'); });
-  assert.equal(named(root, 'data-answer-dock'), undefined);
+  assert.ok(named(root, 'data-answer-dock') === undefined);
   unmount(root);
 });
 
@@ -322,7 +326,7 @@ test('a note that cannot be sealed leaves the words in the box and says so where
   await act(() => { fire(button(root, 'Send')!, 'click'); });
   await settle();
   assert.equal(sent[0]!.body.text, 'this must survive', 'the same words go on the next try');
-  assert.equal(named(root, 'data-pin-composer'), undefined);
+  assert.ok(named(root, 'data-pin-composer') === undefined);
   unmount(root);
 });
 
@@ -356,14 +360,14 @@ test('switching to React or Draw while recording stops the microphone and keeps 
   await act(() => { fire(button(root, 'React')!, 'click'); });
   await settle();
   assert.equal(media.released.tracks, 1, 'the microphone is off');
-  assert.equal(named(root, 'data-recording-strip'), undefined);
+  assert.ok(named(root, 'data-recording-strip') === undefined);
   assert.equal(sent.length, 0, 'nothing was sent behind the owner\'s back');
   const held = named(root, 'data-held-recording')!;
   assert.match(held.textContent, /A 0:07 recording is waiting here, not sent yet\./);
   await act(() => { fire(button(held, 'Send recording')!, 'click'); });
   await settle();
   assert.deepEqual([sent[0]!.body.kind, sent[0]!.body.fromBar, sent[0]!.body.toBar, sent[0]!.body.audio!.seconds], ['speech', 5, 7, 7]);
-  assert.equal(named(root, 'data-held-recording'), undefined, 'gone once stored');
+  assert.ok(named(root, 'data-held-recording') === undefined, 'gone once stored');
   await act(() => { fire(button(root, 'Hum it')!, 'click'); });
   await settle();
   await act(() => { fire(button(root, 'Draw the energy')!, 'click'); });
@@ -371,7 +375,7 @@ test('switching to React or Draw while recording stops the microphone and keeps 
   const again = named(root, 'data-held-recording')!;
   assert.ok(again, 'a hum is kept the same way');
   await act(() => { fire(button(again, 'Discard recording')!, 'click'); });
-  assert.equal(named(root, 'data-held-recording'), undefined);
+  assert.ok(named(root, 'data-held-recording') === undefined);
   assert.equal(sent.length, 1);
   unmount(root);
 });
@@ -391,7 +395,7 @@ test('a recording that could not be stored stays held and goes on the next Send'
   await act(() => { fire(button(held, 'Send recording')!, 'click'); });
   await settle();
   assert.equal(sent[0]!.body.kind, 'hum');
-  assert.equal(named(root, 'data-held-recording'), undefined);
+  assert.ok(named(root, 'data-held-recording') === undefined);
   unmount(root);
 });
 
@@ -427,13 +431,7 @@ test('no key takes Escape while a composer is open and a recording runs', async 
   await pinSpan(root);
   await act(() => { fire(button(root, 'Record')!, 'click'); });
   await settle();
-  let taken = 0;
-  for (const el of [root, ...walk(root)]) for (const type of ['keydown', 'keyup', 'keypress']) fire(el, type, { key: 'Escape', code: 'Escape', keyCode: 27, preventDefault: () => { taken++; }, stopPropagation: () => { taken++; } });
-  for (const f of keyListeners) {
-    const ev = { type: 'keydown', key: 'Escape', preventDefault: () => { taken++; }, stopPropagation: () => { taken++; } };
-    (f as (e: typeof ev) => void)(ev);
-  }
-  assert.equal(taken, 0);
+  assert.equal(pressEscape(root), 0);
   assert.ok(named(root, 'data-pin-composer'), 'the composer is still open');
   assert.ok(named(root, 'data-recording-strip'), 'the recording goes on');
   assert.equal(sent.length, 0);
@@ -484,8 +482,8 @@ test('while the microphone is being asked for, Hum it cannot start a second reco
   await settle();
   grant({ getTracks: () => [{ stop() { media.released.tracks++; } }] });
   await settle();
-  assert.equal(named(root, 'data-recording-strip'), undefined, 'nothing listens');
-  assert.equal(named(root, 'data-held-recording'), undefined, 'nothing was recorded');
+  assert.ok(named(root, 'data-recording-strip') === undefined, 'nothing listens');
+  assert.ok(named(root, 'data-held-recording') === undefined, 'nothing was recorded');
   assert.equal(media.released.tracks, 1, 'the microphone is released');
   assert.notEqual(named(root, 'data-answer-status')!.textContent, RECORDER_MESSAGES.cancelled, 'a cancelled start is not a problem to report');
   assert.equal(button(root, 'Hum it')!.disabled, false);
@@ -503,7 +501,7 @@ test('Cancel in the pin composer while recording stops the microphone and keeps 
   media.clock.ms += 3000;
   await act(() => { fire(button(root, 'Cancel')!, 'click'); });
   await settle();
-  assert.equal(named(root, 'data-pin-composer'), undefined);
+  assert.ok(named(root, 'data-pin-composer') === undefined);
   assert.equal(media.released.tracks, 1);
   assert.match(named(root, 'data-held-recording')!.textContent, /A 0:03 recording is waiting here/);
   await act(() => { fire(button(root, 'Send recording')!, 'click'); });
@@ -521,7 +519,7 @@ test('a sign-in that ended while the notes panel loads locks the bar too: the ne
   const root = await mount({ notes: session });
   assert.equal(locks, 1);
   await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
-  assert.equal(named(root, 'data-pin-composer'), undefined);
+  assert.ok(named(root, 'data-pin-composer') === undefined);
   assert.equal(named(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST);
   unmount(root);
 });
@@ -538,7 +536,73 @@ test('a note kept because the sign-in ended locks the notes; the next tap asks f
   assert.equal(named(root, 'data-answer-status')!.textContent, KEPT_MESSAGES.signed_out);
   assert.ok(locks >= 1);
   await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
-  assert.equal(named(root, 'data-pin-composer'), undefined);
+  assert.ok(named(root, 'data-pin-composer') === undefined);
   assert.equal(named(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST);
   unmount(root);
+});
+
+test('a spoken note leaves the words typed in the composer, and the composer open', async () => {
+  const { session, sent } = fakeNotes();
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  await pinSpan(root);
+  const box = walk(root).find(e => e.localName === 'textarea')!;
+  box.value = 'and also this, typed';
+  await act(() => { fire(box, 'input'); });
+  await act(() => { fire(button(root, 'Record')!, 'click'); });
+  await settle();
+  media.clock.ms += 2000;
+  await act(() => { fire(walk(root).find(e => e.localName === 'button' && /^Stop \(/.test(e.textContent))!, 'click'); });
+  await settle();
+  assert.equal(sent[0]!.body.kind, 'speech');
+  assert.ok(named(root, 'data-pin-composer'), 'the composer stays open');
+  assert.equal(walk(root).find(e => e.localName === 'textarea')!.value, 'and also this, typed');
+  assert.match(named(root, 'data-pin-span')!.textContent, /^For Bars 5–7/, 'the span stays picked');
+});
+
+test('a hum sent while the reactions are open leaves them open', async () => {
+  const { session, sent } = fakeNotes();
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  await act(() => { fire(button(root, 'Hum it')!, 'click'); });
+  await settle();
+  await act(() => { fire(walk(root).find(e => e.localName === 'button' && /^Stop \(/.test(e.textContent))!, 'click'); });
+  await settle();
+  assert.equal(sent[0]!.body.kind, 'hum');
+  assert.ok(named(root, 'data-react-bar'), 'still open');
+});
+
+test('a recording sent while the energy drawing is open leaves the drawing as it is', async () => {
+  const { session, sent } = fakeNotes();
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  await act(() => { fire(button(root, 'Hum it')!, 'click'); });
+  await settle();
+  await act(() => { fire(button(root, 'Draw the energy')!, 'click'); });
+  await settle();
+  const editor = named(root, 'data-energy-editor')!;
+  await act(() => { fire(editor, 'pointerdown', { pointerId: 1, clientX: 180, clientY: 150 }); });
+  await act(() => { fire(editor, 'pointermove', { pointerId: 1, clientX: 540, clientY: 20 }); });
+  await act(() => { fire(editor, 'pointerup', { pointerId: 1, clientX: 540, clientY: 20 }); });
+  assert.ok(named(root, 'data-energy-drawn'));
+  await act(() => { fire(button(named(root, 'data-held-recording')!, 'Send recording')!, 'click'); });
+  await settle();
+  assert.equal(sent[0]!.body.kind, 'hum');
+  assert.ok(named(root, 'data-energy-editor'), 'the drawing stays');
+  assert.ok(named(root, 'data-energy-drawn'), 'with the shape drawn on it');
+});
+
+test('the reactions close on a tap of React even after the notes locked', async () => {
+  const { session } = fakeNotes(key => ({ key, memoryOnly: false, sent: [], kept: [{ key, reason: 'signed_out' }] }));
+  let open = true;
+  Object.assign(session, { unlocked: () => open, lock: () => { open = false; } });
+  const root = await mount({ notes: session });
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  await act(() => { fire(button(root, 'Calmer')!, 'click'); });
+  await settle();
+  assert.equal(open, false);
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  assert.ok(named(root, 'data-react-bar') === undefined, 'closed');
+  assert.ok(named(root, 'data-unlock-reason') === undefined, 'closing asks for nothing');
 });

@@ -107,6 +107,8 @@ export function Workroom(p: WorkroomProps) {
   const [sending, setSending] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const marks = useMemo(() => timelineMarks(items, score.piece.id, score.duration), [items, score]);
+  const modeNow = useRef(mode);
+  modeNow.current = mode;
   const changeMode = (m: AnswerMode): void => {
     setMode(m);
     setPreview(null);
@@ -122,7 +124,7 @@ export function Workroom(p: WorkroomProps) {
   };
   /** The bar is open only while the session says so: a lock anywhere (a sign-in that ended) turns it back to asking for the unlock. */
   const syncLock = (): void => setUnlocked(notes?.unlocked() ?? false);
-  /** Seals and stores a note: true once it is stored (sent, or kept on this device), false when it is not, with the words and recordings still the owner's. A reaction leaves the bar open for the next one. */
+  /** Seals and stores a note: true once it is stored (sent, or kept on this device), false when it is not, with the words and recordings still the owner's. A stored note closes only the mode it came from: a typed note its composer, a shape the drawing. A reaction, a hum and a spoken note close nothing, so the next reaction is one tap and words typed beside a recording stay in the box. */
   const send = async (body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean> => {
     if (!notes) return false;
     setSending(true);
@@ -133,7 +135,8 @@ export function Workroom(p: WorkroomProps) {
       setStatus(kept ? `${KEPT_MESSAGES[kept.reason]}${r.memoryOnly ? ` ${MEMORY_NOTICE}` : ''}` : SENT_MESSAGE);
       // The note is stored; a sign-in that ended locks the notes until the owner signs in and unlocks again.
       if (r.kept.some(k => k.reason === 'signed_out')) notes.lock();
-      if (body.kind !== 'react') changeMode('none');
+      const from: AnswerMode | null = body.kind === 'text' ? 'pin' : body.kind === 'energy' ? 'energy' : null;
+      if (from !== null && modeNow.current === from) changeMode('none');
       return true;
     } catch (e) {
       setStatus(e instanceof Error ? e.message : SEND_MESSAGES.sealFailed);

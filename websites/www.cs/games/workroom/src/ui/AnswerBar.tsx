@@ -118,7 +118,8 @@ export function AnswerBar(p: AnswerBarProps) {
     if (recorder && k) void finish(k, recorder.stop(), false);
   };
   const locked = p.access === 'locked';
-  const toggle = (m: Exclude<AnswerMode, 'none'>): void => (locked ? p.onLocked(m) : p.onMode(p.mode === m ? 'none' : m));
+  /** Closing an open mode needs no unlock; opening one before an unlock asks for it. */
+  const toggle = (m: Exclude<AnswerMode, 'none'>): void => (p.mode === m ? p.onMode('none') : locked ? p.onLocked(m) : p.onMode(m));
 
   if (p.access === 'off') return <p data-answer-off="" class="text-sm text-dim">{NOTES_OFF}</p>;
   const section = sectionAt(p.score, p.tempo, p.time);

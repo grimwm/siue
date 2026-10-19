@@ -5,7 +5,7 @@
 // deletes forget what they removed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NoKeyring, type PageApi } from '../src/api.ts';
+import { NoKeyring, SignedOut, type PageApi } from '../src/api.ts';
 import { UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession } from '../src/notes-session.ts';
 import { SEND_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
 import { PROBLEMS } from '../src/history.ts';
@@ -117,4 +117,47 @@ test('a note that cannot be sealed here is a plain message, and nothing is store
   await assert.rejects(notes.send(note('x'), null), (e: unknown) => e instanceof Error && e.message === SEND_MESSAGES.sealFailed);
   assert.deepEqual(await outbox.pending(), []);
   assert.equal(s.notes.length, 0);
+});
+
+test('a lock wins against an unlock still deriving its key', async () => {
+  const { s, notes } = session();
+  const pending = notes.unlock(fx.passphrase);
+  notes.lock();
+  assert.equal(await pending, null);
+  assert.equal(notes.unlocked(), false);
+  await assert.rejects(notes.send(note('x'), null), locked);
+  assert.equal(s.notes.length, 0);
+});
+
+test('a lock wins against a history still downloading', async () => {
+  const { s, notes } = session();
+  await notes.unlock(fx.passphrase);
+  await notes.send(note('a'), null);
+  let release!: () => void;
+  const gate = new Promise<void>(r => { release = r; });
+  const bytes = s.api.bytes;
+  s.api.bytes = async id => { await gate; return bytes(id); };
+  const pending = notes.history();
+  await new Promise(r => setTimeout(r, 10));
+  notes.lock();
+  release();
+  assert.deepEqual((await pending).map(i => i.opened), [null]);
+  await notes.unlock(fx.passphrase);
+  s.api.bytes = bytes;
+  assert.equal((await notes.history())[0]!.opened?.body.text, 'a', 'nothing opened after the lock was kept');
+});
+
+test('a signed-out download ends the history; unlock and hasKeyring report sign-out and a lost connection', async () => {
+  const { s, notes } = session();
+  await notes.unlock(fx.passphrase);
+  await notes.send(note('a'), null);
+  const bytes = s.api.bytes;
+  s.api.bytes = async () => { throw new SignedOut('out'); };
+  await assert.rejects(notes.history(), SignedOut);
+  s.api.bytes = bytes;
+  s.state.failKeyring = new SignedOut('out');
+  assert.equal(await notes.unlock(fx.passphrase), UNLOCK_MESSAGES.signedOut);
+  assert.equal(await notes.hasKeyring(), true);
+  s.state.failKeyring = new TypeError('Failed to fetch');
+  assert.equal(await notes.unlock(fx.passphrase), UNLOCK_MESSAGES.offline);
 });

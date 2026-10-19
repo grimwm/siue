@@ -47,25 +47,29 @@ export function createNotesSession(d: SessionDeps): NotesSession {
   const outcomes = new Map<string, OpenOutcome>();
   /** The unlocked keyring's current public key: what new notes are sealed to. Null while locked. */
   let current: PublicKey | null = null;
+  /** Incremented by lock(): an operation that started before a lock drops its result. */
+  let epoch = 0;
   const say = (e: unknown): string => (e instanceof NoKeyring ? UNLOCK_MESSAGES.noKeyring
     : e instanceof WrongPassphrase ? UNLOCK_MESSAGES.wrong
     : e instanceof KeyringInvalid ? UNLOCK_MESSAGES.invalid
     : e instanceof SignedOut ? UNLOCK_MESSAGES.signedOut
     : UNLOCK_MESSAGES.offline);
-  const openOne = async (id: string, ring: ReadonlyMap<string, CryptoKey>): Promise<void> => {
+  const openOne = async (id: string, ring: ReadonlyMap<string, CryptoKey>, at: number): Promise<void> => {
     let bytes: Uint8Array<ArrayBuffer>;
     try {
       bytes = await d.api.bytes(id);
     } catch (e) {
       if (e instanceof SignedOut) throw e;
-      outcomes.set(id, 'download');
+      if (at === epoch) outcomes.set(id, 'download');
       return;
     }
+    let outcome: OpenOutcome;
     try {
-      outcomes.set(id, await open(bytes, ring));
+      outcome = await open(bytes, ring);
     } catch (e) {
-      outcomes.set(id, e instanceof NoteUnreadable ? e : new NoteUnreadable('format'));
+      outcome = e instanceof NoteUnreadable ? e : new NoteUnreadable('format');
     }
+    if (at === epoch) outcomes.set(id, outcome);
   };
   return {
     async hasKeyring() {
@@ -78,8 +82,10 @@ export function createNotesSession(d: SessionDeps): NotesSession {
     },
     unlocked: () => current !== null,
     async unlock(passphrase) {
+      const at = epoch;
       try {
         const unlocked = await unlockKeyring(await d.api.keyring(), passphrase);
+        if (at !== epoch) return null;
         d.vault.load(unlocked.ring);
         current = unlocked.current;
         return null;
@@ -89,10 +95,12 @@ export function createNotesSession(d: SessionDeps): NotesSession {
     },
     async history() {
       if (current === null) throw new Error('The notes are locked.');
+      const at = epoch;
       const server = await d.api.list();
       const ring = d.vault.keyring();
       const todo = server.filter(n => { const o = outcomes.get(n.id); return o === undefined || o === 'download'; }).map(n => n.id);
-      for (let i = 0; i < todo.length; i += AT_ONCE) await Promise.all(todo.slice(i, i + AT_ONCE).map(id => openOne(id, ring)));
+      for (let i = 0; i < todo.length; i += AT_ONCE) await Promise.all(todo.slice(i, i + AT_ONCE).map(id => openOne(id, ring, at)));
+      if (at !== epoch) return buildHistory(server, new Map());
       const live = new Set(server.map(n => n.id));
       for (const id of [...outcomes.keys()]) if (!live.has(id)) outcomes.delete(id);
       return buildHistory(server, outcomes);
@@ -106,6 +114,7 @@ export function createNotesSession(d: SessionDeps): NotesSession {
       } catch {
         throw new Error(SEND_MESSAGES.sealFailed);
       }
+      if (key !== current) throw new Error(UNLOCK_FIRST);
       return d.outbox.add(bundle, body.made);
     },
     flush: () => d.outbox.flush(),
@@ -124,6 +133,7 @@ export function createNotesSession(d: SessionDeps): NotesSession {
       d.vault.clear();
       outcomes.clear();
       current = null;
+      epoch++;
     },
   };
 }

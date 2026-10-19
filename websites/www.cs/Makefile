@@ -104,7 +104,7 @@ admin-smoke: ## Admin sign-in check in a throwaway docker project
 
 # The workroom's browser check against its own docker project, with the
 # admin mail capture. Local only.
-music-e2e: ## Music workroom browser check in a throwaway docker project
+music-e2e: ## Music workroom browser check (test keyring, fake microphone) in a throwaway docker project
 	@name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml"; \
 	export ADMIN_SMOKE_DIR=/tmp/$$name; \
 	trap 'docker compose $$files -p $$name down -v >/dev/null 2>&1' EXIT; \
@@ -114,12 +114,15 @@ music-e2e: ## Music workroom browser check in a throwaway docker project
 	test $$ready = 1 || { echo "music-e2e: the stack did not answer" >&2; exit 1; }; \
 	docker compose $$files -p $$name exec -T -u apache www-cs-php mkdir -p $$ADMIN_SMOKE_DIR/mail && \
 	MUSIC_E2E_COMPOSE="$$files" MUSIC_E2E_PROJECT=$$name MUSIC_E2E_MAIL_DIR=$$ADMIN_SMOKE_DIR/mail \
+	MUSIC_PY=$(MUSIC_PY_ABS) \
 	E2E_BASE_URL=http://localhost:$$port/ tests/e2e/run.sh -c local.config.ts && \
 	echo MUSIC-E2E-OK
 
 # The music workroom's key and note tool (music/tools/siue-music), run in its own virtualenv.
 .PHONY: music-setup music-status music-pickup music-publish music-rotate music-forget music-test
 MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
+# The tool's interpreter as an absolute path when it is one (the browser check runs it from tests/e2e); a bare python3 stays a command name.
+MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))
 MUSIC_TOOL = $(MUSIC_PY) music/tools/siue-music
 
 ##@ Music workroom

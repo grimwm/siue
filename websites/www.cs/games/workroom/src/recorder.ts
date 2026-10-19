@@ -38,6 +38,7 @@ export const RECORDER_MESSAGES = {
   unsupported: 'This browser cannot record audio here.',
   denied: 'The microphone is off for this page. Allow it in the browser’s settings, then try again.',
   failed: 'The recording did not start. Try again.',
+  cancelled: 'The recording was stopped before it began.',
 } as const;
 export interface Recorder { start(): Promise<void>; stop(): Promise<Recording>; cancel(): void; readonly recording: boolean; elapsed(): number }
 
@@ -51,6 +52,8 @@ export function createRecorder(ports: MediaPorts, onLimit: (r: Promise<Recording
   let started = 0;
   let cancelCap: (() => void) | null = null;
   let done: Promise<Recording> | null = null;
+  // The microphone has been asked for and not yet answered; abandoned once cancel or stop is pressed meanwhile.
+  let pending: { abandoned: boolean } | null = null;
   const session = (type: string): void => { if (ports.audioSession) ports.audioSession.type = type; };
   const seconds = (): number => Math.min(MAX_AUDIO_SECONDS, Math.max(0, (ports.now() - started) / 1000));
   const release = (): void => {
@@ -65,10 +68,11 @@ export function createRecorder(ports: MediaPorts, onLimit: (r: Promise<Recording
     const r = rec;
     if (!r) return Promise.reject(new RecorderProblem('Nothing is recording.'));
     const length = Math.max(0.01, Math.round(seconds() * 100) / 100);
+    const mine = chunks;
     done = new Promise<Recording>((resolve, reject) => {
       const onStop = (): void => {
         release();
-        Promise.all(chunks.map(c => c.arrayBuffer())).then(parts => {
+        Promise.all(mine.map(c => c.arrayBuffer())).then(parts => {
           const bytes = new Uint8Array(parts.reduce((n, p) => n + p.byteLength, 0));
           let at = 0;
           for (const p of parts) { bytes.set(new Uint8Array(p), at); at += p.byteLength; }
@@ -82,9 +86,11 @@ export function createRecorder(ports: MediaPorts, onLimit: (r: Promise<Recording
   };
   return {
     start() {
-      if (rec && !done) return Promise.reject(new RecorderProblem('Already recording.'));
+      if (pending || (rec && !done)) return Promise.reject(new RecorderProblem('Already recording.'));
       const picked = pickMime(m => ports.isTypeSupported(m));
       if (picked === null) return Promise.reject(new RecorderProblem(RECORDER_MESSAGES.unsupported));
+      const mark = { abandoned: false };
+      pending = mark;
       session('play-and-record');
       let asked: Promise<StreamLike>;
       try {
@@ -93,13 +99,21 @@ export function createRecorder(ports: MediaPorts, onLimit: (r: Promise<Recording
         asked = Promise.reject(e);
       }
       return asked.then(s => {
+        pending = null;
+        if (mark.abandoned) {
+          // Cancel or Stop was pressed while the microphone was being asked for: nothing may start listening.
+          for (const t of s.getTracks()) t.stop();
+          session('auto');
+          throw new RecorderProblem(RECORDER_MESSAGES.cancelled);
+        }
         stream = s;
         try {
-          chunks = [];
+          const mine: BlobLike[] = [];
+          chunks = mine;
           done = null;
           mime = picked;
           const r = ports.makeRecorder(s, picked, RECORDER_BITS_PER_SECOND);
-          r.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+          r.ondataavailable = e => { if (e.data.size > 0) mine.push(e.data); };
           r.start(1000);
           rec = r;
           started = ports.now();
@@ -111,13 +125,19 @@ export function createRecorder(ports: MediaPorts, onLimit: (r: Promise<Recording
           throw new RecorderProblem(RECORDER_MESSAGES.failed);
         }
       }, (e: unknown) => {
+        pending = null;
+        if (mark.abandoned) throw new RecorderProblem(RECORDER_MESSAGES.cancelled);
         release();
         const name = typeof e === 'object' && e !== null ? (e as { name?: unknown }).name : undefined;
         throw new RecorderProblem(typeof name === 'string' && DENIED.has(name) ? RECORDER_MESSAGES.denied : RECORDER_MESSAGES.failed);
       });
     },
-    stop: finish,
+    stop() {
+      if (pending) { pending.abandoned = true; return Promise.reject(new RecorderProblem(RECORDER_MESSAGES.cancelled)); }
+      return finish();
+    },
     cancel() {
+      if (pending) pending.abandoned = true;
       const r = rec;
       rec = null;
       chunks = [];

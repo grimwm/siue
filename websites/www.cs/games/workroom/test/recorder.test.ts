@@ -134,3 +134,67 @@ test('a microphone call that throws still hands the audio session back', async (
   await assert.rejects(createRecorder(f.ports, () => {}).start(), (e: unknown) => e instanceof RecorderProblem && e.message === RECORDER_MESSAGES.failed);
   assert.equal(f.session.type, 'auto');
 });
+
+function slowMic(f: Fake): { grant(): void; asked: () => number } {
+  let n = 0;
+  let grant!: () => void;
+  const stream: StreamLike = { getTracks: () => [{ stop: () => f.log.push('track stopped') }] };
+  f.ports.getUserMedia = () => { n++; return new Promise<StreamLike>(res => { grant = () => res(stream); }); };
+  return { grant: () => grant(), asked: () => n };
+}
+
+test('cancel while the microphone is being asked for releases it when it arrives', async () => {
+  const f = fake();
+  const mic = slowMic(f);
+  const rec = createRecorder(f.ports, () => {});
+  const started = rec.start();
+  rec.cancel();
+  mic.grant();
+  await assert.rejects(started, (e: unknown) => e instanceof RecorderProblem && e.message === RECORDER_MESSAGES.cancelled);
+  assert.ok(f.log.includes('track stopped'));
+  assert.ok(!f.log.some(l => l.startsWith('recorder')), 'no recorder is made');
+  assert.equal(f.session.type, 'auto');
+  assert.equal(rec.recording, false);
+  assert.equal(f.timers.length, 0);
+});
+
+test('stop while the microphone is being asked for rejects and releases it when it arrives', async () => {
+  const f = fake();
+  const mic = slowMic(f);
+  const rec = createRecorder(f.ports, () => {});
+  const started = rec.start();
+  await assert.rejects(rec.stop(), RecorderProblem);
+  mic.grant();
+  await assert.rejects(started, RecorderProblem);
+  assert.ok(f.log.includes('track stopped'));
+  assert.equal(rec.recording, false);
+  assert.equal(f.session.type, 'auto');
+  assert.equal(f.timers.length, 0);
+});
+
+test('a second start while the microphone is being asked for does not ask again', async () => {
+  const f = fake();
+  const mic = slowMic(f);
+  const rec = createRecorder(f.ports, () => {});
+  const first = rec.start();
+  await assert.rejects(rec.start(), RecorderProblem);
+  assert.equal(mic.asked(), 1);
+  mic.grant();
+  await first;
+  assert.equal(rec.recording, true);
+  rec.cancel();
+  assert.ok(f.log.includes('track stopped'));
+});
+
+test('a late chunk from an earlier recorder does not land in the next recording', async () => {
+  const f = fake();
+  const rec = createRecorder(f.ports, () => {});
+  await rec.start();
+  const old = f.recorder();
+  rec.cancel();
+  await rec.start();
+  old.emit([7, 7]);
+  f.recorder().emit([1]);
+  const r = await rec.stop();
+  assert.deepEqual([...r.bytes], [1]);
+});

@@ -152,6 +152,12 @@ export function createUi(deps: UiDeps): Ui {
     layers.open("chapter");
   }
 
+  /** Closes a card; with nothing left open and no level loaded, the title shows rather than a blank screen. */
+  function leave(name: LayerName): void {
+    layers.close(name);
+    if (!layers.any() && !(controls?.game ?? game)?.run) showTitle(titleHint);
+  }
+
   function open(i: number): void {
     layers.clear();
     controls?.game.open(i);
@@ -161,7 +167,7 @@ export function createUi(deps: UiDeps): Ui {
   function pick(i: number): void {
     const { chapter, within } = chapterOf(i);
     if (within === 0) {
-      layers.clear();
+      layers.close("levels");
       showChapter(chapter.n, false, i);
     } else open(i);
   }
@@ -188,7 +194,7 @@ export function createUi(deps: UiDeps): Ui {
       next: nextChapter(chapterN),
       onEnter: enter,
       onLevels: () => layers.open("levels"),
-      onClose: () => layers.close("chapter"),
+      onClose: () => leave("chapter"),
     });
     renderLevels($("levels-root"), {
       open: layers.isOpen("levels"),
@@ -284,7 +290,7 @@ export function createUi(deps: UiDeps): Ui {
     const bs = getComputedStyle(holder);
     const w = holder.clientWidth - parseFloat(bs.paddingLeft) - parseFloat(bs.paddingRight);
     const h = holder.clientHeight - parseFloat(bs.paddingTop) - parseFloat(bs.paddingBottom);
-    const fitted = cellFor(w, h, cols, boardRows(run.now.level, atlas), 0);
+    const fitted = cellFor(w, h, cols, rows, 0, boardRows(run.now.level, atlas));
     let cell = Math.max(1, fitted.cell);
     board.size(cols, rows, cell);
     // The board snaps a cell to whole device pixels, which can round it up: read what it made.
@@ -445,16 +451,24 @@ export function createUi(deps: UiDeps): Ui {
         if (layers.isOpen("lore") && loreShown) {
           loreShown = null;
           drawLayers();
-        } else layers.pressBack();
+        } else if (layers.isOpen("chapter")) leave("chapter");
+        else layers.pressBack();
         return;
       }
       // A chord is the browser's (Cmd+R reloads, Ctrl+T opens a tab), never a game key.
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
       const k = ev.key.toLowerCase();
       const action = actionFor(k);
+      // Held Enter repeats nothing: it would close the card the first press opened, or press its focused button.
+      if (action === "begin" && ev.repeat) {
+        ev.preventDefault();
+        return;
+      }
+      // The title's Play is worded N: there it opens the chapter card, elsewhere N opens the list.
       if (action === "new") {
         ev.preventDefault();
-        layers.open("levels");
+        if (layers.isOpen("title")) c.play();
+        else layers.open("levels");
         return;
       }
       if (action === "mute") {

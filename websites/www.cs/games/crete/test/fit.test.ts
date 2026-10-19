@@ -35,3 +35,8 @@ test('a big level too tight for 32 px cells takes 32 px and scrolls', () => {
 test('a big level with room fits whole, without scrolling', () => {
   assert.deepEqual(cellFor(1000, 800, 14, 12, 0), { cell: fitCell(1000, 800, 14, 12, 0), scrolls: false });
 });
+
+test('a 12-row level never scrolls although the rise above it makes it 12.375 rows tall', () => {
+  assert.deepEqual(cellFor(300, 300, 12, 12, 0, 12.375), { cell: 24, scrolls: false });
+  assert.deepEqual(cellFor(385, 500, 14, 12, 0, 12.375), { cell: BIG_MIN_CELL, scrolls: true });
+});

@@ -49,13 +49,14 @@ test('Q opens the menu, the next Q closes it, and neither quits the game', () =>
   }
 });
 
-test('Q under the title card does nothing; N opens the level list and M still reaches the game', () => {
+test('Q under the title card does nothing; N there is Play and M still reaches the game', () => {
   page.showTitle(false);
   assert.deepEqual(press('q').calls, []);
   assert.equal(page.top(), 'title');
-  assert.deepEqual(press('n').calls, []);
-  assert.equal(page.top(), 'levels');
+  assert.deepEqual(press('n').calls, ['play']);
   assert.deepEqual(press('m').calls, ['mute']);
+  assert.equal(page.top(), 'title');
+  page.showLevels();
   press('q');
   assert.equal(page.top(), 'title', 'Q goes back to where the list was opened from');
 });

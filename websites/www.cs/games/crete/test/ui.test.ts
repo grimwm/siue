@@ -194,6 +194,54 @@ function win(i: number): void {
   assert.equal(game.run!.now.outcome, 'won');
 }
 
+test('Q on the chapter card reached by picking level 1 in a fresh session shows the title, never a blank screen', () => {
+  reset();
+  assert.equal(game.run, null);
+  flow.showTitle(false);
+  key('n'); // the title's Play is worded N: it opens the chapter card
+  assert.equal(flow.top(), 'chapter');
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  pick(1);
+  assert.equal(flow.top(), 'chapter');
+  key('q');
+  assert.equal(flow.top(), 'title');
+  assert.equal(game.run, null);
+});
+
+test('N on the title card does what Play does, and elsewhere still opens the list', () => {
+  reset();
+  flow.showTitle(false);
+  key('n');
+  assert.equal(flow.top(), 'chapter');
+  reset();
+  key('n');
+  assert.equal(flow.top(), 'levels');
+});
+
+test('a held Enter repeats nothing: it does not close the start card or start a level', () => {
+  reset();
+  flow.showChapter(1, false);
+  const rep = (k: string) => fireDocument('keydown', { key: k, repeat: true, target: { tagName: 'DIV' } });
+  const ev = rep('Enter');
+  assert.equal(ev.prevented, true);
+  assert.equal(flow.top(), 'chapter');
+  key('Enter');
+  assert.equal(flow.top(), 'start');
+  rep('Enter');
+  assert.equal(flow.top(), 'start');
+});
+
+test('a held Enter after level 10 closes the closing card once and does not restart the level', () => {
+  reset();
+  win(9);
+  const opens = game.opens;
+  key('Enter');
+  assert.equal(flow.top(), 'end');
+  fireDocument('keydown', { key: 'Enter', repeat: true, target: { tagName: 'DIV' } });
+  assert.equal(game.opens, opens);
+});
+
 test('Play opens the chapter card, and Enter on it starts level 1 when nothing is cleared', () => {
   reset();
   flow.showTitle(false);

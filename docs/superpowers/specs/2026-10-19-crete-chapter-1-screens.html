@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crete campaign screens</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --dim:#9aa4b2; --line:#30363d; --accent:#f0b429; --good:#3fb950; --safe:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#05070a; color:var(--ink); font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; padding:20px 16px 60px; }
+  h1 { font-size:1.3rem; margin:0 0 4px; }
+  .lead { color:var(--dim); margin:0 0 22px; max-width:70ch; }
+  .screens { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:22px; }
+  .screen { background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:18px; position:relative; min-height:420px; display:flex; flex-direction:column; }
+  .tag { position:absolute; top:-11px; left:14px; background:#05070a; color:var(--accent); font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; padding:0 6px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; flex:1; }
+  .kicker { margin:0; color:var(--accent); text-transform:uppercase; letter-spacing:.08em; font-size:.75rem; }
+  .card h2 { margin:.15rem 0 .6rem; font-size:1.25rem; }
+  button { background:var(--accent); color:#1a1a1a; border:none; border-radius:6px; padding:.45rem .8rem; font:inherit; font-weight:700; cursor:default; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:600; }
+  .key { font-size:.7rem; opacity:.75; margin-left:6px; font-weight:600; }
+  blockquote { margin:12px 0; padding:8px 12px; border-left:3px solid var(--accent); color:var(--ink); font-style:italic; }
+  cite { display:block; color:var(--dim); font-size:.78rem; font-style:normal; margin-top:6px; }
+  .story { color:var(--dim); }
+  .tabs { display:flex; gap:4px; overflow:hidden; margin:8px 0 10px; }
+  .tabs span { flex:0 0 auto; padding:3px 8px; border:1px solid var(--line); border-radius:6px; font-size:.78rem; color:var(--dim); }
+  .tabs span.on { border-color:var(--accent); color:var(--ink); }
+  .tabs span.lock { opacity:.45; }
+  ol { list-style:none; margin:0; padding:0; display:grid; gap:5px; }
+  li { display:grid; grid-template-columns:22px 1fr auto; gap:2px 8px; align-items:baseline; background:#0f141b; border:1px solid var(--line); border-radius:7px; padding:6px 9px; }
+  li.cur { border-color:var(--accent); }
+  li .n { color:var(--accent); font-variant-numeric:tabular-nums; }
+  li .code { font-family:ui-monospace,Menlo,monospace; color:var(--safe); font-size:.8rem; letter-spacing:.12em; }
+  li .st { grid-column:2 / 4; color:var(--dim); font-size:.75rem; }
+  li.new .st { color:var(--good); }
+  li.lockd { opacity:.5; }
+  .row { display:flex; gap:8px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+  .codebox { font-family:ui-monospace,Menlo,monospace; letter-spacing:.3em; background:#0f141b; border:1px solid var(--line); border-radius:6px; padding:6px 10px; width:7.5em; color:var(--ink); }
+  .pages { display:grid; gap:6px; margin-top:6px; }
+  .page { border:1px solid var(--line); border-radius:7px; padding:7px 10px; background:#0f141b; }
+  .page b { display:block; }
+  .page small { color:var(--dim); }
+  .page.missing { border-style:dashed; color:var(--dim); }
+  .open { margin-top:10px; padding:10px 12px; border:1px solid var(--accent); border-radius:8px; background:#1b1a14; font-family:Georgia,serif; color:#e9dfc8; }
+  .note { margin-top:10px; color:var(--dim); font-size:.8rem; }
+  .note b { color:var(--accent); font-weight:600; }
+  .banner { margin-top:10px; padding:8px 10px; border-radius:7px; border:1px solid var(--good); color:var(--ink); font-size:.85rem; }
+  .banner .code { font-family:ui-monospace,Menlo,monospace; color:var(--safe); letter-spacing:.15em; }
+</style>
+</head>
+<body>
+<h1>Crete: the new campaign screens (Chapter 1)</h1>
+<p class="lead">These are rough drawings of four screens that sit on top of the game you already have. The words, codes and quotation are placeholders. Under each screen, the <b style="color:var(--accent)">yellow note</b> says what it does. Tell me in the terminal what feels wrong.</p>
+
+<div class="screens">
+
+  <!-- 1. Chapter card -->
+  <div class="screen">
+    <span class="tag">1 · Chapter card</span>
+    <div class="card">
+      <p class="kicker">Chapter 1 of 10</p>
+      <h2>The Outer Halls</h2>
+      <p class="story">Ariadne's thread runs back to the door behind you. Daedalus built these first halls to wear down every tribute before it ever reaches the beast. Ten halls, then a sealed gate.</p>
+      <blockquote>“…the youths and maidens, when they reached Crete, were put to death in the Labyrinth by the Minotaur, or else wandered about and, being unable to find any exit, there ended their lives.”
+        <cite>Plutarch, <i>Theseus</i> 15, tr. Bernadotte Perrin (1914)</cite></blockquote>
+      <div class="row"><button>Enter the halls <span class="key">Enter</span></button><button class="ghost">Levels <span class="key">L</span></button></div>
+    </div>
+    <p class="note"><b>When:</b> before level 1, and again (with a closing quote) after level 10. It replaces today's start card for the campaign. A real quotation from a public-domain translation, with its source, checked against the text before it ships.</p>
+  </div>
+
+  <!-- 2. Level list -->
+  <div class="screen">
+    <span class="tag">2 · Level list</span>
+    <div class="card">
+      <p class="kicker">The Island of Crete</p>
+      <h2>Levels</h2>
+      <div class="tabs"><span class="on">Ch 1</span><span class="lock">Ch 2 ·  soon</span><span class="lock">Ch 3</span><span class="lock">…</span></div>
+      <ol>
+        <li><span class="n">1</span><span>The Mouth of the Labyrinth</span><span class="code">KNOS</span><span class="st">cleared · best 14 moves</span></li>
+        <li><span class="n">2</span><span>The Tribute Relics</span><span class="code">RAPH</span><span class="st">cleared with help</span></li>
+        <li class="cur"><span class="n">3</span><span>The Doors of Daedalus</span><span class="code">····</span><span class="st">not yet · you are here</span></li>
+        <li class="lockd"><span class="n">4</span><span>The River and the Flame</span><span class="code">····</span><span class="st">locked</span></li>
+        <li class="lockd"><span class="n">…</span><span>…</span><span class="code"></span><span class="st"></span></li>
+        <li class="lockd"><span class="n">10</span><span>The Great Hall</span><span class="code">····</span><span class="st">locked</span></li>
+      </ol>
+      <div class="row"><input class="codebox" value="T R O Y" readonly><button>Go</button></div>
+    </div>
+    <p class="note"><b>Does:</b> replaces today's “Eight Trials” list. A level's code appears once you clear it. Typing any code opens that level and everything before it, on any device. <b>Open question:</b> should later levels be locked until you clear earlier ones (as drawn), or all open from the start?</p>
+  </div>
+
+  <!-- 3. Level cleared -->
+  <div class="screen">
+    <span class="tag">3 · Level cleared</span>
+    <div class="card">
+      <p class="kicker">Level 3 · The Doors of Daedalus</p>
+      <h2>Cleared in 23 moves</h2>
+      <p class="story">Best so far: 23. Thread used: no.</p>
+      <div class="banner">Code for this level: <span class="code">TROY</span>. Write it down to come back on another device.</div>
+      <div class="banner" style="border-color:var(--accent)">You found a page: <i>“A note in Daedalus's hand”</i>. It's now in the Lore book.</div>
+      <div class="row"><button>Next level <span class="key">Enter</span></button><button class="ghost">Replay</button><button class="ghost">Lore book</button></div>
+    </div>
+    <p class="note"><b>Does:</b> today's end card, plus the level's code and any story page you picked up. Intros stay as they are: one or two lines on the level's start card.</p>
+  </div>
+
+  <!-- 4. Lore book -->
+  <div class="screen">
+    <span class="tag">4 · Lore book</span>
+    <div class="card">
+      <p class="kicker">Menu · Q</p>
+      <h2>Lore book</h2>
+      <div class="pages">
+        <div class="page"><b>A note in Daedalus's hand</b><small>Chapter 1 · found in level 3</small></div>
+        <div class="page missing"><b>? ? ?</b><small>Chapter 1 · somewhere in levels 6–10</small></div>
+        <div class="page missing"><b>? ? ?</b><small>Chapter 2 · not yet released</small></div>
+      </div>
+      <div class="open">“The halls are not finished. I set the stones at night, and by morning they have moved. Minos thinks I am lying. I am not sure that I am not.” <br><small style="color:#a99e85">— placeholder text; I'd draft the real pages for you to edit</small></div>
+    </div>
+    <p class="note"><b>Does:</b> keeps every story page you've found, by chapter, with blanks hinting where the rest are. Pages are optional; how many you find decides which ending you get at the very end of the campaign.</p>
+  </div>
+
+</div>
+</body>
+</html>

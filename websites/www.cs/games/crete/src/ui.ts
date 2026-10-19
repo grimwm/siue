@@ -343,7 +343,7 @@ export function createUi(deps: UiDeps): Ui {
     if (!won) {
       return {
         open: true, won, hasNext: false, pages: [], kicker: "Level failed", title: "The Minotaur has you",
-        text: "Your last heart is gone. Undo a turn or begin the trial again.", score: `${s.moves} moves`,
+        text: "Your last heart is gone. Undo a turn or begin the level again.", score: `${s.moves} moves`,
       };
     }
     const best = progress.get(LEVEL_IDS[g.trial]!).best;

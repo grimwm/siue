@@ -1,7 +1,7 @@
 /* The Island of Crete: one try at a level, with its undo. Undo is the list of
  * earlier states; restart goes back to the level's start. Any help from
  * Ariadne's thread marks the try assisted, and restart keeps the mark: only
- * opening the trial again clears it. DOM-free. */
+ * opening the level again clears it. DOM-free. */
 import { initial } from './state.ts';
 import type { State } from './state.ts';
 import { step } from './step.ts';

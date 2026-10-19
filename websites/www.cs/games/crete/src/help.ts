@@ -1,4 +1,4 @@
-/* The Island of Crete, trials: the "How to play" lines. Key names come from
+/* The Island of Crete: the "How to play" lines. Key names come from
  * the key table and the tools' own keys, so the text can never disagree with
  * a binding. DOM-free. */
 import type { Action, KeyDef } from "./keys.ts";
@@ -37,10 +37,10 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ["Three tools, one use each. ", ...toolSegs],
     [
       `Move with ${arrows}${letters ? ` or ${letters}` : ""}; bumping a wall costs no turn. `,
-      { strong: `Begin (${k("begin")})` }, " closes a trial's start card; so does a move. ",
+      { strong: `Begin (${k("begin")})` }, " closes a level's start card; so does a move. ",
       { strong: `Wait (${k("wait")})` }, " lets the Minotaur come. ",
       { strong: `Undo (${k("undo")})` }, " takes back a move. ",
-      { strong: `Restart (${k("restart")})` }, " begins the trial again.",
+      { strong: `Restart (${k("restart")})` }, " begins the level again.",
     ],
     [
       "Stuck? ",

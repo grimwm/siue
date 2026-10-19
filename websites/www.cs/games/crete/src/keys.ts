@@ -1,4 +1,4 @@
-/* The Island of Crete, trials: the key table. One place says which keys do
+/* The Island of Crete: the key table. One place says which keys do
  * what and what a button's key tab prints, so a tab can never disagree with
  * its binding. The tools' keys are not here: they come from TOOLS. Q is the
  * kit's back key (isBackKey) and Escape is not bound. DOM-free. */

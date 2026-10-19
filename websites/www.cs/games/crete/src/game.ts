@@ -55,7 +55,7 @@ export interface Anim {
 export interface Game {
   /** 0-based; -1 before one opens. */
   readonly trial: number;
-  /** How many times a trial has been opened: the page shows its start card for each. */
+  /** How many times a level has been opened: the page shows its start card for each. */
   readonly opens: number;
   readonly run: Run | null;
   /** V: the line's cells while shown. */
@@ -65,7 +65,7 @@ export interface Game {
   readonly anim: Anim | null;
   /** The pages the last win recorded as new; empty after open, undo and restart. */
   readonly found: readonly string[];
-  /** Starts trial `i` fresh (clears assisted). */
+  /** Starts level `i` fresh (clears assisted). */
   open(i: number): void;
   press(a: Action | 'undo' | 'restart'): void;
   hint(): void;

@@ -1,4 +1,4 @@
-// The Island of Crete: the ending card of a trial. src/ui.ts decides the words; this draws them and reports
+// The Island of Crete: the ending card of a level. src/ui.ts decides the words; this draws them and reports
 // the buttons: after a win Next level (unless it was the last), Retry and Levels; after a loss Undo and Restart. A win that took story pages names them.
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
@@ -9,7 +9,7 @@ import { KEYS } from '../keys.ts';
 export interface EndView {
   open: boolean;
   won: boolean;
-  /** A won trial that has a trial after it. */
+  /** A won level that has a level after it. */
   hasNext: boolean;
   kicker: string;
   title: string;

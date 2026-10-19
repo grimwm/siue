@@ -1,5 +1,5 @@
 /* The Island of Crete: the exact solver. Breadth-first over states from the
- * one given, so the first win found is a shortest line. It proves every trial
+ * one given, so the first win found is a shortest line. It proves every level
  * winnable and drives Ariadne's thread (one step, the whole line drawn, or
  * played out). DOM-free. */
 import { DIRS, TERRAIN, OBJECTS, KEY_COLORS } from './tiles.ts';

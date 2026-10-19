@@ -13,9 +13,6 @@ interface CreteTest {
   initial(level: unknown): unknown;
   trialLevel(i: number): Lv;
 }
-declare global {
-  interface Window { __creteTest: CreteTest }
-}
 
 test('Play shows the chapter card; a page-taking win names the page, and the Lore book lists it', async ({ page }) => {
   const errors: string[] = [];
@@ -30,7 +27,7 @@ test('Play shows the chapter card; a page-taking win names the page, and the Lor
 
   // Level 9 (index 8) with its page as a relic: any win of the copy has taken the page's cell.
   const steps = await page.evaluate(() => {
-    const t = window.__creteTest;
+    const t = (window as unknown as { __creteTest: CreteTest }).__creteTest;
     const lv = t.trialLevel(8);
     const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
     const r = t.solve(t.initial(copy));

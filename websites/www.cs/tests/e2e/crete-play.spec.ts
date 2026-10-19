@@ -150,7 +150,7 @@ test('keys: arrows move, U undoes, Q opens the menu and Escape does nothing', as
   await expect(page.locator('#menu-veil')).toBeHidden();
 });
 
-test('Hint, Route, Auto and a tool answer; Restart begins the trial again', async ({ page }) => {
+test('Hint, Route, Auto and a tool answer; Restart begins the level again', async ({ page }) => {
   const errors = await beginTrial1(page);
   await page.locator('#btn-hint').click();
   await expect.poll(async () => (await now(page)).moves).toBe(1);

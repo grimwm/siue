@@ -35,6 +35,7 @@ export function EnergyEditor(p: EnergyEditorProps) {
   const [drawn, setDrawn] = useState(false);
   const [live, setLive] = useState<[number, number][]>([]);
   const stroke = useRef<[number, number][] | null>(null);
+  const pointer = useRef<number | null>(null);
   const latest = useRef(p);
   latest.current = p;
   // A drawing left mid-stroke never sees its release.
@@ -44,20 +45,23 @@ export function EnergyEditor(p: EnergyEditorProps) {
   const end = (): void => {
     const s = stroke.current;
     stroke.current = null;
+    pointer.current = null;
     setLive([]);
     if (s) p.onHold?.(false);
-    if (!s || s.length === 0) return;
-    setCurve(c => redraw(c, strokeFromPixels(s, view), score.duration));
+    if (!s) return;
+    const drawing = strokeFromPixels(s, view);
+    if (drawing.length < 2) return; // a tap draws nothing
+    setCurve(c => redraw(c, drawing, score.duration));
     setDrawn(true);
   };
   return (
     <div class="grid gap-2">
       <svg data-energy-editor="" data-guide="energy-editor" class="block max-w-full cursor-crosshair touch-none select-none" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`}
         role="img" aria-label="The energy drawing: drag across it to draw the shape you want"
-        onPointerDown={(e: PointerLike) => { e.currentTarget.setPointerCapture?.(e.pointerId); stroke.current = [local(e)]; setLive([local(e)]); p.onHold?.(true); }}
-        onPointerMove={(e: PointerLike) => { const s = stroke.current; if (!s) return; s.push(local(e)); setLive(s.slice()); }}
-        onPointerUp={end}
-        onPointerCancel={() => { if (stroke.current) p.onHold?.(false); stroke.current = null; setLive([]); }}>
+        onPointerDown={(e: PointerLike) => { if (stroke.current) return; pointer.current = e.pointerId; e.currentTarget.setPointerCapture?.(e.pointerId); stroke.current = [local(e)]; setLive([local(e)]); p.onHold?.(true); }}
+        onPointerMove={(e: PointerLike) => { const s = stroke.current; if (!s || e.pointerId !== pointer.current) return; s.push(local(e)); setLive(s.slice()); }}
+        onPointerUp={(e: PointerLike) => { if (e.pointerId === pointer.current) end(); }}
+        onPointerCancel={(e: PointerLike) => { if (!stroke.current || e.pointerId !== pointer.current) return; p.onHold?.(false); stroke.current = null; pointer.current = null; setLive([]); }}>
         <rect class="fill-well" x={0} y={0} width={view.width} height={ENERGY_EDIT_H} />
         {sections.map(s => <rect class="pointer-events-none opacity-20" data-energy-section={s.id} x={timeToX(view, s.from)} y={0} width={Math.max(0, (s.to - s.from) * view.pxPerSec)} height={ENERGY_EDIT_H} fill={s.fill} />)}
         <polyline data-energy-now="" class="pointer-events-none stroke-dim" fill="none" stroke-width={2} stroke-dasharray="6 4" points={points(curveToPixels(score.energy, view))} />

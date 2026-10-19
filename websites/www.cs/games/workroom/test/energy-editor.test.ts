@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { h, render } from 'preact';
 import { act } from 'preact/test-utils';
-import { fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
+import { fire, installDocument, makeEl, document as stubDocument, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import type { Score } from '../src/score.ts';
@@ -14,6 +14,12 @@ import { tempoMap } from '../src/tempo.ts';
 import { fitView } from '../src/zoom.ts';
 
 installDocument();
+// Every key listener anything mounted puts on the window or the document, so the Escape test can press Escape at each.
+const keyListeners: unknown[] = [];
+const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); };
+Object.assign(globalThis, { window: { addEventListener: listen, removeEventListener() {} } });
+const addToDocument = stubDocument.addEventListener;
+stubDocument.addEventListener = (type, f) => { listen(type, f); addToDocument(type, f); };
 const ui = await importTsx<{ editor: typeof import('../src/ui/EnergyEditor.tsx') }>(import.meta.dirname, { editor: '../src/ui/EnergyEditor.tsx' });
 const score = JSON.parse(readFileSync(new URL('./fixtures/score-v1.json', import.meta.url), 'utf8')) as Score;
 const button = (root: StubElement, text: string) => walk(root).find(e => e.localName === 'button' && e.textContent === text)!;
@@ -83,4 +89,49 @@ test('Start over brings the line back; a cancelled pointer draws nothing', async
   await act(() => { fire(button(root, 'Start over'), 'click'); });
   assert.equal(named(root, 'data-energy-drawn').length, 0);
   assert.equal(button(root, 'Send this shape').disabled, true);
+});
+
+test('a second finger is ignored, and a bare tap draws nothing', async () => {
+  const holds: boolean[] = [];
+  const root = await mount(() => {}, held => holds.push(held));
+  const svg = named(root, 'data-energy-editor')[0]!;
+  await act(() => { fire(svg, 'pointerdown', { pointerId: 1, clientX: 100, clientY: 100 }); });
+  await act(() => { fire(svg, 'pointerdown', { pointerId: 2, clientX: 300, clientY: 20 }); });
+  await act(() => { fire(svg, 'pointermove', { pointerId: 2, clientX: 320, clientY: 20 }); });
+  await act(() => { fire(svg, 'pointerup', { pointerId: 2, clientX: 320, clientY: 20 }); });
+  assert.deepEqual(holds, [true], 'the other finger neither ends nor restarts the stroke');
+  await act(() => { fire(svg, 'pointermove', { pointerId: 1, clientX: 200, clientY: 60 }); });
+  await act(() => { fire(svg, 'pointerup', { pointerId: 1, clientX: 200, clientY: 60 }); });
+  assert.deepEqual(holds, [true, false]);
+  assert.equal(named(root, 'data-energy-drawn').length, 1);
+  await act(() => { fire(button(root, 'Start over'), 'click'); });
+  await act(() => { fire(svg, 'pointerdown', { pointerId: 3, clientX: 100, clientY: 100 }); });
+  await act(() => { fire(svg, 'pointerup', { pointerId: 3, clientX: 100, clientY: 100 }); });
+  assert.deepEqual(holds, [true, false, true, false], 'a tap releases the hold');
+  assert.equal(named(root, 'data-energy-drawn').length, 0);
+  assert.equal(button(root, 'Send this shape').disabled, true);
+});
+
+test('Escape does nothing: not at the drawing, a button, the document or the window', async () => {
+  const holds: boolean[] = [];
+  let cancelled = 0;
+  const root = makeEl('root');
+  await act(() => { render(h(ui.editor.EnergyEditor, { score, tempo: tempoMap(score), view: fitView(16, 720), busy: false, onSend: () => {}, onHold: h => holds.push(h), onCancel: () => { cancelled++; } }), renderTarget(root)); });
+  const svg = named(root, 'data-energy-editor')[0]!;
+  await drag(svg, [[100, 100], [200, 50]]);
+  const state = () => JSON.stringify([named(root, 'data-energy-drawn').length, walk(root).filter(e => e.localName === 'button').map(b => !!b.disabled)]);
+  const before = state();
+  const heldBefore = holds.length;
+  let prevented = false;
+  for (const el of [svg, ...walk(root).filter(e => e.localName === 'button')]) fire(el, 'keydown', { key: 'Escape', preventDefault: () => { prevented = true; } });
+  const pressed = keyListeners.map(f => {
+    const ev = { type: 'keydown', key: 'Escape', prevented: false, stopped: false, preventDefault() { ev.prevented = true; }, stopPropagation() { ev.stopped = true; } };
+    (f as (e: typeof ev) => void)(ev);
+    return ev;
+  });
+  assert.equal(prevented, false);
+  assert.ok(pressed.every(ev => !ev.prevented && !ev.stopped));
+  assert.equal(state(), before);
+  assert.equal(cancelled, 0);
+  assert.equal(holds.length, heldBefore);
 });

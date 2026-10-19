@@ -104,7 +104,7 @@ admin-smoke: ## Admin sign-in check in a throwaway docker project
 
 # The workroom's browser check against its own docker project, with the
 # admin mail capture. Local only.
-music-e2e: ## Music workroom browser check (test keyring, fake microphone) in a throwaway docker project
+music-e2e: ## Music workroom browser check (test keyring, fake microphone)
 	@name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml"; \
 	export ADMIN_SMOKE_DIR=/tmp/$$name; \
 	trap 'docker compose $$files -p $$name down -v >/dev/null 2>&1' EXIT; \

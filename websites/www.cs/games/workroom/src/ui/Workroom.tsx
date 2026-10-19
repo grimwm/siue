@@ -117,8 +117,13 @@ export function Workroom(p: WorkroomProps) {
     if (m !== 'pin') setSpan(null);
     if (m === 'pin') setWanted('story');
   };
-  // Pinning picks on the Story view's timeline: bring it on screen, above the composer.
-  useEffect(() => { if (mode === 'pin') stage.current?.scrollIntoView?.({ block: 'start' }); }, [mode]);
+  // Pinning picks on the Story view's timeline: bring it on screen. On a phone the composer is docked under it, so the stage goes to the top; from 1024 px the composer sits in the page above the stage, so the answer bar goes to the top and both stay in view.
+  useEffect(() => {
+    if (mode !== 'pin') return;
+    const wide = typeof matchMedia === 'function' ? matchMedia('(min-width: 1024px)').matches : false;
+    const top = wide ? stage.current?.closest('main, body')?.querySelector('[data-answer-dock]') ?? stage.current : stage.current;
+    top?.scrollIntoView?.({ block: 'start' });
+  }, [mode]);
   const pick = (s: Span | null, done: boolean): void => {
     if (s === null) setPreview(null);
     else if (done) { setSpan(s); setPreview(null); }

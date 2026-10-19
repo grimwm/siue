@@ -192,6 +192,14 @@ async function dragAcross(page: Page, selector: string, x0: number, x1: number, 
   await page.mouse.up();
 }
 
+/** Every page view starts locked: unlock, then on a phone close the bottom sheet again so the answer bar is in reach. */
+async function unlockThenClose(page: Page): Promise<void> {
+  await unlock(page, testKey.passphrase);
+  await expect(page.locator('[data-history]')).toBeVisible();
+  const open = page.locator('[data-sheet] > button[aria-expanded="true"]');
+  if (await open.isVisible()) await open.click();
+}
+
 test('open a piece, play, seek, switch views, read a term, no CSP violations', async ({ browser, request, baseURL }) => {
   const base = baseURL!;
   const { context, page } = await signedInPage(browser, base);
@@ -650,6 +658,31 @@ const SCREENS: Screen[] = [
     await p.getByRole('button', { name: 'How to read this' }).click();
     await expect(p.locator('[data-guide-card]')).toBeVisible();
   } },
+  { name: 'notes-locked', path: 'music/piece.php?id=test-piece', ready: async p => { await openNotes(p); await expect(p.getByRole('button', { name: 'Unlock notes' })).toBeVisible(); } },
+  { name: 'unlock-first', path: 'music/piece.php?id=test-piece', ready: async p => { await p.getByRole('button', { name: 'Pin a note' }).click(); await expect(p.locator('[data-unlock-reason]')).toBeVisible(); } },
+  { name: 'notes', path: 'music/piece.php?id=test-piece', ready: async p => { await unlock(p, testKey.passphrase); await expect(p.locator('[data-history]')).toBeVisible(); } },
+  { name: 'pin', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await unlockThenClose(p);
+    await expect(p.locator('[data-timeline]')).toBeVisible();
+    await pinSpan(p, 0.5, 0.85);
+    await noteBox(p).fill('More horns here, and hold the last chord longer.');
+  } },
+  { name: 'react', path: 'music/piece.php?id=test-piece', ready: async p => { await unlockThenClose(p); await p.getByRole('button', { name: 'React' }).click(); await expect(p.locator('[data-react-bar]')).toBeVisible(); } },
+  { name: 'energy', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await unlockThenClose(p);
+    await p.getByRole('button', { name: 'Draw the energy' }).click();
+    await dragAcross(p, '[data-energy-editor]', 0.3, 0.7, 140, 30);
+    await expect(p.locator('[data-energy-drawn]')).toBeVisible();
+  } },
+  { name: 'energy-guide', path: 'music/piece.php?id=test-piece', ready: async p => {
+    await unlockThenClose(p);
+    await p.getByRole('button', { name: 'Draw the energy' }).click();
+    await p.getByRole('button', { name: 'How to read this' }).click();
+    await expect(p.locator('[data-guide-card]')).toContainText('Part 1 of 4');
+  } },
+  { name: 'hum-recording', path: 'music/piece.php?id=test-piece', ready: async p => { await unlockThenClose(p); await p.getByRole('button', { name: 'Hum it' }).click(); await expect(p.getByRole('button', { name: /^Stop \(/ })).toBeVisible(); } },
+  { name: 'pieces-unlocked', path: 'music/', ready: async p => { await unlock(p, testKey.passphrase); await expect(p.locator('[data-pieces-notes]')).toContainText('Each piece shows'); } },
+  { name: 'sound-react', path: 'music/piece.php?id=cannon-fire', ready: async p => { await unlockThenClose(p); await p.getByRole('button', { name: 'React' }).click(); await expect(p.locator('[data-react-bar]')).toBeVisible(); } },
   { name: 'sound-story', path: 'music/piece.php?id=cannon-fire', ready: p => expect(p.locator('[data-lane="boom"]')).toBeVisible() },
   { name: 'sound-sound-picture', path: 'music/piece.php?id=cannon-fire', ready: tab('Sound picture', p => expect(p.locator('img[data-spectrogram]')).toBeVisible()) },
   { name: 'missing-piece', path: 'music/piece.php?id=no-such-piece', ready: p => expect(p.locator('.error')).toBeVisible() },
@@ -657,15 +690,16 @@ const SCREENS: Screen[] = [
 ];
 
 test('every screen at 390 and 1280 px, dark and light: no sideways scroll, 44 px targets, no CSP errors', async ({ browser, request, baseURL }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(600_000);
   const base = baseURL!;
   const { context, page } = await signedInPage(browser, base);
   try {
     const violations: string[] = [];
     page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
-    const key = await createKey(page, base, 'e2e screens', ['drafts:publish']);
+    const key = await createKey(page, base, 'e2e screens', ['drafts:publish', 'keys:publish']);
     await publishFixtureDraft(request, base, key);
     await publishFixtureDraft(request, base, key, 'draft-sound');
+    await uploadTestKeyring(request, base, key);
     if (SHOTS) mkdirSync(SHOTS, { recursive: true });
     for (const theme of ['dark', 'light'] as const) {
       for (const width of [390, 1280]) {

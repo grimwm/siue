@@ -30,8 +30,12 @@ import type { Score } from '../src/score.ts';
 installDocument();
 // Every key listener the page puts on the window or the document, so the Escape test can press Escape at each.
 const keyListeners: unknown[] = [];
-const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); };
-Object.assign(globalThis, { window: { addEventListener: listen, removeEventListener() {} } });
+// The page's leave guards (beforeunload), so a test can try to leave.
+type LeaveListener = (e: { preventDefault(): void; returnValue: unknown }) => void;
+const leaveListeners: LeaveListener[] = [];
+const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); if (type === 'beforeunload') leaveListeners.push(f as LeaveListener); };
+const unlisten = (type: string, f: unknown): void => { const i = leaveListeners.indexOf(f as LeaveListener); if (type === 'beforeunload' && i >= 0) leaveListeners.splice(i, 1); };
+Object.assign(globalThis, { window: { addEventListener: listen, removeEventListener: unlisten } });
 const addToDocument = stubDocument.addEventListener;
 stubDocument.addEventListener = (type, f) => { listen(type, f); addToDocument(type, f); };
 Object.assign(globalThis, { requestAnimationFrame: () => 0, cancelAnimationFrame: () => {} });
@@ -635,4 +639,112 @@ test('the reactions close on a tap of React even after the notes locked', async 
   await act(() => { fire(button(root, 'React')!, 'click'); });
   assert.ok(named(root, 'data-react-bar') === undefined, 'closed');
   assert.ok(named(root, 'data-unlock-reason') === undefined, 'closing asks for nothing');
+});
+
+const noteBox = (root: StubElement) => walk(root).find(e => e.localName === 'textarea');
+async function type(root: StubElement, words: string): Promise<void> {
+  const box = noteBox(root)!;
+  box.value = words;
+  await act(() => { fire(box, 'input'); });
+}
+
+test('words typed in the pin composer survive React, Draw the energy, Pin a note again and another view', async () => {
+  const { session } = fakeNotes();
+  const root = await mount({ notes: session });
+  await pinSpan(root);
+  await type(root, 'keep these words');
+  for (const leave of [
+    () => fire(button(root, 'React')!, 'click'),
+    () => fire(button(root, 'Draw the energy')!, 'click'),
+    () => fire(button(root, 'Pin a note')!, 'click'),
+    () => fire(walk(root).find(e => e._attrs['role'] === 'tab' && e.textContent === 'Piano roll')!, 'click'),
+  ]) {
+    await act(leave);
+    assert.ok(named(root, 'data-pin-composer') === undefined, 'the composer is closed');
+    await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+    assert.equal(noteBox(root)!.value, 'keep these words');
+  }
+});
+
+test('words typed while a note is sealed and stored stay, with the composer open; only the words sent are cleared', async () => {
+  const { session, sent } = fakeNotes();
+  let release: () => void = () => {};
+  const slow: NotesSession = { ...session, send: (body, audio) => new Promise(resolve => { release = () => resolve(session.send(body, audio)); }) };
+  const root = await mount({ notes: slow });
+  await pinSpan(root);
+  await type(root, 'first thought');
+  await act(() => { fire(button(root, 'Send')!, 'click'); });
+  await type(root, 'first thought, and a second');
+  await act(() => { release(); });
+  await settle();
+  assert.deepEqual(sent.map(s => s.body.text), ['first thought']);
+  assert.ok(named(root, 'data-pin-composer'), 'the composer stays open with the new words');
+  assert.equal(noteBox(root)!.value, 'first thought, and a second');
+  await act(() => { fire(button(root, 'Send')!, 'click'); });
+  await act(() => { release(); });
+  await settle();
+  assert.deepEqual(sent.map(s => s.body.text), ['first thought', 'first thought, and a second']);
+  assert.ok(named(root, 'data-pin-composer') === undefined, 'closed once everything typed is stored');
+  await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  assert.equal(noteBox(root)!.value, '', 'the box is empty again');
+});
+
+test('leaving the page asks first while typed words, a recording, a kept recording or a note held only in memory would be lost', async () => {
+  const { session } = fakeNotes();
+  let inMemory = false;
+  const media = fakeMedia();
+  const root = await mount({ notes: { ...session, memoryOnly: () => inMemory }, media: media.ports });
+  const asks = (): boolean => leaveListeners.some(f => { const e = { prevented: false, returnValue: undefined as unknown, preventDefault() { e.prevented = true; } }; f(e); return e.prevented; });
+  assert.equal(asks(), false, 'nothing to lose');
+  await pinSpan(root);
+  await type(root, 'not sent yet');
+  assert.equal(asks(), true, 'typed words');
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  assert.equal(asks(), true, 'typed words in a closed composer');
+  await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  await type(root, '');
+  assert.equal(asks(), false);
+  await act(() => { fire(button(root, 'Hum it')!, 'click'); });
+  await settle();
+  assert.equal(asks(), true, 'a recording running');
+  await act(() => { fire(button(root, 'Draw the energy')!, 'click'); });
+  await settle();
+  assert.ok(named(root, 'data-held-recording'));
+  assert.equal(asks(), true, 'a recording kept but not stored');
+  await act(() => { fire(button(root, 'Discard recording')!, 'click'); });
+  assert.equal(asks(), false);
+  inMemory = true;
+  assert.equal(asks(), true, 'a note held only in memory');
+});
+
+test('a recording\'s Stop stays above the notes sheet, even when the sheet is opened while recording', async () => {
+  const { session } = fakeNotes();
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  await act(() => { fire(button(root, 'Hum it')!, 'click'); });
+  await settle();
+  const handle = walk(named(root, 'data-sheet')!).find(e => e.localName === 'button' && e._attrs['aria-controls'] !== undefined)!;
+  await act(() => { fire(handle, 'click'); });
+  assert.equal(String(handle._attrs['aria-expanded']), 'true');
+  const z = (el: StubElement): number => Number(/(?:^| )z-(\d+)(?: |$)/.exec(el._attrs['class'] ?? el.className)?.[1] ?? 0);
+  const dock = named(root, 'data-answer-dock')!;
+  assert.ok(walk(dock).some(e => e.localName === 'button' && /^Stop \(/.test(e.textContent)));
+  assert.ok(z(dock) > z(named(root, 'data-sheet')!), `the dock (z-${z(dock)}) is above the sheet (z-${z(named(root, 'data-sheet')!)})`);
+});
+
+test('while a recording runs or waits to be sent, a phone\'s page keeps room for the dock', async () => {
+  const { session } = fakeNotes();
+  const media = fakeMedia();
+  const root = await mount({ notes: session, media: media.ports });
+  const page = walk(root).find(e => (e._attrs['class'] ?? e.className ?? '').split(' ').includes('workroom'))!;
+  const classes = (): string[] => (page._attrs['class'] ?? page.className).split(' ');
+  await act(() => { fire(button(root, 'Hum it')!, 'click'); });
+  await settle();
+  assert.ok(classes().includes(PIN_ROOM) && classes().includes('lg:pb-0'), 'recording');
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  await settle();
+  assert.ok(named(root, 'data-held-recording'));
+  assert.ok(classes().includes(PIN_ROOM), 'a recording kept to send');
+  await act(() => { fire(button(root, 'Discard recording')!, 'click'); });
+  assert.ok(classes().includes('pb-14') && !classes().includes(PIN_ROOM), 'room for the handle only');
 });

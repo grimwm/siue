@@ -1,8 +1,9 @@
 // Pinning a typed or spoken note on the moment or span picked on the Story
 // view (and its lane, when both ends were in one): the words, or a recording.
-// The words stay in the box until the sealed note is stored, so a note that
-// could not be sealed or kept is never lost, and words typed while it is being
-// sent stay once it is stored. The Stop button of a recording
+// The words belong to the Workroom (text, onText), so they outlive the composer
+// when another mode or view closes it. They stay in the box until the sealed
+// note is stored, so a note that could not be sealed or kept is never lost,
+// and words typed while it is being sent stay once it is stored. The Stop button of a recording
 // lives in the answer bar's dock (AnswerBar.tsx), which is always on screen.
 import { useState } from 'preact/hooks';
 import { spanLabel } from '../answer.ts';
@@ -11,6 +12,8 @@ import { MAX_TEXT } from '../note.ts';
 import { Button } from './console/Button.tsx';
 
 export interface PinComposerProps {
+  /** The words in the box, and how they change: onText gets the change as a function of the words at that moment. */
+  text: string; onText(update: (text: string) => string): void;
   span: Span | null; laneName: string | null; recording: boolean; canRecord: boolean; busy: boolean;
   /** What became of the last send (or why it failed), shown inside the composer where the owner is looking. */
   status: string | null;
@@ -20,7 +23,7 @@ export interface PinComposerProps {
 }
 
 export function PinComposer(p: PinComposerProps) {
-  const [text, setText] = useState('');
+  const { text } = p;
   const [sending, setSending] = useState(false);
   const left = MAX_TEXT - text.length;
   /** One note per tap: only the words sent are cleared, and only once they are stored; a send that fails outright keeps them too. */
@@ -31,14 +34,14 @@ export function PinComposer(p: PinComposerProps) {
     let stored = false;
     try { stored = await p.onSend(sent); } catch { stored = false; }
     setSending(false);
-    if (stored) setText(t => (t === sent ? '' : t));
+    if (stored) p.onText(t => (t === sent ? '' : t));
   };
   const where = p.span ? `For ${spanLabel(p.span)}${p.laneName ? ` · ${p.laneName}` : ''}` : 'Drag across the Story view to pick a span, or tap one moment.';
   return (
     <div data-pin-composer="" class="grid gap-2 rounded-lg border border-amber bg-panel p-3">
       <p data-pin-span="" class="font-mono text-xs text-amber">{where}</p>
       <label class="grid gap-1 font-mono text-xs tracking-widest text-dim uppercase">Your note
-        <textarea rows={3} maxLength={MAX_TEXT} value={text} onInput={e => setText(e.currentTarget.value)}
+        <textarea rows={3} maxLength={MAX_TEXT} value={text} onInput={e => { const v = e.currentTarget.value; p.onText(() => v); }}
           class="min-h-24 rounded-md border border-rule bg-well p-3 font-body text-base tracking-normal text-ink normal-case focus-visible:outline-2 focus-visible:outline-amber" />
       </label>
       {left <= 500 ? <p class="font-mono text-xs text-dim">{`${left} characters left`}</p> : null}

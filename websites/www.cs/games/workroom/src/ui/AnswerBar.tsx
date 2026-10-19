@@ -5,7 +5,8 @@
 // notes are off. What needs the owner's attention right now sits in the dock,
 // fixed at the bottom of a phone's screen above the notes handle (in the
 // page's flow from 1024 px): the Stop button of a recording, a recording kept
-// but not yet stored, and the pin composer. A recording starts inside the tap
+// but not yet stored, and the pin composer. While a recording runs the dock
+// sits above the notes sheet too, so its Stop is never covered. A recording starts inside the tap
 // (the recorder asks for the microphone before anything awaits) and is shown
 // as recording only once the microphone is granted. Switching to another mode
 // or cancelling the composer while recording stops the recording and keeps
@@ -45,6 +46,10 @@ export interface AnswerBarProps {
   send(body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean>;
   say(message: string): void;
   status: string | null;
+  /** The words in the pin composer, kept here so that closing the composer (another mode, another view) does not lose them. */
+  draft: string; onDraft(update: (text: string) => string): void;
+  /** Hears whether a recording is running (live) or made and not stored yet (held): the page keeps room for the dock and asks before it is left. */
+  onRecording?(state: { live: boolean; held: boolean }): void;
 }
 
 type Kind = 'speech' | 'hum';
@@ -93,6 +98,7 @@ export function AnswerBar(p: AnswerBarProps) {
     const id = setInterval(() => setSeconds(recorder.elapsed()), 250);
     return () => clearInterval(id);
   }, [recording, recorder]);
+  useEffect(() => { p.onRecording?.({ live: recording !== null, held: held !== null }); }, [recording, held]);
   // Moving to another mode must not leave a microphone open with nothing on screen to stop it: a recording is stopped and kept, a request still being answered is abandoned.
   useEffect(() => {
     const changed = lastMode.current !== p.mode;
@@ -146,7 +152,7 @@ export function AnswerBar(p: AnswerBarProps) {
         <Button pressed={p.mode === 'energy'} onClick={() => toggle('energy')}>Draw the energy</Button>
       </div>
       {docked ? (
-        <div data-answer-dock="" class="fixed inset-x-0 bottom-11 z-10 grid max-h-[40dvh] gap-2 overflow-y-auto bg-ground px-3 pt-2 pb-2 lg:static lg:z-auto lg:max-h-none lg:overflow-visible lg:bg-transparent lg:p-0">
+        <div data-answer-dock="" class={`fixed inset-x-0 bottom-11 ${recording ? 'z-30' : 'z-10'} grid max-h-[40dvh] gap-2 overflow-y-auto bg-ground px-3 pt-2 pb-2 lg:static lg:z-auto lg:max-h-none lg:overflow-visible lg:bg-transparent lg:p-0`}>
           {recording ? (
             <div data-recording-strip="" class="sticky top-0 flex flex-wrap items-center gap-3 rounded-lg border border-record bg-panel p-3">
               <RecordButton recording seconds={seconds} onStart={() => {}} onStop={stop} />
@@ -162,7 +168,7 @@ export function AnswerBar(p: AnswerBarProps) {
               </div>
             </div>
           ) : null}
-          {p.mode === 'pin' ? <PinComposer span={p.span} laneName={laneName} recording={recording === 'speech' || (asking && kind.current === 'speech')} canRecord={recorder !== null && held === null} busy={p.busy || asking} status={p.status}
+          {p.mode === 'pin' ? <PinComposer text={p.draft} onText={p.onDraft} span={p.span} laneName={laneName} recording={recording === 'speech' || (asking && kind.current === 'speech')} canRecord={recorder !== null && held === null} busy={p.busy || asking} status={p.status}
             onSend={sendText} onRecord={() => start('speech')} onCancel={() => p.onMode('none')} /> : null}
         </div>
       ) : null}

@@ -4,8 +4,9 @@
 // notes sheet) and holds no logic the DOM-free modules can hold. From 1024 px
 // the views and the notes sheet sit side by side; narrower, the sheet is a
 // bottom sheet and the page keeps room under its content for the sheet's handle,
-// and while pinning for the docked composer too, so the Story view can scroll
-// to the top of the screen above it.
+// and whenever the answer bar's dock shows (pinning, a recording running or
+// waiting to be sent) for the dock too, so the Story view can scroll to the
+// top of the screen above it.
 // With a notes session it also holds the answering: the answer bar, the span
 // being picked, the energy drawing and the owner's notes on the Story view;
 // before an unlock the bar's buttons open the notes panel at the unlock form.
@@ -19,6 +20,7 @@ import type { GuideClip, GuideStore, GuideView } from '../guide.ts';
 import type { Span } from '../hit.ts';
 import { timelineMarks } from '../history.ts';
 import type { HistoryItem } from '../history.ts';
+import { guardLeaving, unsavedWork } from '../leave.ts';
 import type { NoteBody } from '../note.ts';
 import { UNLOCK_FIRST } from '../notes-session.ts';
 import type { NotesSession } from '../notes-session.ts';
@@ -108,6 +110,17 @@ export function Workroom(p: WorkroomProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  /** The words in the pin composer: they outlive the composer, and only the words a stored note sent are cleared. */
+  const [draft, setDraft] = useState('');
+  const draftNow = useRef(draft);
+  draftNow.current = draft;
+  /** A recording running (live) or made and not stored yet (held), as the answer bar reports it. */
+  const [rec, setRec] = useState({ live: false, held: false });
+  const recNow = useRef(rec);
+  recNow.current = rec;
+  const docked = mode === 'pin' || rec.live || rec.held;
+  // Leaving the page (another draft, a link, a reload) asks first while something made here would be lost.
+  useEffect(() => guardLeaving(window, () => unsavedWork({ draft: draftNow.current, recording: recNow.current.live, held: recNow.current.held, memoryOnly: notes?.memoryOnly() ?? false })), [notes]);
   const marks = useMemo(() => timelineMarks(items, score.piece.id, score.duration), [items, score]);
   const modeNow = useRef(mode);
   modeNow.current = mode;
@@ -131,7 +144,7 @@ export function Workroom(p: WorkroomProps) {
   };
   /** The bar is open only while the session says so: a lock anywhere (a sign-in that ended) turns it back to asking for the unlock. */
   const syncLock = (): void => setUnlocked(notes?.unlocked() ?? false);
-  /** Seals and stores a note: true once it is stored (sent, or kept on this device), false when it is not, with the words and recordings still the owner's. A stored note closes only the mode it came from: a typed note its composer, a shape the drawing. A reaction, a hum and a spoken note close nothing, so the next reaction is one tap and words typed beside a recording stay in the box. */
+  /** Seals and stores a note: true once it is stored (sent, or kept on this device), false when it is not, with the words and recordings still the owner's. A stored note closes only the mode it came from: a typed note its composer (unless more words were typed while it was sent), a shape the drawing. A reaction, a hum and a spoken note close nothing, so the next reaction is one tap and words typed beside a recording stay in the box. */
   const send = async (body: NoteBody, audio: Uint8Array<ArrayBuffer> | null): Promise<boolean> => {
     if (!notes) return false;
     setSending(true);
@@ -143,7 +156,8 @@ export function Workroom(p: WorkroomProps) {
       // The note is stored; a sign-in that ended locks the notes until the owner signs in and unlocks again.
       if (r.kept.some(k => k.reason === 'signed_out')) notes.lock();
       const from: AnswerMode | null = body.kind === 'text' ? 'pin' : body.kind === 'energy' ? 'energy' : null;
-      if (from !== null && modeNow.current === from) changeMode('none');
+      const typedSince = body.kind === 'text' && draftNow.current.trim() !== body.text;
+      if (from !== null && modeNow.current === from && !typedSince) changeMode('none');
       return true;
     } catch (e) {
       setStatus(e instanceof Error ? e.message : SEND_MESSAGES.sealFailed);
@@ -256,7 +270,7 @@ export function Workroom(p: WorkroomProps) {
   });
 
   return (
-    <div class={`workroom grid gap-4 ${mode === 'pin' ? 'pb-[calc(40dvh+3.5rem)]' : 'pb-14'} lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:pb-0`}>
+    <div class={`workroom grid gap-4 ${docked ? 'pb-[calc(40dvh+3.5rem)]' : 'pb-14'} lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:pb-0`}>
       <div class="grid min-w-0 gap-3">
         <header class="piece-head flex flex-wrap items-end justify-between gap-3">
           <div class="min-w-0">
@@ -270,7 +284,7 @@ export function Workroom(p: WorkroomProps) {
           </label>
         </header>
         <Player src={score.audio} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} />
-        {answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} access={access} onLocked={askUnlock} onFront={() => setSheetOpen(false)} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} /> : null}
+        {answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} access={access} onLocked={askUnlock} onFront={() => setSheetOpen(false)} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} draft={draft} onDraft={setDraft} onRecording={r => setRec(was => (was.live === r.live && was.held === r.held ? was : r))} /> : null}
         <div class="flex flex-wrap items-end justify-end gap-x-3 gap-y-2 lg:flex-nowrap">
           <div class="min-w-0 flex-1 basis-full lg:basis-0"><ViewTabs tabs={tabs} tab={tab} onTab={t => { setWanted(t); if (mode === 'pin' || mode === 'energy') changeMode('none'); }} /></div>
           <Button variant="secondary" buttonRef={howTo} data={{ 'data-guide-open': '' }} onClick={openGuide}>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { SignedOut } from '../api.ts';
 import { waitingByPiece } from '../history.ts';
+import { guardLeaving } from '../leave.ts';
 import { UNLOCK_MESSAGES } from '../notes-session.ts';
 import type { NotesSession } from '../notes-session.ts';
 import type { Pending } from '../outbox.ts';
@@ -23,6 +24,8 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
   const refreshKept = async (): Promise<void> => {
     try { setKept(await p.notes.kept()); } catch { /* the browser's store could not be read just now; the list stays as it was */ }
   };
+  // Leaving the page asks first while a note not sent yet is held only in memory.
+  useEffect(() => guardLeaving(window, () => p.notes.memoryOnly()), [p.notes]);
   useEffect(() => { void p.notes.hasKeyring().then(setKeyring, () => setKeyring(true)); }, [p.notes]);
   useEffect(() => {
     const again = (): void => { void p.notes.flush().then(refreshKept, refreshKept); };

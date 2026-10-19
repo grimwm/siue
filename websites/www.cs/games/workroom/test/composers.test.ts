@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { h, render } from 'preact';
 import type { ComponentChild } from 'preact';
+import { useState } from 'preact/hooks';
 import { act } from 'preact/test-utils';
 import { fire, installDocument, makeEl, document as stubDocument, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
@@ -32,17 +33,22 @@ const mountInto = async (target: StubElement, vnode: ComponentChild): Promise<vo
 const settle = async (): Promise<void> => { for (let i = 0; i < 5; i++) await act(async () => { await new Promise(r => setImmediate(r)); }); };
 
 const span = { from: 8, to: 13.6, fromBar: 5, toBar: 7, laneId: 'brass' };
+/** The pin composer with its words held as the Workroom holds them. */
+function Pin(props: Omit<import('../src/ui/PinComposer.tsx').PinComposerProps, 'text' | 'onText'>) {
+  const [text, setText] = useState('');
+  return h(ui.pin.PinComposer, { ...props, text, onText: setText });
+}
 const pinProps = (extra: Record<string, unknown> = {}) => ({ span: null, laneName: null, recording: false, canRecord: true, busy: false, status: null, onSend: async () => true, onRecord: () => {}, onCancel: () => {}, ...extra });
 
 test('Send waits for a span and words, sends the words, and clears the box once the note is stored', async () => {
   const root = makeEl('root');
   const sent: string[] = [];
   const onSend = async (t: string): Promise<boolean> => { sent.push(t); return true; };
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ onSend })));
+  await mountInto(root, h(Pin, pinProps({ onSend })));
   assert.match(root.textContent, /Drag across the Story view to pick a span, or tap one moment\./);
   assert.equal(button(root, 'Send')!.disabled, true, 'no span yet');
   assert.equal(button(root, 'Record')!.disabled, true, 'nothing to record against yet');
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, laneName: 'Horns', onSend })));
+  await mountInto(root, h(Pin, pinProps({ span, laneName: 'Horns', onSend })));
   assert.match(root.textContent, /For Bars 5–7 · 8 s – 13\.6 s · Horns/);
   assert.equal(button(root, 'Send')!.disabled, true, 'a span but no words');
   const box = walk(root).find(e => e.localName === 'textarea')!;
@@ -61,7 +67,7 @@ test('Send waits for a span and words, sends the words, and clears the box once 
 
 test('a note that was not stored keeps its words in the box', async () => {
   const root = makeEl('root');
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onSend: async () => false })));
+  await mountInto(root, h(Pin, pinProps({ span, onSend: async () => false })));
   const box = walk(root).find(e => e.localName === 'textarea')!;
   box.value = 'do not lose me';
   await act(() => { fire(box, 'input'); });
@@ -74,7 +80,7 @@ test('a note that was not stored keeps its words in the box', async () => {
 test('words typed while a note is being sent stay in the box once it is stored', async () => {
   const root = makeEl('root');
   let done: (stored: boolean) => void = () => {};
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onSend: () => new Promise<boolean>(r => { done = r; }) })));
+  await mountInto(root, h(Pin, pinProps({ span, onSend: () => new Promise<boolean>(r => { done = r; }) })));
   const box = walk(root).find(e => e.localName === 'textarea')!;
   box.value = 'first thought';
   await act(() => { fire(box, 'input'); });
@@ -88,7 +94,7 @@ test('words typed while a note is being sent stay in the box once it is stored',
 
 test('a send that fails outright keeps the words, and Send works again', async () => {
   const root = makeEl('root');
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onSend: async () => { throw new Error('no'); } })));
+  await mountInto(root, h(Pin, pinProps({ span, onSend: async () => { throw new Error('no'); } })));
   const box = walk(root).find(e => e.localName === 'textarea')!;
   box.value = 'keep me';
   await act(() => { fire(box, 'input'); });
@@ -102,7 +108,7 @@ test('Send is one note: a second tap while it is being sent sends nothing', asyn
   const root = makeEl('root');
   const sent: string[] = [];
   let done: (stored: boolean) => void = () => {};
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onSend: (t: string) => { sent.push(t); return new Promise<boolean>(r => { done = r; }); } })));
+  await mountInto(root, h(Pin, pinProps({ span, onSend: (t: string) => { sent.push(t); return new Promise<boolean>(r => { done = r; }); } })));
   const box = walk(root).find(e => e.localName === 'textarea')!;
   box.value = 'once';
   await act(() => { fire(box, 'input'); });
@@ -117,7 +123,7 @@ test('Send is one note: a second tap while it is being sent sends nothing', asyn
 
 test('the box is the textbox "Your note", and the composer shows what became of the last send', async () => {
   const root = makeEl('root');
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, status: 'No connection: this note is kept on this device.' })));
+  await mountInto(root, h(Pin, pinProps({ span, status: 'No connection: this note is kept on this device.' })));
   const label = walk(root).find(e => e.localName === 'label')!;
   assert.match(label.textContent, /^Your note/);
   assert.equal(walk(label).filter(e => e.localName === 'textarea').length, 1);
@@ -126,7 +132,7 @@ test('the box is the textbox "Your note", and the composer shows what became of 
 
 test('the characters left show from the last 500 and count down', async () => {
   const root = makeEl('root');
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span })));
+  await mountInto(root, h(Pin, pinProps({ span })));
   const box = walk(root).find(e => e.localName === 'textarea')!;
   for (const [length, shown] of [[3499, null], [3500, '500 characters left'], [3700, '300 characters left']] as const) {
     box.value = 'x'.repeat(length);
@@ -139,14 +145,14 @@ test('the characters left show from the last 500 and count down', async () => {
 test('recording: Record starts it; while it runs the composer says so and offers no second recording', async () => {
   const root = makeEl('root');
   const calls: string[] = [];
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, onRecord: () => calls.push('record') })));
+  await mountInto(root, h(Pin, pinProps({ span, onRecord: () => calls.push('record') })));
   fire(button(root, 'Record')!, 'click');
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, recording: true, onRecord: () => calls.push('record') })));
+  await mountInto(root, h(Pin, pinProps({ span, recording: true, onRecord: () => calls.push('record') })));
   assert.equal(button(root, 'Recording…')!.disabled, true);
   assert.equal(button(root, 'Send')!.disabled, true, 'no sending while recording');
   assert.equal(buttons(root).some(b => /^Stop/.test(b.textContent)), false, 'Stop lives in the answer bar\'s dock');
   assert.deepEqual(calls, ['record']);
-  await mountInto(root, h(ui.pin.PinComposer, pinProps({ span, canRecord: false })));
+  await mountInto(root, h(Pin, pinProps({ span, canRecord: false })));
   assert.equal(button(root, 'Record'), undefined);
 });
 
@@ -181,8 +187,8 @@ test('no composer takes Escape: not on any of its elements, nor at any window or
   const calls: string[] = [];
   const root = makeEl('root');
   const mounts: ComponentChild[] = [
-    h(ui.pin.PinComposer, pinProps({ span, onRecord: () => calls.push('record'), onCancel: () => calls.push('cancel'), onSend: async () => { calls.push('send'); return true; } })),
-    h(ui.pin.PinComposer, pinProps({ span, recording: true, onCancel: () => calls.push('cancel') })),
+    h(Pin, pinProps({ span, onRecord: () => calls.push('record'), onCancel: () => calls.push('cancel'), onSend: async () => { calls.push('send'); return true; } })),
+    h(Pin, pinProps({ span, recording: true, onCancel: () => calls.push('cancel') })),
     h(ui.rec.RecordButton, { recording: true, seconds: 3, onStart: () => calls.push('start'), onStop: () => calls.push('stop') }),
     h(ui.react.ReactBar, { section: score.sections[1]!, whole: false, busy: false, onReact: () => calls.push('react') }),
   ];

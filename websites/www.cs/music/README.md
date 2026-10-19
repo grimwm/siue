@@ -80,13 +80,16 @@ music-setup)."
 - **The energy drawing** has its own guide (`workroom-guide-energy` in localStorage).
 - **Notes & answers** is the notes panel: the passphrase unlocks it on every
   visit, it lists the notes of this piece or of all pieces, and each note has
-  Delete; Delete all and Discard (for a note not sent yet) ask first, in plain
-  words. Notes not sent yet are listed as waiting.
+  Delete; Delete, Delete all and Discard (for a note not sent yet) each ask
+  first, in plain words. Notes on the server are marked Waiting until they are
+  picked up; notes this browser has not sent yet are listed under Not sent yet.
 - **The outbox** is IndexedDB `siue-music`, store `outbox`, and holds sealed
   bundles only. It is sent on load and when the browser is back online, one tab at
   a time under the Web Locks lock `workroom-outbox`; Discard drops one. A browser
   that refuses IndexedDB keeps the note in memory and says so.
-- Nothing typed or recorded is cleared until the note is stored.
+- Nothing typed or recorded is cleared until the note is stored. Typed words
+  stay when the composer closes, and leaving the page asks first while words, a
+  recording or a note kept only in memory would be lost.
 - The pieces list shows each piece's waiting count after an unlock.
 - Chrome may offer to save the unlock form's username and passphrase; the owner
   answers Never (1Password fills the form either way).

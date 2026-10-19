@@ -622,12 +622,21 @@ test('a composer asks for the unlock first; hum, react and draw the energy; a no
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('No connection');
     await expect(page.locator('[data-kept-note]')).toHaveCount(1);
-    const waiting = await page.evaluate(() => new Promise<number>((resolve, reject) => {
+    // The outbox holds the sealed note only: exactly key, bundle, made and reason, and the typed words are nowhere in the bytes.
+    const waiting = await page.evaluate(words => new Promise<{ keys: string[]; plain: boolean }[]>((resolve, reject) => {
       const r = indexedDB.open('siue-music');
-      r.onsuccess = () => { const q = r.result.transaction('outbox').objectStore('outbox').count(); q.onsuccess = () => resolve(q.result); q.onerror = () => reject(q.error); };
+      r.onsuccess = () => {
+        const q = r.result.transaction('outbox').objectStore('outbox').getAll();
+        q.onsuccess = () => {
+          const needle = new TextEncoder().encode(words);
+          const has = (b: Uint8Array): boolean => { for (let i = 0; i + needle.length <= b.length; i++) if (needle.every((x, j) => b[i + j] === x)) return true; return false; };
+          resolve((q.result as Record<string, unknown>[]).map(rec => ({ keys: Object.keys(rec).sort(), plain: has(rec.bundle as Uint8Array) })));
+        };
+        q.onerror = () => reject(q.error);
+      };
       r.onerror = () => reject(r.error);
-    }));
-    expect(waiting).toBe(1);
+    }), 'made with no connection');
+    expect(waiting).toEqual([{ keys: ['bundle', 'key', 'made', 'reason'], plain: false }]);
     await context.setOffline(false);
     await expect(page.locator('[data-kept-note]')).toHaveCount(0, { timeout: 15_000 });
     await expect(page.locator('[data-note]', { hasText: 'made with no connection' })).toHaveCount(1);

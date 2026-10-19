@@ -191,9 +191,23 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
     });
     expect(steps.length).toBeGreaterThan(0);
     let flipped = false;
+    let toasted = false;
     for (const [i, s] of steps.entries()) {
       await page.locator(MOVE[s] ?? `#${s}`).click();
       expect(await page.evaluate(playerVisible), `step ${i + 1} (${s})`).toBe(true);
+      // Once the board has scrolled, a toast is still inside the board's visible rect (it does not scroll away).
+      if (!toasted && device[0].startsWith('iPhone 15') && await page.evaluate(() => document.getElementById('board')!.scrollLeft > 0)) {
+        toasted = true;
+        const inside = await page.evaluate(() => {
+          const t = document.getElementById('toast')!;
+          t.textContent = 'Relic taken';
+          t.className = 'toast show good';
+          const r = t.getBoundingClientRect();
+          const b = document.getElementById('board')!.getBoundingClientRect();
+          return r.width > 0 && r.left >= b.left - 0.5 && r.top >= b.top - 0.5 && r.right <= b.right + 0.5 && r.bottom <= b.bottom + 0.5;
+        });
+        expect(inside, 'the toast stays on the visible board after it scrolled').toBe(true);
+      }
       // Half way through, a phone turned sideways and back keeps the player in view.
       if (!flipped && i >= steps.length / 2 && device[0].startsWith('iPhone 15')) {
         flipped = true;
@@ -203,6 +217,7 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
         await expect.poll(() => page.evaluate(playerVisible), 'back to portrait').toBe(true);
       }
     }
+    if (device[0].startsWith('iPhone 15')) expect(toasted, 'the board scrolled, so the toast was checked').toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();
   });

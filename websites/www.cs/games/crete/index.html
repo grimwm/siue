@@ -15,15 +15,15 @@
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
     <!-- app-tags:end -->
     <link rel="stylesheet" href="dist/kit.css?v=50839f1237" />
-    <link rel="stylesheet" href="game.css?v=a83b12f52d" />
+    <link rel="stylesheet" href="game.css?v=3ac7b56141" />
   </head>
   <body>
     <div id="frame">
       <header id="status-root" class="status" aria-label="Status"></header>
       <main id="board" class="board" aria-label="The labyrinth board">
         <canvas id="stage" class="stage" role="img" aria-label="The labyrinth"></canvas>
-        <p id="toast" class="toast" role="status" aria-live="polite"></p>
       </main>
+      <p id="toast" class="toast" role="status" aria-live="polite"></p>
       <div id="strip-root" class="strip"></div>
       <div id="title-root"></div>
       <div id="menu-root"></div>

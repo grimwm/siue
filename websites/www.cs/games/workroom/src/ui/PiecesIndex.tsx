@@ -1,6 +1,6 @@
 // The pieces list's notes: unlock, and each piece shows how many of the
 // owner's notes wait for pickup; the notes not sent yet are listed and flushed.
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { SignedOut } from '../api.ts';
 import { waitingByPiece } from '../history.ts';
 import { guardLeaving } from '../leave.ts';
@@ -21,8 +21,16 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
   const [keyring, setKeyring] = useState(true);
   const [kept, setKept] = useState<readonly Pending[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
+  const countedNow = useRef(false);
+  const recount = async (): Promise<void> => {
+    showWaiting(p.list, waitingByPiece(await p.notes.history()));
+    countedNow.current = true;
+    setCounted(true);
+  };
+  // After a flush, notes just sent wait on the server: the counts are taken again once they are shown.
   const refreshKept = async (): Promise<void> => {
     try { setKept(await p.notes.kept()); } catch { /* the browser's store could not be read just now; the list stays as it was */ }
+    if (countedNow.current) await recount().catch(() => { /* the counts stay as they were until the next flush */ });
   };
   // Leaving the page asks first while a note not sent yet is held only in memory.
   useEffect(() => guardLeaving(window, () => p.notes.memoryOnly()), [p.notes]);
@@ -39,8 +47,7 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
     const problem = await p.notes.unlock(passphrase);
     if (problem) { setError(problem); setBusy(false); return; }
     try {
-      showWaiting(p.list, waitingByPiece(await p.notes.history()));
-      setCounted(true);
+      await recount();
     } catch (e) {
       setError(problemOf(e));
     }

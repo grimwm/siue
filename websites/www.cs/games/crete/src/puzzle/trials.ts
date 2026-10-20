@@ -106,7 +106,7 @@ intro: Here Minos hid a harder riddle: a locked door, a block to sink in the poo
 ############
 ` },
   { id: 'trial-9', text: `title: The Bull's Horns
-intro: The beast cannot tread the marked stones. A catch costs a heart but nothing you took: you wake on the last mark you stood on, or where you began if none, and he stays where he caught you unless that is where you wake; then he goes back to his lair.
+intro: The beast cannot tread the marked stones. A catch costs a heart, not what you carry: you wake on the last mark you stood on, or where you began.
 pages: ch1-tribute-marks
 
 ############

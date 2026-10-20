@@ -103,6 +103,28 @@ function room_test_set(string $code, array $set): void
     });
 }
 
+/* Pins a stored lobby's random streams: the room's stream (hills, spawn
+   spots, wind, drone aim) and the drones' seed. A match started from it plays
+   the same war for the same moves, so a suite that fires over HTTP sees the
+   same hits every run. */
+function room_test_seed(string $code, int $rng, string $droneSeed): void
+{
+    tankity_tx(tankity_db(), function (PDO $db) use ($code, $rng, $droneSeed): void {
+        $q = $db->prepare('SELECT data FROM rooms WHERE code = ?');
+        $q->execute([$code]);
+        $room = room_decode($q->fetchColumn());
+        if ($room === null) {
+            throw new RuntimeException("room_test_seed: no room $code");
+        }
+        $room['rng'] = $rng;
+        $room['droneSeed'] = $droneSeed;
+        $u = $db->prepare('UPDATE rooms SET data = ? WHERE code = ?');
+        $u->bindValue(1, serialize($room), PDO::PARAM_LOB);
+        $u->bindValue(2, $code);
+        $u->execute();
+    });
+}
+
 /* A create or join body as the current bundle sends it, for the suites that
    reach rooms.php over HTTP: the room protocol and the room puzzle, asked for
    from $base (the URL of rooms.php's folder) and solved here at whatever bits

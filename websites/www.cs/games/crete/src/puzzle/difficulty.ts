@@ -69,7 +69,7 @@ export interface Bar {
 }
 
 /** Chapter 1's numbers set it: its teaching Minotaurs add 3 to 13 moves (level 9's adds 22), and its hardest
- *  teaching search is trial 6's 2,437 states (level 9 searches 16 times that, level 10 9.4 times). */
+ *  teaching search is trial 6's 2,437 states (level 9 searches 16 times that, level 10 26 times). */
 export const BAR: Bar = { minotaurDelta: 8, exploredTimes: 8 };
 
 /** Where a challenge level sits: the chapter's teaching levels, measured. */

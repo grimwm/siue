@@ -122,20 +122,22 @@ pages: ch1-tribute-marks
 ############
 ` },
   { id: 'trial-10', text: `title: The Great Hall
-intro: This hall runs wider than your sight, with more than one way across. At its far end stands a sealed gate, and the relic that opens it lies in the beast's own den.
+intro: The sealed gate stands at the end of the long hall, and the beast walks the hall before it. Lead him where the walls will hold him, then take the relic from its niche and go.
 pages: ch1-chalk
 
-##################
-#....#...#f~~~~~##
-#.P..#...#.####~##
-#....R.O.~T##.#S##
-#r...#...#.#..#.##
-#....#._z#.#....|E
-##########.#M...##
-######p....#*#S.##
-##########.###F###
-##########hFFFF###
-##################
+####################
+#....#...#f~~~~~~..#
+#.P..#...#.######..#
+#....R.O.~T###..#..#
+#r...#...#.#*#.#...#
+#....#._z#.#...M...#
+##########.#.##...|E
+######p....######..#
+##########.#####...#
+##########.#####.#.#
+##########.######F.#
+##########hFFFFFFF##
+####################
 ` },
 ];
 

@@ -185,7 +185,7 @@ const playerVisible = () => {
   return left >= b.left - 0.5 && top >= b.top - 0.5 && left + cell <= b.right + 0.5 && top + cell <= b.bottom + 0.5;
 };
 
-// Level 10 (18 x 11) is wider than a phone: it scrolls inside #board, never the page, and follows Theseus.
+// Level 10 (20 x 13) is wider than a phone: it scrolls inside #board, never the page, and follows Theseus.
 const MOVE: Record<string, string> = { up: '.mv-up', down: '.mv-down', left: '.mv-left', right: '.mv-right', wait: '#btn-wait' };
 for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') || d[0].startsWith('iPhone 15, portrait'))) {
   test(`${device[0]}: level 10 scrolls inside the board and keeps Theseus in view`, async ({ browser }) => {

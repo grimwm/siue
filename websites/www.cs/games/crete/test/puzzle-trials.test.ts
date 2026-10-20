@@ -14,7 +14,7 @@ import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
-const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 23, 29, 54, 40];
+const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 23, 29, 54, 76];
 /** Level 10 is larger than the screen; its proof may search further than the in-game cap. */
 const GREAT_HALL_CAP = 6_000_000;
 
@@ -184,4 +184,6 @@ test('level 10, The Great Hall: keys, gear, a block and a button, a tool and the
   assert.ok(unwinnable(solve(initial(withoutObjects(lv, routes)), GREAT_HALL_CAP)), 'level 10 needs one of its two routes');
   for (const k of ['key-red', 'block', 'mirror'] as const) assert.ok(unwinnable(solve(initial(withoutObjects(lv, [k])), GREAT_HALL_CAP)), `level 10 needs the ${k}`);
   assert.ok(!t10.took.has('page'), 'the page lies off the shortest line');
+  const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
+  assert.ok(solve(initial(copy), GREAT_HALL_CAP).solved, 'the page lies on a winning line');
 });

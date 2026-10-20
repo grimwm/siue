@@ -86,11 +86,6 @@ test('a capped search is unknown, never none; an exhausted one is none', () => {
 // The campaign gate. Each released chapter's levels are measured once.
 const measured = new Map<string, Difficulty>();
 const of = (id: string) => { if (!measured.has(id)) measured.set(id, measure(levelById(id))); return measured.get(id)!; };
-/** Known gaps the owner decides on, by level id: the test runs and reports, but does not fail the suite. */
-const TODO: Record<string, string> = {
-  'trial-10': 'level 10 is not yet a challenge level by the bar: its Minotaur adds no moves (an equally short line '
-    + 'dodges him), and it searches fewer states than level 9 (23,000 to 39,361); rework level 10 or reorder',
-};
 
 for (const chapter of CHAPTERS.filter(c => c.released)) {
   const teaching = chapter.levelIds.slice(0, chapter.teaching);
@@ -104,7 +99,7 @@ for (const chapter of CHAPTERS.filter(c => c.released)) {
     });
   }
   challenges.forEach((id, k) => {
-    test(`${id} is a challenge level: a real fight, no easier than the one before`, { todo: TODO[id] }, () => {
+    test(`${id} is a challenge level: a real fight, no easier than the one before`, () => {
       const problems = [
         ...challengeProblems(of(id), BAR, { teaching: teaching.map(of) }),
         ...(k > 0 ? rampProblems(of(challenges[k - 1]!), of(id)) : []),

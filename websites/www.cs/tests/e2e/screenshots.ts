@@ -48,8 +48,38 @@ const SHOTS: Record<string, (page: Page) => Promise<Clip>> = {
     return { x: Math.max(0, f.x + f.width / 2 - w / 2), y: Math.max(0, f.y + f.height / 2 - h / 2), width: w, height: h };
   },
   async crete(page: Page): Promise<Clip> {
+    // Chapter 1 in action: through the title and chapter cards, into level 9
+    // from the levels list, then the opening of the solver's line (from the
+    // game's test hook), so the picture shows the labyrinth mid-game, a relic
+    // already taken, instead of the title card the page opens on.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('games/crete/');
-    await page.waitForTimeout(800);
+    await page.click('#title-play');
+    await page.click('#chapter-enter');
+    await page.waitForSelector('#start-veil:not([hidden])');
+    await page.keyboard.press('n');
+    await page.click('#level-9');
+    await page.click('#start-begin');
+    await page.waitForSelector('#start-veil[hidden]', { state: 'attached' });
+    const line = await page.evaluate(() => {
+      // Crete's test hook, as far as this step reads it (the browser specs
+      // declare their own; a global declaration here would clash with them).
+      const t = (window as unknown as {
+        __creteTest: {
+          solve(s: unknown): { solved: boolean; line: { kind: string; dir?: string }[] };
+          game: { run: { now: unknown } };
+        };
+      }).__creteTest;
+      const r = t.solve(t.game.run.now);
+      return r.solved ? r.line.map(a => (a.kind === 'move' ? a.dir! : a.kind)) : [];
+    });
+    const KEY: Record<string, string> = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', wait: '.' };
+    for (const step of line.slice(0, 10)) {
+      const key = KEY[step];
+      if (key) await page.keyboard.press(key);
+      await page.waitForTimeout(160);
+    }
+    await page.waitForTimeout(350);
     return null;
   },
   async cylon(page: Page): Promise<Clip> {

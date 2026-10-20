@@ -55,7 +55,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   background: var(--bg);
   overflow: hidden;
 }
-#title-root, #menu-root, #trials-root, #start-root, #story-root, #end-root { display: contents; }
+#title-root, #menu-root, #chapter-root, #levels-root, #start-root, #story-root, #end-root, #lore-root { display: contents; }
 
 /* ---- status bar ---- */
 .status {
@@ -92,6 +92,11 @@ button:disabled { opacity: 0.45; cursor: default; }
   padding: 6px;
   overflow: hidden;
 }
+/* A big level (more than 12 in a direction) keeps cells of at least 32px and scrolls inside the board; src/ui.ts
+   follows the player. The canvas is centred on the axis where it fits. */
+.board.scrolls { display: flex; overflow: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.board.scrolls::-webkit-scrollbar { display: none; }
+.board.scrolls .stage { flex: none; margin: auto; }
 /* The board is a canvas: src/ui.ts has it sized in whole device pixels (src/board.ts) to the largest cell that
    fits, and the browser never rescales it. */
 .stage {
@@ -122,6 +127,8 @@ button:disabled { opacity: 0.45; cursor: default; }
   transition: opacity 0.4s;
   pointer-events: none;
 }
+/* The toast sits in the board's row of the frame, not inside #board, so a scrolling board does not carry it away. */
+#frame > #toast { grid-row: 2; grid-column: 1; }
 .toast.show { opacity: 1; pointer-events: auto; cursor: pointer; }
 .toast.good { border-color: var(--good); }
 .toast.bad { border-color: var(--bad); }
@@ -195,9 +202,16 @@ button:disabled { opacity: 0.45; cursor: default; }
 .start h2 { font-size: 1.05rem; margin: 0.1rem 0 0.3rem; }
 .start p { margin: 0 0 0.6rem; font-size: 0.88rem; line-height: 1.3; }
 .story-text { margin: 0 0 0.7rem; }
-.trials .close { position: absolute; top: 0.7rem; right: 0.7rem; float: none; margin: 0; }
-.trial-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 6px; }
-.trial-pick {
+.chapter .story { color: var(--dim); }
+.chapter-quote { margin: 0.8rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid var(--accent); font-style: italic; }
+.chapter-quote cite { display: block; margin-top: 0.4rem; color: var(--dim); font-size: 0.8rem; font-style: normal; }
+.chapter-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 0.6rem 0; }
+.chapter-tab { min-height: 32px; padding: 0 0.5rem; font-size: 0.78rem; font-weight: 600; background: var(--bg); color: var(--dim); border: 1px solid var(--line); }
+.chapter-tab[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); }
+.chapter-tab:disabled { opacity: 0.45; }
+.levels .close { position: absolute; top: 0.7rem; right: 0.7rem; float: none; margin: 0; }
+.level-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 6px; }
+.level-pick {
   width: 100%;
   display: grid;
   grid-template-columns: 1.6rem 1fr;
@@ -209,11 +223,19 @@ button:disabled { opacity: 0.45; cursor: default; }
   color: var(--ink);
   border: 1px solid var(--line);
 }
-.trial-pick[aria-pressed="true"] { border-color: var(--accent); }
-.trial-n { grid-area: n; color: var(--accent); font-variant-numeric: tabular-nums; }
-.trial-name { grid-area: name; }
-.trial-status { grid-area: status; color: var(--dim); font-size: 0.8rem; font-weight: 400; }
+.level-pick[aria-pressed="true"] { border-color: var(--accent); }
+.level-n { grid-area: n; color: var(--accent); font-variant-numeric: tabular-nums; }
+.level-name { grid-area: name; }
+.level-status { grid-area: status; color: var(--dim); font-size: 0.8rem; font-weight: 400; }
 .card .close { float: right; margin: -0.3rem -0.3rem 0 0.5rem; }
+.lore .close { position: absolute; top: 0.7rem; right: 0.7rem; float: none; margin: 0; }
+.lore h3 { margin: 0.8rem 0 0.3rem; font-size: 1rem; color: var(--accent); }
+.lore .story { color: var(--dim); }
+.lore-entries { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.lore-pick { width: 100%; display: flex; justify-content: space-between; gap: 0.5rem; text-align: left; background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+.lore-pick:disabled { opacity: 0.6; }
+.lore-where { color: var(--dim); font-size: 0.8rem; font-weight: 400; }
+.lore-soon { margin: 0.5rem 0 0; color: var(--dim); font-size: 0.85rem; }
 
 .menu h3 { margin: 0 0 0.3rem; font-size: 1rem; color: var(--accent); }
 .menu-sec { margin: 0.9rem 0 0; }

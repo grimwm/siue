@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitCell } from '../src/fit.ts';
+import { BIG, BIG_MIN_CELL, cellFor, fitCell } from '../src/fit.ts';
 
 test('the largest whole cell that fits both ways, gaps included', () => {
   assert.equal(fitCell(400, 400, 15, 15, 2), 24); // (400 - 14 * 2) / 15 = 24.8
@@ -19,4 +19,24 @@ test('a drawn maze never exceeds the space', () => {
     assert.ok(cell * 15 + 28 <= size, String(size));
     assert.ok((cell + 1) * 15 + 28 > size || cell === 0, `${size}: one more px would still fit`);
   }
+});
+
+test('a level up to 12 x 12 never scrolls: its cell is the plain fit', () => {
+  assert.deepEqual(cellFor(385, 500, 12, 10, 0), { cell: fitCell(385, 500, 12, 10, 0), scrolls: false });
+  assert.deepEqual(cellFor(100, 100, 12, 12, 0), { cell: fitCell(100, 100, 12, 12, 0), scrolls: false });
+});
+
+test('a big level too tight for 32 px cells takes 32 px and scrolls', () => {
+  assert.deepEqual(cellFor(385, 500, 14, 12, 0), { cell: BIG_MIN_CELL, scrolls: true });
+  assert.equal(BIG_MIN_CELL, 32);
+  assert.equal(BIG, 12);
+});
+
+test('a big level with room fits whole, without scrolling', () => {
+  assert.deepEqual(cellFor(1000, 800, 14, 12, 0), { cell: fitCell(1000, 800, 14, 12, 0), scrolls: false });
+});
+
+test('a 12-row level never scrolls although the rise above it makes it 12.375 rows tall', () => {
+  assert.deepEqual(cellFor(300, 300, 12, 12, 0, 12.375), { cell: 24, scrolls: false });
+  assert.deepEqual(cellFor(385, 500, 14, 12, 0, 12.375), { cell: BIG_MIN_CELL, scrolls: true });
 });

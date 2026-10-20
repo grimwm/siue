@@ -1,4 +1,4 @@
-/* The Island of Crete, trials: the words of the status bar, short enough for
+/* The Island of Crete: the words of the status bar, short enough for
  * a phone. `heartsNote` and `keysNote` are the long forms, for a tooltip and
  * a screen reader. DOM-free. */
 import { KEY_COLORS } from "./puzzle/tiles.ts";

@@ -92,7 +92,7 @@ function arrive(w: Work, at: Cell, ev: GameEvent[]): void {
     w.objects[index(w, at)] = null;
     ev.push({ kind: 'took', what: o, at });
     if (o === 'relic') w.relicsLeft = Math.max(0, w.relicsLeft - 1);
-    else if (o === 'page') w.pages++;
+    else if (o === 'page') w.pages |= 1 << w.level.pageCells.indexOf(index(w, at));
     else if (o.startsWith('key-')) w.keys[o.slice(4) as KeyColor]++;
     else if (o === 'mirror' || o === 'cake' || o === 'cow') w.tools[o]++;
     else if (!w.gear.includes(o as Gear)) w.gear.push(o as Gear);

@@ -1,9 +1,9 @@
 // The Island of Crete on ten screens: the frame fills the window, nothing scrolls, every control is on screen
 // and not clipped, no control covers the board, the board keeps at least 8 px per cell, and key tabs show only
-// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The trial list and the start card are
-// checked too, and trial 8, the largest board, at the smallest phone sizes.
+// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The chapter card, the level list and the start card are
+// checked too, and level 8, the largest board, at the smallest phone sizes.
 import { test, expect } from '@playwright/test';
-import type { Browser } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 
 type Device = [name: string, width: number, height: number, touch: boolean];
 const DEVICES: Device[] = [
@@ -28,7 +28,7 @@ async function open(browser: Browser, [, width, height, touch]: Device) {
 /** The widest values the status bar can show. */
 function setWorst() {
   const put = (id: string, v: string) => { document.getElementById(id)!.textContent = v; };
-  put('hud-trial', '8/8'); put('hud-hearts', '♥ 99'); put('hud-relics', '99/99'); put('hud-keys', '9 9 9 9');
+  put('hud-trial', '10/10'); put('hud-hearts', '♥ 99'); put('hud-relics', '99/99'); put('hud-keys', '9 9 9 9');
   put('hud-gear', 'fire ice water'); put('hud-moves', '99999');
 }
 
@@ -67,6 +67,14 @@ const cardFits = (sel: string) => {
   return card.left >= -0.5 && card.top >= -0.5 && card.right <= innerWidth + 0.5 && card.bottom <= innerHeight + 0.5;
 };
 
+/** Play, the chapter card's Levels, then level `n`; level 1 shows the chapter card first, so Enter the halls follows. */
+async function openLevel(page: Page, n: number): Promise<void> {
+  await page.locator('#title-play').click();
+  await page.locator('#chapter-levels').click();
+  await page.locator(`#level-${n}`).click();
+  if (n === 1) await page.locator('#chapter-enter').click();
+}
+
 for (const device of DEVICES) {
   const [name, width, , touch] = device;
   test(`${name}: the frame fits, the board keeps 8 px cells, tabs follow the keyboard`, async ({ browser }) => {
@@ -76,11 +84,21 @@ for (const device of DEVICES) {
     expect(await page.evaluate(cardFits, '#title-veil .card'), 'title card on screen').toBe(true);
     for (const id of ['title-play', 'title-story', 'title-settings']) await expect(page.locator(`#${id}`)).toBeVisible();
     await page.locator('#title-play').click();
-    await expect(page.locator('#trials-veil')).toBeVisible();
-    expect(await page.evaluate(cardFits, '#trials-veil .card'), 'trial list on screen').toBe(true);
-    for (let i = 1; i <= 8; i++) await expect(page.locator(`#trial-${i}`)).toBeVisible();
-    await page.locator('#trial-1').click();
-    await expect(page.locator('#trials-veil')).toBeHidden();
+    // Play opens Chapter 1's card, with both its buttons on screen; Levels opens the list over it.
+    await expect(page.locator('#chapter-veil')).toBeVisible();
+    expect(await page.evaluate(cardFits, '#chapter-veil .card'), 'chapter card on screen').toBe(true);
+    for (const id of ['chapter-enter', 'chapter-levels']) await expect(page.locator(`#${id}`)).toBeVisible();
+    await page.locator('#chapter-levels').click();
+    await expect(page.locator('#levels-veil')).toBeVisible();
+    expect(await page.evaluate(cardFits, '#levels-veil .card'), 'level list on screen').toBe(true);
+    for (let n = 1; n <= 10; n++) await expect(page.locator(`#levels-tab-${n}`)).toBeVisible();
+    for (let i = 1; i <= 10; i++) await expect(page.locator(`#level-${i}`)).toBeVisible();
+    // Level 1 from the list shows the chapter card first; Enter the halls opens it.
+    await page.locator('#level-1').click();
+    await expect(page.locator('#levels-veil')).toBeHidden();
+    await expect(page.locator('#chapter-veil')).toBeVisible();
+    await page.locator('#chapter-enter').click();
+    await expect(page.locator('#chapter-veil')).toBeHidden();
 
     // The start card sits over the board with its Begin button on screen.
     await expect(page.locator('#start-veil')).toBeVisible();
@@ -106,18 +124,125 @@ for (const device of DEVICES) {
   });
 }
 
-// Trial 8 is the largest board (12 x 10): it must still keep 8 px cells and every control on the smallest phone.
+// Level 8 is the largest board of the first eight (12 x 10): it must still keep 8 px cells and every control on the smallest phone.
 for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE'))) {
-  test(`${device[0]}: trial 8, the largest board, keeps 8 px cells and every control on screen`, async ({ browser }) => {
+  test(`${device[0]}: level 8, the largest board, keeps 8 px cells and every control on screen`, async ({ browser }) => {
     const { ctx, page, errors } = await open(browser, device);
-    await page.locator('#title-play').click();
-    await page.locator('#trial-8').click();
+    await openLevel(page, 8);
     await page.locator('#start-begin').click();
     await expect(page.locator('#start-veil')).toBeHidden();
     await page.waitForSelector('#stage[data-cell]');
     await page.evaluate(setWorst);
     expect(await page.evaluate(measure)).toEqual([]);
     expect(Number(await page.locator('#stage').getAttribute('data-cell'))).toBeGreaterThanOrEqual(8);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}
+
+// Levels up to 12 x 12 fit their board exactly: #board never scrolls, on every device.
+for (const device of DEVICES) {
+  test(`${device[0]}: levels 1 to 9 keep the board unscrolled`, async ({ browser }) => {
+    const { ctx, page, errors } = await open(browser, device);
+    for (let i = 1; i <= 9; i++) {
+      await page.goto('games/crete/');
+      await openLevel(page, i);
+      await expect(page.locator('#start-veil .kicker')).toHaveText(`Chapter 1 · Level ${i}`);
+      await page.locator('#start-begin').click();
+      await expect(page.locator('#start-veil')).toBeHidden();
+      await page.waitForSelector('#stage[data-cell]');
+      const board = await page.evaluate(() => {
+        const b = document.getElementById('board')!;
+        return { sw: b.scrollWidth - b.clientWidth, sh: b.scrollHeight - b.clientHeight, scrolls: b.classList.contains('scrolls') };
+      });
+      expect(board, `level ${i}`).toEqual({ sw: expect.any(Number), sh: expect.any(Number), scrolls: false });
+      expect(board.sw, `level ${i} wide`).toBeLessThanOrEqual(0);
+      expect(board.sh, `level ${i} tall`).toBeLessThanOrEqual(0);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}
+
+/** The turn count and outcome of the run. */
+const runState = () => {
+  const t = (window as unknown as { __creteTest: { game: { run: { now: { moves: number; outcome: string } } } } }).__creteTest;
+  return { moves: t.game.run.now.moves, outcome: t.game.run.now.outcome };
+};
+
+/** The player's cell is inside the board's visible rect. */
+const playerVisible = () => {
+  const t = (window as unknown as { __creteTest: { game: { run: { now: { player: { r: number; c: number } } } } } }).__creteTest;
+  const p = t.game.run.now.player;
+  const stage = document.getElementById('stage')!;
+  const sr = stage.getBoundingClientRect();
+  const cell = Number(stage.dataset.cell);
+  const rows = (window as unknown as { __creteTest: { game: { run: { now: { level: { rows: number } } } } } }).__creteTest.game.run.now.level.rows;
+  const rise = sr.height - rows * cell;
+  const left = sr.left + p.c * cell;
+  const top = sr.top + rise + p.r * cell;
+  const b = document.getElementById('board')!.getBoundingClientRect();
+  return left >= b.left - 0.5 && top >= b.top - 0.5 && left + cell <= b.right + 0.5 && top + cell <= b.bottom + 0.5;
+};
+
+// Level 10 (20 x 13) is wider than a phone: it scrolls inside #board, never the page, and follows Theseus.
+const MOVE: Record<string, string> = { up: '.mv-up', down: '.mv-down', left: '.mv-left', right: '.mv-right', wait: '#btn-wait' };
+for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') || d[0].startsWith('iPhone 15, portrait'))) {
+  test(`${device[0]}: level 10 scrolls inside the board and keeps Theseus in view`, async ({ browser }) => {
+    const { ctx, page, errors } = await open(browser, device);
+    await openLevel(page, 10);
+    await page.locator('#start-begin').click();
+    await expect(page.locator('#start-veil')).toBeHidden();
+    await page.waitForSelector('#stage[data-cell]');
+    const probs = await page.evaluate(() => {
+      const out: string[] = [];
+      const doc = document.documentElement;
+      if (doc.scrollHeight > innerHeight + 0.5) out.push('page taller than the screen');
+      if (doc.scrollWidth > innerWidth + 0.5) out.push('page wider than the screen');
+      const b = document.getElementById('board')!;
+      if (!(b.scrollWidth > b.clientWidth)) out.push('the board does not scroll sideways');
+      return out;
+    });
+    expect(probs).toEqual([]);
+    expect(await page.evaluate(playerVisible), 'visible at the start').toBe(true);
+
+    const steps = await page.evaluate(() => {
+      const t = (window as unknown as { __creteTest: { game: { run: { now: unknown } }; solve(s: unknown): { solved: boolean; line: { kind: string; dir?: string; tool?: string }[] } } }).__creteTest;
+      const r = t.solve(t.game.run.now);
+      return r.solved ? r.line.map(a => (a.kind === 'move' ? a.dir! : a.kind === 'tool' ? `tool-${a.tool}` : a.kind)) : [];
+    });
+    expect(steps.length).toBeGreaterThan(0);
+    let flipped = false;
+    let toasted = false;
+    for (const [i, s] of steps.entries()) {
+      const before = await page.evaluate(runState);
+      await page.locator(MOVE[s] ?? `#${s}`).click();
+      await expect.poll(() => page.evaluate(runState), `step ${i + 1} (${s}) is a turn`).toMatchObject({ moves: before.moves + 1 });
+      expect(await page.evaluate(playerVisible), `step ${i + 1} (${s})`).toBe(true);
+      // Once the board has scrolled, a toast is still inside the board's visible rect (it does not scroll away).
+      if (!toasted && device[0].startsWith('iPhone 15') && await page.evaluate(() => document.getElementById('board')!.scrollLeft > 0)) {
+        toasted = true;
+        const inside = await page.evaluate(() => {
+          const t = document.getElementById('toast')!;
+          t.textContent = 'Relic taken';
+          t.className = 'toast show good';
+          const r = t.getBoundingClientRect();
+          const b = document.getElementById('board')!.getBoundingClientRect();
+          return r.width > 0 && r.left >= b.left - 0.5 && r.top >= b.top - 0.5 && r.right <= b.right + 0.5 && r.bottom <= b.bottom + 0.5;
+        });
+        expect(inside, 'the toast stays on the visible board after it scrolled').toBe(true);
+      }
+      // Half way through, a phone turned sideways and back keeps the player in view.
+      if (!flipped && i >= steps.length / 2 && device[0].startsWith('iPhone 15')) {
+        flipped = true;
+        await page.setViewportSize({ width: 852, height: 393 });
+        await expect.poll(() => page.evaluate(playerVisible), 'landscape').toBe(true);
+        await page.setViewportSize({ width: 393, height: 852 });
+        await expect.poll(() => page.evaluate(playerVisible), 'back to portrait').toBe(true);
+      }
+    }
+    await expect.poll(() => page.evaluate(runState), 'the route ends in a win').toMatchObject({ outcome: 'won' });
+    if (device[0].startsWith('iPhone 15')) expect(toasted, 'the board scrolled, so the toast was checked').toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();
   });

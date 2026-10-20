@@ -62,7 +62,7 @@ export function Strip(p: StripProps) {
         <div class="turn">
           <Button id="btn-wait" title="Let the Minotaur move without you" disabled={p.over} onClick={p.onWait}>Wait<Tab action="wait" /></Button>
           <Button id="btn-undo" title="Take back your last turn" onClick={p.onUndo}>Undo<Tab action="undo" /></Button>
-          <Button id="btn-restart" title="Begin the trial again" onClick={p.onRestart}>Restart<Tab action="restart" /></Button>
+          <Button id="btn-restart" title="Begin the level again" onClick={p.onRestart}>Restart<Tab action="restart" /></Button>
         </div>
         <div class="thread" role="group" aria-label="Ariadne's thread">
           <Button id="btn-hint" title="Take one step along the thread" onClick={p.onHint}>Hint<Tab action="hint" /></Button>

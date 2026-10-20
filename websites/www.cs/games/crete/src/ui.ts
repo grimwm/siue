@@ -8,19 +8,26 @@ import { isBackKey, typesText } from "../../_kit/keys.ts";
 import type { Board } from "./board.ts";
 import { boardRows } from "./board-plan.ts";
 import type { Atlas } from "./board-plan.ts";
-import type { Game, Tone } from "./game.ts";
+import type { Game, SfxName, Tone } from "./game.ts";
 import { KEYS, actionFor, isMove, itemFor } from "./keys.ts";
 import { createLayers } from "./layers.ts";
 import type { LayerName } from "./layers.ts";
+import type { FoundPages } from "./pages.ts";
 import type { Progress } from "./progress.ts";
+import { pagesTaken } from "./puzzle/state.ts";
+import type { State } from "./puzzle/state.ts";
 import { TOOLS } from "./puzzle/tiles.ts";
 import type { Tool } from "./puzzle/tiles.ts";
-import { TRIALS, trialLevel } from "./puzzle/trials.ts";
+import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
-import { fitCell } from "./fit.ts";
+import { cellFor } from "./fit.ts";
+import { follow } from "./follow.ts";
 import { helpLines } from "./help.ts";
+import { renderChapterCard } from "./ui/chapter.tsx";
 import { renderEndCard } from "./ui/end.tsx";
 import type { EndView } from "./ui/end.tsx";
+import { renderLore } from "./ui/lore.tsx";
+import type { LoreEntry } from "./ui/lore.tsx";
 import { renderMenu } from "./ui/menu.tsx";
 import type { LogLine } from "./ui/menu.tsx";
 import { renderStatus } from "./ui/status.tsx";
@@ -29,14 +36,18 @@ import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
 import { renderTitleCard } from "./ui/title.tsx";
-import { renderTrials } from "./ui/trials.tsx";
-import type { TrialRow } from "./ui/trials.tsx";
+import { renderLevels } from "./ui/levels.tsx";
+import type { LevelRow } from "./ui/levels.tsx";
 
 /** What the page borrows at run time. */
 export interface UiDeps {
   atlas: Atlas;
   board: Board;
   progress: Progress;
+  /** The story pages found in this browser, for the Lore book. */
+  pages: FoundPages;
+  /** Voices an event (the chapter card's sound). */
+  sfx?(name: SfxName): void;
 }
 
 /** What a key press or click asks of the page. */
@@ -48,7 +59,7 @@ export interface Controls {
   wake(): void;
   /** Leave the game (the menu's Quit). */
   quit(): void;
-  /** Play on the title card. */
+  /** Play on the title card: opens Chapter 1's card. */
   play(): void;
 }
 
@@ -61,8 +72,11 @@ export interface Ui {
   bindControls(controls: Controls): void;
   /** The title card, alone; `hint` adds how to close an installed app. */
   showTitle(hint: boolean): void;
-  /** The trial list, over whatever is showing. */
-  showTrials(): void;
+  /** The level list, over whatever is showing. */
+  showLevels(): void;
+  /** Chapter `n`'s card, over whatever is showing: the opening one (Enter starts the first level this browser
+   *  has not cleared), or the closing one. */
+  showChapter(n: number, closing: boolean): void;
   /** Closes every card. */
   closeLayers(): void;
   /** The card showing now, if any. */
@@ -78,7 +92,7 @@ const TOAST_MS = 3000;
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
 export function createUi(deps: UiDeps): Ui {
-  const { atlas, board, progress } = deps;
+  const { atlas, board, progress, pages, sfx } = deps;
 
   const log: LogLine[] = [];
   let muted = false;
@@ -87,31 +101,80 @@ export function createUi(deps: UiDeps): Ui {
   let controls: Controls | null = null;
   let game: Game | null = null;
   let titleHint = false;
-  let end: EndView = { open: false, won: false, hasNext: false, kicker: "", title: "", text: "", score: "" };
+  let end: EndView = { open: false, won: false, hasNext: false, pages: [], kicker: "", title: "", text: "", score: "" };
   /** The try whose ending card has been shown, so closing the card does not bring it back. */
   let endFor: unknown = null;
   let sized = "";
   /** The opening the start card was last shown for. */
   let shownOpen = 0;
+  /** The chapter card's chapter, whether it is the closing card, and the level Enter on it starts. */
+  let chapterN = 1;
+  let chapterClosing = false;
+  let chapterTarget = 0;
+  /** The chapter the level list shows. */
+  let listed = 1;
+  /** The Lore book's open entry, or null for its list. */
+  let loreShown: LoreEntry | null = null;
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
     drawLayers();
   });
 
-  function trialRows(): TrialRow[] {
-    return TRIALS.map((t, i) => {
-      const p = progress.get(t.id);
+  /** The campaign index of chapter `n`'s first level. */
+  function firstOf(n: number): number {
+    return CHAPTERS.filter((c) => c.n < n && c.released).reduce((sum, c) => sum + c.levelIds.length, 0);
+  }
+
+  function levelRows(n: number): LevelRow[] {
+    const first = firstOf(n);
+    return CHAPTERS[n - 1]!.levelIds.map((id, i) => {
+      const p = progress.get(id);
       return {
-        title: trialLevel(i).title,
+        title: CAMPAIGN_LEVELS.level(first + i).title,
         status: !p.cleared ? "not yet" : p.assisted ? "cleared with help" : `cleared · best ${p.best}`,
       };
     });
   }
 
-  function pick(i: number): void {
+  /** The first level of chapter `n` this browser has not cleared; the chapter's first when it has cleared all. */
+  function resumeOf(n: number): number {
+    const c = CHAPTERS[n - 1]!;
+    const i = c.levelIds.findIndex((id) => !progress.get(id).cleared);
+    return firstOf(n) + Math.max(0, i);
+  }
+
+  function showChapter(n: number, closing: boolean, target = resumeOf(n)): void {
+    chapterN = n;
+    chapterClosing = closing;
+    chapterTarget = target;
+    sfx?.("chapter");
+    layers.open("chapter");
+  }
+
+  /** Closes a card; with nothing left open and no level loaded, the title shows rather than a blank screen. */
+  function leave(name: LayerName): void {
+    layers.close(name);
+    if (!layers.any() && !(controls?.game ?? game)?.run) showTitle(titleHint);
+  }
+
+  function open(i: number): void {
     layers.clear();
     controls?.game.open(i);
+  }
+
+  /** A level picked from the list or the chapter card: a chapter's first level shows the chapter card first. */
+  function pick(i: number): void {
+    const { chapter, within } = chapterOf(i);
+    if (within === 0) {
+      layers.close("levels");
+      showChapter(chapter.n, false, i);
+    } else open(i);
+  }
+
+  /** Enter on the opening card starts the level it was opened for. */
+  function enter(): void {
+    open(chapterTarget);
   }
 
   function drawLayers(): void {
@@ -123,17 +186,34 @@ export function createUi(deps: UiDeps): Ui {
       onStory: () => layers.open("story"),
       onSettings: () => layers.open("menu"),
     });
-    renderTrials($("trials-root"), {
-      open: layers.isOpen("trials"),
-      rows: trialRows(),
-      current: g?.trial ?? -1,
-      onPick: pick,
-      onClose: () => layers.close("trials"),
+    const playing = g && g.trial >= 0 ? chapterOf(g.trial) : null;
+    renderChapterCard($("chapter-root"), {
+      open: layers.isOpen("chapter"),
+      chapter: CHAPTERS[chapterN - 1]!,
+      closing: chapterClosing,
+      next: nextChapter(chapterN),
+      onEnter: enter,
+      onLevels: () => layers.open("levels"),
+      onClose: () => leave("chapter"),
+    });
+    renderLevels($("levels-root"), {
+      open: layers.isOpen("levels"),
+      chapters: CHAPTERS,
+      shown: listed,
+      rows: levelRows(listed),
+      current: playing && playing.chapter.n === listed ? playing.within : -1,
+      onPick: (i) => pick(firstOf(listed) + i),
+      onTab: (n) => {
+        listed = n;
+        drawLayers();
+      },
+      onClose: () => layers.close("levels"),
     });
     const lv = g?.run?.now.level;
     renderStart($("start-root"), {
       open: layers.isOpen("start"),
-      number: (g?.trial ?? 0) + 1,
+      chapter: playing?.chapter.n ?? 1,
+      number: (playing?.within ?? 0) + 1,
       title: lv?.title ?? "",
       intro: lv?.intro ?? "",
       onBegin: () => layers.close("start"),
@@ -141,11 +221,26 @@ export function createUi(deps: UiDeps): Ui {
     renderEndCard($("end-root"), {
       ...end,
       open: layers.isOpen("end"),
-      onNext: () => pick((g?.trial ?? 0) + 1),
-      onRetry: () => pick(g?.trial ?? 0),
-      onTrials: () => layers.open("trials"),
+      onNext: () => open((g?.trial ?? 0) + 1),
+      onRetry: () => open(g?.trial ?? 0),
+      onTrials: () => layers.open("levels"),
       onUndo: () => g?.press("undo"),
       onRestart: () => g?.press("restart"),
+    });
+    renderLore($("lore-root"), {
+      open: layers.isOpen("lore"),
+      chapters: CHAPTERS,
+      found: pages.has,
+      closingSeen: (n) => {
+        const last = CHAPTERS[n - 1]?.levelIds.at(-1);
+        return last !== undefined && progress.get(last).cleared;
+      },
+      shown: loreShown,
+      onShow: (e) => {
+        loreShown = e;
+        drawLayers();
+      },
+      onClose: () => layers.close("lore"),
     });
     renderStoryCard($("story-root"), { open: layers.isOpen("story"), onClose: () => layers.close("story") });
     renderMenu($("menu-root"), {
@@ -159,6 +254,10 @@ export function createUi(deps: UiDeps): Ui {
         controls?.toggleMute();
       },
       onFullscreen: () => controls?.toggleFullscreen(),
+      onLore: () => {
+        loreShown = null;
+        layers.open("lore");
+      },
       onQuit: () => {
         controls?.wake();
         controls?.quit();
@@ -179,24 +278,55 @@ export function createUi(deps: UiDeps): Ui {
   }
 
   /** The cell size: the largest whole pixel count whose canvas, as the board actually sizes it
-   *  (whole device pixels), fits the space the board has left. */
+   *  (whole device pixels), fits the space the board has left. A big level (src/fit.ts) keeps cells of at least
+   *  32 px instead and scrolls inside the board. */
   function fit(): void {
     const run = game?.run;
     if (!run) return;
     const { cols, rows } = run.now.level;
     const holder = $("board");
     const canvas = $("stage");
+    setScrolls(holder, false); // measured as if it did not scroll: a scroll bar must not change the answer
     const bs = getComputedStyle(holder);
     const w = holder.clientWidth - parseFloat(bs.paddingLeft) - parseFloat(bs.paddingRight);
     const h = holder.clientHeight - parseFloat(bs.paddingTop) - parseFloat(bs.paddingBottom);
-    let cell = Math.max(1, fitCell(w, h, cols, boardRows(run.now.level, atlas), 0));
+    const fitted = cellFor(w, h, cols, rows, 0, boardRows(run.now.level, atlas));
+    let cell = Math.max(1, fitted.cell);
     board.size(cols, rows, cell);
     // The board snaps a cell to whole device pixels, which can round it up: read what it made.
-    while (cell > 1 && (parseFloat(canvas.style.width) > w || parseFloat(canvas.style.height) > h)) {
+    while (!fitted.scrolls && cell > 1 && (parseFloat(canvas.style.width) > w || parseFloat(canvas.style.height) > h)) {
       cell--;
       board.size(cols, rows, cell);
     }
+    setScrolls(holder, fitted.scrolls);
     sized = `${cols}x${rows}`;
+    followPlayer(run.now);
+  }
+
+  function setScrolls(holder: HTMLElement, on: boolean): void {
+    const rest = holder.className.split(" ").filter((c) => c && c !== "scrolls");
+    holder.className = (on ? [...rest, "scrolls"] : rest).join(" ");
+  }
+
+  /** Scrolls a big board, instantly, to keep the player two cells inside the view. */
+  function followPlayer(s: State): void {
+    const holder = $("board");
+    if (!holder.className.split(" ").includes("scrolls")) {
+      holder.scrollLeft = 0;
+      holder.scrollTop = 0;
+      return;
+    }
+    const canvas = $("stage");
+    const cell = parseFloat(canvas.style.width) / s.level.cols;
+    const rise = parseFloat(canvas.style.height) - s.level.rows * cell;
+    const to = follow(
+      { x: holder.scrollLeft, y: holder.scrollTop, w: holder.clientWidth, h: holder.clientHeight },
+      { w: holder.scrollWidth, h: holder.scrollHeight },
+      { left: canvas.offsetLeft + s.player.c * cell, top: canvas.offsetTop + rise + s.player.r * cell, size: cell },
+      2 * cell,
+    );
+    holder.scrollLeft = to.x;
+    holder.scrollTop = to.y;
   }
 
   function toolRows(g: Game): ToolRow[] {
@@ -218,13 +348,16 @@ export function createUi(deps: UiDeps): Ui {
     const won = s.outcome === "won";
     if (!won) {
       return {
-        open: true, won, hasNext: false, kicker: "Trial failed", title: "The Minotaur has you",
-        text: "Your last heart is gone. Undo a turn or begin the trial again.", score: `${s.moves} moves`,
+        open: true, won, hasNext: false, pages: [], kicker: "Level failed", title: "The Minotaur has you",
+        text: "Your last heart is gone. Undo a turn or begin the level again.", score: `${s.moves} moves`,
       };
     }
-    const best = progress.get(TRIALS[g.trial]!.id).best;
+    const best = progress.get(LEVEL_IDS[g.trial]!).best;
+    // Every page this win took, not only the new ones: a replayed win still shows its page line.
+    const titles = CHAPTERS.flatMap((c) => c.lore?.pages ?? []);
+    const pages = pagesTaken(s).map((id) => titles.find((p) => p.id === id)?.title ?? id);
     return {
-      open: true, won, hasNext: g.trial + 1 < TRIALS.length, kicker: `Trial ${g.trial + 1} cleared`, title: s.level.title,
+      open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, pages, kicker: `Level ${chapterOf(g.trial).within + 1} cleared`, title: s.level.title,
       text: run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.",
       score: [`${s.moves} moves`, best !== null ? `best ${best}` : "", run.assisted ? "with help" : ""].filter(Boolean).join(" · "),
     };
@@ -239,7 +372,8 @@ export function createUi(deps: UiDeps): Ui {
     }
     const s = run.now;
     if (sized !== `${s.level.cols}x${s.level.rows}`) fit();
-    // A trial opened: the start card shows (a restart does not); the story log keeps its words.
+    else followPlayer(s);
+    // A level opened: the start card shows (a restart does not); the story log keeps its words.
     if (g.opens !== shownOpen) {
       shownOpen = g.opens;
       log.push({ text: `${s.level.title}: ${s.level.intro}`, tone: "info" });
@@ -248,7 +382,7 @@ export function createUi(deps: UiDeps): Ui {
 
     renderStatus($("status-root"), {
       view: statusView({
-        trial: `${g.trial + 1}/${TRIALS.length}`,
+        trial: `${chapterOf(g.trial).within + 1}/${chapterOf(g.trial).chapter.levelIds.length}`,
         hearts: s.hearts,
         relicsLeft: s.relicsLeft,
         keys: s.keys,
@@ -290,6 +424,9 @@ export function createUi(deps: UiDeps): Ui {
       endFor = run;
       end = endView(g);
       layers.open("end");
+      // A chapter's last level won: its closing card opens over the end card, which waits under it.
+      const { chapter, within } = chapterOf(g.trial);
+      if (end.won && within === chapter.levelIds.length - 1) showChapter(chapter.n, true);
     }
     drawLayers();
   }
@@ -309,20 +446,41 @@ export function createUi(deps: UiDeps): Ui {
       c.wake();
       if (isBackKey(ev)) {
         ev.preventDefault();
-        if (!ev.repeat) layers.pressBack();
+        if (ev.repeat) return;
+        // An open Lore entry goes back to the list; the next Q closes the book.
+        if (layers.isOpen("lore") && loreShown) {
+          loreShown = null;
+          drawLayers();
+        } else if (layers.isOpen("chapter")) leave("chapter");
+        else layers.pressBack();
         return;
       }
       // A chord is the browser's (Cmd+R reloads, Ctrl+T opens a tab), never a game key.
       if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
       const k = ev.key.toLowerCase();
       const action = actionFor(k);
+      // Held Enter repeats nothing: it would close the card the first press opened, or press its focused button.
+      if (action === "begin" && ev.repeat) {
+        ev.preventDefault();
+        return;
+      }
+      // The title's Play is worded N: there it opens the chapter card, elsewhere N opens the list.
       if (action === "new") {
         ev.preventDefault();
-        layers.open("trials");
+        if (layers.isOpen("title")) c.play();
+        else layers.open("levels");
         return;
       }
       if (action === "mute") {
         c.toggleMute();
+        return;
+      }
+      // Begin on the chapter card: the opening one starts a level, the closing one goes on. Tabbed to Levels,
+      // Enter presses that button instead.
+      if (layers.isOpen("chapter") && action === "begin" && (ev.target as HTMLElement | null)?.id !== "chapter-levels") {
+        ev.preventDefault();
+        if (chapterClosing) layers.close("chapter");
+        else enter();
         return;
       }
       // The start card closes on Begin and on a move, which then also moves; it blocks nothing else.
@@ -375,7 +533,8 @@ export function createUi(deps: UiDeps): Ui {
     render,
     bindControls,
     showTitle,
-    showTrials: () => layers.open("trials"),
+    showLevels: () => layers.open("levels"),
+    showChapter: (n, closing) => showChapter(n, closing),
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
     setMuted: (m) => {

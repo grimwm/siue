@@ -2,6 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, frameOf } from '../src/game.ts';
+import { createFoundPages } from '../src/pages.ts';
+import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createProgress } from '../src/progress.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { DELTA } from '../src/puzzle/tiles.ts';
@@ -12,7 +14,7 @@ import { grid, mv } from './puzzle-grid.ts';
 function opened(reduced = false) {
   const m = manualClock();
   const game = createGame({
-    sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => reduced, changed() {},
+    sfx() {}, say() {}, progress: createProgress(null), pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock, reducedMotion: () => reduced, changed() {},
   });
   game.open(0);
   return game;
@@ -20,7 +22,7 @@ function opened(reduced = false) {
 
 test('nothing is drawn before a trial opens', () => {
   const m = manualClock();
-  const game = createGame({ sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => false, changed() {} });
+  const game = createGame({ sfx() {}, say() {}, progress: createProgress(null), pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock, reducedMotion: () => false, changed() {} });
   assert.equal(frameOf(game, 0), null);
 });
 

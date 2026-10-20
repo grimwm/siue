@@ -13,7 +13,7 @@ export interface StatusProps {
 }
 
 const STATS: { id: string; field: 'trial' | 'hearts' | 'relics' | 'keys' | 'gear' | 'moves'; label: string }[] = [
-  { id: 'hud-trial', field: 'trial', label: 'Trial' },
+  { id: 'hud-trial', field: 'trial', label: 'Level' },
   { id: 'hud-hearts', field: 'hearts', label: 'Hearts' },
   { id: 'hud-relics', field: 'relics', label: 'Relics' },
   { id: 'hud-keys', field: 'keys', label: 'Keys' },

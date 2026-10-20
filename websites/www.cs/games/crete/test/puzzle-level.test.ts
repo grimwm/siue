@@ -9,6 +9,7 @@ const SAMPLE = [
   'title: The first gate',
   'intro: Count the walls before it counts you.',
   'hearts: 4',
+  'pages: sample-page',
   '',
   '#########',
   '#P.*..rR#',
@@ -91,4 +92,24 @@ test('serialize refuses a title or intro that would span lines', () => {
   const lv = parse('title: t\nintro: i\n\nP*E\n');
   assert.throws(() => serialize({ ...lv, title: 'a\nb' }), /one line/);
   assert.throws(() => serialize({ ...lv, intro: 'a\r\nb' }), /one line/);
+});
+
+test('pages: header names each page cell in reading order', () => {
+  const lv = parse('title: t\nintro: i\npages: d1-hand d1-gate\n\n#####\n#PpE#\n#..p#\n#####\n');
+  assert.deepEqual(lv.pageIds, ['d1-hand', 'd1-gate']);
+  assert.deepEqual(lv.pageCells, [7, 13]);
+  assert.equal(serialize(lv), 'title: t\nintro: i\npages: d1-hand d1-gate\n\n#####\n#PpE#\n#..p#\n#####\n');
+});
+test('pages: count must match the grid, ids unique and lower-case', () => {
+  assert.throws(() => parse('title: t\nintro: i\npages: a\n\n####\n#Pp#\n#pE#\n####\n'), /pages: 1 named but the grid has 2/);
+  assert.throws(() => parse('title: t\nintro: i\npages: a a\n\n####\n#Pp#\n#pE#\n####\n'), /page 'a' named twice/);
+  assert.throws(() => parse('title: t\nintro: i\npages: A\n\n###\n#Pp\n###\n'), /page id 'A'/);
+  assert.throws(() => parse('title: t\nintro: i\n\n####\n#PpE\n####\n'), /pages: 0 named but the grid has 1/);
+});
+test('a level with no page needs no pages: header', () => {
+  assert.deepEqual(parse('title: t\nintro: i\n\n###\n#PE\n###\n').pageIds, []);
+});
+test('a level holds at most 31 pages', () => {
+  const ids = Array.from({ length: 32 }, (_, i) => `p${i}`).join(' ');
+  assert.throws(() => parse(`title: t\nintro: i\npages: ${ids}\n\nP${'p'.repeat(32)}\n`), /at most 31/);
 });

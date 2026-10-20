@@ -31,3 +31,15 @@ test('blocked or corrupt storage is an empty record and never throws', () => {
     assert.doesNotThrow(() => p.record('trial-1', 9, false));
   }
 });
+
+test('a table stored for trial-1 to trial-8 in today\'s shape reads back the same statuses', () => {
+  const table: Record<string, { cleared: boolean; best: number | null }> = {};
+  for (let i = 1; i <= 8; i++) table[`trial-${i}`] = { cleared: true, best: 10 + i };
+  table['trial-3'] = { cleared: true, best: null };
+  const p = createProgress(memory({ [PROGRESS_KEY]: JSON.stringify(table) }));
+  for (let i = 1; i <= 8; i++) {
+    const want = i === 3 ? { cleared: true, assisted: true, best: null } : { cleared: true, assisted: false, best: 10 + i };
+    assert.deepEqual(p.get(`trial-${i}`), want);
+  }
+  assert.deepEqual(p.get('trial-9'), { cleared: false, assisted: false, best: null });
+});

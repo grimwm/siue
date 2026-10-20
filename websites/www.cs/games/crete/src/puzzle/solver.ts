@@ -1,12 +1,12 @@
 /* The Island of Crete: the exact solver. Breadth-first over states from the
- * one given, so the first win found is a shortest line. It proves every trial
+ * one given, so the first win found is a shortest line. It proves every level
  * winnable and drives Ariadne's thread (one step, the whole line drawn, or
  * played out). DOM-free. */
 import { DIRS, TERRAIN, OBJECTS, KEY_COLORS } from './tiles.ts';
 import type { Terrain, Tool } from './tiles.ts';
 import type { Level } from './level.ts';
 import { step } from './step.ts';
-import type { Action } from './step.ts';
+import type { Action, GameEvent } from './step.ts';
 import type { State } from './state.ts';
 
 export const SOLVER_CAP = 2_000_000;
@@ -58,9 +58,25 @@ function decode(code: number): Action {
   return { kind: 'tool', tool: TOOL_LIST[code - WAIT_CODE - 1]! };
 }
 
+/** A turn the search treats as a dead end, given its events and the state it was played from. */
+export type Refuse = (events: readonly GameEvent[], before: State) => boolean;
+
 /** Breadth-first. A state is kept only until it has been expanded; a visited node costs a parent index, an
  *  action code and its key. */
 export function solve(start: State, cap = SOLVER_CAP): SolveResult {
+  return search(start, cap, null);
+}
+
+/** The same search, but a turn that `refuse` names is a dead end: the shortest line that never plays one.
+ *  `solved: false, capped: false` proves there is none. */
+export function solveRefusing(start: State, refuse: Refuse, cap = SOLVER_CAP): SolveResult {
+  return search(start, cap, refuse);
+}
+
+/** A turn that ends in a catch. */
+export const caught: Refuse = events => events.some(e => e.kind === 'caught');
+
+function search(start: State, cap: number, refuse: Refuse | null): SolveResult {
   if (start.outcome === 'won') return { solved: true, line: [], explored: 0 };
   const queue: (State | null)[] = [start];
   const parent: number[] = [-1];
@@ -71,8 +87,9 @@ export function solve(start: State, cap = SOLVER_CAP): SolveResult {
     const s = queue[head]!;
     queue[head] = null;
     for (const code of actionCodes(s)) {
-      const n = step(s, decode(code)).state;
-      if (n === s || n.outcome === 'lost') continue;
+      const r = step(s, decode(code));
+      const n = r.state;
+      if (n === s || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
       const k = stateKey(n);
       if (seen.has(k)) continue;
       seen.add(k);

@@ -1,4 +1,4 @@
-/* The Island of Crete: which trials this browser has cleared, on the kit's
+/* The Island of Crete: which levels this browser has cleared, on the kit's
  * prefs. `assisted` is derived: cleared with no unassisted best. Storage that
  * is blocked or holds anything unexpected reads as empty. */
 import { pref, json } from "../../_kit/prefs.ts";

@@ -18,6 +18,7 @@ export interface State {
   /** Gear held, each once, in the order taken. */
   readonly gear: readonly Gear[];
   readonly tools: Readonly<Record<Tool, number>>;
+  /** Story pages taken: bit `i` is set once the page at `level.pageCells[i]` is. */
   readonly pages: number;
   /** Where a catch throws the player: the last safe zone stood on, or the start. */
   readonly throwBack: Cell;
@@ -58,3 +59,8 @@ export const terrainAt = (s: State, x: Cell): Terrain => (inside(s.level, x) ? s
 export const same = (a: Cell, b: Cell | null): boolean => !!b && a.r === b.r && a.c === b.c;
 export const next = (x: Cell, d: Dir): Cell => ({ r: x.r + DELTA[d][0], c: x.c + DELTA[d][1] });
 export const gateOpen = (s: Pick<State, 'relicsLeft'>): boolean => s.relicsLeft === 0;
+
+/** The ids of the pages taken, in the level's `pages:` order. */
+export function pagesTaken(s: State): string[] {
+  return s.level.pageIds.filter((_, i) => (s.pages >> i) & 1);
+}

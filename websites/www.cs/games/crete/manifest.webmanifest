@@ -1,7 +1,7 @@
 {
     "name": "The Island of Crete",
     "short_name": "Crete",
-    "description": "Eight tile puzzles in the Labyrinth. Gather the relics, open the gate and reach the exit while the Minotaur takes two steps to your one.",
+    "description": "Ten tile puzzles in the Labyrinth. Gather the relics, open the gate and reach the exit while the Minotaur takes two steps to your one.",
     "lang": "en",
     "start_url": "./",
     "scope": "./",

@@ -1,6 +1,6 @@
-/* The Island of Crete: the eight trials, in the level text (src/puzzle/level.ts).
- * Each teaches one idea; the solver proves each winnable (test/puzzle-trials.test.ts).
- * DOM-free. */
+/* The Island of Crete: the trials, Chapter 1's levels, in the level text (src/puzzle/level.ts).
+ * Ten levels: each teaches one idea, and the tenth, wider than the screen, puts them
+ * together; the solver proves each winnable (test/puzzle-trials.test.ts). DOM-free. */
 import { parse } from './level.ts';
 import type { Level } from './level.ts';
 
@@ -91,8 +91,8 @@ intro: Ariadne left you gifts: Medusa's mirror, Daedalus's cow and a honey cake.
 ####..S.#
 #########
 ` },
-  { id: 'trial-8', text: `title: The Heart of the Labyrinth
-intro: Here Minos hid his last riddle: a locked door, a block to sink in the pool, a flood to swim, and the beast between. Pass it, and Athens owes no more tribute.
+  { id: 'trial-8', text: `title: The Riddle of Minos
+intro: Here Minos hid a harder riddle: a locked door, a block to sink in the pool, a flood to swim, and the beast between. The halls beyond grow no kinder.
 
 ############
 #P..#.M.~.##
@@ -104,6 +104,40 @@ intro: Here Minos hid his last riddle: a locked door, a block to sink in the poo
 #...#..~~..#
 #...#.~f~.E#
 ############
+` },
+  { id: 'trial-9', text: `title: The Bull's Horns
+intro: The beast cannot tread the marked stones. A catch costs a heart, not what you carry: you wake on the last mark you stood on, or where you began.
+pages: ch1-tribute-marks
+
+############
+#.*#.....|E#
+#..#..O#.###
+##S#~..#.#.#
+##......S..#
+#.....###..#
+##.S...~...#
+###~M##....#
+##..##..p.##
+#.....PS...#
+############
+` },
+  { id: 'trial-10', text: `title: The Great Hall
+intro: The sealed gate stands at the end of the long hall, and the beast walks the hall before it. Lead him where the walls will hold him, then take the relic from its niche and go.
+pages: ch1-chalk
+
+####################
+#....#...#f~~~~~~..#
+#.P..#...#.######..#
+#....R.O.~T###..#..#
+#r...#...#.#*#.#...#
+#....#._z#.#...M...#
+##########.#.##...|E
+######p....######..#
+##########.#####...#
+##########.#####.#.#
+##########.######F.#
+##########hFFFFFFF##
+####################
 ` },
 ];
 

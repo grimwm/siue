@@ -1,4 +1,4 @@
-// The Island of Crete: the menu. In order: sound and full screen, the story log, how to play, Quit.
+// The Island of Crete: the menu. In order: sound and full screen, the Lore book, the story log, how to play, Quit.
 // Q (the kit's back key) is handled by src/ui.ts, which owns every card, so the dialog is given no onDismiss;
 // the Close button is for a pointer or a finger.
 import { render } from 'preact';
@@ -22,6 +22,7 @@ export interface MenuProps {
   help: Seg[][];
   onSound: () => void;
   onFullscreen: () => void;
+  onLore: () => void;
   onQuit: () => void;
   onClose: () => void;
 }
@@ -41,6 +42,9 @@ export function Menu(p: MenuProps) {
       <div class="menu-sec" data-section="audio">
         <Button id="mute" keyLabel={KEYS.mute.label} onClick={p.onSound}>{p.muted ? '🔇 Muted' : '🔊 Sound'}</Button>
         <Button id="fullscreen" onClick={p.onFullscreen}>{p.fullscreen ? 'Leave full screen' : 'Full screen'}</Button>
+      </div>
+      <div class="menu-sec" data-section="lore">
+        <Button id="menu-lore" onClick={p.onLore}>📖 Lore book</Button>
       </div>
       <section class="menu-sec" data-section="log">
         <h3>Story log</h3>

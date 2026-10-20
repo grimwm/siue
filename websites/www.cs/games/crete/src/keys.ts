@@ -1,4 +1,4 @@
-/* The Island of Crete, trials: the key table. One place says which keys do
+/* The Island of Crete: the key table. One place says which keys do
  * what and what a button's key tab prints, so a tab can never disagree with
  * its binding. The tools' keys are not here: they come from TOOLS. Q is the
  * kit's back key (isBackKey) and Escape is not bound. DOM-free. */
@@ -30,7 +30,7 @@ export const KEYS: Record<Action, KeyDef> = {
   route: { label: "V", keys: ["v"] },
   auto: { label: "T", keys: ["t"] },
   mute: { label: "M", keys: ["m"] },
-  /** Opens the trial list. */
+  /** Opens the level list. */
   new: { label: "N", keys: ["n"] },
   // Q is read with isBackKey; this row only names it.
   menu: { label: BACK_KEY, keys: [] },

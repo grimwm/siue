@@ -1,4 +1,4 @@
-/* Entry: wires the game, the board, audio and the UI, opens the title card (or, with ?seed=, the first trial),
+/* Entry: wires the game, the board, audio and the UI, opens the title card (or, with ?seed=, Chapter 1's card over it),
  * and exposes window.__creteTest for the browser specs. */
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
 import { createAudio } from './audio.ts';
@@ -9,6 +9,8 @@ import { createGame, frameOf } from './game.ts';
 import { initial } from './puzzle/state.ts';
 import { solve } from './puzzle/solver.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
+import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS } from './campaign/chapters.ts';
+import { createFoundPages } from './pages.ts';
 import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
 import { createSettings } from './settings.ts';
@@ -32,7 +34,8 @@ const appEnv = browserAppEnv();
 const image = new Image();
 const board = createBoard(document.getElementById('stage') as HTMLCanvasElement, atlas, image);
 const progress = createProgress(browserStorage());
-const ui = createUi({ atlas, board, progress });
+const pages = createFoundPages(browserStorage());
+const ui = createUi({ atlas, board, progress, pages, sfx: audio.sfx });
 
 /* The reduced-motion preference, followed live. */
 const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -43,6 +46,8 @@ const game = createGame({
   sfx: audio.sfx,
   say: ui.say,
   progress,
+  pages,
+  levels: CAMPAIGN_LEVELS,
   timers: browserTimers,
   clock,
   reducedMotion: () => reduced,
@@ -76,10 +81,10 @@ function onFullscreenChange(): void {
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
-/* Play on the title card opens the trial list. A click is the gesture that lets a remembered full screen return. */
+/* Play on the title card opens Chapter 1's card. A click is the gesture that lets a remembered full screen return. */
 function play(): void {
   if (settings.fullscreen.get() === 'on' && !appEnv.fullscreenElement()) toggleFullscreen();
-  ui.showTrials();
+  ui.showChapter(1, false);
 }
 
 /* Quit (the menu's): the cards close; an installed app closes where it may, and otherwise
@@ -115,8 +120,10 @@ function start(): void {
   } catch (_) {
     /* ignore */
   }
-  if (direct) game.open(0);
-  else ui.showTitle(false);
+  ui.showTitle(false);
+  if (direct) {
+    ui.showChapter(1, false);
+  }
   mountTitleInstall(window, document.getElementById('title-install'));
   image.onload = () => { requestAnimationFrame(loop); };
   image.onerror = () => {
@@ -137,4 +144,4 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else start();
 
 /* Test hook for automated checks: drives the real game logic, no copy. */
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel };
+window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS };

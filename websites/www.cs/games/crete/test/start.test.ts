@@ -7,6 +7,8 @@ import { fireDocument, installDocument } from '../../_kit/test/dom-stub.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { createGame } from '../src/game.ts';
 import type { Game } from '../src/game.ts';
+import { createFoundPages } from '../src/pages.ts';
+import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createProgress } from '../src/progress.ts';
 import { solve } from '../src/puzzle/solver.ts';
 import { initial } from '../src/puzzle/state.ts';
@@ -25,9 +27,10 @@ const page = ui.createUi({
   atlas: { cell: 16, rise: 8, sprites: {} } as Atlas,
   board: { size() {}, paint() {} } as Board,
   progress: createProgress(null),
+  pages: createFoundPages(null),
 });
 game = createGame({
-  sfx() {}, say: t => said.push(t), progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => true,
+  sfx() {}, say: t => said.push(t), progress: createProgress(null), pages: createFoundPages(null), levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock, reducedMotion: () => true,
   changed: () => page.render(game),
 });
 page.bindControls({ game, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play() {} });

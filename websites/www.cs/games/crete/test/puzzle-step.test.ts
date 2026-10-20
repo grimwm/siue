@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { step } from '../src/puzzle/step.ts';
-import { terrainAt } from '../src/puzzle/state.ts';
+import { terrainAt, pagesTaken } from '../src/puzzle/state.ts';
 import { grid, mv, play, WAIT } from './puzzle-grid.ts';
 
 test('a move takes a turn; a bump returns the same state and costs nothing', () => {
@@ -105,10 +105,11 @@ test('stepping on a button flips every toggle wall; a closed one is a wall', () 
 });
 
 test('things are taken by walking onto them, and a safe zone becomes the throw-back cell', () => {
-  const r = play(grid(['Pfhkuzxcp*S']), ...Array(10).fill(mv('right')));
+  const r = play(grid(['Pfhkuzxcp*S'], 'pages: only'), ...Array(10).fill(mv('right')));
   assert.deepEqual([...r.state.gear].sort(), ['fire-boots', 'flippers', 'skates', 'suction']);
   assert.deepEqual(r.state.tools, { mirror: 1, cake: 1, cow: 1 });
   assert.equal(r.state.pages, 1);
+  assert.deepEqual(pagesTaken(r.state), ['only']);
   assert.equal(r.state.relicsLeft, 0);
   assert.deepEqual(r.state.throwBack, { r: 0, c: 10 });
 });
@@ -164,4 +165,14 @@ test('sent home onto the cow, the Minotaur eats it', () => {
   assert.deepEqual(r.state.minotaur, { r: 0, c: 4 });
   assert.equal(r.state.cow, null);
   assert.ok(r.kinds.includes('caught'));
+});
+
+test('pages are a bitmask in reading order: taking the second sets bit 1, then the first adds bit 0', () => {
+  const s = grid(['pP.p'], 'pages: first-id second-id');
+  const a = play(s, mv('right'), mv('right'));
+  assert.equal(a.state.pages, 0b10);
+  assert.deepEqual(pagesTaken(a.state), ['second-id']);
+  const b = play(a.state, mv('left'), mv('left'), mv('left'));
+  assert.equal(b.state.pages, 0b11);
+  assert.deepEqual(pagesTaken(b.state), ['first-id', 'second-id']);
 });

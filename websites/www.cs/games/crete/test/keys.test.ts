@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { importTsx } from '../../_kit/test/tsx.ts';
 import { fireDocument, installDocument } from '../../_kit/test/dom-stub.ts';
 import { TOOLS } from '../src/puzzle/tiles.ts';
+import { createFoundPages } from '../src/pages.ts';
 import { createProgress } from '../src/progress.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
@@ -26,7 +27,7 @@ const controls: Controls = {
   game, toggleMute: note('mute'), toggleFullscreen: note('fullscreen'), wake: note('wake'), quit: note('quit'), play: note('play'),
 };
 // createUi keeps these for drawing; the key handler reads none of them.
-const page = ui.createUi({ atlas: {} as Atlas, board: {} as Board, progress: createProgress(null) });
+const page = ui.createUi({ atlas: {} as Atlas, board: {} as Board, progress: createProgress(null), pages: createFoundPages(null) });
 page.bindControls(controls);
 
 beforeEach(() => { page.closeLayers(); });
@@ -48,13 +49,14 @@ test('Q opens the menu, the next Q closes it, and neither quits the game', () =>
   }
 });
 
-test('Q under the title card does nothing; N opens the trial list and M still reaches the game', () => {
+test('Q under the title card does nothing; N there is Play and M still reaches the game', () => {
   page.showTitle(false);
   assert.deepEqual(press('q').calls, []);
   assert.equal(page.top(), 'title');
-  assert.deepEqual(press('n').calls, []);
-  assert.equal(page.top(), 'trials');
+  assert.deepEqual(press('n').calls, ['play']);
   assert.deepEqual(press('m').calls, ['mute']);
+  assert.equal(page.top(), 'title');
+  page.showLevels();
   press('q');
   assert.equal(page.top(), 'title', 'Q goes back to where the list was opened from');
 });
@@ -97,7 +99,7 @@ test('game keys wait while a card is up; Q, N and M do not', () => {
   for (const tool of Object.values(TOOLS)) assert.deepEqual(press(tool.key.toLowerCase()).calls, [], tool.name);
   assert.deepEqual(press('m').calls, ['mute']);
   assert.deepEqual(press('n').calls, []);
-  assert.equal(page.top(), 'trials');
+  assert.equal(page.top(), 'levels');
 });
 
 test('with nothing open, the keys reach the game, and a tool key uses its tool', () => {

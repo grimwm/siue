@@ -146,7 +146,8 @@ final class GamesHubTest extends TestCase
     {
         $this->game('tankity', null, ['index.html', 'shot.jpg', 'notes.txt']);
         [$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'screenshot' => 'shot.jpg'], "$this->tmp/tankity");
-        self::assertTrue($err === null && ($card['screenshot'] ?? null) === 'games/tankity/shot.jpg', 'card-screenshot-ok');
+        $versioned = 'games/tankity/shot.jpg?v=' . substr((string) hash_file('sha256', "$this->tmp/tankity/shot.jpg"), 0, 10);
+        self::assertTrue($err === null && ($card['screenshot'] ?? null) === $versioned, 'card-screenshot-ok');
         foreach (['missing' => 'nope.jpg', 'not-an-image' => 'notes.txt', 'traversal' => '../cylon/shot.jpg'] as $name => $shot) {
             [$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'screenshot' => $shot], "$this->tmp/tankity");
             self::assertTrue($card === null && is_string($err), "card-screenshot-reject-$name");

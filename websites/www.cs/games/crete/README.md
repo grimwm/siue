@@ -10,8 +10,8 @@ It is a `play` game: the folder is a complete page (`index.html`) with its own P
 
 - `index.html`, `game.css`: the frame markup and its style (status bar, board, strip, toast, cards, the phone layouts).
 - `src/main.ts`: the entry. It wires the modules together, paints the board every frame, keeps the sound and full-screen settings, and exposes `window.__creteTest` (`game`, `TRIALS`, `solve`, `initial`, `trialLevel`, `LEVEL_IDS`, `CHAPTERS`) for the browser specs.
-- `src/puzzle/`: the rules, DOM-free: `tiles` (the pieces as data), `level` (the level text), `state`, `step` (one turn), `minotaur`, `run` (a try with its undo), `solver` (exact breadth-first search), `trials` (the ten levels of Chapter 1, kept under their `trial-N` ids).
-- `src/campaign/`: the campaign as data, DOM-free: `chapters` (the ten chapters, which are released, `LEVEL_IDS` in play order, `chapterOf`, `pageHome`), `chapter-1` (The Outer Halls: its opening and closing cards and its story pages) and `lore` (the shape of a chapter's words; every quotation is word for word from a public-domain translation).
+- `src/puzzle/`: the rules, DOM-free: `tiles` (the pieces as data), `level` (the level text), `state`, `step` (one turn), `minotaur`, `run` (a try with its undo), `solver` (exact breadth-first search), `difficulty` (the measure and the bar, below), `trials` (the ten levels of Chapter 1, kept under their `trial-N` ids).
+- `src/campaign/`: the campaign as data, DOM-free: `chapters` (the ten chapters, which are released, each one's teaching stretch, `LEVEL_IDS` in play order, `chapterOf`, `pageHome`), `chapter-1` (The Outer Halls: its opening and closing cards and its story pages) and `lore` (the shape of a chapter's words; every quotation is word for word from a public-domain translation).
 - `src/game.ts`: the controller, DOM-free: the try in progress, the turn that is animating, Ariadne's thread, sounds per event, progress and found pages on a win.
 - `src/board-plan.ts` (what to draw and the turn's timeline, DOM-free), `src/board.ts` (the canvas painter), `fx/sprites/tiles.{png,json}` (the atlas, rendered from `fx/blender/`), `src/tiles-page.ts` with `tiles-test.html` (a test page, not deployed).
 - `src/audio.ts`, `src/ui.ts`, `src/ui/*.tsx`: sound, the page and its views (DOM lib).
@@ -42,6 +42,17 @@ php tools/install-files.php                # then rewrite the ?v= versions and s
 The rules never name the page. `game.ts` takes everything it needs as `GameDeps` (`sfx`, `say`, `progress`, `pages`, `levels`, `timers`, `clock`, `reducedMotion`, `changed`), so `test/game.test.ts` plays whole levels against recording hooks and a manual clock. `ui.ts` and `audio.ts` are the other ends of those hooks.
 
 A turn that animates draws the state *before* it while the figures walk (`frameOf` in `game.ts`), so an item vanishes and a door opens when the figure arrives, and the state after it once the last step lands. A key during a slide finishes it and acts at once, exactly once. Reduced motion is read live from `prefers-reduced-motion` and snaps the figures. The thread solves with a cap of 200,000 states; when none is found in that, or the try cannot be won, the toast says the thread goes slack and to undo or restart.
+
+## What makes a good level
+
+Winnable is not enough: a level the solver wins in a few hundred states, with the Minotaur walled off, is no fight. `measure` in `src/puzzle/difficulty.ts` runs the solver three ways and reports the shortest line and the states explored to find it, the shortest line with the Minotaur taken off the board (`minotaurDelta` is how many moves he adds), whether that Minotaur-free line still wins when played on the real level (`greedyWins`), the shortest line that is never caught, and the catches on the shortest line. A search that hits its cap reports unknown, never none.
+
+`challengeProblems` checks a measure against `BAR` and lists what falls short:
+
+- Every level with a Minotaur: he shapes the route. He adds moves, or the line that ignores him loses.
+- A chapter's challenge levels (those after its teaching stretch, `teaching` in `src/campaign/chapters.ts`; Chapter 1 teaches in levels 1 to 8) are a real fight: the line that ignores the Minotaur loses, he adds at least 8 moves, the search explores at least 8 times the states of the chapter's hardest teaching level, and the line is no shorter than its longest teaching level's. `rampProblems` keeps each challenge level from searching fewer states than the one before it.
+
+The bar comes from Chapter 1: its teaching Minotaurs add 3 to 13 moves and its hardest teaching search is 2,437 states; level 9 needs 54 moves, 22 of them for the Minotaur, and explores 39,361 states. `test/difficulty.test.ts` gates every released level on it, and new campaign, editor and endless levels must pass it too.
 
 ## Layout
 

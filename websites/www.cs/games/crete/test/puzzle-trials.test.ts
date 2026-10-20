@@ -5,13 +5,13 @@ import assert from 'node:assert/strict';
 import { TRIALS, trialLevel } from '../src/puzzle/trials.ts';
 import { initial } from '../src/puzzle/state.ts';
 import type { State } from '../src/puzzle/state.ts';
-import { solve, stateKey, SOLVER_CAP } from '../src/puzzle/solver.ts';
+import { solve, solveRefusing, caught, SOLVER_CAP } from '../src/puzzle/solver.ts';
+import { measure } from '../src/puzzle/difficulty.ts';
 import type { SolveResult } from '../src/puzzle/solver.ts';
 import { step } from '../src/puzzle/step.ts';
-import type { Action, GameEvent } from '../src/puzzle/step.ts';
+import type { GameEvent } from '../src/puzzle/step.ts';
 import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
-import { DIRS } from '../src/puzzle/tiles.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
 const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 23, 29, 54, 40];
@@ -24,41 +24,8 @@ const withoutObjects = (lv: Level, kinds: readonly ObjectKind[]): Level => ({ ..
 const retile = (lv: Level, from: readonly Terrain[], to: Terrain): Level => ({ ...lv, terrain: lv.terrain.map(t => (from.includes(t) ? to : t)) });
 const unsolved = (lv: Level) => !solve(initial(lv)).solved;
 
-/** The same breadth-first search as `solve`, but a turn whose events `refuse` is a dead end. */
-function solveRefusing(start: State, cap: number, refuse: (events: GameEvent[], before: State) => boolean): SolveResult {
-  const moves: Action[] = [{ kind: 'wait' }, ...DIRS.map(dir => ({ kind: 'move', dir }) as Action),
-    { kind: 'tool', tool: 'mirror' }, { kind: 'tool', tool: 'cake' }, { kind: 'tool', tool: 'cow' }];
-  const queue: State[] = [start];
-  const parent: number[] = [-1];
-  const via: Action[] = [moves[0]!];
-  const seen = new Set<string>([stateKey(start)]);
-  for (let head = 0; head < queue.length; head++) {
-    for (const a of moves) {
-      const r = step(queue[head]!, a);
-      if (r.state === queue[head] || r.state.outcome === 'lost' || refuse(r.events, queue[head]!)) continue;
-      const k = stateKey(r.state);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      queue.push(r.state);
-      parent.push(head);
-      via.push(a);
-      if (r.state.outcome === 'won') {
-        const line: Action[] = [];
-        for (let i = queue.length - 1; i > 0; i = parent[i]!) line.unshift(via[i]!);
-        return { solved: true, line, explored: queue.length };
-      }
-      if (queue.length >= cap) return { solved: false, explored: queue.length, capped: true };
-    }
-  }
-  return { solved: false, explored: queue.length, capped: false };
-}
-const caught = (events: GameEvent[]) => events.some(e => e.kind === 'caught');
-/** A catch-free search: a turn that ends in a catch is a dead end. */
-const solveNoCatch = (start: State, cap: number) => solveRefusing(start, cap, caught);
 /** Unwinnable (proved, not capped) or won only by a line longer than `than`. */
 const worse = (r: SolveResult, than: number) => (r.solved ? r.line.length > than : !r.capped);
-/** Trial 8's explored count, the largest of the first eight: level 9 must search at least ten times as far. */
-const RIDDLE_EXPLORED = 577;
 
 /** The level's caps: the trials stay small, level 10 may search further. */
 const capOf = (i: number) => (i === 9 ? GREAT_HALL_CAP : undefined);
@@ -176,37 +143,26 @@ test("level 9, The Bull's Horns: the quickest way through takes one catch, and a
   assert.ok(!t9.took.has('page'), 'the page lies off the shortest line');
   const noBlock = solve(initial(withoutObjects(lv, ['block'])));
   assert.ok(noBlock.solved ? noBlock.line.length > t9.line.length : !noBlock.capped, 'the dirt opens the path');
-  const free = solveNoCatch(initial(lv), 2_000_000);
-  assert.ok(worse(free, t9.line.length), `a catch-free line is longer (${free.solved ? free.line.length : 'none'})`);
   const noMarks = solve(initial(retile(lv, ['safe'], 'floor')));
   assert.ok(worse(noMarks, t9.line.length), 'the safe zones matter');
   const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
   assert.ok(solve(initial(copy)).solved, 'the page lies on a winning line');
 });
 
-test("level 9, The Bull's Horns, is a real fight: long, searched wide, shaped by the beast, one catch to spend", () => {
+// Long, searched wide and shaped by the beast is the challenge bar (test/difficulty.test.ts); these are level 9's own.
+test("level 9, The Bull's Horns: one catch to spend, and only where the shortest line spends it", () => {
   const lv = trialLevel(8);
   const t9 = solvedOnce(8);
   const L = t9.line.length;
-  assert.ok(L >= 40, `the shortest line is ${L} moves`);
-
-  assert.equal(solve(initial(trialLevel(7))).explored, RIDDLE_EXPLORED, "trial 8's search is the yardstick");
-  const { explored } = solve(initial(lv));
-  assert.ok(explored >= 10 * RIDDLE_EXPLORED && explored < SOLVER_CAP, `level 9 explored ${explored}`);
-
-  const alone = solve(initial({ ...lv, minotaur: null }));
-  assert.ok(alone.solved && alone.line.length <= L - 8, `without the beast the line is ${alone.solved ? alone.line.length : 'none'}`);
-  let s = initial(lv);
-  for (const a of alone.line) s = step(s, a).state;
-  assert.notEqual(s.outcome, 'won', 'the line that ignores the beast does not win');
-
+  const d = measure(lv);
+  assert.equal(d.catchFree, 'none', 'no line wins without a catch');
   assert.ok(worse(solve(initial({ ...lv, hearts: 1 })), L), 'with one heart there is no catch to spend');
   // Where the catch lands matters: no catch that wakes on the shortest line's mark, and the level is longer or lost.
   let wake: State['throwBack'] | null = null;
-  s = initial(lv);
-  for (const a of t9.line) { const x = step(s, a); if (caught(x.events)) wake = x.state.throwBack; s = x.state; }
+  let s = initial(lv);
+  for (const a of t9.line) { const x = step(s, a); if (caught(x.events, s)) wake = x.state.throwBack; s = x.state; }
   assert.ok(wake && lv.terrain[wake.r * lv.cols + wake.c] === 'safe', 'the shortest line wakes on a mark');
-  const elsewhere = solveRefusing(initial(lv), SOLVER_CAP, (ev, before) => caught(ev) && before.throwBack.r === wake!.r && before.throwBack.c === wake!.c);
+  const elsewhere = solveRefusing(initial(lv), (ev, before) => caught(ev, before) && before.throwBack.r === wake!.r && before.throwBack.c === wake!.c, SOLVER_CAP);
   assert.ok(worse(elsewhere, L), 'a catch that wakes on any other mark does worse');
 });
 

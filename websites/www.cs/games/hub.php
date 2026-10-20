@@ -172,6 +172,14 @@ function games_hub_card(string $id, array $meta, string $dir): array
             return [null, "`screenshot` names $shot, which is not in the game folder"];
         }
         $card['screenshot'] = "games/$id/$shot";
+        // Versioned with the file's content hash, like every other asset on
+        // the site: the server sends no cache headers for pictures, so on the
+        // bare path a browser keeps serving its cached copy after a deploy
+        // replaces the file. The version changes only when the picture does.
+        $hash = @hash_file('sha256', "$dir/$shot");
+        if (is_string($hash)) {
+            $card['screenshot'] .= '?v=' . substr($hash, 0, 10);
+        }
     }
 
     if ($play !== '') {

@@ -94,16 +94,19 @@ intro: Here Minos hid a harder riddle: a locked door, a block to sink in the poo
 #...#.~f~.E#
 ############
 `},{id:"trial-9",text:`title: The Bull's Horns
-intro: The beast cannot tread the marked stones. If he catches you, you lose a heart but wake on the last mark you stood on, still holding all you took.
+intro: The beast cannot tread the marked stones. If he catches you, you lose a heart and wake on the last mark you stood on, still holding all you took, and he stays where he caught you.
 pages: ch1-tribute-marks
 
 ############
-#P.S..S.S|E#
-########.###
-##*...#...##
-#.#...~O..##
-#M#...~##p##
-#.....######
+#.*#.....|E#
+#..#..O#.###
+##S#~..#.#.#
+##......S..#
+#.....###..#
+##.S...~...#
+###~M##....#
+##..##..p.##
+#.....PS...#
 ############
 `},{id:"trial-10",text:`title: The Great Hall
 intro: This hall runs wider than your sight, with more than one way across. At its far end stands a sealed gate, and the relic that opens it lies in the beast's own den.

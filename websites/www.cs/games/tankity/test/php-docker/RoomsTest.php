@@ -147,9 +147,12 @@ final class RoomsTest extends TestCase
         return '';
     }
 
+    /* A reply less its clock-relative fields, which count down between two
+       polls: seconds left on the turn and in the shop, and closesIn, whole
+       seconds that drop by one when the polls straddle a second. */
     private static function volatile(array $r): array
     {
-        unset($r['room']['turnLeft'], $r['room']['shopLeft']);
+        unset($r['room']['turnLeft'], $r['room']['shopLeft'], $r['room']['closesIn']);
         return $r;
     }
 
@@ -259,6 +262,10 @@ final class RoomsTest extends TestCase
         $lobby = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&since=0', 5, $mtoken);
         $joins = array_values(array_filter($lobby['room']['events'] ?? [], fn($e) => ($e['t'] ?? '') === 'join'));
         self::assertTrue(count($joins) === 1 && ($joins[0]['seat'] ?? -1) === $gseat && ($joins[0]['seq'] ?? 0) > 0, 'join-event-reaches-the-host' . ' :: ' . json_encode($joins));
+        // Pinned streams: the hills, the drones' aim and so the hits come out the
+        // same every run. Under this seed every shot below misses, so all four
+        // units stand and the turn comes back round to the host.
+        room_test_seed($mcode, 4, 'tk-4');
         usleep(300000); // seats clock in on create/join; starting is throttled like any other act
         $started = self::post('start', ['code' => $mcode, 'token' => $mtoken, 'csrf' => $mcsrf]);
         self::assertTrue(($started['ok'] ?? false) === true && ($started['room']['turn'] ?? -1) === 0, 'match-starts' . ' :: ' . 'turn=' . ($started['room']['turn'] ?? '?'));
@@ -281,7 +288,7 @@ final class RoomsTest extends TestCase
         foreach (($afterGuest['room']['events'] ?? []) as $e) {
             if (($e['t'] ?? '') === 'aifire') $aiG++;
         }
-        self::assertTrue(($afterGuest['ok'] ?? false) === true && $turnG === 0 && $aiG >= 1 && $aiG <= 2, 'turn-cycles-past-ai' . ' :: ' . 'turn=' . $turnG . ' ai=' . $aiG);
+        self::assertTrue(($afterGuest['ok'] ?? false) === true && $turnG === 0 && $aiG >= 1 && $aiG <= 2, 'turn-cycles-past-ai' . ' :: ' . 'turn=' . $turnG . ' ai=' . $aiG . ' hp=' . json_encode(array_map(fn($t) => [$t['seat'], $t['hp']], $afterGuest['room']['tanks'] ?? [])));
         usleep(300000);
         $calm = self::get(self::$base . '/rooms.php?action=state&code=' . $mcode . '&since=0', 5, $mtoken);
         $aiC = 0;
@@ -341,7 +348,7 @@ final class RoomsTest extends TestCase
             return '';
         };
         $volatile = function (array $r): array {
-            unset($r['room']['turnLeft'], $r['room']['shopLeft']);
+            unset($r['room']['turnLeft'], $r['room']['shopLeft'], $r['room']['closesIn']);
             return $r;
         };
         [$hPlain, $bPlain] = self::rawGet($dUrl . '&since=0', '', $mtoken);

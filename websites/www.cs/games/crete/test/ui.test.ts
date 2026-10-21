@@ -315,6 +315,35 @@ test('the end card words a win as Level N cleared and a loss as Level failed', (
   assert.ok(text('end-trials').startsWith('Levels'));
 });
 
+test('Next level carries the Enter tab, and Enter on a won card opens the next level', () => {
+  reset();
+  win(0);
+  const tabs = walk(el('end-next')!).filter(n => n.localName === 'kbd');
+  assert.deepEqual(tabs.map(t => t.textContent), [KEYS.begin.label]);
+  key('Enter');
+  assert.equal(game.trial, 1);
+  assert.equal(flow.top(), 'start');
+});
+
+test('Retry carries the R tab, and R on a won card plays the level again', () => {
+  reset();
+  win(0);
+  const tabs = walk(el('end-retry')!).filter(n => n.localName === 'kbd');
+  assert.deepEqual(tabs.map(t => t.textContent), [KEYS.restart.label]);
+  const before = game.opens;
+  key('r');
+  assert.equal(game.trial, 0);
+  assert.equal(game.opens, before + 1);
+  assert.equal(game.run!.now.moves, 0);
+});
+
+test('Enter on a won card with Retry focused retries rather than going on', () => {
+  reset();
+  win(0);
+  fireDocument('keydown', { key: 'Enter', target: { tagName: 'BUTTON', id: 'end-retry' } });
+  assert.equal(game.trial, 0);
+});
+
 test('a win that takes a page names it on the end card, and a replayed win still does', () => {
   reset();
   // Level 9 with its page made a relic: the solver's line must take it, and the same line wins the real level.

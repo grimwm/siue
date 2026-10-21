@@ -483,6 +483,21 @@ export function createUi(deps: UiDeps): Ui {
         else enter();
         return;
       }
+      // A won ending card: Begin goes on to the next level (unless another of its buttons has the focus), R plays
+      // this one again.
+      if (layers.isOpen("end") && end.won) {
+        const on = (ev.target as HTMLElement | null)?.id;
+        if (action === "begin" && end.hasNext && (on === undefined || on === "end-next" || !on.startsWith("end-"))) {
+          ev.preventDefault();
+          open(c.game.trial + 1);
+          return;
+        }
+        if (action === "restart") {
+          ev.preventDefault();
+          open(c.game.trial);
+          return;
+        }
+      }
       // The start card closes on Begin and on a move, which then also moves; it blocks nothing else.
       if (layers.isOpen("start")) {
         if (action === "begin") {

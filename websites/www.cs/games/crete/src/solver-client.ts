@@ -1,6 +1,8 @@
 /* The Island of Crete: the page's side of the solver's worker (solver-worker.ts, running solver-host.ts). Start a
  * search on a level's text, follow its progress, stop and resume it, await its answer; the page never blocks on
- * it. One worker serves every search, and a new search cancels the one before it (its answer rejects). The game's
+ * it. One worker serves every search, and a new search cancels the one before it (its answer rejects). A worker
+ * that errors (it failed to load, or threw) is terminated and its searches reject; the next search starts a fresh
+ * one, and a worker that cannot be made at all rejects the search at once. The game's
  * thread help does not use this: it solves in the page (game.ts). */
 import type { Answer, FromHost, Report, SearchKind, ToHost } from './solver-host.ts';
 
@@ -11,6 +13,7 @@ export interface WorkerLike {
   postMessage(m: unknown): void;
   onmessage: ((e: { data: unknown }) => void) | null;
   onerror?: ((e: unknown) => void) | null;
+  terminate?(): void;
 }
 
 export interface SolverJob {
@@ -23,6 +26,9 @@ export interface SolverJob {
 interface Pending { report(p: Report): void; settle(m: FromHost): void }
 
 const routes = new WeakMap<WorkerLike, Map<number, Pending>>();
+/** Workers that errored and were terminated. */
+const dead = new WeakSet<WorkerLike>();
+const FAILED = 'the solver worker failed to run';
 let nextId = 1;
 let shared: WorkerLike | null = null;
 
@@ -46,17 +52,37 @@ function routesOf(worker: WorkerLike): Map<number, Pending> {
       if (msg.type === 'progress') p.report(msg.report);
       else { m.delete(msg.id); p.settle(msg); }
     };
-    if ('onerror' in worker) {
-      worker.onerror = () => {
-        for (const [id, p] of m) p.settle({ type: 'failed', id, message: 'the solver worker failed to run' });
-        m.clear();
-      };
-    }
+    if ('onerror' in worker) worker.onerror = () => fail(worker);
   }
   return map;
 }
 
-export function startSearch(levelText: string, kind: SearchKind, worker: WorkerLike = solverWorker()): SolverJob {
+/** `worker` errored: it is terminated, so it runs nothing on, and its searches reject. */
+function fail(worker: WorkerLike): void {
+  dead.add(worker);
+  if (shared === worker) shared = null;
+  try { worker.terminate?.(); } catch { /* gone either way */ }
+  const m = routes.get(worker);
+  if (!m) return;
+  for (const [id, p] of m) p.settle({ type: 'failed', id, message: FAILED });
+  m.clear();
+}
+
+/** A job that has already failed. */
+function failedJob(message: string): SolverJob {
+  const result = Promise.reject(new Error(message));
+  result.catch(() => {});
+  return { progress() {}, stop() {}, resume() {}, result };
+}
+
+export function startSearch(levelText: string, kind: SearchKind, given?: WorkerLike): SolverJob {
+  let worker: WorkerLike;
+  try {
+    worker = given ?? solverWorker();
+  } catch (e) {
+    return failedJob(`the solver worker could not start: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (dead.has(worker)) return failedJob(FAILED);
   const id = nextId++;
   const listeners: ((p: Report) => void)[] = [];
   const send = (m: ToHost) => worker.postMessage(m);

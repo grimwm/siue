@@ -1,5 +1,6 @@
-/* The Island of Crete: finished search results, kept by the SHA-256 of the exact level text and the search kind,
- * so the same level is never searched twice. A line is kept as move letters. `safeResults` turns any failure of a
+/* The Island of Crete: finished search results, kept by the SHA-256 of the exact level text, the search kind and
+ * the solver's version (a hash of the build that searched), so the same level is never searched twice by one build
+ * and never answered by another's rules. A line is kept as move letters. `safeResults` turns any failure of a
  * store (no storage, a full disk, a corrupt entry) into a miss; nothing it does throws. DOM-free. */
 import { DIRS } from './tiles.ts';
 import type { Dir, Tool } from './tiles.ts';
@@ -23,10 +24,16 @@ export interface ResultStore {
   put(key: string, r: CachedResult): Promise<void>;
 }
 
-/** The cache key: the kind, then the SHA-256 of the text's UTF-8 bytes in hex. */
-export async function resultKey(levelText: string, kind: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(levelText));
-  return `${kind}-${[...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('')}`;
+/** SHA-256 of the text's UTF-8 bytes, in hex. */
+export async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** The cache key: the kind, the version (letters and digits only) when there is one, then the text's SHA-256. */
+export async function resultKey(levelText: string, kind: string, version = ''): Promise<string> {
+  const v = version.replace(/[^A-Za-z0-9]/g, '');
+  return `${kind}-${v ? `${v}-` : ''}${await sha256Hex(levelText)}`;
 }
 
 const DIR_LETTER: Record<Dir, string> = { up: 'u', down: 'd', left: 'l', right: 'r' };

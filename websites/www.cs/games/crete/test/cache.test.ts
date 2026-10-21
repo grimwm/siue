@@ -8,9 +8,13 @@ import type { Action } from '../src/puzzle/step.ts';
 
 const hit: CachedResult = { solved: true, line: 'uuwrz', explored: 812 };
 
-test('a key is the SHA-256 of the exact text, with the search kind', async () => {
+test('a key is the SHA-256 of the exact text, with the search kind and the solver\'s version', async () => {
   const a = await resultKey('title: a\n\nPE\n', 'solve');
   assert.match(a, /^solve-[0-9a-f]{64}$/);
+  const v1 = await resultKey('title: a\n\nPE\n', 'solve', 'abc123');
+  assert.match(v1, /^solve-abc123-[0-9a-f]{64}$/);
+  assert.notEqual(v1, await resultKey('title: a\n\nPE\n', 'solve', 'def456'), 'another build, another key');
+  assert.notEqual(v1, a);
   assert.equal(a, await resultKey('title: a\n\nPE\n', 'solve'), 'the same text, the same key');
   assert.notEqual(a, await resultKey('title: a\n\nPE\n', 'measure'), 'another kind, another key');
   assert.notEqual(a, await resultKey('title: a\n\nPE\n\n', 'solve'), 'one more byte, another key');

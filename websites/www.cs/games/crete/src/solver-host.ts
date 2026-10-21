@@ -1,12 +1,16 @@
 /* The Island of Crete: the solver's worker side, as a message handler. It takes a level's text and a search kind
- * (solve: the shortest line; measure: difficulty.ts's numbers), answers from the result cache when it can, and
+ * (solve: the shortest line; measure: difficulty.ts's numbers), answers from the result cache when it can (an
+ * entry of this solver's version; a cached line only when it still wins), and
  * otherwise searches in batches, reporting progress between them. Past a memory budget the search's nodes go to a
  * node file on disk (the origin private file system, in the worker); without one they stay in memory and the
  * progress says so. Stop pauses between batches and resume goes on with the same search; a new search cancels the
  * one under way or stopped, and every search closes its node file when it ends. solver-worker.ts wires it to the
  * Worker; the tests run it in-process. DOM-free. */
 import { parse } from './puzzle/level.ts';
+import type { Level } from './puzzle/level.ts';
 import { initial } from './puzzle/state.ts';
+import { step } from './puzzle/step.ts';
+import type { Action } from './puzzle/step.ts';
 import { layoutOf } from './puzzle/pack.ts';
 import { memoryStore, spillingStore } from './puzzle/store.ts';
 import type { NodeStore } from './puzzle/store.ts';
@@ -43,6 +47,9 @@ export interface HostDeps {
   openFile(): Promise<NodeFile>;
   /** Lets the messages that arrived during a batch in. */
   pause(): Promise<void>;
+  /** The solver's version, part of every cache key so another build's results are never served; null when it is
+   *  unknown, and then nothing is cached. */
+  version: string | null | Promise<string | null>;
   /** Expansions per batch; BATCH by default. */
   every?: number;
   /** Nodes kept in memory before the node file, its page size and pages cached; searchLimits' and PAGE_BYTES and
@@ -102,12 +109,13 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
   }
 
   async function search(job: Job, text: string, kind: SearchKind): Promise<Answer> {
-    const key = await resultKey(text, kind);
-    const hit = await results.get(key);
-    if (job.cancelled) throw new Cancelled();
-    const cached = hit && fromCache(hit, kind);
-    if (cached) return cached;
     const level = parse(text);
+    const version = await deps.version;
+    const key = version === null ? null : await resultKey(text, kind, version);
+    const hit = key === null ? null : await results.get(key);
+    if (job.cancelled) throw new Cancelled();
+    const cached = hit && fromCache(hit, kind, level);
+    if (cached) return cached;
     let disk: NodeFile | null = null;
     try { disk = await deps.openFile(); } catch { disk = null; }
     try {
@@ -119,8 +127,9 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
       const store = (words: number): NodeStore => (file
         ? spillingStore(words, file, spill.memoryNodes, spill)
         : memoryStore(words));
-      const batches = kind === 'solve'
-        ? solving(initial(level), null, limits.cap, { store: store(layoutOf(level).words), every })
+      const solveStore = kind === 'solve' ? store(layoutOf(level).words) : null;
+      const batches = solveStore
+        ? solving(initial(level), null, limits.cap, { store: solveStore, every })
         : measuring(level, limits.cap, { store, every });
       let answer: Answer;
       for (;;) {
@@ -130,7 +139,7 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
         } catch (e) {
           // Memory ran out below the ceiling: a solve ends capped, as any search that cannot go on.
           if (!(e instanceof RangeError) || kind !== 'solve') throw e;
-          n = { done: true, value: { solved: false, explored: 0, capped: true, reason: `out of memory: ${e.message}` } };
+          n = { done: true, value: { solved: false, explored: solveStore!.size, capped: true, reason: `out of memory: ${e.message}` } };
         }
         if (n.done) { answer = n.value; break; }
         deps.post({ type: 'progress', id: job.id, report: { ...n.value, storage } });
@@ -139,7 +148,7 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
         if (job.cancelled) throw new Cancelled();
       }
       const keep = toCache(answer);
-      if (keep) await results.put(key, keep);
+      if (keep && key !== null) await results.put(key, keep);
       return answer;
     } finally {
       try { disk?.close(); } catch { /* the file is gone either way */ }
@@ -173,13 +182,24 @@ function toCache(a: Answer): CachedResult | null {
   return a.capped ? null : { solved: false, line: '', explored: a.explored };
 }
 
-/** The cached answer for `kind`, or null when the entry does not read as one. */
-function fromCache(c: CachedResult, kind: SearchKind): Answer | null {
+/** The cached answer for `kind` on `level`, or null when the entry does not read as one, or its line does not win
+ *  `level` on its last move. */
+function fromCache(c: CachedResult, kind: SearchKind, level: Level): Answer | null {
   if (kind === 'measure') {
     const d = c.difficulty;
-    return typeof d === 'object' && d !== null && 'shortest' in d ? (d as Difficulty) : null;
+    return typeof d === 'object' && d !== null && 'shortest' in d && 'label' in d ? (d as Difficulty) : null;
   }
   if (!c.solved) return { solved: false, explored: c.explored, capped: false };
   const line = lineOf(c.line);
-  return line ? { solved: true, line, explored: c.explored } : null;
+  return line && wins(level, line) ? { solved: true, line, explored: c.explored } : null;
+}
+
+/** `line` played from the start wins on its last move, and not before. */
+function wins(level: Level, line: readonly Action[]): boolean {
+  let s = initial(level);
+  for (const a of line) {
+    if (s.outcome !== 'playing') return false;
+    s = step(s, a).state;
+  }
+  return s.outcome === 'won';
 }

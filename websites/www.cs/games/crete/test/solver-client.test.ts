@@ -7,7 +7,7 @@ import { startSearch } from '../src/solver-client.ts';
 import type { WorkerLike } from '../src/solver-client.ts';
 import { createSolverHost, searchLimits, MEMORY_CEILING } from '../src/solver-host.ts';
 import type { NodeFile, Report } from '../src/solver-host.ts';
-import { memoryResults } from '../src/puzzle/cache.ts';
+import { memoryResults, resultKey } from '../src/puzzle/cache.ts';
 import type { ResultStore } from '../src/puzzle/cache.ts';
 import { handleFile, memoryFile } from '../src/puzzle/paged.ts';
 import type { PagedFile, SyncHandle } from '../src/puzzle/paged.ts';
@@ -38,7 +38,7 @@ function memoryDisk(make: () => PagedFile = memoryFile): Disk {
 const noDisk = (): Promise<NodeFile> => Promise.reject(new Error('SecurityError: no origin private file system'));
 
 /** The worker's side behind a stand-in for the Worker: every message is cloned and arrives a turn later. */
-function inProcess(opts: { results?: ResultStore; open?: () => Promise<NodeFile>; every?: number; spill?: boolean } = {}): WorkerLike {
+function inProcess(opts: { results?: ResultStore; open?: () => Promise<NodeFile>; every?: number; spill?: boolean; version?: string } = {}): WorkerLike {
   const worker: WorkerLike = {
     onmessage: null,
     postMessage(m) { const copy = structuredClone(m); setImmediate(() => host.receive(copy as never)); },
@@ -48,6 +48,7 @@ function inProcess(opts: { results?: ResultStore; open?: () => Promise<NodeFile>
     results: opts.results ?? memoryResults(),
     openFile: opts.open ?? noDisk,
     pause: tick,
+    version: opts.version ?? 'test',
     every: opts.every ?? 512,
     // Spilling: 2,000 nodes in memory, the rest on 4 KiB pages of which 4 are cached.
     spill: opts.spill ? { memoryNodes: 2_000, pageBytes: 4096, cachePages: 4 } : undefined,
@@ -117,6 +118,58 @@ test('a finished search is cached: the second run answers at once, without progr
   assert.equal(seen.length, 0, 'no progress: the answer came from the cache');
   assert.equal(lengthOf(r2), L9_SHORTEST);
   assert.deepEqual(r2, r1, 'the same line, from the cached letters');
+});
+
+test('a cache entry from another build is a miss: the search runs again', async () => {
+  const results = memoryResults();
+  await startSearch(L9, 'solve', inProcess({ results, version: 'old' })).result;
+  const job = startSearch(L9, 'solve', inProcess({ results, version: 'new' }));
+  const seen: Report[] = [];
+  job.progress(p => seen.push(p));
+  assert.equal(lengthOf(await job.result), L9_SHORTEST);
+  assert.ok(seen.length > 0, 'searched, not answered from the old build\'s entry');
+});
+
+test('a cached line that does not win is a miss: the search runs again', async () => {
+  const results = memoryResults();
+  const key = await resultKey(L9, 'solve', 'test');
+  for (const line of ['w'.repeat(L9_SHORTEST), 'uq', 'u']) {
+    await results.put(key, { solved: true, line, explored: 5 });
+    const job = startSearch(L9, 'solve', inProcess({ results }));
+    const seen: Report[] = [];
+    job.progress(p => seen.push(p));
+    const r = await job.result;
+    assert.equal(lengthOf(r), L9_SHORTEST, line);
+    assert.ok(seen.length > 0, `${line}: searched`);
+  }
+});
+
+/** A worker that never answers, whose error can be fired; it records whether it was terminated. */
+function failingWorker() {
+  const w = {
+    onmessage: null as WorkerLike['onmessage'],
+    onerror: null as ((e: unknown) => void) | null,
+    sent: [] as unknown[],
+    terminated: false,
+    postMessage(m: unknown) { w.sent.push(m); },
+    terminate() { w.terminated = true; },
+  };
+  return w;
+}
+
+test('a worker that errors rejects the search under way, is terminated, and later searches on it reject at once', async () => {
+  const w = failingWorker();
+  const job = startSearch(L9, 'solve', w);
+  w.onerror?.(new Error('404'));
+  await assert.rejects(job.result, /solver worker failed/);
+  assert.ok(w.terminated, 'the worker is terminated, so it runs nothing on');
+  await assert.rejects(startSearch(L9, 'solve', w).result, /solver worker failed/);
+});
+
+test('without a Worker to start the search rejects, every time, instead of hanging', async () => {
+  // Node has no Worker: the default worker cannot be made.
+  await assert.rejects(startSearch(L9, 'solve').result, /solver worker/);
+  await assert.rejects(startSearch(L9, 'solve').result, /solver worker/);
 });
 
 test('a store that fails reads as a miss: the search runs and nothing throws', async () => {

@@ -1,10 +1,11 @@
 /* The Island of Crete: the solver's Web Worker (dist/solver-worker.js), started by solver-client.ts. It runs
  * solver-host.ts with the search's node file and the result cache in the origin private file system, written
- * through sync access handles. Where that is missing or refused (a private window, no quota) the nodes stay in
- * memory and the cache reads as empty. */
+ * through sync access handles; the cache's version is a hash of this bundle. Where the file system is missing or
+ * refused (a private window, no quota) the nodes stay in memory and the cache reads as empty. */
 import { createSolverHost } from './solver-host.ts';
 import type { NodeFile, ToHost } from './solver-host.ts';
 import { handleFile } from './puzzle/paged.ts';
+import { sha256Hex } from './puzzle/cache.ts';
 import type { CachedResult, ResultStore } from './puzzle/cache.ts';
 
 /** A node file older than this was left by a tab that closed mid-search, and is deleted. */
@@ -50,6 +51,14 @@ const diskResults: ResultStore = {
   },
 };
 
+/** The solver's version: a hash of this worker's own bundle, which holds every rule and the solver, so a
+ *  result cached by another build is never served. Unknown (nothing cached) when the bundle cannot be read. */
+const version = fetch(self.location.href)
+  .then(r => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+  .then(text => sha256Hex(text))
+  .then(hex => hex.slice(0, 16))
+  .catch(() => null);
+
 /** A message to itself: whatever arrived during the batch (stop, a new search) is handled before it. */
 const channel = new MessageChannel();
 const waiting: (() => void)[] = [];
@@ -60,5 +69,6 @@ const host = createSolverHost({
   results: diskResults,
   openFile: openNodeFile,
   pause: () => new Promise<void>(r => { waiting.push(r); channel.port2.postMessage(0); }),
+  version,
 });
 self.onmessage = (e: MessageEvent<ToHost>) => host.receive(e.data);

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { solve } from '../src/puzzle/solver.ts';
-import { stateKey } from '../src/puzzle/solver-bfs.ts';
+import { solveBfs, stateKey } from '../src/puzzle/solver-bfs.ts';
 import { step } from '../src/puzzle/step.ts';
 import { grid, mv, play } from './puzzle-grid.ts';
 
@@ -95,10 +95,10 @@ test('a cap of 1 returns capped without expanding', () => {
   assert.equal(r.explored, 1);
 });
 
-test('of two equally short lines the solver keeps the one that waits in place', () => {
+test('of two equally short lines the reference keeps the one that waits in place', () => {
   // Five turns win either way: the Minotaur must be let past the pillar, by a wait or by a step out and back.
   const rows = ['######', '#M.#.#', '#E.#.#', '##P..#', '######'];
-  const r = solve(grid(rows));
+  const r = solveBfs(grid(rows));
   assert.ok(r.solved);
   assert.equal(r.line.length, 5);
   assert.ok(r.line.some(a => a.kind === 'wait'));

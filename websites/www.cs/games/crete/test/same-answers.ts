@@ -1,8 +1,9 @@
 // The same-answers helper: every solver must agree with the breadth-first reference on whether a level is
 // winnable and on the length of the shortest line, plain and refusing catches, and every line it returns must
-// play out. Registers no tests.
+// play out. Where the reference gives up at the cap, a solver that decides must agree with the reference given
+// room to finish (SOLVER_CAP). Registers no tests.
 import assert from 'node:assert/strict';
-import { solve, solveRefusing, caught } from '../src/puzzle/solver.ts';
+import { solve, solveRefusing, caught, SOLVER_CAP } from '../src/puzzle/solver.ts';
 import { solveBfs, solveBfsRefusing } from '../src/puzzle/solver-bfs.ts';
 import type { SolveResult } from '../src/puzzle/solver.ts';
 import { initial } from '../src/puzzle/state.ts';
@@ -12,6 +13,14 @@ import type { Level } from '../src/puzzle/level.ts';
 import { reference, referenceRefusing, CORPUS_CAP } from './corpus.ts';
 
 const summary = (r: SolveResult) => (r.solved ? { solved: true, length: r.line.length } : { solved: false, capped: r.capped });
+const gaveUp = (r: SolveResult) => !r.solved && r.capped;
+
+/** `got` against the reference's `want` at the same cap; when only the reference gave up, against `finished`. */
+function agree(got: SolveResult, want: SolveResult, finished: () => SolveResult, message: string): void {
+  const truth = gaveUp(want) && !gaveUp(got) ? finished() : want;
+  assert.ok(!gaveUp(truth), `the reference gives up even at ${SOLVER_CAP} states: ${message}`);
+  assert.deepEqual(summary(got), summary(truth), message);
+}
 
 /** Plays a solved line from the level's start: it must end won, and with `refuseCatches` no turn may catch. */
 function replay(level: Level, r: SolveResult, refuseCatches: boolean, what: string): void {
@@ -33,8 +42,8 @@ export function sameAnswers(level: Level, cap: number): void {
   const refusing = solveRefusing(s, caught, cap);
   const want = cap === CORPUS_CAP ? reference(level) : solveBfs(s, cap);
   const wantRefusing = cap === CORPUS_CAP ? referenceRefusing(level) : solveBfsRefusing(s, caught, cap);
-  assert.deepEqual(summary(plain), summary(want), `solve disagrees on\n${what}`);
-  assert.deepEqual(summary(refusing), summary(wantRefusing), `solveRefusing disagrees on\n${what}`);
+  agree(plain, want, () => solveBfs(s, SOLVER_CAP), `solve disagrees on\n${what}`);
+  agree(refusing, wantRefusing, () => solveBfsRefusing(s, caught, SOLVER_CAP), `solveRefusing disagrees on\n${what}`);
   replay(level, plain, false, what);
   replay(level, refusing, true, what);
 }

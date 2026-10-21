@@ -37,14 +37,21 @@ a big level runs the browser out of memory.
   three initials. There is no free-text title or intro.
 - **Winnable, proven by the solver:** only a level the solver has proven
   winnable can be shared. The author never has to beat it first.
+- **Every level must have a Minotaur, and he must matter.** A level is
+  shareable only if it has a Minotaur, the solver proves it winnable, and it
+  cannot be won while ignoring him: the shortest route with the Minotaur taken
+  off the board, played on the real level, loses (the difficulty measure's
+  "ignoring him wins?" check). A level without a Minotaur, or one he cannot
+  affect, is refused with a plain explanation.
 - **Hard or slow levels:** while the solver works, the editor shows a progress
   bar. There is no fixed time limit: the author may keep it searching or stop;
   stopping means "not shareable yet", never "shared unproven".
-- **Too easy is allowed:** a level that is winnable but under the difficulty
-  bar can be shared; it is marked "easy". Campaign levels must clear the bar.
-- **Difficulty shown live:** a small meter shows the quickest win, the
-  situations searched and how much the Minotaur adds, updated in the
-  background after the author pauses editing.
+- **Too easy is allowed:** a level that passes the rules above but is under
+  the difficulty bar can be shared; it is marked "easy". Campaign levels must
+  clear the bar.
+- **The solver runs only when asked.** Editing never starts a search. The
+  author presses **Check** to prove and rate the level, and **Share** runs the
+  check first if the level changed since the last one.
 - **Desktop first;** full phone editing too if it can be done well. Phones can
   always play shared levels.
 - **Editing:** paint tiles and pieces, undo the last 50 edits, and a
@@ -131,17 +138,21 @@ a phone must always work.
 - **Try it:** plays the level in the real game engine, with undo and restart;
   leaving returns to the editor where it was. A win by the author is kept as
   their best for the link.
-- **The meter:** after each pause in editing, the background solver measures
-  the level: quickest win, situations searched, how much the Minotaur adds,
-  and the rating (easy, or passes the bar). While it searches it shows the
-  progress bar with **Keep searching** and **Stop**.
+- **Check:** proves and rates the level on request, in the background
+  solver: winnable or not, quickest win, situations searched, how much the
+  Minotaur adds, whether ignoring him still wins, and the rating (easy, or
+  passes the bar). While it searches it shows the progress bar with **Keep
+  searching** and **Stop**. Any edit marks the result out of date; nothing
+  re-runs until Check or Share is pressed.
 - **Problems are explained:** an unwinnable level says so; a level the solver
   could not finish says which pieces make it hard (most often blocks), so the
   author can simplify.
 
 ### Sharing
 
-- **Share** is enabled only once the solver has proven the level winnable.
+- **Share** runs Check if the level changed since the last one, and succeeds
+  only when the level has a Minotaur, is proven winnable, and ignoring the
+  Minotaur loses.
 - The link carries the whole level, compressed, in the URL fragment (after
   `#`), so it never reaches the server's logs. It also carries the solver's
   winning line (see below), the author's three initials and their best move
@@ -196,22 +207,22 @@ gate in the test suite, as today.
   `difficulty.ts` is recalibrated in Part 1 so every Chapter 1 level keeps its
   current pass or fail (the test suite checks this), and the README section
   "What makes a good level" is updated with the new numbers.
-- **"Easy" for a player's level** means it fails the challenge bar measured
-  against Chapter 1's teaching levels (the campaign's fixed reference). A level
-  with no Minotaur is rated easy, following the rule that the Minotaur must
-  shape the route.
+- **"Easy" for a player's level** means it passes the share rules but fails
+  the challenge bar measured against Chapter 1's teaching levels (the
+  campaign's fixed reference). A level with no Minotaur is never shareable.
 - **Links carry the solver's proof.** When the solver proves a level, the
   shortest winning line it found goes into the link with the level. Whoever
   opens the link replays that line, which takes milliseconds even at 64 × 64,
   so the level is proven on their device without a search, and the thread help
-  works at once. Nothing else in a link is trusted: the rating is recomputed in
-  the background on the player's device and shows "rating…" until done. A line
-  that does not win is a damaged link.
-- **Share needs only the proof.** Share is enabled once the first search (the
-  level as it is) finishes with a win. The rating's other searches (without the
-  Minotaur, and refusing every catch) run after it in the background, through
-  the same engine and cache; the progress bar covers whichever search is
-  running, and Stop stops them all.
+  works at once. Nothing else in a link is trusted: the Minotaur rule and the
+  rating are recomputed in the background on the player's device, which shows
+  "rating…" until done. A line that does not win, or a level without a
+  Minotaur, is a damaged link.
+- **What Share waits for.** Share needs two searches: the level as it is
+  (the proof) and the level without the Minotaur (whose route, replayed on the
+  real level, must lose). The catch-refusing search is part of the rating
+  only and does not block Share. All go through the same engine and cache; the
+  progress bar covers whichever search is running, and Stop stops them all.
 - **Campaign fields:** with the owner flag on, the editor shows title, intro
   and page-id fields and offers the story page piece, for campaign export only.
   Those fields never go into a share link, so the no-free-text rule holds for

@@ -1,9 +1,9 @@
 /* The Island of Crete: a file of bytes read and written at offsets, where the search keeps the nodes that do not
- * fit in memory (store.ts). The page backs it with the Origin Private File System; `memoryFile` keeps it in an
- * array, for tests and wherever no disk is at hand. Any method may throw (no room, no access). DOM-free. */
+ * fit in memory (store.ts). `memoryFile` keeps it in an array. Any method may throw (no room, no access). DOM-free. */
 
 export interface PagedFile {
-  /** Fills `into` from `offset`; bytes past the end read as zero. */
+  /** Fills `into` from `offset`; bytes past the end read as zero. The store never reads past the end: a file shorter
+   *  than what it wrote is a failure of the file. */
   read(offset: number, into: Uint8Array): void;
   /** Writes `from` at `offset`, growing the file (with zeros in any gap) as needed. */
   write(offset: number, from: Uint8Array): void;

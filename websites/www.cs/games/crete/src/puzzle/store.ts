@@ -115,7 +115,8 @@ export interface SpillOptions {
 /** The first `memoryBudgetNodes` nodes in memory, as memoryStore keeps them; every later one in `file`, in fixed-size
  *  records (the words, then parent, g and action, one word each) on fixed-size pages, of which a few are cached.
  *  Only each node's hash and the hash table stay in memory for those; a hash match is confirmed against the
- *  record read back, so duplicates are exact. A file that throws throws a StoreError. */
+ *  record read back, so duplicates are exact. A file that throws, or is shorter than what was written to it, throws
+ *  a StoreError. */
 export function spillingStore(wordsPerNode: number, file: PagedFile, memoryBudgetNodes: number, options: SpillOptions = {}): NodeStore {
   const W = wordsPerNode;
   const budget = Math.max(0, Math.floor(memoryBudgetNodes));
@@ -163,7 +164,11 @@ export function spillingStore(wordsPerNode: number, file: PagedFile, memoryBudge
         slotOf.delete(old);
       }
       if (p < begun) {
-        try { file.read(p * pageBytes, raw[s]!); } catch (e) { throw failed(e); }
+        try {
+          // Pages are written whole, so a file that does not hold this one has lost what was written.
+          if (file.size() < (p + 1) * pageBytes) throw new Error(`page ${p} is missing (${file.size()} bytes)`);
+          file.read(p * pageBytes, raw[s]!);
+        } catch (e) { throw failed(e); }
       } else {
         pages[s]!.fill(0);
         begun = p + 1;

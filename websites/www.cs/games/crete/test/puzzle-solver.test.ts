@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { solve } from '../src/puzzle/solver.ts';
-import { solveBfs, stateKey } from '../src/puzzle/solver-bfs.ts';
+import { solveBfs, stateKey } from './reference-solver.ts';
 import { step } from '../src/puzzle/step.ts';
 import { grid, mv, play } from './puzzle-grid.ts';
 

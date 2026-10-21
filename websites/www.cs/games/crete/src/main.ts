@@ -8,6 +8,8 @@ import type { Atlas } from './board-plan.ts';
 import { createGame, frameOf } from './game.ts';
 import { initial } from './puzzle/state.ts';
 import { solve } from './puzzle/solver.ts';
+import { startSearch } from './solver-client.ts';
+import type { Report } from './solver-host.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS } from './campaign/chapters.ts';
 import { createFoundPages } from './pages.ts';
@@ -143,5 +145,13 @@ followPage({ doc: document, win: window }, { hide: game.stop, show: () => {} });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
 else start();
 
+/** A solve in the solver's worker: its answer and every progress report on the way. */
+function solveInWorker(levelText: string): Promise<{ result: unknown; progress: Report[] }> {
+  const job = startSearch(levelText, 'solve');
+  const progress: Report[] = [];
+  job.progress(p => progress.push(p));
+  return job.result.then(result => ({ result, progress }));
+}
+
 /* Test hook for automated checks: drives the real game logic, no copy. */
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS };
+window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker };

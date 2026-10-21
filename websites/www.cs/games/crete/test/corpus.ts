@@ -3,7 +3,7 @@
 import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import { initial } from '../src/puzzle/state.ts';
-import { solveBfs, solveBfsRefusing, caught } from '../src/puzzle/solver-bfs.ts';
+import { solveBfs, solveBfsRefusing, caught } from './reference-solver.ts';
 
 /** Levels the reference cannot finish within this many states are left out, to keep the corpus quick. */
 export const CORPUS_CAP = 60_000;

@@ -28,9 +28,15 @@ test('the rules never name the page', () => {
 });
 
 test('the entry hands the browser specs their test hook, and the bundle ships it', () => {
-  assert.match(read('src/main.ts'), /window\.__creteTest = \{ game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS \};/);
+  assert.match(read('src/main.ts'), /window\.__creteTest = \{ game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker \};/);
   assert.match(read('dist/main.js'), /__creteTest/);
   assert.doesNotMatch(read('dist/main.js'), /__mazeTest/);
+});
+
+test('the bundle starts the solver worker, which ships beside it and is precached', () => {
+  assert.match(read('dist/main.js'), /new Worker\(new URL\(`solver-worker\.js/);
+  assert.match(read('dist/solver-worker.js'), /createSyncAccessHandle/);
+  assert.match(read('sw.js'), /"dist\/solver-worker\.js"/);
 });
 
 // Games do not know the site: nothing the site's script defines may appear in

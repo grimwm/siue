@@ -8,14 +8,16 @@
  * mode all use these. DOM-free. */
 import type { Level } from './level.ts';
 import { initial } from './state.ts';
-import { solve, solveRefusing, caught, SOLVER_CAP } from './solver.ts';
+import { solving, caught, SOLVER_CAP } from './solver.ts';
 import type { SolveResult } from './solver.ts';
 import { step } from './step.ts';
 import { DIRS, DELTA, TERRAIN } from './tiles.ts';
 import type { Dir } from './tiles.ts';
 import { layoutOf, pack, unpack } from './pack.ts';
-import { memoryStore } from './store.ts';
-import { ACTIONS, ORDER, TOOL_LIST, WAIT_CODE } from './astar.ts';
+import { memoryStore, StoreError } from './store.ts';
+import type { NodeStore } from './store.ts';
+import { ACTIONS, ORDER, TOOL_LIST, WAIT_CODE, finish } from './astar.ts';
+import type { Progress } from './astar.ts';
 
 /** A search's answer: the shortest line's length, 'none' when proved unwinnable, 'unknown' when it hit the cap. */
 export type Shortest = number | 'none' | 'unknown';
@@ -48,22 +50,32 @@ const length = (r: SolveResult): Shortest => (r.solved ? r.line.length : r.cappe
 
 /** Every search searches at most `cap` states; a capped search reports 'unknown', never 'none'. */
 export function measure(level: Level, cap = SOLVER_CAP): Difficulty {
+  return finish(measuring(level, cap));
+}
+
+/** Where measuring's searches keep their nodes (a fresh store for each), and how many each expands per batch. */
+export interface MeasureRoom { store?: (words: number) => NodeStore; every?: number }
+
+/** measure in batches: it yields each search's progress between them (astar.ts's searching). */
+export function* measuring(level: Level, cap = SOLVER_CAP, room: MeasureRoom = {}): Generator<Progress, Difficulty, void> {
   const start = initial(level);
-  const r = solve(start, cap);
+  const at = (lv: Level) => ({ store: room.store?.(layoutOf(lv).words), every: room.every });
+  const r = yield* solving(start, null, cap, at(level));
   const shortest = length(r);
   let catches = 0;
   if (r.solved) {
     let s = start;
     for (const a of r.line) { const x = step(s, a); s = x.state; if (caught(x.events, s)) catches++; }
   }
-  const catchFree = length(solveRefusing(start, caught, cap));
-  const can = canCatch(level, cap);
+  const catchFree = length(yield* solving(start, caught, cap, at(level)));
+  const can = canCatch(level, cap, at(level).store);
   const label = can === null ? 'unknown' : can ? 'chase' : 'solo';
   const naiveWins = naiveWalkWins(level);
   if (!level.minotaur) {
     return { solved: r.solved, shortest, explored: r.explored, withoutMinotaur: null, minotaurDelta: 0, greedyWins: true, catchFree, catches, label, naiveWins };
   }
-  const free = solve(initial({ ...level, minotaur: null }), cap);
+  const alone = { ...level, minotaur: null };
+  const free = yield* solving(initial(alone), null, cap, at(alone));
   const withoutMinotaur = length(free);
   let greedyWins: boolean | null = free.solved ? false : free.capped ? null : false;
   if (free.solved) {
@@ -112,12 +124,20 @@ function apart(level: Level): boolean {
 
 /** Whether some line from the start leads to a catch: a depth-first search over packed situations that stops
  *  at the first turn that catches (any route, not the shortest; waiting first lets the beast come on). False when it is proved none does, null when the
- *  search stored `cap` situations first. */
-export function canCatch(level: Level, cap = SOLVER_CAP): boolean | null {
+ *  search stored `cap` situations first or its store failed. It keeps them in `store`, by default one in memory. */
+export function canCatch(level: Level, cap = SOLVER_CAP, store?: NodeStore): boolean | null {
   if (!level.minotaur || apart(level)) return false;
+  try {
+    return catchSearch(level, cap, store ?? memoryStore(layoutOf(level).words));
+  } catch (e) {
+    if (e instanceof StoreError) return null;
+    throw e;
+  }
+}
+
+function catchSearch(level: Level, cap: number, store: NodeStore): boolean | null {
   const start = initial(level);
   const layout = layoutOf(level);
-  const store = memoryStore(layout.words);
   const buf = new Uint32Array(layout.words);
   pack(start, layout, buf, 0);
   store.add(buf, 0, -1, 0, 0);

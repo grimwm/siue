@@ -4,7 +4,7 @@
 // room to finish (SOLVER_CAP). Registers no tests.
 import assert from 'node:assert/strict';
 import { solve, solveRefusing, caught, SOLVER_CAP } from '../src/puzzle/solver.ts';
-import { solveBfs, solveBfsRefusing } from '../src/puzzle/solver-bfs.ts';
+import { solveBfs, solveBfsRefusing } from './reference-solver.ts';
 import type { SolveResult, Refuse } from '../src/puzzle/solver.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { initial } from '../src/puzzle/state.ts';

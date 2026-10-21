@@ -12,7 +12,7 @@ import type { State } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
 import { DIRS } from '../src/puzzle/tiles.ts';
-import { caught, stateKey } from '../src/puzzle/solver-bfs.ts';
+import { caught, stateKey } from './reference-solver.ts';
 import { corpus } from './corpus.ts';
 
 const level = (rows: readonly string[], header = '') => parse(`title: t\nintro: i\n${header}\n${rows.join('\n')}\n`);

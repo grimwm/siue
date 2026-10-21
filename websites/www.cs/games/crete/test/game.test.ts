@@ -8,7 +8,7 @@ import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createProgress } from '../src/progress.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { solve } from '../src/puzzle/solver.ts';
-import { stateKey } from '../src/puzzle/solver-bfs.ts';
+import { stateKey } from './reference-solver.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { initial } from '../src/puzzle/state.ts';

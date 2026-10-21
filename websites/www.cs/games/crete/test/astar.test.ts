@@ -6,7 +6,7 @@ import { memoryStore } from '../src/puzzle/store.ts';
 import { astar } from '../src/puzzle/astar.ts';
 import type { Progress } from '../src/puzzle/astar.ts';
 import { caught } from '../src/puzzle/solver.ts';
-import { solveBfs } from '../src/puzzle/solver-bfs.ts';
+import { solveBfs } from './reference-solver.ts';
 import { step } from '../src/puzzle/step.ts';
 import { grid, mv } from './puzzle-grid.ts';
 

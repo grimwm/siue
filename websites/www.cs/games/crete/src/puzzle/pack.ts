@@ -1,8 +1,8 @@
 // websites/www.cs/games/crete/src/puzzle/pack.ts
 /* The Island of Crete: a game situation packed into a few 32-bit words, losslessly, for the searches that
- * store millions. It holds exactly what `stateKey` (solver-bfs.ts) holds, as fixed-width bit fields sized from
- * the level; `moves` and `outcome` are not packed. Two situations of a level pack alike exactly when they play
- * alike. DOM-free. */
+ * store millions. It holds exactly what the reference solver's `stateKey` (test/reference-solver.ts) holds, as
+ * fixed-width bit fields sized from the level; `moves` and `outcome` are not packed. Two situations of a level
+ * pack alike exactly when they play alike. DOM-free. */
 import { TERRAIN, KEY_COLORS, GEAR } from './tiles.ts';
 import type { Gear, KeyColor, ObjectKind, Terrain, Tool } from './tiles.ts';
 import type { Level } from './level.ts';

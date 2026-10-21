@@ -32,7 +32,7 @@ export interface SearchOptions {
 
 export interface Progress { expanded: number; stored: number; bestF: number; startH: number }
 
-/** Actions as small ints, as the reference codes them: 0-3 a move (DIRS order), 4 a wait, 5-7 a tool. */
+/** Actions as small ints, as the reference solver (test/reference-solver.ts) codes them: 0-3 a move (DIRS order), 4 a wait, 5-7 a tool. */
 export const TOOL_LIST: readonly Tool[] = ['mirror', 'cake', 'cow'];
 export const WAIT_CODE = DIRS.length;
 export const ACTIONS: readonly Action[] = [
@@ -50,18 +50,42 @@ function lineTo(store: NodeStore, id: number): Action[] {
 }
 
 export function astar(start: State, opts: SearchOptions): SolveResult {
+  return finish(searching(start, opts), opts.onProgress);
+}
+
+/** The search in batches: every `progressEvery` expansions it yields its progress, and its return value is the
+ *  answer. Between batches nothing runs, so a caller may pause it there and go on later. */
+export function* searching(start: State, opts: SearchOptions): Generator<Progress, SolveResult, void> {
   if (start.outcome === 'won') return { solved: true, line: [], explored: 0 };
   const store = opts.store ?? memoryStore(layoutOf(start.level).words);
-  try {
-    return search(start, opts, store);
-  } catch (e) {
+  const failed = (e: unknown): SolveResult => {
     if (e instanceof StoreError) return { solved: false, explored: store.size, capped: true, reason: e.message };
     throw e;
+  };
+  let run: Batch;
+  try { run = begin(start, opts, store); } catch (e) { return failed(e); }
+  for (;;) {
+    let r: SolveResult | Progress;
+    try { r = run(); } catch (e) { return failed(e); }
+    if ('explored' in r) return r;
+    yield r;
   }
 }
 
-function search(start: State, opts: SearchOptions, store: NodeStore): SolveResult {
-  const { cap, refuse, onProgress } = opts;
+/** Runs a batched search to its end, handing each batch's progress to `onProgress`. */
+export function finish<T>(batches: Generator<Progress, T, void>, onProgress?: (p: Progress) => void): T {
+  for (;;) {
+    const n = batches.next();
+    if (n.done) return n.value;
+    onProgress?.(n.value);
+  }
+}
+
+/** One batch: the answer, or the progress when the batch ends first. */
+type Batch = () => SolveResult | Progress;
+
+function begin(start: State, opts: SearchOptions, store: NodeStore): Batch {
+  const { cap, refuse } = opts;
   const prune = opts.prune ?? null;
   const every = Math.max(1, opts.progressEvery ?? 65_536);
   const level = start.level;
@@ -127,9 +151,9 @@ function search(start: State, opts: SearchOptions, store: NodeStore): SolveResul
 
   const startH = estimate(start);
   pack(start, layout, buf, 0);
-  if (prune && prune({ ...start, moves: 0 }, buf, 0)) return { solved: false, explored: 0, capped: false };
+  if (prune && prune({ ...start, moves: 0 }, buf, 0)) return () => ({ solved: false, explored: 0, capped: false });
   const root = store.add(buf, 0, -1, 0, 0);
-  if (store.size >= cap) return { solved: false, explored: store.size, capped: true };
+  if (store.size >= cap) return () => ({ solved: false, explored: store.size, capped: true });
   ensure(root);
   hs[root] = Number.isFinite(startH) ? startH : -1;
   fs[root] = hs[root]!;
@@ -138,41 +162,46 @@ function search(start: State, opts: SearchOptions, store: NodeStore): SolveResul
   if (hs[root]! >= 0) push(root);
 
   let expanded = 0;
-  while (count > 0) {
-    const id = pop();
-    if (wins[id]) return { solved: true, line: lineTo(store, id), explored: store.size };
-    const f = fs[id]!;
-    const g = f - hs[id]!;
-    if (++expanded % every === 0 && onProgress) onProgress({ expanded, stored: store.size, bestF: f, startH });
-    store.words(id, buf, 0);
-    const s = unpack(buf, 0, layout, level, g);
-    for (const c of ORDER) {
-      if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
-      const r = step(s, ACTIONS[c]!);
-      const n = r.state;
-      if (n === s || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
-      pack(n, layout, buf, 0);
-      if (prune && prune(n, buf, 0)) continue;
-      const size = store.size;
-      const nid = store.add(buf, 0, id, c, g + 1);
-      if (nid < 0) continue;
-      const won = n.outcome === 'won';
-      if (store.size > size) {
-        ensure(nid);
-        const h = won ? 0 : estimate(n);
-        hs[nid] = Number.isFinite(h) ? h : -1;
-        pos[nid] = -1;
-        wins[nid] = won ? 1 : 0;
-        hearts[nid] = n.hearts;
+  return () => {
+    // A batch ends at the top of the loop once a progress point has passed, so the node reported is expanded first.
+    let paused: Progress | null = null;
+    while (count > 0) {
+      if (paused) return paused;
+      const id = pop();
+      if (wins[id]) return { solved: true, line: lineTo(store, id), explored: store.size };
+      const f = fs[id]!;
+      const g = f - hs[id]!;
+      if (++expanded % every === 0) paused = { expanded, stored: store.size, bestF: f, startH };
+      store.words(id, buf, 0);
+      const s = unpack(buf, 0, layout, level, g);
+      for (const c of ORDER) {
+        if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
+        const r = step(s, ACTIONS[c]!);
+        const n = r.state;
+        if (n === s || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
+        pack(n, layout, buf, 0);
+        if (prune && prune(n, buf, 0)) continue;
+        const size = store.size;
+        const nid = store.add(buf, 0, id, c, g + 1);
+        if (nid < 0) continue;
+        const won = n.outcome === 'won';
+        if (store.size > size) {
+          ensure(nid);
+          const h = won ? 0 : estimate(n);
+          hs[nid] = Number.isFinite(h) ? h : -1;
+          pos[nid] = -1;
+          wins[nid] = won ? 1 : 0;
+          hearts[nid] = n.hearts;
+        }
+        // A win at f: nothing open is shorter (f never exceeds the shortest line), so it is a shortest line.
+        if (won && g + 1 === f) return { solved: true, line: lineTo(store, nid), explored: store.size };
+        if (store.size >= cap) return { solved: false, explored: store.size, capped: true };
+        if (hs[nid]! < 0) continue;
+        fs[nid] = g + 1 + hs[nid]!;
+        if (pos[nid]! >= 0) up(pos[nid]!);
+        else push(nid);
       }
-      // A win at f: nothing open is shorter (f never exceeds the shortest line), so it is a shortest line.
-      if (won && g + 1 === f) return { solved: true, line: lineTo(store, nid), explored: store.size };
-      if (store.size >= cap) return { solved: false, explored: store.size, capped: true };
-      if (hs[nid]! < 0) continue;
-      fs[nid] = g + 1 + hs[nid]!;
-      if (pos[nid]! >= 0) up(pos[nid]!);
-      else push(nid);
     }
-  }
-  return { solved: false, explored: store.size, capped: false };
+    return { solved: false, explored: store.size, capped: false };
+  };
 }

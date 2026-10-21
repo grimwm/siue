@@ -8,7 +8,7 @@ import { initial } from '../src/puzzle/state.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
-import { stateKey } from '../src/puzzle/solver-bfs.ts';
+import { stateKey } from './reference-solver.ts';
 import { DIRS, KEY_COLORS } from '../src/puzzle/tiles.ts';
 import type { Tool } from '../src/puzzle/tiles.ts';
 import type { Level } from '../src/puzzle/level.ts';

@@ -10,7 +10,7 @@ import { initial } from '../src/puzzle/state.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
-import { solveBfs, stateKey } from '../src/puzzle/solver-bfs.ts';
+import { solveBfs, stateKey } from './reference-solver.ts';
 import { DIRS } from '../src/puzzle/tiles.ts';
 import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';

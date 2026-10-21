@@ -1,17 +1,16 @@
-/* The Island of Crete: the breadth-first reference solver. Exact and simple: the first win found is a shortest
- * line. Every faster solver must give its answers (test/same-answers.test.ts). DOM-free. */
-import { DIRS, TERRAIN, OBJECTS, KEY_COLORS } from './tiles.ts';
-import type { Terrain, Tool } from './tiles.ts';
-import type { Level } from './level.ts';
-import { step } from './step.ts';
-import type { Action, GameEvent } from './step.ts';
-import type { State } from './state.ts';
-
-export const SOLVER_CAP = 2_000_000;
-
-export type SolveResult =
-  | { solved: true; line: Action[]; explored: number }
-  | { solved: false; explored: number; capped: boolean; reason?: string };
+// websites/www.cs/games/crete/test/reference-solver.ts
+// The breadth-first reference solver, for the tests only. Exact and simple: the first win found is a shortest line.
+// Every faster solver must give its answers (same-answers.test.ts). Not a test file.
+import { DIRS, TERRAIN, OBJECTS, KEY_COLORS } from '../src/puzzle/tiles.ts';
+import type { Terrain, Tool } from '../src/puzzle/tiles.ts';
+import type { Level } from '../src/puzzle/level.ts';
+import { step } from '../src/puzzle/step.ts';
+import type { Action } from '../src/puzzle/step.ts';
+import type { State } from '../src/puzzle/state.ts';
+import { SOLVER_CAP } from '../src/puzzle/solver.ts';
+import type { SolveResult, Refuse } from '../src/puzzle/solver.ts';
+export { SOLVER_CAP, caught } from '../src/puzzle/solver.ts';
+export type { SolveResult, Refuse } from '../src/puzzle/solver.ts';
 
 const cell = (x: { r: number; c: number } | null) => (x ? `${x.r},${x.c}` : '-');
 
@@ -56,9 +55,6 @@ function decode(code: number): Action {
   return { kind: 'tool', tool: TOOL_LIST[code - WAIT_CODE - 1]! };
 }
 
-/** A turn the search treats as a dead end, given its events and the state it was played from. */
-export type Refuse = (events: readonly GameEvent[], before: State) => boolean;
-
 /** Breadth-first. A state is kept only until it has been expanded; a visited node costs a parent index, an
  *  action code and its key. */
 export function solveBfs(start: State, cap = SOLVER_CAP): SolveResult {
@@ -70,9 +66,6 @@ export function solveBfs(start: State, cap = SOLVER_CAP): SolveResult {
 export function solveBfsRefusing(start: State, refuse: Refuse, cap = SOLVER_CAP): SolveResult {
   return search(start, cap, refuse);
 }
-
-/** A turn that ends in a catch. */
-export const caught: Refuse = events => events.some(e => e.kind === 'caught');
 
 function search(start: State, cap: number, refuse: Refuse | null): SolveResult {
   if (start.outcome === 'won') return { solved: true, line: [], explored: 0 };

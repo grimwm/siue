@@ -40,11 +40,13 @@ a big level runs the browser out of memory.
   three initials. There is no free-text title or intro.
 - **Winnable, proven by the solver:** only a level the solver has proven
   winnable can be shared. The author never has to beat it first.
-- **Two kinds of level, and neither may be easy.** A level with a Minotaur is
-  labelled **chase**; one without is labelled **solo** (a Chip's Challenge
-  style puzzle with no pursuit). A Minotaur may also be present but unable to
-  reach Theseus, taunting him from behind walls or water; that is still a
-  chase level by its label. Every shared level must clear the difficulty bar
+- **Two kinds of level, and neither may be easy.** A level where the
+  Minotaur can catch Theseus is labelled **chase**. A level with no Minotaur,
+  or with one who can never reach Theseus (taunting him from behind walls or
+  water), is labelled **solo**: a Chip's Challenge style puzzle with no
+  pursuit. "Can catch" is decided by the solver: chase when some sequence of
+  moves from the start leads to a catch, found by a search that stops at the
+  first catch; solo when that search proves none exists. Every shared level must clear the difficulty bar
   (below): a level the solver rates easy is refused with a plain explanation,
   not shared. There is no "easy" label.
 - **Hard or slow levels:** while the solver works, the editor shows a progress

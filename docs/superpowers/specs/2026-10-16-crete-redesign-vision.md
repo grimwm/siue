@@ -20,7 +20,7 @@ decisions that bind every part; each part has its own spec, plan and PRs.
 | Look | Drawn tiles (stone, water, fire, ice, force floors, doors, blocks), with the hero and the Minotaur as sprites, replacing the emoji grid. |
 | Audio | Tile effects (splash, sizzle, door, push) on Crete's synth, and a short looping theme per chapter on the kit's music voices, with a Music toggle. |
 | Campaign | 100 levels in 10 chapters of 10, released chapter by chapter; the ending lands with the last chapter. Roughly one new tile or mechanic per chapter; the meta reveal in the last two chapters. |
-| Editor | A public level editor page. A level saves as a compact string that is shared as a link (no server). Campaign levels are made in it and exported to the repo. The solver must prove a level winnable before it can be shared or exported. |
+| Editor | A public level editor page, desktop first, boards up to 64 × 64. A level is shared only as a link (no server, no public list); shared levels carry a generated name and the author's initials, never typed text. Campaign levels are made in it and exported to the repo. The solver must prove a level winnable before it can be shared or exported; too-easy levels are shared marked easy. See `2026-10-21-crete-editor-design.md`. |
 | Today's chase | Replaced. Endless mode (part 4) is its successor, and old `?seed=` links open endless mode on that seed. |
 | Writing | Claude drafts the chapter cards, level intros, pages and endings in a lore file; the owner edits it in its own PR before levels ship. |
 | Caught | The player loses HP and is thrown back to the last safe zone passed, or the start; the Minotaur stays. At 0 HP the try ends. Undo goes back one move at a time; restart begins the level again. The score is the move count; undone moves do not count. Relics and pages are tracked apart from it. |
@@ -67,8 +67,9 @@ and the Lore book shows it.
 3. **Chapter 1** (`2026-10-19-crete-chapter-1-design.md`): the trials
    become chapter 1 with two new levels, chapter cards, the level list,
    story pages, the Lore book and scrolling boards.
-4. **Editor**: the level format, the editor page, share links, export, and
-   the solver gate.
+4. **Fast solver and editor** (`2026-10-21-crete-editor-design.md`): A\*
+   search with pruning in a background worker, then the editor page, share
+   links and campaign export.
 5. **Chapters 2 to 10**, each its own PR, with chapter music once the music
    pipeline exists.
 6. **Endless**: the seeded generator on the same engine, checked by the solver.

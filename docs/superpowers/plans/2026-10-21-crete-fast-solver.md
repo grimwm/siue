@@ -248,4 +248,5 @@ All paths are relative to `websites/www.cs/games/crete/` unless they start with 
 - [ ] **Step 2:** Run the unit tests — Expected: FAIL.
 - [ ] **Step 3:** Implement the worker, client and cache; add the build entry and the worker program; expose the test hook; update the README (current state).
 - [ ] **Step 4:** Build per Global Constraints; `bash units.sh`; `sh crete/test.sh`; from `websites/www.cs`, run `make e2e E2E_ARGS="crete-solver.spec.ts crete-play.spec.ts crete-layout.spec.ts crete-chapter.spec.ts"` with `COMPOSE="docker compose -f ../../compose.yaml -p crete-solver-e2e"` exported for `make up`, the run and `down -v`. Expected: all PASS; units.sh time within the Task 1 baseline.
-- [ ] **Step 5: Commit** `feat(crete): the solver runs in a worker with disk spill and a result cache`
+- [ ] **Step 5:** Move the reference out of the game: `src/puzzle/solver-bfs.ts` becomes `test/reference-solver.ts` (unchanged code), imported only by tests; `src/` no longer contains it (grep `solver-bfs` in `src/` returns nothing) and `tsconfig.json`'s `files` drops it. Rebuild and run `bash units.sh`.
+- [ ] **Step 6: Commit** `feat(crete): the solver runs in a worker with disk spill and a result cache`

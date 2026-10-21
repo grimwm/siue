@@ -45,9 +45,10 @@ export function loadBuildJson(gameDir) {
     throw new BuildError('build.json: `notInlined` must be a list of package names');
   }
   if (cfg.kitCss !== undefined && typeof cfg.kitCss !== 'boolean') throw new BuildError('build.json: `kitCss` must be true or false');
+  const bundles = new Set(cfg.entries.map(bundleOf));
   for (const [name, file] of Object.entries(cfg.versions ?? {})) {
     if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new BuildError(`build.json: version constant ${name} must be UPPER_CASE`);
-    if (!existsSync(join(gameDir, file))) throw new BuildError(`build.json: version file ${file} does not exist`);
+    if (!bundles.has(file) && !existsSync(join(gameDir, file))) throw new BuildError(`build.json: version file ${file} does not exist`);
   }
   if (cfg.css !== undefined) {
     const c = cfg.css;
@@ -204,48 +205,53 @@ function licenseBlock(name, dir) {
 }
 
 const hash10 = text => createHash('sha256').update(text).digest('hex').slice(0, 10);
+/** The game-relative path of an entry's bundle. */
+const bundleOf = e => `dist/${e.out}.js`;
 
 /** Bundles every entry in memory: dist-relative path -> file text, or bytes for a font. */
 export async function bundle(gameDir, cfg) {
   const define = {};
+  // A version naming an entry's bundle is that bundle's hash as this build makes it: those entries go first.
+  const fromBundle = new Map();
   for (const [name, file] of Object.entries(cfg.versions ?? {})) {
-    define[name] = JSON.stringify(hash10(readFileSync(join(gameDir, file))));
+    if (cfg.entries.some(e => bundleOf(e) === file)) fromBundle.set(file, name);
+    else define[name] = JSON.stringify(hash10(readFileSync(join(gameDir, file))));
   }
+  const first = e => (fromBundle.has(bundleOf(e)) ? 0 : 1);
+  const entries = [...cfg.entries].sort((a, b) => first(a) - first(b));
   const outdir = join(gameDir, 'dist');
   const files = new Map();
   const packages = new Map(); // package dir -> name
-  for (const format of FORMATS) {
-    const entries = cfg.entries.filter(e => e.format === format);
-    if (!entries.length) continue;
-    // One build per entry so a banner lands only on bundles that contain npm code.
-    for (const e of entries) {
-      const options = {
-        absWorkingDir: gameDir,
-        entryPoints: [{ in: e.in, out: e.out }],
-        outdir,
-        bundle: true,
-        format,
-        platform: 'browser',
-        target: 'es2022',
-        minify: true,
-        sourcemap: 'linked',
-        jsx: 'automatic',
-        jsxImportSource: 'preact',
-        charset: 'utf8',
-        legalComments: 'eof',
-        define,
-        write: false,
-        logLevel: 'silent',
-        metafile: true,
-      };
-      let result = await esbuild.build(options);
-      const used = packagesOf(result.metafile, gameDir);
-      if (used.size) {
-        result = await esbuild.build({ ...options, banner: { js: BANNER } });
-        for (const [name, dir] of used) packages.set(dir, name);
-      }
-      for (const f of result.outputFiles) files.set(relative(outdir, f.path).split(sep).join('/'), f.text);
+  // One build per entry so a banner lands only on bundles that contain npm code.
+  for (const e of entries) {
+    const options = {
+      absWorkingDir: gameDir,
+      entryPoints: [{ in: e.in, out: e.out }],
+      outdir,
+      bundle: true,
+      format: e.format,
+      platform: 'browser',
+      target: 'es2022',
+      minify: true,
+      sourcemap: 'linked',
+      jsx: 'automatic',
+      jsxImportSource: 'preact',
+      charset: 'utf8',
+      legalComments: 'eof',
+      define,
+      write: false,
+      logLevel: 'silent',
+      metafile: true,
+    };
+    let result = await esbuild.build(options);
+    const used = packagesOf(result.metafile, gameDir);
+    if (used.size) {
+      result = await esbuild.build({ ...options, banner: { js: BANNER } });
+      for (const [name, dir] of used) packages.set(dir, name);
     }
+    for (const f of result.outputFiles) files.set(relative(outdir, f.path).split(sep).join('/'), f.text);
+    const versioned = fromBundle.get(bundleOf(e));
+    if (versioned) define[versioned] = JSON.stringify(hash10(files.get(`${e.out}.js`)));
   }
   if (cfg.kitCss === true) files.set(KIT_CSS, readFileSync(join(KIT, KIT_CSS), 'utf8'));
   const fonts = cfg.css?.fonts ? loadFonts(gameDir, cfg.css.fonts) : null;

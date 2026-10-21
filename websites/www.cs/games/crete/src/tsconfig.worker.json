@@ -1,0 +1,6 @@
+{
+  // The solver's Web Worker: the worker's globals, no DOM. See games/_kit/README.md.
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "lib": ["ES2022", "WebWorker", "WebWorker.AsyncIterable"] },
+  "files": ["solver-worker.ts"]
+}

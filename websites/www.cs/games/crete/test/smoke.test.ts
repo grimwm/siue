@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 
 const GAME = join(import.meta.dirname, '..');
 const read = (...p: string[]) => readFileSync(join(GAME, ...p), 'utf8');
@@ -28,9 +29,16 @@ test('the rules never name the page', () => {
 });
 
 test('the entry hands the browser specs their test hook, and the bundle ships it', () => {
-  assert.match(read('src/main.ts'), /window\.__creteTest = \{ game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS \};/);
+  assert.match(read('src/main.ts'), /window\.__creteTest = \{ game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker \};/);
   assert.match(read('dist/main.js'), /__creteTest/);
   assert.doesNotMatch(read('dist/main.js'), /__mazeTest/);
+});
+
+test('the bundle starts the solver worker, which ships beside it and is precached', () => {
+  const workerV = createHash('sha256').update(read('dist/solver-worker.js')).digest('hex').slice(0, 10);
+  assert.match(read('dist/main.js'), new RegExp(`new Worker\\(new URL\\(["\`]solver-worker\\.js\\?v=${workerV}["\`]`), 'versioned by its own content hash');
+  assert.match(read('dist/solver-worker.js'), /createSyncAccessHandle/);
+  assert.match(read('sw.js'), /"dist\/solver-worker\.js"/);
 });
 
 // Games do not know the site: nothing the site's script defines may appear in

@@ -2,7 +2,7 @@
 // and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, challengeProblems, rampProblems, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, challengeProblems, rampProblems, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
@@ -107,9 +107,9 @@ const RIVER = level([
   '#M....#',
   '#######',
 ]);
-/** The beast is behind a red door, and there is no red key: only the search can prove he never gets out. */
+/** The beast is behind a red door whose key is sealed in the wall: only the search can prove he never gets out. */
 const LOCKED = level([
-  '#######',
+  '######r',
   '#P...E#',
   '###R###',
   '#M....#',
@@ -124,6 +124,47 @@ test('canCatch: a search that stops at the first catch; false when proved none, 
   assert.equal(canCatch(LOCKED), false, 'proved by exhausting every situation');
   assert.equal(canCatch({ ...CORRIDOR, minotaur: null }), false, 'no Minotaur, no catch');
   assert.equal(canCatch(CORRIDOR, 1), null, 'capped is unknown, never no');
+});
+
+/** An n × n room cut in two by a wall with a green door. Theseus starts beside the exit in the top half, among
+ *  relics he need not take (they multiply the situations), and the beast paces the bottom half. With `key`, a green
+ *  key lies sealed in the wall, where nobody can reach it. */
+function doorPen(n: number, key = false): Level {
+  const half = Math.floor(n / 2);
+  const rows = Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c): string => {
+    if (r === 0 || c === 0 || r === n - 1 || c === n - 1) return '#';
+    if (r === half) return c === half ? 'G' : '#';
+    if (r === 1 && c === 1) return 'P';
+    if (r === 1 && c === 2) return 'E';
+    if (r === n - 2 && c === 1) return 'M';
+    return r < half && r > 1 && (r * 7 + c * 3) % 11 === 0 ? '*' : '.';
+  }));
+  if (key) rows[0]![n - 1] = 'g';
+  return level(rows.map(r => r.join('')), 'relics: 0');
+}
+
+test('a beast penned behind a door whose key is not on the board is proved solo by the flood, without a search', () => {
+  const room = doorPen(30);
+  assert.equal(canCatch(room, 1), false, 'proved before a single situation is stored');
+  assert.equal(measure(room).label, 'solo');
+  const river = level(['#######', '#P...E#', '#~~~~~#', '#M....#', '#######']);
+  assert.equal(canCatch(river, 1), false, 'water with no block to fill it pens him');
+  assert.equal(canCatch({ ...river, objects: river.objects.map((o, i) => (i === 10 ? 'block' : o)) }, 1), null,
+    'a block could fill the water: the flood cannot prove it');
+});
+
+test('a long catch search yields its progress, and stops when its caller does', () => {
+  const room = doorPen(14, true);
+  const batches = measuring(room, 2_000_000, { every: 64 });
+  const seen: number[] = [];
+  let n = batches.next();
+  for (; !n.done; n = batches.next()) seen.push(n.value.expanded);
+  assert.equal(n.value.label, 'solo', 'proved by exhausting every situation');
+  assert.ok(seen.length >= 5, `the catch search reports as it goes (${seen.length} reports)`);
+  for (let i = 1; i < seen.length; i++) assert.ok(seen[i]! > seen[i - 1]!);
+  const stopped = measuring(doorPen(30, true), 2_000_000, { every: 64 });
+  for (let i = 0; i < 3; i++) assert.equal(stopped.next().done, false);
+  assert.equal(stopped.return(undefined as never).done, true, 'abandoned between batches');
 });
 
 /** The plain way to ask: every situation from the start, keyed by the reference's string, until a turn catches. */

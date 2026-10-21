@@ -16,7 +16,9 @@ source needs this folder beside it.
 - `entries`: `{ in, out, format }`, bundled by esbuild to `dist/<out>.js`
   with a linked source map. `esm` for modules, `iife` for classic scripts.
 - `versions`: `{ CONSTANT: file }`; the bundle sees `CONSTANT` as the
-  file's 10-hex content hash (a `?v=` for a file the code fetches).
+  file's 10-hex content hash (a `?v=` for a file the code fetches). A
+  `file` that is another entry's bundle (`dist/<out>.js`) is hashed as
+  this build makes it: that entry is bundled first.
 - `kitCss`: `true` copies `_kit/kit.css` to `dist/kit.css` (see "The kit
   stylesheet").
 - `css`: `{ in, out }` compiles a Tailwind v4 entry (`in`, a CSS file) with

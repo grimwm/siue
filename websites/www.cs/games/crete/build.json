@@ -6,5 +6,6 @@
     { "in": "src/tiles-page.ts", "out": "tiles-test", "format": "iife" },
     { "in": "src/solver-worker.ts", "out": "solver-worker", "format": "iife" }
   ],
+  "versions": { "SOLVER_WORKER_V": "dist/solver-worker.js" },
   "kitCss": true
 }

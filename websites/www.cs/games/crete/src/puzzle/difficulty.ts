@@ -9,10 +9,10 @@
 import type { Level } from './level.ts';
 import { initial } from './state.ts';
 import { solving, caught, SOLVER_CAP } from './solver.ts';
-import type { SolveResult } from './solver.ts';
+import type { SearchRoom, SolveResult } from './solver.ts';
 import { step } from './step.ts';
 import { DIRS, DELTA, TERRAIN } from './tiles.ts';
-import type { Dir } from './tiles.ts';
+import type { Dir, Terrain } from './tiles.ts';
 import { layoutOf, pack, unpack } from './pack.ts';
 import { memoryStore, StoreError } from './store.ts';
 import type { NodeStore } from './store.ts';
@@ -68,7 +68,7 @@ export function* measuring(level: Level, cap = SOLVER_CAP, room: MeasureRoom = {
     for (const a of r.line) { const x = step(s, a); s = x.state; if (caught(x.events, s)) catches++; }
   }
   const catchFree = length(yield* solving(start, caught, cap, at(level)));
-  const can = canCatch(level, cap, at(level).store);
+  const can = yield* catching(level, cap, at(level));
   const label = can === null ? 'unknown' : can ? 'chase' : 'solo';
   const naiveWins = naiveWalkWins(level);
   if (!level.minotaur) {
@@ -105,61 +105,73 @@ function flood(level: Level, from: number, open: (i: number) => boolean): Uint8A
   return seen;
 }
 
-/** True when the Minotaur may never share a cell with Theseus: the cells he could ever enter (a door, water or
- *  toggle wall counted open) and the cells Theseus could ever enter (water and fire only when the level holds
- *  their gear or the cell can change) do not meet. Generous both ways, so true is a proof. */
+/** True when the Minotaur may never share a cell with Theseus: the cells he could ever enter and the cells Theseus
+ *  could ever enter do not meet. A cell counts open when it ever may: a door when its key is on the board, water
+ *  when the level has a block to fill it (and, for Theseus, when it holds flippers), fire when it holds fire boots,
+ *  a toggle wall always. Generous both ways, so true is a proof. */
 function apart(level: Level): boolean {
-  const layout = layoutOf(level);
-  const changes = new Set<number>([...layout.changing, ...layout.toggles].filter(i => i >= 0));
   const held = new Set(level.objects);
+  const opens = (t: Terrain): boolean => {
+    const def = TERRAIN[t];
+    if (def.door) return held.has(`key-${def.door}`);
+    return t === 'water' ? held.has('block') : t === 'toggle-open' || t === 'toggle-closed';
+  };
   const beast = flood(level, level.minotaur!.r * level.cols + level.minotaur!.c,
-    i => TERRAIN[level.terrain[i]!].minotaur || changes.has(i));
+    i => TERRAIN[level.terrain[i]!].minotaur || opens(level.terrain[i]!));
   const hero = flood(level, level.player.r * level.cols + level.player.c, i => {
     const t = level.terrain[i]!;
-    const needs = TERRAIN[t].needs;
-    return t !== 'wall' && (!needs || held.has(needs) || changes.has(i));
+    const def = TERRAIN[t];
+    if (t === 'wall') return false;
+    if (def.door) return opens(t);
+    return !def.needs || held.has(def.needs) || opens(t);
   });
   return !beast.some((b, i) => b === 1 && hero[i] === 1);
 }
 
 /** Whether some line from the start leads to a catch: a depth-first search over packed situations that stops
- *  at the first turn that catches (any route, not the shortest; waiting first lets the beast come on). False when it is proved none does, null when the
- *  search stored `cap` situations first or its store failed. It keeps them in `store`, by default one in memory. */
+ *  at the first turn that catches (any route, not the shortest; waiting first lets the beast come on). False when
+ *  it is proved none does, null when the search stored `cap` situations first or its store failed. It keeps them
+ *  in `store`, by default one in memory. */
 export function canCatch(level: Level, cap = SOLVER_CAP, store?: NodeStore): boolean | null {
+  return finish(catching(level, cap, { store }));
+}
+
+/** canCatch in batches: every `room.every` situations expanded it yields its progress (a depth-first search has
+ *  no estimate, so its bestF and startH are 0), and its return value is the answer. */
+export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {}): Generator<Progress, boolean | null, void> {
   if (!level.minotaur || apart(level)) return false;
+  const layout = layoutOf(level);
+  const store = room.store ?? memoryStore(layout.words);
+  const every = Math.max(1, room.every ?? 65_536);
   try {
-    return catchSearch(level, cap, store ?? memoryStore(layoutOf(level).words));
+    const buf = new Uint32Array(layout.words);
+    pack(initial(level), layout, buf, 0);
+    store.add(buf, 0, -1, 0, 0);
+    if (store.size >= cap) return null;
+    const stack = [0];
+    let expanded = 0;
+    while (stack.length) {
+      if (++expanded % every === 0) yield { expanded, stored: store.size, bestF: 0, startH: 0 };
+      const id = stack.pop()!;
+      store.words(id, buf, 0);
+      const s = unpack(buf, 0, layout, level, 0);
+      for (const c of ORDER) {
+        if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
+        const x = step(s, ACTIONS[c]!);
+        if (caught(x.events, s)) return true;
+        const n = x.state;
+        if (n === s || n.outcome !== 'playing') continue;
+        pack(n, layout, buf, 0);
+        const nid = store.add(buf, 0, id, c, 0);
+        if (store.size >= cap) return null;
+        if (nid >= 0) stack.push(nid);
+      }
+    }
+    return false;
   } catch (e) {
     if (e instanceof StoreError) return null;
     throw e;
   }
-}
-
-function catchSearch(level: Level, cap: number, store: NodeStore): boolean | null {
-  const start = initial(level);
-  const layout = layoutOf(level);
-  const buf = new Uint32Array(layout.words);
-  pack(start, layout, buf, 0);
-  store.add(buf, 0, -1, 0, 0);
-  if (store.size >= cap) return null;
-  const stack = [0];
-  while (stack.length) {
-    const id = stack.pop()!;
-    store.words(id, buf, 0);
-    const s = unpack(buf, 0, layout, level, 0);
-    for (const c of ORDER) {
-      if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
-      const x = step(s, ACTIONS[c]!);
-      if (caught(x.events, s)) return true;
-      const n = x.state;
-      if (n === s || n.outcome !== 'playing') continue;
-      pack(n, layout, buf, 0);
-      const nid = store.add(buf, 0, id, c, 0);
-      if (store.size >= cap) return null;
-      if (nid >= 0) stack.push(nid);
-    }
-  }
-  return false;
 }
 
 /** More relics than this on the board and the plain walk takes the nearest needed relic each time. */
@@ -359,7 +371,9 @@ export interface SharedBar {
 
 /** Chapter 1 sets it: its challenge levels win in 54 and 76 moves from 24,086 and 28,990 situations, its teaching
  *  levels in at most 36 moves from at most 614. The bar is about half of level 9's situations and a few moves
- *  past the longest teaching level; a chase level that clears the chase checks needs half of that again. */
+ *  past the longest teaching level; a chase level that clears the chase checks needs half of that again. The
+ *  situation counts are this solver's (its estimate and pruning): a change to either moves them, and the bar is
+ *  set again from Chapter 1's new counts. */
 export const SHARED_BAR: SharedBar = { shortest: 40, explored: 12_000, chaseShortest: 30, chaseExplored: 6_000 };
 
 /** What keeps a level from being shared; empty when it clears the bar. */

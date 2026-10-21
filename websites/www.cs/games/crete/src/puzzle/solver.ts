@@ -17,7 +17,10 @@ export type SolveResult =
   | { solved: true; line: Action[]; explored: number }
   | { solved: false; explored: number; capped: boolean; reason?: string };
 
-/** A turn the search treats as a dead end, given its events and the state it was played from. */
+/** A turn the search treats as a dead end, given its events and the state it was played from. Pruning (prune.ts)
+ *  drops a situation that another beats on hearts, keys, tools, flippers, fire boots or pages, so a refuse may
+ *  read the events and every other part of the state, but never those: a refuse that turned on them could make a
+ *  dropped situation's line the only one it allows. */
 export type Refuse = (events: readonly GameEvent[], before: State) => boolean;
 
 /** A turn that ends in a catch. */
@@ -32,7 +35,8 @@ export function solve(start: State, cap = SOLVER_CAP): SolveResult {
 }
 
 /** The same search, but a turn that `refuse` names is a dead end: the shortest line that never plays one.
- *  `solved: false, capped: false` proves there is none. */
+ *  `solved: false, capped: false` proves there is none. `refuse` keeps Refuse's contract: it never reads the
+ *  fields pruning compares. */
 export function solveRefusing(start: State, refuse: Refuse, cap = SOLVER_CAP): SolveResult {
   return astar(start, { cap, refuse, prune: pruneFor(start.level, layoutOf(start.level)) });
 }

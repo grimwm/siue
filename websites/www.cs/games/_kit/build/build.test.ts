@@ -41,6 +41,24 @@ test('injects a version constant as the file content hash', t => {
   assert.ok(readFileSync(join(dir, 'dist/main.js'), 'utf8').includes(`"${want}"`));
 });
 
+test("a version constant may name another entry's bundle: it is that fresh bundle's hash", t => {
+  const dir = scratch(t);
+  const cfg = JSON.parse(readFileSync(join(dir, 'build.json'), 'utf8'));
+  cfg.entries.push({ in: 'src/pure.ts', out: 'pure', format: 'iife' });
+  cfg.versions.PURE_V = 'dist/pure.js';
+  writeFileSync(join(dir, 'build.json'), JSON.stringify(cfg));
+  writeFileSync(join(dir, 'src/main.ts'), `${readFileSync(join(dir, 'src/main.ts'), 'utf8')}declare const PURE_V: string;\nexport const pureVersion = PURE_V;\n`);
+  const hashOf = (f: string) => createHash('sha256').update(readFileSync(join(dir, f))).digest('hex').slice(0, 10);
+  assert.equal(run(dir).status, 0, 'builds before the bundle it names exists');
+  assert.ok(readFileSync(join(dir, 'dist/main.js'), 'utf8').includes(`"${hashOf('dist/pure.js')}"`));
+  assert.equal(run(dir, '--check').status, 0);
+  writeFileSync(join(dir, 'src/pure.ts'), 'export const add = (a: number, b: number): number => a + b + 1;\n');
+  assert.equal(run(dir, '--check').status, 1);
+  assert.equal(run(dir).status, 0);
+  assert.ok(readFileSync(join(dir, 'dist/main.js'), 'utf8').includes(`"${hashOf('dist/pure.js')}"`), 'one build brings it up to date');
+  assert.equal(run(dir, '--check').status, 0);
+});
+
 test('is byte-for-byte deterministic', t => {
   const dir = scratch(t);
   run(dir);

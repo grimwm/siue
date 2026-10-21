@@ -106,6 +106,37 @@ test('stop pauses the search between batches; resume finishes the same search', 
   assert.ok(seen.at(-1)!.expanded > before, 'the search went on from where it stopped');
 });
 
+/** Theseus beside the exit among relics he need not take; the beast behind a green door whose key is sealed in the
+ *  wall. Every line from the start is a quick win, but proving the beast never gets out takes the catch search
+ *  every situation. */
+const PENNED = `title: t\nintro: i\nrelics: 0\n\n${[
+  '#############g', '#PE..........#', '#.........*..#', '#...*........#', '#........*...#', '#..*.........#',
+  '#.......*....#', '#######G######', '#............#', '#............#', '#............#', '#............#',
+  '#M...........#', '##############',
+].join('\n')}\n`;
+
+test('a measure reports progress through its catch search, and stop pauses it there', async () => {
+  const job = startSearch(PENNED, 'measure', inProcess({ every: 64 }));
+  const seen: Report[] = [];
+  let stoppedAt = -1;
+  job.progress(p => {
+    seen.push(p);
+    if (stoppedAt < 0) { stoppedAt = seen.length; job.stop(); }
+  });
+  let done = false;
+  void job.result.then(() => { done = true; });
+  while (stoppedAt < 0 && !done) await tick();
+  assert.ok(stoppedAt > 0, 'progress came before the answer');
+  for (let i = 0; i < 50; i++) await tick();
+  assert.equal(done, false, 'no answer while stopped');
+  assert.ok(seen.length <= stoppedAt + 1, 'at most the batch under way reports while stopped');
+  job.resume();
+  const d = await job.result as Difficulty;
+  assert.equal(d.label, 'solo');
+  assert.equal(d.shortest, 1);
+  assert.ok(seen.length >= 5, `the catch search reported as it went (${seen.length} reports)`);
+});
+
 test('a finished search is cached: the second run answers at once, without progress', async () => {
   const results = memoryResults();
   const worker = inProcess({ results });

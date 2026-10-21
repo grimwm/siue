@@ -1,6 +1,6 @@
 // Packing a situation is lossless and exact: what unpacks plays like what was packed, two situations pack alike
-// exactly when the reference's key calls them the same, and each field reads back where the layout says. Level 10
-// packs at a tenth of the reference's size.
+// exactly when the reference's key calls them the same, each field reads back where the layout says, and every
+// block lies on a cell the layout encodes blocks on. Level 10 packs at a tenth of the reference's size.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { get, layoutOf, pack, unpack } from '../src/puzzle/pack.ts';
@@ -46,7 +46,11 @@ function checkLevel(level: Level): void {
   const w = new Uint32Array(layout.words);
   const byKey = new Map<string, string>();
   const byWords = new Map<string, string>();
+  const blockCells = new Set([...layout.blockOnly, ...layout.blockOrObject]);
   for (const s of reachable(level, 20_000)) {
+    s.objects.forEach((o, i) => {
+      if (o === 'block') assert.ok(blockCells.has(i), `a block at cell ${i}, outside the cells pack.ts gives blocks`);
+    });
     pack(s, layout, w, 0);
     const u = unpack(w, 0, layout, level);
     const key = stateKey(s);

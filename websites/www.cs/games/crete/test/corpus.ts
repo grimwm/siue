@@ -37,7 +37,7 @@ function prng(seed: number): () => number {
 }
 
 /** Each entry: the tiles that may be placed, and the most of them a level gets. A tile is dropped on a random floor cell. */
-const SCATTER: readonly (readonly [string, number])[] = [
+export const SCATTER: readonly (readonly [string, number])[] = [
   ['#', 9], ['*', 3], ['|', 1], ['r', 1], ['R', 1], ['b', 1], ['B', 1], ['~', 4], ['f', 1], ['F', 3], ['h', 1],
   ['=', 4], ['k', 1], ['^', 2], ['v', 2], ['<', 2], ['>', 2], ['O', 3], ['_', 1], ['t', 2], ['T', 2], ['S', 2],
   ['%', 3], ['u', 1], ['z', 1], ['x', 1], ['c', 1], ['y', 1], ['Y', 1], ['g', 1], ['G', 1],

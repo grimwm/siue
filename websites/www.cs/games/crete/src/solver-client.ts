@@ -32,9 +32,11 @@ const FAILED = 'the solver worker failed to run';
 let nextId = 1;
 let shared: WorkerLike | null = null;
 
-/** The worker's bundle sits beside this one (dist/); it carries this bundle's version query. */
+declare const SOLVER_WORKER_V: string; // the worker bundle's content hash, injected by the build
+
+/** The worker's bundle sits beside this one (dist/), versioned by its own content hash. */
 function solverWorker(): WorkerLike {
-  shared ??= new Worker(new URL(`solver-worker.js${new URL(import.meta.url).search}`, import.meta.url)) as WorkerLike;
+  shared ??= new Worker(new URL(`solver-worker.js?v=${SOLVER_WORKER_V}`, import.meta.url)) as WorkerLike;
   return shared;
 }
 

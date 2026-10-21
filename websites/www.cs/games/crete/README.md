@@ -45,14 +45,40 @@ A turn that animates draws the state *before* it while the figures walk (`frameO
 
 ## What makes a good level
 
-Winnable is not enough: a level the solver wins in a few hundred states, with the Minotaur walled off, is no fight. `measure` in `src/puzzle/difficulty.ts` runs the solver three ways and reports the shortest line and the states explored to find it, the shortest line with the Minotaur taken off the board (`minotaurDelta` is how many moves he adds), whether that Minotaur-free line still wins when played on the real level (`greedyWins`), the shortest line that is never caught, and the catches on the shortest line. A search that hits its cap reports unknown, never none.
+Winnable is not enough: a level the solver wins in a few hundred situations, with the Minotaur walled off, is no fight. `measure` in `src/puzzle/difficulty.ts` runs the solver three ways and reports the shortest line and the situations stored to find it (`explored`: the A\* search with pruning in `src/puzzle/solver.ts`), the shortest line with the Minotaur taken off the board (`minotaurDelta` is how many moves he adds), whether that Minotaur-free line still wins when played on the real level (`greedyWins`), the shortest line that is never caught, and the catches on the shortest line. A search that hits its cap reports unknown, never none.
 
-`challengeProblems` checks a measure against `BAR` and lists what falls short:
+It also labels the level and plays the plain walk:
+
+- **chase** or **solo** (`label`): `canCatch` searches depth-first from the start and stops at the first turn that catches Theseus. A catch found makes the level chase. A level with no Minotaur, or one whose search ends with no catch (he taunts Theseus from behind walls or water), is solo; when the cells the Minotaur could ever reach and the cells Theseus could ever reach do not meet, that is proved without a search. A capped search labels it unknown.
+- **The plain walk** (`naiveWins`): the shortest path from Theseus to the exit over plain floor, ignoring every piece (only walls stop it) and taking the relics the gate needs on the way, played as moves on the real level. `naiveWins` is true when that walk wins, false when it fails or there is no plain path.
+
+`challengeProblems` checks a measure against `BAR`, the campaign's bar, and lists what falls short:
 
 - Every level with a Minotaur: he shapes the route. He adds moves, or the line that ignores him loses.
-- A chapter's challenge levels (those after its teaching stretch, `teaching` in `src/campaign/chapters.ts`; Chapter 1 teaches in levels 1 to 8) are a real fight: the line that ignores the Minotaur loses, he adds at least 8 moves, the search explores at least 8 times the states of the chapter's hardest teaching level, and the line is no shorter than its longest teaching level's. `rampProblems` keeps each challenge level from searching fewer states than the one before it.
+- A chapter's challenge levels (those after its teaching stretch, `teaching` in `src/campaign/chapters.ts`; Chapter 1 teaches in levels 1 to 8) are a real fight: the line that ignores the Minotaur loses, he adds at least 8 moves, the search stores at least 20 times the situations of the chapter's hardest teaching level, and the line is no shorter than its longest teaching level's. `rampProblems` keeps each challenge level from storing fewer situations than the one before it.
 
-The bar comes from Chapter 1: its teaching Minotaurs add 3 to 13 moves and its hardest teaching search is 2,437 states; level 9 needs 54 moves, 22 of them for the Minotaur, and explores 39,361 states. `test/difficulty.test.ts` gates every released level on it, and new campaign, editor and endless levels must pass it too.
+`sharedProblems` checks a measure against `SHARED_BAR`, the bar every shared level must clear. It never needs a Minotaur, so a solo level clears it on puzzle difficulty alone:
+
+- The level is proved winnable, and the plain walk does not win.
+- The quickest win takes at least 40 moves, and the solver stores at least 12,000 situations to find it.
+- A chase level whose Minotaur adds at least 8 moves (`BAR.minotaurDelta`), and whose line that ignores him loses, needs only 30 moves and 6,000 situations.
+
+Chapter 1 sets both bars. Every level is chase and no plain walk wins:
+
+| Level | Moves | Situations | Minotaur adds | Ignoring him wins | Catches |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 10 | 25 | 3 | no | 0 |
+| 2 | 23 | 104 | 7 | no | 0 |
+| 3 | 36 | 614 | 10 | no | 0 |
+| 4 | 28 | 120 | 12 | no | 0 |
+| 5 | 23 | 55 | 8 | no | 0 |
+| 6 | 24 | 447 | 8 | no | 0 |
+| 7 | 23 | 237 | 13 | no | 1 |
+| 8 | 29 | 120 | 11 | no | 0 |
+| 9 | 54 | 24,086 | 22 | no | 1 |
+| 10 | 76 | 28,990 | 31 | no | 0 |
+
+Its hardest teaching search is level 3's 614 situations; level 9 stores 39 times that and level 10 47 times, so the campaign bar of 20 times is about half of level 9's. The shared bar is about half of level 9's situations and a few moves past the longest teaching level (36), so levels 9 and 10 clear it and levels 1 to 8 fall far short. `test/difficulty.test.ts` gates every released level on both bars; new campaign levels must pass `BAR` and every shared level `SHARED_BAR`.
 
 ## Layout
 

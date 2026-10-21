@@ -32,15 +32,15 @@ export interface SearchOptions {
 export interface Progress { expanded: number; stored: number; bestF: number; startH: number }
 
 /** Actions as small ints, as the reference codes them: 0-3 a move (DIRS order), 4 a wait, 5-7 a tool. */
-const TOOL_LIST: readonly Tool[] = ['mirror', 'cake', 'cow'];
-const WAIT_CODE = DIRS.length;
-const ACTIONS: readonly Action[] = [
+export const TOOL_LIST: readonly Tool[] = ['mirror', 'cake', 'cow'];
+export const WAIT_CODE = DIRS.length;
+export const ACTIONS: readonly Action[] = [
   ...DIRS.map((dir): Action => ({ kind: 'move', dir })),
   { kind: 'wait' },
   ...TOOL_LIST.map((tool): Action => ({ kind: 'tool', tool })),
 ];
 /** The order a node's actions are tried: the wait, the moves, then each tool held. */
-const ORDER: readonly number[] = [WAIT_CODE, ...DIRS.map((_, i) => i), ...TOOL_LIST.map((_, i) => WAIT_CODE + 1 + i)];
+export const ORDER: readonly number[] = [WAIT_CODE, ...DIRS.map((_, i) => i), ...TOOL_LIST.map((_, i) => WAIT_CODE + 1 + i)];
 
 function lineTo(store: NodeStore, id: number): Action[] {
   const line: Action[] = [];

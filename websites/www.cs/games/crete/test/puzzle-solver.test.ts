@@ -2,7 +2,8 @@
 // "unsolved" when there is none, and the cap.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { solve, stateKey } from '../src/puzzle/solver.ts';
+import { solve } from '../src/puzzle/solver.ts';
+import { stateKey } from '../src/puzzle/solver-bfs.ts';
 import { step } from '../src/puzzle/step.ts';
 import { grid, mv, play } from './puzzle-grid.ts';
 

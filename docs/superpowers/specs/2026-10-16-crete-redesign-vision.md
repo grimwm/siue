@@ -25,7 +25,7 @@ decisions that bind every part; each part has its own spec, plan and PRs.
 | Writing | Claude drafts the chapter cards, level intros, pages and endings in a lore file; the owner edits it in its own PR before levels ship. |
 | Caught | The player loses HP and is thrown back to the last safe zone passed, or the start; the Minotaur stays. At 0 HP the try ends. Undo goes back one move at a time; restart begins the level again. The score is the move count; undone moves do not count. Relics and pages are tracked apart from it. |
 | Progress | Every level is open from the start. The browser remembers each level's clear and best move count, and the story pages found. No level codes and no server. |
-| Engine | A tile grid where each tile type is data with its rules; a pure step function (state, action) → state, so undo is a history of states; an exact breadth-first solver over states proves every campaign level winnable and drives the help tools. |
+| Engine | A tile grid where each tile type is data with its rules; a pure step function (state, action) → state, so undo is a history of states; the exact A\* solver of `2026-10-21-crete-editor-design.md` over states proves every campaign level winnable and drives the help tools. |
 
 ## Lore
 

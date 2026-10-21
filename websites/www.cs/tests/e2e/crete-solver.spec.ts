@@ -1,5 +1,6 @@
 // Crete's solver in its Web Worker: level 10 is solved off the page, with its pinned shortest line, progress on the
-// way and the nodes' file on disk (the origin private file system), while the page keeps drawing frames. The same
+// way and the nodes' file opened in the origin private file system (level 10 stays under the in-memory node count, so
+// nothing is spilled to the file; the spill itself is tested in spill.test.ts), while the page keeps drawing frames. The same
 // level again answers from the result cache, with no progress.
 import { test, expect } from '@playwright/test';
 
@@ -41,7 +42,7 @@ test('level 10 is solved in the worker, with progress, while the page keeps draw
   expect(first.solved).toBe(true);
   expect(first.length, 'the pinned shortest line').toBe(LEVEL_10_SHORTEST);
   expect(first.reports, 'progress arrives during the search').toBeGreaterThan(0);
-  expect(first.storages, 'the nodes go to the origin private file system').toEqual(['disk']);
+  expect(first.storages, 'the worker opened its node file in the origin private file system').toEqual(['disk']);
   expect(first.frames, `frames drawn during the ${Math.round(first.ms)} ms search`).toBeGreaterThanOrEqual(3);
 
   const again = await run();

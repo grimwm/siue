@@ -82,6 +82,14 @@ that the Minotaur never dies.
   throw-back cell it is sent back to its own start, like the Minotaur today.
   Theseus cannot push a block into a hazard's cell. Hazards do not enter cells
   holding a block, an object, the cow, the stone Minotaur or another hazard.
+- **Hazard order.** When the hazard phase starts, the hazards are listed once
+  in reading order of the cells they stand on then; that list is the order for
+  the whole phase, so a hazard that moves keeps its place and a later hazard
+  sees the cells earlier ones have already left. A hazard cloned during the
+  phase joins the end of the list in the order the clones were made, and first
+  moves in the next turn. Catches, button presses and clone firings all
+  follow this order, and the engine, the reference solver and the fast solver
+  use the same one.
 - **Clone machines.** A machine holds the block or hazard placed on it in the
   level; it is a template that is never pushed off and is cloned each time its
   red button fires, the clone taking the machine's direction. "Free" means the
@@ -121,7 +129,9 @@ palette; the plain names stay in code.
   walls, shown invisible walls, spent bombs, hazard positions and directions,
   clones) becomes part of the solver's situation, packed compactly by the
   fast solver. Moving hazards and clone machines grow the search the most; the
-  same-answers and pruning tests cover every piece.
+  same-answers and pruning tests cover every piece, among them hazards whose
+  order decides a catch, a button press or a clone's cell, and clones made in
+  the same turn.
 - Turn order is fixed and documented: Theseus's action, then moving hazards in
   reading order, then the Minotaur's two steps.
 - The help text and Chapter 1's levels are unaffected; no existing level uses

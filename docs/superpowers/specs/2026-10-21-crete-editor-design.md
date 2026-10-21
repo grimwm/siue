@@ -170,8 +170,14 @@ a phone must always work.
 - Opening a link shows the name, the rating, and the author's best ("beat
   54"), with **Play** and **Edit a copy**. Playing uses the normal game with
   the thread help, which uses the cached or freshly computed solution.
-- A link that is damaged, too long, from a newer format, or fails the solver
-  shows a plain message and never a broken board.
+- Link text is untrusted input and is bounded twice: an encoded limit on the
+  fragment's length, checked before any decompression, and a decoded limit on
+  the level's text (a 64 × 64 board plus its fixed-size fields and the
+  winning line), enforced while decompressing so decompression stops there.
+  Dimensions and level structure are validated before the board is allocated
+  or the solver starts.
+- A link that is damaged, too long, too large once decoded, from a newer
+  format, or fails the solver shows a plain message and never a broken board.
 - Nothing about a shared level is stored on the server.
 
 ### Campaign export

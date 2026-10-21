@@ -24,6 +24,13 @@ export interface Layout {
   readonly toolBits: readonly number[];
   /** The gear the level holds, one bit each. */
   readonly gear: readonly Gear[];
+  /** Where fields start, in bits: hearts, pages, each key colour (KEY_COLORS order), each tool (mirror, cake,
+   *  cow) and the first gear bit (one per `gear`, in order). */
+  readonly heartAt: number;
+  readonly pageAt: number;
+  readonly keyAt: readonly number[];
+  readonly toolAt: readonly number[];
+  readonly gearAt: number;
   /** Cells whose water can fill in or whose door can open: one bit each, set once changed. */
   readonly changing: Int32Array;
   /** One bit for every toggle wall, which flip together; -1 when the level has none. */
@@ -100,12 +107,20 @@ function build(lv: Level): Layout {
   const cow = count('cow') > 0;
   const mino = lv.minotaur !== null;
   const stoneBits = count('mirror') > 0 ? 2 : 0;
+  const heartAt = cellBits * (2 + (mino ? 1 : 0) + (cow ? 1 : 0)) + stoneBits;
+  const pageAt = heartAt + bits(lv.hearts) + bits(lv.relics);
+  const keyAt: number[] = [];
+  let at = pageAt + lv.pageIds.length;
+  for (const b of keyBits) { keyAt.push(at); at += b; }
+  const toolAt: number[] = [];
+  for (const b of toolBits) { toolAt.push(at); at += b; }
   const total = cellBits * (2 + (mino ? 1 : 0) + (cow ? 1 : 0)) + stoneBits + bits(lv.hearts) + bits(lv.relics) + lv.pageIds.length
     + keyBits.reduce((a, b) => a + b, 0) + toolBits.reduce((a, b) => a + b, 0) + gear.length
     + changing.length + (toggles.length ? 1 : 0) + fixed.length + blockOnly.length + 2 * blockOrObject.length;
   return {
     words: Math.max(1, Math.ceil(total / 32)), cellBits, none: cells, minotaur: mino, cow, stoneBits,
     heartBits: bits(lv.hearts), relicBits: bits(lv.relics), pageBits: lv.pageIds.length, keyBits, toolBits, gear,
+    heartAt, pageAt, keyAt, toolAt, gearAt: at,
     changing: Int32Array.from(changing), toggles: Int32Array.from(toggles), fixed: Int32Array.from(fixed),
     blockOnly: Int32Array.from(blockOnly), blockOrObject: Int32Array.from(blockOrObject),
   };
@@ -122,7 +137,7 @@ function put(out: Uint32Array, at: number, pos: number, width: number, v: number
 }
 
 /** Reads `width` bits at bit `pos`. */
-function get(words: Uint32Array, at: number, pos: number, width: number): number {
+export function get(words: Uint32Array, at: number, pos: number, width: number): number {
   if (width === 0) return 0;
   const w = at + (pos >>> 5);
   const sh = pos & 31;
@@ -155,7 +170,8 @@ export function pack(s: State, layout: Layout, out: Uint32Array, at: number): vo
   for (const i of l.blockOrObject) p = put(out, at, p, 2, s.objects[i] === 'block' ? 2 : s.objects[i] ? 1 : 0);
 }
 
-export function unpack(words: Uint32Array, at: number, layout: Layout, level: Level): State {
+/** The situation packed in the words; `moves` is what it says (moves are not packed). */
+export function unpack(words: Uint32Array, at: number, layout: Layout, level: Level, moves = 0): State {
   const l = layout;
   let p = 0;
   const take = (width: number): number => { const v = get(words, at, p, width); p += width; return v; };
@@ -192,6 +208,6 @@ export function unpack(words: Uint32Array, at: number, layout: Layout, level: Le
   }
   return {
     level, terrain, objects, player, hearts, keys, gear, tools, pages, throwBack, minotaur, stone, cow, relicsLeft,
-    moves: 0, outcome: 'playing',
+    moves, outcome: 'playing',
   };
 }

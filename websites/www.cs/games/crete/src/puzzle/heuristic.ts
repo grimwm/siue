@@ -102,3 +102,12 @@ export function estimateFor(level: Level): Estimate {
     return Math.max(exit, onBoard === s.relicsLeft ? farthest : nearest);
   };
 }
+
+const estimates = new WeakMap<Level, Estimate>();
+
+/** `estimateFor(level)`, built once per Level object. */
+export function estimateOf(level: Level): Estimate {
+  let e = estimates.get(level);
+  if (!e) estimates.set(level, e = estimateFor(level));
+  return e;
+}

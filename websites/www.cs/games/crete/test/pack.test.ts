@@ -1,14 +1,16 @@
-// Packing a situation is lossless and exact: what unpacks plays like what was packed, and two situations pack
-// alike exactly when the reference's key calls them the same. Level 10 packs at a tenth of the reference's size.
+// Packing a situation is lossless and exact: what unpacks plays like what was packed, two situations pack alike
+// exactly when the reference's key calls them the same, and each field reads back where the layout says. Level 10
+// packs at a tenth of the reference's size.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutOf, pack, unpack } from '../src/puzzle/pack.ts';
+import { get, layoutOf, pack, unpack } from '../src/puzzle/pack.ts';
 import { initial } from '../src/puzzle/state.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
 import { stateKey } from '../src/puzzle/solver-bfs.ts';
-import { DIRS } from '../src/puzzle/tiles.ts';
+import { DIRS, KEY_COLORS } from '../src/puzzle/tiles.ts';
+import type { Tool } from '../src/puzzle/tiles.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import { TRIALS, trialLevel } from '../src/puzzle/trials.ts';
 import { corpus } from './corpus.ts';
@@ -17,6 +19,8 @@ const ACTIONS: Action[] = [
   { kind: 'wait' }, ...DIRS.map(dir => ({ kind: 'move', dir }) as Action),
   { kind: 'tool', tool: 'mirror' }, { kind: 'tool', tool: 'cake' }, { kind: 'tool', tool: 'cow' },
 ];
+
+const TOOL_LIST: readonly Tool[] = ['mirror', 'cake', 'cow'];
 
 /** Every situation breadth-first search reaches from the start, up to `cap`. */
 function reachable(level: Level, cap: number): State[] {
@@ -48,6 +52,12 @@ function checkLevel(level: Level): void {
     const key = stateKey(s);
     assert.equal(stateKey(u), key);
     assert.equal(u.moves, 0);
+    assert.equal(unpack(w, 0, layout, level, 7).moves, 7);
+    assert.equal(get(w, 0, layout.heartAt, layout.heartBits), s.hearts);
+    assert.equal(get(w, 0, layout.pageAt, layout.pageBits), s.pages);
+    KEY_COLORS.forEach((k, i) => assert.equal(get(w, 0, layout.keyAt[i]!, layout.keyBits[i]!), s.keys[k]));
+    TOOL_LIST.forEach((t, i) => assert.equal(get(w, 0, layout.toolAt[i]!, layout.toolBits[i]!), s.tools[t]));
+    layout.gear.forEach((g, i) => assert.equal(get(w, 0, layout.gearAt + i, 1), s.gear.includes(g) ? 1 : 0));
     assert.equal(u.outcome, 'playing');
     const packed = Array.from(w).join(',');
     assert.equal(byKey.get(key) ?? packed, packed, 'one key, two packings');

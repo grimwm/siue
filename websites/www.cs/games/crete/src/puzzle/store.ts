@@ -16,7 +16,7 @@ export interface NodeStore {
 const FIRST = 1024;
 
 /** murmur3's 32-bit mix over the words. */
-function hashOf(words: Uint32Array, at: number, n: number): number {
+export function hashOf(words: Uint32Array, at: number, n: number): number {
   let h = 0x9747b28c;
   for (let i = 0; i < n; i++) {
     let k = Math.imul(words[at + i]!, 0xcc9e2d51);

@@ -1,20 +1,19 @@
 /* The Island of Crete: A* over packed situations, the search behind solver.ts. Nodes live in a NodeStore
  * (store.ts) as packed words (pack.ts); the open list is a binary heap of node ids ordered by f = g + h, then the
  * lower h, then more hearts left (of equally short lines, one that spends no needless catch), then the earlier
- * node. h is the consistent estimate of heuristic.ts, so a node is expanded at most once
- * and the first win expanded is a shortest line. A situation whose estimate is infinite is stored but never
- * expanded. DOM-free. */
+ * node. h is the consistent estimate of heuristic.ts, so the first win expanded is a shortest line. A situation
+ * whose estimate is infinite is stored but never expanded. An optional prune (prune.ts) drops a situation before
+ * it is stored; the State it is shown has `moves` set to the situation's moves from the start. DOM-free. */
 import { DIRS } from './tiles.ts';
 import type { Tool } from './tiles.ts';
-import type { Level } from './level.ts';
 import type { State } from './state.ts';
 import { step } from './step.ts';
 import type { Action } from './step.ts';
 import { layoutOf, pack, unpack } from './pack.ts';
-import { estimateFor } from './heuristic.ts';
-import type { Estimate } from './heuristic.ts';
+import { estimateOf } from './heuristic.ts';
 import { memoryStore } from './store.ts';
 import type { NodeStore } from './store.ts';
+import type { Prune } from './prune.ts';
 import type { Refuse, SolveResult } from './solver.ts';
 
 export interface SearchOptions {
@@ -27,7 +26,7 @@ export interface SearchOptions {
   progressEvery?: number;
   store?: NodeStore;
   /** A situation it names is dropped before it is stored. */
-  prune?: ((s: State, words: Uint32Array, at: number) => boolean) | null;
+  prune?: Prune | null;
 }
 
 export interface Progress { expanded: number; stored: number; bestF: number; startH: number }
@@ -42,13 +41,6 @@ const ACTIONS: readonly Action[] = [
 ];
 /** The order a node's actions are tried: the wait, the moves, then each tool held. */
 const ORDER: readonly number[] = [WAIT_CODE, ...DIRS.map((_, i) => i), ...TOOL_LIST.map((_, i) => WAIT_CODE + 1 + i)];
-
-const estimates = new WeakMap<Level, Estimate>();
-function estimateOf(level: Level): Estimate {
-  let e = estimates.get(level);
-  if (!e) estimates.set(level, e = estimateFor(level));
-  return e;
-}
 
 function lineTo(store: NodeStore, id: number): Action[] {
   const line: Action[] = [];
@@ -125,6 +117,7 @@ export function astar(start: State, opts: SearchOptions): SolveResult {
 
   const startH = estimate(start);
   pack(start, layout, buf, 0);
+  if (prune && prune({ ...start, moves: 0 }, buf, 0)) return { solved: false, explored: 0, capped: false };
   const root = store.add(buf, 0, -1, 0, 0);
   if (store.size >= cap) return { solved: false, explored: store.size, capped: true };
   ensure(root);
@@ -142,7 +135,7 @@ export function astar(start: State, opts: SearchOptions): SolveResult {
     const g = f - hs[id]!;
     if (++expanded % every === 0 && onProgress) onProgress({ expanded, stored: store.size, bestF: f, startH });
     store.words(id, buf, 0);
-    const s = unpack(buf, 0, layout, level);
+    const s = unpack(buf, 0, layout, level, g);
     for (const c of ORDER) {
       if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
       const r = step(s, ACTIONS[c]!);

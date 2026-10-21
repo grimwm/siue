@@ -3,16 +3,24 @@
 import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import { initial } from '../src/puzzle/state.ts';
-import { solveBfs } from '../src/puzzle/solver-bfs.ts';
+import { solveBfs, solveBfsRefusing, caught } from '../src/puzzle/solver-bfs.ts';
 
 /** Levels the reference cannot finish within this many states are left out, to keep the corpus quick. */
-export const CORPUS_CAP = 200_000;
+export const CORPUS_CAP = 60_000;
 
 const answers = new WeakMap<Level, ReturnType<typeof solveBfs>>();
 /** The reference's answer at CORPUS_CAP, solved once per level. */
 export function reference(lv: Level) {
   let r = answers.get(lv);
   if (!r) answers.set(lv, r = solveBfs(initial(lv), CORPUS_CAP));
+  return r;
+}
+
+const refusing = new WeakMap<Level, ReturnType<typeof solveBfs>>();
+/** The reference's answer at CORPUS_CAP when a catch is a dead end, solved once per level. */
+export function referenceRefusing(lv: Level) {
+  let r = refusing.get(lv);
+  if (!r) refusing.set(lv, r = solveBfsRefusing(initial(lv), caught, CORPUS_CAP));
   return r;
 }
 
@@ -62,8 +70,20 @@ function candidate(rand: () => number): Level {
   for (const [lock, key] of [['R', 'r'], ['B', 'b'], ['Y', 'y'], ['G', 'g'], ['T', '_'], ['t', '_'], ['~', 'f'], ['F', 'h']] as const) {
     if (has(lock) && !has(key) && rand() < 0.8) put(key);
   }
+  // Often wall the exit in with a lock, water or fire: the exit area is reachable by plain flood fill, and only
+  // the right key or gear (or none, when the level has neither) gets there.
+  if (rand() < 0.4) {
+    const [er, ec] = g.flatMap((row, r) => row.flatMap((ch, c) => (ch === 'E' ? [[r, c] as const] : [])))[0]!;
+    const lock = ['R', 'B', 'Y', 'G', '~', 'F'][pick(6)]!;
+    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+      if (g[er + dr]?.[ec + dc] === '.') g[er + dr]![ec + dc] = lock;
+    }
+  }
   const hearts = rand() < 0.6 ? '' : `hearts: ${1 + pick(5)}\n`;
-  return parse(`title: corpus\nintro: generated\n${hearts}\n${g.map(row => row.join('')).join('\n')}\n`);
+  // Some levels ask for fewer relics than the grid holds.
+  const onGrid = g.reduce((n, row) => n + row.filter(ch => ch === '*').length, 0);
+  const relics = onGrid > 0 && rand() < 0.25 ? `relics: ${pick(onGrid)}\n` : '';
+  return parse(`title: corpus\nintro: generated\n${hearts}${relics}\n${g.map(row => row.join('')).join('\n')}\n`);
 }
 
 /** `count` levels from `seed`, the same every run. A level the reference does not finish within CORPUS_CAP

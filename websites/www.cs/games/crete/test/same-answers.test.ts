@@ -1,24 +1,11 @@
-// The same-answers harness: every solver must agree with the breadth-first reference on whether a level is
-// winnable and on the length of the shortest line, plain and refusing catches.
+// Every solver gets the breadth-first reference's answers (the helper is test/same-answers.ts) on the trial levels
+// and a generated corpus.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { solve, solveRefusing, caught } from '../src/puzzle/solver.ts';
-import { solveBfs, solveBfsRefusing } from '../src/puzzle/solver-bfs.ts';
-import type { SolveResult } from '../src/puzzle/solver.ts';
-import { initial } from '../src/puzzle/state.ts';
 import { parse, serialize } from '../src/puzzle/level.ts';
-import type { Level } from '../src/puzzle/level.ts';
 import { TRIALS, trialLevel } from '../src/puzzle/trials.ts';
 import { corpus, reference, CORPUS_CAP } from './corpus.ts';
-
-const summary = (r: SolveResult) => (r.solved ? { solved: true, length: r.line.length } : { solved: false, capped: r.capped });
-
-export function sameAnswers(level: Level, cap: number): void {
-  const s = initial(level);
-  const what = serialize(level);
-  assert.deepEqual(summary(solve(s, cap)), summary(solveBfs(s, cap)), `solve disagrees on\n${what}`);
-  assert.deepEqual(summary(solveRefusing(s, caught, cap)), summary(solveBfsRefusing(s, caught, cap)), `solveRefusing disagrees on\n${what}`);
-}
+import { sameAnswers } from './same-answers.ts';
 
 const LEVELS = corpus(1, 300);
 
@@ -32,6 +19,9 @@ test('the generated corpus: valid, round-trips, and mixes solvable with unsolvab
   const solvable = LEVELS.filter(lv => reference(lv).solved).length;
   assert.ok(solvable >= 100, `${solvable} solvable`);
   assert.ok(LEVELS.length - solvable >= 30, `${LEVELS.length - solvable} unsolvable`);
+  const explored = LEVELS.filter(lv => { const r = reference(lv); return !r.solved && r.explored >= 50; }).length;
+  assert.ok(explored >= 30, `${explored} unsolvable levels explore 50 states or more`);
+  assert.ok(LEVELS.some(lv => lv.relics < lv.objects.filter(o => o === 'relic').length), 'a level asks for fewer relics than the grid holds');
   assert.ok(LEVELS.some(lv => lv.minotaur) && LEVELS.some(lv => !lv.minotaur));
 });
 

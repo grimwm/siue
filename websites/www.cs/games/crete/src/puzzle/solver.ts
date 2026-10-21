@@ -1,6 +1,6 @@
 /* The Island of Crete: the exact solver. It proves every level winnable and
  * drives Ariadne's thread (one step, the whole line drawn, or played out).
- * Today it is the breadth-first reference in solver-bfs.ts. DOM-free. */
+ * It delegates to the breadth-first reference in solver-bfs.ts. DOM-free. */
 import { solveBfs, solveBfsRefusing, SOLVER_CAP } from './solver-bfs.ts';
 import type { SolveResult, Refuse } from './solver-bfs.ts';
 import type { State } from './state.ts';

@@ -3,7 +3,8 @@
  * lower h, then more hearts left (of equally short lines, one that spends no needless catch), then the earlier
  * node. h is the consistent estimate of heuristic.ts, so the first win expanded is a shortest line. A situation
  * whose estimate is infinite is stored but never expanded. An optional prune (prune.ts) drops a situation before
- * it is stored; the State it is shown has `moves` set to the situation's moves from the start. DOM-free. */
+ * it is stored; the State it is shown has `moves` set to the situation's moves from the start. A store that fails
+ * (StoreError: its file cannot be written or read) ends the search capped, with the failure as its reason. DOM-free. */
 import { DIRS } from './tiles.ts';
 import type { Tool } from './tiles.ts';
 import type { State } from './state.ts';
@@ -11,7 +12,7 @@ import { step } from './step.ts';
 import type { Action } from './step.ts';
 import { layoutOf, pack, unpack } from './pack.ts';
 import { estimateOf } from './heuristic.ts';
-import { memoryStore } from './store.ts';
+import { memoryStore, StoreError } from './store.ts';
 import type { NodeStore } from './store.ts';
 import type { Prune } from './prune.ts';
 import type { Refuse, SolveResult } from './solver.ts';
@@ -50,13 +51,22 @@ function lineTo(store: NodeStore, id: number): Action[] {
 
 export function astar(start: State, opts: SearchOptions): SolveResult {
   if (start.outcome === 'won') return { solved: true, line: [], explored: 0 };
+  const store = opts.store ?? memoryStore(layoutOf(start.level).words);
+  try {
+    return search(start, opts, store);
+  } catch (e) {
+    if (e instanceof StoreError) return { solved: false, explored: store.size, capped: true, reason: e.message };
+    throw e;
+  }
+}
+
+function search(start: State, opts: SearchOptions, store: NodeStore): SolveResult {
   const { cap, refuse, onProgress } = opts;
   const prune = opts.prune ?? null;
   const every = Math.max(1, opts.progressEvery ?? 65_536);
   const level = start.level;
   const layout = layoutOf(level);
   const estimate = estimateOf(level);
-  const store = opts.store ?? memoryStore(layout.words);
   const buf = new Uint32Array(layout.words);
 
   // Per node: f and h (h -1 when infinite: never expanded), its heap position (-1 when not in the heap), a win, and

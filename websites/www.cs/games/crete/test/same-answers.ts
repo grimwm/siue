@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict';
 import { solve, solveRefusing, caught, SOLVER_CAP } from '../src/puzzle/solver.ts';
 import { solveBfs, solveBfsRefusing } from '../src/puzzle/solver-bfs.ts';
-import type { SolveResult } from '../src/puzzle/solver.ts';
+import type { SolveResult, Refuse } from '../src/puzzle/solver.ts';
+import type { State } from '../src/puzzle/state.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
 import { serialize } from '../src/puzzle/level.ts';
@@ -35,11 +36,15 @@ function replay(level: Level, r: SolveResult, refuseCatches: boolean, what: stri
   assert.equal(s.outcome, 'won', `the line does not win on\n${what}`);
 }
 
-export function sameAnswers(level: Level, cap: number): void {
+/** A solver under test: `refuse` null searches plain. */
+export type Search = (s: State, refuse: Refuse | null, cap: number) => SolveResult;
+const SOLVER: Search = (s, refuse, cap) => (refuse ? solveRefusing(s, refuse, cap) : solve(s, cap));
+
+export function sameAnswers(level: Level, cap: number, search: Search = SOLVER): void {
   const s = initial(level);
   const what = serialize(level);
-  const plain = solve(s, cap);
-  const refusing = solveRefusing(s, caught, cap);
+  const plain = search(s, null, cap);
+  const refusing = search(s, caught, cap);
   const want = cap === CORPUS_CAP ? reference(level) : solveBfs(s, cap);
   const wantRefusing = cap === CORPUS_CAP ? referenceRefusing(level) : solveBfsRefusing(s, caught, cap);
   agree(plain, want, () => solveBfs(s, SOLVER_CAP), `solve disagrees on\n${what}`);

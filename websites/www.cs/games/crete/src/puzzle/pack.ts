@@ -127,7 +127,7 @@ function build(lv: Level): Layout {
 }
 
 /** Writes `width` bits of `v` at bit `pos` of the words from `at`; the words are zero. Returns the next bit. */
-function put(out: Uint32Array, at: number, pos: number, width: number, v: number): number {
+export function put(out: Uint32Array, at: number, pos: number, width: number, v: number): number {
   if (width === 0) return pos;
   const w = at + (pos >>> 5);
   const sh = pos & 31;

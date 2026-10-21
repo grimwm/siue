@@ -10,7 +10,7 @@ import { DELTA, DIRS, KEY_COLORS, TERRAIN } from './tiles.ts';
 import type { Gear, Terrain } from './tiles.ts';
 import type { Level } from './level.ts';
 import type { State } from './state.ts';
-import { get } from './pack.ts';
+import { get, put } from './pack.ts';
 import type { Layout } from './pack.ts';
 import { estimateOf } from './heuristic.ts';
 import { hashOf } from './store.ts';
@@ -57,8 +57,9 @@ function dominance(lv: Level, l: Layout): Field[] {
 
 const FIRST = 1024;
 
-/** The level's pruning. It keeps, for every situation it let through, its dominance fields and moves, indexed by
- *  its words with those fields masked out; within one index entry it keeps only those no other one dominates. */
+/** The level's pruning. It keeps, for every situation it let through, its dominance fields (copied side by side
+ *  into a word or two) and moves, indexed by its words with those fields masked out; within one index entry it
+ *  keeps only those no other one dominates. */
 export function pruneFor(level: Level, layout: Layout): Prune {
   const estimate = estimateOf(level);
   const fields = dominance(level, layout);
@@ -66,62 +67,68 @@ export function pruneFor(level: Level, layout: Layout): Prune {
   const W = layout.words;
   const mask = new Uint32Array(W);
   for (const f of fields) for (let b = f.pos; b < f.pos + f.width; b++) mask[b >>> 5]! |= 1 << (b & 31);
+  // The fields side by side: where each starts, and the words they take.
+  const at0: number[] = [];
+  let D = 0;
+  for (const f of fields) { at0.push(D); D += f.width; }
+  const E = (D + 31) >>> 5;
 
-  // Groups: the masked words, their hash and the first of their entries.
+  // Groups: the masked words and the first of their entries.
   let room = FIRST;
   let keys = new Uint32Array(room * W);
-  let hashes = new Uint32Array(room);
   let heads = new Int32Array(room);
   let groups = 0;
   /** Slots hold group + 1; 0 is empty. Kept at most half full. */
   let table = new Int32Array(FIRST * 2);
   let tmask = table.length - 1;
-  // Entries: the dominance bits, the moves, and the next entry of the group (-1 at the end). Freed ones are reused.
+  // Entries: the dominance fields, the moves, and the next entry of the group (-1 at the end). Freed ones are reused.
   let eroom = FIRST;
-  let bits = new Uint32Array(eroom * W);
+  let vals = new Uint32Array(eroom * E);
   let moves = new Uint32Array(eroom);
   let nexts = new Int32Array(eroom);
   let entries = 0;
   let free = -1;
   const key = new Uint32Array(W);
+  /** The situation asked about: its dominance fields side by side. */
+  const cur = new Uint32Array(E);
 
   function growGroups(): void {
     room *= 2;
     const k = new Uint32Array(room * W); k.set(keys); keys = k;
-    const h = new Uint32Array(room); h.set(hashes); hashes = h;
     const d = new Int32Array(room); d.set(heads); heads = d;
     table = new Int32Array(room * 2);
     tmask = table.length - 1;
     for (let g = 0; g < groups; g++) {
-      let slot = hashes[g]! & tmask;
+      let slot = hashOf(keys, g * W, W) & tmask;
       while (table[slot] !== 0) slot = (slot + 1) & tmask;
       table[slot] = g + 1;
     }
   }
 
-  function newEntry(words: Uint32Array, at: number, g: number, next: number): number {
+  function newEntry(g: number, next: number): number {
     let e = free;
     if (e >= 0) free = nexts[e]!;
     else {
       if (entries === eroom) {
         eroom *= 2;
-        const b = new Uint32Array(eroom * W); b.set(bits); bits = b;
+        const v = new Uint32Array(eroom * E); v.set(vals); vals = v;
         const m = new Uint32Array(eroom); m.set(moves); moves = m;
         const n = new Int32Array(eroom); n.set(nexts); nexts = n;
       }
       e = entries++;
     }
-    for (let i = 0; i < W; i++) bits[e * W + i] = words[at + i]! & mask[i]!;
+    vals.set(cur, e * E);
     moves[e] = g;
     nexts[e] = next;
     return e;
   }
 
-  /** Every field of `a` at least as good as `b`'s. */
+  /** Every field of `a` at least as good as `b`'s (fields side by side). */
   function atLeast(a: Uint32Array, aAt: number, b: Uint32Array, bAt: number): boolean {
-    for (const f of fields) {
-      const va = get(a, aAt, f.pos, f.width);
-      const vb = get(b, bAt, f.pos, f.width);
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i]!;
+      const va = get(a, aAt, at0[i]!, f.width);
+      const vb = get(b, bAt, at0[i]!, f.width);
       if (f.set ? (va & vb) !== vb : va < vb) return false;
     }
     return true;
@@ -132,11 +139,12 @@ export function pruneFor(level: Level, layout: Layout): Prune {
     const g = s.moves;
     for (let i = 0; i < W; i++) key[i] = words[at + i]! & ~mask[i]!;
     const h = hashOf(key, 0, W);
+    cur.fill(0);
+    for (let i = 0; i < fields.length; i++) put(cur, 0, at0[i]!, fields[i]!.width, get(words, at, fields[i]!.pos, fields[i]!.width));
     let slot = h & tmask;
     let group = -1;
     for (let e = table[slot]!; e !== 0; slot = (slot + 1) & tmask, e = table[slot]!) {
       const k = e - 1;
-      if (hashes[k] !== h) continue;
       let same = true;
       for (let i = 0; i < W && same; i++) same = keys[k * W + i] === key[i];
       if (same) { group = k; break; }
@@ -149,24 +157,23 @@ export function pruneFor(level: Level, layout: Layout): Prune {
       }
       group = groups++;
       keys.set(key, group * W);
-      hashes[group] = h;
       table[slot] = group + 1;
-      heads[group] = newEntry(words, at, g, -1);
+      heads[group] = newEntry(g, -1);
       return false;
     }
-    for (let e = heads[group]!; e >= 0; e = nexts[e]!) if (moves[e]! <= g && atLeast(bits, e * W, words, at)) return true;
+    for (let e = heads[group]!; e >= 0; e = nexts[e]!) if (moves[e]! <= g && atLeast(vals, e * E, cur, 0)) return true;
     // Kept: entries it dominates are dropped from the group, as it prunes everything they would.
     let prev = -1;
     for (let e = heads[group]!; e >= 0;) {
       const next = nexts[e]!;
-      if (g <= moves[e]! && atLeast(words, at, bits, e * W)) {
+      if (g <= moves[e]! && atLeast(cur, 0, vals, e * E)) {
         if (prev < 0) heads[group] = next; else nexts[prev] = next;
         nexts[e] = free;
         free = e;
       } else prev = e;
       e = next;
     }
-    heads[group] = newEntry(words, at, g, heads[group]!);
+    heads[group] = newEntry(g, heads[group]!);
     return false;
   };
 }

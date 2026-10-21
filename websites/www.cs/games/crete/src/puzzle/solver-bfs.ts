@@ -11,7 +11,7 @@ export const SOLVER_CAP = 2_000_000;
 
 export type SolveResult =
   | { solved: true; line: Action[]; explored: number }
-  | { solved: false; explored: number; capped: boolean };
+  | { solved: false; explored: number; capped: boolean; reason?: string };
 
 const cell = (x: { r: number; c: number } | null) => (x ? `${x.r},${x.c}` : '-');
 

@@ -119,6 +119,8 @@ export function createUi(deps: UiDeps): Ui {
   let loreFromPickup = false;
   /** The pages of this try already shown on taking them. */
   let announced: string[] = [];
+  /** Pages taken together (one slide can take several) that wait to open after the one showing. */
+  let pending: string[] = [];
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
@@ -242,17 +244,15 @@ export function createUi(deps: UiDeps): Ui {
       shown: loreShown,
       onShow: (e) => {
         if (e === null && loreFromPickup) {
-          loreFromPickup = false;
-          loreShown = null;
-          layers.close("lore");
+          closePickup();
           return;
         }
         loreShown = e;
         drawLayers();
       },
       onClose: () => {
-        loreFromPickup = false;
-        layers.close("lore");
+        if (loreFromPickup) closePickup();
+        else layers.close("lore");
       },
     });
     renderStoryCard($("story-root"), { open: layers.isOpen("story"), onClose: () => layers.close("story") });
@@ -391,6 +391,7 @@ export function createUi(deps: UiDeps): Ui {
     if (g.opens !== shownOpen) {
       shownOpen = g.opens;
       announced = [];
+      pending = [];
       log.push({ text: `${s.level.title}: ${s.level.intro}`, tone: "info" });
       layers.open("start");
     }
@@ -455,9 +456,29 @@ export function createUi(deps: UiDeps): Ui {
     const fresh = taken.filter((id) => !announced.includes(id));
     if (fresh.length === 0 || g.anim) return;
     announced = taken;
-    loreShown = { kind: "page", id: fresh[0]! };
+    pending.push(...fresh);
+    if (!loreFromPickup) showNextPickup();
+  }
+
+  /** Opens the next page waiting to be shown on taking it. */
+  function showNextPickup(): void {
+    const id = pending.shift();
+    if (id === undefined) return;
+    loreShown = { kind: "page", id };
     loreFromPickup = true;
     layers.open("lore");
+    drawLayers();
+  }
+
+  /** Closes a page opened on taking it; the next page taken in the same turn, if any, opens in its place. */
+  function closePickup(): void {
+    if (pending.length > 0) {
+      showNextPickup();
+      return;
+    }
+    loreFromPickup = false;
+    loreShown = null;
+    layers.close("lore");
   }
 
   function showTitle(hint: boolean): void {
@@ -492,8 +513,7 @@ export function createUi(deps: UiDeps): Ui {
           loreShown = null;
           drawLayers();
         } else if (layers.isOpen("lore") && loreFromPickup) {
-          loreFromPickup = false;
-          layers.close("lore");
+          closePickup();
         } else if (layers.isOpen("title")) layers.open("menu");
         else if (layers.isOpen("chapter")) leave("chapter");
         else layers.pressBack();
@@ -616,8 +636,7 @@ export function createUi(deps: UiDeps): Ui {
       // A Lore entry opened by taking its page closes on Enter or Space, and the game plays on.
       if (layers.isOpen("lore") && loreFromPickup && action === "begin" && onDefault(focused?.id, "lore-", "lore-close", "lore-back")) {
         ev.preventDefault();
-        loreFromPickup = false;
-        layers.close("lore");
+        closePickup();
         return;
       }
       // Anywhere else Enter or Space presses the button with the focus.

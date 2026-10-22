@@ -506,7 +506,6 @@ test('Enter on a won card with Retry focused retries rather than going on', () =
   assert.equal(game.trial, 0);
 });
 
-// This one runs before any test records the page: the found pages are kept for the whole file.
 test('taking a story page opens its Lore entry over the board; Enter closes it and play goes on; the book lists the page only after the win', () => {
   reset();
   const lv = trialLevel(8);
@@ -514,6 +513,8 @@ test('taking a story page opens its Lore entry over the board; Enter closes it a
   const r = solve(initial(copy));
   assert.ok(r.solved);
   const id = lv.pageIds[0]!;
+  // The found pages are kept for the whole file, so the test reads what was already found rather than relying on order.
+  const foundBefore = found.has(id);
   game.open(8);
   key('Enter');
   let i = 0;
@@ -532,9 +533,10 @@ test('taking a story page opens its Lore entry over the board; Enter closes it a
   assert.equal(game.run!.now.moves, moves + 1, 'the next move plays');
   assert.notEqual(flow.top(), 'lore', 'the page does not open twice');
   // The book still counts the page as not found until the level is won.
+  assert.equal(found.has(id), foundBefore, 'taking the page records nothing before the win');
   key('q');
   click(byId(rootOf('menu-lore'), 'menu-lore'));
-  assert.ok(text(`lore-page-${id}`).includes('? ? ?'));
+  if (!foundBefore) assert.ok(text(`lore-page-${id}`).includes('? ? ?'));
   flow.closeLayers();
   for (; i < r.line.length; i++) game.press(r.line[i]!);
   assert.equal(game.run!.now.outcome, 'won');

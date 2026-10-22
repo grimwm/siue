@@ -98,9 +98,10 @@ async function quit(): Promise<void> {
   if (outcome !== 'closed') ui.showTitle(outcome === 'title-with-hint');
 }
 
-/* The board repaints every frame: the sprites animate, and a turn's figures move between cells. */
+/* The board repaints every frame: the sprites animate, and a turn's figures move between cells (holding still
+   while a story page the figure reached is read). */
 function loop(now: number): void {
-  const f = frameOf(game, game.anim ? clock.now() - game.anim.started : 0);
+  const f = frameOf(game, game.animMs());
   if (f) {
     board.paint(drawList(f.state, f.figures, atlas, now), game.thread ?? undefined);
     if (game.anim && f.done) game.finishAnim();

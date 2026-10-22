@@ -25,8 +25,8 @@ export function TitleCard(p: TitleCardProps) {
       {p.hint && <p id="title-hint" class="runstats" role="status">{EXIT_HINT}.</p>}
       <div class="title-actions">
         <Button id="title-play" keyLabel={KEYS.new.label} onClick={p.onPlay}>▶ Play</Button>
-        {p.onStory && <Button id="title-story" onClick={p.onStory}>Story</Button>}
-        {p.onSettings && <Button id="title-settings" onClick={p.onSettings}>Settings</Button>}
+        {p.onStory && <Button id="title-story" keyLabel={KEYS.story.label} onClick={p.onStory}>Story</Button>}
+        {p.onSettings && <Button id="title-settings" keyLabel={KEYS.menu.label} onClick={p.onSettings}>Settings</Button>}
       </div>
       <div id="title-install" class="title-install" />
     </Dialog>

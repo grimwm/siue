@@ -9,7 +9,7 @@ import { manualClock } from '../../_kit/test/clock.ts';
 import { DELTA } from '../src/puzzle/tiles.ts';
 import { SLIDE_MS, timeline } from '../src/board-plan.ts';
 import { step } from '../src/puzzle/step.ts';
-import { grid, mv } from './puzzle-grid.ts';
+import { grid, icedPages, mv } from './puzzle-grid.ts';
 
 function opened(reduced = false) {
   const m = manualClock();
@@ -82,4 +82,89 @@ test('mid-push the block is between cells and the player is not drawn on a block
   const f = frameOf(g, SLIDE_MS / 2)!;
   assert.equal(f.state, before);
   assert.deepEqual(f.figures.blocks?.[0]?.at, { r: 0, c: 1.5 });
+});
+
+/* One slide right over two story pages on ice: a at column 2, b at column 4; it stops at column 5, by the exit. */
+function sliding(reduced = false) {
+  const m = manualClock();
+  const changes: (string | null)[] = [];
+  const level = icedPages(['P=p=p.E'], 'a b');
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), pages: createFoundPages(null), timers: m.timers, clock: m.clock,
+    reducedMotion: () => reduced, changed: () => changes.push(game.anim?.paused?.id ?? null),
+    levels: { count: 1, id: () => 'iced', level: () => level },
+  });
+  game.open(0);
+  return { game, m, changes };
+}
+
+test('the animation pauses where the figure reaches each page, holds that frame while the clock runs, and goes on from it', () => {
+  const { game, m, changes } = sliding();
+  const pausedAt = (): string | null => game.anim?.paused?.id ?? null;
+  game.press({ kind: 'move', dir: 'right' });
+  assert.deepEqual(game.anim!.stops, [{ id: 'a', ms: 2 * SLIDE_MS }, { id: 'b', ms: 4 * SLIDE_MS }]);
+  m.advance(SLIDE_MS);
+  assert.equal(game.animMs(), SLIDE_MS);
+  assert.equal(pausedAt(), null, 'it plays');
+  m.advance(SLIDE_MS * 1.5);
+  changes.length = 0;
+  assert.equal(game.animMs(), 2 * SLIDE_MS, 'it stops at the page, not past it');
+  assert.equal(pausedAt(), 'a');
+  assert.deepEqual(changes, ['a'], 'the page is told once');
+  m.advance(5000);
+  assert.equal(game.animMs(), 2 * SLIDE_MS, 'the frame holds while the page is read');
+  const held = frameOf(game, game.animMs())!;
+  assert.equal(held.done, false);
+  assert.deepEqual(held.figures.player, { r: 0, c: 2 });
+  assert.equal(held.state.objects[2], null, 'the page taken is gone');
+  assert.equal(held.state.objects[4], 'page', 'the page ahead is still there');
+  game.resume();
+  assert.equal(game.animMs(), 2 * SLIDE_MS, 'no jump on resuming');
+  m.advance(SLIDE_MS / 2);
+  assert.equal(game.animMs(), 2.5 * SLIDE_MS);
+  assert.equal(pausedAt(), null, 'it plays');
+  m.advance(5000);
+  assert.equal(game.animMs(), 4 * SLIDE_MS);
+  assert.equal(pausedAt(), 'b');
+  assert.equal(frameOf(game, game.animMs())!.state.objects[4], null);
+  game.resume();
+  m.advance(5000);
+  const end = frameOf(game, game.animMs())!;
+  assert.equal(end.done, true);
+  assert.equal(end.state, game.run!.now);
+});
+
+test('just after a page taken mid-slide the board no longer draws it, and before it still does', () => {
+  const { game } = sliding();
+  game.press({ kind: 'move', dir: 'right' });
+  assert.equal(frameOf(game, 2 * SLIDE_MS - 1)!.state.objects[2], 'page');
+  assert.equal(frameOf(game, 2 * SLIDE_MS + 1)!.state.objects[2], null);
+  assert.equal(frameOf(game, 2 * SLIDE_MS + 1)!.state.objects[4], 'page');
+});
+
+test('with reduced motion a slide over pages plays no animation and never pauses', () => {
+  const { game } = sliding(true);
+  game.press({ kind: 'move', dir: 'right' });
+  assert.equal(game.anim, null);
+  assert.equal(game.animMs(), 0);
+  game.resume();
+  assert.deepEqual(game.run!.now.player, { r: 0, c: 5 });
+});
+
+test('a play-out waits while its turn has a page to reach or is paused at one, and goes on once it ends', () => {
+  const { game, m } = sliding();
+  game.auto();
+  m.advance(SLIDE_MS * 3);
+  assert.equal(game.run!.now.moves, 1, 'the play-out slides over the pages');
+  m.advance(SLIDE_MS * 30);
+  assert.equal(game.run!.now.moves, 1, 'it waits for the figure to reach the pages');
+  assert.equal(game.animMs(), 2 * SLIDE_MS);
+  game.resume();
+  m.advance(SLIDE_MS * 30);
+  assert.equal(game.animMs(), 4 * SLIDE_MS);
+  assert.equal(game.run!.now.moves, 1, 'and while it is paused at one');
+  game.resume();
+  game.finishAnim();
+  m.advance(SLIDE_MS * 3);
+  assert.equal(game.run!.now.outcome, 'won');
 });

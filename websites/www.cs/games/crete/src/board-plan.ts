@@ -5,9 +5,10 @@
  * rows draws after the lower one, so no floor paints over it.
  * `timeline` turns a turn's events into where the figures stand at each
  * moment: the player's moves and slides (and the block they push) first, then
- * each Minotaur step, SLIDE_MS a cell; reduced motion snaps. DOM-free. */
+ * each Minotaur step, SLIDE_MS a cell; reduced motion snaps. It also says when
+ * the player's figure reaches each thing taken. DOM-free. */
 import { TERRAIN, OBJECTS } from './puzzle/tiles.ts';
-import type { Cell } from './puzzle/tiles.ts';
+import type { Cell, ObjectKind } from './puzzle/tiles.ts';
 import type { State } from './puzzle/state.ts';
 import type { GameEvent } from './puzzle/step.ts';
 
@@ -21,8 +22,12 @@ export interface Pos { r: number; c: number }
 export interface MovingBlock { origin: Cell; at: Pos }
 export interface Figures { player: Pos; minotaur: Pos | null; blocks?: MovingBlock[] }
 export interface Draw { sprite: string; frame: number; x: number; y: number }
+/** A thing the player took this turn, and when their figure reaches its cell. */
+export interface Taken { what: ObjectKind; at: Cell; ms: number }
 export interface Timeline {
   duration: number;
+  /** What the player took, in the order they reach it. */
+  taken: readonly Taken[];
   /** When the player's own moves, slides and pushed blocks have landed: the Minotaur's steps follow. */
   playerEnd: number;
   at(ms: number): Figures;
@@ -68,8 +73,11 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
   const player: Seg[] = [];
   const minotaur: Seg[] = [];
   const block: Cell[] = [];
+  const taken: Taken[] = [];
   for (const e of events) {
-    if (e.kind === 'pushed') block.push(e.from, e.to);
+    // A thing is taken as the figure lands on its cell: the end of the player's segments so far.
+    if (e.kind === 'took') taken.push({ what: e.what, at: e.at, ms: reducedMotion ? 0 : player.length * SLIDE_MS });
+    else if (e.kind === 'pushed') block.push(e.from, e.to);
     else if (e.kind === 'slid' && e.who === 'block') block.push(e.to);
     else if ((e.kind === 'moved' || e.kind === 'slid') && e.who !== 'block') {
       (e.who === 'player' ? player : minotaur).push({ who: e.who, from: e.from, to: e.to });
@@ -82,6 +90,7 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
   const lerp = (a: Cell, b: Cell, t: number): Pos => ({ r: a.r + (b.r - a.r) * t, c: a.c + (b.c - a.c) * t });
   return {
     duration,
+    taken,
     playerEnd,
     at(ms: number): Figures {
       if (ms >= duration) return end;

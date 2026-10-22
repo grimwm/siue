@@ -23,6 +23,10 @@ import type { Action } from '../src/puzzle/step.ts';
 import { DIRS } from '../src/puzzle/tiles.ts';
 import { stateKey } from './reference-solver.ts';
 import { CAMPAIGN_LEVELS, LEVEL_IDS } from '../src/campaign/chapters.ts';
+import type { Level } from '../src/puzzle/level.ts';
+import { icedPages } from './puzzle-grid.ts';
+import { SLIDE_MS } from '../src/board-plan.ts';
+import { frameOf } from '../src/game.ts';
 import type { Progress } from '../src/progress.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
@@ -143,8 +147,11 @@ test('Story and Settings appear when the page gives them, and call back', () => 
   assert.equal(maybeById(root, 'title-settings'), undefined);
   const seen: string[] = [];
   renderTitleCard(root, { open: true, hint: false, onPlay() {}, onStory: () => seen.push('story'), onSettings: () => seen.push('settings') });
-  assert.equal(byId(root, 'title-story').textContent, 'Story');
-  assert.equal(byId(root, 'title-settings').textContent, 'Settings');
+  const caps = (id: string) => walk(byId(root, id)).filter(n => n.localName === 'kbd').map(k => k.textContent);
+  assert.equal(byId(root, 'title-story').textContent, `Story${KEYS.story.label}`);
+  assert.equal(byId(root, 'title-settings').textContent, `Settings${KEYS.menu.label}`);
+  assert.deepEqual(caps('title-story'), ['I']);
+  assert.deepEqual(caps('title-settings'), ['Q']);
   click(byId(root, 'title-story'));
   click(byId(root, 'title-settings'));
   assert.deepEqual(seen, ['story', 'settings']);
@@ -180,14 +187,19 @@ const m = manualClock();
 const heard: string[] = [];
 const found = createFoundPages(null);
 const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, sfx: n => heard.push(n) });
+/* A test may animate its turns, and may serve its own level in place of level 1. */
+let reduced = true;
+let ownLevel: Level | null = null;
 const game: Game = createGame({
-  sfx() {}, say() {}, progress, pages: found, levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock,
-  reducedMotion: () => true, changed: () => flow.render(game),
+  sfx() {}, say() {}, progress, pages: found, timers: m.timers, clock: m.clock,
+  levels: { count: CAMPAIGN_LEVELS.count, id: CAMPAIGN_LEVELS.id, level: i => (i === 0 && ownLevel) || CAMPAIGN_LEVELS.level(i) },
+  reducedMotion: () => reduced, changed: () => flow.render(game),
 });
-flow.bindControls({ game, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play: () => flow.showChapter(1, false) });
+let toggled = 0;
+flow.bindControls({ game, toggleMute() {}, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false) });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
-const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); };
+const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; };
 // Elements of unmounted overlay tests linger in the stub by id, so a page element is looked up inside its root.
 const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
 const el = (id: string) => maybeById(rootOf(id), id);
@@ -225,6 +237,91 @@ test('in the levels list, up and down (or j and k) move between levels and Enter
   key('Enter');
   assert.equal(game.trial, 8);
   assert.equal(flow.top(), 'start');
+});
+
+test('I on the title opens the story card and Q opens the menu; Q again returns to the title', () => {
+  reset();
+  flow.showTitle(false);
+  key('i');
+  assert.equal(flow.top(), 'story');
+  key('q');
+  assert.equal(flow.top(), 'title');
+  key('q');
+  assert.equal(flow.top(), 'menu');
+  key('q');
+  assert.equal(flow.top(), 'title');
+});
+
+test('F toggles full screen and L opens the Lore book while the menu is up, and neither does anything in play', () => {
+  reset();
+  toggled = 0;
+  game.open(0);
+  key('Enter');
+  key('f');
+  key('l');
+  key('i');
+  assert.equal(toggled, 0);
+  assert.equal(flow.top(), null);
+  key('q');
+  assert.equal(flow.top(), 'menu');
+  key('i');
+  assert.equal(flow.top(), 'menu', 'I is the title card key');
+  key('f');
+  assert.equal(toggled, 1);
+  key('l');
+  assert.equal(flow.top(), 'lore');
+  key('f');
+  assert.equal(toggled, 1, 'F does nothing on the Lore book');
+});
+
+test('in the menu, down and up (or j and k) move the focus through its buttons and Enter presses the focused one', () => {
+  reset();
+  toggled = 0;
+  key('q');
+  const at = () => document.activeElement?.id;
+  const order = ['menu-close', 'mute', 'fullscreen', 'menu-lore', 'quit'];
+  const first = order.indexOf(at() ?? '');
+  assert.ok(first >= 0, `focus is on a menu button, not ${at()}`);
+  for (let i = 0; i < 6; i++) key('ArrowUp');
+  assert.equal(at(), 'menu-close', 'clamped at the top');
+  key('ArrowDown');
+  assert.equal(at(), 'mute');
+  key('j');
+  assert.equal(at(), 'fullscreen');
+  key('s');
+  assert.equal(at(), 'menu-lore');
+  key('k');
+  assert.equal(at(), 'fullscreen');
+  key('Enter');
+  assert.equal(toggled, 1);
+  for (let i = 0; i < 6; i++) key('ArrowDown');
+  assert.equal(at(), 'quit', 'clamped at the bottom');
+});
+
+test('left and right in the levels list keep the one released chapter shown', () => {
+  reset();
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  key('ArrowRight');
+  key('d');
+  key('ArrowLeft');
+  key('a');
+  assert.equal(flow.top(), 'levels');
+  assert.equal(byId(rootOf('levels-tab-1'), 'levels-tab-1').getAttribute('aria-pressed'), 'true');
+  assert.ok(byId(document.getElementById('levels-root'), 'level-1'));
+});
+
+test('Enter on the end card with the focus moved to Levels opens the list, not the next level', () => {
+  reset();
+  win(0);
+  assert.equal(flow.top(), 'end');
+  assert.equal(document.activeElement?.id, 'end-next');
+  key('ArrowDown');
+  key('ArrowDown');
+  assert.equal(document.activeElement?.id, 'end-trials');
+  key('Enter');
+  assert.equal(flow.top(), 'levels');
+  assert.equal(game.trial, 0);
 });
 
 test('N on the title card does what Play does, and elsewhere still opens the list', () => {
@@ -417,6 +514,46 @@ test('Enter on a won card with Retry focused retries rather than going on', () =
   assert.equal(game.trial, 0);
 });
 
+test('taking a story page opens its Lore entry over the board; Enter closes it and play goes on; the book lists the page only after the win', () => {
+  reset();
+  const lv = trialLevel(8);
+  const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
+  const r = solve(initial(copy));
+  assert.ok(r.solved);
+  const id = lv.pageIds[0]!;
+  // The found pages are kept for the whole file, so the test reads what was already found rather than relying on order.
+  const foundBefore = found.has(id);
+  game.open(8);
+  key('Enter');
+  let i = 0;
+  while (flow.top() !== 'lore' && i < r.line.length) game.press(r.line[i++]!);
+  assert.equal(flow.top(), 'lore', 'taking the page opens the Lore book');
+  assert.equal(text('lore-entry-title'), "A Tribute's Marks");
+  assert.ok(el('lore-entry-text'));
+  const tabs = walk(el('lore-back')!).filter(n => n.localName === 'kbd').map(t => t.textContent);
+  assert.deepEqual(tabs, [KEYS.menu.label]);
+  const moves = game.run!.now.moves;
+  key('ArrowUp');
+  assert.equal(game.run!.now.moves, moves, 'the game waits while the entry is open');
+  key('Enter');
+  assert.notEqual(flow.top(), 'lore');
+  game.press(r.line[i++]!);
+  assert.equal(game.run!.now.moves, moves + 1, 'the next move plays');
+  assert.notEqual(flow.top(), 'lore', 'the page does not open twice');
+  // The book still counts the page as not found until the level is won.
+  assert.equal(found.has(id), foundBefore, 'taking the page records nothing before the win');
+  key('q');
+  click(byId(rootOf('menu-lore'), 'menu-lore'));
+  if (!foundBefore) assert.ok(text(`lore-page-${id}`).includes('? ? ?'));
+  flow.closeLayers();
+  for (; i < r.line.length; i++) game.press(r.line[i]!);
+  assert.equal(game.run!.now.outcome, 'won');
+  flow.closeLayers();
+  key('q');
+  click(byId(rootOf('menu-lore'), 'menu-lore'));
+  assert.ok(text(`lore-page-${id}`).includes("A Tribute's Marks"));
+});
+
 test('a win that takes a page names it on the end card, and a replayed win still does', () => {
   reset();
   // Level 9 with its page made a relic: the solver's line must take it, and the same line wins the real level.
@@ -427,11 +564,97 @@ test('a win that takes a page names it on the end card, and a replayed win still
   for (let round = 0; round < 2; round++) {
     game.open(8);
     key('Enter');
-    for (const a of r.line) game.press(a);
+    for (const a of r.line) {
+      game.press(a);
+      if (flow.top() === 'lore') key('Enter');
+    }
     assert.equal(game.run!.now.outcome, 'won');
     assert.equal(flow.top(), 'end');
     assert.equal(text('end-pages'), "You found a page: A Tribute's Marks. It is in the Lore book.");
   }
+});
+
+test('Q closes a page entry, and undoing back over the pickup shows it again only when retaken', () => {
+  reset();
+  const lv = trialLevel(8);
+  const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
+  const r = solve(initial(copy));
+  assert.ok(r.solved);
+  game.open(8);
+  key('Enter');
+  let i = 0;
+  while (flow.top() !== 'lore' && i < r.line.length) game.press(r.line[i++]!);
+  key('q');
+  assert.equal(flow.top(), null);
+  game.press('undo');
+  assert.equal(flow.top(), null);
+  game.press(r.line[i - 1]!);
+  assert.equal(flow.top(), 'lore');
+});
+
+/* Level 1 swapped for one slide right over two of Chapter 1's pages on ice. */
+function slideOverPages(animated: boolean): void {
+  reset();
+  reduced = !animated;
+  ownLevel = icedPages(['#########', '#P=p=p.E#', '#########'], 'ch1-tribute-marks ch1-chalk');
+  game.open(0);
+  key('Enter');
+  assert.equal(flow.top(), null);
+  key('ArrowRight');
+}
+/** What the page's loop does each frame: reads the animation's time, and ends a finished animation. */
+function frame(): void {
+  const f = frameOf(game, game.animMs());
+  if (game.anim && f?.done) game.finishAnim();
+}
+
+test('a slide over two pages pauses at each as the figure reaches it, opens it, and goes on when it closes', () => {
+  slideOverPages(true);
+  assert.ok(game.anim, 'the turn animates');
+  frame();
+  assert.equal(flow.top(), null, 'no page opens before the figure reaches it');
+  m.advance(2 * SLIDE_MS);
+  frame();
+  assert.equal(flow.top(), 'lore', 'the figure reached the first page');
+  assert.equal(text('lore-entry-title'), "A Tribute's Marks");
+  assert.equal(game.anim?.paused?.id, 'ch1-tribute-marks');
+  const moves = game.run!.now.moves;
+  key('ArrowUp');
+  key('t');
+  assert.equal(game.run!.now.moves, moves, 'the game waits while the page is read');
+  m.advance(5000);
+  frame();
+  assert.equal(game.animMs(), 2 * SLIDE_MS, 'the animation holds while the page is read');
+  key('Enter');
+  assert.equal(flow.top(), null, 'the page closes');
+  assert.equal(game.anim?.paused, null, 'and the slide goes on');
+  m.advance(SLIDE_MS);
+  frame();
+  assert.equal(game.animMs(), 3 * SLIDE_MS, 'from where it paused');
+  assert.equal(flow.top(), null);
+  m.advance(SLIDE_MS);
+  frame();
+  assert.equal(flow.top(), 'lore', 'the figure reached the second page');
+  assert.equal(text('lore-entry-title'), 'Chalk');
+  key('q');
+  assert.equal(flow.top(), null);
+  m.advance(5000);
+  frame();
+  assert.equal(game.anim, null, 'the animation ends');
+  assert.equal(flow.top(), null, 'no page opens twice');
+  assert.deepEqual(game.run!.now.player, { r: 1, c: 6 });
+});
+
+test('with reduced motion the pages a slide takes open one after the other once the turn has landed', () => {
+  slideOverPages(false);
+  assert.equal(game.anim, null);
+  assert.equal(flow.top(), 'lore');
+  assert.equal(text('lore-entry-title'), "A Tribute's Marks");
+  key('Enter');
+  assert.equal(flow.top(), 'lore');
+  assert.equal(text('lore-entry-title'), 'Chalk');
+  key('Enter');
+  assert.equal(flow.top(), null);
 });
 
 test('a win that takes no page has no page line', () => {

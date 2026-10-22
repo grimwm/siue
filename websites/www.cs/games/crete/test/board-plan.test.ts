@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs';
 import { drawList, timeline, SLIDE_MS, boardRows } from '../src/board-plan.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import { step } from '../src/puzzle/step.ts';
-import { grid, mv, WAIT } from './puzzle-grid.ts';
+import { grid, icedPages, mv, WAIT } from './puzzle-grid.ts';
+import { initial } from '../src/puzzle/state.ts';
 
 const atlas = JSON.parse(readFileSync(new URL('../fx/sprites/tiles.json', import.meta.url), 'utf8')) as Atlas;
 
@@ -103,4 +104,14 @@ test('a block that slides on after the push moves cell by cell and the Minotaur 
   const late = tl.at(tl.playerEnd - 1);
   assert.equal(late.blocks?.length, 1);
   assert.deepEqual(tl.at(tl.playerEnd).minotaur, s.minotaur);
+});
+
+test('the timeline says when the figure reaches each thing it takes: a slide over two pages, each in its turn', () => {
+  const s = initial(icedPages(['P=p=p.'], 'a b'));
+  const r = step(s, mv('right'));
+  const tl = timeline(s, r.events, false, r.state);
+  assert.deepEqual(tl.taken.map(t => [t.what, t.at, t.ms]), [['page', { r: 0, c: 2 }, 2 * SLIDE_MS], ['page', { r: 0, c: 4 }, 4 * SLIDE_MS]]);
+  assert.deepEqual(tl.at(2 * SLIDE_MS).player, { r: 0, c: 2 });
+  assert.deepEqual(tl.at(4 * SLIDE_MS).player, { r: 0, c: 4 });
+  assert.deepEqual(timeline(s, r.events, true, r.state).taken.map(t => t.ms), [0, 0]);
 });

@@ -1,7 +1,7 @@
 /* The Island of Crete: the cards that can be open over the maze, as a stack.
  * Only the top one is shown. Q takes the top one away; with nothing open it
- * opens the menu; the title card ignores it (nothing is under it to go back
- * to). DOM-free. */
+ * opens the menu; the title card ignores it here (src/ui.ts opens the menu
+ * from it). DOM-free. */
 export type LayerName = "title" | "menu" | "story" | "chapter" | "lore" | "levels" | "start" | "end";
 /** What a Q press did: closed the top card, opened the menu, or left the title card be. */
 export type BackResult = "closed" | "opened" | "kept";

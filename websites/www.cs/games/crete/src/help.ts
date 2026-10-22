@@ -51,5 +51,13 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
       { strong: k("new") }, " opens the level list, and ",
       { strong: k("menu") }, " opens this menu and closes whatever is open.",
     ],
+    [
+      "Every card works from the keyboard. ", { strong: `${k("up")} ${k("down")}` },
+      " (or J and K) move between its buttons and Enter or Space presses the focused one; in the level list ",
+      { strong: `${k("left")} ${k("right")}` }, " switch chapters. On the title card ",
+      { strong: k("story") }, " opens the story and ", { strong: k("menu") }, " the settings; in this menu ",
+      { strong: k("fullscreen") }, " toggles full screen and ", { strong: k("lore") }, " opens the Lore book. A story page you take opens in the Lore book at once; Enter, Space or ",
+      { strong: k("menu") }, " closes it and play goes on.",
+    ],
   ];
 }

@@ -202,6 +202,31 @@ function win(i: number): void {
   assert.equal(game.run!.now.outcome, 'won');
 }
 
+test('in the levels list, up and down (or j and k) move between levels and Enter opens the one chosen', () => {
+  reset();
+  game.open(0);
+  flow.closeLayers();
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  const at = () => document.activeElement?.id;
+  assert.equal(at(), 'level-1');
+  key('ArrowDown');
+  assert.equal(at(), 'level-2');
+  key('j');
+  assert.equal(at(), 'level-3');
+  key('k');
+  assert.equal(at(), 'level-2');
+  key('ArrowUp');
+  key('ArrowUp');
+  assert.equal(at(), 'level-1', 'the first level stays chosen at the top');
+  for (let i = 0; i < 15; i++) key('ArrowDown');
+  assert.equal(at(), 'level-10', 'the last level stays chosen at the bottom');
+  key('k');
+  key('Enter');
+  assert.equal(game.trial, 8);
+  assert.equal(flow.top(), 'start');
+});
+
 test('N on the title card does what Play does, and elsewhere still opens the list', () => {
   reset();
   flow.showTitle(false);

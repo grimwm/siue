@@ -323,7 +323,8 @@ test('a button blurs itself, then calls back; a key label becomes a chip', () =>
   const chip = chips(b)[0];
   assert.ok(chip);
   assert.equal(chip.getAttribute('aria-hidden'), 'true');
-  assert.equal(chip.className, 'kit-key-chip');
+  // The key is the kit's dark keycap, in line after the words (not a chip in the button's own colours).
+  assert.equal(chip.className, 'kit-key-tab kit-key-inline');
   assert.equal(chip.textContent, 'Z');
 });
 

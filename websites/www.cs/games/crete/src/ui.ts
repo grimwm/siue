@@ -124,6 +124,13 @@ export function createUi(deps: UiDeps): Ui {
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
+    // A page opened on taking it that closes some other way (Quit closes every card) leaves nothing waiting on it.
+    if (loreFromPickup && !layers.isOpen("lore")) {
+      loreFromPickup = false;
+      loreShown = null;
+      pending = [];
+      (controls?.game ?? game)?.resume();
+    }
     drawLayers();
   });
 
@@ -448,15 +455,24 @@ export function createUi(deps: UiDeps): Ui {
     drawLayers();
   }
 
-  /** A story page taken this turn opens its Lore entry once the turn has landed, over everything else; the
-   *  book still lists it as found only after the win. A page taken back by Undo shows again when retaken. */
+  /** A story page taken this turn opens its Lore entry over everything else: while the turn animates, the
+   *  moment the figure reaches it (the animation waits at it until the entry closes); with no animation, once the
+   *  turn has landed, one page after another. The book still lists it as found only after the win. A page taken
+   *  back by Undo shows again when retaken. */
   function announcePages(g: Game): void {
     const taken = pagesTaken(g.run!.now);
     announced = announced.filter((id) => taken.includes(id));
     const fresh = taken.filter((id) => !announced.includes(id));
-    if (fresh.length === 0 || g.anim) return;
-    announced = taken;
-    pending.push(...fresh);
+    if (fresh.length === 0) return;
+    if (g.anim) {
+      const at = g.anim.paused?.id;
+      if (at === undefined || !fresh.includes(at)) return;
+      announced.push(at);
+      pending.push(at);
+    } else {
+      announced = taken;
+      pending.push(...fresh);
+    }
     if (!loreFromPickup) showNextPickup();
   }
 
@@ -470,7 +486,8 @@ export function createUi(deps: UiDeps): Ui {
     drawLayers();
   }
 
-  /** Closes a page opened on taking it; the next page taken in the same turn, if any, opens in its place. */
+  /** Closes a page opened on taking it; the next page taken in the same turn, if any, opens in its place, and
+   *  otherwise a turn's animation paused at the page goes on. */
   function closePickup(): void {
     if (pending.length > 0) {
       showNextPickup();
@@ -479,6 +496,7 @@ export function createUi(deps: UiDeps): Ui {
     loreFromPickup = false;
     loreShown = null;
     layers.close("lore");
+    (controls?.game ?? game)?.resume();
   }
 
   function showTitle(hint: boolean): void {

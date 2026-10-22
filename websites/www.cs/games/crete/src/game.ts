@@ -1,7 +1,9 @@
 /* The Island of Crete: the controller. It holds the try in progress, plays the
  * player's presses and Ariadne's thread (a hint, the whole line, a play-out)
  * through the engine, voices each turn's events, records a win, and keeps the
- * turn that is animating. The page draws from it and holds no rules. DOM-free. */
+ * turn that is animating. A turn's animation pauses where the player's figure
+ * reaches a story page, while the page reads it, and goes on when told. The
+ * page draws from it and holds no rules. DOM-free. */
 import type { Clock, Timers } from '../../_kit/ports.ts';
 import { SLIDE_MS, timeline } from './board-plan.ts';
 import type { Figures, Timeline } from './board-plan.ts';
@@ -50,7 +52,13 @@ export interface Anim {
   started: number;
   /** The state the turn began from: it is drawn while the player's own moves play. */
   before: State;
+  /** The story pages the player's figure reaches this turn, by id, at the moment it lands on each. */
+  stops: readonly PageStop[];
+  /** The page the animation waits at while it is read, or null while it plays. */
+  paused: PageStop | null;
 }
+
+export interface PageStop { id: string; ms: number }
 
 export interface Game {
   /** 0-based; -1 before one opens. */
@@ -63,6 +71,11 @@ export interface Game {
   /** T is playing the line out. */
   readonly playing: boolean;
   readonly anim: Anim | null;
+  /** The animation's time now, ms since the turn was played less any time spent paused. Reaching a story
+   *  page pauses it there (`anim.paused`) and tells the page; it then stays at that time until `resume`. */
+  animMs(): number;
+  /** Goes on from a page the animation paused at, from the same moment. */
+  resume(): void;
   /** The pages the last win recorded as new; empty after open, undo and restart. */
   readonly found: readonly string[];
   /** Starts level `i` fresh (clears assisted). */
@@ -76,16 +89,34 @@ export interface Game {
   finishAnim(): void;
 }
 
-/** What the board draws `ms` after the animation began: the state before the turn while the player's own
- *  moves, slides and pushed block play (items vanish, doors open and a block lands as the figure arrives), the
- *  state after it from then on, while the Minotaur's steps play, and the figures at rest once it ends. */
+/** What the board draws `ms` into the animation: the state before the turn, less each thing the figure has
+ *  reached, while the player's own moves, slides and pushed block play; the state after it from then on, while
+ *  the Minotaur's steps play; and the figures at rest once it ends. An animation paused at a page is not done. */
 export function frameOf(g: Pick<Game, 'run' | 'anim'>, ms: number): { state: State; figures: Figures; done: boolean } | null {
   if (!g.run) return null;
   const a = g.anim;
-  if (a && ms < a.timeline.duration) {
-    return { state: ms < a.timeline.playerEnd ? a.before : g.run.now, figures: a.timeline.at(ms), done: false };
+  if (a && (ms < a.timeline.duration || a.paused)) {
+    return { state: ms < a.timeline.playerEnd ? takenBy(a, ms) : g.run.now, figures: a.timeline.at(ms), done: false };
   }
   return { state: g.run.now, figures: { player: g.run.now.player, minotaur: g.run.now.minotaur }, done: true };
+}
+
+/** The state before the turn with each thing the figure has reached by `ms` gone from its cell. */
+function takenBy(a: Pick<Anim, 'before' | 'timeline'>, ms: number): State {
+  const gone = a.timeline.taken.filter(t => t.ms <= ms);
+  if (gone.length === 0) return a.before;
+  const objects = [...a.before.objects];
+  for (const t of gone) objects[t.at.r * a.before.level.cols + t.at.c] = null;
+  return { ...a.before, objects };
+}
+
+/** Where the turn's animation stops for each story page the player takes. */
+function pageStops(before: State, tl: Timeline): PageStop[] {
+  const { cols, pageIds, pageCells } = before.level;
+  return tl.taken.flatMap(t => {
+    const id = t.what === 'page' ? pageIds[pageCells.indexOf(t.at.r * cols + t.at.c)] : undefined;
+    return id === undefined ? [] : [{ id, ms: t.ms }];
+  });
 }
 
 export function createGame(deps: GameDeps): Game {
@@ -94,6 +125,8 @@ export function createGame(deps: GameDeps): Game {
   let run: Run | null = null;
   let thread: readonly Cell[] | null = null;
   let anim: Anim | null = null;
+  /** How many of the animation's page stops it has reached. */
+  let reached = 0;
   let tick: number | null = null;
   let found: readonly string[] = [];
   /** V is on: the line from the try as it stands stays drawn through every turn. */
@@ -161,7 +194,8 @@ export function createGame(deps: GameDeps): Game {
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
-    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before } : null;
+    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, stops: pageStops(before, tl), paused: null } : null;
+    reached = 0;
     if (run.now.outcome === 'won') {
       deps.progress.record(deps.levels.id(trial), run.now.moves, run.assisted);
       found = deps.pages.add(pagesTaken(run.now));
@@ -228,6 +262,30 @@ export function createGame(deps: GameDeps): Game {
     return out;
   }
 
+  function animMs(): number {
+    if (!anim) return 0;
+    if (anim.paused) return anim.paused.ms;
+    const ms = deps.clock.now() - anim.started;
+    const stop = anim.stops[reached];
+    if (stop && ms >= stop.ms) {
+      reached++;
+      anim.paused = stop;
+      deps.changed();
+      return stop.ms;
+    }
+    return ms;
+  }
+
+  function resume(): void {
+    if (!anim?.paused) return;
+    anim.started = deps.clock.now() - anim.paused.ms;
+    anim.paused = null;
+    deps.changed();
+  }
+
+  /** The turn's animation is paused at a page, or has one still to reach: a play-out waits for it. */
+  const pageAhead = (): boolean => !!anim && (anim.paused !== null || reached < anim.stops.length);
+
   return {
     get trial() { return trial; },
     get opens() { return opens; },
@@ -236,6 +294,8 @@ export function createGame(deps: GameDeps): Game {
     get playing() { return tick !== null; },
     get anim() { return anim; },
     get found() { return found; },
+    animMs,
+    resume,
     open(i) {
       stop();
       trial = i;
@@ -293,6 +353,7 @@ export function createGame(deps: GameDeps): Game {
       if (!live()) return;
       finishAnim();
       tick = deps.timers.setInterval(() => {
+        if (pageAhead()) return;
         if (!live() || !nextOfLine() || !live()) stop();
       }, SLIDE_MS * 3);
       deps.changed();

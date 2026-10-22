@@ -23,6 +23,10 @@ import type { Action } from '../src/puzzle/step.ts';
 import { DIRS } from '../src/puzzle/tiles.ts';
 import { stateKey } from './reference-solver.ts';
 import { CAMPAIGN_LEVELS, LEVEL_IDS } from '../src/campaign/chapters.ts';
+import type { Level } from '../src/puzzle/level.ts';
+import { icedPages } from './puzzle-grid.ts';
+import { SLIDE_MS } from '../src/board-plan.ts';
+import { frameOf } from '../src/game.ts';
 import type { Progress } from '../src/progress.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
@@ -183,15 +187,19 @@ const m = manualClock();
 const heard: string[] = [];
 const found = createFoundPages(null);
 const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, sfx: n => heard.push(n) });
+/* A test may animate its turns, and may serve its own level in place of level 1. */
+let reduced = true;
+let ownLevel: Level | null = null;
 const game: Game = createGame({
-  sfx() {}, say() {}, progress, pages: found, levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock,
-  reducedMotion: () => true, changed: () => flow.render(game),
+  sfx() {}, say() {}, progress, pages: found, timers: m.timers, clock: m.clock,
+  levels: { count: CAMPAIGN_LEVELS.count, id: CAMPAIGN_LEVELS.id, level: i => (i === 0 && ownLevel) || CAMPAIGN_LEVELS.level(i) },
+  reducedMotion: () => reduced, changed: () => flow.render(game),
 });
 let toggled = 0;
 flow.bindControls({ game, toggleMute() {}, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false) });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
-const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); };
+const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; };
 // Elements of unmounted overlay tests linger in the stub by id, so a page element is looked up inside its root.
 const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
 const el = (id: string) => maybeById(rootOf(id), id);
@@ -582,6 +590,71 @@ test('Q closes a page entry, and undoing back over the pickup shows it again onl
   assert.equal(flow.top(), null);
   game.press(r.line[i - 1]!);
   assert.equal(flow.top(), 'lore');
+});
+
+/* Level 1 swapped for one slide right over two of Chapter 1's pages on ice. */
+function slideOverPages(animated: boolean): void {
+  reset();
+  reduced = !animated;
+  ownLevel = icedPages(['#########', '#P=p=p.E#', '#########'], 'ch1-tribute-marks ch1-chalk');
+  game.open(0);
+  key('Enter');
+  assert.equal(flow.top(), null);
+  key('ArrowRight');
+}
+/** What the page's loop does each frame: reads the animation's time, and ends a finished animation. */
+function frame(): void {
+  const f = frameOf(game, game.animMs());
+  if (game.anim && f?.done) game.finishAnim();
+}
+
+test('a slide over two pages pauses at each as the figure reaches it, opens it, and goes on when it closes', () => {
+  slideOverPages(true);
+  assert.ok(game.anim, 'the turn animates');
+  frame();
+  assert.equal(flow.top(), null, 'no page opens before the figure reaches it');
+  m.advance(2 * SLIDE_MS);
+  frame();
+  assert.equal(flow.top(), 'lore', 'the figure reached the first page');
+  assert.equal(text('lore-entry-title'), "A Tribute's Marks");
+  assert.equal(game.anim?.paused?.id, 'ch1-tribute-marks');
+  const moves = game.run!.now.moves;
+  key('ArrowUp');
+  key('t');
+  assert.equal(game.run!.now.moves, moves, 'the game waits while the page is read');
+  m.advance(5000);
+  frame();
+  assert.equal(game.animMs(), 2 * SLIDE_MS, 'the animation holds while the page is read');
+  key('Enter');
+  assert.equal(flow.top(), null, 'the page closes');
+  assert.equal(game.anim?.paused, null, 'and the slide goes on');
+  m.advance(SLIDE_MS);
+  frame();
+  assert.equal(game.animMs(), 3 * SLIDE_MS, 'from where it paused');
+  assert.equal(flow.top(), null);
+  m.advance(SLIDE_MS);
+  frame();
+  assert.equal(flow.top(), 'lore', 'the figure reached the second page');
+  assert.equal(text('lore-entry-title'), 'Chalk');
+  key('q');
+  assert.equal(flow.top(), null);
+  m.advance(5000);
+  frame();
+  assert.equal(game.anim, null, 'the animation ends');
+  assert.equal(flow.top(), null, 'no page opens twice');
+  assert.deepEqual(game.run!.now.player, { r: 1, c: 6 });
+});
+
+test('with reduced motion the pages a slide takes open one after the other once the turn has landed', () => {
+  slideOverPages(false);
+  assert.equal(game.anim, null);
+  assert.equal(flow.top(), 'lore');
+  assert.equal(text('lore-entry-title'), "A Tribute's Marks");
+  key('Enter');
+  assert.equal(flow.top(), 'lore');
+  assert.equal(text('lore-entry-title'), 'Chalk');
+  key('Enter');
+  assert.equal(flow.top(), null);
 });
 
 test('a win that takes no page has no page line', () => {

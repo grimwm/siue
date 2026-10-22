@@ -48,6 +48,15 @@
   white-space: nowrap;
   flex: none;
 }
+/* A key tab in line after a button's words (ui/button.tsx keyLabel): in flow, spaced from the words, and
+   centred on them. */
+:where(.kit-key-tab.kit-key-inline) {
+  --kit-key-tab-position: static;
+  margin-left: 0.5em;
+  vertical-align: middle;
+  position: relative;
+  top: -0.1em;
+}
 :where(.kit-key-tab):empty {
   display: none;
 }

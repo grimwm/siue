@@ -1,5 +1,5 @@
 // A button that gives up focus when clicked, so the key that pressed it (Space,
-// Enter) cannot press it again, with an optional key chip after its text.
+// Enter) cannot press it again, with an optional key after its text.
 import type { ComponentChildren } from 'preact';
 import { KeyChip } from './key-chip.tsx';
 
@@ -13,7 +13,7 @@ export interface ButtonProps {
   title?: string;
   /** aria-pressed, for a toggle. */
   pressed?: boolean;
-  /** The key that does the same, shown as a chip after the text. */
+  /** The key that does the same, shown after the text as the kit's dark keycap (.kit-key-inline). */
   keyLabel?: string;
   children?: ComponentChildren;
 }
@@ -37,7 +37,7 @@ export function Button(p: ButtonProps) {
         setTimeout(() => { pressed = null; }, 0);
       }}>
       {p.children}
-      {p.keyLabel ? <> <KeyChip label={p.keyLabel} decorative /></> : null}
+      {p.keyLabel ? <KeyChip label={p.keyLabel} variant="tab" class="kit-key-inline" decorative /> : null}
     </button>
   );
 }

@@ -3,7 +3,6 @@
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';
-import { KeyChip } from '../../../_kit/ui/key-chip.tsx';
 import { KEYS } from '../keys.ts';
 
 export interface EndView {
@@ -43,7 +42,7 @@ export function EndCard(p: EndCardProps) {
       <div class="title-actions">
         {p.won && p.hasNext && <Button id="end-next" keyLabel={KEYS.begin.label} onClick={p.onNext}>Next level</Button>}
         {p.won && <Button id="end-retry" keyLabel={KEYS.restart.label} onClick={p.onRetry}>Retry</Button>}
-        {p.won && <Button id="end-trials" onClick={p.onTrials}>Levels<KeyChip label={KEYS.new.label} decorative /></Button>}
+        {p.won && <Button id="end-trials" keyLabel={KEYS.new.label} onClick={p.onTrials}>Levels</Button>}
         {!p.won && <Button id="end-undo" keyLabel={KEYS.undo.label} onClick={p.onUndo}>Undo</Button>}
         {!p.won && <Button id="end-restart" keyLabel={KEYS.restart.label} onClick={p.onRestart}>Restart</Button>}
       </div>

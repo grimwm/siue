@@ -1,4 +1,4 @@
-// Crete's keyboard: Q is the kit's back key (it opens the menu, closes what is open, and the title card keeps it),
+// Crete's keyboard: Q is the kit's back key (it opens the menu, closes what is open, and on the title card it opens the menu),
 // a letter typed into a text box is only a letter, game keys wait while a card is up, and Escape is never bound.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -49,9 +49,11 @@ test('Q opens the menu, the next Q closes it, and neither quits the game', () =>
   }
 });
 
-test('Q under the title card does nothing; N there is Play and M still reaches the game', () => {
+test('Q on the title card opens the menu over it; N there is Play and M still reaches the game', () => {
   page.showTitle(false);
   assert.deepEqual(press('q').calls, []);
+  assert.equal(page.top(), 'menu');
+  press('q');
   assert.equal(page.top(), 'title');
   assert.deepEqual(press('n').calls, ['play']);
   assert.deepEqual(press('m').calls, ['mute']);

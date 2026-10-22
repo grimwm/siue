@@ -115,6 +115,10 @@ export function createUi(deps: UiDeps): Ui {
   let listed = 1;
   /** The Lore book's open entry, or null for its list. */
   let loreShown: LoreEntry | null = null;
+  /** The Lore entry was opened by taking its page, so its Back closes the book rather than showing the list. */
+  let loreFromPickup = false;
+  /** The pages of this try already shown on taking them. */
+  let announced: string[] = [];
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
@@ -237,10 +241,19 @@ export function createUi(deps: UiDeps): Ui {
       },
       shown: loreShown,
       onShow: (e) => {
+        if (e === null && loreFromPickup) {
+          loreFromPickup = false;
+          loreShown = null;
+          layers.close("lore");
+          return;
+        }
         loreShown = e;
         drawLayers();
       },
-      onClose: () => layers.close("lore"),
+      onClose: () => {
+        loreFromPickup = false;
+        layers.close("lore");
+      },
     });
     renderStoryCard($("story-root"), { open: layers.isOpen("story"), onClose: () => layers.close("story") });
     renderMenu($("menu-root"), {
@@ -256,6 +269,7 @@ export function createUi(deps: UiDeps): Ui {
       onFullscreen: () => controls?.toggleFullscreen(),
       onLore: () => {
         loreShown = null;
+        loreFromPickup = false;
         layers.open("lore");
       },
       onQuit: () => {
@@ -376,6 +390,7 @@ export function createUi(deps: UiDeps): Ui {
     // A level opened: the start card shows (a restart does not); the story log keeps its words.
     if (g.opens !== shownOpen) {
       shownOpen = g.opens;
+      announced = [];
       log.push({ text: `${s.level.title}: ${s.level.intro}`, tone: "info" });
       layers.open("start");
     }
@@ -428,13 +443,38 @@ export function createUi(deps: UiDeps): Ui {
       const { chapter, within } = chapterOf(g.trial);
       if (end.won && within === chapter.levelIds.length - 1) showChapter(chapter.n, true);
     }
+    announcePages(g);
     drawLayers();
+  }
+
+  /** A story page taken this turn opens its Lore entry once the turn has landed, over everything else; the
+   *  book still lists it as found only after the win. A page taken back by Undo shows again when retaken. */
+  function announcePages(g: Game): void {
+    const taken = pagesTaken(g.run!.now);
+    announced = announced.filter((id) => taken.includes(id));
+    const fresh = taken.filter((id) => !announced.includes(id));
+    if (fresh.length === 0 || g.anim) return;
+    announced = taken;
+    loreShown = { kind: "page", id: fresh[0]! };
+    loreFromPickup = true;
+    layers.open("lore");
   }
 
   function showTitle(hint: boolean): void {
     titleHint = hint;
     layers.clear();
     layers.open("title");
+  }
+
+  /** The enabled buttons of card `name`, in order. */
+  function cardButtons(name: LayerName): HTMLElement[] {
+    const veil = document.getElementById(`${name}-root`);
+    return veil ? (Array.from(veil.querySelectorAll("button")) as HTMLElement[]).filter((b) => !(b as HTMLButtonElement).disabled) : [];
+  }
+
+  /** True when the focus is on nothing of the card (its id has no `prefix`) or on one of its default buttons. */
+  function onDefault(id: string | undefined, prefix: string, ...defaults: string[]): boolean {
+    return id === undefined || !id.startsWith(prefix) || defaults.includes(id);
   }
 
   /* ---------- input: moves, tools and guides never share a key ---------- */
@@ -448,10 +488,14 @@ export function createUi(deps: UiDeps): Ui {
         ev.preventDefault();
         if (ev.repeat) return;
         // An open Lore entry goes back to the list; the next Q closes the book.
-        if (layers.isOpen("lore") && loreShown) {
+        if (layers.isOpen("lore") && loreShown && !loreFromPickup) {
           loreShown = null;
           drawLayers();
-        } else if (layers.isOpen("chapter")) leave("chapter");
+        } else if (layers.isOpen("lore") && loreFromPickup) {
+          loreFromPickup = false;
+          layers.close("lore");
+        } else if (layers.isOpen("title")) layers.open("menu");
+        else if (layers.isOpen("chapter")) leave("chapter");
         else layers.pressBack();
         return;
       }
@@ -473,6 +517,52 @@ export function createUi(deps: UiDeps): Ui {
       }
       if (action === "mute") {
         c.toggleMute();
+        return;
+      }
+      // Each card's own keys act only while it is the top card: I on the title, F and L on the menu.
+      if (action === "story" && layers.isOpen("title")) {
+        ev.preventDefault();
+        if (!ev.repeat) layers.open("story");
+        return;
+      }
+      if (action === "fullscreen" && layers.isOpen("menu")) {
+        ev.preventDefault();
+        if (!ev.repeat) c.toggleFullscreen();
+        return;
+      }
+      if (action === "lore" && layers.isOpen("menu")) {
+        ev.preventDefault();
+        if (!ev.repeat) {
+          loreShown = null;
+          loreFromPickup = false;
+          layers.open("lore");
+        }
+        return;
+      }
+      // Up and down (or k and j) move the focus between the top card's enabled buttons, clamped at the ends; Enter
+      // and Space press the focused one (the cards whose Enter means something say so below).
+      const top = layers.top();
+      const buttons = top && top !== "start" ? cardButtons(top) : [];
+      const named = (ev.target as HTMLElement | null)?.id;
+      const focused = buttons.find((b) => !!named && b.id === named) ?? buttons.find((b) => b === document.activeElement) ?? null;
+      const stepKey = action === "up" || k === "k" ? -1 : action === "down" || k === "j" ? 1 : 0;
+      if (stepKey !== 0 && buttons.length > 0 && top !== "levels") {
+        ev.preventDefault();
+        const to = buttons[Math.min(buttons.length - 1, Math.max(0, buttons.indexOf(focused as HTMLElement) + stepKey))]!;
+        to.focus();
+        to.scrollIntoView?.({ block: "nearest" });
+        return;
+      }
+      // The level list: left and right (or A and D) switch between the released chapters' tabs.
+      if (top === "levels" && (action === "left" || action === "right")) {
+        ev.preventDefault();
+        const released = CHAPTERS.filter((ch) => ch.released).map((ch) => ch.n);
+        const at = released.indexOf(listed);
+        const to = released[Math.min(released.length - 1, Math.max(0, at + (action === "left" ? -1 : 1)))];
+        if (to !== undefined && to !== listed) {
+          listed = to;
+          drawLayers();
+        }
         return;
       }
       // The levels list: up and down (or j and k) move between its levels, Enter opens the one chosen.
@@ -497,7 +587,7 @@ export function createUi(deps: UiDeps): Ui {
       }
       // Begin on the chapter card: the opening one starts a level, the closing one goes on. Tabbed to Levels,
       // Enter presses that button instead.
-      if (layers.isOpen("chapter") && action === "begin" && (ev.target as HTMLElement | null)?.id !== "chapter-levels") {
+      if (layers.isOpen("chapter") && action === "begin" && onDefault(focused?.id, "chapter-", "chapter-enter", "chapter-continue")) {
         ev.preventDefault();
         if (chapterClosing) layers.close("chapter");
         else enter();
@@ -506,8 +596,7 @@ export function createUi(deps: UiDeps): Ui {
       // A won ending card: Begin goes on to the next level (unless another of its buttons has the focus), R plays
       // this one again.
       if (layers.isOpen("end") && end.won) {
-        const on = (ev.target as HTMLElement | null)?.id;
-        if (action === "begin" && end.hasNext && (on === undefined || on === "end-next" || !on.startsWith("end-"))) {
+        if (action === "begin" && end.hasNext && onDefault(focused?.id, "end-", "end-next")) {
           ev.preventDefault();
           open(c.game.trial + 1);
           return;
@@ -524,6 +613,19 @@ export function createUi(deps: UiDeps): Ui {
         c.game.press(action);
         return;
       }
+      // A Lore entry opened by taking its page closes on Enter or Space, and the game plays on.
+      if (layers.isOpen("lore") && loreFromPickup && action === "begin" && onDefault(focused?.id, "lore-", "lore-close", "lore-back")) {
+        ev.preventDefault();
+        loreFromPickup = false;
+        layers.close("lore");
+        return;
+      }
+      // Anywhere else Enter or Space presses the button with the focus.
+      if (action === "begin" && focused) {
+        ev.preventDefault();
+        focused.click();
+        return;
+      }
       // The start card closes on Begin and on a move, which then also moves; it blocks nothing else.
       if (layers.isOpen("start")) {
         if (action === "begin") {
@@ -533,7 +635,7 @@ export function createUi(deps: UiDeps): Ui {
         }
         if (isMove(action)) layers.close("start");
       }
-      // A card is up: only Q, N and M reach the game.
+      // A card is up: only Q, N and M (and the keys a card names) reach the game.
       if (layers.any() && !layers.isOpen("start")) return;
       const g = c.game;
       if (isMove(action)) {

@@ -91,6 +91,7 @@ export interface StubElement {
   getContext(kind?: string): Callable;
   blur(): void;
   focus(): void;
+  click(): void;
 }
 
 declare global {
@@ -176,6 +177,7 @@ export function makeEl(id: string): StubElement {
     removeAttribute(k: string) { if (k === 'class') this.className = ''; else delete this._attrs[k]; },
     getBoundingClientRect: () => ({ width: 720, height: 460 }),
     getContext: () => makeCallable(),
+    click() { click(this); },
     blur() { globalThis.__blurred = this; if (document.activeElement === this) document.activeElement = null; },
     focus() { globalThis.__focused = this; document.activeElement = this; },
   };

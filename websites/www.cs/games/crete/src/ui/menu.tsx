@@ -41,10 +41,10 @@ export function Menu(p: MenuProps) {
       <Button id="menu-close" class="close" label="Close menu" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>
       <div class="menu-sec" data-section="audio">
         <Button id="mute" keyLabel={KEYS.mute.label} onClick={p.onSound}>{p.muted ? '🔇 Muted' : '🔊 Sound'}</Button>
-        <Button id="fullscreen" onClick={p.onFullscreen}>{p.fullscreen ? 'Leave full screen' : 'Full screen'}</Button>
+        <Button id="fullscreen" keyLabel={KEYS.fullscreen.label} onClick={p.onFullscreen}>{p.fullscreen ? 'Leave full screen' : 'Full screen'}</Button>
       </div>
       <div class="menu-sec" data-section="lore">
-        <Button id="menu-lore" onClick={p.onLore}>📖 Lore book</Button>
+        <Button id="menu-lore" keyLabel={KEYS.lore.label} onClick={p.onLore}>📖 Lore book</Button>
       </div>
       <section class="menu-sec" data-section="log">
         <h3>Story log</h3>

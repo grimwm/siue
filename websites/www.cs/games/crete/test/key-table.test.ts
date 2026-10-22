@@ -28,6 +28,9 @@ test('the rows the trials use', () => {
   assert.deepEqual(KEYS.begin, { label: '↵', keys: ['enter', ' '] });
   assert.equal(actionFor('Enter'), 'begin');
   assert.equal(actionFor(' '), 'begin');
+  assert.deepEqual(KEYS.story, { label: 'I', keys: ['i'] });
+  assert.deepEqual(KEYS.fullscreen, { label: 'F', keys: ['f'] });
+  assert.deepEqual(KEYS.lore, { label: 'L', keys: ['l'] });
   assert.equal('bash' in KEYS, false);
 });
 
@@ -38,6 +41,7 @@ test('presses map to their action whatever the case; Escape and Q map to nothing
   assert.equal(actionFor('U'), 'undo');
   assert.equal(actionFor('Escape'), null);
   assert.equal(actionFor('q'), null);
+  assert.equal(actionFor('J'), null, 'J and K move focus and are not actions');
 });
 
 test('moves are unit steps; tools are found by their printed key and are not actions', () => {

@@ -39,7 +39,18 @@ test('Play shows the chapter card; a page-taking win names the page, and the Lor
   await page.locator('#level-9').click();
   await expect(page.locator('#start-veil')).toBeVisible();
   await page.locator('#start-begin').click();
-  for (const s of steps) await page.locator(BUTTON[s]!).click();
+  let opened = 0;
+  for (const s of steps) {
+    await page.locator(BUTTON[s]!).click();
+    // Taking the page opens its Lore entry over the board; Enter puts it away and the walk goes on.
+    if (await page.locator('#lore-veil').isVisible()) {
+      opened++;
+      await expect(page.locator('#lore-entry-title')).toHaveText("A Tribute's Marks");
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#lore-veil')).toBeHidden();
+    }
+  }
+  expect(opened, 'the page opened its entry once').toBe(1);
 
   await expect(page.locator('#end-veil')).toBeVisible();
   await expect(page.locator('#end-kicker')).toHaveText('Level 9 cleared');

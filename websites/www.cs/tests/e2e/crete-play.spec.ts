@@ -266,9 +266,16 @@ test('the title card opens Story and Settings, and Q returns to it', async ({ pa
   await expect(page.locator('#menu-veil')).toBeVisible();
   await page.keyboard.press('q');
   await expect(page.locator('#title-veil')).toBeVisible();
-  // Q under the title card does nothing.
+  // I and Q do what the Story and Settings buttons do; Q leaves the menu again.
+  await page.keyboard.press('i');
+  await expect(page.locator('#story-veil')).toBeVisible();
+  await page.keyboard.press('q');
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-veil')).toBeVisible();
   await page.keyboard.press('q');
   await expect(page.locator('#menu-veil')).toBeHidden();
+  await expect(page.locator('#title-veil')).toBeVisible();
 });
 
 type LockCall = { keys?: string[]; outcome?: string; unlock?: boolean };

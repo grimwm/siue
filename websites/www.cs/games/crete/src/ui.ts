@@ -498,6 +498,12 @@ export function createUi(deps: UiDeps): Ui {
           return;
         }
       }
+      // A lost ending card: U undoes the last turn and R begins the level again, as its buttons say.
+      if (layers.isOpen("end") && !end.won && (action === "undo" || action === "restart")) {
+        ev.preventDefault();
+        c.game.press(action);
+        return;
+      }
       // The start card closes on Begin and on a move, which then also moves; it blocks nothing else.
       if (layers.isOpen("start")) {
         if (action === "begin") {

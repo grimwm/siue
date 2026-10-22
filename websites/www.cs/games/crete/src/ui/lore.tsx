@@ -58,7 +58,7 @@ export function Lore(p: LoreProps) {
               <cite>{full.quote.cite}</cite>
             </blockquote>
           )}
-          <Button id="lore-back" onClick={() => p.onShow(null)}>Back</Button>
+          <Button id="lore-back" keyLabel={KEYS.menu.label} onClick={() => p.onShow(null)}>Back</Button>
         </div>
       ) : (
         <div class="lore-list">

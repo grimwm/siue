@@ -404,6 +404,7 @@ test('an open entry shows its full text, quotation and citation, with a Back but
   assert.ok(quote?.textContent.includes(PAGES[0]!.quote!.text));
   assert.equal(walk(quote!).find(n => n.localName === 'cite')?.textContent, PAGES[0]!.quote!.cite);
   assert.equal(maybeById(root, 'lore-opening-1'), undefined, 'the list is not shown under an entry');
+  assert.deepEqual(tabsOf(byId(root, 'lore-back')).map(t => t.textContent), [KEYS.menu.label]);
   click(byId(root, 'lore-back'));
   assert.deepEqual(seen, [null]);
   renderLore(root, loreProps({ shown: { kind: 'card', which: 'closing', chapter: 1 } }));

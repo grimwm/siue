@@ -18,6 +18,10 @@ import { createFoundPages } from '../src/pages.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { solve } from '../src/puzzle/solver.ts';
 import { trialLevel } from '../src/puzzle/trials.ts';
+import { step } from '../src/puzzle/step.ts';
+import type { Action } from '../src/puzzle/step.ts';
+import { DIRS } from '../src/puzzle/tiles.ts';
+import { stateKey } from './reference-solver.ts';
 import { CAMPAIGN_LEVELS, LEVEL_IDS } from '../src/campaign/chapters.ts';
 import type { Progress } from '../src/progress.ts';
 import type { Atlas } from '../src/board-plan.ts';
@@ -123,7 +127,11 @@ test('the title card names the game and focuses Play; Play calls back', () => {
   assert.equal(byId(root, 'title-name').textContent, 'The Island of Crete');
   assert.equal(maybeById(root, 'title-hint'), undefined);
   assert.equal(globalThis.__focused?.id, 'title-play');
-  assert.equal(byId(root, 'title-play').textContent, `▶ Play (${KEYS.new.label})`);
+  // The key is the kit's keycap after the words, never written into them.
+  const play = byId(root, 'title-play');
+  assert.deepEqual(walk(play).filter(n => n.localName === 'kbd').map(k => [k.className, k.textContent]),
+    [['kit-key-tab kit-key-inline', KEYS.new.label]]);
+  assert.ok(!play.textContent.includes('('), play.textContent);
   click(byId(root, 'title-play'));
   assert.equal(played, 1);
 });
@@ -193,6 +201,31 @@ function win(i: number): void {
   for (const a of r.line) game.press(a);
   assert.equal(game.run!.now.outcome, 'won');
 }
+
+test('in the levels list, up and down (or j and k) move between levels and Enter opens the one chosen', () => {
+  reset();
+  game.open(0);
+  flow.closeLayers();
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  const at = () => document.activeElement?.id;
+  assert.equal(at(), 'level-1');
+  key('ArrowDown');
+  assert.equal(at(), 'level-2');
+  key('j');
+  assert.equal(at(), 'level-3');
+  key('k');
+  assert.equal(at(), 'level-2');
+  key('ArrowUp');
+  key('ArrowUp');
+  assert.equal(at(), 'level-1', 'the first level stays chosen at the top');
+  for (let i = 0; i < 15; i++) key('ArrowDown');
+  assert.equal(at(), 'level-10', 'the last level stays chosen at the bottom');
+  key('k');
+  key('Enter');
+  assert.equal(game.trial, 8);
+  assert.equal(flow.top(), 'start');
+});
 
 test('N on the title card does what Play does, and elsewhere still opens the list', () => {
   reset();
@@ -334,6 +367,46 @@ test('Retry carries the R tab, and R on a won card plays the level again', () =>
   key('r');
   assert.equal(game.trial, 0);
   assert.equal(game.opens, before + 1);
+  assert.equal(game.run!.now.moves, 0);
+});
+
+/** A shortest line that loses level `i`: breadth-first until a turn ends the try lost. */
+function losingLine(i: number): Action[] {
+  const start = initial(trialLevel(i));
+  const queue: { s: typeof start; line: Action[] }[] = [{ s: start, line: [] }];
+  const seen = new Set<string>([stateKey(start)]);
+  const acts: Action[] = [{ kind: 'wait' }, ...DIRS.map(dir => ({ kind: 'move', dir }) as Action)];
+  for (let h = 0; h < queue.length && h < 200_000; h++) {
+    const { s, line } = queue[h]!;
+    for (const a of acts) {
+      const n = step(s, a).state;
+      if (n === s) continue;
+      if (n.outcome === 'lost') return [...line, a];
+      const k = stateKey(n);
+      if (n.outcome === 'won' || seen.has(k)) continue;
+      seen.add(k);
+      queue.push({ s: n, line: [...line, a] });
+    }
+  }
+  throw new Error(`level ${i + 1} has no losing line`);
+}
+
+test('on a lost card U undoes and R restarts, as their tabs say', () => {
+  reset();
+  const lose = () => {
+    game.open(8);
+    key('Enter');
+    for (const a of losingLine(8)) game.press(a);
+    assert.equal(game.run!.now.outcome, 'lost');
+    assert.equal(flow.top(), 'end');
+  };
+  lose();
+  key('u');
+  assert.equal(game.run!.now.outcome, 'playing');
+  assert.notEqual(flow.top(), 'end');
+  lose();
+  key('r');
+  assert.equal(game.run!.now.outcome, 'playing');
   assert.equal(game.run!.now.moves, 0);
 });
 

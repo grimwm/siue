@@ -24,7 +24,7 @@ export function TitleCard(p: TitleCardProps) {
       <p>Tile puzzles in the Labyrinth. Gather the relics, open the gate and reach the exit. The Minotaur takes two steps to your one.</p>
       {p.hint && <p id="title-hint" class="runstats" role="status">{EXIT_HINT}.</p>}
       <div class="title-actions">
-        <Button id="title-play" onClick={p.onPlay}>{`▶ Play (${KEYS.new.label})`}</Button>
+        <Button id="title-play" keyLabel={KEYS.new.label} onClick={p.onPlay}>▶ Play</Button>
         {p.onStory && <Button id="title-story" onClick={p.onStory}>Story</Button>}
         {p.onSettings && <Button id="title-settings" onClick={p.onSettings}>Settings</Button>}
       </div>

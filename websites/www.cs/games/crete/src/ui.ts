@@ -475,6 +475,26 @@ export function createUi(deps: UiDeps): Ui {
         c.toggleMute();
         return;
       }
+      // The levels list: up and down (or j and k) move between its levels, Enter opens the one chosen.
+      if (layers.isOpen("levels")) {
+        const chosen = /^level-(\d+)$/.exec((document.activeElement as HTMLElement | null)?.id ?? "");
+        const step = action === "up" || k === "k" ? -1 : action === "down" || k === "j" ? 1 : 0;
+        if (step !== 0) {
+          ev.preventDefault();
+          const count = levelRows(listed).length;
+          const from = chosen ? Number(chosen[1]) : 0;
+          const to = Math.min(count, Math.max(1, from + step));
+          const target = document.getElementById(`level-${to}`);
+          target?.focus();
+          target?.scrollIntoView?.({ block: "nearest" });
+          return;
+        }
+        if (action === "begin" && chosen) {
+          ev.preventDefault();
+          pick(firstOf(listed) + Number(chosen[1]) - 1);
+          return;
+        }
+      }
       // Begin on the chapter card: the opening one starts a level, the closing one goes on. Tabbed to Levels,
       // Enter presses that button instead.
       if (layers.isOpen("chapter") && action === "begin" && (ev.target as HTMLElement | null)?.id !== "chapter-levels") {
@@ -497,6 +517,12 @@ export function createUi(deps: UiDeps): Ui {
           open(c.game.trial);
           return;
         }
+      }
+      // A lost ending card: U undoes the last turn and R begins the level again, as its buttons say.
+      if (layers.isOpen("end") && !end.won && (action === "undo" || action === "restart")) {
+        ev.preventDefault();
+        c.game.press(action);
+        return;
       }
       // The start card closes on Begin and on a move, which then also moves; it blocks nothing else.
       if (layers.isOpen("start")) {

@@ -222,5 +222,6 @@ export function step(s: State, a: Action): StepResult {
   if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];
   if (sameItems(w.objects, s.objects)) w.objects = s.objects as (ObjectKind | null)[];
   if (sameItems(w.hazards, s.hazards)) w.hazards = s.hazards as Hazard[];
-  return { state: w, events: ev };
+  const { inHazardPhase: _, ...state } = w;
+  return { state, events: ev };
 }

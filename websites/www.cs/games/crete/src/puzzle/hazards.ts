@@ -5,7 +5,7 @@ import { TERRAIN, HAZARDS } from './tiles.ts';
 import type { Dir } from './tiles.ts';
 import { index, next, same } from './state.ts';
 import { caught } from './catch.ts';
-import { hazardLands, hazardMayGo, hazardPhaseOf, heldAt } from './pieces.ts';
+import { hazardLands, hazardMayGo, heldAt } from './pieces.ts';
 import { tAt } from './work.ts';
 import type { GameEvent, Work } from './work.ts';
 
@@ -74,13 +74,16 @@ function moveHazard(w: Work, i: number, ev: GameEvent[]): Outcome {
  *  the next phase. A catch ends the phase. */
 export function hazardPhase(w: Work, ev: GameEvent[]): void {
   if (w.hazards.length === 0) return;
-  hazardPhaseOf(w);
-  for (let i = 0, n = w.hazards.length; i < n;) {
-    const end = moveHazard(w, i, ev);
-    if (end === 'caught') break;
-    if (end === 'gone') n--;
-    else i++;
+  w.inHazardPhase = true;
+  try {
+    for (let i = 0, n = w.hazards.length; i < n;) {
+      const end = moveHazard(w, i, ev);
+      if (end === 'caught') break;
+      if (end === 'gone') n--;
+      else i++;
+    }
+  } finally {
+    w.inHazardPhase = false;
   }
-  hazardPhaseOf(null);
   w.hazards.sort((a, b) => index(w, a.at) - index(w, b.at));
 }

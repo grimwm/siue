@@ -104,10 +104,6 @@ export const hazardRoom = (w: Work, kind: HazardKind, x: Cell): boolean =>
 export const hazardMayGo = (w: Work, kind: HazardKind, x: Cell): boolean =>
   same(x, w.player) ? hazardGround(w, kind, x) : hazardRoom(w, kind, x);
 
-/** The work whose hazard phase is under way, if any: a hazard cloned then joins the end of the phase's list. */
-let phaseOf: Work | null = null;
-export const hazardPhaseOf = (w: Work | null): void => { phaseOf = w; };
-
 /** Hazard `i` has landed on its cell, Theseus not there: a bomb destroys it, buttons press, a snare holds it.
  *  `keep` is the cell Theseus is stepping into. */
 export function hazardLands(w: Work, i: number, ev: GameEvent[], keep?: Cell): 'on' | 'gone' {
@@ -145,7 +141,7 @@ export function fireRed(w: Work, button: number, ev: GameEvent[], keep?: Cell): 
   if (!hazardRoom(w, m.template, front) || same(front, w.player)) return;
   const h = { kind: m.template, at: front, dir: m.dir, home: m.home! };
   let i = w.hazards.length;
-  if (phaseOf !== w) {
+  if (!w.inHazardPhase) {
     const f = index(w, front);
     while (i > 0 && index(w, w.hazards[i - 1]!.at) > f) i--;
   }

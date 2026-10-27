@@ -395,4 +395,31 @@ describe('clone machine', () => {
     const toggle = step(grid(['P+C_t'], 'machines: ball-right'), mv('right'));
     assert.equal(terrainAt(toggle.state, at(0, 4)), 'toggle-closed');
   });
+
+  test('a block clone onto water sinks', () => {
+    const r = step(grid(['P+C~'], 'machines: block-right'), mv('right'));
+    assert.deepEqual(r.events.filter(e => e.kind === 'sank'), [{ kind: 'sank', at: at(0, 3) }]);
+    assert.equal(terrainAt(r.state, at(0, 3)), 'dirt');
+    assert.equal(r.state.objects[3], null);
+  });
+
+  test('a hazard clone onto a snare is held', () => {
+    const r = step(grid(['P+C&'], 'machines: ball-right'), mv('right'));
+    assert.deepEqual(r.events.filter(e => e.kind === 'held'), [{ kind: 'held', who: 'hazard', at: at(0, 3) }]);
+    assert.deepEqual(r.state.hazards.map(h => h.at), [at(0, 3)]);
+  });
+
+  test("a red button on the machine's own front cell makes exactly one clone", () => {
+    for (const tpl of ['block', 'ball']) {
+      const r = step(grid(['P++', '..C'], `machines: ${tpl}-up`), mv('right'));
+      assert.deepEqual(cloned(r.events), [{ kind: 'cloned', what: tpl, at: at(0, 2) }], tpl);
+    }
+  });
+
+  test("a hazard clone made in Theseus's action moves in that turn's hazard phase", () => {
+    const r = step(grid(['P+C..'], 'machines: ball-right'), mv('right'));
+    assert.deepEqual(r.state.hazards, [{ kind: 'ball', at: at(0, 4), dir: 'right', home: 0 }]);
+    assert.ok(r.events.some(e => e.kind === 'moved' && e.who === 'hazard'));
+    assert.equal('inHazardPhase' in r.state, false, 'the phase marker stays off the state');
+  });
 });

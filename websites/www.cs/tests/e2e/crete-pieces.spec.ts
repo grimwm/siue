@@ -53,19 +53,30 @@ const now = (page: Page) => page.evaluate(() => {
   const s = (window as unknown as Hooked).__creteTest.game.run.now;
   return { moves: s.moves, player: s.player, harpy: s.hazards[0]!.at };
 });
-const canvas = (page: Page) => page.evaluate(() => (document.getElementById('stage') as HTMLCanvasElement).toDataURL());
+/** How many dark pixels board cell (r, c) holds. Figures carry a dark outline and floor has none, so the cell a figure
+ *  stands in holds far more than its neighbour, whatever frame of its loop is showing. A cell is the canvas width over
+ *  the level's 7 columns; the rows sit under the top row's rise. */
+const darkIn = (page: Page, r: number, c: number) => page.evaluate(([r, c]) => {
+  const stage = document.getElementById('stage') as HTMLCanvasElement;
+  const cell = stage.width / 7;
+  const top = stage.height - 6 * cell;
+  const d = stage.getContext('2d')!.getImageData(c * cell, top + r * cell, cell, cell).data;
+  let n = 0;
+  for (let i = 0; i < d.length; i += 4) if (d[i]! + d[i + 1]! + d[i + 2]! < 180) n++;
+  return n;
+}, [r, c] as const);
 
 test('Wait moves the Harpy, and the board shows it', async ({ page }) => {
   const errors = await open(page);
   const before = await now(page);
   expect(before.harpy).toEqual({ r: 3, c: 3 });
-  const picture = await canvas(page);
+  expect(await darkIn(page, 3, 3), 'the Harpy is drawn at its start').toBeGreaterThan(await darkIn(page, 3, 4));
   await page.locator('#btn-wait').click();
   const after = await now(page);
   expect(after.moves).toBe(1);
   expect(after.harpy, 'the Harpy flew one cell right').toEqual({ r: 3, c: 4 });
-  // Only proves the board redrew; the Harpy's cell above is what proves where it flew.
-  await expect.poll(() => canvas(page)).not.toBe(picture);
+  await expect.poll(async () => (await darkIn(page, 3, 4)) - (await darkIn(page, 3, 3)), { message: 'the board draws it in its new cell' })
+    .toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
 

@@ -13,15 +13,17 @@ import type { Progress } from './progress.ts';
 import { act, assist, restart, startRun, undo } from './puzzle/run.ts';
 import type { Run } from './puzzle/run.ts';
 import { solve } from './puzzle/solver.ts';
-import { pagesTaken } from './puzzle/state.ts';
+import { next, pagesTaken, same } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
 import { act as actAlone, step } from './puzzle/step.ts';
 import type { Action, GameEvent } from './puzzle/step.ts';
-import type { Cell } from './puzzle/tiles.ts';
+import { HAZARDS } from './puzzle/tiles.ts';
+import type { Cell, HazardKind } from './puzzle/tiles.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
-  | 'caught' | 'stone' | 'win' | 'lose' | 'bump' | 'pickup' | 'page' | 'hint' | 'chapter';
+  | 'caught' | 'stone' | 'win' | 'lose' | 'bump' | 'pickup' | 'page' | 'hint' | 'chapter'
+  | 'snap' | 'reveal' | 'rise' | 'warp' | 'thief' | 'boom' | 'clone' | 'home';
 
 export type Tone = 'info' | 'good' | 'bad';
 
@@ -151,7 +153,19 @@ export function createGame(deps: GameDeps): Game {
     deps.changed();
   }
 
-  function voice(events: GameEvent[], before: State, after: State): void {
+  /** Who caught Theseus, by myth name: the hazard that ended on his cell this turn, else the one he stepped toward. */
+  function culprit(events: GameEvent[], before: State, a: Action, at: Cell): string {
+    let kind: HazardKind | undefined;
+    for (const e of events) {
+      if ((e.kind === 'moved' || e.kind === 'slid') && e.who === 'hazard' && same(e.to, at)) kind = e.hazard;
+    }
+    if (!kind && a.kind === 'move') kind = before.hazards.find(h => same(h.at, next(at, a.dir)))?.kind;
+    if (!kind) return 'Something';
+    const name = HAZARDS[kind].name;
+    return kind === 'fireball' ? name : `The ${name}`;
+  }
+
+  function voice(events: GameEvent[], before: State, after: State, a: Action): void {
     let slid = false;
     for (const e of events) {
       switch (e.kind) {
@@ -178,8 +192,19 @@ export function createGame(deps: GameDeps): Game {
         case 'flipped': deps.sfx('button'); break;
         case 'caught':
           deps.sfx('caught');
-          deps.say(`Caught! ${e.hearts} ${e.hearts === 1 ? 'heart' : 'hearts'} left.`, 'bad');
+          deps.say(`${e.by === 'bomb' ? 'A bomb!' : e.by === 'hazard' ? `${culprit(events, before, a, e.at)} caught you!` : 'Caught!'} ${e.hearts} ${e.hearts === 1 ? 'heart' : 'hearts'} left.`, 'bad');
           break;
+        case 'held':
+          deps.sfx('snap');
+          if (e.who === 'player') deps.say("Daedalus's snare holds you.", 'bad');
+          break;
+        case 'revealed': deps.sfx('reveal'); deps.say('A hidden wall!'); break;
+        case 'rose': deps.sfx('rise'); break;
+        case 'teleported': deps.sfx('warp'); break;
+        case 'robbed': deps.sfx('thief'); deps.say('The thief took your gear.', 'bad'); break;
+        case 'exploded': deps.sfx('boom'); break;
+        case 'cloned': deps.sfx('clone'); break;
+        case 'sent-home': deps.sfx('home'); break;
         case 'stoned': deps.sfx('stone'); break;
         case 'won': deps.sfx('win'); break;
         case 'lost': deps.sfx('lose'); break;
@@ -198,7 +223,7 @@ export function createGame(deps: GameDeps): Game {
     const before = run.now;
     run = r.run;
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
-    voice(r.events, before, run.now);
+    voice(r.events, before, run.now, a);
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
     anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: pageStops(before, tl), paused: null } : null;
     reached = 0;

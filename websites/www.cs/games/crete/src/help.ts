@@ -34,6 +34,26 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
       { strong: "Blocks" }, " can be pushed. Stepping on a ", { strong: "button" },
       ", or pushing a block onto one, flips every toggle wall. Stone blocks everyone.",
     ],
+    [
+      { strong: "Daedalus's snare" }, " holds whoever steps in it until a ", { strong: "brown button" },
+      " is pressed down: stand a block on it, or step on it yourself.",
+    ],
+    [
+      { strong: "Pop-up walls" }, " rise behind you. ", { strong: "Fake walls" }, " and ", { strong: "invisible walls" },
+      " open or show when you bump them. Only you can cross ", { strong: "gravel" }, ".",
+    ],
+    [
+      { strong: "Teleports" }, " carry you to the next one in reading order. A ", { strong: "thief" },
+      " takes your boots and flippers, never keys or tools.",
+    ],
+    [
+      { strong: "Bombs" }, " cost a heart if you step on one, and destroy any block or hazard that meets one. ", { strong: "Clone machines" },
+      " copy what stands in them when you press a ", { strong: "red button" }, ".",
+    ],
+    [
+      "The ", { strong: "Bronze ball" }, " rolls straight and turns back, the ", { strong: "Harpy" },
+      " crosses water, and ", { strong: "Talos's fire" }, " burns. Each turn goes you, then the hazards, then the Minotaur.",
+    ],
     ["Three tools, one use each. ", ...toolSegs],
     [
       `Move with ${arrows}${letters ? ` or ${letters}` : ""}; bumping a wall costs no turn. `,

@@ -12,9 +12,8 @@ interface PiecesTest {
   parse(text: string): unknown;
   playLevel(level: unknown): void;
 }
-declare global {
-  interface Window { __creteTest: PiecesTest }
-}
+/** The hook's shape as this spec uses it; crete-play.spec.ts declares the global `__creteTest` itself. */
+type Hooked = { __creteTest: PiecesTest };
 
 const LEVEL = [
   'title: Snare and Harpy',
@@ -40,7 +39,7 @@ async function open(page: Page): Promise<string[]> {
   await page.locator('#chapter-enter').click();
   await expect(page.locator('#start-veil')).toBeVisible();
   await page.evaluate(text => {
-    const t = window.__creteTest;
+    const t = (window as unknown as Hooked).__creteTest;
     t.playLevel(t.parse(text));
   }, LEVEL);
   await expect(page.locator('#start-veil')).toBeVisible();
@@ -51,7 +50,7 @@ async function open(page: Page): Promise<string[]> {
 }
 
 const now = (page: Page) => page.evaluate(() => {
-  const s = window.__creteTest.game.run.now;
+  const s = (window as unknown as Hooked).__creteTest.game.run.now;
   return { moves: s.moves, player: s.player, harpy: s.hazards[0]!.at };
 });
 const canvas = (page: Page) => page.evaluate(() => (document.getElementById('stage') as HTMLCanvasElement).toDataURL());

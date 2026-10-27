@@ -4,9 +4,11 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { step } from '../src/puzzle/step.ts';
 import { terrainAt } from '../src/puzzle/state.ts';
+import type { State } from '../src/puzzle/state.ts';
+import { heldAt, released } from '../src/puzzle/pieces.ts';
 import { caught } from '../src/puzzle/catch.ts';
 import { work } from '../src/puzzle/work.ts';
-import type { GameEvent } from '../src/puzzle/work.ts';
+import type { GameEvent, Work } from '../src/puzzle/work.ts';
 import { TERRAIN } from '../src/puzzle/tiles.ts';
 import { grid, mv, play, WAIT } from './puzzle-grid.ts';
 
@@ -203,5 +205,97 @@ describe('teleport', () => {
 
   test('the Minotaur treats a teleport as wall', () => {
     assert.deepEqual(play(grid(['P.@M', '..@.']), WAIT).state.minotaur, at(0, 3));
+  });
+});
+
+describe("Daedalus's snare", () => {
+  /** The state after `f` has edited a copy of it. */
+  const put = (s: State, f: (w: Work) => void): State => {
+    const w = work(s);
+    f(w);
+    return w as unknown as State;
+  };
+  const BUTTON = 0;
+  const onButton = (w: Work) => { w.objects[BUTTON] = 'block'; };
+
+  test('Theseus in a snare cannot move until a block stands on its button', () => {
+    const held = step(grid(['-.P&.']), mv('right')).state;
+    assert.deepEqual(held.player, at(0, 3));
+    assert.equal(step(held, mv('right')).state, held);
+    assert.equal(step(held, mv('left')).state, held);
+    const freed = step(put(held, onButton), mv('right')).state;
+    assert.deepEqual(freed.player, at(0, 4));
+  });
+
+  test('waiting while held is a turn', () => {
+    const held = step(grid(['-.P&.']), mv('right')).state;
+    const r = step(held, WAIT);
+    assert.notEqual(r.state, held);
+    assert.equal(r.state.moves, held.moves + 1);
+    assert.deepEqual(r.state.player, at(0, 3));
+  });
+
+  test('a move while held is a bump', () => {
+    const held = step(grid(['-.P&.#']), mv('right')).state;
+    const r = step(held, mv('right'));
+    assert.equal(r.state, held);
+    assert.deepEqual(r.events, []);
+  });
+
+  test('the Minotaur in a snare is pinned', () => {
+    const s = put(grid(['-..&..P']), w => { w.minotaur = at(0, 3); });
+    assert.deepEqual(step(s, WAIT).state.minotaur, at(0, 3));
+    assert.deepEqual(step(put(s, onButton), WAIT).state.minotaur, at(0, 5));
+  });
+
+  test('a block in a held snare cannot be pushed', () => {
+    const s2 = grid(['-.PO&.']);
+    assert.deepEqual(step(s2, mv('right')).state.player, at(0, 3), 'a block outside is pushed into it');
+    const inTrap = put(grid(['-.P&.']), w => { w.objects[3] = 'block'; });
+    assert.equal(step(inTrap, mv('right')).state, inTrap);
+    assert.deepEqual(step(put(inTrap, onButton), mv('right')).state.player, at(0, 3));
+  });
+
+  test('anything walks through a snare whose button is held', () => {
+    const s = put(grid(['-.P&.']), onButton);
+    const r = play(s, mv('right'), mv('right'));
+    assert.deepEqual(r.state.player, at(0, 4));
+    assert.ok(!r.kinds.includes('held'));
+  });
+
+  test('stepping off the button holds the snare again', () => {
+    const s = grid(['.P-.&']);
+    const w = work(s);
+    assert.equal(released(w, 4), false);
+    const on = work(step(s, mv('right')).state);
+    assert.equal(released(on, 4), true);
+    assert.equal(heldAt(on, at(0, 4)), false);
+    const off = work(step(step(s, mv('right')).state, mv('right')).state);
+    assert.equal(heldAt(off, at(0, 4)), true);
+    assert.equal(heldAt(off, at(0, 1)), false, 'only a snare is ever held');
+    const hazardOn = work(s);
+    hazardOn.hazards.push({ kind: 'ball', at: at(0, 2), dir: 'left', home: 0 });
+    assert.equal(released(hazardOn, 4), true, 'a hazard on the button releases it');
+  });
+
+  test('a catch throws Theseus out of a snare', () => {
+    const s = put(grid(['-.P&.']), w => { w.player = at(0, 3); w.throwBack = at(0, 1); w.hearts = 3; });
+    const w = work(s);
+    assert.equal(heldAt(w, w.player), true);
+    caught(w, [], 'minotaur');
+    assert.deepEqual(w.player, at(0, 1));
+  });
+
+  test('the Minotaur standing on a brown button does not release it', () => {
+    const s = put(grid(['-.P&.']), w => { w.player = at(0, 3); w.minotaur = at(0, 0); });
+    assert.equal(released(work(s), 3), false);
+    assert.equal(step(s, mv('right')).state, s);
+  });
+
+  test('a snare emits held when it closes on someone', () => {
+    const held = (e: GameEvent[]) => e.filter(x => x.kind === 'held');
+    assert.deepEqual(held(step(grid(['-.P&.']), mv('right')).events), [{ kind: 'held', who: 'player', at: at(0, 3) }]);
+    assert.deepEqual(held(step(grid(['-.PO&']), mv('right')).events), [{ kind: 'held', who: 'block', at: at(0, 4) }]);
+    assert.deepEqual(held(step(grid(['-M&..P']), WAIT).events), [{ kind: 'held', who: 'minotaur', at: at(0, 2) }]);
   });
 });

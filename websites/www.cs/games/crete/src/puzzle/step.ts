@@ -13,7 +13,7 @@ import type { State } from './state.ts';
 import { minotaurPhase } from './minotaur.ts';
 import { hazardPhase } from './hazards.ts';
 import { caught, leave, turnOver } from './catch.ts';
-import { teleportExit, teleportsLinked } from './pieces.ts';
+import { heldAt, teleportExit, teleportsLinked } from './pieces.ts';
 import { work, tAt, oAt } from './work.ts';
 import type { Action, GameEvent, Work } from './work.ts';
 
@@ -66,6 +66,7 @@ function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell, ev: GameEvent[]): 
       return;
     }
     if (t === 'button') flip(w, ev);
+    if (heldAt(w, here)) ev.push({ kind: 'held', who: 'block', at: here });
     const def = TERRAIN[t];
     if (def.carries) dir = def.carries;
     else if (!def.slides) return;
@@ -90,7 +91,8 @@ function playerMayEnter(w: Work, to: Cell, d: Dir, riding: boolean): boolean {
   if (t === 'gate' && !gateOpen(w)) return false;
   if (def.needs && !w.gear.includes(def.needs)) return false;
   if (def.door && w.keys[def.door] <= 0) return false;
-  return oAt(w, to) !== 'block' || (!riding && !!blockMove(w, to, d, () => true));
+  if (oAt(w, to) !== 'block') return true;
+  return !riding && !heldAt(w, to) && !!blockMove(w, to, d, () => true);
 }
 
 /** Whether the player may enter `to` heading `d`. When they may, a door on the way opens and a block is pushed.
@@ -139,6 +141,7 @@ function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): bo
     w.gear = [];
   }
   if (t === 'safe') w.throwBack = at;
+  if (heldAt(w, at)) ev.push({ kind: 'held', who: 'player', at });
   if (t === 'button') flip(w, ev);
   if (t === 'exit' && gateOpen(w)) {
     w.outcome = 'won';
@@ -180,6 +183,7 @@ export function step(s: State, a: Action): StepResult {
   const ev: GameEvent[] = [];
   if (a.kind === 'move') {
     const from = w.player;
+    if (heldAt(w, from)) return { state: s, events: [] };
     const to = next(from, a.dir);
     const t = tAt(w, to);
     if (t === 'fake-wall' || t === 'invisible-wall') {

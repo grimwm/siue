@@ -9,6 +9,7 @@ import type { Cell, Dir } from './tiles.ts';
 import { inside, index, next, same } from './state.ts';
 import { tAt, oAt } from './work.ts';
 import { caught } from './catch.ts';
+import { heldAt } from './pieces.ts';
 import type { GameEvent, Work } from './work.ts';
 
 export function minotaurMayEnter(w: Work, x: Cell): boolean {
@@ -18,6 +19,7 @@ export function minotaurMayEnter(w: Work, x: Cell): boolean {
 /** The Minotaur arrives on `to`: the cow is gone, the player is caught. True when the turn's steps end. */
 function arrive(w: Work, to: Cell, ev: GameEvent[]): boolean {
   w.minotaur = to;
+  if (heldAt(w, to)) ev.push({ kind: 'held', who: 'minotaur', at: to });
   if (same(to, w.cow)) w.cow = null;
   if (same(to, w.player)) {
     caught(w, ev, 'minotaur');
@@ -30,6 +32,7 @@ function arrive(w: Work, to: Cell, ev: GameEvent[]): boolean {
 export function minotaurStep(w: Work, ev: GameEvent[]): boolean {
   const m = w.minotaur;
   if (!m) return true;
+  if (heldAt(w, m)) return false;
   const target = w.cow ?? w.player;
   const dc = Math.sign(target.c - m.c);
   const dr = Math.sign(target.r - m.r);

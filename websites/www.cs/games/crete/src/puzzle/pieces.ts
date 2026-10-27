@@ -105,8 +105,8 @@ export const hazardMayGo = (w: Work, kind: HazardKind, x: Cell): boolean =>
   same(x, w.player) ? hazardGround(w, kind, x) : hazardRoom(w, kind, x);
 
 /** Hazard `i` has landed on its cell, Theseus not there: a bomb destroys it, buttons press, a snare holds it.
- *  `keep` is the cell Theseus is stepping into. */
-export function hazardLands(w: Work, i: number, ev: GameEvent[], keep?: Cell): 'on' | 'gone' {
+ *  `keep` is the cell Theseus is stepping into; `inPhase` says the hazard phase is under way. */
+export function hazardLands(w: Work, i: number, ev: GameEvent[], keep?: Cell, inPhase = false): 'on' | 'gone' {
   const h = w.hazards[i]!;
   const t = tAt(w, h.at);
   if (t === 'bomb') {
@@ -116,7 +116,7 @@ export function hazardLands(w: Work, i: number, ev: GameEvent[], keep?: Cell): '
     return 'gone';
   }
   if (t === 'button') flip(w, ev);
-  else if (t === 'button-red') fireRed(w, index(w, h.at), ev, keep);
+  else if (t === 'button-red') fireRed(w, index(w, h.at), ev, keep, inPhase);
   if (heldAt(w, h.at)) ev.push({ kind: 'held', who: 'hazard', at: h.at });
   return 'on';
 }
@@ -124,8 +124,9 @@ export function hazardLands(w: Work, i: number, ev: GameEvent[], keep?: Cell): '
 /** The red button at index `button` fires: its machine's template appears in front of the machine when that cell
  *  is free for it, never on Theseus nor on `keep`, the cell he is stepping into. A block then settles as if pushed
  *  the machine's way; a hazard faces that way and lands, first moving in the next hazard phase. Each clone takes
- *  a free cell or uses up a bomb or water, so a chain of firings ends. */
-export function fireRed(w: Work, button: number, ev: GameEvent[], keep?: Cell): void {
+ *  a free cell or uses up a bomb or water, so a chain of firings ends. In the hazard phase (`inPhase`) a hazard
+ *  clone joins the end of the phase's list; otherwise it takes its place in reading order. */
+export function fireRed(w: Work, button: number, ev: GameEvent[], keep?: Cell, inPhase = false): void {
   const c = w.level.links[button];
   if (c === undefined) return;
   const m = w.level.machines.find(x => index(w, x.at) === c)!;
@@ -135,17 +136,18 @@ export function fireRed(w: Work, button: number, ev: GameEvent[], keep?: Cell): 
     if (!blockMayEnter(w, front)) return;
     w.objects[index(w, front)] = 'block';
     ev.push({ kind: 'cloned', what: 'block', at: front });
-    settleBlock(w, front, m.dir, keep, ev);
+    settleBlock(w, front, m.dir, keep, ev, inPhase);
     return;
   }
   if (!hazardRoom(w, m.template, front) || same(front, w.player)) return;
   const h = { kind: m.template, at: front, dir: m.dir, home: m.home! };
+  if (w.hazards.length === 0) w.hazards = [];
   let i = w.hazards.length;
-  if (!w.inHazardPhase) {
+  if (!inPhase) {
     const f = index(w, front);
     while (i > 0 && index(w, w.hazards[i - 1]!.at) > f) i--;
   }
   w.hazards.splice(i, 0, h);
   ev.push({ kind: 'cloned', what: m.template, at: front });
-  hazardLands(w, i, ev, keep);
+  hazardLands(w, i, ev, keep, inPhase);
 }

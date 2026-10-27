@@ -4,8 +4,9 @@
  * fixed-width bit fields sized from the level; `moves` and `outcome` are not packed. Two situations of a level
  * pack alike exactly when they play alike. A hazard's kind is never packed: its home (a level hazard, or the
  * machine that cloned it) decides it. Where no machine clones a hazard, each home holds at most one hazard, so
- * the hazards pack as one slot per home: its cell (or none, once a bomb took it) and its facing. Otherwise they
- * pack per cell a hazard could ever stand on: 0 empty, else 1 + facing + 4 × home. DOM-free. */
+ * the hazards pack as one slot per home: its cell (or none, once a bomb took it or a send-home found no cell for
+ * it) and its facing. Otherwise they pack per cell a hazard could ever stand on: 0 empty, else 1 + facing + 4 ×
+ * home. DOM-free. */
 import { TERRAIN, HAZARDS, KEY_COLORS, GEAR, DIRS, DELTA } from './tiles.ts';
 import type { Gear, Hazard, HazardKind, KeyColor, ObjectKind, Terrain, Tool } from './tiles.ts';
 import type { Level } from './level.ts';
@@ -230,6 +231,7 @@ export function pack(s: State, layout: Layout, out: Uint32Array, at: number): vo
   for (const i of l.fixed) p = put(out, at, p, 1, s.objects[i] ? 1 : 0);
   for (const i of l.blockOnly) p = put(out, at, p, 1, s.objects[i] === 'block' ? 1 : 0);
   for (const i of l.blockOrObject) p = put(out, at, p, 2, s.objects[i] === 'block' ? 2 : s.objects[i] ? 1 : 0);
+  if (l.hazardSlots > 1 && s.hazards.some((h, i) => i > 0 && cellOf(s, h.at, l.none) < cellOf(s, s.hazards[i - 1]!.at, l.none))) throw new Error('the hazards must be sorted by cell');
   for (let home = 0; home < l.hazardSlots; home++) {
     const h = s.hazards.find(x => x.home === home);
     p = put(out, at, p, l.cellBits, h ? cellOf(s, h.at, l.none) : l.none);
@@ -295,7 +297,8 @@ export function unpack(words: Uint32Array, at: number, layout: Layout, level: Le
     hazards.push({ kind: l.homeKinds[home]!, at: cell(i), dir: DIRS[(v - 1) & 3]!, home });
   }
   return {
-    level, terrain, objects, player, hearts, keys, gear, tools, pages, throwBack, minotaur, stone, cow, relicsLeft,
-    hazards, moves, outcome: 'playing',
+    // The order of `initial`'s keys: states of one shape keep `step` monomorphic.
+    level, terrain, objects, player, hearts, keys, gear, tools, pages, throwBack, minotaur, stone, cow, hazards,
+    relicsLeft, moves, outcome: 'playing',
   };
 }

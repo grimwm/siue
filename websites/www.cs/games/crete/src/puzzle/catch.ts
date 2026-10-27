@@ -1,8 +1,9 @@
 // websites/www.cs/games/crete/src/puzzle/catch.ts
 /* The Island of Crete: the catch every cause shares. A heart lost, Theseus
  * thrown back to his last safe zone, the Minotaur sent home when he lands on
- * it. A hazard on a cell something is thrown onto is never destroyed: it goes
- * back to its own start, or to the nearest free cell. DOM-free. */
+ * it. A hazard on a cell something is thrown onto goes back to its own start,
+ * or to the nearest free cell; it is removed only when no cell on the board can
+ * take it. DOM-free. */
 import { DIRS } from './tiles.ts';
 import type { Cell, HazardKind } from './tiles.ts';
 import { inside, index, next, same } from './state.ts';
@@ -28,8 +29,9 @@ export function leave(w: Work, from: Cell, ev: GameEvent[]): void {
   ev.push({ kind: 'rose', at: from });
 }
 
-/** A hazard of this kind may be set down on `x` now: it has room there, and Theseus is not on it. */
-const hazardMayStand = (w: Work, kind: HazardKind, x: Cell): boolean => hazardRoom(w, kind, x) && !same(x, w.player);
+/** A hazard of this kind may be set down on `x` now: it has room there, it is no bomb, and Theseus is not on it. */
+const hazardMayStand = (w: Work, kind: HazardKind, x: Cell): boolean =>
+  hazardRoom(w, kind, x) && tAt(w, x) !== 'bomb' && !same(x, w.player);
 
 /** Where a hazard goes when sent home: its home cell, else the nearest free cell breadth-first from it over all
  *  four-neighbours, walls included, ties in reading order; null when no cell on the board can take it. */
@@ -54,7 +56,8 @@ function homeFor(w: Work, kind: HazardKind, home: number): Cell | null {
   return null;
 }
 
-/** The hazard standing on `x`, if any, goes home; with no cell to take it, it is gone (`to: null`). */
+/** The hazard standing on `x`, if any, goes home; with no cell to take it, it is gone (`to: null`). Being set down
+ *  is no arrival: it presses nothing, and a snare there holds it by its live rule. */
 function sendHome(w: Work, x: Cell, ev: GameEvent[]): void {
   const i = w.hazards.findIndex(h => same(x, h.at));
   if (i < 0) return;
@@ -90,5 +93,8 @@ export function caught(w: Work, ev: GameEvent[], by: CatchCause): void {
 }
 
 /** The turn stops here: the try is decided, or something was caught. */
-export const turnOver = (w: Work, ev: readonly GameEvent[]): boolean =>
-  w.outcome !== 'playing' || ev.some(e => e.kind === 'caught');
+export function turnOver(w: Work, ev: readonly GameEvent[]): boolean {
+  if (w.outcome !== 'playing') return true;
+  for (let i = 0; i < ev.length; i++) if (ev[i]!.kind === 'caught') return true;
+  return false;
+}

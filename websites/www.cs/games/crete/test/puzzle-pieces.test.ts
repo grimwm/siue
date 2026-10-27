@@ -417,9 +417,10 @@ describe('clone machine', () => {
   });
 
   test("a hazard clone made in Theseus's action moves in that turn's hazard phase", () => {
-    const r = step(grid(['P+C..'], 'machines: ball-right'), mv('right'));
+    const s = grid(['P+C..'], 'machines: ball-right');
+    const r = step(s, mv('right'));
     assert.deepEqual(r.state.hazards, [{ kind: 'ball', at: at(0, 4), dir: 'right', home: 0 }]);
     assert.ok(r.events.some(e => e.kind === 'moved' && e.who === 'hazard'));
-    assert.equal('inHazardPhase' in r.state, false, 'the phase marker stays off the state');
+    assert.deepEqual(Object.keys(r.state).sort(), Object.keys(s).sort(), 'the turn adds no key to the state');
   });
 });

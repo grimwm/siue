@@ -213,6 +213,15 @@ describe('sharing the board', () => {
   });
 });
 
+describe('pushing', () => {
+  test("Theseus cannot push a block into a hazard's cell", () => {
+    const s = grid(['POo#'], 'facing: right');
+    const r = step(s, mv('right'));
+    assert.equal(r.state, s, 'a bump');
+    assert.deepEqual(r.events, []);
+  });
+});
+
 describe('sent home', () => {
   /** The level's first hazard moved onto (0,0), where a catch throws Theseus. */
   const thrown = (rows: string[], header: string, objects: Record<number, 'block'> = {}) => {
@@ -237,6 +246,16 @@ describe('sent home', () => {
     assert.ok(r.events.some(e => e.kind === 'sent-home' && e.to?.c === 4));
     const walled = thrown(['.P.M#o#', '#######'], 'facing: up', { 5: 'block' });
     assert.deepEqual(play(walled, WAIT).state.hazards.map(h => h.at), [at(0, 3)], 'through walls to the nearest free cell');
+  });
+
+  test('a hazard sent home is never set down on a bomb, and presses nothing', () => {
+    const r = play(thrown(['.P.M!o.'], 'facing: up', { 5: 'block' }), WAIT);
+    assert.deepEqual(r.state.hazards.map(h => h.at), [at(0, 6)], 'the bomb is passed over');
+    assert.equal(terrainAt(r.state, at(0, 4)), 'bomb');
+    assert.ok(!r.events.some(e => e.kind === 'exploded'));
+    const button = play(thrown(['.P.M_o.'], 'facing: up', { 5: 'block' }), WAIT);
+    assert.deepEqual(button.state.hazards.map(h => h.at), [at(0, 4)]);
+    assert.ok(!button.events.some(e => e.kind === 'flipped'), 'set down on the toggle button, it presses nothing');
   });
 
   test('a hazard with no cell on the whole board is removed, reported with to: null', () => {

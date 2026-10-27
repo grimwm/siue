@@ -27,7 +27,7 @@ function arrive(w: Work, i: number, ev: GameEvent[]): Outcome {
     caught(w, ev, 'hazard');
     return 'caught';
   }
-  return hazardLands(w, i, ev);
+  return hazardLands(w, i, ev, undefined, true);
 }
 
 /** Hazard `i`'s move: ahead, else the first of its turns it may enter; then on over ice and force floors until the
@@ -74,16 +74,11 @@ function moveHazard(w: Work, i: number, ev: GameEvent[]): Outcome {
  *  the next phase. A catch ends the phase. */
 export function hazardPhase(w: Work, ev: GameEvent[]): void {
   if (w.hazards.length === 0) return;
-  w.inHazardPhase = true;
-  try {
-    for (let i = 0, n = w.hazards.length; i < n;) {
-      const end = moveHazard(w, i, ev);
-      if (end === 'caught') break;
-      if (end === 'gone') n--;
-      else i++;
-    }
-  } finally {
-    w.inHazardPhase = false;
+  for (let i = 0, n = w.hazards.length; i < n;) {
+    const end = moveHazard(w, i, ev);
+    if (end === 'caught') break;
+    if (end === 'gone') n--;
+    else i++;
   }
   w.hazards.sort((a, b) => index(w, a.at) - index(w, b.at));
 }

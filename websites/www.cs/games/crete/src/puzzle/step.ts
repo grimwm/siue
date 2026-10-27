@@ -47,8 +47,9 @@ function moveBlock(w: Work, from: Cell, m: BlockMove, how: 'pushed' | 'slid', ev
 }
 
 /** A block has just entered `at` heading `d`: it sinks, explodes, presses, slides or is carried. It never enters
- *  `pusher`, the cell the player is stepping into, and a red button it presses clones nothing there. */
-export function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell | undefined, ev: GameEvent[]): void {
+ *  `pusher`, the cell the player is stepping into, and a red button it presses clones nothing there. `inPhase`
+ *  is passed on to `fireRed`. */
+export function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell | undefined, ev: GameEvent[], inPhase = false): void {
   let here = at;
   let dir = d;
   const seen = new Set<number>([index(w, here)]);
@@ -62,7 +63,7 @@ export function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell | undefined,
       return;
     }
     if (t === 'button') flip(w, ev);
-    else if (t === 'button-red') fireRed(w, index(w, here), ev, pusher);
+    else if (t === 'button-red') fireRed(w, index(w, here), ev, pusher, inPhase);
     if (heldAt(w, here)) ev.push({ kind: 'held', who: 'block', at: here });
     const def = TERRAIN[t];
     if (def.carries) dir = def.carries;
@@ -179,7 +180,11 @@ function ridePlayer(w: Work, d: Dir, ev: GameEvent[]): void {
   }
 }
 
-const sameItems = <T>(a: readonly T[], b: readonly T[]): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
+function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
 
 export function step(s: State, a: Action): StepResult {
   if (s.outcome !== 'playing') return { state: s, events: [] };
@@ -222,6 +227,5 @@ export function step(s: State, a: Action): StepResult {
   if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];
   if (sameItems(w.objects, s.objects)) w.objects = s.objects as (ObjectKind | null)[];
   if (sameItems(w.hazards, s.hazards)) w.hazards = s.hazards as Hazard[];
-  const { inHazardPhase: _, ...state } = w;
-  return { state, events: ev };
+  return { state: w, events: ev };
 }

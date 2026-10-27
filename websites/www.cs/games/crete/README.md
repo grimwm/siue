@@ -87,7 +87,7 @@ A turn goes in a fixed order and stops at its first catch: Theseus's action, the
 
 The rulings the pieces need:
 
-- **Sent home**: when a catch throws Theseus onto a hazard, or the Minotaur home onto one, that hazard goes back to its start (a level hazard's own cell; a clone's, the cell in front of its machine). If that is taken, it goes to the nearest cell it may stand on, breadth-first from its start over every cell, ties in reading order; only when no cell on the board can take it is it removed.
+- **Sent home**: when a catch throws Theseus onto a hazard, or the Minotaur home onto one, that hazard goes back to its start (a level hazard's own cell; a clone's, the cell in front of its machine). If that is taken, it goes to the nearest cell it may stand on, breadth-first from its start over every cell, ties in reading order, never a bomb; only when no cell on the board can take it is it removed. Being set down is no arrival: it presses no button, though a snare it is set down in holds it.
 - **The cow**: a hazard never enters the cow's cell, but one that moves onto Theseus standing on his cow catches him and the cow is lost. The cow never holds a brown button down.
 - **Hazards and the toggle button**: a hazard on `_` flips the toggle walls, as Theseus and blocks do.
 - **Teleport chains**: there are none. A teleport beyond an exit makes that exit blocked. Out of a teleport, Theseus pushes a block only when he entered it by his own step, not on a ride; with every exit blocked he stays on the teleport he entered, and a pushed block's push is refused.

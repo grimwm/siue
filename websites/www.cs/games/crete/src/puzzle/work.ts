@@ -36,14 +36,14 @@ export interface Work extends Mutable<Omit<State, 'terrain' | 'objects' | 'keys'
   keys: Record<KeyColor, number>;
   tools: Record<Tool, number>;
   gear: Gear[];
+  /** The turn's own copy, except an empty list, which is the state's: never add to it in place. */
   hazards: Hazard[];
-  /** The hazard phase is under way: a hazard cloned now joins the end of the phase's list. Never part of a State. */
-  inHazardPhase: boolean;
 }
 
 export const work = (s: State): Work => ({
-  ...s, terrain: [...s.terrain], objects: [...s.objects], keys: { ...s.keys }, tools: { ...s.tools }, gear: [...s.gear], hazards: [...s.hazards],
-  inHazardPhase: false,
+  ...s, terrain: [...s.terrain], objects: [...s.objects], keys: { ...s.keys }, tools: { ...s.tools }, gear: [...s.gear],
+  // An empty list is shared with the state: whatever adds a hazard to an empty list gives the turn its own first.
+  hazards: s.hazards.length > 0 ? [...s.hazards] : (s.hazards as Hazard[]),
 });
 export const tAt = (w: Work, x: Cell): Terrain => (inside(w.level, x) ? w.terrain[index(w, x)]! : 'wall');
 export const oAt = (w: Work, x: Cell): ObjectKind | null => (inside(w.level, x) ? w.objects[index(w, x)]! : null);

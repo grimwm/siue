@@ -2,10 +2,14 @@
  * when it can never win (its estimate, heuristic.ts, is infinite), or when one already seen is the same but for
  * resources that only help, holds at least as much of each, and was reached in no more moves: whatever wins from
  * the dropped one wins as fast from that one. Those resources are hearts, keys, the three tools, flippers, fire
- * boots and pages. More of any of them never forces a different turn, with one exception the level is checked
+ * boots and pages. More of any of them never forces a different turn, with two exceptions the level is checked
  * for: a ride (ice, a force floor) carries Theseus through a door he holds the key to, or into water or fire he
- * holds the gear for, where without it the ride would stop. A key colour or gear a ride could meet so is not
- * compared. Skates and suction boots change where rides stop, so they must match. DOM-free. */
+ * holds the gear for, where without it the ride would stop; and a teleport exit beside such a door, water or fire
+ * is open to him with the key or gear and blocked without, so he comes out of a different teleport. A key colour
+ * or gear a ride or a teleport exit could meet so is not compared. Skates and suction boots change where rides
+ * stop, so they must match. The rest hold with every piece: a thief takes all gear from either situation alike; a
+ * catch by the Minotaur, a hazard or a bomb costs one heart and throws Theseus back whatever he holds; snares,
+ * buttons, clone machines and the hazards never look at what he holds. DOM-free. */
 import { DELTA, DIRS, KEY_COLORS, TERRAIN } from './tiles.ts';
 import type { Gear, Terrain } from './tiles.ts';
 import type { Level } from './level.ts';
@@ -39,18 +43,32 @@ function rideMeets(lv: Level, onto: (t: Terrain) => boolean): boolean {
   return false;
 }
 
+/** True when a teleport exit could be blocked or not by a cell whose terrain `onto` names: it is next to a
+ *  teleport, in a level with two or more. */
+function teleportMeets(lv: Level, onto: (t: Terrain) => boolean): boolean {
+  const teleports = lv.terrain.flatMap((t, i) => (t === 'teleport' ? [i] : []));
+  if (teleports.length < 2) return false;
+  return teleports.some(i => DIRS.some(d => {
+    const r = Math.floor(i / lv.cols) + DELTA[d][0], c = (i % lv.cols) + DELTA[d][1];
+    return r >= 0 && c >= 0 && r < lv.rows && c < lv.cols && onto(lv.terrain[r * lv.cols + c]!);
+  }));
+}
+
+/** A key colour or gear whose holding could force a different turn: a ride or a teleport exit could meet it. */
+const forced = (lv: Level, onto: (t: Terrain) => boolean): boolean => rideMeets(lv, onto) || teleportMeets(lv, onto);
+
 /** The fields this level compares. */
 function dominance(lv: Level, l: Layout): Field[] {
   const out: Field[] = [];
   if (l.heartBits) out.push({ pos: l.heartAt, width: l.heartBits, set: false });
   if (l.pageBits) out.push({ pos: l.pageAt, width: l.pageBits, set: true });
   KEY_COLORS.forEach((k, i) => {
-    if (l.keyBits[i] && !rideMeets(lv, t => TERRAIN[t].door === k)) out.push({ pos: l.keyAt[i]!, width: l.keyBits[i]!, set: false });
+    if (l.keyBits[i] && !forced(lv, t => TERRAIN[t].door === k)) out.push({ pos: l.keyAt[i]!, width: l.keyBits[i]!, set: false });
   });
   l.toolBits.forEach((b, i) => { if (b) out.push({ pos: l.toolAt[i]!, width: b, set: false }); });
   const free: readonly Gear[] = ['flippers', 'fire-boots'];
   l.gear.forEach((g, i) => {
-    if (free.includes(g) && !rideMeets(lv, t => TERRAIN[t].needs === g)) out.push({ pos: l.gearAt + i, width: 1, set: false });
+    if (free.includes(g) && !forced(lv, t => TERRAIN[t].needs === g)) out.push({ pos: l.gearAt + i, width: 1, set: false });
   });
   return out;
 }

@@ -143,4 +143,31 @@ export const PIECE_LEVELS: Record<string, Level> = {
     '#*..E#',
     '######',
   ], 'facing: right'),
+  /** A ball runs into a bomb: both are gone. */
+  'hazard-bomb': level('Hazard bomb', [
+    '######',
+    '#P...#',
+    '#.o.!#',
+    '#....#',
+    '#*..E#',
+    '######',
+  ], 'facing: right'),
+  /** A cloned ball runs into a bomb, so the hazards pack per cell. */
+  'hazard-bomb-clone': level('Hazard bomb clone', [
+    '#######',
+    '#P.+..#',
+    '#.....#',
+    '#C..!.#',
+    '#...*E#',
+    '#######',
+  ], 'machines: ball-right'),
+  /** A ball walks over the door Theseus opens. The machine, with no button, only makes the hazards pack per cell. */
+  'hazard-door': level('Hazard door', [
+    '#######',
+    '#PrR..#',
+    '#C#.#.#',
+    '###o#.#',
+    '#E*...#',
+    '#######',
+  ], 'facing: up\nmachines: ball-right'),
 };

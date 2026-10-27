@@ -161,7 +161,7 @@ test("the reference's key tells hazards and changed pieces apart", () => {
 });
 
 test('hazards pack as slots when nothing clones one', () => {
-  for (const name of ['ball', 'glider', 'fireball', 'throw-back', 'hazard-snare', 'hazard-toggle']) {
+  for (const name of ['ball', 'glider', 'fireball', 'throw-back', 'hazard-snare', 'hazard-toggle', 'hazard-bomb']) {
     const layout = layoutOf(PIECE_LEVELS[name]!);
     assert.equal(layout.hazardSlots, PIECE_LEVELS[name]!.hazards.length, name);
     assert.equal(layout.hazardCells.length, 0, name);
@@ -172,7 +172,7 @@ test('hazards pack as slots when nothing clones one', () => {
 });
 
 test('cloned hazards pack per cell', () => {
-  for (const name of ['clone-ball', 'two-clones']) {
+  for (const name of ['clone-ball', 'two-clones', 'hazard-bomb-clone', 'hazard-door']) {
     const level = PIECE_LEVELS[name]!;
     const layout = layoutOf(level);
     assert.equal(layout.hazardSlots, 0, name);
@@ -188,6 +188,8 @@ test('cloned hazards pack per cell', () => {
   pack(s, layout, w, 0);
   const u = unpack(w, 0, layout, level);
   assert.deepEqual(u.hazards, s.hazards);
+  // Out of cell order, a hazard would be passed over: packing refuses it.
+  assert.throws(() => pack({ ...s, hazards: [...s.hazards].reverse() }, layout, w, 0), /hazard/);
 });
 
 test("Chapter 1's levels pack into as many words as they always have", () => {

@@ -1,7 +1,7 @@
 // The relaxed-graph estimate never overestimates the moves a win still needs, and it is consistent: one action
 // lowers it by at most one. Checked on every situation breadth-first search reaches (up to 20,000 per level) on the
-// trial levels and a generated corpus, and on hand-built levels for a catch, a long slide, a carry round corners
-// and a `relics:` header below the grid count.
+// trial levels, a generated corpus and the piece levels, and on hand-built levels for a catch, a long slide, a
+// carry round corners, a teleport and a `relics:` header below the grid count.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { estimateFor } from '../src/puzzle/heuristic.ts';
@@ -16,6 +16,7 @@ import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import { TRIALS, trialLevel } from '../src/puzzle/trials.ts';
 import { corpus } from './corpus.ts';
+import { PIECE_LEVELS } from './piece-levels.ts';
 
 const ACTIONS: Action[] = [
   { kind: 'wait' }, ...DIRS.map(dir => ({ kind: 'move', dir }) as Action),
@@ -100,6 +101,39 @@ test('every trial level: a lower bound, consistent', () => {
 
 test('the generated corpus: a lower bound, consistent', () => {
   for (const lv of corpus(3, 200)) check(lv);
+});
+
+test('the estimate never exceeds the true distance on piece levels', () => {
+  for (const [name, lv] of Object.entries(PIECE_LEVELS)) {
+    const g = explore(lv, estimateFor(lv), CAP);
+    assert.ok(g.whole, `${name}: every situation fits`);
+    check(lv);
+  }
+});
+
+test('a teleport shortens the estimate', () => {
+  // Into the left teleport heading right: out beyond the right one, onto the exit.
+  const lv = level(['##########', '#P@....@E#', '##########']);
+  assert.equal(shortest(lv), 1);
+  assert.equal(estimateFor(lv)(initial(lv)), 1);
+  check(lv);
+  // A ride into a teleport, and out onto ice that carries on.
+  const ride = level(['############', '#P=@...@==E#', '############']);
+  assert.equal(shortest(ride), 1);
+  assert.equal(estimateFor(ride)(initial(ride)), 1);
+  check(ride);
+});
+
+test('clone machines and invisible walls are walls to the estimate; fake walls are not', () => {
+  const fake = level(['######', '#PW.E#', '######']);
+  assert.equal(estimateFor(fake)(initial(fake)), 3);
+  check(fake);
+  const hidden = level(['#######', '#PI..E#', '#.....#', '#######']);
+  assert.equal(estimateFor(hidden)(initial(hidden)), 6);
+  check(hidden);
+  const machine = level(['#######', '#PC..E#', '#.....#', '#######'], 'machines: block-down');
+  assert.equal(estimateFor(machine)(initial(machine)), 6);
+  check(machine);
 });
 
 test('an exit walled off: no win, even relaxed', () => {

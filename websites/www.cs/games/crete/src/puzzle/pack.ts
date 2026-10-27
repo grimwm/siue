@@ -78,7 +78,7 @@ function blockCells(lv: Level): Set<number> {
   const todo: number[] = [];
   const enterable = (i: number) => {
     const t = lv.terrain[i]!;
-    return TERRAIN[t].block || TERRAIN[t].door !== undefined || t === 'fake-wall' || t === 'bomb';
+    return TERRAIN[t].block || TERRAIN[t].door !== undefined || t === 'fake-wall';
   };
   const mino = lv.minotaur ? lv.minotaur.r * lv.cols + lv.minotaur.c : -1;
   const inside = (r: number, c: number) => r >= 0 && c >= 0 && r < lv.rows && c < lv.cols;
@@ -243,6 +243,8 @@ export function pack(s: State, layout: Layout, out: Uint32Array, at: number): vo
     p = put(out, at, p, l.hazardBits, here ? 1 + DIRS.indexOf(h.dir) + 4 * h.home : 0);
     if (here) k++;
   }
+  // A hazard out of cell order, or off every hazard cell, would be passed over without a sign.
+  if (l.hazardCells.length && k !== s.hazards.length) throw new Error(`packed ${k} of ${s.hazards.length} hazards: they must be sorted by cell`);
 }
 
 /** The situation packed in the words; `moves` is what it says (moves are not packed). */

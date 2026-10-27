@@ -151,6 +151,13 @@ test('a finished search is cached: the second run answers at once, without progr
   assert.deepEqual(r2, r1, 'the same line, from the cached letters');
 });
 
+test('the host trims after it caches a result', async () => {
+  let trims = 0;
+  const results: ResultStore = { ...memoryResults(), trim: async () => { trims++; } };
+  await startSearch(L9, 'solve', inProcess({ results })).result;
+  assert.equal(trims, 1);
+});
+
 test('a cache entry from another build is a miss: the search runs again', async () => {
   const results = memoryResults();
   await startSearch(L9, 'solve', inProcess({ results, version: 'old' })).result;

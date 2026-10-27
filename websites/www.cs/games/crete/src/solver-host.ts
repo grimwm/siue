@@ -149,7 +149,10 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
         if (job.cancelled) throw new Cancelled();
       }
       const keep = toCache(answer);
-      if (keep && key !== null) await results.put(key, keep);
+      if (keep && key !== null) {
+        await results.put(key, keep);
+        void results.trim?.();
+      }
       return answer;
     } finally {
       try { disk?.close(); } catch { /* the file is gone either way */ }

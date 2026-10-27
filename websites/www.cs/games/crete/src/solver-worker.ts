@@ -5,7 +5,7 @@
 import { createSolverHost } from './solver-host.ts';
 import type { NodeFile, ToHost } from './solver-host.ts';
 import { handleFile } from './puzzle/paged.ts';
-import { sha256Hex } from './puzzle/cache.ts';
+import { evictions, sha256Hex } from './puzzle/cache.ts';
 import type { CachedResult, ResultStore } from './puzzle/cache.ts';
 
 /** A node file older than this was left by a tab that closed mid-search, and is deleted. */
@@ -32,6 +32,8 @@ async function openNodeFile(): Promise<NodeFile> {
   };
 }
 
+let trimming = false;
+
 /** Finished results, one JSON file each. */
 const diskResults: ResultStore = {
   async get(key) {
@@ -47,6 +49,23 @@ const diskResults: ResultStore = {
       handle.flush();
     } finally {
       handle.close();
+    }
+  },
+  /** Removes other versions' entries and the oldest beyond RESULT_LIMIT; one trim at a time, a trim asked for
+   *  while one runs is skipped (the next put trims again). */
+  async trim() {
+    if (trimming) return;
+    trimming = true;
+    try {
+      const dir = await folder('crete-results');
+      const entries: { key: string; modified: number }[] = [];
+      for await (const [name, handle] of dir.entries()) {
+        if (handle.kind !== 'file' || !name.endsWith('.json')) continue;
+        entries.push({ key: name.slice(0, -5), modified: (await (handle as FileSystemFileHandle).getFile()).lastModified });
+      }
+      for (const key of evictions(entries, await version)) await dir.removeEntry(`${key}.json`).catch(() => {});
+    } finally {
+      trimming = false;
     }
   },
 };

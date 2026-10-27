@@ -113,3 +113,54 @@ test('a level holds at most 31 pages', () => {
   const ids = Array.from({ length: 32 }, (_, i) => `p${i}`).join(' ');
   assert.throws(() => parse(`title: t\nintro: i\npages: ${ids}\n\nP${'p'.repeat(32)}\n`), /at most 31/);
 });
+
+const PIECES = [
+  'title: Pieces',
+  'intro: Nine of them.',
+  'facing: up left',
+  'machines: block-right fireball-down',
+  '',
+  '#########',
+  '#P&-+;:WI',
+  '#@$!C.Co#',
+  '#..w...M#',
+  '#########',
+  '',
+].join('\n');
+
+test('every new piece round-trips', () => {
+  const lv = parse(PIECES);
+  const at = (r: number, c: number) => lv.terrain[r * lv.cols + c];
+  assert.deepEqual(['&', '-', '+', ';', ':', 'W', 'I'].map((_, i) => at(1, 2 + i)),
+    ['trap', 'button-brown', 'button-red', 'popup', 'gravel', 'fake-wall', 'invisible-wall']);
+  assert.deepEqual([1, 2, 3, 4].map(c => at(2, c)), ['teleport', 'thief', 'bomb', 'clone']);
+  assert.equal(lv.hazards.length, 2);
+  assert.deepEqual(lv.hazards[0], { kind: 'ball', at: { r: 2, c: 7 }, dir: 'up', home: 0 });
+  assert.deepEqual(lv.hazards[1], { kind: 'glider', at: { r: 3, c: 3 }, dir: 'left', home: 1 });
+  assert.deepEqual(lv.machines, [
+    { at: { r: 2, c: 4 }, template: 'block', dir: 'right' },
+    { at: { r: 2, c: 6 }, template: 'fireball', dir: 'down' },
+  ]);
+  assert.equal(serialize(lv), PIECES);
+  assert.deepEqual(parse(serialize(lv)), lv);
+});
+
+test('buttons link to the next trap or machine in reading order, wrapping', () => {
+  const lv = parse('title: t\nintro: i\n\nP&-&-\n');
+  assert.deepEqual(lv.links, { 2: 3, 4: 1 });
+  const red = parse('title: t\nintro: i\n\nP+..\n');
+  assert.deepEqual(red.links, {});
+  const clone = parse('title: t\nintro: i\nmachines: ball-up\n\nP+.C\n');
+  assert.deepEqual(clone.links, { 1: 3 });
+});
+
+test('facing and machines must match the grid', () => {
+  const bad = (head: string, grid: string, line: number) => assert.throws(
+    () => parse(`title: t\nintro: i\n${head}\n\n${grid}\n`), (e: unknown) => e instanceof LevelError && e.line === line);
+  bad('', 'Pw.', 1);
+  bad('facing: up up', 'Pw.', 3);
+  bad('facing: north', 'Pw.', 3);
+  bad('machines: rock-up', 'PC.', 3);
+  bad('machines: block-up block-up', 'PC.', 3);
+  bad('machines: block-up', 'P..', 3);
+});

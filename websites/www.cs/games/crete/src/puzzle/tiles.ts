@@ -24,7 +24,9 @@ export type Terrain =
   | 'floor' | 'wall' | 'exit' | 'gate' | 'water' | 'fire' | 'ice'
   | 'force-up' | 'force-down' | 'force-left' | 'force-right'
   | 'dirt' | 'safe' | 'button' | 'toggle-open' | 'toggle-closed'
-  | 'door-red' | 'door-blue' | 'door-yellow' | 'door-green';
+  | 'door-red' | 'door-blue' | 'door-yellow' | 'door-green'
+  | 'trap' | 'button-brown' | 'button-red' | 'popup' | 'gravel'
+  | 'fake-wall' | 'invisible-wall' | 'teleport' | 'thief' | 'bomb' | 'clone';
 
 export interface TerrainDef {
   char: string;
@@ -34,6 +36,8 @@ export interface TerrainDef {
   minotaur: boolean;
   /** A pushed block may enter it. */
   block: boolean;
+  /** A hazard may stand on it. */
+  hazard: boolean;
   /** Gear the player needs to enter it. */
   needs?: Gear;
   /** It slides whoever enters, unless the player wears this gear. */
@@ -44,8 +48,8 @@ export interface TerrainDef {
   door?: KeyColor;
 }
 
-const t = (char: string, minotaur: boolean, block: boolean, more: Partial<TerrainDef> = {}, sprites?: string[]) =>
-  ({ char, minotaur, block, ...more, sprites: sprites ?? [] });
+const t = (char: string, minotaur: boolean, block: boolean, more: Partial<TerrainDef> = {}, sprites?: string[], hazard = minotaur) =>
+  ({ char, minotaur, block, hazard, ...more, sprites: sprites ?? [] });
 
 export const TERRAIN: Record<Terrain, TerrainDef> = {
   floor: t('.', true, true, {}, ['floor']),
@@ -68,6 +72,47 @@ export const TERRAIN: Record<Terrain, TerrainDef> = {
   'door-blue': t('B', false, false, { door: 'blue' }, ['door-blue']),
   'door-yellow': t('Y', false, false, { door: 'yellow' }, ['door-yellow']),
   'door-green': t('G', false, false, { door: 'green' }, ['door-green']),
+  trap: t('&', true, true, {}, ['floor']),
+  'button-brown': t('-', true, true, {}, ['floor']),
+  'button-red': t('+', true, true, {}, ['floor']),
+  popup: t(';', false, false, {}, ['floor']),
+  gravel: t(':', false, false, {}, ['floor']),
+  'fake-wall': t('W', false, false, {}, ['wall']),
+  'invisible-wall': t('I', false, false, {}, ['floor']),
+  teleport: t('@', false, false, {}, ['floor']),
+  thief: t('$', true, true, {}, ['floor']),
+  bomb: t('!', false, true, {}, ['floor'], true),
+  clone: t('C', false, false, {}, ['floor']),
+};
+
+/** A moving hazard: it stands on floor and turns by its own rule when it cannot go ahead. */
+export type HazardKind = 'ball' | 'glider' | 'fireball';
+export interface Hazard {
+  readonly kind: HazardKind; readonly at: Cell; readonly dir: Dir;
+  /** Its index among the level's homes: the level's hazard cells in reading order, then each hazard-template machine. */
+  readonly home: number;
+}
+
+export const HAZARDS: Record<HazardKind, {
+  char: string; name: string; sprite?: string;
+  /** What it tries, in order, when blocked ahead. */
+  turns: readonly ('ahead' | 'left' | 'right' | 'back')[];
+  /** The terrain it may cross though it is not floor. */
+  crosses?: Terrain;
+}> = {
+  ball: { char: 'o', name: 'Bronze ball', turns: ['back'] },
+  glider: { char: 'w', name: 'Harpy', turns: ['left', 'right', 'back'], crosses: 'water' },
+  fireball: { char: 'e', name: "Talos's fire", turns: ['right', 'left', 'back'], crosses: 'fire' },
+};
+
+/** What a clone machine makes: a block or one of the hazards. */
+export type Template = 'block' | HazardKind;
+
+/** The pieces' names in the game and the help text; plain unless a myth gave one. */
+export const PIECE_NAMES: Partial<Record<Terrain, string>> = {
+  trap: "Daedalus's snare", 'button-brown': 'Brown button', 'button-red': 'Red button', popup: 'Pop-up wall',
+  gravel: 'Gravel', 'fake-wall': 'Fake wall', 'invisible-wall': 'Invisible wall', teleport: 'Teleport',
+  thief: 'Thief', bomb: 'Bomb', clone: 'Clone machine',
 };
 
 export type ObjectKind = 'relic' | `key-${KeyColor}` | Gear | Tool | 'page' | 'block';

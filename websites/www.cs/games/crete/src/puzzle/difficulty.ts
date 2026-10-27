@@ -165,11 +165,10 @@ export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {})
     pack(initial(level), layout, buf, 0);
     store.add(buf, 0, -1, 0, 0);
     if (store.size >= cap) return null;
-    const queue = [0];
     let expanded = 0;
-    for (let head = 0; head < queue.length; head++) {
+    // Every store hands out ids in the order it stores situations, so they are the breadth-first queue.
+    for (let id = 0; id < store.size; id++) {
       if (++expanded % every === 0) yield { expanded, stored: store.size, bestF: 0, startH: 0 };
-      const id = queue[head]!;
       store.words(id, buf, 0);
       const s = unpack(buf, 0, layout, level, 0);
       for (const c of ORDER) {
@@ -179,9 +178,8 @@ export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {})
         const n = x.state;
         if (n === s || n.outcome !== 'playing') continue;
         pack(n, layout, buf, 0);
-        const nid = store.add(buf, 0, id, c, 0);
+        store.add(buf, 0, id, c, 0);
         if (store.size >= cap) return null;
-        if (nid >= 0) queue.push(nid);
       }
     }
     return false;

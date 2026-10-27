@@ -39,6 +39,7 @@ const ANSWERS: Record<string, readonly [number | null, number | null]> = {
   'thief-keys': [10, 10],
   'clone-blocked': [10, 10],
   'hazard-order': [7, 7],
+  'hazard-first': [6, null],
   'clone-keep': [18, 18],
 };
 
@@ -95,6 +96,15 @@ test('no clone while a block stands in front of the machine', () => {
 test('the hazard first in reading order moves first: the ball behind is blocked and stays', () => {
   const { state } = play(initial(PIECE_LEVELS['hazard-order']!), WAIT);
   assert.deepEqual(state.hazards.map(h => h.at), [at(3, 1), at(3, 3)]);
+});
+
+test("a hazard's catch ends the turn before the Minotaur's steps, which would have caught him too", () => {
+  const s = play(initial(PIECE_LEVELS['hazard-first']!), WAIT, mv('right')).state;
+  const { events } = play(s, mv('right'));
+  assert.deepEqual(events.filter(e => e.kind === 'caught').map(e => e.kind === 'caught' && e.by), ['hazard']);
+  assert.ok(!events.some(e => e.kind === 'moved' && e.who === 'minotaur'), 'the Minotaur never steps');
+  const alone = play({ ...s, hazards: [] }, mv('right')).events;
+  assert.deepEqual(alone.filter(e => e.kind === 'caught').map(e => e.kind === 'caught' && e.by), ['minotaur']);
 });
 
 test('a block pushed onto the red button clones nothing onto the cell Theseus steps into', () => {

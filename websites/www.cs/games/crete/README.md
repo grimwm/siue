@@ -92,7 +92,7 @@ The rulings the pieces need:
 - **Hazards and the toggle button**: a hazard on `_` flips the toggle walls, as Theseus and blocks do.
 - **Teleport chains**: there are none. A teleport beyond an exit makes that exit blocked. Out of a teleport, Theseus pushes a block only when he entered it by his own step, not on a ride; with every exit blocked he stays on the teleport he entered, and a pushed block's push is refused.
 - **Bomb catches**: a bomb under Theseus is a catch (`caught` with `by: 'bomb'`), so a search that refuses catches refuses it and the turn stops there. A hazard's catch is `by: 'hazard'`, the Minotaur's `by: 'minotaur'`.
-- **Clones arrive in full**: a cloned block settles like a pushed one (it sinks, explodes, presses, slides); a cloned hazard presses buttons and meets a bomb on its cell, and first moves in the next hazard phase. One made during the hazard phase joins the end of the phase's order. A red button pressed by a clone's arrival fires again; each firing needs a free cell, so a chain ends.
+- **Clones arrive in full**: a cloned block settles like a pushed one (it sinks, explodes, presses, slides); a cloned hazard presses buttons and meets a bomb on its cell, and first moves in the next hazard phase. One made during the hazard phase joins the end of the list and does not move until the next phase. A red button pressed by a clone's arrival fires again; each firing needs a free cell, so a chain ends.
 - **No clone on the cell Theseus enters**: a clone is never made on Theseus, nor on the cell he is stepping into while his own push presses the button.
 
 ## The solver

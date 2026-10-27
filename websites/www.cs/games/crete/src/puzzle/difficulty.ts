@@ -11,8 +11,9 @@ import { initial } from './state.ts';
 import { solving, caught, SOLVER_CAP } from './solver.ts';
 import type { SearchRoom, SolveResult } from './solver.ts';
 import { step } from './step.ts';
-import { DIRS, DELTA, TERRAIN } from './tiles.ts';
+import { DIRS, DELTA, TERRAIN, HAZARDS } from './tiles.ts';
 import type { Dir, Terrain } from './tiles.ts';
+import { lineText } from './cache.ts';
 import { layoutOf, pack, unpack } from './pack.ts';
 import { memoryStore, StoreError } from './store.ts';
 import type { NodeStore } from './store.ts';
@@ -44,6 +45,8 @@ export interface Difficulty {
   /** The plain walk (the shortest path over plain floor, taking the relics the gate needs, ignoring every piece),
    *  played on the real level, wins. False when there is no plain path. */
   naiveWins: boolean;
+  /** The shortest winning line as move letters (cache.ts's lineText); '' when not solved. */
+  line: string;
 }
 
 const length = (r: SolveResult): Shortest => (r.solved ? r.line.length : r.capped ? 'unknown' : 'none');
@@ -71,8 +74,9 @@ export function* measuring(level: Level, cap = SOLVER_CAP, room: MeasureRoom = {
   const can = yield* catching(level, cap, at(level));
   const label = can === null ? 'unknown' : can ? 'chase' : 'solo';
   const naiveWins = naiveWalkWins(level);
+  const line = r.solved ? lineText(r.line) : '';
   if (!level.minotaur) {
-    return { solved: r.solved, shortest, explored: r.explored, withoutMinotaur: null, minotaurDelta: 0, greedyWins: true, catchFree, catches, label, naiveWins };
+    return { solved: r.solved, shortest, explored: r.explored, withoutMinotaur: null, minotaurDelta: 0, greedyWins: true, catchFree, catches, label, naiveWins, line };
   }
   const alone = { ...level, minotaur: null };
   const free = yield* solving(initial(alone), null, cap, at(alone));
@@ -84,7 +88,29 @@ export function* measuring(level: Level, cap = SOLVER_CAP, room: MeasureRoom = {
     greedyWins = s.outcome === 'won';
   }
   const minotaurDelta = typeof shortest === 'number' && typeof withoutMinotaur === 'number' ? shortest - withoutMinotaur : null;
-  return { solved: r.solved, shortest, explored: r.explored, withoutMinotaur, minotaurDelta, greedyWins, catchFree, catches, label, naiveWins };
+  return { solved: r.solved, shortest, explored: r.explored, withoutMinotaur, minotaurDelta, greedyWins, catchFree, catches, label, naiveWins, line };
+}
+
+/** The pieces that make a level hard, as phrases ("4 blocks", "2 keys and 2 doors"), the most numerous first and in
+ *  a fixed order on ties; a piece the level lacks is left out. Blocks and hazards count their clone machines too. */
+export function hardPieces(level: Level): string[] {
+  const count = (pred: (t: Terrain) => boolean) => level.terrain.filter(pred).length;
+  const blocks = level.objects.filter(o => o === 'block').length + level.machines.filter(m => m.template === 'block').length;
+  const keys = level.objects.filter(o => o !== null && o.startsWith('key-')).length;
+  const doors = count(t => TERRAIN[t].door !== undefined);
+  const toggles = count(t => t === 'toggle-open' || t === 'toggle-closed');
+  const hazards = level.hazards.length + level.machines.filter(m => m.template in HAZARDS).length;
+  const other = level.machines.filter(m => m.template !== 'block' && !(m.template in HAZARDS)).length;
+  const buttons = count(t => t === 'button-brown' || t === 'button-red' || t === 'button');
+  const entries: [number, string][] = [
+    [blocks, `${blocks} ${blocks === 1 ? 'block' : 'blocks'}`],
+    [keys + doors, `${keys} ${keys === 1 ? 'key' : 'keys'} and ${doors} ${doors === 1 ? 'door' : 'doors'}`],
+    [toggles, `${toggles} toggle ${toggles === 1 ? 'wall' : 'walls'}`],
+    [hazards, `${hazards} ${hazards === 1 ? 'hazard' : 'hazards'}`],
+    [other, `${other} clone ${other === 1 ? 'machine' : 'machines'}`],
+    [buttons, `${buttons} ${buttons === 1 ? 'button' : 'buttons'}`],
+  ];
+  return entries.filter(e => e[0] > 0).sort((a, b) => b[0] - a[0]).map(e => e[1]);
 }
 
 /** Cells reachable from `from` through cells `open` allows; from a cell `jumps` names, also every cell in `to`. */

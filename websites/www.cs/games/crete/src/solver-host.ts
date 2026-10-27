@@ -192,7 +192,7 @@ function toCache(a: Answer): CachedResult | null {
 function fromCache(c: CachedResult, kind: SearchKind, level: Level): Answer | null {
   if (kind === 'measure') {
     const d = c.difficulty;
-    return typeof d === 'object' && d !== null && 'shortest' in d && 'label' in d ? (d as Difficulty) : null;
+    return typeof d === 'object' && d !== null && 'shortest' in d && 'label' in d && typeof (d as Difficulty).line === 'string' ? (d as Difficulty) : null;
   }
   if (!c.solved) return { solved: false, explored: c.explored, capped: false };
   const line = lineOf(c.line);

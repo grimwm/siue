@@ -2,12 +2,13 @@
 // and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, measuring, challengeProblems, rampProblems, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, hardPieces, challengeProblems, rampProblems, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import { parse, serialize } from '../src/puzzle/level.ts';
 import { initial } from '../src/puzzle/state.ts';
+import { lineOf } from '../src/puzzle/cache.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
@@ -37,7 +38,7 @@ const CHASED = level([
 
 test('a walled-off Minotaur adds nothing: delta 0, the line that ignores him wins, and the bar says so', () => {
   const d = measure(WALLED);
-  assert.deepEqual(d, { solved: true, shortest: 4, explored: d.explored, withoutMinotaur: 4, minotaurDelta: 0, greedyWins: true, catchFree: 4, catches: 0, label: 'solo', naiveWins: true });
+  assert.deepEqual(d, { solved: true, shortest: 4, explored: d.explored, withoutMinotaur: 4, minotaurDelta: 0, greedyWins: true, catchFree: 4, catches: 0, label: 'solo', naiveWins: true, line: d.line });
   assert.match(challengeProblems(d).join(), /does not matter/);
 });
 
@@ -292,7 +293,7 @@ test('plainWalk: the shortest plain path through the relics the gate needs, then
 test('the shared bar: never needs a Minotaur; a chase level may trade puzzle numbers for the chase checks', () => {
   const solo: Difficulty = {
     solved: true, shortest: SHARED_BAR.shortest, explored: SHARED_BAR.explored, withoutMinotaur: null, minotaurDelta: 0,
-    greedyWins: true, catchFree: SHARED_BAR.shortest, catches: 0, label: 'solo', naiveWins: false,
+    greedyWins: true, catchFree: SHARED_BAR.shortest, catches: 0, label: 'solo', naiveWins: false, line: '',
   };
   assert.deepEqual(sharedProblems(solo), [], 'a solo level clears it on puzzle difficulty alone');
   assert.match(sharedProblems({ ...solo, shortest: SHARED_BAR.shortest - 1 }).join(), /moves/);
@@ -346,3 +347,36 @@ for (const chapter of CHAPTERS.filter(c => c.released)) {
     });
   });
 }
+
+test('measure keeps the shortest line', () => {
+  for (const id of ['trial-1', 'trial-9', 'trial-10']) {
+    const d = of(id);
+    const line = lineOf(d.line);
+    assert.ok(line, id);
+    let s = initial(levelById(id));
+    for (const a of line) s = step(s, a).state;
+    assert.equal(s.outcome, 'won', id);
+    assert.equal(line.length, d.shortest, id);
+  }
+});
+
+test('an unsolved measure has an empty line', () => {
+  const d = measure(level(['#####', '#P#E#', '#####']));
+  assert.equal(d.solved, false);
+  assert.equal(d.line, '');
+});
+
+test('hardPieces names the pieces by how many there are', () => {
+  const lv = level([
+    '#########',
+    '#P.OOO.E#',
+    '#rrRRCw.#',
+    '#.......#',
+    '#########',
+  ], 'machines: block-down\nfacing: right');
+  assert.deepEqual(hardPieces(lv), ['4 blocks', '2 keys and 2 doors', '1 hazard']);
+});
+
+test('hardPieces skips what the level does not have', () => {
+  assert.deepEqual(hardPieces(level(['#####', '#P.E#', '#####'])), []);
+});

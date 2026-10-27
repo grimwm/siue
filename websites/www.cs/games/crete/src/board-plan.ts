@@ -9,9 +9,9 @@
  * moment: the player's moves and slides (and the blocks they push) first, then
  * the hazard phase in one slot (every hazard moving at once, the slot as long
  * as the longest slide), then each Minotaur step, SLIDE_MS a cell. Through a
- * teleport a figure jumps to the exit and steps on. A hazard sent home or
- * destroyed, and anything a clone machine makes, has no path: the board shows
- * the change when the turn lands. Reduced motion snaps. It also says when the
+ * teleport a figure jumps to the exit and steps on. A hazard destroyed or sent
+ * home plays its move, then is gone or home when the turn lands; anything a
+ * clone machine makes has no path and shows when the turn lands. Reduced motion snaps. It also says when the
  * player's figure reaches each thing taken. DOM-free. */
 import { DIRS, TERRAIN, OBJECTS, HAZARDS } from './puzzle/tiles.ts';
 import type { Cell, HazardKind, ObjectKind } from './puzzle/tiles.ts';
@@ -37,8 +37,10 @@ export interface Timeline {
   duration: number;
   /** What the player took, in the order they reach it. */
   taken: readonly Taken[];
-  /** When the player's own moves, slides and pushed blocks have landed: the Minotaur's steps follow. */
+  /** When the player's own moves, slides and pushed blocks have landed: the hazards' moves follow. */
   playerEnd: number;
+  /** When the hazards' moves have landed: the Minotaur's steps follow. */
+  hazardEnd: number;
   at(ms: number): Figures;
 }
 
@@ -113,10 +115,9 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
   const step = (segs: Seg[], from: Cell, to: Cell, t0: number, ms = SLIDE_MS) => segs.push({ from, to, t0, ms });
   const blockAt = (x: Cell) => blocks.find(b => same(b.end, x));
   const hazardAt = (x: Cell) => hazards.find(h => same(h.end, x));
-  /** The hazard leaves the animation: it stays where the turn began until the turn lands. */
+  /** The hazard is gone or sent home: it plays its move, and later events no longer find it. */
   const drop = (h: HazardPath | undefined) => {
     if (!h) return;
-    h.segs = [];
     h.end = { r: -1, c: -1 };
     if (current === h) current = null;
   };
@@ -172,7 +173,7 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
   }
   const blockEnd = Math.max(0, ...blocks.map(b => b.segs.at(-1)!.t0 + b.segs.at(-1)!.ms));
   const playerEnd = reducedMotion ? 0 : Math.max(playerT, blockEnd);
-  const hazardEnd = playerEnd + Math.max(0, ...hazards.map(h => h.segs.length)) * SLIDE_MS;
+  const hazardEnd = reducedMotion ? 0 : playerEnd + Math.max(0, ...hazards.map(h => h.segs.length)) * SLIDE_MS;
   minotaur.forEach((s, i) => (s.t0 = hazardEnd + i * SLIDE_MS));
   for (const h of hazards) for (const s of h.segs) s.t0 += playerEnd;
   const duration = reducedMotion ? 0 : hazardEnd + minotaur.length * SLIDE_MS;
@@ -181,6 +182,7 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
     duration,
     taken: reducedMotion ? taken.map(t => ({ ...t, ms: 0 })) : taken,
     playerEnd,
+    hazardEnd,
     at(ms: number): Figures {
       if (ms >= duration) return end;
       const f: Figures = {

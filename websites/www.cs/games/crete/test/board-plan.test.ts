@@ -8,7 +8,7 @@ import { drawList, timeline, SLIDE_MS, boardRows } from '../src/board-plan.ts';
 import type { Atlas, Figures } from '../src/board-plan.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { parse } from '../src/puzzle/level.ts';
-import { TERRAIN, OBJECTS, HAZARDS } from '../src/puzzle/tiles.ts';
+import { DIRS, TERRAIN, OBJECTS, HAZARDS } from '../src/puzzle/tiles.ts';
 import { TILES_LEVEL } from '../src/tiles-level.ts';
 import { step } from '../src/puzzle/step.ts';
 import { grid, icedPages, mv, WAIT } from './puzzle-grid.ts';
@@ -164,12 +164,15 @@ test('the timeline moves hazards after the player and before the Minotaur, one p
   assert.deepEqual(tl.at(tl.duration), rest(r.state));
 });
 
-test('a hazard destroyed, sent home or cloned this turn has no segment: it changes when the turn lands', () => {
+test('a hazard destroyed plays its move and is gone when the turn lands; a clone appears only then', () => {
   const s = grid(['P.o!..', '......', '.....M'], 'facing: right');
   const r = step(s, mv('down'));
   assert.ok(r.events.some(e => e.kind === 'exploded' && e.who === 'hazard'));
   const tl = timeline(s, r.events, false, r.state);
-  for (const ms of [0, SLIDE_MS / 2, SLIDE_MS * 1.5, tl.duration - 1]) assert.deepEqual(tl.at(ms).hazards, [{ kind: 'ball', at: at(0, 2) }]);
+  assert.equal(tl.hazardEnd, tl.playerEnd + SLIDE_MS);
+  assert.deepEqual(tl.at(SLIDE_MS / 2).hazards, [{ kind: 'ball', at: at(0, 2) }]);
+  assert.deepEqual(tl.at(SLIDE_MS * 1.5).hazards, [{ kind: 'ball', at: at(0, 2.5) }]);
+  assert.deepEqual(tl.at(tl.duration - 1).hazards, [{ kind: 'ball', at: at(0, 3) }]);
   assert.deepEqual(tl.at(tl.duration).hazards, []);
   const c = grid(['P+C.', '....', '...M'], 'machines: ball-right');
   const made = step(c, mv('right'));
@@ -178,6 +181,42 @@ test('a hazard destroyed, sent home or cloned this turn has no segment: it chang
   assert.deepEqual(ctl.at(ctl.duration - 1).hazards, [], 'a clone appears only at the end');
   assert.deepEqual(ctl.at(ctl.duration).hazards, rest(made.state).hazards);
   assert.equal(ctl.at(ctl.duration).hazards.length, 1);
+});
+
+test('a Minotaur catch throws Theseus onto a hazard: the hazard plays its move, then is home when the turn lands', () => {
+  const s = grid(['P.M', 'o..'], 'facing: up');
+  const r = step(s, mv('right'));
+  assert.ok(r.events.some(e => e.kind === 'caught' && e.by === 'minotaur'));
+  assert.ok(r.events.some(e => e.kind === 'sent-home'));
+  const tl = timeline(s, r.events, false, r.state);
+  assert.deepEqual(tl.at(tl.playerEnd + SLIDE_MS / 2).hazards, [{ kind: 'ball', at: at(0.5, 0) }]);
+  assert.deepEqual(tl.at(tl.hazardEnd).hazards, [{ kind: 'ball', at: at(0, 0) }]);
+  assert.deepEqual(tl.at(tl.duration - 1).hazards, [{ kind: 'ball', at: at(0, 0) }]);
+  assert.deepEqual(tl.at(tl.duration).hazards, [{ kind: 'ball', at: at(1, 0) }]);
+  assert.deepEqual(tl.at(tl.duration).player, at(0, 0));
+});
+
+test('a hazard catch: the hazard slides onto Theseus in its slot, the Minotaur never moves, Theseus lands thrown back', () => {
+  const s = grid(['.==o', 'P..M'], 'facing: left');
+  const r = step(s, mv('up'));
+  assert.ok(r.events.some(e => e.kind === 'caught' && e.by === 'hazard'));
+  const tl = timeline(s, r.events, false, r.state);
+  assert.equal(tl.playerEnd, SLIDE_MS);
+  assert.equal(tl.hazardEnd, 4 * SLIDE_MS);
+  assert.equal(tl.duration, tl.hazardEnd);
+  assert.deepEqual(tl.at(SLIDE_MS * 3.5).hazards, [{ kind: 'ball', at: at(0, 0.5) }]);
+  assert.deepEqual(tl.at(SLIDE_MS * 3.5).player, at(0, 0));
+  for (let ms = 0; ms <= tl.duration; ms += 30) assert.deepEqual(tl.at(ms).minotaur, s.minotaur);
+  assert.deepEqual(r.state.throwBack, at(1, 0));
+  assert.deepEqual(tl.at(tl.duration).player, at(1, 0));
+});
+
+test('clone machine sprites follow DIRS for all four facings', () => {
+  const s = grid(['P....', '.C.C.', '.....', '.C.C.', '.....'], 'machines: block-up block-down block-left block-right');
+  const list = drawList(s, rest(s), atlas, 0);
+  const machine = (r: number, c: number) => list.find(d => d.x === c && d.y === r && d.sprite.startsWith('clone-'))!.sprite;
+  assert.deepEqual([machine(1, 1), machine(1, 3), machine(3, 1), machine(3, 3)], DIRS.map(d => `clone-${d}`));
+  assert.deepEqual(TERRAIN.clone.sprites, DIRS.map(d => `clone-${d}`));
 });
 
 test('a teleport jumps without passing the cells between, then steps on; a block teleports the same way', () => {

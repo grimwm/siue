@@ -15,7 +15,7 @@ import type { Run } from './puzzle/run.ts';
 import { solve } from './puzzle/solver.ts';
 import { pagesTaken } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
-import { step } from './puzzle/step.ts';
+import { act as actAlone, step } from './puzzle/step.ts';
 import type { Action, GameEvent } from './puzzle/step.ts';
 import type { Cell } from './puzzle/tiles.ts';
 
@@ -52,6 +52,8 @@ export interface Anim {
   started: number;
   /** The state the turn began from: it is drawn while the player's own moves play. */
   before: State;
+  /** The state once the player's action alone has played: it is drawn while the hazards move. */
+  mid: State;
   /** The story pages the player's figure reaches this turn, by id, at the moment it lands on each. */
   stops: readonly PageStop[];
   /** The page the animation waits at while it is read, or null while it plays. */
@@ -90,15 +92,16 @@ export interface Game {
 }
 
 /** What the board draws `ms` into the animation: the state before the turn, less each thing the figure has
- *  reached, while the player's own moves, slides and pushed block play; the state after it from then on, while
- *  the hazards and the Minotaur's steps play; and the figures at rest once it ends. The hazards drawn are the
- *  figures', never the state's: the state before the turn's while it plays, the state after it's once it ends.
- *  An animation paused at a page is not done. */
+ *  reached, while the player's own moves, slides and pushed blocks play; the state once the player's action alone
+ *  has played (`anim.mid`) while the hazards move; the state after the turn while the Minotaur's steps play; and
+ *  the figures at rest once it ends. The hazards drawn are the figures', never the state's. An animation paused
+ *  at a page is not done. */
 export function frameOf(g: Pick<Game, 'run' | 'anim'>, ms: number): { state: State; figures: Figures; done: boolean } | null {
   if (!g.run) return null;
   const a = g.anim;
   if (a && (ms < a.timeline.duration || a.paused)) {
-    return { state: ms < a.timeline.playerEnd ? takenBy(a, ms) : g.run.now, figures: a.timeline.at(ms), done: false };
+    const state = ms < a.timeline.playerEnd ? takenBy(a, ms) : ms < a.timeline.hazardEnd ? a.mid : g.run.now;
+    return { state, figures: a.timeline.at(ms), done: false };
   }
   const now = g.run.now;
   return { state: now, figures: { player: now.player, minotaur: now.minotaur, hazards: now.hazards.map(h => ({ kind: h.kind, at: h.at })) }, done: true };
@@ -197,7 +200,7 @@ export function createGame(deps: GameDeps): Game {
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
-    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, stops: pageStops(before, tl), paused: null } : null;
+    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: pageStops(before, tl), paused: null } : null;
     reached = 0;
     if (run.now.outcome === 'won') {
       deps.progress.record(deps.levels.id(trial), run.now.moves, run.assisted);

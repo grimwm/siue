@@ -127,7 +127,7 @@ async function inflate(bytes: Uint8Array): Promise<{ text: string } | { error: '
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let stop = false;
   let chunks = 0;
-  let wake: (() => void) | null = null;
+  let wake = null as (() => void) | null;
   // A corrupt stream rejects the write, the close and the read alike; the read reports it.
   const writing = (async () => {
     try {

@@ -14,12 +14,16 @@ export type { SolveResult, Refuse } from '../src/puzzle/solver.ts';
 
 const cell = (x: { r: number; c: number } | null) => (x ? `${x.r},${x.c}` : '-');
 
-/** The cells whose terrain can change during a try: doors open, toggle walls flip, water fills in. */
+/** The terrain that can change during a try: doors open, toggle walls flip, water fills in, pop-ups rise, fake
+ *  walls open, invisible walls show, bombs go off. */
+const CHANGES: ReadonlySet<Terrain> = new Set<Terrain>(['water', 'toggle-open', 'toggle-closed', 'popup', 'fake-wall', 'invisible-wall', 'bomb']);
+
+/** The cells whose terrain can change during a try. */
 const changing = new WeakMap<Level, number[]>();
 function changingCells(lv: Level): number[] {
   let list = changing.get(lv);
   if (!list) {
-    const may = (t: Terrain) => t === 'water' || t === 'toggle-open' || t === 'toggle-closed' || TERRAIN[t].door !== undefined;
+    const may = (t: Terrain) => CHANGES.has(t) || TERRAIN[t].door !== undefined;
     list = [];
     lv.terrain.forEach((t, i) => { if (may(t)) list!.push(i); });
     changing.set(lv, list);
@@ -31,12 +35,14 @@ function changingCells(lv: Level): number[] {
 export function stateKey(s: State): string {
   const objects: string[] = [];
   s.objects.forEach((o, i) => { if (o) objects.push(`${i}:${OBJECTS[o].char}`); });
+  const hazards = s.hazards.map(h => `${h.at.r * s.level.cols + h.at.c}:${h.kind}:${h.dir}:${h.home}`).sort();
   return [
     cell(s.player), cell(s.minotaur), cell(s.cow), cell(s.throwBack),
     [s.stone, s.hearts, s.relicsLeft, s.pages, ...KEY_COLORS.map(k => s.keys[k]), s.tools.mirror, s.tools.cake, s.tools.cow].join(','),
     s.gear.slice().sort().join('+'),
     changingCells(s.level).map(i => TERRAIN[s.terrain[i]!].char).join(''),
     objects.join(' '),
+    hazards.join(' '),
   ].join('|');
 }
 

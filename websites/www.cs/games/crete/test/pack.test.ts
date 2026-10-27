@@ -1,6 +1,7 @@
 // Packing a situation is lossless and exact: what unpacks plays like what was packed, two situations pack alike
 // exactly when the reference's key calls them the same, each field reads back where the layout says, and every
-// block lies on a cell the layout encodes blocks on. Level 10 packs at a tenth of the reference's size.
+// block and hazard lies on a cell the layout encodes it on, every piece in play. Level 10 packs at a tenth of the
+// reference's size, and Chapter 1 packs into as few words as it ever has.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { get, layoutOf, pack, unpack } from '../src/puzzle/pack.ts';
@@ -13,7 +14,8 @@ import { DIRS, KEY_COLORS } from '../src/puzzle/tiles.ts';
 import type { Tool } from '../src/puzzle/tiles.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import { TRIALS, trialLevel } from '../src/puzzle/trials.ts';
-import { corpus } from './corpus.ts';
+import { corpus, prng } from './corpus.ts';
+import { PIECE_LEVELS } from './piece-levels.ts';
 
 const ACTIONS: Action[] = [
   { kind: 'wait' }, ...DIRS.map(dir => ({ kind: 'move', dir }) as Action),
@@ -47,10 +49,17 @@ function checkLevel(level: Level): void {
   const byKey = new Map<string, string>();
   const byWords = new Map<string, string>();
   const blockCells = new Set([...layout.blockOnly, ...layout.blockOrObject]);
+  const hazardCells = new Set(layout.hazardCells);
   for (const s of reachable(level, 20_000)) {
     s.objects.forEach((o, i) => {
       if (o === 'block') assert.ok(blockCells.has(i), `a block at cell ${i}, outside the cells pack.ts gives blocks`);
     });
+    if (layout.hazardSlots === 0) {
+      for (const h of s.hazards) {
+        const i = h.at.r * level.cols + h.at.c;
+        assert.ok(hazardCells.has(i), `a hazard at cell ${i}, outside the cells pack.ts gives hazards`);
+      }
+    }
     pack(s, layout, w, 0);
     const u = unpack(w, 0, layout, level);
     const key = stateKey(s);
@@ -77,6 +86,114 @@ test('every trial level packs losslessly and exactly', () => {
 
 test('the generated corpus packs losslessly and exactly', () => {
   for (const lv of corpus(2, 100)) checkLevel(lv);
+});
+
+test('every piece level packs losslessly and exactly', () => {
+  for (const [name, lv] of Object.entries(PIECE_LEVELS)) {
+    assert.ok(lv.rows <= 8 && lv.cols <= 8, `${name} is small`);
+    checkLevel(lv);
+  }
+});
+
+test('pack and unpack round-trip with every piece in play', () => {
+  const random = prng(7);
+  for (const [name, level] of Object.entries(PIECE_LEVELS)) {
+    const layout = layoutOf(level);
+    const w = new Uint32Array(layout.words);
+    const again = new Uint32Array(layout.words);
+    let checked = 0;
+    for (let line = 0; line < 40; line++) {
+      let s = initial(level);
+      for (let turn = 0; turn < 60 && s.outcome === 'playing'; turn++) {
+        pack(s, layout, w, 0);
+        const u = unpack(w, 0, layout, level);
+        pack(u, layout, again, 0);
+        assert.deepEqual(Array.from(again), Array.from(w), `${name}: unpacking and packing again changes the words`);
+        assert.equal(stateKey(u), stateKey(s), `${name}: unpacking changes the situation`);
+        checked++;
+        s = step(s, ACTIONS[Math.floor(random() * ACTIONS.length)]!).state;
+      }
+    }
+    assert.ok(checked > 100, `${name}: ${checked} situations`);
+  }
+});
+
+test('two situations pack alike exactly when their keys match, across the piece levels', () => {
+  const random = prng(11);
+  for (const [name, level] of Object.entries(PIECE_LEVELS)) {
+    const layout = layoutOf(level);
+    const w = new Uint32Array(layout.words);
+    const byKey = new Map<string, string>();
+    const byWords = new Map<string, string>();
+    const seen = [...reachable(level, 5_000)];
+    for (let line = 0; line < 40; line++) {
+      let s = initial(level);
+      for (let turn = 0; turn < 60 && s.outcome === 'playing'; turn++) {
+        seen.push(s);
+        s = step(s, ACTIONS[Math.floor(random() * ACTIONS.length)]!).state;
+      }
+    }
+    for (const s of seen) {
+      pack(s, layout, w, 0);
+      const key = stateKey(s);
+      const packed = Array.from(w).join(',');
+      assert.equal(byKey.get(key) ?? packed, packed, `${name}: one key, two packings`);
+      assert.equal(byWords.get(packed) ?? key, key, `${name}: one packing, two keys`);
+      byKey.set(key, packed);
+      byWords.set(packed, key);
+    }
+  }
+});
+
+test("the reference's key tells hazards and changed pieces apart", () => {
+  const ball = initial(PIECE_LEVELS.ball!);
+  const h = ball.hazards[0]!;
+  assert.notEqual(stateKey({ ...ball, hazards: [{ ...h, dir: 'left' }] }), stateKey(ball), 'facing');
+  assert.notEqual(stateKey({ ...ball, hazards: [{ ...h, home: 1 }] }), stateKey(ball), 'home');
+  assert.notEqual(stateKey({ ...ball, hazards: [] }), stateKey(ball), 'gone');
+  for (const [name, from, to] of [['popup', 'popup', 'wall'], ['fake-wall', 'fake-wall', 'floor'],
+    ['invisible-wall', 'invisible-wall', 'wall'], ['bomb', 'bomb', 'floor']] as const) {
+    const s = initial(PIECE_LEVELS[name]!);
+    const i = s.terrain.indexOf(from);
+    const changed = { ...s, terrain: s.terrain.map((t, j) => (j === i ? to : t)) };
+    assert.notEqual(stateKey(changed), stateKey(s), name);
+  }
+});
+
+test('hazards pack as slots when nothing clones one', () => {
+  for (const name of ['ball', 'glider', 'fireball', 'throw-back', 'hazard-snare', 'hazard-toggle', 'hazard-bomb']) {
+    const layout = layoutOf(PIECE_LEVELS[name]!);
+    assert.equal(layout.hazardSlots, PIECE_LEVELS[name]!.hazards.length, name);
+    assert.equal(layout.hazardCells.length, 0, name);
+  }
+  const block = layoutOf(PIECE_LEVELS['clone-block']!);
+  assert.equal(block.hazardSlots, 0, 'a block machine clones no hazard');
+  assert.equal(block.hazardCells.length, 0);
+});
+
+test('cloned hazards pack per cell', () => {
+  for (const name of ['clone-ball', 'two-clones', 'hazard-bomb-clone', 'hazard-door']) {
+    const level = PIECE_LEVELS[name]!;
+    const layout = layoutOf(level);
+    assert.equal(layout.hazardSlots, 0, name);
+    assert.ok(layout.hazardCells.length > 0, name);
+  }
+  const level = PIECE_LEVELS['clone-ball']!;
+  const layout = layoutOf(level);
+  // Theseus steps on the red button three times: more than one ball stands at once.
+  let s = initial(level);
+  for (const dir of ['right', 'right', 'left', 'right', 'left', 'right'] as const) s = step(s, { kind: 'move', dir }).state;
+  assert.ok(s.hazards.length >= 2, `${s.hazards.length} balls`);
+  const w = new Uint32Array(layout.words);
+  pack(s, layout, w, 0);
+  const u = unpack(w, 0, layout, level);
+  assert.deepEqual(u.hazards, s.hazards);
+  // Out of cell order, a hazard would be passed over: packing refuses it.
+  assert.throws(() => pack({ ...s, hazards: [...s.hazards].reverse() }, layout, w, 0), /hazard/);
+});
+
+test("Chapter 1's levels pack into as many words as they always have", () => {
+  assert.deepEqual(TRIALS.map((_, i) => layoutOf(trialLevel(i)).words), [1, 1, 2, 2, 1, 2, 2, 3, 3, 3]);
 });
 
 test('a situation packs at an offset inside a larger array without touching its neighbours', () => {

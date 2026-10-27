@@ -8,34 +8,23 @@ import { TERRAIN } from './tiles.ts';
 import type { Cell, Dir } from './tiles.ts';
 import { inside, index, next, same } from './state.ts';
 import { tAt, oAt } from './work.ts';
+import { caught } from './catch.ts';
+import { hazardOn, heldAt } from './pieces.ts';
 import type { GameEvent, Work } from './work.ts';
 
+/** The Minotaur may enter `x`: terrain he stands on, with no block or hazard there. */
 export function minotaurMayEnter(w: Work, x: Cell): boolean {
-  return inside(w.level, x) && TERRAIN[tAt(w, x)].minotaur && oAt(w, x) !== 'block';
-}
-
-/** A catch: a heart lost, the player thrown back, or the try over. */
-function caught(w: Work, ev: GameEvent[]): void {
-  w.hearts--;
-  ev.push({ kind: 'caught', at: w.player, hearts: w.hearts });
-  if (w.hearts <= 0) {
-    w.outcome = 'lost';
-    ev.push({ kind: 'lost' });
-    return;
-  }
-  w.player = w.throwBack;
-  if (same(w.player, w.minotaur)) {
-    w.minotaur = w.level.minotaur;
-    if (same(w.minotaur!, w.cow)) w.cow = null;
-  }
+  return inside(w.level, x) && TERRAIN[tAt(w, x)].minotaur && oAt(w, x) !== 'block'
+    && !hazardOn(w, x);
 }
 
 /** The Minotaur arrives on `to`: the cow is gone, the player is caught. True when the turn's steps end. */
 function arrive(w: Work, to: Cell, ev: GameEvent[]): boolean {
   w.minotaur = to;
+  if (heldAt(w, to)) ev.push({ kind: 'held', who: 'minotaur', at: to });
   if (same(to, w.cow)) w.cow = null;
   if (same(to, w.player)) {
-    caught(w, ev);
+    caught(w, ev, 'minotaur');
     return true;
   }
   return false;
@@ -45,6 +34,7 @@ function arrive(w: Work, to: Cell, ev: GameEvent[]): boolean {
 export function minotaurStep(w: Work, ev: GameEvent[]): boolean {
   const m = w.minotaur;
   if (!m) return true;
+  if (heldAt(w, m)) return false;
   const target = w.cow ?? w.player;
   const dc = Math.sign(target.c - m.c);
   const dr = Math.sign(target.r - m.r);

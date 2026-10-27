@@ -1,12 +1,14 @@
 /* The Island of Crete: a lower bound on the moves a win still needs, for an A* search. It counts moves in a
- * relaxed game over cells, where every door, toggle wall, block and figure is gone and water, fire and the gate
- * are open. From a cell, a move in each direction may end on any cell its step and the slide or carry after it
- * pass (gear or an obstacle may stop it there), and a catch may throw Theseus to any safe zone or the start. Every
- * real action is one edge or none, so the bound never overestimates and drops by at most one per action. The
- * distances to the exit and to each relic are found once per level; a situation costs one look-up per relic still
- * on the board. DOM-free. */
+ * relaxed game over cells, where every door, toggle wall, pop-up wall, fake wall, snare, block, figure and
+ * hazard is gone and water, fire, the gate, gravel, bombs and the thief are open; only walls, invisible walls and
+ * clone machines stay shut. From a cell, a move in each direction may end on any cell its step and the slide or
+ * carry after it pass (gear or an obstacle may stop it there), and a teleport may keep Theseus or send him beyond
+ * any other teleport; a catch by the Minotaur, a hazard or a bomb may throw him to any safe zone or the start.
+ * Every real action is one edge or none, so the bound never overestimates and drops by at most one per action.
+ * The distances to the exit and to each relic are found once per level; a situation costs one look-up per relic
+ * still on the board. DOM-free. */
 import { DIRS, DELTA, TERRAIN } from './tiles.ts';
-import type { Dir } from './tiles.ts';
+import type { Dir, Terrain } from './tiles.ts';
 import type { Level } from './level.ts';
 import type { State } from './state.ts';
 
@@ -15,38 +17,54 @@ export interface Estimate {
   (s: State): number;
 }
 
-/** The cells a move from `from` heading `d` may end on, in the relaxed game: the step's cell, then each cell the
- *  slide or carry would take Theseus to without gear, until a wall, the board's edge or a cell already crossed. */
-function moveEnds(lv: Level, from: number, d: Dir): number[] {
-  const open = (r: number, c: number) => r >= 0 && c >= 0 && r < lv.rows && c < lv.cols && lv.terrain[r * lv.cols + c] !== 'wall';
-  let r = Math.floor(from / lv.cols) + DELTA[d][0];
-  let c = (from % lv.cols) + DELTA[d][1];
-  if (!open(r, c)) return [];
-  const ends = [r * lv.cols + c];
-  const seen = new Set(ends);
-  let dir = d;
-  for (;;) {
-    const def = TERRAIN[lv.terrain[r * lv.cols + c]!];
-    if (def.carries) dir = def.carries;
-    else if (!def.slides) return ends;
-    const nr = r + DELTA[dir][0];
-    const nc = c + DELTA[dir][1];
-    if (!open(nr, nc) || seen.has(nr * lv.cols + nc)) return ends;
-    r = nr;
-    c = nc;
-    ends.push(r * lv.cols + c);
-    seen.add(r * lv.cols + c);
+/** Terrain the relaxed game keeps as wall: what Theseus never enters, however the try goes. */
+const WALLS: ReadonlySet<Terrain> = new Set<Terrain>(['wall', 'invisible-wall', 'clone']);
+
+/** The cells a move from `from` heading `d` may end on, in the relaxed game: every cell the step and the slide or
+ *  carry after it would take Theseus to without gear. A teleport may keep him, or send him on to the cell beyond
+ *  any other of `teleports` the way he entered (none when the level has fewer than two). Each (cell, heading) is
+ *  followed once. */
+function moveEnds(lv: Level, from: number, d: Dir, teleports: readonly number[]): number[] {
+  const open = (r: number, c: number) => r >= 0 && c >= 0 && r < lv.rows && c < lv.cols && !WALLS.has(lv.terrain[r * lv.cols + c]!);
+  const ends = new Set<number>();
+  const seen = new Set<number>();
+  const todo: [number, number, Dir][] = [];
+  const enter = (r: number, c: number, dir: Dir) => {
+    if (!open(r, c)) return;
+    const key = (r * lv.cols + c) * 4 + DIRS.indexOf(dir);
+    if (seen.has(key)) return;
+    seen.add(key);
+    ends.add(r * lv.cols + c);
+    todo.push([r, c, dir]);
+  };
+  enter(Math.floor(from / lv.cols) + DELTA[d][0], (from % lv.cols) + DELTA[d][1], d);
+  while (todo.length) {
+    const [r, c, dir] = todo.pop()!;
+    const t = lv.terrain[r * lv.cols + c]!;
+    if (t === 'teleport') {
+      for (const v of teleports) {
+        if (v === r * lv.cols + c) continue;
+        const br = Math.floor(v / lv.cols) + DELTA[dir][0], bc = (v % lv.cols) + DELTA[dir][1];
+        if (open(br, bc) && lv.terrain[br * lv.cols + bc] !== 'teleport') enter(br, bc, dir);
+      }
+      continue;
+    }
+    const def = TERRAIN[t];
+    const on = def.carries ?? (def.slides ? dir : null);
+    if (on) enter(r + DELTA[on][0], c + DELTA[on][1], on);
   }
+  return [...ends];
 }
 
 /** The relaxed game's edges, reversed: for each cell, the cells one move or one catch away from it. */
 function relaxed(lv: Level) {
   const n = lv.rows * lv.cols;
-  const open = lv.terrain.map(t => t !== 'wall');
+  const open = lv.terrain.map(t => !WALLS.has(t));
+  const teleports = lv.terrain.flatMap((t, i) => (t === 'teleport' ? [i] : []));
   const into: number[][] = Array.from({ length: n }, () => []);
   for (let x = 0; x < n; x++) {
     if (!open[x]) continue;
-    for (const d of DIRS) for (const y of moveEnds(lv, x, d)) into[y]!.push(x);
+    for (const d of DIRS) for (const y of moveEnds(lv, x, d, teleports.length > 1 ? teleports : [])) into[y]!.push(x);
   }
   const thrown = new Uint8Array(n);
   lv.terrain.forEach((t, i) => { if (t === 'safe') thrown[i] = 1; });

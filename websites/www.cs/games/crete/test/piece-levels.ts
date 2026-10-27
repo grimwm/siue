@@ -170,4 +170,59 @@ export const PIECE_LEVELS: Record<string, Level> = {
     '#E*...#',
     '#######',
   ], 'facing: up\nmachines: ball-right'),
+  /** The Minotaur walks into a snare with no button and stays there; one heart, so only the snare lets Theseus by. */
+  'minotaur-trap': level('Minotaur trap', [
+    '########',
+    '#P.....#',
+    '#.####.#',
+    '#..&.M.#',
+    '#E######',
+    '########',
+  ], 'hearts: 1'),
+  /** The block goes through the teleport into the water beyond, the only bridge to the exit. */
+  'block-teleport': level('Block teleport', [
+    '#######',
+    '#PO@###',
+    '###@~E#',
+    '#######',
+  ]),
+  /** The thief takes the first flippers and leaves the key that opens the way to the second. */
+  'thief-keys': level('Thief and keys', [
+    '########',
+    '#Pf~r$R#',
+    '######f#',
+    '###E~~.#',
+    '########',
+  ]),
+  /** The machine's block slides off the ice into the water; the next stops on the dirt it made, and a third has
+   *  no room while that one stands in front of the machine. */
+  'clone-blocked': level('Clone blocked', [
+    '#######',
+    '#P.+..#',
+    '#..####',
+    '#C=~~E#',
+    '#######',
+  ], 'machines: block-right'),
+  /** Two balls on one track: the one behind moves first, finds the other in its way and stays. */
+  'hazard-order': level('Hazard order', [
+    '########',
+    '#P.....#',
+    '###.####',
+    '#oo....#',
+    '###.####',
+    '###E####',
+    '########',
+  ], 'facing: right right'),
+  /** A block pushed onto the red button clones nothing onto the cell Theseus steps into; his own step on the
+   *  button clones the second block that two cells of water need. */
+  'clone-keep': level('Clone keep', [
+    '######',
+    '#....#',
+    '#PO+.#',
+    '##C..#',
+    '###~##',
+    '###~##',
+    '###E##',
+    '######',
+  ], 'machines: block-up'),
 };

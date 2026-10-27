@@ -10,11 +10,13 @@ The vision and its parts are in `specs/2026-10-16-crete-redesign-vision.md`.
 Live: the shell, the engine, Chapter 1 (ten levels, story pages, the Lore book),
 full keyboard play, and the fast solver.
 
-1. **Nine new pieces** — design `specs/2026-10-21-crete-pieces-design.md`; no
-   plan yet. Engine, both solvers, art and sounds. The game lives in
-   `websites/www.cs/games/crete/`; its `test/pieces.test.ts` fails until a new
-   kind is handled in `src/puzzle/pack.ts`, `heuristic.ts`, `prune.ts` and the
-   same-answers corpus.
+1. **Nine new pieces** — design `specs/2026-10-21-crete-pieces-design.md`,
+   plan `plans/2026-10-27-crete-pieces.md`. The rules and both solvers are
+   done: every piece is in the engine, the packing, the estimate, the pruning
+   and the same-answers corpus. The art and the sounds are in progress. The
+   game lives in `websites/www.cs/games/crete/`; its `test/pieces.test.ts`
+   fails until a new kind is handled in `src/puzzle/pack.ts`, `heuristic.ts`,
+   `prune.ts` and the same-answers corpus.
 2. **The level editor** — design `specs/2026-10-21-crete-editor-design.md`
    (Part 2 there); no plan yet. Also lands here, held over from the fast
    solver:

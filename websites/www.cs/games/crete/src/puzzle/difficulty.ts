@@ -38,8 +38,8 @@ export interface Difficulty {
   catchFree: Shortest;
   /** Catches on the shortest line. */
   catches: number;
-  /** chase when some line from the start leads to a catch, solo when none does (or there is no Minotaur),
-   *  unknown when the search for one hit its cap. */
+  /** chase when some line from the start leads to a catch by the Minotaur (a hazard's or a bomb's never counts),
+   *  solo when none does (or there is no Minotaur), unknown when the search for one hit its cap. */
   label: 'solo' | 'chase' | 'unknown';
   /** The plain walk (the shortest path over plain floor, taking the relics the gate needs, ignoring every piece),
    *  played on the real level, wins. False when there is no plain path. */
@@ -87,8 +87,8 @@ export function* measuring(level: Level, cap = SOLVER_CAP, room: MeasureRoom = {
   return { solved: r.solved, shortest, explored: r.explored, withoutMinotaur, minotaurDelta, greedyWins, catchFree, catches, label, naiveWins };
 }
 
-/** Cells reachable from `from` through cells `open` allows. */
-function flood(level: Level, from: number, open: (i: number) => boolean): Uint8Array {
+/** Cells reachable from `from` through cells `open` allows; from a cell `jumps` names, also every cell in `to`. */
+function flood(level: Level, from: number, open: (i: number) => boolean, jumps?: { from: (i: number) => boolean; to: readonly number[] }): Uint8Array {
   const seen = new Uint8Array(level.rows * level.cols);
   const queue = [from];
   seen[from] = 1;
@@ -101,43 +101,60 @@ function flood(level: Level, from: number, open: (i: number) => boolean): Uint8A
       const j = nr * level.cols + nc;
       if (!seen[j] && open(j)) { seen[j] = 1; queue.push(j); }
     }
+    if (jumps?.from(i)) {
+      for (const j of jumps.to) if (!seen[j] && open(j)) { seen[j] = 1; queue.push(j); }
+    }
   }
   return seen;
 }
 
 /** True when the Minotaur may never share a cell with Theseus: the cells he could ever enter and the cells Theseus
  *  could ever enter do not meet. A cell counts open when it ever may: a door when its key is on the board, water
- *  when the level has a block to fill it (and, for Theseus, when it holds flippers), fire when it holds fire boots,
- *  a toggle wall always. Generous both ways, so true is a proof. */
+ *  when the level has a block or a block-cloning machine to fill it (and, for Theseus, when it holds flippers),
+ *  fire when it holds fire boots, a toggle wall always; for the Minotaur also a fake wall (Theseus may open it) and
+ *  a bomb (anything may set it off). Theseus's flood goes through every other piece but walls, and from any
+ *  teleport to every cell beside any teleport. Generous both ways, so true is a proof. */
 function apart(level: Level): boolean {
-  const held = new Set(level.objects);
+  const held = new Set<string>(level.objects.filter(o => o !== null));
+  if (level.machines.some(m => m.template === 'block')) held.add('block');
   const opens = (t: Terrain): boolean => {
     const def = TERRAIN[t];
     if (def.door) return held.has(`key-${def.door}`);
     return t === 'water' ? held.has('block') : t === 'toggle-open' || t === 'toggle-closed';
   };
-  const beast = flood(level, level.minotaur!.r * level.cols + level.minotaur!.c,
-    i => TERRAIN[level.terrain[i]!].minotaur || opens(level.terrain[i]!));
+  const beast = flood(level, level.minotaur!.r * level.cols + level.minotaur!.c, i => {
+    const t = level.terrain[i]!;
+    return TERRAIN[t].minotaur || opens(t) || t === 'fake-wall' || t === 'bomb';
+  });
+  const teleports = level.terrain.flatMap((t, i) => (t === 'teleport' ? [i] : []));
+  const besideTeleports = teleports.flatMap(i => {
+    const r = Math.floor(i / level.cols), c = i % level.cols;
+    return DIRS.flatMap(d => {
+      const nr = r + DELTA[d][0], nc = c + DELTA[d][1];
+      return nr < 0 || nc < 0 || nr >= level.rows || nc >= level.cols ? [] : [nr * level.cols + nc];
+    });
+  });
   const hero = flood(level, level.player.r * level.cols + level.player.c, i => {
     const t = level.terrain[i]!;
     const def = TERRAIN[t];
     if (t === 'wall') return false;
     if (def.door) return opens(t);
     return !def.needs || held.has(def.needs) || opens(t);
-  });
+  }, { from: i => level.terrain[i] === 'teleport', to: besideTeleports });
   return !beast.some((b, i) => b === 1 && hero[i] === 1);
 }
 
-/** Whether some line from the start leads to a catch: a depth-first search over packed situations that stops
- *  at the first turn that catches (any route, not the shortest; waiting first lets the beast come on). False when
+/** Whether some line from the start leads to a catch by the Minotaur: a breadth-first search over packed
+ *  situations that stops at the first turn he catches in; a hazard's or a bomb's catch is a turn like any other.
+ *  Breadth-first, a catch a few turns away is found before the search wanders off down one long line. False when
  *  it is proved none does, null when the search stored `cap` situations first or its store failed. It keeps them
  *  in `store`, by default one in memory. */
 export function canCatch(level: Level, cap = SOLVER_CAP, store?: NodeStore): boolean | null {
   return finish(catching(level, cap, { store }));
 }
 
-/** canCatch in batches: every `room.every` situations expanded it yields its progress (a depth-first search has
- *  no estimate, so its bestF and startH are 0), and its return value is the answer. */
+/** canCatch in batches: every `room.every` situations expanded it yields its progress (a breadth-first search
+ *  has no estimate, so its bestF and startH are 0), and its return value is the answer. */
 export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {}): Generator<Progress, boolean | null, void> {
   if (!level.minotaur || apart(level)) return false;
   const layout = layoutOf(level);
@@ -148,23 +165,23 @@ export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {})
     pack(initial(level), layout, buf, 0);
     store.add(buf, 0, -1, 0, 0);
     if (store.size >= cap) return null;
-    const stack = [0];
+    const queue = [0];
     let expanded = 0;
-    while (stack.length) {
+    for (let head = 0; head < queue.length; head++) {
       if (++expanded % every === 0) yield { expanded, stored: store.size, bestF: 0, startH: 0 };
-      const id = stack.pop()!;
+      const id = queue[head]!;
       store.words(id, buf, 0);
       const s = unpack(buf, 0, layout, level, 0);
       for (const c of ORDER) {
         if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
         const x = step(s, ACTIONS[c]!);
-        if (caught(x.events, s)) return true;
+        if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur')) return true;
         const n = x.state;
         if (n === s || n.outcome !== 'playing') continue;
         pack(n, layout, buf, 0);
         const nid = store.add(buf, 0, id, c, 0);
         if (store.size >= cap) return null;
-        if (nid >= 0) stack.push(nid);
+        if (nid >= 0) queue.push(nid);
       }
     }
     return false;

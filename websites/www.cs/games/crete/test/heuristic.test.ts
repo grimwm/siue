@@ -69,10 +69,10 @@ function distances(states: readonly State[], preds: readonly number[][]): number
 }
 
 /** The estimate is consistent from every situation reached, and a lower bound on the reference's shortest line
- *  from each: all of them when the level's situations fit in CAP, else a sample solved one by one. */
-function check(level: Level): void {
+ *  from each: all of them when the level's situations fit in CAP, else a sample solved one by one. `g` is the
+ *  level's graph when the caller has already explored it. */
+function check(level: Level, g = explore(level, estimateFor(level), CAP)): void {
   const estimate = estimateFor(level);
-  const g = explore(level, estimate, CAP);
   const bound = (s: State, shortest: number) => {
     if (estimate(s) > shortest) assert.fail(`estimate ${estimate(s)} > shortest ${shortest} on\n${serialize(level)}\nat ${stateKey(s)}`);
   };
@@ -107,7 +107,7 @@ test('the estimate never exceeds the true distance on piece levels', () => {
   for (const [name, lv] of Object.entries(PIECE_LEVELS)) {
     const g = explore(lv, estimateFor(lv), CAP);
     assert.ok(g.whole, `${name}: every situation fits`);
-    check(lv);
+    check(lv, g);
   }
 });
 

@@ -13,9 +13,7 @@ import type { State } from '../src/puzzle/state.ts';
 import type { Gear } from '../src/puzzle/tiles.ts';
 import { trialLevel } from '../src/puzzle/trials.ts';
 import { grid, mv, play } from './puzzle-grid.ts';
-import { PIECE_LEVELS } from './piece-levels.ts';
 import { sameAnswers } from './same-answers.ts';
-import { solveBfs } from './reference-solver.ts';
 
 /** Asks `prune` about `s` as reached in `moves` moves. */
 function asker(s0: State) {
@@ -131,13 +129,6 @@ test('beside a bomb and a hazard, more hearts still dominate', () => {
   const two = play({ ...s, hearts: 2 }, mv('right'), mv('right')).state;
   assert.deepEqual([three.hearts, two.hearts], [2, 1]);
   assert.deepEqual({ ...three, hearts: 0, level: null }, { ...two, hearts: 0, level: null });
-});
-
-test('every piece level: the pruned solver gives the reference answer', () => {
-  for (const lv of Object.values(PIECE_LEVELS)) {
-    assert.ok(solveBfs(initial(lv)).solved);
-    sameAnswers(lv, 100_000);
-  }
 });
 
 test('more hearts and more tools dominate', () => {

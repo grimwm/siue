@@ -12,7 +12,7 @@ import type { State } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
 import { DIRS } from '../src/puzzle/tiles.ts';
-import { caught, stateKey } from './reference-solver.ts';
+import { stateKey } from './reference-solver.ts';
 import { corpus } from './corpus.ts';
 
 const level = (rows: readonly string[], header = '') => parse(`title: t\nintro: i\n${header}\n${rows.join('\n')}\n`);
@@ -153,6 +153,22 @@ test('a beast penned behind a door whose key is not on the board is proved solo 
     'a block could fill the water: the flood cannot prove it');
 });
 
+test('the flood counts a fake wall, a bomb, a block machine and a teleport as ways through', () => {
+  // Each pen holds the Minotaur only while the piece is walled up; with the piece the flood proves nothing, so a
+  // search of one situation gives up.
+  const pens: [string, string[], string][] = [
+    ['fake wall', ['#######', '#P...E#', '###W###', '#M....#', '#######'], ''],
+    ['bomb', ['#######', '#P...E#', '###!###', '#M....#', '#######'], ''],
+    ['block machine', ['#######', '#P+.C.#', '#~~~~~#', '#M...E#', '#######'], 'machines: block-down'],
+    ['teleport', ['#######', '#P.@.E#', '#######', '#M.@..#', '#######'], ''],
+  ];
+  for (const [name, rows, header] of pens) {
+    assert.equal(canCatch(level(rows, header), 1), null, `${name}: not proved apart`);
+    const walled = rows.map(r => r.replace(/[W!C@]/g, '#'));
+    assert.equal(canCatch(level(walled, header.startsWith('machines') ? '' : header), 1), false, `${name} walled: proved apart`);
+  }
+});
+
 test('a long catch search yields its progress, and stops when its caller does', () => {
   const room = doorPen(14, true);
   const batches = measuring(room, 2_000_000, { every: 64 });
@@ -167,7 +183,8 @@ test('a long catch search yields its progress, and stops when its caller does', 
   assert.equal(stopped.return(undefined as never).done, true, 'abandoned between batches');
 });
 
-/** The plain way to ask: every situation from the start, keyed by the reference's string, until a turn catches. */
+/** The plain way to ask: every situation from the start, keyed by the reference's string, until the Minotaur
+ *  catches. */
 function catchByStrings(lv: Level): boolean | null {
   const seen = new Set<string>();
   const queue: State[] = [initial(lv)];
@@ -179,7 +196,7 @@ function catchByStrings(lv: Level): boolean | null {
     for (const a of actions) {
       if (a.kind === 'tool' && s.tools[a.tool] <= 0) continue;
       const x = step(s, a);
-      if (caught(x.events, s)) return true;
+      if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur')) return true;
       if (x.state === s || x.state.outcome !== 'playing') continue;
       const key = stateKey(x.state);
       if (seen.has(key)) continue;
@@ -219,6 +236,25 @@ test('the label: chase when a catch is reachable, solo when none is or there is 
   assert.equal(measure(LOCKED).label, 'solo');
   assert.equal(measure({ ...WALLED, minotaur: null }).label, 'solo');
   assert.equal(measure(LOCKED, 1).label, 'unknown');
+});
+
+test('a level where only a hazard catches is solo', () => {
+  // The Minotaur is penned behind a toggle wall with no button: the floods meet, so only the search can tell.
+  const lv = level([
+    '#########',
+    '#P..o...#',
+    '#.......#',
+    '#......E#',
+    '####T####',
+    '#...M...#',
+    '#########',
+  ], 'facing: left');
+  let s = initial(lv);
+  for (let i = 0; i < 2; i++) s = step(s, { kind: 'wait' }).state;
+  const { events } = step(s, { kind: 'wait' });
+  assert.ok(events.some(e => e.kind === 'caught' && e.by === 'hazard'), 'the ball catches Theseus');
+  assert.equal(canCatch(lv), false);
+  assert.equal(measure(lv).label, 'solo');
 });
 
 test('naiveWins: the plain walk to the exit, ignoring every piece, played on the real level', () => {

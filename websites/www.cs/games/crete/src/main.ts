@@ -7,11 +7,14 @@ import { drawList } from './board-plan.ts';
 import type { Atlas } from './board-plan.ts';
 import { createGame, frameOf } from './game.ts';
 import { initial } from './puzzle/state.ts';
+import { parse } from './puzzle/level.ts';
+import type { Level } from './puzzle/level.ts';
 import { solve } from './puzzle/solver.ts';
 import { startSearch } from './solver-client.ts';
 import type { Report } from './solver-host.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS } from './campaign/chapters.ts';
+import type { Levels } from './campaign/chapters.ts';
 import { createFoundPages } from './pages.ts';
 import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
@@ -44,12 +47,28 @@ const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-m
 let reduced = motion?.matches ?? false;
 motion?.addEventListener('change', e => { reduced = e.matches; });
 
+/** The level `__creteTest.playLevel` opens outside the campaign: it opens once, and records nothing. */
+let queued: Level | null = null;
+/** The scratch level in play, until the next real open. */
+let scratch: Level | null = null;
+const levels: Levels = {
+  count: CAMPAIGN_LEVELS.count,
+  id: i => (scratch ? 'test-level' : CAMPAIGN_LEVELS.id(i)),
+  // Moves a queued scratch level into place; `game.open` is its only caller.
+  level: i => {
+    scratch = queued;
+    queued = null;
+    return scratch ?? CAMPAIGN_LEVELS.level(i);
+  },
+  scratch: () => scratch !== null,
+};
+
 const game = createGame({
   sfx: audio.sfx,
   say: ui.say,
   progress,
   pages,
-  levels: CAMPAIGN_LEVELS,
+  levels,
   timers: browserTimers,
   clock,
   reducedMotion: () => reduced,
@@ -155,4 +174,8 @@ function solveInWorker(levelText: string): Promise<{ result: unknown; progress: 
 }
 
 /* Test hook for automated checks: drives the real game logic, no copy. */
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker };
+function playLevel(level: Level): void {
+  queued = level;
+  game.open(0);
+}
+window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse };

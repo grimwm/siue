@@ -15,13 +15,15 @@ import type { Run } from './puzzle/run.ts';
 import { solve } from './puzzle/solver.ts';
 import { pagesTaken } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
-import { step } from './puzzle/step.ts';
+import { act as actAlone, step } from './puzzle/step.ts';
 import type { Action, GameEvent } from './puzzle/step.ts';
-import type { Cell } from './puzzle/tiles.ts';
+import { HAZARDS } from './puzzle/tiles.ts';
+import type { Cell, HazardKind } from './puzzle/tiles.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
-  | 'caught' | 'stone' | 'win' | 'lose' | 'bump' | 'pickup' | 'page' | 'hint' | 'chapter';
+  | 'caught' | 'stone' | 'win' | 'lose' | 'bump' | 'pickup' | 'page' | 'hint' | 'chapter'
+  | 'snap' | 'reveal' | 'rise' | 'warp' | 'thief' | 'boom' | 'clone' | 'home';
 
 export type Tone = 'info' | 'good' | 'bad';
 
@@ -52,6 +54,8 @@ export interface Anim {
   started: number;
   /** The state the turn began from: it is drawn while the player's own moves play. */
   before: State;
+  /** The state once the player's action alone has played: it is drawn while the hazards move. */
+  mid: State;
   /** The story pages the player's figure reaches this turn, by id, at the moment it lands on each. */
   stops: readonly PageStop[];
   /** The page the animation waits at while it is read, or null while it plays. */
@@ -90,15 +94,19 @@ export interface Game {
 }
 
 /** What the board draws `ms` into the animation: the state before the turn, less each thing the figure has
- *  reached, while the player's own moves, slides and pushed block play; the state after it from then on, while
- *  the Minotaur's steps play; and the figures at rest once it ends. An animation paused at a page is not done. */
+ *  reached, while the player's own moves, slides and pushed blocks play; the state once the player's action alone
+ *  has played (`anim.mid`) while the hazards move; the state after the turn while the Minotaur's steps play; and
+ *  the figures at rest once it ends. The hazards drawn are the figures', never the state's. An animation paused
+ *  at a page is not done. */
 export function frameOf(g: Pick<Game, 'run' | 'anim'>, ms: number): { state: State; figures: Figures; done: boolean } | null {
   if (!g.run) return null;
   const a = g.anim;
   if (a && (ms < a.timeline.duration || a.paused)) {
-    return { state: ms < a.timeline.playerEnd ? takenBy(a, ms) : g.run.now, figures: a.timeline.at(ms), done: false };
+    const state = ms < a.timeline.playerEnd ? takenBy(a, ms) : ms < a.timeline.hazardEnd ? a.mid : g.run.now;
+    return { state, figures: a.timeline.at(ms), done: false };
   }
-  return { state: g.run.now, figures: { player: g.run.now.player, minotaur: g.run.now.minotaur }, done: true };
+  const now = g.run.now;
+  return { state: now, figures: { player: now.player, minotaur: now.minotaur, hazards: now.hazards.map(h => ({ kind: h.kind, at: h.at })) }, done: true };
 }
 
 /** The state before the turn with each thing the figure has reached by `ms` gone from its cell. */
@@ -118,6 +126,9 @@ function pageStops(before: State, tl: Timeline): PageStop[] {
     return id === undefined ? [] : [{ id, ms: t.ms }];
   });
 }
+
+/** A hazard by its myth name, with its article: "The Harpy", "Talos's fire". */
+const hazardName = (kind: HazardKind): string => (kind === 'fireball' ? HAZARDS[kind].name : `The ${HAZARDS[kind].name}`);
 
 export function createGame(deps: GameDeps): Game {
   let trial = -1;
@@ -172,8 +183,19 @@ export function createGame(deps: GameDeps): Game {
         case 'flipped': deps.sfx('button'); break;
         case 'caught':
           deps.sfx('caught');
-          deps.say(`Caught! ${e.hearts} ${e.hearts === 1 ? 'heart' : 'hearts'} left.`, 'bad');
+          deps.say(`${e.by === 'bomb' ? 'A bomb!' : e.hazard ? `${hazardName(e.hazard)} caught you!` : 'Caught!'} ${e.hearts} ${e.hearts === 1 ? 'heart' : 'hearts'} left.`, 'bad');
           break;
+        case 'held':
+          deps.sfx('snap');
+          if (e.who === 'player') deps.say("Daedalus's snare holds you.", 'bad');
+          break;
+        case 'revealed': deps.sfx('reveal'); deps.say(e.what === 'fake-wall' ? 'A false wall gives way!' : 'A hidden wall!'); break;
+        case 'rose': deps.sfx('rise'); break;
+        case 'teleported': deps.sfx('warp'); break;
+        case 'robbed': deps.sfx('thief'); deps.say('The thief took your gear.', 'bad'); break;
+        case 'exploded': deps.sfx('boom'); break;
+        case 'cloned': deps.sfx('clone'); break;
+        case 'sent-home': deps.sfx('home'); break;
         case 'stoned': deps.sfx('stone'); break;
         case 'won': deps.sfx('win'); break;
         case 'lost': deps.sfx('lose'); break;
@@ -194,9 +216,9 @@ export function createGame(deps: GameDeps): Game {
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
-    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, stops: pageStops(before, tl), paused: null } : null;
+    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: pageStops(before, tl), paused: null } : null;
     reached = 0;
-    if (run.now.outcome === 'won') {
+    if (run.now.outcome === 'won' && !deps.levels.scratch?.(trial)) {
       deps.progress.record(deps.levels.id(trial), run.now.moves, run.assisted);
       found = deps.pages.add(pagesTaken(run.now));
     }

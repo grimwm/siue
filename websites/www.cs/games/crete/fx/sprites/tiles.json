@@ -128,113 +128,203 @@
       "frames": 1,
       "fps": 0
     },
-    "relic": {
+    "trap": {
       "x": 0,
       "y": 1848,
       "frames": 1,
       "fps": 0
     },
-    "key-red": {
+    "button-brown": {
       "x": 0,
       "y": 1936,
       "frames": 1,
       "fps": 0
     },
-    "key-blue": {
+    "button-red": {
       "x": 0,
       "y": 2024,
       "frames": 1,
       "fps": 0
     },
-    "key-yellow": {
+    "popup": {
       "x": 0,
       "y": 2112,
       "frames": 1,
       "fps": 0
     },
-    "key-green": {
+    "gravel": {
       "x": 0,
       "y": 2200,
       "frames": 1,
       "fps": 0
     },
-    "flippers": {
+    "teleport": {
       "x": 0,
       "y": 2288,
-      "frames": 1,
-      "fps": 0
+      "frames": 8,
+      "fps": 8
     },
-    "fire-boots": {
+    "thief": {
       "x": 0,
       "y": 2376,
       "frames": 1,
       "fps": 0
     },
-    "skates": {
+    "bomb": {
       "x": 0,
       "y": 2464,
       "frames": 1,
       "fps": 0
     },
-    "suction": {
+    "clone-up": {
       "x": 0,
       "y": 2552,
       "frames": 1,
       "fps": 0
     },
-    "mirror": {
+    "clone-down": {
       "x": 0,
       "y": 2640,
       "frames": 1,
       "fps": 0
     },
-    "cake": {
+    "clone-left": {
       "x": 0,
       "y": 2728,
       "frames": 1,
       "fps": 0
     },
-    "cow": {
+    "clone-right": {
       "x": 0,
       "y": 2816,
       "frames": 1,
       "fps": 0
     },
-    "page": {
+    "relic": {
       "x": 0,
       "y": 2904,
       "frames": 1,
       "fps": 0
     },
-    "block": {
+    "key-red": {
       "x": 0,
       "y": 2992,
       "frames": 1,
       "fps": 0
     },
-    "theseus": {
+    "key-blue": {
       "x": 0,
       "y": 3080,
       "frames": 1,
       "fps": 0
     },
-    "minotaur": {
+    "key-yellow": {
       "x": 0,
       "y": 3168,
-      "frames": 8,
-      "fps": 6
+      "frames": 1,
+      "fps": 0
     },
-    "minotaur-stone": {
+    "key-green": {
       "x": 0,
       "y": 3256,
       "frames": 1,
       "fps": 0
     },
-    "cow-standing": {
+    "flippers": {
       "x": 0,
       "y": 3344,
       "frames": 1,
       "fps": 0
+    },
+    "fire-boots": {
+      "x": 0,
+      "y": 3432,
+      "frames": 1,
+      "fps": 0
+    },
+    "skates": {
+      "x": 0,
+      "y": 3520,
+      "frames": 1,
+      "fps": 0
+    },
+    "suction": {
+      "x": 0,
+      "y": 3608,
+      "frames": 1,
+      "fps": 0
+    },
+    "mirror": {
+      "x": 0,
+      "y": 3696,
+      "frames": 1,
+      "fps": 0
+    },
+    "cake": {
+      "x": 0,
+      "y": 3784,
+      "frames": 1,
+      "fps": 0
+    },
+    "cow": {
+      "x": 0,
+      "y": 3872,
+      "frames": 1,
+      "fps": 0
+    },
+    "page": {
+      "x": 0,
+      "y": 3960,
+      "frames": 1,
+      "fps": 0
+    },
+    "block": {
+      "x": 0,
+      "y": 4048,
+      "frames": 1,
+      "fps": 0
+    },
+    "theseus": {
+      "x": 0,
+      "y": 4136,
+      "frames": 1,
+      "fps": 0
+    },
+    "minotaur": {
+      "x": 0,
+      "y": 4224,
+      "frames": 8,
+      "fps": 6
+    },
+    "minotaur-stone": {
+      "x": 0,
+      "y": 4312,
+      "frames": 1,
+      "fps": 0
+    },
+    "cow-standing": {
+      "x": 0,
+      "y": 4400,
+      "frames": 1,
+      "fps": 0
+    },
+    "ball": {
+      "x": 0,
+      "y": 4488,
+      "frames": 8,
+      "fps": 10
+    },
+    "glider": {
+      "x": 0,
+      "y": 4576,
+      "frames": 8,
+      "fps": 10
+    },
+    "fireball": {
+      "x": 0,
+      "y": 4664,
+      "frames": 8,
+      "fps": 10
     }
   }
 }

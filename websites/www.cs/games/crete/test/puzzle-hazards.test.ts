@@ -78,7 +78,7 @@ describe('arrival', () => {
     assert.deepEqual(r.state.minotaur, at(0, 6));
     assert.deepEqual(where(r.state), [{ at: at(0, 1), dir: 'left' }]);
     const c = r.events.find(e => e.kind === 'caught');
-    assert.deepEqual(c, { kind: 'caught', at: at(0, 1), hearts: 2, by: 'hazard' });
+    assert.deepEqual(c, { kind: 'caught', at: at(0, 1), hearts: 2, by: 'hazard', hazard: 'ball' });
   });
 
   test('a hazard catches Theseus standing on his own cow, and the cow is lost', () => {
@@ -121,7 +121,7 @@ describe('arrival', () => {
     const r = step(grid(['P@.', '.@o'], 'facing: down'), mv('right'));
     assert.deepEqual(r.state.player, at(0, 0));
     assert.equal(r.state.hearts, 2);
-    assert.deepEqual(r.events.find(e => e.kind === 'caught'), { kind: 'caught', at: at(0, 1), hearts: 2, by: 'hazard' });
+    assert.deepEqual(r.events.find(e => e.kind === 'caught'), { kind: 'caught', at: at(0, 1), hearts: 2, by: 'hazard', hazard: 'ball' });
     assert.ok(!r.events.some(e => e.kind === 'teleported'));
   });
 

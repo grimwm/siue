@@ -1,6 +1,6 @@
 // websites/www.cs/games/crete/src/puzzle/step.ts
 /* The Island of Crete: one turn. `step(state, action)` plays the player's
- * action (a move, a wait or a tool), then, unless the player has won or been
+ * action (a move, a wait or a tool; `act` plays that alone), then, unless the player has won or been
  * caught, the hazards' moves and the Minotaur's two steps, and returns the new
  * state and what happened, for the log, the sounds and the board's animation.
  * A bump (an action that cannot happen: a wall in the way, a tool not held or
@@ -99,7 +99,7 @@ function playerMayEnter(w: Work, to: Cell, d: Dir, riding: boolean): boolean {
 function enterAsPlayer(w: Work, to: Cell, d: Dir, riding: boolean, ev: GameEvent[]): boolean {
   if (!playerMayEnter(w, to, d, riding)) return false;
   if (hazardOn(w, to)) {
-    caught(w, ev, 'hazard');
+    caught(w, ev, 'hazard', w.hazards.find(h => same(h.at, to))!.kind);
     return false;
   }
   const def = TERRAIN[tAt(w, to)];
@@ -186,31 +186,27 @@ function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
   return true;
 }
 
-export function step(s: State, a: Action): StepResult {
-  if (s.outcome !== 'playing') return { state: s, events: [] };
-  const w = work(s);
-  const ev: GameEvent[] = [];
+/** The player's part of a turn, played on `w`: false for a bump. */
+function playerPart(w: Work, a: Action, ev: GameEvent[]): boolean {
   if (a.kind === 'move') {
     const from = w.player;
-    if (heldAt(w, from)) return { state: s, events: [] };
+    if (heldAt(w, from)) return false;
     const to = next(from, a.dir);
     const t = tAt(w, to);
     if (t === 'fake-wall' || t === 'invisible-wall') {
       w.terrain[index(w, to)] = t === 'fake-wall' ? 'floor' : 'wall';
       ev.push({ kind: 'revealed', at: to, what: t });
-    } else {
-      if (enterAsPlayer(w, to, a.dir, false, ev)) {
-        ev.push({ kind: 'moved', who: 'player', from, to });
-        if (!arrive(w, to, a.dir, false, ev)) ridePlayer(w, a.dir, ev);
-      } else if (!turnOver(w, ev)) return { state: s, events: [] };
-    }
+    } else if (enterAsPlayer(w, to, a.dir, false, ev)) {
+      ev.push({ kind: 'moved', who: 'player', from, to });
+      if (!arrive(w, to, a.dir, false, ev)) ridePlayer(w, a.dir, ev);
+    } else if (!turnOver(w, ev)) return false;
   } else if (a.kind === 'tool') {
-    if (w.tools[a.tool] <= 0) return { state: s, events: [] };
+    if (w.tools[a.tool] <= 0) return false;
     if (a.tool === 'cake') {
-      if (w.hearts >= w.level.hearts) return { state: s, events: [] };
+      if (w.hearts >= w.level.hearts) return false;
       w.hearts++;
     } else if (a.tool === 'cow') {
-      if (w.cow) return { state: s, events: [] };
+      if (w.cow) return false;
       w.cow = w.player;
     } else {
       w.stone = 3;
@@ -218,14 +214,36 @@ export function step(s: State, a: Action): StepResult {
     }
     w.tools[a.tool]--;
   }
+  return true;
+}
+
+/** A turn that left the terrain, the objects or the hazards as they were shares the previous arrays. */
+function share(w: Work, s: State): StepResult['state'] {
+  if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];
+  if (sameItems(w.objects, s.objects)) w.objects = s.objects as (ObjectKind | null)[];
+  if (sameItems(w.hazards, s.hazards)) w.hazards = s.hazards as Hazard[];
+  return w;
+}
+
+/** The player's action alone, without the hazards' moves or the Minotaur's steps: the board in the middle of a
+ *  turn, once the player has moved. A bump returns the same state and no events; the move count is unchanged. */
+export function act(s: State, a: Action): StepResult {
+  if (s.outcome !== 'playing') return { state: s, events: [] };
+  const w = work(s);
+  const ev: GameEvent[] = [];
+  if (!playerPart(w, a, ev)) return { state: s, events: [] };
+  return { state: share(w, s), events: ev };
+}
+
+export function step(s: State, a: Action): StepResult {
+  if (s.outcome !== 'playing') return { state: s, events: [] };
+  const w = work(s);
+  const ev: GameEvent[] = [];
+  if (!playerPart(w, a, ev)) return { state: s, events: [] };
   // The mirror turn is itself a stone turn: the Minotaur sits it out without spending any of the 3 that follow.
   const raisedMirror = a.kind === 'tool' && a.tool === 'mirror';
   if (!turnOver(w, ev)) hazardPhase(w, ev);
   if (!raisedMirror && !turnOver(w, ev)) minotaurPhase(w, ev);
   w.moves++;
-  // A turn that left the terrain or the objects as they were shares the previous arrays.
-  if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];
-  if (sameItems(w.objects, s.objects)) w.objects = s.objects as (ObjectKind | null)[];
-  if (sameItems(w.hazards, s.hazards)) w.hazards = s.hazards as Hazard[];
-  return { state: w, events: ev };
+  return { state: share(w, s), events: ev };
 }

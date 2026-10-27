@@ -11,6 +11,7 @@ import type { SfxName } from '../src/game.ts';
 const EVENTS: SfxName[] = [
   'step', 'push', 'splash', 'sizzle', 'door', 'key', 'relic', 'gate', 'button', 'slide',
   'caught', 'stone', 'win', 'lose', 'bump', 'pickup', 'page', 'hint', 'chapter',
+  'snap', 'reveal', 'rise', 'warp', 'thief', 'boom', 'clone', 'home',
 ];
 const rig = (state?: string) => {
   const ctx = fakeAudioContext(state);
@@ -71,4 +72,18 @@ test('ensure wakes a suspended context, but not while muted', async () => {
   audio.ensure();
   await new Promise(r => setImmediate(r));
   assert.equal(ctx.state, 'running');
+});
+
+test('the new voices differ from each other and from the old ones', () => {
+  const notes = (name: SfxName): string => {
+    const { ctx, audio } = rig();
+    audio.sfx(name);
+    return oscs(ctx).map(o => `${o.type}:${JSON.stringify(o.frequency.calls)}`).join('|');
+  };
+  const seen = new Map<string, SfxName>();
+  for (const name of EVENTS) {
+    const n = notes(name);
+    assert.ok(!seen.has(n), `${name} sounds like ${seen.get(n)}`);
+    seen.set(n, name);
+  }
 });

@@ -32,7 +32,13 @@ export const LEVEL_IDS: readonly string[] = CHAPTERS.filter(c => c.released).fla
 export const levelById = (id: string): Level => trialLevel(TRIALS.findIndex(t => t.id === id));
 
 /** What the controller plays: a count, and each level's id and level by index. */
-export interface Levels { readonly count: number; id(i: number): string; level(i: number): Level }
+export interface Levels {
+  readonly count: number;
+  id(i: number): string;
+  level(i: number): Level;
+  /** Level `i` is a scratch level (the browser specs'): winning it records no progress and finds no pages. */
+  scratch?(i: number): boolean;
+}
 
 /** LEVEL_IDS, each built from its trial. */
 export const CAMPAIGN_LEVELS: Levels = {

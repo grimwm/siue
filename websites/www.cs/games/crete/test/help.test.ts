@@ -38,3 +38,14 @@ test('the help states the rules\' key facts', () => {
   assert.match(all, /Hint \([^)]*\) plays one step/);
   assert.doesNotMatch(all, /step onto the gate/);
 });
+
+test("the help names Daedalus's snare, the Bronze ball, the Harpy and Talos's fire, and the turn order", () => {
+  const all = text(helpLines(KEYS, TOOLS));
+  for (const n of ["Daedalus's snare", 'Bronze ball', 'Harpy', "Talos's fire", 'Pop-up', 'Teleport', 'Thief', 'Bomb', 'Clone']) {
+    assert.ok(all.toLowerCase().includes(n.toLowerCase()), n);
+  }
+  for (const w of ['flippers', 'fire boots', 'skates', 'suction boots', 'only while something stands on it', 'throws you back', 'sent home']) {
+    assert.ok(all.includes(w), w);
+  }
+  assert.match(all, /you, then the hazards, then the Minotaur/);
+});

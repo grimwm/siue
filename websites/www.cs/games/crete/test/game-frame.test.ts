@@ -8,7 +8,7 @@ import { createProgress } from '../src/progress.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { DELTA } from '../src/puzzle/tiles.ts';
 import { SLIDE_MS, timeline } from '../src/board-plan.ts';
-import { step } from '../src/puzzle/step.ts';
+import { act, step } from '../src/puzzle/step.ts';
 import { grid, icedPages, mv } from './puzzle-grid.ts';
 
 function opened(reduced = false) {
@@ -30,7 +30,7 @@ test('with no turn animating, the state now and the figures at rest', () => {
   const game = opened();
   const f = frameOf(game, 0)!;
   assert.equal(f.state, game.run!.now);
-  assert.deepEqual(f.figures, { player: game.run!.now.player, minotaur: game.run!.now.minotaur });
+  assert.deepEqual(f.figures, { player: game.run!.now.player, minotaur: game.run!.now.minotaur, hazards: [] });
   assert.equal(f.done, true);
 });
 
@@ -167,4 +167,20 @@ test('a play-out waits while its turn has a page to reach or is paused at one, a
   game.finishAnim();
   m.advance(SLIDE_MS * 3);
   assert.equal(game.run!.now.outcome, 'won');
+});
+
+test('while the hazards move, the board draws the state once the player has acted, not the turn\'s end', () => {
+  const before = grid(['P.o!..', '......', '.....M'], 'facing: right');
+  const r = step(before, mv('down'));
+  const mid = act(before, mv('down')).state;
+  const tl = timeline(before, r.events, false, r.state);
+  const g = { run: { now: r.state }, anim: { timeline: tl, started: 0, before, mid } } as unknown as Parameters<typeof frameOf>[0];
+  const bomb = 3;
+  assert.equal(frameOf(g, tl.playerEnd - 1)!.state, before);
+  const moving = frameOf(g, tl.playerEnd + SLIDE_MS / 2)!.state;
+  assert.equal(moving, mid);
+  assert.equal(moving.terrain[bomb], 'bomb', 'the bomb waits for the ball');
+  assert.deepEqual(moving.player, { r: 1, c: 0 });
+  assert.equal(frameOf(g, tl.hazardEnd)!.state, r.state);
+  assert.equal(r.state.terrain[bomb], 'floor');
 });

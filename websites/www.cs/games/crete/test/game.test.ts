@@ -229,3 +229,104 @@ test('a lost try records nothing', () => {
   assert.deepEqual(added, []);
   assert.deepEqual(game.found, []);
 });
+
+/** A game on one level, recording the sounds and the lines said. */
+function lone(rows: string[], header = '') {
+  const sounds: string[] = [];
+  const said: string[] = [];
+  const m = manualClock();
+  const game = createGame({
+    sfx: n => sounds.push(n), say: t => said.push(t), progress: createProgress(null), pages: createFoundPages(null),
+    timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    levels: { count: 1, id: () => 'lone', level: () => parse(`title: t\nintro: i\n${header}\n${rows.join('\n')}\n`) },
+  });
+  game.open(0);
+  return { game, sounds, said };
+}
+const R_ = mv('right');
+
+test('a win on a scratch level records no progress and finds no pages', () => {
+  const added: string[][] = [];
+  const progress = createProgress(null);
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say() {}, progress, timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    pages: { has: () => false, all: () => [], add: ids => { added.push([...ids]); return [...ids]; } },
+    levels: { count: 1, id: () => 'test-level', scratch: () => true, level: () => parse('title: t\nintro: i\npages: a\n\n#####\n#PpE#\n#####\n') },
+  });
+  game.open(0);
+  game.press(R_);
+  game.press(R_);
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.equal(progress.get('test-level').cleared, false);
+  assert.deepEqual(added, []);
+  assert.deepEqual(game.found, []);
+});
+
+test('a catch names the hazard on a teleport exit and on a ride onto one', () => {
+  const exit = lone(['P@..', '..@w'], 'facing: left');
+  exit.game.press(R_);
+  assert.deepEqual(exit.said, ['The Harpy caught you! 2 hearts left.']);
+  const ride = lone(['P=@.', '..@e'], 'facing: up');
+  ride.game.press(R_);
+  assert.deepEqual(ride.said, ["Talos's fire caught you! 2 hearts left."]);
+});
+
+test('every new event has a sound', () => {
+  const cases: [name: string, rows: string[], header: string, actions: Action[], sound: string][] = [
+    ['held', ['-.P&.'], '', [R_], 'snap'],
+    ['revealed', ['PW...M'], '', [R_], 'reveal'],
+    ['rose', ['P;.'], '', [R_, R_], 'rise'],
+    ['teleported', ['P@..', '..@.'], '', [R_], 'warp'],
+    ['robbed', ['Pfkrz$.'], '', [R_, R_, R_, R_, R_], 'thief'],
+    ['exploded', ['PO!.'], '', [R_], 'boom'],
+    ['cloned', ['P+C.'], 'machines: block-right', [R_], 'clone'],
+    ['sent-home', ['Po.'], 'facing: left', [{ kind: 'wait' }], 'home'],
+    ['hazard catch', ['P.o...M'], 'facing: left', [R_], 'caught'],
+  ];
+  for (const [name, rows, header, actions, sound] of cases) {
+    const h = lone(rows, header);
+    for (const a of actions) h.game.press(a);
+    assert.ok(h.sounds.includes(sound), `${name} plays ${sound}: ${h.sounds.join(' ')}`);
+  }
+});
+
+test('a catch names what caught Theseus', () => {
+  const ball = lone(['P.o...M'], 'facing: left');
+  ball.game.press(R_);
+  assert.deepEqual(ball.said, ['The Bronze ball caught you! 2 hearts left.']);
+  const harpy = lone(['P.w...M'], 'facing: left');
+  harpy.game.press(R_);
+  assert.deepEqual(harpy.said, ['The Harpy caught you! 2 hearts left.']);
+  const fire = lone(['P.e...M'], 'facing: left');
+  fire.game.press(R_);
+  assert.deepEqual(fire.said, ["Talos's fire caught you! 2 hearts left."]);
+  const walked = lone(['.Po..M'], 'facing: up');
+  walked.game.press(R_);
+  assert.deepEqual(walked.said, ['The Bronze ball caught you! 2 hearts left.']);
+  const minotaur = lone(['PM'], '');
+  minotaur.game.press({ kind: 'wait' });
+  assert.deepEqual(minotaur.said, ['Caught! 2 hearts left.']);
+});
+
+test('a bomb, a snare, a thief and a revealed wall each get one line; hazard steps get none', () => {
+  const bomb = lone(['P!...M'], '');
+  bomb.game.press(R_);
+  assert.deepEqual(bomb.said, ['A bomb! 2 hearts left.']);
+  const snare = lone(['-.P&.'], '');
+  snare.game.press(R_);
+  assert.deepEqual(snare.said, ["Daedalus's snare holds you."]);
+  const thief = lone(['Pf$.'], '');
+  thief.game.press(R_);
+  thief.game.press(R_);
+  assert.deepEqual(thief.said, ['The thief took your gear.']);
+  const wall = lone(['PW...M'], '');
+  wall.game.press(R_);
+  assert.deepEqual(wall.said, ['A false wall gives way!']);
+  const unseen = lone(['PI...M'], '');
+  unseen.game.press(R_);
+  assert.deepEqual(unseen.said, ['A hidden wall!']);
+  const steps = lone(['P....o'], 'facing: left');
+  steps.game.press({ kind: 'wait' });
+  assert.deepEqual(steps.said, []);
+});

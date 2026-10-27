@@ -25,8 +25,8 @@ test('every frame lies inside tiles.png', () => {
   }
 });
 
-test('water, fire, the force floors and the Minotaur loop; everything else is still', () => {
-  const loops = ['water', 'fire', 'force-up', 'force-down', 'force-left', 'force-right', 'minotaur'];
+test('water, fire, the force floors, the teleport, the Minotaur and the hazards loop; everything else is still', () => {
+  const loops = ['water', 'fire', 'force-up', 'force-down', 'force-left', 'force-right', 'teleport', 'minotaur', 'ball', 'glider', 'fireball'];
   for (const [name, s] of Object.entries(atlas.sprites)) {
     if (loops.includes(name)) assert.ok(s.frames >= 6 && s.fps > 0, name);
     else assert.equal(s.frames, 1, name);

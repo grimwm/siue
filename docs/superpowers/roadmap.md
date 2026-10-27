@@ -11,10 +11,11 @@ Live: the shell, the engine, Chapter 1 (ten levels, story pages, the Lore book),
 full keyboard play, and the fast solver.
 
 1. **Nine new pieces** — design `specs/2026-10-21-crete-pieces-design.md`,
-   plan `plans/2026-10-27-crete-pieces.md`. The rules and both solvers are
-   done: every piece is in the engine, the packing, the estimate, the pruning
-   and the same-answers corpus. The art and the sounds come next, in the
-   second pull request. The game lives in `websites/www.cs/games/crete/`; its
+   plan `plans/2026-10-27-crete-pieces.md`. Live in the engine, both solvers,
+   the art and the sound: the nine pieces and the three hazards are in the
+   rules, the packing, the estimate, the pruning and the same-answers corpus,
+   drawn on the board, voiced, logged and explained in the help. The next step
+   is the editor. The game lives in `websites/www.cs/games/crete/`; its
    `test/pieces.test.ts` fails until a new kind is handled in
    `src/puzzle/pack.ts`, `heuristic.ts`, `prune.ts` and the same-answers
    corpus.

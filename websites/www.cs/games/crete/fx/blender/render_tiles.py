@@ -1,16 +1,16 @@
 """The Island of Crete: render every board sprite with Blender.
 
-Builds each terrain, object and figure of the puzzle as a small painted scene in
+Builds each terrain, object, figure and hazard of the puzzle as a small painted scene in
 code (no outside assets), renders it through one fixed camera and light rig, and
 tiles the frames into one PNG atlas, `tiles.png`, with `tiles.json` naming where
 each sprite sits. The game (src/puzzle/tiles.ts lists the names) reads both.
 
 Regenerate (from this folder; Blender 4.2 or newer, tested on 5.2):
 
-    /Applications/Blender.app/Contents/MacOS/Blender -b -P render_tiles.py -- --out ../sprites
+    blender -b -P render_tiles.py -- --out ../sprites
 
-Install Blender with `brew install --cask blender`. The 16 px check and the
-quantize pass use the system `python3` with Pillow (`pip3 install pillow`).
+with `blender` on the PATH. The 16 px check and the quantize pass use the system
+`python3` with Pillow (`pip3 install pillow`).
 
 Options (after the `--`):
 
@@ -50,7 +50,7 @@ light every sprite the same way, so tiles join; figures add a rim light from
 behind, and figures and objects get a dark outline (an inverted hull) that keeps
 them readable at 16 px.
 
-The 16 px check. After the atlas is written, every object and figure's first frame
+The 16 px check. After the atlas is written, every object, figure and hazard's first frame
 is shrunk to 16 px wide and must cover 12-85% of its frame and differ in mean
 luminance from the floor by at least 0.18; the script lists each failure and exits
 non-zero. It also writes preview-16.png (every sprite at 16, 24 and 48 px) and
@@ -869,6 +869,174 @@ def build_force(f, direction):
         key_val(ph.outputs[0], fr, 2.0 * fr / n)
 
 
+# ------------------------------------------------------------ trap and trick tiles
+def build_trap(f):
+    """Daedalus's snare: two toothed bronze jaws lying open round a trigger plate,
+    sunk in a dark pit in the floor."""
+    slab(floor_mat())
+    pit = paint('snare-pit', '#21180f', rough=1.0)
+    bz = bronze('snare', '#9c6128')
+    tooth = paint('snare-tooth', '#d6b070', rough=0.3, metal=0.7)
+    cyl((0, 0, 0.0), 0.39, length=0.012, mat=pit, seg=32, outline=False)
+    torus((0, 0, 0.012), 0.36, 0.028, bz, outline=False)
+    for sy in (-1, 1):
+        y = sy * 0.2
+        box(-0.3, 0.3, y - 0.035, y + 0.035, 0.0, 0.06, bz, bz, 0.01, outline=False)
+        for i in range(6):
+            x = -0.25 + i * 0.1
+            cyl((x, y - sy * 0.02, 0.11), 0.034, 0.0, 0.11, mat=tooth, seg=8, rot=(sy * 0.45, 0, 0), outline=False)
+        for sx in (-1, 1):
+            cyl((sx * 0.31, y, 0.05), 0.04, length=0.06, axis='X', mat=bz, seg=12, outline=False)
+    cyl((0, 0, 0.02), 0.08, length=0.03, mat=paint('snare-plate', '#c48a3c', rough=0.35, metal=0.7), outline=False)
+
+
+def build_inlay_button(f, color):
+    """A disc of coloured enamel set flush in the floor in a gold rim, with a cream
+    ring and a gold boss in the middle: the brown and red buttons (the plain button
+    is a raised bronze plunger)."""
+    slab(floor_mat())
+    cyl((0, 0, 0.0), 0.36, length=0.02, mat=paint('inlay-ring', '#2a2118', rough=1.0), seg=32, outline=False)
+    torus((0, 0, 0.014), 0.33, 0.036, gold('inlay-rim'), outline=False)
+    cyl((0, 0, 0.016), 0.3, length=0.03, mat=enamel('inlay-' + color, INLAY_COLORS[color]), seg=32, outline=False)
+    torus((0, 0, 0.034), 0.18, 0.018, paint('inlay-cream', '#f2e2b8', rough=0.5), outline=False)
+    ball((0, 0, 0.03), 0.07, gold('inlay-boss'), (1, 1, 0.45), 14, 8, outline=False)
+
+
+INLAY_COLORS = {'brown': '#5c2a0c', 'red': '#d01c14'}
+
+
+def build_popup(f):
+    """The pop-up wall, still down: a pale slab standing proud of the floor inside a
+    bronze lip, a dark gap all round it."""
+    slab(floor_mat())
+    gap = paint('popup-gap', '#1d150e', rough=1.0)
+    bz = bronze('popup-lip', '#b07434')
+    box(-0.44, 0.44, -0.44, 0.44, -0.02, 0.004, gap, gap, 0.0, outline=False)
+    ring(0.42, 0.36, 0.04, bz, paint('popup-lip-side', '#6a3e18', rough=0.6, metal=0.3), depth=0.05)
+    box(-0.34, 0.34, -0.34, 0.34, 0.0, 0.12, limestone('popup-top', '#e8dcbc', '#d4c6a0', grid=False),
+        paint('popup-side', '#8a7c60', rough=0.9), 0.012, outline=False)
+
+
+def build_gravel(f):
+    """Loose grey scree: a bed of grit heaped with small stones of three greys."""
+    m = MB('gravel')
+    nz = m.noise(22, 6, 0.7)
+    col = m.ramp(nz, [(0.3, '#a49c8e'), (0.55, '#857d70'), (0.75, '#6a6358')])
+    peb = m.voronoi(18)
+    col = m.mix(col, m.ramp(peb, [(0.0, '#5a544a'), (0.2, '#ffffff')]), 0.8, 'MULTIPLY')
+    col = m.groove(col)
+    m.pbr(col, 0.95, 0.0, m.bump(m.math('ADD', nz, peb), 1.0, 0.04), spec=0.1)
+    slab(m.mat)
+    rng = random.Random(ARGS['seed'])
+    stones = [paint('scree-%d' % i, c, rough=0.85, var=0.25) for i, c in
+              enumerate(('#c9c2b4', '#8f887c', '#5e584f'))]
+    for _ in range(46):
+        x, y = rng.uniform(-0.46, 0.46), rng.uniform(-0.46, 0.46)
+        r = rng.uniform(0.03, 0.06)
+        ball((x, y, 0.0), r, rng.choice(stones), (1, rng.uniform(0.7, 1.0), 0.55), 8, 6, outline=False,
+             rot=(0, 0, rng.uniform(0, math.pi)))
+
+
+def build_teleport(f):
+    """A bronze-rimmed disc inlaid with a two-armed labyrinth spiral of gold on deep
+    blue that turns and glows at its heart. The 'phase' value runs 0..1, which turns
+    the spiral half a turn: one arm onto the other, so the loop closes."""
+    n = ARGS_FRAMES['teleport']
+    slab(floor_mat())
+    m = MB('teleport')
+    ph = m.value('phase')
+    s = m.sep()
+    r = m.vmath('LENGTH', m.comb(s.outputs['X'], s.outputs['Y']))
+    a = m.math('ARCTAN2', s.outputs['Y'], s.outputs['X'])
+    sp = m.math('FRACT', m.math('SUBTRACT', m.math('SUBTRACT', m.math('MULTIPLY', r, 6.0),
+                                                  m.math('MULTIPLY', a, 2.0 / math.tau)), ph.outputs[0]))
+    band = m.ramp(sp, [(0.0, '#000000'), (0.08, '#ffffff'), (0.42, '#ffffff'), (0.5, '#000000')])
+    col = m.mix('#0d2457', m.ramp(r, [(0.0, '#ffe9a0'), (0.35, '#e0a63a')]), band, 'MIX')
+    glow = m.ramp(r, [(0.0, '#c8f6ff'), (0.14, '#3aa6e0'), (0.32, '#000000')])
+    emit = m.mix(m.mix('#000000', '#5a3a08', band, 'MIX'), glow, 1.0, 'ADD')
+    m.pbr(col, 0.35, 0.5, m.bump(band, 0.4, 0.02), emit=emit, estr=1.6, spec=0.6)
+    cyl((0, 0, 0.0), 0.37, length=0.03, mat=m.mat, seg=48, outline=False)
+    torus((0, 0, 0.015), 0.385, 0.03, bronze('teleport-rim', '#b07434'), outline=False)
+    for i in range(8):
+        a = i / 8 * math.tau
+        ball((math.cos(a) * 0.385, math.sin(a) * 0.385, 0.04), 0.022, gold('teleport-stud'), outline=False)
+    for fr in range(n):
+        key_val(ph.outputs[0], fr, fr / n)
+
+
+def build_thief(f):
+    """The thief's mark: an open, grasping gold hand inlaid in a round mosaic of
+    dark purple tesserae."""
+    slab(floor_mat())
+    m = MB('thief-mosaic')
+    v = m.voronoi(26, out='Color')
+    col = m.ramp(m.n('ShaderNodeSeparateColor', inp={'Color': v}).outputs[0],
+                 [(0.0, '#2c1838'), (0.5, '#43264f'), (1.0, '#5a3368')])
+    edge = m.voronoi(26, 'DISTANCE_TO_EDGE')
+    col = m.mix(col, m.ramp(edge, [(0.0, '#1a0e20'), (0.06, '#ffffff')]), 1.0, 'MULTIPLY')
+    m.pbr(col, 0.6, 0.0, m.bump(edge, 0.4, 0.02), spec=0.4)
+    cyl((0, 0, 0.0), 0.38, length=0.024, mat=m.mat, seg=40, outline=False)
+    torus((0, 0, 0.012), 0.385, 0.026, gold('thief-rim'), outline=False)
+    hand = enamel('thief-hand', '#f0bc4a')
+    z = 0.012
+    prism([(-0.12, -0.24), (0.11, -0.24), (0.14, -0.06), (0.12, 0.06), (-0.12, 0.06), (-0.14, -0.06)], 0.03, hand,
+          'XY', z, outline=False)
+    for ang, length, x0 in ((-0.22, 0.17, -0.09), (-0.07, 0.2, -0.03), (0.07, 0.2, 0.03), (0.2, 0.17, 0.09)):
+        rt = empty((x0, 0.04, 0))
+        rt.rotation_euler = (0, 0, -ang)
+        prism([(-0.026, 0.0), (0.026, 0.0), (0.024, length), (-0.024, length)], 0.03, hand, 'XY', z, parent=rt,
+              outline=False)
+        ball((0.0, length, z + 0.015), 0.03, hand, (1, 1, 0.6), 10, 6, parent=rt, outline=False)
+    rt = empty((-0.12, -0.1, 0))
+    rt.rotation_euler = (0, 0, math.radians(55))
+    prism([(-0.028, 0.0), (0.028, 0.0), (0.024, 0.15), (-0.024, 0.15)], 0.03, hand, 'XY', z, parent=rt, outline=False)
+    ball((0.0, 0.15, z + 0.015), 0.03, hand, (1, 1, 0.6), 10, 6, parent=rt, outline=False)
+
+
+def build_bomb(f):
+    """A round clay pot painted with dark Minoan bands, a lit wick fizzing in its mouth."""
+    slab(floor_mat())
+    clay = paint('pot-clay', '#d8945a', rough=0.75, var=0.2, bump=0.2)
+    band = paint('pot-band', '#2a160c', rough=0.7)
+    ball((0, 0.0, 0.22), 0.24, clay, (1, 1, 0.92), 28, 18, outline=True)
+    for z, rr, w in ((0.22, 0.24, 0.03), (0.12, 0.2, 0.018), (0.32, 0.2, 0.018)):
+        torus((0, 0, z), rr - w * 0.4, w, band, outline=False)
+    cyl((0, 0, 0.44), 0.1, 0.085, 0.07, mat=clay, seg=20, outline=True)
+    torus((0, 0, 0.475), 0.09, 0.02, clay, outline=False)
+    cyl((0, 0, 0.47), 0.07, length=0.012, mat=paint('pot-mouth', '#140c06', rough=1.0), seg=16, outline=False)
+    wick = paint('wick', '#3a2a1a', rough=0.9)
+    cyl((0.02, 0, 0.53), 0.012, length=0.12, mat=wick, seg=6, rot=(0, 0.35, 0), outline=False)
+    spark = MB('wick-flame')
+    spark.emission('#ffb02a', 3.0)
+    t = tongue(0.16, 0.05, spark.mat)
+    t.location = (0.045, 0, 0.58)
+    hot = MB('wick-spark')
+    hot.emission('#fff2b0', 4.0)
+    ball((0.045, -0.01, 0.6), 0.03, hot.mat, outline=False)
+    blob(0.3, 0.0, 0.35)
+
+
+def build_clone(f, direction):
+    """A bronze casting mould: a squat block with a dark cavity cut in its top, the
+    seam of its two halves, and a gold arrow on the cavity pointing the way its
+    casts come out."""
+    slab(floor_mat())
+    bz = bronze('mould', '#9c6128')
+    side = paint('mould-side', '#6a3e18', rough=0.5, metal=0.4)
+    h = 0.2
+    box(-0.42, 0.42, -0.42, 0.42, 0.0, h, bz, side, 0.02, outline=False)
+    box(-0.3, 0.3, -0.3, 0.3, h - 0.002, h + 0.004, paint('mould-cavity', '#1d120a', rough=1.0), None, 0.0,
+        outline=False)
+    box(-0.43, 0.43, -0.006, 0.006, 0.02, h + 0.003, side, side, 0.0, outline=False)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            ball((sx * 0.36, sy * 0.36, h), 0.028, gold('mould-rivet'), (1, 1, 0.6), 10, 6, outline=False)
+    rt = empty((0, 0, 0))
+    rt.rotation_euler = (0, 0, {'right': 0.0, 'up': math.pi / 2, 'left': math.pi, 'down': -math.pi / 2}[direction])
+    prism([(-0.22, -0.06), (0.03, -0.06), (0.03, -0.16), (0.24, 0.0), (0.03, 0.16), (0.03, 0.06), (-0.22, 0.06)],
+          0.02, enamel('mould-arrow', '#f2c040'), 'XY', h + 0.002, parent=rt, outline=False)
+
+
 # --------------------------------------------------------------------- objects
 def build_relic(f):
     g = gold('labrys')
@@ -1171,9 +1339,142 @@ def build_minotaur_stone(f):
     build_minotaur(f, stone=True)
 
 
+# --------------------------------------------------------------------- hazards
+def build_ball(f):
+    """The bronze ball: a heavy riveted sphere rolling on the spot. Its studs sit
+    every 45 degrees round the rolling circle and it turns 90 degrees over the
+    loop, so the last frame meets the first. The tilted camera draws depth and
+    height both at full length, so the sphere is squashed by SQ across the rolling
+    axis to look round; rolling about that axis keeps its outline."""
+    n = ARGS_FRAMES['ball']
+    R = 0.29
+    SQ = 0.71
+    y = Y0
+    c = Vector((0, y, R * SQ))
+    k = Vector((R, R * SQ, R * SQ))
+    rt = empty(tuple(c))
+    parts = [ball(tuple(c), R, bronze('ball-bronze', '#a86a2c'), (1, SQ, SQ), seg=28, rings=18)]
+    band = paint('ball-band', '#5a3412', rough=0.5, metal=0.5)
+    parts.append(torus(tuple(c), R * SQ, 0.022, band, rot=(0, math.pi / 2, 0), outline=False))
+    stud = gold('ball-stud')
+    for lat in (-0.75, 0.0, 0.75):
+        for i in range(8):
+            a = i / 8 * math.tau
+            d = Vector((math.sin(lat), math.cos(lat) * math.cos(a), math.cos(lat) * math.sin(a)))
+            parts.append(ball(tuple(c + d * k), 0.032, stud, seg=8, rings=6, outline=False))
+    for o in parts:
+        child_of(o, rt)
+    for fr in range(n):
+        key_obj(rt, fr, rotation_euler=(-fr / n * math.pi / 2, 0, 0))
+    blob(0.32, y, 0.45)
+
+
+def build_glider(f):
+    """The harpy: a bird's feathered body and talons under a woman's head, beating
+    two broad brown wings."""
+    n = ARGS_FRAMES['glider']
+    y = Y0
+    lift = 0.12
+    skin = paint('harpy-skin', '#d4996a', rough=0.6, var=0.15)
+    hair = paint('harpy-hair', '#1e120a', rough=0.7)
+    body = paint('harpy-feather', '#6b4226', rough=0.8, var=0.35, bump=0.5, scale=30)
+    wing = paint('harpy-wing', '#5a3218', rough=0.8, var=0.3, bump=0.4, scale=24)
+    wing_in = paint('harpy-wing-in', '#b47a3c', rough=0.75, var=0.3)
+    claw = paint('harpy-talon', '#e0b030', rough=0.5)
+    rt = empty((0, 0, 0))
+    parts = [ball((0, y, lift + 0.27), 0.14, body, (0.95, 0.75, 1.15))]
+    parts.append(prism([(-0.1, lift + 0.2), (0.1, lift + 0.2), (0.06, lift + 0.06), (0.0, lift + 0.02),
+                        (-0.06, lift + 0.06)], 0.06, body, at=y + 0.02))
+    for sx in (-1, 1):
+        parts.append(cyl((sx * 0.05, y, lift + 0.11), 0.018, length=0.14, mat=claw, seg=8))
+        for k in (-1, 0, 1):
+            parts.append(cyl((sx * 0.05 + k * 0.025, y - 0.02, lift + 0.035), 0.012, 0.0, 0.05, mat=claw, seg=6,
+                             rot=(0, k * 0.5, 0), outline=False))
+    parts.append(ball((0, y - 0.06, lift + 0.4), 0.08, skin, (1.0, 0.7, 0.85)))
+    parts.append(cyl((0, y - 0.03, lift + 0.47), 0.035, length=0.06, mat=skin, seg=10, outline=False))
+    parts.append(ball((0, y + 0.06, lift + 0.47), 0.075, hair, (1.15, 0.5, 1.3)))
+    parts.append(ball((0, y - 0.04, lift + 0.54), 0.09, skin))
+    parts.append(ball((0, y + 0.03, lift + 0.575), 0.088, hair, (1.08, 0.75, 0.55)))
+    for sx in (-1, 1):
+        parts.append(ball((sx * 0.034, y - 0.122, lift + 0.545), 0.015, MB_emit('harpy-eye', '#ffd23a', 1.5),
+                          outline=False))
+    parts.append(cyl((0, y - 0.0, lift + 0.6), 0.088, length=0.018, mat=gold('harpy-band'), seg=16, outline=False))
+    for o in parts:
+        child_of(o, rt)
+    shape = [(0.0, 0.05), (0.1, 0.13), (0.24, 0.19), (0.38, 0.17), (0.42, 0.1), (0.36, 0.07), (0.38, 0.0),
+             (0.3, -0.01), (0.31, -0.07), (0.22, -0.06), (0.22, -0.12), (0.13, -0.07), (0.1, -0.12), (0.03, -0.05)]
+    inner = [(0.03, 0.04), (0.11, 0.1), (0.23, 0.14), (0.33, 0.12), (0.22, 0.05), (0.08, -0.02)]
+    sh_z = lift + 0.4
+    wings = []
+    for sx in (-1, 1):
+        sh = (sx * 0.08, y + 0.04, sh_z)
+        w = empty(sh, parent=rt)
+        pts = [(sh[0] + sx * px, sh_z + pz) for px, pz in shape]
+        ipts = [(sh[0] + sx * px, sh_z + pz) for px, pz in inner]
+        if sx < 0:
+            pts, ipts = pts[::-1], ipts[::-1]
+        for o in (prism(pts, 0.03, wing, at=y + 0.06), prism(ipts, 0.02, wing_in, at=y + 0.035, outline=False)):
+            child_of(o, w)
+        wings.append((w, sx))
+    for fr in range(n):
+        t = fr / n
+        flap = 0.15 + 0.5 * math.sin(math.tau * t)
+        key_obj(rt, fr, location=(0, 0, -0.03 * math.sin(math.tau * t)))
+        for w, sx in wings:
+            key_obj(w, fr, rotation_euler=(0, -sx * flap, 0))
+    blob(0.28, y, 0.4)
+
+
+def MB_emit(name, color, strength):
+    m = MB(name)
+    return m.emission(color, strength)
+
+
+def build_fireball(f):
+    """Talos's fire: a lump of molten bronze, a dark crust split by glowing seams,
+    wrapped in flickering flames that stream up off it."""
+    n = ARGS_FRAMES['fireball']
+    y = Y0
+    c = (0, y, 0.24)
+    m = MB('molten')
+    w = m.value('w')
+    nz = m.noise(6, 4, 0.6, w=w.outputs[0])
+    seam = m.voronoi(9.0, 'DISTANCE_TO_EDGE')
+    crust = m.ramp(nz, [(0.3, '#6a3212'), (0.7, '#9a5420')])
+    hot = m.ramp(seam, [(0.0, '#ffd060'), (0.06, '#ff6a10'), (0.12, '#000000')])
+    m.pbr(crust, 0.4, 0.6, m.bump(seam, 0.6, 0.02), emit=hot, estr=3.0, spec=0.6)
+    ball(c, 0.17, m.mat, (1, 0.71, 0.71), 24, 16)
+    fm = MB('talos-flame')
+    z = fm.sep()
+    fac = fm.math('DIVIDE', fm.math('SUBTRACT', z.outputs['Z'], 0.12), 0.45, True)
+    lw = fm.n('ShaderNodeLayerWeight', inp={'Blend': 0.5}).outputs['Facing']
+    col = fm.ramp(fac, [(0.0, '#a8280a'), (0.35, '#e8580c'), (0.7, '#ff9a20'), (1.0, '#ffd870')])
+    col = fm.mix(col, shade('#ffffff', 0.7), fm.math('SUBTRACT', 1.0, lw, True), 'MULTIPLY')
+    fm.emission(col, 2.0)
+    rng = random.Random(ARGS['seed'] + 3)
+    tongues = []
+    for i in range(9):
+        a = i / 9 * math.tau + rng.uniform(-0.3, 0.3)
+        rr = 0.0 if i == 0 else 0.14
+        hgt = 0.44 if i == 0 else rng.uniform(0.24, 0.34)
+        o = tongue(hgt, 0.13 if i == 0 else rng.uniform(0.08, 0.11), fm.mat)
+        o.location = (math.cos(a) * rr, y + math.sin(a) * rr * 0.6 + 0.04, 0.12)
+        tongues.append((o, math.cos(a) * 0.5 if i else 0.0, rng.uniform(0, math.tau), rng.choice((1, 2)),
+                        rng.uniform(0.08, 0.16)))
+    for fr in range(n):
+        t = fr / n
+        key_val(w.outputs[0], fr, 0.6 * math.sin(math.tau * t))
+        for o, lean, ph, k, amp in tongues:
+            s = 1.0 + 0.2 * math.sin(math.tau * t * k + ph)
+            key_obj(o, fr, scale=(1.0, 1.0, s),
+                    rotation_euler=(amp * math.sin(math.tau * t + ph), lean + amp * math.sin(math.tau * t + ph * 1.7), 0.0))
+    blob(0.26, y, 0.45)
+
+
 # -------------------------------------------------------------------- sprites
-# name, builder, frames, fps, kind, outline. Rows of the atlas follow this order
-# (the order tiles.ts lists them: terrain, then objects, then figures).
+# name, builder, frames, fps, kind. Rows of the atlas follow this order (the order
+# tiles.ts lists them: terrain, then objects, then figures, then the hazards, which
+# are drawn and checked as figures).
 SPRITES = [
     ('floor', build_floor, 1, 0, 'terrain'),
     ('wall', build_wall, 1, 0, 'terrain'),
@@ -1196,6 +1497,18 @@ SPRITES = [
     ('door-blue', lambda f: build_door(f, 'blue'), 1, 0, 'terrain'),
     ('door-yellow', lambda f: build_door(f, 'yellow'), 1, 0, 'terrain'),
     ('door-green', lambda f: build_door(f, 'green'), 1, 0, 'terrain'),
+    ('trap', build_trap, 1, 0, 'terrain'),
+    ('button-brown', lambda f: build_inlay_button(f, 'brown'), 1, 0, 'terrain'),
+    ('button-red', lambda f: build_inlay_button(f, 'red'), 1, 0, 'terrain'),
+    ('popup', build_popup, 1, 0, 'terrain'),
+    ('gravel', build_gravel, 1, 0, 'terrain'),
+    ('teleport', build_teleport, 8, 8, 'terrain'),
+    ('thief', build_thief, 1, 0, 'terrain'),
+    ('bomb', build_bomb, 1, 0, 'terrain'),
+    ('clone-up', lambda f: build_clone(f, 'up'), 1, 0, 'terrain'),
+    ('clone-down', lambda f: build_clone(f, 'down'), 1, 0, 'terrain'),
+    ('clone-left', lambda f: build_clone(f, 'left'), 1, 0, 'terrain'),
+    ('clone-right', lambda f: build_clone(f, 'right'), 1, 0, 'terrain'),
     ('relic', build_relic, 1, 0, 'object'),
     ('key-red', lambda f: build_key(f, 'red'), 1, 0, 'object'),
     ('key-blue', lambda f: build_key(f, 'blue'), 1, 0, 'object'),
@@ -1214,6 +1527,9 @@ SPRITES = [
     ('minotaur', build_minotaur, 8, 6, 'figure'),
     ('minotaur-stone', build_minotaur_stone, 1, 0, 'figure'),
     ('cow-standing', lambda f: build_cow(f, True), 1, 0, 'figure'),
+    ('ball', build_ball, 8, 10, 'figure'),
+    ('glider', build_glider, 8, 10, 'figure'),
+    ('fireball', build_fireball, 8, 10, 'figure'),
 ]
 ARGS_FRAMES = {name: frames for name, _, frames, _, _ in SPRITES}
 

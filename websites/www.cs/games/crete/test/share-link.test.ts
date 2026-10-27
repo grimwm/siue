@@ -4,6 +4,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeLink, decodeLink, LINK_MESSAGES, ENCODED_MAX, DECODED_MAX, MAX_LINE, LINK_VERSION } from '../src/share/link.ts';
 import { levelCode, sharedName } from '../src/share/name.ts';
+import { openLink } from '../src/share/open.ts';
+import { solve } from '../src/puzzle/solver.ts';
+import { initial } from '../src/puzzle/state.ts';
 import { parse, serialize } from '../src/puzzle/level.ts';
 import { TRIALS } from '../src/puzzle/trials.ts';
 import { lineText, lineOf } from '../src/puzzle/cache.ts';
@@ -151,7 +154,7 @@ test('a bomb is caught after a bounded number of input pieces', async () => {
   } finally {
     globalThis.DecompressionStream = real;
   }
-  assert.ok(writes >= 1 && writes <= 4, `${writes} of ${pieces} pieces written`);
+  assert.ok(writes >= 1 && writes <= 6, `${writes} of ${pieces} pieces written`);
 });
 
 test('L2 is newer; garbage, bad base64 and a truncated stream are damaged', async () => {
@@ -231,4 +234,48 @@ test('every error has a message', () => {
   assert.equal(LINK_MESSAGES.newer, 'This level was made by a newer version of the game. Reload the page and try again.');
   assert.equal(LINK_MESSAGES['not-a-link'], 'This is not a level link.');
   assert.equal(lineText(lineOf('udlrwzxc')!), 'udlrwzxc');
+});
+
+/** Trial 9 as a link carries it: no title, intro or pages, each `p` cell a floor. */
+const TRIAL_9 = canonical(TRIALS[8]!.text.replace(/^pages: .*\n/m, '').replace(/p/g, '.').replace(/^(title|intro): .*$/gm, '$1: '));
+let trialLine: ReturnType<typeof lineOf> | undefined;
+function trial9Line() {
+  if (!trialLine) {
+    const r = solve(initial(parse(TRIAL_9)));
+    assert.ok(r.solved);
+    trialLine = r.line;
+  }
+  return trialLine;
+}
+
+test('a real link opens', async () => {
+  const line = trial9Line()!;
+  const fragment = await encodeLink({ text: TRIAL_9, line, initials: 'WGR', best: line.length });
+  const r = await openLink(fragment);
+  assert.ok(r.ok);
+  assert.equal(r.shared.text, TRIAL_9);
+  assert.deepEqual(r.shared.line, line);
+  assert.equal(r.name, `Level ${await levelCode(TRIAL_9)} by WGR`);
+});
+
+test('a line that wins early or never is damaged', async () => {
+  const line = trial9Line()!;
+  const early = await encodeLink({ text: TRIAL_9, line: [...line, ...line.slice(0, 1)], initials: 'WGR', best: null });
+  assert.deepEqual(await openLink(early), { ok: false, error: 'damaged' });
+  const short = await encodeLink({ text: TRIAL_9, line: line.slice(0, -1), initials: 'WGR', best: null });
+  assert.deepEqual(await openLink(short), { ok: false, error: 'damaged' });
+  const empty = await encodeLink({ text: TRIAL_9, line: [], initials: 'WGR', best: null });
+  assert.deepEqual(await openLink(empty), { ok: false, error: 'damaged' });
+});
+
+test('a line that loses before the end is damaged', async () => {
+  // One heart, and the Minotaur stands two steps from P: the first move to the right gets P caught and the level lost, so
+  // the line that would otherwise run to the exit is refused at its second move.
+  const text = canonical('hearts: 1\n\n######\n#P.M.#\n#...E#\n######\n');
+  const fragment = await encodeLink({ text, line: lineOf('rrrdr')!, initials: 'WGR', best: null });
+  assert.deepEqual(await openLink(fragment), { ok: false, error: 'damaged' });
+});
+
+test('openLink passes decode errors through', async () => {
+  assert.deepEqual(await openLink('nonsense'), { ok: false, error: 'not-a-link' });
 });

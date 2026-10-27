@@ -48,7 +48,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ],
     [
       { strong: "Bombs" }, " cost a heart if you step on one, and destroy any block or hazard that meets one. ", { strong: "Clone machines" },
-      " copy what stands in them when you press a ", { strong: "red button" }, ".",
+      " copy what stands in them when a ", { strong: "red button" }, " is pressed.",
     ],
     [
       "The ", { strong: "Bronze ball" }, " rolls straight and turns back, the ", { strong: "Harpy" },

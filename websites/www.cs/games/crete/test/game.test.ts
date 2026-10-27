@@ -322,7 +322,10 @@ test('a bomb, a snare, a thief and a revealed wall each get one line; hazard ste
   assert.deepEqual(thief.said, ['The thief took your gear.']);
   const wall = lone(['PW...M'], '');
   wall.game.press(R_);
-  assert.deepEqual(wall.said, ['A hidden wall!']);
+  assert.deepEqual(wall.said, ['A false wall gives way!']);
+  const unseen = lone(['PI...M'], '');
+  unseen.game.press(R_);
+  assert.deepEqual(unseen.said, ['A hidden wall!']);
   const steps = lone(['P....o'], 'facing: left');
   steps.game.press({ kind: 'wait' });
   assert.deepEqual(steps.said, []);

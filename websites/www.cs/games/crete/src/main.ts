@@ -54,6 +54,7 @@ let scratch: Level | null = null;
 const levels: Levels = {
   count: CAMPAIGN_LEVELS.count,
   id: i => (scratch ? 'test-level' : CAMPAIGN_LEVELS.id(i)),
+  // Moves a queued scratch level into place; `game.open` is its only caller.
   level: i => {
     scratch = queued;
     queued = null;

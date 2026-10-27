@@ -1,5 +1,6 @@
 // The new pieces in a real browser: a small level with a Harpy and Daedalus's snare, opened through the test hook.
 // The Harpy moves when the player waits; Theseus held in the snare stays put after an arrow key.
+// The spec runs with reduced motion, so the hazard animation is covered by the unit tests (board-plan.test.ts), not here.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 

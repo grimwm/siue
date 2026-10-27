@@ -89,7 +89,7 @@ interface Seg { from: Cell; to: Cell; t0: number; ms: number }
 /** A block the player sets moving: where the state before the turn holds it, and its path. */
 interface BlockPath { origin: Cell; end: Cell; segs: Seg[] }
 /** A hazard of the state before the turn: where it stands now in the reading of the events, and its path. */
-interface HazardPath { kind: HazardKind; start: Cell; end: Cell; segs: Seg[]; moved: boolean }
+interface HazardPath { kind: HazardKind; start: Cell; end: Cell; segs: Seg[]; moved: boolean; exploded: boolean }
 
 const lerp = (a: Cell, b: Cell, t: number): Pos => ({ r: a.r + (b.r - a.r) * t, c: a.c + (b.c - a.c) * t });
 /** Where a path puts its figure at `ms`, or `rest` before it starts. */
@@ -108,8 +108,10 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
   const blocks: BlockPath[] = [];
   /** The ends of blocks made by a clone machine this turn: they appear when the turn lands. */
   const clonedBlocks: Cell[] = [];
-  const hazards: HazardPath[] = before.hazards.map(h => ({ kind: h.kind, start: h.at, end: h.at, segs: [], moved: false }));
+  const hazards: HazardPath[] = before.hazards.map(h => ({ kind: h.kind, start: h.at, end: h.at, segs: [], moved: false, exploded: false }));
   const taken: Taken[] = [];
+  /** The hazards made by a clone machine this turn. */
+  const clonedHazards: Figures['hazards'] = [];
   let playerT = 0;
   let current: HazardPath | null = null;
   const step = (segs: Seg[], from: Cell, to: Cell, t0: number, ms = SLIDE_MS) => segs.push({ from, to, t0, ms });
@@ -126,6 +128,7 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
     if (e.kind === 'took') taken.push({ what: e.what, at: e.at, ms: playerT });
     else if (e.kind === 'pushed') blocks.push({ origin: e.from, end: e.to, segs: [{ from: e.from, to: e.to, t0: playerT, ms: SLIDE_MS }] });
     else if (e.kind === 'cloned' && e.what === 'block') clonedBlocks.push(e.at);
+    else if (e.kind === 'cloned' && e.what !== 'block') clonedHazards.push({ kind: e.what, at: e.at });
     else if (e.kind === 'slid' && e.who === 'block') {
       const c = clonedBlocks.findIndex(x => same(x, e.from));
       const b = blockAt(e.from);
@@ -168,7 +171,7 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
         step(current.segs, e.from, e.to, current.segs.length * SLIDE_MS);
         current.end = e.to;
       }
-    } else if (e.kind === 'exploded' && e.who === 'hazard') drop(hazardAt(e.at));
+    } else if (e.kind === 'exploded' && e.who === 'hazard') { const h = hazardAt(e.at); if (h) h.exploded = true; drop(h); }
     else if (e.kind === 'sent-home') drop(hazardAt(e.from));
   }
   const blockEnd = Math.max(0, ...blocks.map(b => b.segs.at(-1)!.t0 + b.segs.at(-1)!.ms));
@@ -188,7 +191,11 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
       const f: Figures = {
         player: along(player, ms, before.player),
         minotaur: before.minotaur && along(minotaur, ms, before.minotaur),
-        hazards: hazards.map(h => ({ kind: h.kind, at: along(h.segs, ms, h.start) })),
+        // A destroyed hazard is gone once the hazards' moves land; a cloned one is there from then on.
+        hazards: [
+          ...hazards.filter(h => ms < hazardEnd || !h.exploded).map(h => ({ kind: h.kind, at: along(h.segs, ms, h.start) })),
+          ...(ms >= hazardEnd ? clonedHazards.filter(c => after.hazards.some(a => a.kind === c.kind && same(a.at, c.at))) : []),
+        ],
       };
       const moving = ms < playerEnd ? blocks.filter(b => ms >= b.segs[0]!.t0) : [];
       if (moving.length > 0) f.blocks = moving.map(b => ({ origin: b.origin, at: along(b.segs, ms, b.origin) }));

@@ -189,7 +189,7 @@ export function createGame(deps: GameDeps): Game {
           deps.sfx('snap');
           if (e.who === 'player') deps.say("Daedalus's snare holds you.", 'bad');
           break;
-        case 'revealed': deps.sfx('reveal'); deps.say('A hidden wall!'); break;
+        case 'revealed': deps.sfx('reveal'); deps.say(e.what === 'fake-wall' ? 'A false wall gives way!' : 'A hidden wall!'); break;
         case 'rose': deps.sfx('rise'); break;
         case 'teleported': deps.sfx('warp'); break;
         case 'robbed': deps.sfx('thief'); deps.say('The thief took your gear.', 'bad'); break;

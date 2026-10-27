@@ -172,13 +172,15 @@ test('a hazard destroyed plays its move and is gone when the turn lands; a clone
   assert.equal(tl.hazardEnd, tl.playerEnd + SLIDE_MS);
   assert.deepEqual(tl.at(SLIDE_MS / 2).hazards, [{ kind: 'ball', at: at(0, 2) }]);
   assert.deepEqual(tl.at(SLIDE_MS * 1.5).hazards, [{ kind: 'ball', at: at(0, 2.5) }]);
-  assert.deepEqual(tl.at(tl.duration - 1).hazards, [{ kind: 'ball', at: at(0, 3) }]);
+  assert.equal(tl.at(tl.hazardEnd - 1).hazards.length, 1);
+  assert.deepEqual(tl.at(tl.hazardEnd).hazards, [], 'gone once the hazards land, before the Minotaur steps');
   assert.deepEqual(tl.at(tl.duration).hazards, []);
   const c = grid(['P+C.', '....', '...M'], 'machines: ball-right');
   const made = step(c, mv('right'));
   assert.ok(made.events.some(e => e.kind === 'cloned'));
   const ctl = timeline(c, made.events, false, made.state);
-  assert.deepEqual(ctl.at(ctl.duration - 1).hazards, [], 'a clone appears only at the end');
+  assert.deepEqual(ctl.at(ctl.hazardEnd - 1).hazards, [], 'a clone appears when the hazards land');
+  assert.deepEqual(ctl.at(ctl.hazardEnd).hazards, rest(made.state).hazards);
   assert.deepEqual(ctl.at(ctl.duration).hazards, rest(made.state).hazards);
   assert.equal(ctl.at(ctl.duration).hazards.length, 1);
 });

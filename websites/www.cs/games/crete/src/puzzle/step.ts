@@ -30,7 +30,7 @@ function flip(w: Work, ev: GameEvent[]): void {
 function blockMayEnter(w: Work, x: Cell): boolean {
   return inside(w.level, x) && TERRAIN[tAt(w, x)].block && !oAt(w, x)
     && !same(x, w.player) && !same(x, w.minotaur) && !same(x, w.cow)
-    && !same(x, w.throwBack) && !same(x, w.level.minotaur) && !w.hazards.some(h => same(x, h.at));
+    && !same(x, w.throwBack) && !same(x, w.level.minotaur) && !(w.hazards.length > 0 && w.hazards.some(h => same(x, h.at)));
 }
 
 /** Where a block leaving `from` heading `d` lands: the cell `entry` next to it, or, when that is a teleport, the
@@ -113,8 +113,8 @@ function enterAsPlayer(w: Work, to: Cell, d: Dir, riding: boolean, ev: GameEvent
 
 /** The player is on `at`, heading `d`: a bomb catches them; else take what lies there, lose gear to a thief,
  *  press, mark the safe zone, win, or go out of a teleport and on to the cell beyond its exit. Out of a teleport
- *  entered on a ride, a block beyond is a blocked exit. */
-function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): void {
+ *  entered on a ride, a block beyond is a blocked exit. True when a bomb caught the player. */
+function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): boolean {
   leave(w, w.player, ev);
   w.player = at;
   const t = tAt(w, at);
@@ -122,7 +122,7 @@ function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): vo
     w.terrain[index(w, at)] = 'floor';
     ev.push({ kind: 'exploded', who: 'player', at });
     caught(w, ev, 'bomb');
-    return;
+    return true;
   }
   const o = oAt(w, at);
   if (o && o !== 'block') {
@@ -146,11 +146,12 @@ function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): vo
   }
   if (t === 'teleport') {
     const exit = teleportExit(w, at, d, x => playerMayEnter(w, x, d, riding));
-    if (!exit) return;
+    if (!exit) return false;
     enterAsPlayer(w, exit.to, d, riding, ev);
     ev.push({ kind: 'teleported', who: 'player', from: at, via: exit.via, to: exit.to });
-    arrive(w, exit.to, d, riding, ev);
+    return arrive(w, exit.to, d, riding, ev);
   }
+  return false;
 }
 
 /** Ice and force floors under the player move them on, until the ride ends, would cross itself or a catch ends
@@ -158,7 +159,7 @@ function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): vo
 function ridePlayer(w: Work, d: Dir, ev: GameEvent[]): void {
   let dir = d;
   const seen = new Set<number>([index(w, w.player)]);
-  while (!turnOver(w, ev)) {
+  while (w.outcome === 'playing') {
     const def = TERRAIN[tAt(w, w.player)];
     if (def.carries && !w.gear.includes('suction')) dir = def.carries;
     else if (!def.slides || w.gear.includes(def.slides)) return;
@@ -166,7 +167,7 @@ function ridePlayer(w: Work, d: Dir, ev: GameEvent[]): void {
     if (seen.has(index(w, to)) || !enterAsPlayer(w, to, dir, true, ev)) return;
     ev.push({ kind: 'slid', who: 'player', from: w.player, to });
     seen.add(index(w, to));
-    arrive(w, to, dir, true, ev);
+    if (arrive(w, to, dir, true, ev)) return;
     seen.add(index(w, w.player));
   }
 }
@@ -187,8 +188,7 @@ export function step(s: State, a: Action): StepResult {
     } else {
       if (!enterAsPlayer(w, to, a.dir, false, ev)) return { state: s, events: [] };
       ev.push({ kind: 'moved', who: 'player', from, to });
-      arrive(w, to, a.dir, false, ev);
-      ridePlayer(w, a.dir, ev);
+      if (!arrive(w, to, a.dir, false, ev)) ridePlayer(w, a.dir, ev);
     }
   } else if (a.kind === 'tool') {
     if (w.tools[a.tool] <= 0) return { state: s, events: [] };

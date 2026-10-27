@@ -5,7 +5,7 @@ import { TERRAIN, HAZARDS } from './tiles.ts';
 import type { Dir } from './tiles.ts';
 import { index, next, same } from './state.ts';
 import { caught } from './catch.ts';
-import { flip, hazardMayEnter, heldAt } from './pieces.ts';
+import { flip, hazardMayGo, heldAt } from './pieces.ts';
 import { tAt } from './work.ts';
 import type { GameEvent, Work } from './work.ts';
 
@@ -20,11 +20,12 @@ const TURN: Record<'ahead' | 'left' | 'right' | 'back', Record<Dir, Dir>> = {
 /** How a hazard's move ended: it stands somewhere, it is gone, or it caught Theseus. */
 type Outcome = 'on' | 'gone' | 'caught';
 
-/** Hazard `i` has just entered its cell: it catches Theseus, explodes on a bomb, presses the toggle button or is
+/** Hazard `i` has just entered its cell: it catches Theseus (a cow set down there is lost), explodes on a bomb, presses the toggle button or is
  *  held by a snare. */
 function arrive(w: Work, i: number, ev: GameEvent[]): Outcome {
   const h = w.hazards[i]!;
   if (same(h.at, w.player)) {
+    if (same(h.at, w.cow)) w.cow = null;
     caught(w, ev, 'hazard');
     return 'caught';
   }
@@ -44,12 +45,13 @@ function arrive(w: Work, i: number, ev: GameEvent[]): Outcome {
  *  slide is stopped, would cross itself, or the hazard is gone or has caught Theseus. */
 function moveHazard(w: Work, i: number, ev: GameEvent[]): Outcome {
   let h = w.hazards[i]!;
+  if (heldAt(w, h.at)) return 'on';
   let dir: Dir | undefined = h.dir;
-  if (!hazardMayEnter(w, h, next(h.at, dir))) {
+  if (!hazardMayGo(w, h.kind, next(h.at, dir))) {
     dir = undefined;
     for (const turn of HAZARDS[h.kind].turns) {
       const d = TURN[turn][h.dir];
-      if (hazardMayEnter(w, h, next(h.at, d))) {
+      if (hazardMayGo(w, h.kind, next(h.at, d))) {
         dir = d;
         break;
       }
@@ -58,7 +60,7 @@ function moveHazard(w: Work, i: number, ev: GameEvent[]): Outcome {
   if (!dir) return 'on';
   let to = next(h.at, dir);
   ev.push({ kind: 'moved', who: 'hazard', hazard: h.kind, from: h.at, to });
-  const seen = new Set<number>([index(w, to)]);
+  let seen: Set<number> | null = null;
   for (;;) {
     h = w.hazards[i] = { ...h, at: to, dir };
     const end = arrive(w, i, ev);
@@ -68,8 +70,10 @@ function moveHazard(w: Work, i: number, ev: GameEvent[]): Outcome {
       dir = def.carries;
       if (h.dir !== dir) h = w.hazards[i] = { ...h, dir };
     } else if (!def.slides) return 'on';
+    // Ice and force floors are never snares, so a sliding hazard is never held.
+    seen ??= new Set<number>([index(w, to)]);
     const on = next(to, dir);
-    if (seen.has(index(w, on)) || !hazardMayEnter(w, h, on)) return 'on';
+    if (seen.has(index(w, on)) || !hazardMayGo(w, h.kind, on)) return 'on';
     ev.push({ kind: 'slid', who: 'hazard', hazard: h.kind, from: to, to: on });
     seen.add(index(w, on));
     to = on;

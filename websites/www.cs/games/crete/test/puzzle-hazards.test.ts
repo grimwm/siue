@@ -81,6 +81,22 @@ describe('arrival', () => {
     assert.deepEqual(c, { kind: 'caught', at: at(0, 1), hearts: 2, by: 'hazard' });
   });
 
+  test('a hazard catches Theseus standing on his own cow, and the cow is lost', () => {
+    const base = grid(['Po.'], 'facing: left');
+    const r = step({ ...base, tools: { ...base.tools, cow: 1 } }, { kind: 'tool', tool: 'cow' });
+    assert.equal(r.state.hearts, 2);
+    assert.equal(r.state.cow, null);
+    assert.ok(r.events.some(e => e.kind === 'caught' && e.by === 'hazard'));
+  });
+
+  test('a hazard catching Theseus on his throw-back cell is sent home when he lands there', () => {
+    const r = step(grid(['Po.'], 'facing: left'), WAIT);
+    assert.deepEqual(r.events.map(e => e.kind), ['moved', 'caught', 'sent-home']);
+    assert.equal(r.state.hearts, 2);
+    assert.deepEqual(r.state.player, at(0, 0));
+    assert.deepEqual(r.state.hazards.map(h => h.at), [at(0, 1)]);
+  });
+
   test('a catch partway through a slide ends it there', () => {
     const s = { ...grid(['P.o==..M'], 'facing: right'), player: at(0, 4) };
     const hit = step(s, WAIT);

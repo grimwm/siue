@@ -3,7 +3,7 @@
  * Theseus and blocks out of the next teleport in reading order; the toggle
  * button flips; a hazard keeps to the cells it may enter. DOM-free. */
 import { TERRAIN, HAZARDS } from './tiles.ts';
-import type { Cell, Dir, Hazard, HazardKind } from './tiles.ts';
+import type { Cell, Dir, HazardKind } from './tiles.ts';
 import { inside, next, same } from './state.ts';
 import type { Level } from './level.ts';
 import { tAt, oAt } from './work.ts';
@@ -85,14 +85,19 @@ export function released(w: Work, trap: number): boolean {
 /** `x` is a snare that holds whatever stands on it: no linked brown button is held down. */
 export const heldAt = (w: Work, x: Cell): boolean => tAt(w, x) === 'trap' && !released(w, x.r * w.level.cols + x.c);
 
-/** A hazard of this kind has room on `x`, Theseus aside: terrain it may stand on, and no object, cow, Minotaur
- *  (stone or not) or hazard there. */
-export function hazardRoom(w: Work, kind: HazardKind, x: Cell): boolean {
+/** A hazard of this kind may stand on the terrain at `x`. */
+function hazardGround(w: Work, kind: HazardKind, x: Cell): boolean {
   if (!inside(w.level, x)) return false;
   const t = tAt(w, x);
-  return (TERRAIN[t].hazard || HAZARDS[kind].crosses === t) && !oAt(w, x)
-    && !same(x, w.minotaur) && !same(x, w.cow) && !hazardOn(w, x);
+  return TERRAIN[t].hazard || HAZARDS[kind].crosses === t;
 }
 
-/** Hazard `h` may move onto `x`: it is not held, and `x` has room for it. Theseus's cell is a catch, so it may. */
-export const hazardMayEnter = (w: Work, h: Hazard, x: Cell): boolean => !heldAt(w, h.at) && hazardRoom(w, h.kind, x);
+/** A hazard of this kind has room on `x`, Theseus aside: terrain it may stand on, and no object, cow, Minotaur
+ *  (stone or not) or hazard there. */
+export const hazardRoom = (w: Work, kind: HazardKind, x: Cell): boolean =>
+  hazardGround(w, kind, x) && !oAt(w, x) && !same(x, w.minotaur) && !same(x, w.cow) && !hazardOn(w, x);
+
+/** A hazard of this kind, not held, may move onto `x`: Theseus's cell whenever its terrain lets the hazard in (a
+ *  catch, whatever else stands there), else a cell with room. */
+export const hazardMayGo = (w: Work, kind: HazardKind, x: Cell): boolean =>
+  same(x, w.player) ? hazardGround(w, kind, x) : hazardRoom(w, kind, x);

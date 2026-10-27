@@ -30,7 +30,7 @@ export type Terrain =
 
 export interface TerrainDef {
   char: string;
-  /** The sprites it can show: the gate's first is closed, its second open. */
+  /** The sprites it can show: the gate's first is closed, its second open; the clone machine's, one per facing in DIRS order. */
   sprites: readonly string[];
   /** The Minotaur may stand on it. */
   minotaur: boolean;
@@ -72,17 +72,17 @@ export const TERRAIN: Record<Terrain, TerrainDef> = {
   'door-blue': t('B', false, false, { door: 'blue' }, ['door-blue']),
   'door-yellow': t('Y', false, false, { door: 'yellow' }, ['door-yellow']),
   'door-green': t('G', false, false, { door: 'green' }, ['door-green']),
-  trap: t('&', true, true, {}, ['floor']),
-  'button-brown': t('-', true, true, {}, ['floor']),
-  'button-red': t('+', true, true, {}, ['floor']),
-  popup: t(';', false, false, {}, ['floor']),
-  gravel: t(':', false, false, {}, ['floor']),
+  trap: t('&', true, true, {}, ['trap']),
+  'button-brown': t('-', true, true, {}, ['button-brown']),
+  'button-red': t('+', true, true, {}, ['button-red']),
+  popup: t(';', false, false, {}, ['popup']),
+  gravel: t(':', false, false, {}, ['gravel']),
   'fake-wall': t('W', false, false, {}, ['wall']),
   'invisible-wall': t('I', false, false, {}, ['floor']),
-  teleport: t('@', false, false, {}, ['floor']),
-  thief: t('$', true, true, {}, ['floor']),
-  bomb: t('!', false, true, {}, ['floor'], true),
-  clone: t('C', false, false, {}, ['floor']),
+  teleport: t('@', false, false, {}, ['teleport']),
+  thief: t('$', true, true, {}, ['thief']),
+  bomb: t('!', false, true, {}, ['bomb'], true),
+  clone: t('C', false, false, {}, DIRS.map(d => `clone-${d}`)),
 };
 
 /** A moving hazard: it stands on floor and turns by its own rule when it cannot go ahead. */
@@ -94,15 +94,15 @@ export interface Hazard {
 }
 
 export const HAZARDS: Record<HazardKind, {
-  char: string; name: string; sprite?: string;
+  char: string; name: string; sprite: string;
   /** What it tries, in order, when blocked ahead. */
   turns: readonly ('ahead' | 'left' | 'right' | 'back')[];
   /** The terrain it may cross though it is not floor. */
   crosses?: Terrain;
 }> = {
-  ball: { char: 'o', name: 'Bronze ball', turns: ['back'] },
-  glider: { char: 'w', name: 'Harpy', turns: ['left', 'right', 'back'], crosses: 'water' },
-  fireball: { char: 'e', name: "Talos's fire", turns: ['right', 'left', 'back'], crosses: 'fire' },
+  ball: { char: 'o', name: 'Bronze ball', sprite: 'ball', turns: ['back'] },
+  glider: { char: 'w', name: 'Harpy', sprite: 'glider', turns: ['left', 'right', 'back'], crosses: 'water' },
+  fireball: { char: 'e', name: "Talos's fire", sprite: 'fireball', turns: ['right', 'left', 'back'], crosses: 'fire' },
 };
 
 /** What a clone machine makes: a block or one of the hazards. */
@@ -143,5 +143,6 @@ export const SPRITE_NAMES: readonly string[] = [
     ...Object.values(TERRAIN).flatMap(d => d.sprites),
     ...Object.values(OBJECTS).map(o => o.sprite),
     ...FIGURE_SPRITES,
+    ...Object.values(HAZARDS).map(h => h.sprite),
   ]),
 ];

@@ -26,7 +26,11 @@ export interface Level {
   /** The moving hazards, in reading order; each stands on floor. */
   readonly hazards: readonly Hazard[];
   /** The clone machines, in reading order. */
-  readonly machines: readonly { at: Cell; template: Template; dir: Dir }[];
+  readonly machines: readonly {
+    at: Cell; template: Template; dir: Dir;
+    /** A hazard template's home index: the level's hazard count plus its place among hazard machines; derived, never written. */
+    home?: number;
+  }[];
   /** Button cell index to the trap or clone machine cell index it controls; derived, never written. */
   readonly links: Readonly<Record<number, number>>;
 }
@@ -167,9 +171,11 @@ export function parse(text: string): Level {
     const [tpl, d] = w.split('-');
     return (TEMPLATES as readonly string[]).includes(tpl!) && (DIRS as readonly string[]).includes(d!) && w.split('-').length === 2;
   }, 'a template and a direction like block-up');
+  let homes = hazards.length;
   const machines = clones.map((at, i) => {
     const [template, dir] = made[i]!.split('-');
-    return { at, template: template as Template, dir: dir as Dir };
+    const m = { at, template: template as Template, dir: dir as Dir };
+    return template === 'block' ? m : { ...m, home: homes++ };
   });
   return {
     title: head.title?.value ?? '', intro: head.intro?.value ?? '', hearts, relics, pageIds, pageCells,

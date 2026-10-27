@@ -3,7 +3,7 @@
  * (src/puzzle/step.ts) returns a new state and never edits the one it was
  * given. DOM-free. */
 import { DELTA } from './tiles.ts';
-import type { Cell, Dir, Gear, KeyColor, ObjectKind, Terrain, Tool } from './tiles.ts';
+import type { Cell, Dir, Gear, Hazard, KeyColor, ObjectKind, Terrain, Tool } from './tiles.ts';
 import type { Level } from './level.ts';
 
 export type Outcome = 'playing' | 'won' | 'lost';
@@ -27,6 +27,8 @@ export interface State {
   readonly stone: number;
   /** Where Daedalus's cow stands, while it stands. */
   readonly cow: Cell | null;
+  /** The moving hazards standing now, sorted by cell. */
+  readonly hazards: readonly Hazard[];
   readonly relicsLeft: number;
   readonly moves: number;
   readonly outcome: Outcome;
@@ -47,6 +49,7 @@ export function initial(level: Level): State {
     minotaur: level.minotaur,
     stone: 0,
     cow: null,
+    hazards: [...level.hazards],
     relicsLeft: level.relics,
     moves: 0,
     outcome: 'playing',

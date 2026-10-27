@@ -79,7 +79,7 @@ export function timeline(before: State, events: GameEvent[], reducedMotion: bool
     if (e.kind === 'took') taken.push({ what: e.what, at: e.at, ms: reducedMotion ? 0 : player.length * SLIDE_MS });
     else if (e.kind === 'pushed') block.push(e.from, e.to);
     else if (e.kind === 'slid' && e.who === 'block') block.push(e.to);
-    else if ((e.kind === 'moved' || e.kind === 'slid') && e.who !== 'block') {
+    else if ((e.kind === 'moved' || e.kind === 'slid') && (e.who === 'player' || e.who === 'minotaur')) {
       (e.who === 'player' ? player : minotaur).push({ who: e.who, from: e.from, to: e.to });
     }
   }

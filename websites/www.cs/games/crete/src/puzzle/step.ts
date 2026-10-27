@@ -6,10 +6,12 @@
  * happen: a wall in the way, a tool not held or of no use) returns the same
  * state object and no events, and costs no turn. DOM-free. */
 import { TERRAIN } from './tiles.ts';
-import type { Cell, Dir, Gear, KeyColor, ObjectKind, Terrain } from './tiles.ts';
+import type { Cell, Dir, Gear, Hazard, KeyColor, ObjectKind, Terrain } from './tiles.ts';
 import { index, inside, same, next, gateOpen } from './state.ts';
 import type { State } from './state.ts';
 import { minotaurPhase } from './minotaur.ts';
+import { hazardPhase } from './hazards.ts';
+import { turnOver } from './catch.ts';
 import { work, tAt, oAt } from './work.ts';
 import type { Action, GameEvent, Work } from './work.ts';
 
@@ -152,10 +154,12 @@ export function step(s: State, a: Action): StepResult {
   }
   // The mirror turn is itself a stone turn: the Minotaur sits it out without spending any of the 3 that follow.
   const raisedMirror = a.kind === 'tool' && a.tool === 'mirror';
-  if (w.outcome === 'playing' && !raisedMirror) minotaurPhase(w, ev);
+  if (!turnOver(w, ev)) hazardPhase(w, ev);
+  if (!raisedMirror && !turnOver(w, ev)) minotaurPhase(w, ev);
   w.moves++;
   // A turn that left the terrain or the objects as they were shares the previous arrays.
   if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];
   if (sameItems(w.objects, s.objects)) w.objects = s.objects as (ObjectKind | null)[];
+  if (w.hazards.length === s.hazards.length && sameItems(w.hazards, s.hazards)) w.hazards = s.hazards as Hazard[];
   return { state: w, events: ev };
 }

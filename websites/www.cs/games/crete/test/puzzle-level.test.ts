@@ -139,7 +139,7 @@ test('every new piece round-trips', () => {
   assert.deepEqual(lv.hazards[1], { kind: 'glider', at: { r: 3, c: 3 }, dir: 'left', home: 1 });
   assert.deepEqual(lv.machines, [
     { at: { r: 2, c: 4 }, template: 'block', dir: 'right' },
-    { at: { r: 2, c: 6 }, template: 'fireball', dir: 'down' },
+    { at: { r: 2, c: 6 }, template: 'fireball', dir: 'down', home: 2 },
   ]);
   assert.equal(serialize(lv), PIECES);
   assert.deepEqual(parse(serialize(lv)), lv);

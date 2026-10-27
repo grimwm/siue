@@ -208,6 +208,6 @@ export function unpack(words: Uint32Array, at: number, layout: Layout, level: Le
   }
   return {
     level, terrain, objects, player, hearts, keys, gear, tools, pages, throwBack, minotaur, stone, cow, relicsLeft,
-    moves, outcome: 'playing',
+    hazards: level.hazards, moves, outcome: 'playing',
   };
 }

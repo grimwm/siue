@@ -5,7 +5,7 @@ import { TERRAIN, HAZARDS } from './tiles.ts';
 import type { Dir } from './tiles.ts';
 import { index, next, same } from './state.ts';
 import { caught } from './catch.ts';
-import { flip, hazardMayGo, heldAt } from './pieces.ts';
+import { hazardLands, hazardMayGo, hazardPhaseOf, heldAt } from './pieces.ts';
 import { tAt } from './work.ts';
 import type { GameEvent, Work } from './work.ts';
 
@@ -20,25 +20,14 @@ const TURN: Record<'ahead' | 'left' | 'right' | 'back', Record<Dir, Dir>> = {
 /** How a hazard's move ended: it stands somewhere, it is gone, or it caught Theseus. */
 type Outcome = 'on' | 'gone' | 'caught';
 
-/** Hazard `i` has just entered its cell: it catches Theseus (a cow set down there is lost), explodes on a bomb, presses the toggle button or is
- *  held by a snare. */
+/** Hazard `i` has just entered its cell: it catches Theseus (a cow set down there is lost), else it lands. */
 function arrive(w: Work, i: number, ev: GameEvent[]): Outcome {
-  const h = w.hazards[i]!;
-  if (same(h.at, w.player)) {
-    if (same(h.at, w.cow)) w.cow = null;
+  if (same(w.hazards[i]!.at, w.player)) {
+    if (same(w.player, w.cow)) w.cow = null;
     caught(w, ev, 'hazard');
     return 'caught';
   }
-  const t = tAt(w, h.at);
-  if (t === 'bomb') {
-    w.terrain[index(w, h.at)] = 'floor';
-    w.hazards.splice(i, 1);
-    ev.push({ kind: 'exploded', who: 'hazard', at: h.at });
-    return 'gone';
-  }
-  if (t === 'button') flip(w, ev);
-  if (heldAt(w, h.at)) ev.push({ kind: 'held', who: 'hazard', at: h.at });
-  return 'on';
+  return hazardLands(w, i, ev);
 }
 
 /** Hazard `i`'s move: ahead, else the first of its turns it may enter; then on over ice and force floors until the
@@ -81,14 +70,17 @@ function moveHazard(w: Work, i: number, ev: GameEvent[]): Outcome {
 }
 
 /** Every hazard moves once, in reading order of the cells they stood on when the phase began; a hazard that moves
- *  keeps its place in that order. A catch ends the phase. */
+ *  keeps its place in that order. A hazard cloned in the phase joins the end of the list and does not move until
+ *  the next phase. A catch ends the phase. */
 export function hazardPhase(w: Work, ev: GameEvent[]): void {
   if (w.hazards.length === 0) return;
+  hazardPhaseOf(w);
   for (let i = 0, n = w.hazards.length; i < n;) {
     const end = moveHazard(w, i, ev);
     if (end === 'caught') break;
     if (end === 'gone') n--;
     else i++;
   }
+  hazardPhaseOf(null);
   w.hazards.sort((a, b) => index(w, a.at) - index(w, b.at));
 }

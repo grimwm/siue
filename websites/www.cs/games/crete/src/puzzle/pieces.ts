@@ -1,11 +1,13 @@
 // websites/www.cs/games/crete/src/puzzle/pieces.ts
 /* The Island of Crete: the trap and trick pieces' shared rules. Teleports send
  * Theseus and blocks out of the next teleport in reading order; the toggle
- * button flips; a hazard keeps to the cells it may enter. DOM-free. */
+ * button flips; a red button makes its clone machine's template; a hazard
+ * keeps to the cells it may enter. DOM-free. */
 import { TERRAIN, HAZARDS } from './tiles.ts';
 import type { Cell, Dir, HazardKind } from './tiles.ts';
-import { inside, next, same } from './state.ts';
+import { index, inside, next, same } from './state.ts';
 import type { Level } from './level.ts';
+import { blockMayEnter, settleBlock } from './step.ts';
 import { tAt, oAt } from './work.ts';
 import type { GameEvent, Work } from './work.ts';
 
@@ -101,3 +103,53 @@ export const hazardRoom = (w: Work, kind: HazardKind, x: Cell): boolean =>
  *  catch, whatever else stands there), else a cell with room. */
 export const hazardMayGo = (w: Work, kind: HazardKind, x: Cell): boolean =>
   same(x, w.player) ? hazardGround(w, kind, x) : hazardRoom(w, kind, x);
+
+/** The work whose hazard phase is under way, if any: a hazard cloned then joins the end of the phase's list. */
+let phaseOf: Work | null = null;
+export const hazardPhaseOf = (w: Work | null): void => { phaseOf = w; };
+
+/** Hazard `i` has landed on its cell, Theseus not there: a bomb destroys it, buttons press, a snare holds it.
+ *  `keep` is the cell Theseus is stepping into. */
+export function hazardLands(w: Work, i: number, ev: GameEvent[], keep?: Cell): 'on' | 'gone' {
+  const h = w.hazards[i]!;
+  const t = tAt(w, h.at);
+  if (t === 'bomb') {
+    w.terrain[index(w, h.at)] = 'floor';
+    w.hazards.splice(i, 1);
+    ev.push({ kind: 'exploded', who: 'hazard', at: h.at });
+    return 'gone';
+  }
+  if (t === 'button') flip(w, ev);
+  else if (t === 'button-red') fireRed(w, index(w, h.at), ev, keep);
+  if (heldAt(w, h.at)) ev.push({ kind: 'held', who: 'hazard', at: h.at });
+  return 'on';
+}
+
+/** The red button at index `button` fires: its machine's template appears in front of the machine when that cell
+ *  is free for it, never on Theseus nor on `keep`, the cell he is stepping into. A block then settles as if pushed
+ *  the machine's way; a hazard faces that way and lands, first moving in the next hazard phase. Each clone takes
+ *  a free cell or uses up a bomb or water, so a chain of firings ends. */
+export function fireRed(w: Work, button: number, ev: GameEvent[], keep?: Cell): void {
+  const c = w.level.links[button];
+  if (c === undefined) return;
+  const m = w.level.machines.find(x => index(w, x.at) === c)!;
+  const front = next(m.at, m.dir);
+  if (keep && same(front, keep)) return;
+  if (m.template === 'block') {
+    if (!blockMayEnter(w, front)) return;
+    w.objects[index(w, front)] = 'block';
+    ev.push({ kind: 'cloned', what: 'block', at: front });
+    settleBlock(w, front, m.dir, keep, ev);
+    return;
+  }
+  if (!hazardRoom(w, m.template, front) || same(front, w.player)) return;
+  const h = { kind: m.template, at: front, dir: m.dir, home: m.home! };
+  let i = w.hazards.length;
+  if (phaseOf !== w) {
+    const f = index(w, front);
+    while (i > 0 && index(w, w.hazards[i - 1]!.at) > f) i--;
+  }
+  w.hazards.splice(i, 0, h);
+  ev.push({ kind: 'cloned', what: m.template, at: front });
+  hazardLands(w, i, ev, keep);
+}

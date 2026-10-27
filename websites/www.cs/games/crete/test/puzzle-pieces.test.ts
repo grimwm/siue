@@ -299,3 +299,100 @@ describe("Daedalus's snare", () => {
     assert.deepEqual(held(step(grid(['-M&..P']), WAIT).events), [{ kind: 'held', who: 'minotaur', at: at(0, 2) }]);
   });
 });
+
+describe('clone machine', () => {
+  const cloned = (e: readonly GameEvent[]) => e.filter(x => x.kind === 'cloned');
+
+  test('a red button clones a block out of its machine', () => {
+    const r = step(grid(['P+C.'], 'machines: block-right'), mv('right'));
+    assert.deepEqual(cloned(r.events), [{ kind: 'cloned', what: 'block', at: at(0, 3) }]);
+    assert.equal(r.state.objects[3], 'block');
+    assert.equal(terrainAt(r.state, at(0, 2)), 'clone', 'the machine stays: it is a template');
+  });
+
+  test('a clone into a blocked cell is not made', () => {
+    for (const [rows, head] of [
+      [['P+CO'], 'machines: block-right'],
+      [['P+C#'], 'machines: ball-right'],
+      [['P+Co'], 'machines: block-right\nfacing: left'],
+      [['P+CM'], 'machines: glider-right'],
+    ] as [string[], string][]) {
+      const r = step(grid(rows, head), mv('right'));
+      assert.deepEqual(cloned(r.events), [], rows.join('/'));
+    }
+    const twice = play(grid(['P+C.'], 'machines: block-right'), mv('right'), mv('left'), mv('right'));
+    assert.equal(cloned(twice.events).length, 1, 'the first clone fills the cell in front');
+  });
+
+  test('a cloned hazard never appears on Theseus', () => {
+    const on = step(grid(['P+C'], 'machines: ball-left'), mv('right'));
+    assert.deepEqual(cloned(on.events), []);
+    assert.deepEqual(on.state.hazards, []);
+    const off = step(grid(['P+C', '...'], 'machines: ball-down'), mv('right'));
+    assert.deepEqual(off.state.hazards, [{ kind: 'ball', at: at(1, 2), dir: 'down', home: 0 }]);
+  });
+
+  test('nothing is cloned onto the cell Theseus is stepping into', () => {
+    for (const tpl of ['block', 'ball']) {
+      const r = step(grid(['.PO+', '..C.'], `machines: ${tpl}-up`), mv('right'));
+      assert.deepEqual(r.state.player, at(0, 2));
+      assert.deepEqual(cloned(r.events), [], tpl);
+      assert.equal(r.state.objects[2], null);
+      assert.deepEqual(r.state.hazards, []);
+    }
+  });
+
+  test('the Minotaur never presses the red button', () => {
+    const r = step(grid(['P..+.M', '.....C', '......'], 'machines: block-down'), WAIT);
+    assert.deepEqual(r.state.minotaur, at(0, 3));
+    assert.deepEqual(cloned(r.events), []);
+  });
+
+  test('a machine cell is wall to everyone', () => {
+    const m = 'machines: block-right';
+    const s = grid(['PC.'], m);
+    assert.equal(step(s, mv('right')).state, s, 'Theseus');
+    const b = grid(['POC.'], m);
+    assert.equal(step(b, mv('right')).state, b, 'a pushed block');
+    assert.deepEqual(step(grid(['P.CM'], m), WAIT).state.minotaur, at(0, 3), 'the Minotaur');
+    const h = step(grid(['P..', 'oC.'], `${m}\nfacing: right`), WAIT);
+    assert.deepEqual(h.state.hazards.map(x => x.at), [at(1, 0)], 'a hazard');
+  });
+
+  test('two firings in one turn make two clones in order', () => {
+    const s = grid(['P+C###', '#....#', '#.o+C#'], 'facing: right\nmachines: ball-down glider-up');
+    const r1 = step(s, mv('right'));
+    assert.deepEqual(cloned(r1.events), [
+      { kind: 'cloned', what: 'ball', at: at(1, 2) },
+      { kind: 'cloned', what: 'glider', at: at(1, 4) },
+    ]);
+    assert.deepEqual(r1.state.hazards, [
+      { kind: 'ball', at: at(1, 2), dir: 'down', home: 1 },
+      { kind: 'glider', at: at(1, 4), dir: 'up', home: 2 },
+      { kind: 'ball', at: at(2, 3), dir: 'right', home: 0 },
+    ], 'the hazard clone made in the phase has not moved; the list is sorted by cell');
+    const r2 = step(r1.state, WAIT);
+    assert.deepEqual(r2.state.hazards.map(x => x.at), [at(1, 3), at(2, 2), at(2, 3)], 'next turn both clones move');
+  });
+
+  test('a cloned block on ice slides', () => {
+    const r = step(grid(['P+C==.'], 'machines: block-right'), mv('right'));
+    assert.equal(r.state.objects[5], 'block');
+    assert.deepEqual(r.events.filter(e => e.kind === 'cloned' || e.kind === 'slid').map(e => e.kind), ['cloned', 'slid', 'slid']);
+  });
+
+  test('a clone that presses a red button fires again, and the chain ends', () => {
+    const r = step(grid(['P+C=+.'], 'machines: block-right'), mv('right'));
+    assert.deepEqual(cloned(r.events).map(e => e.kind === 'cloned' && e.at), [at(0, 3), at(0, 3)]);
+    assert.deepEqual(r.state.objects.slice(3, 5), ['block', 'block']);
+  });
+
+  test('a cloned hazard meets a bomb and presses buttons on its cell', () => {
+    const bomb = step(grid(['P+C!'], 'machines: ball-right'), mv('right'));
+    assert.deepEqual(bomb.state.hazards, []);
+    assert.equal(terrainAt(bomb.state, at(0, 3)), 'floor');
+    assert.deepEqual(bomb.events.filter(e => e.kind === 'exploded'), [{ kind: 'exploded', who: 'hazard', at: at(0, 3) }]);
+    const toggle = step(grid(['P+C_t'], 'machines: ball-right'), mv('right'));
+    assert.equal(terrainAt(toggle.state, at(0, 4)), 'toggle-closed');
+  });
+});

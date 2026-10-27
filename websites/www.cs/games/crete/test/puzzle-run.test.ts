@@ -45,3 +45,22 @@ test('after a win or a loss only undo and restart act', () => {
   assert.equal(undo(lost).now.outcome, 'playing');
   assert.equal(restart(lost).now.hearts, 1);
 });
+
+test('undo restores the board after a reveal, a bomb and a clone', () => {
+  let run = startRun(lv(['PW!+C', '.....'], 'machines: block-down'));
+  const seen = [JSON.stringify(run.now)];
+  for (let i = 0; i < 6; i++) {
+    run = act(run, mv('right')).run;
+    seen.push(JSON.stringify(run.now));
+  }
+  assert.equal(run.now.terrain[1], 'floor', 'the fake wall was found');
+  assert.equal(run.now.terrain[2], 'floor', 'the bomb went off');
+  assert.equal(run.now.objects[9], 'block', 'the clone was made');
+  for (let i = seen.length - 1; i >= 0; i--) {
+    assert.equal(JSON.stringify(run.now), seen[i], `turn ${i}`);
+    run = undo(run);
+  }
+  assert.equal(run.now.terrain[1], 'fake-wall');
+  assert.equal(run.now.terrain[2], 'bomb');
+  assert.equal(run.now.objects[9], null);
+});

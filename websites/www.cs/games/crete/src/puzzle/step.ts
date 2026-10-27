@@ -13,7 +13,7 @@ import type { State } from './state.ts';
 import { minotaurPhase } from './minotaur.ts';
 import { hazardPhase } from './hazards.ts';
 import { caught, leave, turnOver } from './catch.ts';
-import { flip, hazardOn, heldAt, teleportExit, teleportsLinked } from './pieces.ts';
+import { fireRed, flip, hazardOn, heldAt, teleportExit, teleportsLinked } from './pieces.ts';
 import { work, tAt, oAt } from './work.ts';
 import type { Action, GameEvent, Work } from './work.ts';
 
@@ -22,7 +22,7 @@ export interface StepResult { state: State; events: GameEvent[] }
 
 /** A pushed block may enter this cell. Never a hazard's cell, the cell a catch throws the player back to, nor the
  *  Minotaur's start: a block there would share a cell with whoever lands on it. */
-function blockMayEnter(w: Work, x: Cell): boolean {
+export function blockMayEnter(w: Work, x: Cell): boolean {
   return inside(w.level, x) && TERRAIN[tAt(w, x)].block && !oAt(w, x)
     && !same(x, w.player) && !same(x, w.minotaur) && !same(x, w.cow)
     && !same(x, w.throwBack) && !same(x, w.level.minotaur) && !hazardOn(w, x);
@@ -47,11 +47,12 @@ function moveBlock(w: Work, from: Cell, m: BlockMove, how: 'pushed' | 'slid', ev
 }
 
 /** A block has just entered `at` heading `d`: it sinks, explodes, presses, slides or is carried. It never enters
- *  `pusher`, the cell the player is stepping into. */
-function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell, ev: GameEvent[]): void {
+ *  `pusher`, the cell the player is stepping into, and a red button it presses clones nothing there. */
+export function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell | undefined, ev: GameEvent[]): void {
   let here = at;
   let dir = d;
-  const seen = new Set<number>([index(w, here), index(w, pusher)]);
+  const seen = new Set<number>([index(w, here)]);
+  if (pusher) seen.add(index(w, pusher));
   for (;;) {
     const t = tAt(w, here);
     if (t === 'water' || t === 'bomb') {
@@ -61,6 +62,7 @@ function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell, ev: GameEvent[]): 
       return;
     }
     if (t === 'button') flip(w, ev);
+    else if (t === 'button-red') fireRed(w, index(w, here), ev, pusher);
     if (heldAt(w, here)) ev.push({ kind: 'held', who: 'block', at: here });
     const def = TERRAIN[t];
     if (def.carries) dir = def.carries;
@@ -143,6 +145,7 @@ function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): bo
   if (t === 'safe') w.throwBack = at;
   if (heldAt(w, at)) ev.push({ kind: 'held', who: 'player', at });
   if (t === 'button') flip(w, ev);
+  else if (t === 'button-red') fireRed(w, index(w, at), ev);
   if (t === 'exit' && gateOpen(w)) {
     w.outcome = 'won';
     ev.push({ kind: 'won' });

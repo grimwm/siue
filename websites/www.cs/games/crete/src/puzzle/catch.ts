@@ -72,9 +72,9 @@ function sendHome(w: Work, x: Cell, ev: GameEvent[]): void {
 }
 
 /** A catch: a heart lost, Theseus thrown back, or the try over. */
-export function caught(w: Work, ev: GameEvent[], by: CatchCause): void {
+export function caught(w: Work, ev: GameEvent[], by: CatchCause, hazard?: HazardKind): void {
   w.hearts--;
-  ev.push({ kind: 'caught', at: w.player, hearts: w.hearts, by });
+  ev.push(hazard ? { kind: 'caught', at: w.player, hearts: w.hearts, by, hazard } : { kind: 'caught', at: w.player, hearts: w.hearts, by });
   if (w.hearts <= 0) {
     w.outcome = 'lost';
     ev.push({ kind: 'lost' });

@@ -47,12 +47,19 @@ const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-m
 let reduced = motion?.matches ?? false;
 motion?.addEventListener('change', e => { reduced = e.matches; });
 
-/** The level `__creteTest.playLevel` opens outside the campaign, while it is set. */
-let testLevel: Level | null = null;
+/** The level `__creteTest.playLevel` opens outside the campaign: it opens once, and records nothing. */
+let queued: Level | null = null;
+/** The scratch level in play, until the next real open. */
+let scratch: Level | null = null;
 const levels: Levels = {
   count: CAMPAIGN_LEVELS.count,
-  id: i => (testLevel ? 'test-level' : CAMPAIGN_LEVELS.id(i)),
-  level: i => testLevel ?? CAMPAIGN_LEVELS.level(i),
+  id: i => (scratch ? 'test-level' : CAMPAIGN_LEVELS.id(i)),
+  level: i => {
+    scratch = queued;
+    queued = null;
+    return scratch ?? CAMPAIGN_LEVELS.level(i);
+  },
+  scratch: () => scratch !== null,
 };
 
 const game = createGame({
@@ -167,8 +174,7 @@ function solveInWorker(levelText: string): Promise<{ result: unknown; progress: 
 
 /* Test hook for automated checks: drives the real game logic, no copy. */
 function playLevel(level: Level): void {
-  testLevel = level;
+  queued = level;
   game.open(0);
-  testLevel = null;
 }
 window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse };

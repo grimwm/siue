@@ -36,7 +36,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ],
     [
       { strong: "Daedalus's snare" }, " holds whoever steps in it until a ", { strong: "brown button" },
-      " is pressed down: stand a block on it, or step on it yourself.",
+      " is pressed down, and only while something stands on it: you, a block or a hazard.",
     ],
     [
       { strong: "Pop-up walls" }, " rise behind you. ", { strong: "Fake walls" }, " and ", { strong: "invisible walls" },
@@ -44,7 +44,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ],
     [
       { strong: "Teleports" }, " carry you to the next one in reading order. A ", { strong: "thief" },
-      " takes your boots and flippers, never keys or tools.",
+      " takes all your gear (flippers, fire boots, skates and suction boots), never keys or tools.",
     ],
     [
       { strong: "Bombs" }, " cost a heart if you step on one, and destroy any block or hazard that meets one. ", { strong: "Clone machines" },
@@ -52,7 +52,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ],
     [
       "The ", { strong: "Bronze ball" }, " rolls straight and turns back, the ", { strong: "Harpy" },
-      " crosses water, and ", { strong: "Talos's fire" }, " burns. Each turn goes you, then the hazards, then the Minotaur.",
+      " crosses water, and ", { strong: "Talos's fire" }, " burns. Each turn goes you, then the hazards, then the Minotaur. Any catch costs a heart and throws you back to your last safe zone; a hazard standing where you land is sent home to its start.",
     ],
     ["Three tools, one use each. ", ...toolSegs],
     [

@@ -99,7 +99,7 @@ function playerMayEnter(w: Work, to: Cell, d: Dir, riding: boolean): boolean {
 function enterAsPlayer(w: Work, to: Cell, d: Dir, riding: boolean, ev: GameEvent[]): boolean {
   if (!playerMayEnter(w, to, d, riding)) return false;
   if (hazardOn(w, to)) {
-    caught(w, ev, 'hazard');
+    caught(w, ev, 'hazard', w.hazards.find(h => same(h.at, to))!.kind);
     return false;
   }
   const def = TERRAIN[tAt(w, to)];

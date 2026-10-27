@@ -24,7 +24,7 @@ type Outcome = 'on' | 'gone' | 'caught';
 function arrive(w: Work, i: number, ev: GameEvent[]): Outcome {
   if (same(w.hazards[i]!.at, w.player)) {
     if (same(w.player, w.cow)) w.cow = null;
-    caught(w, ev, 'hazard');
+    caught(w, ev, 'hazard', w.hazards[i]!.kind);
     return 'caught';
   }
   return hazardLands(w, i, ev, undefined, true);

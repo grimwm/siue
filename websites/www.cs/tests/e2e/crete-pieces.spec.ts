@@ -64,6 +64,7 @@ test('Wait moves the Harpy, and the board shows it', async ({ page }) => {
   const after = await now(page);
   expect(after.moves).toBe(1);
   expect(after.harpy, 'the Harpy flew one cell right').toEqual({ r: 3, c: 4 });
+  // Only proves the board redrew; the Harpy's cell above is what proves where it flew.
   await expect.poll(() => canvas(page)).not.toBe(picture);
   expect(errors).toEqual([]);
 });

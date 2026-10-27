@@ -176,7 +176,7 @@ export async function encodeLink(s: { text: string; line: readonly Action[]; ini
   return `${LINK_VERSION}.${toBase64Url(await deflate(`${head.join('\n')}\n\n${s.text}`))}`;
 }
 
-/** The raw grid's row count and widest row, or null when it has no row; read without parsing. */
+/** The raw grid's row count and its widest and narrowest rows, or null when it has no row; read without parsing. */
 function gridShape(text: string): { rows: number; widest: number; narrowest: number } | null {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   let i = 0;
@@ -200,7 +200,7 @@ export async function decodeLink(fragment: string): Promise<{ ok: true; shared: 
   try {
     const dot = fragment.indexOf('.');
     const version = dot < 0 ? fragment : fragment.slice(0, dot);
-    if (!/^L[0-9]+$/.test(version)) return fail('not-a-link');
+    if (!/^L[1-9][0-9]*$/.test(version)) return fail('not-a-link');
     if (version !== LINK_VERSION) return fail(dot < 0 ? 'not-a-link' : 'newer');
     if (dot < 0) return fail('not-a-link');
     const encoded = fragment.slice(dot + 1);
@@ -230,6 +230,7 @@ export async function decodeLink(fragment: string): Promise<{ ok: true; shared: 
       if (e instanceof LevelError) return fail('damaged');
       throw e;
     }
+    if (level.rows < SIDE_MIN || level.rows > SIDE_MAX || level.cols < SIDE_MIN || level.cols > SIDE_MAX) return fail('damaged');
     if (level.title !== '' || level.intro !== '' || level.pageIds.length > 0 || level.objects.includes('page')) return fail('damaged');
 
     if (letters[1]!.length > MAX_LINE) return fail('too-long');

@@ -116,15 +116,18 @@ export function resize(d: Draft, rows: number, cols: number): Draft {
   return { ...d, rows: r, cols: c, cells, extra };
 }
 
-/** The level text for a draft. `forShare` leaves out title, intro and page ids (a page becomes floor). */
+/** The level text for a draft, byte for byte what `serialize` writes for the level. `forShare` writes an empty title
+ *  and intro and no page ids (a page becomes floor): the level text a share link carries. */
 export function toText(d: Draft, forShare: boolean): string {
   const oneLine = (s: string): string => s.replace(/[\r\n]+/g, ' ');
-  const head: string[] = [];
-  if (!forShare) head.push(`title: ${oneLine(d.title)}`, `intro: ${oneLine(d.intro)}`);
+  const head: string[] = forShare ? ['title: ', 'intro: '] : [`title: ${oneLine(d.title)}`, `intro: ${oneLine(d.intro)}`];
   const hearts = Number.isFinite(d.hearts) ? Math.min(99, Math.max(1, Math.trunc(d.hearts))) : 3;
   if (hearts !== 3) head.push(`hearts: ${hearts}`);
   const relicsOnGrid = d.cells.filter(ch => ch === OBJECTS.relic.char).length;
-  if (d.relics !== null && Number.isFinite(d.relics)) head.push(`relics: ${Math.min(relicsOnGrid, Math.max(0, Math.trunc(d.relics)))}`);
+  if (d.relics !== null && Number.isFinite(d.relics)) {
+    const relics = Math.min(relicsOnGrid, Math.max(0, Math.trunc(d.relics)));
+    if (relics !== relicsOnGrid) head.push(`relics: ${relics}`);
+  }
   const pages: string[] = [], facing: string[] = [], machines: string[] = [];
   const rows: string[] = [];
   for (let y = 0; y < d.rows; y++) {
@@ -143,7 +146,7 @@ export function toText(d: Draft, forShare: boolean): string {
   if (pages.length > 0) head.push(`pages: ${pages.join(' ')}`);
   if (facing.length > 0) head.push(`facing: ${facing.join(' ')}`);
   if (machines.length > 0) head.push(`machines: ${machines.join(' ')}`);
-  return `${head.join('\n')}${head.length > 0 ? '\n\n' : ''}${rows.join('\n')}\n`;
+  return `${head.join('\n')}\n\n${rows.join('\n')}\n`;
 }
 
 export function fromLevel(lv: Level): Draft {

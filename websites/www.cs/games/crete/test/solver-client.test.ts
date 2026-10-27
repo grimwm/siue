@@ -356,6 +356,21 @@ test('cancel closes the node file', async () => {
   assert.equal(disk.closed, 1);
 });
 
+test('a stopped search can be cancelled: it rejects with CancelledError and its file closes once', async () => {
+  const disk = memoryDisk();
+  const job = startSearch(L9, 'solve', inProcess({ open: () => disk.open() }));
+  let stopped = false;
+  job.progress(p => { if (!stopped && p.expanded > 0) { stopped = true; job.stop(); } });
+  while (!stopped) await tick();
+  for (let i = 0; i < 20; i++) await tick();
+  job.cancel();
+  await assert.rejects(job.result, CancelledError);
+  for (let i = 0; i < 20 && disk.closed === 0; i++) await tick();
+  for (let i = 0; i < 20; i++) await tick();
+  assert.equal(disk.opened, 1);
+  assert.equal(disk.closed, 1);
+});
+
 test('a search started after a cancel runs', async () => {
   const worker = inProcess();
   const first = startSearch(L9, 'solve', worker);

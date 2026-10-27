@@ -120,9 +120,31 @@ test('toText for sharing drops title, intro and pages', () => {
   const own = toText(d, false);
   assert.match(own, /^title: T\nintro: I\npages: secret\n/);
   const shared = toText(d, true);
-  assert.doesNotMatch(shared, /title|intro|pages|secret|p/);
+  assert.match(shared, /^title: \nintro: \n\n/);
+  assert.doesNotMatch(shared, /pages|secret/);
+  assert.doesNotMatch(shared.split('\n\n')[1]!, /p/);
   assert.equal(parse(shared).pageIds.length, 0);
   assert.equal(parse(shared).objects.includes('page'), false);
+});
+
+/** The level text a link carries: serialize's output with an empty title and intro and no pages. */
+const canonical = (raw: string) => serialize({ ...parse(raw), title: '', intro: '' });
+
+test('toText for sharing is the link form of every trial, and toText(d, false) is serialize', () => {
+  for (const t of TRIALS) {
+    const [head = '', grid = ''] = t.text.replace(/^pages: .*\n/m, '').split('\n\n');
+    const shared = `${head}\n\n${grid.replace(/p/g, '.')}`;
+    const d = fromLevel(parse(t.text));
+    assert.equal(toText(d, true), canonical(shared), t.id);
+    assert.equal(toText(d, false), serialize(parse(t.text)), t.id);
+  }
+});
+
+test('toText leaves out a relics header equal to the grid count', () => {
+  const d = paint(newDraft(5, 5), at(2, 2), { kind: 'object', o: 'relic' });
+  assert.doesNotMatch(toText({ ...d, relics: 1 }, true), /relics/);
+  assert.doesNotMatch(toText({ ...d, relics: 9 }, true), /relics/);
+  assert.match(toText({ ...d, relics: 0 }, true), /relics: 0/);
 });
 
 test('relics and hearts headers', () => {

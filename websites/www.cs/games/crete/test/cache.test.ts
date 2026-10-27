@@ -93,6 +93,14 @@ test('evictions with an unknown version keeps only the newest by age', () => {
   assert.deepEqual(evictions(entries, null, 1), [`solve-aaaa-${SHA}`]);
 });
 
+test('evictions and resultKey agree on a version with punctuation', async () => {
+  const version = 'v1-2.3_x';
+  const mine = await resultKey('a', 'solve', version);
+  const other = await resultKey('a', 'solve', 'v1-2.3_y');
+  assert.deepEqual(evictions([{ key: mine, modified: 1 }, { key: other, modified: 2 }], version), [other]);
+  assert.deepEqual(evictions([{ key: mine, modified: 1 }], '-.'), [], 'a version with no letters or digits is no version');
+});
+
 test('safeResults trim swallows a throwing trim', async () => {
   const base = { get: async () => null, put: async () => {} };
   await safeResults({ ...base, trim() { throw new Error('gone'); } }).trim?.();

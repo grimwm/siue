@@ -164,6 +164,9 @@ test('L2 is newer; garbage, bad base64 and a truncated stream are damaged', asyn
   assert.equal(await errorOf('hello'), 'not-a-link');
   assert.equal(await errorOf(''), 'not-a-link');
   assert.equal(await errorOf('L1'), 'not-a-link');
+  assert.equal(await errorOf('L0.abc'), 'not-a-link');
+  assert.equal(await errorOf('L01.abc'), 'not-a-link');
+  assert.equal(await errorOf('L00.abc'), 'not-a-link');
   assert.equal(await errorOf('L1.!!!!'), 'damaged');
   assert.equal(await errorOf('L1.A'), 'damaged');
   assert.equal(await errorOf('L1.AAAA'), 'damaged');
@@ -212,6 +215,26 @@ test('a line over MAX_LINE is too-long', async () => {
   assert.equal(await errorOf(link), 'too-long');
   const ok = await decodeLink(await pack(payloadOf(SMALL, 'WGR', 'r'.repeat(MAX_LINE))));
   assert.ok(ok.ok);
+});
+
+/** A link whose compressed payload is the given bytes. */
+async function packBytes(raw: Uint8Array<ArrayBuffer>): Promise<string> {
+  const cs = new CompressionStream('deflate-raw');
+  const w = cs.writable.getWriter();
+  void w.write(raw);
+  void w.close();
+  return `${LINK_VERSION}.${Buffer.from(new Uint8Array(await new Response(cs.readable).arrayBuffer())).toString('base64url')}`;
+}
+
+test('invalid UTF-8 in the payload, an empty payload and a padded fragment are damaged', async () => {
+  const good = new TextEncoder().encode(payloadOf(SMALL));
+  const bad = Uint8Array.from([...good.slice(0, 4), 0xff, 0xfe, ...good.slice(4)]);
+  assert.equal(await errorOf(await packBytes(bad)), 'damaged');
+  assert.equal(await errorOf('L1.'), 'damaged');
+  const fragment = await pack(payloadOf(SMALL));
+  assert.ok((await decodeLink(fragment)).ok);
+  const padded = `${fragment}${'='.repeat(4 - (fragment.length - 3) % 4 || 4)}`;
+  assert.equal(await errorOf(padded), 'damaged');
 });
 
 test('levelCode is stable', async () => {

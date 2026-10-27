@@ -1,11 +1,11 @@
 /* The Island of Crete: the solver's worker side, as a message handler. It takes a level's text and a search kind
- * (solve: the shortest line; measure: difficulty.ts's numbers), answers from the result cache when it can (an
- * entry of this solver's version; a cached line only when it still wins), and
- * otherwise searches in batches, reporting progress between them. Past a memory budget the search's nodes go to a
- * node file on disk (the origin private file system, in the worker); without one they stay in memory and the
- * progress says so. Stop pauses between batches and resume goes on with the same search; a new search cancels the
- * one under way or stopped, as does a cancel, and every search closes its node file when it ends. solver-worker.ts wires it to the
- * Worker; the tests run it in-process. DOM-free. */
+ * (solve: the shortest line; measure: difficulty.ts's numbers), answers from the result cache when it can (an entry
+ * of this solver's version; a cached line only when it still wins), and otherwise searches in batches, reporting
+ * progress between them. Past a memory budget the search's nodes go to a node file on disk (the origin private file
+ * system, in the worker); without one they stay in memory and the progress says so. Stop pauses between batches
+ * and resume goes on with the same search; a new search cancels the one under way or stopped, as does a cancel,
+ * and every search closes its node file when it ends. solver-worker.ts wires it to the Worker; the tests run it
+ * in-process. DOM-free. */
 import { parse } from './puzzle/level.ts';
 import type { Level } from './puzzle/level.ts';
 import { initial } from './puzzle/state.ts';
@@ -101,7 +101,7 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
     try {
       deps.post({ type: 'result', id: job.id, result: await search(job, text, kind) });
     } catch (e) {
-      const message = e instanceof Cancelled ? 'the search was cancelled: a newer search replaced it or it was cancelled'
+      const message = e instanceof Cancelled ? 'the search was cancelled'
         : e instanceof Error ? e.message : String(e);
       deps.post({ type: 'failed', id: job.id, message });
     } finally {

@@ -1,10 +1,9 @@
 /* The Island of Crete: the page's side of the solver's worker (solver-worker.ts, running solver-host.ts). Start a
  * search on a level's text, follow its progress, stop and resume it, await its answer; the page never blocks on
- * it. One worker serves every search; a search ends by cancel or by a newer search, and then its answer rejects
- * with CancelledError (a newer search's cancel is the host's, and rejects with the host's message). A worker
- * that errors (it failed to load, or threw) is terminated and its searches reject; the next search starts a fresh
- * one, and a worker that cannot be made at all rejects the search at once. The game's
- * thread help does not use this: it solves in the page (game.ts). */
+ * it. One worker serves every search; a search ends by `cancel()` (its answer rejects with CancelledError) or by
+ * a newer search (its answer rejects with the host's message). A worker that errors (it failed to load, or threw)
+ * is terminated and its searches reject; the next search starts a fresh one, and a worker that cannot be made at
+ * all rejects the search at once. The game's thread help does not use this: it solves in the page (game.ts). */
 import type { Answer, FromHost, Report, SearchKind, ToHost } from './solver-host.ts';
 
 export type { SearchKind } from './solver-host.ts';

@@ -14,8 +14,8 @@ const BRUSHES: Brush[] = [
   ...(Object.keys(TERRAIN) as Terrain[]).map((t): Brush => ({ kind: 'terrain', t })),
   ...(Object.keys(OBJECTS) as ObjectKind[]).map((o): Brush => ({ kind: 'object', o })),
   { kind: 'player' }, { kind: 'minotaur' }, { kind: 'erase' },
-  ...(Object.keys(HAZARDS) as HazardKind[]).map((h): Brush => ({ kind: 'hazard', h, dir: 'left' })),
-  ...(['block', 'ball', 'glider', 'fireball'] as Template[]).map((template): Brush => ({ kind: 'machine', template, dir: 'down' })),
+  ...(Object.keys(HAZARDS) as HazardKind[]).flatMap(h => DIRS.map((dir): Brush => ({ kind: 'hazard', h, dir }))),
+  ...(['block', 'ball', 'glider', 'fireball'] as Template[]).flatMap(template => DIRS.map((dir): Brush => ({ kind: 'machine', template, dir }))),
   { kind: 'page', id: 'a-page' }, { kind: 'page', id: 'Bad Id!' },
 ];
 const at = (r: number, c: number) => ({ r, c });
@@ -96,6 +96,22 @@ test('painting a page: ids are valid and unique, at most 31', () => {
   for (let r = 1; r < 7; r++) for (let c = 1; c < 7; c++) big = paint(big, at(r, c), { kind: 'page', id: '' });
   assert.equal(toLevel(big).pageIds.length, 31);
   assert.equal(paint(big, at(6, 6), { kind: 'page', id: 'x' }), big);
+});
+
+test('the object page brush keeps an existing page id', () => {
+  let d = paint(newDraft(5, 5), at(2, 2), { kind: 'page', id: 'intro' });
+  assert.equal(paint(d, at(2, 2), { kind: 'object', o: 'page' }), d);
+  d = paint(d, at(2, 3), { kind: 'object', o: 'page' });
+  assert.deepEqual(toLevel(d).pageIds, ['intro', 'page-1']);
+});
+
+test('a non-finite hearts or relics still parses', () => {
+  let d = paint(newDraft(5, 5), at(2, 2), { kind: 'object', o: 'relic' });
+  d = { ...d, hearts: NaN, relics: NaN };
+  const lv = toLevel(d);
+  assert.equal(lv.hearts, 3);
+  assert.equal(lv.relics, 1);
+  assert.equal(toLevel({ ...d, hearts: Infinity, relics: Infinity }).hearts, 3);
 });
 
 test('toText for sharing drops title, intro and pages', () => {

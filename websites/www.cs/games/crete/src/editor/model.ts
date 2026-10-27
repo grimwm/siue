@@ -75,7 +75,7 @@ export function paint(d: Draft, at: Cell, b: Brush): Draft {
       if (ch === CLONE) ex = here === CLONE ? d.extra[i]! : 'block-up';
       break;
     case 'object':
-      if (b.o === 'page') return paint(d, at, { kind: 'page', id: '' });
+      if (b.o === 'page') return here === PAGE ? d : paint(d, at, { kind: 'page', id: '' });
       ch = OBJECTS[b.o].char;
       break;
     case 'hazard': ch = HAZARDS[b.h].char; ex = b.dir; break;
@@ -121,9 +121,10 @@ export function toText(d: Draft, forShare: boolean): string {
   const oneLine = (s: string): string => s.replace(/[\r\n]+/g, ' ');
   const head: string[] = [];
   if (!forShare) head.push(`title: ${oneLine(d.title)}`, `intro: ${oneLine(d.intro)}`);
-  if (d.hearts !== 3) head.push(`hearts: ${Math.min(99, Math.max(1, Math.trunc(d.hearts)))}`);
+  const hearts = Number.isFinite(d.hearts) ? Math.min(99, Math.max(1, Math.trunc(d.hearts))) : 3;
+  if (hearts !== 3) head.push(`hearts: ${hearts}`);
   const relicsOnGrid = d.cells.filter(ch => ch === OBJECTS.relic.char).length;
-  if (d.relics !== null) head.push(`relics: ${Math.min(relicsOnGrid, Math.max(0, Math.trunc(d.relics)))}`);
+  if (d.relics !== null && Number.isFinite(d.relics)) head.push(`relics: ${Math.min(relicsOnGrid, Math.max(0, Math.trunc(d.relics)))}`);
   const pages: string[] = [], facing: string[] = [], machines: string[] = [];
   const rows: string[] = [];
   for (let y = 0; y < d.rows; y++) {

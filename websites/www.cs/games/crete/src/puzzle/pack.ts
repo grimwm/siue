@@ -2,9 +2,12 @@
 /* The Island of Crete: a game situation packed into a few 32-bit words, losslessly, for the searches that
  * store millions. It holds exactly what the reference solver's `stateKey` (test/reference-solver.ts) holds, as
  * fixed-width bit fields sized from the level; `moves` and `outcome` are not packed. Two situations of a level
- * pack alike exactly when they play alike. DOM-free. */
-import { TERRAIN, KEY_COLORS, GEAR } from './tiles.ts';
-import type { Gear, KeyColor, ObjectKind, Terrain, Tool } from './tiles.ts';
+ * pack alike exactly when they play alike. A hazard's kind is never packed: its home (a level hazard, or the
+ * machine that cloned it) decides it. Where no machine clones a hazard, each home holds at most one hazard, so
+ * the hazards pack as one slot per home: its cell (or none, once a bomb took it) and its facing. Otherwise they
+ * pack per cell a hazard could ever stand on: 0 empty, else 1 + facing + 4 × home. DOM-free. */
+import { TERRAIN, HAZARDS, KEY_COLORS, GEAR, DIRS, DELTA } from './tiles.ts';
+import type { Gear, Hazard, HazardKind, KeyColor, ObjectKind, Terrain, Tool } from './tiles.ts';
 import type { Level } from './level.ts';
 import type { State } from './state.ts';
 
@@ -31,7 +34,8 @@ export interface Layout {
   readonly keyAt: readonly number[];
   readonly toolAt: readonly number[];
   readonly gearAt: number;
-  /** Cells whose water can fill in or whose door can open: one bit each, set once changed. */
+  /** Cells whose terrain can change once (water fills in, a door or fake wall opens, a pop-up rises, an invisible
+   *  wall shows, a bomb goes off): one bit each, set once changed. */
   readonly changing: Int32Array;
   /** One bit for every toggle wall, which flip together; -1 when the level has none. */
   readonly toggles: Int32Array;
@@ -41,6 +45,15 @@ export interface Layout {
   readonly blockOnly: Int32Array;
   /** Cells a block can reach that start with another object: two bits, 0 empty, 1 the object, 2 a block. */
   readonly blockOrObject: Int32Array;
+  /** Hazard slots, one per level hazard, used when no machine clones a hazard: the cell (`none` when gone) and the
+   *  facing (2 bits, DIRS order). 0 when the hazards pack per cell. */
+  readonly hazardSlots: number;
+  /** The cells a hazard could ever stand on, used when a machine clones one: `hazardBits` each, 0 empty, else
+   *  1 + facing + 4 × home. Empty when the hazards pack as slots. */
+  readonly hazardCells: Int32Array;
+  readonly hazardBits: number;
+  /** Each home's hazard kind: the level's hazards, then the hazard-template machines. */
+  readonly homeKinds: readonly HazardKind[];
 }
 
 const TOOL_LIST: readonly Tool[] = ['mirror', 'cake', 'cow'];
@@ -55,33 +68,74 @@ export function layoutOf(level: Level): Layout {
   return l;
 }
 
-/** The cells a pushed block could ever stand on: a flood from the blocks' own cells. A block steps onto an
- *  adjacent cell it may enter when the player can stand behind it to push, or when it rides ice or a force floor
- *  there. Generous: a door counts as floor, and any non-wall cell as somewhere to stand. */
+/** The cells a pushed block could ever stand on: a flood from the blocks' own cells and the cells block machines
+ *  clone into. A block steps onto an adjacent cell it may enter when the player can stand behind it to push, or
+ *  when it rides ice or a force floor there; stepping into a teleport, it comes out onto the cell beyond any
+ *  teleport that way. Generous: a door or a fake wall counts as floor, and any non-wall cell as somewhere to
+ *  stand. */
 function blockCells(lv: Level): Set<number> {
   const reach = new Set<number>();
   const todo: number[] = [];
-  lv.objects.forEach((o, i) => { if (o === 'block') { reach.add(i); todo.push(i); } });
-  const enterable = (i: number) => TERRAIN[lv.terrain[i]!].block || TERRAIN[lv.terrain[i]!].door !== undefined;
+  const enterable = (i: number) => {
+    const t = lv.terrain[i]!;
+    return TERRAIN[t].block || TERRAIN[t].door !== undefined || t === 'fake-wall' || t === 'bomb';
+  };
   const mino = lv.minotaur ? lv.minotaur.r * lv.cols + lv.minotaur.c : -1;
+  const inside = (r: number, c: number) => r >= 0 && c >= 0 && r < lv.rows && c < lv.cols;
+  const add = (b: number) => {
+    if (reach.has(b) || b === mino || !enterable(b)) return;
+    reach.add(b);
+    todo.push(b);
+  };
+  lv.objects.forEach((o, i) => { if (o === 'block') { reach.add(i); todo.push(i); } });
+  for (const m of lv.machines) {
+    const r = m.at.r + DELTA[m.dir][0], c = m.at.c + DELTA[m.dir][1];
+    if (m.template === 'block' && inside(r, c)) add(r * lv.cols + c);
+  }
+  const teleports: number[] = [];
+  lv.terrain.forEach((t, i) => { if (t === 'teleport') teleports.push(i); });
   while (todo.length) {
     const a = todo.pop()!;
     const ar = Math.floor(a / lv.cols), ac = a % lv.cols;
     const t = TERRAIN[lv.terrain[a]!];
     const rides = t.slides !== undefined || t.carries !== undefined;
-    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+    for (const d of DIRS) {
+      const [dr, dc] = DELTA[d];
       const r = ar + dr, c = ac + dc;
-      if (r < 0 || c < 0 || r >= lv.rows || c >= lv.cols) continue;
-      const b = r * lv.cols + c;
-      if (reach.has(b) || b === mino || !enterable(b)) continue;
+      if (!inside(r, c)) continue;
       const pr = ar - dr, pc = ac - dc;
-      const stands = pr >= 0 && pc >= 0 && pr < lv.rows && pc < lv.cols && lv.terrain[pr * lv.cols + pc] !== 'wall';
+      const stands = inside(pr, pc) && lv.terrain[pr * lv.cols + pc] !== 'wall';
       if (!stands && !rides) continue;
-      reach.add(b);
-      todo.push(b);
+      const b = r * lv.cols + c;
+      if (lv.terrain[b] !== 'teleport') {
+        add(b);
+        continue;
+      }
+      for (const via of teleports) {
+        const vr = Math.floor(via / lv.cols) + dr, vc = via % lv.cols + dc;
+        if (inside(vr, vc)) add(vr * lv.cols + vc);
+      }
     }
   }
   return reach;
+}
+
+/** Terrain whose cells change once during a try, and what each becomes; doors open to floor as well. */
+const CHANGES_TO: Partial<Record<Terrain, Terrain>> = {
+  water: 'dirt', popup: 'wall', 'fake-wall': 'floor', 'invisible-wall': 'wall', bomb: 'floor',
+};
+const changesTo = (t: Terrain): Terrain | undefined => CHANGES_TO[t] ?? (TERRAIN[t].door !== undefined ? 'floor' : undefined);
+
+/** The cells a hazard of one of `kinds` could ever stand on: terrain a hazard may stand on, or may once it changes
+ *  (water fills in, a door or fake wall opens, a toggle wall flips), and the terrain one of the kinds crosses. */
+function hazardGround(lv: Level, kinds: readonly HazardKind[]): number[] {
+  const crosses = new Set(kinds.map(k => HAZARDS[k].crosses));
+  const out: number[] = [];
+  lv.terrain.forEach((t, i) => {
+    const later = changesTo(t);
+    if (TERRAIN[t].hazard || crosses.has(t) || t === 'toggle-closed' || (later && TERRAIN[later].hazard)) out.push(i);
+  });
+  return out;
 }
 
 function build(lv: Level): Layout {
@@ -93,7 +147,7 @@ function build(lv: Level): Layout {
   const blockOnly: number[] = [];
   const blockOrObject: number[] = [];
   lv.terrain.forEach((t, i) => {
-    if (t === 'water' || TERRAIN[t].door !== undefined) changing.push(i);
+    if (changesTo(t)) changing.push(i);
     else if (t === 'toggle-open' || t === 'toggle-closed') toggles.push(i);
     const o = lv.objects[i]!;
     if (blocks.has(i)) (o && o !== 'block' ? blockOrObject : blockOnly).push(i);
@@ -114,15 +168,23 @@ function build(lv: Level): Layout {
   for (const b of keyBits) { keyAt.push(at); at += b; }
   const toolAt: number[] = [];
   for (const b of toolBits) { toolAt.push(at); at += b; }
+  const homeKinds: HazardKind[] = [...lv.hazards.map(h => h.kind)];
+  for (const m of lv.machines) if (m.home !== undefined) homeKinds[m.home] = m.template as HazardKind;
+  const cloning = homeKinds.length > lv.hazards.length;
+  const hazardSlots = cloning ? 0 : lv.hazards.length;
+  const hazardCells = cloning ? hazardGround(lv, homeKinds) : [];
+  const hazardBits = cloning ? bits(4 * homeKinds.length) : 0;
   const total = cellBits * (2 + (mino ? 1 : 0) + (cow ? 1 : 0)) + stoneBits + bits(lv.hearts) + bits(lv.relics) + lv.pageIds.length
     + keyBits.reduce((a, b) => a + b, 0) + toolBits.reduce((a, b) => a + b, 0) + gear.length
-    + changing.length + (toggles.length ? 1 : 0) + fixed.length + blockOnly.length + 2 * blockOrObject.length;
+    + changing.length + (toggles.length ? 1 : 0) + fixed.length + blockOnly.length + 2 * blockOrObject.length
+    + hazardSlots * (cellBits + 2) + hazardCells.length * hazardBits;
   return {
     words: Math.max(1, Math.ceil(total / 32)), cellBits, none: cells, minotaur: mino, cow, stoneBits,
     heartBits: bits(lv.hearts), relicBits: bits(lv.relics), pageBits: lv.pageIds.length, keyBits, toolBits, gear,
     heartAt, pageAt, keyAt, toolAt, gearAt: at,
     changing: Int32Array.from(changing), toggles: Int32Array.from(toggles), fixed: Int32Array.from(fixed),
     blockOnly: Int32Array.from(blockOnly), blockOrObject: Int32Array.from(blockOrObject),
+    hazardSlots, hazardCells: Int32Array.from(hazardCells), hazardBits, homeKinds,
   };
 }
 
@@ -168,6 +230,19 @@ export function pack(s: State, layout: Layout, out: Uint32Array, at: number): vo
   for (const i of l.fixed) p = put(out, at, p, 1, s.objects[i] ? 1 : 0);
   for (const i of l.blockOnly) p = put(out, at, p, 1, s.objects[i] === 'block' ? 1 : 0);
   for (const i of l.blockOrObject) p = put(out, at, p, 2, s.objects[i] === 'block' ? 2 : s.objects[i] ? 1 : 0);
+  for (let home = 0; home < l.hazardSlots; home++) {
+    const h = s.hazards.find(x => x.home === home);
+    p = put(out, at, p, l.cellBits, h ? cellOf(s, h.at, l.none) : l.none);
+    p = put(out, at, p, 2, h ? DIRS.indexOf(h.dir) : 0);
+  }
+  // The hazards are sorted by cell, as the cells are: one pass pairs them.
+  let k = 0;
+  for (const i of l.hazardCells) {
+    const h = s.hazards[k];
+    const here = h !== undefined && cellOf(s, h.at, l.none) === i;
+    p = put(out, at, p, l.hazardBits, here ? 1 + DIRS.indexOf(h.dir) + 4 * h.home : 0);
+    if (here) k++;
+  }
 }
 
 /** The situation packed in the words; `moves` is what it says (moves are not packed). */
@@ -191,10 +266,7 @@ export function unpack(words: Uint32Array, at: number, layout: Layout, level: Le
   const gear: Gear[] = [];
   for (const g of l.gear) if (take(1)) gear.push(g);
   const terrain: Terrain[] = [...level.terrain];
-  for (const i of l.changing) {
-    if (!take(1)) continue;
-    terrain[i] = level.terrain[i] === 'water' ? 'dirt' : 'floor';
-  }
+  for (const i of l.changing) if (take(1)) terrain[i] = changesTo(level.terrain[i]!)!;
   if (l.toggles.length && take(1)) {
     for (const i of l.toggles) terrain[i] = level.terrain[i] === 'toggle-open' ? 'toggle-closed' : 'toggle-open';
   }
@@ -206,8 +278,22 @@ export function unpack(words: Uint32Array, at: number, layout: Layout, level: Le
     if (v === 0) objects[i] = null;
     else if (v === 2) objects[i] = 'block';
   }
+  const hazards: Hazard[] = [];
+  const cell = (i: number) => ({ r: Math.floor(i / level.cols), c: i % level.cols });
+  for (let home = 0; home < l.hazardSlots; home++) {
+    const i = take(l.cellBits);
+    const dir = DIRS[take(2)]!;
+    if (i !== l.none) hazards.push({ kind: l.homeKinds[home]!, at: cell(i), dir, home });
+  }
+  hazards.sort((a, b) => a.at.r * level.cols + a.at.c - (b.at.r * level.cols + b.at.c));
+  for (const i of l.hazardCells) {
+    const v = take(l.hazardBits);
+    if (!v) continue;
+    const home = (v - 1) >>> 2;
+    hazards.push({ kind: l.homeKinds[home]!, at: cell(i), dir: DIRS[(v - 1) & 3]!, home });
+  }
   return {
     level, terrain, objects, player, hearts, keys, gear, tools, pages, throwBack, minotaur, stone, cow, relicsLeft,
-    hazards: level.hazards, moves, outcome: 'playing',
+    hazards, moves, outcome: 'playing',
   };
 }

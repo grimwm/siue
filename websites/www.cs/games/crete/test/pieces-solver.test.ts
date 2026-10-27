@@ -40,6 +40,8 @@ const ANSWERS: Record<string, readonly [number | null, number | null]> = {
   'clone-blocked': [10, 10],
   'hazard-order': [7, 7],
   'hazard-first': [6, null],
+  'hazard-order-catch': [6, 6],
+  'hazard-phase-first': [6, 6],
   'clone-keep': [18, 18],
 };
 
@@ -98,7 +100,29 @@ test('the hazard first in reading order moves first: the ball behind is blocked 
   assert.deepEqual(state.hazards.map(h => h.at), [at(3, 1), at(3, 3)]);
 });
 
-test("a hazard's catch ends the turn before the Minotaur's steps, which would have caught him too", () => {
+const causes = (events: ReturnType<typeof play>['events']) => events.flatMap(e => (e.kind === 'caught' ? [e.by] : []));
+
+test('the hazard phase keeps its start order: the ball behind turns back onto Theseus', () => {
+  const s = initial(PIECE_LEVELS['hazard-order-catch']!);
+  const { events } = play(s, WAIT);
+  assert.deepEqual(causes(events), ['hazard']);
+  assert.ok(events.some(e => e.kind === 'moved' && e.who === 'hazard' && e.from.c === 2 && e.to.c === 1), 'the first ball turned back');
+  // Had the second ball moved first, the first would have followed it away: no catch.
+  const [first, second] = s.hazards;
+  const gone = play({ ...s, hazards: [first!, { ...second!, at: at(1, 4) }] }, WAIT);
+  assert.deepEqual(causes(gone.events), []);
+});
+
+test("a hazard moving onto Theseus in the phase catches him before the Minotaur's steps", () => {
+  const s = play(initial(PIECE_LEVELS['hazard-phase-first']!), mv('down')).state;
+  const { events } = play(s, WAIT);
+  assert.deepEqual(causes(events), ['hazard']);
+  assert.ok(events.some(e => e.kind === 'moved' && e.who === 'hazard'), 'the ball moved onto him');
+  assert.ok(!events.some(e => e.kind === 'moved' && e.who === 'minotaur'), 'the Minotaur never steps');
+  assert.deepEqual(causes(play({ ...s, hazards: [] }, WAIT).events), ['minotaur'], 'he would have caught Theseus');
+});
+
+test("a catch in Theseus's own action ends the turn before the Minotaur's steps, which would have caught him too", () => {
   const s = play(initial(PIECE_LEVELS['hazard-first']!), WAIT, mv('right')).state;
   const { events } = play(s, mv('right'));
   assert.deepEqual(events.filter(e => e.kind === 'caught').map(e => e.kind === 'caught' && e.by), ['hazard']);

@@ -213,8 +213,8 @@ export const PIECE_LEVELS: Record<string, Level> = {
     '###E####',
     '########',
   ], 'facing: right right'),
-  /** The ball comes up its shaft as the Minotaur comes up his: the ball's catch ends the turn before his steps,
-   *  which would have caught Theseus too. Every win is caught at least once. */
+  /** Theseus steps into the ball as the Minotaur comes up his shaft: the catch in Theseus's own action ends the
+   *  turn before the Minotaur's steps, which would have caught him too. Every win is caught at least once. */
   'hazard-first': level('Hazard first', [
     '#######',
     '#P...E#',
@@ -224,6 +224,23 @@ export const PIECE_LEVELS: Record<string, Level> = {
     '#M#####',
     '#######',
   ], 'facing: up'),
+  /** Two balls heading right, Theseus behind them. The first in reading order is blocked by the second, which
+   *  has not moved yet, so it turns back onto Theseus; moved second, it would follow the other away. */
+  'hazard-order-catch': level('Hazard order catch', [
+    '########',
+    '#Poo...#',
+    '#.....E#',
+    '########',
+  ], 'facing: right right'),
+  /** The ball, turned back by the exit, comes onto Theseus in the hazard phase of a turn whose Minotaur steps
+   *  would have reached him too. */
+  'hazard-phase-first': level('Hazard phase first', [
+    '######',
+    '#P..M#',
+    '#..oE#',
+    '#....#',
+    '######',
+  ], 'facing: right'),
   /** A block pushed onto the red button clones nothing onto the cell Theseus steps into; his own step on the
    *  button clones the second block that two cells of water need. */
   'clone-keep': level('Clone keep', [

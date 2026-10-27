@@ -34,6 +34,18 @@ async function openNodeFile(): Promise<NodeFile> {
 }
 
 let trimming = false;
+let trimAgain = false;
+
+/** One pass of the trim: lists the entries and evicts. */
+async function trimOnce(): Promise<void> {
+  const dir = await folder('crete-results');
+  const entries: { key: string; modified: number }[] = [];
+  for await (const [name, handle] of dir.entries()) {
+    if (handle.kind !== 'file' || !name.endsWith('.json')) continue;
+    entries.push({ key: name.slice(0, -5), modified: (await (handle as FileSystemFileHandle).getFile()).lastModified });
+  }
+  for (const key of evictions(entries, await version)) await dir.removeEntry(`${key}.json`).catch(() => {});
+}
 
 /** Finished results, one JSON file each. */
 const diskResults: ResultStore = {
@@ -53,18 +65,15 @@ const diskResults: ResultStore = {
     }
   },
   /** Removes other versions' entries and the oldest beyond RESULT_LIMIT; one trim at a time, a trim asked for
-   *  while one runs is skipped (the next put trims again). */
+   *  while one runs makes it pass again once it finishes, so an entry written after it listed is seen. */
   async trim() {
-    if (trimming) return;
+    if (trimming) { trimAgain = true; return; }
     trimming = true;
     try {
-      const dir = await folder('crete-results');
-      const entries: { key: string; modified: number }[] = [];
-      for await (const [name, handle] of dir.entries()) {
-        if (handle.kind !== 'file' || !name.endsWith('.json')) continue;
-        entries.push({ key: name.slice(0, -5), modified: (await (handle as FileSystemFileHandle).getFile()).lastModified });
-      }
-      for (const key of evictions(entries, await version)) await dir.removeEntry(`${key}.json`).catch(() => {});
+      do {
+        trimAgain = false;
+        await trimOnce();
+      } while (trimAgain);
     } finally {
       trimming = false;
     }

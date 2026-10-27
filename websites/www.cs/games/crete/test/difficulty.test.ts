@@ -38,7 +38,7 @@ const CHASED = level([
 
 test('a walled-off Minotaur adds nothing: delta 0, the line that ignores him wins, and the bar says so', () => {
   const d = measure(WALLED);
-  assert.deepEqual(d, { solved: true, shortest: 4, explored: d.explored, withoutMinotaur: 4, minotaurDelta: 0, greedyWins: true, catchFree: 4, catches: 0, label: 'solo', naiveWins: true, line: d.line });
+  assert.deepEqual(d, { solved: true, shortest: 4, explored: d.explored, withoutMinotaur: 4, minotaurDelta: 0, greedyWins: true, catchFree: 4, catches: 0, label: 'solo', naiveWins: true, line: 'rrrr' });
   assert.match(challengeProblems(d).join(), /does not matter/);
 });
 

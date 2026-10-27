@@ -54,6 +54,7 @@ function freePageId(used: ReadonlySet<string>): string {
 }
 
 export function paint(d: Draft, at: Cell, b: Brush): Draft {
+  if (!Number.isInteger(at.r) || !Number.isInteger(at.c)) return d;
   if (at.r < 0 || at.c < 0 || at.r >= d.rows || at.c >= d.cols) return d;
   const i = at.r * d.cols + at.c;
   const here = d.cells[i]!;

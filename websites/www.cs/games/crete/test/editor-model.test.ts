@@ -32,6 +32,14 @@ test('a draft always parses', () => {
   }
 });
 
+test('a cell that is not a whole number changes nothing', () => {
+  const d = newDraft(5, 5);
+  for (const [r, c] of [[NaN, 2], [2, NaN], [1.5, 2], [2, 0.5], [Infinity, 1]] as const) {
+    assert.equal(paint(d, at(r, c), { kind: 'player' }), d);
+    assert.equal(paint(d, at(r, c), { kind: 'terrain', t: 'wall' }), d);
+  }
+});
+
 test('painting the player moves him', () => {
   const d = newDraft(5, 5);
   const e = paint(d, at(3, 3), { kind: 'player' });

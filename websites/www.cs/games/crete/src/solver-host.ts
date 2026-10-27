@@ -4,7 +4,7 @@
  * otherwise searches in batches, reporting progress between them. Past a memory budget the search's nodes go to a
  * node file on disk (the origin private file system, in the worker); without one they stay in memory and the
  * progress says so. Stop pauses between batches and resume goes on with the same search; a new search cancels the
- * one under way or stopped, and every search closes its node file when it ends. solver-worker.ts wires it to the
+ * one under way or stopped, as does a cancel, and every search closes its node file when it ends. solver-worker.ts wires it to the
  * Worker; the tests run it in-process. DOM-free. */
 import { parse } from './puzzle/level.ts';
 import type { Level } from './puzzle/level.ts';
@@ -31,7 +31,8 @@ export type Answer = SolveResult | Difficulty;
 export type ToHost =
   | { type: 'start'; id: number; text: string; kind: SearchKind }
   | { type: 'stop'; id: number }
-  | { type: 'resume'; id: number };
+  | { type: 'resume'; id: number }
+  | { type: 'cancel'; id: number };
 export type FromHost =
   | { type: 'progress'; id: number; report: Report }
   | { type: 'result'; id: number; result: Answer }
@@ -80,7 +81,7 @@ export function searchLimits(words: number, storage: Storage): { cap: number; me
   return { cap, memoryNodes: Math.min(MEMORY_NODES, cap), bytes: n => fixed + n * perNode };
 }
 
-/** A search a newer one replaced. */
+/** A search a newer one replaced, or a cancel ended. */
 class Cancelled extends Error {}
 
 interface Job { id: number; stopped: boolean; cancelled: boolean; wake: (() => void) | null }
@@ -100,7 +101,7 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
     try {
       deps.post({ type: 'result', id: job.id, result: await search(job, text, kind) });
     } catch (e) {
-      const message = e instanceof Cancelled ? 'the search was cancelled: a newer search replaced it'
+      const message = e instanceof Cancelled ? 'the search was cancelled: a newer search replaced it or it was cancelled'
         : e instanceof Error ? e.message : String(e);
       deps.post({ type: 'failed', id: job.id, message });
     } finally {
@@ -163,6 +164,7 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
         current = job;
         void run(job, m.text, m.kind);
       } else if (current && current.id === m.id) {
+        if (m.type === 'cancel') { current.cancelled = true; wake(current); return; }
         current.stopped = m.type === 'stop';
         if (!current.stopped) wake(current);
       }

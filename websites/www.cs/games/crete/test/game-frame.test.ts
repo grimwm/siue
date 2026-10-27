@@ -30,7 +30,7 @@ test('with no turn animating, the state now and the figures at rest', () => {
   const game = opened();
   const f = frameOf(game, 0)!;
   assert.equal(f.state, game.run!.now);
-  assert.deepEqual(f.figures, { player: game.run!.now.player, minotaur: game.run!.now.minotaur });
+  assert.deepEqual(f.figures, { player: game.run!.now.player, minotaur: game.run!.now.minotaur, hazards: [] });
   assert.equal(f.done, true);
 });
 

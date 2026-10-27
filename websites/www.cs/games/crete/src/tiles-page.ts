@@ -12,20 +12,9 @@ import type { Run } from './puzzle/run.ts';
 import type { Action } from './puzzle/step.ts';
 import { TOOLS } from './puzzle/tiles.ts';
 import { itemFor } from './keys.ts';
+import { TILES_LEVEL as LEVEL } from './tiles-level.ts';
 
 const atlas = atlasJson as Atlas;
-
-const LEVEL = `title: Tiles
-intro: Every piece on one board.
-
-#############
-#P.*rRbByYgG#
-#~f.Fh.=k.>u#
-#%S_Tt.^v<..#
-#zxcpO....|E#
-#..........M#
-#############
-`;
 
 const KEYS: Record<string, Action> = {
   ArrowUp: { kind: 'move', dir: 'up' },
@@ -89,7 +78,7 @@ function start(): void {
 
   const frame = (now: number): void => {
     const ms = tl ? now - t0 : 0;
-    let fig: Figures = { player: run.now.player, minotaur: run.now.minotaur };
+    let fig: Figures = { player: run.now.player, minotaur: run.now.minotaur, hazards: run.now.hazards.map(h => ({ kind: h.kind, at: h.at })) };
     if (tl) {
       fig = tl.at(ms);
       if (ms >= tl.duration) tl = null;

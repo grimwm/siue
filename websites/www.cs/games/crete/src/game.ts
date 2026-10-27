@@ -91,14 +91,17 @@ export interface Game {
 
 /** What the board draws `ms` into the animation: the state before the turn, less each thing the figure has
  *  reached, while the player's own moves, slides and pushed block play; the state after it from then on, while
- *  the Minotaur's steps play; and the figures at rest once it ends. An animation paused at a page is not done. */
+ *  the hazards and the Minotaur's steps play; and the figures at rest once it ends. The hazards drawn are the
+ *  figures', never the state's: the state before the turn's while it plays, the state after it's once it ends.
+ *  An animation paused at a page is not done. */
 export function frameOf(g: Pick<Game, 'run' | 'anim'>, ms: number): { state: State; figures: Figures; done: boolean } | null {
   if (!g.run) return null;
   const a = g.anim;
   if (a && (ms < a.timeline.duration || a.paused)) {
     return { state: ms < a.timeline.playerEnd ? takenBy(a, ms) : g.run.now, figures: a.timeline.at(ms), done: false };
   }
-  return { state: g.run.now, figures: { player: g.run.now.player, minotaur: g.run.now.minotaur }, done: true };
+  const now = g.run.now;
+  return { state: now, figures: { player: now.player, minotaur: now.minotaur, hazards: now.hazards.map(h => ({ kind: h.kind, at: h.at })) }, done: true };
 }
 
 /** The state before the turn with each thing the figure has reached by `ms` gone from its cell. */

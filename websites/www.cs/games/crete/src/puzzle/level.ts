@@ -83,15 +83,22 @@ function words(name: string, h: Header, count: number, ok: (w: string) => boolea
 /** Each button's control: brown buttons the next trap, red buttons the next clone machine, in reading order, wrapping. */
 function linkButtons(terrain: readonly Terrain[]): Record<number, number> {
   const links: Record<number, number> = {};
-  const n = terrain.length;
-  terrain.forEach((t, i) => {
-    const want = t === 'button-brown' ? 'trap' : t === 'button-red' ? 'clone' : null;
-    if (!want) return;
-    for (let k = 1; k <= n; k++) {
-      const j = (i + k) % n;
-      if (terrain[j] === want) { links[i] = j; return; }
-    }
-  });
+  // One pass from the end: the next trap or machine after each cell, else the first one (the wrap).
+  const firstTrap = terrain.indexOf('trap');
+  const firstClone = terrain.indexOf('clone');
+  let nextTrap = -1;
+  let nextClone = -1;
+  for (let i = terrain.length - 1; i >= 0; i--) {
+    const t = terrain[i];
+    if (t === 'button-brown') {
+      const j = nextTrap >= 0 ? nextTrap : firstTrap;
+      if (j >= 0) links[i] = j;
+    } else if (t === 'button-red') {
+      const j = nextClone >= 0 ? nextClone : firstClone;
+      if (j >= 0) links[i] = j;
+    } else if (t === 'trap') nextTrap = i;
+    else if (t === 'clone') nextClone = i;
+  }
   return links;
 }
 

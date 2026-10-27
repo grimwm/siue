@@ -218,14 +218,32 @@ test('a catch that throws Theseus onto a hazard sends it home', () => {
   const r = play(s, WAIT);
   assert.deepEqual(r.state.player, { r: 0, c: 0 });
   assert.deepEqual(r.state.hazards.map(h => h.at), [{ r: 0, c: 6 }]);
-  assert.ok(r.events.some(e => e.kind === 'sent-home' && e.from.c === 0 && e.to.c === 6));
+  assert.ok(r.events.some(e => e.kind === 'sent-home' && e.from.c === 0 && e.to?.c === 6));
 });
 
 test('a hazard whose start is taken goes to the nearest free cell', () => {
   const s = thrown(['.P.M.o.', '.......'], 'facing: up', { 5: 'block' });
   const r = play(s, WAIT);
   assert.deepEqual(r.state.hazards.map(h => h.at), [{ r: 0, c: 4 }], 'ties go in reading order');
-  assert.ok(r.events.some(e => e.kind === 'sent-home' && e.to.c === 4));
+  assert.ok(r.events.some(e => e.kind === 'sent-home' && e.to?.c === 4));
   const walled = thrown(['.P.M#o#', '#######'], 'facing: up', { 5: 'block' });
-  assert.deepEqual(play(walled, WAIT).state.hazards, [], 'no free cell: removed');
+  assert.deepEqual(play(walled, WAIT).state.hazards.map(h => h.at), [{ r: 0, c: 3 }], 'through walls to the nearest free cell');
+});
+
+test('a hazard with no cell on the whole board is removed, reported with to: null', () => {
+  const s = thrown(['.PM#o#'], 'facing: up', { 4: 'block' });
+  const packed = { ...s, terrain: s.terrain.map((t, i) => (i === 2 ? 'wall' as const : t)) };
+  const r = play(packed, WAIT);
+  assert.deepEqual(r.state.hazards, []);
+  assert.ok(r.events.some(e => e.kind === 'sent-home' && e.to === null));
+});
+
+test('a Minotaur sent home onto a hazard on his start sends it home', () => {
+  const base = grid(['P.w.M'], 'facing: up');
+  const s = { ...base, minotaur: { r: 0, c: 2 }, hazards: [{ ...base.hazards[0]!, at: { r: 0, c: 4 } }] };
+  const r = play(s, WAIT);
+  assert.deepEqual(r.state.minotaur, { r: 0, c: 4 });
+  assert.deepEqual(r.state.player, { r: 0, c: 0 });
+  assert.deepEqual(r.state.hazards.map(h => h.at), [{ r: 0, c: 2 }]);
+  assert.ok(r.events.some(e => e.kind === 'sent-home' && e.from.c === 4 && e.to?.c === 2));
 });

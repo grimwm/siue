@@ -125,7 +125,7 @@ function ridePlayer(w: Work, d: Dir, ev: GameEvent[]): void {
   }
 }
 
-const sameItems = <T>(a: readonly T[], b: readonly T[]): boolean => a.every((v, i) => v === b[i]);
+const sameItems = <T>(a: readonly T[], b: readonly T[]): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
 
 export function step(s: State, a: Action): StepResult {
   if (s.outcome !== 'playing') return { state: s, events: [] };
@@ -160,6 +160,6 @@ export function step(s: State, a: Action): StepResult {
   // A turn that left the terrain or the objects as they were shares the previous arrays.
   if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];
   if (sameItems(w.objects, s.objects)) w.objects = s.objects as (ObjectKind | null)[];
-  if (w.hazards.length === s.hazards.length && sameItems(w.hazards, s.hazards)) w.hazards = s.hazards as Hazard[];
+  if (sameItems(w.hazards, s.hazards)) w.hazards = s.hazards as Hazard[];
   return { state: w, events: ev };
 }

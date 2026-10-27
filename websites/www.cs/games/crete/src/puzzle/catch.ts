@@ -34,8 +34,8 @@ function hazardMayStand(w: Work, kind: HazardKind, x: Cell): boolean {
     && !w.hazards.some(h => same(x, h.at));
 }
 
-/** Where a hazard goes when sent home: its home cell, else the nearest free cell breadth-first from it over
- *  terrain it may stand on, ties in reading order; null when there is none. */
+/** Where a hazard goes when sent home: its home cell, else the nearest free cell breadth-first from it over all
+ *  four-neighbours, walls included, ties in reading order; null when no cell on the board can take it. */
 function homeFor(w: Work, kind: HazardKind, home: number): Cell | null {
   const start = homeCell(w.level, home);
   const seen = new Set<number>([index(w, start)]);
@@ -47,7 +47,7 @@ function homeFor(w: Work, kind: HazardKind, home: number): Cell | null {
     for (const x of layer) {
       for (const d of DIRS) {
         const y = next(x, d);
-        if (!inside(w.level, y) || seen.has(index(w, y)) || !mayStandOn(kind, tAt(w, y))) continue;
+        if (!inside(w.level, y) || seen.has(index(w, y))) continue;
         seen.add(index(w, y));
         out.push(y);
       }
@@ -57,16 +57,17 @@ function homeFor(w: Work, kind: HazardKind, home: number): Cell | null {
   return null;
 }
 
-/** The hazard standing on `x`, if any, goes home. */
+/** The hazard standing on `x`, if any, goes home; with no cell to take it, it is gone (`to: null`). */
 function sendHome(w: Work, x: Cell, ev: GameEvent[]): void {
   const i = w.hazards.findIndex(h => same(x, h.at));
   if (i < 0) return;
   const h = w.hazards[i]!;
   w.hazards.splice(i, 1);
   const to = homeFor(w, h.kind, h.home);
-  if (!to) return;
-  w.hazards.push({ ...h, at: to });
-  w.hazards.sort((a, b) => index(w, a.at) - index(w, b.at));
+  if (to) {
+    w.hazards.push({ ...h, at: to });
+    w.hazards.sort((a, b) => index(w, a.at) - index(w, b.at));
+  }
   ev.push({ kind: 'sent-home', from: x, to });
 }
 

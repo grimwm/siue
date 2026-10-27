@@ -24,7 +24,7 @@ export type GameEvent =
   | { kind: 'robbed'; at: Cell; gear: Gear[] }
   | { kind: 'exploded'; who: 'player' | 'block' | 'hazard'; at: Cell }
   | { kind: 'cloned'; what: Template; at: Cell }
-  | { kind: 'sent-home'; from: Cell; to: Cell }
+  | { kind: 'sent-home'; from: Cell; to: Cell | null }
   | { kind: 'stoned'; turns: number }
   | { kind: 'won' }
   | { kind: 'lost' };

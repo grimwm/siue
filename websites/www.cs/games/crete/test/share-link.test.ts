@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { encodeLink, decodeLink, LINK_MESSAGES, ENCODED_MAX, DECODED_MAX, MAX_LINE, LINK_VERSION } from '../src/share/link.ts';
 import { levelCode, sharedName } from '../src/share/name.ts';
 import { parse, serialize } from '../src/puzzle/level.ts';
+import { TRIALS } from '../src/puzzle/trials.ts';
 import { lineText, lineOf } from '../src/puzzle/cache.ts';
 import { TERRAIN, OBJECTS, HAZARDS } from '../src/puzzle/tiles.ts';
 import { mulberry32, hashSeed } from '../../_kit/rng.ts';
@@ -119,6 +120,40 @@ test('a decompression bomb is too-large', async () => {
   assert.equal(await errorOf(justOver), 'too-large');
 });
 
+test('a bomb is caught after a bounded number of input pieces', async () => {
+  const link = await pack('#'.repeat(12_000_000));
+  const pieces = Math.ceil(Buffer.from(link.slice(3), 'base64url').length / 1024);
+  assert.ok(pieces >= 8, `${pieces} pieces`);
+  const real = globalThis.DecompressionStream;
+  let writes = 0;
+  globalThis.DecompressionStream = class extends real {
+    get writable(): WritableStream<BufferSource> {
+      const w = super.writable;
+      return new Proxy(w, {
+        get: (target, key) => {
+          if (key !== 'getWriter') return Reflect.get(target, key, target);
+          return () => {
+            const writer = target.getWriter();
+            return new Proxy(writer, {
+              get: (wr, k) => {
+                if (k === 'write') return (chunk: BufferSource) => { writes++; return wr.write(chunk); };
+                const v = Reflect.get(wr, k, wr);
+                return typeof v === 'function' ? v.bind(wr) : v;
+              },
+            });
+          };
+        },
+      });
+    }
+  } as typeof real;
+  try {
+    assert.equal(await errorOf(link), 'too-large');
+  } finally {
+    globalThis.DecompressionStream = real;
+  }
+  assert.ok(writes >= 1 && writes <= 4, `${writes} of ${pieces} pieces written`);
+});
+
 test('L2 is newer; garbage, bad base64 and a truncated stream are damaged', async () => {
   const good = await pack(payloadOf(SMALL));
   assert.equal(await errorOf(await pack(payloadOf(SMALL), 'L2')), 'newer');
@@ -177,12 +212,12 @@ test('a line over MAX_LINE is too-long', async () => {
 });
 
 test('levelCode is stable', async () => {
-  const text = canonical(`title: One\nintro: Two\n\n#####\n#P.E#\n#####\n`);
+  const text = canonical(TRIALS[0]!.text);
   const code = await levelCode(text);
   assert.match(code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$/);
   assert.equal(code, await levelCode(text));
-  assert.notEqual(code, await levelCode(text.replace('P.E', 'PE.')));
-  assert.equal(code, '48BQ');
+  assert.notEqual(code, await levelCode(`${text}\n`));
+  assert.equal(code, 'V43B');
 });
 
 test('sharedName names the level and its author', () => {

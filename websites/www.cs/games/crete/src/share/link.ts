@@ -21,6 +21,7 @@ type Chunks<T> = { getReader(): { read(): Promise<{ done: boolean; value?: T }>;
 type Sink = { getWriter(): { write(chunk: Uint8Array): Promise<void>; close(): Promise<void>; abort(): Promise<void> } };
 declare const CompressionStream: new (format: 'deflate-raw') => { readable: Chunks<Uint8Array>; writable: Sink };
 declare const DecompressionStream: new (format: 'deflate-raw') => { readable: Chunks<Uint8Array>; writable: Sink };
+declare const setTimeout: (run: () => void, ms: number) => unknown;
 declare const TextEncoder: new () => { encode(text: string): Uint8Array };
 declare const TextDecoder: new (label: 'utf-8', options: { fatal: true }) => {
   decode(bytes?: Uint8Array, options?: { stream: boolean }): string;
@@ -34,6 +35,10 @@ export const DECODED_MAX = 32_768;
 /** The most moves in a link's line: a random line of this length on a random 64 x 64 board still fits ENCODED_MAX (deflate's literal codes cost about 3.6 bits a move there, not the 3 a packing would). */
 export const MAX_LINE = 18_000;
 
+/** Bytes of compressed input written to the decompressor at a time. */
+const PIECE = 1024;
+/** The longest the next piece waits for output from the last. */
+const PAUSE_MS = 20;
 const SIDE_MIN = 3;
 const SIDE_MAX = 64;
 
@@ -111,21 +116,41 @@ async function deflate(text: string): Promise<Uint8Array> {
 }
 
 /** The text `bytes` inflate to, or why not: a stream that ends early or is corrupt, or text that is not UTF-8, is
- *  damaged; more than DECODED_MAX characters is too-large, and stops the stream at once. */
+ *  damaged; more than DECODED_MAX characters is too-large. The input goes in pieces of PIECE bytes, and the next
+ *  piece waits (up to PAUSE_MS) for the output of the last to be read and counted, because a stream accepts writes
+ *  long before it has inflated them. So only a few pieces of work follow the count passing DECODED_MAX; then no
+ *  more is written and the stream is cancelled. */
 async function inflate(bytes: Uint8Array): Promise<{ text: string } | { error: 'damaged' | 'too-large' }> {
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
   const reader = ds.readable.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
+  let stop = false;
+  let chunks = 0;
+  let wake: (() => void) | null = null;
   // A corrupt stream rejects the write, the close and the read alike; the read reports it.
-  const writing = writer.write(bytes).then(() => writer.close()).catch(() => undefined);
+  const writing = (async () => {
+    try {
+      for (let at = 0; at < bytes.length && !stop; at += PIECE) {
+        const seen = chunks;
+        await writer.write(bytes.subarray(at, at + PIECE));
+        if (chunks === seen && !stop) await new Promise<void>(done => { wake = done; setTimeout(done, PAUSE_MS); });
+      }
+      if (!stop) await writer.close();
+    } catch {
+      // reported by the read
+    }
+  })();
   let text = '';
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       text += decoder.decode(value, { stream: true });
+      chunks++;
+      wake?.();
       if (text.length > DECODED_MAX) {
+        stop = true;
         await reader.cancel().catch(() => undefined);
         await writer.abort().catch(() => undefined);
         return { error: 'too-large' };
@@ -133,6 +158,7 @@ async function inflate(bytes: Uint8Array): Promise<{ text: string } | { error: '
     }
     text += decoder.decode();
   } catch {
+    stop = true;
     await writer.abort().catch(() => undefined);
     return { error: 'damaged' };
   } finally {

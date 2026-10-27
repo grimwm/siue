@@ -1,11 +1,22 @@
 // websites/www.cs/games/crete/src/puzzle/pieces.ts
 /* The Island of Crete: the trap and trick pieces' shared rules. Teleports send
- * Theseus and blocks out of the next teleport in reading order. DOM-free. */
-import type { Cell, Dir } from './tiles.ts';
-import { next, same } from './state.ts';
+ * Theseus and blocks out of the next teleport in reading order; the toggle
+ * button flips; a hazard keeps to the cells it may enter. DOM-free. */
+import { TERRAIN, HAZARDS } from './tiles.ts';
+import type { Cell, Dir, Hazard, HazardKind } from './tiles.ts';
+import { inside, next, same } from './state.ts';
 import type { Level } from './level.ts';
 import { tAt, oAt } from './work.ts';
-import type { Work } from './work.ts';
+import type { GameEvent, Work } from './work.ts';
+
+/** A hazard stands on `x`. */
+export const hazardOn = (w: Work, x: Cell): boolean => w.hazards.length > 0 && w.hazards.some(h => same(x, h.at));
+
+/** Something pressed the toggle button: every toggle wall opens or closes. */
+export function flip(w: Work, ev: GameEvent[]): void {
+  w.terrain = w.terrain.map(t => (t === 'toggle-open' ? 'toggle-closed' : t === 'toggle-closed' ? 'toggle-open' : t));
+  ev.push({ kind: 'flipped' });
+}
 
 const teleportLists = new WeakMap<Level, readonly number[]>();
 
@@ -67,9 +78,21 @@ export function released(w: Work, trap: number): boolean {
   const { cols } = w.level;
   return buttons.some(b => {
     const x = { r: Math.floor(b / cols), c: b % cols };
-    return same(x, w.player) || oAt(w, x) === 'block' || (w.hazards.length > 0 && w.hazards.some(h => same(x, h.at)));
+    return same(x, w.player) || oAt(w, x) === 'block' || hazardOn(w, x);
   });
 }
 
 /** `x` is a snare that holds whatever stands on it: no linked brown button is held down. */
 export const heldAt = (w: Work, x: Cell): boolean => tAt(w, x) === 'trap' && !released(w, x.r * w.level.cols + x.c);
+
+/** A hazard of this kind has room on `x`, Theseus aside: terrain it may stand on, and no object, cow, Minotaur
+ *  (stone or not) or hazard there. */
+export function hazardRoom(w: Work, kind: HazardKind, x: Cell): boolean {
+  if (!inside(w.level, x)) return false;
+  const t = tAt(w, x);
+  return (TERRAIN[t].hazard || HAZARDS[kind].crosses === t) && !oAt(w, x)
+    && !same(x, w.minotaur) && !same(x, w.cow) && !hazardOn(w, x);
+}
+
+/** Hazard `h` may move onto `x`: it is not held, and `x` has room for it. Theseus's cell is a catch, so it may. */
+export const hazardMayEnter = (w: Work, h: Hazard, x: Cell): boolean => !heldAt(w, h.at) && hazardRoom(w, h.kind, x);

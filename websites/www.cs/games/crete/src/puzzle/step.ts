@@ -13,24 +13,19 @@ import type { State } from './state.ts';
 import { minotaurPhase } from './minotaur.ts';
 import { hazardPhase } from './hazards.ts';
 import { caught, leave, turnOver } from './catch.ts';
-import { heldAt, teleportExit, teleportsLinked } from './pieces.ts';
+import { flip, hazardOn, heldAt, teleportExit, teleportsLinked } from './pieces.ts';
 import { work, tAt, oAt } from './work.ts';
 import type { Action, GameEvent, Work } from './work.ts';
 
 export type { Action, GameEvent } from './work.ts';
 export interface StepResult { state: State; events: GameEvent[] }
 
-function flip(w: Work, ev: GameEvent[]): void {
-  w.terrain = w.terrain.map(t => (t === 'toggle-open' ? 'toggle-closed' : t === 'toggle-closed' ? 'toggle-open' : t));
-  ev.push({ kind: 'flipped' });
-}
-
 /** A pushed block may enter this cell. Never a hazard's cell, the cell a catch throws the player back to, nor the
  *  Minotaur's start: a block there would share a cell with whoever lands on it. */
 function blockMayEnter(w: Work, x: Cell): boolean {
   return inside(w.level, x) && TERRAIN[tAt(w, x)].block && !oAt(w, x)
     && !same(x, w.player) && !same(x, w.minotaur) && !same(x, w.cow)
-    && !same(x, w.throwBack) && !same(x, w.level.minotaur) && !(w.hazards.length > 0 && w.hazards.some(h => same(x, h.at)));
+    && !same(x, w.throwBack) && !same(x, w.level.minotaur) && !hazardOn(w, x);
 }
 
 /** Where a block leaving `from` heading `d` lands: the cell `entry` next to it, or, when that is a teleport, the
@@ -91,14 +86,19 @@ function playerMayEnter(w: Work, to: Cell, d: Dir, riding: boolean): boolean {
   if (t === 'gate' && !gateOpen(w)) return false;
   if (def.needs && !w.gear.includes(def.needs)) return false;
   if (def.door && w.keys[def.door] <= 0) return false;
-  if (oAt(w, to) !== 'block') return true;
+  if (hazardOn(w, to) || oAt(w, to) !== 'block') return true;
   return !riding && !heldAt(w, to) && !!blockMove(w, to, d, () => true);
 }
 
-/** Whether the player may enter `to` heading `d`. When they may, a door on the way opens and a block is pushed.
- *  Every refusal happens before anything is changed. */
+/** Whether the player enters `to` heading `d`. When they may, a door on the way opens and a block is pushed; a
+ *  hazard there catches them where they stand, and they do not enter. Every refusal happens before anything is
+ *  changed. */
 function enterAsPlayer(w: Work, to: Cell, d: Dir, riding: boolean, ev: GameEvent[]): boolean {
   if (!playerMayEnter(w, to, d, riding)) return false;
+  if (hazardOn(w, to)) {
+    caught(w, ev, 'hazard');
+    return false;
+  }
   const def = TERRAIN[tAt(w, to)];
   if (def.door) {
     if (def.door !== 'green') w.keys[def.door]--;
@@ -115,7 +115,7 @@ function enterAsPlayer(w: Work, to: Cell, d: Dir, riding: boolean, ev: GameEvent
 
 /** The player is on `at`, heading `d`: a bomb catches them; else take what lies there, lose gear to a thief,
  *  press, mark the safe zone, win, or go out of a teleport and on to the cell beyond its exit. Out of a teleport
- *  entered on a ride, a block beyond is a blocked exit. True when a bomb caught the player. */
+ *  entered on a ride, a block beyond is a blocked exit. True when a bomb or a hazard caught the player. */
 function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): boolean {
   leave(w, w.player, ev);
   w.player = at;
@@ -150,7 +150,8 @@ function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): bo
   if (t === 'teleport') {
     const exit = teleportExit(w, at, d, x => playerMayEnter(w, x, d, riding));
     if (!exit) return false;
-    enterAsPlayer(w, exit.to, d, riding, ev);
+    // The exit passed playerMayEnter, so entering fails only when a hazard there caught the player.
+    if (!enterAsPlayer(w, exit.to, d, riding, ev)) return true;
     ev.push({ kind: 'teleported', who: 'player', from: at, via: exit.via, to: exit.to });
     return arrive(w, exit.to, d, riding, ev);
   }
@@ -190,9 +191,10 @@ export function step(s: State, a: Action): StepResult {
       w.terrain[index(w, to)] = t === 'fake-wall' ? 'floor' : 'wall';
       ev.push({ kind: 'revealed', at: to, what: t });
     } else {
-      if (!enterAsPlayer(w, to, a.dir, false, ev)) return { state: s, events: [] };
-      ev.push({ kind: 'moved', who: 'player', from, to });
-      if (!arrive(w, to, a.dir, false, ev)) ridePlayer(w, a.dir, ev);
+      if (enterAsPlayer(w, to, a.dir, false, ev)) {
+        ev.push({ kind: 'moved', who: 'player', from, to });
+        if (!arrive(w, to, a.dir, false, ev)) ridePlayer(w, a.dir, ev);
+      } else if (!turnOver(w, ev)) return { state: s, events: [] };
     }
   } else if (a.kind === 'tool') {
     if (w.tools[a.tool] <= 0) return { state: s, events: [] };

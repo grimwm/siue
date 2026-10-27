@@ -9,11 +9,13 @@ import type { Cell, Dir } from './tiles.ts';
 import { inside, index, next, same } from './state.ts';
 import { tAt, oAt } from './work.ts';
 import { caught } from './catch.ts';
-import { heldAt } from './pieces.ts';
+import { hazardOn, heldAt } from './pieces.ts';
 import type { GameEvent, Work } from './work.ts';
 
+/** The Minotaur may enter `x`: terrain he stands on, with no block or hazard there. */
 export function minotaurMayEnter(w: Work, x: Cell): boolean {
-  return inside(w.level, x) && TERRAIN[tAt(w, x)].minotaur && oAt(w, x) !== 'block';
+  return inside(w.level, x) && TERRAIN[tAt(w, x)].minotaur && oAt(w, x) !== 'block'
+    && !hazardOn(w, x);
 }
 
 /** The Minotaur arrives on `to`: the cow is gone, the player is caught. True when the turn's steps end. */

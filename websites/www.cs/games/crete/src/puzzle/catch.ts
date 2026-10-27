@@ -3,11 +3,12 @@
  * thrown back to his last safe zone, the Minotaur sent home when he lands on
  * it. A hazard on a cell something is thrown onto is never destroyed: it goes
  * back to its own start, or to the nearest free cell. DOM-free. */
-import { TERRAIN, HAZARDS, DIRS } from './tiles.ts';
-import type { Cell, HazardKind, Terrain } from './tiles.ts';
+import { DIRS } from './tiles.ts';
+import type { Cell, HazardKind } from './tiles.ts';
 import { inside, index, next, same } from './state.ts';
 import type { Level } from './level.ts';
-import { tAt, oAt } from './work.ts';
+import { hazardRoom } from './pieces.ts';
+import { tAt } from './work.ts';
 import type { GameEvent, Work } from './work.ts';
 
 export type CatchCause = 'minotaur' | 'hazard' | 'bomb';
@@ -27,16 +28,8 @@ export function leave(w: Work, from: Cell, ev: GameEvent[]): void {
   ev.push({ kind: 'rose', at: from });
 }
 
-/** A hazard of this kind may stand on terrain `t`. */
-const mayStandOn = (kind: HazardKind, t: Terrain): boolean =>
-  TERRAIN[t].hazard || HAZARDS[kind].crosses === t;
-
-/** A hazard of this kind may stand on `x` now: its terrain, with no object, cow, Minotaur, hazard or Theseus there. */
-function hazardMayStand(w: Work, kind: HazardKind, x: Cell): boolean {
-  return inside(w.level, x) && mayStandOn(kind, tAt(w, x)) && !oAt(w, x)
-    && !same(x, w.player) && !same(x, w.minotaur) && !same(x, w.cow)
-    && !w.hazards.some(h => same(x, h.at));
-}
+/** A hazard of this kind may be set down on `x` now: it has room there, and Theseus is not on it. */
+const hazardMayStand = (w: Work, kind: HazardKind, x: Cell): boolean => hazardRoom(w, kind, x) && !same(x, w.player);
 
 /** Where a hazard goes when sent home: its home cell, else the nearest free cell breadth-first from it over all
  *  four-neighbours, walls included, ties in reading order; null when no cell on the board can take it. */

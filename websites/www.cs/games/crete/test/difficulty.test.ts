@@ -380,3 +380,19 @@ test('hardPieces names the pieces by how many there are', () => {
 test('hardPieces skips what the level does not have', () => {
   assert.deepEqual(hardPieces(level(['#####', '#P.E#', '#####'])), []);
 });
+
+test('hardPieces names only the present half of keys and doors', () => {
+  assert.deepEqual(hardPieces(level(['#####', '#PRR#', '#..E#', '#####'])), ['2 doors']);
+  assert.deepEqual(hardPieces(level(['#####', '#Pr.#', '#..E#', '#####'])), ['1 key']);
+});
+
+test('hardPieces is singular for one of each', () => {
+  const lv = level(['##########', '#PO.rRtwE#', '#..-.....#', '##########'], 'facing: right');
+  assert.deepEqual(hardPieces(lv), ['1 key and 1 door', '1 block', '1 toggle wall', '1 hazard', '1 button']);
+});
+
+test('hardPieces counts a hazard-template machine as a hazard, and breaks ties in the stated order', () => {
+  // Two hazards (one a ball machine) tie with two blocks: blocks come first. Two buttons come last.
+  const lv = level(['#########', '#POOCw.E#', '#..-+...#', '#########'], 'machines: ball-down\nfacing: right');
+  assert.deepEqual(hardPieces(lv), ['2 blocks', '2 hazards', '2 buttons']);
+});

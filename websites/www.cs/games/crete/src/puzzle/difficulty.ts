@@ -104,7 +104,7 @@ export function hardPieces(level: Level): string[] {
   const buttons = count(t => t === 'button-brown' || t === 'button-red' || t === 'button');
   const entries: [number, string][] = [
     [blocks, `${blocks} ${blocks === 1 ? 'block' : 'blocks'}`],
-    [keys + doors, `${keys} ${keys === 1 ? 'key' : 'keys'} and ${doors} ${doors === 1 ? 'door' : 'doors'}`],
+    [keys + doors, [keys && `${keys} ${keys === 1 ? 'key' : 'keys'}`, doors && `${doors} ${doors === 1 ? 'door' : 'doors'}`].filter(Boolean).join(' and ')],
     [toggles, `${toggles} toggle ${toggles === 1 ? 'wall' : 'walls'}`],
     [hazards, `${hazards} ${hazards === 1 ? 'hazard' : 'hazards'}`],
     [other, `${other} clone ${other === 1 ? 'machine' : 'machines'}`],

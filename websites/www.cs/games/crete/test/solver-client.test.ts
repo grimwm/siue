@@ -182,6 +182,26 @@ test('a cached line that does not win is a miss: the search runs again', async (
   }
 });
 
+test('a cached measure with no line is a miss; one with its line is served', async () => {
+  const d = measure(trialLevel(0));
+  const { line: _line, ...old } = d;
+  const key = await resultKey(TRIALS[0]!.text, 'measure', 'test');
+  const run = async (difficulty: unknown) => {
+    const results = memoryResults();
+    await results.put(key, { solved: d.solved, line: '', explored: d.explored, difficulty: difficulty as Difficulty });
+    const job = startSearch(TRIALS[0]!.text, 'measure', inProcess({ results, every: 1 }));
+    const seen: Report[] = [];
+    job.progress(p => seen.push(p));
+    return { answer: await job.result, searched: seen.length > 0 };
+  };
+  const stale = await run(old);
+  assert.equal(stale.searched, true, 'no line: searched again');
+  assert.deepEqual(stale.answer, d);
+  const fresh = await run(d);
+  assert.equal(fresh.searched, false, 'with its line: served from the cache');
+  assert.deepEqual(fresh.answer, d);
+});
+
 /** A worker that never answers, whose error can be fired; it records whether it was terminated. */
 function failingWorker() {
   const w = {

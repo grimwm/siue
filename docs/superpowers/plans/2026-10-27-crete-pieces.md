@@ -32,12 +32,12 @@ These are the "left to the builder" choices, plus one change to a settled call.
 - **Headers.** `facing:` lists one direction word (`up`, `down`, `left`, `right`) per hazard on the grid, in reading order, and is required exactly when the grid has a hazard. `machines:` lists one `<template>-<dir>` per `C`, in reading order (`template` is `block`, `ball`, `glider` or `fireball`), required exactly when the grid has a `C`. A count mismatch or bad word is a `LevelError` at the header, as for `pages:`.
 - **Links** follow Chip's Challenge's reading-order rule and are never written: each brown button controls the first snare after it in reading order (wrapping to the first), each red button the first clone machine after it (wrapping). A button with nothing to control does nothing. `parse` derives `Level.links`.
 - **The trap holds nothing as state.** A snare is *released* while some brown button linked to it is occupied by Theseus, a block or a hazard (never the Minotaur or the cow); a figure on an unreleased snare cannot leave it. Theseus's move while held is a bump (no turn); waiting and tools are turns. A block on an unreleased snare cannot be pushed.
-- **Throw-back onto a hazard (changes a settled call).** The spec sends a hazard standing on the throw-back cell back to its own start. Clones have no start that stays free, and a start per hazard would grow every solver situation, so instead: when a catch throws Theseus onto a hazard's cell, or throws the Minotaur home onto one, that hazard is destroyed (event `vanished`). Reported to the owner in the PR body.
+- **Throw-back onto a hazard.** As the spec says: when a catch throws Theseus onto a hazard's cell, or throws the Minotaur home onto one, that hazard is sent back to its own start (event `sent-home`). A level hazard's start is its cell in the level; a clone's start is the cell in front of the machine that made it. If its start is taken (anything a hazard may not enter, or Theseus), it goes to the nearest free cell it may stand on, breadth-first from its start over cells it may enter, ties in reading order; only when no such cell exists is it removed. Each hazard carries `home` (an index into the level's homes: its hazards' cells in reading order, then its hazard-cloning machines' front cells).
 - **Hazards and the toggle button.** Hazards press the toggle button (`_`) too, as Chip's Challenge's monsters press green buttons.
 - **Teleports.** A teleport beyond an exit counts as a blocked exit (no chains). Theseus's step out of a teleport may push a block only when he entered the teleport by his own step, not on a ride. Theseus whose every exit is blocked stays on the teleport he entered; the Minotaur and hazards treat that cell as wall, as every teleport.
 - **Bomb catches.** A bomb on Theseus is a catch (`caught` with `by: 'bomb'`), so `caught` refuses it and the turn stops there. `canCatch` (the chase/solo label) counts only `by: 'minotaur'`.
 - **Clones arrive in full.** A cloned block settles like a pushed block (sinks, slides, presses, explodes); a cloned hazard presses buttons and meets bombs on its cell but does not move until its next phase. A red button pressed by a clone's arrival fires again; every firing needs a free cell, so it ends.
-- **Packing hazards.** When no clone machine clones a hazard, hazards are a list of as many slots as the level has hazards, each `cell, kind (2 bits), dir (2 bits)` sorted by cell, empty slots `none`; otherwise 4 bits per cell a hazard could ever stand on (0 empty, 1–12 kind × dir). `State.hazards` is always kept sorted by cell, so equal situations pack alike.
+- **Packing hazards.** When no clone machine clones a hazard, hazards are a list of as many slots as the level has hazards, each `cell, kind (2 bits), dir (2 bits), home` sorted by cell, empty slots `none`; otherwise per cell a hazard could ever stand on, 0 empty or 1 + (kind × dir × home). `State.hazards` is always kept sorted by cell, so equal situations pack alike.
 
 ## Review Focus
 
@@ -63,7 +63,7 @@ These are the "left to the builder" choices, plus one change to a settled call.
   export type Terrain = /* existing */ | 'trap' | 'button-brown' | 'button-red' | 'popup' | 'gravel'
     | 'fake-wall' | 'invisible-wall' | 'teleport' | 'thief' | 'bomb' | 'clone';
   export type HazardKind = 'ball' | 'glider' | 'fireball';
-  export interface Hazard { readonly kind: HazardKind; readonly at: Cell; readonly dir: Dir }
+  export interface Hazard { readonly kind: HazardKind; readonly at: Cell; readonly dir: Dir; readonly home: number }
   export const HAZARDS: Record<HazardKind, { char: string; name: string; sprite: string; turns: readonly ('ahead' | 'left' | 'right' | 'back')[]; crosses?: Terrain }>;
   // ball: turns ['back'], name 'Bronze ball'; glider: ['left','right','back'], 'Harpy', crosses 'water';
   // fireball: ['right','left','back'], "Talos's fire", crosses 'fire'.
@@ -92,8 +92,8 @@ These are the "left to the builder" choices, plus one change to a settled call.
 
 **Interfaces:**
 - Produces: `State.hazards: readonly Hazard[]` (sorted by cell; `initial` copies `level.hazards`); `Work.hazards: Hazard[]` (`work()` copies it).
-- `GameEvent` gains: `moved`/`slid` `who` adds `'hazard'` (with `hazard?: HazardKind`); `{ kind: 'caught'; at; hearts; by: 'minotaur' | 'hazard' | 'bomb' }`; `{ kind: 'revealed'; at; what: 'fake-wall' | 'invisible-wall' }`; `{ kind: 'rose'; at }`; `{ kind: 'teleported'; who: 'player' | 'block'; from: Cell; via: Cell; to: Cell }`; `{ kind: 'held'; who: 'player' | 'minotaur' | 'block' | 'hazard'; at }`; `{ kind: 'robbed'; at; gear: Gear[] }`; `{ kind: 'exploded'; who: 'player' | 'block' | 'hazard'; at }`; `{ kind: 'cloned'; what: Template; at }`; `{ kind: 'vanished'; at }`.
-- `catch.ts`: `caught(w: Work, ev: GameEvent[], by: 'minotaur' | 'hazard' | 'bomb'): void` — moved out of `minotaur.ts`, plus: Theseus leaves his cell through `leave` (Task 3 fills it in; here a no-op export `leave(w, from, ev)`), a hazard on the throw-back cell or on the Minotaur's start when he is sent home is removed with `vanished`. `turnOver(w, ev): boolean` — the outcome is no longer `playing` or a `caught` is in `ev`.
+- `GameEvent` gains: `moved`/`slid` `who` adds `'hazard'` (with `hazard?: HazardKind`); `{ kind: 'caught'; at; hearts; by: 'minotaur' | 'hazard' | 'bomb' }`; `{ kind: 'revealed'; at; what: 'fake-wall' | 'invisible-wall' }`; `{ kind: 'rose'; at }`; `{ kind: 'teleported'; who: 'player' | 'block'; from: Cell; via: Cell; to: Cell }`; `{ kind: 'held'; who: 'player' | 'minotaur' | 'block' | 'hazard'; at }`; `{ kind: 'robbed'; at; gear: Gear[] }`; `{ kind: 'exploded'; who: 'player' | 'block' | 'hazard'; at }`; `{ kind: 'cloned'; what: Template; at }`; `{ kind: 'sent-home'; from: Cell; to: Cell }`.
+- `catch.ts`: `caught(w: Work, ev: GameEvent[], by: 'minotaur' | 'hazard' | 'bomb'): void` — moved out of `minotaur.ts`, plus: Theseus leaves his cell through `leave` (Task 3 fills it in; here a no-op export `leave(w, from, ev)`), a hazard on the throw-back cell or on the Minotaur's start when he is sent home is sent home (the throw-back ruling) with `sent-home`. `turnOver(w, ev): boolean` — the outcome is no longer `playing` or a `caught` is in `ev`.
 - `step()` runs `hazardPhase(w, ev)` (a no-op export in a new `src/puzzle/hazards.ts`, filled in by Task 5) between the player's action and `minotaurPhase`, skipping both when `turnOver`; a raised mirror skips only the Minotaur.
 
 - [ ] **Step 1: Write the failing tests**: `a Minotaur catch reports by: 'minotaur'`; `initial copies the level's hazards sorted by cell`; existing step tests still pass unchanged.
@@ -159,7 +159,7 @@ These are the "left to the builder" choices, plus one change to a settled call.
   - `a hazard moving onto Theseus is a catch and the Minotaur does not move that turn`; `Theseus moving into a hazard is a catch and he does not move`; `a hazard on a bomb is destroyed with it`; `hazards press the toggle button`.
   - `hazards move in reading order of where they stood when the phase began`: two hazards racing for one cell — the earlier one takes it; a later hazard enters a cell an earlier one just left.
   - `the Minotaur and a hazard never share a cell`, stone or not; `hazards keep moving while the Minotaur is stone`.
-  - `a catch that throws Theseus onto a hazard destroys it` (`vanished`).
+  - `a catch that throws Theseus onto a hazard sends it home`; `a hazard whose start is taken goes to the nearest free cell`.
   - `hazards do not enter blocks, objects, the cow or each other`.
 - [ ] **Step 2:** Run `node --test crete/test/puzzle-hazards.test.ts` — Expected: FAIL.
 - [ ] **Step 3:** Implement.
@@ -275,7 +275,7 @@ Then: open PR 1, `foundry:pr-fix-loop`, merge on green, deploy, light live check
 - Test: `test/game.test.ts`, `test/audio.test.ts`, `test/help.test.ts`
 
 **Interfaces:**
-- `SfxName` gains `snap` (held), `reveal`, `rise`, `warp` (teleported), `thief`, `boom` (exploded), `clone`, `vanish`. A hazard catch voices `caught`; its log says who caught Theseus by myth name ("The harpy caught you! 2 hearts left."); a bomb says "A bomb! …".
+- `SfxName` gains `snap` (held), `reveal`, `rise`, `warp` (teleported), `thief`, `boom` (exploded), `clone`, `home`. A hazard catch voices `caught`; its log says who caught Theseus by myth name ("The harpy caught you! 2 hearts left."); a bomb says "A bomb! …".
 - `helpLines` gains one line per family, with myth names: the snare and its button; pop-up, fake and invisible walls and gravel; teleports and the thief; bombs and clone machines with the red button; the three hazards and the turn order.
 - `window.__creteTest` gains `parse` and `playLevel(level: Level)` if `Game` cannot already open a level outside the campaign.
 

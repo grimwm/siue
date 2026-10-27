@@ -20,8 +20,12 @@ export function homeCell(level: Level, home: number): Cell {
   return next(m.at, m.dir);
 }
 
-/** Theseus leaves `from` by being thrown, not by walking. */
-export function leave(_w: Work, _from: Cell, _ev: GameEvent[]): void {}
+/** Theseus leaves `from`, by any means: a pop-up wall there rises. Every change of `w.player` goes through it. */
+export function leave(w: Work, from: Cell, ev: GameEvent[]): void {
+  if (tAt(w, from) !== 'popup') return;
+  w.terrain[index(w, from)] = 'wall';
+  ev.push({ kind: 'rose', at: from });
+}
 
 /** A hazard of this kind may stand on terrain `t`. */
 const mayStandOn = (kind: HazardKind, t: Terrain): boolean =>

@@ -1,5 +1,6 @@
 // The Island of Crete: the ending card of a level. src/ui.ts decides the words; this draws them and reports
-// the buttons: after a win Next level (unless it was the last), Retry and Levels; after a loss Undo and Restart. A win that took story pages names them.
+// the buttons: after a win Next level (unless it was the last), Retry and Levels (for a campaign level); after a loss
+// Undo and Restart; and Back to the editor when the page gives it. A win that took story pages names them.
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';
@@ -10,6 +11,8 @@ export interface EndView {
   won: boolean;
   /** A won level that has a level after it. */
   hasNext: boolean;
+  /** The level is the campaign's, so a win offers the levels list. */
+  hasLevels: boolean;
   kicker: string;
   title: string;
   text: string;
@@ -25,6 +28,8 @@ export interface EndCardProps extends EndView {
   onTrials: () => void;
   onUndo: () => void;
   onRestart: () => void;
+  /** Back to the editor, shown only when given. */
+  onBackToEditor?: () => void;
 }
 
 export function EndCard(p: EndCardProps) {
@@ -42,9 +47,10 @@ export function EndCard(p: EndCardProps) {
       <div class="title-actions">
         {p.won && p.hasNext && <Button id="end-next" keyLabel={KEYS.begin.label} onClick={p.onNext}>Next level</Button>}
         {p.won && <Button id="end-retry" keyLabel={KEYS.restart.label} onClick={p.onRetry}>Retry</Button>}
-        {p.won && <Button id="end-trials" keyLabel={KEYS.new.label} onClick={p.onTrials}>Levels</Button>}
+        {p.won && p.hasLevels && <Button id="end-trials" keyLabel={KEYS.new.label} onClick={p.onTrials}>Levels</Button>}
         {!p.won && <Button id="end-undo" keyLabel={KEYS.undo.label} onClick={p.onUndo}>Undo</Button>}
         {!p.won && <Button id="end-restart" keyLabel={KEYS.restart.label} onClick={p.onRestart}>Restart</Button>}
+        {p.onBackToEditor && <Button id="end-editor" onClick={p.onBackToEditor}>Back to the editor</Button>}
       </div>
     </Dialog>
   );

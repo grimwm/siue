@@ -263,6 +263,43 @@ test('a win on a scratch level records no progress and finds no pages', () => {
   assert.deepEqual(game.found, []);
 });
 
+test('a scratch win is handed to the levels, with its moves and whether it had help', () => {
+  const wins: [number, number, boolean][] = [];
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    pages: createFoundPages(null),
+    levels: {
+      count: 1, id: () => 'test-level', scratch: () => true, won: (i, moves, assisted) => { wins.push([i, moves, assisted]); },
+      level: () => parse('title: t\nintro: i\n\n#####\n#P.E#\n#####\n'),
+    },
+  });
+  game.open(0);
+  game.press(R_);
+  game.press(R_);
+  assert.deepEqual(wins, [[0, 2, false]]);
+  game.open(0);
+  game.hint();
+  game.press(R_);
+  game.press(R_);
+  assert.deepEqual(wins, [[0, 2, false], [0, 2, true]]);
+});
+
+test('a campaign win is not handed to the levels', () => {
+  const wins: number[] = [];
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    pages: createFoundPages(null),
+    levels: { count: 1, id: () => 'test-level', won: i => { wins.push(i); }, level: () => parse('title: t\nintro: i\n\n#####\n#P.E#\n#####\n') },
+  });
+  game.open(0);
+  game.press(R_);
+  game.press(R_);
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.deepEqual(wins, []);
+});
+
 test('a catch names the hazard on a teleport exit and on a ride onto one', () => {
   const exit = lone(['P@..', '..@w'], 'facing: left');
   exit.game.press(R_);
@@ -329,4 +366,59 @@ test('a bomb, a snare, a thief and a revealed wall each get one line; hazard ste
   const steps = lone(['P....o'], 'facing: left');
   steps.game.press({ kind: 'wait' });
   assert.deepEqual(steps.said, []);
+});
+
+/** Level 9 with its solver line given as the level's known line, and the thread's search counted. */
+function onKnownLine() {
+  const known = line(8);
+  let solves = 0;
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), pages: createFoundPages(null), timers: m.timers, clock: m.clock,
+    reducedMotion: () => true, changed() {},
+    levels: { ...CAMPAIGN_LEVELS, line: i => (i === 8 ? known : null) },
+    solve: (s, cap) => { solves++; return solve(s, cap); },
+  });
+  game.open(8);
+  /** A move that changes the try but is not the known line's next. */
+  const offLine = (): Action => {
+    const next = known[game.run!.now.moves]!;
+    const a = (['up', 'down', 'left', 'right'] as const).map((dir): Action => ({ kind: 'move', dir }))
+      .find(a => JSON.stringify(a) !== JSON.stringify(next) && step(game.run!.now, a).state !== game.run!.now);
+    assert.ok(a, 'some move leaves the line');
+    return a;
+  };
+  return { game, known, solves: () => solves, offLine };
+}
+
+test('the thread follows a known line while the try is on it', () => {
+  const h = onKnownLine();
+  for (let i = 0; i < 3; i++) h.game.hint();
+  assert.equal(h.solves(), 0);
+  assert.equal(h.game.run!.now.moves, 3);
+  h.game.route();
+  assert.equal(h.solves(), 0, 'V draws the known line too');
+  h.game.route();
+  h.game.press(h.offLine());
+  h.game.hint();
+  assert.equal(h.solves(), 1);
+});
+
+test('undo back onto the line uses it again', () => {
+  const h = onKnownLine();
+  h.game.hint();
+  h.game.hint();
+  h.game.press(h.offLine());
+  h.game.hint();
+  assert.equal(h.solves(), 1, 'off the line the thread solves');
+  h.game.press('undo');
+  h.game.press('undo');
+  h.game.hint();
+  assert.equal(h.solves(), 1, 'back on the line it follows the line');
+  h.game.press(h.offLine());
+  h.game.press('restart');
+  for (const a of h.known.slice(0, 2)) h.game.press(a);
+  h.game.hint();
+  assert.equal(h.solves(), 1, 'restart clears the moves played');
+  assert.equal(h.game.run!.now.moves, 3);
 });

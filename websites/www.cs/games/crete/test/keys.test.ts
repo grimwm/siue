@@ -11,6 +11,9 @@ import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
 import type { Game } from '../src/game.ts';
 import type { Controls } from '../src/ui.ts';
+import { EDITOR_KEYS, editorActionFor } from '../src/editor/keys.ts';
+import type { EditorAction } from '../src/editor/keys.ts';
+import { KEYS } from '../src/keys.ts';
 
 installDocument();
 const { ui } = await importTsx<{ ui: typeof import('../src/ui.ts') }>(import.meta.dirname, { ui: '../src/ui.ts' });
@@ -133,4 +136,40 @@ test('a chord with Ctrl, Cmd or Alt is the browser\'s: no game key acts on it or
     }
   }
   assert.equal(page.top(), null);
+});
+
+// ---- the level editor's keys ----
+
+test('EDITOR_KEYS never binds escape', () => {
+  for (const a of Object.keys(EDITOR_KEYS) as EditorAction[]) {
+    assert.ok(!EDITOR_KEYS[a].keys.includes('escape'), a);
+    assert.ok(!EDITOR_KEYS[a].keys.includes('q'), `${a}: Q is the back key`);
+  }
+  for (const mods of [{}, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }]) assert.equal(editorActionFor({ key: 'Escape', ...mods }), null);
+});
+
+test('the editor keys: U and Ctrl or Cmd+Z undo; Y, Ctrl or Cmd+Y and Ctrl or Cmd+Shift+Z redo; P, C and O', () => {
+  assert.deepEqual(EDITOR_KEYS, {
+    undo: { label: 'U', keys: ['u'] }, redo: { label: 'Y', keys: ['y'] }, try: { label: 'P', keys: ['p'] },
+    check: { label: 'C', keys: ['c'] }, rotate: { label: 'O', keys: ['o'] },
+  });
+  assert.equal(editorActionFor({ key: 'u' }), 'undo');
+  assert.equal(editorActionFor({ key: 'U' }), 'undo');
+  for (const mod of ['ctrlKey', 'metaKey']) {
+    assert.equal(editorActionFor({ key: 'z', [mod]: true }), 'undo', mod);
+    assert.equal(editorActionFor({ key: 'Z', shiftKey: true, [mod]: true }), 'redo', mod);
+    assert.equal(editorActionFor({ key: 'y', [mod]: true }), 'redo', mod);
+    assert.equal(editorActionFor({ key: 'p', [mod]: true }), null, `${mod}+P is the browser's`);
+  }
+  assert.equal(editorActionFor({ key: 'y' }), 'redo');
+  assert.equal(editorActionFor({ key: 'p' }), 'try');
+  assert.equal(editorActionFor({ key: 'c' }), 'check');
+  assert.equal(editorActionFor({ key: 'o' }), 'rotate');
+  assert.equal(editorActionFor({ key: 'z' }), null);
+  assert.equal(editorActionFor({ key: 'u', altKey: true }), null);
+  assert.equal(editorActionFor({ key: 'q' }), null);
+});
+
+test('E is Make a level on the title card', () => {
+  assert.deepEqual(KEYS.editor, { label: 'E', keys: ['e'] });
 });

@@ -317,6 +317,109 @@ button:disabled { opacity: 0.45; cursor: default; }
   .board { padding: 4px; }
 }
 
+/* ---- the level editor: a layer over the whole frame. The bar runs across the top, the board fills the rest and
+   the palette sits at its right; under 700px the palette is a drawer the Pieces button opens. ---- */
+.editor {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template: "bar bar" auto "board side" minmax(0, 1fr) / minmax(0, 1fr) auto;
+  background: var(--bg);
+}
+.editor[hidden] { display: none; }
+#editor-panel { display: contents; }
+.editor-bar {
+  grid-area: bar;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.editor-actions, .editor-size { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.editor-size label { display: flex; gap: 0.3rem; align-items: center; color: var(--dim); font-size: 0.9rem; }
+.editor-size input { width: 4rem; }
+.editor-size input, .editor-size select { font: inherit; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 0.15rem 0.3rem; }
+.editor-pieces { display: none; }
+/* The board as the game's: centred, and a big draft scrolls with cells of at least 32px (src/editor/editor.ts). */
+.editor-board {
+  grid-area: board;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  overflow: hidden;
+}
+.editor-board.scrolls { display: flex; overflow: auto; overscroll-behavior: contain; }
+.editor-board.scrolls .stage { flex: none; margin: auto; }
+/* One finger paints, so the browser takes no touch gesture on the board; two fingers scroll it (editor.ts). */
+.editor-stage { touch-action: none; cursor: crosshair; }
+.editor-side {
+  grid-area: side;
+  width: 15.5rem;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+}
+.check-panel { margin-bottom: 0.6rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); }
+.check-panel h3 { margin: 0 0 0.3rem; font-size: 0.8rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
+.check-panel p { margin: 0.3rem 0; font-size: 0.9rem; }
+.share-panel { margin-bottom: 0.6rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); }
+.share-panel h3 { margin: 0 0 0.3rem; font-size: 0.8rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
+.share-panel p { margin: 0.3rem 0; font-size: 0.9rem; }
+.share-panel input[type="text"], .share-panel textarea { width: 100%; box-sizing: border-box; }
+.check-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.check-bar { position: relative; height: 6px; margin-top: 0.5rem; overflow: hidden; background: var(--bg); border-radius: 3px; }
+.check-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 35%; background: var(--accent); border-radius: 3px; animation: check-slide 1.4s ease-in-out infinite alternate; }
+@keyframes check-slide { to { transform: translateX(185%); } }
+.check-strip { display: none; align-items: center; gap: 0.4rem; min-width: 0; flex-basis: 100%; }
+.check-strip .check-bar { flex: 0 0 4rem; margin: 0; }
+.check-strip-text { font-size: 0.85rem; color: var(--dim); min-width: 0; overflow-wrap: anywhere; }
+.check-strip.stale { opacity: 0.7; }
+.check-result.stale { opacity: 0.55; }
+.check-stale { color: var(--bad); }
+.palette h3 { margin: 0.4rem 0 0.25rem; font-size: 0.8rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
+.palette-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.palette .brush { position: relative; padding: 2px; background: var(--bg); border: 2px solid var(--line); border-radius: 4px; line-height: 0; }
+.palette .brush[aria-pressed="true"] { border-color: var(--accent); }
+.swatch { position: relative; display: block; width: 32px; height: 32px; overflow: hidden; }
+.swatch-img { display: block; transform-origin: 0 0; background-repeat: no-repeat; }
+.brush-dir, .brush-mark {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 14px;
+  color: var(--ink);
+  background: rgba(1, 4, 9, 0.8);
+  border-radius: 3px;
+}
+.brush-mark { font-weight: 700; color: var(--accent); }
+.erase-mark { color: var(--bad); }
+.brush-rotate { margin-top: 0.6rem; }
+@container frame (max-width: 699px) {
+  .editor { grid-template: "bar" auto "board" minmax(0, 1fr) / minmax(0, 1fr); }
+  .editor-pieces { display: inline-block; }
+  .check-strip { display: flex; flex-wrap: wrap; }
+  /* The drawer lies over the board's right side, under the bar. */
+  .editor-side {
+    grid-area: board;
+    justify-self: end;
+    z-index: 1;
+    max-width: 85%;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.5);
+  }
+  .editor-side:not(.open) { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toast { transition: none; }
+  .check-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }

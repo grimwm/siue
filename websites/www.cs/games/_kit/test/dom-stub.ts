@@ -110,14 +110,29 @@ function siblingOf(node: StubNode, step: number): StubNode | null {
   const kin = node.parentNode ? node.parentNode.children : [];
   return kin[kin.indexOf(node) + step] ?? null;
 }
+// node:assert prints a failing value with its getters, 1000 levels deep, and
+// stops only at an ancestor it is already inside. A node whose parent and
+// sibling links were enumerable would print every path through the tree, which
+// grows past the machine's memory on a rendered page; so the links upward and
+// sideways stay readable but hidden, and a node prints as its own subtree.
+// Preact keeps its render tree, which points back into the DOM, on the root
+// it renders into (`__k`), so that slot is hidden before Preact fills it.
+function hideLinks<T extends StubNode>(node: T, keys: readonly string[]): T {
+  for (const key of keys) {
+    Object.defineProperty(node, key, key in node
+      ? { enumerable: false }
+      : { value: undefined, writable: true, enumerable: false, configurable: true });
+  }
+  return node;
+}
 export function makeText(data: unknown): StubText {
-  return {
+  return hideLinks({
     nodeType: 3, data: String(data), children: [], parentNode: null as StubElement | null,
     get textContent() { return this.data; },
     set textContent(v: string) { this.data = String(v); },
     get nextSibling() { return siblingOf(this, 1); },
     remove() { detach(this); },
-  };
+  } as StubText, ['parentNode', 'nextSibling']);
 }
 // `children` holds every child node, text included (the stub's long-standing
 // reading); a plain `textContent = ...` is one text child, as in a browser.
@@ -181,7 +196,7 @@ export function makeEl(id: string): StubElement {
     blur() { globalThis.__blurred = this; if (document.activeElement === this) document.activeElement = null; },
     focus() { globalThis.__focused = this; document.activeElement = this; },
   };
-  return el;
+  return hideLinks(el, ['parentNode', 'parentElement', 'nextSibling', 'firstChild', 'childNodes', '__k']);
 }
 // An element made through createElementNS is Preact's: giving it an id makes
 // document.getElementById find it, as the page would.

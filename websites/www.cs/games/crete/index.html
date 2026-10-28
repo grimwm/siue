@@ -15,7 +15,7 @@
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
     <!-- app-tags:end -->
     <link rel="stylesheet" href="dist/kit.css?v=58f4ab21d4" />
-    <link rel="stylesheet" href="game.css?v=558f0af71e" />
+    <link rel="stylesheet" href="game.css?v=d48da7db2f" />
   </head>
   <body>
     <div id="frame">
@@ -33,9 +33,16 @@
       <div id="story-root"></div>
       <div id="end-root"></div>
       <div id="lore-root"></div>
+      <div id="shared-root"></div>
+      <div id="editor-root" class="editor" hidden>
+        <div id="editor-board" class="editor-board">
+          <canvas id="editor-stage" class="stage editor-stage" role="img" aria-label="Your level"></canvas>
+        </div>
+        <div id="editor-panel"></div>
+      </div>
     </div>
 
-    <script type="module" src="dist/main.js?v=2a8d8c1c53"></script>
+    <script type="module" src="dist/main.js?v=71a7960641"></script>
     <script src="dist/install.js?v=11432e35ca" defer></script>
   </body>
 </html>

@@ -1,5 +1,6 @@
-/* Entry: wires the game, the board, audio and the UI, opens the title card (or, with ?seed=, Chapter 1's card over it),
- * and exposes window.__creteTest for the browser specs. */
+/* Entry: wires the game, the board, audio, the UI, the level editor and share links, opens the title card (or, with
+ * ?seed=, Chapter 1's card over it; with #edit, the editor; with a share link, its card), and exposes
+ * window.__creteTest for the browser specs. */
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
 import { createAudio } from './audio.ts';
 import { createBoard } from './board.ts';
@@ -14,10 +15,16 @@ import { startSearch } from './solver-client.ts';
 import type { Report } from './solver-host.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS } from './campaign/chapters.ts';
-import type { Levels } from './campaign/chapters.ts';
+import type { OutsideLevel } from './campaign/chapters.ts';
+import { createOutside } from './outside.ts';
+import type { Action } from './puzzle/step.ts';
 import { createFoundPages } from './pages.ts';
 import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
+import { createEditor } from './editor/editor.ts';
+import { fromLevel } from './editor/model.ts';
+import { createRater } from './share/rating.ts';
+import { createVisit, fragmentKind } from './share/visit.ts';
 import { createSettings } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
@@ -40,28 +47,87 @@ const image = new Image();
 const board = createBoard(document.getElementById('stage') as HTMLCanvasElement, atlas, image);
 const progress = createProgress(browserStorage());
 const pages = createFoundPages(browserStorage());
-const ui = createUi({ atlas, board, progress, pages, sfx: audio.sfx });
+/* The campaign's levels, then the level from outside it (a try from the editor, or a browser spec's). */
+const outside = createOutside(CAMPAIGN_LEVELS, {
+  open: i => game.open(i),
+  settle: () => game.settle(),
+  closeLayers: () => ui.closeLayers(),
+  showEditor: () => ui.showEditor(),
+  bestWon: (text, moves) => editor.tryWon(text, moves),
+});
+const levels = outside.levels;
+const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx });
+/* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
+   which comes first. */
+const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
+/* The level editor, a layer over the game frame. Try it plays the draft on the game screen. */
+const editor = createEditor({
+  root: document.getElementById('editor-root') as HTMLElement,
+  atlas,
+  image,
+  tryIt: (level, text, line) => tryLevel(level, text, line),
+  start: rater.check,
+  changed: () => {},
+  leave: () => ui.leaveEditor(),
+});
+/* A share link in the address: its card, Play as a shared level, Edit a copy in the editor (the address then says
+   #edit, as for any visit to the editor). */
+const visit = createVisit({
+  rater,
+  play: (level, about, line) => outside.play(level, about, line),
+  edit: draft => {
+    game.settle();
+    ui.showEditor(draft);
+    history.replaceState(history.state, '', `${window.location.pathname}${window.location.search}${EDIT_HASH}`);
+  },
+  show: () => {
+    game.settle();
+    ui.showShared();
+  },
+  refuse: message => {
+    game.settle();
+    ui.refuseLink(message);
+  },
+});
+
+/** Opens the editor's draft on the game screen as a try. `line` is the last Check's line when that check was of this
+ *  exact text, for Ariadne's thread to follow. */
+function tryLevel(level: Level, text: string, line: readonly Action[] | null): void {
+  outside.tryLevel(level, text, line);
+}
+
+/* `#edit` in the address opens the editor, when the page opens and whenever the fragment changes to it (as Back to
+   the editor does, so a try in play settles first); the fragment changing away from it (the browser's Back) leaves
+   the editor for the title card. A try leaves the address as it is, as part of the editor's visit; the browser's
+   Back during one changes nothing on the screen: the try plays on, with Back to the editor in its menu. A fragment
+   `L<digits>…` is a share link: its card opens, or the title card says why it cannot. The link stays in the address
+   while its level is played, so a reload opens its card again; the browser's Back from its card to no fragment
+   shows the title card. Any other fragment is not the game's and changes nothing. */
+const EDIT_HASH = '#edit';
+function followHash(): void {
+  const hash = window.location.hash;
+  const kind = fragmentKind(hash);
+  if (kind === 'link') {
+    void visit.open(hash.slice(1));
+    return;
+  }
+  if (kind === 'other') return;
+  // The address moved on from any link: one still decoding shows no card.
+  visit.forget();
+  if (kind === 'edit') outside.backToEditor();
+  else if (ui.top() === 'shared') ui.leaveShared();
+  else ui.leaveEditor();
+}
+/* The editor's visit ending (the editor left for the title card, a campaign level opened, Quit) takes `#edit` off
+   the address without a new history entry, so a reload does not open the editor. */
+function leftEditor(): void {
+  if (window.location.hash === EDIT_HASH) history.replaceState(history.state, '', window.location.pathname + window.location.search);
+}
 
 /* The reduced-motion preference, followed live. */
 const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
 let reduced = motion?.matches ?? false;
 motion?.addEventListener('change', e => { reduced = e.matches; });
-
-/** The level `__creteTest.playLevel` opens outside the campaign: it opens once, and records nothing. */
-let queued: Level | null = null;
-/** The scratch level in play, until the next real open. */
-let scratch: Level | null = null;
-const levels: Levels = {
-  count: CAMPAIGN_LEVELS.count,
-  id: i => (scratch ? 'test-level' : CAMPAIGN_LEVELS.id(i)),
-  // Moves a queued scratch level into place; `game.open` is its only caller.
-  level: i => {
-    scratch = queued;
-    queued = null;
-    return scratch ?? CAMPAIGN_LEVELS.level(i);
-  },
-  scratch: () => scratch !== null,
-};
 
 const game = createGame({
   sfx: audio.sfx,
@@ -108,11 +174,12 @@ function play(): void {
   ui.showChapter(1, false);
 }
 
-/* Quit (the menu's): the cards close; an installed app closes where it may, and otherwise
-   (always in a browser tab) the title card shows. */
+/* Quit (the menu's): the cards close and the editor's visit ends; an installed app closes where it may, and
+   otherwise (always in a browser tab) the title card shows. */
 async function quit(): Promise<void> {
   ui.closeLayers();
   game.stop();
+  leftEditor();
   const outcome = await exitApp(appEnv);
   if (outcome !== 'closed') ui.showTitle(outcome === 'title-with-hint');
 }
@@ -130,7 +197,8 @@ function loop(now: number): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleFullscreen, wake: audio.ensure, quit: () => { void quit(); }, play,
+    game, toggleMute, toggleFullscreen, wake: audio.ensure, quit: () => { void quit(); }, play, editor, leftEditor,
+    backToEditor: outside.backToEditor, shared: visit,
   });
   if (settings.sound.get() === 'off') {
     audio.toggleMute();
@@ -146,6 +214,8 @@ function start(): void {
   if (direct) {
     ui.showChapter(1, false);
   }
+  followHash();
+  window.addEventListener('hashchange', followHash);
   mountTitleInstall(window, document.getElementById('title-install'));
   image.onload = () => { requestAnimationFrame(loop); };
   image.onerror = () => {
@@ -162,6 +232,9 @@ function start(): void {
 }
 // A hidden tab runs no play-out; showing it again leaves it stopped.
 followPage({ doc: document, win: window }, { hide: game.stop, show: () => {} });
+// The page going away cancels a shared level's rating; a page brought back from the browser's cache rates it again.
+window.addEventListener('pagehide', () => visit.leave());
+window.addEventListener('pageshow', e => { if (e.persisted) visit.back(); });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
 else start();
 
@@ -173,9 +246,19 @@ function solveInWorker(levelText: string): Promise<{ result: unknown; progress: 
   return job.result.then(result => ({ result, progress }));
 }
 
-/* Test hook for automated checks: drives the real game logic, no copy. */
-function playLevel(level: Level): void {
-  queued = level;
-  game.open(0);
+/** Opens `level` from outside the campaign: a try (named by its title, or "Your level") unless `opts.outside` says
+ *  otherwise, with `opts.line` as its proven line when there is one. */
+function playLevel(level: Level, opts: { outside?: OutsideLevel; line?: readonly Action[] } = {}): void {
+  outside.play(level, opts.outside ?? { kind: 'try', name: level.title || 'Your level', best: null }, opts.line ?? null);
 }
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse };
+
+/* Test hook for automated checks: drives the real game logic, no copy. Its editor is the Editor, plus `load(text)`,
+   which opens the editor on that level text. */
+const editorHook = {
+  open: editor.open, close: editor.close, key: editor.key, bestFor: editor.bestFor,
+  get draft() { return editor.draft; },
+  load(text: string): void {
+    ui.showEditor(fromLevel(parse(text)));
+  },
+};
+window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook };

@@ -6,6 +6,7 @@
  */
 import { isBackKey, typesText } from "../../_kit/keys.ts";
 import type { Board } from "./board.ts";
+import type { Editor } from "./editor/editor.ts";
 import { boardRows } from "./board-plan.ts";
 import type { Atlas } from "./board-plan.ts";
 import type { Game, SfxName, Tone } from "./game.ts";
@@ -19,6 +20,7 @@ import type { State } from "./puzzle/state.ts";
 import { TOOLS } from "./puzzle/tiles.ts";
 import type { Tool } from "./puzzle/tiles.ts";
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter } from "./campaign/chapters.ts";
+import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
 import { cellFor } from "./fit.ts";
 import { follow } from "./follow.ts";
@@ -36,6 +38,9 @@ import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
 import { renderTitleCard } from "./ui/title.tsx";
+import { ratingText, renderSharedCard } from "./ui/shared.tsx";
+import type { SharedView } from "./share/visit.ts";
+import type { RatingState } from "./share/rating.ts";
 import { renderLevels } from "./ui/levels.tsx";
 import type { LevelRow } from "./ui/levels.tsx";
 
@@ -46,6 +51,8 @@ export interface UiDeps {
   progress: Progress;
   /** The story pages found in this browser, for the Lore book. */
   pages: FoundPages;
+  /** The levels the game plays, for telling one from outside the campaign; without it every level is the campaign's. */
+  levels?: Pick<Levels, "outside">;
   /** Voices an event (the chapter card's sound). */
   sfx?(name: SfxName): void;
 }
@@ -61,6 +68,16 @@ export interface Controls {
   quit(): void;
   /** Play on the title card: opens Chapter 1's card. */
   play(): void;
+  /** Back to the editor from a try: offered in the menu and on the end card while a try is in play. */
+  backToEditor?(): void;
+  /** The level editor, when the page has one: Make a level on the title card opens it, and while it is the top
+   *  layer every key goes to it. */
+  editor?: Pick<Editor, "open" | "close" | "key">;
+  /** The open share link, when the page has one: its card, Play and Edit a copy. */
+  shared?: { card(): SharedView | null; play(): void; edit(): void };
+  /** The editor's visit ended: the editor was left for the title card, or a campaign level was opened (from a try,
+   *  or from anywhere). */
+  leftEditor?(): void;
 }
 
 export interface Ui {
@@ -70,8 +87,8 @@ export interface Ui {
   setMuted(muted: boolean): void;
   setFullscreen(on: boolean): void;
   bindControls(controls: Controls): void;
-  /** The title card, alone; `hint` adds how to close an installed app. */
-  showTitle(hint: boolean): void;
+  /** The title card, alone; `hint` adds how to close an installed app, and `note` why a share link did not open. */
+  showTitle(hint: boolean, note?: string): void;
   /** The level list, over whatever is showing. */
   showLevels(): void;
   /** Chapter `n`'s card, over whatever is showing: the opening one (Enter starts the first level this browser
@@ -81,6 +98,18 @@ export interface Ui {
   closeLayers(): void;
   /** The card showing now, if any. */
   top(): LayerName | null;
+  /** The level editor, alone, when the page has one: on `draft` when given, else on the draft in progress. */
+  showEditor(draft?: Parameters<Editor["open"]>[0]): void;
+  /** The open share link's card, alone. */
+  showShared(): void;
+  /** A share link could not be opened: the toast and the title card say why. */
+  refuseLink(message: string): void;
+  /** Draws the cards again (the shared card's rating came in). */
+  refresh(): void;
+  /** Leaves the editor for the title card. */
+  leaveEditor(): void;
+  /** Leaves the shared card for the title card, keeping the installed-app close hint as it was. */
+  leaveShared(): void;
 }
 
 const TOOL_EMOJI: Record<Tool, string> = { mirror: "🪞", cake: "🍯", cow: "🐄" };
@@ -94,6 +123,21 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 export function createUi(deps: UiDeps): Ui {
   const { atlas, board, progress, pages, sfx } = deps;
 
+  /** The level in play when it is from outside the campaign, else null. */
+  const outsideOf = (g: Game | null): OutsideLevel | null => (g && g.trial >= 0 ? deps.levels?.outside?.(g.trial) ?? null : null);
+  /** An outside level's kicker on its start and end cards. */
+  const outsideKicker = (o: OutsideLevel): string => (o.kind === "try" ? "Your level" : "Shared level");
+  /** The shared card, while a shared level is in play and the open link's card is that level's. */
+  const sharedCard = (g: Game | null): (() => void) | undefined => {
+    const card = controls?.shared?.card();
+    return card && g?.run && outsideOf(g)?.kind === "shared" && card.level === g.run.now.level ? () => showShared(true) : undefined;
+  };
+  /** Back to the editor, while a try is in play and the page gives it. */
+  const backToEditor = (g: Game | null): (() => void) | undefined => {
+    const back = controls?.backToEditor;
+    return back && g?.run && outsideOf(g)?.kind === "try" ? () => back() : undefined;
+  };
+
   const log: LogLine[] = [];
   let muted = false;
   let full = false;
@@ -101,7 +145,10 @@ export function createUi(deps: UiDeps): Ui {
   let controls: Controls | null = null;
   let game: Game | null = null;
   let titleHint = false;
-  let end: EndView = { open: false, won: false, hasNext: false, pages: [], kicker: "", title: "", text: "", score: "" };
+  let sharedFromMenu = false;
+  /** Why the last share link did not open, on the title card until it shows again some other way. */
+  let titleNote = "";
+  let end: EndView = { open: false, won: false, hasNext: false, hasLevels: false, pages: [], kicker: "", title: "", text: "", score: "" };
   /** The try whose ending card has been shown, so closing the card does not bring it back. */
   let endFor: unknown = null;
   let sized = "";
@@ -121,9 +168,15 @@ export function createUi(deps: UiDeps): Ui {
   let announced: string[] = [];
   /** Pages taken together (one slide can take several) that wait to open after the one showing. */
   let pending: string[] = [];
+  /** The editor's layer is in the stack and the editor has been opened for it. */
+  let editorShown = false;
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
+    if (editorShown && !layers.has("editor")) {
+      editorShown = false;
+      controls?.editor?.close();
+    }
     // A page opened on taking it that closes some other way (Quit closes every card) leaves nothing waiting on it.
     if (loreFromPickup && !layers.isOpen("lore")) {
       loreFromPickup = false;
@@ -171,8 +224,10 @@ export function createUi(deps: UiDeps): Ui {
     if (!layers.any() && !(controls?.game ?? game)?.run) showTitle(titleHint);
   }
 
+  /** Opens level `i`. A level from inside the campaign ends the editor's visit, if a try was part of it. */
   function open(i: number): void {
     layers.clear();
+    if (!deps.levels?.outside?.(i)) controls?.leftEditor?.();
     controls?.game.open(i);
   }
 
@@ -190,16 +245,63 @@ export function createUi(deps: UiDeps): Ui {
     open(chapterTarget);
   }
 
+  function showEditor(draft?: Parameters<Editor["open"]>[0]): void {
+    const editor = controls?.editor;
+    if (!editor) return;
+    layers.clear();
+    layers.open("editor");
+    editorShown = true;
+    editor.open(draft);
+  }
+
+  /** `fromMenu`: the card was opened from the menu during its level, so Q goes back to the menu, not the title card. */
+  function showShared(fromMenu = false): void {
+    if (!controls?.shared?.card()) return;
+    sharedFromMenu = fromMenu;
+    layers.clear();
+    layers.open("shared");
+  }
+
+  /** The shared card's rating line: null while the rating is worked out. */
+  function ratingLine(r: RatingState): string | null {
+    if (r.kind === "done") return ratingText(r.d);
+    if (r.kind === "failed") return `No rating: ${r.message}`;
+    if (r.kind === "waiting") return "Rating waits for your Check in the editor.";
+    return null;
+  }
+
+  function leaveShared(): void {
+    if (layers.isOpen("shared")) showTitle(titleHint);
+  }
+
+  function leaveEditor(): void {
+    if (!layers.has("editor")) return;
+    showTitle(titleHint);
+    controls?.leftEditor?.();
+  }
+
   function drawLayers(): void {
     const g = controls?.game ?? game;
     renderTitleCard($("title-root"), {
       open: layers.isOpen("title"),
       hint: titleHint,
+      ...(titleNote ? { note: titleNote } : {}),
       onPlay: () => controls?.play(),
       onStory: () => layers.open("story"),
+      ...(controls?.editor ? { onEditor: showEditor } : {}),
       onSettings: () => layers.open("menu"),
     });
-    const playing = g && g.trial >= 0 ? chapterOf(g.trial) : null;
+    const card = controls?.shared?.card() ?? null;
+    renderSharedCard($("shared-root"), {
+      open: layers.isOpen("shared") && card !== null,
+      name: card?.name ?? "",
+      rating: card ? ratingLine(card.rating) : null,
+      best: card?.best ?? null,
+      onPlay: () => controls?.shared?.play(),
+      onEdit: () => controls?.shared?.edit(),
+    });
+    const out = outsideOf(g);
+    const playing = g && g.trial >= 0 && !out ? chapterOf(g.trial) : null;
     renderChapterCard($("chapter-root"), {
       open: layers.isOpen("chapter"),
       chapter: CHAPTERS[chapterN - 1]!,
@@ -227,8 +329,10 @@ export function createUi(deps: UiDeps): Ui {
       open: layers.isOpen("start"),
       chapter: playing?.chapter.n ?? 1,
       number: (playing?.within ?? 0) + 1,
-      title: lv?.title ?? "",
+      ...(out ? { kicker: outsideKicker(out) } : {}),
+      title: out ? out.name : lv?.title ?? "",
       intro: lv?.intro ?? "",
+      ...(out?.best != null ? { best: `beat ${out.best}` } : {}),
       onBegin: () => layers.close("start"),
     });
     renderEndCard($("end-root"), {
@@ -239,6 +343,7 @@ export function createUi(deps: UiDeps): Ui {
       onTrials: () => layers.open("levels"),
       onUndo: () => g?.press("undo"),
       onRestart: () => g?.press("restart"),
+      onBackToEditor: backToEditor(g),
     });
     renderLore($("lore-root"), {
       open: layers.isOpen("lore"),
@@ -284,6 +389,8 @@ export function createUi(deps: UiDeps): Ui {
         controls?.quit();
       },
       onClose: () => layers.close("menu"),
+      onBackToEditor: backToEditor(g),
+      onSharedCard: sharedCard(g),
     });
   }
 
@@ -369,8 +476,20 @@ export function createUi(deps: UiDeps): Ui {
     const won = s.outcome === "won";
     if (!won) {
       return {
-        open: true, won, hasNext: false, pages: [], kicker: "Level failed", title: "The Minotaur has you",
+        open: true, won, hasNext: false, hasLevels: false, pages: [], kicker: "Level failed", title: "The Minotaur has you",
         text: "Your last heart is gone. Undo a turn or begin the level again.", score: `${s.moves} moves`,
+      };
+    }
+    const how = run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.";
+    const help = run.assisted ? "with help" : "";
+    const out = outsideOf(g);
+    // A level from outside the campaign records nothing and has no chapter: its card names it and, for a shared
+    // level, sets the win against the author's best (only a win without help can beat it).
+    if (out) {
+      const author = out.best === null ? "" : !run.assisted && s.moves < out.best ? ` You beat the author's ${out.best}.` : ` The author's best is ${out.best}.`;
+      return {
+        open: true, won, hasNext: false, hasLevels: false, pages: [], kicker: outsideKicker(out), title: out.name,
+        text: how + author, score: [`${s.moves} moves`, help].filter(Boolean).join(" · "),
       };
     }
     const best = progress.get(LEVEL_IDS[g.trial]!).best;
@@ -378,9 +497,9 @@ export function createUi(deps: UiDeps): Ui {
     const titles = CHAPTERS.flatMap((c) => c.lore?.pages ?? []);
     const pages = pagesTaken(s).map((id) => titles.find((p) => p.id === id)?.title ?? id);
     return {
-      open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, pages, kicker: `Level ${chapterOf(g.trial).within + 1} cleared`, title: s.level.title,
-      text: run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.",
-      score: [`${s.moves} moves`, best !== null ? `best ${best}` : "", run.assisted ? "with help" : ""].filter(Boolean).join(" · "),
+      open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, hasLevels: true, pages, kicker: `Level ${chapterOf(g.trial).within + 1} cleared`, title: s.level.title,
+      text: how,
+      score: [`${s.moves} moves`, best !== null ? `best ${best}` : "", help].filter(Boolean).join(" · "),
     };
   }
 
@@ -392,6 +511,7 @@ export function createUi(deps: UiDeps): Ui {
       return;
     }
     const s = run.now;
+    const out = outsideOf(g);
     if (sized !== `${s.level.cols}x${s.level.rows}`) fit();
     else followPlayer(s);
     // A level opened: the start card shows (a restart does not); the story log keeps its words.
@@ -399,13 +519,14 @@ export function createUi(deps: UiDeps): Ui {
       shownOpen = g.opens;
       announced = [];
       pending = [];
-      log.push({ text: `${s.level.title}: ${s.level.intro}`, tone: "info" });
+      const name = out ? out.name : s.level.title;
+      log.push({ text: s.level.intro ? `${name}: ${s.level.intro}` : name, tone: "info" });
       layers.open("start");
     }
 
     renderStatus($("status-root"), {
       view: statusView({
-        trial: `${chapterOf(g.trial).within + 1}/${chapterOf(g.trial).chapter.levelIds.length}`,
+        trial: out ? "" : `${chapterOf(g.trial).within + 1}/${chapterOf(g.trial).chapter.levelIds.length}`,
         hearts: s.hearts,
         relicsLeft: s.relicsLeft,
         keys: s.keys,
@@ -448,8 +569,8 @@ export function createUi(deps: UiDeps): Ui {
       end = endView(g);
       layers.open("end");
       // A chapter's last level won: its closing card opens over the end card, which waits under it.
-      const { chapter, within } = chapterOf(g.trial);
-      if (end.won && within === chapter.levelIds.length - 1) showChapter(chapter.n, true);
+      const place = out ? null : chapterOf(g.trial);
+      if (place && end.won && place.within === place.chapter.levelIds.length - 1) showChapter(place.chapter.n, true);
     }
     announcePages(g);
     drawLayers();
@@ -460,6 +581,7 @@ export function createUi(deps: UiDeps): Ui {
    *  turn has landed, one page after another. The book still lists it as found only after the win. A page taken
    *  back by Undo shows again when retaken. */
   function announcePages(g: Game): void {
+    if (outsideOf(g)) return;
     const taken = pagesTaken(g.run!.now);
     announced = announced.filter((id) => taken.includes(id));
     const fresh = taken.filter((id) => !announced.includes(id));
@@ -499,8 +621,9 @@ export function createUi(deps: UiDeps): Ui {
     (controls?.game ?? game)?.resume();
   }
 
-  function showTitle(hint: boolean): void {
+  function showTitle(hint: boolean, note = ""): void {
     titleHint = hint;
+    titleNote = note;
     layers.clear();
     layers.open("title");
   }
@@ -523,6 +646,15 @@ export function createUi(deps: UiDeps): Ui {
     document.addEventListener("keydown", (ev) => {
       if (typesText(ev.target)) return;
       c.wake();
+      // The editor takes every key while it is the top layer; a Q it does not use (no dialog of its own is open)
+      // leaves it for the title card.
+      if (layers.isOpen("editor") && c.editor) {
+        if (!c.editor.key(ev) && isBackKey(ev)) {
+          ev.preventDefault();
+          if (!ev.repeat) leaveEditor();
+        }
+        return;
+      }
       if (isBackKey(ev)) {
         ev.preventDefault();
         if (ev.repeat) return;
@@ -533,6 +665,12 @@ export function createUi(deps: UiDeps): Ui {
         } else if (layers.isOpen("lore") && loreFromPickup) {
           closePickup();
         } else if (layers.isOpen("title")) layers.open("menu");
+        else if (layers.isOpen("shared")) {
+          if (sharedFromMenu) {
+            layers.clear();
+            layers.open("menu");
+          } else showTitle(titleHint);
+        }
         else if (layers.isOpen("chapter")) leave("chapter");
         else layers.pressBack();
         return;
@@ -557,10 +695,15 @@ export function createUi(deps: UiDeps): Ui {
         c.toggleMute();
         return;
       }
-      // Each card's own keys act only while it is the top card: I on the title, F and L on the menu.
+      // Each card's own keys act only while it is the top card: I and E on the title, F and L on the menu.
       if (action === "story" && layers.isOpen("title")) {
         ev.preventDefault();
         if (!ev.repeat) layers.open("story");
+        return;
+      }
+      if (action === "editor" && layers.isOpen("title") && c.editor) {
+        ev.preventDefault();
+        if (!ev.repeat) showEditor();
         return;
       }
       if (action === "fullscreen" && layers.isOpen("menu")) {
@@ -717,6 +860,15 @@ export function createUi(deps: UiDeps): Ui {
     showChapter: (n, closing) => showChapter(n, closing),
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
+    showEditor,
+    showShared: () => showShared(),
+    refuseLink: (message) => {
+      say(message, "bad");
+      showTitle(titleHint, message);
+    },
+    refresh: () => drawLayers(),
+    leaveEditor,
+    leaveShared,
     setMuted: (m) => {
       muted = m;
       drawLayers();

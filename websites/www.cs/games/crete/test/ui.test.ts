@@ -9,6 +9,7 @@ import { asElement, byId, childEl, click, document, installDocument, makeEl, may
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import type { EndCardProps } from '../src/ui/end.tsx';
 import type { TitleCardProps } from '../src/ui/title.tsx';
+import type { SharedCardProps } from '../src/ui/shared.tsx';
 import { KEYS } from '../src/keys.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { fireDocument } from '../../_kit/test/dom-stub.ts';
@@ -24,6 +25,7 @@ import { DIRS } from '../src/puzzle/tiles.ts';
 import { stateKey } from './reference-solver.ts';
 import { CAMPAIGN_LEVELS, LEVEL_IDS } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
+import type { Levels, OutsideLevel } from '../src/campaign/chapters.ts';
 import { icedPages } from './puzzle-grid.ts';
 import { SLIDE_MS } from '../src/board-plan.ts';
 import { frameOf } from '../src/game.ts';
@@ -35,16 +37,18 @@ installDocument();
 const ui = await importTsx<{
   end: typeof import('../src/ui/end.tsx');
   title: typeof import('../src/ui/title.tsx');
+  shared: typeof import('../src/ui/shared.tsx');
   page: typeof import('../src/ui.ts');
-}>(import.meta.dirname, { end: '../src/ui/end.tsx', title: '../src/ui/title.tsx', page: '../src/ui.ts' });
+}>(import.meta.dirname, { end: '../src/ui/end.tsx', title: '../src/ui/title.tsx', shared: '../src/ui/shared.tsx', page: '../src/ui.ts' });
 (globalThis as { getComputedStyle?: unknown }).getComputedStyle = () => ({ paddingLeft: '0', paddingRight: '0', paddingTop: '0', paddingBottom: '0', display: 'block' });
 // The overlays render into a DOM Element; the stub stands in for one.
 const renderEndCard = (root: StubElement, props: EndCardProps): void => ui.end.renderEndCard(asElement(root), props);
 const renderTitleCard = (root: StubElement, props: TitleCardProps): void => ui.title.renderTitleCard(asElement(root), props);
+const renderSharedCard = (root: StubElement, props: SharedCardProps & { open: boolean }): void => ui.shared.renderSharedCard(asElement(root), props);
 const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));
 
-const WON = { won: true, hasNext: true, pages: [] as string[], kicker: 'Level 1 cleared', title: 'The Mouth of the Labyrinth', text: 'You found the way on your own.', score: '14 moves · best 14' };
-const LOST = { won: false, hasNext: false, pages: [] as string[], kicker: 'Level failed', title: 'The Minotaur has you', text: 'Your last heart is gone.', score: '9 moves' };
+const WON = { won: true, hasNext: true, hasLevels: true, pages: [] as string[], kicker: 'Level 1 cleared', title: 'The Mouth of the Labyrinth', text: 'You found the way on your own.', score: '14 moves · best 14' };
+const LOST = { won: false, hasNext: false, hasLevels: false, pages: [] as string[], kicker: 'Level failed', title: 'The Minotaur has you', text: 'Your last heart is gone.', score: '9 moves' };
 const calls = (seen: string[]) => ({
   onNext: () => seen.push('next'), onRetry: () => seen.push('retry'), onTrials: () => seen.push('trials'),
   onUndo: () => seen.push('undo'), onRestart: () => seen.push('restart'),
@@ -169,6 +173,36 @@ test('an installed app that could not close says how to', () => {
   assert.equal(byId(root, 'title-hint').textContent, 'Swipe the app away to close it.');
 });
 
+test('the title card says why a link did not open, when given a note', () => {
+  const root = mount();
+  renderTitleCard(root, { open: true, hint: false, onPlay() {} });
+  assert.equal(maybeById(root, 'title-note'), undefined);
+  renderTitleCard(root, { open: true, hint: false, note: 'This level link is damaged. Ask for the link again.', onPlay() {} });
+  assert.equal(byId(root, 'title-note').textContent, 'This level link is damaged. Ask for the link again.');
+});
+
+test('the shared card shows the name, rating… until the rating is in, the best to beat, Play and Edit a copy', () => {
+  const root = mount();
+  const seen: string[] = [];
+  const props = { open: true, name: 'Level K7QD by ABC', rating: null, best: 54, onPlay: () => seen.push('play'), onEdit: () => seen.push('edit') };
+  renderSharedCard(root, props);
+  assert.equal(byId(root, 'shared-veil').hidden, false);
+  assert.equal(byId(root, 'shared-title').textContent, 'Level K7QD by ABC');
+  assert.equal(byId(root, 'shared-rating').textContent, 'rating…');
+  assert.equal(byId(root, 'shared-best').textContent, 'beat 54');
+  assert.equal(globalThis.__focused?.id, 'shared-play');
+  assert.ok(byId(root, 'shared-play').textContent.includes('Play'));
+  assert.ok(byId(root, 'shared-edit').textContent.includes('Edit a copy'));
+  click(byId(root, 'shared-play'));
+  click(byId(root, 'shared-edit'));
+  assert.deepEqual(seen, ['play', 'edit']);
+  renderSharedCard(root, { ...props, rating: 'Solo · quickest win 41 moves · 12,161 situations', best: null });
+  assert.equal(byId(root, 'shared-rating').textContent, 'Solo · quickest win 41 moves · 12,161 situations');
+  assert.equal(maybeById(root, 'shared-best'), undefined);
+  renderSharedCard(root, { ...props, open: false });
+  assert.equal(byId(root, 'shared-veil').hidden, true);
+});
+
 test('the title card reads its kicker from Chapter 1', () => {
   const root = makeEl('title-root');
   renderTitleCard(root, { open: true, hint: false, onPlay() {} });
@@ -186,20 +220,40 @@ const progress: Progress = {
 const m = manualClock();
 const heard: string[] = [];
 const found = createFoundPages(null);
-const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, sfx: n => heard.push(n) });
-/* A test may animate its turns, and may serve its own level in place of level 1. */
+/* A test may animate its turns, may serve its own level in place of level 1, and may make level `outsideAt` one from
+   outside the campaign. */
 let reduced = true;
 let ownLevel: Level | null = null;
+let outsideAt = -1;
+let ownOutside: OutsideLevel | null = null;
+let outsideLevel: Level | null = null;
+const levels: Levels = {
+  count: CAMPAIGN_LEVELS.count, id: CAMPAIGN_LEVELS.id,
+  level: i => (i === outsideAt && outsideLevel) || (i === 0 && ownLevel) || CAMPAIGN_LEVELS.level(i),
+  scratch: i => i === outsideAt, outside: i => (i === outsideAt ? ownOutside : null),
+};
+const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, levels, sfx: n => heard.push(n) });
 const game: Game = createGame({
-  sfx() {}, say() {}, progress, pages: found, timers: m.timers, clock: m.clock,
-  levels: { count: CAMPAIGN_LEVELS.count, id: CAMPAIGN_LEVELS.id, level: i => (i === 0 && ownLevel) || CAMPAIGN_LEVELS.level(i) },
+  sfx() {}, say() {}, progress, pages: found, timers: m.timers, clock: m.clock, levels,
   reducedMotion: () => reduced, changed: () => flow.render(game),
 });
 let toggled = 0;
-flow.bindControls({ game, toggleMute() {}, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false) });
+let backs = 0;
+/* The editor as the page sees it: what it was asked to do, and every key it was handed. */
+const edits: string[] = [];
+const editorKeys: string[] = [];
+const editor = {
+  open: () => { edits.push('open'); },
+  close: () => { edits.push('close'); },
+  key: (ev: KeyboardEvent) => { editorKeys.push(ev.key); return false; },
+};
+flow.bindControls({
+  game, toggleMute() {}, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; },
+  editor, leftEditor: () => { edits.push('left'); },
+});
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
-const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; };
+const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; outsideAt = -1; ownOutside = null; outsideLevel = null; backs = 0; edits.length = 0; editorKeys.length = 0; };
 // Elements of unmounted overlay tests linger in the stub by id, so a page element is looked up inside its root.
 const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
 const el = (id: string) => maybeById(rootOf(id), id);
@@ -719,4 +773,181 @@ test('the Lore book lists the closing card once level 10 is cleared', () => {
   key('q');
   click(byId(rootOf('menu-lore'), 'menu-lore'));
   assert.ok(el('lore-closing-1'));
+});
+
+// ---- a level from outside the campaign: a try from the editor, or a shared link ----
+/** Makes level 10 (a chapter's last, whose win opens the closing card) an outside level. */
+function outside(o: OutsideLevel): void {
+  outsideAt = 9;
+  ownOutside = o;
+}
+const startKicker = () => walk(byId(rootOf('start-veil'), 'start-veil')).find(n => n.className === 'kicker')?.textContent;
+
+test('the start and end cards name an outside level', () => {
+  reset();
+  outside({ kind: 'try', name: 'My maze', best: null });
+  game.open(9);
+  assert.equal(flow.top(), 'start');
+  assert.equal(startKicker(), 'Your level');
+  assert.equal(text('start-title'), 'My maze');
+  assert.equal(el('start-best'), undefined);
+  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, '–', 'the status bar gives no place in a chapter');
+  win(9);
+  assert.equal(flow.top(), 'end');
+  assert.equal(text('end-kicker'), 'Your level');
+  assert.equal(text('end-title'), 'My maze');
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: 54 });
+  game.open(9);
+  assert.equal(startKicker(), 'Shared level');
+  assert.equal(text('start-title'), 'Level K7QD by ABC');
+  assert.equal(text('start-best'), 'beat 54');
+  assert.doesNotMatch(byId(rootOf('start-veil'), 'start-veil').textContent, /Chapter/);
+});
+
+test('a shared win says whether it beat the author', () => {
+  const r = solve(initial(trialLevel(9)));
+  assert.ok(r.solved);
+  const moves = r.line.length;
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: moves + 1 });
+  win(9);
+  assert.equal(text('end-kicker'), 'Shared level');
+  assert.equal(text('end-text'), `You found the way on your own. You beat the author's ${moves + 1}.`);
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: moves });
+  win(9);
+  assert.equal(text('end-text'), `You found the way on your own. The author's best is ${moves}.`, 'a tie does not beat it');
+});
+
+test('an outside level offers no next level and no levels list', () => {
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: null });
+  game.open(9);
+  assert.equal(flow.top(), 'start');
+  assert.equal(el('start-best'), undefined, 'a shared level with no best names none');
+  win(9);
+  assert.equal(flow.top(), 'end', 'no closing card opens over it');
+  for (const id of ['end-next', 'end-trials', 'end-pages']) assert.equal(el(id), undefined, id);
+  assert.ok(el('end-retry'));
+  key('Enter');
+  assert.equal(game.trial, 9, 'Enter does not go on to another level');
+});
+
+test('a level from outside the campaign with a story page takes it with no Lore entry and no pause', () => {
+  reset();
+  // Level 9 with its page made a relic: the solver's line must take it, and the same line wins the real level.
+  const lv = trialLevel(8);
+  const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
+  const r = solve(initial(copy));
+  assert.ok(r.solved);
+  assert.ok(lv.pageIds.length > 0, 'the level has a page');
+  reduced = false;
+  outsideLevel = lv;
+  outside({ kind: 'try', name: 'Your level', best: null });
+  game.open(9);
+  key('Enter');
+  for (const a of r.line) {
+    game.press(a);
+    m.advance(5000);
+    frame();
+    assert.notEqual(flow.top(), 'lore', 'no Lore entry opens');
+    assert.equal(game.anim?.paused ?? null, null, 'the animation is never paused at a page');
+  }
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.equal(flow.top(), 'end');
+  assert.equal(game.found.length, 0, 'no page is recorded');
+});
+
+test('an outside win records no progress', () => {
+  reset();
+  outside({ kind: 'try', name: 'Your level', best: null });
+  win(9);
+  assert.equal(cleared.size, 0);
+  assert.doesNotMatch(text('end-score'), /best/);
+});
+
+test('Back to the editor shows in the menu and on the end card only for a try', () => {
+  reset();
+  const menuEditor = () => {
+    flow.closeLayers();
+    click(byId(document.getElementById('status-root')!, 'btn-menu'));
+    assert.equal(flow.top(), 'menu');
+    return el('menu-editor');
+  };
+  win(9);
+  assert.equal(el('end-editor'), undefined, 'not after a campaign level');
+  assert.equal(menuEditor(), undefined);
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: null });
+  win(9);
+  assert.equal(el('end-editor'), undefined, 'not after a shared level');
+  assert.equal(menuEditor(), undefined);
+  reset();
+  outside({ kind: 'try', name: 'Your level', best: null });
+  win(9);
+  assert.match(text('end-editor'), /Back to the editor/);
+  click(el('end-editor')!);
+  assert.equal(backs, 1);
+  const button = menuEditor();
+  assert.ok(button);
+  assert.match(button.textContent, /Back to the editor/);
+  click(button);
+  assert.equal(backs, 2);
+});
+
+test('the title card offers Make a level when the page gives it, with its key', () => {
+  const root = makeEl('title-root');
+  renderTitleCard(root, { open: true, hint: false, onPlay() {} });
+  assert.equal(maybeById(root, 'title-editor'), undefined);
+  let made = 0;
+  renderTitleCard(root, { open: true, hint: false, onPlay() {}, onEditor: () => { made++; } });
+  assert.equal(byId(root, 'title-editor').textContent, `Make a level${KEYS.editor.label}`);
+  click(byId(root, 'title-editor'));
+  assert.equal(made, 1);
+});
+
+test('Make a level on the title card opens the editor layer', () => {
+  reset();
+  flow.showTitle(false);
+  click(byId(rootOf('title-editor'), 'title-editor'));
+  assert.equal(flow.top(), 'editor');
+  assert.deepEqual(edits, ['open']);
+  reset();
+  flow.showTitle(false);
+  key('e');
+  assert.equal(flow.top(), 'editor', 'E on the title card');
+  assert.deepEqual(edits, ['open']);
+  reset();
+  game.open(0);
+  key('Enter');
+  key('e');
+  assert.equal(flow.top(), null, 'E is a title card key only');
+  assert.deepEqual(edits, []);
+});
+
+test('game keys do nothing while the editor is open', () => {
+  reset();
+  game.open(0);
+  key('Enter');
+  const at = game.run!.now.player;
+  flow.showEditor();
+  for (const k of ['ArrowRight', 'ArrowDown', 'd', 's', 'n', 'm', 'h', '.']) key(k);
+  assert.deepEqual(game.run!.now.player, at, 'an arrow key moves no figure');
+  assert.equal(game.run!.now.moves, 0);
+  assert.equal(flow.top(), 'editor', 'N opens no level list over the editor');
+  assert.deepEqual(editorKeys, ['ArrowRight', 'ArrowDown', 'd', 's', 'n', 'm', 'h', '.']);
+});
+
+test('Q in the editor closes it to the title card', () => {
+  reset();
+  flow.showEditor();
+  edits.length = 0;
+  const ev = key('q');
+  assert.equal(ev.prevented, true);
+  assert.equal(flow.top(), 'title');
+  assert.deepEqual(edits, ['close', 'left']);
+  assert.deepEqual(editorKeys, ['q'], 'the editor sees Q first, to close a dialog of its own');
+  fireDocument('keydown', { key: 'q', repeat: true, target: { tagName: 'DIV' } });
+  assert.equal(flow.top(), 'title', 'a held Q does not go on to open the menu');
 });

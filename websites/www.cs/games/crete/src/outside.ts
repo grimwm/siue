@@ -52,6 +52,7 @@ export function createOutside(campaign: Levels, deps: OutsideDeps): Outside {
     },
   };
   function play(level: Level, about: OutsideLevel, line: readonly Action[] | null = null, text: string | null = null): void {
+    deps.closeLayers();
     held = { level, about, line, text };
     deps.open(at);
   }
@@ -60,7 +61,6 @@ export function createOutside(campaign: Levels, deps: OutsideDeps): Outside {
     at,
     play,
     tryLevel(level, text, line) {
-      deps.closeLayers();
       play(level, { kind: 'try', name: level.title || 'Your level', best: null }, line, text);
     },
     backToEditor() {

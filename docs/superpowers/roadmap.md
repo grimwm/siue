@@ -14,17 +14,16 @@ full keyboard play, the fast solver and the level editor.
    plan `plans/2026-10-27-crete-pieces.md`. Live in the engine, both solvers,
    the art and the sound: the nine pieces and the three hazards are in the
    rules, the packing, the estimate, the pruning and the same-answers corpus,
-   drawn on the board, voiced, logged and explained in the help. The next step
-   is the editor. The game lives in `websites/www.cs/games/crete/`; its
-   `test/pieces.test.ts` fails until a new kind is handled in
-   `src/puzzle/pack.ts`, `heuristic.ts`, `prune.ts` and the same-answers
-   corpus.
+   drawn on the board, voiced, logged and explained in the help. The game lives
+   in `websites/www.cs/games/crete/`; its `test/pieces.test.ts` fails until a
+   new kind is handled in `src/puzzle/pack.ts`, `heuristic.ts`, `prune.ts` and
+   the same-answers corpus.
 2. **The level editor** — design `specs/2026-10-21-crete-editor-design.md`
    (Part 2 there). Live on the game page at `games/crete/#edit`: painting,
    Check with Stop and a progress bar, Try it on the full game screen, Share as
    a link and opening a link, with the OPFS solve cache trimmed. The README's
    "The editor" section describes it. The next step is Chapter 2, built in it.
-3. **Chapters 2 to 10** (next: Chapter 2), one pull request each, built in the editor and
+3. **Chapters 2 to 10**, one pull request each, built in the editor and
    exported to the repo. Every level passes the difficulty gate
    (`src/puzzle/difficulty.ts`); a level that is winnable but easy is refused.
    Each chapter gets its music once the first piece is done.

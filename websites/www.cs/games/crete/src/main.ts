@@ -74,17 +74,20 @@ const editor = createEditor({
    #edit, as for any visit to the editor). */
 const visit = createVisit({
   rater,
-  play: (level, about, line) => {
-    ui.closeLayers();
-    outside.play(level, about, line);
-  },
+  play: (level, about, line) => outside.play(level, about, line),
   edit: draft => {
     game.settle();
     ui.showEditor(draft);
     history.replaceState(history.state, '', `${window.location.pathname}${window.location.search}${EDIT_HASH}`);
   },
-  show: () => ui.showShared(),
-  refuse: message => ui.refuseLink(message),
+  show: () => {
+    game.settle();
+    ui.showShared();
+  },
+  refuse: message => {
+    game.settle();
+    ui.refuseLink(message);
+  },
 });
 
 /** Opens the editor's draft on the game screen as a try. `line` is the last Check's line when that check was of this

@@ -130,7 +130,7 @@ export function createUi(deps: UiDeps): Ui {
   /** The shared card, while a shared level is in play and the open link's card is that level's. */
   const sharedCard = (g: Game | null): (() => void) | undefined => {
     const card = controls?.shared?.card();
-    return card && g?.run && outsideOf(g)?.kind === "shared" && card.level === g.run.now.level ? showShared : undefined;
+    return card && g?.run && outsideOf(g)?.kind === "shared" && card.level === g.run.now.level ? () => showShared(true) : undefined;
   };
   /** Back to the editor, while a try is in play and the page gives it. */
   const backToEditor = (g: Game | null): (() => void) | undefined => {
@@ -145,6 +145,7 @@ export function createUi(deps: UiDeps): Ui {
   let controls: Controls | null = null;
   let game: Game | null = null;
   let titleHint = false;
+  let sharedFromMenu = false;
   /** Why the last share link did not open, on the title card until it shows again some other way. */
   let titleNote = "";
   let end: EndView = { open: false, won: false, hasNext: false, hasLevels: false, pages: [], kicker: "", title: "", text: "", score: "" };
@@ -253,8 +254,10 @@ export function createUi(deps: UiDeps): Ui {
     editor.open(draft);
   }
 
-  function showShared(): void {
+  /** `fromMenu`: the card was opened from the menu during its level, so Q goes back to the menu, not the title card. */
+  function showShared(fromMenu = false): void {
     if (!controls?.shared?.card()) return;
+    sharedFromMenu = fromMenu;
     layers.clear();
     layers.open("shared");
   }
@@ -662,7 +665,12 @@ export function createUi(deps: UiDeps): Ui {
         } else if (layers.isOpen("lore") && loreFromPickup) {
           closePickup();
         } else if (layers.isOpen("title")) layers.open("menu");
-        else if (layers.isOpen("shared")) showTitle(titleHint);
+        else if (layers.isOpen("shared")) {
+          if (sharedFromMenu) {
+            layers.clear();
+            layers.open("menu");
+          } else showTitle(titleHint);
+        }
         else if (layers.isOpen("chapter")) leave("chapter");
         else layers.pressBack();
         return;
@@ -853,7 +861,7 @@ export function createUi(deps: UiDeps): Ui {
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
     showEditor,
-    showShared,
+    showShared: () => showShared(),
     refuseLink: (message) => {
       say(message, "bad");
       showTitle(titleHint, message);

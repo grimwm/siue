@@ -79,10 +79,7 @@ const editor = mods.editor.createEditor({
 });
 const visit = createVisit({
   rater,
-  play: (level, about, line) => {
-    ui.closeLayers();
-    outside.play(level, about, line);
-  },
+  play: (level, about, line) => outside.play(level, about, line),
   edit: draft => ui.showEditor(draft),
   show: () => ui.showShared(),
   refuse: message => ui.refuseLink(message),
@@ -318,4 +315,23 @@ test('leaving the shared card for the title card keeps the installed-app close h
   assert.equal(el('title-hint'), undefined, 'no hint when there was none');
   ui.leaveShared();
   assert.equal(ui.top(), 'title', 'with no shared card up, nothing changes');
+});
+
+test('Q on the card opened from the menu goes back to the menu over the level, not to the title card', async () => {
+  await visit.open(ONE.fragment);
+  click(byId(rootOf('shared-play'), 'shared-play'));
+  key('Enter');
+  const run = game.run;
+  click(byId(document.getElementById('status-root'), 'btn-menu'));
+  click(byId(rootOf('menu-shared'), 'menu-shared'));
+  assert.equal(ui.top(), 'shared');
+  key('q');
+  assert.equal(ui.top(), 'menu');
+  assert.equal(game.run, run, 'the level in play is untouched');
+  assert.equal(game.trial, outside.at);
+  key('q');
+  assert.equal(ui.top(), null, 'Q closes the menu onto the level');
+  await visit.open(ONE.fragment);
+  key('q');
+  assert.equal(ui.top(), 'title', 'a card opened by a link still goes to the title card');
 });

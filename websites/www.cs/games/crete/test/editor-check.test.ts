@@ -2,7 +2,7 @@
 // reused or gone stale) with a fake job whose answer comes on demand, and the lines the panel shows for each answer.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createChecker, checkLines } from '../src/editor/check.ts';
+import { createChecker, checkLines, checkSummary } from '../src/editor/check.ts';
 import type { CheckState } from '../src/editor/check.ts';
 import type { SolverJob } from '../src/solver-client.ts';
 import type { Answer, Report } from '../src/solver-host.ts';
@@ -240,4 +240,30 @@ test('a winnable but easy level lists what keeps it from being shared', () => {
 test('a result of other text is stale; nothing running or checked has no lines', () => {
   assert.equal(checkLines(done(DIFF), 'other', L9).stale, true);
   assert.deepEqual(checkLines({ kind: 'none' }, 'x', L9), { lines: [], stale: false, shareable: false });
+});
+
+test('checking a stopped search again resumes it', async () => {
+  const f = fakes();
+  const c = createChecker(f.start, f.onChange);
+  const p = c.check('A');
+  c.stop();
+  const again = c.check('A');
+  assert.equal(f.jobs.length, 1);
+  assert.deepEqual(f.jobs[0]!.calls, ['stop', 'resume']);
+  assert.equal((c.state as { stopped: boolean }).stopped, false);
+  f.jobs[0]!.answer(DIFF);
+  assert.equal(await p, DIFF);
+  assert.equal(await again, DIFF);
+});
+
+test('the one-line summary', () => {
+  assert.equal(checkSummary({ kind: 'none' }, 'T'), '');
+  assert.equal(checkSummary({ kind: 'running', text: 'T', report: null, stopped: false }, 'T'), '');
+  const shareable: Difficulty = { ...DIFF, shortest: 60, explored: 900000 };
+  assert.equal(checkSummary(done(shareable), 'T'), 'Winnable in 60 · Shareable');
+  assert.equal(checkSummary(done({ ...DIFF, shortest: 5, explored: 20, naiveWins: true }), 'T'), 'Winnable in 5 · Not shareable yet');
+  assert.equal(checkSummary(done({ ...DIFF, solved: false, shortest: 'none', line: '' }), 'T'), 'Cannot be won');
+  assert.equal(checkSummary(done({ ...DIFF, solved: false, shortest: 'unknown', line: '' }), 'T'), 'The solver could not finish');
+  assert.equal(checkSummary(done(DIFF), 'other'), 'Out of date: press Check.');
+  assert.equal(checkSummary({ kind: 'failed', text: 'T', message: 'boom' }, 'T'), 'The solver stopped: boom');
 });

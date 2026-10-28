@@ -11,7 +11,7 @@ import { MAX_SIDE, MIN_SIDE, clampSide } from './model.ts';
 import type { Brush, Draft } from './model.ts';
 import { EDITOR_KEYS } from './keys.ts';
 import { Palette } from './palette.tsx';
-import { CheckPanel } from './check-panel.tsx';
+import { CheckPanel, CheckStrip } from './check-panel.tsx';
 import type { CheckPanelProps } from './check-panel.tsx';
 
 export interface EditorPanelProps {
@@ -64,6 +64,7 @@ export function EditorPanel(p: EditorPanelProps) {
             onClick={() => p.onDrawer(!p.drawer)}>Pieces</button>
           {p.onLeave && <Button id="editor-leave" keyLabel={BACK_KEY} onClick={p.onLeave}>Leave</Button>}
         </div>
+        {p.check && <CheckStrip {...p.check} />}
         <div class="editor-size">
           <label>Rows <input id="editor-rows" key={`r${sized}`} ref={rows} type="number" min={MIN_SIDE} max={MAX_SIDE} defaultValue={String(d.rows)} /></label>
           <label>Cols <input id="editor-cols" key={`c${sized}`} ref={cols} type="number" min={MIN_SIDE} max={MAX_SIDE} defaultValue={String(d.cols)} /></label>

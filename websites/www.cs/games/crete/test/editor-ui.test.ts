@@ -670,3 +670,33 @@ test('Try it hands the last Check\'s line over only when that check was of the v
   press(e, 'p');
   assert.equal(e.tries[2]!.line, null);
 });
+
+test('the check strip in the bar, outside the drawer, shows the run, the answer and the stale note, and has its own buttons', async () => {
+  const e = make();
+  e.editor.open();
+  const strip = () => byId(e.root, 'check-strip');
+  assert.equal(maybeById(strip(), 'check-strip-text'), undefined);
+  click(byId(e.root, 'check-strip-run'));
+  assert.equal(e.searches.length, 1);
+  assert.equal(byId(e.root, 'check-strip-text').textContent, 'Starting the search…');
+  assert.ok(walk(strip()).some(n => n.getAttribute('role') === 'progressbar'));
+  e.searches[0]!.report(REPORT);
+  assert.equal(byId(e.root, 'check-strip-text').textContent, 'Searched 1,234 situations · trying lines of at least 40 moves');
+  click(byId(e.root, 'check-strip-stop'));
+  assert.deepEqual(e.searches[0]!.calls, ['stop']);
+  assert.match(byId(e.root, 'check-strip-text').textContent, /Stopped\.$/);
+  assert.equal(byId(e.root, 'check-strip-keep').disabled, false);
+  click(byId(e.root, 'check-strip-run'));
+  assert.deepEqual(e.searches[0]!.calls, ['stop', 'resume']);
+  e.searches[0]!.answer({ ...ANSWER, shortest: 60, explored: 900000 });
+  await settle();
+  assert.equal(maybeById(e.root, 'check-strip-stop'), undefined);
+  assert.equal(byId(e.root, 'check-strip-text').textContent, 'Winnable in 60 · Shareable');
+  click(byId(e.root, 'brush-wall'));
+  fire(e.canvas, 'pointerdown', at(e, 5, 2));
+  fire(e.canvas, 'pointerup', at(e, 5, 2));
+  assert.equal(byId(e.root, 'check-strip-text').textContent, 'Out of date: press Check.');
+  assert.ok(strip().className.includes('stale'));
+  const ids = walk(e.root).map(n => n.id).filter(Boolean);
+  assert.equal(new Set(ids).size, ids.length, 'no id twice');
+});

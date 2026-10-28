@@ -58,7 +58,11 @@ export function createChecker(start: (text: string) => CheckJob, changed: () => 
 
   function check(text: string): Promise<Difficulty | null> {
     if (state.kind === 'done' && state.text === text) return Promise.resolve(state.d);
-    if (state.kind === 'running' && state.text === text && pending) return pending;
+    if (state.kind === 'running' && state.text === text && pending) {
+      // Checking a paused search again carries it on.
+      if (state.stopped) checker.keepSearching();
+      return pending;
+    }
     cancel();
     const mine = gen;
     set({ kind: 'running', text, report: null, stopped: false });
@@ -94,7 +98,7 @@ export function createChecker(start: (text: string) => CheckJob, changed: () => 
     return p;
   }
 
-  return {
+  const checker: Checker = {
     get state() {
       return state;
     },
@@ -116,6 +120,7 @@ export function createChecker(start: (text: string) => CheckJob, changed: () => 
       }
     },
   };
+  return checker;
 }
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
@@ -149,4 +154,16 @@ export function checkLines(s: CheckState, current: string, level: Level): { line
   if (problems.length === 0) lines.push('Shareable');
   else lines.push('Not shareable yet:', ...problems);
   return { lines, stale, shareable: problems.length === 0 };
+}
+
+/** The one-line summary of a check, for the strip that stays on screen when the side panel is closed; '' before any
+ *  check. A search running has no summary (the strip shows its progress). */
+export function checkSummary(s: CheckState, current: string): string {
+  if (s.kind === 'none' || s.kind === 'running') return '';
+  if (s.text !== current) return 'Out of date: press Check.';
+  if (s.kind === 'failed') return `The solver stopped: ${s.message}`;
+  const d = s.d;
+  if (d.shortest === 'unknown') return 'The solver could not finish';
+  if (!d.solved || typeof d.shortest !== 'number') return 'Cannot be won';
+  return sharedProblems(d).length === 0 ? `Winnable in ${d.shortest} · Shareable` : `Winnable in ${d.shortest} · Not shareable yet`;
 }

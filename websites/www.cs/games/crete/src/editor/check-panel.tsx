@@ -3,7 +3,7 @@
 // An answer for an earlier draft stays, greyed, with "Out of date: press Check."
 import { Button } from '../../../_kit/ui/button.tsx';
 import { EDITOR_KEYS } from './keys.ts';
-import { checkLines } from './check.ts';
+import { checkLines, checkSummary } from './check.ts';
 import type { CheckState } from './check.ts';
 import type { Level } from '../puzzle/level.ts';
 
@@ -18,6 +18,37 @@ export interface CheckPanelProps {
   onKeep(): void;
 }
 
+/** What the running search has done, in a line. */
+function progressText(s: Extract<CheckState, { kind: 'running' }>): string {
+  const r = s.report;
+  const text = r
+    ? `Searched ${r.stored.toLocaleString('en-US')} situations · trying lines of at least ${r.bestF.toLocaleString('en-US')} moves${r.storage === 'memory' ? ' (in memory only)' : ''}`
+    : 'Starting the search…';
+  return s.stopped ? `${text} Stopped.` : text;
+}
+
+/** The check in one strip, in the editor's bar: where a narrow screen keeps the side panel closed, the Check button,
+ *  the running search's bar and text with Stop and Keep searching, and the answer in a line. Wide screens hide it
+ *  (game.css) for the panel. A search goes on while the editor is left (Try it, Q), so the strip is current on return. */
+export function CheckStrip(p: CheckPanelProps) {
+  const s = p.state;
+  const summary = checkSummary(s, p.current);
+  return (
+    <div id="check-strip" class={summary === 'Out of date: press Check.' ? 'check-strip stale' : 'check-strip'} aria-label="Check">
+      <Button id="check-strip-run" keyLabel={EDITOR_KEYS.check.label} onClick={p.onCheck}>Check</Button>
+      {s.kind === 'running' && (
+        <>
+          <div class="check-bar" role="progressbar" aria-label="Searching" />
+          <span id="check-strip-text" class="check-strip-text">{progressText(s)}</span>
+          <Button id="check-strip-stop" disabled={s.stopped} onClick={p.onStop}>Stop</Button>
+          <Button id="check-strip-keep" disabled={!s.stopped} onClick={p.onKeep}>Keep searching</Button>
+        </>
+      )}
+      {summary !== '' && <span id="check-strip-text" class="check-strip-text">{summary}</span>}
+    </div>
+  );
+}
+
 export function CheckPanel(p: CheckPanelProps) {
   const s = p.state;
   const running = s.kind === 'running';
@@ -30,10 +61,7 @@ export function CheckPanel(p: CheckPanelProps) {
         <div class="check-running">
           <div class="check-bar" role="progressbar" aria-label="Searching" />
           <p id="check-progress" aria-live="polite">
-            {s.report
-              ? `Searched ${s.report.stored.toLocaleString('en-US')} situations · trying lines of at least ${s.report.bestF.toLocaleString('en-US')} moves${s.report.storage === 'memory' ? ' (in memory only)' : ''}`
-              : 'Starting the search…'}
-            {s.stopped ? ' Stopped.' : ''}
+            {progressText(s)}
           </p>
           <div class="check-actions">
             <Button id="check-stop" disabled={s.stopped} onClick={p.onStop}>Stop</Button>

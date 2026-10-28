@@ -374,6 +374,10 @@ button:disabled { opacity: 0.45; cursor: default; }
 .check-bar { position: relative; height: 6px; margin-top: 0.5rem; overflow: hidden; background: var(--bg); border-radius: 3px; }
 .check-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 35%; background: var(--accent); border-radius: 3px; animation: check-slide 1.4s ease-in-out infinite alternate; }
 @keyframes check-slide { to { transform: translateX(185%); } }
+.check-strip { display: none; align-items: center; gap: 0.4rem; min-width: 0; flex-basis: 100%; }
+.check-strip .check-bar { flex: 0 0 4rem; margin: 0; }
+.check-strip-text { font-size: 0.85rem; color: var(--dim); min-width: 0; overflow-wrap: anywhere; }
+.check-strip.stale { opacity: 0.7; }
 .check-result.stale { opacity: 0.55; }
 .check-stale { color: var(--bad); }
 .palette h3 { margin: 0.4rem 0 0.25rem; font-size: 0.8rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -399,6 +403,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 @container frame (max-width: 699px) {
   .editor { grid-template: "bar" auto "board" minmax(0, 1fr) / minmax(0, 1fr); }
   .editor-pieces { display: inline-block; }
+  .check-strip { display: flex; flex-wrap: wrap; }
   /* The drawer lies over the board's right side, under the bar. */
   .editor-side {
     grid-area: board;

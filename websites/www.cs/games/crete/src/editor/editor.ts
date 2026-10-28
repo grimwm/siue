@@ -360,6 +360,7 @@ export function createEditor(deps: EditorDeps): Editor {
       drawBoard();
     },
     close() {
+      // A running check goes on while the editor is left (Try it, Q); its panel is current on return.
       endStroke();
       touches.clear();
       drawer = false;

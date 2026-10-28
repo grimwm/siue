@@ -15,7 +15,7 @@ import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
 import { TRIALS } from '../src/puzzle/trials.ts';
 import { lineText } from '../src/puzzle/cache.ts';
-import { ENCODED_MAX, MAX_LINE, decodeLink } from '../src/share/link.ts';
+import { MAX_LINE, decodeLink } from '../src/share/link.ts';
 import { openLink } from '../src/share/open.ts';
 import { fromLevel, newDraft, toText } from '../src/editor/model.ts';
 import type { Draft } from '../src/editor/model.ts';
@@ -44,7 +44,7 @@ afterEach(() => {
 });
 const settle = () => new Promise<void>(r => setImmediate(r));
 /** Waits for `done` (the link is made on the platform's own compression streams, which take real time under load). */
-const later = async (done: () => boolean = () => false) => {
+const later = async (done: () => boolean) => {
   const end = Date.now() + 10_000;
   for (let i = 0; i < 20 || (!done() && Date.now() < end); i++) await (i < 20 ? settle() : new Promise<void>(r => setTimeout(r, 5)));
 };
@@ -95,13 +95,12 @@ test('share refuses a line that does not win, or cannot be read', async () => {
 });
 
 test('share refuses a fragment over ENCODED_MAX', async () => {
-  // Random letters make a long line the level cannot replay; the size check comes first.
+  // shareLink does not parse the text, so large incompressible text makes the fragment too long.
   let seed = 7;
-  const letters = Array.from({ length: MAX_LINE }, () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return 'udlrwzxc'[seed % 8]!; }).join('');
-  const r = await ed.panel.shareLink(BASE, TEXT, { ...D, line: letters }, 'WGR', null);
-  assert.equal(r.ok, false);
-  assert.match((r as { message: string }).message, /too large to share as a link|could not be read/);
-  assert.ok(ENCODED_MAX > 0);
+  const next = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed >>> 24; };
+  const noise = Array.from({ length: 30_000 }, () => String.fromCharCode(33 + (next() % 90))).join('');
+  const r = await ed.panel.shareLink(BASE, noise, D, 'WGR', null);
+  assert.deepEqual(r, { ok: false, message: 'This level is too large to share as a link.' });
 });
 
 test('share builds a link that openLink opens', async () => {
@@ -200,6 +199,35 @@ test('share runs Check first when the level changed, then shows the link, name a
   fire(e.canvas, 'pointerup', at);
   assert.notEqual(toText(e.editor.draft, true), TEXT, 'the edit changed the level');
   assert.equal(maybeById(e.root, 'share-link'), undefined);
+});
+
+test('Stop during a Share ends the Share with a message; Share again carries the search on', async () => {
+  const e = make();
+  e.editor.open(DRAFT);
+  typeInitials(e.root, 'WGR');
+  click(byId(e.root, 'share-run'));
+  assert.equal(byId(e.root, 'share-run').disabled, true);
+  click(byId(e.root, 'check-stop'));
+  assert.equal(byId(e.root, 'share-run').disabled, false, 'the button is back');
+  assert.equal(byId(e.root, 'share-message').textContent, 'The search stopped before it finished; press Share again to keep going.');
+  click(byId(e.root, 'share-run'));
+  assert.equal(e.searches.length, 1, 'the paused search is carried on');
+  assert.equal(maybeById(e.root, 'share-message'), undefined);
+  assert.equal(byId(e.root, 'share-run').disabled, true);
+  e.searches[0]!.answer(D);
+  await later(() => maybeById(e.root, 'share-link') !== undefined);
+});
+
+test('Share while a Check of the same text is running reuses that search', async () => {
+  const e = make();
+  e.editor.open(DRAFT);
+  typeInitials(e.root, 'WGR');
+  click(byId(e.root, 'check-run'));
+  assert.equal(e.searches.length, 1);
+  click(byId(e.root, 'share-run'));
+  assert.equal(e.searches.length, 1);
+  e.searches[0]!.answer(D);
+  await later(() => maybeById(e.root, 'share-link') !== undefined);
 });
 
 test('share with bad initials says so and runs no search', async () => {

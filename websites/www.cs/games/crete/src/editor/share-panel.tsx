@@ -4,7 +4,7 @@
 import { useRef, useState } from 'preact/hooks';
 import { Button } from '../../../_kit/ui/button.tsx';
 import { validInitials } from '../../../_kit/initials.ts';
-import { ENCODED_MAX, MAX_LINE, encodeLink } from '../share/link.ts';
+import { ENCODED_MAX, LINK_MESSAGES, MAX_LINE, encodeLink } from '../share/link.ts';
 import { openLink } from '../share/open.ts';
 import { levelCode, sharedName } from '../share/name.ts';
 import { lineOf } from '../puzzle/cache.ts';
@@ -31,7 +31,8 @@ export async function shareLink(
   const fragment = await encodeLink({ text: draftText, line, initials: by, best });
   if (fragment.length - 'L1.'.length > ENCODED_MAX) return { ok: false, message: 'This level is too large to share as a link.' };
   // The link is shown only once it opens: its line replays to a win on the level it carries.
-  if (!(await openLink(fragment)).ok) return { ok: false, message: "The solver's line could not be read." };
+  const opened = await openLink(fragment);
+  if (!opened.ok) return { ok: false, message: opened.error === 'damaged' ? "The solver's line could not be read." : LINK_MESSAGES[opened.error] };
   return { ok: true, url: `${base}#${fragment}`, name: sharedName(await levelCode(draftText), by) };
 }
 

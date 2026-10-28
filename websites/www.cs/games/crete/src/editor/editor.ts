@@ -5,6 +5,7 @@
  * undo history live for the page's life: leaving the editor by Try it or Q keeps them. It keeps the author's best
  * for each level it tried: the fewest moves of a try won without Ariadne's thread, by the level's share text, so
  * an edit leaves a level with no best until it is won again. Needs the DOM lib. */
+import { validInitials } from '../../../_kit/initials.ts';
 import { isBackKey, typesText } from '../../../_kit/keys.ts';
 import { oneOf, pref, text as textCodec } from '../../../_kit/prefs.ts';
 import { browserStorage } from '../../../_kit/ports.browser.ts';
@@ -26,7 +27,6 @@ import type { Cell, Terrain } from '../puzzle/tiles.ts';
 import { renderEditorPanel } from './bar.tsx';
 import { createChecker } from './check.ts';
 import { INITIALS_MESSAGE, shareLink } from './share-panel.tsx';
-import { validInitials } from '../../../_kit/initials.ts';
 import { editorActionFor } from './keys.ts';
 import { commit, redoH, startHistory, undoH } from './history.ts';
 import type { History } from './history.ts';
@@ -70,6 +70,7 @@ export const OWNER_PREF = 'crete-owner';
 /** The kit pref that remembers the author's initials. */
 export const INITIALS_PREF = 'crete-initials';
 const NEW_SIDE = 12;
+const STOPPED_MESSAGE = 'The search stopped before it finished; press Share again to keep going.';
 
 /** The figures where the level starts them. */
 function restingFigures(s: State): Figures {
@@ -136,6 +137,8 @@ export function createEditor(deps: EditorDeps): Editor {
   let shared: { text: string; link: { url: string; name: string } | null; message: string } | null = null;
   /** The running Share's number; a Share that is no longer the latest drops its answer. */
   let shareGen = 0;
+  /** The share text of the Share that is waiting on a Check; null when none is. */
+  let sharingText: string | null = null;
   let drawer = false;
   let shown = false;
   /** The draw list and the draft it was made for. */
@@ -149,7 +152,7 @@ export function createEditor(deps: EditorDeps): Editor {
   const touches = new Map<number, { x: number; y: number }>();
   /** The author's best by share text. */
   const bests = new Map<string, number>();
-  const checker = createChecker(deps.start ?? (text => startSearch(text, 'measure')), () => drawPanel());
+  const checker = createChecker(deps.start ?? (text => startSearch(text, 'measure')), () => { endStoppedShare(); drawPanel(); });
 
   const now = (): History<Draft> => (history ??= startHistory(newDraft(NEW_SIDE, NEW_SIDE)));
 
@@ -309,6 +312,16 @@ export function createEditor(deps: EditorDeps): Editor {
     void runShare();
   }
 
+  /** Stop pauses the search a Share is waiting on, which then never answers: that Share ends here, saying so. */
+  function endStoppedShare(): void {
+    const c = checker.state;
+    if (!sharing || sharingText === null || c.kind !== 'running' || !c.stopped || c.text !== sharingText) return;
+    shareGen++;
+    sharing = false;
+    shared = { text: sharingText, link: null, message: STOPPED_MESSAGE };
+    sharingText = null;
+  }
+
   /** Makes the link for the draft as it stands: Check first when the draft is not what the last Check proved. */
   async function runShare(): Promise<void> {
     endStroke();
@@ -316,20 +329,23 @@ export function createEditor(deps: EditorDeps): Editor {
     const mine = ++shareGen;
     const say = (message: string, link: { url: string; name: string } | null = null): void => {
       sharing = false;
+      sharingText = null;
       shared = { text, link, message };
       drawPanel();
     };
     if (validInitials(initials) === null) { say(INITIALS_MESSAGE); return; }
     const c = checker.state;
     sharing = true;
+    sharingText = text;
     shared = null;
     drawPanel();
     let d: Difficulty | null;
     if (c.kind === 'done' && c.text === text) d = c.d;
     else d = await checker.check(text);
     if (mine !== shareGen) return;
+    sharingText = null;
     if (d === null) {
-      // Cancelled by an edit or a newer Check, or the solver stopped: its panel says which.
+      // Cancelled by an edit or a newer Check, or the solver failed: the Check panel says which.
       sharing = false;
       drawPanel();
       return;

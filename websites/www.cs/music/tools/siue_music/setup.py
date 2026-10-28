@@ -136,5 +136,6 @@ class Setup:
         self.out("\nDone:")
         for line in self.done:
             self.out(f"  ✓ {line}")
-        self.out(f"\nNext: open the workroom, {self.keys.base}, and leave a note. Pick it up with make music-pickup.")
+        self.out(f"\nNext: publish a draft with make music-publish PIECE=<id>, then open it in the workroom, {self.keys.base}, and leave a note on its page. "
+                 "Notes can only be left on a published draft. Pick up the notes with make music-pickup.")
         return 0

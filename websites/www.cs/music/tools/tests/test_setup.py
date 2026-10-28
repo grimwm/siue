@@ -95,7 +95,9 @@ class SetupTest(unittest.TestCase):
         for line in ("music-publish API key saved", "music-pickup API key saved", "notes key made and saved in 1Password",
                      "locked copy on the server, its current key checked"):
             self.assertIn("✓ " + line, text)
-        self.assertIn("Next: open the workroom, https://www.cs.siue.edu/~wgrim/music/", text)
+        self.assertIn("Next: publish a draft with make music-publish PIECE=<id>", text)
+        self.assertIn("then open it in the workroom, https://www.cs.siue.edu/~wgrim/music/, and leave a note on its page.", text)
+        self.assertIn("Pick up the notes with make music-pickup.", text)
         self.assertEqual(text.count("Done:"), 1, "only the closing checklist says Done")
         for word in ("pull request", "branch", "commit", "[Y/n]"):
             self.assertNotIn(word, text)

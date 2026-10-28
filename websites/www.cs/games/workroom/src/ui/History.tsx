@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { KIND_LABELS, REACTION_LABELS, spanLabel } from '../answer.ts';
 import type { HistoryItem } from '../history.ts';
+import { GENERAL_PIECE } from '../note.ts';
 import type { NoteBody } from '../note.ts';
 import { KEPT_MESSAGES } from '../outbox.ts';
 import type { Pending } from '../outbox.ts';
@@ -29,6 +30,8 @@ export interface HistoryProps {
   onDeleteAll(): void;
   onDiscard(key: string): void;
   onRetry(): void;
+  /** The front page's general notes: no piece scope, no span, and no Delete all (it would delete every piece's notes too). */
+  general?: boolean;
 }
 
 const SMALL_CAPS = 'font-display text-xs font-semibold tracking-widest text-dim uppercase';
@@ -59,7 +62,7 @@ function Shape(p: { curve: readonly [number, number][] }) {
 function Summary(p: { body: NoteBody; audio: Uint8Array<ArrayBuffer> | null; version: number; lane: string | null }) {
   const b = p.body;
   const head = b.kind === 'react' && b.reaction ? `${KIND_LABELS.react}: ${REACTION_LABELS[b.reaction]}` : KIND_LABELS[b.kind];
-  const where = [b.kind === 'energy' ? 'The whole piece' : spanLabel(b), p.lane, b.draft !== p.version ? `draft ${b.draft}` : null].filter(Boolean).join(' · ');
+  const where = b.piece === GENERAL_PIECE ? 'General' : [b.kind === 'energy' ? 'The whole piece' : spanLabel(b), p.lane, b.draft !== p.version ? `draft ${b.draft}` : null].filter(Boolean).join(' · ');
   return (
     <>
       <p class="font-display text-sm font-semibold tracking-wider uppercase">{head}</p>
@@ -104,11 +107,13 @@ export function History(p: HistoryProps) {
   const [deleting, setDeleting] = useState<string | null>(null);
   return (
     <div data-history="" class="grid gap-3">
-      <div class="flex flex-wrap gap-2" role="group" aria-label="Which notes">
-        <Chip pressed={p.scope === 'piece'} onClick={() => p.onScope('piece')}>This piece</Chip>
-        <Chip pressed={p.scope === 'all'} onClick={() => p.onScope('all')}>All pieces</Chip>
-      </div>
-      {p.items.length === 0 ? <p class="empty">{p.scope === 'piece' ? 'No notes on this piece yet.' : 'No notes yet.'}</p> : (
+      {p.general ? null : (
+        <div class="flex flex-wrap gap-2" role="group" aria-label="Which notes">
+          <Chip pressed={p.scope === 'piece'} onClick={() => p.onScope('piece')}>This piece</Chip>
+          <Chip pressed={p.scope === 'all'} onClick={() => p.onScope('all')}>All pieces</Chip>
+        </div>
+      )}
+      {p.items.length === 0 ? <p class="empty">{p.general ? 'No general notes yet.' : p.scope === 'piece' ? 'No notes on this piece yet.' : 'No notes yet.'}</p> : (
         <ol class="grid gap-3" aria-label="Notes">
           {p.items.map(i => {
             const n = p.numberOf(i.id);
@@ -141,7 +146,7 @@ export function History(p: HistoryProps) {
           })}
         </ol>
       )}
-      {p.total > 0 ? (asking ? (
+      {p.total > 0 && !p.general ? (asking ? (
         <div role="group" aria-label="Delete all notes" class="grid gap-2 rounded-md border border-amber p-3">
           <p>{deleteAllQuestion(p.total)}</p>
           <div class="flex flex-wrap gap-2">

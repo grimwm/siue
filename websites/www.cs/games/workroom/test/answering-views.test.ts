@@ -431,3 +431,91 @@ test('notes panel, unlocked: a failed Delete, Delete all, Discard or Try again s
     await act(() => { fire(walk(root).filter(e => e.localName === 'button' && /^Discard/.test(e.textContent)).at(-1)!, 'click'); });
   }, /could not be discarded/);
 });
+
+const general = (c: string, text: string, extra: Partial<HistoryItem> = {}): HistoryItem => item(c, extra, { piece: 'general', draft: 1, from: 0, to: 0, fromBar: null, toBar: null, lane: null, text });
+const generalPanel = (notes: NotesSession, extra: Record<string, unknown> = {}) => h(ui.answers.Answers, { notes, score: null, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: () => {}, ...extra });
+
+test('general notes: the unlock form says what unlocking gives on the front page', async () => {
+  const root = await mount(generalPanel(fakeSession()));
+  await settle();
+  assert.match(root.textContent, /general notes/);
+  assert.match(root.textContent, /how many notes wait/);
+  assert.doesNotMatch(root.textContent, /Unlock to write and read your notes\./);
+});
+
+test('general notes: unlocked, only the general notes are listed, without piece scope chips, a span or Delete all', async () => {
+  const notes = fakeSession({ unlocked: () => true, history: async () => [general('a', 'play the theme again'), item('b'), general('c', 'shorter intro')] });
+  const root = await mount(generalPanel(notes));
+  await settle();
+  const listed = walk(root).filter(e => e._attrs['data-note'] !== undefined);
+  assert.equal(listed.length, 2);
+  assert.match(root.textContent, /play the theme again/);
+  assert.doesNotMatch(root.textContent, /louder here/, 'a note on a piece is not a general note');
+  assert.doesNotMatch(root.textContent, /This piece|All pieces|Delete all|0:00|draft/);
+  assert.match(root.textContent, /General/);
+  assert.ok(button(root, 'Delete'), 'one note can still be deleted');
+});
+
+test('general notes: with none yet, the list says so', async () => {
+  const root = await mount(generalPanel(fakeSession({ unlocked: () => true, history: async () => [item('b')] })));
+  await settle();
+  assert.match(root.textContent, /No general notes yet\./);
+});
+
+test('general notes: writing one seals a text note on the general piece, says it is sent, clears the box and reloads the list', async () => {
+  const sent: NoteBody[] = [];
+  const notes = fakeSession({ unlocked: () => true, send: async b => { sent.push(b); return { key: 'k', memoryOnly: false, sent: [{ key: 'k', id: 'a'.repeat(32) }], kept: [] }; } });
+  const root = await mount(generalPanel(notes));
+  await settle();
+  const box = walk(root).find(e => e.localName === 'textarea')!;
+  box.value = '  more brass in the finale  ';
+  await act(() => { fire(box, 'input'); });
+  await act(() => { fire(button(root, 'Send note')!, 'click'); });
+  await settle();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]!.piece, 'general');
+  assert.equal(sent[0]!.text, 'more brass in the finale');
+  assert.match(root.textContent, /Sent\. It is waiting for pickup\./);
+  assert.equal(walk(root).find(e => e.localName === 'textarea')!.value, '');
+  assert.equal(notes.calls.filter(c => c === 'history').length, 2, 'the list was loaded again');
+});
+
+test('general notes: an empty note is refused in words, a note kept on this device says why, and a failed seal keeps the words', async () => {
+  let mode: 'kept' | 'fail' = 'kept';
+  const notes = fakeSession({ unlocked: () => true, send: async () => {
+    if (mode === 'fail') throw new Error('This note could not be sealed here.');
+    return { key: 'k', memoryOnly: false, sent: [], kept: [{ key: 'k', reason: 'offline' }] };
+  } });
+  const root = await mount(generalPanel(notes));
+  await settle();
+  const type = async (text: string): Promise<void> => { const box = walk(root).find(e => e.localName === 'textarea')!; box.value = text; await act(() => { fire(box, 'input'); }); };
+  await act(() => { fire(button(root, 'Send note')!, 'click'); });
+  assert.match(root.textContent, /Type a note first/);
+  await type('hello');
+  await act(() => { fire(button(root, 'Send note')!, 'click'); });
+  await settle();
+  assert.match(root.textContent, /kept on this device/);
+  mode = 'fail';
+  await type('again');
+  await act(() => { fire(button(root, 'Send note')!, 'click'); });
+  await settle();
+  assert.match(root.textContent, /could not be sealed/);
+  assert.equal(walk(root).find(e => e.localName === 'textarea')!.value, 'again');
+});
+
+test('general notes: locked, there is no box to write in', async () => {
+  const root = await mount(generalPanel(fakeSession()));
+  await settle();
+  assert.equal(walk(root).some(e => e.localName === 'textarea'), false);
+});
+
+test('the front page is the general notes panel: it unlocks, fills the per-piece counts from every note, and keeps the counts hint', async () => {
+  const notes = fakeSession();
+  const list = makeEl('ol');
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: list as unknown as ParentNode }));
+  await settle();
+  assert.ok(byAttr(root, 'data-pieces-notes'), 'the panel keeps its marker');
+  await unlockWith(root, 'right');
+  assert.match(root.textContent, /Each piece shows how many of your notes wait for pickup\./);
+  assert.ok(walk(root).some(e => e.localName === 'textarea'), 'and the general box is there');
+});

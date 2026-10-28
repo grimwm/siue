@@ -3,8 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { NoteEmpty, NoteTooLong, REACTIONS, energyNote, humNote, reactNote, recordClock, resampleCurve, spanLabel, speechNote, textNote, wholePiece } from '../src/answer.ts';
-import { MAX_CURVE_POINTS, REACTION_IDS, isNoteBody } from '../src/note.ts';
+import { NoteEmpty, NoteTooLong, REACTIONS, energyNote, generalNote, humNote, reactNote, recordClock, resampleCurve, spanLabel, speechNote, textNote, wholePiece } from '../src/answer.ts';
+import { GENERAL_PIECE, MAX_CURVE_POINTS, REACTION_IDS, isNoteBody } from '../src/note.ts';
 import { tempoMap } from '../src/tempo.ts';
 import type { Score } from '../src/score.ts';
 
@@ -94,4 +94,16 @@ test('every builder yields a body the shape check accepts, and energy refuses wh
   assert.throws(() => energyNote(ctx, [[1, 0.5], [2, Number.NaN]], 16, 8), NoteEmpty);
   assert.throws(() => humNote(ctx, { time: 1, bar: 1, laneId: null }, { mime: '', seconds: 3 }), NoteEmpty);
   assert.deepEqual(resampleCurve([[0, 0], [1, 1], [2, 0]], 1), [[0, 0]]);
+});
+
+test('a general note is text on the reserved piece, with no span, lane or curve, and passes the shape check', () => {
+  const n = generalNote(() => new Date('2026-10-20T14:03:11.000Z'), '  the theme should come back  ');
+  assert.deepEqual(n, {
+    v: 1, kind: 'text', piece: GENERAL_PIECE, draft: 1, from: 0, to: 0, fromBar: null, toBar: null, lane: null,
+    text: 'the theme should come back', reaction: null, curve: null, audio: null, made: '2026-10-20T14:03:11.000Z',
+  });
+  assert.equal(GENERAL_PIECE, 'general');
+  assert.equal(isNoteBody(n), true);
+  assert.throws(() => generalNote(ctx.now, '  '), NoteEmpty);
+  assert.throws(() => generalNote(ctx.now, 'x'.repeat(4001)), NoteTooLong);
 });

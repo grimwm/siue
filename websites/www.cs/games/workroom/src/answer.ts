@@ -3,7 +3,7 @@
 // seconds only. The limits are refused here, in plain words. DOM-free.
 import { formatSeconds } from './axis.ts';
 import type { Span } from './hit.ts';
-import { MAX_AUDIO_SECONDS, MAX_CURVE_POINTS, MAX_TEXT, REACTION_IDS } from './note.ts';
+import { GENERAL_PIECE, MAX_AUDIO_SECONDS, MAX_CURVE_POINTS, MAX_TEXT, REACTION_IDS } from './note.ts';
 import type { NoteBody, NoteKind, Reaction } from './note.ts';
 import type { Score, Section } from './score.ts';
 import { sectionTimes } from './tempo.ts';
@@ -38,6 +38,11 @@ export function textNote(c: Context, span: Span, text: string): NoteBody {
   if (t === '') throw new NoteEmpty('Type a note first.');
   if (t.length > MAX_TEXT) throw new NoteTooLong(`A note holds up to ${MAX_TEXT.toLocaleString('en-US')} characters. Shorten this one by ${(t.length - MAX_TEXT).toLocaleString('en-US')}.`);
   return { ...base(c, 'text', span.from, span.to, span.fromBar, span.toBar, span.laneId), text: t };
+}
+
+/** A typed note on the front page, tied to no piece: the reserved general piece, draft 1, no span. */
+export function generalNote(now: () => Date, text: string): NoteBody {
+  return textNote({ piece: GENERAL_PIECE, draft: 1, now }, { from: 0, to: 0, fromBar: null, toBar: null, laneId: null }, text);
 }
 
 export function speechNote(c: Context, span: Span, audio: Audio): NoteBody {

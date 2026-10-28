@@ -13,17 +13,23 @@ import type { NotesSession } from '../notes-session.ts';
 import type { Pending } from '../outbox.ts';
 import type { Score } from '../score.ts';
 import { Panel } from './console/Panel.tsx';
+import { GENERAL_PIECE } from '../note.ts';
+import { GeneralComposer } from './GeneralComposer.tsx';
 import { History, Kept } from './History.tsx';
 import { UnlockPanel } from './UnlockPanel.tsx';
 
 export interface AnswersProps {
-  notes: NotesSession; score: Score; version: number; refresh: number;
+  /** A piece's score; null on the front page, where the panel is the general notes (tied to no piece). */
+  notes: NotesSession; score: Score | null; version: number; refresh: number;
   ask: string | null;
   onUnlocked(): void;
   /** The notes are locked again (a sign-in that ended, or a lock that overtook a load). */
   onLocked?(): void;
   onItems(items: readonly HistoryItem[]): void;
 }
+
+/** What unlocking gives on the front page. */
+const FRONT_PAGE_INTRO = 'Unlock to write and read your general notes, and to see how many notes wait on each piece.';
 
 export function Answers(p: AnswersProps) {
   const [unlocked, setUnlocked] = useState(p.notes.unlocked());
@@ -90,24 +96,31 @@ export function Answers(p: AnswersProps) {
     await load();
   };
 
-  const piece = p.score.piece.id;
-  const numbers = new Map(timelineMarks(items, piece, p.score.duration).map(m => [m.id, m.n]));
+  const score = p.score;
+  const piece = score ? score.piece.id : GENERAL_PIECE;
+  const numbers = new Map(score ? timelineMarks(items, piece, score.duration).map(m => [m.id, m.n]) : []);
   const keptList = <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key), DISCARD_FAILED)} onRetry={() => void act(() => p.notes.flush())} />;
+  const alertOf = (m: string | null) => (m ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{m}</p> : null);
   return (
-    <Panel title="Your notes" label="Notes & answers" class="grid gap-3" data={{ 'data-answers': '' }}>
+    <Panel title="Your notes" label="Notes & answers" class="grid gap-3" data={score ? { 'data-answers': '' } : { 'data-answers': '', 'data-pieces-notes': '' }}>
       {!unlocked ? (
         <>
           {p.ask ? <p data-unlock-reason="" class="text-sm">{p.ask}</p> : null}
-          <UnlockPanel busy={busy} error={error} onUnlock={pass => void unlock(pass)} />
+          <UnlockPanel busy={busy} error={error} intro={score ? undefined : FRONT_PAGE_INTRO} onUnlock={pass => void unlock(pass)} />
+          {alertOf(problem)}
           {keptList}
         </>
       ) : (
         <>
-          {[problem, error].map(m => (m ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{m}</p> : null))}
-          <History items={scope === 'piece' ? forPiece(items, piece) : items} total={items.length} scope={scope} onScope={setScope} version={p.version}
-            laneName={id => p.score.lanes.find(l => l.id === id)?.name ?? null}
+          {score ? null : <p class="text-sm text-dim">Each piece shows how many of your notes wait for pickup.</p>}
+          {alertOf(problem)}
+          {alertOf(error)}
+          {score ? null : <GeneralComposer notes={p.notes} busy={busy} onStored={() => void load()} />}
+          <History items={score === null ? forPiece(items, GENERAL_PIECE) : scope === 'piece' ? forPiece(items, piece) : items} total={items.length} scope={scope} onScope={setScope} version={p.version}
+            general={score === null}
+            laneName={id => score?.lanes.find(l => l.id === id)?.name ?? null}
             numberOf={id => numbers.get(id) ?? null}
-            answers={id => { const k = answeredBy(p.score.changes, id); return k.length ? `Answered in this draft: ${k.map(i => `change ${i + 1}`).join(', ')}` : null; }}
+            answers={id => { const k = score ? answeredBy(score.changes, id) : []; return k.length ? `Answered in this draft: ${k.map(i => `change ${i + 1}`).join(', ')}` : null; }}
             kept={kept} busy={busy}
             onDelete={id => void act(() => p.notes.remove(id))}
             onDeleteAll={() => void act(() => p.notes.removeAll())}

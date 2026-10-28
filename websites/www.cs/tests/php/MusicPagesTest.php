@@ -171,6 +171,10 @@ final class MusicPagesTest extends TestCase
         $res = $this->pages->keyring($r);
         self::assertSame(200, $res->status);
         self::assertSame($locked, json_decode($res->body, true)['keyring']);
+        $tag = json_decode($res->body, true)['session'];
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $tag);
+        self::assertSame($tag, json_decode($this->pages->keyring($r)->body, true)['session'], 'one session, one tag');
+        self::assertNotSame($tag, json_decode($this->pages->keyring(music_signed_in($this->sessions))->body, true)['session'], 'a new sign-in, a new tag');
         $id = $this->store->addNote(music_sealed())['id'];
         $this->store->markPickedUp($id);
         $notes = json_decode($this->pages->notes($r, '')->body, true)['notes'];

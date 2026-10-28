@@ -25,6 +25,7 @@ export class ServerError extends Error {
 }
 export type RefusedReason = 'too_large' | 'full' | 'no_key' | 'bad_header' | 'unknown_key';
 export const REFUSED_REASONS: readonly RefusedReason[] = ['too_large', 'full', 'no_key', 'bad_header', 'unknown_key'];
+export interface KeyringAnswer { locked: LockedKeyring; session: string }
 export interface ServerNote { id: string; size: number; arrived_at: number; picked_up_at: number | null }
 export type UploadResult = { kind: 'sent'; id: string } | { kind: 'refused'; reason: RefusedReason };
 export interface PageApi {
@@ -34,7 +35,8 @@ export interface PageApi {
   bytes(id: string): Promise<Uint8Array<ArrayBuffer>>;
   remove(id: string): Promise<number>;
   removeAll(): Promise<number>;
-  keyring(): Promise<LockedKeyring>;
+  /** The locked keyring, and the server's tag for this sign-in ('' when it gave none). */
+  keyring(): Promise<KeyringAnswer>;
 }
 
 type Reply = Awaited<ReturnType<Fetch>>;
@@ -135,7 +137,7 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
       const keyring = data['keyring'];
       if (!reply.ok) throw failed(reply);
       if (typeof keyring !== 'object' || keyring === null) throw new UnreadableAnswer();
-      return keyring as LockedKeyring;
+      return { locked: keyring as LockedKeyring, session: typeof data['session'] === 'string' ? data['session'] : '' };
     },
   };
 }

@@ -150,10 +150,10 @@ final class Pages
         }, 'POST');
     }
 
-    /** GET keyring.php: the locked keyring. */
+    /** GET keyring.php: the locked keyring, and this session's unlock tag (the page forgets a remembered unlock when it changes). */
     public function keyring(\Admin\Request $r): \Admin\Response
     {
-        return $this->guarded($r, false, false, function (): \Admin\Response {
+        return $this->guarded($r, false, false, function () use ($r): \Admin\Response {
             $row = $this->store->keyring();
             $keyring = $row === null ? null : json_decode($row['locked'], true);
             if ($row === null) {
@@ -163,7 +163,7 @@ final class Pages
                 error_log('music: the stored keyring is not valid JSON');
                 return Http::json(500, ['error' => 'bad_keyring']);
             }
-            return Http::json(200, ['keyring' => $keyring]);
+            return Http::json(200, ['keyring' => $keyring, 'session' => $this->sessions->tag($r, 'music-unlock')]);
         }, 'GET');
     }
 

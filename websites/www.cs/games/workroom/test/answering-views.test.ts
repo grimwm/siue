@@ -188,6 +188,7 @@ function fakeSession(over: Partial<NotesSession> = {}): NotesSession & { calls: 
     hasKeyring: async () => true,
     unlocked: () => open,
     unlock: async p => { calls.push(`unlock ${p}`); if (p !== 'right') return 'That passphrase did not unlock the key.'; open = true; return null; },
+    restore: async () => false,
     history: async () => { calls.push('history'); return [item('a'), item('e', {}, { piece: 'other-piece' })]; },
     send: async () => ({ key: 'k', memoryOnly: false, sent: [], kept: [] }),
     flush: async () => { calls.push('flush'); return { sent: [], kept: [] }; },

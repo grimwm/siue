@@ -145,6 +145,22 @@ final class AdminSessionsTest extends TestCase
         self::assertNotSame($token, $s->csrf($r));
     }
 
+    public function testTagIsStablePerSessionAndPurposeAndEndsWithTheSession(): void
+    {
+        [$s, , $c] = $this->sessions();
+        $r = $this->reqWith($s->start(req()));
+        $tag = $s->tag($r, 'music-unlock');
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $tag);
+        self::assertSame($tag, $s->tag($r, 'music-unlock'));
+        self::assertTrue($s->checkCsrf($r, $s->csrf($r)));
+        self::assertSame($tag, $s->tag($r, 'music-unlock'), 'a spent CSRF token does not change it');
+        self::assertNotSame($tag, $s->tag($r, 'other'));
+        self::assertNotSame($tag, $s->tag($this->reqWith($s->start(req())), 'music-unlock'));
+        self::assertSame('', $s->tag(req(), 'music-unlock'));
+        $c->now += Admin\Sessions::IDLE + 1;
+        self::assertSame('', $s->tag($r, 'music-unlock'));
+    }
+
     public function testCsrfRefusesAnExpiredSession(): void
     {
         [$s, , $c] = $this->sessions();

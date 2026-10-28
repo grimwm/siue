@@ -69,6 +69,17 @@ final class Sessions
     }
 
     /**
+     * A stable tag for this session and purpose, '' without a live session: an HMAC of the purpose under the
+     * session id, so it changes with every sign-in and tells nothing about the id. A page keeps it beside
+     * something it remembers, to forget that once this session ends.
+     */
+    public function tag(Request $r, string $purpose): string
+    {
+        $id = $this->idOf($r);
+        return $id === null || !$this->live($id) ? '' : hash_hmac('sha256', $purpose, $id);
+    }
+
+    /**
      * The session's current CSRF token, created when it has none; '' without a live
      * session. The database keeps only a random nonce; the token is its HMAC under the
      * session id, so it can be handed to every form on a page and is unknowable from

@@ -87,12 +87,12 @@ test('bytes() returns a note\'s octet-stream; a redirect is SignedOut; any other
   await assert.rejects(createApi(async () => reply(200, '<html>', false, 'text/html'), 'x').bytes(A), (e: unknown) => e instanceof Error && !(e instanceof SignedOut) && /octet-stream/.test(e.message));
 });
 
-test('the keyring comes from keyring.php; before the first upload there is none', async () => {
+test('the keyring and the sign-in tag come from keyring.php; before the first upload there is none', async () => {
   const locked = { v: 1, kdf: 'PBKDF2-SHA-256', iterations: 600000, salt: 's', iv: 'i', ct: 'c' };
   const urls: string[] = [];
-  const fetch: Fetch = async url => { urls.push(url); return urls.length === 1 ? reply(200, { keyring: locked }) : reply(404, { error: 'no_keyring' }); };
+  const fetch: Fetch = async url => { urls.push(url); return urls.length === 1 ? reply(200, { keyring: locked, session: 'tag' }) : reply(404, { error: 'no_keyring' }); };
   const api = createApi(fetch, 'x');
-  assert.deepEqual(await api.keyring(), locked);
+  assert.deepEqual(await api.keyring(), { locked, session: 'tag' });
   await assert.rejects(api.keyring(), NoKeyring);
   assert.deepEqual(urls, ['keyring.php', 'keyring.php']);
 });

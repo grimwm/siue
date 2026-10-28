@@ -1,8 +1,10 @@
 // The owner's notes on this page view: unlock the keyring with the passphrase
 // (used once, kept nowhere), list and open every note, seal a new one to the
 // unlocked keyring's current key and send it through the outbox, delete. The
-// unlocked private keys live in the vault and the current public key here,
-// both in memory only; before an unlock nothing can be sealed.
+// unlocked private keys live in the vault and the current public key here; the
+// unlock is also remembered in this browser (remember.ts) for the same sign-in
+// and keyring, so a reload restores it, and a lock forgets it. Before an unlock
+// or a restore nothing can be sealed.
 import { NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer } from './api.ts';
 import type { PageApi } from './api.ts';
 import { DownloadFailed, buildHistory } from './history.ts';
@@ -13,6 +15,8 @@ import type { AddReport, FlushReport, Outbox, Pending } from './outbox.ts';
 import { NoteUnreadable, open, seal } from './seal.ts';
 import type { PublicKey } from './seal.ts';
 import { KeyringInvalid, NoCrypto, WrongPassphrase, unlockKeyring } from './unlock.ts';
+import { forgetfulMemory, keyringDigest } from './remember.ts';
+import type { KeyMemory } from './remember.ts';
 import type { Vault } from './vault.ts';
 
 export const UNLOCK_MESSAGES = {
@@ -50,11 +54,14 @@ export const unreadableMessage = (n: number): string => `${n} ${n === 1 ? 'note'
 
 export const UNLOCK_FIRST = 'Unlock your notes first: each note is sealed to your notes key, and the passphrase unlocks it.';
 
-export interface SessionDeps { api: PageApi; vault: Vault; outbox: Outbox }
+/** `memory` remembers the unlock in this browser; without it every visit asks for the passphrase. */
+export interface SessionDeps { api: PageApi; vault: Vault; outbox: Outbox; memory?: KeyMemory }
 export interface NotesSession {
   hasKeyring(): Promise<boolean>;
   unlocked(): boolean;
   unlock(passphrase: string): Promise<string | null>;
+  /** Unlocks with what this browser remembers, when it was remembered under this sign-in and this keyring; true when it did. Forgets it when either changed. Never throws. */
+  restore(): Promise<boolean>;
   history(): Promise<HistoryItem[]>;
   /** How many notes the last history() listed that this page could not read (they are not in the history). */
   unreadable(): number;
@@ -64,6 +71,7 @@ export interface NotesSession {
   discard(key: string): Promise<void>;
   remove(id: string): Promise<void>;
   removeAll(): Promise<number>;
+  /** Locks the notes and forgets the remembered unlock. */
   lock(): void;
   /** True while a note not sent yet is held only in this page view's memory: closing the page would lose it. */
   memoryOnly(): boolean;
@@ -73,6 +81,7 @@ export interface NotesSession {
 const AT_ONCE = 6;
 
 export function createNotesSession(d: SessionDeps): NotesSession {
+  const memory = d.memory ?? forgetfulMemory;
   const outcomes = new Map<string, OpenOutcome>();
   /** The unlocked keyring's current public key: what new notes are sealed to. Null while locked. */
   let current: PublicKey | null = null;
@@ -114,13 +123,39 @@ export function createNotesSession(d: SessionDeps): NotesSession {
     async unlock(passphrase) {
       const at = epoch;
       try {
-        const unlocked = await unlockKeyring(await d.api.keyring(), passphrase);
+        const { locked, session } = await d.api.keyring();
+        const unlocked = await unlockKeyring(locked, passphrase);
         if (at !== epoch) return null;
         d.vault.load(unlocked.ring);
         current = unlocked.current;
+        if (session !== '') {
+          await memory.keep({ session, keyring: await keyringDigest(locked), ring: unlocked.ring, current: unlocked.current });
+          if (at !== epoch) await memory.forget(); // a lock while it was being stored
+        }
         return null;
       } catch (e) {
         return say(e);
+      }
+    },
+    async restore() {
+      const at = epoch;
+      const kept = await memory.recall();
+      if (kept === null) return false;
+      try {
+        const { locked, session } = await d.api.keyring();
+        const digest = await keyringDigest(locked);
+        if (at !== epoch) return false;
+        if (session === '' || session !== kept.session || digest !== kept.keyring || !kept.ring.has(kept.current.fingerprint)) {
+          await memory.forget();
+          return false;
+        }
+        d.vault.load(kept.ring);
+        current = kept.current;
+        return true;
+      } catch (e) {
+        // A sign-in that ended, or a keyring gone or unusable, forgets it; a failed connection keeps it for the next visit.
+        if (!(e instanceof NetworkError || e instanceof ServerError || e instanceof UnreadableAnswer)) await memory.forget();
+        return false;
       }
     },
     async history() {
@@ -167,6 +202,7 @@ export function createNotesSession(d: SessionDeps): NotesSession {
       skipped = 0;
       current = null;
       epoch++;
+      void memory.forget();
     },
   };
 }

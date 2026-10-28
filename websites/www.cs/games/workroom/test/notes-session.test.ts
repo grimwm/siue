@@ -21,14 +21,14 @@ const note = (text: string, piece = 'test-piece'): NoteBody => ({ v: 1, kind: 't
 function server() {
   const notes: { id: string; bytes: Uint8Array<ArrayBuffer>; arrived: number; picked: number | null }[] = [];
   let n = 0;
-  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, broken: new Set<string>(), downloads: 0, unreadable: 0 };
+  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, session: 'tag-1', broken: new Set<string>(), downloads: 0, unreadable: 0 };
   const api: PageApi = {
     upload: async b => { const id = (++n).toString(16).padStart(32, '0'); notes.push({ id, bytes: b, arrived: n, picked: null }); return { kind: 'sent', id }; },
     list: async () => ({ notes: notes.map(x => ({ id: x.id, size: x.bytes.length, arrived_at: x.arrived, picked_up_at: x.picked })), unreadable: state.unreadable }),
     bytes: async id => { state.downloads++; if (state.broken.has(id)) throw new ServerError(500); return notes.find(x => x.id === id)!.bytes; },
     remove: async id => { const i = notes.findIndex(x => x.id === id); if (i >= 0) notes.splice(i, 1); return i >= 0 ? 1 : 0; },
     removeAll: async () => { const k = notes.length; notes.length = 0; return k; },
-    keyring: async () => { if (state.failKeyring) throw state.failKeyring; return state.keyring; },
+    keyring: async () => { if (state.failKeyring) throw state.failKeyring; return { locked: state.keyring, session: state.session }; },
   };
   return { api, notes, state };
 }

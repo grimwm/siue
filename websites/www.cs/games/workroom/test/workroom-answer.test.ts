@@ -62,6 +62,7 @@ function fakeNotes(answer: (key: string) => AddReport = key => ({ key, memoryOnl
     hasKeyring: async () => opts.keyring ?? true,
     unlocked: () => open,
     unlock: async () => { open = true; return null; },
+    restore: async () => false,
     history: async () => [],
     send: async (body, audio) => {
       if (!open) throw new Error(UNLOCK_FIRST);

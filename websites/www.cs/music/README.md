@@ -78,8 +78,7 @@ music-setup)."
   64 kb/s; the microphone is asked for inside the tap. A recording that is not
   stored stays on screen to Send or Discard.
 - **The energy drawing** has its own guide (`workroom-guide-energy` in localStorage).
-- **Notes & answers** is the notes panel: the passphrase unlocks it on every
-  visit, it lists the notes of this piece or of all pieces, and each note has
+- **Notes & answers** is the notes panel: the passphrase unlocks it, it lists the notes of this piece or of all pieces, and each note has
   Delete; Delete, Delete all and Discard (for a note not sent yet) each ask
   first, in plain words. Notes on the server are marked Waiting until they are
   picked up; notes this browser has not sent yet are listed under Not sent yet.
@@ -95,6 +94,18 @@ music-setup)."
   until the note is stored, across a lost sign-in too (the unlock form says the note is
   kept), and leaving the page asks first while they are there. A note the page could not
   open is listed as such, since its piece is not known.
+- **The unlock is remembered** in this browser, so a reload or a later visit does
+  not ask for the passphrase again: IndexedDB `siue-music-keys`, store `unlocked`,
+  holds the unlocked private keys as non-extractable `CryptoKey`s (no script can read
+  their bytes), the current public key, the SHA-256 of the locked keyring and the
+  session tag `keyring.php` answers (an HMAC of `music-unlock` under the sign-in's
+  session id). The passphrase and the locked keyring are never stored. A page that
+  finds the tag or the keyring changed forgets it and asks again: Sign out, Sign
+  out everywhere, a sign-in that ended (7 days idle, 30 days at most) and `make
+  music-rotate` all do that. A lost sign-in on the page forgets it at once; a
+  failed connection keeps it for the next visit. Any page on www.cs, which serves
+  every user's pages from one origin, could use (never read) those keys while they
+  are remembered, as it could the outbox.
 - **The outbox** is IndexedDB `siue-music`, store `outbox`, and holds sealed
   bundles only. It is sent on load and when the browser is back online, one tab at
   a time under the Web Locks lock `workroom-outbox`; Discard drops one. A browser

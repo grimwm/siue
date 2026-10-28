@@ -381,3 +381,53 @@ test('on the pieces list, notes the page could not read are counted in a message
   await unlockWith(root, 'right');
   assert.match(alerts(root), /1 note .*could not be read/);
 });
+
+const flush = async (): Promise<void> => { await settle(); await settle(); };
+const unlockedPieces = async (over: Partial<NotesSession>) => {
+  const notes = fakeSession(over);
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  await settle();
+  await unlockWith(root, 'right');
+  assert.equal(alerts(root), '', 'nothing to say before the action');
+  return { notes, root };
+};
+
+test('pieces list, unlocked: a failed Discard, Try again or flush still shows after the reload that follows it', async () => {
+  const waiting: Pending = { key: 'k1', bundle: new Uint8Array([1]), made: '2026-10-20T00:00:00.000Z', reason: 'offline' };
+  const { ServerError } = ui.api;
+  const discarding = await unlockedPieces({ kept: async () => [waiting], discard: async () => { throw new DOMException('closing', 'InvalidStateError'); } });
+  await act(() => { fire(button(discarding.root, 'Discard')!, 'click'); });
+  await act(() => { fire(walk(discarding.root).filter(e => e.localName === 'button' && /^Discard/.test(e.textContent)).at(-1)!, 'click'); });
+  await flush();
+  assert.ok(discarding.notes.calls.filter(c => c === 'history').length >= 2, 'the counts were reloaded');
+  assert.match(alerts(discarding.root), /could not be discarded/);
+  let flushes = 0;
+  const retrying = await unlockedPieces({ kept: async () => [waiting], flush: async () => { if (++flushes > 1) throw new ServerError(503); return { sent: [], kept: [] }; } });
+  await act(() => { fire(button(retrying.root, 'Try again')!, 'click'); });
+  await flush();
+  assert.match(alerts(retrying.root), /503/);
+});
+
+test('notes panel, unlocked: a failed Delete, Delete all, Discard or Try again still shows after the reload that follows it', async () => {
+  const waiting: Pending = { key: 'k1', bundle: new Uint8Array([1]), made: '2026-10-20T00:00:00.000Z', reason: 'offline' };
+  const { ServerError } = ui.api;
+  const fails = async (over: Partial<NotesSession>, click: (root: StubElement) => Promise<void>, expected: RegExp): Promise<void> => {
+    const notes = fakeSession({ unlocked: () => true, kept: async () => [waiting], ...over });
+    const root = await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: () => {} }));
+    await settle();
+    assert.equal(alerts(root), '');
+    const before = notes.calls.filter(c => c === 'history').length;
+    await click(root);
+    await flush();
+    assert.ok(notes.calls.filter(c => c === 'history').length > before, 'the history was reloaded');
+    assert.match(alerts(root), expected);
+  };
+  const press = async (root: StubElement, ...labels: string[]): Promise<void> => { for (const l of labels) await act(() => { fire(button(root, l)!, 'click'); }); };
+  await fails({ remove: async () => { throw new ServerError(500); } }, root => press(root, 'Delete', 'Delete it'), /500/);
+  await fails({ removeAll: async () => { throw new ServerError(502); } }, root => press(root, 'Delete all', 'Delete all 2 notes'), /502/);
+  await fails({ flush: async () => { throw new ServerError(503); } }, root => press(root, 'Try again'), /503/);
+  await fails({ discard: async () => { throw new DOMException('closing', 'InvalidStateError'); } }, async root => {
+    await press(root, 'Discard');
+    await act(() => { fire(walk(root).filter(e => e.localName === 'button' && /^Discard/.test(e.textContent)).at(-1)!, 'click'); });
+  }, /could not be discarded/);
+});

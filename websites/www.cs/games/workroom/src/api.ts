@@ -9,6 +9,12 @@ import type { LockedKeyring } from './unlock.ts';
 
 export class SignedOut extends Error {}
 export class NoKeyring extends Error {}
+/** fetch itself failed (offline, DNS, refused): a TypeError, as fetch rejects, but known to come from the network and not from this page's own code. */
+export class NetworkError extends TypeError {}
+/** The server answered 2xx, but not with what the page needs (no list, no keyring, not JSON). */
+export class UnreadableAnswer extends Error {
+  constructor() { super('The server sent an answer this page cannot read.'); }
+}
 /** The server answered, but with an error status. */
 export class ServerError extends Error {
   readonly status: number;
@@ -56,7 +62,14 @@ const noteId = (id: string): string => {
   return id;
 };
 
-export function createApi(fetch: Fetch, csrf: string): PageApi {
+export function createApi(rawFetch: Fetch, csrf: string): PageApi {
+  const fetch: Fetch = async (url, init) => {
+    try {
+      return await rawFetch(url, init);
+    } catch (e) {
+      throw e instanceof TypeError ? new NetworkError(e.message) : e;
+    }
+  };
   let token = csrf;
   let queue: Promise<unknown> = Promise.resolve();
   const get = async (url: string): Promise<{ reply: Reply; data: Data }> => {
@@ -103,7 +116,7 @@ export function createApi(fetch: Fetch, csrf: string): PageApi {
       const { reply, data } = await get('notes.php');
       if (!reply.ok) throw failed(reply);
       const notes = data['notes'];
-      if (!Array.isArray(notes)) return { notes: [], unreadable: 0 };
+      if (!Array.isArray(notes)) throw new UnreadableAnswer();
       const readable = notes.filter(isServerNote);
       return { notes: readable, unreadable: notes.length - readable.length };
     },
@@ -120,7 +133,8 @@ export function createApi(fetch: Fetch, csrf: string): PageApi {
       const { reply, data } = await get('keyring.php');
       if (reply.status === 404 && data['error'] === 'no_keyring') throw new NoKeyring('No notes key has been uploaded yet.');
       const keyring = data['keyring'];
-      if (!reply.ok || typeof keyring !== 'object' || keyring === null) throw failed(reply);
+      if (!reply.ok) throw failed(reply);
+      if (typeof keyring !== 'object' || keyring === null) throw new UnreadableAnswer();
       return keyring as LockedKeyring;
     },
   };

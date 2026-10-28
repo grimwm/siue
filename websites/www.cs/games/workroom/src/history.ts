@@ -10,7 +10,7 @@ import { NoteUnreadable } from './seal.ts';
 import type { Opened } from './seal.ts';
 
 export interface HistoryItem { id: string; arrived: number; pickedUp: number | null; state: 'waiting' | 'picked-up'; opened: Opened | null; problem: string | null }
-/** A note that could not be downloaded, with the plain reason. */
+/** A note that could not be downloaded, with the reason as a phrase (see failureReason). */
 export class DownloadFailed {
   readonly why: string;
   constructor(why: string) {
@@ -18,7 +18,7 @@ export class DownloadFailed {
   }
 }
 export type OpenOutcome = Opened | NoteUnreadable | DownloadFailed;
-export const downloadProblem = (why: string): string => `Could not download this note. ${why} Reload the page to try again.`;
+export const downloadProblem = (why: string): string => `Could not download this note: ${why}.`;
 export const PROBLEMS: Readonly<Record<NoteUnreadable['reason'], string>> = {
   format: 'Could not open this note: it is not a sealed note.',
   'unknown-key': 'Could not open this note: it was sealed to a key your keyring does not hold.',

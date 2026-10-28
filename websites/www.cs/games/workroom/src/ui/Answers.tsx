@@ -29,6 +29,8 @@ export function Answers(p: AnswersProps) {
   const [unlocked, setUnlocked] = useState(p.notes.unlocked());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** What the last action (Delete, Delete all, Discard, Try again) could not do: kept until the next action, so the reload after it cannot wipe it. */
+  const [problem, setProblem] = useState<string | null>(null);
   const [items, setItems] = useState<readonly HistoryItem[]>([]);
   const [kept, setKept] = useState<readonly Pending[]>([]);
   const [scope, setScope] = useState<'piece' | 'all'>('piece');
@@ -61,10 +63,9 @@ export function Answers(p: AnswersProps) {
   /** `whenFailed` is what to say when the work fails for any reason but a lost sign-in. */
   const act = async (work: () => Promise<unknown>, whenFailed?: string): Promise<void> => {
     setBusy(true);
-    let told: string | null = null;
-    try { await work(); } catch (e) { if (whenFailed !== undefined && !(e instanceof SignedOut)) told = whenFailed; else fail(e); } finally { setBusy(false); }
+    setProblem(null);
+    try { await work(); } catch (e) { if (e instanceof SignedOut) fail(e); else setProblem(whenFailed ?? describeFailure(e)); } finally { setBusy(false); }
     await load();
-    if (told !== null) setError(told); // the reload would otherwise wipe what failed
   };
   const mounted = useRef(false);
   // The first load follows the mount's flush below; a later refresh loads at once.
@@ -102,7 +103,7 @@ export function Answers(p: AnswersProps) {
         </>
       ) : (
         <>
-          {error ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{error}</p> : null}
+          {[problem, error].map(m => (m ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{m}</p> : null))}
           <History items={scope === 'piece' ? forPiece(items, piece) : items} total={items.length} scope={scope} onScope={setScope} version={p.version}
             laneName={id => p.score.lanes.find(l => l.id === id)?.name ?? null}
             numberOf={id => numbers.get(id) ?? null}

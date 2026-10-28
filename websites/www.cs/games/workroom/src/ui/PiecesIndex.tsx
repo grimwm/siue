@@ -18,19 +18,22 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
   const [counted, setCounted] = useState(false);
   const [keyring, setKeyring] = useState(true);
   const [kept, setKept] = useState<readonly Pending[]>([]);
+  /** What the last action (Discard, Try again) could not do: kept until the next action, so the reload after it cannot wipe it. */
   const [problem, setProblem] = useState<string | null>(null);
+  /** What is wrong with the counts: notes the page could not read, or a count that failed. Replaced by every count. */
+  const [countNote, setCountNote] = useState<string | null>(null);
   const countedNow = useRef(false);
   const recount = async (): Promise<void> => {
     showWaiting(p.list, waitingByPiece(await p.notes.history()));
     countedNow.current = true;
     setCounted(true);
     const skipped = p.notes.unreadable();
-    setProblem(skipped > 0 ? unreadableMessage(skipped) : null);
+    setCountNote(skipped > 0 ? unreadableMessage(skipped) : null);
   };
   // After a flush, notes just sent wait on the server: the counts are taken again once they are shown.
   const refreshKept = async (): Promise<void> => {
     try { setKept(await p.notes.kept()); } catch { /* the browser's store could not be read just now; the list stays as it was */ }
-    if (countedNow.current) await recount().catch((e: unknown) => setProblem(`The counts could not be updated. ${describeFailure(e)}`));
+    if (countedNow.current) await recount().catch((e: unknown) => setCountNote(`The counts could not be updated. ${describeFailure(e)}`));
   };
   // Leaving the page asks first while a note not sent yet is held only in memory.
   useEffect(() => guardLeaving(window, () => p.notes.memoryOnly()), [p.notes]);
@@ -52,7 +55,7 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
     try {
       await recount();
     } catch (e) {
-      setProblem(`Your notes are unlocked, but the counts could not be loaded. ${describeFailure(e)}`);
+      setCountNote(`Your notes are unlocked, but the counts could not be loaded. ${describeFailure(e)}`);
     }
     setBusy(false);
   };
@@ -70,7 +73,7 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
         : counted
           ? <p class="text-sm text-dim">Each piece shows how many of your notes wait for pickup.</p>
           : <UnlockPanel busy={busy} error={error} onUnlock={pass => void unlock(pass)} />}
-      {problem ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{problem}</p> : null}
+      {[problem, countNote].map(m => (m ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{m}</p> : null))}
       <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key), DISCARD_FAILED)} onRetry={() => void act(() => p.notes.flush())} />
     </Panel>
   );

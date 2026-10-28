@@ -3,7 +3,7 @@
 // unlocked keyring's current key and send it through the outbox, delete. The
 // unlocked private keys live in the vault and the current public key here,
 // both in memory only; before an unlock nothing can be sealed.
-import { NoKeyring, ServerError, SignedOut } from './api.ts';
+import { NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer } from './api.ts';
 import type { PageApi } from './api.ts';
 import { DownloadFailed, buildHistory } from './history.ts';
 import type { HistoryItem, OpenOutcome } from './history.ts';
@@ -26,13 +26,24 @@ export const UNLOCK_MESSAGES = {
 export const NO_CRYPTO = 'This browser cannot unlock or seal notes: it has no Web Crypto. Use a current browser, on the https page.';
 export const DISCARD_FAILED = 'The saved note could not be discarded from this browser. Try again.';
 
-/** What went wrong, in plain words: a lost sign-in, no connection, the server's error status, no Web Crypto, or the error's own message. */
+/** Why something failed, as a phrase to follow "because" or a colon: no full stop, no developer text. */
+export function failureReason(e: unknown): string {
+  if (e instanceof SignedOut) return 'your sign-in ended';
+  if (e instanceof NoCrypto) return 'this browser has no Web Crypto';
+  if (e instanceof ServerError) return `the server answered with an error (${e.status})`;
+  if (e instanceof NetworkError) return 'the connection to the server failed';
+  if (e instanceof UnreadableAnswer) return "the server's answer could not be read";
+  return 'something unexpected went wrong';
+}
+
+/** What went wrong, as a whole message for the owner. */
 export function describeFailure(e: unknown): string {
   if (e instanceof SignedOut) return UNLOCK_MESSAGES.signedOut;
   if (e instanceof NoCrypto) return NO_CRYPTO;
   if (e instanceof ServerError) return `The server answered with an error (${e.status}). Try again in a moment.`;
-  if (e instanceof TypeError) return UNLOCK_MESSAGES.offline; // fetch rejects with a TypeError when the network is down
-  return `Something went wrong: ${e instanceof Error && e.message ? e.message : 'an unknown error'}`;
+  if (e instanceof NetworkError) return UNLOCK_MESSAGES.offline;
+  if (e instanceof UnreadableAnswer) return 'The server sent an answer this page cannot read. Try again in a moment.';
+  return 'Something unexpected went wrong. Try again.';
 }
 
 export const unreadableMessage = (n: number): string => `${n} ${n === 1 ? 'note' : 'notes'} on the server could not be read, so ${n === 1 ? 'it is' : 'they are'} not listed.`;
@@ -78,7 +89,7 @@ export function createNotesSession(d: SessionDeps): NotesSession {
       bytes = await d.api.bytes(id);
     } catch (e) {
       if (e instanceof SignedOut) throw e;
-      if (at === epoch) outcomes.set(id, new DownloadFailed(describeFailure(e)));
+      if (at === epoch) outcomes.set(id, new DownloadFailed(failureReason(e)));
       return;
     }
     let outcome: OpenOutcome;

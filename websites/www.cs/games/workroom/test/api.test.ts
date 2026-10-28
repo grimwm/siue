@@ -3,7 +3,7 @@
 // (read from the status, never the Content-Type), and limits are refusals.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NoKeyring, ServerError, SignedOut, createApi } from '../src/api.ts';
+import { NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, createApi } from '../src/api.ts';
 import type { Fetch } from '../src/load.ts';
 
 type Init = Parameters<Fetch>[1];
@@ -120,5 +120,23 @@ test('a row the list cannot read is counted, and the rows beside it still come',
   const listed = await createApi(async () => reply(200, { notes: rows }), 'x').list();
   assert.deepEqual(listed.notes.map(n => n.id), [A]);
   assert.equal(listed.unreadable, 3);
-  assert.equal((await createApi(async () => reply(200, { notes: 'nope' }), 'x').list()).unreadable, 0, 'no list at all is an empty one');
+});
+
+test('an answer without the list, or without the keyring, is an unreadable answer, not an empty one', async () => {
+  await assert.rejects(createApi(async () => reply(200, { notes: 'nope' }), 'x').list(), UnreadableAnswer);
+  await assert.rejects(createApi(async () => reply(200, {}), 'x').list(), UnreadableAnswer);
+  const page = { ...reply(200, null, false, 'text/html'), json: async () => { throw new SyntaxError('Unexpected token <'); } };
+  await assert.rejects(createApi(async () => page, 'x').list(), UnreadableAnswer);
+  assert.deepEqual((await createApi(async () => reply(200, { notes: [] }), 'x').list()), { notes: [], unreadable: 0 });
+  await assert.rejects(createApi(async () => reply(200, {}), 'x').keyring(), UnreadableAnswer);
+  await assert.rejects(createApi(async () => reply(200, { keyring: 'x' }), 'x').keyring(), UnreadableAnswer);
+});
+
+test('a fetch that rejects with a TypeError is a NetworkError (still a TypeError); any other rejection passes through', async () => {
+  const down = createApi(async () => { throw new TypeError('Failed to fetch'); }, 'x');
+  await assert.rejects(down.list(), (e: unknown) => e instanceof NetworkError && e instanceof TypeError);
+  await assert.rejects(down.remove(A), NetworkError);
+  await assert.rejects(down.bytes(A), NetworkError);
+  const odd = new RangeError('odd');
+  await assert.rejects(createApi(async () => { throw odd; }, 'x').list(), (e: unknown) => e === odd);
 });

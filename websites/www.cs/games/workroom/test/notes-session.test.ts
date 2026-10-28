@@ -5,8 +5,8 @@
 // deletes forget what they removed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NoKeyring, ServerError, SignedOut, type PageApi } from '../src/api.ts';
-import { DISCARD_FAILED, NO_CRYPTO, UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession, describeFailure } from '../src/notes-session.ts';
+import { NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, type PageApi } from '../src/api.ts';
+import { DISCARD_FAILED, NO_CRYPTO, UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession, describeFailure, failureReason } from '../src/notes-session.ts';
 import { SEND_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
 import { PROBLEMS, downloadProblem } from '../src/history.ts';
 import { headerFingerprint, seal } from '../src/seal.ts';
@@ -40,7 +40,7 @@ test('unlock: no keyring yet, a damaged keyring, a wrong passphrase, then the ri
   s.state.failKeyring = new NoKeyring('none');
   assert.equal(await notes.hasKeyring(), false);
   assert.equal(await notes.unlock(fx.passphrase), UNLOCK_MESSAGES.noKeyring);
-  s.state.failKeyring = new TypeError('Failed to fetch');
+  s.state.failKeyring = new NetworkError('Failed to fetch');
   assert.equal(await notes.hasKeyring(), true, 'a server that cannot be asked is not a server without a keyring');
   s.state.failKeyring = null;
   assert.equal(await notes.hasKeyring(), true);
@@ -89,7 +89,7 @@ test('a damaged note and a failed download never stop the rest; an earlier key\'
   await notes.send(note('download fails'), null);
   s.state.broken.add(s.notes[3]!.id);
   const items = await notes.history();
-  assert.deepEqual(items.map(i => i.opened?.body.text ?? i.problem), [downloadProblem(describeFailure(new ServerError(500))), 'sealed before a rotation', PROBLEMS.format, 'fine']);
+  assert.deepEqual(items.map(i => i.opened?.body.text ?? i.problem), [downloadProblem(failureReason(new ServerError(500))), 'sealed before a rotation', PROBLEMS.format, 'fine']);
   s.state.broken.clear();
   assert.equal((await notes.history())[0]!.opened?.body.text, 'download fails', 'a failed download is tried again');
 });
@@ -161,7 +161,7 @@ test('a signed-out download ends the history; unlock and hasKeyring report sign-
   s.state.failKeyring = new SignedOut('out');
   assert.equal(await notes.unlock(fx.passphrase), UNLOCK_MESSAGES.signedOut);
   assert.equal(await notes.hasKeyring(), true);
-  s.state.failKeyring = new TypeError('Failed to fetch');
+  s.state.failKeyring = new NetworkError('Failed to fetch');
   assert.equal(await notes.unlock(fx.passphrase), UNLOCK_MESSAGES.offline);
 });
 
@@ -178,14 +178,16 @@ test('the session says while a note not sent yet is held only in memory', async 
 
 test('every failure is described as what it was', () => {
   assert.equal(describeFailure(new SignedOut('out')), UNLOCK_MESSAGES.signedOut);
-  assert.equal(describeFailure(new TypeError('Failed to fetch')), UNLOCK_MESSAGES.offline);
+  assert.equal(describeFailure(new NetworkError('Failed to fetch')), UNLOCK_MESSAGES.offline);
+  assert.doesNotMatch(describeFailure(new TypeError('x is not a function')), /Could not reach/, 'a plain TypeError is a bug, not a lost connection');
+  assert.match(describeFailure(new UnreadableAnswer()), /cannot read/);
   const server = describeFailure(new ServerError(503));
   assert.match(server, /503/);
   assert.doesNotMatch(server, /Could not reach/);
   assert.equal(describeFailure(new NoCrypto('none')), NO_CRYPTO);
   const other = describeFailure(new Error('note.php did not answer application/octet-stream.'));
-  assert.match(other, /note\.php did not answer/);
-  assert.doesNotMatch(other, /Could not reach/);
+  assert.doesNotMatch(other, /note\.php|Could not reach/, 'developer text stays out of the message');
+  assert.match(other, /\.$/);
   assert.match(DISCARD_FAILED, /could not be discarded/);
 });
 
@@ -212,9 +214,11 @@ test('a failed download keeps its reason on the note', async () => {
   await notes.send(note('a'), null);
   s.state.broken.add(s.notes[0]!.id);
   const [item] = await notes.history();
-  assert.equal(item!.problem, downloadProblem(describeFailure(new ServerError(500))));
+  assert.equal(item!.problem, downloadProblem(failureReason(new ServerError(500))));
   assert.match(item!.problem!, /500/);
-  assert.notEqual(item!.problem, downloadProblem(describeFailure(new TypeError('Failed to fetch'))));
+  assert.doesNotMatch(item!.problem!, /Reload/, 'every history() retries the download');
+  assert.equal(item!.problem!.match(/\./g)!.length, 1, 'one sentence');
+  assert.notEqual(item!.problem, downloadProblem(failureReason(new NetworkError('Failed to fetch'))));
 });
 
 test('notes the server listed but this page cannot read are counted', async () => {

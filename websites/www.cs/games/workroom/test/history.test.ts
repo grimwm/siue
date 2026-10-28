@@ -20,14 +20,14 @@ const server = [
 ];
 const outcomes = new Map<string, OpenOutcome>([
   [id('a'), opened('ch1')], [id('b'), opened('ch1', { from: 6, to: 6, fromBar: 4, toBar: 4, lane: null, kind: 'hum', text: null, audio: { mime: 'audio/mp4', seconds: 2 } })],
-  [id('c'), new NoteUnreadable('tampered')], [id('d'), new DownloadFailed('The server answered 500.')], [id('e'), opened('other')],
+  [id('c'), new NoteUnreadable('tampered')], [id('d'), new DownloadFailed('the server answered with an error (500)')], [id('e'), opened('other')],
 ]);
 
 test('newest first, waiting or picked up, problems named', () => {
   const items = buildHistory(server, outcomes);
   assert.deepEqual(items.map(i => [i.id[0], i.state]), [['e', 'waiting'], ['d', 'waiting'], ['c', 'waiting'], ['b', 'picked-up'], ['a', 'waiting']]);
   assert.equal(items[2]!.problem, PROBLEMS.tampered);
-  assert.equal(items[1]!.problem, downloadProblem('The server answered 500.'));
+  assert.equal(items[1]!.problem, downloadProblem('the server answered with an error (500)'));
   assert.match(items[1]!.problem!, /500/);
   assert.equal(items[0]!.problem, null);
   assert.equal(items[3]!.pickedUp, 5);

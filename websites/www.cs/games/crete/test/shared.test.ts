@@ -300,3 +300,18 @@ test('ratingText words the label, the quickest win and the situations searched',
   const capped: Difficulty = { ...ANSWER, label: 'unknown', shortest: 'unknown', explored: 1 };
   assert.equal(mods.card.ratingText(capped), 'Chase or solo not known · quickest win not known · 1 situation');
 });
+
+test('leaving the shared card for the title card keeps the installed-app close hint', async () => {
+  ui.showTitle(true);
+  await visit.open(ONE.fragment);
+  assert.equal(ui.top(), 'shared');
+  ui.leaveShared();
+  assert.equal(ui.top(), 'title');
+  assert.equal(text('title-hint'), 'Swipe the app away to close it.');
+  ui.showTitle(false);
+  await visit.open(ONE.fragment);
+  ui.leaveShared();
+  assert.equal(el('title-hint'), undefined, 'no hint when there was none');
+  ui.leaveShared();
+  assert.equal(ui.top(), 'title', 'with no shared card up, nothing changes');
+});

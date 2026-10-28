@@ -109,7 +109,7 @@ function followHash(): void {
   // The address moved on from any link: one still decoding shows no card.
   visit.forget();
   if (kind === 'edit') outside.backToEditor();
-  else if (ui.top() === 'shared') ui.showTitle(false);
+  else if (ui.top() === 'shared') ui.leaveShared();
   else ui.leaveEditor();
 }
 /* The editor's visit ending (the editor left for the title card, a campaign level opened, Quit) takes `#edit` off
@@ -252,8 +252,7 @@ const editorHook = {
   open: editor.open, close: editor.close, key: editor.key, bestFor: editor.bestFor,
   get draft() { return editor.draft; },
   load(text: string): void {
-    ui.showEditor();
-    editor.open(fromLevel(parse(text)));
+    ui.showEditor(fromLevel(parse(text)));
   },
 };
 window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook };

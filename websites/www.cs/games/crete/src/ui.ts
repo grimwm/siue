@@ -108,6 +108,8 @@ export interface Ui {
   refresh(): void;
   /** Leaves the editor for the title card. */
   leaveEditor(): void;
+  /** Leaves the shared card for the title card, keeping the installed-app close hint as it was. */
+  leaveShared(): void;
 }
 
 const TOOL_EMOJI: Record<Tool, string> = { mirror: "🪞", cake: "🍯", cow: "🐄" };
@@ -263,6 +265,10 @@ export function createUi(deps: UiDeps): Ui {
     if (r.kind === "failed") return `No rating: ${r.message}`;
     if (r.kind === "waiting") return "Rating waits for your Check in the editor.";
     return null;
+  }
+
+  function leaveShared(): void {
+    if (layers.isOpen("shared")) showTitle(titleHint);
   }
 
   function leaveEditor(): void {
@@ -854,6 +860,7 @@ export function createUi(deps: UiDeps): Ui {
     },
     refresh: () => drawLayers(),
     leaveEditor,
+    leaveShared,
     setMuted: (m) => {
       muted = m;
       drawLayers();

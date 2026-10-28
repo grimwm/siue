@@ -727,3 +727,14 @@ test('a diagonal drag paints a connected run of cells', () => {
   walls.sort((a, b) => a.c - b.c);
   for (let i = 1; i < walls.length; i++) assert.ok(Math.abs(walls[i]!.c - walls[i - 1]!.c) <= 1 && Math.abs(walls[i]!.r - walls[i - 1]!.r) <= 1);
 });
+
+test('an editor first opened on a loaded draft has no empty draft beneath it', () => {
+  const fresh = ed.editor.createEditor({
+    root: makeEl('fresh-editor-root') as unknown as HTMLElement, atlas, image: makeEl('img') as unknown as HTMLImageElement,
+    tryIt() {}, changed() {}, start: trySolver.start,
+  });
+  const loaded = newDraft(7, 9);
+  fresh.open(loaded);
+  fresh.key({ key: 'u', target: { tagName: 'DIV' }, preventDefault() {} } as unknown as KeyboardEvent);
+  assert.deepEqual(fresh.draft, loaded, 'U has nothing earlier to bring back');
+});

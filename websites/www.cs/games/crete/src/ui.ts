@@ -70,7 +70,8 @@ export interface Controls {
   /** The level editor, when the page has one: Make a level on the title card opens it, and while it is the top
    *  layer every key goes to it. */
   editor?: Pick<Editor, "open" | "close" | "key">;
-  /** The editor was left for the title card. */
+  /** The editor's visit ended: the editor was left for the title card, or a campaign level was opened (from a try,
+   *  or from anywhere). */
   leftEditor?(): void;
 }
 
@@ -202,8 +203,10 @@ export function createUi(deps: UiDeps): Ui {
     if (!layers.any() && !(controls?.game ?? game)?.run) showTitle(titleHint);
   }
 
+  /** Opens level `i`. A level from inside the campaign ends the editor's visit, if a try was part of it. */
   function open(i: number): void {
     layers.clear();
+    if (!deps.levels?.outside?.(i)) controls?.leftEditor?.();
     controls?.game.open(i);
   }
 

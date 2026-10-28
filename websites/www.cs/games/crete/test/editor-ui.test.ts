@@ -367,7 +367,7 @@ const progress = createProgress(null);
 const m = manualClock();
 const outside = createOutside(CAMPAIGN_LEVELS, {
   open: i => tryGame.open(i),
-  stop: () => tryGame.stop(),
+  settle: () => tryGame.settle(),
   closeLayers: () => flow.closeLayers(),
   showEditor: () => flow.showEditor(),
   bestWon: (text, moves) => tryEditor.tryWon(text, moves),
@@ -381,7 +381,12 @@ const tryEditor = ed.editor.createEditor({
   root: tryRoot as unknown as HTMLElement, atlas, image: makeEl('img') as unknown as HTMLImageElement,
   tryIt: (level, text) => outside.tryLevel(level, text, null), changed() {},
 });
-flow.bindControls({ game: tryGame, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play() {}, backToEditor: outside.backToEditor, editor: tryEditor });
+/* How many times the page was told the editor's visit ended (it then takes #edit off the address). */
+let lefts = 0;
+flow.bindControls({
+  game: tryGame, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play() {}, backToEditor: outside.backToEditor, editor: tryEditor,
+  leftEditor: () => { lefts++; },
+});
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
 const el = (id: string) => maybeById(rootOf(id), id);
@@ -537,4 +542,42 @@ test('the browser leaving #edit during a try leaves the try playing', () => {
   assert.equal(tryRoot.hidden, true);
   assert.equal(tryGame.trial, outside.at);
   assert.equal(tryGame.run!.now.moves, 1);
+});
+
+test('the #edit path back into the editor settles a running try: no play-out, no animation, no thread', () => {
+  editing(8, 8);
+  key('p');
+  key('Enter');
+  key('v');
+  assert.ok(tryGame.thread, 'the thread is drawn');
+  tryGame.auto();
+  m.advance(1000);
+  assert.equal(tryGame.playing, true);
+  const moves = tryGame.run!.now.moves;
+  assert.ok(moves > 0, 'the play-out has played');
+  // The browser's Forward to #edit takes this path (src/main.ts followHash).
+  outside.backToEditor();
+  assert.equal(flow.top(), 'editor');
+  assert.equal(tryGame.playing, false);
+  assert.equal(tryGame.anim, null);
+  assert.equal(tryGame.thread, null);
+  const at = tryGame.run!.now.moves;
+  m.advance(10_000);
+  assert.equal(tryGame.run!.now.moves, at, 'no move is played under the editor');
+});
+
+test('a try left for a campaign level ends the editor\'s visit; Retry does not', () => {
+  editing(7, 7);
+  key('p');
+  walkToExit();
+  lefts = 0;
+  click(el('end-retry')!);
+  assert.equal(tryGame.trial, outside.at);
+  assert.equal(lefts, 0, 'Retry plays the try again');
+  key('Enter');
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  click(byId(rootOf('levels-root'), 'level-2'));
+  assert.equal(tryGame.trial, 1);
+  assert.equal(lefts, 1);
 });

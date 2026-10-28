@@ -93,6 +93,9 @@ export interface Game {
   /** Ends the play-out, if one is running. */
   stop(): void;
   finishAnim(): void;
+  /** Ends the play-out, finishes the turn animating and takes the thread down: nothing of the try moves or is
+   *  drawn as live. The try stays where it stands. */
+  settle(): void;
 }
 
 /** What the board draws `ms` into the animation: the state before the turn, less each thing the figure has
@@ -403,5 +406,13 @@ export function createGame(deps: GameDeps): Game {
     },
     stop,
     finishAnim,
+    settle() {
+      stop();
+      finishAnim();
+      if (!threadOn && thread === null) return;
+      threadOn = false;
+      thread = null;
+      deps.changed();
+    },
   };
 }

@@ -1,7 +1,7 @@
 /* The Island of Crete: the level from outside the campaign. It sits at index `at`, after the campaign's levels,
  * until the next one is put there, so Retry opens it again; it records no progress and finds no pages. A try from
  * the editor is one: Try it puts the editor away and opens the draft at its start card on the game screen, Back to
- * the editor stops the game and shows the editor on its draft, and a try won without Ariadne's thread is the
+ * the editor settles the game (no play-out, animation or thread) and shows the editor on its draft, and a try won without Ariadne's thread is the
  * author's best for its level text. DOM-free. */
 import type { Levels, OutsideLevel } from './campaign/chapters.ts';
 import type { Level } from './puzzle/level.ts';
@@ -10,8 +10,8 @@ import type { Action } from './puzzle/step.ts';
 export interface OutsideDeps {
   /** The game opens level `i`. */
   open(i: number): void;
-  /** The game's play-out stops. */
-  stop(): void;
+  /** The game settles: its play-out, animation and thread stop. */
+  settle(): void;
   /** Every card and layer closes. */
   closeLayers(): void;
   /** The editor shows, alone, on its draft. */
@@ -60,7 +60,7 @@ export function createOutside(campaign: Levels, deps: OutsideDeps): Outside {
       play(level, { kind: 'try', name: level.title || 'Your level', best: null }, line, text);
     },
     backToEditor() {
-      deps.stop();
+      deps.settle();
       deps.showEditor();
     },
   };

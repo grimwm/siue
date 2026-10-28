@@ -47,7 +47,7 @@ const pages = createFoundPages(browserStorage());
 /* The campaign's levels, then the level from outside it (a try from the editor, or a browser spec's). */
 const outside = createOutside(CAMPAIGN_LEVELS, {
   open: i => game.open(i),
-  stop: () => game.stop(),
+  settle: () => game.settle(),
   closeLayers: () => ui.closeLayers(),
   showEditor: () => ui.showEditor(),
   bestWon: (text, moves) => editor.tryWon(text, moves),
@@ -70,16 +70,17 @@ function tryLevel(level: Level, text: string, line: readonly Action[] | null): v
   outside.tryLevel(level, text, line);
 }
 
-/* `#edit` in the address opens the editor, when the page opens and whenever the fragment changes to it; the
-   fragment changing away from it (the browser's Back) leaves the editor for the title card. A try leaves the
-   address as it is, as part of the editor's visit; the browser's Back during one changes nothing on the screen: the
-   try plays on, with Back to the editor in its menu. */
+/* `#edit` in the address opens the editor, when the page opens and whenever the fragment changes to it (as Back to
+   the editor does, so a try in play settles first); the fragment changing away from it (the browser's Back) leaves
+   the editor for the title card. A try leaves the address as it is, as part of the editor's visit; the browser's
+   Back during one changes nothing on the screen: the try plays on, with Back to the editor in its menu. */
 const EDIT_HASH = '#edit';
 function followHash(): void {
-  if (window.location.hash === EDIT_HASH) ui.showEditor();
+  if (window.location.hash === EDIT_HASH) outside.backToEditor();
   else ui.leaveEditor();
 }
-/* Leaving the editor takes `#edit` off the address without a new history entry. */
+/* The editor's visit ending (the editor left for the title card, a campaign level opened, Quit) takes `#edit` off
+   the address without a new history entry, so a reload does not open the editor. */
 function leftEditor(): void {
   if (window.location.hash === EDIT_HASH) history.replaceState(history.state, '', window.location.pathname + window.location.search);
 }
@@ -134,11 +135,12 @@ function play(): void {
   ui.showChapter(1, false);
 }
 
-/* Quit (the menu's): the cards close; an installed app closes where it may, and otherwise
-   (always in a browser tab) the title card shows. */
+/* Quit (the menu's): the cards close and the editor's visit ends; an installed app closes where it may, and
+   otherwise (always in a browser tab) the title card shows. */
 async function quit(): Promise<void> {
   ui.closeLayers();
   game.stop();
+  leftEditor();
   const outcome = await exitApp(appEnv);
   if (outcome !== 'closed') ui.showTitle(outcome === 'title-with-hint');
 }

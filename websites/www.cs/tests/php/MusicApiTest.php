@@ -190,6 +190,7 @@ final class MusicApiTest extends TestCase
         self::assertSame([], $this->store->drafts());
         self::assertFalse(Music\Store::validPieceId('general'));
         self::assertTrue(Music\Store::validPieceId('generally'));
+        self::assertTrue(Music\Store::validProjectId('general'), 'only a piece id is reserved');
     }
 
     public function testPublishDraftValidatesFiles(): void

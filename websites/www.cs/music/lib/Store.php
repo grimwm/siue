@@ -382,9 +382,10 @@ final class Store
         return is_string($v) && preg_match('/^[1-9]\d{0,3}$/D', $v) === 1;
     }
 
+    /** A project id has a piece id's form; `general` is reserved for pieces only. */
     public static function validProjectId(mixed $id): bool
     {
-        return self::validPieceId($id);
+        return is_string($id) && preg_match(self::PIECE, $id) === 1;
     }
 
     /** 1 to 80 characters. */

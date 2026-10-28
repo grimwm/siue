@@ -74,7 +74,10 @@ const editor = createEditor({
    #edit, as for any visit to the editor). */
 const visit = createVisit({
   rater,
-  play: (level, about, line) => outside.play(level, about, line),
+  play: (level, about, line) => {
+    ui.closeLayers();
+    outside.play(level, about, line);
+  },
   edit: draft => {
     game.settle();
     ui.showEditor(draft);

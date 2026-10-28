@@ -79,7 +79,10 @@ const editor = mods.editor.createEditor({
 });
 const visit = createVisit({
   rater,
-  play: (level, about, line) => outside.play(level, about, line),
+  play: (level, about, line) => {
+    ui.closeLayers();
+    outside.play(level, about, line);
+  },
   edit: draft => ui.showEditor(draft),
   show: () => ui.showShared(),
   refuse: message => ui.refuseLink(message),
@@ -161,6 +164,7 @@ test('play starts before the rating finishes', async () => {
   assert.deepEqual(outside.levels.outside!(outside.at), { kind: 'shared', name: ONE.name, best: ONE.line.length + 2 });
   assert.equal(ui.top(), 'start');
   key('Enter');
+  assert.equal(ui.top(), null, 'closing the start card leaves no shared card beneath it');
   game.hint();
   assert.equal(game.run!.now.moves, 1);
   assert.deepEqual(game.run!.now.player, step(initial(parse(ONE.text)), ONE.line[0]!).state.player, 'the hint is the link\'s first move');

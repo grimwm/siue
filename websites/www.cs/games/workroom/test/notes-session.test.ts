@@ -5,11 +5,12 @@
 // deletes forget what they removed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NoKeyring, SignedOut, type PageApi } from '../src/api.ts';
-import { UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession } from '../src/notes-session.ts';
+import { NoKeyring, ServerError, SignedOut, type PageApi } from '../src/api.ts';
+import { DISCARD_FAILED, NO_CRYPTO, UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession, describeFailure } from '../src/notes-session.ts';
 import { SEND_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
-import { PROBLEMS } from '../src/history.ts';
+import { PROBLEMS, downloadProblem } from '../src/history.ts';
 import { headerFingerprint, seal } from '../src/seal.ts';
+import { NoCrypto } from '../src/unlock.ts';
 import type { LockedKeyring } from '../src/unlock.ts';
 import { createVault } from '../src/vault.ts';
 import type { NoteBody } from '../src/note.ts';
@@ -20,11 +21,11 @@ const note = (text: string, piece = 'test-piece'): NoteBody => ({ v: 1, kind: 't
 function server() {
   const notes: { id: string; bytes: Uint8Array<ArrayBuffer>; arrived: number; picked: number | null }[] = [];
   let n = 0;
-  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, broken: new Set<string>(), downloads: 0 };
+  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, broken: new Set<string>(), downloads: 0, unreadable: 0 };
   const api: PageApi = {
     upload: async b => { const id = (++n).toString(16).padStart(32, '0'); notes.push({ id, bytes: b, arrived: n, picked: null }); return { kind: 'sent', id }; },
-    list: async () => notes.map(x => ({ id: x.id, size: x.bytes.length, arrived_at: x.arrived, picked_up_at: x.picked })),
-    bytes: async id => { state.downloads++; if (state.broken.has(id)) throw new Error('The server answered 500.'); return notes.find(x => x.id === id)!.bytes; },
+    list: async () => ({ notes: notes.map(x => ({ id: x.id, size: x.bytes.length, arrived_at: x.arrived, picked_up_at: x.picked })), unreadable: state.unreadable }),
+    bytes: async id => { state.downloads++; if (state.broken.has(id)) throw new ServerError(500); return notes.find(x => x.id === id)!.bytes; },
     remove: async id => { const i = notes.findIndex(x => x.id === id); if (i >= 0) notes.splice(i, 1); return i >= 0 ? 1 : 0; },
     removeAll: async () => { const k = notes.length; notes.length = 0; return k; },
     keyring: async () => { if (state.failKeyring) throw state.failKeyring; return state.keyring; },
@@ -88,7 +89,7 @@ test('a damaged note and a failed download never stop the rest; an earlier key\'
   await notes.send(note('download fails'), null);
   s.state.broken.add(s.notes[3]!.id);
   const items = await notes.history();
-  assert.deepEqual(items.map(i => i.opened?.body.text ?? i.problem), [PROBLEMS.download, 'sealed before a rotation', PROBLEMS.format, 'fine']);
+  assert.deepEqual(items.map(i => i.opened?.body.text ?? i.problem), [downloadProblem(describeFailure(new ServerError(500))), 'sealed before a rotation', PROBLEMS.format, 'fine']);
   s.state.broken.clear();
   assert.equal((await notes.history())[0]!.opened?.body.text, 'download fails', 'a failed download is tried again');
 });
@@ -173,4 +174,56 @@ test('the session says while a note not sent yet is held only in memory', async 
   assert.equal(notes.memoryOnly(), true);
   await notes.discard('k');
   assert.equal(notes.memoryOnly(), false);
+});
+
+test('every failure is described as what it was', () => {
+  assert.equal(describeFailure(new SignedOut('out')), UNLOCK_MESSAGES.signedOut);
+  assert.equal(describeFailure(new TypeError('Failed to fetch')), UNLOCK_MESSAGES.offline);
+  const server = describeFailure(new ServerError(503));
+  assert.match(server, /503/);
+  assert.doesNotMatch(server, /Could not reach/);
+  assert.equal(describeFailure(new NoCrypto('none')), NO_CRYPTO);
+  const other = describeFailure(new Error('note.php did not answer application/octet-stream.'));
+  assert.match(other, /note\.php did not answer/);
+  assert.doesNotMatch(other, /Could not reach/);
+  assert.match(DISCARD_FAILED, /could not be discarded/);
+});
+
+test('unlock names a server error and a browser without Web Crypto, not a lost connection or a wrong passphrase', async () => {
+  const { s, notes } = session();
+  s.state.failKeyring = new ServerError(503);
+  const server = await notes.unlock(fx.passphrase);
+  assert.match(server!, /503/);
+  assert.doesNotMatch(server!, /Could not reach/);
+  s.state.failKeyring = null;
+  const real = Object.getOwnPropertyDescriptor(globalThis, 'crypto')!;
+  Object.defineProperty(globalThis, 'crypto', { value: {}, configurable: true });
+  try {
+    assert.equal(await notes.unlock(fx.passphrase), NO_CRYPTO);
+  } finally {
+    Object.defineProperty(globalThis, 'crypto', real);
+  }
+  assert.equal(await notes.unlock(fx.passphrase), null, 'with Web Crypto back it unlocks');
+});
+
+test('a failed download keeps its reason on the note', async () => {
+  const { s, notes } = session();
+  await notes.unlock(fx.passphrase);
+  await notes.send(note('a'), null);
+  s.state.broken.add(s.notes[0]!.id);
+  const [item] = await notes.history();
+  assert.equal(item!.problem, downloadProblem(describeFailure(new ServerError(500))));
+  assert.match(item!.problem!, /500/);
+  assert.notEqual(item!.problem, downloadProblem(describeFailure(new TypeError('Failed to fetch'))));
+});
+
+test('notes the server listed but this page cannot read are counted', async () => {
+  const { s, notes } = session();
+  await notes.unlock(fx.passphrase);
+  assert.equal(notes.unreadable(), 0);
+  s.state.unreadable = 2;
+  await notes.history();
+  assert.equal(notes.unreadable(), 2);
+  notes.lock();
+  assert.equal(notes.unreadable(), 0);
 });

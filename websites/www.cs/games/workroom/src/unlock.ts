@@ -16,6 +16,8 @@ const RSA_BITS = 4096;
 export interface LockedKeyring { v: 1; kdf: 'PBKDF2-SHA-256'; iterations: number; salt: string; iv: string; ct: string }
 export class WrongPassphrase extends Error {}
 export class KeyringInvalid extends Error {}
+/** This browser has no Web Crypto (an old browser, or a page not served over https). */
+export class NoCrypto extends Error {}
 
 /** The characters stripped from both ends of a passphrase: an explicit set, so Python strips exactly the same. */
 export const STRIPPED = ' \t\n\r\f\v\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF';
@@ -58,6 +60,7 @@ export interface Unlocked {
  * WrongPassphrase when the passphrase does not decrypt it.
  */
 export async function unlockKeyring(locked: LockedKeyring, passphrase: string): Promise<Unlocked> {
+  if (typeof crypto === 'undefined' || !crypto.subtle) throw new NoCrypto('this browser has no Web Crypto');
   const salt = fromBase64(locked.salt);
   const iv = fromBase64(locked.iv);
   const ct = fromBase64(locked.ct);

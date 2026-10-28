@@ -4,15 +4,13 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { SignedOut } from '../api.ts';
 import { waitingByPiece } from '../history.ts';
 import { guardLeaving } from '../leave.ts';
-import { UNLOCK_MESSAGES } from '../notes-session.ts';
+import { DISCARD_FAILED, UNLOCK_MESSAGES, describeFailure, unreadableMessage } from '../notes-session.ts';
 import type { NotesSession } from '../notes-session.ts';
 import type { Pending } from '../outbox.ts';
 import { Panel } from './console/Panel.tsx';
 import { Kept } from './History.tsx';
 import { UnlockPanel } from './UnlockPanel.tsx';
 import { showWaiting } from './waiting.ts';
-
-const problemOf = (e: unknown): string => (e instanceof SignedOut ? UNLOCK_MESSAGES.signedOut : UNLOCK_MESSAGES.offline);
 
 export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
   const [busy, setBusy] = useState(false);
@@ -26,11 +24,13 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
     showWaiting(p.list, waitingByPiece(await p.notes.history()));
     countedNow.current = true;
     setCounted(true);
+    const skipped = p.notes.unreadable();
+    setProblem(skipped > 0 ? unreadableMessage(skipped) : null);
   };
   // After a flush, notes just sent wait on the server: the counts are taken again once they are shown.
   const refreshKept = async (): Promise<void> => {
     try { setKept(await p.notes.kept()); } catch { /* the browser's store could not be read just now; the list stays as it was */ }
-    if (countedNow.current) await recount().catch(() => { /* the counts stay as they were until the next flush */ });
+    if (countedNow.current) await recount().catch((e: unknown) => setProblem(`The counts could not be updated. ${describeFailure(e)}`));
   };
   // Leaving the page asks first while a note not sent yet is held only in memory.
   useEffect(() => guardLeaving(window, () => p.notes.memoryOnly()), [p.notes]);
@@ -46,17 +46,21 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
     setError(null);
     const problem = await p.notes.unlock(passphrase);
     if (problem) { setError(problem); setBusy(false); return; }
+    // The notes are unlocked now, so the unlock form goes whether or not the first count works; a failed count is told and tried again after the next flush.
+    countedNow.current = true;
+    setCounted(true);
     try {
       await recount();
     } catch (e) {
-      setError(problemOf(e));
+      setProblem(`Your notes are unlocked, but the counts could not be loaded. ${describeFailure(e)}`);
     }
     setBusy(false);
   };
-  const act = async (work: () => Promise<unknown>): Promise<void> => {
+  /** `whenFailed` is what to say when the work fails for any reason but a lost sign-in. */
+  const act = async (work: () => Promise<unknown>, whenFailed?: string): Promise<void> => {
     setBusy(true);
     setProblem(null);
-    try { await work(); } catch (e) { setProblem(problemOf(e)); } finally { setBusy(false); }
+    try { await work(); } catch (e) { setProblem(whenFailed !== undefined && !(e instanceof SignedOut) ? whenFailed : describeFailure(e)); } finally { setBusy(false); }
     await refreshKept();
   };
   return (
@@ -67,7 +71,7 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
           ? <p class="text-sm text-dim">Each piece shows how many of your notes wait for pickup.</p>
           : <UnlockPanel busy={busy} error={error} onUnlock={pass => void unlock(pass)} />}
       {problem ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{problem}</p> : null}
-      <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key))} onRetry={() => void act(() => p.notes.flush())} />
+      <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key), DISCARD_FAILED)} onRetry={() => void act(() => p.notes.flush())} />
     </Panel>
   );
 }

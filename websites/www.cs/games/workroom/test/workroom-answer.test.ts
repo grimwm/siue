@@ -69,7 +69,7 @@ function fakeNotes(answer: (key: string) => AddReport = key => ({ key, memoryOnl
       sent.push({ body, audio });
       return answer(`k${sent.length}`);
     },
-    flush: async () => ({ sent: [], kept: [] }), kept: async () => [], discard: async () => {}, remove: async () => {}, removeAll: async () => 0, lock() {}, memoryOnly: () => false,
+    flush: async () => ({ sent: [], kept: [] }), kept: async () => [], discard: async () => {}, remove: async () => {}, removeAll: async () => 0, lock() {}, memoryOnly: () => false, unreadable: () => 0,
   };
   return { session, sent };
 }

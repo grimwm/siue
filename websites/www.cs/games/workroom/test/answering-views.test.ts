@@ -22,7 +22,8 @@ import type { Score } from '../src/score.ts';
 installDocument();
 // Every key listener the panel puts on the window or the document, so the Escape test can press Escape at each.
 const keyListeners: unknown[] = [];
-const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); };
+const onlineListeners: (() => void)[] = [];
+const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); if (type === 'online') onlineListeners.push(f as () => void); };
 Object.assign(globalThis, { window: { addEventListener: listen, removeEventListener() {} } });
 const addToDocument = stubDocument.addEventListener;
 stubDocument.addEventListener = (type, f) => { listen(type, f); addToDocument(type, f); };
@@ -194,6 +195,7 @@ function fakeSession(over: Partial<NotesSession> = {}): NotesSession & { calls: 
     removeAll: async () => 2,
     lock() {},
     memoryOnly: () => false,
+    unreadable: () => 0,
     ...over,
   };
 }
@@ -307,5 +309,75 @@ test('on the pieces list, a Discard that fails says so in plain words and lists 
   });
   assert.equal(unhandled, 0);
   assert.ok(listed >= 2, 'listed again after the failure');
-  assert.ok(walk(root!).some(e => e._attrs['role'] === 'alert' && /not be done|try again/i.test(e.textContent)), 'a plain message');
+  assert.ok(walk(root!).some(e => e._attrs['role'] === 'alert' && /could not be discarded/i.test(e.textContent) && !/reach the server/i.test(e.textContent)), 'a plain message');
+});
+
+const alerts = (root: StubElement): string => walk(root).filter(e => e._attrs['role'] === 'alert').map(e => e.textContent).join(' | ');
+const unlockWith = async (root: StubElement, pass: string): Promise<void> => {
+  const field = byAttr(root, 'autocomplete', 'current-password')!;
+  field.value = pass;
+  await act(() => { fire(field, 'input'); });
+  await act(() => { fire(walk(root).find(e => e.localName === 'form')!, 'submit'); });
+  await settle();
+};
+
+test('the notes panel says the server answered with an error, with its status, not that it could not be reached', async () => {
+  const { ServerError } = ui.api;
+  const notes = fakeSession({ unlocked: () => true, history: async () => { throw new ServerError(503); } });
+  const root = await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: () => {} }));
+  await settle();
+  assert.match(alerts(root), /503/);
+  assert.doesNotMatch(alerts(root), /reach the server/);
+});
+
+test('the notes panel says how many listed notes it could not read, and a failed Discard says it could not be discarded', async () => {
+  const waiting: Pending = { key: 'k1', bundle: new Uint8Array([1]), made: '2026-10-20T00:00:00.000Z', reason: 'offline' };
+  const notes = fakeSession({ unlocked: () => true, unreadable: () => 2, kept: async () => [waiting], discard: async () => { throw new DOMException('closing', 'InvalidStateError'); } });
+  const root = await mount(h(ui.answers.Answers, { notes, score, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: () => {} }));
+  await settle();
+  assert.match(alerts(root), /2 notes .*could not be read/);
+  await act(() => { fire(button(root, 'Discard')!, 'click'); });
+  await act(() => { fire(walk(root).filter(e => e.localName === 'button' && /^Discard/.test(e.textContent)).at(-1)!, 'click'); });
+  await settle();
+  assert.match(alerts(root), /could not be discarded/);
+  assert.doesNotMatch(alerts(root), /reach the server/);
+});
+
+test('on the pieces list, a recount that fails after an unlock keeps the unlock form away and says why', async () => {
+  const { ServerError } = ui.api;
+  const notes = fakeSession({ history: async () => { throw new ServerError(500); } });
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  await settle();
+  await unlockWith(root, 'right');
+  assert.equal(byAttr(root, 'autocomplete', 'current-password'), undefined, 'the notes are unlocked, so the form is gone');
+  assert.match(alerts(root), /500/);
+  assert.doesNotMatch(alerts(root), /reach the server/);
+});
+
+test('on the pieces list, a recount after a flush that fails says so, and the counts are tried again after the next flush', async () => {
+  const { ServerError } = ui.api;
+  let failing = false;
+  let flushes = 0;
+  const notes = fakeSession({ flush: async () => { flushes++; return { sent: [], kept: [] }; }, history: async () => { if (failing) throw new ServerError(502); return [item('a')]; } });
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  await settle();
+  await unlockWith(root, 'right');
+  assert.equal(alerts(root), '');
+  failing = true;
+  await act(() => { onlineListeners.at(-1)!(); });
+  await settle();
+  assert.ok(flushes >= 2);
+  assert.match(alerts(root), /502/);
+  failing = false;
+  await act(() => { onlineListeners.at(-1)!(); });
+  await settle();
+  assert.equal(alerts(root), '', 'a recount that works clears the message');
+});
+
+test('on the pieces list, notes the page could not read are counted in a message', async () => {
+  const notes = fakeSession({ unreadable: () => 1 });
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  await settle();
+  await unlockWith(root, 'right');
+  assert.match(alerts(root), /1 note .*could not be read/);
 });

@@ -3,7 +3,7 @@
 // (read from the status, never the Content-Type), and limits are refusals.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NoKeyring, SignedOut, createApi } from '../src/api.ts';
+import { NoKeyring, ServerError, SignedOut, createApi } from '../src/api.ts';
 import type { Fetch } from '../src/load.ts';
 
 type Init = Parameters<Fetch>[1];
@@ -70,12 +70,12 @@ test('a sign-in redirect, a 401 or a 403 other than the CSRF refusal is SignedOu
   await assert.rejects(createApi(async () => reply(401, { error: 'unauthorized' }, false, 'text/html'), 'x').list(), SignedOut);
   await assert.rejects(createApi(async () => reply(403, { error: 'cross_site' }), 'x').list(), SignedOut);
   await assert.rejects(createApi(async () => reply(200, '<html>', true, 'text/html'), 'x').upload(new Uint8Array(4)), SignedOut);
-  await assert.rejects(createApi(async () => reply(500, { error: 'boom' }), 'x').list(), (e: unknown) => e instanceof Error && !(e instanceof SignedOut) && /500/.test(e.message));
+  await assert.rejects(createApi(async () => reply(500, { error: 'boom' }), 'x').list(), (e: unknown) => e instanceof ServerError && e.status === 500 && /500/.test(e.message));
 });
 
 test('the list keeps well-formed entries and reads JSON whatever its Content-Type', async () => {
   const fetch: Fetch = async () => reply(200, { notes: [{ id: A, size: 5, arrived_at: 1, picked_up_at: null }, { id: 'zz', size: 1, arrived_at: 1, picked_up_at: null }, null] }, false, 'text/plain');
-  assert.deepEqual(await createApi(fetch, 'x').list(), [{ id: A, size: 5, arrived_at: 1, picked_up_at: null }]);
+  assert.deepEqual(await createApi(fetch, 'x').list(), { notes: [{ id: A, size: 5, arrived_at: 1, picked_up_at: null }], unreadable: 2 });
 });
 
 test('bytes() returns a note\'s octet-stream; a redirect is SignedOut; any other type is an error', async () => {
@@ -113,4 +113,12 @@ test('an upload is a raw octet-stream; limits come back as refusals, not errors'
   status = 500;
   answer = { error: 'storage' };
   await assert.rejects(api.upload(new Uint8Array(4)), /500/);
+});
+
+test('a row the list cannot read is counted, and the rows beside it still come', async () => {
+  const rows = [{ id: A, size: 5, arrived_at: 1, picked_up_at: null }, { id: 'nope', size: 1, arrived_at: 2, picked_up_at: null }, null, { id: B, size: 'x', arrived_at: 3, picked_up_at: null }];
+  const listed = await createApi(async () => reply(200, { notes: rows }), 'x').list();
+  assert.deepEqual(listed.notes.map(n => n.id), [A]);
+  assert.equal(listed.unreadable, 3);
+  assert.equal((await createApi(async () => reply(200, { notes: 'nope' }), 'x').list()).unreadable, 0, 'no list at all is an empty one');
 });

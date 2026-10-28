@@ -3,19 +3,28 @@
 // on every check, so a refused one (403 {"error":"csrf"}) is refreshed from
 // csrf.php once and the POST retried once. A lost session is SignedOut, read
 // from the status (a redirect to the sign-in, a 401, or a 403 other than the
-// CSRF refusal), never from the Content-Type. Every other failure names the status.
+// CSRF refusal), never from the Content-Type. Every other failure is a ServerError naming the status.
 import type { Fetch } from './load.ts';
 import type { LockedKeyring } from './unlock.ts';
 
 export class SignedOut extends Error {}
 export class NoKeyring extends Error {}
+/** The server answered, but with an error status. */
+export class ServerError extends Error {
+  readonly status: number;
+  constructor(status: number) {
+    super(`The server answered ${status}.`);
+    this.status = status;
+  }
+}
 export type RefusedReason = 'too_large' | 'full' | 'no_key' | 'bad_header' | 'unknown_key';
 export const REFUSED_REASONS: readonly RefusedReason[] = ['too_large', 'full', 'no_key', 'bad_header', 'unknown_key'];
 export interface ServerNote { id: string; size: number; arrived_at: number; picked_up_at: number | null }
 export type UploadResult = { kind: 'sent'; id: string } | { kind: 'refused'; reason: RefusedReason };
 export interface PageApi {
   upload(bundle: Uint8Array<ArrayBuffer>): Promise<UploadResult>;
-  list(): Promise<ServerNote[]>;
+  /** Every note row the page can read, and how many rows it could not (they are left out, the rest still come). */
+  list(): Promise<{ notes: ServerNote[]; unreadable: number }>;
   bytes(id: string): Promise<Uint8Array<ArrayBuffer>>;
   remove(id: string): Promise<number>;
   removeAll(): Promise<number>;
@@ -36,7 +45,7 @@ async function read(reply: Reply): Promise<Data> {
   }
 }
 const signedOut = (reply: Reply, data: Data): boolean => reply.redirected || reply.status === 401 || (reply.status === 403 && data['error'] !== 'csrf');
-const failed = (reply: Reply): Error => new Error(`The server answered ${reply.status}.`);
+const failed = (reply: Reply): ServerError => new ServerError(reply.status);
 const isServerNote = (x: unknown): x is ServerNote => {
   const n = x as Partial<ServerNote> | null;
   return typeof n === 'object' && n !== null && typeof n.id === 'string' && NOTE_ID.test(n.id) && Number.isInteger(n.size)
@@ -94,7 +103,9 @@ export function createApi(fetch: Fetch, csrf: string): PageApi {
       const { reply, data } = await get('notes.php');
       if (!reply.ok) throw failed(reply);
       const notes = data['notes'];
-      return Array.isArray(notes) ? notes.filter(isServerNote) : [];
+      if (!Array.isArray(notes)) return { notes: [], unreadable: 0 };
+      const readable = notes.filter(isServerNote);
+      return { notes: readable, unreadable: notes.length - readable.length };
     },
     async bytes(id) {
       const reply = await fetch(`note.php?id=${noteId(id)}`);

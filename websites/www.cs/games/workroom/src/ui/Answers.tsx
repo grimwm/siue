@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { SignedOut } from '../api.ts';
 import { answeredBy, forPiece, timelineMarks } from '../history.ts';
 import type { HistoryItem } from '../history.ts';
-import { UNLOCK_MESSAGES } from '../notes-session.ts';
+import { DISCARD_FAILED, describeFailure, unreadableMessage } from '../notes-session.ts';
 import type { NotesSession } from '../notes-session.ts';
 import type { Pending } from '../outbox.ts';
 import type { Score } from '../score.ts';
@@ -25,8 +25,6 @@ export interface AnswersProps {
   onItems(items: readonly HistoryItem[]): void;
 }
 
-const problemOf = (e: unknown): string => (e instanceof SignedOut ? UNLOCK_MESSAGES.signedOut : UNLOCK_MESSAGES.offline);
-
 export function Answers(p: AnswersProps) {
   const [unlocked, setUnlocked] = useState(p.notes.unlocked());
   const [busy, setBusy] = useState(false);
@@ -38,7 +36,7 @@ export function Answers(p: AnswersProps) {
   /** Shows a failure; a sign-in that ended locks the notes, so the unlock form comes back. */
   const fail = (e: unknown): void => {
     if (e instanceof SignedOut) { p.notes.lock(); setItems([]); }
-    setError(problemOf(e));
+    setError(describeFailure(e));
     setUnlocked(p.notes.unlocked());
     if (!p.notes.unlocked()) p.onLocked?.();
   };
@@ -54,15 +52,19 @@ export function Answers(p: AnswersProps) {
       if (!p.notes.unlocked()) { setItems([]); setUnlocked(false); p.onLocked?.(); return; }
       setItems(all);
       p.onItems(all);
-      setError(null);
+      const skipped = p.notes.unreadable();
+      setError(skipped > 0 ? unreadableMessage(skipped) : null);
     } catch (e) {
       fail(e);
     }
   };
-  const act = async (work: () => Promise<unknown>): Promise<void> => {
+  /** `whenFailed` is what to say when the work fails for any reason but a lost sign-in. */
+  const act = async (work: () => Promise<unknown>, whenFailed?: string): Promise<void> => {
     setBusy(true);
-    try { await work(); } catch (e) { fail(e); } finally { setBusy(false); }
+    let told: string | null = null;
+    try { await work(); } catch (e) { if (whenFailed !== undefined && !(e instanceof SignedOut)) told = whenFailed; else fail(e); } finally { setBusy(false); }
     await load();
+    if (told !== null) setError(told); // the reload would otherwise wipe what failed
   };
   const mounted = useRef(false);
   // The first load follows the mount's flush below; a later refresh loads at once.
@@ -89,7 +91,7 @@ export function Answers(p: AnswersProps) {
 
   const piece = p.score.piece.id;
   const numbers = new Map(timelineMarks(items, piece, p.score.duration).map(m => [m.id, m.n]));
-  const keptList = <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key))} onRetry={() => void act(() => p.notes.flush())} />;
+  const keptList = <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key), DISCARD_FAILED)} onRetry={() => void act(() => p.notes.flush())} />;
   return (
     <Panel title="Your notes" label="Notes & answers" class="grid gap-3" data={{ 'data-answers': '' }}>
       {!unlocked ? (
@@ -108,7 +110,7 @@ export function Answers(p: AnswersProps) {
             kept={kept} busy={busy}
             onDelete={id => void act(() => p.notes.remove(id))}
             onDeleteAll={() => void act(() => p.notes.removeAll())}
-            onDiscard={key => void act(() => p.notes.discard(key))}
+            onDiscard={key => void act(() => p.notes.discard(key), DISCARD_FAILED)}
             onRetry={() => void act(() => p.notes.flush())} />
         </>
       )}

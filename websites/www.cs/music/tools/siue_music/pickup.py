@@ -14,6 +14,7 @@ from .api import ApiError
 from .paths import check_outside
 from .sealing import NoteUnreadable, open_bundle
 
+GENERAL_PIECE = "general"  # the reserved piece id of the front page's notes (games/workroom/src/note.ts)
 _NOTE_ID = re.compile(r"[0-9a-f]{32}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _AUDIO_MIMES = {"audio/webm": "webm", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/ogg": "ogg"}
@@ -22,6 +23,7 @@ _AUDIO_MIMES = {"audio/webm": "webm", "audio/mp4": "m4a", "audio/x-m4a": "m4a", 
 @dataclass
 class Report:
     picked: list[str] = field(default_factory=list)
+    general: list[str] = field(default_factory=list)  # the picked notes written on the front page, tied to no piece
     left: dict[str, str] = field(default_factory=dict)
     notices: list[str] = field(default_factory=list)
 
@@ -123,6 +125,8 @@ def _one(api, keyring, notes: Path, steps: Steps, report: Report, note_id: str, 
     _derive(final, opened.body["kind"], ext, steps, report, note_id)
     api.mark_picked_up(note_id)
     report.picked.append(note_id)
+    if opened.body.get("piece") == GENERAL_PIECE:
+        report.general.append(note_id)
 
 
 def _saved(final: Path, note_id: str) -> bool:

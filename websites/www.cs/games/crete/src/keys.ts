@@ -7,7 +7,7 @@ import { BACK_KEY } from "../../_kit/keys.ts";
 export type MoveAction = "up" | "down" | "left" | "right";
 export type Action =
   | MoveAction
-  | "begin" | "wait" | "undo" | "restart" | "hint" | "route" | "auto" | "mute" | "new" | "menu" | "story" | "fullscreen" | "lore";
+  | "begin" | "wait" | "undo" | "restart" | "hint" | "route" | "auto" | "mute" | "new" | "menu" | "story" | "fullscreen" | "lore" | "editor";
 
 export interface KeyDef {
   /** What a button's key tab and the help text print. */
@@ -38,6 +38,8 @@ export const KEYS: Record<Action, KeyDef> = {
   fullscreen: { label: "F", keys: ["f"] },
   /** Opens the Lore book, from the menu. */
   lore: { label: "L", keys: ["l"] },
+  /** Opens the level editor, from the title card. */
+  editor: { label: "E", keys: ["e"] },
   // Q is read with isBackKey; this row only names it.
   menu: { label: BACK_KEY, keys: [] },
 };

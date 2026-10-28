@@ -6,6 +6,7 @@
  */
 import { isBackKey, typesText } from "../../_kit/keys.ts";
 import type { Board } from "./board.ts";
+import type { Editor } from "./editor/editor.ts";
 import { boardRows } from "./board-plan.ts";
 import type { Atlas } from "./board-plan.ts";
 import type { Game, SfxName, Tone } from "./game.ts";
@@ -66,6 +67,11 @@ export interface Controls {
   play(): void;
   /** Back to the editor from a try: offered in the menu and on the end card while a try is in play. */
   backToEditor?(): void;
+  /** The level editor, when the page has one: Make a level on the title card opens it, and while it is the top
+   *  layer every key goes to it. */
+  editor?: Pick<Editor, "open" | "close" | "key">;
+  /** The editor was left for the title card. */
+  leftEditor?(): void;
 }
 
 export interface Ui {
@@ -86,6 +92,10 @@ export interface Ui {
   closeLayers(): void;
   /** The card showing now, if any. */
   top(): LayerName | null;
+  /** The level editor, alone, when the page has one. */
+  showEditor(): void;
+  /** Leaves the editor for the title card. */
+  leaveEditor(): void;
 }
 
 const TOOL_EMOJI: Record<Tool, string> = { mirror: "🪞", cake: "🍯", cow: "🐄" };
@@ -136,9 +146,15 @@ export function createUi(deps: UiDeps): Ui {
   let announced: string[] = [];
   /** Pages taken together (one slide can take several) that wait to open after the one showing. */
   let pending: string[] = [];
+  /** The editor's layer is in the stack and the editor has been opened for it. */
+  let editorShown = false;
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
+    if (editorShown && !layers.has("editor")) {
+      editorShown = false;
+      controls?.editor?.close();
+    }
     // A page opened on taking it that closes some other way (Quit closes every card) leaves nothing waiting on it.
     if (loreFromPickup && !layers.isOpen("lore")) {
       loreFromPickup = false;
@@ -205,6 +221,21 @@ export function createUi(deps: UiDeps): Ui {
     open(chapterTarget);
   }
 
+  function showEditor(): void {
+    const editor = controls?.editor;
+    if (!editor) return;
+    layers.clear();
+    layers.open("editor");
+    editorShown = true;
+    editor.open();
+  }
+
+  function leaveEditor(): void {
+    if (!layers.has("editor")) return;
+    showTitle(titleHint);
+    controls?.leftEditor?.();
+  }
+
   function drawLayers(): void {
     const g = controls?.game ?? game;
     renderTitleCard($("title-root"), {
@@ -212,6 +243,7 @@ export function createUi(deps: UiDeps): Ui {
       hint: titleHint,
       onPlay: () => controls?.play(),
       onStory: () => layers.open("story"),
+      ...(controls?.editor ? { onEditor: showEditor } : {}),
       onSettings: () => layers.open("menu"),
     });
     const out = outsideOf(g);
@@ -557,6 +589,15 @@ export function createUi(deps: UiDeps): Ui {
     document.addEventListener("keydown", (ev) => {
       if (typesText(ev.target)) return;
       c.wake();
+      // The editor takes every key while it is the top layer; a Q it does not use (no dialog of its own is open)
+      // leaves it for the title card.
+      if (layers.isOpen("editor") && c.editor) {
+        if (!c.editor.key(ev) && isBackKey(ev)) {
+          ev.preventDefault();
+          if (!ev.repeat) leaveEditor();
+        }
+        return;
+      }
       if (isBackKey(ev)) {
         ev.preventDefault();
         if (ev.repeat) return;
@@ -591,10 +632,15 @@ export function createUi(deps: UiDeps): Ui {
         c.toggleMute();
         return;
       }
-      // Each card's own keys act only while it is the top card: I on the title, F and L on the menu.
+      // Each card's own keys act only while it is the top card: I and E on the title, F and L on the menu.
       if (action === "story" && layers.isOpen("title")) {
         ev.preventDefault();
         if (!ev.repeat) layers.open("story");
+        return;
+      }
+      if (action === "editor" && layers.isOpen("title") && c.editor) {
+        ev.preventDefault();
+        if (!ev.repeat) showEditor();
         return;
       }
       if (action === "fullscreen" && layers.isOpen("menu")) {
@@ -751,6 +797,8 @@ export function createUi(deps: UiDeps): Ui {
     showChapter: (n, closing) => showChapter(n, closing),
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
+    showEditor,
+    leaveEditor,
     setMuted: (m) => {
       muted = m;
       drawLayers();

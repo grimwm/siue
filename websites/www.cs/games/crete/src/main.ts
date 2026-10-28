@@ -1,5 +1,5 @@
-/* Entry: wires the game, the board, audio and the UI, opens the title card (or, with ?seed=, Chapter 1's card over it),
- * and exposes window.__creteTest for the browser specs. */
+/* Entry: wires the game, the board, audio, the UI and the level editor, opens the title card (or, with ?seed=,
+ * Chapter 1's card over it; with #edit, the editor), and exposes window.__creteTest for the browser specs. */
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
 import { createAudio } from './audio.ts';
 import { createBoard } from './board.ts';
@@ -19,6 +19,8 @@ import type { Action } from './puzzle/step.ts';
 import { createFoundPages } from './pages.ts';
 import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
+import { createEditor } from './editor/editor.ts';
+import { fromLevel } from './editor/model.ts';
 import { createSettings } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
@@ -54,6 +56,26 @@ const levels: Levels = {
   line: i => (i === OUTSIDE ? outside?.line ?? null : null),
 };
 const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx });
+/* The level editor, a layer over the game frame. The page does not act on its Try it: the draft stays in the
+   editor. */
+const editor = createEditor({
+  root: document.getElementById('editor-root') as HTMLElement,
+  atlas,
+  image,
+  tryIt: () => {},
+  changed: () => {},
+  leave: () => ui.leaveEditor(),
+});
+
+/* `#edit` in the address opens the editor, when the page opens and whenever the fragment changes to it. */
+const EDIT_HASH = '#edit';
+function followHash(): void {
+  if (window.location.hash === EDIT_HASH) ui.showEditor();
+}
+/* Leaving the editor takes `#edit` off the address without a new history entry. */
+function leftEditor(): void {
+  if (window.location.hash === EDIT_HASH) history.replaceState(history.state, '', window.location.pathname + window.location.search);
+}
 
 /* The reduced-motion preference, followed live. */
 const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -127,7 +149,7 @@ function loop(now: number): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleFullscreen, wake: audio.ensure, quit: () => { void quit(); }, play,
+    game, toggleMute, toggleFullscreen, wake: audio.ensure, quit: () => { void quit(); }, play, editor, leftEditor,
   });
   if (settings.sound.get() === 'off') {
     audio.toggleMute();
@@ -143,6 +165,8 @@ function start(): void {
   if (direct) {
     ui.showChapter(1, false);
   }
+  followHash();
+  window.addEventListener('hashchange', followHash);
   mountTitleInstall(window, document.getElementById('title-install'));
   image.onload = () => { requestAnimationFrame(loop); };
   image.onerror = () => {
@@ -177,5 +201,14 @@ function playLevel(level: Level, opts: { outside?: OutsideLevel; line?: readonly
   game.open(OUTSIDE);
 }
 
-/* Test hook for automated checks: drives the real game logic, no copy. */
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse };
+/* Test hook for automated checks: drives the real game logic, no copy. Its editor is the Editor, plus `load(text)`,
+   which opens the editor on that level text. */
+const editorHook = {
+  open: editor.open, close: editor.close, key: editor.key,
+  get draft() { return editor.draft; },
+  load(text: string): void {
+    ui.showEditor();
+    editor.open(fromLevel(parse(text)));
+  },
+};
+window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook };

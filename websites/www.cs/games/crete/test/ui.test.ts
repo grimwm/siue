@@ -204,10 +204,21 @@ const game: Game = createGame({
 });
 let toggled = 0;
 let backs = 0;
-flow.bindControls({ game, toggleMute() {}, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; } });
+/* The editor as the page sees it: what it was asked to do, and every key it was handed. */
+const edits: string[] = [];
+const editorKeys: string[] = [];
+const editor = {
+  open: () => { edits.push('open'); },
+  close: () => { edits.push('close'); },
+  key: (ev: KeyboardEvent) => { editorKeys.push(ev.key); return false; },
+};
+flow.bindControls({
+  game, toggleMute() {}, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; },
+  editor, leftEditor: () => { edits.push('left'); },
+});
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
-const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; outsideAt = -1; ownOutside = null; backs = 0; };
+const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; outsideAt = -1; ownOutside = null; backs = 0; edits.length = 0; editorKeys.length = 0; };
 // Elements of unmounted overlay tests linger in the stub by id, so a page element is looked up inside its root.
 const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
 const el = (id: string) => maybeById(rootOf(id), id);
@@ -820,4 +831,60 @@ test('Back to the editor shows in the menu and on the end card only for a try', 
   assert.match(button.textContent, /Back to the editor/);
   click(button);
   assert.equal(backs, 2);
+});
+
+test('the title card offers Make a level when the page gives it, with its key', () => {
+  const root = makeEl('title-root');
+  renderTitleCard(root, { open: true, hint: false, onPlay() {} });
+  assert.equal(maybeById(root, 'title-editor'), undefined);
+  let made = 0;
+  renderTitleCard(root, { open: true, hint: false, onPlay() {}, onEditor: () => { made++; } });
+  assert.equal(byId(root, 'title-editor').textContent, `Make a level${KEYS.editor.label}`);
+  click(byId(root, 'title-editor'));
+  assert.equal(made, 1);
+});
+
+test('Make a level on the title card opens the editor layer', () => {
+  reset();
+  flow.showTitle(false);
+  click(byId(rootOf('title-editor'), 'title-editor'));
+  assert.equal(flow.top(), 'editor');
+  assert.deepEqual(edits, ['open']);
+  reset();
+  flow.showTitle(false);
+  key('e');
+  assert.equal(flow.top(), 'editor', 'E on the title card');
+  assert.deepEqual(edits, ['open']);
+  reset();
+  game.open(0);
+  key('Enter');
+  key('e');
+  assert.equal(flow.top(), null, 'E is a title card key only');
+  assert.deepEqual(edits, []);
+});
+
+test('game keys do nothing while the editor is open', () => {
+  reset();
+  game.open(0);
+  key('Enter');
+  const at = game.run!.now.player;
+  flow.showEditor();
+  for (const k of ['ArrowRight', 'ArrowDown', 'd', 's', 'n', 'm', 'h', '.']) key(k);
+  assert.deepEqual(game.run!.now.player, at, 'an arrow key moves no figure');
+  assert.equal(game.run!.now.moves, 0);
+  assert.equal(flow.top(), 'editor', 'N opens no level list over the editor');
+  assert.deepEqual(editorKeys, ['ArrowRight', 'ArrowDown', 'd', 's', 'n', 'm', 'h', '.']);
+});
+
+test('Q in the editor closes it to the title card', () => {
+  reset();
+  flow.showEditor();
+  edits.length = 0;
+  const ev = key('q');
+  assert.equal(ev.prevented, true);
+  assert.equal(flow.top(), 'title');
+  assert.deepEqual(edits, ['close', 'left']);
+  assert.deepEqual(editorKeys, ['q'], 'the editor sees Q first, to close a dialog of its own');
+  fireDocument('keydown', { key: 'q', repeat: true, target: { tagName: 'DIV' } });
+  assert.equal(flow.top(), 'title', 'a held Q does not go on to open the menu');
 });

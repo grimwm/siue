@@ -24,7 +24,7 @@ import { createUi } from './ui.ts';
 import { createEditor } from './editor/editor.ts';
 import { fromLevel } from './editor/model.ts';
 import { createRater } from './share/rating.ts';
-import { createVisit } from './share/visit.ts';
+import { createVisit, fragmentKind } from './share/visit.ts';
 import { createSettings } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
@@ -93,14 +93,23 @@ function tryLevel(level: Level, text: string, line: readonly Action[] | null): v
 /* `#edit` in the address opens the editor, when the page opens and whenever the fragment changes to it (as Back to
    the editor does, so a try in play settles first); the fragment changing away from it (the browser's Back) leaves
    the editor for the title card. A try leaves the address as it is, as part of the editor's visit; the browser's
-   Back during one changes nothing on the screen: the try plays on, with Back to the editor in its menu. Any other
-   fragment is a share link: its card opens, or the title card says why it cannot. The link stays in the address
-   while its level is played, so a reload opens its card again. */
+   Back during one changes nothing on the screen: the try plays on, with Back to the editor in its menu. A fragment
+   `L<digits>…` is a share link: its card opens, or the title card says why it cannot. The link stays in the address
+   while its level is played, so a reload opens its card again; the browser's Back from its card to no fragment
+   shows the title card. Any other fragment is not the game's and changes nothing. */
 const EDIT_HASH = '#edit';
 function followHash(): void {
   const hash = window.location.hash;
-  if (hash === EDIT_HASH) outside.backToEditor();
-  else if (hash.length > 1) void visit.open(hash.slice(1));
+  const kind = fragmentKind(hash);
+  if (kind === 'link') {
+    void visit.open(hash.slice(1));
+    return;
+  }
+  if (kind === 'other') return;
+  // The address moved on from any link: one still decoding shows no card.
+  visit.forget();
+  if (kind === 'edit') outside.backToEditor();
+  else if (ui.top() === 'shared') ui.showTitle(false);
   else ui.leaveEditor();
 }
 /* The editor's visit ending (the editor left for the title card, a campaign level opened, Quit) takes `#edit` off

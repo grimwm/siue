@@ -1,5 +1,6 @@
 // The Island of Crete: a shared level's card, shown when a share link opens and from the menu during the level. It
-// names the level, gives its rating (`rating…` until the page's own search is in) and the author's best to beat,
+// names the level, gives its rating (`rating…` until the page's own search is in, or a line saying it waits for the
+// editor's Check) and the author's best to beat,
 // with Play and Edit a copy. Q takes it to the title card (src/ui.ts owns every card, so the dialog is given no
 // onDismiss).
 import { render } from 'preact';

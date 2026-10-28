@@ -1,5 +1,5 @@
 // The Island of Crete: the menu. In order: sound and full screen, the Lore book, the story log, how to play, Back to
-// the editor or the shared level's card (each only when the page gives it), Quit.
+// the editor or Shared level (the shared level's card; each only when the page gives it), Quit.
 // Q (the kit's back key) is handled by src/ui.ts, which owns every card, so the dialog is given no onDismiss;
 // the Close button is for a pointer or a finger.
 import { render } from 'preact';
@@ -70,7 +70,7 @@ export function Menu(p: MenuProps) {
       )}
       {p.onSharedCard && (
         <div class="menu-sec" data-section="shared">
-          <Button id="menu-shared" onClick={p.onSharedCard}>The level's card</Button>
+          <Button id="menu-shared" onClick={p.onSharedCard}>Shared level</Button>
         </div>
       )}
       <div class="menu-sec" data-section="quit">

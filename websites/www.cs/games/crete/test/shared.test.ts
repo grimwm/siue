@@ -14,7 +14,7 @@ import type { Progress } from '../src/progress.ts';
 import type { Board } from '../src/board.ts';
 import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createRater } from '../src/share/rating.ts';
-import { createVisit } from '../src/share/visit.ts';
+import { createVisit, fragmentKind } from '../src/share/visit.ts';
 import { LINK_MESSAGES, encodeLink } from '../src/share/link.ts';
 import { levelCode, sharedName } from '../src/share/name.ts';
 import { fromLevel, toText } from '../src/editor/model.ts';
@@ -121,6 +121,38 @@ test('a link opens its card: the generated name, rating… and the best to beat'
   assert.equal(el('shared-best'), undefined, 'a link with no best names none');
 });
 
+test('Escape on the shared card does nothing: the card stays up', async () => {
+  await visit.open(ONE.fragment);
+  assert.equal(key('Escape').prevented, false);
+  assert.equal(ui.top(), 'shared');
+});
+
+test('only a fragment L<digits>… is a link; #edit opens the editor, and any other fragment is ignored', () => {
+  assert.equal(fragmentKind(`#${ONE.fragment}`), 'link');
+  assert.equal(fragmentKind('#L2.abc'), 'link', 'a newer version is still a link, refused with its message');
+  assert.equal(fragmentKind('#edit'), 'edit');
+  assert.equal(fragmentKind(''), 'empty');
+  assert.equal(fragmentKind('#'), 'empty');
+  for (const h of ['#foo', '#L', '#Lx.abc', '#l1.abc', '#top']) assert.equal(fragmentKind(h), 'other', h);
+});
+
+test('a link still decoding when the address moves on shows no card', async () => {
+  ui.showEditor();
+  const opening = visit.open(ONE.fragment);
+  visit.forget();
+  await opening;
+  assert.equal(ui.top(), 'editor', 'the editor stays up');
+});
+
+test('while an editor Check holds the worker, the card says the rating waits for it', async () => {
+  const check = rater.check('CHECK');
+  await visit.open(ONE.fragment);
+  assert.equal(text('shared-rating'), 'Rating waits for your Check in the editor.');
+  check.cancel();
+  await settle();
+  assert.equal(text('shared-rating'), 'rating…', 'the rating starts once the Check ends');
+});
+
 test('play starts before the rating finishes', async () => {
   await visit.open(ONE.fragment);
   const rating = fake.searches.at(-1)!;
@@ -148,11 +180,26 @@ test('the card shows the rating the next time it opens, from the menu during pla
   assert.equal(text('shared-rating'), 'Chase · quickest win 54 moves · 24,086 situations');
 });
 
-test('the menu offers the shared card only during a shared level', async () => {
+test('the menu offers Shared level only while the open link\'s level is in play', async () => {
+  const menuShared = () => {
+    ui.closeLayers();
+    click(byId(document.getElementById('status-root'), 'btn-menu'));
+    return el('menu-shared');
+  };
   game.open(0);
   key('Enter');
-  click(byId(document.getElementById('status-root'), 'btn-menu'));
-  assert.equal(el('menu-shared'), undefined);
+  assert.equal(menuShared(), undefined, 'not during a campaign level');
+  await visit.open(ONE.fragment);
+  click(byId(rootOf('shared-play'), 'shared-play'));
+  key('Enter');
+  assert.equal(menuShared()?.textContent, 'Shared level');
+  await visit.open('L1.not*base64');
+  assert.equal(menuShared(), undefined, 'not after a bad link: there is no card');
+  await visit.open(ONE.fragment);
+  click(byId(rootOf('shared-play'), 'shared-play'));
+  key('Enter');
+  await visit.open(TWO.fragment);
+  assert.equal(menuShared(), undefined, 'not when the open link is another level');
 });
 
 test('Q on the shared card goes to the title card', async () => {
@@ -178,7 +225,9 @@ test('another link, a bad link or the page going away cancels the rating', async
   assert.deepEqual(third.calls, ['cancel']);
 });
 
-test('Edit a copy opens the editor on the level, with no initials or best carried over', async () => {
+test('Edit a copy opens the editor on the level, with no initials or best carried over; U brings back the draft before', async () => {
+  const before = fromLevel(parse(TWO.text));
+  ui.showEditor(before);
   await visit.open(ONE.fragment);
   click(byId(rootOf('shared-edit'), 'shared-edit'));
   assert.equal(ui.top(), 'editor');
@@ -186,6 +235,8 @@ test('Edit a copy opens the editor on the level, with no initials or best carrie
   assert.equal(editor.bestFor(ONE.text), null);
   assert.equal(byId(editorRoot, 'share-initials').value, '');
   assert.equal(stored.get('crete-initials'), undefined);
+  key('u');
+  assert.deepEqual(editor.draft, before, 'the copy is one undo step');
 });
 
 /* ---------- the rating and the editor's Check, one search at a time in the one worker ---------- */

@@ -125,9 +125,11 @@ export function createUi(deps: UiDeps): Ui {
   const outsideOf = (g: Game | null): OutsideLevel | null => (g && g.trial >= 0 ? deps.levels?.outside?.(g.trial) ?? null : null);
   /** An outside level's kicker on its start and end cards. */
   const outsideKicker = (o: OutsideLevel): string => (o.kind === "try" ? "Your level" : "Shared level");
-  /** The shared card, while a shared level is in play and the page gives it. */
-  const sharedCard = (g: Game | null): (() => void) | undefined =>
-    controls?.shared && g?.run && outsideOf(g)?.kind === "shared" ? showShared : undefined;
+  /** The shared card, while a shared level is in play and the open link's card is that level's. */
+  const sharedCard = (g: Game | null): (() => void) | undefined => {
+    const card = controls?.shared?.card();
+    return card && g?.run && outsideOf(g)?.kind === "shared" && card.level === g.run.now.level ? showShared : undefined;
+  };
   /** Back to the editor, while a try is in play and the page gives it. */
   const backToEditor = (g: Game | null): (() => void) | undefined => {
     const back = controls?.backToEditor;
@@ -259,6 +261,7 @@ export function createUi(deps: UiDeps): Ui {
   function ratingLine(r: RatingState): string | null {
     if (r.kind === "done") return ratingText(r.d);
     if (r.kind === "failed") return `No rating: ${r.message}`;
+    if (r.kind === "waiting") return "Rating waits for your Check in the editor.";
     return null;
   }
 

@@ -35,7 +35,8 @@ import type { Brush, Draft } from './model.ts';
 import { HIDDEN_MARK, dirOf, nextDir } from './palette.tsx';
 
 export interface Editor {
-  /** Shows the editor on `draft` (a fresh history), or on the draft in progress, or on a new 12 x 12 one. */
+  /** Shows the editor on `draft` (one undo step on the history, so U brings back the draft before it), or on the
+   *  draft in progress, or on a new 12 x 12 one. */
   open(draft?: Draft): void;
   close(): void;
   /** The draft as it stands, mid-stroke included. */
@@ -438,7 +439,7 @@ export function createEditor(deps: EditorDeps): Editor {
 
   return {
     open(draft) {
-      if (draft) history = startHistory(draft);
+      if (draft) history = history ? commit(history, draft) : startHistory(draft);
       isOwner = owner.get() === 'on';
       if (brush.kind === 'page' && !isOwner) brush = { kind: 'terrain', t: 'wall' };
       shown = true;

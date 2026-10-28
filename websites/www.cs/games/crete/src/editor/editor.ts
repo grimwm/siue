@@ -152,7 +152,7 @@ export function createEditor(deps: EditorDeps): Editor {
   const touches = new Map<number, { x: number; y: number }>();
   /** The author's best by share text. */
   const bests = new Map<string, number>();
-  const checker = createChecker(deps.start ?? (text => startSearch(text, 'measure')), () => { endStoppedShare(); drawPanel(); });
+  const checker = createChecker(deps.start ?? (text => startSearch(text, 'measure')), () => { endStoppedShare(); clearStoppedMessage(); drawPanel(); });
 
   const now = (): History<Draft> => (history ??= startHistory(newDraft(NEW_SIDE, NEW_SIDE)));
 
@@ -320,6 +320,14 @@ export function createEditor(deps: EditorDeps): Editor {
     sharing = false;
     shared = { text: sharingText, link: null, message: STOPPED_MESSAGE };
     sharingText = null;
+  }
+
+  /** Keep searching resumed the search, or it finished: "press Share again" no longer applies. */
+  function clearStoppedMessage(): void {
+    if (shared?.message !== STOPPED_MESSAGE) return;
+    const c = checker.state;
+    if (c.kind === 'running' && c.stopped && c.text === shared.text) return;
+    shared = null;
   }
 
   /** Makes the link for the draft as it stands: Check first when the draft is not what the last Check proved. */

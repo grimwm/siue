@@ -2,7 +2,6 @@
 // (a drag is one undo step and leaves no gaps), the size bar, the editor's keys, and Try it on the game screen and
 // back, with the author's best.
 import { test, afterEach } from 'node:test';
-import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { h, render as preactRender } from 'preact';
 import { importTsx } from '../../_kit/test/tsx.ts';
@@ -14,8 +13,6 @@ import { HAZARDS, OBJECTS, TERRAIN } from '../src/puzzle/tiles.ts';
 import type { HazardKind, Terrain } from '../src/puzzle/tiles.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
-import type { Answer, Report } from '../src/solver-host.ts';
-import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { createGame } from '../src/game.ts';
 import type { Game } from '../src/game.ts';
@@ -25,18 +22,17 @@ import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createOutside } from '../src/outside.ts';
 import { newDraft, toText } from '../src/editor/model.ts';
 import { mv } from './puzzle-grid.ts';
+import { measure } from '../src/puzzle/difficulty.ts';
+import { parse } from '../src/puzzle/level.ts';
+import { lineOf } from '../src/puzzle/cache.ts';
+import { act, startRun } from '../src/puzzle/run.ts';
+import { ANSWER, REPORT, atlas, fakeSearches, installEditorWindow, makeEditor } from './editor-fakes.ts';
+import type { MadeEditor } from './editor-fakes.ts';
 
 installDocument();
 /* The page's storage, for the owner flag, and the window the board reads its pixel ratio from. */
 const stored = new Map<string, string>();
-(globalThis as { window?: unknown }).window = {
-  devicePixelRatio: 1,
-  localStorage: { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => { stored.set(k, v); }, removeItem: (k: string) => { stored.delete(k); } },
-  addEventListener() {},
-  setTimeout: () => 0,
-  clearTimeout() {},
-};
-(globalThis as { getComputedStyle?: unknown }).getComputedStyle = () => ({ paddingLeft: '0', paddingRight: '0', paddingTop: '0', paddingBottom: '0', display: 'block' });
+installEditorWindow(stored);
 const ed = await importTsx<{
   palette: typeof import('../src/editor/palette.tsx');
   editor: typeof import('../src/editor/editor.ts');
@@ -121,34 +117,8 @@ test('the page brush only with the owner flag', () => {
 });
 
 // ---- the editor itself ----
-const atlas = JSON.parse(readFileSync(new URL('../fx/sprites/tiles.json', import.meta.url), 'utf8')) as Atlas;
-interface Fake { text: string; calls: string[]; answer(a: Answer): void; report(r: Report): void }
-interface Made { root: StubElement; canvas: StubElement; tries: { level: Level; text: string; line: unknown }[]; searches: Fake[]; changes: () => number; editor: ReturnType<typeof ed.editor.createEditor> }
-function make(): Made {
-  const root = makeEl('editor-root');
-  roots.push(root);
-  const holder = makeEl('editor-board');
-  const canvas = makeEl('editor-stage');
-  holder.appendChild(canvas);
-  root.appendChild(holder);
-  const tries: { level: Level; text: string; line: unknown }[] = [];
-  const searches: Fake[] = [];
-  let changes = 0;
-  const image = makeEl('img');
-  const editor = ed.editor.createEditor({
-    root: root as unknown as HTMLElement, atlas, image: image as unknown as HTMLImageElement,
-    tryIt: (level, text, line) => tries.push({ level, text, line }), changed: () => { changes++; },
-    start: (text) => {
-      const calls: string[] = [];
-      const cbs: ((r: Report) => void)[] = [];
-      let resolve!: (a: Answer) => void;
-      const result = new Promise<Answer>(res => { resolve = res; });
-      searches.push({ text, calls, answer: resolve, report: r => { for (const cb of cbs) cb(r); } });
-      return { progress: cb => { cbs.push(cb); }, stop: () => { calls.push('stop'); }, resume: () => { calls.push('resume'); }, cancel: () => { calls.push('cancel'); }, result };
-    },
-  });
-  return { root, canvas, tries, searches, changes: () => changes, editor };
-}
+type Made = MadeEditor;
+const make = (): Made => makeEditor(ed.editor.createEditor, stored, roots);
 /** A press of `key` handed to the editor, as the page hands it. */
 function press(e: Made, key: string, mods: Record<string, unknown> = {}): { used: boolean; prevented: boolean } {
   let prevented = false;
@@ -294,7 +264,7 @@ test('the board is drawn: the canvas is sized to the draft', () => {
   assert.equal((e.canvas as unknown as { width: number }).width, 12 * Number(e.canvas.dataset.cell));
 });
 
-// ---- review round 1 ----
+// ---- hidden walls, focus, and the hearts and size boxes ----
 test('the fake and invisible walls carry a mark on the editor board and on their swatches', () => {
   const e = make();
   e.editor.open();
@@ -389,9 +359,10 @@ const tryGame: Game = createGame({
   sfx() {}, say() {}, progress, pages: createFoundPages(null), timers: m.timers, clock: m.clock, levels: outside.levels,
   reducedMotion: () => true, changed: () => flow.render(tryGame),
 });
+const trySolver = fakeSearches();
 const tryEditor = ed.editor.createEditor({
   root: tryRoot as unknown as HTMLElement, atlas, image: makeEl('img') as unknown as HTMLImageElement,
-  tryIt: (level, text) => outside.tryLevel(level, text, null), changed() {},
+  tryIt: (level, text, line) => outside.tryLevel(level, text, line), changed() {}, start: trySolver.start,
 });
 /* How many times the page was told the editor's visit ended (it then takes #edit off the address). */
 let lefts = 0;
@@ -594,12 +565,26 @@ test('a try left for a campaign level ends the editor\'s visit; Retry does not',
   assert.equal(lefts, 1);
 });
 
+test('the line a Check proved is the try\'s thread: the first hint plays its first move', async () => {
+  editing(6, 6);
+  const text = toText(tryEditor.draft, true);
+  key('c');
+  const search = trySolver.searches.at(-1)!;
+  assert.equal(search.text, text);
+  const answer = measure(parse(text));
+  search.answer(answer);
+  await settle();
+  key('p');
+  const line = lineOf(answer.line)!;
+  assert.ok(line.length > 0);
+  assert.deepEqual(outside.levels.line!(outside.at), line);
+  key('Enter');
+  key('h');
+  assert.equal(tryGame.run!.now.moves, 1);
+  assert.deepEqual(tryGame.run!.now, act(startRun(tryGame.run!.now.level), line[0]!).run.now);
+});
+
 /* ---------- Check ---------- */
-const REPORT: Report = { expanded: 10, stored: 1234, bestF: 40, startH: 30, storage: 'disk' };
-const ANSWER: Difficulty = {
-  solved: true, shortest: 54, explored: 24086, withoutMinotaur: 32, minotaurDelta: 22, greedyWins: false, catchFree: 54,
-  catches: 0, label: 'chase', naiveWins: false, line: 'rrdd',
-};
 const settle = () => new Promise<void>(r => setImmediate(r));
 const said = (e: Made, id: string) => byId(e.root, id).textContent;
 
@@ -699,4 +684,42 @@ test('the check strip in the bar, outside the drawer, shows the run, the answer 
   assert.ok(strip().className.includes('stale'));
   const ids = walk(e.root).map(n => n.id).filter(Boolean);
   assert.equal(new Set(ids).size, ids.length, 'no id twice');
+});
+
+test('a search goes on while the editor is left, and the answer is there on return', async () => {
+  const e = make();
+  e.editor.open();
+  press(e, 'c');
+  e.editor.close();
+  e.searches[0]!.answer(ANSWER);
+  await settle();
+  e.editor.open();
+  assert.match(said(e, 'check-result'), /^Winnable: quickest win 54 moves/);
+  assert.deepEqual(e.searches[0]!.calls, [], 'the search was never cancelled');
+});
+
+test('a line between two cells that are neither in a row nor in a column leaves no gaps', () => {
+  const to = { r: 3, c: 5 };
+  const cells = ed.editor.lineCells({ r: 0, c: 0 }, to);
+  assert.equal(cells.length, 5);
+  assert.deepEqual(cells.at(-1), to);
+  let prev = { r: 0, c: 0 };
+  for (const x of cells) {
+    assert.ok(Math.max(Math.abs(x.r - prev.r), Math.abs(x.c - prev.c)) === 1, `(${x.r},${x.c}) touches (${prev.r},${prev.c})`);
+    prev = x;
+  }
+});
+
+test('a diagonal drag paints a connected run of cells', () => {
+  const e = make();
+  e.editor.open();
+  click(byId(e.root, 'brush-wall'));
+  fire(e.canvas, 'pointerdown', at(e, 2, 2));
+  fire(e.canvas, 'pointermove', at(e, 5, 7));
+  fire(e.canvas, 'pointerup', at(e, 5, 7));
+  const inside = (x: { r: number; c: number }) => x.r >= 2 && x.r <= 5 && x.c >= 2 && x.c <= 7;
+  const walls = e.editor.draft.cells.flatMap((c, i) => (c === '#' ? [{ r: Math.floor(i / 12), c: i % 12 }] : [])).filter(inside);
+  assert.equal(walls.length, 6, 'the start cell and the five the line crosses');
+  walls.sort((a, b) => a.c - b.c);
+  for (let i = 1; i < walls.length; i++) assert.ok(Math.abs(walls[i]!.c - walls[i - 1]!.c) <= 1 && Math.abs(walls[i]!.r - walls[i - 1]!.r) <= 1);
 });

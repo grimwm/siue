@@ -73,12 +73,44 @@ async function copyText(text: string, field: HTMLInputElement | HTMLTextAreaElem
   }
 }
 
-export function SharePanel(p: ShareProps) {
-  const link = useRef<HTMLInputElement>(null);
-  const entry = useRef<HTMLTextAreaElement>(null);
+/** The made link: its name, the field, Copy and what Copy said. Keyed by the link, so a new link starts uncopied. */
+function LinkBlock(p: { link: { url: string; name: string } }) {
+  const field = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState('');
+  return (
+    <div class="share-result">
+      <p id="share-name">{p.link.name}</p>
+      <input id="share-link" ref={field} type="text" readOnly value={p.link.url} aria-label="Link"
+        onFocus={ev => ev.currentTarget.select()} />
+      <Button id="share-copy" onClick={() => { void copyText(p.link.url, field.current).then(setCopied); }}>Copy</Button>
+      {copied !== '' && <p id="share-copied" aria-live="polite">{copied}</p>}
+    </div>
+  );
+}
+
+/** The owner's Copy for trials.ts and the entry it made. Keyed by the draft's text, so an edit clears the entry. */
+function EntryBlock(p: { draft: Draft }) {
+  const entry = useRef<HTMLTextAreaElement>(null);
   const [entryText, setEntryText] = useState<string | null>(null);
   const [entryCopied, setEntryCopied] = useState('');
+  return (
+    <>
+      <Button id="owner-export" onClick={() => {
+        const text = trialsEntry(p.draft);
+        setEntryText(text);
+        void copyText(text, entry.current).then(setEntryCopied);
+      }}>Copy for trials.ts</Button>
+      {entryText !== null && (
+        <>
+          <textarea id="owner-entry" ref={entry} readOnly value={entryText} aria-label="Level entry" onFocus={ev => ev.currentTarget.select()} />
+          {entryCopied !== '' && <p id="owner-copied" aria-live="polite">{entryCopied}</p>}
+        </>
+      )}
+    </>
+  );
+}
+
+export function SharePanel(p: ShareProps) {
   return (
     <section id="share-panel" class="share-panel" aria-label="Share">
       <h3>Share</h3>
@@ -90,31 +122,13 @@ export function SharePanel(p: ShareProps) {
         }} /></label>
       <Button id="share-run" disabled={p.busy} onClick={p.onShare}>Share</Button>
       {p.message !== '' && <p id="share-message" class="share-message" aria-live="polite">{p.message}</p>}
-      {p.link && (
-        <div class="share-result">
-          <p id="share-name">{p.link.name}</p>
-          <input id="share-link" ref={link} type="text" readOnly value={p.link.url} aria-label="Link"
-            onFocus={ev => ev.currentTarget.select()} />
-          <Button id="share-copy" onClick={() => { void copyText(p.link!.url, link.current).then(setCopied); }}>Copy</Button>
-          {copied !== '' && <p id="share-copied" aria-live="polite">{copied}</p>}
-        </div>
-      )}
+      {p.link && <LinkBlock key={p.link.url} link={p.link} />}
       {p.owner && (
         <div id="owner-fields" class="owner-fields">
           <label>Id <input id="owner-id" type="text" key={`i${p.draft.id}`} defaultValue={p.draft.id} onChange={ev => p.onId(ev.currentTarget.value)} /></label>
           <label>Title <input id="owner-title" type="text" key={`t${p.draft.title}`} defaultValue={p.draft.title} onChange={ev => p.onTitle(ev.currentTarget.value)} /></label>
           <label>Intro <textarea id="owner-intro" key={`n${p.draft.intro}`} defaultValue={p.draft.intro} onChange={ev => p.onIntro(ev.currentTarget.value)} /></label>
-          <Button id="owner-export" onClick={() => {
-            const text = trialsEntry(p.draft);
-            setEntryText(text);
-            void copyText(text, entry.current).then(setEntryCopied);
-          }}>Copy for trials.ts</Button>
-          {entryText !== null && (
-            <>
-              <textarea id="owner-entry" ref={entry} readOnly value={entryText} aria-label="Level entry" onFocus={ev => ev.currentTarget.select()} />
-              {entryCopied !== '' && <p id="owner-copied" aria-live="polite">{entryCopied}</p>}
-            </>
-          )}
+          <EntryBlock key={toText(p.draft, false)} draft={p.draft} />
         </div>
       )}
     </section>

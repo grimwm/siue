@@ -47,7 +47,7 @@ export function CheckStrip(p: CheckPanelProps) {
         </>
       )}
       {summary !== '' && <span id="check-strip-text" class="check-strip-text">{summary}</span>}
-      {p.onShare && <Button id="check-strip-share" disabled={s.kind === 'running'} onClick={p.onShare}>Share</Button>}
+      {p.onShare && <Button id="check-strip-share" disabled={s.kind === 'running' && !s.stopped} onClick={p.onShare}>Share</Button>}
     </div>
   );
 }

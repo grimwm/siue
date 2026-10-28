@@ -4,44 +4,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createChecker, checkLines, checkSummary } from '../src/editor/check.ts';
 import type { CheckState } from '../src/editor/check.ts';
-import type { SolverJob } from '../src/solver-client.ts';
-import type { Answer, Report } from '../src/solver-host.ts';
 import { hardPieces, measure, sharedProblems } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
 import { TRIALS } from '../src/puzzle/trials.ts';
+import { ANSWER, REPORT, fakeSearches } from './editor-fakes.ts';
 
-interface Fake { job: SolverJob; text: string; calls: string[]; answer(a: Answer): void; fail(m: string): void; report(r: Report): void }
-function fakes(): { start: (text: string) => SolverJob; jobs: Fake[]; changes: () => number; onChange: () => void } {
-  const jobs: Fake[] = [];
+function fakes() {
+  const f = fakeSearches();
   let changes = 0;
-  return {
-    jobs,
-    changes: () => changes,
-    onChange: () => { changes++; },
-    start(text) {
-      const calls: string[] = [];
-      const cbs: ((r: Report) => void)[] = [];
-      let resolve!: (a: Answer) => void, reject!: (e: Error) => void;
-      const result = new Promise<Answer>((res, rej) => { resolve = res; reject = rej; });
-      result.catch(() => {});
-      const job: SolverJob = {
-        progress: cb => { cbs.push(cb); },
-        stop: () => { calls.push('stop'); },
-        resume: () => { calls.push('resume'); },
-        cancel: () => { calls.push('cancel'); reject(new Error('the search was cancelled')); },
-        result,
-      };
-      jobs.push({ job, text, calls, answer: resolve, fail: m => reject(new Error(m)), report: r => { for (const cb of cbs) cb(r); } });
-      return job;
-    },
-  };
+  return { start: f.start, jobs: f.searches, changes: () => changes, onChange: () => { changes++; } };
 }
-const REPORT: Report = { expanded: 10, stored: 1234, bestF: 40, startH: 30, storage: 'disk' };
-const DIFF: Difficulty = {
-  solved: true, shortest: 54, explored: 24086, withoutMinotaur: 32, minotaurDelta: 22, greedyWins: false, catchFree: 54,
-  catches: 0, label: 'chase', naiveWins: false, line: 'rrdd',
-};
+const DIFF = ANSWER;
 const tick = () => new Promise<void>(r => setImmediate(r));
 
 test('a check runs the search, shows its progress, and keeps the answer', async () => {

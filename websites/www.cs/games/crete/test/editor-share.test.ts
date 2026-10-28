@@ -2,14 +2,11 @@
 // Share running Check first when the level changed, the initials remembered, the Copy fallback, and the owner's fields
 // only with the flag on.
 import { test, afterEach } from 'node:test';
-import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { render as preactRender } from 'preact';
 import { importTsx } from '../../_kit/test/tsx.ts';
-import { byId, click, fire, installDocument, makeEl, maybeById, renderTarget } from '../../_kit/test/dom-stub.ts';
+import { byId, click, fire, installDocument, maybeById, renderTarget } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
-import type { Atlas } from '../src/board-plan.ts';
-import type { Answer, Report } from '../src/solver-host.ts';
 import { measure } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
@@ -19,22 +16,16 @@ import { MAX_LINE, decodeLink } from '../src/share/link.ts';
 import { openLink } from '../src/share/open.ts';
 import { fromLevel, newDraft, toText } from '../src/editor/model.ts';
 import type { Draft } from '../src/editor/model.ts';
+import { atlas, installEditorWindow, makeEditor } from './editor-fakes.ts';
+import type { MadeEditor } from './editor-fakes.ts';
 
 installDocument();
 const stored = new Map<string, string>();
-(globalThis as { window?: unknown }).window = {
-  devicePixelRatio: 1,
-  localStorage: { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => { stored.set(k, v); }, removeItem: (k: string) => { stored.delete(k); } },
-  addEventListener() {},
-  setTimeout: () => 0,
-  clearTimeout() {},
-};
-(globalThis as { getComputedStyle?: unknown }).getComputedStyle = () => ({ paddingLeft: '0', paddingRight: '0', paddingTop: '0', paddingBottom: '0', display: 'block' });
+installEditorWindow(stored);
 const ed = await importTsx<{
   panel: typeof import('../src/editor/share-panel.tsx');
   editor: typeof import('../src/editor/editor.ts');
 }>(import.meta.dirname, { panel: '../src/editor/share-panel.tsx', editor: '../src/editor/editor.ts' });
-const atlas = JSON.parse(readFileSync(new URL('../fx/sprites/tiles.json', import.meta.url), 'utf8')) as Atlas;
 
 const roots: StubElement[] = [];
 afterEach(() => {
@@ -43,10 +34,11 @@ afterEach(() => {
   delete (globalThis.navigator as { clipboard?: unknown }).clipboard;
 });
 const settle = () => new Promise<void>(r => setImmediate(r));
-/** Waits for `done` (the link is made on the platform's own compression streams, which take real time under load). */
+/** Waits for `done`, and fails when it never comes (the link is made on the platform's own compression streams, which take real time under load). */
 const later = async (done: () => boolean) => {
   const end = Date.now() + 10_000;
   for (let i = 0; i < 20 || (!done() && Date.now() < end); i++) await (i < 20 ? settle() : new Promise<void>(r => setTimeout(r, 5)));
+  if (!done()) throw new Error('timed out waiting');
 };
 
 /** Trial 9 as a draft with no title, intro or pages: the level a share link carries. */
@@ -136,28 +128,19 @@ test('trialsEntry escapes backslashes, backticks and ${', () => {
 });
 
 /* ---------- the editor's wiring ---------- */
-interface Fake { text: string; calls: string[]; answer(a: Answer): void; report(r: Report): void }
-function make(opts: { owner?: boolean; pageUrl?: string } = {}) {
-  if (opts.owner) stored.set('crete-owner', 'on');
-  const root = makeEl('editor-root');
-  roots.push(root);
-  const holder = makeEl('editor-board');
-  const canvas = makeEl('editor-stage');
-  holder.appendChild(canvas);
-  root.appendChild(holder);
-  const searches: Fake[] = [];
-  const editor = ed.editor.createEditor({
-    root: root as unknown as HTMLElement, atlas, image: makeEl('img') as unknown as HTMLImageElement,
-    tryIt: () => {}, changed: () => {}, pageUrl: () => opts.pageUrl ?? BASE,
-    start: (text) => {
-      const calls: string[] = [];
-      let resolve!: (a: Answer) => void;
-      const result = new Promise<Answer>(res => { resolve = res; });
-      searches.push({ text, calls, answer: resolve, report: () => {} });
-      return { progress: () => {}, stop: () => {}, resume: () => {}, cancel: () => { calls.push('cancel'); }, result };
-    },
-  });
-  return { root, canvas, searches, editor };
+const make = (opts: { owner?: boolean; pageUrl?: string } = {}) =>
+  makeEditor(ed.editor.createEditor, stored, roots, { ...opts, pageUrl: opts.pageUrl ?? BASE });
+/** Paints a wall on the first open floor cell of the draft, as a click does: the level text changes. */
+function paintWall(e: MadeEditor): void {
+  click(byId(e.root, 'brush-wall'));
+  const d = e.editor.draft;
+  const spot = d.cells.findIndex(c => c === '.');
+  assert.ok(spot >= 0);
+  const rise = (10 * atlas.rise) / atlas.cell;
+  e.canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: d.cols * 10, height: d.rows * 10 + rise }) as never;
+  const at = { clientX: (spot % d.cols) * 10 + 5, clientY: rise + Math.floor(spot / d.cols) * 10 + 5, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
+  fire(e.canvas, 'pointerdown', at);
+  fire(e.canvas, 'pointerup', at);
 }
 const typeInitials = (root: StubElement, v: string) => {
   const box = byId(root, 'share-initials');
@@ -188,15 +171,7 @@ test('share runs Check first when the level changed, then shows the link, name a
   await later(() => maybeById(e.root, 'share-link') !== undefined && !byId(e.root, 'share-run').disabled);
   assert.equal(e.searches.length, 1);
   // The link goes with the level: an edit takes it away.
-  click(byId(e.root, 'brush-wall'));
-  const d = e.editor.draft;
-  const spot = d.cells.findIndex(c => c === '.');
-  assert.ok(spot >= 0);
-  const rise = (10 * atlas.rise) / atlas.cell;
-  e.canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: d.cols * 10, height: d.rows * 10 + rise }) as never;
-  const at = { clientX: (spot % d.cols) * 10 + 5, clientY: rise + Math.floor(spot / d.cols) * 10 + 5, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
-  fire(e.canvas, 'pointerdown', at);
-  fire(e.canvas, 'pointerup', at);
+  paintWall(e);
   assert.notEqual(toText(e.editor.draft, true), TEXT, 'the edit changed the level');
   assert.equal(maybeById(e.root, 'share-link'), undefined);
 });
@@ -314,4 +289,75 @@ test('the owner edits id, title and intro as undoable edits and copies the entry
   assert.equal(maybeById(e.root, 'owner-id')?.id, 'owner-id');
   const ids = [...e.root.querySelectorAll('[id]')].map(n => n.id);
   assert.equal(new Set(ids).size, ids.length, 'no id twice');
+});
+
+const STOPPED = 'The search stopped before it finished; press Share again to keep going.';
+
+test('after Stop the strip\'s Share is enabled, and pressing it carries the same search on', () => {
+  const e = make();
+  e.editor.open(DRAFT);
+  typeInitials(e.root, 'WGR');
+  click(byId(e.root, 'check-strip-share'));
+  assert.equal(byId(e.root, 'check-strip-share').disabled, true);
+  click(byId(e.root, 'check-strip-stop'));
+  assert.equal(byId(e.root, 'check-strip-share').disabled, false);
+  click(byId(e.root, 'check-strip-share'));
+  assert.equal(e.searches.length, 1, 'the paused search is carried on');
+  assert.deepEqual(e.searches[0]!.calls, ['stop', 'resume']);
+});
+
+test('Keep searching takes "press Share again" away, and it stays away when the answer comes', async () => {
+  const e = make();
+  e.editor.open(DRAFT);
+  typeInitials(e.root, 'WGR');
+  click(byId(e.root, 'share-run'));
+  click(byId(e.root, 'check-stop'));
+  assert.equal(byId(e.root, 'share-message').textContent, STOPPED);
+  click(byId(e.root, 'check-keep'));
+  assert.equal(maybeById(e.root, 'share-message'), undefined);
+  e.searches[0]!.answer(D);
+  await later(() => maybeById(e.root, 'check-result') !== undefined);
+  assert.equal(maybeById(e.root, 'share-message'), undefined);
+});
+
+test('an edit during a Share waiting on its Check frees Share, with no link', async () => {
+  const e = make();
+  e.editor.open(DRAFT);
+  typeInitials(e.root, 'WGR');
+  click(byId(e.root, 'share-run'));
+  assert.equal(byId(e.root, 'share-run').disabled, true);
+  paintWall(e);
+  assert.deepEqual(e.searches[0]!.calls, ['cancel']);
+  await later(() => !byId(e.root, 'share-run').disabled);
+  assert.equal(maybeById(e.root, 'share-link'), undefined);
+  assert.equal(maybeById(e.root, 'share-message'), undefined);
+});
+
+test('"Copied." belongs to the link it was for: after an edit and a new Share it is gone', async () => {
+  const e = make();
+  e.editor.open(DRAFT);
+  typeInitials(e.root, 'WGR');
+  Object.defineProperty(globalThis.navigator, 'clipboard', { configurable: true, value: { writeText: async () => {} } });
+  click(byId(e.root, 'share-run'));
+  e.searches[0]!.answer(D);
+  await later(() => maybeById(e.root, 'share-link') !== undefined);
+  click(byId(e.root, 'share-copy'));
+  await later(() => maybeById(e.root, 'share-copied') !== undefined);
+  const first = byId(e.root, 'share-link').value;
+  paintWall(e);
+  click(byId(e.root, 'share-run'));
+  e.searches[1]!.answer(measure(parse(toText(e.editor.draft, true))));
+  await later(() => maybeById(e.root, 'share-link') !== undefined);
+  assert.notEqual(byId(e.root, 'share-link').value, first);
+  assert.equal(maybeById(e.root, 'share-copied'), undefined);
+});
+
+test('the owner\'s entry is gone after an edit', async () => {
+  const e = make({ owner: true });
+  e.editor.open(DRAFT);
+  Object.defineProperty(globalThis.navigator, 'clipboard', { configurable: true, value: { writeText: async () => {} } });
+  click(byId(e.root, 'owner-export'));
+  await later(() => maybeById(e.root, 'owner-entry') !== undefined);
+  paintWall(e);
+  assert.equal(maybeById(e.root, 'owner-entry'), undefined);
 });

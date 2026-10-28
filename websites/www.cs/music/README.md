@@ -90,7 +90,11 @@ music-setup)."
   curve; the server cannot tell them apart, since the body is sealed. The front
   page lists them with Delete and Discard (no Delete all there, which would also
   delete every piece's notes) and still shows each piece's count of waiting
-  notes, which comes from every note. No piece can be published as `general`.
+  notes, which comes from every note. No piece can be published as `general`:
+  the server refuses the id (`bad_piece`) as the tool does. Words typed in the box stay
+  until the note is stored, across a lost sign-in too (the unlock form says the note is
+  kept), and leaving the page asks first while they are there. A note the page could not
+  open is listed as such, since its piece is not known.
 - **The outbox** is IndexedDB `siue-music`, store `outbox`, and holds sealed
   bundles only. It is sent on load and when the browser is back online, one tab at
   a time under the Web Locks lock `workroom-outbox`; Discard drops one. A browser

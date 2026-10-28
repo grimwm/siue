@@ -99,7 +99,7 @@ export function Kept(p: { kept: readonly Pending[]; busy: boolean; onDiscard(key
   );
 }
 
-const deleteAllQuestion = (n: number): string => (n === 1 ? 'Delete the one note? This cannot be undone.' : `Delete all ${n} notes, on every piece? This cannot be undone.`);
+const deleteAllQuestion = (n: number): string => (n === 1 ? 'Delete the one note? This cannot be undone.' : `Delete all ${n} notes, on every piece and the general notes? This cannot be undone.`);
 const deleteAllLabel = (n: number): string => (n === 1 ? 'Delete the one note' : `Delete all ${n} notes`);
 
 export function History(p: HistoryProps) {
@@ -126,7 +126,7 @@ export function History(p: HistoryProps) {
                 </div>
                 {i.opened
                   ? <Summary body={i.opened.body} audio={i.opened.audio} version={p.version} lane={i.opened.body.lane ? p.laneName(i.opened.body.lane) : null} />
-                  : <p class="text-sm text-dim">{i.problem ?? 'Opening…'}</p>}
+                  : <p class="text-sm text-dim">{p.general && i.problem ? `A note that could not be opened, so it may belong to any piece. ${i.problem}` : i.problem ?? 'Opening…'}</p>}
                 {answered ? <p class="text-sm text-amber">{answered}</p> : null}
                 {deleting === i.id ? (
                   <div role="group" aria-label={`Delete note from ${arrivedAt(i.arrived)}`} class="grid gap-2 rounded-md border border-amber p-3">

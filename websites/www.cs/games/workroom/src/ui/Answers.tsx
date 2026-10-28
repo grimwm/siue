@@ -26,6 +26,8 @@ export interface AnswersProps {
   /** The notes are locked again (a sign-in that ended, or a lock that overtook a load). */
   onLocked?(): void;
   onItems(items: readonly HistoryItem[]): void;
+  /** The front page's unsent general note, kept by the page so it survives a lock and the leave guard can see it. */
+  draft?: { text: string; onText(update: (text: string) => string): void };
 }
 
 /** What unlocking gives on the front page. */
@@ -108,6 +110,7 @@ export function Answers(p: AnswersProps) {
           {p.ask ? <p data-unlock-reason="" class="text-sm">{p.ask}</p> : null}
           <UnlockPanel busy={busy} error={error} intro={score ? undefined : FRONT_PAGE_INTRO} onUnlock={pass => void unlock(pass)} />
           {alertOf(problem)}
+          {!score && p.draft?.text.trim() ? <p data-general-kept="" class="text-sm">Your note is kept here; unlock to send it.</p> : null}
           {keptList}
         </>
       ) : (
@@ -115,7 +118,7 @@ export function Answers(p: AnswersProps) {
           {score ? null : <p class="text-sm text-dim">Each piece shows how many of your notes wait for pickup.</p>}
           {alertOf(problem)}
           {alertOf(error)}
-          {score ? null : <GeneralComposer notes={p.notes} busy={busy} onStored={() => void load()} />}
+          {score || !p.draft ? null : <GeneralComposer notes={p.notes} busy={busy} text={p.draft.text} onText={p.draft.onText} onStored={() => void load()} />}
           <History items={score === null ? forPiece(items, GENERAL_PIECE) : scope === 'piece' ? forPiece(items, piece) : items} total={items.length} scope={scope} onScope={setScope} version={p.version}
             general={score === null}
             laneName={id => score?.lanes.find(l => l.id === id)?.name ?? null}

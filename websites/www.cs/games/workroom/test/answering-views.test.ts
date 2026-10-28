@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { h, render } from 'preact';
+import { useState } from 'preact/hooks';
 import { act } from 'preact/test-utils';
 import { fire, installDocument, makeEl, document as stubDocument, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
@@ -23,7 +24,8 @@ installDocument();
 // Every key listener the panel puts on the window or the document, so the Escape test can press Escape at each.
 const keyListeners: unknown[] = [];
 const onlineListeners: (() => void)[] = [];
-const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); if (type === 'online') onlineListeners.push(f as () => void); };
+const leaveListeners: ((e: { preventDefault(): void; returnValue: unknown }) => void)[] = [];
+const listen = (type: string, f: unknown): void => { if (type.startsWith('key')) keyListeners.push(f); if (type === 'online') onlineListeners.push(f as () => void); if (type === 'beforeunload') leaveListeners.push(f as (typeof leaveListeners)[number]); };
 Object.assign(globalThis, { window: { addEventListener: listen, removeEventListener() {} } });
 const addToDocument = stubDocument.addEventListener;
 stubDocument.addEventListener = (type, f) => { listen(type, f); addToDocument(type, f); };
@@ -115,7 +117,7 @@ test('Delete all asks first, names the count on its button, and says it is every
   const root = await mount(h(ui.history.History, historyProps({ items: [item('a'), item('b')], total: 12, onDeleteAll: () => all++ })));
   await act(() => { fire(button(root, 'Delete all')!, 'click'); });
   assert.equal(all, 0);
-  assert.match(root.textContent, /Delete all 12 notes, on every piece\? This cannot be undone\./);
+  assert.match(root.textContent, /Delete all 12 notes, on every piece and the general notes\? This cannot be undone\./);
   await act(() => { fire(button(root, 'Keep them')!, 'click'); });
   assert.doesNotMatch(root.textContent, /cannot be undone/);
   await act(() => { fire(button(root, 'Delete all')!, 'click'); });
@@ -433,7 +435,11 @@ test('notes panel, unlocked: a failed Delete, Delete all, Discard or Try again s
 });
 
 const general = (c: string, text: string, extra: Partial<HistoryItem> = {}): HistoryItem => item(c, extra, { piece: 'general', draft: 1, from: 0, to: 0, fromBar: null, toBar: null, lane: null, text });
-const generalPanel = (notes: NotesSession, extra: Record<string, unknown> = {}) => h(ui.answers.Answers, { notes, score: null, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: () => {}, ...extra });
+function Harness(p: Record<string, unknown>) {
+  const [text, setText] = useState('');
+  return h(ui.answers.Answers, { ...p, draft: { text, onText: setText } } as never);
+}
+const generalPanel = (notes: NotesSession, extra: Record<string, unknown> = {}) => h(Harness, { notes, score: null, version: 1, refresh: 0, ask: null, onUnlocked: () => {}, onItems: () => {}, ...extra });
 
 test('general notes: the unlock form says what unlocking gives on the front page', async () => {
   const root = await mount(generalPanel(fakeSession()));
@@ -518,4 +524,65 @@ test('the front page is the general notes panel: it unlocks, fills the per-piece
   await unlockWith(root, 'right');
   assert.match(root.textContent, /Each piece shows how many of your notes wait for pickup\./);
   assert.ok(walk(root).some(e => e.localName === 'textarea'), 'and the general box is there');
+});
+
+const leaveAsks = (): boolean => {
+  let asked = false;
+  for (const f of leaveListeners.slice(-1)) f({ preventDefault() { asked = true; }, returnValue: undefined });
+  return asked;
+};
+const typeGeneral = async (root: StubElement, text: string): Promise<void> => {
+  const box = walk(root).find(e => e.localName === 'textarea')!;
+  box.value = text;
+  await act(() => { fire(box, 'input'); });
+};
+
+test('front page: leaving with words in the general box asks first; once the note is stored it does not', async () => {
+  const notes = fakeSession({ send: async () => ({ key: 'k', memoryOnly: false, sent: [{ key: 'k', id: 'a'.repeat(32) }], kept: [] }) });
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  await settle();
+  await unlockWith(root, 'right');
+  assert.equal(leaveAsks(), false, 'nothing typed, nothing to lose');
+  await typeGeneral(root, 'a thought about the finale');
+  assert.equal(leaveAsks(), true);
+  await act(() => { fire(button(root, 'Send note')!, 'click'); });
+  await settle();
+  assert.equal(leaveAsks(), false, 'stored, so nothing to lose');
+});
+
+test('front page: a lost sign-in keeps the typed words, tells so, and shows them again after the unlock; the guard still asks meanwhile', async () => {
+  const { SignedOut } = ui.api;
+  let open = false;
+  let failing = false;
+  const notes = fakeSession({
+    unlocked: () => open, unlock: async p => { if (p !== 'right') return 'no'; open = true; return null; }, lock: () => { open = false; },
+    history: async () => { if (failing) throw new SignedOut(); return []; },
+  });
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  await settle();
+  await unlockWith(root, 'right');
+  await typeGeneral(root, 'do not lose this');
+  failing = true;
+  await act(() => { onlineListeners.at(-1)!(); });
+  await settle();
+  assert.ok(byAttr(root, 'autocomplete', 'current-password'), 'locked again');
+  assert.equal(walk(root).some(e => e.localName === 'textarea'), false);
+  assert.match(root.textContent, /Your note is kept here/);
+  assert.equal(leaveAsks(), true, 'the words are still unsent');
+  failing = false;
+  await unlockWith(root, 'right');
+  assert.equal(walk(root).find(e => e.localName === 'textarea')!.value, 'do not lose this');
+});
+
+test('general notes: a note that could not be opened is labelled as such, not shown as general', async () => {
+  const stuck = item('d', { opened: null, problem: 'Could not download this note: the server answered with an error (500).' });
+  const root = await mount(generalPanel(fakeSession({ unlocked: () => true, history: async () => [general('a', 'fine'), stuck] })));
+  await settle();
+  const rows = walk(root).filter(e => e._attrs['data-note'] !== undefined);
+  assert.equal(rows.length, 2);
+  const row = rows.find(r => /could not be opened/i.test(r.textContent))!;
+  assert.ok(row, 'labelled');
+  assert.match(row.textContent, /may belong to any piece/);
+  assert.doesNotMatch(row.textContent, /General/);
+  assert.doesNotMatch(rows.find(r => r !== row)!.textContent, /could not be opened/);
 });

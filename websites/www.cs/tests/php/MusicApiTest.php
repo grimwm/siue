@@ -182,6 +182,16 @@ final class MusicApiTest extends TestCase
         }
     }
 
+    public function testTheGeneralNotesPieceIdCannotBePublished(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $res = $this->publish($k, $this->draftFiles(), 'general', 1);
+        self::assertSame([422, 'bad_piece'], [$res->status, $this->body($res)['error']]);
+        self::assertSame([], $this->store->drafts());
+        self::assertFalse(Music\Store::validPieceId('general'));
+        self::assertTrue(Music\Store::validPieceId('generally'));
+    }
+
     public function testPublishDraftValidatesFiles(): void
     {
         $k = $this->keys->create('publish', ['drafts:publish']);

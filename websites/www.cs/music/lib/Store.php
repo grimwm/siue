@@ -362,9 +362,12 @@ final class Store
         return is_array($list) ? array_values(array_filter($list, 'is_string')) : [];
     }
 
+    /** The piece id of the workroom's general notes (games/workroom/src/note.ts GENERAL_PIECE): no piece can have it. */
+    public const GENERAL_PIECE = 'general';
+
     public static function validPieceId(mixed $id): bool
     {
-        return is_string($id) && preg_match(self::PIECE, $id) === 1;
+        return is_string($id) && $id !== self::GENERAL_PIECE && preg_match(self::PIECE, $id) === 1;
     }
 
     /** A note id: 32 lowercase hex digits. */

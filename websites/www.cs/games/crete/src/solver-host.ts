@@ -1,11 +1,11 @@
 /* The Island of Crete: the solver's worker side, as a message handler. It takes a level's text and a search kind
- * (solve: the shortest line; measure: difficulty.ts's numbers), answers from the result cache when it can (an
- * entry of this solver's version; a cached line only when it still wins), and
- * otherwise searches in batches, reporting progress between them. Past a memory budget the search's nodes go to a
- * node file on disk (the origin private file system, in the worker); without one they stay in memory and the
- * progress says so. Stop pauses between batches and resume goes on with the same search; a new search cancels the
- * one under way or stopped, and every search closes its node file when it ends. solver-worker.ts wires it to the
- * Worker; the tests run it in-process. DOM-free. */
+ * (solve: the shortest line; measure: difficulty.ts's numbers), answers from the result cache when it can (an entry
+ * of this solver's version; a cached line only when it still wins), and otherwise searches in batches, reporting
+ * progress between them. Past a memory budget the search's nodes go to a node file on disk (the origin private file
+ * system, in the worker); without one they stay in memory and the progress says so. Stop pauses between batches
+ * and resume goes on with the same search; a new search cancels the one under way or stopped, as does a cancel,
+ * and every search closes its node file when it ends. solver-worker.ts wires it to the Worker; the tests run it
+ * in-process. DOM-free. */
 import { parse } from './puzzle/level.ts';
 import type { Level } from './puzzle/level.ts';
 import { initial } from './puzzle/state.ts';
@@ -31,7 +31,8 @@ export type Answer = SolveResult | Difficulty;
 export type ToHost =
   | { type: 'start'; id: number; text: string; kind: SearchKind }
   | { type: 'stop'; id: number }
-  | { type: 'resume'; id: number };
+  | { type: 'resume'; id: number }
+  | { type: 'cancel'; id: number };
 export type FromHost =
   | { type: 'progress'; id: number; report: Report }
   | { type: 'result'; id: number; result: Answer }
@@ -80,7 +81,7 @@ export function searchLimits(words: number, storage: Storage): { cap: number; me
   return { cap, memoryNodes: Math.min(MEMORY_NODES, cap), bytes: n => fixed + n * perNode };
 }
 
-/** A search a newer one replaced. */
+/** A search a newer one replaced, or a cancel ended. */
 class Cancelled extends Error {}
 
 interface Job { id: number; stopped: boolean; cancelled: boolean; wake: (() => void) | null }
@@ -100,7 +101,7 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
     try {
       deps.post({ type: 'result', id: job.id, result: await search(job, text, kind) });
     } catch (e) {
-      const message = e instanceof Cancelled ? 'the search was cancelled: a newer search replaced it'
+      const message = e instanceof Cancelled ? 'the search was cancelled'
         : e instanceof Error ? e.message : String(e);
       deps.post({ type: 'failed', id: job.id, message });
     } finally {
@@ -148,7 +149,10 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
         if (job.cancelled) throw new Cancelled();
       }
       const keep = toCache(answer);
-      if (keep && key !== null) await results.put(key, keep);
+      if (keep && key !== null) {
+        await results.put(key, keep);
+        void results.trim?.();
+      }
       return answer;
     } finally {
       try { disk?.close(); } catch { /* the file is gone either way */ }
@@ -163,6 +167,7 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
         current = job;
         void run(job, m.text, m.kind);
       } else if (current && current.id === m.id) {
+        if (m.type === 'cancel') { current.cancelled = true; wake(current); return; }
         current.stopped = m.type === 'stop';
         if (!current.stopped) wake(current);
       }
@@ -187,7 +192,13 @@ function toCache(a: Answer): CachedResult | null {
 function fromCache(c: CachedResult, kind: SearchKind, level: Level): Answer | null {
   if (kind === 'measure') {
     const d = c.difficulty;
-    return typeof d === 'object' && d !== null && 'shortest' in d && 'label' in d ? (d as Difficulty) : null;
+    if (!(typeof d === 'object' && d !== null && 'shortest' in d && 'label' in d && typeof (d as Difficulty).line === 'string')) return null;
+    const m = d as Difficulty;
+    if (m.solved) {
+      const line = lineOf(m.line);
+      if (!line || !wins(level, line)) return null;
+    }
+    return m;
   }
   if (!c.solved) return { solved: false, explored: c.explored, capped: false };
   const line = lineOf(c.line);

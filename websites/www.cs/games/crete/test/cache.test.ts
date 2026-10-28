@@ -2,7 +2,7 @@
 // store that fails, which reads as empty and never throws.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { memoryResults, safeResults, resultKey, lineText, lineOf, isCachedResult } from '../src/puzzle/cache.ts';
+import { memoryResults, safeResults, resultKey, lineText, lineOf, isCachedResult, evictions, RESULT_LIMIT } from '../src/puzzle/cache.ts';
 import type { ResultStore, CachedResult } from '../src/puzzle/cache.ts';
 import type { Action } from '../src/puzzle/step.ts';
 
@@ -63,4 +63,47 @@ test('a store that throws or rejects reads as a miss and never throws', async ()
     assert.equal(await store.get('solve-x'), null);
     await store.put('solve-x', hit);
   }
+});
+
+const SHA = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+test('evictions removes other versions first', () => {
+  const entries = [
+    { key: `solve-aaaa-${SHA}`, modified: 5 },
+    { key: `solve-bbbb-${SHA}`, modified: 9 },
+  ];
+  assert.deepEqual(evictions(entries, 'aaaa'), [`solve-bbbb-${SHA}`]);
+});
+
+test('evictions keeps the newest RESULT_LIMIT', () => {
+  assert.equal(RESULT_LIMIT, 256);
+  const entries = Array.from({ length: 300 }, (_, i) => ({ key: `solve-aaaa-${i}${SHA}`, modified: i }));
+  const gone = evictions([...entries].reverse(), 'aaaa');
+  assert.deepEqual(new Set(gone), new Set(entries.slice(0, 44).map(e => e.key)));
+  assert.equal(gone.length, 44);
+});
+
+test('a key with no version counts as another version', () => {
+  assert.deepEqual(evictions([{ key: `measure-${SHA}`, modified: 1 }], 'aaaa'), [`measure-${SHA}`]);
+});
+
+test('evictions with an unknown version keeps only the newest by age', () => {
+  const entries = [{ key: `solve-aaaa-${SHA}`, modified: 1 }, { key: `solve-bbbb-${SHA}`, modified: 2 }];
+  assert.deepEqual(evictions(entries, null), []);
+  assert.deepEqual(evictions(entries, null, 1), [`solve-aaaa-${SHA}`]);
+});
+
+test('evictions and resultKey agree on a version with punctuation', async () => {
+  const version = 'v1-2.3_x';
+  const mine = await resultKey('a', 'solve', version);
+  const other = await resultKey('a', 'solve', 'v1-2.3_y');
+  assert.deepEqual(evictions([{ key: mine, modified: 1 }, { key: other, modified: 2 }], version), [other]);
+  assert.deepEqual(evictions([{ key: mine, modified: 1 }], '-.'), [], 'a version with no letters or digits is no version');
+});
+
+test('safeResults trim swallows a throwing trim', async () => {
+  const base = { get: async () => null, put: async () => {} };
+  await safeResults({ ...base, trim() { throw new Error('gone'); } }).trim?.();
+  await safeResults({ ...base, trim: () => Promise.reject(new Error('gone')) }).trim?.();
+  await safeResults(base).trim?.();
 });

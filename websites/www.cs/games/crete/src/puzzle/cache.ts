@@ -22,6 +22,33 @@ export interface CachedResult {
 export interface ResultStore {
   get(key: string): Promise<CachedResult | null>;
   put(key: string, r: CachedResult): Promise<void>;
+  /** Drops the entries the store should no longer keep (see `evictions`); a store that never grows has none. */
+  trim?(): Promise<void>;
+}
+
+/** The most entries a store keeps after a trim. */
+export const RESULT_LIMIT = 256;
+
+/** A version as a key carries it: letters and digits only. Empty means no version. */
+const versionPart = (version: string): string => version.replace(/[^A-Za-z0-9]/g, '');
+
+/** The keys to remove: every entry of another version (or none) first, then the oldest by `modified` until
+ *  `limit` remain. An unknown or empty version matches no entry's version, so nothing goes for that reason. */
+export function evictions(entries: readonly { key: string; modified: number }[], version: string | null, limit = RESULT_LIMIT): string[] {
+  const mine = version === null ? '' : versionPart(version);
+  const versionOf = (key: string) => {
+    const parts = key.split('-');
+    return parts.length === 3 ? parts[1] : null;
+  };
+  const gone: string[] = [];
+  const kept: { key: string; modified: number }[] = [];
+  for (const e of entries) {
+    if (mine !== '' && versionOf(e.key) !== mine) gone.push(e.key);
+    else kept.push(e);
+  }
+  kept.sort((a, b) => b.modified - a.modified);
+  for (const e of kept.slice(limit)) gone.push(e.key);
+  return gone;
 }
 
 /** SHA-256 of the text's UTF-8 bytes, in hex. */
@@ -32,7 +59,7 @@ export async function sha256Hex(text: string): Promise<string> {
 
 /** The cache key: the kind, the version (letters and digits only) when there is one, then the text's SHA-256. */
 export async function resultKey(levelText: string, kind: string, version = ''): Promise<string> {
-  const v = version.replace(/[^A-Za-z0-9]/g, '');
+  const v = versionPart(version);
   return `${kind}-${v ? `${v}-` : ''}${await sha256Hex(levelText)}`;
 }
 
@@ -86,6 +113,9 @@ export function safeResults(store: ResultStore): ResultStore {
     },
     async put(key, r) {
       try { await store.put(key, r); } catch { /* not cached: the next run searches again */ }
+    },
+    async trim() {
+      try { await store.trim?.(); } catch { /* the store stays as large as it was */ }
     },
   };
 }

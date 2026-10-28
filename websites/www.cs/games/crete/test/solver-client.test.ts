@@ -1,9 +1,9 @@
 // The solver off the page: the client (solver-client.ts) talking to the worker's side (solver-host.ts) in-process,
-// through a stand-in for the Worker. Progress, stop and resume, the result cache, a new search replacing a stopped
+// through a stand-in for the Worker. Progress, stop, resume and cancel, the result cache, a new search replacing a stopped
 // one, a node file that fails or is missing, and the disk file over a sync access handle.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { startSearch } from '../src/solver-client.ts';
+import { CancelledError, startSearch } from '../src/solver-client.ts';
 import type { WorkerLike } from '../src/solver-client.ts';
 import { createSolverHost, searchLimits, MEMORY_CEILING } from '../src/solver-host.ts';
 import type { NodeFile, Report } from '../src/solver-host.ts';
@@ -20,6 +20,13 @@ import { TRIALS, trialLevel } from '../src/puzzle/trials.ts';
 const L9 = TRIALS[8]!.text;
 const L9_SHORTEST = 54;
 const tick = () => new Promise<void>(r => setImmediate(r));
+/** Ticks until `done()`, failing the test rather than hanging when it never holds. */
+async function until(done: () => boolean): Promise<void> {
+  for (let i = 0; !done(); i++) {
+    if (i > 100_000) throw new Error('timed out waiting');
+    await tick();
+  }
+}
 
 interface Disk { opened: number; closed: number; written: number; open(): Promise<NodeFile> }
 /** A disk whose node files live in memory, counting the files opened and closed and the bytes written. */
@@ -95,7 +102,7 @@ test('stop pauses the search between batches; resume finishes the same search', 
   });
   let done = false;
   void job.result.then(() => { done = true; });
-  while (stoppedAt < 0) await tick();
+  await until(() => stoppedAt >= 0);
   for (let i = 0; i < 50; i++) await tick();
   assert.equal(done, false, 'no answer while stopped');
   assert.ok(seen.length <= stoppedAt + 1, 'at most the batch under way reports while stopped');
@@ -125,7 +132,7 @@ test('a measure reports progress through its catch search, and stop pauses it th
   });
   let done = false;
   void job.result.then(() => { done = true; });
-  while (stoppedAt < 0 && !done) await tick();
+  await until(() => stoppedAt >= 0 || done);
   assert.ok(stoppedAt > 0, 'progress came before the answer');
   for (let i = 0; i < 50; i++) await tick();
   assert.equal(done, false, 'no answer while stopped');
@@ -151,6 +158,13 @@ test('a finished search is cached: the second run answers at once, without progr
   assert.deepEqual(r2, r1, 'the same line, from the cached letters');
 });
 
+test('the host trims after it caches a result', async () => {
+  let trims = 0;
+  const results: ResultStore = { ...memoryResults(), trim: async () => { trims++; } };
+  await startSearch(L9, 'solve', inProcess({ results })).result;
+  assert.equal(trims, 1);
+});
+
 test('a cache entry from another build is a miss: the search runs again', async () => {
   const results = memoryResults();
   await startSearch(L9, 'solve', inProcess({ results, version: 'old' })).result;
@@ -173,6 +187,26 @@ test('a cached line that does not win is a miss: the search runs again', async (
     assert.equal(lengthOf(r), L9_SHORTEST, line);
     assert.ok(seen.length > 0, `${line}: searched`);
   }
+});
+
+test('a cached measure with no line is a miss; one with its line is served', async () => {
+  const d = measure(trialLevel(0));
+  const { line: _line, ...old } = d;
+  const key = await resultKey(TRIALS[0]!.text, 'measure', 'test');
+  const run = async (difficulty: unknown) => {
+    const results = memoryResults();
+    await results.put(key, { solved: d.solved, line: '', explored: d.explored, difficulty: difficulty as Difficulty });
+    const job = startSearch(TRIALS[0]!.text, 'measure', inProcess({ results, every: 1 }));
+    const seen: Report[] = [];
+    job.progress(p => seen.push(p));
+    return { answer: await job.result, searched: seen.length > 0 };
+  };
+  const stale = await run(old);
+  assert.equal(stale.searched, true, 'no line: searched again');
+  assert.deepEqual(stale.answer, d);
+  const fresh = await run(d);
+  assert.equal(fresh.searched, false, 'with its line: served from the cache');
+  assert.deepEqual(fresh.answer, d);
 });
 
 /** A worker that never answers, whose error can be fired; it records whether it was terminated. */
@@ -215,7 +249,7 @@ test('a new search replaces a stopped one: the old one is cancelled and its file
   const old = startSearch(L9, 'solve', worker);
   let stopped = false;
   old.progress(p => { if (!stopped && p.expanded > 0) { stopped = true; old.stop(); } });
-  while (!stopped) await tick();
+  await until(() => stopped);
   const next = startSearch(TRIALS[0]!.text, 'solve', worker);
   await assert.rejects(old.result, /cancelled/);
   assert.equal(lengthOf(await next.result), 10);
@@ -294,4 +328,61 @@ test('the disk file reports its size truthfully and throws on a short read or wr
   shortRead.write(0, new Uint8Array(16));
   assert.throws(() => shortRead.read(0, new Uint8Array(16)), /short read/);
   assert.throws(() => handleFile(fakeHandle({ write: true })).write(0, new Uint8Array(4)), /short write/);
+});
+
+test('cancel rejects the result with CancelledError at once', async () => {
+  const job = startSearch(TRIALS[9]!.text, 'solve', inProcess());
+  job.cancel();
+  await assert.rejects(job.result, CancelledError);
+});
+
+test('a cancelled search reports no more progress', async () => {
+  const job = startSearch(L9, 'solve', inProcess());
+  let count = 0;
+  let cancelled = false;
+  let late = 0;
+  job.progress(() => { count++; if (cancelled) late++; });
+  await until(() => count !== 0);
+  job.cancel();
+  cancelled = true;
+  await assert.rejects(job.result, CancelledError);
+  for (let i = 0; i < 20; i++) await tick();
+  assert.equal(late, 0);
+});
+
+test('cancel closes the node file', async () => {
+  const disk = memoryDisk();
+  const job = startSearch(L9, 'solve', inProcess({ open: () => disk.open() }));
+  let seen = false;
+  job.progress(() => { seen = true; });
+  await until(() => seen);
+  job.cancel();
+  await assert.rejects(job.result, CancelledError);
+  for (let i = 0; i < 20 && disk.closed === 0; i++) await tick();
+  assert.equal(disk.opened, 1);
+  assert.equal(disk.closed, 1);
+});
+
+test('a stopped search can be cancelled: it rejects with CancelledError and its file closes once', async () => {
+  const disk = memoryDisk();
+  const job = startSearch(L9, 'solve', inProcess({ open: () => disk.open() }));
+  let stopped = false;
+  job.progress(p => { if (!stopped && p.expanded > 0) { stopped = true; job.stop(); } });
+  await until(() => stopped);
+  for (let i = 0; i < 20; i++) await tick();
+  job.cancel();
+  await assert.rejects(job.result, CancelledError);
+  for (let i = 0; i < 20 && disk.closed === 0; i++) await tick();
+  for (let i = 0; i < 20; i++) await tick();
+  assert.equal(disk.opened, 1);
+  assert.equal(disk.closed, 1);
+});
+
+test('a search started after a cancel runs', async () => {
+  const worker = inProcess();
+  const first = startSearch(L9, 'solve', worker);
+  first.cancel();
+  await assert.rejects(first.result, CancelledError);
+  const r = await startSearch(L9, 'solve', worker).result;
+  assert.equal(r.solved, true);
 });

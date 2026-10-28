@@ -73,7 +73,8 @@ test('a lock forgets it; a sign-in with no tag is not remembered', async () => {
   const notes = page(s, indexedDbKeyMemory(idb));
   await notes.unlock(fx.passphrase);
   notes.lock();
-  await new Promise(r => setTimeout(r, 10));
+  // lock() forgets in the background: wait until the record is gone (a lock that never forgets fails here).
+  for (let i = 0; i < 100 && (await indexedDbKeyMemory(idb).recall()) !== null; i++) await new Promise(r => setTimeout(r, 5));
   assert.equal(await page(s, indexedDbKeyMemory(idb)).restore(), false);
   s.state.session = '';
   await page(s, indexedDbKeyMemory(idb)).unlock(fx.passphrase);

@@ -38,7 +38,9 @@ function notesSession(): NotesSession {
   return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock()), memory: indexedDbKeyMemory() });
 }
 const notes = notesSession();
-await notes.restore();
+/** How long the page waits to restore a remembered unlock before drawing locked: a stalled request must not keep it blank. */
+const RESTORE_WAIT_MS = 5000;
+await Promise.race([notes.restore(), new Promise(resolve => setTimeout(resolve, RESTORE_WAIT_MS))]);
 
 function say(text: string, role = 'alert'): void {
   const p = document.createElement('p');

@@ -178,16 +178,19 @@ final class Pages
     }
 
     /**
-     * The page to return to after sign-in: index.php or keys.php with an optional query string,
-     * else ''. No path separators, scheme, backslash or control character can pass, so the value
-     * can only ever point at a sibling page of the one that sent it.
+     * The page to return to after sign-in, else '': index.php or keys.php with an optional query
+     * string, or one of the music workroom's pages, which sits beside the admin folder: its index
+     * (../music/) or a piece page with a query (../music/piece.php?id=...&v=...). Nothing else can
+     * pass: no scheme, host, backslash, control character, fragment or further path separator, so
+     * the value can only ever point at one of those pages.
      */
     public static function safeNext(mixed $next): string
     {
         if (!is_string($next) || strlen($next) > 300) {
             return '';
         }
-        if (preg_match('/^(?:index|keys)\.php(?:\?[A-Za-z0-9_.~%=&,+\-\[\]:]*)?$/D', $next) !== 1) {
+        $query = '[A-Za-z0-9_.~%=&,+\-\[\]:]';
+        if (preg_match("/^(?:(?:index|keys)\\.php(?:\\?$query*)?|\\.\\.\\/music\\/|\\.\\.\\/music\\/piece\\.php\\?$query+)$/D", $next) !== 1) {
             return '';
         }
         return $next;

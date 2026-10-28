@@ -63,7 +63,18 @@ final class Pages
                 $body .= '<p class="empty">No drafts have been published yet.</p>';
             }
             return $this->shell(200, 'Music workroom', 'index', '', '', $body, $r);
-        });
+        }, null, '../music/');
+    }
+
+    /** Where a signed-out visit to piece.php returns after sign-in: the piece and draft it asked for, when both are well-formed, else nowhere. */
+    private static function pieceBack(\Admin\Request $r): string
+    {
+        $id = $r->query['id'] ?? null;
+        $v = $r->query['v'] ?? '';
+        if (!Store::validPieceId($id) || ($v !== '' && !Store::validVersion($v))) {
+            return '';
+        }
+        return '../music/piece.php?id=' . $id . ($v === '' ? '' : '&v=' . $v);
     }
 
     /** GET piece.php?id=<piece>[&v=<n>]: the page shell. */
@@ -76,7 +87,7 @@ final class Pages
                 return $this->errorPage(400, 'No such piece.');
             }
             return $this->shell(200, 'Music workroom', 'piece', $id, $v, '', $r);
-        });
+        }, null, self::pieceBack($r));
     }
 
     /** GET csrf.php: the session's current token. */
@@ -192,11 +203,12 @@ final class Pages
 
     /**
      * Runs the gates in order, then $work. $page: a browser navigation only (Fetch Metadata), else the
-     * route refuses cross-site requests. $post: CSRF is checked. $method: the one method the route takes.
+     * route refuses cross-site requests. $post: CSRF is checked. $method: the one method the route takes. $back: the page
+     * (relative to the admin folder) a signed-out visit returns to after sign-in, when it is one the sign-in accepts.
      *
      * @param \Closure(): \Admin\Response $work
      */
-    private function guarded(\Admin\Request $r, bool $page, bool $post, \Closure $work, ?string $method = null): \Admin\Response
+    private function guarded(\Admin\Request $r, bool $page, bool $post, \Closure $work, ?string $method = null, string $back = ''): \Admin\Response
     {
         $refused = admin_refuse_plain_http($r, $this->baseUrl);
         if ($refused === null) {
@@ -209,7 +221,8 @@ final class Pages
             $refused = $this->admin->requireAdmin($r);
             if ($refused !== null) {
                 if ($refused->status === 303 && isset($refused->headers['Location'])) {
-                    $refused->headers['Location'] = $this->baseUrl . 'login.php';
+                    $next = \Admin\Pages::safeNext($back);
+                    $refused->headers['Location'] = $this->baseUrl . 'login.php' . ($next === '' ? '' : '?next=' . rawurlencode($next));
                 }
                 return Http::finish($refused);
             }

@@ -107,12 +107,44 @@ final class AdminPagesTest extends TestCase
         self::assertSame($next, $done->headers['Location']);
     }
 
+    /** @return array<string,array{0:string}> */
+    public static function musicNexts(): array
+    {
+        return [
+            'the index' => ['../music/'],
+            'a piece' => ['../music/piece.php?id=ch1-labyrinth'],
+            'a piece and its draft' => ['../music/piece.php?id=ch1-labyrinth&v=3'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('musicNexts')]
+    public function testSignInCanReturnToTheMusicWorkroom(string $next): void
+    {
+        [$p, , , $m] = $this->pages();
+        self::assertSame($next, Admin\Pages::safeNext($next));
+        self::assertStringContainsString('<input type="hidden" name="next" value="' . htmlspecialchars($next) . '">', $p->loginForm(req(['query' => ['next' => $next]]))->body);
+        $p->requestLink($this->post(['email' => 'wgrim@siue.edu', 'next' => $next]));
+        $p->flush();
+        self::assertStringContainsString('&next=' . rawurlencode($next), quoted_printable_decode($m->sent[0]['mime']));
+        $token = $this->tokenOf($m);
+        $confirm = $p->confirm(req(['query' => ['token' => $token, 'next' => $next]]));
+        $mark = $this->cookieValue($confirm, Admin\Pages::CONFIRM_COOKIE);
+        $done = $p->signIn($this->post(['token' => $token, 'csrf' => $mark, 'next' => $next], ['cookies' => [Admin\Pages::CONFIRM_COOKIE => $mark]]));
+        self::assertSame(303, $done->status);
+        self::assertSame($next, $done->headers['Location']);
+    }
+
     /** @return array<string,array{0:mixed}> */
     public static function unsafeNexts(): array
     {
         return [
             'absolute' => ['https://evil.example/'], 'scheme-relative' => ['//evil.example/'], 'backslash' => ['\\evil.example'],
-            'path' => ['/~wgrim/music/'], 'parent' => ['../music/'], 'subdir' => ['x/keys.php'], 'encoded slash' => ['%2f%2fevil.example'],
+            'path' => ['/~wgrim/music/'], 'parent' => ['../'], 'two up' => ['../../music/'], 'sibling dir' => ['../musicx/'], 'leading slash' => ['/../music/'],
+            'music traversal' => ['../music/../x'], 'music piece traversal' => ['../music/piece.php/../../x'], 'music double slash' => ['../music//evil.example'], 'music backslash' => ['../music/\\evil.example'],
+            'music scheme' => ['../music/https://evil.example/'], 'music encoded dots' => ['%2e%2e/music/'], 'music encoded slash' => ['..%2fmusic%2f'], 'music index query' => ['../music/?x=1'],
+            'music index.php' => ['../music/index.php'], 'music piece without query' => ['../music/piece.php'], 'music piece empty query' => ['../music/piece.php?'], 'music other page' => ['../music/notes.php?x=1'],
+            'music api' => ['../music/api/notes.php'], 'music newline' => ["../music/piece.php?id=a\r\nSet-Cookie: x=1"], 'music space' => ['../music/piece.php?id=a b'], 'music too long' => ['../music/piece.php?id=' . str_repeat('a', 400)],
+            'music fragment' => ['../music/piece.php?id=a#x'], 'subdir' => ['x/keys.php'], 'encoded slash' => ['%2f%2fevil.example'],
             'javascript' => ['javascript:alert(1)'], 'newline' => ["keys.php?a=1\r\nSet-Cookie: x=1"], 'loop' => ['login.php'],
             'verify' => ['verify.php?token=x'], 'health' => ['health.php'], 'other page' => ['future.php?a=1'], 'not a page' => ['keys'], 'too long' => ['keys.php?' . str_repeat('a', 400)],
             'array' => [['keys.php']], 'empty' => [''], 'space' => ['keys.php?a b'],

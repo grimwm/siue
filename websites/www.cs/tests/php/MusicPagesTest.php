@@ -41,13 +41,26 @@ final class MusicPagesTest extends TestCase
     {
         $anon = req(['https' => true, 'query' => ['id' => str_repeat('0', 32), 'piece' => 'x', 'v' => '1', 'file' => 'score.json']]);
         $login = self::BASE . 'login.php';
-        foreach (['index', 'piece', 'csrf', 'note', 'keyring', 'drafts', 'draftFile', 'delete'] as $route) {
+        foreach (['csrf', 'note', 'keyring', 'drafts', 'draftFile', 'delete'] as $route) {
             $res = $this->pages->$route($anon);
             self::assertSame(303, $res->status, $route);
             self::assertSame($login, $res->headers['Location'], "$route sends the browser to the admin login, not to /music/login.php");
         }
         $res = $this->pages->notes($anon, '');
         self::assertSame([303, $login], [$res->status, $res->headers['Location']]);
+    }
+
+    public function testTheWorkroomPagesSendTheBrowserToTheLoginAndBackToThemselves(): void
+    {
+        $login = self::BASE . 'login.php?next=';
+        $index = $this->pages->index(req(['https' => true]));
+        self::assertSame([303, $login . rawurlencode('../music/')], [$index->status, $index->headers['Location']]);
+        $piece = $this->pages->piece(req(['https' => true, 'query' => ['id' => 'ch1-labyrinth', 'v' => '3', 'junk' => 'x y']]));
+        self::assertSame([303, $login . rawurlencode('../music/piece.php?id=ch1-labyrinth&v=3')], [$piece->status, $piece->headers['Location']]);
+        $bare = $this->pages->piece(req(['https' => true, 'query' => ['id' => 'ch1-labyrinth']]));
+        self::assertSame($login . rawurlencode('../music/piece.php?id=ch1-labyrinth'), $bare->headers['Location']);
+        $bad = $this->pages->piece(req(['https' => true, 'query' => ['id' => '../../evil', 'v' => 'x']]));
+        self::assertSame(self::BASE . 'login.php', $bad->headers['Location'], 'a piece id that is not one is not remembered');
     }
 
     public function testAnApiKeyIsNotASession(): void

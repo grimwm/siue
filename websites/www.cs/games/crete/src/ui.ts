@@ -38,6 +38,9 @@ import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
 import { renderTitleCard } from "./ui/title.tsx";
+import { ratingText, renderSharedCard } from "./ui/shared.tsx";
+import type { SharedView } from "./share/visit.ts";
+import type { RatingState } from "./share/rating.ts";
 import { renderLevels } from "./ui/levels.tsx";
 import type { LevelRow } from "./ui/levels.tsx";
 
@@ -70,6 +73,8 @@ export interface Controls {
   /** The level editor, when the page has one: Make a level on the title card opens it, and while it is the top
    *  layer every key goes to it. */
   editor?: Pick<Editor, "open" | "close" | "key">;
+  /** The open share link, when the page has one: its card, Play and Edit a copy. */
+  shared?: { card(): SharedView | null; play(): void; edit(): void };
   /** The editor's visit ended: the editor was left for the title card, or a campaign level was opened (from a try,
    *  or from anywhere). */
   leftEditor?(): void;
@@ -82,8 +87,8 @@ export interface Ui {
   setMuted(muted: boolean): void;
   setFullscreen(on: boolean): void;
   bindControls(controls: Controls): void;
-  /** The title card, alone; `hint` adds how to close an installed app. */
-  showTitle(hint: boolean): void;
+  /** The title card, alone; `hint` adds how to close an installed app, and `note` why a share link did not open. */
+  showTitle(hint: boolean, note?: string): void;
   /** The level list, over whatever is showing. */
   showLevels(): void;
   /** Chapter `n`'s card, over whatever is showing: the opening one (Enter starts the first level this browser
@@ -93,8 +98,14 @@ export interface Ui {
   closeLayers(): void;
   /** The card showing now, if any. */
   top(): LayerName | null;
-  /** The level editor, alone, when the page has one. */
-  showEditor(): void;
+  /** The level editor, alone, when the page has one: on `draft` when given, else on the draft in progress. */
+  showEditor(draft?: Parameters<Editor["open"]>[0]): void;
+  /** The open share link's card, alone. */
+  showShared(): void;
+  /** A share link could not be opened: the toast and the title card say why. */
+  refuseLink(message: string): void;
+  /** Draws the cards again (the shared card's rating came in). */
+  refresh(): void;
   /** Leaves the editor for the title card. */
   leaveEditor(): void;
 }
@@ -114,6 +125,9 @@ export function createUi(deps: UiDeps): Ui {
   const outsideOf = (g: Game | null): OutsideLevel | null => (g && g.trial >= 0 ? deps.levels?.outside?.(g.trial) ?? null : null);
   /** An outside level's kicker on its start and end cards. */
   const outsideKicker = (o: OutsideLevel): string => (o.kind === "try" ? "Your level" : "Shared level");
+  /** The shared card, while a shared level is in play and the page gives it. */
+  const sharedCard = (g: Game | null): (() => void) | undefined =>
+    controls?.shared && g?.run && outsideOf(g)?.kind === "shared" ? showShared : undefined;
   /** Back to the editor, while a try is in play and the page gives it. */
   const backToEditor = (g: Game | null): (() => void) | undefined => {
     const back = controls?.backToEditor;
@@ -127,6 +141,8 @@ export function createUi(deps: UiDeps): Ui {
   let controls: Controls | null = null;
   let game: Game | null = null;
   let titleHint = false;
+  /** Why the last share link did not open, on the title card until it shows again some other way. */
+  let titleNote = "";
   let end: EndView = { open: false, won: false, hasNext: false, hasLevels: false, pages: [], kicker: "", title: "", text: "", score: "" };
   /** The try whose ending card has been shown, so closing the card does not bring it back. */
   let endFor: unknown = null;
@@ -224,13 +240,26 @@ export function createUi(deps: UiDeps): Ui {
     open(chapterTarget);
   }
 
-  function showEditor(): void {
+  function showEditor(draft?: Parameters<Editor["open"]>[0]): void {
     const editor = controls?.editor;
     if (!editor) return;
     layers.clear();
     layers.open("editor");
     editorShown = true;
-    editor.open();
+    editor.open(draft);
+  }
+
+  function showShared(): void {
+    if (!controls?.shared?.card()) return;
+    layers.clear();
+    layers.open("shared");
+  }
+
+  /** The shared card's rating line: null while the rating is worked out. */
+  function ratingLine(r: RatingState): string | null {
+    if (r.kind === "done") return ratingText(r.d);
+    if (r.kind === "failed") return `No rating: ${r.message}`;
+    return null;
   }
 
   function leaveEditor(): void {
@@ -244,10 +273,20 @@ export function createUi(deps: UiDeps): Ui {
     renderTitleCard($("title-root"), {
       open: layers.isOpen("title"),
       hint: titleHint,
+      ...(titleNote ? { note: titleNote } : {}),
       onPlay: () => controls?.play(),
       onStory: () => layers.open("story"),
       ...(controls?.editor ? { onEditor: showEditor } : {}),
       onSettings: () => layers.open("menu"),
+    });
+    const card = controls?.shared?.card() ?? null;
+    renderSharedCard($("shared-root"), {
+      open: layers.isOpen("shared") && card !== null,
+      name: card?.name ?? "",
+      rating: card ? ratingLine(card.rating) : null,
+      best: card?.best ?? null,
+      onPlay: () => controls?.shared?.play(),
+      onEdit: () => controls?.shared?.edit(),
     });
     const out = outsideOf(g);
     const playing = g && g.trial >= 0 && !out ? chapterOf(g.trial) : null;
@@ -339,6 +378,7 @@ export function createUi(deps: UiDeps): Ui {
       },
       onClose: () => layers.close("menu"),
       onBackToEditor: backToEditor(g),
+      onSharedCard: sharedCard(g),
     });
   }
 
@@ -569,8 +609,9 @@ export function createUi(deps: UiDeps): Ui {
     (controls?.game ?? game)?.resume();
   }
 
-  function showTitle(hint: boolean): void {
+  function showTitle(hint: boolean, note = ""): void {
     titleHint = hint;
+    titleNote = note;
     layers.clear();
     layers.open("title");
   }
@@ -612,6 +653,7 @@ export function createUi(deps: UiDeps): Ui {
         } else if (layers.isOpen("lore") && loreFromPickup) {
           closePickup();
         } else if (layers.isOpen("title")) layers.open("menu");
+        else if (layers.isOpen("shared")) showTitle(titleHint);
         else if (layers.isOpen("chapter")) leave("chapter");
         else layers.pressBack();
         return;
@@ -802,6 +844,12 @@ export function createUi(deps: UiDeps): Ui {
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
     showEditor,
+    showShared,
+    refuseLink: (message) => {
+      say(message, "bad");
+      showTitle(titleHint, message);
+    },
+    refresh: () => drawLayers(),
     leaveEditor,
     setMuted: (m) => {
       muted = m;

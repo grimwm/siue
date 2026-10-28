@@ -1,5 +1,6 @@
-/* Entry: wires the game, the board, audio, the UI and the level editor, opens the title card (or, with ?seed=,
- * Chapter 1's card over it; with #edit, the editor), and exposes window.__creteTest for the browser specs. */
+/* Entry: wires the game, the board, audio, the UI, the level editor and share links, opens the title card (or, with
+ * ?seed=, Chapter 1's card over it; with #edit, the editor; with a share link, its card), and exposes
+ * window.__creteTest for the browser specs. */
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
 import { createAudio } from './audio.ts';
 import { createBoard } from './board.ts';
@@ -22,6 +23,8 @@ import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
 import { createEditor } from './editor/editor.ts';
 import { fromLevel } from './editor/model.ts';
+import { createRater } from './share/rating.ts';
+import { createVisit } from './share/visit.ts';
 import { createSettings } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
@@ -54,14 +57,31 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
 });
 const levels = outside.levels;
 const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx });
+/* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
+   which comes first. */
+const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
 /* The level editor, a layer over the game frame. Try it plays the draft on the game screen. */
 const editor = createEditor({
   root: document.getElementById('editor-root') as HTMLElement,
   atlas,
   image,
   tryIt: (level, text, line) => tryLevel(level, text, line),
+  start: rater.check,
   changed: () => {},
   leave: () => ui.leaveEditor(),
+});
+/* A share link in the address: its card, Play as a shared level, Edit a copy in the editor (the address then says
+   #edit, as for any visit to the editor). */
+const visit = createVisit({
+  rater,
+  play: (level, about, line) => outside.play(level, about, line),
+  edit: draft => {
+    game.settle();
+    ui.showEditor(draft);
+    history.replaceState(history.state, '', `${window.location.pathname}${window.location.search}${EDIT_HASH}`);
+  },
+  show: () => ui.showShared(),
+  refuse: message => ui.refuseLink(message),
 });
 
 /** Opens the editor's draft on the game screen as a try. `line` is the last Check's line when that check was of this
@@ -73,10 +93,14 @@ function tryLevel(level: Level, text: string, line: readonly Action[] | null): v
 /* `#edit` in the address opens the editor, when the page opens and whenever the fragment changes to it (as Back to
    the editor does, so a try in play settles first); the fragment changing away from it (the browser's Back) leaves
    the editor for the title card. A try leaves the address as it is, as part of the editor's visit; the browser's
-   Back during one changes nothing on the screen: the try plays on, with Back to the editor in its menu. */
+   Back during one changes nothing on the screen: the try plays on, with Back to the editor in its menu. Any other
+   fragment is a share link: its card opens, or the title card says why it cannot. The link stays in the address
+   while its level is played, so a reload opens its card again. */
 const EDIT_HASH = '#edit';
 function followHash(): void {
-  if (window.location.hash === EDIT_HASH) outside.backToEditor();
+  const hash = window.location.hash;
+  if (hash === EDIT_HASH) outside.backToEditor();
+  else if (hash.length > 1) void visit.open(hash.slice(1));
   else ui.leaveEditor();
 }
 /* The editor's visit ending (the editor left for the title card, a campaign level opened, Quit) takes `#edit` off
@@ -159,7 +183,7 @@ function loop(now: number): void {
 function start(): void {
   ui.bindControls({
     game, toggleMute, toggleFullscreen, wake: audio.ensure, quit: () => { void quit(); }, play, editor, leftEditor,
-    backToEditor: outside.backToEditor,
+    backToEditor: outside.backToEditor, shared: visit,
   });
   if (settings.sound.get() === 'off') {
     audio.toggleMute();
@@ -193,6 +217,9 @@ function start(): void {
 }
 // A hidden tab runs no play-out; showing it again leaves it stopped.
 followPage({ doc: document, win: window }, { hide: game.stop, show: () => {} });
+// The page going away cancels a shared level's rating; a page brought back from the browser's cache rates it again.
+window.addEventListener('pagehide', () => visit.leave());
+window.addEventListener('pageshow', e => { if (e.persisted) visit.back(); });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
 else start();
 

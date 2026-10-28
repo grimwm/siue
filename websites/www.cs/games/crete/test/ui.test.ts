@@ -9,6 +9,7 @@ import { asElement, byId, childEl, click, document, installDocument, makeEl, may
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import type { EndCardProps } from '../src/ui/end.tsx';
 import type { TitleCardProps } from '../src/ui/title.tsx';
+import type { SharedCardProps } from '../src/ui/shared.tsx';
 import { KEYS } from '../src/keys.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { fireDocument } from '../../_kit/test/dom-stub.ts';
@@ -36,12 +37,14 @@ installDocument();
 const ui = await importTsx<{
   end: typeof import('../src/ui/end.tsx');
   title: typeof import('../src/ui/title.tsx');
+  shared: typeof import('../src/ui/shared.tsx');
   page: typeof import('../src/ui.ts');
-}>(import.meta.dirname, { end: '../src/ui/end.tsx', title: '../src/ui/title.tsx', page: '../src/ui.ts' });
+}>(import.meta.dirname, { end: '../src/ui/end.tsx', title: '../src/ui/title.tsx', shared: '../src/ui/shared.tsx', page: '../src/ui.ts' });
 (globalThis as { getComputedStyle?: unknown }).getComputedStyle = () => ({ paddingLeft: '0', paddingRight: '0', paddingTop: '0', paddingBottom: '0', display: 'block' });
 // The overlays render into a DOM Element; the stub stands in for one.
 const renderEndCard = (root: StubElement, props: EndCardProps): void => ui.end.renderEndCard(asElement(root), props);
 const renderTitleCard = (root: StubElement, props: TitleCardProps): void => ui.title.renderTitleCard(asElement(root), props);
+const renderSharedCard = (root: StubElement, props: SharedCardProps & { open: boolean }): void => ui.shared.renderSharedCard(asElement(root), props);
 const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));
 
 const WON = { won: true, hasNext: true, hasLevels: true, pages: [] as string[], kicker: 'Level 1 cleared', title: 'The Mouth of the Labyrinth', text: 'You found the way on your own.', score: '14 moves · best 14' };
@@ -168,6 +171,36 @@ test('an installed app that could not close says how to', () => {
   const root = makeEl('title-root');
   renderTitleCard(root, { open: true, hint: true, onPlay() {} });
   assert.equal(byId(root, 'title-hint').textContent, 'Swipe the app away to close it.');
+});
+
+test('the title card says why a link did not open, when given a note', () => {
+  const root = mount();
+  renderTitleCard(root, { open: true, hint: false, onPlay() {} });
+  assert.equal(maybeById(root, 'title-note'), undefined);
+  renderTitleCard(root, { open: true, hint: false, note: 'This level link is damaged. Ask for the link again.', onPlay() {} });
+  assert.equal(byId(root, 'title-note').textContent, 'This level link is damaged. Ask for the link again.');
+});
+
+test('the shared card shows the name, rating… until the rating is in, the best to beat, Play and Edit a copy', () => {
+  const root = mount();
+  const seen: string[] = [];
+  const props = { open: true, name: 'Level K7QD by ABC', rating: null, best: 54, onPlay: () => seen.push('play'), onEdit: () => seen.push('edit') };
+  renderSharedCard(root, props);
+  assert.equal(byId(root, 'shared-veil').hidden, false);
+  assert.equal(byId(root, 'shared-title').textContent, 'Level K7QD by ABC');
+  assert.equal(byId(root, 'shared-rating').textContent, 'rating…');
+  assert.equal(byId(root, 'shared-best').textContent, 'beat 54');
+  assert.equal(globalThis.__focused?.id, 'shared-play');
+  assert.ok(byId(root, 'shared-play').textContent.includes('Play'));
+  assert.ok(byId(root, 'shared-edit').textContent.includes('Edit a copy'));
+  click(byId(root, 'shared-play'));
+  click(byId(root, 'shared-edit'));
+  assert.deepEqual(seen, ['play', 'edit']);
+  renderSharedCard(root, { ...props, rating: 'Solo · quickest win 41 moves · 12,161 situations', best: null });
+  assert.equal(byId(root, 'shared-rating').textContent, 'Solo · quickest win 41 moves · 12,161 situations');
+  assert.equal(maybeById(root, 'shared-best'), undefined);
+  renderSharedCard(root, { ...props, open: false });
+  assert.equal(byId(root, 'shared-veil').hidden, true);
 });
 
 test('the title card reads its kicker from Chapter 1', () => {

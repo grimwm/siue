@@ -46,6 +46,8 @@ export interface GameDeps {
   reducedMotion(): boolean;
   /** The view redraws. */
   changed(): void;
+  /** The thread's search; the solver's when not given. */
+  solve?: typeof solve;
 }
 
 export interface Anim {
@@ -127,6 +129,9 @@ function pageStops(before: State, tl: Timeline): PageStop[] {
   });
 }
 
+const sameAction = (a: Action, b: Action): boolean =>
+  a.kind === b.kind && (a.kind !== 'move' || a.dir === (b as typeof a).dir) && (a.kind !== 'tool' || a.tool === (b as typeof a).tool);
+
 /** A hazard by its myth name, with its article: "The Harpy", "Talos's fire". */
 const hazardName = (kind: HazardKind): string => (kind === 'fireball' ? HAZARDS[kind].name : `The ${HAZARDS[kind].name}`);
 
@@ -142,6 +147,9 @@ export function createGame(deps: GameDeps): Game {
   let found: readonly string[] = [];
   /** V is on: the line from the try as it stands stays drawn through every turn. */
   let threadOn = false;
+  /** The actions that made the try as it stands, from the level's start. */
+  let played: Action[] = [];
+  const search = deps.solve ?? solve;
 
   const stop = (): void => {
     if (tick === null) return;
@@ -213,6 +221,7 @@ export function createGame(deps: GameDeps): Game {
     }
     const before = run.now;
     run = r.run;
+    played.push(a);
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
@@ -227,9 +236,14 @@ export function createGame(deps: GameDeps): Game {
     return true;
   }
 
-  /** A solve of the try as it stands, or null (with a word said) when none is found. */
+  /** The rest of the level's known line while the try so far is exactly its start; otherwise a solve of the try as
+   *  it stands, or null (with a word said) when none is found. */
   function line(): Action[] | null {
-    const r = solve(run!.now, THREAD_CAP);
+    const known = deps.levels.line?.(trial);
+    if (known && played.length <= known.length && played.every((a, i) => sameAction(a, known[i]!))) {
+      return known.slice(played.length);
+    }
+    const r = search(run!.now, THREAD_CAP);
     if (!r.solved) {
       deps.say(SLACK, 'bad');
       return null;
@@ -323,6 +337,7 @@ export function createGame(deps: GameDeps): Game {
       trial = i;
       run = startRun(deps.levels.level(i));
       found = [];
+      played = [];
       threadOn = false;
       thread = null;
       anim = null;
@@ -334,7 +349,10 @@ export function createGame(deps: GameDeps): Game {
       finishAnim();
       stop();
       if (a === 'undo' || a === 'restart') {
+        const was = run;
         run = a === 'undo' ? undo(run) : restart(run);
+        if (a === 'restart') played = [];
+        else if (run !== was) played.pop();
         found = [];
         redraw();
         deps.changed();

@@ -330,3 +330,58 @@ test('a bomb, a snare, a thief and a revealed wall each get one line; hazard ste
   steps.game.press({ kind: 'wait' });
   assert.deepEqual(steps.said, []);
 });
+
+/** Level 9 with its solver line given as the level's known line, and the thread's search counted. */
+function onKnownLine() {
+  const known = line(8);
+  let solves = 0;
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), pages: createFoundPages(null), timers: m.timers, clock: m.clock,
+    reducedMotion: () => true, changed() {},
+    levels: { ...CAMPAIGN_LEVELS, line: i => (i === 8 ? known : null) },
+    solve: (s, cap) => { solves++; return solve(s, cap); },
+  });
+  game.open(8);
+  /** A move that changes the try but is not the known line's next. */
+  const offLine = (): Action => {
+    const next = known[game.run!.now.moves]!;
+    const a = (['up', 'down', 'left', 'right'] as const).map((dir): Action => ({ kind: 'move', dir }))
+      .find(a => JSON.stringify(a) !== JSON.stringify(next) && step(game.run!.now, a).state !== game.run!.now);
+    assert.ok(a, 'some move leaves the line');
+    return a;
+  };
+  return { game, known, solves: () => solves, offLine };
+}
+
+test('the thread follows a known line while the try is on it', () => {
+  const h = onKnownLine();
+  for (let i = 0; i < 3; i++) h.game.hint();
+  assert.equal(h.solves(), 0);
+  assert.equal(h.game.run!.now.moves, 3);
+  h.game.route();
+  assert.equal(h.solves(), 0, 'V draws the known line too');
+  h.game.route();
+  h.game.press(h.offLine());
+  h.game.hint();
+  assert.equal(h.solves(), 1);
+});
+
+test('undo back onto the line uses it again', () => {
+  const h = onKnownLine();
+  h.game.hint();
+  h.game.hint();
+  h.game.press(h.offLine());
+  h.game.hint();
+  assert.equal(h.solves(), 1, 'off the line the thread solves');
+  h.game.press('undo');
+  h.game.press('undo');
+  h.game.hint();
+  assert.equal(h.solves(), 1, 'back on the line it follows the line');
+  h.game.press(h.offLine());
+  h.game.press('restart');
+  for (const a of h.known.slice(0, 2)) h.game.press(a);
+  h.game.hint();
+  assert.equal(h.solves(), 1, 'restart clears the moves played');
+  assert.equal(h.game.run!.now.moves, 3);
+});

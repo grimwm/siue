@@ -14,7 +14,8 @@ import { startSearch } from './solver-client.ts';
 import type { Report } from './solver-host.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS } from './campaign/chapters.ts';
-import type { Levels } from './campaign/chapters.ts';
+import type { Levels, OutsideLevel } from './campaign/chapters.ts';
+import type { Action } from './puzzle/step.ts';
 import { createFoundPages } from './pages.ts';
 import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
@@ -40,28 +41,24 @@ const image = new Image();
 const board = createBoard(document.getElementById('stage') as HTMLCanvasElement, atlas, image);
 const progress = createProgress(browserStorage());
 const pages = createFoundPages(browserStorage());
-const ui = createUi({ atlas, board, progress, pages, sfx: audio.sfx });
+/** The level from outside the campaign in play: it sits at index OUTSIDE, after the campaign's, until the next
+ *  `playLevel`, so Retry opens it again. It records nothing. */
+const OUTSIDE = CAMPAIGN_LEVELS.count;
+let outside: { level: Level; about: OutsideLevel; line: readonly Action[] | null } | null = null;
+const levels: Levels = {
+  count: CAMPAIGN_LEVELS.count,
+  id: i => (i === OUTSIDE ? 'outside' : CAMPAIGN_LEVELS.id(i)),
+  level: i => (i === OUTSIDE && outside ? outside.level : CAMPAIGN_LEVELS.level(i)),
+  scratch: i => i === OUTSIDE,
+  outside: i => (i === OUTSIDE ? outside?.about ?? null : null),
+  line: i => (i === OUTSIDE ? outside?.line ?? null : null),
+};
+const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx });
 
 /* The reduced-motion preference, followed live. */
 const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
 let reduced = motion?.matches ?? false;
 motion?.addEventListener('change', e => { reduced = e.matches; });
-
-/** The level `__creteTest.playLevel` opens outside the campaign: it opens once, and records nothing. */
-let queued: Level | null = null;
-/** The scratch level in play, until the next real open. */
-let scratch: Level | null = null;
-const levels: Levels = {
-  count: CAMPAIGN_LEVELS.count,
-  id: i => (scratch ? 'test-level' : CAMPAIGN_LEVELS.id(i)),
-  // Moves a queued scratch level into place; `game.open` is its only caller.
-  level: i => {
-    scratch = queued;
-    queued = null;
-    return scratch ?? CAMPAIGN_LEVELS.level(i);
-  },
-  scratch: () => scratch !== null,
-};
 
 const game = createGame({
   sfx: audio.sfx,
@@ -173,9 +170,12 @@ function solveInWorker(levelText: string): Promise<{ result: unknown; progress: 
   return job.result.then(result => ({ result, progress }));
 }
 
-/* Test hook for automated checks: drives the real game logic, no copy. */
-function playLevel(level: Level): void {
-  queued = level;
-  game.open(0);
+/** Opens `level` from outside the campaign: a try (named by its title, or "Your level") unless `opts.outside` says
+ *  otherwise, with `opts.line` as its proven line when there is one. */
+function playLevel(level: Level, opts: { outside?: OutsideLevel; line?: readonly Action[] } = {}): void {
+  outside = { level, about: opts.outside ?? { kind: 'try', name: level.title || 'Your level', best: null }, line: opts.line ?? null };
+  game.open(OUTSIDE);
 }
+
+/* Test hook for automated checks: drives the real game logic, no copy. */
 window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse };

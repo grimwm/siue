@@ -1,4 +1,5 @@
-// The Island of Crete: the menu. In order: sound and full screen, the Lore book, the story log, how to play, Quit.
+// The Island of Crete: the menu. In order: sound and full screen, the Lore book, the story log, how to play, Back to
+// the editor (only when the page gives it), Quit.
 // Q (the kit's back key) is handled by src/ui.ts, which owns every card, so the dialog is given no onDismiss;
 // the Close button is for a pointer or a finger.
 import { render } from 'preact';
@@ -25,6 +26,8 @@ export interface MenuProps {
   onLore: () => void;
   onQuit: () => void;
   onClose: () => void;
+  /** Back to the editor, shown only when given. */
+  onBackToEditor?: () => void;
 }
 
 const segs = (line: Seg[]) => line.map(s => (typeof s === 'string' ? s : <strong>{s.strong}</strong>));
@@ -58,6 +61,11 @@ export function Menu(p: MenuProps) {
           {p.help.map((line, i) => <li key={i}>{segs(line)}</li>)}
         </ul>
       </section>
+      {p.onBackToEditor && (
+        <div class="menu-sec" data-section="editor">
+          <Button id="menu-editor" onClick={p.onBackToEditor}>Back to the editor</Button>
+        </div>
+      )}
       <div class="menu-sec" data-section="quit">
         <Button id="quit" title="End this run and leave the game" onClick={p.onQuit}>⏻ Quit</Button>
       </div>

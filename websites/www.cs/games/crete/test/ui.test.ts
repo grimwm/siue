@@ -24,6 +24,7 @@ import { DIRS } from '../src/puzzle/tiles.ts';
 import { stateKey } from './reference-solver.ts';
 import { CAMPAIGN_LEVELS, LEVEL_IDS } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
+import type { Levels, OutsideLevel } from '../src/campaign/chapters.ts';
 import { icedPages } from './puzzle-grid.ts';
 import { SLIDE_MS } from '../src/board-plan.ts';
 import { frameOf } from '../src/game.ts';
@@ -43,8 +44,8 @@ const renderEndCard = (root: StubElement, props: EndCardProps): void => ui.end.r
 const renderTitleCard = (root: StubElement, props: TitleCardProps): void => ui.title.renderTitleCard(asElement(root), props);
 const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));
 
-const WON = { won: true, hasNext: true, pages: [] as string[], kicker: 'Level 1 cleared', title: 'The Mouth of the Labyrinth', text: 'You found the way on your own.', score: '14 moves · best 14' };
-const LOST = { won: false, hasNext: false, pages: [] as string[], kicker: 'Level failed', title: 'The Minotaur has you', text: 'Your last heart is gone.', score: '9 moves' };
+const WON = { won: true, hasNext: true, hasLevels: true, pages: [] as string[], kicker: 'Level 1 cleared', title: 'The Mouth of the Labyrinth', text: 'You found the way on your own.', score: '14 moves · best 14' };
+const LOST = { won: false, hasNext: false, hasLevels: false, pages: [] as string[], kicker: 'Level failed', title: 'The Minotaur has you', text: 'Your last heart is gone.', score: '9 moves' };
 const calls = (seen: string[]) => ({
   onNext: () => seen.push('next'), onRetry: () => seen.push('retry'), onTrials: () => seen.push('trials'),
   onUndo: () => seen.push('undo'), onRestart: () => seen.push('restart'),
@@ -186,20 +187,27 @@ const progress: Progress = {
 const m = manualClock();
 const heard: string[] = [];
 const found = createFoundPages(null);
-const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, sfx: n => heard.push(n) });
-/* A test may animate its turns, and may serve its own level in place of level 1. */
+/* A test may animate its turns, may serve its own level in place of level 1, and may make level `outsideAt` one from
+   outside the campaign. */
 let reduced = true;
 let ownLevel: Level | null = null;
+let outsideAt = -1;
+let ownOutside: OutsideLevel | null = null;
+const levels: Levels = {
+  count: CAMPAIGN_LEVELS.count, id: CAMPAIGN_LEVELS.id, level: i => (i === 0 && ownLevel) || CAMPAIGN_LEVELS.level(i),
+  scratch: i => i === outsideAt, outside: i => (i === outsideAt ? ownOutside : null),
+};
+const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, levels, sfx: n => heard.push(n) });
 const game: Game = createGame({
-  sfx() {}, say() {}, progress, pages: found, timers: m.timers, clock: m.clock,
-  levels: { count: CAMPAIGN_LEVELS.count, id: CAMPAIGN_LEVELS.id, level: i => (i === 0 && ownLevel) || CAMPAIGN_LEVELS.level(i) },
+  sfx() {}, say() {}, progress, pages: found, timers: m.timers, clock: m.clock, levels,
   reducedMotion: () => reduced, changed: () => flow.render(game),
 });
 let toggled = 0;
-flow.bindControls({ game, toggleMute() {}, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false) });
+let backs = 0;
+flow.bindControls({ game, toggleMute() {}, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; } });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
-const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; };
+const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; outsideAt = -1; ownOutside = null; backs = 0; };
 // Elements of unmounted overlay tests linger in the stub by id, so a page element is looked up inside its root.
 const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
 const el = (id: string) => maybeById(rootOf(id), id);
@@ -719,4 +727,97 @@ test('the Lore book lists the closing card once level 10 is cleared', () => {
   key('q');
   click(byId(rootOf('menu-lore'), 'menu-lore'));
   assert.ok(el('lore-closing-1'));
+});
+
+// ---- a level from outside the campaign: a try from the editor, or a shared link ----
+/** Makes level 10 (a chapter's last, whose win opens the closing card) an outside level. */
+function outside(o: OutsideLevel): void {
+  outsideAt = 9;
+  ownOutside = o;
+}
+const startKicker = () => walk(byId(rootOf('start-veil'), 'start-veil')).find(n => n.className === 'kicker')?.textContent;
+
+test('the start and end cards name an outside level', () => {
+  reset();
+  outside({ kind: 'try', name: 'My maze', best: null });
+  game.open(9);
+  assert.equal(flow.top(), 'start');
+  assert.equal(startKicker(), 'Your level');
+  assert.equal(text('start-title'), 'My maze');
+  assert.equal(el('start-best'), undefined);
+  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, '–', 'the status bar gives no place in a chapter');
+  win(9);
+  assert.equal(flow.top(), 'end');
+  assert.equal(text('end-kicker'), 'Your level');
+  assert.equal(text('end-title'), 'My maze');
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: 54 });
+  game.open(9);
+  assert.equal(startKicker(), 'Shared level');
+  assert.equal(text('start-title'), 'Level K7QD by ABC');
+  assert.equal(text('start-best'), 'beat 54');
+  assert.doesNotMatch(byId(rootOf('start-veil'), 'start-veil').textContent, /Chapter/);
+});
+
+test('a shared win says whether it beat the author', () => {
+  const r = solve(initial(trialLevel(9)));
+  assert.ok(r.solved);
+  const moves = r.line.length;
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: moves + 1 });
+  win(9);
+  assert.equal(text('end-kicker'), 'Shared level');
+  assert.equal(text('end-text'), `You found the way on your own. You beat the author's ${moves + 1}.`);
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: moves });
+  win(9);
+  assert.equal(text('end-text'), `You found the way on your own. The author's best is ${moves}.`, 'a tie does not beat it');
+});
+
+test('an outside level offers no next level and no levels list', () => {
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: null });
+  win(9);
+  assert.equal(flow.top(), 'end', 'no closing card opens over it');
+  for (const id of ['end-next', 'end-trials', 'end-pages']) assert.equal(el(id), undefined, id);
+  assert.ok(el('end-retry'));
+  key('Enter');
+  assert.equal(game.trial, 9, 'Enter does not go on to another level');
+});
+
+test('an outside win records no progress', () => {
+  reset();
+  outside({ kind: 'try', name: 'Your level', best: null });
+  win(9);
+  assert.equal(cleared.size, 0);
+  assert.doesNotMatch(text('end-score'), /best/);
+});
+
+test('Back to the editor shows in the menu and on the end card only for a try', () => {
+  reset();
+  const menuEditor = () => {
+    flow.closeLayers();
+    click(byId(document.getElementById('status-root')!, 'btn-menu'));
+    assert.equal(flow.top(), 'menu');
+    return el('menu-editor');
+  };
+  win(9);
+  assert.equal(el('end-editor'), undefined, 'not after a campaign level');
+  assert.equal(menuEditor(), undefined);
+  reset();
+  outside({ kind: 'shared', name: 'Level K7QD by ABC', best: null });
+  win(9);
+  assert.equal(el('end-editor'), undefined, 'not after a shared level');
+  assert.equal(menuEditor(), undefined);
+  reset();
+  outside({ kind: 'try', name: 'Your level', best: null });
+  win(9);
+  assert.match(text('end-editor'), /Back to the editor/);
+  click(el('end-editor')!);
+  assert.equal(backs, 1);
+  const button = menuEditor();
+  assert.ok(button);
+  assert.match(button.textContent, /Back to the editor/);
+  click(button);
+  assert.equal(backs, 2);
 });

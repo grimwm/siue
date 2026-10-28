@@ -19,6 +19,7 @@ import type { State } from "./puzzle/state.ts";
 import { TOOLS } from "./puzzle/tiles.ts";
 import type { Tool } from "./puzzle/tiles.ts";
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter } from "./campaign/chapters.ts";
+import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
 import { cellFor } from "./fit.ts";
 import { follow } from "./follow.ts";
@@ -46,6 +47,8 @@ export interface UiDeps {
   progress: Progress;
   /** The story pages found in this browser, for the Lore book. */
   pages: FoundPages;
+  /** The levels the game plays, for telling one from outside the campaign; without it every level is the campaign's. */
+  levels?: Pick<Levels, "outside">;
   /** Voices an event (the chapter card's sound). */
   sfx?(name: SfxName): void;
 }
@@ -61,6 +64,8 @@ export interface Controls {
   quit(): void;
   /** Play on the title card: opens Chapter 1's card. */
   play(): void;
+  /** Back to the editor from a try: offered in the menu and on the end card while a try is in play. */
+  backToEditor?(): void;
 }
 
 export interface Ui {
@@ -94,6 +99,16 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 export function createUi(deps: UiDeps): Ui {
   const { atlas, board, progress, pages, sfx } = deps;
 
+  /** The level in play when it is from outside the campaign, else null. */
+  const outsideOf = (g: Game | null): OutsideLevel | null => (g && g.trial >= 0 ? deps.levels?.outside?.(g.trial) ?? null : null);
+  /** An outside level's kicker on its start and end cards. */
+  const outsideKicker = (o: OutsideLevel): string => (o.kind === "try" ? "Your level" : "Shared level");
+  /** Back to the editor, while a try is in play and the page gives it. */
+  const backToEditor = (g: Game | null): (() => void) | undefined => {
+    const back = controls?.backToEditor;
+    return back && g?.run && outsideOf(g)?.kind === "try" ? () => back() : undefined;
+  };
+
   const log: LogLine[] = [];
   let muted = false;
   let full = false;
@@ -101,7 +116,7 @@ export function createUi(deps: UiDeps): Ui {
   let controls: Controls | null = null;
   let game: Game | null = null;
   let titleHint = false;
-  let end: EndView = { open: false, won: false, hasNext: false, pages: [], kicker: "", title: "", text: "", score: "" };
+  let end: EndView = { open: false, won: false, hasNext: false, hasLevels: false, pages: [], kicker: "", title: "", text: "", score: "" };
   /** The try whose ending card has been shown, so closing the card does not bring it back. */
   let endFor: unknown = null;
   let sized = "";
@@ -199,7 +214,8 @@ export function createUi(deps: UiDeps): Ui {
       onStory: () => layers.open("story"),
       onSettings: () => layers.open("menu"),
     });
-    const playing = g && g.trial >= 0 ? chapterOf(g.trial) : null;
+    const out = outsideOf(g);
+    const playing = g && g.trial >= 0 && !out ? chapterOf(g.trial) : null;
     renderChapterCard($("chapter-root"), {
       open: layers.isOpen("chapter"),
       chapter: CHAPTERS[chapterN - 1]!,
@@ -227,8 +243,10 @@ export function createUi(deps: UiDeps): Ui {
       open: layers.isOpen("start"),
       chapter: playing?.chapter.n ?? 1,
       number: (playing?.within ?? 0) + 1,
-      title: lv?.title ?? "",
+      ...(out ? { kicker: outsideKicker(out) } : {}),
+      title: out ? out.name : lv?.title ?? "",
       intro: lv?.intro ?? "",
+      ...(out?.best != null ? { best: `beat ${out.best}` } : {}),
       onBegin: () => layers.close("start"),
     });
     renderEndCard($("end-root"), {
@@ -239,6 +257,7 @@ export function createUi(deps: UiDeps): Ui {
       onTrials: () => layers.open("levels"),
       onUndo: () => g?.press("undo"),
       onRestart: () => g?.press("restart"),
+      onBackToEditor: backToEditor(g),
     });
     renderLore($("lore-root"), {
       open: layers.isOpen("lore"),
@@ -284,6 +303,7 @@ export function createUi(deps: UiDeps): Ui {
         controls?.quit();
       },
       onClose: () => layers.close("menu"),
+      onBackToEditor: backToEditor(g),
     });
   }
 
@@ -369,8 +389,20 @@ export function createUi(deps: UiDeps): Ui {
     const won = s.outcome === "won";
     if (!won) {
       return {
-        open: true, won, hasNext: false, pages: [], kicker: "Level failed", title: "The Minotaur has you",
+        open: true, won, hasNext: false, hasLevels: false, pages: [], kicker: "Level failed", title: "The Minotaur has you",
         text: "Your last heart is gone. Undo a turn or begin the level again.", score: `${s.moves} moves`,
+      };
+    }
+    const how = run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.";
+    const help = run.assisted ? "with help" : "";
+    const out = outsideOf(g);
+    // A level from outside the campaign records nothing and has no chapter: its card names it and, for a shared
+    // level, sets the win against the author's best (only a win without help can beat it).
+    if (out) {
+      const author = out.best === null ? "" : !run.assisted && s.moves < out.best ? ` You beat the author's ${out.best}.` : ` The author's best is ${out.best}.`;
+      return {
+        open: true, won, hasNext: false, hasLevels: false, pages: [], kicker: outsideKicker(out), title: out.name,
+        text: how + author, score: [`${s.moves} moves`, help].filter(Boolean).join(" · "),
       };
     }
     const best = progress.get(LEVEL_IDS[g.trial]!).best;
@@ -378,9 +410,9 @@ export function createUi(deps: UiDeps): Ui {
     const titles = CHAPTERS.flatMap((c) => c.lore?.pages ?? []);
     const pages = pagesTaken(s).map((id) => titles.find((p) => p.id === id)?.title ?? id);
     return {
-      open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, pages, kicker: `Level ${chapterOf(g.trial).within + 1} cleared`, title: s.level.title,
-      text: run.assisted ? "You followed Ariadne's thread." : "You found the way on your own.",
-      score: [`${s.moves} moves`, best !== null ? `best ${best}` : "", run.assisted ? "with help" : ""].filter(Boolean).join(" · "),
+      open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, hasLevels: true, pages, kicker: `Level ${chapterOf(g.trial).within + 1} cleared`, title: s.level.title,
+      text: how,
+      score: [`${s.moves} moves`, best !== null ? `best ${best}` : "", help].filter(Boolean).join(" · "),
     };
   }
 
@@ -392,6 +424,7 @@ export function createUi(deps: UiDeps): Ui {
       return;
     }
     const s = run.now;
+    const out = outsideOf(g);
     if (sized !== `${s.level.cols}x${s.level.rows}`) fit();
     else followPlayer(s);
     // A level opened: the start card shows (a restart does not); the story log keeps its words.
@@ -399,13 +432,14 @@ export function createUi(deps: UiDeps): Ui {
       shownOpen = g.opens;
       announced = [];
       pending = [];
-      log.push({ text: `${s.level.title}: ${s.level.intro}`, tone: "info" });
+      const name = out ? out.name : s.level.title;
+      log.push({ text: s.level.intro ? `${name}: ${s.level.intro}` : name, tone: "info" });
       layers.open("start");
     }
 
     renderStatus($("status-root"), {
       view: statusView({
-        trial: `${chapterOf(g.trial).within + 1}/${chapterOf(g.trial).chapter.levelIds.length}`,
+        trial: out ? "" : `${chapterOf(g.trial).within + 1}/${chapterOf(g.trial).chapter.levelIds.length}`,
         hearts: s.hearts,
         relicsLeft: s.relicsLeft,
         keys: s.keys,
@@ -448,8 +482,8 @@ export function createUi(deps: UiDeps): Ui {
       end = endView(g);
       layers.open("end");
       // A chapter's last level won: its closing card opens over the end card, which waits under it.
-      const { chapter, within } = chapterOf(g.trial);
-      if (end.won && within === chapter.levelIds.length - 1) showChapter(chapter.n, true);
+      const place = out ? null : chapterOf(g.trial);
+      if (place && end.won && place.within === place.chapter.levelIds.length - 1) showChapter(place.chapter.n, true);
     }
     announcePages(g);
     drawLayers();

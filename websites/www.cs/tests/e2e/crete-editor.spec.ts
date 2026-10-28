@@ -13,22 +13,21 @@ interface CreteTest {
   solve(s: unknown): { solved: boolean; line: Act[] };
   editor: { draft: { rows: number; cols: number; cells: string[] }; load(text: string): void };
 }
-declare global {
-  interface Window { __creteTest: CreteTest }
-}
+/** The page's window with its test hook (a cast in each evaluated function, which runs in the page). */
+type Hooked = { __creteTest: CreteTest };
 
-const draftOf = (page: Page) => page.evaluate(() => JSON.stringify(window.__creteTest.editor.draft));
+const draftOf = (page: Page) => page.evaluate(() => JSON.stringify((window as unknown as Hooked).__creteTest.editor.draft));
 
 /** The game's own winning line for the level in play, pressed through the page's keys. */
 async function winWithKeys(page: Page): Promise<void> {
   const steps = await page.evaluate(() => {
-    const t = window.__creteTest;
+    const t = (window as unknown as Hooked).__creteTest;
     const r = t.solve(t.game.run.now);
     return r.solved ? r.line.map(a => (a.kind === 'move' ? a.dir! : a.kind === 'tool' ? a.tool! : a.kind)) : [];
   });
   expect(steps.length).toBeGreaterThan(0);
   for (const s of steps) await page.keyboard.press(KEY[s]!);
-  expect(await page.evaluate(() => window.__creteTest.game.run.now.outcome)).toBe('won');
+  expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run.now.outcome)).toBe('won');
 }
 
 /** The link's own line: the `line:` header of the address's payload (base64url of deflate-raw text), as the letters
@@ -46,21 +45,21 @@ async function winWithLine(page: Page, letters: string): Promise<void> {
   const keys: Record<string, string> = { u: 'ArrowUp', d: 'ArrowDown', l: 'ArrowLeft', r: 'ArrowRight', w: '.', z: 'z', x: 'x', c: 'c' };
   expect(letters.length).toBeGreaterThan(0);
   for (const ch of letters) await page.keyboard.press(keys[ch]!);
-  expect(await page.evaluate(() => window.__creteTest.game.run.now.outcome)).toBe('won');
+  expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run.now.outcome)).toBe('won');
 }
 
 /** Paints one cell with the selected brush, as a click on the editor's board does (cells are square, the board's
  *  extra height is the rise above the first row). */
 async function paint(page: Page, r: number, c: number): Promise<void> {
   const box = (await page.locator('#editor-stage').boundingBox())!;
-  const { rows, cols } = await page.evaluate(() => window.__creteTest.editor.draft);
+  const { rows, cols } = await page.evaluate(() => (window as unknown as Hooked).__creteTest.editor.draft);
   const cell = box.width / cols;
   await page.mouse.click(box.x + (c + 0.5) * cell, box.y + box.height - (rows - r - 0.5) * cell);
 }
 
 /** Trial 9 with no title, intro or page, as a link carries a level. */
 const bareTrial9 = (page: Page) => page.evaluate(() => {
-  const [head, grid] = window.__creteTest.TRIALS[8]!.text.split('\n\n');
+  const [head, grid] = (window as unknown as Hooked).__creteTest.TRIALS[8]!.text.split('\n\n');
   const lines = head!.split('\n').filter(l => !/^(title|intro|pages):/.test(l));
   return `title: \nintro: \n${lines.join('\n')}${lines.length ? '\n' : ''}\n${grid!.replace(/p/g, '.')}`;
 });
@@ -72,7 +71,7 @@ test('builds a small level and tries it', async ({ page }) => {
   await page.goto(`${PAGE}#edit`);
   await expect(page.locator('#editor-root')).toBeVisible();
   const spots = [3 * 12 + 3, 3 * 12 + 4, 4 * 12 + 3];
-  const cellsAt = () => page.evaluate(i => i.map(n => window.__creteTest.editor.draft.cells[n]), spots);
+  const cellsAt = () => page.evaluate(i => i.map(n => (window as unknown as Hooked).__creteTest.editor.draft.cells[n]), spots);
   expect(await cellsAt(), 'the cells are floor before painting').not.toContain('#');
   await page.locator('#brush-wall').click();
   await paint(page, 3, 3);
@@ -118,12 +117,12 @@ test('shares a level and wins it on a phone', async ({ page, browser }) => {
   await page.goto(PAGE);
   await expect(page.locator('#title-veil')).toBeVisible();
   const level = await bareTrial9(page);
-  await page.evaluate(t => window.__creteTest.editor.load(t), level);
+  await page.evaluate(t => (window as unknown as Hooked).__creteTest.editor.load(t), level);
   await expect(page.locator('#editor-root')).toBeVisible();
-  expect(await page.evaluate(() => window.__creteTest.editor.draft.rows)).toBe(11);
+  expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.editor.draft.rows)).toBe(11);
   await expect(page.locator('#editor-undo'), 'nothing earlier to undo').toBeDisabled();
   await page.keyboard.press('u');
-  expect(await page.evaluate(() => window.__creteTest.editor.draft.rows), 'no empty draft beneath the loaded level').toBe(11);
+  expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.editor.draft.rows), 'no empty draft beneath the loaded level').toBe(11);
 
   await page.locator('#share-initials').fill('WGR');
   await page.locator('#share-run').click();
@@ -173,7 +172,7 @@ test('a link opened in a page shows the card; Edit a copy then U brings back the
   await page.goto(`${PAGE}#edit`);
   await expect(page.locator('#editor-root')).toBeVisible();
   const level = await bareTrial9(page);
-  await page.evaluate(t => window.__creteTest.editor.load(t), level);
+  await page.evaluate(t => (window as unknown as Hooked).__creteTest.editor.load(t), level);
   await page.locator('#share-initials').fill('WGR');
   await page.locator('#share-run').click();
   await expect(page.locator('#share-link')).toBeVisible({ timeout: 180_000 });

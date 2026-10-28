@@ -227,9 +227,12 @@ export function createGame(deps: GameDeps): Game {
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
     anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: pageStops(before, tl), paused: null } : null;
     reached = 0;
-    if (run.now.outcome === 'won' && !deps.levels.scratch?.(trial)) {
-      deps.progress.record(deps.levels.id(trial), run.now.moves, run.assisted);
-      found = deps.pages.add(pagesTaken(run.now));
+    if (run.now.outcome === 'won') {
+      if (deps.levels.scratch?.(trial)) deps.levels.won?.(trial, run.now.moves, run.assisted);
+      else {
+        deps.progress.record(deps.levels.id(trial), run.now.moves, run.assisted);
+        found = deps.pages.add(pagesTaken(run.now));
+      }
     }
     redraw();
     deps.changed();

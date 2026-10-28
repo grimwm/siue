@@ -1,17 +1,28 @@
 // Crete's level editor in the DOM stub: the palette's buttons, the owner's page brush, painting with the mouse
-// (a drag is one undo step and leaves no gaps), the size bar, and the editor's keys.
+// (a drag is one undo step and leaves no gaps), the size bar, the editor's keys, and Try it on the game screen and
+// back, with the author's best.
 import { test, afterEach } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { h, render as preactRender } from 'preact';
 import { importTsx } from '../../_kit/test/tsx.ts';
-import { byId, click, document, fire, installDocument, makeEl, maybeById, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
+import { byId, click, document, fire, fireDocument, installDocument, makeEl, maybeById, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import type { Brush } from '../src/editor/model.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import { HAZARDS, OBJECTS, TERRAIN } from '../src/puzzle/tiles.ts';
 import type { HazardKind, Terrain } from '../src/puzzle/tiles.ts';
 import type { Atlas } from '../src/board-plan.ts';
+import type { Board } from '../src/board.ts';
+import { manualClock } from '../../_kit/test/clock.ts';
+import { createGame } from '../src/game.ts';
+import type { Game } from '../src/game.ts';
+import { createFoundPages } from '../src/pages.ts';
+import { createProgress } from '../src/progress.ts';
+import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
+import { createOutside } from '../src/outside.ts';
+import { newDraft, toText } from '../src/editor/model.ts';
+import { mv } from './puzzle-grid.ts';
 
 installDocument();
 /* The page's storage, for the owner flag, and the window the board reads its pixel ratio from. */
@@ -20,12 +31,15 @@ const stored = new Map<string, string>();
   devicePixelRatio: 1,
   localStorage: { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => { stored.set(k, v); }, removeItem: (k: string) => { stored.delete(k); } },
   addEventListener() {},
+  setTimeout: () => 0,
+  clearTimeout() {},
 };
-(globalThis as { getComputedStyle?: unknown }).getComputedStyle = () => ({ paddingLeft: '0', paddingRight: '0', paddingTop: '0', paddingBottom: '0' });
+(globalThis as { getComputedStyle?: unknown }).getComputedStyle = () => ({ paddingLeft: '0', paddingRight: '0', paddingTop: '0', paddingBottom: '0', display: 'block' });
 const ed = await importTsx<{
   palette: typeof import('../src/editor/palette.tsx');
   editor: typeof import('../src/editor/editor.ts');
-}>(import.meta.dirname, { palette: '../src/editor/palette.tsx', editor: '../src/editor/editor.ts' });
+  page: typeof import('../src/ui.ts');
+}>(import.meta.dirname, { palette: '../src/editor/palette.tsx', editor: '../src/editor/editor.ts', page: '../src/ui.ts' });
 
 const roots: StubElement[] = [];
 afterEach(() => {
@@ -344,4 +358,183 @@ test('Resize ignores an empty box, and the boxes show the size the board has', (
   assert.equal(c2.value, '3', 'a clamped size equal to the board shows the board\'s size');
   press(e, 'u');
   assert.equal(e.editor.draft.cols, 12, 'the clamped equal size added no undo step');
+});
+
+// ---- Try it: the draft on the game screen, and back ----
+/* The page as src/main.ts wires it: the game, its UI, the editor, and the outside slot a try plays in. */
+const tryRoot = makeEl('try-editor-root');
+const progress = createProgress(null);
+const m = manualClock();
+const outside = createOutside(CAMPAIGN_LEVELS, {
+  open: i => tryGame.open(i),
+  stop: () => tryGame.stop(),
+  closeLayers: () => flow.closeLayers(),
+  showEditor: () => flow.showEditor(),
+  bestWon: (text, moves) => tryEditor.tryWon(text, moves),
+});
+const flow = ed.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: createFoundPages(null), levels: outside.levels });
+const tryGame: Game = createGame({
+  sfx() {}, say() {}, progress, pages: createFoundPages(null), timers: m.timers, clock: m.clock, levels: outside.levels,
+  reducedMotion: () => true, changed: () => flow.render(tryGame),
+});
+const tryEditor = ed.editor.createEditor({
+  root: tryRoot as unknown as HTMLElement, atlas, image: makeEl('img') as unknown as HTMLImageElement,
+  tryIt: (level, text) => outside.tryLevel(level, text, null), changed() {},
+});
+flow.bindControls({ game: tryGame, toggleMute() {}, toggleFullscreen() {}, wake() {}, quit() {}, play() {}, backToEditor: outside.backToEditor, editor: tryEditor });
+const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
+const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
+const el = (id: string) => maybeById(rootOf(id), id);
+/** The editor, alone, on a new draft of `rows` x `cols` (the player at the top left, the exit at the bottom right). */
+function editing(rows: number, cols: number): void {
+  flow.showEditor();
+  tryEditor.open(newDraft(rows, cols));
+}
+/** Paints a wall at (r, c) of the open draft, as a click on the board does. */
+function wallAt(r: number, c: number): void {
+  const d = tryEditor.draft;
+  const rise = (10 * atlas.rise) / atlas.cell;
+  const canvas = byId(tryRoot, 'editor-stage');
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: d.cols * 10, height: d.rows * 10 + rise }) as { width: number; height: number };
+  click(byId(tryRoot, 'brush-wall'));
+  const ev = { clientX: c * 10 + 5, clientY: rise + r * 10 + 5, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
+  fire(canvas, 'pointerdown', ev);
+  fire(canvas, 'pointerup', ev);
+}
+/** Begins the try and walks from the top left to the bottom right of an open draft: its moves. */
+function walkToExit(): number {
+  key('Enter');
+  const d = tryEditor.draft;
+  for (let i = 0; i < d.cols - 3; i++) tryGame.press(mv('right'));
+  for (let i = 0; i < d.rows - 3; i++) tryGame.press(mv('down'));
+  assert.equal(tryGame.run!.now.outcome, 'won');
+  return tryGame.run!.now.moves;
+}
+
+test('Try it opens the level on the game screen with its start card', () => {
+  editing(8, 9);
+  wallAt(3, 5);
+  const draft = tryEditor.draft;
+  click(byId(tryRoot, 'editor-try'));
+  assert.equal(flow.top(), 'start');
+  assert.equal(tryRoot.hidden, true, 'the editor is put away');
+  assert.equal(tryGame.trial, outside.at);
+  assert.equal(tryGame.run!.now.level.cols, 9);
+  assert.equal(tryGame.run!.now.level.terrain[3 * 9 + 5], 'wall');
+  assert.equal(walk(byId(rootOf('start-veil'), 'start-veil')).find(n => n.className === 'kicker')?.textContent, 'Your level');
+  assert.equal(byId(rootOf('start-title'), 'start-title').textContent, 'Your level');
+  assert.equal(tryEditor.draft, draft);
+  key('Enter');
+  assert.equal(flow.top(), null, 'Enter begins the try');
+  key('ArrowRight');
+  assert.equal(tryGame.run!.now.moves, 1, 'the game takes the keys');
+});
+
+test('a draft with a title is named by it, and its best is kept under its share text', () => {
+  flow.showEditor();
+  tryEditor.open({ ...newDraft(6, 6), title: 'My maze' });
+  key('p');
+  assert.equal(byId(rootOf('start-title'), 'start-title').textContent, 'My maze');
+  const moves = walkToExit();
+  assert.equal(byId(rootOf('end-title'), 'end-title').textContent, 'My maze');
+  assert.equal(tryEditor.bestFor(toText(tryEditor.draft, true)), moves);
+});
+
+test('Back to the editor returns to the same draft and history', () => {
+  editing(7, 8);
+  wallAt(2, 4);
+  wallAt(3, 4);
+  const draft = tryEditor.draft;
+  key('p');
+  key('Enter');
+  tryGame.press(mv('right'));
+  tryGame.auto();
+  assert.equal(tryGame.playing, true, 'a play-out runs');
+  key('q');
+  assert.equal(flow.top(), 'menu');
+  click(el('menu-editor')!);
+  assert.equal(flow.top(), 'editor');
+  assert.equal(tryRoot.hidden, false);
+  assert.equal(tryGame.playing, false, 'the play-out stopped');
+  assert.equal(tryEditor.draft, draft);
+  key('u');
+  assert.equal(tryEditor.draft.cells[3 * 8 + 4], '.', 'the last stroke undone');
+  assert.equal(tryEditor.draft.cells[2 * 8 + 4], '#', 'and only it');
+  // From the end card too.
+  key('p');
+  walkToExit();
+  assert.equal(flow.top(), 'end');
+  click(el('end-editor')!);
+  assert.equal(flow.top(), 'editor');
+  key('y');
+  assert.equal(tryEditor.draft, draft, 'redo still has the stroke');
+});
+
+test('an unassisted win records the author\'s best for that text', () => {
+  editing(9, 9);
+  const text = toText(tryEditor.draft, true);
+  assert.equal(tryEditor.bestFor(text), null);
+  key('p');
+  const moves = walkToExit();
+  assert.equal(moves, 12);
+  assert.equal(tryEditor.bestFor(text), 12);
+  // A longer win keeps the best; Retry plays the same try.
+  click(el('end-retry')!);
+  key('Enter');
+  tryGame.press({ kind: 'wait' });
+  for (let i = 0; i < 6; i++) tryGame.press(mv('right'));
+  for (let i = 0; i < 6; i++) tryGame.press(mv('down'));
+  assert.equal(tryGame.run!.now.outcome, 'won');
+  assert.equal(tryEditor.bestFor(text), 12);
+  assert.equal(progress.get('outside').cleared, false, 'a try records no progress');
+});
+
+test('a hinted win records none', () => {
+  editing(9, 10);
+  const text = toText(tryEditor.draft, true);
+  key('p');
+  key('Enter');
+  key('h');
+  assert.equal(tryGame.run!.assisted, true);
+  for (let i = 0; i < 7; i++) tryGame.press(mv('right'));
+  for (let i = 0; i < 6; i++) tryGame.press(mv('down'));
+  assert.equal(tryGame.run!.now.outcome, 'won');
+  assert.equal(tryEditor.bestFor(text), null);
+});
+
+test('an edit after a win forgets the best', () => {
+  editing(10, 9);
+  key('p');
+  const moves = walkToExit();
+  click(el('end-editor')!);
+  assert.equal(tryEditor.bestFor(toText(tryEditor.draft, true)), moves);
+  wallAt(4, 4);
+  assert.equal(tryEditor.bestFor(toText(tryEditor.draft, true)), null, 'the edited level has no best');
+  key('u');
+  assert.equal(tryEditor.bestFor(toText(tryEditor.draft, true)), moves, 'undo brings back the level that was won');
+});
+
+test('P with no player-reachable problem opens Try it; the editor layer closes', () => {
+  editing(12, 12);
+  assert.equal(flow.top(), 'editor');
+  key('p');
+  assert.equal(flow.top(), 'start');
+  assert.equal(tryRoot.hidden, true);
+  key('q');
+  assert.equal(flow.top(), null, 'Q closes the start card, not a hidden editor');
+  key('q');
+  assert.equal(flow.top(), 'menu');
+  assert.ok(el('menu-editor'));
+});
+
+test('the browser leaving #edit during a try leaves the try playing', () => {
+  editing(6, 7);
+  key('p');
+  key('Enter');
+  tryGame.press(mv('right'));
+  flow.leaveEditor();
+  assert.equal(flow.top(), null, 'no title card over the try, and no editor');
+  assert.equal(tryRoot.hidden, true);
+  assert.equal(tryGame.trial, outside.at);
+  assert.equal(tryGame.run!.now.moves, 1);
 });

@@ -263,6 +263,43 @@ test('a win on a scratch level records no progress and finds no pages', () => {
   assert.deepEqual(game.found, []);
 });
 
+test('a scratch win is handed to the levels, with its moves and whether it had help', () => {
+  const wins: [number, number, boolean][] = [];
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    pages: createFoundPages(null),
+    levels: {
+      count: 1, id: () => 'test-level', scratch: () => true, won: (i, moves, assisted) => { wins.push([i, moves, assisted]); },
+      level: () => parse('title: t\nintro: i\n\n#####\n#P.E#\n#####\n'),
+    },
+  });
+  game.open(0);
+  game.press(R_);
+  game.press(R_);
+  assert.deepEqual(wins, [[0, 2, false]]);
+  game.open(0);
+  game.hint();
+  game.press(R_);
+  game.press(R_);
+  assert.deepEqual(wins, [[0, 2, false], [0, 2, true]]);
+});
+
+test('a campaign win is not handed to the levels', () => {
+  const wins: number[] = [];
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say() {}, progress: createProgress(null), timers: m.timers, clock: m.clock, reducedMotion: () => true, changed() {},
+    pages: createFoundPages(null),
+    levels: { count: 1, id: () => 'test-level', won: i => { wins.push(i); }, level: () => parse('title: t\nintro: i\n\n#####\n#P.E#\n#####\n') },
+  });
+  game.open(0);
+  game.press(R_);
+  game.press(R_);
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.deepEqual(wins, []);
+});
+
 test('a catch names the hazard on a teleport exit and on a ride onto one', () => {
   const exit = lone(['P@..', '..@w'], 'facing: left');
   exit.game.press(R_);

@@ -2,7 +2,9 @@
  * canvas #editor-stage). It draws the draft as the game would at its start, paints it with the mouse or one
  * finger (a drag paints every cell it crosses and is one undo step; two fingers scroll a big board), fits the
  * board as the game's does, and answers the editor's keys while src/ui.ts hands them over. The draft and its
- * undo history live for the page's life: leaving the editor by Try it or Q keeps them. Needs the DOM lib. */
+ * undo history live for the page's life: leaving the editor by Try it or Q keeps them. It keeps the author's best
+ * for each level it tried: the fewest moves of a try won without Ariadne's thread, by the level's share text, so
+ * an edit leaves a level with no best until it is won again. Needs the DOM lib. */
 import { isBackKey, typesText } from '../../../_kit/keys.ts';
 import { oneOf, pref } from '../../../_kit/prefs.ts';
 import { browserStorage } from '../../../_kit/ports.browser.ts';
@@ -31,13 +33,17 @@ export interface Editor {
   readonly draft: Draft;
   /** Handles a key press while the editor is the top layer; false when the press is not the editor's. */
   key(ev: KeyboardEvent): boolean;
+  /** A try of the share text `text` was won in `moves` without the thread. */
+  tryWon(text: string, moves: number): void;
+  /** The author's best for the share text `text`, or null before a try of it is won without the thread. */
+  bestFor(text: string): number | null;
 }
 
 export interface EditorDeps {
   root: HTMLElement;
   atlas: Atlas;
   image: HTMLImageElement;
-  /** Plays the draft on the game screen. */
+  /** Plays the draft on the game screen; `text` is its share text (`toText(draft, true)`). */
   tryIt(level: Level, text: string): void;
   /** The draft changed. */
   changed(): void;
@@ -118,6 +124,8 @@ export function createEditor(deps: EditorDeps): Editor {
   let stroke: { id: number; last: Cell } | null = null;
   /** Touches on the board, for telling a one-finger stroke from a two-finger scroll. */
   const touches = new Map<number, { x: number; y: number }>();
+  /** The author's best by share text. */
+  const bests = new Map<string, number>();
 
   const now = (): History<Draft> => (history ??= startHistory(newDraft(NEW_SIDE, NEW_SIDE)));
 
@@ -238,7 +246,7 @@ export function createEditor(deps: EditorDeps): Editor {
 
   function tryIt(): void {
     endStroke();
-    deps.tryIt(toLevel(live), toText(live, false));
+    deps.tryIt(toLevel(live), toText(live, true));
   }
 
   /* ---------- painting ---------- */
@@ -357,5 +365,10 @@ export function createEditor(deps: EditorDeps): Editor {
       }
       return true;
     },
+    tryWon(text, moves) {
+      const best = bests.get(text);
+      if (best === undefined || moves < best) bests.set(text, moves);
+    },
+    bestFor: text => bests.get(text) ?? null,
   };
 }

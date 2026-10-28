@@ -14,7 +14,8 @@ import { startSearch } from './solver-client.ts';
 import type { Report } from './solver-host.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS } from './campaign/chapters.ts';
-import type { Levels, OutsideLevel } from './campaign/chapters.ts';
+import type { OutsideLevel } from './campaign/chapters.ts';
+import { createOutside } from './outside.ts';
 import type { Action } from './puzzle/step.ts';
 import { createFoundPages } from './pages.ts';
 import { createProgress } from './progress.ts';
@@ -43,32 +44,36 @@ const image = new Image();
 const board = createBoard(document.getElementById('stage') as HTMLCanvasElement, atlas, image);
 const progress = createProgress(browserStorage());
 const pages = createFoundPages(browserStorage());
-/** The level from outside the campaign in play: it sits at index OUTSIDE, after the campaign's, until the next
- *  `playLevel`, so Retry opens it again. It records nothing. */
-const OUTSIDE = CAMPAIGN_LEVELS.count;
-let outside: { level: Level; about: OutsideLevel; line: readonly Action[] | null } | null = null;
-const levels: Levels = {
-  count: CAMPAIGN_LEVELS.count,
-  id: i => (i === OUTSIDE ? 'outside' : CAMPAIGN_LEVELS.id(i)),
-  level: i => (i === OUTSIDE && outside ? outside.level : CAMPAIGN_LEVELS.level(i)),
-  scratch: i => i === OUTSIDE,
-  outside: i => (i === OUTSIDE ? outside?.about ?? null : null),
-  line: i => (i === OUTSIDE ? outside?.line ?? null : null),
-};
+/* The campaign's levels, then the level from outside it (a try from the editor, or a browser spec's). */
+const outside = createOutside(CAMPAIGN_LEVELS, {
+  open: i => game.open(i),
+  stop: () => game.stop(),
+  closeLayers: () => ui.closeLayers(),
+  showEditor: () => ui.showEditor(),
+  bestWon: (text, moves) => editor.tryWon(text, moves),
+});
+const levels = outside.levels;
 const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx });
-/* The level editor, a layer over the game frame. The page does not act on its Try it: the draft stays in the
-   editor. */
+/* The level editor, a layer over the game frame. Try it plays the draft on the game screen. */
 const editor = createEditor({
   root: document.getElementById('editor-root') as HTMLElement,
   atlas,
   image,
-  tryIt: () => {},
+  tryIt: (level, text) => tryLevel(level, text, null),
   changed: () => {},
   leave: () => ui.leaveEditor(),
 });
 
+/** Opens the editor's draft on the game screen as a try. `line` is the last Check's line when that check was of this
+ *  exact text, for Ariadne's thread to follow. */
+function tryLevel(level: Level, text: string, line: readonly Action[] | null): void {
+  outside.tryLevel(level, text, line);
+}
+
 /* `#edit` in the address opens the editor, when the page opens and whenever the fragment changes to it; the
-   fragment changing away from it (the browser's Back) leaves the editor for the title card. */
+   fragment changing away from it (the browser's Back) leaves the editor for the title card. A try leaves the
+   address as it is, as part of the editor's visit; the browser's Back during one changes nothing on the screen: the
+   try plays on, with Back to the editor in its menu. */
 const EDIT_HASH = '#edit';
 function followHash(): void {
   if (window.location.hash === EDIT_HASH) ui.showEditor();
@@ -152,6 +157,7 @@ function loop(now: number): void {
 function start(): void {
   ui.bindControls({
     game, toggleMute, toggleFullscreen, wake: audio.ensure, quit: () => { void quit(); }, play, editor, leftEditor,
+    backToEditor: outside.backToEditor,
   });
   if (settings.sound.get() === 'off') {
     audio.toggleMute();
@@ -199,14 +205,13 @@ function solveInWorker(levelText: string): Promise<{ result: unknown; progress: 
 /** Opens `level` from outside the campaign: a try (named by its title, or "Your level") unless `opts.outside` says
  *  otherwise, with `opts.line` as its proven line when there is one. */
 function playLevel(level: Level, opts: { outside?: OutsideLevel; line?: readonly Action[] } = {}): void {
-  outside = { level, about: opts.outside ?? { kind: 'try', name: level.title || 'Your level', best: null }, line: opts.line ?? null };
-  game.open(OUTSIDE);
+  outside.play(level, opts.outside ?? { kind: 'try', name: level.title || 'Your level', best: null }, opts.line ?? null);
 }
 
 /* Test hook for automated checks: drives the real game logic, no copy. Its editor is the Editor, plus `load(text)`,
    which opens the editor on that level text. */
 const editorHook = {
-  open: editor.open, close: editor.close, key: editor.key,
+  open: editor.open, close: editor.close, key: editor.key, bestFor: editor.bestFor,
   get draft() { return editor.draft; },
   load(text: string): void {
     ui.showEditor();

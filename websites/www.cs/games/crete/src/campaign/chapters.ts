@@ -53,6 +53,9 @@ export interface Levels {
   outside?(i: number): OutsideLevel | null;
   /** A proven winning line from the level's start, or null. */
   line?(i: number): readonly Action[] | null;
+  /** Scratch level `i` was won in `moves`, with the thread's help or not. The controller records a campaign level's
+   *  win itself; a scratch level's comes here, for the page to keep what it will. */
+  won?(i: number, moves: number, assisted: boolean): void;
 }
 
 /** LEVEL_IDS, each built from its trial. */

@@ -10,6 +10,9 @@ _VERSION_DIR = re.compile(r"v([1-9][0-9]*)")
 DRAFT_FILES = ("score.json", "score.musicxml", "audio.webm", "audio.m4a", "spectrogram.png")
 
 
+GENERAL_PIECE = "general"  # the front page's notes carry this piece id (games/workroom/src/note.ts)
+
+
 class PublishError(Exception):
     pass
 
@@ -24,6 +27,8 @@ def latest_version(piece_dir: Path) -> int:
 def publish(piece: str, version: int | None, pieces: Path, api, glossary_ids: frozenset[str]) -> int:
     if not ID_RE.fullmatch(piece):
         raise PublishError(f"{piece!r} is not a piece id (lowercase letters, digits and hyphens)")
+    if piece == GENERAL_PIECE:
+        raise PublishError(f"{piece!r} is the id of the workroom's general notes, so no piece can use it")
     pieces = Path(pieces)
     piece_dir = pieces / piece
     if version is None:

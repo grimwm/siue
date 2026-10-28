@@ -2,7 +2,9 @@
 // server rendered, and draws it: a piece (its views, the answer bar and the
 // notes panel), or on the pieces list the unlock that fills in each piece's
 // waiting count. Notes are sealed to the current key of the keyring the
-// passphrase unlocks on this page view; nothing seals before that unlock.
+// passphrase unlocks; this browser remembers that unlock for the same sign-in
+// and keyring, so it is restored before the page draws. Nothing seals before an
+// unlock or a restore.
 import { render, h } from 'preact';
 import { createAudioCore } from '../../_kit/audio/core.ts';
 import { createApi } from './api.ts';
@@ -13,6 +15,7 @@ import { draftUrl, loadDraft } from './load.ts';
 import { createNotesSession } from './notes-session.ts';
 import type { NotesSession } from './notes-session.ts';
 import { createOutbox } from './outbox.ts';
+import { indexedDbKeyMemory } from './remember.ts';
 import { startTheme } from './theme.ts';
 import { createVault } from './vault.ts';
 import { demoPlayer } from './ui/demo-player.ts';
@@ -29,12 +32,15 @@ const playDemo = demoPlayer(createAudioCore());
 const { view, piece, version } = document.body.dataset;
 const fetcher = window.fetch.bind(window);
 
-/** The notes on this page view: the keys stay in memory, the outbox in IndexedDB holds sealed notes only. */
+/** The notes on this page view: the unlocked keys are remembered in IndexedDB as non-extractable keys; the outbox holds sealed notes only. */
 function notesSession(): NotesSession {
   const api = createApi(fetcher, document.querySelector('meta[name="csrf"]')?.getAttribute('content') ?? '');
-  return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock()) });
+  return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock()), memory: indexedDbKeyMemory() });
 }
 const notes = notesSession();
+/** How long the page waits to restore a remembered unlock before drawing locked: a stalled request must not keep it blank. */
+const RESTORE_WAIT_MS = 5000;
+await Promise.race([notes.restore(), new Promise(resolve => setTimeout(resolve, RESTORE_WAIT_MS))]);
 
 function say(text: string, role = 'alert'): void {
   const p = document.createElement('p');

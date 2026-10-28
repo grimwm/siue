@@ -8,29 +8,37 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { SignedOut } from '../api.ts';
 import { answeredBy, forPiece, timelineMarks } from '../history.ts';
 import type { HistoryItem } from '../history.ts';
-import { UNLOCK_MESSAGES } from '../notes-session.ts';
+import { DISCARD_FAILED, describeFailure, unreadableMessage } from '../notes-session.ts';
 import type { NotesSession } from '../notes-session.ts';
 import type { Pending } from '../outbox.ts';
 import type { Score } from '../score.ts';
 import { Panel } from './console/Panel.tsx';
+import { GENERAL_PIECE } from '../note.ts';
+import { GeneralComposer } from './GeneralComposer.tsx';
 import { History, Kept } from './History.tsx';
 import { UnlockPanel } from './UnlockPanel.tsx';
 
 export interface AnswersProps {
-  notes: NotesSession; score: Score; version: number; refresh: number;
+  /** A piece's score; null on the front page, where the panel is the general notes (tied to no piece). */
+  notes: NotesSession; score: Score | null; version: number; refresh: number;
   ask: string | null;
   onUnlocked(): void;
   /** The notes are locked again (a sign-in that ended, or a lock that overtook a load). */
   onLocked?(): void;
   onItems(items: readonly HistoryItem[]): void;
+  /** The front page's unsent general note, kept by the page so it survives a lock and the leave guard can see it. */
+  draft?: { text: string; onText(update: (text: string) => string): void };
 }
 
-const problemOf = (e: unknown): string => (e instanceof SignedOut ? UNLOCK_MESSAGES.signedOut : UNLOCK_MESSAGES.offline);
+/** What unlocking gives on the front page. */
+const FRONT_PAGE_INTRO = 'Unlock to write and read your general notes, and to see how many notes wait on each piece.';
 
 export function Answers(p: AnswersProps) {
   const [unlocked, setUnlocked] = useState(p.notes.unlocked());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** What the last action (Delete, Delete all, Discard, Try again) could not do: kept until the next action, so the reload after it cannot wipe it. */
+  const [problem, setProblem] = useState<string | null>(null);
   const [items, setItems] = useState<readonly HistoryItem[]>([]);
   const [kept, setKept] = useState<readonly Pending[]>([]);
   const [scope, setScope] = useState<'piece' | 'all'>('piece');
@@ -38,7 +46,7 @@ export function Answers(p: AnswersProps) {
   /** Shows a failure; a sign-in that ended locks the notes, so the unlock form comes back. */
   const fail = (e: unknown): void => {
     if (e instanceof SignedOut) { p.notes.lock(); setItems([]); }
-    setError(problemOf(e));
+    setError(describeFailure(e));
     setUnlocked(p.notes.unlocked());
     if (!p.notes.unlocked()) p.onLocked?.();
   };
@@ -54,14 +62,17 @@ export function Answers(p: AnswersProps) {
       if (!p.notes.unlocked()) { setItems([]); setUnlocked(false); p.onLocked?.(); return; }
       setItems(all);
       p.onItems(all);
-      setError(null);
+      const skipped = p.notes.unreadable();
+      setError(skipped > 0 ? unreadableMessage(skipped) : null);
     } catch (e) {
       fail(e);
     }
   };
-  const act = async (work: () => Promise<unknown>): Promise<void> => {
+  /** `whenFailed` is what to say when the work fails for any reason but a lost sign-in. */
+  const act = async (work: () => Promise<unknown>, whenFailed?: string): Promise<void> => {
     setBusy(true);
-    try { await work(); } catch (e) { fail(e); } finally { setBusy(false); }
+    setProblem(null);
+    try { await work(); } catch (e) { if (e instanceof SignedOut) fail(e); else setProblem(whenFailed ?? describeFailure(e)); } finally { setBusy(false); }
     await load();
   };
   const mounted = useRef(false);
@@ -87,28 +98,36 @@ export function Answers(p: AnswersProps) {
     await load();
   };
 
-  const piece = p.score.piece.id;
-  const numbers = new Map(timelineMarks(items, piece, p.score.duration).map(m => [m.id, m.n]));
-  const keptList = <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key))} onRetry={() => void act(() => p.notes.flush())} />;
+  const score = p.score;
+  const piece = score ? score.piece.id : GENERAL_PIECE;
+  const numbers = new Map(score ? timelineMarks(items, piece, score.duration).map(m => [m.id, m.n]) : []);
+  const keptList = <Kept kept={kept} busy={busy} onDiscard={key => void act(() => p.notes.discard(key), DISCARD_FAILED)} onRetry={() => void act(() => p.notes.flush())} />;
+  const alertOf = (m: string | null) => (m ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{m}</p> : null);
   return (
-    <Panel title="Your notes" label="Notes & answers" class="grid gap-3" data={{ 'data-answers': '' }}>
+    <Panel title="Your notes" label="Notes & answers" class="grid gap-3" data={score ? { 'data-answers': '' } : { 'data-answers': '', 'data-pieces-notes': '' }}>
       {!unlocked ? (
         <>
           {p.ask ? <p data-unlock-reason="" class="text-sm">{p.ask}</p> : null}
-          <UnlockPanel busy={busy} error={error} onUnlock={pass => void unlock(pass)} />
+          <UnlockPanel busy={busy} error={error} intro={score ? undefined : FRONT_PAGE_INTRO} onUnlock={pass => void unlock(pass)} />
+          {alertOf(problem)}
+          {!score && p.draft?.text.trim() ? <p data-general-kept="" class="text-sm">Your note is kept here; unlock to send it.</p> : null}
           {keptList}
         </>
       ) : (
         <>
-          {error ? <p class="rounded-md border border-amber bg-well p-3 text-sm" role="alert">{error}</p> : null}
-          <History items={scope === 'piece' ? forPiece(items, piece) : items} total={items.length} scope={scope} onScope={setScope} version={p.version}
-            laneName={id => p.score.lanes.find(l => l.id === id)?.name ?? null}
+          {score ? null : <p class="text-sm text-dim">Each piece shows how many of your notes wait for pickup.</p>}
+          {alertOf(problem)}
+          {alertOf(error)}
+          {score || !p.draft ? null : <GeneralComposer notes={p.notes} busy={busy} text={p.draft.text} onText={p.draft.onText} onStored={() => void load()} />}
+          <History items={score === null ? forPiece(items, GENERAL_PIECE) : scope === 'piece' ? forPiece(items, piece) : items} total={items.length} scope={scope} onScope={setScope} version={p.version}
+            general={score === null}
+            laneName={id => score?.lanes.find(l => l.id === id)?.name ?? null}
             numberOf={id => numbers.get(id) ?? null}
-            answers={id => { const k = answeredBy(p.score.changes, id); return k.length ? `Answered in this draft: ${k.map(i => `change ${i + 1}`).join(', ')}` : null; }}
+            answers={id => { const k = score ? answeredBy(score.changes, id) : []; return k.length ? `Answered in this draft: ${k.map(i => `change ${i + 1}`).join(', ')}` : null; }}
             kept={kept} busy={busy}
             onDelete={id => void act(() => p.notes.remove(id))}
             onDeleteAll={() => void act(() => p.notes.removeAll())}
-            onDiscard={key => void act(() => p.notes.discard(key))}
+            onDiscard={key => void act(() => p.notes.discard(key), DISCARD_FAILED)}
             onRetry={() => void act(() => p.notes.flush())} />
         </>
       )}

@@ -7,7 +7,13 @@
 import { useState } from 'preact/hooks';
 import { Button } from './console/Button.tsx';
 
-export interface UnlockPanelProps { busy: boolean; error: string | null; onUnlock(passphrase: string): void }
+export interface UnlockPanelProps {
+  busy: boolean; error: string | null; onUnlock(passphrase: string): void;
+  /** What unlocking gives on this page; the piece page's wording when not given. */
+  intro?: string;
+}
+
+export const UNLOCK_INTRO = 'Unlock to write and read your notes.';
 
 export function UnlockPanel(p: UnlockPanelProps) {
   const [value, setValue] = useState('');
@@ -18,7 +24,7 @@ export function UnlockPanel(p: UnlockPanelProps) {
       setValue('');
       if (v.trim() !== '') p.onUnlock(v);
     }}>
-      <p class="text-sm text-dim">Unlock to write and read your notes. Your password manager fills the passphrase in; this device never keeps it.</p>
+      <p class="text-sm text-dim">{p.intro ?? UNLOCK_INTRO} Your password manager fills the passphrase in; this device never keeps it.</p>
       <input type="text" name="username" autocomplete="username" value="siue-music" readOnly tabIndex={-1} aria-hidden="true" class="sr-only" />
       <label class="grid gap-1 font-mono text-xs tracking-widest text-dim uppercase">Passphrase
         <input type="password" name="password" autocomplete="current-password" required value={value} onInput={e => setValue(e.currentTarget.value)}

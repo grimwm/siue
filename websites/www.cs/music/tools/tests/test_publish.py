@@ -39,6 +39,12 @@ class PublishTest(unittest.TestCase):
         self.assertEqual(publish("test-piece", None, self.pieces, self.api, self.ids), 2)
         self.assertEqual(self.api.sent, [("test-piece", 2, ["audio.webm", "score.json", "score.musicxml", "spectrogram.png"])])
 
+    def test_the_general_notes_piece_id_is_not_publishable(self):
+        with self.assertRaises(PublishError) as raised:
+            publish("general", None, self.pieces, self.api, self.ids)
+        self.assertIn("general notes", str(raised.exception))
+        self.assertEqual(self.api.sent, [])
+
     def test_an_invalid_score_never_leaves_the_computer(self):
         score = json.loads((self.v1 / "score.json").read_text())
         score["sections"][1]["from_bar"] = 6

@@ -1,6 +1,7 @@
-// Nothing of any key is ever written to browser storage: unlocking, loading
-// the vault, sealing and opening touch no IndexedDB, localStorage,
-// sessionStorage, cookie or Cache API, and the key modules do not even name them.
+// Unlocking, loading the vault, sealing and opening touch no IndexedDB,
+// localStorage, sessionStorage, cookie or Cache API, and the key modules do not
+// even name them: the one place an unlock is stored is remember.ts, which keeps
+// only non-extractable keys (test/remember.test.ts).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

@@ -85,7 +85,8 @@ def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
             notes = paths.notes_dir(sys.platform, env, Path.home())
             api = make_api(paths.api_base(env), keys.api_key(PICKUP_KEY, "make music-pickup"))
             report = pickup(api, ring, notes, paths.repo_root(), default_steps())
-            print(f"Picked up {len(report.picked)} note{'' if len(report.picked) == 1 else 's'} into {notes}.")
+            general = f" ({len(report.general)} general)" if report.general else ""
+            print(f"Picked up {len(report.picked)} note{'' if len(report.picked) == 1 else 's'}{general} into {notes}.")
             for note_id, why in report.left.items():
                 print(f"Left {note_id}: {why}")
             for notice in report.notices:

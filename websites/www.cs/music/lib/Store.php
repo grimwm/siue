@@ -362,9 +362,12 @@ final class Store
         return is_array($list) ? array_values(array_filter($list, 'is_string')) : [];
     }
 
+    /** The piece id of the workroom's general notes (games/workroom/src/note.ts GENERAL_PIECE): no piece can have it. */
+    public const GENERAL_PIECE = 'general';
+
     public static function validPieceId(mixed $id): bool
     {
-        return is_string($id) && preg_match(self::PIECE, $id) === 1;
+        return is_string($id) && $id !== self::GENERAL_PIECE && preg_match(self::PIECE, $id) === 1;
     }
 
     /** A note id: 32 lowercase hex digits. */
@@ -379,9 +382,10 @@ final class Store
         return is_string($v) && preg_match('/^[1-9]\d{0,3}$/D', $v) === 1;
     }
 
+    /** A project id has a piece id's form; `general` is reserved for pieces only. */
     public static function validProjectId(mixed $id): bool
     {
-        return self::validPieceId($id);
+        return is_string($id) && preg_match(self::PIECE, $id) === 1;
     }
 
     /** 1 to 80 characters. */

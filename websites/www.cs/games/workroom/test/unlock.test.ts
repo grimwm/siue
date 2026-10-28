@@ -4,7 +4,7 @@
 // keyring is refused.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { KeyringInvalid, STRIPPED, WrongPassphrase, lockKeyring, normalizePassphrase, unlockKeyring } from '../src/unlock.ts';
+import { KeyringInvalid, NoCrypto, STRIPPED, WrongPassphrase, lockKeyring, normalizePassphrase, unlockKeyring } from '../src/unlock.ts';
 import { fingerprintOf, open, seal } from '../src/seal.ts';
 import { b64, current, fx, otherKey } from './fixture-key.ts';
 
@@ -106,4 +106,14 @@ test('a keyring Python locked unlocks in the browser, current key first', async 
   assert.equal(key.fingerprint, fx.fingerprint);
   assert.deepEqual([...ring.keys()], [fx.fingerprint, fx.other.fingerprint]);
   for (const key of ring.values()) assert.equal(key.extractable, false);
+});
+
+test('a browser without Web Crypto is not a wrong passphrase', async () => {
+  const real = Object.getOwnPropertyDescriptor(globalThis, 'crypto')!;
+  Object.defineProperty(globalThis, 'crypto', { value: {}, configurable: true });
+  try {
+    await assert.rejects(unlockKeyring(fx.keyring, fx.passphrase), NoCrypto);
+  } finally {
+    Object.defineProperty(globalThis, 'crypto', real);
+  }
 });

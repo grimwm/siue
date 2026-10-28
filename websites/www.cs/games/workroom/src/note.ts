@@ -6,6 +6,9 @@ export type NoteKind = (typeof NOTE_KINDS)[number];
 export const REACTION_IDS = ['more-epic', 'calmer', 'darker', 'brighter', 'longer', 'shorter', 'love-it', 'not-this'] as const;
 export type Reaction = (typeof REACTION_IDS)[number];
 
+/** The piece id of the owner's general notes, the ones written on the front page and tied to no piece; a draft cannot be published under it (music/tools/siue_music/publish.py). They carry draft 1 and no span, bars, lane or curve. */
+export const GENERAL_PIECE = 'general';
+
 export interface NoteBody {
   v: 1;
   kind: NoteKind;

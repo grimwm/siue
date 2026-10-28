@@ -52,9 +52,9 @@ class PickupTest(unittest.TestCase):
         self.ring = {self.fp: self.pkcs8}
         self.steps = Steps(transcribe=missing, hum_to_midi=missing)
 
-    def sealed(self, text, kind="text", audio=b"", spki=None):
-        body = {"v": 1, "kind": kind, "piece": "test-piece", "draft": 1, "from": 8, "to": 12, "fromBar": 5, "toBar": 6,
-                "lane": "brass", "text": text, "reaction": None, "curve": None,
+    def sealed(self, text, kind="text", audio=b"", spki=None, general=False):
+        body = {"v": 1, "kind": kind, "piece": "general" if general else "test-piece", "draft": 1, "from": 0 if general else 8, "to": 0 if general else 12,
+                "fromBar": None if general else 5, "toBar": None if general else 6, "lane": None if general else "brass", "text": text, "reaction": None, "curve": None,
                 "audio": {"mime": "audio/webm", "seconds": 1} if audio else None, "made": "2027-01-15T08:00:00.000Z"}
         return sealing.seal(body, audio, spki or self.spki)
 
@@ -65,6 +65,14 @@ class PickupTest(unittest.TestCase):
         self.assertLess(api.calls.index(f"get {A}"), api.calls.index(f"mark {A}"))
         saved = json.loads((self.notes / f"2027-01-15-{A}" / "note.json").read_text())
         self.assertEqual((saved["body"]["text"], saved["fingerprint"]), ("louder here", self.fp))
+
+    def test_a_general_note_is_saved_beside_the_piece_notes_and_counted(self):
+        api = FakeApi({A: self.sealed("louder here"), B: self.sealed("play the theme again", general=True)})
+        report = pickup(api, self.ring, self.notes, self.repo, self.steps)
+        self.assertEqual((sorted(report.picked), report.general, sorted(api.marked)), ([A, B], [B], [A, B]))
+        saved = json.loads((self.notes / f"2027-01-15-{B}" / "note.json").read_text())
+        self.assertEqual((saved["body"]["piece"], saved["body"]["text"]), ("general", "play the theme again"))
+        self.assertTrue((self.notes / f"2027-01-15-{A}" / "note.json").exists(), "in the same folder as the piece notes")
 
     def test_a_corrupt_download_is_not_marked(self):
         api = FakeApi({A: self.sealed("x")}, corrupt=frozenset({A}))

@@ -10,19 +10,26 @@ import { NoteUnreadable } from './seal.ts';
 import type { Opened } from './seal.ts';
 
 export interface HistoryItem { id: string; arrived: number; pickedUp: number | null; state: 'waiting' | 'picked-up'; opened: Opened | null; problem: string | null }
-export type OpenOutcome = Opened | NoteUnreadable | 'download';
-export const PROBLEMS: Readonly<Record<NoteUnreadable['reason'] | 'download', string>> = {
+/** A note that could not be downloaded, with the reason as a phrase (see failureReason). */
+export class DownloadFailed {
+  readonly why: string;
+  constructor(why: string) {
+    this.why = why;
+  }
+}
+export type OpenOutcome = Opened | NoteUnreadable | DownloadFailed;
+export const downloadProblem = (why: string): string => `Could not download this note: ${why}.`;
+export const PROBLEMS: Readonly<Record<NoteUnreadable['reason'], string>> = {
   format: 'Could not open this note: it is not a sealed note.',
   'unknown-key': 'Could not open this note: it was sealed to a key your keyring does not hold.',
   tampered: 'Could not open this note: it was damaged or changed.',
-  download: 'Could not download this note. Reload the page to try again.',
 };
 
 export function buildHistory(server: readonly ServerNote[], outcomes: ReadonlyMap<string, OpenOutcome>): HistoryItem[] {
   return server.map((n, i) => ({ n, i })).sort((a, b) => b.n.arrived_at - a.n.arrived_at || b.i - a.i).map(({ n }) => {
     const o = outcomes.get(n.id);
-    const problem = o === undefined ? null : o === 'download' ? PROBLEMS.download : o instanceof NoteUnreadable ? PROBLEMS[o.reason] : null;
-    const opened = o === undefined || o === 'download' || o instanceof NoteUnreadable ? null : o;
+    const problem = o === undefined ? null : o instanceof DownloadFailed ? downloadProblem(o.why) : o instanceof NoteUnreadable ? PROBLEMS[o.reason] : null;
+    const opened = o === undefined || o instanceof DownloadFailed || o instanceof NoteUnreadable ? null : o;
     return { id: n.id, arrived: n.arrived_at, pickedUp: n.picked_up_at, state: n.picked_up_at === null ? 'waiting' : 'picked-up', opened, problem };
   });
 }

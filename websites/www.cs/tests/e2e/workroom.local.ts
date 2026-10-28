@@ -159,11 +159,25 @@ async function openNotes(page: Page): Promise<void> {
   if (await handle.isVisible()) await handle.click();
 }
 
-/** Notes are listed, and notes can be sealed, only after an unlock, and nothing is remembered: every load of a page starts by unlocking. */
+/** Notes are listed, and notes can be sealed, only after an unlock; this browser remembers it for the same sign-in and keyring. */
 async function unlock(page: Page, passphrase: string): Promise<void> {
   await openNotes(page);
   await page.getByLabel('Passphrase').fill(passphrase);
   await page.getByRole('button', { name: 'Unlock notes' }).click();
+}
+
+/** A page view this browser restored the unlock on: no passphrase asked, the notes listed (on a phone, in the opened sheet). */
+async function restored(page: Page): Promise<void> {
+  const handle = page.locator('[data-sheet] > button[aria-expanded="false"]');
+  await expect(handle.or(page.locator('[data-history]')).filter({ visible: true }).first()).toBeVisible();
+  if (await handle.isVisible()) await handle.click();
+  await expect(page.locator('[data-history]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Unlock notes' })).toHaveCount(0);
+}
+
+/** Forgets the unlock this browser remembers, so the next page view starts locked. A delete the page's own open connection blocks finishes once that closes. */
+async function forgetUnlock(page: Page): Promise<void> {
+  await page.evaluate(() => new Promise<void>((resolve, reject) => { const r = indexedDB.deleteDatabase('siue-music-keys'); r.onsuccess = () => resolve(); r.onerror = () => reject(r.error); }));
 }
 
 /** The pin composer's textbox, by its role and name: the panel that lists the notes has another name. */
@@ -194,7 +208,7 @@ async function dragAcross(page: Page, selector: string, x0: number, x1: number, 
   await page.mouse.up();
 }
 
-/** Every page view starts locked: unlock, then on a phone close the bottom sheet again so the answer bar is in reach. */
+/** On a page view that starts locked: unlock, then on a phone close the bottom sheet again so the answer bar is in reach. */
 async function unlockThenClose(page: Page): Promise<void> {
   await unlock(page, testKey.passphrase);
   await expect(page.locator('[data-history]')).toBeVisible();
@@ -498,9 +512,9 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
     await expect(mine.locator('[data-state]')).toHaveText('Waiting');
     await expect(page.locator('[data-note-mark]').first()).toBeVisible();
 
-    // The pieces list counts per piece once unlocked.
+    // The pieces list counts per piece once unlocked: this browser remembers the unlock, so no passphrase is asked.
     await page.goto(`${base}music/`);
-    await unlock(page, testKey.passphrase);
+    await restored(page);
     await expect(page.locator('a[data-waiting="test-piece"] + .waiting-count')).toHaveText('1 waiting');
 
     // Claude's side: the owner's tool picks it up from this docker stack.
@@ -515,10 +529,11 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
     }
 
     await page.goto(`${base}music/piece.php?id=test-piece`);
-    await unlock(page, testKey.passphrase);
+    await restored(page);
     await expect(mine.locator('[data-state]')).toHaveText('Picked up');
 
-    // A second device: a phone signs in, unlocks with the passphrase, reads, deletes. Nothing of a key is stored.
+    // A second device: a phone signs in, unlocks with the passphrase, reads, deletes. Only the unlocked keys are stored, as
+    // non-extractable keys tied to the sign-in: a reload restores them, and a sign-out and a new sign-in forget them.
     const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
     try {
       await phone.addInitScript((views: readonly string[]) => { for (const v of views) { localStorage.setItem(`workroom-guide-${v}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${v}`, 'seen'); } }, GUIDE_VIEWS);
@@ -543,11 +558,35 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
       });
       expect(Object.keys(stored.local).filter(k => !/^workroom-(guide-|theme$)/.test(k))).toEqual([]);
       expect(stored.session).toEqual([]);
-      expect(stored.stores.filter(s => s !== 'siue-music/outbox')).toEqual([]);
+      expect(stored.stores.filter(s => s !== 'siue-music/outbox' && s !== 'siue-music-keys/unlocked')).toEqual([]);
       expect(stored.cookies).toBe('');
       expect(stored.caches).toEqual([]);
       expect(JSON.stringify(stored)).not.toContain(testKey.passphrase);
+      const remembered = await p2.evaluate(() => new Promise<{ fields: string[]; keys: boolean[] }>((resolve, reject) => {
+        const r = indexedDB.open('siue-music-keys');
+        r.onerror = () => reject(r.error);
+        r.onsuccess = () => {
+          const q = r.result.transaction('unlocked').objectStore('unlocked').getAll();
+          q.onerror = () => reject(q.error);
+          q.onsuccess = () => {
+            r.result.close();
+            const row = q.result[0] as Record<string, unknown>;
+            resolve({ fields: Object.keys(row).sort(), keys: [...(row['ring'] as Map<string, CryptoKey>).values()].map(k => k instanceof CryptoKey && !k.extractable) });
+          };
+        };
+      }));
+      expect(remembered.fields).toEqual(['current', 'id', 'keyring', 'ring', 'session']);
+      expect(remembered.keys.length).toBeGreaterThan(0);
+      expect(remembered.keys.every(Boolean), 'every remembered key is non-extractable').toBe(true);
       await p2.reload();
+      await restored(p2);
+      await expect(p2.getByText('louder and slower right here')).toBeVisible();
+
+      // Sign out, sign in again: the remembered unlock is forgotten and the passphrase is asked.
+      await p2.goto(`${base}admin/`);
+      await p2.getByRole('button', { name: 'Sign out', exact: true }).click();
+      await signIn(p2, base);
+      await p2.goto(`${base}music/piece.php?id=test-piece`);
       await openNotes(p2);
       await expect(p2.getByRole('button', { name: 'Unlock notes' })).toBeVisible();
       await expect(p2.getByText('louder and slower right here')).toHaveCount(0);
@@ -721,6 +760,7 @@ test('every screen at 390 and 1280 px, dark and light: no sideways scroll, 44 px
         for (const s of SCREENS) {
           await page.goto(`${base}music/`);
           await page.evaluate(t => localStorage.setItem('workroom-theme', t), theme);
+          await forgetUnlock(page); // every screen starts locked, as on a first visit
           await page.goto(`${base}${s.path}`);
           await s.ready(page);
           await expect(page.locator('html')).toHaveAttribute('data-theme', theme);

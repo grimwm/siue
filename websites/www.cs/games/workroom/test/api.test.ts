@@ -3,7 +3,7 @@
 // (read from the status, never the Content-Type), and limits are refusals.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NoKeyring, SignedOut, createApi } from '../src/api.ts';
+import { NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, createApi } from '../src/api.ts';
 import type { Fetch } from '../src/load.ts';
 
 type Init = Parameters<Fetch>[1];
@@ -70,12 +70,12 @@ test('a sign-in redirect, a 401 or a 403 other than the CSRF refusal is SignedOu
   await assert.rejects(createApi(async () => reply(401, { error: 'unauthorized' }, false, 'text/html'), 'x').list(), SignedOut);
   await assert.rejects(createApi(async () => reply(403, { error: 'cross_site' }), 'x').list(), SignedOut);
   await assert.rejects(createApi(async () => reply(200, '<html>', true, 'text/html'), 'x').upload(new Uint8Array(4)), SignedOut);
-  await assert.rejects(createApi(async () => reply(500, { error: 'boom' }), 'x').list(), (e: unknown) => e instanceof Error && !(e instanceof SignedOut) && /500/.test(e.message));
+  await assert.rejects(createApi(async () => reply(500, { error: 'boom' }), 'x').list(), (e: unknown) => e instanceof ServerError && e.status === 500 && /500/.test(e.message));
 });
 
 test('the list keeps well-formed entries and reads JSON whatever its Content-Type', async () => {
   const fetch: Fetch = async () => reply(200, { notes: [{ id: A, size: 5, arrived_at: 1, picked_up_at: null }, { id: 'zz', size: 1, arrived_at: 1, picked_up_at: null }, null] }, false, 'text/plain');
-  assert.deepEqual(await createApi(fetch, 'x').list(), [{ id: A, size: 5, arrived_at: 1, picked_up_at: null }]);
+  assert.deepEqual(await createApi(fetch, 'x').list(), { notes: [{ id: A, size: 5, arrived_at: 1, picked_up_at: null }], unreadable: 2 });
 });
 
 test('bytes() returns a note\'s octet-stream; a redirect is SignedOut; any other type is an error', async () => {
@@ -87,12 +87,12 @@ test('bytes() returns a note\'s octet-stream; a redirect is SignedOut; any other
   await assert.rejects(createApi(async () => reply(200, '<html>', false, 'text/html'), 'x').bytes(A), (e: unknown) => e instanceof Error && !(e instanceof SignedOut) && /octet-stream/.test(e.message));
 });
 
-test('the keyring comes from keyring.php; before the first upload there is none', async () => {
+test('the keyring and the sign-in tag come from keyring.php; before the first upload there is none', async () => {
   const locked = { v: 1, kdf: 'PBKDF2-SHA-256', iterations: 600000, salt: 's', iv: 'i', ct: 'c' };
   const urls: string[] = [];
-  const fetch: Fetch = async url => { urls.push(url); return urls.length === 1 ? reply(200, { keyring: locked }) : reply(404, { error: 'no_keyring' }); };
+  const fetch: Fetch = async url => { urls.push(url); return urls.length === 1 ? reply(200, { keyring: locked, session: 'tag' }) : reply(404, { error: 'no_keyring' }); };
   const api = createApi(fetch, 'x');
-  assert.deepEqual(await api.keyring(), locked);
+  assert.deepEqual(await api.keyring(), { locked, session: 'tag' });
   await assert.rejects(api.keyring(), NoKeyring);
   assert.deepEqual(urls, ['keyring.php', 'keyring.php']);
 });
@@ -113,4 +113,30 @@ test('an upload is a raw octet-stream; limits come back as refusals, not errors'
   status = 500;
   answer = { error: 'storage' };
   await assert.rejects(api.upload(new Uint8Array(4)), /500/);
+});
+
+test('a row the list cannot read is counted, and the rows beside it still come', async () => {
+  const rows = [{ id: A, size: 5, arrived_at: 1, picked_up_at: null }, { id: 'nope', size: 1, arrived_at: 2, picked_up_at: null }, null, { id: B, size: 'x', arrived_at: 3, picked_up_at: null }];
+  const listed = await createApi(async () => reply(200, { notes: rows }), 'x').list();
+  assert.deepEqual(listed.notes.map(n => n.id), [A]);
+  assert.equal(listed.unreadable, 3);
+});
+
+test('an answer without the list, or without the keyring, is an unreadable answer, not an empty one', async () => {
+  await assert.rejects(createApi(async () => reply(200, { notes: 'nope' }), 'x').list(), UnreadableAnswer);
+  await assert.rejects(createApi(async () => reply(200, {}), 'x').list(), UnreadableAnswer);
+  const page = { ...reply(200, null, false, 'text/html'), json: async () => { throw new SyntaxError('Unexpected token <'); } };
+  await assert.rejects(createApi(async () => page, 'x').list(), UnreadableAnswer);
+  assert.deepEqual((await createApi(async () => reply(200, { notes: [] }), 'x').list()), { notes: [], unreadable: 0 });
+  await assert.rejects(createApi(async () => reply(200, {}), 'x').keyring(), UnreadableAnswer);
+  await assert.rejects(createApi(async () => reply(200, { keyring: 'x' }), 'x').keyring(), UnreadableAnswer);
+});
+
+test('a fetch that rejects with a TypeError is a NetworkError (still a TypeError); any other rejection passes through', async () => {
+  const down = createApi(async () => { throw new TypeError('Failed to fetch'); }, 'x');
+  await assert.rejects(down.list(), (e: unknown) => e instanceof NetworkError && e instanceof TypeError);
+  await assert.rejects(down.remove(A), NetworkError);
+  await assert.rejects(down.bytes(A), NetworkError);
+  const odd = new RangeError('odd');
+  await assert.rejects(createApi(async () => { throw odd; }, 'x').list(), (e: unknown) => e === odd);
 });

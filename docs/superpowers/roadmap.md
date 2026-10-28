@@ -8,7 +8,7 @@ each step starts from. A step with a design but no plan gets its plan written
 
 The vision and its parts are in `specs/2026-10-16-crete-redesign-vision.md`.
 Live: the shell, the engine, Chapter 1 (ten levels, story pages, the Lore book),
-full keyboard play, and the fast solver.
+full keyboard play, the fast solver and the level editor.
 
 1. **Nine new pieces** — design `specs/2026-10-21-crete-pieces-design.md`,
    plan `plans/2026-10-27-crete-pieces.md`. Live in the engine, both solvers,
@@ -20,14 +20,11 @@ full keyboard play, and the fast solver.
    `src/puzzle/pack.ts`, `heuristic.ts`, `prune.ts` and the same-answers
    corpus.
 2. **The level editor** — design `specs/2026-10-21-crete-editor-design.md`
-   (Part 2 there); no plan yet. Also lands here, held over from the fast
-   solver:
-   - A Stop for a running proof: `src/solver-client.ts` cancels a search only
-     by starting a newer one, so the editor needs a `cancel()`, plus the
-     progress bar Check and Share show while it runs.
-   - Eviction for the OPFS solve cache (`src/puzzle/cache.ts` never removes an
-     entry).
-3. **Chapters 2 to 10**, one pull request each, built in the editor and
+   (Part 2 there). Live on the game page at `games/crete/#edit`: painting,
+   Check with Stop and a progress bar, Try it on the full game screen, Share as
+   a link and opening a link, with the OPFS solve cache trimmed. The README's
+   "The editor" section describes it. The next step is Chapter 2, built in it.
+3. **Chapters 2 to 10** (next: Chapter 2), one pull request each, built in the editor and
    exported to the repo. Every level passes the difficulty gate
    (`src/puzzle/difficulty.ts`); a level that is winnable but easy is refused.
    Each chapter gets its music once the first piece is done.

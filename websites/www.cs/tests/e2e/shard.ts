@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 export const WEIGHTS: Record<string, number> = {
   'crete-chapter.spec.ts': 10,
+  'crete-editor.spec.ts': 12,
   'crete-layout.spec.ts': 10,
   'crete-pieces.spec.ts': 3,
   'crete-play.spec.ts': 15,

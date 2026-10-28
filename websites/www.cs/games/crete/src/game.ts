@@ -228,7 +228,7 @@ export function createGame(deps: GameDeps): Game {
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
-    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: pageStops(before, tl), paused: null } : null;
+    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: deps.levels.scratch?.(trial) ? [] : pageStops(before, tl), paused: null } : null;
     reached = 0;
     if (run.now.outcome === 'won') {
       if (deps.levels.scratch?.(trial)) deps.levels.won?.(trial, run.now.moves, run.assisted);

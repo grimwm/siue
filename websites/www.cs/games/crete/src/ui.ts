@@ -529,6 +529,7 @@ export function createUi(deps: UiDeps): Ui {
    *  turn has landed, one page after another. The book still lists it as found only after the win. A page taken
    *  back by Undo shows again when retaken. */
   function announcePages(g: Game): void {
+    if (outsideOf(g)) return;
     const taken = pagesTaken(g.run!.now);
     announced = announced.filter((id) => taken.includes(id));
     const fresh = taken.filter((id) => !announced.includes(id));

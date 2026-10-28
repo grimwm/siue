@@ -1,8 +1,8 @@
-/* The Island of Crete: the level from outside the campaign. It sits at index `at`, after the campaign's levels,
- * until the next one is put there, so Retry opens it again; it records no progress and finds no pages. A try from
- * the editor is one: Try it puts the editor away and opens the draft at its start card on the game screen, Back to
- * the editor settles the game (no play-out, animation or thread) and shows the editor on its draft, and a try won without Ariadne's thread is the
- * author's best for its level text. DOM-free. */
+/* The Island of Crete: the level from outside the campaign. It sits at index `at`, after the campaign's levels, until
+ * the next one is put there, so Retry opens it again; it records no progress and finds no pages. A try from the
+ * editor is one: Try it puts the editor away and opens the draft at its start card on the game screen, Back to
+ * the editor settles the game (no play-out, animation or thread) and shows the editor on its draft, and a try won
+ * without Ariadne's thread is the author's best for its level text. DOM-free. */
 import type { Levels, OutsideLevel } from './campaign/chapters.ts';
 import type { Level } from './puzzle/level.ts';
 import type { Action } from './puzzle/step.ts';
@@ -39,7 +39,11 @@ export function createOutside(campaign: Levels, deps: OutsideDeps): Outside {
   const levels: Levels = {
     count: campaign.count,
     id: i => (i === at ? 'outside' : campaign.id(i)),
-    level: i => (i === at && held ? held.level : campaign.level(i)),
+    level(i) {
+      if (i !== at) return campaign.level(i);
+      if (!held) throw new RangeError('no outside level is held');
+      return held.level;
+    },
     scratch: i => i === at,
     outside: i => (i === at ? held?.about ?? null : null),
     line: i => (i === at ? held?.line ?? null : null),

@@ -193,8 +193,10 @@ let reduced = true;
 let ownLevel: Level | null = null;
 let outsideAt = -1;
 let ownOutside: OutsideLevel | null = null;
+let outsideLevel: Level | null = null;
 const levels: Levels = {
-  count: CAMPAIGN_LEVELS.count, id: CAMPAIGN_LEVELS.id, level: i => (i === 0 && ownLevel) || CAMPAIGN_LEVELS.level(i),
+  count: CAMPAIGN_LEVELS.count, id: CAMPAIGN_LEVELS.id,
+  level: i => (i === outsideAt && outsideLevel) || (i === 0 && ownLevel) || CAMPAIGN_LEVELS.level(i),
   scratch: i => i === outsideAt, outside: i => (i === outsideAt ? ownOutside : null),
 };
 const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, levels, sfx: n => heard.push(n) });
@@ -218,7 +220,7 @@ flow.bindControls({
 });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
-const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; outsideAt = -1; ownOutside = null; backs = 0; edits.length = 0; editorKeys.length = 0; };
+const reset = () => { cleared.clear(); heard.length = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; outsideAt = -1; ownOutside = null; outsideLevel = null; backs = 0; edits.length = 0; editorKeys.length = 0; };
 // Elements of unmounted overlay tests linger in the stub by id, so a page element is looked up inside its root.
 const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
 const el = (id: string) => maybeById(rootOf(id), id);
@@ -788,12 +790,40 @@ test('a shared win says whether it beat the author', () => {
 test('an outside level offers no next level and no levels list', () => {
   reset();
   outside({ kind: 'shared', name: 'Level K7QD by ABC', best: null });
+  game.open(9);
+  assert.equal(flow.top(), 'start');
+  assert.equal(el('start-best'), undefined, 'a shared level with no best names none');
   win(9);
   assert.equal(flow.top(), 'end', 'no closing card opens over it');
   for (const id of ['end-next', 'end-trials', 'end-pages']) assert.equal(el(id), undefined, id);
   assert.ok(el('end-retry'));
   key('Enter');
   assert.equal(game.trial, 9, 'Enter does not go on to another level');
+});
+
+test('a level from outside the campaign with a story page takes it with no Lore entry and no pause', () => {
+  reset();
+  // Level 9 with its page made a relic: the solver's line must take it, and the same line wins the real level.
+  const lv = trialLevel(8);
+  const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
+  const r = solve(initial(copy));
+  assert.ok(r.solved);
+  assert.ok(lv.pageIds.length > 0, 'the level has a page');
+  reduced = false;
+  outsideLevel = lv;
+  outside({ kind: 'try', name: 'Your level', best: null });
+  game.open(9);
+  key('Enter');
+  for (const a of r.line) {
+    game.press(a);
+    m.advance(5000);
+    frame();
+    assert.notEqual(flow.top(), 'lore', 'no Lore entry opens');
+    assert.equal(game.anim?.paused ?? null, null, 'the animation is never paused at a page');
+  }
+  assert.equal(game.run!.now.outcome, 'won');
+  assert.equal(flow.top(), 'end');
+  assert.equal(game.found.length, 0, 'no page is recorded');
 });
 
 test('an outside win records no progress', () => {

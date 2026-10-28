@@ -98,14 +98,16 @@ afterEach(() => {
 });
 
 test('a bad link shows its message in the toast and on the title card, never a board', async () => {
+  const run = game.run;
+  const searches = fake.searches.length;
   for (const [fragment, error] of [['L1.not*base64', 'damaged'], ['L2.abc', 'newer'], ['edit-me', 'not-a-link']] as const) {
     await visit.open(fragment);
     assert.equal(ui.top(), 'title', fragment);
     assert.equal(document.getElementById('toast').textContent, LINK_MESSAGES[error]);
     assert.equal(text('title-note'), LINK_MESSAGES[error]);
   }
-  assert.equal(game.run, null, 'no level was opened');
-  assert.equal(fake.searches.length, 0, 'no rating was started');
+  assert.equal(game.run, run, 'no level was opened');
+  assert.equal(fake.searches.length, searches, 'no rating was started');
   ui.showTitle(false);
   assert.equal(el('title-note'), undefined, 'the title card shown again some other way has no message');
 });

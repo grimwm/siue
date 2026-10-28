@@ -46,7 +46,7 @@ export function CheckStrip(p: CheckPanelProps) {
           <Button id="check-strip-keep" disabled={!s.stopped} onClick={p.onKeep}>Keep searching</Button>
         </>
       )}
-      {summary !== '' && <span id="check-strip-text" class="check-strip-text">{summary}</span>}
+      {summary !== '' && <span id="check-strip-text" class="check-strip-text" role="status">{summary}</span>}
       {p.onShare && <Button id="check-strip-share" disabled={s.kind === 'running' && !s.stopped} onClick={p.onShare}>Share</Button>}
     </div>
   );
@@ -73,7 +73,7 @@ export function CheckPanel(p: CheckPanelProps) {
         </div>
       )}
       {lines.length > 0 && (
-        <div id="check-result" class={stale ? 'check-result stale' : 'check-result'}>
+        <div id="check-result" class={stale ? 'check-result stale' : 'check-result'} role="status">
           {lines.map((line, i) => <p key={i}>{line}</p>)}
           {stale && <p id="check-stale" class="check-stale">Out of date: press Check.</p>}
         </div>

@@ -115,8 +115,14 @@ function siblingOf(node: StubNode, step: number): StubNode | null {
 // sibling links were enumerable would print every path through the tree, which
 // grows past the machine's memory on a rendered page; so the links upward and
 // sideways stay readable but hidden, and a node prints as its own subtree.
+// Preact keeps its render tree, which points back into the DOM, on the root
+// it renders into (`__k`), so that slot is hidden before Preact fills it.
 function hideLinks<T extends StubNode>(node: T, keys: readonly string[]): T {
-  for (const key of keys) Object.defineProperty(node, key, { enumerable: false });
+  for (const key of keys) {
+    Object.defineProperty(node, key, key in node
+      ? { enumerable: false }
+      : { value: undefined, writable: true, enumerable: false, configurable: true });
+  }
   return node;
 }
 export function makeText(data: unknown): StubText {
@@ -190,7 +196,7 @@ export function makeEl(id: string): StubElement {
     blur() { globalThis.__blurred = this; if (document.activeElement === this) document.activeElement = null; },
     focus() { globalThis.__focused = this; document.activeElement = this; },
   };
-  return hideLinks(el, ['parentNode', 'parentElement', 'nextSibling', 'firstChild', 'childNodes']);
+  return hideLinks(el, ['parentNode', 'parentElement', 'nextSibling', 'firstChild', 'childNodes', '__k']);
 }
 // An element made through createElementNS is Preact's: giving it an id makes
 // document.getElementById find it, as the page would.

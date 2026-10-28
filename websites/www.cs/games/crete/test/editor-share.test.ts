@@ -127,6 +127,14 @@ test('trialsEntry escapes backslashes, backticks and ${', () => {
   assert.equal(ed.panel.trialsEntry({ ...d, id: '  ' }).startsWith("{ id: 'trial-new', "), true);
 });
 
+test("trialsEntry escapes the id's quotes, backslashes and line breaks", () => {
+  const d: Draft = { ...newDraft(3, 3), id: "it's \\ a\nb', x: 1, y: '" };
+  const entry = ed.panel.trialsEntry(d);
+  const back = new Function(`return ${entry.replace(/^\{/, '({').replace(/,$/, ')')}`)() as Record<string, unknown>;
+  assert.deepEqual(Object.keys(back), ['id', 'text']);
+  assert.equal(back.id, d.id.trim());
+});
+
 /* ---------- the editor's wiring ---------- */
 const make = (opts: { owner?: boolean; pageUrl?: string } = {}) =>
   makeEditor(ed.editor.createEditor, stored, roots, { ...opts, pageUrl: opts.pageUrl ?? BASE });

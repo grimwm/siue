@@ -6,7 +6,8 @@
 // test process takes all the machine's memory.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { installDocument, makeEl, makeText } from './dom-stub.ts';
+import { h, render } from 'preact';
+import { installDocument, makeEl, makeText, renderTarget } from './dom-stub.ts';
 import type { StubElement } from './dom-stub.ts';
 
 installDocument();
@@ -46,6 +47,16 @@ test('a failing assert on a stub text node stays short', () => {
   const root = tree();
   const text = (root.children[1] as StubElement).children[0]!.children[0]!;
   assert.ok(failure(text).length < 2_000);
+});
+
+test('a failing assert on a root Preact rendered into stays short', () => {
+  const root = makeEl('root');
+  const rows = [];
+  for (let i = 0; i < 2; i++) rows.push(h('div', { id: `d${i}` }, h('span', null, h('b', null, `x${i}`)), h('p', null, 'y')));
+  render(h('section', null, rows), renderTarget(root));
+  const message = failure(root);
+  assert.ok(message.length < 20_000, `the message is ${message.length} characters`);
+  assert.match(message, /'d1'/, 'the rendered subtree is in the message');
 });
 
 test('the hidden tree links still read', () => {

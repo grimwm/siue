@@ -36,11 +36,13 @@ export async function shareLink(
   return { ok: true, url: `${base}#${fragment}`, name: sharedName(await levelCode(draftText), by) };
 }
 
-/** `{ id: '<id>', text: \`<campaign text>\` },`, the form of an entry in src/puzzle/trials.ts: backslashes, backticks
- *  and `${` escaped. An empty id reads `trial-new`. */
+/** `{ id: '<id>', text: \`<campaign text>\` },`, the form of an entry in src/puzzle/trials.ts: the text's backslashes,
+ *  backticks and `${` escaped, and the id's backslashes, quotes and line breaks. An empty id reads `trial-new`. */
 export function trialsEntry(d: Draft): string {
   const text = toText(d, false).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
-  return `{ id: '${d.id.trim() || 'trial-new'}', text: \`${text}\` },`;
+  const id = (d.id.trim() || 'trial-new').replace(/[\\']/g, c => `\\${c}`).replace(/\r/g, '\\r').replace(/\n/g, '\\n')
+    .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  return `{ id: '${id}', text: \`${text}\` },`;
 }
 
 export interface ShareProps {

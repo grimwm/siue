@@ -373,7 +373,9 @@ flow.bindControls({
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
 const el = (id: string) => maybeById(rootOf(id), id);
-/** The editor, alone, on a new draft of `rows` x `cols` (the player at the top left, the exit at the bottom right). */
+/** The editor, alone, on a new draft of `rows` x `cols` (the player at the top left, the exit at the bottom right).
+ *  The page is built once for the file (its keys are bound on the shared document and cannot be unbound), so the
+ *  editor keeps every test's bests: a test that expects no best for a fresh draft gives it a size no other test uses. */
 function editing(rows: number, cols: number): void {
   flow.showEditor();
   tryEditor.open(newDraft(rows, cols));
@@ -611,6 +613,7 @@ test('C and the Check button run the search of the draft; the panel shows its pr
   await settle();
   assert.equal(maybeById(e.root, 'check-progress'), undefined);
   assert.match(said(e, 'check-result'), /^Winnable: quickest win 54 moves/);
+  assert.equal(byId(e.root, 'check-result').getAttribute('role'), 'status', 'the answer is announced');
   assert.equal(maybeById(e.root, 'check-stale'), undefined);
   click(byId(e.root, 'check-run'));
   assert.equal(e.searches.length, 1, 'the answer for this text is reused');
@@ -677,6 +680,7 @@ test('the check strip in the bar, outside the drawer, shows the run, the answer 
   await settle();
   assert.equal(maybeById(e.root, 'check-strip-stop'), undefined);
   assert.equal(byId(e.root, 'check-strip-text').textContent, 'Winnable in 60 · Shareable');
+  assert.equal(byId(e.root, 'check-strip-text').getAttribute('role'), 'status', 'the strip announces the answer');
   click(byId(e.root, 'brush-wall'));
   fire(e.canvas, 'pointerdown', at(e, 5, 2));
   fire(e.canvas, 'pointerup', at(e, 5, 2));

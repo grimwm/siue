@@ -1,8 +1,7 @@
 // The Island of Crete: the level editor's controls around its board. The bar holds Undo, Redo, Try it and Leave,
 // the size bar (rows and cols, 3 to 64, and Resize), the hearts (1 to 99) and the relics needed ("all", or 0 to
 // the relics on the board). The palette sits beside the board; under 700 px it is a drawer the Pieces button
-// opens (game.css). The Check panel (check-panel.tsx) and the Share panel
-// (share-panel.tsx) sit above the palette.
+// opens (game.css). The Check panel (check-panel.tsx) and the Share panel (share-panel.tsx) sit above the palette.
 import { render } from 'preact';
 import { useRef } from 'preact/hooks';
 import { Button } from '../../../_kit/ui/button.tsx';

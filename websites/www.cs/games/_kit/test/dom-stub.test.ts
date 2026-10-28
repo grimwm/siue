@@ -48,7 +48,7 @@ test('a failing assert on a stub text node stays short', () => {
   assert.ok(failure(text).length < 2_000);
 });
 
-test('the tree links still read as before', () => {
+test('the hidden tree links still read', () => {
   const root = tree();
   const c1 = root.children[1] as StubElement;
   assert.equal(c1.parentNode, root);

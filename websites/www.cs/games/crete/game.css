@@ -370,6 +370,10 @@ button:disabled { opacity: 0.45; cursor: default; }
 .check-panel { margin-bottom: 0.6rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); }
 .check-panel h3 { margin: 0 0 0.3rem; font-size: 0.8rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
 .check-panel p { margin: 0.3rem 0; font-size: 0.9rem; }
+.share-panel { margin-bottom: 0.6rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); }
+.share-panel h3 { margin: 0 0 0.3rem; font-size: 0.8rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
+.share-panel p { margin: 0.3rem 0; font-size: 0.9rem; }
+.share-panel input[type="text"], .share-panel textarea { width: 100%; box-sizing: border-box; }
 .check-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .check-bar { position: relative; height: 6px; margin-top: 0.5rem; overflow: hidden; background: var(--bg); border-radius: 3px; }
 .check-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 35%; background: var(--accent); border-radius: 3px; animation: check-slide 1.4s ease-in-out infinite alternate; }

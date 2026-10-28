@@ -1,7 +1,8 @@
 // The Island of Crete: the level editor's controls around its board. The bar holds Undo, Redo, Try it and Leave,
 // the size bar (rows and cols, 3 to 64, and Resize), the hearts (1 to 99) and the relics needed ("all", or 0 to
 // the relics on the board). The palette sits beside the board; under 700 px it is a drawer the Pieces button
-// opens (game.css). The Check panel (check-panel.tsx) sits above the palette.
+// opens (game.css). The Check panel (check-panel.tsx) and the Share panel
+// (share-panel.tsx) sit above the palette.
 import { render } from 'preact';
 import { useRef } from 'preact/hooks';
 import { Button } from '../../../_kit/ui/button.tsx';
@@ -13,6 +14,8 @@ import { EDITOR_KEYS } from './keys.ts';
 import { Palette } from './palette.tsx';
 import { CheckPanel, CheckStrip } from './check-panel.tsx';
 import type { CheckPanelProps } from './check-panel.tsx';
+import { SharePanel } from './share-panel.tsx';
+import type { ShareProps } from './share-panel.tsx';
 
 export interface EditorPanelProps {
   draft: Draft;
@@ -36,6 +39,8 @@ export interface EditorPanelProps {
   onRelics(relics: number | null): void;
   /** The Check panel, above the palette. */
   check?: CheckPanelProps;
+  /** The Share panel, under the Check panel. */
+  share?: ShareProps;
 }
 
 /** A box's number, or null when it is empty or not a number. */
@@ -94,6 +99,7 @@ export function EditorPanel(p: EditorPanelProps) {
       </header>
       <aside id="editor-side" class={p.drawer ? 'editor-side open' : 'editor-side'} aria-label="Pieces">
         {p.check && <CheckPanel {...p.check} />}
+        {p.share && <SharePanel {...p.share} />}
         <Palette brush={p.brush} owner={p.owner} onPick={p.onPick} onRotate={p.onRotate} />
       </aside>
     </>

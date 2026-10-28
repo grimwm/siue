@@ -6,7 +6,7 @@
  * for each level it tried: the fewest moves of a try won without Ariadne's thread, by the level's share text, so
  * an edit leaves a level with no best until it is won again. Needs the DOM lib. */
 import { isBackKey, typesText } from '../../../_kit/keys.ts';
-import { oneOf, pref } from '../../../_kit/prefs.ts';
+import { oneOf, pref, text as textCodec } from '../../../_kit/prefs.ts';
 import { browserStorage } from '../../../_kit/ports.browser.ts';
 import { createBoard } from '../board.ts';
 import { boardRows, drawList } from '../board-plan.ts';
@@ -15,6 +15,7 @@ import { cellFor } from '../fit.ts';
 import { initial } from '../puzzle/state.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Level } from '../puzzle/level.ts';
+import type { Difficulty } from '../puzzle/difficulty.ts';
 import { parse } from '../puzzle/level.ts';
 import { lineOf } from '../puzzle/cache.ts';
 import type { Action } from '../puzzle/step.ts';
@@ -24,6 +25,8 @@ import { TERRAIN } from '../puzzle/tiles.ts';
 import type { Cell, Terrain } from '../puzzle/tiles.ts';
 import { renderEditorPanel } from './bar.tsx';
 import { createChecker } from './check.ts';
+import { INITIALS_MESSAGE, shareLink } from './share-panel.tsx';
+import { validInitials } from '../../../_kit/initials.ts';
 import { editorActionFor } from './keys.ts';
 import { commit, redoH, startHistory, undoH } from './history.ts';
 import type { History } from './history.ts';
@@ -56,12 +59,16 @@ export interface EditorDeps {
   start?: (text: string) => SolverJob;
   /** The draft changed. */
   changed(): void;
+  /** The page's URL without its hash, which a share link is added to; the window's own by default. */
+  pageUrl?: () => string;
   /** Leaves the editor for the title card (its Leave button), when the page gives it. */
   leave?: () => void;
 }
 
 /** The owner flag: the kit pref `crete-owner` set to `on` shows the campaign's own tools. */
 export const OWNER_PREF = 'crete-owner';
+/** The kit pref that remembers the author's initials. */
+export const INITIALS_PREF = 'crete-initials';
 const NEW_SIDE = 12;
 
 /** The figures where the level starts them. */
@@ -116,12 +123,19 @@ export function createEditor(deps: EditorDeps): Editor {
   const board = createBoard(canvas, atlas, image);
   const ctx = canvas.getContext('2d');
   const owner = pref(OWNER_PREF, 'off', oneOf(['on', 'off'], 'off'), browserStorage());
+  const savedInitials = pref(INITIALS_PREF, '', textCodec, browserStorage());
 
   let history: History<Draft> | null = null;
   /** The draft on show: the history's present, or a stroke's work before it is committed. */
   let live: Draft = newDraft(NEW_SIDE, NEW_SIDE);
   let brush: Brush = { kind: 'terrain', t: 'wall' };
   let isOwner = false;
+  /** The initials as typed, and what the last Share made or said: a link for the share text `text`, or a message. */
+  let initials = savedInitials.get();
+  let sharing = false;
+  let shared: { text: string; link: { url: string; name: string } | null; message: string } | null = null;
+  /** The running Share's number; a Share that is no longer the latest drops its answer. */
+  let shareGen = 0;
   let drawer = false;
   let shown = false;
   /** The draw list and the draft it was made for. */
@@ -205,7 +219,21 @@ export function createEditor(deps: EditorDeps): Editor {
     renderEditorPanel(panel, {
       check: {
         state: checked, current: text, level: answered !== null && answered !== text ? parse(answered) : toLevel(live),
-        onCheck: runCheck, onStop: () => checker.stop(), onKeep: () => checker.keepSearching(),
+        onCheck: runCheck, onShare: shareFromStrip, onStop: () => checker.stop(), onKeep: () => checker.keepSearching(),
+      },
+      share: {
+        initials, busy: sharing, draft: live, owner: isOwner,
+        message: shared && shared.text === text ? shared.message : '',
+        link: shared && shared.text === text ? shared.link : null,
+        onInitials: (raw) => {
+          initials = raw;
+          const ok = validInitials(raw);
+          if (ok !== null) savedInitials.set(ok);
+        },
+        onShare: () => { void runShare(); },
+        onId: (id) => edit(d => (id === d.id ? d : { ...d, id })),
+        onTitle: (title) => edit(d => (title === d.title ? d : { ...d, title })),
+        onIntro: (intro) => edit(d => (intro === d.intro ? d : { ...d, intro })),
       },
       draft: live, canUndo: h.canUndo, canRedo: h.canRedo, brush, owner: isOwner, drawer,
       onPick: (b) => {
@@ -273,6 +301,44 @@ export function createEditor(deps: EditorDeps): Editor {
   function runCheck(): void {
     endStroke();
     void checker.check(toText(live, true));
+  }
+
+  /** Share, from the strip: the drawer opens, as that is where the link and the initials are. */
+  function shareFromStrip(): void {
+    drawer = true;
+    void runShare();
+  }
+
+  /** Makes the link for the draft as it stands: Check first when the draft is not what the last Check proved. */
+  async function runShare(): Promise<void> {
+    endStroke();
+    const text = toText(live, true);
+    const mine = ++shareGen;
+    const say = (message: string, link: { url: string; name: string } | null = null): void => {
+      sharing = false;
+      shared = { text, link, message };
+      drawPanel();
+    };
+    if (validInitials(initials) === null) { say(INITIALS_MESSAGE); return; }
+    const c = checker.state;
+    sharing = true;
+    shared = null;
+    drawPanel();
+    let d: Difficulty | null;
+    if (c.kind === 'done' && c.text === text) d = c.d;
+    else d = await checker.check(text);
+    if (mine !== shareGen) return;
+    if (d === null) {
+      // Cancelled by an edit or a newer Check, or the solver stopped: its panel says which.
+      sharing = false;
+      drawPanel();
+      return;
+    }
+    const base = deps.pageUrl ? deps.pageUrl() : location.href.split('#')[0]!;
+    const r = await shareLink(base, text, d, initials, bests.get(text) ?? null);
+    if (mine !== shareGen) return;
+    if (r.ok) say('', { url: r.url, name: r.name });
+    else say(r.message);
   }
 
   /* ---------- painting ---------- */

@@ -16,6 +16,8 @@ export interface CheckPanelProps {
   onCheck(): void;
   onStop(): void;
   onKeep(): void;
+  /** Share, from the strip: a narrow screen keeps the Share panel in the closed drawer. */
+  onShare?: () => void;
 }
 
 /** What the running search has done, in a line. */
@@ -45,6 +47,7 @@ export function CheckStrip(p: CheckPanelProps) {
         </>
       )}
       {summary !== '' && <span id="check-strip-text" class="check-strip-text">{summary}</span>}
+      {p.onShare && <Button id="check-strip-share" disabled={s.kind === 'running'} onClick={p.onShare}>Share</Button>}
     </div>
   );
 }

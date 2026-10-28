@@ -36,7 +36,8 @@ const WALL = TERRAIN.wall.char;
 const PAGE = OBJECTS.page.char;
 const CLONE = TERRAIN.clone.char;
 const HAZARD_CHARS = new Set(Object.values(HAZARDS).map(h => h.char));
-const clampSide = (n: number): number => Math.min(MAX_SIDE, Math.max(MIN_SIDE, Math.trunc(n) || MIN_SIDE));
+/** A board side within MIN_SIDE..MAX_SIDE; not a number gives MIN_SIDE. */
+export const clampSide = (n: number): number => Math.min(MAX_SIDE, Math.max(MIN_SIDE, Math.trunc(n) || MIN_SIDE));
 
 export function newDraft(rows: number, cols: number): Draft {
   const r = clampSide(rows), c = clampSide(cols);

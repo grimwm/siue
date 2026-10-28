@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { h, render as preactRender } from 'preact';
 import { importTsx } from '../../_kit/test/tsx.ts';
-import { byId, click, fire, installDocument, makeEl, maybeById, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
+import { byId, click, document, fire, installDocument, makeEl, maybeById, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import type { Brush } from '../src/editor/model.ts';
 import type { Level } from '../src/puzzle/level.ts';
@@ -266,4 +266,82 @@ test('the board is drawn: the canvas is sized to the draft', () => {
   e.editor.open();
   assert.ok(Number(e.canvas.dataset.cell) >= 1, e.canvas.dataset.cell);
   assert.equal((e.canvas as unknown as { width: number }).width, 12 * Number(e.canvas.dataset.cell));
+});
+
+// ---- review round 1 ----
+test('the fake and invisible walls carry a mark on the editor board and on their swatches', () => {
+  const e = make();
+  e.editor.open();
+  click(byId(e.root, 'brush-fake-wall'));
+  fire(e.canvas, 'pointerdown', at(e, 3, 3));
+  fire(e.canvas, 'pointerup', at(e, 3, 3));
+  click(byId(e.root, 'brush-invisible-wall'));
+  fire(e.canvas, 'pointerdown', at(e, 4, 6));
+  fire(e.canvas, 'pointerup', at(e, 4, 6));
+  assert.deepEqual(ed.editor.hiddenMarks(e.editor.draft), [{ r: 3, c: 3, mark: 'F' }, { r: 4, c: 6, mark: 'I' }]);
+  const root = palette({ kind: 'terrain', t: 'wall' }, false);
+  assert.equal(byId(root, 'brush-fake-wall').querySelector('.brush-mark')?.textContent, 'F');
+  assert.equal(byId(root, 'brush-invisible-wall').querySelector('.brush-mark')?.textContent, 'I');
+  assert.equal(byId(root, 'brush-wall').querySelector('.brush-mark'), null);
+});
+
+test('painting the board takes the focus out of a number box, so the editor keys work again', () => {
+  const e = make();
+  e.editor.open();
+  const box = makeEl('editor-rows-focus') as StubElement & { tagName: string; type: string };
+  box.tagName = 'INPUT';
+  box.type = 'number';
+  box.focus();
+  globalThis.__blurred = null;
+  fire(e.canvas, 'pointerdown', at(e, 6, 6));
+  fire(e.canvas, 'pointerup', at(e, 6, 6));
+  assert.equal(globalThis.__blurred, box);
+  assert.notEqual(document.activeElement, box);
+});
+
+test('hearts are clamped before they are compared; an empty box changes nothing and shows the hearts', () => {
+  const e = make();
+  e.editor.open();
+  const hearts = () => byId(e.root, 'editor-hearts');
+  hearts().value = '99';
+  fire(hearts(), 'change');
+  assert.equal(e.editor.draft.hearts, 99);
+  const box = hearts();
+  box.value = '150';
+  fire(box, 'change');
+  assert.equal(e.editor.draft.hearts, 99);
+  assert.equal(box.value, '99', 'the box shows the clamped value');
+  box.value = '';
+  fire(box, 'change');
+  assert.equal(e.editor.draft.hearts, 99);
+  assert.equal(box.value, '99');
+  press(e, 'u');
+  assert.equal(e.editor.draft.hearts, 3, '150 and the empty box added no undo step');
+  assert.equal(byId(e.root, 'editor-undo').disabled, true);
+});
+
+test('Resize ignores an empty box, and the boxes show the size the board has', () => {
+  const e = make();
+  e.editor.open();
+  const rows = byId(e.root, 'editor-rows');
+  const cols = byId(e.root, 'editor-cols');
+  rows.value = '';
+  cols.value = '20';
+  click(byId(e.root, 'editor-resize'));
+  assert.equal(e.editor.draft.rows, 12);
+  assert.equal(e.editor.draft.cols, 12);
+  assert.deepEqual([rows.value, cols.value], ['12', '12']);
+  assert.equal(byId(e.root, 'editor-undo').disabled, true);
+  rows.value = '12';
+  cols.value = '2';
+  click(byId(e.root, 'editor-resize'));
+  assert.equal(e.editor.draft.cols, 3);
+  const r2 = byId(e.root, 'editor-rows');
+  const c2 = byId(e.root, 'editor-cols');
+  r2.value = '12';
+  c2.value = '1';
+  click(byId(e.root, 'editor-resize'));
+  assert.equal(c2.value, '3', 'a clamped size equal to the board shows the board\'s size');
+  press(e, 'u');
+  assert.equal(e.editor.draft.cols, 12, 'the clamped equal size added no undo step');
 });

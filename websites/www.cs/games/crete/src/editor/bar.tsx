@@ -7,7 +7,7 @@ import { useRef } from 'preact/hooks';
 import { Button } from '../../../_kit/ui/button.tsx';
 import { BACK_KEY } from '../../../_kit/keys.ts';
 import { OBJECTS } from '../puzzle/tiles.ts';
-import { MAX_SIDE, MIN_SIDE } from './model.ts';
+import { MAX_SIDE, MIN_SIDE, clampSide } from './model.ts';
 import type { Brush, Draft } from './model.ts';
 import { EDITOR_KEYS } from './keys.ts';
 import { Palette } from './palette.tsx';
@@ -34,6 +34,13 @@ export interface EditorPanelProps {
   onRelics(relics: number | null): void;
 }
 
+/** A box's number, or null when it is empty or not a number. */
+function boxNumber(box: HTMLInputElement | null): number | null {
+  const v = box?.value.trim() ?? '';
+  const n = Number(v);
+  return v === '' || !Number.isFinite(n) ? null : n;
+}
+
 export function EditorPanel(p: EditorPanelProps) {
   const rows = useRef<HTMLInputElement>(null);
   const cols = useRef<HTMLInputElement>(null);
@@ -56,9 +63,23 @@ export function EditorPanel(p: EditorPanelProps) {
         <div class="editor-size">
           <label>Rows <input id="editor-rows" key={`r${sized}`} ref={rows} type="number" min={MIN_SIDE} max={MAX_SIDE} defaultValue={String(d.rows)} /></label>
           <label>Cols <input id="editor-cols" key={`c${sized}`} ref={cols} type="number" min={MIN_SIDE} max={MAX_SIDE} defaultValue={String(d.cols)} /></label>
-          <Button id="editor-resize" onClick={() => p.onResize(Number(rows.current?.value), Number(cols.current?.value))}>Resize</Button>
+          <Button id="editor-resize" onClick={() => {
+            // An empty box resizes nothing; either way the boxes show the size the board will have.
+            const r = boxNumber(rows.current), c = boxNumber(cols.current);
+            const to = r === null || c === null ? { r: d.rows, c: d.cols } : { r: clampSide(r), c: clampSide(c) };
+            if (rows.current) rows.current.value = String(to.r);
+            if (cols.current) cols.current.value = String(to.c);
+            if (to.r !== d.rows || to.c !== d.cols) p.onResize(to.r, to.c);
+          }}>Resize</Button>
           <label>Hearts <input id="editor-hearts" key={`h${d.hearts}`} type="number" min={1} max={99} defaultValue={String(d.hearts)}
-            onChange={ev => p.onHearts(Number(ev.currentTarget.value))} /></label>
+            onChange={ev => {
+              // Clamped first, so an out-of-range number that clamps to the hearts already set changes nothing; an empty
+              // box changes nothing. The box shows the hearts the level has.
+              const n = boxNumber(ev.currentTarget);
+              const hearts = n === null ? d.hearts : Math.min(99, Math.max(1, Math.trunc(n)));
+              ev.currentTarget.value = String(hearts);
+              if (hearts !== d.hearts) p.onHearts(hearts);
+            }} /></label>
           <label>Relics needed <select id="editor-relics" value={relics}
             onChange={ev => { const v = ev.currentTarget.value; p.onRelics(v === 'all' ? null : Number(v)); }}>
             <option value="all">all</option>

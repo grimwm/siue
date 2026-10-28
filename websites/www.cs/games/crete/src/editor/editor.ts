@@ -13,14 +13,15 @@ import { cellFor } from '../fit.ts';
 import { initial } from '../puzzle/state.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Level } from '../puzzle/level.ts';
-import type { Cell } from '../puzzle/tiles.ts';
+import { TERRAIN } from '../puzzle/tiles.ts';
+import type { Cell, Terrain } from '../puzzle/tiles.ts';
 import { renderEditorPanel } from './bar.tsx';
 import { editorActionFor } from './keys.ts';
 import { commit, redoH, startHistory, undoH } from './history.ts';
 import type { History } from './history.ts';
 import { newDraft, paint, resize, toLevel, toText } from './model.ts';
 import type { Brush, Draft } from './model.ts';
-import { dirOf, nextDir } from './palette.tsx';
+import { HIDDEN_MARK, dirOf, nextDir } from './palette.tsx';
 
 export interface Editor {
   /** Shows the editor on `draft` (a fresh history), or on the draft in progress, or on a new 12 x 12 one. */
@@ -69,6 +70,19 @@ export function lineCells(a: Cell, b: Cell): Cell[] {
   return out;
 }
 
+const HIDDEN_BY_CHAR = new Map((Object.keys(HIDDEN_MARK) as Terrain[]).map(t => [TERRAIN[t].char, HIDDEN_MARK[t]!]));
+
+/** The cells whose terrain the game draws as something else (a fake wall as wall, an invisible wall as floor), with
+ *  the letter the editor's board marks them with. */
+export function hiddenMarks(d: Draft): { r: number; c: number; mark: string }[] {
+  const out: { r: number; c: number; mark: string }[] = [];
+  d.cells.forEach((ch, i) => {
+    const mark = HIDDEN_BY_CHAR.get(ch);
+    if (mark) out.push({ r: Math.floor(i / d.cols), c: i % d.cols, mark });
+  });
+  return out;
+}
+
 /** Finds `#id` under `root`, or makes it as a child of `parent`. */
 function part(root: HTMLElement, parent: HTMLElement, id: string, tag: string): HTMLElement {
   const found = root.querySelector<HTMLElement>(`#${id}`);
@@ -85,6 +99,7 @@ export function createEditor(deps: EditorDeps): Editor {
   const canvas = part(root, holder, 'editor-stage', 'canvas') as HTMLCanvasElement;
   const panel = part(root, root, 'editor-panel', 'div');
   const board = createBoard(canvas, atlas, image);
+  const ctx = canvas.getContext('2d');
   const owner = pref(OWNER_PREF, 'off', oneOf(['on', 'off'], 'off'), browserStorage());
 
   let history: History<Draft> | null = null;
@@ -97,6 +112,7 @@ export function createEditor(deps: EditorDeps): Editor {
   /** The draw list and the draft it was made for. */
   let list: Draw[] = [];
   let listFor: Draft | null = null;
+  let marks: { r: number; c: number; mark: string }[] = [];
   let sized = '';
   /** The stroke in progress: its pointer and the last cell it painted. */
   let stroke: { id: number; last: Cell } | null = null;
@@ -110,10 +126,30 @@ export function createEditor(deps: EditorDeps): Editor {
     if (listFor !== live) {
       const s = initial(toLevel(live));
       list = drawList(s, restingFigures(s), atlas, 0);
+      marks = hiddenMarks(live);
       listFor = live;
     }
     if (sized !== `${live.cols}x${live.rows}`) fit();
+    else paintBoard();
+  }
+
+  /** The board, then a letter in a dark tab on each cell the game would draw as something else. */
+  function paintBoard(): void {
     board.paint(list);
+    if (!ctx || marks.length === 0) return;
+    const cell = canvas.width / live.cols;
+    const top = canvas.height - live.rows * cell;
+    const size = Math.max(8, Math.round(cell * 0.45));
+    ctx.font = `bold ${size}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const m of marks) {
+      const x = (m.c + 0.5) * cell, y = top + (m.r + 0.5) * cell;
+      ctx.fillStyle = 'rgba(1, 4, 9, 0.75)';
+      ctx.fillRect(x - size * 0.6, y - size * 0.6, size * 1.2, size * 1.2);
+      ctx.fillStyle = '#f0b429';
+      ctx.fillText(m.mark, x, y);
+    }
   }
 
   /** The cell size: as the game's board (src/ui.ts fit), the largest whole pixel count that fits, and a big draft
@@ -134,7 +170,7 @@ export function createEditor(deps: EditorDeps): Editor {
     }
     setScrolls(fitted.scrolls);
     sized = `${cols}x${rows}`;
-    if (listFor === live) board.paint(list);
+    if (listFor === live) paintBoard();
   }
 
   function setScrolls(on: boolean): void {
@@ -162,7 +198,11 @@ export function createEditor(deps: EditorDeps): Editor {
         drawPanel();
       },
       onResize: (rows, cols) => edit(d => (Number.isFinite(rows) && Number.isFinite(cols) ? resize(d, rows, cols) : d)),
-      onHearts: (n) => edit(d => (Number.isFinite(n) && Math.trunc(n) !== d.hearts ? { ...d, hearts: Math.min(99, Math.max(1, Math.trunc(n))) } : d)),
+      onHearts: (n) => edit(d => {
+        if (!Number.isFinite(n)) return d;
+        const hearts = Math.min(99, Math.max(1, Math.trunc(n)));
+        return hearts === d.hearts ? d : { ...d, hearts };
+      }),
       onRelics: (n) => edit(d => (n === d.relics || (n !== null && !Number.isFinite(n)) ? d : { ...d, relics: n })),
     });
   }
@@ -235,6 +275,9 @@ export function createEditor(deps: EditorDeps): Editor {
     } else if (ev.button > 0) return;
     if (!shown || stroke) return;
     ev.preventDefault();
+    // The press keeps the focus where it was; a number box keeping it would take the editor's keys as typing.
+    const focused = document.activeElement as HTMLElement | null;
+    if (focused && typesText(focused)) focused.blur();
     canvas.setPointerCapture?.(ev.pointerId);
     const at = cellAt(ev);
     stroke = { id: ev.pointerId, last: at };

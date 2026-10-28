@@ -384,7 +384,8 @@ button:disabled { opacity: 0.45; cursor: default; }
   background: rgba(1, 4, 9, 0.8);
   border-radius: 3px;
 }
-.brush-mark { color: var(--bad); }
+.brush-mark { font-weight: 700; color: var(--accent); }
+.erase-mark { color: var(--bad); }
 .brush-rotate { margin-top: 0.6rem; }
 @container frame (max-width: 699px) {
   .editor { grid-template: "bar" auto "board" minmax(0, 1fr) / minmax(0, 1fr); }

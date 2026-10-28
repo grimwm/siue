@@ -67,10 +67,12 @@ const editor = createEditor({
   leave: () => ui.leaveEditor(),
 });
 
-/* `#edit` in the address opens the editor, when the page opens and whenever the fragment changes to it. */
+/* `#edit` in the address opens the editor, when the page opens and whenever the fragment changes to it; the
+   fragment changing away from it (the browser's Back) leaves the editor for the title card. */
 const EDIT_HASH = '#edit';
 function followHash(): void {
   if (window.location.hash === EDIT_HASH) ui.showEditor();
+  else ui.leaveEditor();
 }
 /* Leaving the editor takes `#edit` off the address without a new history entry. */
 function leftEditor(): void {

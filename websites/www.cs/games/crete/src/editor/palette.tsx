@@ -1,7 +1,9 @@
 // The Island of Crete: the level editor's palette. One button per brush, in five groups (Terrain, Pieces, Figures,
 // Hazards, Machines), each showing its sprite as a CSS background cut from the board's atlas (fx/sprites/tiles.png)
 // and named for screen readers. The hazard and machine buttons show the facing they paint, which is the current
-// brush's when it has one; Turn (O) rotates it. The page brush is the owner's only.
+// brush's when it has one; Turn (O) rotates it. The fake and invisible walls look like wall and floor in the game,
+// so their swatches carry a letter (HIDDEN_MARK), as their cells do on the editor's board. The page brush is the
+// owner's only.
 import atlasJson from '../../fx/sprites/tiles.json' with { type: 'json' };
 import { Button } from '../../../_kit/ui/button.tsx';
 import { HAZARDS, OBJECTS, PIECE_NAMES, TERRAIN } from '../puzzle/tiles.ts';
@@ -28,6 +30,9 @@ const ARROW: Record<Dir, string> = { up: '↑', right: '→', down: '↓', left:
 const NEXT: Record<Dir, Dir> = { up: 'right', right: 'down', down: 'left', left: 'up' };
 
 export const nextDir = (d: Dir): Dir => NEXT[d];
+
+/** The editor's letter for a terrain that hides what it is: the game draws it as wall or floor. */
+export const HIDDEN_MARK: Partial<Record<Terrain, string>> = { 'fake-wall': 'F', 'invisible-wall': 'I' };
 
 /** The facing a brush paints, when it has one. */
 export function dirOf(b: Brush): Dir | null {
@@ -110,7 +115,8 @@ function Swatch({ b }: { b: Brush }) {
         // The cell under the rise: a sprite's frame is the rise, then the cell.
         backgroundPosition: frames.map(s => `-${s.x}px -${s.y + atlas.rise}px`).join(', '),
       }} />
-      {b.kind === 'erase' && <span class="brush-mark">✕</span>}
+      {b.kind === 'erase' && <span class="brush-mark erase-mark">✕</span>}
+      {b.kind === 'terrain' && HIDDEN_MARK[b.t] && <span class="brush-mark">{HIDDEN_MARK[b.t]}</span>}
       {dirOf(b) && <span class="brush-dir">{ARROW[dirOf(b)!]}</span>}
     </span>
   );

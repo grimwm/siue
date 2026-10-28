@@ -14,6 +14,8 @@ import { HAZARDS, OBJECTS, TERRAIN } from '../src/puzzle/tiles.ts';
 import type { HazardKind, Terrain } from '../src/puzzle/tiles.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
+import type { Answer, Report } from '../src/solver-host.ts';
+import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { createGame } from '../src/game.ts';
 import type { Game } from '../src/game.ts';
@@ -120,7 +122,8 @@ test('the page brush only with the owner flag', () => {
 
 // ---- the editor itself ----
 const atlas = JSON.parse(readFileSync(new URL('../fx/sprites/tiles.json', import.meta.url), 'utf8')) as Atlas;
-interface Made { root: StubElement; canvas: StubElement; tries: { level: Level; text: string }[]; changes: () => number; editor: ReturnType<typeof ed.editor.createEditor> }
+interface Fake { text: string; calls: string[]; answer(a: Answer): void; report(r: Report): void }
+interface Made { root: StubElement; canvas: StubElement; tries: { level: Level; text: string; line: unknown }[]; searches: Fake[]; changes: () => number; editor: ReturnType<typeof ed.editor.createEditor> }
 function make(): Made {
   const root = makeEl('editor-root');
   roots.push(root);
@@ -128,14 +131,23 @@ function make(): Made {
   const canvas = makeEl('editor-stage');
   holder.appendChild(canvas);
   root.appendChild(holder);
-  const tries: { level: Level; text: string }[] = [];
+  const tries: { level: Level; text: string; line: unknown }[] = [];
+  const searches: Fake[] = [];
   let changes = 0;
   const image = makeEl('img');
   const editor = ed.editor.createEditor({
     root: root as unknown as HTMLElement, atlas, image: image as unknown as HTMLImageElement,
-    tryIt: (level, text) => tries.push({ level, text }), changed: () => { changes++; },
+    tryIt: (level, text, line) => tries.push({ level, text, line }), changed: () => { changes++; },
+    start: (text) => {
+      const calls: string[] = [];
+      const cbs: ((r: Report) => void)[] = [];
+      let resolve!: (a: Answer) => void;
+      const result = new Promise<Answer>(res => { resolve = res; });
+      searches.push({ text, calls, answer: resolve, report: r => { for (const cb of cbs) cb(r); } });
+      return { progress: cb => { cbs.push(cb); }, stop: () => { calls.push('stop'); }, resume: () => { calls.push('resume'); }, cancel: () => { calls.push('cancel'); }, result };
+    },
   });
-  return { root, canvas, tries, changes: () => changes, editor };
+  return { root, canvas, tries, searches, changes: () => changes, editor };
 }
 /** A press of `key` handed to the editor, as the page hands it. */
 function press(e: Made, key: string, mods: Record<string, unknown> = {}): { used: boolean; prevented: boolean } {
@@ -208,7 +220,7 @@ test('O rotates the brush', () => {
   assert.equal(e.editor.draft.extra[4 * 12 + 4], 'right');
 });
 
-test('P tries the draft; C is taken; Q is left to the page unless the drawer is open', () => {
+test('P tries the draft; C checks; Q is left to the page unless the drawer is open', () => {
   const e = make();
   e.editor.open();
   assert.deepEqual(press(e, 'p'), { used: true, prevented: true });
@@ -580,4 +592,81 @@ test('a try left for a campaign level ends the editor\'s visit; Retry does not',
   click(byId(rootOf('levels-root'), 'level-2'));
   assert.equal(tryGame.trial, 1);
   assert.equal(lefts, 1);
+});
+
+/* ---------- Check ---------- */
+const REPORT: Report = { expanded: 10, stored: 1234, bestF: 40, startH: 30, storage: 'disk' };
+const ANSWER: Difficulty = {
+  solved: true, shortest: 54, explored: 24086, withoutMinotaur: 32, minotaurDelta: 22, greedyWins: false, catchFree: 54,
+  catches: 0, label: 'chase', naiveWins: false, line: 'rrdd',
+};
+const settle = () => new Promise<void>(r => setImmediate(r));
+const said = (e: Made, id: string) => byId(e.root, id).textContent;
+
+test('C and the Check button run the search of the draft; the panel shows its progress, Stop and Keep searching', async () => {
+  const e = make();
+  e.editor.open();
+  assert.equal(maybeById(e.root, 'check-progress'), undefined);
+  assert.deepEqual(press(e, 'c'), { used: true, prevented: true });
+  assert.equal(e.searches.length, 1);
+  assert.equal(e.searches[0]!.text, toText(e.editor.draft, true));
+  assert.match(said(e, 'check-progress'), /^Starting/);
+  e.searches[0]!.report(REPORT);
+  assert.equal(said(e, 'check-progress'), 'Searched 1,234 situations · trying lines of at least 40 moves');
+  e.searches[0]!.report({ ...REPORT, storage: 'memory' });
+  assert.match(said(e, 'check-progress'), /\(in memory only\)$/);
+  assert.equal(byId(e.root, 'check-keep').disabled, true);
+  click(byId(e.root, 'check-stop'));
+  assert.deepEqual(e.searches[0]!.calls, ['stop']);
+  assert.equal(byId(e.root, 'check-stop').disabled, true);
+  assert.equal(byId(e.root, 'check-keep').disabled, false);
+  click(byId(e.root, 'check-keep'));
+  assert.deepEqual(e.searches[0]!.calls, ['stop', 'resume']);
+  e.searches[0]!.answer(ANSWER);
+  await settle();
+  assert.equal(maybeById(e.root, 'check-progress'), undefined);
+  assert.match(said(e, 'check-result'), /^Winnable: quickest win 54 moves/);
+  assert.equal(maybeById(e.root, 'check-stale'), undefined);
+  click(byId(e.root, 'check-run'));
+  assert.equal(e.searches.length, 1, 'the answer for this text is reused');
+});
+
+test('an edit cancels a running check and marks a finished one out of date; undo makes it current', async () => {
+  const e = make();
+  e.editor.open();
+  press(e, 'c');
+  click(byId(e.root, 'brush-wall'));
+  fire(e.canvas, 'pointerdown', at(e, 5, 2));
+  fire(e.canvas, 'pointerup', at(e, 5, 2));
+  assert.deepEqual(e.searches[0]!.calls, ['cancel']);
+  assert.equal(maybeById(e.root, 'check-progress'), undefined);
+  press(e, 'u');
+  click(byId(e.root, 'check-run'));
+  assert.equal(e.searches.length, 2);
+  e.searches[1]!.answer(ANSWER);
+  await settle();
+  fire(e.canvas, 'pointerdown', at(e, 5, 2));
+  fire(e.canvas, 'pointerup', at(e, 5, 2));
+  assert.equal(said(e, 'check-stale'), 'Out of date: press Check.');
+  assert.ok(byId(e.root, 'check-result').className.includes('stale'));
+  press(e, 'u');
+  assert.equal(maybeById(e.root, 'check-stale'), undefined);
+  assert.match(said(e, 'check-result'), /Winnable/);
+});
+
+test('Try it hands the last Check\'s line over only when that check was of the very text', async () => {
+  const e = make();
+  e.editor.open();
+  press(e, 'p');
+  assert.equal(e.tries[0]!.line, null);
+  press(e, 'c');
+  e.searches[0]!.answer(ANSWER);
+  await settle();
+  press(e, 'p');
+  assert.deepEqual((e.tries[1]!.line as { kind: string; dir: string }[]).map(a => a.dir), ['right', 'right', 'down', 'down']);
+  click(byId(e.root, 'brush-wall'));
+  fire(e.canvas, 'pointerdown', at(e, 5, 2));
+  fire(e.canvas, 'pointerup', at(e, 5, 2));
+  press(e, 'p');
+  assert.equal(e.tries[2]!.line, null);
 });

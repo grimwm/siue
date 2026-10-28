@@ -15,9 +15,15 @@ import { cellFor } from '../fit.ts';
 import { initial } from '../puzzle/state.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Level } from '../puzzle/level.ts';
+import { parse } from '../puzzle/level.ts';
+import { lineOf } from '../puzzle/cache.ts';
+import type { Action } from '../puzzle/step.ts';
+import { startSearch } from '../solver-client.ts';
+import type { SolverJob } from '../solver-client.ts';
 import { TERRAIN } from '../puzzle/tiles.ts';
 import type { Cell, Terrain } from '../puzzle/tiles.ts';
 import { renderEditorPanel } from './bar.tsx';
+import { createChecker } from './check.ts';
 import { editorActionFor } from './keys.ts';
 import { commit, redoH, startHistory, undoH } from './history.ts';
 import type { History } from './history.ts';
@@ -43,8 +49,11 @@ export interface EditorDeps {
   root: HTMLElement;
   atlas: Atlas;
   image: HTMLImageElement;
-  /** Plays the draft on the game screen; `text` is its share text (`toText(draft, true)`). */
-  tryIt(level: Level, text: string): void;
+  /** Plays the draft on the game screen; `text` is its share text (`toText(draft, true)`), and `line` the shortest
+   *  winning line of the last Check when that was of this very text, else null. */
+  tryIt(level: Level, text: string, line: Action[] | null): void;
+  /** Starts the solver's `measure` search on a share text (Check); the page's worker by default. */
+  start?: (text: string) => SolverJob;
   /** The draft changed. */
   changed(): void;
   /** Leaves the editor for the title card (its Leave button), when the page gives it. */
@@ -126,6 +135,7 @@ export function createEditor(deps: EditorDeps): Editor {
   const touches = new Map<number, { x: number; y: number }>();
   /** The author's best by share text. */
   const bests = new Map<string, number>();
+  const checker = createChecker(deps.start ?? (text => startSearch(text, 'measure')), () => drawPanel());
 
   const now = (): History<Draft> => (history ??= startHistory(newDraft(NEW_SIDE, NEW_SIDE)));
 
@@ -189,7 +199,14 @@ export function createEditor(deps: EditorDeps): Editor {
   function drawPanel(): void {
     if (!shown) return;
     const h = now();
+    const text = toText(live, true);
+    const checked = checker.state;
+    const answered = checked.kind === 'done' || checked.kind === 'failed' ? checked.text : null;
     renderEditorPanel(panel, {
+      check: {
+        state: checked, current: text, level: answered !== null && answered !== text ? parse(answered) : toLevel(live),
+        onCheck: runCheck, onStop: () => checker.stop(), onKeep: () => checker.keepSearching(),
+      },
       draft: live, canUndo: h.canUndo, canRedo: h.canRedo, brush, owner: isOwner, drawer,
       onPick: (b) => {
         brush = b;
@@ -219,6 +236,7 @@ export function createEditor(deps: EditorDeps): Editor {
   function show(d: Draft): void {
     if (d === live) return;
     live = d;
+    checker.edited(toText(d, true));
     drawBoard();
     drawPanel();
     deps.changed();
@@ -246,7 +264,15 @@ export function createEditor(deps: EditorDeps): Editor {
 
   function tryIt(): void {
     endStroke();
-    deps.tryIt(toLevel(live), toText(live, true));
+    const text = toText(live, true);
+    const c = checker.state;
+    deps.tryIt(toLevel(live), text, c.kind === 'done' && c.text === text ? lineOf(c.d.line) : null);
+  }
+
+  /** Checks the draft as it stands. */
+  function runCheck(): void {
+    endStroke();
+    void checker.check(toText(live, true));
   }
 
   /* ---------- painting ---------- */
@@ -328,6 +354,7 @@ export function createEditor(deps: EditorDeps): Editor {
       shown = true;
       root.hidden = false;
       live = now().now;
+      checker.edited(toText(live, true));
       sized = '';
       drawPanel();
       drawBoard();
@@ -359,8 +386,7 @@ export function createEditor(deps: EditorDeps): Editor {
         case 'undo': step(undoH); break;
         case 'redo': step(redoH); break;
         case 'try': tryIt(); break;
-        // C is Check's key: the press is kept from the game and checks nothing on this page.
-        case 'check': break;
+        case 'check': runCheck(); break;
         case 'rotate': rotate(); break;
       }
       return true;

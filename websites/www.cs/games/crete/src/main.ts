@@ -59,7 +59,7 @@ const editor = createEditor({
   root: document.getElementById('editor-root') as HTMLElement,
   atlas,
   image,
-  tryIt: (level, text) => tryLevel(level, text, null),
+  tryIt: (level, text, line) => tryLevel(level, text, line),
   changed: () => {},
   leave: () => ui.leaveEditor(),
 });

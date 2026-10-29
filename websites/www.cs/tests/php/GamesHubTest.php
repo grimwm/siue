@@ -154,6 +154,54 @@ final class GamesHubTest extends TestCase
         }
     }
 
+    /** the card's animation is a .webp beside a screenshot (versioned), the share clip an .mp4, the genre plain text */
+    public function testCardPreviewVideoGenre(): void
+    {
+        $this->game('tankity', null, ['index.html', 'shot.jpg', 'loop.webp', 'clip.mp4', 'notes.txt']);
+        file_put_contents("$this->tmp/tankity/loop.webp", 'webp');
+        $base = ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'screenshot' => 'shot.jpg'];
+        [$card, $err] = games_hub_card('tankity', $base + ['preview' => 'loop.webp', 'video' => 'clip.mp4', 'genre' => 'Artillery'], "$this->tmp/tankity");
+        $versioned = 'games/tankity/loop.webp?v=' . substr((string) hash_file('sha256', "$this->tmp/tankity/loop.webp"), 0, 10);
+        self::assertTrue($err === null && ($card['preview'] ?? null) === $versioned, 'card-preview-ok');
+        self::assertTrue(($card['video'] ?? null) === 'games/tankity/clip.mp4' && ($card['genre'] ?? null) === 'Artillery', 'card-video-genre-ok');
+        [$card, $err] = games_hub_card('tankity', $base, "$this->tmp/tankity");
+        self::assertTrue($err === null && !isset($card['preview']) && !isset($card['video']) && !isset($card['genre']), 'card-preview-optional');
+        $bad = [
+            'preview-missing' => ['preview' => 'nope.webp'], 'preview-not-webp' => ['preview' => 'notes.txt'],
+            'preview-traversal' => ['preview' => '../cylon/loop.webp'], 'video-not-mp4' => ['video' => 'loop.webp'],
+            'video-missing' => ['video' => 'nope.mp4'],
+        ];
+        foreach ($bad as $name => $extra) {
+            [$card, $err] = games_hub_card('tankity', $base + $extra, "$this->tmp/tankity");
+            self::assertTrue($card === null && is_string($err), "card-reject-$name");
+        }
+        // Reduced motion shows the still, so an animation needs one.
+        [$card, $err] = games_hub_card('tankity', ['title' => 't', 'description' => 'd', 'play' => 'index.html', 'preview' => 'loop.webp'], "$this->tmp/tankity");
+        self::assertTrue($card === null && is_string($err), 'card-preview-needs-screenshot');
+    }
+
+    /** every game in the repo has its card picture, animation, share picture (1200x630) and share clip */
+    public function testRepoGamesHavePictures(): void
+    {
+        $root = __DIR__ . '/../../games';
+        $hub = games_hub_list($root);
+        self::assertTrue($hub['errors'] === [], 'repo-games-valid :: ' . json_encode($hub['errors']));
+        foreach ($hub['games'] as $card) {
+            $id = $card['id'];
+            foreach (['screenshot', 'preview', 'video', 'image', 'genre'] as $key) {
+                self::assertTrue(isset($card[$key]), "repo-$id-has-$key");
+            }
+            $size = @getimagesize(__DIR__ . '/../../' . $card['image']);
+            self::assertTrue(is_array($size) && $size[0] === 1200 && $size[1] === 630, "repo-$id-share-picture-1200x630");
+            $shot = @getimagesize(__DIR__ . '/../../' . explode('?', $card['screenshot'])[0]);
+            self::assertTrue(is_array($shot) && $shot[0] === 800 && $shot[1] === 450, "repo-$id-screenshot-800x450");
+            $loop = __DIR__ . '/../../' . explode('?', $card['preview'])[0];
+            self::assertTrue(filesize($loop) < 600_000, "repo-$id-preview-under-600KB");
+            $clip = __DIR__ . '/../../' . $card['video'];
+            self::assertTrue(filesize($clip) < 2_000_000 && str_contains((string) file_get_contents($clip, false, null, 0, 64), 'ftyp'), "repo-$id-clip-mp4-under-2MB");
+        }
+    }
+
     /** the install look is a short name and colors, with defaults */
     public function testCardInstallLook(): void
     {

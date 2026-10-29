@@ -14,6 +14,8 @@ interface HubGame {
     button: string;
     kicker?: string;
     screenshot?: string;
+    /** A few looping seconds of play (animated WebP), shown over the screenshot unless motion is reduced. */
+    preview?: string;
     /** The game's wrapper page: the card links to it. */
     href?: string;
     /** The link to share, when it is not href. */
@@ -177,9 +179,24 @@ function gamesHubCard(game: HubGame): HTMLLIElement {
         shot.src = game.screenshot;
         shot.alt = `${game.title} in play`;
         shot.loading = 'lazy';
+        shot.decoding = 'async';
         shot.width = 800;
         shot.height = 450;
-        card.append(shot);
+        if (game.preview) {
+            // The looping preview where motion is welcome; the still where it
+            // is reduced, or where WebP is not understood.
+            const pic = el('picture', 'games-hub-card-pic');
+            const moving = document.createElement('source');
+            moving.type = 'image/webp';
+            moving.media = '(prefers-reduced-motion: no-preference)';
+            moving.srcset = game.preview;
+            moving.width = 640;
+            moving.height = 360;
+            pic.append(moving, shot);
+            card.append(pic);
+        } else {
+            card.append(shot);
+        }
     }
     const head = el('div', 'games-hub-card-head');
     if (game.kicker) head.append(el('p', 'games-hub-card-kicker', game.kicker));

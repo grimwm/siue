@@ -87,9 +87,10 @@ e2e: ## Browser suite against the local site (E2E_BASE_URL, E2E_ARGS)
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
 	E2E_BASE_URL=$$url tests/e2e/run.sh $(E2E_ARGS)
 
-screenshots: ## Recapture the Games-page pictures (macOS)
+screenshots: ## Recapture every game's card still and loop, share image and clip
 	@url=$${E2E_BASE_URL:-$$($(MAKE) --no-print-directory -s url)} && \
-	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url node screenshots.ts $(GAMES)
+	cd tests/e2e && npm ci --silent && E2E_BASE_URL=$$url node screenshots.ts $(GAMES) && \
+	cd ../.. && php tools/site-game-pages.php
 
 # The specs this branch's changes need (committed, uncommitted and new files
 # against origin/main), picked by tests/e2e/select.ts; nothing when none.

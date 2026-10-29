@@ -54,6 +54,9 @@ theme_color: "#05060f"            # optional #rgb/#rrggbb browser bar color
 background_color: "#05060f"       # optional #rgb/#rrggbb splash color
 accent_color: "#ffc93c"           # optional #rgb/#rrggbb navbar accent on the site
 screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
+preview: preview.webp             # optional looping animation on the card (needs screenshot)
+video: preview.mp4                # optional silent clip for link previews (og:video)
+genre: Artillery                  # optional genre for search engines (JSON-LD)
 ```
 
 - Set exactly one of `play` or `start`. `play` must be a file inside the game
@@ -65,8 +68,25 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
   `errors`, and the browser console repeats it.
 - Check every game with `vendor/bin/phpunit --filter GamesHubTest` from
   `websites/www.cs`.
-- `make screenshots` plays each game briefly in a real browser and rewrites
-  its `screenshot.jpg` (800x450). Rerun it when a game's look changes.
+- Pictures. `make screenshots` (from `websites/www.cs`, with `make up`
+  running, or `E2E_BASE_URL=` the live site) plays each game briefly in
+  Chrome and rewrites all of its pictures, then the share pages:
+  - `screenshot.jpg`, the 800x450 still on the Games-page card;
+  - `preview.webp`, 4.5 s of play looping on that card (640x360, under
+    600 KB). The card shows it through `<picture>`, with the still for
+    `prefers-reduced-motion: reduce` and for browsers without WebP, and
+    lazy-loads both;
+  - `og.png`, the 1200x630 link preview: the same moment under the game's
+    name and kicker;
+  - `preview.mp4`, 5-8 s of silent 1280x720 H.264, the share page's
+    `og:video` for apps that play one (Facebook, LinkedIn, Discord); every
+    other app shows `og.png`.
+  Rerun it whenever a game's look changes (new art, HUD, layout or levels),
+  check the pictures, and commit them with the rewritten `play/` pages. It
+  needs Chrome and ffmpeg with libwebp and libx264 or libopenh264 (macOS:
+  `brew install ffmpeg`; Fedora's `ffmpeg-free` has both). `GAMES="crete"`
+  limits it to some games. What each game plays is its entry in
+  `tests/e2e/screenshots.ts`.
 - Games know nothing about the site. A built game folder is self-contained and
   works copied anywhere; its source needs `games/_kit/` beside it to rebuild
   (`cd games && npm ci && node _kit/build/build.mjs <id>`).
@@ -83,8 +103,10 @@ screenshot: screenshot.jpg        # optional 16:9 picture on the Games page card
       Install, or on iOS opens the Add to Home Screen steps on the game's page;
     - a `start` game: a page that forwards to the site with `?game=<id>`,
       keeping the address's query (`?install`).
-    Both carry the game's link previews (title, description, `image`): the
-    tags chat apps and social sites read when a link is shared. Run the tool
+    Both carry the game's link previews (title, description, `image`,
+    `video`) and JSON-LD game data (a free browser game): the tags chat apps,
+    social sites and search engines read. The picture and clip URLs carry a
+    hash of the file, so a recapture gives previews a new address to fetch. Run the tool
     after editing a `metadata.yaml`; `make test` and `make deploy` refuse
     stale pages. The home page opens its Contact and Games panels for
     `#contact` and `#games`, which the navbar links to.

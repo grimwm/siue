@@ -46,6 +46,14 @@ async function open(page: Page): Promise<string[]> {
   await page.locator('#start-begin').click();
   await expect(page.locator('#start-veil')).toBeHidden();
   await page.waitForSelector('#stage[data-cell]');
+  // data-cell is set when the canvas is sized, before the first paint (which waits for the tile atlas): wait for the
+  // board itself, or a cold-cache run reads a blank canvas.
+  await page.waitForFunction(() => {
+    const stage = document.getElementById('stage') as HTMLCanvasElement;
+    const d = stage.getContext('2d')!.getImageData(0, 0, stage.width, stage.height).data;
+    for (let i = 3; i < d.length; i += 4 * 97) if (d[i]! > 0) return true;
+    return false;
+  });
   return errors;
 }
 

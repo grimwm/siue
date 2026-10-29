@@ -73,8 +73,26 @@ final class SiteGamePagesTest extends TestCase
         self::assertTrue(str_contains($wrap, '<meta property="og:title" content="Arty &amp; Co">'), 'wrapper-title');
         self::assertTrue(str_contains($wrap, 'content="Lob &lt;shells&gt; at drones."'), 'wrapper-escaped');
         self::assertTrue(str_contains($wrap, '<meta property="og:url" content="https://example.edu/~me/play/arty/">'), 'wrapper-url');
-        self::assertTrue(str_contains($wrap, '<meta property="og:image" content="https://example.edu/~me/games/arty/og.png">')
-            && str_contains($wrap, '<meta name="twitter:card" content="summary_large_image">'), 'wrapper-image');
+        $og = 'https://example.edu/~me/games/arty/og.png?v=' . substr(hash('sha256', 'png'), 0, 10);
+        self::assertTrue(str_contains($wrap, '<meta property="og:image" content="' . $og . '">')
+            && str_contains($wrap, '<meta property="og:image:secure_url" content="' . $og . '">')
+            && str_contains($wrap, '<meta property="og:image:type" content="image/png">')
+            && str_contains($wrap, '<meta property="og:image:width" content="1200">')
+            && str_contains($wrap, '<meta property="og:image:height" content="630">')
+            && str_contains($wrap, '<meta property="og:image:alt" content="Arty &amp; Co in play">')
+            && str_contains($wrap, '<meta name="twitter:card" content="summary_large_image">')
+            && str_contains($wrap, '<meta name="twitter:image" content="' . $og . '">')
+            && str_contains($wrap, '<meta name="twitter:image:alt" content="Arty &amp; Co in play">'), 'wrapper-image');
+        // No clip in the metadata, no og:video.
+        self::assertTrue(!str_contains($wrap, 'og:video'), 'wrapper-no-video');
+        // JSON-LD: a free browser game, with the share picture.
+        self::assertTrue((bool) preg_match('#<script type="application/ld\+json">(.*?)</script>#', $wrap, $m), 'wrapper-json-ld');
+        $ld = json_decode($m[1], true);
+        self::assertTrue($ld['@type'] === ['VideoGame', 'WebApplication'] && $ld['name'] === 'Arty & Co'
+            && $ld['description'] === 'Lob <shells> at drones.' && $ld['url'] === 'https://example.edu/~me/play/arty/'
+            && $ld['image'] === $og && $ld['isAccessibleForFree'] === true
+            && $ld['offers'] === ['@type' => 'Offer', 'price' => '0', 'priceCurrency' => 'USD'], 'wrapper-json-ld-fields :: ' . $m[1]);
+        self::assertTrue(!str_contains($m[1], '<shells>'), 'wrapper-json-ld-escapes-tags');
         self::assertTrue(str_contains($wrap, 'href="../../">William Grim</a>') && str_contains($wrap, 'href="../../#contact"')
             && str_contains($wrap, 'href="../../#games"'), 'wrapper-nav');
         self::assertTrue(str_contains($wrap, 'class="play-github" href="https://github.com/grimwm/siue" target="_blank" rel="noopener" aria-label="Source on GitHub"')
@@ -98,6 +116,41 @@ final class SiteGamePagesTest extends TestCase
         // file is fetched afresh.
         self::assertTrue(str_contains($wrap, '<link rel="stylesheet" href="../play.css?v=' . $this->vOf('play.css') . '">')
             && str_contains($wrap, '<script src="../play.js?v=' . $this->vOf('play.js') . '" defer></script>'), 'wrapper-versions-shared-files');
+    }
+
+    /** a game's clip becomes og:video (absolute, versioned, typed, sized) and its kicker and genre reach the alt text and JSON-LD */
+    public function testVideoKickerGenre(): void
+    {
+        file_put_contents("$this->root/arty/clip.mp4", 'mp4');
+        file_put_contents("$this->root/arty/metadata.yaml", "title: Arty\nkicker: Lob shells\ngenre: Artillery\ndescription: Lob shells.\nplay: index.html\nimage: og.png\nvideo: clip.mp4\n");
+        site_pages_sync($this->root, $this->site, true);
+        $wrap = (string) @file_get_contents("$this->tmp/play/arty/index.html");
+        $clip = 'https://example.edu/~me/games/arty/clip.mp4?v=' . substr(hash('sha256', 'mp4'), 0, 10);
+        self::assertTrue(str_contains($wrap, '<meta property="og:video" content="' . $clip . '">')
+            && str_contains($wrap, '<meta property="og:video:secure_url" content="' . $clip . '">')
+            && str_contains($wrap, '<meta property="og:video:type" content="video/mp4">')
+            && str_contains($wrap, '<meta property="og:video:width" content="1280">')
+            && str_contains($wrap, '<meta property="og:video:height" content="720">'), 'wrapper-video');
+        // The still stays the preview, and the page stays a website.
+        self::assertTrue(str_contains($wrap, '<meta property="og:type" content="website">')
+            && str_contains($wrap, '<meta name="twitter:card" content="summary_large_image">')
+            && !str_contains($wrap, 'twitter:player'), 'wrapper-still-is-preview');
+        self::assertTrue(str_contains($wrap, 'content="Arty in play: lob shells"') && str_contains($wrap, '"genre":"Artillery"'), 'wrapper-kicker-genre');
+        // A recaptured clip is a new address, so the page goes stale.
+        file_put_contents("$this->root/arty/clip.mp4", 'mp4 again');
+        [$stale] = site_pages_sync($this->root, $this->site, false);
+        self::assertTrue($stale === ['arty'], 'wrapper-stale-on-new-clip');
+    }
+
+    /** search text is cut at a whole sentence near 160 characters */
+    public function testSummary(): void
+    {
+        self::assertTrue(site_pages_summary('Short.') === 'Short.', 'summary-short');
+        $long = 'Defend this page from Cylon drones: missiles, Raptors, and one opening nuke. Play often: weekly high scores reset every Sunday at midnight Central. You can also start from the nav Game Off toggle.';
+        self::assertTrue(site_pages_summary($long) === 'Defend this page from Cylon drones: missiles, Raptors, and one opening nuke. Play often: weekly high scores reset every Sunday at midnight Central.', 'summary-sentences');
+        $one = str_repeat('word ', 50);
+        $cut = site_pages_summary($one);
+        self::assertTrue(mb_strlen($cut) <= 160 && str_ends_with($cut, 'word…'), 'summary-one-long-sentence :: ' . $cut);
     }
 
     /** a mounted game gets a site page that forwards to the site */

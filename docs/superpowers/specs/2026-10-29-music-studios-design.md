@@ -229,8 +229,11 @@ comes first because a score-only studio cannot be heard without it.
   deleting a piece deletes its drafts, and pieces have no size of their own.
 - **One account per person:**
   - addresses with `+` are refused;
-  - the server caps the number of accounts and their total disk, both set in
-    its configuration;
+  - the server caps the number of accounts, and the total disk of all accounts
+    other than named people at **about 1 GB** (owner's decision), both set in
+    its configuration (the host's disk is 1.5 TB with 1.4 TB free, checked
+    2026-10-29; an account quota, if the university sets one, is not visible
+    from sftp);
   - when either cap is reached, new sign-ups get a plain "the studio is full"
     page.
 - **Untrusted scores** get limits on top of today's validator:

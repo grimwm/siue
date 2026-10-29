@@ -45,8 +45,8 @@ export function Menu(p: MenuProps) {
   }, [p.open, p.log.length]);
   return (
     <Dialog open={p.open} id="menu-veil" veilClass="veil" panelClass="card menu" kicker="The Island of Crete" kickerClass="kicker"
-      titleId="menu-title" title="Menu">
-      <Button id="menu-close" class="close" label="Close menu" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>
+      titleId="menu-title" title="Menu"
+      close={<Button id="menu-close" class="close" label="Close menu" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>}>
       <div class="menu-sec" data-section="audio">
         <Button id="mute" keyLabel={KEYS.mute.label} onClick={p.onSound}>{p.muted ? '🔇 Muted' : '🔊 Sound'}</Button>
         <Button id="music" onClick={p.onMusic}>{p.music ? '🎶 Music' : '🎶 Music off'}</Button>

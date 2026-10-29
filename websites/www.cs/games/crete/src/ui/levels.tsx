@@ -31,8 +31,8 @@ export interface LevelsProps {
 export function Levels(p: LevelsProps) {
   return (
     <Dialog open={p.open} id="levels-veil" veilClass="veil" panelClass="card levels" kicker="The Island of Crete" kickerClass="kicker"
-      titleId="levels-title" title="Levels" focusId={`level-${Math.max(0, p.current) + 1}`}>
-      <Button id="levels-close" class="close" label="Close the level list" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>
+      titleId="levels-title" title="Levels" focusId={`level-${Math.max(0, p.current) + 1}`}
+      close={<Button id="levels-close" class="close" label="Close the level list" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>}>
       <div class="chapter-tabs">
         {p.chapters.map(c => (
           <Button key={c.n} id={`levels-tab-${c.n}`} class="chapter-tab" pressed={c.n === p.shown} disabled={!c.released} onClick={() => p.onTab(c.n)}>

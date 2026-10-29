@@ -48,6 +48,12 @@
   white-space: nowrap;
   flex: none;
 }
+/* A dialog's title row (ui/dialog.tsx close): the title wraps in the space the close button leaves, and the
+   button stays at the end of the row, centred on the title. */
+.kit-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.kit-dialog-head > h2 { min-width: 0; overflow-wrap: anywhere; }
+.kit-dialog-head > button { flex: none; margin: 0; }
+
 /* A key tab in line after a button's words (ui/button.tsx keyLabel): in flow, spaced from the words, and
    centred on them. */
 :where(.kit-key-tab.kit-key-inline) {

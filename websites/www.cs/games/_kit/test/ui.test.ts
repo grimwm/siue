@@ -65,6 +65,18 @@ test('the title class lands on the heading; a null kicker renders no paragraph',
   assert.equal(maybeById(root, 'dlg-kicker'), undefined);
 });
 
+test('a close button shares the title\'s row, after the heading, and stays in the panel\'s tab order', () => {
+  const root = mount();
+  render(dialog({ open: true, close: h(Button, { id: 'dlg-close', label: 'Close', onClick: () => {} }, 'x') }, h('button', { id: 'other' }, 'Other')), root);
+  const head = byId(root, 'dlg-title').parentNode as StubElement;
+  assert.equal(head.className, 'kit-dialog-head');
+  assert.deepEqual(Array.from(head.children).map(c => (c as StubElement).id), ['dlg-title', 'dlg-close']);
+  assert.equal(byId(root, 'dlg-close').getAttribute('aria-label'), 'Close');
+  render(dialog({ open: false }), root);
+  assert.equal(maybeById(root, 'dlg-close'), undefined);
+  assert.equal((byId(root, 'dlg-title').parentNode as StubElement).className, 'card');
+});
+
 test('opening focuses the named element; closing gives focus back', () => {
   const root = mount();
   const opener = makeEl('opener');

@@ -46,8 +46,8 @@ export function Lore(p: LoreProps) {
   const full = p.shown ? fullOf(p.chapters, p.shown) : null;
   return (
     <Dialog open={p.open} id="lore-veil" veilClass="veil" panelClass="card lore" kicker="The Island of Crete" kickerClass="kicker"
-      titleId="lore-title" title="Lore book" focusId="lore-close">
-      <Button id="lore-close" class="close" label="Close the Lore book" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>
+      titleId="lore-title" title="Lore book" focusId="lore-close"
+      close={<Button id="lore-close" class="close" label="Close the Lore book" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>}>
       {full ? (
         <div class="lore-entry">
           <h3 id="lore-entry-title">{full.title}</h3>

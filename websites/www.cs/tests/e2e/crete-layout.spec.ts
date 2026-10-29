@@ -25,6 +25,20 @@ async function open(browser: Browser, [, width, height, touch]: Device) {
   return { ctx, page, errors };
 }
 
+/** A dialog's close button sits on the title's row: its vertical centre is inside the title's box, and it ends to the title's right. */
+async function closeOnTitleRow(page: Page, dialog: string): Promise<void> {
+  await expect(page.locator(`#${dialog}-title`), `${dialog}: title shown`).toBeVisible();
+  await expect(page.locator(`#${dialog}-close`), `${dialog}: close shown`).toBeVisible();
+  const row = await page.evaluate((d) => {
+    const t = document.querySelector(`#${d}-title`)!.getBoundingClientRect();
+    const c = document.querySelector(`#${d}-close`)!.getBoundingClientRect();
+    return { mid: (c.top + c.bottom) / 2, top: t.top, bottom: t.bottom, gap: c.left - t.right };
+  }, dialog);
+  expect(row.mid, `${dialog}: close centre inside the title's line`).toBeGreaterThanOrEqual(row.top);
+  expect(row.mid, `${dialog}: close centre inside the title's line`).toBeLessThanOrEqual(row.bottom);
+  expect(row.gap, `${dialog}: close beside the title, not over it`).toBeGreaterThanOrEqual(-0.5);
+}
+
 /** The widest values the status bar can show. */
 function setWorst() {
   const put = (id: string, v: string) => { document.getElementById(id)!.textContent = v; };
@@ -91,6 +105,7 @@ for (const device of DEVICES) {
     await page.locator('#chapter-levels').click();
     await expect(page.locator('#levels-veil')).toBeVisible();
     expect(await page.evaluate(cardFits, '#levels-veil .card'), 'level list on screen').toBe(true);
+    await closeOnTitleRow(page, 'levels');
     for (let n = 1; n <= 10; n++) await expect(page.locator(`#levels-tab-${n}`)).toBeVisible();
     for (let i = 1; i <= 10; i++) await expect(page.locator(`#level-${i}`)).toBeVisible();
     // Level 1 from the list shows the chapter card first; Enter the halls opens it.
@@ -118,6 +133,11 @@ for (const device of DEVICES) {
     await page.locator('#btn-menu').click();
     await expect(page.locator('#menu-veil')).toBeVisible();
     expect(await page.evaluate(cardFits, '#menu-veil .card'), 'menu on screen').toBe(true);
+    await closeOnTitleRow(page, 'menu');
+    await page.locator('#menu-lore').click();
+    await expect(page.locator('#lore-veil')).toBeVisible();
+    await closeOnTitleRow(page, 'lore');
+    await page.locator('#lore-close').click();
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 0.5)).toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();

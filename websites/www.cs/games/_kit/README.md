@@ -154,7 +154,9 @@ view of its state and callbacks, and redraws when the state changes.
   a click on the veil (one that also began there) call `onDismiss`; a game
   whose own key router already handles Q should not pass `onDismiss`. Q
   typed into a box is a letter, and an open dialog stops Q there, so the game
-  under it never also acts on it. Escape does nothing.
+  under it never also acts on it. Escape does nothing. A `close` button
+  passed to it sits at the end of the title's row, centred on the title
+  (`.kit-dialog-head`, in kit.css), and a long title wraps beside it.
   Focus returns to what had it, or to the kit `Button` that opened the
   dialog. The game passes its own ids and classes, so its CSS and browser
   specs keep working.

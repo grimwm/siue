@@ -1,12 +1,13 @@
-// The draft on screen as files to save: the audio the player plays, the sheet
-// music when the piece has it, and the score, each named for the piece and the
-// draft. DOM-free.
+// The draft on screen as files to save: the audio the player plays (the WAV
+// built in the page for a draft played from its score), the sheet music when
+// the piece has it, and the score, each named for the piece and the draft.
+// DOM-free.
 import type { AudioSource } from './score.ts';
 
-export type DraftFile = AudioSource['file'] | 'score.musicxml' | 'score.json';
+export type DraftFile = AudioSource['file'] | 'audio.wav' | 'score.musicxml' | 'score.json';
 export interface DownloadLink { label: string; href: string; name: string }
-/** piece and version name the draft; audio is the source the player plays (null: none plays); sheet: the score has score.musicxml. */
-export interface DraftDownload { piece: string; version: number; audio: AudioSource | null; sheet: boolean }
+/** piece and version name the draft; audio is the source the player plays (null: none plays); wav is the address of the sound built in the page, offered in its place; sheet: the score has score.musicxml. */
+export interface DraftDownload { piece: string; version: number; audio: AudioSource | null; wav?: string; sheet: boolean }
 
 /** The saved file's name: the piece, the draft and the file's own extension (crete-title-v3.webm). */
 export function downloadName(piece: string, version: number, file: DraftFile): string {
@@ -15,9 +16,11 @@ export function downloadName(piece: string, version: number, file: DraftFile): s
 
 /** The links the page offers, in order: Audio, Sheet music, Score; url is the page's own draft-file route. */
 export function downloadLinks(d: DraftDownload, url: (file: DraftFile) => string): DownloadLink[] {
-  const files: [string, DraftFile][] = [];
-  if (d.audio) files.push(['Audio', d.audio.file]);
-  if (d.sheet) files.push(['Sheet music', 'score.musicxml']);
-  files.push(['Score', 'score.json']);
-  return files.map(([label, file]) => ({ label, href: url(file), name: downloadName(d.piece, d.version, file) }));
+  const links: DownloadLink[] = [];
+  const add = (label: string, file: DraftFile, href = url(file)): void => { links.push({ label, href, name: downloadName(d.piece, d.version, file) }); };
+  if (d.wav !== undefined) add('Audio (WAV)', 'audio.wav', d.wav);
+  else if (d.audio) add('Audio', d.audio.file);
+  if (d.sheet) add('Sheet music', 'score.musicxml');
+  add('Score', 'score.json');
+  return links;
 }

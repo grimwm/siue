@@ -1,6 +1,7 @@
-// The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns under a drag, moves
-// Theseus the way the screen shows, ignores the camera while a card is up, keeps the Walls choice, follows the mini
-// map, and hands the board back to the classic look and takes it again. Without WebGL the classic board shows.
+// The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns under a drag, zooms
+// under the wheel and its buttons, moves Theseus the way the screen shows, ignores the camera while a card is up,
+// keeps the Walls choice, follows the mini map, and hands the board back to the classic look and takes it again.
+// Without WebGL the classic board shows.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -34,7 +35,7 @@ interface Hooked {
     game: { run: { now: { player: { r: number; c: number } } } };
     parse(text: string): unknown;
     playLevel(level: unknown): void;
-    modern?: { frames(): number; yaw(): number; active: boolean };
+    modern?: { frames(): number; yaw(): number; zoom(): number; active: boolean };
   };
 }
 
@@ -52,6 +53,7 @@ const modern = (page: Page) => page.evaluate(() => {
   const m = (window as unknown as Hooked).__creteTest.modern;
   return m ? { frames: m.frames(), yaw: m.yaw(), active: m.active } : null;
 });
+const zoom = (page: Page) => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.zoom());
 const player = (page: Page) => page.evaluate(() => ({ ...(window as unknown as Hooked).__creteTest.game.run.now.player }));
 
 /** Waits until the board has drawn and then held still for a moment. */
@@ -161,6 +163,43 @@ test('with the menu open the camera stays where it is', async ({ page }) => {
   await expect(page.locator('#menu-veil')).toBeHidden();
   await strayDrag();
   await expect.poll(async () => (await modern(page))!.yaw).not.toBe(yaw);
+  expect(errors).toEqual([]);
+});
+
+test('the wheel zooms toward the pointer and the buttons zoom too; with the menu open the wheel does nothing', async ({ page }) => {
+  const errors = await openHall(page);
+  const z0 = await zoom(page);
+  const box = (await page.locator('#stage3d').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => zoom(page), 'a wheel down zooms out').toBeGreaterThan(z0);
+  const out = await zoom(page);
+  await page.mouse.wheel(0, -600);
+  await expect.poll(() => zoom(page), 'a wheel up zooms in').toBeLessThan(out);
+
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-veil')).toBeVisible();
+  const held = await zoom(page);
+  // Straight at the canvas, under the card.
+  const prevented = await page.evaluate(() => {
+    const c = document.getElementById('stage3d')!;
+    const r = c.getBoundingClientRect();
+    const e = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 400, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
+    c.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
+  await page.waitForTimeout(300);
+  expect(await zoom(page), 'a wheel under the menu zooms nothing').toBe(held);
+  expect(prevented, 'and leaves the wheel to the page').toBe(false);
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-veil')).toBeHidden();
+
+  await page.locator('#cam-zoom-out').click();
+  await expect.poll(() => zoom(page), 'Zoom out').toBeGreaterThan(held);
+  await page.locator('#cam-reset').click();
+  await expect.poll(() => zoom(page), 'Reset view brings the default back').toBeCloseTo(z0, 3);
+  await page.locator('#cam-zoom-in').click();
+  await expect.poll(() => zoom(page), 'Zoom in').toBeLessThan(z0);
   expect(errors).toEqual([]);
 });
 

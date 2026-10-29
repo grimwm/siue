@@ -1,4 +1,4 @@
-// Pointer gestures as camera operations: turning, panning, twisting and the double-tap reset.
+// Pointer gestures as camera operations: turning, panning, twisting, zooming and the double-tap reset.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGestures } from '../src/modern/gestures.ts';
@@ -84,4 +84,47 @@ test('cancel forgets a pointer', () => {
   g.down(p(1, 0, 0));
   g.cancel(1);
   assert.deepEqual(g.move(p(1, 50, 0)), []);
+});
+
+const zooms = (ops: CamOp[]) => ops.flatMap(o => (o.kind === 'zoom' ? [o] : []));
+
+test("pinching apart zooms in about the fingers' midpoint; pinching together zooms out", () => {
+  const g = createGestures(() => 0);
+  g.down(p(1, 100, 100));
+  g.down(p(2, 200, 100));
+  const apart = zooms(g.move(p(2, 300, 100)));
+  assert.equal(apart.length, 1);
+  assert.ok(Math.abs(apart[0]!.factor - 0.5) < 1e-9, 'twice as far apart shows half the height');
+  assert.deepEqual([apart[0]!.x, apart[0]!.y], [200, 100]);
+  const together = zooms(g.move(p(2, 150, 100)));
+  assert.ok(together[0]!.factor > 1);
+  assert.equal(zooms(g.move(p(1, 110, 100))).length, 1, 'parallel moves of one finger still pinch');
+  const pan = g.move(p(1, 110, 140));
+  assert.ok(pan.some(o => o.kind === 'pan') && pan.some(o => o.kind === 'zoom'), 'pan and pinch together');
+});
+
+test('fingers almost touching pinch as if 10 px apart', () => {
+  const g = createGestures(() => 0);
+  g.down(p(1, 100, 100));
+  g.down(p(2, 101, 100));
+  const z = zooms(g.move(p(2, 120, 100)));
+  assert.ok(Math.abs(z[0]!.factor - 10 / 20) < 1e-9);
+});
+
+test('the wheel: down zooms out, up zooms in, by the same amount either way', () => {
+  const g = createGestures(() => 0);
+  const [out] = g.wheel(100, 40, 50);
+  const [inn] = g.wheel(-100, 40, 50);
+  assert.ok(out?.kind === 'zoom' && out.factor > 1 && out.x === 40 && out.y === 50);
+  assert.ok(inn?.kind === 'zoom' && Math.abs(inn.factor * out.factor - 1) < 1e-9);
+  assert.deepEqual(g.wheel(0, 0, 0), []);
+});
+
+test('one finger and mouse drags never zoom', () => {
+  const g = createGestures(() => 0);
+  g.down(p(1, 10, 10));
+  assert.deepEqual(zooms(g.move(p(1, 60, 40))), []);
+  g.up(p(1, 60, 40));
+  g.down(p(2, 10, 10, 'mouse', 2));
+  assert.deepEqual(zooms(g.move(p(2, 60, 40, 'mouse', 2))), []);
 });

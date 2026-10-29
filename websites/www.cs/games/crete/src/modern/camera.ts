@@ -1,5 +1,5 @@
 /* The Island of Crete, modern look: the fixed-pitch camera as pure maths. The view turns about the vertical
- * axis and slides over the board; it never tilts or zooms. The board is centred at the origin, one cell is
+ * axis, slides over the board and zooms within limits; it never tilts. The board is centred at the origin, one cell is
  * one unit, and cell (r, c) sits at x = c - (cols - 1) / 2, z = r - (rows - 1) / 2. DOM-free. */
 
 export const PITCH = 45;
@@ -9,6 +9,8 @@ export interface Cam {
   yaw: number;
   tx: number;
   tz: number;
+  /** The view's height in ground rows: smaller is closer. */
+  zoom: number;
 }
 
 const SIN_PITCH = Math.sin((PITCH * Math.PI) / 180);
@@ -17,7 +19,7 @@ const SIN_PITCH = Math.sin((PITCH * Math.PI) / 180);
 export function easeCam(cur: Cam, goal: Cam, dtSec: number, snap: boolean): boolean {
   const k = snap ? 1 : 1 - Math.exp(-dtSec * 11);
   let moving = false;
-  for (const key of ['yaw', 'tx', 'tz'] as const) {
+  for (const key of ['yaw', 'tx', 'tz', 'zoom'] as const) {
     const d = goal[key] - cur[key];
     if (d === 0) continue;
     cur[key] = Math.abs(d) > (key === 'yaw' ? 0.02 : 0.002) && !snap ? cur[key] + d * k : goal[key];
@@ -30,7 +32,7 @@ export function easeCam(cur: Cam, goal: Cam, dtSec: number, snap: boolean): bool
 export function clampCam(c: Cam, cols: number, rows: number): Cam {
   const hx = (cols - 1) / 2 + 1;
   const hz = (rows - 1) / 2 + 1;
-  return { yaw: c.yaw, tx: Math.max(-hx, Math.min(hx, c.tx)), tz: Math.max(-hz, Math.min(hz, c.tz)) };
+  return { ...c, tx: Math.max(-hx, Math.min(hx, c.tx)), tz: Math.max(-hz, Math.min(hz, c.tz)) };
 }
 
 /** A screen drag of (dxPx, dyPx) as a ground move: the board follows the finger, and the ground's depth axis
@@ -43,7 +45,7 @@ export function panCam(c: Cam, dxPx: number, dyPx: number, unitsPerPx: number): 
   const fz = -Math.cos(y);
   const dx = dxPx * unitsPerPx;
   const dy = (dyPx * unitsPerPx) / SIN_PITCH;
-  return { yaw: c.yaw, tx: c.tx - rx * dx + fx * dy, tz: c.tz - rz * dx + fz * dy };
+  return { ...c, tx: c.tx - rx * dx + fx * dy, tz: c.tz - rz * dx + fz * dy };
 }
 
 /** The yaw equal to `target` modulo 360 that lies nearest `current`. */
@@ -51,10 +53,30 @@ export function nearestYaw(target: number, current: number): number {
   return target + 360 * Math.round((current - target) / 360);
 }
 
-/** Ground rows visible top to bottom: more on a tall, narrow screen so the width still fits. */
+/** Ground rows visible top to bottom by default: more on a tall, narrow screen so the width still fits. */
 export function viewRows(aspect: number): number {
   return Math.min(14, Math.max(7.5, 7.5 / aspect));
 }
+
+/** The closest view: about five rows. */
+export const ZOOM_MIN = 5;
+/** The farthest view never shows more than this many rows. */
+export const ZOOM_MAX = 22;
+
+export interface ZoomLimits {
+  min: number;
+  max: number;
+}
+
+/** How far the view may zoom on a `cols` × `rows` level at screen `aspect`: in to about five rows, out until the
+ *  whole level fits whichever way the view is turned, but never past 22 rows nor short of the default view. */
+export function zoomLimits(aspect: number, cols: number, rows: number): ZoomLimits {
+  const d = Math.hypot(cols, rows);
+  const whole = Math.max(d * SIN_PITCH, d / aspect) + 1;
+  return { min: ZOOM_MIN, max: Math.max(viewRows(aspect), Math.min(ZOOM_MAX, whole)) };
+}
+
+export const clampZoom = (z: number, lim: ZoomLimits): number => Math.max(lim.min, Math.min(lim.max, z));
 
 export interface Ground {
   x: number;
@@ -69,10 +91,19 @@ export function groundAt(c: Cam, sx: number, sy: number): Ground {
   return { x: c.tx + Math.cos(y) * sx - Math.sin(y) * fy, z: c.tz - Math.sin(y) * sx - Math.cos(y) * fy };
 }
 
+/** The camera zoomed by `factor` (its view height times `factor`, within `lim`) about the screen point `(u, v)` view
+ *  heights right of and above the view's centre: the floor point under it stays under it. */
+export function zoomAbout(c: Cam, factor: number, u: number, v: number, lim: ZoomLimits): Cam {
+  const zoom = clampZoom(c.zoom * factor, lim);
+  const k = c.zoom - zoom;
+  const g = groundAt(c, u * k, v * k);
+  return { ...c, zoom, tx: g.x, tz: g.z };
+}
+
 /** What the camera sees of the floor at screen `aspect`: the screen's corners from top-left clockwise, and a tick
  *  from the view's centre toward screen-up. */
 export function footprint(c: Cam, aspect: number): { corners: Ground[]; tick: [Ground, Ground] } {
-  const hh = viewRows(aspect) / 2;
+  const hh = c.zoom / 2;
   const hw = hh * aspect;
   return {
     corners: [groundAt(c, -hw, hh), groundAt(c, hw, hh), groundAt(c, hw, -hh), groundAt(c, -hw, -hh)],

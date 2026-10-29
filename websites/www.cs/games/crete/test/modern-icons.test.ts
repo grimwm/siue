@@ -1,7 +1,7 @@
-// The floating icons: who carries one, and their bob.
+// The floating icons: who carries one, their size and bob, and how they stay inside the view.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bob, iconFor } from '../src/modern/icons.ts';
+import { ICON_SIZE, bob, iconFor, keepInView } from '../src/modern/icons.ts';
 import { PIECE_MODEL_NAMES, placed } from '../src/modern/model-names.ts';
 import { grid } from './puzzle-grid.ts';
 
@@ -25,4 +25,22 @@ test('the bob is a few hundredths of a cell over about two seconds, and nothing 
   assert.ok(Math.max(...xs) > 0.02 && Math.max(...xs) <= 0.05);
   assert.ok(Math.abs(bob(0, false) - bob(2, false)) < 1e-9);
   for (const t of [0, 0.3, 0.5, 1.7]) assert.equal(bob(t, true), 0);
+});
+
+test('an icon is about three quarters of a cell wide', () => {
+  assert.ok(ICON_SIZE >= 0.7 && ICON_SIZE <= 0.8);
+});
+
+test('keepInView: an icon past the top or a side slides back inside the margin; one inside stays', () => {
+  // A 10 × 6 view (5 and 3 from the centre), a 0.8 × 1 icon, a 0.1 margin.
+  assert.deepEqual(keepInView(0, 0, 0.8, 1, 5, 3, 0.1), [0, 0]);
+  const [, dy] = keepInView(1, 2.5, 0.8, 1, 5, 3, 0.1);
+  assert.ok(Math.abs(2.5 + dy - 1.9) < 1e-9, 'its top sits 0.1 under the top edge');
+  const [dx] = keepInView(4.9, 0, 0.8, 1, 5, 3, 0.1);
+  assert.ok(Math.abs(4.9 + dx - 4.5) < 1e-9, 'its right side 0.1 inside the right edge');
+  const [dxl] = keepInView(-5, 0, 0.8, 1, 5, 3, 0.1);
+  assert.ok(Math.abs(-5 + dxl + 4.5) < 1e-9, 'and the left');
+  const [, dyb] = keepInView(0, -3.2, 0.8, 1, 5, 3, 0.1);
+  assert.ok(Math.abs(-3.2 + dyb + 2.9) < 1e-9, 'a foot below the bottom comes up');
+  assert.deepEqual(keepInView(3, 2, 0.8, 9, 5, 3, 0.1), [0, 0], 'an icon taller than the view is left be');
 });

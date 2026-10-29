@@ -1,12 +1,12 @@
-// The modern look's camera maths: easing, clamping, panning, yaw choice and view height.
+// The modern look's camera maths: easing, clamping, panning, zooming, yaw choice and view height.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clampCam, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, viewRows } from '../src/modern/camera.ts';
+import { ZOOM_MAX, ZOOM_MIN, clampCam, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, viewRows, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
 import type { Cam } from '../src/modern/camera.ts';
 
 test('easeCam closes on the goal, reports motion, and settles exactly', () => {
-  const cur: Cam = { yaw: 0, tx: 0, tz: 0 };
-  const goal: Cam = { yaw: 90, tx: 3, tz: -2 };
+  const cur: Cam = { yaw: 0, tx: 0, tz: 0, zoom: 8 };
+  const goal: Cam = { yaw: 90, tx: 3, tz: -2, zoom: 12 };
   let frames = 0;
   while (easeCam(cur, goal, 1 / 60, false)) assert.ok(++frames < 600);
   assert.deepEqual(cur, goal);
@@ -14,22 +14,22 @@ test('easeCam closes on the goal, reports motion, and settles exactly', () => {
 });
 
 test('easeCam snaps at once under reduced motion', () => {
-  const cur: Cam = { yaw: 0, tx: 0, tz: 0 };
-  assert.equal(easeCam(cur, { yaw: 45, tx: 2, tz: 2 }, 1 / 60, true), false);
-  assert.deepEqual(cur, { yaw: 45, tx: 2, tz: 2 });
+  const cur: Cam = { yaw: 0, tx: 0, tz: 0, zoom: 8 };
+  assert.equal(easeCam(cur, { yaw: 45, tx: 2, tz: 2, zoom: 6 }, 1 / 60, true), false);
+  assert.deepEqual(cur, { yaw: 45, tx: 2, tz: 2, zoom: 6 });
 });
 
 test('clampCam pulls a far target back to one cell beyond the board and keeps a near one', () => {
-  assert.deepEqual(clampCam({ yaw: 7, tx: 50, tz: -50 }, 5, 3), { yaw: 7, tx: 3, tz: -2 });
-  assert.deepEqual(clampCam({ yaw: 0, tx: 1, tz: 0.5 }, 5, 3), { yaw: 0, tx: 1, tz: 0.5 });
+  assert.deepEqual(clampCam({ yaw: 7, tx: 50, tz: -50, zoom: 8 }, 5, 3), { yaw: 7, tx: 3, tz: -2, zoom: 8 });
+  assert.deepEqual(clampCam({ yaw: 0, tx: 1, tz: 0.5, zoom: 8 }, 5, 3), { yaw: 0, tx: 1, tz: 0.5, zoom: 8 });
 });
 
 test('panCam: the board follows the finger, with depth foreshortened by sin 45 degrees', () => {
-  const r = panCam({ yaw: 0, tx: 0, tz: 0 }, 10, 0, 0.1);
+  const r = panCam({ yaw: 0, tx: 0, tz: 0, zoom: 8 }, 10, 0, 0.1);
   assert.ok(Math.abs(r.tx + 1) < 1e-9 && Math.abs(r.tz) < 1e-9, 'a rightward drag moves the target toward -x');
-  const d = panCam({ yaw: 0, tx: 0, tz: 0 }, 0, 10, 0.1);
+  const d = panCam({ yaw: 0, tx: 0, tz: 0, zoom: 8 }, 0, 10, 0.1);
   assert.ok(Math.abs(d.tz + 1 / Math.sin(Math.PI / 4)) < 1e-9);
-  const t = panCam({ yaw: 90, tx: 0, tz: 0 }, 10, 0, 0.1);
+  const t = panCam({ yaw: 90, tx: 0, tz: 0, zoom: 8 }, 10, 0, 0.1);
   assert.ok(Math.abs(t.tx) < 1e-9 && Math.abs(t.tz - 1) < 1e-9, 'the drag follows the turned view');
 });
 
@@ -50,18 +50,18 @@ test('viewRows grows on a narrow screen and stays within 7.5 and 14', () => {
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
 test('groundAt: the view centre is the target, screen-up runs along the board forward, foreshortened by sin 45 degrees', () => {
-  const c: Cam = { yaw: 0, tx: 1, tz: 2 };
+  const c: Cam = { yaw: 0, tx: 1, tz: 2, zoom: 8 };
   assert.deepEqual(groundAt(c, 0, 0), { x: 1, z: 2 });
   const up = groundAt(c, 0, 1);
   assert.ok(near(up.x, 1) && near(up.z, 2 - Math.SQRT2), 'screen-up at yaw 0 is -z, one view unit is √2 of ground');
   const right = groundAt(c, 1, 0);
   assert.ok(near(right.x, 2) && near(right.z, 2), 'screen-right at yaw 0 is +x');
-  const turned = groundAt({ yaw: 90, tx: 0, tz: 0 }, 1, 0);
+  const turned = groundAt({ yaw: 90, tx: 0, tz: 0, zoom: 8 }, 1, 0);
   assert.ok(near(turned.x, 0) && near(turned.z, -1), 'at yaw 90 screen-right is -z');
 });
 
 test('groundAt agrees with panCam: dragging a ground point under the finger keeps it there', () => {
-  const c: Cam = { yaw: 37, tx: 0.5, tz: -1 };
+  const c: Cam = { yaw: 37, tx: 0.5, tz: -1, zoom: 8 };
   const upp = 0.02;
   const p = groundAt(c, 3, 4);
   // The finger moves 50 px right and 30 px down; the point it held is now 50 px right of where it was on screen.
@@ -71,12 +71,48 @@ test('groundAt agrees with panCam: dragging a ground point under the finger keep
 });
 
 test('footprint: the four screen corners on the ground, and a tick from the centre toward screen-up', () => {
-  const f = footprint({ yaw: 0, tx: 0, tz: 0 }, 2);
+  const f = footprint({ yaw: 0, tx: 0, tz: 0, zoom: viewRows(2) }, 2);
   const hh = viewRows(2) / 2, hw = hh * 2, d = hh * Math.SQRT2;
   const want = [[-hw, -d], [hw, -d], [hw, d], [-hw, d]];
   f.corners.forEach((p, i) => assert.ok(near(p.x, want[i]![0]!) && near(p.z, want[i]![1]!), `corner ${i}`));
   assert.deepEqual(f.tick[0], { x: 0, z: 0 });
   assert.ok(near(f.tick[1].x, 0) && f.tick[1].z < 0, 'the tick points up the screen, which at yaw 0 is -z');
+});
+
+test('footprint grows and shrinks with the zoom', () => {
+  const near1 = footprint({ yaw: 0, tx: 0, tz: 0, zoom: 6 }, 1.5).corners[1]!;
+  const far1 = footprint({ yaw: 0, tx: 0, tz: 0, zoom: 12 }, 1.5).corners[1]!;
+  assert.ok(near(far1.x, near1.x * 2) && near(far1.z, near1.z * 2));
+});
+
+test('zoomLimits: in to five rows, out to the whole level within 22 rows, never short of the default', () => {
+  assert.deepEqual(zoomLimits(1.6, 4, 4), { min: ZOOM_MIN, max: viewRows(1.6) }, 'a small level zooms no farther out than the default');
+  const big = zoomLimits(1.6, 60, 60);
+  assert.equal(big.max, ZOOM_MAX, 'a huge level stops at 22 rows');
+  const mid = zoomLimits(1.6, 20, 12);
+  const d = Math.hypot(20, 12);
+  assert.ok(near(mid.max, d * Math.SQRT1_2 + 1), 'a middling level fits its diagonal, foreshortened, plus a margin');
+  assert.ok(zoomLimits(0.46, 20, 12).max >= viewRows(0.46), 'a phone in portrait');
+  assert.equal(clampZoom(2, mid), ZOOM_MIN);
+  assert.equal(clampZoom(99, mid), mid.max);
+  assert.equal(clampZoom(9, mid), 9);
+});
+
+test('zoomAbout keeps the floor point under the pointer where it was on screen', () => {
+  const lim = { min: 5, max: 22 };
+  const c: Cam = { yaw: 37, tx: 0.5, tz: -1, zoom: 10 };
+  const u = 0.3, v = -0.2;
+  const before = groundAt(c, u * c.zoom, v * c.zoom);
+  const z = zoomAbout(c, 0.8, u, v, lim);
+  assert.ok(near(z.zoom, 8));
+  const after = groundAt(z, u * z.zoom, v * z.zoom);
+  assert.ok(near(before.x, after.x) && near(before.z, after.z));
+  const centre = zoomAbout(c, 1.5, 0, 0, lim);
+  assert.ok(near(centre.tx, c.tx) && near(centre.tz, c.tz) && near(centre.zoom, 15), 'about the centre the target stays');
+  const clamped = zoomAbout(c, 0.1, u, v, lim);
+  assert.equal(clamped.zoom, 5, 'within the limits');
+  const held = groundAt(clamped, u * 5, v * 5);
+  assert.ok(near(held.x, before.x) && near(held.z, before.z), 'and the point still holds at the limit');
 });
 
 test('toMini and fromMini: cell centres land on mini-map cell centres below the rise, and back', () => {

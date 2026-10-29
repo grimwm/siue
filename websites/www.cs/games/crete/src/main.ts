@@ -495,6 +495,7 @@ const editorHook = {
 const modernHook = {
   frames: () => modern?.frames() ?? 0,
   yaw: () => modern?.yaw() ?? DEFAULT_YAW,
+  zoom: () => modern?.zoom() ?? 0,
   get active() { return modernOn && !editorUp; },
 };
 window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };

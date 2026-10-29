@@ -5,20 +5,21 @@
  * a wall fades, a figure turns or the tile loops tick. The tile loops tick at 12 fps, only while one is on screen,
  * the tab is visible, the board is in view and motion is not reduced. The camera looks down at 45° through an
  * orthographic lens, and follows Theseus until a pan or the mini map sends it elsewhere; the controls
- * (controls.ts) turn and pan it, and the mini map (minimap.ts) shows what it sees. A wall that hides Theseus fades
+ * (controls.ts) turn, pan and zoom it, and the mini map (minimap.ts) shows what it sees. A wall that hides Theseus fades
  * in every walls mode; in Ghosted, one that hides any figure or piece fades too. The floating icons are drawn
- * over the finished picture. */
+ * over the finished picture, slid inside the view when their piece shows but they would not. */
 import { Color, Group, OrthographicCamera, PCFSoftShadowMap, Scene, Vector3, WebGLRenderer } from 'three';
 import type { Object3D } from 'three';
 import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { DEFAULT_YAW, PITCH, clampCam, easeCam, nearestYaw, panCam, viewRows } from './camera.ts';
+import { DEFAULT_YAW, PITCH, clampCam, clampZoom, easeCam, nearestYaw, panCam, viewRows, zoomAbout, zoomLimits } from './camera.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
 import { changedCells } from './diff.ts';
 import { ghostSubjects } from './ghost.ts';
+import { ICON_MARGIN, keepInView } from './icons.ts';
 import { createMinimap } from './minimap.ts';
 import { SURFACES, placed, terrainModel } from './model-names.ts';
 import type { TerrainModel } from './model-names.ts';
@@ -60,6 +61,8 @@ export interface ModernBoard {
   walls(m: WallMode): void;
   /** The camera's yaw in degrees, for screenToGrid. */
   yaw(): number;
+  /** The view's height in ground rows, for tests. */
+  zoom(): number;
   reset(): void;
   resize(): void;
   /** A hidden board draws nothing and stops its loops. */
@@ -74,6 +77,8 @@ export interface ModernBoard {
 const BACKGROUND = 0x060504;
 const RAD = Math.PI / 180;
 const LOOP_FPS = 12;
+/** A zoom about a point this near the view's centre (a share of its width or height) keeps following Theseus. */
+const ZOOM_CENTRE = 0.12;
 
 export function createModernBoard(host: ModernHost): ModernBoard {
   const renderer = new WebGLRenderer({ canvas: host.canvas, antialias: false, powerPreference: 'high-performance' });
@@ -85,6 +90,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   scene.background = new Color(BACKGROUND);
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   const ndc = new Vector3();
+  const right = new Vector3(), up = new Vector3();
   const paint = createPaint(renderer);
   const floor = createFloor(kit);
   const wallSet = createWalls(kit);
@@ -119,15 +125,19 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   let loopsDirty = true;
   let shadowsDirty = true;
 
-  /** The camera: where it is, where it eases to, and whether its target follows Theseus. */
-  const cur: Cam = { yaw: DEFAULT_YAW, tx: 0, tz: 0 };
+  /** The camera: where it is, where it eases to, whether its target follows Theseus, and whether the player chose
+   *  its zoom (otherwise it keeps the default for the screen's shape). */
+  const cur: Cam = { yaw: DEFAULT_YAW, tx: 0, tz: 0, zoom: viewRows(1) };
   const goal: Cam = { ...cur };
   let follow = true;
+  let zoomed = false;
 
   const snap = () => host.reducedMotion();
   const dpr = () => (quality === 0 ? 1 : Math.min(globalThis.devicePixelRatio || 1, 2));
   const rows = () => last?.level.rows ?? 1;
   const cols = () => last?.level.cols ?? 1;
+  const aspect = () => width / height;
+  const limits = () => zoomLimits(aspect(), cols(), rows());
 
   function invalidate(): void {
     if (!raf && active) raf = requestAnimationFrame(frame);
@@ -170,7 +180,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     camera.position.set(cur.tx + Math.sin(y) * Math.cos(p) * D, FY + Math.sin(p) * D, cur.tz + Math.cos(y) * Math.cos(p) * D);
     camera.up.set(-Math.sin(y), 0, -Math.cos(y)); // screen-up is the board's forward
     camera.lookAt(cur.tx, FY, cur.tz);
-    const hh = viewRows(width / height) / 2, a = width / height;
+    const hh = cur.zoom / 2, a = aspect();
     camera.left = -hh * a;
     camera.right = hh * a;
     camera.top = hh;
@@ -184,6 +194,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       goal.tx = cellX(lastPlayer.c, cols());
       goal.tz = cellZ(lastPlayer.r, rows());
     }
+    goal.zoom = zoomed ? clampZoom(goal.zoom, limits()) : viewRows(aspect());
     Object.assign(goal, clampCam(goal, cols(), rows()));
   }
 
@@ -251,18 +262,39 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     }
     paint.render(scene, camera, quality >= 2);
     if (actors.icons.children.length) {
+      const moved = keepIcons();
       renderer.autoClear = false;
       renderer.render(iconScene, camera);
       renderer.autoClear = true;
+      for (const [sp, x, y, z] of moved) sp.position.set(x, y, z);
     }
-    const key = `${cur.yaw} ${cur.tx} ${cur.tz} ${width} ${height}`;
+    const key = `${cur.yaw} ${cur.tx} ${cur.tz} ${cur.zoom} ${width} ${height}`;
     if (key !== viewKey) {
       viewKey = key;
-      mini?.view(cur, width / height);
+      mini?.view(cur, aspect());
     }
     drawn++;
     chained = busy;
     if (busy) invalidate();
+  }
+
+  /** Slides each icon whose piece shows on screen fully inside the view, for this frame's drawing; returns where
+   *  the moved ones stood. */
+  function keepIcons(): [Object3D, number, number, number][] {
+    const hh = cur.zoom / 2, hw = hh * aspect();
+    right.setFromMatrixColumn(camera.matrixWorld, 0);
+    up.setFromMatrixColumn(camera.matrixWorld, 1);
+    const moved: [Object3D, number, number, number][] = [];
+    for (const sp of actors.icons.children) {
+      ndc.set(sp.position.x, FY, sp.position.z).project(camera);
+      if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue;
+      ndc.copy(sp.position).project(camera);
+      const [dx, dy] = keepInView(ndc.x * hw, ndc.y * hh, sp.scale.x, sp.scale.y, hw, hh, ICON_MARGIN);
+      if (dx === 0 && dy === 0) continue;
+      moved.push([sp, sp.position.x, sp.position.y, sp.position.z]);
+      sp.position.addScaledVector(right, dx).addScaledVector(up, dy);
+    }
+    return moved;
   }
 
   function resize(): void {
@@ -275,6 +307,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     renderer.setSize(w, h, false);
     paint.setSize(Math.round(w * r), Math.round(h * r), r);
     mini?.fit(host.overlay.clientWidth || w, host.overlay.clientHeight || h);
+    if (!zoomed) cur.zoom = goal.zoom = viewRows(aspect());
     aimWalls = true;
   }
 
@@ -331,6 +364,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     lastPlayer = null;
     setFigures(s, { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) });
     follow = true;
+    zoomed = false;
     aimGoal();
     Object.assign(cur, goal);
     aimWalls = loopsDirty = shadowsDirty = true;
@@ -402,13 +436,28 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     },
     pan(dx: number, dy: number) {
       follow = false;
-      const upp = viewRows(width / height) / height;
+      const upp = cur.zoom / height;
       for (const c of [cur, goal]) Object.assign(c, clampCam(panCam(c, dx, dy, upp), cols(), rows()));
+      aimWalls = true;
+      invalidate();
+    },
+    zoom(factor: number, fx: number, fy: number, eased: boolean) {
+      zoomed = true;
+      const lim = limits();
+      if (eased) goal.zoom = clampZoom(goal.zoom * factor, lim);
+      else {
+        // Toward the pointer, unless it is near the centre: then the view keeps following Theseus.
+        const off = Math.abs(fx) > ZOOM_CENTRE || Math.abs(fy) > ZOOM_CENTRE;
+        if (off) follow = false;
+        const u = off ? fx * aspect() : 0, v = off ? fy : 0;
+        for (const c of [cur, goal]) Object.assign(c, clampCam(zoomAbout(c, factor, u, v, lim), cols(), rows()));
+      }
       aimWalls = true;
       invalidate();
     },
     reset() {
       follow = true;
+      zoomed = false;
       goal.yaw = nearestYaw(DEFAULT_YAW, cur.yaw);
       invalidate();
     },
@@ -456,6 +505,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     show,
     walls,
     yaw: () => cur.yaw,
+    zoom: () => cur.zoom,
     reset: cam.reset,
     resize() { resize(); invalidate(); },
     setActive(on) {

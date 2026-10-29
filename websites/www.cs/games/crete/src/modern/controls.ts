@@ -1,8 +1,8 @@
 /* The Island of Crete, modern look: the camera's controls. Pointers on the modern canvas go through the gesture
- * reader (gestures.ts) to the camera: one finger or the left button turns, two fingers pan and twist, the right or
- * middle button pans, and a double tap or double click resets. Three buttons at the board's top-right turn the view
- * 15° either way and reset it; on a narrow touch screen a View button shows and hides them. The wheel does nothing,
- * since the view never zooms. Every control is ignored while a layer covers the board. */
+ * reader (gestures.ts) to the camera: one finger or the left button turns, two fingers pan, twist and pinch, the
+ * right or middle button pans, the wheel zooms toward the pointer, and a double tap or double click resets. Buttons
+ * at the board's top-right turn the view 15° either way, zoom it in and out, and reset it; on a narrow touch screen
+ * a View button shows and hides them. Every control is ignored while a layer covers the board. */
 import { createGestures } from './gestures.ts';
 import type { CamOp, Ptr } from './gestures.ts';
 
@@ -12,7 +12,10 @@ export interface CamControl {
   turn(deg: number, eased: boolean): void;
   /** Slides the view by a screen drag of `(dx, dy)` CSS pixels; the camera stops following Theseus. */
   pan(dx: number, dy: number): void;
-  /** Back to the default yaw, following Theseus. */
+  /** Multiplies the view's height by `factor` about the screen point `(fx, fy)`, in fractions of the canvas from its
+   *  centre (right and up are positive); at once under a finger or the wheel, eased from a button. */
+  zoom(factor: number, fx: number, fy: number, eased: boolean): void;
+  /** Back to the default yaw and zoom, following Theseus. */
   reset(): void;
 }
 
@@ -28,8 +31,13 @@ export interface Controls {
 }
 
 const STEP = 15;
+const ZOOM_STEP = 1.2;
+/** Wheel lines and pages as pixels. */
+const LINE_PX = 16;
 const TURN_LEFT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg>';
 const TURN_RIGHT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg>';
+const ZOOM_IN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>';
+const ZOOM_OUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
 
 function button(id: string, label: string, html: string, className: string): HTMLButtonElement {
   const b = document.createElement('button');
@@ -58,7 +66,10 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     for (const op of ops) {
       if (op.kind === 'turn') cam.turn(op.deg, false);
       else if (op.kind === 'pan') cam.pan(op.dx, op.dy);
-      else cam.reset();
+      else if (op.kind === 'zoom') {
+        const r = canvas.getBoundingClientRect();
+        cam.zoom(op.factor, (op.x - r.left) / (r.width || 1) - 0.5, 0.5 - (op.y - r.top) / (r.height || 1), false);
+      } else cam.reset();
     }
   };
 
@@ -80,7 +91,12 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     cam.reset();
   };
   const noMenu = (e: Event) => e.preventDefault();
-  const noZoom = (e: WheelEvent) => e.preventDefault();
+  const wheel = (e: WheelEvent) => {
+    if (host.blocked()) return;
+    e.preventDefault();
+    const px = e.deltaMode === 1 ? LINE_PX : e.deltaMode === 2 ? canvas.clientHeight : 1;
+    apply(gestures.wheel(e.deltaY * px, e.clientX, e.clientY));
+  };
 
   canvas.style.touchAction = 'none';
   canvas.addEventListener('pointerdown', down);
@@ -89,7 +105,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   canvas.addEventListener('pointercancel', cancel);
   canvas.addEventListener('dblclick', dbl);
   canvas.addEventListener('contextmenu', noMenu);
-  canvas.addEventListener('wheel', noZoom, { passive: false });
+  canvas.addEventListener('wheel', wheel, { passive: false });
 
   const view = document.createElement('button');
   view.type = 'button';
@@ -104,8 +120,10 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   group.setAttribute('aria-label', 'Camera');
   const left = button('cam-left', 'Turn left', TURN_LEFT, 'cbtn');
   const right = button('cam-right', 'Turn right', TURN_RIGHT, 'cbtn');
+  const zoomIn = button('cam-zoom-in', 'Zoom in', ZOOM_IN, 'cbtn');
+  const zoomOut = button('cam-zoom-out', 'Zoom out', ZOOM_OUT, 'cbtn');
   const reset = button('cam-reset', 'Reset view', 'Reset', 'cbtn wide');
-  group.append(left, right, reset);
+  group.append(left, right, zoomIn, zoomOut, reset);
   parent.append(view, group);
 
   const press = (fn: () => void) => () => {
@@ -115,6 +133,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   };
   left.addEventListener('click', press(() => cam.turn(-STEP, true)));
   right.addEventListener('click', press(() => cam.turn(STEP, true)));
+  zoomIn.addEventListener('click', press(() => cam.zoom(1 / ZOOM_STEP, 0, 0, true)));
+  zoomOut.addEventListener('click', press(() => cam.zoom(ZOOM_STEP, 0, 0, true)));
   reset.addEventListener('click', press(() => cam.reset()));
   view.addEventListener('click', () => {
     const open = group.classList.toggle('open');
@@ -129,7 +149,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
       canvas.removeEventListener('pointercancel', cancel);
       canvas.removeEventListener('dblclick', dbl);
       canvas.removeEventListener('contextmenu', noMenu);
-      canvas.removeEventListener('wheel', noZoom);
+      canvas.removeEventListener('wheel', wheel);
       view.remove();
       group.remove();
     },

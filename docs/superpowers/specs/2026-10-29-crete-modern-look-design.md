@@ -26,18 +26,22 @@ and readable. Players who prefer the flat board keep it.
   moves, as in Chip's Challenge; any movement is subtle.
 - **Active tiles loop.** Water, fire, torches and the like get smooth, subtle
   loops.
-- **Camera angle.** The camera always looks down at **45°**. There is no tilt
-  and **no zoom**.
+- **Camera angle.** The camera always looks down at **45°**. There is no tilt.
+- **Zoom.** The mouse wheel (toward the pointer), a two-finger pinch (about the
+  fingers) and Zoom in / Zoom out buttons zoom the view, from about five rows
+  in to the whole level out (at most 22 rows, never less than the default).
+  Reset view and a new level bring back the default.
 - **Camera turn.** The default turn is **15°**, so "up" still reads clearly as
   up. The player may turn the board freely.
-- **Camera input.** Only turning and panning move the camera.
+- **Camera input.** Only turning, panning and zooming move the camera.
   - Touch: **one finger turns** the board. **Two fingers pan**, and twisting
-    two fingers also turns it. The board follows the fingers; the sample's first
-    twist went the wrong way, and the fix is part of the approved sample.
-  - Mouse: left-drag turns, right- or middle-drag pans.
+    two fingers also turns it, and pinching zooms. The board follows the fingers;
+    the sample's first twist went the wrong way, and the fix is part of the
+    approved sample.
+  - Mouse: left-drag turns, right- or middle-drag pans, the wheel zooms.
   - Double-tap or double-click resets the view.
   - **No camera keys** — fingers and mouse only — so no key needs remapping.
-  - Visible turn and reset buttons sit on the board's edge on PC-sized screens.
+  - Visible turn, zoom and reset buttons sit on the board's edge on PC-sized screens.
   - Camera input is ignored while any menu, card or dialog is open.
 - **Floor.** One flagstone per cell; the seams between stones are the only
   grid. Every piece stands centred on its stone, never on a seam.
@@ -86,9 +90,9 @@ These were not put to the owner; each is easy to change later.
   drops below the readable board.
 - **The editor stays Classic.** The level editor keeps today's flat board;
   its grid is a tool, not a scene.
-- **Fixed view size.** Without zoom, the camera frames a fixed number of rows
-  for the screen's shape, as in the sample, so Theseus and his surroundings
-  are always readable on a phone.
+- **Default view size.** Until the player zooms, the camera frames a fixed
+  number of rows for the screen's shape, as in the sample, so Theseus and his
+  surroundings are always readable on a phone.
 - **The camera follows Theseus** until the player pans; reset (or the next
   level) returns it to following.
 - **Edges.** The camera's target stays within the level plus one cell, so
@@ -118,7 +122,7 @@ These were not put to the owner; each is easy to change later.
 - New rules, levels or story.
 - A 3D level editor.
 - Blender glTF models in the first build (a later step, above).
-- Camera zoom, tilt or keyboard camera controls.
+- Camera tilt or keyboard camera controls.
 
 ## Anti-goals
 

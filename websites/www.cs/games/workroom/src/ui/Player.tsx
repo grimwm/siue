@@ -102,7 +102,7 @@ export function Player(p: PlayerProps) {
         {SKIPS.slice(0, 2).map(s => <SkipButton {...s} disabled={!source} onClick={() => skip(s.kind)} />)}
         <Button variant="primary" class="min-w-24" disabled={!source} onClick={toggle}>{playing ? 'Pause' : 'Play'}</Button>
         {SKIPS.slice(2).map(s => <SkipButton {...s} disabled={!source} onClick={() => skip(s.kind)} />)}
-        <Button variant="secondary" pressed={loop} disabled={!source} onClick={() => setLoop(l => !l)}>Loop</Button>
+        <Button variant="secondary" pressed={loop} pressedLook="outline" disabled={!source} onClick={() => setLoop(l => !l)}>Loop</Button>
       </div>
       <Readout time={p.time} bar={p.bar} />
     </div>

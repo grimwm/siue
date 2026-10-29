@@ -162,6 +162,6 @@ music-image: ## Build the composing container (sfizz, ffmpeg, Python)
 	podman build -t $(MUSIC_IMAGE) -f music/compose/Containerfile music/compose
 music-compose-test: ## Run the composing tests in the container
 	@$(MUSIC_RUN) python3 -m unittest discover -s tests -t tests
-music-render: ## Compose and render a draft (PIECE=<id> VERSION=n); CUT=<name> remixes its stems as a cut
+music-render: ## Compose and render a draft (PIECE=<id> VERSION=n [CUT=<name>])
 	@test -n "$(PIECE)" -a -n "$(VERSION)" || { echo "usage: make music-render PIECE=crete-title VERSION=1" >&2; exit 1; }
 	@$(MUSIC_RUN) python3 -m siue_compose.cli render "$(PIECE)" "$(VERSION)" $(if $(CUT),--cut "$(CUT)")

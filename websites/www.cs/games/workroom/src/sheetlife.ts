@@ -7,12 +7,12 @@ export interface Container { firstChild: unknown; removeChild(child: never): unk
 export interface ResizeSource { addEventListener(type: 'resize', f: () => void): void; removeEventListener(type: 'resize', f: () => void): void }
 export interface SheetHandle {
   /** Draws one lane, replacing whatever was drawn. */
-  show(musicxml: string, laneId: string): Promise<void>;
+  show(musicxml: string, laneId: string, laneName?: string): Promise<void>;
   /** Clears the container and removes the resize listener. */
   dispose(): void;
 }
 
-export function createSheet(host: Container, make: (host: Container) => Notation, win: ResizeSource, prepare: (musicxml: string, laneId: string) => string): SheetHandle {
+export function createSheet(host: Container, make: (host: Container) => Notation, win: ResizeSource, prepare: (musicxml: string, laneId: string, laneName?: string) => string): SheetHandle {
   let notation: Notation | null = null;
   let onResize: (() => void) | null = null;
   let turn = 0;
@@ -25,12 +25,12 @@ export function createSheet(host: Container, make: (host: Container) => Notation
     while (host.firstChild) host.removeChild(host.firstChild as never);
   };
   return {
-    async show(musicxml, laneId) {
+    async show(musicxml, laneId, laneName) {
       teardown();
       const mine = turn;
       const n = make(host);
       notation = n;
-      await n.load(prepare(musicxml, laneId));
+      await n.load(prepare(musicxml, laneId, laneName));
       if (mine !== turn) return; // a later show or dispose took over while this one loaded
       n.render();
       onResize = () => n.render();

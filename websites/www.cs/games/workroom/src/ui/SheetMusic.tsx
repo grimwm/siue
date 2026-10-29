@@ -52,7 +52,7 @@ export function SheetMusic(p: SheetMusicProps) {
     setStatus('loading');
     mounted.current ??= Promise.all([ports.fetchText(p.musicxmlSrc), ports.loadModule()]).then(([xml, mod]) => ({ xml, sheet: host.current ? mod.mountSheet(host.current) : NO_SHEET }));
     const mine = mounted.current;
-    mine.then(m => m.sheet.show(m.xml, p.laneId)).then(
+    mine.then(m => m.sheet.show(m.xml, p.laneId, p.lanes.find(l => l.id === p.laneId)?.name)).then(
       () => { if (current) setStatus('ready'); },
       (e: unknown) => {
         if (mounted.current === mine) mounted.current = null; // a failed fetch is tried again next time

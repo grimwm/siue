@@ -65,12 +65,12 @@ final class MusicPagesTest extends TestCase
 
     public function testAnApiKeyIsNotASession(): void
     {
-        $key = $this->keys->create('all', ['notes:pickup', 'drafts:publish', 'keys:publish']);
+        $key = $this->keys->create('all', Admin\Keys::SCOPES);
         $id = $this->store->addNote(music_sealed())['id'];
         $this->store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
         $bearer = ['authorization' => "Bearer $key"];
         self::assertSame(303, $this->pages->delete(req(['https' => true, 'method' => 'POST', 'headers' => $bearer, 'post' => ['id' => $id]]))->status);
-        self::assertNotNull($this->store->noteBytes($id), 'an API key cannot delete');
+        self::assertNotNull($this->store->noteBytes($id), 'an API key cannot delete a note');
         self::assertSame(303, $this->pages->keyring(req(['https' => true, 'headers' => $bearer]))->status, 'the keyring goes only to a session');
         self::assertSame(303, $this->pages->note(req(['https' => true, 'headers' => $bearer, 'query' => ['id' => $id]]))->status);
     }

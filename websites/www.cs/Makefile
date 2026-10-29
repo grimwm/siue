@@ -119,7 +119,7 @@ music-e2e: ## Music workroom browser check (test keyring, fake microphone)
 	echo MUSIC-E2E-OK
 
 # The music workroom's key and note tool (music/tools/siue-music), run in its own virtualenv.
-.PHONY: music-setup music-status music-pickup music-publish music-rotate music-forget music-test music-image music-compose-test music-render
+.PHONY: music-setup music-status music-pickup music-publish music-delete music-rotate music-forget music-test music-image music-compose-test music-render
 MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
 # The tool's interpreter as an absolute path when it is one (the browser check runs it from tests/e2e); a bare python3 stays a command name.
 MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))
@@ -136,6 +136,9 @@ music-pickup: ## Download, open and save your waiting notes
 music-publish: ## Upload a draft (PIECE=<id> [VERSION=n])
 	@test -n "$(PIECE)" || { echo "usage: make music-publish PIECE=ch1-labyrinth [VERSION=3]" >&2; exit 1; }
 	@$(MUSIC_TOOL) publish "$(PIECE)" $(if $(VERSION),--version $(VERSION))
+music-delete: ## Delete one published draft (PIECE=<id> VERSION=n)
+	@test -n "$(PIECE)" -a -n "$(VERSION)" || { echo "usage: make music-delete PIECE=ch1-labyrinth VERSION=3" >&2; exit 1; }
+	@$(MUSIC_TOOL) delete "$(PIECE)" "$(VERSION)"
 music-rotate: ## Make a new notes key (earlier notes still open)
 	@$(MUSIC_TOOL) keys rotate
 music-forget: ## Delete this computer's cached keys

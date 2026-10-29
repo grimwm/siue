@@ -18,7 +18,16 @@ its project, its kind (`music` or `sound`) and its characters.
 - The only browser storage the workroom writes besides the theme and the guide
   flags is the outbox: sealed notes waiting to be sent. Nothing of any key, and
   nothing in the clear about a note, is stored in the browser.
-- API keys are made on the admin hub and carry scopes. A key cannot delete.
+- API keys are made on the admin hub and carry scopes. The one thing a key can
+  delete is a published draft, with `drafts:delete`: a key that publishes drafts may
+  also delete them. Every active key that held `drafts:publish` before
+  `drafts:delete` existed holds it too, added in place by a one-time step when the
+  admin database opens (`Db::open`, recorded in its `migrations` table so it never
+  runs again): same key, nothing to remake. Revoked keys and keys without
+  `drafts:publish` do not hold it; any other key holds exactly the scopes ticked when
+  it was made (`make music-setup` ticks `drafts:delete` for a new `music-publish`
+  key); revoking a key on the hub ends all it can do. Notes are deleted only from
+  the page, with the session.
 - The server also keeps the fingerprints the uploader named (current and earlier), only
   to refuse notes sealed to other keys and to show the current one on the admin hub.
 - `lib/`, `tools/` and `pieces/` are never served (`.htaccess` on Apache,
@@ -34,7 +43,9 @@ Session routes (same-origin, signed in): `index.php`, `piece.php?id=&v=` (pages)
 
 API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
 `api/picked-up.php` (POST) need `notes:pickup`; `api/drafts.php` (POST) needs
-`drafts:publish`; `api/keyring.php` needs `keys:publish` (POST uploads
+`drafts:publish`; `api/delete-draft.php?piece=&version=` (POST) needs
+`drafts:delete` and deletes that one draft, its row and files (404 `not_found` when
+it is not stored, 422 `bad_piece` or `bad_version` as for a publish); `api/keyring.php` needs `keys:publish` (POST uploads
 `{keyring, current, previous}`; GET answers the stored fingerprints).
 
 ## The look
@@ -140,6 +151,7 @@ standard input and are never printed.
 - `make music-pickup` downloads each waiting note with the `music-pickup` API key, checks its length and SHA-256 against the listing, opens it with the cached keyring and saves it under the notes folder (`~/Library/Application Support/siue-music/notes/` on macOS, `$XDG_DATA_HOME/siue-music/notes/` elsewhere on Unix, `%APPDATA%\siue-music\notes\` on Windows; `SIUE_MUSIC_NOTES_DIR` overrides; the tool refuses a folder inside the repository) as `<arrival date>-<id>/` with `note.json` and `audio.webm|m4a|ogg` (a general note, piece `general`, is filed the same way beside the piece notes, and the closing line counts them: `Picked up 3 notes (1 general) into ...`). Only then does it mark the note picked up. A note whose download is corrupt or that will not open stays waiting, is reported with its reason, and the run goes on with the next; the exit code is 1 when any note was left. Every API call, the listing included, waits out a 429 and is retried; a 429 that never clears leaves that note waiting and the run goes on.
 - Speech notes (webm, m4a or ogg audio; ffmpeg is told the format and never sniffs it) also get `transcript.txt` (local Whisper, `faster-whisper`; `SIUE_MUSIC_WHISPER_MODEL` picks the model, default `small.en`) and hum notes `motif.mid` (`librosa.pyin` and `mido`). Both are optional: `music/tools/.venv/bin/pip install -r music/tools/requirements-answering.txt` and `brew install ffmpeg`. Without them pickup still opens and saves every note and prints one line naming what is missing.
 - `make music-publish PIECE=ch1-labyrinth [VERSION=3]` checks `music/pieces/<piece>/v<N>/score.json` with the page's rules (glossary ids from `games/workroom/src/glossary.json`), requires the audio, the spectrogram and, for music, `score.musicxml`, refuses a draft over 8 MB before sending, and publishes it with the `music-publish` API key. The newest version is the default.
+- `make music-delete PIECE=ch1-labyrinth VERSION=3` deletes that one published draft from the server with the `music-publish` API key (which holds `drafts:delete`); the files under `music/pieces/` are untouched. A bad piece id or version is refused before anything is sent; a draft the server does not hold exits 1 with `not_found`. `make music-status` says whether the key may delete drafts; the key is healthy either way.
 
 ## The local browser check
 

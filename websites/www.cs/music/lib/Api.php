@@ -1,7 +1,7 @@
 <?php
-// The API-key routes: pickup of sealed notes, publishing drafts and uploading the
-// locked keyring. Every route checks its key and scope first, then the method,
-// then the declared length, and nothing here can delete.
+// The API-key routes: pickup of sealed notes, publishing and deleting drafts and
+// uploading the locked keyring. Every route checks its key and scope first, then the
+// method, then the declared length; deleting one draft is the only delete here.
 declare(strict_types=1);
 
 namespace Music;
@@ -101,6 +101,25 @@ final class Api
             }, ['error' => $e->reason]);
         }
         return Http::json(201, ['piece' => $piece, 'version' => (int) $version]);
+    }
+
+    /** POST ?piece=&version=, drafts:delete: deletes that one draft, its row and its files. A missing draft answers 404. */
+    public function deleteDraft(\Admin\Request $r): \Admin\Response
+    {
+        if ($res = $this->gate($r, 'drafts:delete', 'POST')) {
+            return $res;
+        }
+        $piece = $r->query['piece'] ?? null;
+        $version = $r->query['version'] ?? null;
+        if (!Store::validPieceId($piece)) {
+            return Http::json(422, ['error' => 'bad_piece']);
+        }
+        if (!Store::validVersion($version)) {
+            return Http::json(422, ['error' => 'bad_version']);
+        }
+        return $this->store->deleteDraft($piece, (int) $version)
+            ? Http::json(200, ['piece' => $piece, 'version' => (int) $version, 'deleted' => true])
+            : Http::json(404, ['error' => 'not_found']);
     }
 
     /**

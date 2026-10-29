@@ -25,7 +25,8 @@ PICKUP_KEY = "music-pickup"
 KEY_KINDS = ("Two kinds of key:\n"
              "  NOTES KEY  seals your notes so only you can open them (kept in 1Password).\n"
              "  API KEYS   (music-publish, music-pickup) let this tool talk to the server.")
-PUBLISH_SCOPES = ("drafts:publish", "keys:publish")
+# A key that publishes drafts may also delete them; drafts:delete is optional, so WANT leaves it out.
+PUBLISH_SCOPES = ("drafts:publish", "keys:publish", "drafts:delete")
 PICKUP_SCOPES = ("notes:pickup",)
 
 ApiCheck = Callable[[str], "object"]  # secret -> something with holds(scope)
@@ -270,6 +271,9 @@ class Keys:
                     problems[name] = problem
                 elif name == PUBLISH_KEY and states["keys:publish"] == "yes":
                     publish_api = api
+                if name == PUBLISH_KEY and not problem:
+                    may = {"yes": "allowed", "no": "not allowed"}.get(api.holds("drafts:delete"), "could not be checked")  # type: ignore[attr-defined]
+                    self.out(f"Deleting drafts (make music-delete): {may} for the {PUBLISH_KEY} API key")
         on_server = self._server_line(publish_api, op_current, [*op_previous, *only_here], op_problem is None)
         self._checklist(in_op, in_cache, set(secrets), problems, on_server)
         return 0 if in_op and in_cache and on_server else 3

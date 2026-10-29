@@ -278,6 +278,32 @@ class ApiTest(unittest.TestCase):
     def test_a_403_about_https_is_not_a_missing_permission(self):
         self.assertEqual(self.probe("keys:publish", 403, b'{"error":"HTTPS required."}'), "https")
 
+    def test_delete_draft_posts_the_piece_and_version_with_the_key(self):
+        seen = {}
+
+        def opener(request, timeout=None):
+            seen.update(url=request.full_url, method=request.get_method(), auth=request.get_header("Authorization"),
+                        length=request.get_header("Content-length"), body=request.data)
+            return FakeResponse(b'{"piece":"ch1-labyrinth","version":3,"deleted":true}')
+
+        Api("https://example.test/music/", "k" * 64, opener).delete_draft("ch1-labyrinth", 3)
+        self.assertEqual(seen, {"url": "https://example.test/music/api/delete-draft.php?piece=ch1-labyrinth&version=3",
+                                "method": "POST", "auth": "Bearer " + "k" * 64, "length": "0", "body": b""})
+
+    def test_delete_draft_raises_the_servers_refusal(self):
+        def opener(request, timeout=None):
+            raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, io.BytesIO(b'{"error":"not_found"}'))
+
+        with self.assertRaises(ApiError) as ctx:
+            Api("https://example.test/music/", "k" * 64, opener).delete_draft("ch1-labyrinth", 3)
+        self.assertEqual(ctx.exception.status, 404)
+        self.assertIn("not_found", str(ctx.exception))
+
+    def test_drafts_delete_is_probed_on_its_own_route(self):
+        self.assertEqual(self.probe("drafts:delete", 405), "yes")
+        self.assertEqual(self.probe("drafts:delete", 403), "no")
+        self.assertEqual(self.probe("drafts:delete", 401), "invalid")
+
     def test_holds_only_makes_get_requests(self):
         methods = []
 
@@ -286,7 +312,7 @@ class ApiTest(unittest.TestCase):
             raise urllib.error.HTTPError(request.full_url, 405, "m", {}, io.BytesIO(b"{}"))
 
         api = Api("https://example.test/music/", "k" * 64, opener=opener)
-        for scope in ("notes:pickup", "keys:publish", "drafts:publish"):
+        for scope in ("notes:pickup", "keys:publish", "drafts:publish", "drafts:delete"):
             api.holds(scope)
         self.assertEqual(set(methods), {"GET"})
 

@@ -106,12 +106,16 @@ class Api:
             raise ApiError(f"the draft is {size} bytes; the server accepts at most {MAX_REQUEST_BYTES}")
         self._request("POST", "api/drafts.php", {"piece": piece, "version": version}, draft_container(files))
 
+    def delete_draft(self, piece: str, version: int) -> None:
+        """Deletes one published draft (its row and files) with a drafts:delete key; a draft the server does not hold raises 404."""
+        self._request("POST", "api/delete-draft.php", {"piece": piece, "version": version}, body=b"")
+
     def holds(self, scope: str) -> str:
         """Whether this key holds `scope`, by a GET that changes nothing: "yes", "no" (403), "invalid" (401: revoked or
         mistyped), "https" (403 because the address is not https://) or "unknown" (the server could not be asked).
-        The publish routes answer a GET 405 once the key is accepted; the keyring route answers 200, or 404 while none is stored."""
+        The publish and delete routes answer a GET 405 once the key is accepted; the keyring route answers 200, or 404 while none is stored."""
         routes = {"notes:pickup": ("api/notes.php", {"state": "waiting"}), "keys:publish": ("api/keyring.php", None),
-                  "drafts:publish": ("api/drafts.php", None)}
+                  "drafts:publish": ("api/drafts.php", None), "drafts:delete": ("api/delete-draft.php", None)}
         if scope not in routes:
             raise ValueError(f"cannot probe {scope}")
         route, query = routes[scope]

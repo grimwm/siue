@@ -262,6 +262,23 @@ final class Store
         }
     }
 
+    /** Deletes one draft's row and then its files; false for a bad piece id or version, or a draft that is not stored. */
+    public function deleteDraft(string $piece, int $version): bool
+    {
+        if (!self::validPieceId($piece) || $version < 1 || $version > 9999) {
+            return false;
+        }
+        $gone = $this->transaction(function () use ($piece, $version): bool {
+            $drop = $this->db->prepare('DELETE FROM music_drafts WHERE piece = ? AND version = ?');
+            $drop->execute([$piece, $version]);
+            return $drop->rowCount() > 0;
+        });
+        if ($gone) {
+            $this->removeDraftFiles($piece, $version);
+        }
+        return $gone;
+    }
+
     /** @return list<array{piece: string, version: int, published_at: int, project_id: string, project_name: string, kind: string}> newest first */
     public function drafts(?string $piece = null): array
     {

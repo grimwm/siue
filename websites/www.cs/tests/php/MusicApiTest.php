@@ -1,6 +1,6 @@
 <?php
 // The API-key routes: HTTPS only, exactly the right scope on every route,
-// header-only keys, no delete route at all, pickup marks after a separate
+// header-only keys, one delete route (one draft, drafts:delete), pickup marks after a separate
 // call, drafts and the keyring validated before they are kept, and the draft
 // limits (8 MB per request, 20 kept, 100 MB in total) enforced by the server.
 declare(strict_types=1);
@@ -17,12 +17,13 @@ final class MusicApiTest extends TestCase
     private Music\Store $store;
     private Admin\Keys $keys;
     private PDO $db;
+    private string $dir;
     /** How many times a route read its request body. */
     private int $reads = 0;
 
     protected function setUp(): void
     {
-        [$this->store, $this->db, , $clock] = music_world();
+        [$this->store, $this->db, $this->dir, $clock] = music_world();
         $this->keys = new Admin\Keys($this->db, $clock, null, self::BASE);
         $this->api = new Music\Api($this->store, $this->keys);
     }
@@ -96,7 +97,7 @@ final class MusicApiTest extends TestCase
 
     public function testScopesAreRegistered(): void
     {
-        self::assertSame(['notes:pickup', 'drafts:publish', 'keys:publish'], Admin\Keys::SCOPES);
+        self::assertSame(['notes:pickup', 'drafts:publish', 'drafts:delete', 'keys:publish'], Admin\Keys::SCOPES);
         foreach (Admin\Keys::SCOPES as $scope) {
             self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $this->keys->create("t-$scope", [$scope]));
         }
@@ -117,8 +118,9 @@ final class MusicApiTest extends TestCase
     public function testEveryRouteDemandsExactlyItsOwnScope(): void
     {
         $id = $this->store->addNote(music_sealed())['id'];
-        // Each route as [call, the status the key that holds its scope gets]. The empty draft and keyring bodies pass the scope
-        // and are refused as malformed (422), so the own-scope status proves the route ran past the key check.
+        // Each route as [call, the status the key that holds its scope gets]. The empty draft and keyring bodies and the
+        // delete without a piece pass the scope and are refused as malformed (422), so the own-scope status proves the
+        // route ran past the key check.
         $routes = [
             'notes:pickup' => [
                 'listNotes' => [fn(string $k) => $this->api->listNotes($this->as($k, ['query' => ['state' => 'waiting']])), 200],
@@ -126,6 +128,7 @@ final class MusicApiTest extends TestCase
                 'pickedUp' => [fn(string $k) => $this->api->pickedUp($this->as($k, ['method' => 'POST', 'query' => ['id' => $id]])), 200],
             ],
             'drafts:publish' => ['publishDraft' => [fn(string $k) => $this->api->publishDraft($this->post($k, [], ''), $this->reading('')), 422]],
+            'drafts:delete' => ['deleteDraft' => [fn(string $k) => $this->api->deleteDraft($this->as($k, ['method' => 'POST'])), 422]],
             'keys:publish' => [
                 'publishKeyring' => [fn(string $k) => $this->api->publishKeyring($this->post($k, [], ''), $this->reading('')), 422],
                 'keyringFingerprints' => [fn(string $k) => $this->api->publishKeyring($this->as($k), $this->reading('')), 200],
@@ -469,11 +472,80 @@ final class MusicApiTest extends TestCase
         self::assertSame($reads, $this->reads, 'an oversized keyring is refused from its declared length');
     }
 
-    public function testTheApiHasNoWayToDelete(): void
+    public function testDeletingADraftIsTheApisOnlyWayToDelete(): void
     {
         $methods = array_map(fn(ReflectionMethod $m) => $m->name, (new ReflectionClass(Music\Api::class))->getMethods(ReflectionMethod::IS_PUBLIC));
-        self::assertSame([], array_values(array_filter($methods, fn(string $m) => stripos($m, 'delete') !== false || stripos($m, 'remove') !== false)));
-        self::assertFileDoesNotExist(dirname(__DIR__, 2) . '/music/api/delete.php');
+        self::assertSame(['deleteDraft'], array_values(array_filter($methods, fn(string $m) => stripos($m, 'delete') !== false || stripos($m, 'remove') !== false)));
+        self::assertSame(['delete-draft.php', 'drafts.php', 'keyring.php', 'note.php', 'notes.php', 'picked-up.php'],
+            array_values(array_map('basename', glob(dirname(__DIR__, 2) . '/music/api/*.php'))));
+    }
+
+    private function deleting(string $key, array $query, array $over = []): Admin\Response
+    {
+        return $this->api->deleteDraft($this->as($key, array_replace(['method' => 'POST', 'query' => $query], $over)));
+    }
+
+    public function testADeleteKeyRemovesOneDraftsRowAndFilesAndNothingElse(): void
+    {
+        $publish = $this->keys->create('music-publish', ['drafts:publish', 'keys:publish', 'drafts:delete']);
+        foreach ([['ch1-labyrinth', 1], ['ch1-labyrinth', 2], ['ch2-sea', 1]] as [$piece, $v]) {
+            self::assertSame(201, $this->publish($publish, $this->draftFiles($piece, $v), $piece, $v)->status);
+        }
+        $before = $this->store->draftBytes();
+        $gone = "{$this->dir}/drafts/ch1-labyrinth/2";
+        self::assertDirectoryExists($gone);
+        $res = $this->deleting($publish, ['piece' => 'ch1-labyrinth', 'version' => '2']);
+        self::assertSame(200, $res->status);
+        self::assertSame(['piece' => 'ch1-labyrinth', 'version' => 2, 'deleted' => true], $this->body($res));
+        self::assertSame('application/json', $res->headers['Content-Type']);
+        self::assertDirectoryDoesNotExist($gone, 'its files and folder are gone');
+        self::assertNull($this->store->draftFile('ch1-labyrinth', 2, 'score.json'));
+        self::assertSame([['ch1-labyrinth', 1], ['ch2-sea', 1]], array_map(fn(array $d) => [$d['piece'], $d['version']], array_reverse($this->store->drafts())));
+        self::assertNotNull($this->store->draftFile('ch1-labyrinth', 1, 'audio.webm'), 'the piece\'s other draft is untouched');
+        self::assertNotNull($this->store->draftFile('ch2-sea', 1, 'score.json'), 'another piece is untouched');
+        self::assertLessThan($before, $this->store->draftBytes(), 'its bytes no longer count toward the quota');
+        self::assertSame(404, $this->deleting($publish, ['piece' => 'ch1-labyrinth', 'version' => '2'])->status, 'deleting twice finds nothing');
+        self::assertSame(['error' => 'not_found'], $this->body($this->deleting($publish, ['piece' => 'ch9-none', 'version' => '1'])));
+        // The last draft of a piece takes the piece's folder with it.
+        self::assertSame(200, $this->deleting($publish, ['piece' => 'ch2-sea', 'version' => '1'])->status);
+        self::assertDirectoryDoesNotExist("{$this->dir}/drafts/ch2-sea");
+    }
+
+    public function testDeletingADraftNeedsItsScopePostAndHttps(): void
+    {
+        $publishOnly = $this->keys->create('publish', ['drafts:publish', 'keys:publish']);
+        $delete = $this->keys->create('delete', ['drafts:delete']);
+        self::assertSame(201, $this->publish($publishOnly, $this->draftFiles(), 'ch1-labyrinth', 1)->status);
+        $draft = ['piece' => 'ch1-labyrinth', 'version' => '1'];
+        self::assertSame(403, $this->deleting($publishOnly, $draft)->status, 'a key without drafts:delete');
+        self::assertSame(403, $this->deleting($delete, $draft, ['https' => false])->status, 'plain HTTP');
+        self::assertSame(405, $this->deleting($delete, $draft, ['method' => 'GET'])->status);
+        self::assertSame(405, $this->deleting($delete, $draft, ['method' => 'DELETE'])->status);
+        self::assertSame(401, $this->api->deleteDraft(req(['https' => true, 'method' => 'POST', 'query' => $draft + ['key' => $delete]]))->status, 'a key in the URL');
+        self::assertCount(1, $this->store->drafts(), 'no refused request deleted anything');
+        self::assertSame(200, $this->deleting($delete, $draft)->status);
+        self::assertSame([], $this->store->drafts());
+    }
+
+    public function testADeleteValidatesThePieceAndVersionLikeAPublish(): void
+    {
+        $delete = $this->keys->create('delete', ['drafts:delete']);
+        foreach ([[[], 'bad_piece'], [['piece' => '../x', 'version' => '1'], 'bad_piece'], [['piece' => 'general', 'version' => '1'], 'bad_piece'],
+            [['piece' => 'ch1-labyrinth'], 'bad_version'], [['piece' => 'ch1-labyrinth', 'version' => '01'], 'bad_version'],
+            [['piece' => 'ch1-labyrinth', 'version' => '0'], 'bad_version'], [['piece' => 'ch1-labyrinth', 'version' => '10000'], 'bad_version']] as [$query, $error]) {
+            $res = $this->deleting($delete, $query);
+            self::assertSame([422, ['error' => $error]], [$res->status, $this->body($res)], json_encode($query));
+        }
+    }
+
+    public function testAStoreDeleteRefusesBadIdsAndAnswersWhetherADraftWent(): void
+    {
+        $this->store->putDraft('ch1-labyrinth', 3, $this->draftFiles('ch1-labyrinth', 3));
+        self::assertFalse($this->store->deleteDraft('../x', 3));
+        self::assertFalse($this->store->deleteDraft('ch1-labyrinth', 0));
+        self::assertFalse($this->store->deleteDraft('ch1-labyrinth', 4));
+        self::assertTrue($this->store->deleteDraft('ch1-labyrinth', 3));
+        self::assertFalse($this->store->deleteDraft('ch1-labyrinth', 3));
     }
 
     public function testServeFileRanges(): void
@@ -497,7 +569,7 @@ final class MusicApiTest extends TestCase
         self::assertNull(Music\Http::refuseCrossSite(req(['https' => true])), 'curl and older browsers send none');
     }
 
-    /** Each of the five routes as a closure from a request to its response; the body readers return an empty body. */
+    /** Each of the six routes as a closure from a request to its response; the body readers return an empty body. */
     private function allRoutes(): array
     {
         $read = $this->reading('');
@@ -507,6 +579,7 @@ final class MusicApiTest extends TestCase
             'pickedUp' => fn(Admin\Request $r) => $this->api->pickedUp($r),
             'publishDraft' => fn(Admin\Request $r) => $this->api->publishDraft($r, $read),
             'publishKeyring' => fn(Admin\Request $r) => $this->api->publishKeyring($r, $read),
+            'deleteDraft' => fn(Admin\Request $r) => $this->api->deleteDraft($r),
         ];
     }
 
@@ -591,9 +664,9 @@ final class MusicApiTest extends TestCase
     public function testAGetProbeSaysWhetherTheKeyHoldsTheScope(): void
     {
         $lacking = $this->keys->create('pickup', ['notes:pickup']);
-        $holding = $this->keys->create('publish', ['drafts:publish', 'keys:publish']);
+        $holding = $this->keys->create('publish', ['drafts:publish', 'keys:publish', 'drafts:delete']);
         $read = $this->reading('');
-        foreach (['publishKeyring', 'publishDraft'] as $route) {
+        foreach (['publishKeyring', 'publishDraft', 'deleteDraft'] as $route) {
             self::assertSame(403, $this->api->$route($this->as($lacking), $read)->status, "$route without its scope");
             self::assertSame($route === 'publishKeyring' ? 200 : 405, $this->api->$route($this->as($holding), $read)->status, "$route with its scope");
             self::assertSame(401, $this->api->$route($this->as(str_repeat('0', 64)), $read)->status, "$route with an unknown key");

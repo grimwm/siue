@@ -9,6 +9,7 @@ from unittest import mock
 
 from support import ServerApi, TOOLS, World
 from siue_music import cli
+from siue_music.api import ApiError
 
 
 class CliTest(unittest.TestCase):
@@ -110,6 +111,48 @@ class CliTest(unittest.TestCase):
             self.assertEqual(code, 1, argv)
             self.assertIn(f"There is no API key named {name}", err)
             self.assertIn("Run make music-setup", err)
+
+    def test_delete_removes_one_draft_with_the_music_publish_key(self):
+        deleted, made = [], []
+
+        class Deleting(ServerApi):
+            def delete_draft(self, piece, version):
+                deleted.append((piece, version))
+
+        def make_api(base, key):
+            made.append(key)
+            return Deleting()
+
+        self.run_cli("api-key-set", "music-publish", stdin="d" * 64 + "\n")
+        with mock.patch.object(cli, "make_api", make_api):
+            code, out, _ = self.run_cli("delete", "ch1-labyrinth", "3")
+        self.assertEqual((code, deleted, made), (0, [("ch1-labyrinth", 3)], ["d" * 64]))
+        self.assertIn("Deleted ch1-labyrinth v3.", out)
+
+    def test_delete_refuses_bad_input_before_asking_for_a_key(self):
+        def make_api(base, key):
+            raise AssertionError("no request for bad input")
+
+        with mock.patch.object(cli, "make_api", make_api):
+            for argv in (("delete",), ("delete", "ch1-labyrinth"), ("delete", "ch1-labyrinth", "3", "4")):
+                self.assertEqual(self.run_cli(*argv)[0], 2, argv)
+            for argv in (("delete", "Ch1", "3"), ("delete", "../x", "3"), ("delete", "general", "1"),
+                         ("delete", "ch1-labyrinth", "0"), ("delete", "ch1-labyrinth", "03"),
+                         ("delete", "ch1-labyrinth", "10000"), ("delete", "ch1-labyrinth", "v3"), ("delete", "ch1-labyrinth", "-1")):
+                code, _, err = self.run_cli(*argv)
+                self.assertEqual(code, 1, argv)
+                self.assertTrue(err.strip(), argv)
+
+    def test_a_draft_the_server_does_not_hold_exits_1(self):
+        class Missing(ServerApi):
+            def delete_draft(self, piece, version):
+                raise ApiError("api/delete-draft.php answered 404: not_found", 404)
+
+        self.run_cli("api-key-set", "music-publish", stdin="d" * 64 + "\n")
+        with mock.patch.object(cli, "make_api", lambda base, key: Missing()):
+            code, _, err = self.run_cli("delete", "ch1-labyrinth", "3")
+        self.assertEqual(code, 1)
+        self.assertIn("not_found", err)
 
     def test_the_removed_key_commands_and_unknown_ones_print_usage_and_exit_2(self):
         for argv in (("bogus",), ("keys", "init"), ("keys", "upload")):

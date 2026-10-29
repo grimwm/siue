@@ -11,8 +11,8 @@ SECRET = "e" * 64
 class FakeKey:
     """What the server says about one API key."""
 
-    def __init__(self, pickup, publish):
-        self.states = {"notes:pickup": pickup, "keys:publish": publish, "drafts:publish": publish}
+    def __init__(self, pickup, publish, delete="no"):
+        self.states = {"notes:pickup": pickup, "keys:publish": publish, "drafts:publish": publish, "drafts:delete": delete}
 
     def holds(self, scope):
         return self.states[scope]
@@ -88,6 +88,16 @@ class GuideTest(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertIn("Notes key on the server: not checked", text)
         self.assertIn("lacks the keys:publish and drafts:publish permission", text)
+
+    def test_the_publish_key_is_healthy_with_or_without_drafts_delete_and_status_says_which(self):
+        self.finish()
+        for delete, line in (("yes", "Deleting drafts (make music-delete): allowed for the music-publish API key"),
+                             ("no", "Deleting drafts (make music-delete): not allowed for the music-publish API key")):
+            self.server.scopes["drafts:delete"] = delete
+            code, text = self.status()
+            self.assertEqual(code, 0, text)
+            self.assertIn(line, text)
+            self.assertIn("✓ The music-publish API key is saved.", text)
 
     def test_a_cache_that_names_another_key_is_reported(self):
         self.finish()

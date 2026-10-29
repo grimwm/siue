@@ -64,7 +64,7 @@ class ServerApi:
     route keeps what is posted."""
 
     def __init__(self, scopes: dict[str, str] | None = None):
-        self.scopes = scopes or {"notes:pickup": "yes", "keys:publish": "yes", "drafts:publish": "yes"}
+        self.scopes = scopes or {"notes:pickup": "yes", "keys:publish": "yes", "drafts:publish": "yes", "drafts:delete": "yes"}
         self.uploads: list[dict] = []  # {"keyring", "current", "previous"} per call
         self.stored: dict | None = None
 

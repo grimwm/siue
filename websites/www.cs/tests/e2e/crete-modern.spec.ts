@@ -1,7 +1,7 @@
 // The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns under a drag, zooms
 // under the wheel and its buttons, moves Theseus the way the screen shows, ignores the camera while a card is up,
 // keeps the Walls choice, follows the mini map, and hands the board back to the classic look and takes it again.
-// Without WebGL the classic board shows.
+// A block pushed into water floats there, and undo takes it out. Without WebGL the classic board shows.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -30,12 +30,26 @@ const HALL = [
   '',
 ].join('\n');
 
+/* A block beside a pool: Right pushes it in. */
+const POOL = [
+  'title: The Pool',
+  'intro: A block and a pool.',
+  '',
+  '#######',
+  '#.....#',
+  '#.PO~.#',
+  '#....E#',
+  '#######',
+  '',
+].join('\n');
+const POOL_CELL = 2 * 7 + 4;
+
 interface Hooked {
   __creteTest: {
     game: { run: { now: { player: { r: number; c: number } } } };
     parse(text: string): unknown;
     playLevel(level: unknown): void;
-    modern?: { frames(): number; yaw(): number; zoom(): number; active: boolean };
+    modern?: { frames(): number; yaw(): number; zoom(): number; floating(): number[]; active: boolean };
   };
 }
 
@@ -68,11 +82,11 @@ async function settled(page: Page): Promise<number> {
   throw new Error('the modern board never came to rest');
 }
 
-/** Opens the hall on the real page, in the modern look, and closes its start card. */
-async function openHall(page: Page): Promise<string[]> {
+/** Opens a level (the hall by default) on the real page, in the modern look, and closes its start card. */
+async function openHall(page: Page, text = HALL, reducedMotion: 'reduce' | 'no-preference' = 'reduce'): Promise<string[]> {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.emulateMedia({ reducedMotion });
   await page.goto(PAGE);
   await page.locator('#title-play').click();
   await page.locator('#chapter-enter').click();
@@ -80,11 +94,13 @@ async function openHall(page: Page): Promise<string[]> {
   await page.evaluate(text => {
     const t = (window as unknown as Hooked).__creteTest;
     t.playLevel(t.parse(text));
-  }, HALL);
+  }, text);
   await page.locator('#start-begin').click();
   await expect(page.locator('#start-veil')).toBeHidden();
   await page.waitForFunction(() => (window as unknown as Hooked).__creteTest.modern?.active === true);
-  await settled(page);
+  // With motion on, the water's loop keeps drawing, so the board never rests.
+  if (reducedMotion === 'reduce') await settled(page);
+  else await expect.poll(async () => (await modern(page))!.frames).toBeGreaterThan(0);
   return errors;
 }
 
@@ -200,6 +216,20 @@ test('the wheel zooms toward the pointer and the buttons zoom too; with the menu
   await expect.poll(() => zoom(page), 'Reset view brings the default back').toBeCloseTo(z0, 3);
   await page.locator('#cam-zoom-in').click();
   await expect.poll(() => zoom(page), 'Zoom in').toBeLessThan(z0);
+  expect(errors).toEqual([]);
+});
+
+test('a block pushed into water splashes in and floats there; undo takes it out', async ({ page }) => {
+  const floating = () => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.floating());
+  const errors = await openHall(page, POOL, 'no-preference');
+  expect(await floating()).toEqual([]);
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(floating, 'the block floats in the pool').toEqual([POOL_CELL]);
+  await page.waitForTimeout(1500);
+  await page.keyboard.press('u');
+  await expect.poll(floating, 'undo empties the pool').toEqual([]);
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(floating).toEqual([POOL_CELL]);
   expect(errors).toEqual([]);
 });
 

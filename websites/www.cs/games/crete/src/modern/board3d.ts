@@ -1,8 +1,8 @@
 /* The modern board: a three.js scene drawn on the modern canvas, only when something changes. A level builds the
  * ground, the walls, one model per cell and the light; a shown state rebuilds only the cells whose model
  * changed, and stands the pieces and figures where the state and the turn put them, with Ariadne's thread on
- * the floor. A frame is drawn when the board is told of a change, and more follow only while the camera eases,
- * a wall fades, a figure turns or the tile loops tick. The tile loops tick at 12 fps, only while one is on screen,
+ * the floor, and a block that filled water floating in it. A frame is drawn when the board is told of a change, and more follow only while the camera eases,
+ * a wall fades, a figure turns, a block splashes into water or the tile loops tick. The tile loops tick at 12 fps, only while one is on screen,
  * the tab is visible, the board is in view and motion is not reduced. The camera looks down at 45° through an
  * orthographic lens, and follows Theseus until a pan or the mini map sends it elsewhere; the controls
  * (controls.ts) turn, pan and zoom it, and the mini map (minimap.ts) shows what it sees. A wall that hides Theseus fades
@@ -18,6 +18,7 @@ import { DEFAULT_YAW, PITCH, clampCam, clampZoom, easeCam, nearestYaw, panCam, v
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
 import { changedCells } from './diff.ts';
+import { filledWater } from './float.ts';
 import { ghostSubjects } from './ghost.ts';
 import { ICON_MARGIN, keepInView } from './icons.ts';
 import { createMinimap } from './minimap.ts';
@@ -26,6 +27,7 @@ import type { TerrainModel } from './model-names.ts';
 import { frameSample, nextQuality } from './quality.ts';
 import type { Quality } from './quality.ts';
 import { createActors } from './scene/figures.ts';
+import { createFloats } from './scene/float.ts';
 import { FY, cellX, cellZ, createFloor } from './scene/floor.ts';
 import { createIconSheet } from './scene/icons.ts';
 import { createLights } from './scene/light.ts';
@@ -71,6 +73,8 @@ export interface ModernBoard {
   frames(): number;
   /** The render quality step (quality.ts), for tests. */
   quality(): number;
+  /** The cells a block floats in, for tests. */
+  floating(): number[];
   dispose(): void;
 }
 
@@ -98,7 +102,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const sheet = host.atlas && host.image ? createIconSheet(host.atlas, host.image, () => invalidate()) : null;
   const actors = createActors(kit, sheet, () => host.reducedMotion());
   const thread = createThread();
-  scene.add(floor.group, wallSet.group, pieceGroup, actors.group, thread.group);
+  const floats = createFloats(kit);
+  scene.add(floor.group, wallSet.group, pieceGroup, actors.group, thread.group, floats.group);
   const iconScene = new Scene();
   iconScene.add(actors.icons);
 
@@ -114,6 +119,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   let last: State | null = null;
   let lastPlayer: Pos | null = null;
   let models: TerrainModel[] = [];
+  /** The cells that were water when the level began and are filled now: they show water, with the block in it. */
+  let filled = new Set<number>();
   let pieces: (Object3D | null)[] = [];
   let lights: Lights | null = null;
   let loopT = 0;
@@ -137,6 +144,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const rows = () => last?.level.rows ?? 1;
   const cols = () => last?.level.cols ?? 1;
   const aspect = () => width / height;
+  const shown = (s: State, i: number): TerrainModel => (filled.has(i) ? 'water' : terrainModel(s, i));
   const limits = () => zoomLimits(aspect(), cols(), rows());
 
   function invalidate(): void {
@@ -249,10 +257,15 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       busy = true;
       shadowsDirty = true;
     }
+    if (floats.frame(now)) {
+      busy = true;
+      shadowsDirty = true;
+    }
     if (loopsDirty) {
       floor.loop(loopT);
       lights?.loop(loopT);
       actors.loop(loopT);
+      floats.loop(loopT, snap());
       for (const p of pieces) (p?.userData as PieceInfo | undefined)?.loop?.(loopT);
       loopsDirty = false;
     }
@@ -345,6 +358,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     pieces = [];
     if (lights) { scene.remove(lights.group); lights.dispose(); lights = null; }
     actors.clear();
+    floats.clear();
     thread.set(null, 0, 0);
   }
 
@@ -352,7 +366,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     teardown();
     last = s;
     const { rows: nr, cols: nc } = s.level;
-    models = s.terrain.map((_, i) => terrainModel(s, i));
+    filled = new Set(filledWater(s.level.terrain, s.terrain));
+    models = s.terrain.map((_, i) => shown(s, i));
+    floats.set([...filled], nc, nr, false);
     floor.set(models, nr, nc);
     wallSet.build(models, nr, nc);
     pieces = models.map(() => null);
@@ -384,8 +400,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     let ground = false, walled = false;
     const { rows: nr, cols: nc } = s.level;
     const near = new Set<number>();
+    const nowFilled = filledWater(s.level.terrain, s.terrain);
+    filled = new Set(nowFilled);
     for (const i of changed) {
-      const md = terrainModel(s, i), was = models[i]!;
+      const md = shown(s, i), was = models[i]!;
       if (md === was) continue;
       if (SURFACES[md] !== SURFACES[was]) ground = true;
       if ((md === 'wall') !== (was === 'wall')) {
@@ -410,8 +428,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     last = s;
     const moved = setFigures(s, f.figures);
     const threaded = thread.set(threadCells, nc, nr);
-    if (changed.length === 0 && !moved && !threaded && s === prev) return;
-    if (changed.length || moved) { aimWalls = true; shadowsDirty = true; }
+    // A block that went in during play splashes; one that is simply there (reduced motion) floats at once.
+    const floated = floats.set(nowFilled, nc, nr, !snap());
+    if (changed.length === 0 && !moved && !threaded && !floated && s === prev) return;
+    if (changed.length || moved || floated) { aimWalls = true; shadowsDirty = true; }
     mini?.paint(s, f.figures, threadCells);
     invalidate();
     if (!loopTimer) scheduleLoops();
@@ -521,6 +541,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     },
     frames: () => drawn,
     quality: () => quality,
+    floating: () => floats.cells(),
     dispose() {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
@@ -536,6 +557,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       floor.dispose();
       wallSet.dispose();
       actors.dispose();
+      floats.dispose();
       thread.dispose();
       sheet?.dispose();
       paint.dispose();

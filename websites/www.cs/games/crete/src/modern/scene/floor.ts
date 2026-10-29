@@ -12,6 +12,8 @@ import type { Kit } from './textures.ts';
 
 /** The top of the flagstones: everything standing on the floor stands at this height. */
 export const FY = 0.1;
+/** The water's surface, in its basin below the stones. */
+export const WATER_Y = 0.035;
 /** World x and z of a cell, the board centred at the origin. */
 export const cellX = (c: number, cols: number): number => c - (cols - 1) / 2;
 export const cellZ = (r: number, rows: number): number => r - (rows - 1) / 2;
@@ -37,7 +39,7 @@ export function createFloor(kit: Kit): Floor {
   flagGeo.translate(0, FY - 0.06, 0);
   const waterGeo = new PlaneGeometry(1, 1);
   waterGeo.rotateX(-Math.PI / 2);
-  waterGeo.translate(0, 0.035, 0);
+  waterGeo.translate(0, WATER_Y, 0);
   const pebbleGeo = new IcosahedronGeometry(0.045, 0);
   // The dark ground round the board, open over the board itself so the exit's pit can go down.
   const under = new Mesh<BufferGeometry, Material>(new PlaneGeometry(1, 1), m.under);

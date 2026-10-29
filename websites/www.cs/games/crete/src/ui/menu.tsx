@@ -1,4 +1,4 @@
-// The Island of Crete: the menu. In order: sound, music and full screen, the Lore book, the story log, how to play, Back to
+// The Island of Crete: the menu. In order: sound, music, music in the background and full screen, the Lore book, the story log, how to play, Back to
 // the editor or Shared level (the shared level's card; each only when the page gives it), Quit.
 // Q (the kit's back key) is handled by src/ui.ts, which owns every card, so the dialog is given no onDismiss;
 // the Close button is for a pointer or a finger.
@@ -20,11 +20,14 @@ export interface MenuProps {
   muted: boolean;
   /** Whether the Music switch is on (Sound off silences the music whatever it says). */
   music: boolean;
+  /** Whether the music goes on while the page is hidden. */
+  background: boolean;
   fullscreen: boolean;
   log: LogLine[];
   help: Seg[][];
   onSound: () => void;
   onMusic: () => void;
+  onBackground: () => void;
   onFullscreen: () => void;
   onLore: () => void;
   onQuit: () => void;
@@ -50,6 +53,7 @@ export function Menu(p: MenuProps) {
       <div class="menu-sec" data-section="audio">
         <Button id="mute" keyLabel={KEYS.mute.label} onClick={p.onSound}>{p.muted ? '🔇 Muted' : '🔊 Sound'}</Button>
         <Button id="music" onClick={p.onMusic}>{p.music ? '🎶 Music' : '🎶 Music off'}</Button>
+        <Button id="music-hidden" onClick={p.onBackground}>{p.background ? '🎶 Music in the background: On' : '🎶 Music in the background: Off'}</Button>
         <Button id="fullscreen" keyLabel={KEYS.fullscreen.label} onClick={p.onFullscreen}>{p.fullscreen ? 'Leave full screen' : 'Full screen'}</Button>
       </div>
       <div class="menu-sec" data-section="lore">

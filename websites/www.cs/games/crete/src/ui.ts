@@ -55,8 +55,6 @@ export interface UiDeps {
   levels?: Pick<Levels, "outside">;
   /** Voices an event (the chapter card's sound). */
   sfx?(name: SfxName): void;
-  /** Told the cards after every change to them (the music follows them, src/music.ts trackFor). */
-  cards?(stack: LayerName[]): void;
 }
 
 /** What a key press or click asks of the page. */
@@ -65,6 +63,8 @@ export interface Controls {
   toggleMute(): void;
   /** The Music switch, beside Sound in the menu. */
   toggleMusic?(): void;
+  /** The Music in the background switch, under Music in the menu. */
+  toggleBackground?(): void;
   toggleFullscreen(): void;
   /** Wake the speakers: any gesture does. */
   wake(): void;
@@ -90,6 +90,7 @@ export interface Ui {
   render(game: Game): void;
   setMuted(muted: boolean): void;
   setMusic(on: boolean): void;
+  setBackground(on: boolean): void;
   setFullscreen(on: boolean): void;
   bindControls(controls: Controls): void;
   /** The title card, alone; `hint` adds how to close an installed app, and `note` why a share link did not open. */
@@ -149,6 +150,7 @@ export function createUi(deps: UiDeps): Ui {
   const log: LogLine[] = [];
   let muted = false;
   let music = true;
+  let background = true;
   let full = false;
   let toastTimer = 0;
   let controls: Controls | null = null;
@@ -194,7 +196,6 @@ export function createUi(deps: UiDeps): Ui {
       (controls?.game ?? game)?.resume();
     }
     drawLayers();
-    deps.cards?.(layers.stack());
   });
 
   /** The campaign index of chapter `n`'s first level. */
@@ -398,6 +399,7 @@ export function createUi(deps: UiDeps): Ui {
       open: layers.isOpen("menu"),
       muted,
       music,
+      background,
       fullscreen: full,
       log,
       help: helpLines(KEYS, TOOLS),
@@ -408,6 +410,10 @@ export function createUi(deps: UiDeps): Ui {
       onMusic: () => {
         controls?.wake();
         controls?.toggleMusic?.();
+      },
+      onBackground: () => {
+        controls?.wake();
+        controls?.toggleBackground?.();
       },
       onFullscreen: () => controls?.toggleFullscreen(),
       onLore: () => {
@@ -908,6 +914,10 @@ export function createUi(deps: UiDeps): Ui {
     },
     setMusic: (on) => {
       music = on;
+      drawLayers();
+    },
+    setBackground: (on) => {
+      background = on;
       drawLayers();
     },
     setFullscreen: (on) => {

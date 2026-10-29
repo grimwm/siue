@@ -1,21 +1,13 @@
-/* The Island of Crete: the music. The title card plays the title theme; the
- * story cards (the story, a chapter's card, the Lore book and a page taken in
- * play) play its story cut, the same music with the organ held back; a level
- * and the editor play none. Each track streams from media elements ("decks",
- * src/music-decks.ts), two a track. The render's tail is folded onto its
- * start, so the file runs on from its end into its start; the browser's own
- * media loop would leave a gap there, so as the first deck reaches its end the
- * second starts the file again from 0, and the two take turns: every pass is
- * the whole file, so the music's beat never slips. A file has nothing past its
- * end to overlap, so the join is a short equal-power dip (the first deck's
- * last moments fade out, the second's first fade in) that hides a decoder's
- * gap. Changing track starts the new one at
- * the same point of the music, crossfading. DOM-free: the decks and timers are
- * ports. */
+/* The Island of Crete: the music. The title theme plays on every screen, the title card, the story, a level and the
+ * editor alike, and never stops for one: only the Music and Sound switches, a hidden page and the browser's rule
+ * that a gesture must come first start or stop it. It streams from media elements ("decks", src/music-decks.ts),
+ * two. The render's tail is folded onto its start, so the file runs on from its end into its start; the browser's
+ * own media loop would leave a gap there, so as the first deck reaches its end the second starts the file again
+ * from 0, and the two take turns: every pass is the whole file, so the music's beat never slips. A file has
+ * nothing past its end to overlap, so the join is a short equal-power dip (the first deck's last moments fade
+ * out, the second's first fade in) that hides a decoder's gap. DOM-free: the decks and timers are ports. */
 import type { Timers } from "../../_kit/ports.ts";
-import type { LayerName } from "./layers.ts";
 
-export type Track = "title" | "story";
 /** A fade's curve: linear, or equal-power (constant loudness across a crossfade). */
 export type FadeShape = "linear" | "equal-power";
 
@@ -33,67 +25,45 @@ export interface Deck {
   /** Ramps the deck's gain from where it is to `to` over `seconds` (linear unless `shape` says); 0 seconds sets it
    *  at once. */
   fade(to: number, seconds: number, shape?: FadeShape): void;
+  /** Runs `listener` whenever the file plays to its end. Unlike a timer it is not throttled in a hidden page. */
+  onEnded(listener: () => void): void;
 }
 
 export interface MusicPorts {
-  /** A new deck for `track`, loading its file, paused at its start. */
-  deck(track: Track): Deck;
+  /** A new deck, loading the title theme's file, paused at its start. */
+  deck(): Deck;
   timers: Timers;
 }
 
 export interface Music {
-  /** The track the screen calls for, or null for none: a change crossfades, and none fades out. */
-  want(track: Track | null): void;
-  /** Whether music may play (Sound on and Music on). Off stops it at once; on starts the wanted track again. */
+  /** Whether music may play (Sound on and Music on). Off stops it at once; on starts it, from its beginning. */
   setEnabled(on: boolean): void;
-  /** A gesture: starts a track the browser blocked, and readies the deck its loop point will need. */
+  /** A gesture: starts the music if the browser blocked it, and readies the deck its loop point will need. */
   kick(): void;
-  /** The page hid: stops at once, remembering where. */
+  /** Whether a hidden page keeps the music going (the default); when not, `hold` stops it. */
+  setBackground(on: boolean): void;
+  /** The page hid: stops at once, remembering where, unless the music goes on in the background. */
   hold(): void;
   /** The page showed again: goes on from there. */
   release(): void;
 }
 
-/** Seconds a track takes to come in from silence. */
+/** Seconds the music takes to come in from silence. */
 export const FADE_IN_S = 2;
-/** Seconds the music takes to fade when a level opens. */
-export const FADE_OUT_S = 1.5;
-/** Seconds one track takes to cross into the other. */
-export const SWITCH_S = 2.5;
 /** Seconds of each half of the equal-power dip at the loop point: the first deck fades out over its last this long
  *  and the second fades in over its first, enough to hide a decoder's gap and too short to hear. */
 export const LOOP_XF_S = 0.03;
 /** How often the loop asks again for a length the browser does not know yet. */
 const POLL_MS = 250;
-/** A deck is paused this long after its fade should have ended. */
-const PAUSE_PAD_MS = 100;
 /** The loop point is taken once the live deck is this close to it; further off, the timer waits again. */
 const SEAM_SLACK_S = 0.005;
 
-const STORY_CARDS: readonly LayerName[] = ["story", "chapter", "lore"];
-/** Cards that open over another and leave its music playing. */
-const PASSING: readonly LayerName[] = ["menu", "levels"];
-
-/** The track for the cards open, `stack` from the bottom up: the topmost card that is not the menu or the level list
- *  decides. A story card plays the story cut, the title card the theme, and anything else (a level, its cards, the
- *  editor) none. */
-export function trackFor(stack: readonly LayerName[]): Track | null {
-  for (let i = stack.length - 1; i >= 0; i--) {
-    const card = stack[i]!;
-    if (PASSING.includes(card)) continue;
-    if (STORY_CARDS.includes(card)) return "story";
-    return card === "title" ? "title" : null;
-  }
-  return null;
-}
-
 interface Player {
-  track: Track;
-  /** Both decks, made when the track first starts. */
+  /** Both decks, made when the music first starts. */
   decks: [Deck, Deck];
-  /** The deck the track plays on now. */
+  /** The deck the music plays on now. */
   live: 0 | 1;
-  /** Whether the track is meant to sound (it is the current one). */
+  /** Whether the music is meant to sound. */
   on: boolean;
   /** The browser refused the live deck's play; a gesture tries again. */
   blocked: boolean;
@@ -104,31 +74,35 @@ interface Player {
   loop: number;
   /** The live deck is fading out over its last moments, into the loop point. */
   ending: boolean;
-  /** The pause at the end of a fade-out. */
-  stop: number;
 }
 
 const isAbort = (err: unknown): boolean => (err as { name?: unknown } | null)?.name === "AbortError";
 
 export function createMusic(ports: MusicPorts): Music {
   const { timers } = ports;
-  const players = new Map<Track, Player>();
-  let wanted: Track | null = null;
-  let enabled = true;
+  let player: Player | null = null;
+  let enabled = false;
   let held = false;
-  let current: Track | null = null;
-  /** Where the track was when the page hid. */
-  let heldAt: { track: Track; at: number } | null = null;
+  let background = true;
+  /** Where the music was when the page hid. */
+  let heldAt = 0;
 
-  function player(track: Track): Player {
-    let p = players.get(track);
-    if (!p) {
-      p = {
-        track, decks: [ports.deck(track), ports.deck(track)], live: 0, on: false, blocked: false,
-        ready: [false, false], plays: [0, 0], loop: 0, ending: false, stop: 0,
-      };
-      players.set(track, p);
-    }
+  /** The player, its two decks made and loading on the first call. */
+  function get(): Player {
+    if (player) return player;
+    const p: Player = {
+      decks: [ports.deck(), ports.deck()], live: 0, on: false, blocked: false,
+      ready: [false, false], plays: [0, 0], loop: 0, ending: false,
+    };
+    // A hidden page's timers run late (a second or more apart, far more after minutes); the live deck's end is the
+    // loop point all the same, with at worst a gap the size of that lateness, and the music never stops.
+    p.decks.forEach((d, i) => d.onEnded(() => {
+      if (!p.on || p.live !== i) return;
+      clearTimer(p.loop);
+      p.loop = 0;
+      seam(p);
+    }));
+    player = p;
     return p;
   }
 
@@ -156,7 +130,7 @@ export function createMusic(ports: MusicPorts): Music {
   }
 
   /** Plays the idle deck silently and pauses it again at its start, so the browser lets the loop point play it from a
-   *  timer: done when the track starts (often in the gesture that started it) and again on each gesture until it
+   *  timer: done when the music starts (often in the gesture that started it) and again on each gesture until it
    *  takes. */
   function ready(p: Player): void {
     const i = other(p.live);
@@ -229,76 +203,46 @@ export function createMusic(ports: MusicPorts): Music {
     schedule(p);
   }
 
-  function start(track: Track, at: number, fadeIn: number): void {
-    const p = player(track);
+  function start(at: number): void {
+    const p = get();
     p.on = true;
     p.ending = false;
-    if (p.stop) {
-      // Still fading out: it comes back up from where it is.
-      clearTimer(p.stop);
-      p.stop = 0;
-      p.decks[p.live].fade(1, fadeIn);
-    } else {
-      p.decks[p.live].seek(at);
-      play(p, fadeIn);
-    }
+    p.decks[p.live].seek(at);
+    play(p, FADE_IN_S);
     ready(p);
     schedule(p);
   }
 
-  function stop(p: Player, fadeOut: number): void {
+  function stop(p: Player): void {
     p.on = false;
     p.blocked = false;
     clearTimer(p.loop);
     p.loop = 0;
     p.ending = false;
-    clearTimer(p.stop);
-    p.stop = 0;
-    const pauseAll = (): void => {
-      p.stop = 0;
-      for (const d of p.decks) d.pause();
-    };
-    if (fadeOut <= 0) {
-      pauseAll();
-      return;
-    }
-    p.decks[p.live].fade(0, fadeOut);
-    p.stop = timers.setTimeout(pauseAll, fadeOut * 1000 + PAUSE_PAD_MS);
+    for (const d of p.decks) d.pause();
   }
 
-  /** Brings what sounds in line with what is wanted; `quick` stops without a fade (Music off, a hidden page). */
-  function apply(quick: boolean): void {
-    const target = enabled && !held ? wanted : null;
-    if (target === current) return;
-    const from = current ? player(current) : null;
-    current = target;
+  /** Brings the sound in line with the switches and the page: music plays when enabled and shown. */
+  function apply(): void {
+    const target = enabled && !held;
+    if (target === !!player?.on) return;
     if (target) {
-      let at = 0;
-      let fadeIn = FADE_IN_S;
-      if (from) {
-        at = from.decks[from.live].position();
-        fadeIn = SWITCH_S;
-      } else if (heldAt?.track === target) at = heldAt.at;
-      heldAt = null;
-      start(target, at, fadeIn);
-    }
-    if (from) {
-      if (held) heldAt = { track: from.track, at: from.decks[from.live].position() };
-      stop(from, quick ? 0 : target ? SWITCH_S : FADE_OUT_S);
+      start(heldAt);
+      heldAt = 0;
+    } else if (player) {
+      if (held) heldAt = player.decks[player.live].position();
+      stop(player);
     }
   }
 
   return {
-    want(track) {
-      wanted = track;
-      apply(false);
-    },
     setEnabled(on) {
       enabled = on;
-      apply(true);
+      if (!on) heldAt = 0;
+      apply();
     },
     kick() {
-      const p = current ? player(current) : null;
+      const p = player?.on ? player : null;
       if (!p) return;
       if (p.blocked) {
         p.blocked = false;
@@ -306,13 +250,17 @@ export function createMusic(ports: MusicPorts): Music {
       }
       ready(p);
     },
+    setBackground(on) {
+      background = on;
+    },
     hold() {
+      if (background) return;
       held = true;
-      apply(true);
+      apply();
     },
     release() {
       held = false;
-      apply(false);
+      apply();
     },
   };
 }

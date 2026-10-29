@@ -23,6 +23,8 @@ const fakeMedia = () => {
     src: '', preload: '', currentTime: 0, duration: Number.NaN, volume: 1, plays: 0, paused: true,
     play() { el.plays++; el.paused = false; return Promise.resolve(); },
     pause() { el.paused = true; },
+    listeners: [] as Array<() => void>,
+    addEventListener(type: string, fn: () => void) { if (type === 'ended') el.listeners.push(fn); },
   };
   return el;
 };
@@ -104,4 +106,14 @@ test('without Web Audio a deck sets the element’s own volume', () => {
   assert.equal(el.volume, 0);
   deck.fade(1, 2);
   assert.equal(el.volume, 1);
+});
+
+test('a deck reports the end of its file from the element\'s ended event', () => {
+  const core = createAudioCore({ createContext: () => asAudioContext(fakeAudioContext()) });
+  const el = fakeMedia();
+  const deck = mediaDeck(core, 'a.webm', el as unknown as MediaLike);
+  let ended = 0;
+  deck.onEnded(() => { ended++; });
+  for (const fn of el.listeners) fn();
+  assert.equal(ended, 1);
 });

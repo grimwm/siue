@@ -20,9 +20,8 @@ A score-only draft (v4) has no audio or spectrogram to make: its render writes t
 - v4: the same music as v3, sent as its score alone: the workroom builds its
   sound in the browser. Publish it, then compare it with v3 by ear.
 
-The game plays draft 3: `CUT=full` under the title card and `CUT=story` (the
-organ held back, 4 LU quieter) on the story cards, as
-`games/crete/audio/music/`.
+The game plays draft 3's `CUT=full` on every screen, as
+`games/crete/audio/music/title.*`.
 
 ## Credits
 

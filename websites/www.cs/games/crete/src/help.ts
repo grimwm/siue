@@ -80,8 +80,9 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
       { strong: k("menu") }, " closes it and play goes on.",
     ],
     [
-      { strong: "Music" }, " in this menu turns the music off; ", { strong: k("mute") }, " silences everything. ",
-      "The title theme and its quieter cut on the story cards were made for the game, with samples from ",
+      { strong: "Music" }, " in this menu turns the music off, and ", { strong: "Music in the background" }, " whether it goes on while this tab is hidden; ",
+      { strong: k("mute") }, " silences everything. ",
+      "The title theme plays on every screen. It was made for the game, with samples from ",
       "VSCO-2 Community Edition by Versilian Studios (CC0), the organ sampled by Simon Dalzell of Ivy Audio.",
     ],
   ];

@@ -37,6 +37,7 @@ import { renderStoryCard } from "./ui/story.tsx";
 import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
+import type { Look, WallMode } from "./settings.ts";
 import { renderTitleCard } from "./ui/title.tsx";
 import { ratingText, renderSharedCard } from "./ui/shared.tsx";
 import type { SharedView } from "./share/visit.ts";
@@ -65,6 +66,10 @@ export interface Controls {
   toggleMusic?(): void;
   /** The Music in the background switch, under Music in the menu. */
   toggleBackground?(): void;
+  /** The Look choice (menu and title card). */
+  setLook?(look: Look): void;
+  /** The Walls choice, shown while the look is modern. */
+  setWalls?(walls: WallMode): void;
   toggleFullscreen(): void;
   /** Wake the speakers: any gesture does. */
   wake(): void;
@@ -92,6 +97,8 @@ export interface Ui {
   setMusic(on: boolean): void;
   setBackground(on: boolean): void;
   setFullscreen(on: boolean): void;
+  /** Shows the look and wall choices the page restored or changed. */
+  setLook(look: Look, walls: WallMode): void;
   bindControls(controls: Controls): void;
   /** The title card, alone; `hint` adds how to close an installed app, and `note` why a share link did not open. */
   showTitle(hint: boolean, note?: string): void;
@@ -152,6 +159,8 @@ export function createUi(deps: UiDeps): Ui {
   let music = true;
   let background = true;
   let full = false;
+  let look: Look = "modern";
+  let walls: WallMode = "solid";
   let toastTimer = 0;
   let controls: Controls | null = null;
   let game: Game | null = null;
@@ -317,6 +326,11 @@ export function createUi(deps: UiDeps): Ui {
       onStory: () => layers.open("story"),
       ...(controls?.editor ? { onEditor: showEditor } : {}),
       onSettings: () => layers.open("menu"),
+      look,
+      onLook: () => {
+        controls?.wake();
+        controls?.setLook?.(look === "modern" ? "classic" : "modern");
+      },
     });
     const card = controls?.shared?.card() ?? null;
     renderSharedCard($("shared-root"), {
@@ -401,6 +415,8 @@ export function createUi(deps: UiDeps): Ui {
       music,
       background,
       fullscreen: full,
+      look,
+      walls,
       log,
       help: helpLines(KEYS, TOOLS),
       onSound: () => {
@@ -416,6 +432,8 @@ export function createUi(deps: UiDeps): Ui {
         controls?.toggleBackground?.();
       },
       onFullscreen: () => controls?.toggleFullscreen(),
+      onLook: (l) => controls?.setLook?.(l),
+      onWalls: (w) => controls?.setWalls?.(w),
       onLore: () => {
         loreShown = null;
         loreFromPickup = false;
@@ -922,6 +940,11 @@ export function createUi(deps: UiDeps): Ui {
     },
     setFullscreen: (on) => {
       full = on;
+      drawLayers();
+    },
+    setLook: (l, w) => {
+      look = l;
+      walls = w;
       drawLayers();
     },
   };

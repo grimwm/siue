@@ -30,6 +30,7 @@ import { fromLevel } from './editor/model.ts';
 import { createRater } from './share/rating.ts';
 import { createVisit, fragmentKind } from './share/visit.ts';
 import { createSettings } from './settings.ts';
+import type { Look, WallMode } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
@@ -194,6 +195,19 @@ function toggleBackground(): void {
   ui.say(on ? 'Music goes on in the background.' : 'Music stops in the background.', 'info');
 }
 
+/* The Look switch. The modern look is stored and shown here; the board draws the classic tiles either way. */
+function applyLook(look: Look): void {
+  settings.look.set(look);
+  ui.setLook(look, settings.walls.get());
+  ui.say(look === 'modern' ? 'Modern look.' : 'Classic look.', 'info');
+}
+
+function applyWalls(walls: WallMode): void {
+  settings.walls.set(walls);
+  ui.setLook(settings.look.get(), walls);
+  ui.say(`Walls: ${walls}.`, 'info');
+}
+
 /* A gesture wakes the speakers and starts music the browser held back until one. */
 function wake(): void {
   audio.ensure();
@@ -248,7 +262,7 @@ function loop(now: number): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
   });
   const background = settings.musicHidden.get() === 'on';
@@ -262,6 +276,7 @@ function start(): void {
     audio.setMusic(false);
     ui.setMusic(false);
   }
+  ui.setLook(settings.look.get(), settings.walls.get());
   followMusicSwitches();
   let direct = false;
   try {

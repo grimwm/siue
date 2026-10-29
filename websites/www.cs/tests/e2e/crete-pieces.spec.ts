@@ -4,6 +4,9 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
+/** These specs read the classic board's pixels and cells, so they pin the Look setting before the page loads. */
+const pinClassic = (): void => localStorage.setItem('crete-look', 'classic');
+
 const PAGE = 'games/crete/';
 
 interface Cell { r: number; c: number }
@@ -34,6 +37,7 @@ async function open(page: Page): Promise<string[]> {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(pinClassic);
   await page.goto(PAGE);
   await page.locator('#title-play').click();
   await page.locator('#chapter-enter').click();

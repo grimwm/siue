@@ -161,6 +161,19 @@ test('Story and Settings appear when the page gives them, and call back', () => 
   assert.deepEqual(seen, ['story', 'settings']);
 });
 
+test('the title card has one Look switch that shows the look now drawn and flips it', () => {
+  const root = makeEl('title-root');
+  renderTitleCard(root, { open: true, hint: false, onPlay() {} });
+  assert.equal(maybeById(root, 'title-look'), undefined);
+  let flips = 0;
+  renderTitleCard(root, { open: true, hint: false, onPlay() {}, look: 'modern', onLook: () => { flips++; } });
+  assert.equal(byId(root, 'title-look').textContent, 'Look: Modern');
+  click(byId(root, 'title-look'));
+  assert.equal(flips, 1);
+  renderTitleCard(root, { open: true, hint: false, onPlay() {}, look: 'classic', onLook: () => { flips++; } });
+  assert.equal(byId(root, 'title-look').textContent, 'Look: Classic');
+});
+
 test('the title card keeps a slot for the kit install bar', () => {
   const root = makeEl('title-root');
   renderTitleCard(root, { open: true, hint: false, onPlay() {} });
@@ -251,8 +264,9 @@ const editor = {
   close: () => { edits.push('close'); },
   key: (ev: KeyboardEvent) => { editorKeys.push(ev.key); return false; },
 };
+const looks: string[] = [];
 flow.bindControls({
-  game, toggleMute() {}, toggleMusic() { musics++; }, toggleBackground() { backgrounds++; }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; },
+  game, toggleMute() {}, toggleMusic() { musics++; }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; },
   editor, leftEditor: () => { edits.push('left'); },
 });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
@@ -337,7 +351,7 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   toggled = 0;
   key('q');
   const at = () => document.activeElement?.id;
-  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'menu-lore', 'quit'];
+  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'look-modern', 'look-classic', 'walls-solid', 'walls-ghosted', 'walls-low', 'menu-lore', 'quit'];
   const first = order.indexOf(at() ?? '');
   assert.ok(first >= 0, `focus is on a menu button, not ${at()}`);
   for (let i = 0; i < 8; i++) key('ArrowUp');
@@ -351,12 +365,14 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   key('s');
   assert.equal(at(), 'fullscreen');
   key('j');
+  assert.equal(at(), 'look-modern');
+  for (let i = 0; i < 5; i++) key('j');
   assert.equal(at(), 'menu-lore');
-  key('k');
+  for (let i = 0; i < 6; i++) key('k');
   assert.equal(at(), 'fullscreen');
   key('Enter');
   assert.equal(toggled, 1);
-  for (let i = 0; i < 8; i++) key('ArrowDown');
+  for (let i = 0; i < 12; i++) key('ArrowDown');
   assert.equal(at(), 'quit', 'clamped at the bottom');
 });
 
@@ -372,6 +388,48 @@ test('Music sits beside Sound in the menu, says whether it is on, and asks for i
   assert.equal(music().textContent, '🎶 Music off');
   flow.setMusic(true);
   assert.equal(music().textContent, '🎶 Music');
+});
+
+test('Look and Walls sit in the menu; Walls show only for the modern look, and the title card flips the look', () => {
+  reset();
+  looks.length = 0;
+  flow.setLook('modern', 'low');
+  key('q');
+  const pressed = (id: string) => byId(rootOf('menu'), id).getAttribute('aria-pressed');
+  assert.deepEqual(['look-modern', 'walls-solid', 'walls-low'].map(pressed), ['true', 'false', 'true']);
+  click(byId(rootOf('menu'), 'look-classic'));
+  click(byId(rootOf('menu'), 'walls-ghosted'));
+  assert.deepEqual(looks, ['classic', 'ghosted']);
+  flow.setLook('classic', 'low');
+  assert.equal(maybeById(rootOf('menu'), 'walls-low'), undefined);
+  flow.closeLayers();
+  flow.showTitle(false);
+  assert.equal(byId(document.getElementById('title-root'), 'title-look').textContent, 'Look: Classic');
+  click(byId(document.getElementById('title-root'), 'title-look'));
+  assert.equal(looks.at(-1), 'modern');
+  flow.setLook('modern', 'solid');
+});
+
+test('every change of cards reaches the page, which picks the music from them', () => {
+  reset();
+  flow.showTitle(false);
+  key('i');
+  key('q');
+  key('n');
+  key('Enter');
+  assert.equal(game.run !== null, true);
+  key('Enter');
+  const changes = tracks.filter((t, i) => i === 0 || t !== tracks[i - 1]);
+  assert.deepEqual(changes, ['title', 'story', 'title', 'story', null]);
+});
+
+test('the level list over the story card keeps the story cut', () => {
+  reset();
+  flow.showTitle(false);
+  key('i');
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  assert.equal(tracks[tracks.length - 1], 'story');
 });
 
 test('left and right in the levels list switch between the released chapters, clamped at the ends', () => {

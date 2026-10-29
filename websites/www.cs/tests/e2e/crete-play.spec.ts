@@ -3,6 +3,9 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
+/** These specs read the classic board's pixels and cells, so they pin the Look setting before the page loads. */
+const pinClassic = (): void => localStorage.setItem('crete-look', 'classic');
+
 const PAGE = 'games/crete/';
 const BUTTON: Record<string, string> = { up: '.mv-up', down: '.mv-down', left: '.mv-left', right: '.mv-right', wait: '#btn-wait' };
 const KEY: Record<string, string> = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', wait: '.' };
@@ -24,6 +27,7 @@ async function openTrial1(page: Page): Promise<string[]> {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(pinClassic);
   await page.goto(PAGE);
   await expect(page.locator('#title-veil')).toBeVisible();
   await page.locator('#title-play').click();
@@ -184,6 +188,7 @@ test('N opens the level list, which has ten levels and ten chapter tabs; M mutes
 });
 
 test('a ?seed= link opens Chapter 1\'s card with no title card, and Enter starts level 1', async ({ page }) => {
+  await page.addInitScript(pinClassic);
   await page.goto(`${PAGE}?seed=stefan-1984`);
   await expect(page.locator('#title-veil')).toBeHidden();
   await expect(page.locator('#chapter-veil')).toBeVisible();
@@ -194,6 +199,7 @@ test('a ?seed= link opens Chapter 1\'s card with no title card, and Enter starts
 });
 
 test('Enter the halls starts the first level this browser has not cleared', async ({ page }) => {
+  await page.addInitScript(pinClassic);
   await page.goto(PAGE);
   await page.evaluate(() => localStorage.setItem('crete-progress', JSON.stringify({ 'trial-1': { cleared: true, best: 20 }, 'trial-2': { cleared: true, best: null } })));
   await page.reload();
@@ -238,6 +244,7 @@ test('a missing tiles.png says so, loudly, instead of leaving a blank board', as
   const logged: string[] = [];
   page.on('console', m => { if (m.type() === 'error') logged.push(m.text()); });
   await page.route('**/fx/sprites/tiles.png*', route => route.abort());
+  await page.addInitScript(pinClassic);
   await page.goto(PAGE);
   await expect(page.locator('#atlas-error')).toHaveText(/did not load/);
   expect(logged.some(t => /tiles\.png/.test(t))).toBe(true);
@@ -256,6 +263,7 @@ test('Quit in the menu ends the try and shows the title card in a browser tab; P
 });
 
 test('the title card opens Story and Settings, and Q returns to it', async ({ page }) => {
+  await page.addInitScript(pinClassic);
   await page.goto(PAGE);
   await page.locator('#title-story').click();
   await expect(page.locator('#story-veil')).toBeVisible();
@@ -309,6 +317,7 @@ test('Full screen from the menu takes the Esc lock; Esc changes nothing and the 
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (/Keyboard Lock refused/.test(m.text())) errors.push(m.text()); });
+  await page.addInitScript(pinClassic);
   await page.goto(PAGE);
   await page.locator('#title-play').click();
   await page.locator('#chapter-enter').click();

@@ -5,6 +5,9 @@
 import { test, expect } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
 
+/** These specs read the classic board's pixels and cells, so they pin the Look setting before the page loads. */
+const pinClassic = (): void => localStorage.setItem('crete-look', 'classic');
+
 type Device = [name: string, width: number, height: number, touch: boolean];
 const DEVICES: Device[] = [
   ['Desktop', 1280, 720, false], ['Laptop, small window', 1024, 640, false],
@@ -21,6 +24,7 @@ async function open(browser: Browser, [, width, height, touch]: Device) {
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
+  await page.addInitScript(pinClassic);
   await page.goto('games/crete/');
   return { ctx, page, errors };
 }

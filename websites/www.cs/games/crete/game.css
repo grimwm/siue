@@ -239,6 +239,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 .menu h3 { margin: 0 0 0.3rem; font-size: 1rem; color: var(--accent); }
 .menu-sec { margin: 0.9rem 0 0; }
 .menu-sec > button { margin-right: 0.4rem; }
+.menu-sec > button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.menu-label { margin-right: 0.4rem; }
 .help { margin: 0; padding-left: 1.1rem; }
 .help li { margin-bottom: 0.35rem; }
 .log { list-style: none; margin: 0; padding: 0; max-height: 12rem; overflow-y: auto; display: grid; gap: 0.35rem; }

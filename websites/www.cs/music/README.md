@@ -121,8 +121,9 @@ music-setup)."
 
 - A sealed note is at most 2,097,152 bytes; 2,000 notes are kept.
 - A draft request is at most 8 MB (declared `Content-Length`, refused with 413
-  before the script reads the body); the newest 20 drafts are kept; a publish that would
-  leave more than 100 MB stored is refused with 413.
+  before the script reads the body); each piece keeps its newest 20 drafts, like an
+  undo history (its oldest rolls off; other pieces are never touched); a publish that
+  would leave more than 100 MB stored is refused with 413.
 
 ## The owner's key tool
 

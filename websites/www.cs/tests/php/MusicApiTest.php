@@ -304,16 +304,44 @@ final class MusicApiTest extends TestCase
         self::assertSame([], $this->store->drafts());
     }
 
-    public function testTheTwentyFirstDraftEvictsTheOldest(): void
+    public function testEachPieceKeepsItsOwnNewestTwentyDraftsAndOtherPiecesAreUntouched(): void
     {
         $k = $this->keys->create('publish', ['drafts:publish']);
+        self::assertSame(201, $this->publish($k, $this->draftFiles('other-piece', 1), 'other-piece', 1)->status);
         for ($v = 1; $v <= 21; $v++) {
             self::assertSame(201, $this->publish($k, $this->draftFiles('ch1-labyrinth', $v), 'ch1-labyrinth', $v)->status, "draft $v");
         }
-        self::assertCount(20, $this->store->drafts());
-        self::assertNull($this->store->draftFile('ch1-labyrinth', 1, 'score.json'), 'the oldest is gone');
+        self::assertCount(21, $this->store->drafts(), 'twenty of ch1-labyrinth and one of other-piece');
+        self::assertNull($this->store->draftFile('ch1-labyrinth', 1, 'score.json'), 'the piece\'s oldest is gone');
         self::assertNotNull($this->store->draftFile('ch1-labyrinth', 2, 'score.json'));
         self::assertNotNull($this->store->draftFile('ch1-labyrinth', 21, 'score.json'));
+        self::assertNotNull($this->store->draftFile('other-piece', 1, 'score.json'), 'another piece\'s only draft stays');
+    }
+
+    public function testWhenStorageIsFullAnotherPiecesDraftsAreNeverDroppedToMakeRoom(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $add = $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)');
+        $add->execute(['big-piece', 1, 1, Music\Store::MAX_DRAFT_TOTAL_BYTES - 20]);
+        for ($v = 1; $v <= 19; $v++) {
+            $add->execute(['ch1-labyrinth', $v, 1 + $v, 1]);
+        }
+        $res = $this->publish($k, $this->draftFiles('ch1-labyrinth', 20), 'ch1-labyrinth', 20);
+        self::assertSame(413, $res->status);
+        self::assertSame('over_quota', $this->body($res)['error']);
+        self::assertCount(20, $this->store->drafts(), 'big-piece and the nineteen are all still there');
+    }
+
+    public function testThePiecesOwnOldestDraftRollingOffMakesRoom(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $add = $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)');
+        $add->execute(['ch1-labyrinth', 1, 1, Music\Store::MAX_DRAFT_TOTAL_BYTES - 1000]);
+        for ($v = 2; $v <= 20; $v++) {
+            $add->execute(['ch1-labyrinth', $v, $v, 1]);
+        }
+        self::assertSame(201, $this->publish($k, $this->draftFiles('ch1-labyrinth', 21), 'ch1-labyrinth', 21)->status, 'v1 rolls off, so v21 fits');
+        self::assertNull($this->store->draftFile('ch1-labyrinth', 1, 'score.json'));
     }
 
     public function testADraftThatWouldPassTheQuotaIsRefusedAndNothingIsWritten(): void

@@ -100,6 +100,12 @@ test('a glossary word in a step opens its card', async () => {
   const word = walk(lesson(s.root)!).find(e => e.getAttribute('data-term') === 'clef')!;
   await act(() => { click(word); });
   assert.deepEqual(s.terms, ['clef']);
+  await act(() => { click(button(s.root, 'Next')!); });
+  await settle();
+  const rest = walk(lesson(s.root)!).find(e => e.getAttribute('data-term') === 'rest');
+  assert.equal(rest?.textContent, 'rest', 'the lesson links rest by id, though free text does not');
+  await act(() => { click(rest!); });
+  assert.deepEqual(s.terms, ['clef', 'rest']);
   render(null, renderTarget(s.root));
 });
 

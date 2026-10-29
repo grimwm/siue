@@ -1,6 +1,8 @@
 // The glossary: plain-words definitions of the musical and sound-design terms a
 // score's `glossary` and a change's text can point at. glossary.json is its one
-// source; the Python tool reads the same file.
+// source; the Python tool reads the same file. A term whose word is also an
+// everyday word ("rest", "tie", "staff") lists in `match` the only phrases that
+// link in free text (none, for `[]`); the reading lesson links it by id.
 import data from './glossary.json' with { type: 'json' };
 import type { Score } from './score.ts';
 
@@ -26,12 +28,14 @@ export function termsIn(score: Score): { term: Term; from: number; to: number }[
 
 const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Longest words first, so a phrase wins over a word inside it; whole words only (a hyphen or letter next to a match disqualifies it).
-const WORDS = GLOSSARY.map(t => ({ term: t, source: escape(t.word.toLowerCase()).replace(/ /g, '\\s+') })).sort((a, b) => b.term.word.length - a.term.word.length);
-const BY_WORD = new Map(GLOSSARY.map(t => [t.word.toLowerCase(), t]));
+/** The phrases that link to each term in free text: its `match` list when it has one, else its word. */
+const PHRASES = data.terms.flatMap(t => ((t as { match?: string[] }).match ?? [t.word]).map(phrase => ({ phrase: phrase.toLowerCase(), term: BY_ID.get(t.id)! })));
+// Longest phrases first, so a phrase wins over a word inside it; whole words only (a hyphen or letter next to a match disqualifies it).
+const WORDS = PHRASES.map(p => ({ term: p.term, phrase: p.phrase, source: escape(p.phrase).replace(/ /g, '\\s+') })).sort((a, b) => b.phrase.length - a.phrase.length);
+const BY_WORD = new Map(PHRASES.map(p => [p.phrase, p.term]));
 const PATTERN = new RegExp(`(?<![\\p{L}\\p{N}-])(?:${WORDS.map(w => w.source).join('|')})(?![\\p{L}\\p{N}-])`, 'giu');
 
-/** Splits text into plain runs and glossary words (whole words or whole phrases such as "reverb tail", case-insensitive, first match wins). */
+/** Splits text into plain runs and glossary words (whole words or whole phrases such as "reverb tail", case-insensitive, first match wins); an everyday word links only through its term's `match` phrases. */
 export function splitTerms(text: string): ({ text: string } | { term: Term; text: string })[] {
   const parts: ({ text: string } | { term: Term; text: string })[] = [];
   let at = 0;

@@ -478,3 +478,12 @@ test('a sound piece’s Story guide opens by itself even when the music Story gu
   assert.equal(storage.data.get('workroom-guide-sound-story'), 'seen');
   unmount(root);
 });
+
+test("a change note's everyday \"rest\" is plain text, not a glossary word", async () => {
+  const changes = [{ from_bar: 1, to_bar: 2, lane: null, text: 'Quieter, then a quarter rest; keep the rest of the piece.', answers: [] }];
+  const root = await mount({ score: { ...score, changes } });
+  const note = walk(root).find(e => e.localName === 'li' && e._attrs['data-change'] === '0')!;
+  assert.match(note.textContent, /keep the rest of the piece/);
+  assert.deepEqual(walk(note).filter(e => e._attrs['data-term'] !== undefined).map(e => e.textContent), ['quarter rest'], 'only the musical phrase links');
+  unmount(root);
+});

@@ -33,7 +33,7 @@ final class MusicDeployTest extends TestCase
     public function testNeverShipsToolsDraftsOrDocs(): void
     {
         foreach (self::shipped() as $f) {
-            self::assertDoesNotMatchRegularExpression('~^music/(tools|pieces|keys)/|^music/README\.md$~', $f, $f);
+            self::assertDoesNotMatchRegularExpression('~^music/(tools|compose|pieces|keys)/|^music/README\.md$~', $f, $f);
         }
     }
 
@@ -63,11 +63,11 @@ final class MusicDeployTest extends TestCase
     public function testNginxDeniesWhatApacheDenies(): void
     {
         $conf = (string) file_get_contents(dirname(__DIR__, 2) . '/docker/nginx/default.conf');
-        foreach (['lib', 'tools', 'pieces', 'keys'] as $d) {
+        foreach (['lib', 'tools', 'compose', 'pieces', 'keys'] as $d) {
             self::assertStringContainsString("location ^~ /music/$d/ { deny all; }", $conf, $d);
         }
         $ht = (string) file_get_contents(dirname(__DIR__, 2) . '/music/.htaccess');
-        self::assertStringContainsString('m#/music/(lib|tools|pieces|keys)/#', $ht);
+        self::assertStringContainsString('m#/music/(lib|tools|compose|pieces|keys)/#', $ht);
         self::assertStringContainsString("media-src 'self' blob:", $ht);
     }
 }

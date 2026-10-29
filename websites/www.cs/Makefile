@@ -119,7 +119,7 @@ music-e2e: ## Music workroom browser check (test keyring, fake microphone)
 	echo MUSIC-E2E-OK
 
 # The music workroom's key and note tool (music/tools/siue-music), run in its own virtualenv.
-.PHONY: music-setup music-status music-pickup music-publish music-rotate music-forget music-test
+.PHONY: music-setup music-status music-pickup music-publish music-rotate music-forget music-test music-image music-compose-test music-render
 MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
 # The tool's interpreter as an absolute path when it is one (the browser check runs it from tests/e2e); a bare python3 stays a command name.
 MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))
@@ -142,3 +142,18 @@ music-forget: ## Delete this computer's cached keys
 	@$(MUSIC_TOOL) keys forget
 music-test: ## Run the key tool's tests
 	$(MUSIC_PY) -m unittest discover -s music/tools/tests -t music/tools/tests
+
+##@ Composing (in a container; nothing here talks to the server or 1Password)
+MUSIC_IMAGE = siue-music-compose
+MUSIC_CACHE ?= $(HOME)/.cache/siue-music
+# Capped where systemd is available, so a runaway render cannot take the machine down.
+MUSIC_CAP = $(if $(shell command -v systemd-run),systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0)
+MUSIC_RUN = mkdir -p "$(MUSIC_CACHE)" && $(MUSIC_CAP) podman run --rm --memory=4g --memory-swap=4g -v "$(CURDIR)":/work:z -v "$(MUSIC_CACHE)":/cache:z \
+	-e SIUE_MUSIC_CACHE=/cache -w /work/music/compose $(MUSIC_IMAGE)
+music-image: ## Build the composing container (sfizz, ffmpeg, Python)
+	podman build -t $(MUSIC_IMAGE) -f music/compose/Containerfile music/compose
+music-compose-test: ## Run the composing tests in the container
+	@$(MUSIC_RUN) python3 -m unittest discover -s tests -t tests
+music-render: ## Compose and render a draft (PIECE=<id> VERSION=n)
+	@test -n "$(PIECE)" -a -n "$(VERSION)" || { echo "usage: make music-render PIECE=crete-title VERSION=1" >&2; exit 1; }
+	@$(MUSIC_RUN) python3 -m siue_compose.cli render "$(PIECE)" "$(VERSION)"

@@ -34,10 +34,9 @@ full keyboard play, the fast solver and the level editor.
 Design `specs/2026-10-17-music-workroom-design.md`; the workroom and its
 answering are live.
 
-1. **Notes do not show and cannot be added** on the live site after
-   `make music-setup` and entering the passphrase. Find out why first.
-2. **A failed Discard of the browser's saved draft** says "Could not reach the
-   server"; it should say the draft could not be discarded.
-3. **The shared-origin question** is still open: whether the workroom shares an
-   origin with the games.
-4. **The first piece**, likely the Crete title theme.
+1. **The first piece: the Crete title theme.** Design
+   `specs/2026-10-28-crete-title-theme-design.md`; the composing pipeline
+   (`music/compose/`) and draft 1, a one-minute sketch, are built. Next: the
+   owner publishes it, answers it in the workroom, and each later draft
+   follows those notes until the owner says it is done. Then the theme goes
+   into Crete under the title card and story pages (its own plan).

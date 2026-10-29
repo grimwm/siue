@@ -1,0 +1,21 @@
+# The composing toolchain: Python, sfizz_render, ffmpeg. Build with `make music-image`.
+FROM docker.io/library/debian:trixie-slim AS sfizz
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl cmake g++ make \
+    && rm -rf /var/lib/apt/lists/*
+ARG SFIZZ_VERSION=1.2.3
+ARG SFIZZ_SHA256=a9339eac7620d7f0f6b44bdfe860680fab73e66efad4b5f15b21198dd9436822
+RUN curl -fsSL -o /tmp/sfizz.tgz https://github.com/sfztools/sfizz/releases/download/${SFIZZ_VERSION}/sfizz-${SFIZZ_VERSION}.tar.gz \
+    && echo "${SFIZZ_SHA256}  /tmp/sfizz.tgz" | sha256sum -c - \
+    && tar xzf /tmp/sfizz.tgz -C /tmp \
+    && cmake -S /tmp/sfizz-${SFIZZ_VERSION} -B /tmp/build -DCMAKE_BUILD_TYPE=Release -DSFIZZ_JACK=OFF \
+       -DSFIZZ_RENDER=ON -DSFIZZ_SHARED=OFF -DENABLE_LTO=OFF -DSFIZZ_GIT_SUBMODULE_CHECK=OFF \
+    && cmake --build /tmp/build --target sfizz_render -j4 \
+    && install -m 755 "$(find /tmp/build -type f -name sfizz_render -perm -u+x | head -1)" /usr/local/bin/sfizz_render
+
+FROM docker.io/library/debian:trixie-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 python3-numpy \
+    python3-mido python3-pip ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip3 install --no-cache-dir --break-system-packages music21==10.5.2
+COPY --from=sfizz /usr/local/bin/sfizz_render /usr/local/bin/sfizz_render
+WORKDIR /work

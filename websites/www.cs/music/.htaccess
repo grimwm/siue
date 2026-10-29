@@ -13,6 +13,6 @@
 </IfModule>
 
 # Libraries, tools, committed drafts and keys are never served.
-<If "%{REQUEST_URI} =~ m#/music/(lib|tools|pieces|keys)/#">
+<If "%{REQUEST_URI} =~ m#/music/(lib|tools|compose|pieces|keys)/#">
     Require all denied
 </If>

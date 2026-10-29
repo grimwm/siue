@@ -1,0 +1,2881 @@
+{
+ "schema": 1,
+ "kind": "music",
+ "project": {
+  "id": "crete",
+  "name": "Crete"
+ },
+ "piece": {
+  "id": "crete-title",
+  "title": "Crete: title theme"
+ },
+ "draft": 3,
+ "made": "2026-10-29T05:18:56Z",
+ "duration": 216.774194,
+ "bars": 56,
+ "tempo": [
+  {
+   "bar": 1,
+   "bpm": 62,
+   "beats": 4,
+   "unit": 4
+  }
+ ],
+ "sections": [
+  {
+   "id": "wakes",
+   "name": "The island wakes",
+   "color": "#2d4a5a",
+   "from_bar": 1,
+   "to_bar": 6
+  },
+  {
+   "id": "tune",
+   "name": "Ariadne's tune",
+   "color": "#8a6d1f",
+   "from_bar": 7,
+   "to_bar": 14
+  },
+  {
+   "id": "wind",
+   "name": "Sea wind",
+   "color": "#35505a",
+   "from_bar": 15,
+   "to_bar": 18
+  },
+  {
+   "id": "deep",
+   "name": "The tune in the deep",
+   "color": "#4f5d3f",
+   "from_bar": 19,
+   "to_bar": 26
+  },
+  {
+   "id": "rises",
+   "name": "The labyrinth rises",
+   "color": "#4a3f6a",
+   "from_bar": 27,
+   "to_bar": 30
+  },
+  {
+   "id": "awe",
+   "name": "Awe",
+   "color": "#7a5a9a",
+   "from_bar": 31,
+   "to_bar": 38
+  },
+  {
+   "id": "after",
+   "name": "After the light",
+   "color": "#4d4566",
+   "from_bar": 39,
+   "to_bar": 44
+  },
+  {
+   "id": "breathes",
+   "name": "The labyrinth breathes",
+   "color": "#3a3550",
+   "from_bar": 45,
+   "to_bar": 56
+  }
+ ],
+ "lanes": [
+  {
+   "id": "lyre",
+   "name": "Lyre",
+   "family": "harp",
+   "icon": "harp",
+   "color": "#d4a72c"
+  },
+  {
+   "id": "cellos",
+   "name": "Cellos (tune)",
+   "family": "strings",
+   "icon": "strings",
+   "color": "#7a8f6a"
+  },
+  {
+   "id": "organ-tune",
+   "name": "Organ (tune)",
+   "family": "keys",
+   "icon": "keys",
+   "color": "#b0a6d6"
+  },
+  {
+   "id": "organ",
+   "name": "Organ",
+   "family": "keys",
+   "icon": "keys",
+   "color": "#8a7fb0"
+  },
+  {
+   "id": "horn",
+   "name": "Horn (far)",
+   "family": "brass",
+   "icon": "brass",
+   "color": "#a0603a"
+  },
+  {
+   "id": "drone",
+   "name": "Drone (cellos)",
+   "family": "strings",
+   "icon": "strings",
+   "color": "#5a6b7a"
+  },
+  {
+   "id": "deep",
+   "name": "Deep drone (bass)",
+   "family": "strings",
+   "icon": "strings",
+   "color": "#3d4652"
+  }
+ ],
+ "characters": [
+  {
+   "id": "ariadne",
+   "name": "Ariadne",
+   "color": "#d4a72c"
+  }
+ ],
+ "motifs": [
+  {
+   "id": "ariadne",
+   "character": "ariadne",
+   "spans": [
+    {
+     "lane": "lyre",
+     "from": 23.225806,
+     "to": 54.193548
+    },
+    {
+     "lane": "horn",
+     "from": 58.064516,
+     "to": 65.806452
+    },
+    {
+     "lane": "lyre",
+     "from": 63.870968,
+     "to": 69.677419
+    },
+    {
+     "lane": "cellos",
+     "from": 69.677419,
+     "to": 100.645161
+    },
+    {
+     "lane": "lyre",
+     "from": 116.129032,
+     "to": 147.096774
+    },
+    {
+     "lane": "organ-tune",
+     "from": 116.129032,
+     "to": 147.096774
+    },
+    {
+     "lane": "lyre",
+     "from": 154.83871,
+     "to": 170.322581
+    }
+   ]
+  }
+ ],
+ "notes": [
+  {
+   "lane": "deep",
+   "start": 0.0,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 0.0,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 0.0,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 3.870968,
+   "length": 13.548387,
+   "pitch": 50,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 5.806452,
+   "length": 11.612903,
+   "pitch": 57,
+   "velocity": 28,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 11.612903,
+   "length": 3.870968,
+   "pitch": 50,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "deep",
+   "start": 15.483871,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 15.483871,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 15.483871,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 15.483871,
+   "length": 3.870968,
+   "pitch": 45,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 19.354839,
+   "length": 3.870968,
+   "pitch": 50,
+   "velocity": 30,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 23.225806,
+   "length": 3.870968,
+   "pitch": 38,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 23.225806,
+   "length": 1.935484,
+   "pitch": 69,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 24.193548,
+   "length": 2.903226,
+   "pitch": 45,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 25.16129,
+   "length": 1.935484,
+   "pitch": 53,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 25.16129,
+   "length": 0.967742,
+   "pitch": 74,
+   "velocity": 64,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 26.129032,
+   "length": 0.967742,
+   "pitch": 72,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 27.096774,
+   "length": 3.870968,
+   "pitch": 36,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 27.096774,
+   "length": 2.903226,
+   "pitch": 69,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 28.064516,
+   "length": 2.903226,
+   "pitch": 43,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 29.032258,
+   "length": 1.935484,
+   "pitch": 52,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 30.0,
+   "length": 0.967742,
+   "pitch": 67,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "deep",
+   "start": 30.967742,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 30.967742,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 30.967742,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 30.967742,
+   "length": 3.870968,
+   "pitch": 41,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 30.967742,
+   "length": 1.451613,
+   "pitch": 65,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 31.935484,
+   "length": 2.903226,
+   "pitch": 48,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 32.419355,
+   "length": 0.483871,
+   "pitch": 67,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 32.903226,
+   "length": 1.935484,
+   "pitch": 57,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 32.903226,
+   "length": 0.967742,
+   "pitch": 69,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 33.870968,
+   "length": 0.967742,
+   "pitch": 64,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 34.83871,
+   "length": 3.870968,
+   "pitch": 38,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 34.83871,
+   "length": 3.870968,
+   "pitch": 62,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 35.806452,
+   "length": 2.903226,
+   "pitch": 45,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 36.774194,
+   "length": 1.935484,
+   "pitch": 53,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 38.709677,
+   "length": 3.870968,
+   "pitch": 38,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 38.709677,
+   "length": 1.935484,
+   "pitch": 69,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 39.677419,
+   "length": 2.903226,
+   "pitch": 45,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 40.645161,
+   "length": 1.935484,
+   "pitch": 53,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 40.645161,
+   "length": 0.967742,
+   "pitch": 74,
+   "velocity": 64,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 41.612903,
+   "length": 0.967742,
+   "pitch": 76,
+   "velocity": 64,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 42.580645,
+   "length": 3.870968,
+   "pitch": 41,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 42.580645,
+   "length": 1.935484,
+   "pitch": 77,
+   "velocity": 64,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 43.548387,
+   "length": 2.903226,
+   "pitch": 48,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 44.516129,
+   "length": 1.935484,
+   "pitch": 57,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 44.516129,
+   "length": 0.967742,
+   "pitch": 76,
+   "velocity": 64,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 45.483871,
+   "length": 0.967742,
+   "pitch": 74,
+   "velocity": 64,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "deep",
+   "start": 46.451613,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 46.451613,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 46.451613,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 46.451613,
+   "length": 1.935484,
+   "pitch": 36,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 46.451613,
+   "length": 0.967742,
+   "pitch": 72,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 47.419355,
+   "length": 0.967742,
+   "pitch": 43,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 47.419355,
+   "length": 0.967742,
+   "pitch": 69,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 48.387097,
+   "length": 1.935484,
+   "pitch": 39,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 48.387097,
+   "length": 0.967742,
+   "pitch": 67,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 49.354839,
+   "length": 0.967742,
+   "pitch": 46,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 49.354839,
+   "length": 0.967742,
+   "pitch": 63,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 50.322581,
+   "length": 3.870968,
+   "pitch": 38,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 50.322581,
+   "length": 3.870968,
+   "pitch": 62,
+   "velocity": 58,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 51.290323,
+   "length": 2.903226,
+   "pitch": 45,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 52.258065,
+   "length": 1.935484,
+   "pitch": 50,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 54.193548,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 54.193548,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 56.129032,
+   "length": 13.548387,
+   "pitch": 65,
+   "velocity": 30,
+   "motif": null
+  },
+  {
+   "lane": "horn",
+   "start": 58.064516,
+   "length": 1.935484,
+   "pitch": 57,
+   "velocity": 44,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "horn",
+   "start": 60.0,
+   "length": 5.806452,
+   "pitch": 62,
+   "velocity": 46,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "deep",
+   "start": 61.935484,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 61.935484,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 61.935484,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 63.870968,
+   "length": 0.967742,
+   "pitch": 81,
+   "velocity": 34,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 64.83871,
+   "length": 0.967742,
+   "pitch": 79,
+   "velocity": 32,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 65.806452,
+   "length": 3.870968,
+   "pitch": 74,
+   "velocity": 32,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "cellos",
+   "start": 69.677419,
+   "length": 1.935484,
+   "pitch": 57,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 69.677419,
+   "length": 0.483871,
+   "pitch": 62,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 70.16129,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 70.645161,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 71.129032,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 71.612903,
+   "length": 0.967742,
+   "pitch": 62,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 71.612903,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 72.096774,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 72.580645,
+   "length": 0.967742,
+   "pitch": 60,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 72.580645,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 73.064516,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 73.548387,
+   "length": 2.903226,
+   "pitch": 57,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 73.548387,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 74.032258,
+   "length": 0.483871,
+   "pitch": 76,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 74.516129,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 75.0,
+   "length": 0.483871,
+   "pitch": 84,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 75.483871,
+   "length": 0.483871,
+   "pitch": 88,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 75.967742,
+   "length": 0.483871,
+   "pitch": 84,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 76.451613,
+   "length": 0.967742,
+   "pitch": 55,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 76.451613,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 76.935484,
+   "length": 0.483871,
+   "pitch": 76,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 77.419355,
+   "length": 1.451613,
+   "pitch": 53,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "deep",
+   "start": 77.419355,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 77.419355,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 77.419355,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 77.419355,
+   "length": 0.483871,
+   "pitch": 67,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 77.903226,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 78.387097,
+   "length": 0.483871,
+   "pitch": 79,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 78.870968,
+   "length": 0.483871,
+   "pitch": 55,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 78.870968,
+   "length": 0.483871,
+   "pitch": 83,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 79.354839,
+   "length": 0.967742,
+   "pitch": 57,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 79.354839,
+   "length": 0.483871,
+   "pitch": 86,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 79.83871,
+   "length": 0.483871,
+   "pitch": 83,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 80.322581,
+   "length": 0.967742,
+   "pitch": 52,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 80.322581,
+   "length": 0.483871,
+   "pitch": 79,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 80.806452,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 81.290323,
+   "length": 3.870968,
+   "pitch": 50,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 81.290323,
+   "length": 0.483871,
+   "pitch": 62,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 81.774194,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 82.258065,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 82.741935,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 83.225806,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 83.709677,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 84.193548,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 84.677419,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 85.16129,
+   "length": 1.935484,
+   "pitch": 57,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 85.16129,
+   "length": 0.483871,
+   "pitch": 65,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 85.645161,
+   "length": 0.483871,
+   "pitch": 72,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 86.129032,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 86.612903,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 87.096774,
+   "length": 0.967742,
+   "pitch": 62,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 87.096774,
+   "length": 0.483871,
+   "pitch": 84,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 87.580645,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 88.064516,
+   "length": 0.967742,
+   "pitch": 64,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 88.064516,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 88.548387,
+   "length": 0.483871,
+   "pitch": 72,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 89.032258,
+   "length": 1.935484,
+   "pitch": 65,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 89.032258,
+   "length": 0.483871,
+   "pitch": 60,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 89.516129,
+   "length": 0.483871,
+   "pitch": 67,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 90.0,
+   "length": 0.483871,
+   "pitch": 72,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 90.483871,
+   "length": 0.483871,
+   "pitch": 76,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 90.967742,
+   "length": 0.967742,
+   "pitch": 64,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 90.967742,
+   "length": 0.483871,
+   "pitch": 79,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 91.451613,
+   "length": 0.483871,
+   "pitch": 76,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 91.935484,
+   "length": 0.967742,
+   "pitch": 62,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 91.935484,
+   "length": 0.483871,
+   "pitch": 72,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 92.419355,
+   "length": 0.483871,
+   "pitch": 67,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 92.903226,
+   "length": 0.967742,
+   "pitch": 60,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "deep",
+   "start": 92.903226,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 92.903226,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 92.903226,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 92.903226,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 92.903226,
+   "length": 1.935484,
+   "pitch": 57,
+   "velocity": 36,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 92.903226,
+   "length": 1.935484,
+   "pitch": 60,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 93.387097,
+   "length": 0.483871,
+   "pitch": 76,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 93.870968,
+   "length": 0.967742,
+   "pitch": 57,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 93.870968,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 94.354839,
+   "length": 0.483871,
+   "pitch": 84,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 94.83871,
+   "length": 0.967742,
+   "pitch": 55,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 94.83871,
+   "length": 0.483871,
+   "pitch": 63,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 94.83871,
+   "length": 1.935484,
+   "pitch": 58,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 94.83871,
+   "length": 1.935484,
+   "pitch": 63,
+   "velocity": 36,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 95.322581,
+   "length": 0.483871,
+   "pitch": 70,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 95.806452,
+   "length": 0.967742,
+   "pitch": 51,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 95.806452,
+   "length": 0.483871,
+   "pitch": 75,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 96.290323,
+   "length": 0.483871,
+   "pitch": 79,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "cellos",
+   "start": 96.774194,
+   "length": 3.870968,
+   "pitch": 50,
+   "velocity": 60,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 96.774194,
+   "length": 0.483871,
+   "pitch": 62,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 96.774194,
+   "length": 5.806452,
+   "pitch": 62,
+   "velocity": 32,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 97.258065,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 97.741935,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 98.225806,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 98.709677,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 99.193548,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 99.677419,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 100.16129,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 100.645161,
+   "length": 0.483871,
+   "pitch": 62,
+   "velocity": 36,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 100.645161,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 44,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 101.129032,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 33,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 101.612903,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 33,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 102.096774,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 102.580645,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 39,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 103.064516,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 35,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 103.548387,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 36,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 104.032258,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 37,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 104.516129,
+   "length": 0.483871,
+   "pitch": 62,
+   "velocity": 42,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 104.516129,
+   "length": 11.612903,
+   "pitch": 57,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 105.0,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 38,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 105.483871,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 39,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 105.967742,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 106.451613,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 44,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 106.935484,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 41,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 107.419355,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 42,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 107.903226,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 42,
+   "motif": null
+  },
+  {
+   "lane": "deep",
+   "start": 108.387097,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 108.387097,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 108.387097,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "horn",
+   "start": 108.387097,
+   "length": 7.741935,
+   "pitch": 57,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 108.387097,
+   "length": 0.483871,
+   "pitch": 62,
+   "velocity": 47,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 108.387097,
+   "length": 7.741935,
+   "pitch": 62,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 108.870968,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 44,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 109.354839,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 44,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 109.83871,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 45,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 110.322581,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 110.322581,
+   "length": 5.806452,
+   "pitch": 65,
+   "velocity": 52,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 110.806452,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 111.290323,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 47,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 111.774194,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 48,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 112.258065,
+   "length": 0.483871,
+   "pitch": 62,
+   "velocity": 52,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 112.258065,
+   "length": 3.870968,
+   "pitch": 69,
+   "velocity": 56,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 112.741935,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 49,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 113.225806,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 113.709677,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 51,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 114.193548,
+   "length": 0.483871,
+   "pitch": 81,
+   "velocity": 55,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 114.677419,
+   "length": 0.483871,
+   "pitch": 77,
+   "velocity": 52,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 115.16129,
+   "length": 0.483871,
+   "pitch": 74,
+   "velocity": 53,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 115.645161,
+   "length": 0.483871,
+   "pitch": 69,
+   "velocity": 53,
+   "motif": null
+  },
+  {
+   "lane": "horn",
+   "start": 116.129032,
+   "length": 7.741935,
+   "pitch": 62,
+   "velocity": 52,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 116.129032,
+   "length": 1.935484,
+   "pitch": 81,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 116.129032,
+   "length": 27.096774,
+   "pitch": 38,
+   "velocity": 54,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 116.129032,
+   "length": 3.870968,
+   "pitch": 50,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 116.129032,
+   "length": 3.870968,
+   "pitch": 57,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 116.129032,
+   "length": 3.870968,
+   "pitch": 65,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ-tune",
+   "start": 116.129032,
+   "length": 1.935484,
+   "pitch": 69,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 118.064516,
+   "length": 0.967742,
+   "pitch": 86,
+   "velocity": 46,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 118.064516,
+   "length": 0.967742,
+   "pitch": 74,
+   "velocity": 72,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 119.032258,
+   "length": 0.967742,
+   "pitch": 84,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 119.032258,
+   "length": 0.967742,
+   "pitch": 72,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 120.0,
+   "length": 2.903226,
+   "pitch": 81,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 120.0,
+   "length": 3.870968,
+   "pitch": 48,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 120.0,
+   "length": 3.870968,
+   "pitch": 55,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 120.0,
+   "length": 3.870968,
+   "pitch": 64,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ-tune",
+   "start": 120.0,
+   "length": 2.903226,
+   "pitch": 69,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 122.903226,
+   "length": 0.967742,
+   "pitch": 79,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 122.903226,
+   "length": 0.967742,
+   "pitch": 67,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "deep",
+   "start": 123.870968,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 123.870968,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 123.870968,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "horn",
+   "start": 123.870968,
+   "length": 3.870968,
+   "pitch": 60,
+   "velocity": 52,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 123.870968,
+   "length": 1.451613,
+   "pitch": 77,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 123.870968,
+   "length": 3.870968,
+   "pitch": 53,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 123.870968,
+   "length": 3.870968,
+   "pitch": 60,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 123.870968,
+   "length": 3.870968,
+   "pitch": 69,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ-tune",
+   "start": 123.870968,
+   "length": 1.451613,
+   "pitch": 65,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 125.322581,
+   "length": 0.483871,
+   "pitch": 79,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 125.322581,
+   "length": 0.483871,
+   "pitch": 67,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 125.806452,
+   "length": 0.967742,
+   "pitch": 81,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 125.806452,
+   "length": 0.967742,
+   "pitch": 69,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 126.774194,
+   "length": 0.967742,
+   "pitch": 76,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 126.774194,
+   "length": 0.967742,
+   "pitch": 64,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "horn",
+   "start": 127.741935,
+   "length": 3.870968,
+   "pitch": 57,
+   "velocity": 52,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 127.741935,
+   "length": 3.870968,
+   "pitch": 74,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 127.741935,
+   "length": 3.870968,
+   "pitch": 50,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 127.741935,
+   "length": 3.870968,
+   "pitch": 57,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 127.741935,
+   "length": 3.870968,
+   "pitch": 65,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ-tune",
+   "start": 127.741935,
+   "length": 3.870968,
+   "pitch": 62,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "horn",
+   "start": 131.612903,
+   "length": 7.741935,
+   "pitch": 62,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 131.612903,
+   "length": 1.935484,
+   "pitch": 81,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 131.612903,
+   "length": 3.870968,
+   "pitch": 50,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 131.612903,
+   "length": 3.870968,
+   "pitch": 57,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 131.612903,
+   "length": 3.870968,
+   "pitch": 65,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ-tune",
+   "start": 131.612903,
+   "length": 1.935484,
+   "pitch": 69,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 133.548387,
+   "length": 0.967742,
+   "pitch": 86,
+   "velocity": 46,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 133.548387,
+   "length": 0.967742,
+   "pitch": 74,
+   "velocity": 72,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 134.516129,
+   "length": 0.967742,
+   "pitch": 88,
+   "velocity": 46,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 134.516129,
+   "length": 0.967742,
+   "pitch": 76,
+   "velocity": 72,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 135.483871,
+   "length": 1.935484,
+   "pitch": 89,
+   "velocity": 46,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 135.483871,
+   "length": 3.870968,
+   "pitch": 53,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 135.483871,
+   "length": 3.870968,
+   "pitch": 60,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 135.483871,
+   "length": 3.870968,
+   "pitch": 69,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ-tune",
+   "start": 135.483871,
+   "length": 1.935484,
+   "pitch": 77,
+   "velocity": 72,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 137.419355,
+   "length": 0.967742,
+   "pitch": 88,
+   "velocity": 46,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 137.419355,
+   "length": 0.967742,
+   "pitch": 76,
+   "velocity": 72,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 138.387097,
+   "length": 0.967742,
+   "pitch": 86,
+   "velocity": 46,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 138.387097,
+   "length": 0.967742,
+   "pitch": 74,
+   "velocity": 72,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "deep",
+   "start": 139.354839,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 139.354839,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 139.354839,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "horn",
+   "start": 139.354839,
+   "length": 1.935484,
+   "pitch": 60,
+   "velocity": 56,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 139.354839,
+   "length": 0.967742,
+   "pitch": 84,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 139.354839,
+   "length": 1.935484,
+   "pitch": 48,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 139.354839,
+   "length": 1.935484,
+   "pitch": 55,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 139.354839,
+   "length": 1.935484,
+   "pitch": 64,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ-tune",
+   "start": 139.354839,
+   "length": 0.967742,
+   "pitch": 72,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 140.322581,
+   "length": 0.967742,
+   "pitch": 81,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 140.322581,
+   "length": 0.967742,
+   "pitch": 69,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "horn",
+   "start": 141.290323,
+   "length": 1.935484,
+   "pitch": 63,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 141.290323,
+   "length": 0.967742,
+   "pitch": 79,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 141.290323,
+   "length": 1.935484,
+   "pitch": 51,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 141.290323,
+   "length": 1.935484,
+   "pitch": 58,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 141.290323,
+   "length": 1.935484,
+   "pitch": 67,
+   "velocity": 58,
+   "motif": null
+  },
+  {
+   "lane": "organ-tune",
+   "start": 141.290323,
+   "length": 0.967742,
+   "pitch": 67,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 142.258065,
+   "length": 0.967742,
+   "pitch": 75,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ-tune",
+   "start": 142.258065,
+   "length": 0.967742,
+   "pitch": 63,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "horn",
+   "start": 143.225806,
+   "length": 7.741935,
+   "pitch": 66,
+   "velocity": 60,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 143.225806,
+   "length": 3.870968,
+   "pitch": 74,
+   "velocity": 40,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 143.225806,
+   "length": 11.612903,
+   "pitch": 50,
+   "velocity": 64,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 143.225806,
+   "length": 11.612903,
+   "pitch": 57,
+   "velocity": 64,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 143.225806,
+   "length": 11.612903,
+   "pitch": 62,
+   "velocity": 64,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 143.225806,
+   "length": 11.612903,
+   "pitch": 66,
+   "velocity": 64,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 143.225806,
+   "length": 11.612903,
+   "pitch": 69,
+   "velocity": 64,
+   "motif": null
+  },
+  {
+   "lane": "organ-tune",
+   "start": 143.225806,
+   "length": 3.870968,
+   "pitch": 62,
+   "velocity": 66,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "deep",
+   "start": 154.83871,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 154.83871,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 154.83871,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 154.83871,
+   "length": 3.870968,
+   "pitch": 81,
+   "velocity": 36,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "organ",
+   "start": 154.83871,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 154.83871,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 154.83871,
+   "length": 15.483871,
+   "pitch": 65,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "horn",
+   "start": 158.709677,
+   "length": 3.870968,
+   "pitch": 57,
+   "velocity": 36,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 158.709677,
+   "length": 1.935484,
+   "pitch": 86,
+   "velocity": 34,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 160.645161,
+   "length": 1.935484,
+   "pitch": 84,
+   "velocity": 32,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "horn",
+   "start": 162.580645,
+   "length": 7.741935,
+   "pitch": 62,
+   "velocity": 34,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 162.580645,
+   "length": 5.806452,
+   "pitch": 81,
+   "velocity": 32,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "lyre",
+   "start": 168.387097,
+   "length": 1.935484,
+   "pitch": 79,
+   "velocity": 30,
+   "motif": "ariadne"
+  },
+  {
+   "lane": "deep",
+   "start": 170.322581,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 170.322581,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 170.322581,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 178.064516,
+   "length": 19.354839,
+   "pitch": 50,
+   "velocity": 30,
+   "motif": null
+  },
+  {
+   "lane": "organ",
+   "start": 180.0,
+   "length": 17.419355,
+   "pitch": 57,
+   "velocity": 28,
+   "motif": null
+  },
+  {
+   "lane": "deep",
+   "start": 185.806452,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 185.806452,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 185.806452,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 185.806452,
+   "length": 5.806452,
+   "pitch": 50,
+   "velocity": 30,
+   "motif": null
+  },
+  {
+   "lane": "deep",
+   "start": 201.290323,
+   "length": 15.483871,
+   "pitch": 38,
+   "velocity": 50,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 201.290323,
+   "length": 15.483871,
+   "pitch": 50,
+   "velocity": 46,
+   "motif": null
+  },
+  {
+   "lane": "drone",
+   "start": 201.290323,
+   "length": 15.483871,
+   "pitch": 57,
+   "velocity": 40,
+   "motif": null
+  },
+  {
+   "lane": "lyre",
+   "start": 201.290323,
+   "length": 5.806452,
+   "pitch": 45,
+   "velocity": 28,
+   "motif": null
+  }
+ ],
+ "energy": [
+  [
+   0.0,
+   0.12
+  ],
+  [
+   23.225806,
+   0.3
+  ],
+  [
+   54.193548,
+   0.25
+  ],
+  [
+   69.677419,
+   0.4
+  ],
+  [
+   100.645161,
+   0.5
+  ],
+  [
+   116.129032,
+   0.75
+  ],
+  [
+   131.612903,
+   0.95
+  ],
+  [
+   147.096774,
+   0.6
+  ],
+  [
+   170.322581,
+   0.25
+  ],
+  [
+   197.419355,
+   0.12
+  ],
+  [
+   216.774194,
+   0.12
+  ]
+ ],
+ "glossary": [
+  {
+   "term": "drone",
+   "from": 0.0,
+   "to": 9.677419
+  },
+  {
+   "term": "motif",
+   "from": 23.225806,
+   "to": 36.774194
+  },
+  {
+   "term": "orchestration",
+   "from": 69.677419,
+   "to": 81.290323
+  },
+  {
+   "term": "ostinato",
+   "from": 77.419355,
+   "to": 89.032258
+  },
+  {
+   "term": "crescendo",
+   "from": 100.645161,
+   "to": 114.193548
+  },
+  {
+   "term": "swell",
+   "from": 104.516129,
+   "to": 118.064516
+  },
+  {
+   "term": "theme",
+   "from": 116.129032,
+   "to": 129.677419
+  },
+  {
+   "term": "phrygian",
+   "from": 139.354839,
+   "to": 143.225806
+  },
+  {
+   "term": "cadence",
+   "from": 139.354839,
+   "to": 150.967742
+  },
+  {
+   "term": "pedal-point",
+   "from": 170.322581,
+   "to": 181.935484
+  }
+ ],
+ "audio": [
+  {
+   "file": "audio.webm",
+   "type": "audio/webm; codecs=opus"
+  }
+ ],
+ "spectrogram": {
+  "file": "spectrogram.png",
+  "low_hz": 20,
+  "high_hz": 12000,
+  "scale": "log"
+ },
+ "musicxml": "score.musicxml",
+ "changes": [
+  {
+   "from_bar": 1,
+   "to_bar": 56,
+   "lane": null,
+   "answers": [],
+   "text": "Same music as draft 2; the sheet music now shows."
+  }
+ ]
+}

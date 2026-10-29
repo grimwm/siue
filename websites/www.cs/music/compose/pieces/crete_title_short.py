@@ -114,5 +114,13 @@ def sketch(piece_id: str, title: str) -> Piece:
     )
 
 
+CHANGES = {
+    2: [
+        {"from_bar": 1, "to_bar": 16, "lane": None, "answers": [],
+         "text": "Same music as draft 1; the sheet music now shows."},
+    ],
+}
+
+
 def compose(draft: int) -> Piece:
     return sketch("crete-title-short", "Crete: title theme (short)")

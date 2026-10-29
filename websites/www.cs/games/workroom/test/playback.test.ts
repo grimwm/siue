@@ -167,7 +167,7 @@ test('pausing cancels the Player\'s pending frame', async () => {
 
 // --- Sheet ---
 
-const lanes = ['a', 'b'].map(id => ({ id, name: id, family: 'strings' as const, icon: 'strings' as const, color: '#112233' }));
+const lanes = ['a', 'b'].map(id => ({ id, name: `Lane ${id}`, family: 'strings' as const, icon: 'strings' as const, color: '#112233' }));
 const settle = async (): Promise<void> => { for (let i = 0; i < 6; i++) await act(() => new Promise<void>(r => setImmediate(r))); };
 
 test('switching lanes twice leaves one drawing, and leaving the view removes the resize listener', async () => {
@@ -181,7 +181,7 @@ test('switching lanes twice leaves one drawing, and leaving the view removes the
         load: async () => {},
         render: () => { const svg = stubDocument.createElement('svg'); (host as unknown as StubElement).appendChild(svg); },
         clear: () => {},
-      }), win, (_x, lane) => { shown.push(lane); return ''; }),
+      }), win, (_x, lane, name) => { shown.push(`${lane} ${name}`); return ''; }),
     }),
   };
   const root = makeEl('root');
@@ -195,7 +195,7 @@ test('switching lanes twice leaves one drawing, and leaving the view removes the
   await settle();
   await act(() => { render(h(ui.sheet.SheetMusic, props('a')), renderTarget(root)); });
   await settle();
-  assert.deepEqual(shown, ['a', 'b', 'a']);
+  assert.deepEqual(shown, ['a Lane a', 'b Lane b', 'a Lane a'], 'each lane is drawn by its id, with its name for parts a notation program numbered');
   assert.equal(sheet.children.length, 1, 'one drawing after two lane switches');
   assert.equal(listeners.size, 1);
   assert.doesNotMatch(root.textContent, /Loading sheet music/);

@@ -59,3 +59,12 @@ test('a score laid out by time is refused in plain words', () => {
   const timewise = '<?xml version="1.0"?><score-timewise version="3.1"><part-list><score-part id="brass"/></part-list><measure number="1"><part id="brass"/></measure></score-timewise>';
   assert.throws(() => onlyLane(timewise, 'brass'), /laid out by time.*instrument/);
 });
+
+test('a part named P1, P2 by its notation program is found by the lane name instead', () => {
+  const numbered = xml.replace(/strings-low/g, 'P1').replace(/brass/g, 'P2');
+  const out = onlyLane(numbered, 'brass', 'Brass');
+  assert.match(out, /<score-part id='P2'><part-name>Brass<\/part-name>/);
+  assert.match(out, /<part id='P2'>[\s\S]*<step>G<\/step>/);
+  assert.doesNotMatch(out, /Low strings|<step>C<\/step>/);
+  assert.throws(() => onlyLane(numbered, 'harp', 'Harp'), /no part for harp/);
+});

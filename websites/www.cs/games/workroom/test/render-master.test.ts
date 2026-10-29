@@ -2,7 +2,7 @@
 // the BS.1770 loudness, the one leveling gain and the WAV file.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fold, levelGain, loudnessLufs, pinkHiss, reverbIR, wav } from '../src/render/master.ts';
+import { fold, hissSource, levelGain, loudnessLufs, pinkHiss, reverbIR, wav } from '../src/render/master.ts';
 
 const RATE = 48000;
 const sine = (seconds: number, peak: number, hz = 1000): Float32Array => Float32Array.from({ length: Math.round(seconds * RATE) }, (_, i) => peak * Math.sin((2 * Math.PI * hz * i) / RATE));
@@ -13,13 +13,13 @@ const rms = (x: Float32Array, from: number, to: number): number => {
 };
 const db = (v: number): number => 10 ** (v / 20);
 
-test('fold cuts to the length and adds everything after it onto the start, as often as it wraps', () => {
+test('fold cuts to the length and adds everything after it onto the start, as often as it wraps, in place', () => {
   const ch = [Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), Float32Array.from([10, 20, 30, 40, 50, 60, 70, 80, 90, 100])];
   const out = fold(ch, 4);
   assert.deepEqual([...out[0]!], [1 + 5 + 9, 2 + 6 + 10, 3 + 7, 4 + 8]);
   assert.deepEqual([...out[1]!], [150, 180, 100, 120]);
+  out.forEach((c, i) => assert.equal(c.buffer, ch[i]!.buffer, 'the fold is the input\'s own memory, not a copy'));
   assert.deepEqual([...fold([Float32Array.from([1, 2])], 4)[0]!], [1, 2, 0, 0], 'a short input is padded with silence');
-  assert.deepEqual([...ch[0]!], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 'the input is left alone');
 });
 
 test('the hall IR is stereo, peaks at 0.5, fades in, decays and is the same for the same seed', () => {
@@ -39,22 +39,24 @@ test('the hall IR is stereo, peaks at 0.5, fades in, decays and is the same for 
   assert.notDeepEqual(reverbIR(4.5, RATE, 8)[0], ir[0]);
 });
 
-test('the hiss is quiet pink noise, the same in both channels, and the same for the same seed', () => {
+test('the hiss is quiet pink noise, one channel, and the same for the same seed', () => {
   const h = pinkHiss(RATE * 2, RATE, 3);
-  assert.equal(h.length, 2);
-  assert.equal(h[0]!.length, RATE * 2);
-  assert.deepEqual(h[0], h[1]);
-  const top = h[0]!.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+  assert.ok(h instanceof Float32Array);
+  assert.equal(h.length, RATE * 2);
+  const top = h.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
   assert.ok(top > 0 && top < 0.0015, `peak ${top}`);
   assert.deepEqual(pinkHiss(RATE * 2, RATE, 3), h);
-  assert.notDeepEqual(pinkHiss(RATE * 2, RATE, 4)[0], h[0]);
+  assert.notDeepEqual(pinkHiss(RATE * 2, RATE, 4), h);
+  const next = hissSource(RATE, 3);
+  assert.deepEqual(Float32Array.from({ length: RATE * 2 }, next), h, 'the source gives the same samples one at a time');
 });
 
 // render.py makes the hiss in mono and upmixes it with ffmpeg's -ac 2, which puts a mono channel into each of left and
-// right at 1/√2: its hiss.wav measures 0.000188 RMS per channel, against 0.000261 for the mono noise.
-test('the hiss is upmixed as ffmpeg upmixes mono: 0.000188 RMS in each channel', () => {
+// right at 1/√2: its hiss.wav measures 0.000188 RMS per channel, against 0.000261 for the mono noise. The engine adds
+// this one channel to both.
+test('the hiss is at the level ffmpeg upmixes mono to: 0.000188 RMS, the level of each stereo channel', () => {
   const h = pinkHiss(RATE * 10, RATE, 3);
-  const level = rms(h[0]!, 0, h[0]!.length);
+  const level = rms(h, 0, h.length);
   assert.ok(Math.abs(level / 0.000188 - 1) < 0.05, `RMS ${level}`);
 });
 

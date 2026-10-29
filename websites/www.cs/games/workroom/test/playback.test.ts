@@ -285,6 +285,25 @@ test('a draft is built once and kept in memory: the library and each draft rende
   assert.deepEqual(stages, ['instruments', 'rendering', 'instruments', 'rendering', 'finishing']);
 });
 
+test('once the WAV is made, the built sound keeps one channel, the mix, in the left channel\'s own memory', async () => {
+  const left = Float32Array.from([0.1, 0.2, -0.4, 0]);
+  const right = Float32Array.from([0.3, 0.2, 0, 0.5]);
+  const [l0, r0] = [[...left], [...right]];
+  let bytes: Uint8Array | null = null;
+  const build = soundBuilder({
+    library: async () => library,
+    load: async () => {},
+    render: async () => ({ channels: [left, right], rate: 48000 }),
+    url: b => { bytes = b; return 'blob:x'; },
+  });
+  const built = await build('mix/v1', renderable.score, () => {});
+  const v = new DataView(bytes!.buffer);
+  assert.deepEqual([v.getInt16(44, true), v.getInt16(46, true)], [Math.round(0.1 * 32767), Math.round(0.3 * 32767)], 'the WAV is the stereo audio');
+  assert.equal(built.channels.length, 1);
+  assert.equal(built.channels[0], left, 'no new array: the mix is written over the left channel');
+  assert.deepEqual([...built.channels[0]!], l0.map((x, i) => Math.fround(Math.fround(x / 2) + r0[i]! / 2)), 'the mean, summed as the sound picture sums it');
+});
+
 test('a failed library fetch is tried again by the next build', async () => {
   let tries = 0;
   const build = soundBuilder({

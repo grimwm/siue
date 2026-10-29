@@ -61,3 +61,24 @@ test('stereo is drawn as its mix', () => {
   const mono = spectrum([l.map(v => v / 2)], RATE, { width: 4, height: 40, low_hz: 20, high_hz: 12000 });
   assert.deepEqual(pic.data, mono.data);
 });
+
+test('one channel is drawn as it is, with no copy of it made', () => {
+  const x = tone(1000, 1);
+  const F32 = Float32Array;
+  let big = 0;
+  globalThis.Float32Array = new Proxy(F32, {
+    construct(target, args, newTarget) {
+      const made = Reflect.construct(target, args, newTarget) as Float32Array;
+      if (made.length >= x.length) big++;
+      return made;
+    },
+  });
+  let picture;
+  try {
+    picture = spectrum([x], RATE, { width: 8, height: 32, low_hz: 20, high_hz: 12000 });
+  } finally {
+    globalThis.Float32Array = F32;
+  }
+  assert.equal(big, 0);
+  assert.deepEqual(picture, spectrum([x, x], RATE, { width: 8, height: 32, low_hz: 20, high_hz: 12000 }), 'the same picture as its stereo pair');
+});

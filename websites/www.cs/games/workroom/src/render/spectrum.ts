@@ -76,8 +76,10 @@ function fft(re: Float64Array, im: Float64Array): void {
 export function spectrum(channels: readonly Float32Array[], rate: number, size: SpectrumSize): Picture {
   const { width, height, low_hz, high_hz } = size;
   const length = channels[0]?.length ?? 0;
-  const mono = new Float32Array(length);
-  for (const c of channels) for (let i = 0; i < length; i++) mono[i]! += c[i]! / channels.length;
+  // One channel is its own mix: drawn as it is, with no copy of it.
+  const only = channels.length === 1 ? channels[0]! : null;
+  const mono = only ?? new Float32Array(length);
+  if (!only) for (const c of channels) for (let i = 0; i < length; i++) mono[i]! += c[i]! / channels.length;
   const window = Float64Array.from({ length: FFT_SIZE }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / FFT_SIZE));
   // A full-scale sine through the Hann window peaks at FFT_SIZE / 4.
   const full = FFT_SIZE / 4;

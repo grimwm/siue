@@ -3,12 +3,13 @@
 // and its lane's level; the lanes meet in the lo-fi chain (tanh soft clip, wow and flutter, a 30 Hz high-pass, low-passes
 // at 6.5 and 9 kHz) in one stereo OfflineAudioContext rendered TAIL seconds past the end. render.py's hall is silent
 // (afir=dry=0 scales afir's own input to 0), so its masters are dry and the chain here has no reverb either.
-// Then, in JS, the tail is folded onto the start, the hiss added and the whole piece given one leveling gain.
+// Then, in JS and in the rendered buffer itself, the tail is folded onto the start, the hiss added and the whole
+// piece given one leveling gain.
 // The context, the fetch and the decoder are injected, so the tests hand in fakes.
 import type { Score } from '../score.ts';
 import { voices } from './plan.ts';
 import type { Library } from './plan.ts';
-import { fold, levelGain, pinkHiss } from './master.ts';
+import { fold, hissSource, levelGain } from './master.ts';
 
 export const RATE = 48000;
 export const TAIL = 6; // seconds of release rendered past the end, then folded onto the start
@@ -154,13 +155,13 @@ export async function renderScore(score: Score, lib: Library, deps: RenderDeps =
     src.stop(end);
   }
   const rendered = await ctx.startRendering();
-  const audio = Array.from({ length: rendered.numberOfChannels }, (_, c) => rendered.getChannelData(c));
-  const hiss = pinkHiss(length, RATE, HISS_SEED);
-  const folded = fold(audio, length).map((c, i) => {
-    const h = hiss[i]!;
-    for (let j = 0; j < length; j++) c[j]! += h[j]!;
-    return c;
-  });
+  // From here on the work is in the rendered buffer's own memory: no full-length copy of the piece is made.
+  const folded = fold(Array.from({ length: rendered.numberOfChannels }, (_, c) => rendered.getChannelData(c)), length);
+  const hiss = hissSource(RATE, HISS_SEED);
+  for (let j = 0; j < length; j++) {
+    const h = hiss();
+    for (const c of folded) c[j]! += h;
+  }
   const gain = levelGain(folded, RATE, score.mix?.loudness ?? DEFAULT_LOUDNESS, PEAK_DB);
   for (const c of folded) for (let j = 0; j < length; j++) c[j]! *= gain;
   return { channels: folded, rate: RATE };

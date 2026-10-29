@@ -53,12 +53,21 @@ export function reverbIR(seconds: number, rate: number, seed: number): Float32Ar
   return ir.map(c => Float32Array.from(c, v => (v / peak) * 0.5));
 }
 
-/** The audio cut to `length` with everything after it added onto the start, as often as it wraps, so the loop carries its own tail. */
+/**
+ * The audio cut to `length` with everything after it added onto the start, as often as it wraps, so the loop carries
+ * its own tail. Done in place: each channel comes back as the first `length` samples of its own memory (a channel
+ * shorter than `length` comes back as a padded copy).
+ */
 export function fold(ch: readonly Float32Array[], length: number): Float32Array[] {
   return ch.map(c => {
-    const out = new Float32Array(length);
-    for (let i = 0; i < c.length; i++) out[i % length]! += c[i]!;
-    return out;
+    if (c.length < length) {
+      const out = new Float32Array(length);
+      out.set(c);
+      return out;
+    }
+    // Only samples at `length` and past are read, and only samples before it are written.
+    for (let i = length; i < c.length; i++) c[i % length]! += c[i]!;
+    return c.subarray(0, length);
   });
 }
 
@@ -68,14 +77,14 @@ const HISS_LOWPASS_HZ = 5000;
 /**
  * The tape hiss, as render.py's ffmpeg anoisesrc color=pink amplitude=0.0015, lowpass=f=5000, upmixed to stereo:
  * uniform white noise of that amplitude through Paul Kellet's pink filter (scaled by 0.11 as anoisesrc does), then a
- * two-pole Butterworth low-pass at 5 kHz; the same noise in both channels, each at 1/√2 as ffmpeg's -ac 2 upmixes mono.
+ * two-pole Butterworth low-pass at 5 kHz, at 1/√2 as ffmpeg's -ac 2 puts mono into each channel. One sample per call,
+ * each a float32 value, so the engine adds the same noise to both channels without holding the hiss whole.
  */
-export function pinkHiss(length: number, rate: number, seed: number): Float32Array[] {
+export function hissSource(rate: number, seed: number): () => number {
   const u = uniform(seed);
   const b = [0, 0, 0, 0, 0, 0, 0];
   const lp = biquad(lowpass(HISS_LOWPASS_HZ, rate));
-  const out = new Float32Array(length);
-  for (let i = 0; i < length; i++) {
+  return () => {
     const white = HISS_AMPLITUDE * (2 * u() - 1);
     b[0] = 0.99886 * b[0]! + white * 0.0555179;
     b[1] = 0.99332 * b[1]! + white * 0.0750759;
@@ -85,9 +94,13 @@ export function pinkHiss(length: number, rate: number, seed: number): Float32Arr
     b[5] = -0.7616 * b[5]! - white * 0.016898;
     const pink = b[0]! + b[1]! + b[2]! + b[3]! + b[4]! + b[5]! + b[6]! + white * 0.5362;
     b[6] = white * 0.115926;
-    out[i] = lp(pink * 0.11) * Math.SQRT1_2;
-  }
-  return [out, Float32Array.from(out)];
+    return Math.fround(lp(pink * 0.11) * Math.SQRT1_2);
+  };
+}
+
+/** `length` samples of the hiss: what hissSource gives, as one channel, the level of each stereo channel. */
+export function pinkHiss(length: number, rate: number, seed: number): Float32Array {
+  return Float32Array.from({ length }, hissSource(rate, seed));
 }
 
 /** Biquad coefficients, normalised so a0 is 1. */

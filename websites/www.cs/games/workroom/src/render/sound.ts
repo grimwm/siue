@@ -15,7 +15,10 @@ export const STAGE_WORDS: Record<BuildStage, string> = {
   finishing: 'Making the audio file',
 };
 
-/** url is the WAV's address (a blob URL in the page); channels and rate are the audio it holds, for the sound picture. */
+/**
+ * url is the WAV's address (a blob URL in the page); channels is the audio it holds mixed to one channel (the sound
+ * picture draws the mix), at `rate`.
+ */
 export interface BuiltSound { url: string; channels: Float32Array[]; rate: number }
 /** Where a draft's sound is: being built, ready to play, or failed with the reason. */
 export type DraftSound = { state: 'building'; stage: BuildStage } | ({ state: 'ready' } & BuiltSound) | { state: 'failed'; reason: string };
@@ -32,6 +35,22 @@ export interface SoundPorts {
 
 /** Builds the sound of the draft `key` (piece and version), or hands back the one already built or being built. */
 export type BuildSound = (key: string, score: Score, onStage: (stage: BuildStage) => void) => Promise<BuiltSound>;
+
+/**
+ * The channels' mean, written over the first channel, so the page keeps one channel of the sound for its life and not
+ * all of them. Summed as the sound picture sums a mix, so its picture of this one channel is the picture of them all.
+ */
+function mixInPlace(channels: readonly Float32Array[]): Float32Array {
+  const [first, ...rest] = channels;
+  if (!first) return new Float32Array(0);
+  const n = channels.length;
+  for (let i = 0; i < first.length; i++) {
+    let m = Math.fround(first[i]! / n);
+    for (const c of rest) m = Math.fround(m + c[i]! / n);
+    first[i] = m;
+  }
+  return first;
+}
 
 /** A builder that keeps each draft's sound, and the library index, once made; a failure is forgotten, so the next build tries again. */
 export function soundBuilder(ports: SoundPorts): BuildSound {
@@ -50,7 +69,8 @@ export function soundBuilder(ports: SoundPorts): BuildSound {
     onStage('rendering');
     const { channels, rate } = await ports.render(score, lib);
     onStage('finishing');
-    return { url: ports.url(wav(channels, rate)), channels, rate };
+    const url = ports.url(wav(channels, rate));
+    return { url, channels: [mixInPlace(channels)], rate };
   };
   return (key, score, onStage) => {
     let job = built.get(key);

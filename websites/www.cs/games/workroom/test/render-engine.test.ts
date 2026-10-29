@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadInstruments, renderScore, RATE, TAIL } from '../src/render/engine.ts';
+import { levelGain, pinkHiss } from '../src/render/master.ts';
 import type { RenderDeps } from '../src/render/engine.ts';
 import { voices } from '../src/render/plan.ts';
 import type { Library } from '../src/render/plan.ts';
@@ -47,8 +48,10 @@ class Node {
 }
 
 interface Buf { numberOfChannels: number; length: number; sampleRate: number; duration: number; data: Float32Array[]; getChannelData(c: number): Float32Array; copyToChannel(src: Float32Array, c: number): void }
+/** The Float32Array the fakes allocate with, so a test that counts the engine's allocations does not count theirs. */
+const F32 = Float32Array;
 const buffer = (channels: number, length: number, rate: number): Buf => {
-  const data = Array.from({ length: channels }, () => new Float32Array(length));
+  const data = Array.from({ length: channels }, () => new F32(length));
   return { numberOfChannels: channels, length, sampleRate: rate, duration: length / rate, data, getChannelData: c => data[c]!, copyToChannel: (src, c) => data[c]!.set(src) };
 };
 
@@ -58,6 +61,9 @@ class FakeContext {
   channels: number;
   length: number;
   sampleRate: number;
+  /** What startRendering hands back; `signal` fills it, or it is silence. */
+  rendered: Buf | null = null;
+  signal: ((channel: number, i: number) => number) | null = null;
   constructor(channels: number, length: number, sampleRate: number) { this.channels = channels; this.length = length; this.sampleRate = sampleRate; }
   private add(n: Node): Node { this.nodes.push(n); return n; }
   createBufferSource(): Node { return this.add(new Node('source', { buffer: null, loop: false, loopStart: 0, loopEnd: 0, playbackRate: new Param(1) })); }
@@ -68,17 +74,23 @@ class FakeContext {
   createBiquadFilter(): Node { return this.add(new Node('biquad', { type: 'lowpass', frequency: new Param(350), Q: new Param(1) })); }
   createConvolver(): Node { return this.add(new Node('convolver', { buffer: null, normalize: true })); }
   createBuffer(channels: number, length: number, rate: number): Buf { return buffer(channels, length, rate); }
-  async startRendering(): Promise<Buf> { return buffer(this.channels, this.length, this.sampleRate); }
+  async startRendering(): Promise<Buf> {
+    const b = buffer(this.channels, this.length, this.sampleRate);
+    const signal = this.signal;
+    if (signal) b.data.forEach((c, k) => { for (let i = 0; i < c.length; i++) c[i] = signal(k, i); });
+    this.rendered = b;
+    return b;
+  }
 }
 
-/** Deps with a recording context; `fetched` lists the files asked for; `fail` makes that file's fetch reject. */
-const deps = (fail?: string): { deps: RenderDeps; contexts: FakeContext[]; fetched: string[] } => {
+/** Deps with a recording context; `fetched` lists the files asked for; `fail` makes that file's fetch reject; `signal` is what the render plays. */
+const deps = (fail?: string, signal?: (channel: number, i: number) => number): { deps: RenderDeps; contexts: FakeContext[]; fetched: string[] } => {
   const contexts: FakeContext[] = [];
   const fetched: string[] = [];
   return {
     contexts, fetched,
     deps: {
-      context: (channels, length, rate) => { const c = new FakeContext(channels, length, rate); contexts.push(c); return c as unknown as OfflineAudioContext; },
+      context: (channels, length, rate) => { const c = new FakeContext(channels, length, rate); c.signal = signal ?? null; contexts.push(c); return c as unknown as OfflineAudioContext; },
       fetchBytes: async file => { fetched.push(file); if (file === fail) throw new Error('404'); return new ArrayBuffer(8); },
       decode: async () => buffer(2, RATE * 10, RATE) as unknown as AudioBuffer,
       cache: new Map(),
@@ -182,6 +194,63 @@ test('renders the duration plus the 6 s tail in stereo, then folds it to the dur
   assert.equal(out.channels.length, 2);
   for (const c of out.channels) assert.equal(c.length, Math.round(s.duration * RATE));
   assert.ok(out.channels[0]!.some(v => v !== 0), 'the hiss is on');
+});
+
+/** A stereo signal with a tail worth folding: the channels differ, and it runs on past the duration. */
+const playing = (channel: number, i: number): number => 0.3 * Math.sin(i * (0.01 + 0.003 * channel)) * Math.exp(-i / (RATE * 20));
+
+// The master after the render, written out the long way: the tail added onto a copy of the start, the hiss's own
+// stereo pair added (the same noise in each, at 1/√2), then one gain. The engine must give these numbers.
+test('after the render: the tail folded onto the start, the same hiss in both channels, one leveling gain', async () => {
+  const s = score();
+  const { deps: d, contexts } = deps(undefined, playing);
+  const out = await renderScore(s, LIBRARY, d);
+  const length = Math.round(s.duration * RATE);
+  const rendered = contexts[0]!.rendered!;
+  const hiss = pinkHiss(length, RATE, 3);
+  const want = [0, 1].map(k => {
+    const full = Float32Array.from({ length: length + TAIL * RATE }, (_, i) => playing(k, i));
+    const c = new Float32Array(length);
+    for (let i = 0; i < full.length; i++) c[i % length]! += full[i]!;
+    for (let i = 0; i < length; i++) c[i]! += hiss[i]!;
+    return c;
+  });
+  const gain = levelGain(want, RATE, s.mix?.loudness ?? -20, -3);
+  for (const c of want) for (let i = 0; i < length; i++) c[i]! *= gain;
+  out.channels.forEach((c, k) => {
+    assert.equal(c.length, length);
+    for (let i = 0; i < length; i++) if (c[i] !== want[k]![i]) assert.fail(`channel ${k} sample ${i}: ${c[i]} is not ${want[k]![i]}`);
+    assert.equal(c.buffer, rendered.data[k]!.buffer, 'the output is the rendered buffer\'s own memory');
+  });
+});
+
+test('a silent render comes back as the hiss alone, the same in both channels', async () => {
+  const s = score();
+  const { deps: d } = deps();
+  const out = await renderScore(s, LIBRARY, d);
+  assert.deepEqual(out.channels[0], out.channels[1]);
+  assert.ok(out.channels[0]!.some(v => v !== 0));
+});
+
+test('the master after the render makes no full-length arrays of its own: the fold, hiss and gain work in the rendered buffer', async () => {
+  const s = score();
+  const length = Math.round(s.duration * RATE);
+  const { deps: d } = deps(undefined, playing);
+  const big: number[] = [];
+  const counting = new Proxy(F32, {
+    construct(target, args, newTarget) {
+      const made = Reflect.construct(target, args, newTarget) as Float32Array;
+      if (made.length >= length) big.push(made.length);
+      return made;
+    },
+  });
+  globalThis.Float32Array = counting;
+  try {
+    await renderScore(s, LIBRARY, d);
+  } finally {
+    globalThis.Float32Array = F32;
+  }
+  assert.deepEqual(big, [], 'no Float32Array as long as the piece');
 });
 
 test('each needed file is fetched once and decoded once, across renders', async () => {

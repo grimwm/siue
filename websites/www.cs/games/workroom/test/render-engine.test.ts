@@ -135,7 +135,7 @@ test('each voice has an envelope: a linear attack to its level, a hold, and a li
   });
 });
 
-test('the graph reaches the destination through the master chain in order, the reverb beside the dry signal', async () => {
+test('the graph reaches the destination through the master chain in order, with no reverb', async () => {
   const { deps: d, contexts } = deps();
   await renderScore(score(), LIBRARY, d);
   const ctx = contexts[0]!;
@@ -151,8 +151,8 @@ test('the graph reaches the destination through the master chain in order, the r
   });
   const chain = chains[0]!;
   for (const c of chains) assert.deepEqual(c, chain, 'every lane feeds the same chain');
-  assert.deepEqual(chain.map(describe), ['gain', 'shaper', 'delay', 'highpass 30', 'lowpass 6500', 'lowpass 9000']);
-  const [drive, shaper, delay, highpass, lowpass] = chain as [Node, Node, Node, Node, Node, Node];
+  assert.deepEqual(chain.map(describe), ['gain', 'shaper', 'delay', 'highpass 30', 'lowpass 6500', 'lowpass 9000', 'destination']);
+  const [drive, shaper, delay, highpass, lowpass] = chain as [Node, Node, Node, Node, Node, Node, Node];
   // tanh soft clip: the gain ahead of the shaper scales the input into the curve's [-1, 1].
   const curve = shaper['curve'] as Float32Array;
   const k = 1 / param(drive, 'gain').value;
@@ -166,18 +166,9 @@ test('the graph reaches the destination through the master chain in order, the r
   for (const o of lfos) assert.equal(o.started, 0);
   assert.ok(param(delay, 'delayTime').value > 0);
   for (const f of [highpass, lowpass]) assert.ok(Math.abs(param(f, 'Q').value - 20 * Math.log10(Math.SQRT1_2)) < 1e-9, 'two-pole Butterworth');
-  // The last low-pass splits: dry straight to the destination, wet through the hall at 0.55.
-  const last = chain[5]!;
-  assert.equal(last.out.length, 2);
-  assert.ok(last.out.includes(ctx.destination));
-  const conv = last.out.find(n => n !== ctx.destination) as Node;
-  assert.equal(conv.kind, 'convolver');
-  assert.equal(conv['normalize'], false);
-  assert.equal((conv['buffer'] as Buf).length, 4.5 * RATE);
-  const wet = conv.out[0] as Node;
-  assert.equal(wet.kind, 'gain');
-  assert.equal(param(wet, 'gain').value, 0.55);
-  assert.deepEqual(wet.out, [ctx.destination]);
+  assert.equal(chain[5]!.out.length, 1);
+  assert.equal(chain[6], ctx.destination, 'the last low-pass feeds the destination, dry only');
+  assert.ok(!ctx.nodes.some(n => n.kind === 'convolver'), 'no hall: render.py\'s afir=dry=0 is silent');
 });
 
 test('renders the duration plus the 6 s tail in stereo, then folds it to the duration', async () => {

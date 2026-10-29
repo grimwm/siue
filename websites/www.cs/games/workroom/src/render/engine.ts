@@ -1,22 +1,20 @@
 // The render engine: a renderable score to stereo audio in the browser, the way the composing pipeline
 // (music/compose/siue_compose/render.py) makes its master. Each note plays its library sample through an envelope
 // and its lane's level; the lanes meet in the lo-fi chain (tanh soft clip, wow and flutter, a 30 Hz high-pass, low-passes
-// at 6.5 and 9 kHz, the hall beside the dry signal) in one stereo OfflineAudioContext rendered TAIL seconds past the
-// end. Then, in JS, the tail is folded onto the start, the hiss added and the whole piece given one leveling gain.
+// at 6.5 and 9 kHz) in one stereo OfflineAudioContext rendered TAIL seconds past the end. render.py's hall is silent
+// (afir=dry=0 scales afir's own input to 0), so its masters are dry and the chain here has no reverb either.
+// Then, in JS, the tail is folded onto the start, the hiss added and the whole piece given one leveling gain.
 // The context, the fetch and the decoder are injected, so the tests hand in fakes.
 import type { Score } from '../score.ts';
 import { voices } from './plan.ts';
 import type { Library } from './plan.ts';
-import { fold, levelGain, pinkHiss, reverbIR } from './master.ts';
+import { fold, levelGain, pinkHiss } from './master.ts';
 
 export const RATE = 48000;
-export const TAIL = 6; // seconds of reverb and release rendered past the end, then folded onto the start
+export const TAIL = 6; // seconds of release rendered past the end, then folded onto the start
 const PEAK_DB = -3;
 const DEFAULT_LOUDNESS = -20; // LUFS, when the score has no mix
-const IR_SECONDS = 4.5;
-const IR_SEED = 7;
 const HISS_SEED = 3;
-const WET = 0.55; // the hall's weight beside the dry signal's 1
 /** The library's folder beside the workroom page (music/library/ next to music/index.php). */
 export const LIBRARY_BASE = 'library/';
 
@@ -86,22 +84,6 @@ const WOBBLE: readonly { hz: number; depth: number }[] = [{ hz: 0.45, depth: 0.0
 /** ffmpeg's highpass and lowpass default to two poles at Q 0.7071; a BiquadFilterNode's Q for these types is in dB. */
 const BUTTERWORTH_Q_DB = 20 * Math.log10(Math.SQRT1_2);
 
-/**
- * render.py convolves with afir=dry=0:wet=10. afir's dry gain scales its input, so dry=0 silences the hall there; the
- * intent is the hall at wet 10 mixed in at 0.55. afir by default scales the IR to unit L1 norm, one gain for both
- * channels from the larger channel's norm, then by wet: the hall here is reverbIR * 10 / max-channel L1, unnormalised
- * by the ConvolverNode, through a gain of WET.
- */
-const AFIR_WET = 10;
-
-function hall(ctx: OfflineAudioContext): AudioBuffer {
-  const ir = reverbIR(IR_SECONDS, RATE, IR_SEED);
-  const l1 = Math.max(...ir.map(c => c.reduce((s, v) => s + Math.abs(v), 0)));
-  const buf = ctx.createBuffer(2, ir[0]!.length, RATE);
-  ir.forEach((c, i) => buf.copyToChannel(Float32Array.from(c, v => (v * AFIR_WET) / l1), i));
-  return buf;
-}
-
 /** The master chain from its input to the destination; returns the node the lanes connect to. */
 function masterChain(ctx: OfflineAudioContext): AudioNode {
   const drive = ctx.createGain();
@@ -128,14 +110,7 @@ function masterChain(ctx: OfflineAudioContext): AudioNode {
     f.Q.value = BUTTERWORTH_Q_DB;
     return f;
   };
-  const dry = drive.connect(clip).connect(wobble).connect(filter('highpass', 30)).connect(filter('lowpass', 6500)).connect(filter('lowpass', 9000));
-  dry.connect(ctx.destination);
-  const reverb = ctx.createConvolver();
-  reverb.normalize = false;
-  reverb.buffer = hall(ctx);
-  const wet = ctx.createGain();
-  wet.gain.value = WET;
-  dry.connect(reverb).connect(wet).connect(ctx.destination);
+  drive.connect(clip).connect(wobble).connect(filter('highpass', 30)).connect(filter('lowpass', 6500)).connect(filter('lowpass', 9000)).connect(ctx.destination);
   return drive;
 }
 
@@ -179,9 +154,9 @@ export async function renderScore(score: Score, lib: Library, deps: RenderDeps =
     src.stop(end);
   }
   const rendered = await ctx.startRendering();
-  const wet = Array.from({ length: rendered.numberOfChannels }, (_, c) => rendered.getChannelData(c));
+  const audio = Array.from({ length: rendered.numberOfChannels }, (_, c) => rendered.getChannelData(c));
   const hiss = pinkHiss(length, RATE, HISS_SEED);
-  const folded = fold(wet, length).map((c, i) => {
+  const folded = fold(audio, length).map((c, i) => {
     const h = hiss[i]!;
     for (let j = 0; j < length; j++) c[j]! += h[j]!;
     return c;

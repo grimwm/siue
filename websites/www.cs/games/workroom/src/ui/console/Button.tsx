@@ -1,5 +1,6 @@
 // The console's button: primary (amber), secondary, ghost and record (red);
-// at least 44 px square.
+// at least 44 px square. A pressed secondary or ghost toggle is filled amber,
+// like a pressed chip.
 import type { ComponentChildren, Ref } from 'preact';
 import { cx } from './cx.ts';
 
@@ -10,6 +11,7 @@ const VARIANTS: Readonly<Record<ButtonVariant, string>> = {
   ghost: 'border-transparent bg-transparent text-ink hover:bg-lane',
   record: 'border-record bg-record text-on-accent hover:brightness-110',
 };
+const PRESSED = 'border-amber bg-amber text-on-accent hover:brightness-110';
 const BASE = 'inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md border px-4 font-display text-sm font-semibold tracking-wider uppercase select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber disabled:cursor-not-allowed disabled:opacity-50';
 
 export interface ButtonProps {
@@ -30,7 +32,12 @@ export interface ButtonProps {
 
 export function Button(p: ButtonProps) {
   return (
-    <button type={p.submit ? 'submit' : 'button'} ref={p.buttonRef} class={cx(BASE, VARIANTS[p.variant ?? 'secondary'], p.class)} disabled={p.disabled}
+    <button type={p.submit ? 'submit' : 'button'} ref={p.buttonRef} class={cx(BASE, toggledOn(p) ? PRESSED : VARIANTS[p.variant ?? 'secondary'], p.class)} disabled={p.disabled}
       aria-pressed={p.pressed} aria-label={p.label} onClick={() => p.onClick?.()} {...p.data}>{p.children}</button>
   );
+}
+
+function toggledOn(p: ButtonProps): boolean {
+  const v = p.variant ?? 'secondary';
+  return p.pressed === true && (v === 'secondary' || v === 'ghost');
 }

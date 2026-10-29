@@ -74,6 +74,14 @@ test('Tabs: the arrows wrap around the ends', async () => {
   assert.deepEqual(picked, ['a']);
 });
 
+test('Button: a pressed toggle is drawn filled amber, and unpressed it is drawn as its variant', async () => {
+  const find = async (pressed: boolean) => walk(await mount(h(c.button.Button, { pressed, onClick: () => {} }, 'Loop'))).find(e => e.localName === 'button')!;
+  const on = await find(true);
+  assert.ok(classes(on).includes('bg-amber') && classes(on).includes('text-on-accent') && !classes(on).includes('bg-panel'), classes(on).join(' '));
+  const off = await find(false);
+  assert.ok(classes(off).includes('bg-panel') && !classes(off).includes('bg-amber'), classes(off).join(' '));
+});
+
 test('Chip: a glossary word carries its term; a toggle carries aria-pressed', async () => {
   let n = 0;
   const word = await mount(h(c.chip.Chip, { term: 'ostinato', onClick: () => { n++; } }, 'ostinato'));
@@ -125,9 +133,9 @@ test('Sheet: the phone handle says what it holds and opens or closes it', async 
   assert.deepEqual(toggles, [true]);
 });
 
-test('Readout: time always, the bar only on a music piece', async () => {
+test('Readout: time always, as a fixed-width clock; the bar only on a music piece', async () => {
   const music = await mount(h(c.readout.Readout, { time: 1.5, bar: 3 }));
-  assert.equal(walk(music).find(e => e._attrs['data-clock'] !== undefined)!.textContent, '1.5 s');
+  assert.equal(walk(music).find(e => e._attrs['data-clock'] !== undefined)!.textContent, '0:01.50');
   assert.equal(walk(music).find(e => e._attrs['data-bar'] !== undefined)!.textContent, 'bar 3');
   const sound = await mount(h(c.readout.Readout, { time: 0.05, bar: null }));
   assert.equal(walk(sound).filter(e => e._attrs['data-bar'] !== undefined).length, 0);

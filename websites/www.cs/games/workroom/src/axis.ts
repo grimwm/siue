@@ -16,6 +16,14 @@ export function formatSeconds(t: number): string {
   return `${Math.round(t * 100) / 100} s`;
 }
 
+/** The playing time as m:ss.cc, the same width at every moment so a running readout never jumps; hundredths are cut, not rounded, so 9.999 is 0:09.99. */
+export function formatClock(t: number): string {
+  const cs = Math.floor(Math.max(0, t) * 100 + 1e-6);
+  const m = Math.floor(cs / 6000);
+  const s = Math.floor(cs / 100) % 60;
+  return `${m}:${String(s).padStart(2, '0')}.${String(cs % 100).padStart(2, '0')}`;
+}
+
 /** Ticks at a round step (10 ms up to 5 min) chosen so neighbours are at least 60 px apart; only ticks with 0 <= x < view.width - 1e-6. */
 export function secondsTicks(view: View): AxisTick[] {
   const step = STEPS.find(s => s * view.pxPerSec >= MIN_GAP_PX) ?? STEPS[STEPS.length - 1]!;

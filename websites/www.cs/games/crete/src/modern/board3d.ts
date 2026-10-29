@@ -2,19 +2,24 @@
  * ground, the walls, one model per cell and the light; a shown state rebuilds only the cells whose model
  * changed, and stands the pieces and figures where the state and the turn put them, with Ariadne's thread on
  * the floor. A frame is drawn when the board is told of a change, and more follow only while the camera eases,
- * a wall fades, a figure turns or the tile loops tick. The camera looks down at 45° through an orthographic lens,
- * and follows Theseus. A wall that hides Theseus fades in every walls mode; in Ghosted, one that hides any
- * figure or piece fades too. */
+ * a wall fades, a figure turns or the tile loops tick. The tile loops tick at 12 fps, only while one is on screen,
+ * the tab is visible, the board is in view and motion is not reduced. The camera looks down at 45° through an
+ * orthographic lens, and follows Theseus until a pan or the mini map sends it elsewhere; the controls
+ * (controls.ts) turn and pan it, and the mini map (minimap.ts) shows what it sees. A wall that hides Theseus fades
+ * in every walls mode; in Ghosted, one that hides any figure or piece fades too. The floating icons are drawn
+ * over the finished picture. */
 import { Color, Group, OrthographicCamera, PCFSoftShadowMap, Scene, Vector3, WebGLRenderer } from 'three';
 import type { Object3D } from 'three';
 import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { DEFAULT_YAW, PITCH, clampCam, easeCam, nearestYaw, viewRows } from './camera.ts';
+import { DEFAULT_YAW, PITCH, clampCam, easeCam, nearestYaw, panCam, viewRows } from './camera.ts';
 import type { Cam } from './camera.ts';
+import { createControls } from './controls.ts';
 import { changedCells } from './diff.ts';
 import { ghostSubjects } from './ghost.ts';
+import { createMinimap } from './minimap.ts';
 import { SURFACES, placed, terrainModel } from './model-names.ts';
 import type { TerrainModel } from './model-names.ts';
 import { frameSample, nextQuality } from './quality.ts';
@@ -35,6 +40,8 @@ import type { Seen } from './scene/walls.ts';
 export interface ModernHost {
   /** The modern canvas, sized by CSS to the board region. */
   canvas: HTMLCanvasElement;
+  /** A layer over the canvas, the same size, for the camera buttons and the mini map. */
+  overlay: HTMLElement;
   /** For the mini map. */
   atlas: Atlas;
   image: HTMLImageElement;
@@ -59,11 +66,14 @@ export interface ModernBoard {
   setActive(on: boolean): void;
   /** Frames drawn, for tests. */
   frames(): number;
+  /** The render quality step (quality.ts), for tests. */
+  quality(): number;
   dispose(): void;
 }
 
 const BACKGROUND = 0x060504;
 const RAD = Math.PI / 180;
+const LOOP_FPS = 12;
 
 export function createModernBoard(host: ModernHost): ModernBoard {
   const renderer = new WebGLRenderer({ canvas: host.canvas, antialias: false, powerPreference: 'high-performance' });
@@ -79,10 +89,12 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const floor = createFloor(kit);
   const wallSet = createWalls(kit);
   const pieceGroup = new Group();
-  const sheet = host.atlas && host.image ? createIconSheet(host.atlas, host.image) : null;
+  const sheet = host.atlas && host.image ? createIconSheet(host.atlas, host.image, () => invalidate()) : null;
   const actors = createActors(kit, sheet, () => host.reducedMotion());
   const thread = createThread();
   scene.add(floor.group, wallSet.group, pieceGroup, actors.group, thread.group);
+  const iconScene = new Scene();
+  iconScene.add(actors.icons);
 
   let active = true;
   let drawn = 0;
@@ -99,6 +111,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   let pieces: (Object3D | null)[] = [];
   let lights: Lights | null = null;
   let loopT = 0;
+  let loopTimer: ReturnType<typeof setTimeout> | 0 = 0;
+  let inView = true;
+  let viewKey = '';
   // What the next frame must redo.
   let aimWalls = true;
   let loopsDirty = true;
@@ -124,6 +139,21 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     loopsDirty = true;
     invalidate();
   }
+  const loopsMay = () => active && inView && !document.hidden && !host.reducedMotion();
+  /** Ticks the tile loops at 12 fps while they may run, drawing only when one is on screen. */
+  function scheduleLoops(): void {
+    if (loopTimer) clearTimeout(loopTimer);
+    loopTimer = 0;
+    if (!loopsMay()) return;
+    loopTimer = setTimeout(() => {
+      loopTimer = 0;
+      if (!loopsMay()) return;
+      if (last && loopOnScreen()) loopAt(loopT + 1 / LOOP_FPS);
+      else loopT += 1 / LOOP_FPS;
+      scheduleLoops();
+    }, 1000 / LOOP_FPS);
+  }
+
   /** True while any looping thing stands in the camera's view. */
   function loopOnScreen(): boolean {
     applyCamera();
@@ -131,7 +161,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       ndc.copy(v).project(camera);
       return Math.abs(ndc.x) < 1.05 && Math.abs(ndc.y) < 1.05;
     };
-    return (lights?.anchors ?? []).some(on) || actors.looping().some(o => on(o.position));
+    return (lights?.anchors ?? []).some(on) || actors.looping().some(o => on(o.position))
+      || pieces.some(p => !!(p?.userData as PieceInfo | undefined)?.loop && on(p!.position));
   }
 
   function applyCamera(): void {
@@ -219,6 +250,16 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       shadowsDirty = false;
     }
     paint.render(scene, camera, quality >= 2);
+    if (actors.icons.children.length) {
+      renderer.autoClear = false;
+      renderer.render(iconScene, camera);
+      renderer.autoClear = true;
+    }
+    const key = `${cur.yaw} ${cur.tx} ${cur.tz} ${width} ${height}`;
+    if (key !== viewKey) {
+      viewKey = key;
+      mini?.view(cur, width / height);
+    }
     drawn++;
     chained = busy;
     if (busy) invalidate();
@@ -233,6 +274,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     renderer.setPixelRatio(r);
     renderer.setSize(w, h, false);
     paint.setSize(Math.round(w * r), Math.round(h * r), r);
+    mini?.fit(host.overlay.clientWidth || w, host.overlay.clientHeight || h);
     aimWalls = true;
   }
 
@@ -292,7 +334,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     aimGoal();
     Object.assign(cur, goal);
     aimWalls = loopsDirty = shadowsDirty = true;
+    mini?.paint(s, { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) }, null);
     invalidate();
+    if (!loopTimer) scheduleLoops();
   }
 
   function show(f: { state: State; figures: Figures }, threadCells: readonly Cell[] | null): void {
@@ -334,7 +378,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     const threaded = thread.set(threadCells, nc, nr);
     if (changed.length === 0 && !moved && !threaded && s === prev) return;
     if (changed.length || moved) { aimWalls = true; shadowsDirty = true; }
+    mini?.paint(s, f.figures, threadCells);
     invalidate();
+    if (!loopTimer) scheduleLoops();
   }
 
   function walls(m: WallMode): void {
@@ -346,6 +392,63 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     invalidate();
   }
 
+  /** The camera under the player's hand. */
+  const cam = {
+    turn(deg: number, eased: boolean) {
+      goal.yaw += deg;
+      if (!eased) cur.yaw += deg;
+      aimWalls = true;
+      invalidate();
+    },
+    pan(dx: number, dy: number) {
+      follow = false;
+      const upp = viewRows(width / height) / height;
+      for (const c of [cur, goal]) Object.assign(c, clampCam(panCam(c, dx, dy, upp), cols(), rows()));
+      aimWalls = true;
+      invalidate();
+    },
+    reset() {
+      follow = true;
+      goal.yaw = nearestYaw(DEFAULT_YAW, cur.yaw);
+      invalidate();
+    },
+  };
+
+  const ui = document.createElement('div');
+  ui.className = 'modern-ui';
+  host.overlay.append(ui);
+  const controls = createControls(host.canvas, ui, host, cam);
+  const mini = host.atlas && host.image
+    ? createMinimap(ui, host.atlas, host.image, {
+      blocked: () => host.blocked(),
+      look(g) {
+        host.gesture();
+        follow = false;
+        goal.tx = g.x;
+        goal.tz = g.z;
+        invalidate();
+      },
+    })
+    : null;
+
+  const onVisible = () => scheduleLoops();
+  document.addEventListener('visibilitychange', onVisible);
+  const seenIO = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver(es => {
+      inView = es.some(e => e.isIntersecting);
+      scheduleLoops();
+    })
+    : null;
+  seenIO?.observe(host.canvas);
+  const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+  const onMotion = () => {
+    // The icons settle and the loops stop or start with the setting.
+    loopsDirty = true;
+    invalidate();
+    scheduleLoops();
+  };
+  motion?.addEventListener('change', onMotion);
+
   resize();
 
   return {
@@ -353,26 +456,32 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     show,
     walls,
     yaw: () => cur.yaw,
-    reset() {
-      follow = true;
-      goal.yaw = nearestYaw(DEFAULT_YAW, cur.yaw);
-      invalidate();
-    },
+    reset: cam.reset,
     resize() { resize(); invalidate(); },
     setActive(on) {
       active = on;
+      ui.hidden = !on;
       if (on) invalidate();
       else {
         if (raf) cancelAnimationFrame(raf);
         raf = 0;
         chained = false;
       }
+      scheduleLoops();
     },
     frames: () => drawn,
+    quality: () => quality,
     dispose() {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
       active = false;
+      scheduleLoops();
+      document.removeEventListener('visibilitychange', onVisible);
+      seenIO?.disconnect();
+      motion?.removeEventListener('change', onMotion);
+      controls.dispose();
+      mini?.dispose();
+      ui.remove();
       teardown();
       floor.dispose();
       wallSet.dispose();

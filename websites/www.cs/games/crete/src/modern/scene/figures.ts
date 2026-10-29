@@ -144,6 +144,8 @@ interface Actor {
 
 export interface Actors {
   readonly group: Group;
+  /** The floating icons, drawn over the finished picture. */
+  readonly icons: Group;
   /** Stands the things placed on a board `cols` × `rows`; true when any moved, turned, came or went. */
   set(list: readonly Placed[], cols: number, rows: number, snap: boolean): boolean;
   /** Eases each turn toward its way; true while any is still turning. */
@@ -165,13 +167,14 @@ const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 /** `sheet` draws the icons (none without it); `still` is true while motion is reduced. */
 export function createActors(kit: Kit, sheet: IconSheet | null, still: () => boolean): Actors {
   const group = new Group();
+  const icons = new Group();
   let actors: Actor[] = [];
   let loopT = 0;
 
   const iconOf = (p: Placed) => {
     const name = iconFor(p);
     const sp = name && sheet ? sheet.make(name) : null;
-    if (sp) group.add(sp);
+    if (sp) icons.add(sp);
     return sp;
   };
   /** The icon over its piece, bobbing. */
@@ -193,7 +196,7 @@ export function createActors(kit: Kit, sheet: IconSheet | null, still: () => boo
   function drop(a: Actor): void {
     group.remove(a.obj);
     disposeModel(a.obj, kit);
-    if (a.icon) group.remove(a.icon);
+    if (a.icon) icons.remove(a.icon);
   }
   function rebuild(a: Actor, p: Placed): void {
     drop(a);
@@ -275,6 +278,7 @@ export function createActors(kit: Kit, sheet: IconSheet | null, still: () => boo
 
   return {
     group,
+    icons,
     set,
     ease,
     seen() {

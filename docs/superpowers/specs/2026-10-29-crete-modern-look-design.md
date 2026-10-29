@@ -48,6 +48,12 @@ and readable. Players who prefer the flat board keep it.
     much a wall fades depends on how much it hides, and it fades in and out
     over about 0.2 s.
   - Low: walls drawn at about a third of their height.
+- **Theseus is never hidden.** In every wall mode, a wall in front of
+  Theseus ghosts the same way Ghosted walls do.
+- **Floating icons.** The Minotaur and every item carry a small floating icon
+  above them, drawn from their Classic sprite, so they are easy to find in
+  every setting. Walls never hide the icons. They bob very slightly, as if
+  levitating; with reduced motion they hold still.
 - **Mini map.** Modern shows a mini map of the whole level, drawn in today's
   Classic sprites, with the camera's view outlined. Tapping or clicking it
   looks at that spot.

@@ -31,7 +31,7 @@ final class Store
     public const MAX_NOTES = 2000;
     /** The most a draft request may carry, and so the most one draft holds: 8 MB. */
     public const MAX_REQUEST_BYTES = 8_388_608;
-    /** Only this many drafts are kept; each successful publish deletes the older ones. */
+    /** Each piece keeps only this many drafts; a publish deletes that piece's older ones. */
     public const KEEP_DRAFTS = 20;
     /** The most the kept drafts may hold in total: 100 MB. */
     public const MAX_DRAFT_TOTAL_BYTES = 104_857_600;
@@ -193,9 +193,10 @@ final class Store
 
     /**
      * Keeps one draft. In one transaction, before any file is written: refuses when the files total more than
-     * MAX_REQUEST_BYTES (too_large), when the draft exists, or when the new draft plus the newest KEEP_DRAFTS - 1
-     * stored drafts (the ones that remain) total more than MAX_DRAFT_TOTAL_BYTES (over_quota). After the files
-     * are written, deletes every draft (row and files) older than the newest KEEP_DRAFTS.
+     * MAX_REQUEST_BYTES (too_large), when the draft exists, or when the new draft plus every stored draft that
+     * remains (all of them, less this piece's drafts older than its newest KEEP_DRAFTS - 1) total more than
+     * MAX_DRAFT_TOTAL_BYTES (over_quota). After the files are written, deletes this piece's drafts (rows and files)
+     * older than its newest KEEP_DRAFTS: each piece keeps its own history, and other pieces are never touched.
      * $about is taken from the validated score.json: project_id (matches validProjectId), project_name (1 to 80 characters) and
      * kind (one of KINDS); anything else throws DraftRejected('bad_score') before the transaction opens. null records no
      * project: '' and '' and 'music' (a published draft always has one).
@@ -233,7 +234,9 @@ final class Store
             if ($exists->fetchColumn() !== false) {
                 throw new DraftRejected('exists');
             }
-            $remaining = (int) $this->db->query('SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM music_drafts ORDER BY published_at DESC, rowid DESC LIMIT ' . (self::KEEP_DRAFTS - 1) . ')')->fetchColumn();
+            $rollsOff = $this->db->prepare('SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM music_drafts WHERE piece = ? ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . (self::KEEP_DRAFTS - 1) . ')');
+            $rollsOff->execute([$piece]);
+            $remaining = (int) $this->db->query('SELECT COALESCE(SUM(size), 0) FROM music_drafts')->fetchColumn() - (int) $rollsOff->fetchColumn();
             if ($size + $remaining > self::MAX_DRAFT_TOTAL_BYTES) {
                 throw new DraftRejected('over_quota');
             }
@@ -241,7 +244,9 @@ final class Store
             try {
                 $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size, project_id, project_name, kind) VALUES (?, ?, ?, ?, ?, ?, ?)')
                     ->execute([$piece, $version, $this->clock->now(), $size, $about['project_id'], $about['project_name'], $about['kind']]);
-                $old = $this->db->query('SELECT piece, version FROM music_drafts ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . self::KEEP_DRAFTS)->fetchAll(\PDO::FETCH_ASSOC);
+                $history = $this->db->prepare('SELECT piece, version FROM music_drafts WHERE piece = ? ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . self::KEEP_DRAFTS);
+                $history->execute([$piece]);
+                $old = $history->fetchAll(\PDO::FETCH_ASSOC);
                 $drop = $this->db->prepare('DELETE FROM music_drafts WHERE piece = ? AND version = ?');
                 foreach ($old as $row) {
                     $drop->execute([$row['piece'], $row['version']]);

@@ -73,7 +73,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ],
     [
       { strong: "Look" }, " in this menu picks the modern board or the classic tiles; ", { strong: "Walls" },
-      " (modern only) draws the walls in front of you solid, ghosted or low. On the modern board one finger or the left mouse button turns it, two fingers or the right or middle button pan it, and a double tap or double click brings the view back to Theseus.",
+      " (modern only) draws the walls in front of you solid, ghosted or low. On the modern board one finger or the left mouse button turns it, two fingers or the right or middle button pan it, and a double tap or double click brings the view back to Theseus. The arrows and the pad move him the way the screen shows, and a tap on the mini map looks there.",
     ],
     [
       "Every card works from the keyboard. ", { strong: `${k("up")} ${k("down")}` },

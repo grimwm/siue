@@ -8,8 +8,11 @@ from .export import MOTIF_GAP_BEATS
 from .piece import Piece
 
 TRANSIENT_WINDOW = 0.005  # seconds
-CONTEXT_WINDOW = 0.4
-MAX_TRANSIENT_DB = 18.0  # a 5 ms peak this far above the loudness around it is a sharp attack
+LOCAL_WINDOW = 0.05  # centred on each frame
+BEFORE_WINDOW = 0.4  # just before the local window
+MAX_CLICK_DB = 18.0  # a 5 ms peak this far above the 50 ms around it is a click
+MAX_JUMP_DB = 24.0  # 50 ms this far above the 400 ms before it is a sudden loud entry (a pluck's decay cannot hide it)
+FLOOR_DB = -20.0  # below the whole piece's loudness, silence before a soft entrance does not count as quiet
 AUDIBLE_DB = -50.0  # quieter peaks are not judged
 HIGH_HZ = 8000
 MAX_HIGH_DB = -30.0  # energy above HIGH_HZ against the whole
@@ -44,12 +47,24 @@ def sharpness_of(samples: np.ndarray, rate: int) -> list[str]:
         f = x[: frames * hop].reshape(frames, hop)
         peak = np.abs(f).max(axis=1)
         power = (f ** 2).mean(axis=1)
-        span = max(1, int(CONTEXT_WINDOW / TRANSIENT_WINDOW))
-        context = np.sqrt(np.convolve(power, np.ones(span) / span, mode="same"))
+        sums = np.concatenate([[0.0], np.cumsum(power)])
+        idx = np.arange(frames)
+
+        def rms(lo, hi):
+            lo, hi = np.clip(lo, 0, frames), np.clip(hi, 0, frames)
+            return np.sqrt((sums[hi] - sums[lo]) / np.maximum(hi - lo, 1))
+
+        half = max(1, int(LOCAL_WINDOW / TRANSIENT_WINDOW) // 2)
+        span = max(1, int(BEFORE_WINDOW / TRANSIENT_WINDOW))
+        local = rms(idx - half, idx + half + 1)
+        floor = np.sqrt(power.mean()) * 10 ** (FLOOR_DB / 20)
+        before = np.maximum(rms(idx - half - span, idx - half), floor)
         db = lambda v: 20 * np.log10(np.maximum(v, 1e-12))  # noqa: E731
-        sharp = (db(peak) > AUDIBLE_DB) & (db(peak) - db(context) > MAX_TRANSIENT_DB)
-        for i in np.flatnonzero(sharp)[:5]:
-            problems.append(f"a sharp transient at {i * hop / rate:.1f} s ({db(peak[i]) - db(context[i]):.0f} dB above its surroundings)")
+        audible = db(peak) > AUDIBLE_DB
+        for kind, rise in (("click", db(peak) - db(local)), ("sudden entry", db(local) - db(before))):
+            limit = MAX_CLICK_DB if kind == "click" else MAX_JUMP_DB
+            for i in np.flatnonzero(audible & (rise > limit))[:5]:
+                problems.append(f"a sharp transient ({kind}) at {i * hop / rate:.1f} s, {rise[i]:.0f} dB above its surroundings")
     total = float((x ** 2).sum())
     if total > 0:
         spectrum = np.abs(np.fft.rfft(x)) ** 2

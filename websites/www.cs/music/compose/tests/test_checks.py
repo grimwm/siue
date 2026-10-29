@@ -46,6 +46,13 @@ class SharpnessTest(unittest.TestCase):
         problems = sharpness_of(quiet, RATE)
         self.assertTrue(any("1.0" in p and "transient" in p for p in problems), problems)
 
+    def test_loud_pluck_in_quiet_passage_fails(self):
+        audio = tone(seconds=3.0, amp=0.005)
+        t = np.arange(int(0.6 * RATE)) / RATE
+        audio[2 * RATE: 2 * RATE + len(t)] += (0.5 * np.exp(-t / 0.1) * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+        problems = sharpness_of(audio, RATE)
+        self.assertTrue(any("2.0" in p and "transient" in p for p in problems), problems)
+
     def test_bright_noise_fails(self):
         noise = np.random.default_rng(1).normal(0, 0.1, 2 * RATE).astype(np.float32)
         self.assertTrue(any("8 kHz" in p for p in sharpness_of(noise, RATE)))

@@ -82,7 +82,7 @@ def level(path: Path, samples: np.ndarray) -> float:
 
 
 def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, made: str, changes: list[dict] | None = None) -> list[str]:
-    """Writes the draft folder; returns the checks' problems (empty when the draft may be published)."""
+    """Writes the draft folder; returns the checks' problems. With any problem the audio is removed, so publish refuses the draft."""
     out = Path(out)
     work = out / "work"
     for d in (out / "stems", out / "midi", work):
@@ -108,13 +108,15 @@ def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, m
     chain = (
         "[0:a]asoftclip=type=tanh,vibrato=f=0.45:d=0.012,vibrato=f=5.5:d=0.003,highpass=f=30,lowpass=f=6500,lowpass=f=9000,asplit[d][w];"
         "[w][1:a]afir=dry=0:wet=10[r];"
-        "[d][r]amix=inputs=2:weights='1 0.55':normalize=0[m];"
-        "anoisesrc=color=pink:amplitude=0.0015:sample_rate=48000:seed=3,lowpass=f=5000[h];"
-        "[m][h]amix=inputs=2:normalize=0:duration=first,aformat=channel_layouts=stereo[o]"
+        "[d][r]amix=inputs=2:weights='1 0.55':normalize=0,aformat=channel_layouts=stereo[o]"
     )
     _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "dry.wav"), "-i", str(work / "ir.wav"),
          "-filter_complex", chain, "-map", "[o]", "-c:a", "pcm_f32le", str(work / "wet.wav"))
-    folded = fold(_read(work / "wet.wav"), length)
+    # The hiss goes on after the fold, so the loop's start does not carry two layers of it.
+    _run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+         f"anoisesrc=color=pink:amplitude=0.0015:sample_rate={RATE}:seed=3:duration={length / RATE:.6f},lowpass=f=5000",
+         "-ac", "2", "-c:a", "pcm_f32le", str(work / "hiss.wav"))
+    folded = fold(_read(work / "wet.wav"), length) + fold(_read(work / "hiss.wav"), length)
     _write(folded, work / "folded.wav")
     _write(folded * level(work / "folded.wav", folded), work / "master.wav")
     _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "master.wav"), "-c:a", "libopus", "-b:a", BITRATE,
@@ -122,6 +124,9 @@ def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, m
     _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "master.wav"), "-lavfi",
          "aresample=24000,showspectrumpic=s=1600x480:legend=0:fscale=log:color=intensity:scale=log", str(out / "spectrogram.png"))
     problems += sharpness(work / "master.wav")
+    if problems:
+        # publish needs the audio, so a draft that breaks a check cannot be sent.
+        (out / "audio.webm").unlink()
     (out / "score.json").write_text(json.dumps(score_json(piece, draft, made, changes), indent=1) + "\n")
     (out / "score.musicxml").write_text(musicxml(piece))
     shutil.rmtree(work)

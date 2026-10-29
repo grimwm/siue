@@ -148,7 +148,7 @@ MUSIC_IMAGE = siue-music-compose
 MUSIC_CACHE ?= $(HOME)/.cache/siue-music
 # Capped where systemd is available, so a runaway render cannot take the machine down.
 MUSIC_CAP = $(if $(shell command -v systemd-run),systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0)
-MUSIC_RUN = mkdir -p "$(MUSIC_CACHE)" && $(MUSIC_CAP) podman run --rm -v "$(CURDIR)":/work:z -v "$(MUSIC_CACHE)":/cache:z \
+MUSIC_RUN = mkdir -p "$(MUSIC_CACHE)" && $(MUSIC_CAP) podman run --rm --memory=4g --memory-swap=4g -v "$(CURDIR)":/work:z -v "$(MUSIC_CACHE)":/cache:z \
 	-e SIUE_MUSIC_CACHE=/cache -w /work/music/compose $(MUSIC_IMAGE)
 music-image: ## Build the composing container (sfizz, ffmpeg, Python)
 	podman build -t $(MUSIC_IMAGE) -f music/compose/Containerfile music/compose

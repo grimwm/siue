@@ -49,6 +49,19 @@ class ExportTest(unittest.TestCase):
         want = {(float(n.beat), n.pitch) for n in piece().notes}
         self.assertEqual(got, want)
 
+    def test_musicxml_keeps_onsets_under_held_notes_and_ties(self):
+        import music21
+        p = piece([Note("lyre", 0, 6, 38, 40), Note("lyre", 1, 2, 45, 40), Note("lyre", 2.5, 3, 62, 60),
+                   Note("lyre", 3.5, 1, 65, 60), Note("drone", 0, 8, 50, 40)])
+        parsed = music21.converter.parseData(musicxml(p), format="musicxml")
+        got = set()
+        for part in parsed.parts:
+            for n in part.recurse().notes:
+                for x in (n.notes if n.isChord else [n]):
+                    if x.tie is None or x.tie.type == "start":
+                        got.add((float(n.getOffsetInHierarchy(parsed)), x.pitch.midi))
+        self.assertEqual(got, {(float(n.beat), n.pitch) for n in p.notes})
+
     def test_midi_has_every_note(self):
         files = midi_files(piece())
         self.assertEqual(sorted(files), ["drone", "lyre"])

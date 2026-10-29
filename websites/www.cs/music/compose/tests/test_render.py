@@ -40,6 +40,15 @@ class RenderTest(unittest.TestCase):
             steps = np.abs(np.diff(np.concatenate([audio[-near:, 0], audio[:near, 0]])))
             self.assertLessEqual(float(steps[near - 1]), 2 * float(np.delete(steps, near - 1).max()))
 
+    def test_a_draft_that_fails_a_check_cannot_be_published(self):
+        from siue_compose.piece import Note
+        tune = [Note("lyre", b, 1, 62 + b, 50, "ariadne") for b in (0, 1)]
+        p = piece(tune + [Note(n.lane, n.beat + 6, n.beats, n.pitch, n.velocity, n.motif) for n in tune])
+        with tempfile.TemporaryDirectory() as tmp:
+            problems = render(p, 1, Path(tmp), MANIFEST, SAMPLES, "2026-10-28T12:00:00Z")
+            self.assertTrue(any("same notes" in x for x in problems), problems)
+            self.assertFalse((Path(tmp) / "audio.webm").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

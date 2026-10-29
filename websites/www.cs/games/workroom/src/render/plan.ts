@@ -11,7 +11,7 @@ export interface Library { version: 1; source: string; commit: string; licence: 
 export interface Region { lo: number; hi: number; file: LibraryFile }
 /**
  * A note as played: `file` at `rate` (1 is the sample's own pitch) from `at` for `dur` seconds, then released;
- * `gain` is linear (lane level times velocity); `loop` is the sample's sustained stretch in seconds, or null.
+ * `gain` is linear (sfizz's level times the lane level times the velocity's); `loop` is the sample's sustained stretch in seconds, or null.
  */
 export interface Voice { lane: string; file: string; rate: number; at: number; dur: number; gain: number; attack: number; release: number; loop: [number, number] | null }
 
@@ -33,6 +33,13 @@ const AMP_VELTRACK = 0.8;
  */
 export const velocityGain = (velocity: number): number => 1 - AMP_VELTRACK * (1 - (velocity / 127) ** 2);
 
+/**
+ * sfizz_render's own level: it plays a sample at velocity 127 at this fraction of the sample's level in each channel
+ * (measured in the composing container on the harp, horn, organ and cello: 0.2654, -11.5 dB). Every voice carries it,
+ * so the master's soft clip and hiss meet the music at the levels render.py's do.
+ */
+export const SFIZZ_LEVEL = 0.2654;
+
 /** One voice per note, in the score's note order. Throws on a lane without a sound or an instrument the library lacks. */
 export function voices(score: Score, lib: Library): Voice[] {
   const byLane = new Map(score.lanes.map(lane => {
@@ -48,7 +55,7 @@ export function voices(score: Score, lib: Library): Voice[] {
     const region = lane.regions.find(r => n.pitch >= r.lo && n.pitch <= r.hi)!;
     return {
       lane: n.lane, file: region.file.file, rate: 2 ** ((n.pitch - region.file.pitch) / 12), at: n.start, dur: n.length,
-      gain: 10 ** (lane.sound.gain_db / 20) * velocityGain(n.velocity), attack: lane.sound.attack, release: lane.sound.release, loop: lane.loop,
+      gain: SFIZZ_LEVEL * 10 ** (lane.sound.gain_db / 20) * velocityGain(n.velocity), attack: lane.sound.attack, release: lane.sound.release, loop: lane.loop,
     };
   });
 }

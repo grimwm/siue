@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { regions, velocityGain, voices } from '../src/render/plan.ts';
+import { regions, SFIZZ_LEVEL, velocityGain, voices } from '../src/render/plan.ts';
 import type { Library } from '../src/render/plan.ts';
 import { parseScore } from '../src/score.ts';
 import type { Score } from '../src/score.ts';
@@ -69,7 +69,17 @@ test('velocity gain follows sfizz with amp_veltrack=80; the lane gain multiplies
   const s = harpScore([60]);
   s.notes[0]!.velocity = 64;
   s.lanes[0]!.sound!.gain_db = 6;
-  assert.ok(Math.abs(voices(s, LIBRARY)[0]!.gain - 10 ** (6 / 20) * velocityGain(64)) < 1e-12);
+  assert.ok(Math.abs(voices(s, LIBRARY)[0]!.gain - SFIZZ_LEVEL * 10 ** (6 / 20) * velocityGain(64)) < 1e-12);
+});
+
+// sfizz_render plays a sample at velocity 127 at 0.2654 of its own level in each channel (measured in the composing
+// container on the harp, horn, organ and cello), so the master's soft clip and hiss meet the music at render.py's levels.
+test('a voice plays at sfizz_render\'s own level: velocity 127 on a 0 dB lane is 0.2654', () => {
+  assert.ok(Math.abs(SFIZZ_LEVEL - 0.2654) < 1e-4);
+  const s = harpScore([60]);
+  s.notes[0]!.velocity = 127;
+  s.lanes[0]!.sound!.gain_db = 0;
+  assert.equal(voices(s, LIBRARY)[0]!.gain, SFIZZ_LEVEL);
 });
 
 test('a lane without a sound or with an instrument the library lacks is refused', () => {

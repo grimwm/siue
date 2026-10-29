@@ -68,7 +68,7 @@ const HISS_LOWPASS_HZ = 5000;
 /**
  * The tape hiss, as render.py's ffmpeg anoisesrc color=pink amplitude=0.0015, lowpass=f=5000, upmixed to stereo:
  * uniform white noise of that amplitude through Paul Kellet's pink filter (scaled by 0.11 as anoisesrc does), then a
- * two-pole Butterworth low-pass at 5 kHz; the same noise in both channels.
+ * two-pole Butterworth low-pass at 5 kHz; the same noise in both channels, each at 1/√2 as ffmpeg's -ac 2 upmixes mono.
  */
 export function pinkHiss(length: number, rate: number, seed: number): Float32Array[] {
   const u = uniform(seed);
@@ -85,7 +85,7 @@ export function pinkHiss(length: number, rate: number, seed: number): Float32Arr
     b[5] = -0.7616 * b[5]! - white * 0.016898;
     const pink = b[0]! + b[1]! + b[2]! + b[3]! + b[4]! + b[5]! + b[6]! + white * 0.5362;
     b[6] = white * 0.115926;
-    out[i] = lp(pink * 0.11);
+    out[i] = lp(pink * 0.11) * Math.SQRT1_2;
   }
   return [out, Float32Array.from(out)];
 }

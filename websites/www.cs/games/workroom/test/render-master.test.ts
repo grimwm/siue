@@ -50,6 +50,14 @@ test('the hiss is quiet pink noise, the same in both channels, and the same for 
   assert.notDeepEqual(pinkHiss(RATE * 2, RATE, 4)[0], h[0]);
 });
 
+// render.py makes the hiss in mono and upmixes it with ffmpeg's -ac 2, which puts a mono channel into each of left and
+// right at 1/√2: its hiss.wav measures 0.000188 RMS per channel, against 0.000261 for the mono noise.
+test('the hiss is upmixed as ffmpeg upmixes mono: 0.000188 RMS in each channel', () => {
+  const h = pinkHiss(RATE * 10, RATE, 3);
+  const level = rms(h[0]!, 0, h[0]!.length);
+  assert.ok(Math.abs(level / 0.000188 - 1) < 0.05, `RMS ${level}`);
+});
+
 // BS.1770: K-weighting, -0.691 offset, both stereo channels weight 1.0. The -0.691 cancels the K-weighting's gain at 1 kHz,
 // so a 1 kHz sine at -20 dBFS peak in one channel measures -23.0 LUFS and in both channels -20.0 LUFS
 // (EBU Tech 3341 case 1: a stereo 1 kHz sine at -23 dBFS measures -23.0 LUFS).

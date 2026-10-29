@@ -249,6 +249,18 @@ test('open a piece, play, seek, switch views, read a term, no CSP violations', a
     await page.getByRole('tab', { name: 'Sheet music' }).click();
     await expect(page.locator('#sheet svg')).toBeVisible({ timeout: 15_000 });
 
+    // The reading lesson sits beside the music and lights the bar each step talks about.
+    await page.getByRole('button', { name: 'Learn to read sheet music' }).click();
+    const lesson = page.getByRole('region', { name: 'Learn to read sheet music' });
+    await expect(lesson).toContainText('Step 1 of 6');
+    await expect(lesson).toContainText('The first note here, in bar 1, is D2');
+    await expect(page.locator('#sheet [data-sheet-bar="1"]')).toBeVisible();
+    await lesson.getByRole('button', { name: 'Hear it' }).click();
+    await lesson.getByRole('button', { name: 'Next' }).click();
+    await expect(lesson).toContainText('Step 2 of 6');
+    await lesson.getByRole('button', { name: 'Close' }).click();
+    await expect(page.locator('#sheet [data-sheet-bar]')).toHaveCount(0);
+
     // The timeline belongs to the Story view alone.
     await page.getByRole('tab', { name: 'Story' }).click();
     await page.setViewportSize({ width: 390, height: 844 });

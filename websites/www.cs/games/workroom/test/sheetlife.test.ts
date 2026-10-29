@@ -17,6 +17,7 @@ function setup() {
       load: async xml => { log.push(`load ${xml}`); },
       render: () => { children.push('svg'); log.push('render'); },
       clear: () => { log.push('clear'); },
+      mark: bar => { log.push(`mark ${bar}`); },
     };
     made.push(n);
     return n;
@@ -63,4 +64,25 @@ test('a show that is overtaken while loading draws nothing', async () => {
   release();
   await pending;
   assert.equal(s.children.length, 0);
+});
+
+test('a lit bar is drawn after every render, kept across a resize and a lane switch, and cleared with null', async () => {
+  const s = setup();
+  s.sheet.mark(7);
+  await s.sheet.show('xml', 'a');
+  assert.equal(s.log.at(-1), 'mark 7', 'a bar lit before the drawing arrives is lit once it is drawn');
+  s.sheet.mark(9);
+  assert.equal(s.log.at(-1), 'mark 9');
+  for (const f of s.listeners) f();
+  assert.deepEqual(s.log.slice(-2), ['render', 'mark 9']);
+  await s.sheet.show('xml', 'b');
+  assert.equal(s.log.at(-1), 'mark 9');
+  s.sheet.mark(null);
+  assert.equal(s.log.at(-1), 'mark null');
+});
+
+test('lighting a bar with nothing drawn yet touches no notation', () => {
+  const s = setup();
+  s.sheet.mark(3);
+  assert.deepEqual(s.log, []);
 });

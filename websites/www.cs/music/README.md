@@ -52,6 +52,14 @@ through the view's parts, one lit at a time, each with Hear it (a clip of the
 piece, or a built-in demo). It opens by itself the first time each view is
 shown in a browser (`workroom-guide-<view>` in localStorage).
 
+Sheet music also has **Learn to read sheet music**: a six-step lesson beside the
+notation (staff and clef, note lengths and rests, bars and the time signature,
+sharps, flats and the key signature, ties, reading along). Each step uses the
+shown instrument's own bars as its example, lights that bar in amber and plays
+it with Hear it; while reading along the lit bar follows the playhead. A step
+the instrument has no example for (no accidental, no tie) keeps its plain
+explanation and offers no Hear it. Its words open glossary cards.
+
 ## Answering
 
 The answer bar sits under the player on a piece's page, with four buttons: **Pin
@@ -146,7 +154,7 @@ standard input and are never printed.
 `make music-e2e` (local only; CI never runs it) brings up its own docker project
 with the admin mail capture, signs in through the captured email, publishes the
 fixture drafts with an API key made on the hub, and drives the page in Chrome:
-play, seek, the four views, a glossary card, the sheet music, a sound effect from
+play, seek, the four views, a glossary card, the sheet music and its reading lesson, a sound effect from
 a second project, and no content security policy violation. It also uploads the
 committed TEST keyring (`games/workroom/test/fixtures/test-key.json`) with its
 fingerprints through `music/api/keyring.php`, unlocks it in the shipped page with

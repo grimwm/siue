@@ -68,6 +68,14 @@ for a class.
   - nothing is ever re-encoded lossily.
 - **Drafts appear at once,** and deleting (on the page, or by the AI through
   the MCP) is always available.
+- **Drafts are each piece's undo history.**
+  - Each piece keeps its newest 20 drafts; its 21st rolls off its own oldest.
+  - Another piece is never touched.
+  - When storage is full, the upload is refused with a message saying how much
+    room is left; nothing is deleted to make room.
+  - The owner's store already works this way (PR #199).
+- **A Download button** on the piece page pulls down the draft on screen: its
+  audio, its sheet music and its score.
 - **AI connection over MCP,** with the MCP server on the person's own computer.
 
 ## How it works (decided in conversation)

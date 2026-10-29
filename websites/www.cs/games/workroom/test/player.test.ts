@@ -27,26 +27,13 @@ test('the view follows the playhead a page at a time', () => {
 });
 
 test('back 5 and ahead 5 jump five seconds, clamped to the piece', () => {
-  assert.equal(skipTarget('back5', 12, 60, []), 7);
-  assert.equal(skipTarget('back5', 3, 60, []), 0);
-  assert.equal(skipTarget('ahead5', 12, 60, []), 17);
-  assert.equal(skipTarget('ahead5', 58, 60, []), 60);
+  assert.equal(skipTarget('back5', 12, 60), 7);
+  assert.equal(skipTarget('back5', 3, 60), 0);
+  assert.equal(skipTarget('ahead5', 12, 60), 17);
+  assert.equal(skipTarget('ahead5', 58, 60), 60);
 });
 
-test('previous section goes to the section playing, or the one before within 1.5 s of its start', () => {
-  const starts = [0, 8, 20];
-  assert.equal(skipTarget('prev', 12, 60, starts), 8);
-  assert.equal(skipTarget('prev', 9, 60, starts), 0, 'just past a start: the one before');
-  assert.equal(skipTarget('prev', 8, 60, starts), 0);
-  assert.equal(skipTarget('prev', 1, 60, starts), 0);
-  assert.equal(skipTarget('prev', 5, 60, []), 0, 'no sections: the start');
-});
-
-test('next section goes to the next start; past the last it stays put', () => {
-  const starts = [0, 8, 20];
-  assert.equal(skipTarget('next', 0, 60, starts), 8);
-  assert.equal(skipTarget('next', 8, 60, starts), 20);
-  assert.equal(skipTarget('next', 12, 60, starts), 20);
-  assert.equal(skipTarget('next', 25, 60, starts), 25);
-  assert.equal(skipTarget('next', 5, 60, []), 5);
+test('to the start and to the end go to the first and last moment of the whole track', () => {
+  assert.equal(skipTarget('start', 125, 216), 0);
+  assert.equal(skipTarget('end', 12, 216), 216);
 });

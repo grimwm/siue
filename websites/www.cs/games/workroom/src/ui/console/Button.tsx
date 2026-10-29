@@ -1,6 +1,6 @@
 // The console's button: primary (amber), secondary, ghost and record (red);
 // at least 44 px square. A pressed secondary or ghost toggle is filled amber,
-// like a pressed chip.
+// like a pressed chip, or outlined in amber when its look is 'outline'.
 import type { ComponentChildren, Ref } from 'preact';
 import { cx } from './cx.ts';
 
@@ -11,7 +11,7 @@ const VARIANTS: Readonly<Record<ButtonVariant, string>> = {
   ghost: 'border-transparent bg-transparent text-ink hover:bg-lane',
   record: 'border-record bg-record text-on-accent hover:brightness-110',
 };
-const PRESSED = 'border-amber bg-amber text-on-accent hover:brightness-110';
+const PRESSED = { fill: 'border-amber bg-amber text-on-accent hover:brightness-110', outline: 'border-amber bg-panel text-amber ring-1 ring-amber' } as const;
 const BASE = 'inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md border px-4 font-display text-sm font-semibold tracking-wider uppercase select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber disabled:cursor-not-allowed disabled:opacity-50';
 
 export interface ButtonProps {
@@ -20,6 +20,8 @@ export interface ButtonProps {
   disabled?: boolean;
   /** aria-pressed, for a toggle. */
   pressed?: boolean;
+  /** How a pressed toggle is drawn: filled amber (the default) or outlined in amber. */
+  pressedLook?: 'fill' | 'outline';
   /** The accessible name, for a button whose text is a symbol. */
   label?: string;
   /** A form's submit button (type="submit"); every other button is type="button" and never submits. */
@@ -32,7 +34,7 @@ export interface ButtonProps {
 
 export function Button(p: ButtonProps) {
   return (
-    <button type={p.submit ? 'submit' : 'button'} ref={p.buttonRef} class={cx(BASE, toggledOn(p) ? PRESSED : VARIANTS[p.variant ?? 'secondary'], p.class)} disabled={p.disabled}
+    <button type={p.submit ? 'submit' : 'button'} ref={p.buttonRef} class={cx(BASE, toggledOn(p) ? PRESSED[p.pressedLook ?? 'fill'] : VARIANTS[p.variant ?? 'secondary'], p.class)} disabled={p.disabled}
       aria-pressed={p.pressed} aria-label={p.label} onClick={() => p.onClick?.()} {...p.data}>{p.children}</button>
   );
 }

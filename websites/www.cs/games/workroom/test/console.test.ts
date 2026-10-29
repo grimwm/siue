@@ -82,6 +82,11 @@ test('Button: a pressed toggle is drawn filled amber, and unpressed it is drawn 
   assert.ok(classes(off).includes('bg-panel') && !classes(off).includes('bg-amber'), classes(off).join(' '));
 });
 
+test('Button: an outline toggle, pressed, is drawn with an amber outline and no fill', async () => {
+  const on = walk(await mount(h(c.button.Button, { pressed: true, pressedLook: 'outline', onClick: () => {} }, 'Loop'))).find(e => e.localName === 'button')!;
+  assert.ok(['border-amber', 'ring-amber', 'text-amber', 'bg-panel'].every(k => classes(on).includes(k)) && !classes(on).includes('bg-amber'), classes(on).join(' '));
+});
+
 test('Chip: a glossary word carries its term; a toggle carries aria-pressed', async () => {
   let n = 0;
   const word = await mount(h(c.chip.Chip, { term: 'ostinato', onClick: () => { n++; } }, 'ostinato'));

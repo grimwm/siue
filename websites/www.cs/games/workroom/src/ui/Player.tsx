@@ -1,12 +1,15 @@
 // The audio: Play/Pause, five seconds back and ahead, the start and end
 // of the track, Loop (on by default; a hear-it clip never loops), the time readout
-// (and the bar on a music piece), and the playhead's time kept in step with the
+// (and the bar on a music piece), the draft's downloads (the audio it plays,
+// the sheet music, the score), and the playhead's time kept in step with the
 // <audio> element in both directions.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { downloadLinks } from '../download.ts';
+import type { DownloadLink } from '../download.ts';
 import { clipDone, pickSource, skipTarget } from '../player.ts';
 import type { Clip, Skip } from '../player.ts';
 import type { AudioSource } from '../score.ts';
-import { Button } from './console/Button.tsx';
+import { Button, buttonClass } from './console/Button.tsx';
 import { Readout } from './console/Readout.tsx';
 
 // The transport buttons' 16 px icons (paths in a 16-unit box) and accessible names.
@@ -17,8 +20,8 @@ const SKIPS: readonly { kind: Skip; label: string; icon: string }[] = [
   { kind: 'end', label: 'To the end', icon: 'M13 3v10M3 3l7 5-7 5Z' },
 ];
 
-/** duration is the piece's length in seconds; onSeek is the page's seek, which moves the audio, the playhead and the view together. */
-export interface PlayerProps { src: AudioSource[]; duration: number; onSeek(t: number): void; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void; pauseRef?: { current: (() => void) | null } }
+/** duration is the piece's length in seconds; onSeek is the page's seek, which moves the audio, the playhead and the view together. download names the draft on screen (sheet: it has sheet music); without it, no downloads. */
+export interface PlayerProps { src: AudioSource[]; duration: number; onSeek(t: number): void; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void; pauseRef?: { current: (() => void) | null }; download?: { piece: string; version: number; sheet: boolean } }
 
 export function Player(p: PlayerProps) {
   const audio = useRef<HTMLAudioElement>(null);
@@ -105,6 +108,22 @@ export function Player(p: PlayerProps) {
         <Button variant="secondary" pressed={loop} pressedLook="outline" disabled={!source} onClick={() => setLoop(l => !l)}>Loop</Button>
       </div>
       <Readout time={p.time} bar={p.bar} />
+      {p.download ? <Downloads links={downloadLinks({ ...p.download, audio: source }, p.audioSrc)} /> : null}
+    </div>
+  );
+}
+
+// Plain same-origin links: the download attribute saves the file under the draft's name.
+const DOWNLOAD_ICON = 'M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10';
+function Downloads(p: { links: DownloadLink[] }) {
+  return (
+    <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Download this draft">
+      {p.links.map(l => (
+        <a class={buttonClass('secondary')} href={l.href} download={l.name} aria-label={`Download ${l.label.toLowerCase()}, ${l.name}`}>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d={DOWNLOAD_ICON} /></svg>
+          {l.label}
+        </a>
+      ))}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 // The console's button: primary (amber), secondary, ghost and record (red);
 // at least 44 px square. A pressed secondary or ghost toggle is filled amber,
 // like a pressed chip, or outlined in amber when its look is 'outline'.
+// buttonClass styles a link that acts as a button (a download) the same way.
 import type { ComponentChildren, Ref } from 'preact';
 import { cx } from './cx.ts';
 
@@ -30,6 +31,11 @@ export interface ButtonProps {
   buttonRef?: Ref<HTMLButtonElement>;
   data?: Record<`data-${string}`, string>;
   children?: ComponentChildren;
+}
+
+/** A button's classes, for a link styled as one. */
+export function buttonClass(variant: ButtonVariant = 'secondary', extra?: string): string {
+  return cx(BASE, VARIANTS[variant], extra);
 }
 
 export function Button(p: ButtonProps) {

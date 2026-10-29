@@ -81,6 +81,7 @@ let modernOn = false;
 let modernLoading = false;
 /** The modern board cannot draw in this browser (no WebGL, or its context was lost). */
 let modernFailed = false;
+let modernFailure = '';
 /** The toast has said so, once this visit. */
 let modernWarned = false;
 /** The game's level opening the modern board last built. */
@@ -221,7 +222,7 @@ function toggleBackground(): void {
 function applyLook(look: Look): void {
   settings.look.set(look);
   ui.setLook(look, settings.walls.get());
-  ui.say(look === 'classic' ? 'Classic look.' : modernFailed ? NO_WEBGL : 'Modern look.', 'info');
+  ui.say(look === 'classic' ? 'Classic look.' : modernFailed ? modernFailure : 'Modern look.', 'info');
   showLook(look);
 }
 
@@ -371,7 +372,7 @@ async function createModern(): Promise<void> {
   }
   modernLoading = false;
   if (!modern) {
-    noModern();
+    noModern(NO_WEBGL);
     return;
   }
   modern.walls(settings.walls.get());
@@ -379,7 +380,7 @@ async function createModern(): Promise<void> {
   canvas.addEventListener('webglcontextlost', e => {
     // Kept so the browser may give it back; until it does, the classic board shows.
     e.preventDefault();
-    noModern();
+    noModern(LOST_WEBGL);
   });
   canvas.addEventListener('webglcontextrestored', () => {
     modernFailed = false;
@@ -391,14 +392,16 @@ async function createModern(): Promise<void> {
 }
 
 const NO_WEBGL = 'The modern look needs WebGL, which this browser does not have; showing Classic.';
+const LOST_WEBGL = 'The modern look stopped working in this browser; showing Classic.';
 
 /* The modern board cannot draw here: the classic one shows, the stored choice stays, and the toast says why once. */
-function noModern(): void {
+function noModern(why: string): void {
   modernFailed = true;
+  modernFailure = why;
   setModernOn(false);
   if (!modernWarned) {
     modernWarned = true;
-    ui.say(NO_WEBGL, 'info');
+    ui.say(why, 'info');
   }
 }
 

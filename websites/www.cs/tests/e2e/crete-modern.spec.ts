@@ -73,13 +73,13 @@ const player = (page: Page) => page.evaluate(() => ({ ...(window as unknown as H
 /** Waits until the board has drawn and then held still for a moment. */
 async function settled(page: Page): Promise<number> {
   let last = -1;
-  for (let i = 0; i < 60; i++) {
+  await expect.poll(async () => {
     const m = await modern(page);
-    if (m && m.frames > 0 && m.frames === last) return last;
+    const rested = !!m && m.frames > 0 && m.frames === last;
     last = m?.frames ?? -1;
-    await page.waitForTimeout(250);
-  }
-  throw new Error('the modern board never came to rest');
+    return rested;
+  }, { message: 'the modern board comes to rest', intervals: [250], timeout: 15_000 }).toBe(true);
+  return last;
 }
 
 /** Opens a level (the hall by default) on the real page, in the modern look, and closes its start card. */
@@ -225,7 +225,7 @@ test('a block pushed into water splashes in and floats there; undo takes it out'
   expect(await floating()).toEqual([]);
   await page.keyboard.press('ArrowRight');
   await expect.poll(floating, 'the block floats in the pool').toEqual([POOL_CELL]);
-  await page.waitForTimeout(1500);
+  await expect.poll(() => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.splashing()), 'the splash ends').toEqual([]);
   await page.keyboard.press('u');
   await expect.poll(floating, 'undo empties the pool').toEqual([]);
   await page.keyboard.press('ArrowRight');
@@ -240,7 +240,8 @@ test('a block sunk while the modern look is hidden floats at once when it return
   await page.keyboard.press('q');
   await page.keyboard.press('ArrowRight');
   await expect.poll(async () => (await player(page)).c, 'Theseus pushes the block in').toBe(3);
-  await page.waitForTimeout(1500); // the turn's animation ends
+  // No hook shows the classic board's turn while the modern one is hidden, so the turn's length is waited out.
+  await page.waitForTimeout(1500);
   await page.keyboard.press('q');
   await page.locator('#look-modern').click();
   await expect.poll(async () => (await modern(page))!.active).toBe(true);
@@ -316,7 +317,7 @@ test('a lost WebGL context warns only when the player chose the modern look', as
   const errors = await openHall(page);
   await page.keyboard.press('q');
   await page.locator('#look-classic').click();
-  await page.waitForTimeout(3500); // the "Classic look." toast has gone
+  await expect(page.locator('#toast')).not.toHaveClass(/\bshow\b/, { timeout: 10_000 }); // the "Classic look." toast has gone
   await lose();
   await page.waitForTimeout(1000);
   await expect(page.locator('#toast')).not.toContainText('stopped working');

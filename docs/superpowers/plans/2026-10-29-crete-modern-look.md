@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript 7 (strict), three.js (npm, exact pin), esbuild via `games/_kit/build/build.mjs`, preact views, `node:test`, Playwright e2e.
 
-**Spec:** `docs/superpowers/specs/2026-10-29-crete-modern-look-design.md`. The approved sample is `/tmp/claude-1000/-home-wgrim-Documents-Repositories-siue/acd40093-fd7c-4fef-8f78-f0a59c547661/scratchpad/live3d/index.html` (grep it; it is ~1200 lines): its floor, wall, ghosting, paint filter, lighting, torch, loop, camera and mini-map code is the reference to port.
+**Spec:** `docs/superpowers/specs/2026-10-29-crete-modern-look-design.md`. The approved live sample (about 1200 lines, described in the spec): its floor, wall, ghosting, paint filter, lighting, torch, loop, camera and mini-map code is the reference to port.
 
 ## Global Constraints
 

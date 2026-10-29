@@ -64,14 +64,14 @@ export function Menu(p: MenuProps) {
         <Button id="music-hidden" onClick={p.onBackground}>{p.background ? '🎶 Music in the background: On' : '🎶 Music in the background: Off'}</Button>
         <Button id="fullscreen" keyLabel={KEYS.fullscreen.label} onClick={p.onFullscreen}>{p.fullscreen ? 'Leave full screen' : 'Full screen'}</Button>
       </div>
-      <div class="menu-sec" data-section="look">
-        <span class="menu-label">Look:</span>
+      <div class="menu-sec" data-section="look" role="group" aria-labelledby="menu-look-label">
+        <span class="menu-label" id="menu-look-label">Look:</span>
         <Button id="look-modern" pressed={p.look === 'modern'} onClick={() => p.onLook('modern')}>Modern</Button>
         <Button id="look-classic" pressed={p.look === 'classic'} onClick={() => p.onLook('classic')}>Classic</Button>
       </div>
       {p.look === 'modern' && (
-        <div class="menu-sec" data-section="walls">
-          <span class="menu-label">Walls:</span>
+        <div class="menu-sec" data-section="walls" role="group" aria-labelledby="menu-walls-label">
+          <span class="menu-label" id="menu-walls-label">Walls:</span>
           {WALL_CHOICES.map(([mode, name]) => (
             <Button key={mode} id={`walls-${mode}`} pressed={p.walls === mode} onClick={() => p.onWalls(mode)}>{name}</Button>
           ))}

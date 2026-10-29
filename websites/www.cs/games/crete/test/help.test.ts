@@ -50,6 +50,13 @@ test("the help names Daedalus's snare, the Bronze ball, the Harpy and Talos's fi
   assert.match(all, /you, then the hazards, then the Minotaur/);
 });
 
+test('the help explains the Look setting and the camera gestures', () => {
+  const all = text(helpLines(KEYS, TOOLS));
+  assert.match(all, /Look in this menu picks the modern board or the classic tiles/);
+  assert.match(all, /Walls \(modern only\)/);
+  assert.match(all, /double tap or double click/);
+});
+
 test('the help says what the Music switch does and credits the music and its samples', () => {
   const all = text(helpLines(KEYS, TOOLS));
   assert.match(all, /Music in this menu turns the music off, and Music in the background whether it goes on while this tab is hidden; M silences everything\./);

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
-import { createSettings, FULLSCREEN_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, SOUND_KEY } from '../src/settings.ts';
+import { createSettings, FULLSCREEN_KEY, LOOK_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, SOUND_KEY, WALLS_KEY } from '../src/settings.ts';
 
 test('defaults: sound on, music on, music in the background on, fullscreen off', () => {
   const s = createSettings(memoryStorage());
@@ -51,4 +51,16 @@ test('music in the background is its own setting and defaults to on', () => {
   const again = createSettings(storage);
   assert.deepEqual([again.music.get(), again.musicHidden.get()], ['on', 'off']);
   assert.equal(createSettings(memoryStorage({ [MUSIC_HIDDEN_KEY]: 'sometimes' })).musicHidden.get(), 'on');
+});
+
+test('the look is modern and the walls solid until chosen; a stored choice reads back, an unknown word reads the default', () => {
+  assert.deepEqual([createSettings(null).look.get(), createSettings(null).walls.get()], ['modern', 'solid']);
+  const storage = memoryStorage();
+  const s = createSettings(storage);
+  s.look.set('classic');
+  s.walls.set('ghosted');
+  assert.deepEqual([storage.data.get(LOOK_KEY), storage.data.get(WALLS_KEY)], ['classic', 'ghosted']);
+  assert.deepEqual([createSettings(storage).look.get(), createSettings(storage).walls.get()], ['classic', 'ghosted']);
+  const odd = createSettings(memoryStorage({ [LOOK_KEY]: 'flat', [WALLS_KEY]: 'glass' }));
+  assert.deepEqual([odd.look.get(), odd.walls.get()], ['modern', 'solid']);
 });

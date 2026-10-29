@@ -11,6 +11,7 @@ import { boardRows } from "./board-plan.ts";
 import type { Atlas } from "./board-plan.ts";
 import type { Game, SfxName, Tone } from "./game.ts";
 import { KEYS, actionFor, isMove, itemFor } from "./keys.ts";
+import type { MoveAction } from "./keys.ts";
 import { createLayers } from "./layers.ts";
 import type { LayerName } from "./layers.ts";
 import type { FoundPages } from "./pages.ts";
@@ -37,6 +38,7 @@ import { renderStoryCard } from "./ui/story.tsx";
 import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
+import type { Look, WallMode } from "./settings.ts";
 import { renderTitleCard } from "./ui/title.tsx";
 import { ratingText, renderSharedCard } from "./ui/shared.tsx";
 import type { SharedView } from "./share/visit.ts";
@@ -55,6 +57,8 @@ export interface UiDeps {
   levels?: Pick<Levels, "outside">;
   /** Voices an event (the chapter card's sound). */
   sfx?(name: SfxName): void;
+  /** Told the cards after every change to them (the modern board hides behind the editor). */
+  cards?(stack: LayerName[]): void;
 }
 
 /** What a key press or click asks of the page. */
@@ -65,6 +69,10 @@ export interface Controls {
   toggleMusic?(): void;
   /** The Music in the background switch, under Music in the menu. */
   toggleBackground?(): void;
+  /** The Look choice (menu and title card). */
+  setLook?(look: Look): void;
+  /** The Walls choice, shown while the look is modern. */
+  setWalls?(walls: WallMode): void;
   toggleFullscreen(): void;
   /** Wake the speakers: any gesture does. */
   wake(): void;
@@ -92,6 +100,17 @@ export interface Ui {
   setMusic(on: boolean): void;
   setBackground(on: boolean): void;
   setFullscreen(on: boolean): void;
+  /** Shows the look and wall choices the page restored or changed. */
+  setLook(look: Look, walls: WallMode): void;
+  /** Whether the modern board shows: it fills the board's space, so the classic canvas is not fitted and nothing
+   *  scrolls. */
+  setModernBoard(on: boolean): void;
+  /** Turns a move key or pad press, a direction on the screen, into the direction on the grid it moves. */
+  setMoveDir(fn: (dir: MoveAction) => MoveAction): void;
+  /** True while a card other than the start card is open. */
+  cardsOpen(): boolean;
+  /** Closes the start card, as a move does. */
+  closeStart(): void;
   bindControls(controls: Controls): void;
   /** The title card, alone; `hint` adds how to close an installed app, and `note` why a share link did not open. */
   showTitle(hint: boolean, note?: string): void;
@@ -152,6 +171,8 @@ export function createUi(deps: UiDeps): Ui {
   let music = true;
   let background = true;
   let full = false;
+  let look: Look = "modern";
+  let walls: WallMode = "solid";
   let toastTimer = 0;
   let controls: Controls | null = null;
   let game: Game | null = null;
@@ -181,6 +202,10 @@ export function createUi(deps: UiDeps): Ui {
   let pending: string[] = [];
   /** The editor's layer is in the stack and the editor has been opened for it. */
   let editorShown = false;
+  /** The modern board shows instead of the classic canvas. */
+  let modernBoard = false;
+  /** A move on the screen as a move on the grid. */
+  let moveDir = (dir: MoveAction): MoveAction => dir;
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
@@ -196,6 +221,7 @@ export function createUi(deps: UiDeps): Ui {
       (controls?.game ?? game)?.resume();
     }
     drawLayers();
+    deps.cards?.(layers.stack());
   });
 
   /** The campaign index of chapter `n`'s first level. */
@@ -317,6 +343,11 @@ export function createUi(deps: UiDeps): Ui {
       onStory: () => layers.open("story"),
       ...(controls?.editor ? { onEditor: showEditor } : {}),
       onSettings: () => layers.open("menu"),
+      look,
+      onLook: () => {
+        controls?.wake();
+        controls?.setLook?.(look === "modern" ? "classic" : "modern");
+      },
     });
     const card = controls?.shared?.card() ?? null;
     renderSharedCard($("shared-root"), {
@@ -401,6 +432,8 @@ export function createUi(deps: UiDeps): Ui {
       music,
       background,
       fullscreen: full,
+      look,
+      walls,
       log,
       help: helpLines(KEYS, TOOLS),
       onSound: () => {
@@ -416,6 +449,8 @@ export function createUi(deps: UiDeps): Ui {
         controls?.toggleBackground?.();
       },
       onFullscreen: () => controls?.toggleFullscreen(),
+      onLook: (l) => controls?.setLook?.(l),
+      onWalls: (w) => controls?.setWalls?.(w),
       onLore: () => {
         loreShown = null;
         loreFromPickup = false;
@@ -450,6 +485,11 @@ export function createUi(deps: UiDeps): Ui {
     if (!run) return;
     const { cols, rows } = run.now.level;
     const holder = $("board");
+    if (modernBoard) {
+      setScrolls(holder, false);
+      sized = "";
+      return;
+    }
     const canvas = $("stage");
     setScrolls(holder, false); // measured as if it did not scroll: a scroll bar must not change the answer
     const bs = getComputedStyle(holder);
@@ -587,7 +627,7 @@ export function createUi(deps: UiDeps): Ui {
       over: s.outcome !== "playing",
       onMove: (dir) => act(() => {
         layers.close("start");
-        g.press({ kind: "move", dir });
+        g.press({ kind: "move", dir: moveDir(dir) });
       })(),
       onWait: act(() => g.press({ kind: "wait" })),
       onUndo: act(() => g.press("undo")),
@@ -858,7 +898,7 @@ export function createUi(deps: UiDeps): Ui {
       const g = c.game;
       if (isMove(action)) {
         ev.preventDefault();
-        g.press({ kind: "move", dir: action });
+        g.press({ kind: "move", dir: moveDir(action) });
       } else if (action === "wait") {
         ev.preventDefault();
         g.press({ kind: "wait" });
@@ -924,5 +964,20 @@ export function createUi(deps: UiDeps): Ui {
       full = on;
       drawLayers();
     },
+    setLook: (l, w) => {
+      look = l;
+      walls = w;
+      drawLayers();
+    },
+    setModernBoard: (on) => {
+      modernBoard = on;
+      sized = "";
+      fit();
+    },
+    setMoveDir: (fn) => {
+      moveDir = fn;
+    },
+    cardsOpen: () => layers.stack().some((n) => n !== "start"),
+    closeStart: () => layers.close("start"),
   };
 }

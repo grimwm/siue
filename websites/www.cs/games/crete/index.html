@@ -15,13 +15,17 @@
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {}); });</script>
     <!-- app-tags:end -->
     <link rel="stylesheet" href="dist/kit.css?v=41bad8402c" />
-    <link rel="stylesheet" href="game.css?v=d12962bc06" />
+    <link rel="stylesheet" href="game.css?v=67cb2a40a9" />
   </head>
   <body>
     <div id="frame">
       <header id="status-root" class="status" aria-label="Status"></header>
       <main id="board" class="board" aria-label="The labyrinth board">
         <canvas id="stage" class="stage" role="img" aria-label="The labyrinth"></canvas>
+        <div id="modern" class="modern-area">
+          <canvas id="stage3d" class="stage3d" role="img" aria-label="The labyrinth"></canvas>
+          <div class="modern-overlay"></div>
+        </div>
       </main>
       <p id="toast" class="toast" role="status" aria-live="polite"></p>
       <div id="strip-root" class="strip"></div>
@@ -42,7 +46,7 @@
       </div>
     </div>
 
-    <script type="module" src="dist/main.js?v=c6834c813a"></script>
+    <script type="module" src="dist/main.js?v=de240b657b"></script>
     <script src="dist/install.js?v=0666dbf8f1" defer></script>
   </body>
 </html>

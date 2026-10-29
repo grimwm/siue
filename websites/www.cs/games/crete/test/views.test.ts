@@ -154,10 +154,10 @@ test('a tool names itself, its count and what it does to a screen reader', () =>
 // ---- menu ----
 function menuProps(over: Partial<MenuProps> = {}): MenuProps {
   return {
-    open: true, muted: false, music: true, background: true, fullscreen: false,
+    open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid',
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 
@@ -167,8 +167,22 @@ test('the menu holds sound and full screen, the story log, how to play and Quit,
   const veil = byId(root, 'menu-veil');
   assert.equal(veil.hidden, false);
   assert.equal(byId(root, 'menu-title').textContent, 'Menu');
-  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'lore', 'log', 'help', 'quit']);
+  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'look', 'walls', 'lore', 'log', 'help', 'quit']);
   for (const gone of ['seed-form', 'seed-input', 'random-run', 'run-stats']) assert.equal(maybeById(root, gone), undefined, gone);
+});
+
+test('the menu offers Modern and Classic, and Solid, Ghosted and Low only while the look is modern', () => {
+  const root = mount();
+  const seen: string[] = [];
+  renderMenu(root, menuProps({ look: 'modern', walls: 'ghosted', onLook: l => seen.push(l), onWalls: w => seen.push(w) }));
+  const pressed = (id: string) => byId(root, id).getAttribute('aria-pressed');
+  assert.deepEqual(['look-modern', 'look-classic'].map(pressed), ['true', 'false']);
+  assert.deepEqual(['walls-solid', 'walls-ghosted', 'walls-low'].map(pressed), ['false', 'true', 'false']);
+  for (const id of ['look-classic', 'walls-low']) click(byId(root, id));
+  assert.deepEqual(seen, ['classic', 'low']);
+  renderMenu(root, menuProps({ look: 'classic' }));
+  assert.deepEqual(['look-modern', 'look-classic'].map(pressed), ['false', 'true']);
+  assert.equal(maybeById(root, 'walls-solid'), undefined);
 });
 
 test('the menu has a Lore book button that calls back', () => {

@@ -6,3 +6,8 @@ committed through Git LFS). The limestone, bronze, enamel, water, ice, fire and
 hide are procedural Blender materials; the figures, objects and terrain are
 modelled from primitive meshes. No external images, textures, models or fonts
 are used.
+
+The Modern look's models (floor, walls, terrain, pieces and figures) are built in
+code from three.js primitives (`src/modern/scene/`), and its textures are painted
+procedurally on canvases from seeded noise. Its floating icons and mini map reuse
+the sprite atlas above. No external images, textures, models or fonts are used.

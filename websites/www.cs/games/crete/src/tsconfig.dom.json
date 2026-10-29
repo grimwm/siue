@@ -1,5 +1,5 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": { "lib": ["ES2022", "DOM"], "resolveJsonModule": true },
-  "files": ["audio.ts", "music-decks.ts", "ui.ts", "ui/end.tsx", "ui/menu.tsx", "ui/status.tsx", "ui/story.tsx", "ui/strip.tsx", "ui/title.tsx", "ui/start.tsx", "ui/chapter.tsx", "ui/levels.tsx", "ui/shared.tsx", "notes.ts", "install-slot.ts", "main.ts", "solver-client.ts", "board.ts", "tiles-page.ts", "editor/editor.ts", "editor/bar.tsx", "editor/palette.tsx"]
+  "files": ["audio.ts", "music-decks.ts", "ui.ts", "ui/end.tsx", "ui/menu.tsx", "ui/status.tsx", "ui/story.tsx", "ui/strip.tsx", "ui/title.tsx", "ui/start.tsx", "ui/chapter.tsx", "ui/levels.tsx", "ui/shared.tsx", "notes.ts", "install-slot.ts", "main.ts", "solver-client.ts", "modern-loader.ts", "modern/entry.ts", "modern/board3d.ts", "modern/controls.ts", "modern/minimap.ts", "modern/scene/floor.ts", "modern/scene/walls.ts", "modern/scene/terrain.ts", "modern/scene/light.ts", "modern/scene/paint.ts", "modern/scene/textures.ts", "modern/scene/pieces.ts", "modern/scene/figures.ts", "modern/scene/thread.ts", "modern/scene/icons.ts", "modern/scene/float.ts", "board.ts", "tiles-page.ts", "editor/editor.ts", "editor/bar.tsx", "editor/palette.tsx"]
 }

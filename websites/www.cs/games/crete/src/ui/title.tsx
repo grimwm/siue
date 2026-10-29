@@ -8,6 +8,7 @@ import { Button } from '../../../_kit/ui/button.tsx';
 import { EXIT_HINT } from '../../../_kit/app.ts';
 import { CHAPTERS } from '../campaign/chapters.ts';
 import { KEYS } from '../keys.ts';
+import type { Look } from '../settings.ts';
 
 export interface TitleCardProps {
   open: boolean;
@@ -20,6 +21,9 @@ export interface TitleCardProps {
   /** Make a level: opens the level editor. */
   onEditor?: () => void;
   onSettings?: () => void;
+  /** The look now drawn; its switch shows it and flips to the other. */
+  look?: Look;
+  onLook?: () => void;
 }
 
 export function TitleCard(p: TitleCardProps) {
@@ -34,6 +38,7 @@ export function TitleCard(p: TitleCardProps) {
         {p.onStory && <Button id="title-story" keyLabel={KEYS.story.label} onClick={p.onStory}>Story</Button>}
         {p.onEditor && <Button id="title-editor" keyLabel={KEYS.editor.label} onClick={p.onEditor}>Make a level</Button>}
         {p.onSettings && <Button id="title-settings" keyLabel={KEYS.menu.label} onClick={p.onSettings}>Settings</Button>}
+        {p.onLook && <Button id="title-look" onClick={p.onLook}>Look: {p.look === 'classic' ? 'Classic' : 'Modern'}</Button>}
       </div>
       <div id="title-install" class="title-install" />
     </Dialog>

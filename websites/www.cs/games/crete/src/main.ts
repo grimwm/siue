@@ -8,6 +8,10 @@ import { createMusic } from './music.ts';
 import { mediaDeck, pickSource } from './music-decks.ts';
 import type { AudioSource } from './music-decks.ts';
 import { createBoard } from './board.ts';
+import { loadModern } from './modern-loader.ts';
+import type { ModernBoard } from './modern/board3d.ts';
+import { DEFAULT_YAW } from './modern/camera.ts';
+import { screenToGrid } from './modern/screen-move.ts';
 import { drawList } from './board-plan.ts';
 import type { Atlas } from './board-plan.ts';
 import { createGame, frameOf } from './game.ts';
@@ -30,6 +34,7 @@ import { fromLevel } from './editor/model.ts';
 import { createRater } from './share/rating.ts';
 import { createVisit, fragmentKind } from './share/visit.ts';
 import { createSettings } from './settings.ts';
+import type { Look, WallMode } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
@@ -70,6 +75,21 @@ const settings = createSettings(browserStorage());
 const appEnv = browserAppEnv();
 const image = new Image();
 const board = createBoard(document.getElementById('stage') as HTMLCanvasElement, atlas, image);
+/* Which board shows. The classic board's loop and the modern board's frames each run only while their board does. */
+let modern: ModernBoard | null = null;
+let modernOn = false;
+let modernLoading = false;
+/** The modern board cannot draw in this browser (no WebGL, or its context was lost). */
+let modernFailed = false;
+let modernFailure = '';
+/** The toast has said so, once this visit. */
+let modernWarned = false;
+/** The game's level opening the modern board last built. */
+let modernOpens = -1;
+let modernRaf = 0;
+let classicRaf = 0;
+let tilesLoaded = false;
+let editorUp = false;
 const progress = createProgress(browserStorage());
 const pages = createFoundPages(browserStorage());
 /* The campaign's levels, then the level from outside it (a try from the editor, or a browser spec's). */
@@ -81,7 +101,7 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   bestWon: (text, moves) => editor.tryWon(text, moves),
 });
 const levels = outside.levels;
-const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx });
+const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx, cards: stack => behindEditor(stack.includes('editor')) });
 /* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
    which comes first. */
 const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
@@ -163,7 +183,10 @@ const game = createGame({
   timers: browserTimers,
   clock,
   reducedMotion: () => reduced,
-  changed: () => ui.render(game),
+  changed: () => {
+    ui.render(game);
+    showModern();
+  },
 });
 const frame = (): HTMLElement => document.getElementById('frame') ?? document.documentElement;
 
@@ -192,6 +215,22 @@ function toggleBackground(): void {
   music.setBackground(on);
   ui.setBackground(on);
   ui.say(on ? 'Music goes on in the background.' : 'Music stops in the background.', 'info');
+}
+
+
+/* The Look switch: stored, and the board it names shown. */
+function applyLook(look: Look): void {
+  settings.look.set(look);
+  ui.setLook(look, settings.walls.get());
+  ui.say(look === 'classic' ? 'Classic look.' : modernFailed ? modernFailure : 'Modern look.', 'info');
+  showLook(look);
+}
+
+function applyWalls(walls: WallMode): void {
+  settings.walls.set(walls);
+  ui.setLook(settings.look.get(), walls);
+  modern?.walls(walls);
+  ui.say(`Walls: ${walls}.`, 'info');
 }
 
 /* A gesture wakes the speakers and starts music the browser held back until one. */
@@ -235,20 +274,146 @@ async function quit(): Promise<void> {
   if (outcome !== 'closed') ui.showTitle(outcome === 'title-with-hint');
 }
 
-/* The board repaints every frame: the sprites animate, and a turn's figures move between cells (holding still
-   while a story page the figure reached is read). */
+/* The classic board repaints every frame while it shows: the sprites animate, and a turn's figures move between
+   cells (holding still while a story page the figure reached is read). */
 function loop(now: number): void {
+  classicRaf = 0;
+  if (modernOn) return;
   const f = frameOf(game, game.animMs());
   if (f) {
     board.paint(drawList(f.state, f.figures, atlas, now), game.thread ?? undefined);
     if (game.anim && f.done) game.finishAnim();
   }
-  requestAnimationFrame(loop);
+  classicRaf = requestAnimationFrame(loop);
+}
+
+/* The classic loop runs once the tiles have loaded, while the modern board does not show. */
+function runClassic(): void {
+  if (tilesLoaded && !modernOn && !classicRaf) classicRaf = requestAnimationFrame(loop);
+}
+
+/* The modern board draws only when told: a change to the game shows the frame now, and while a turn animates a
+   frame follows each display frame until it ends, when the turn is finished. An animation paused at a story page
+   shows its held frame and waits: the page closing resumes it, and that change starts the frames again. */
+function modernFrame(): void {
+  modernRaf = 0;
+  if (!modern || !modernOn) return;
+  const f = frameOf(game, game.animMs());
+  if (!f) return;
+  if (game.opens !== modernOpens) {
+    modernOpens = game.opens;
+    modern.level(f.state);
+  }
+  modern.show(f, game.thread);
+  if (game.anim && f.done) game.finishAnim();
+  else if (game.anim && !game.anim.paused && !modernRaf) modernRaf = requestAnimationFrame(modernFrame);
+}
+
+function showModern(): void {
+  if (modernOn && !modernRaf) modernRaf = requestAnimationFrame(modernFrame);
+}
+
+/* Shows the modern board or the classic one. The modern board is loaded the first time it is asked for, and the
+   classic one shows while it loads, and for good when this browser cannot draw it. */
+function showLook(look: Look): void {
+  if (look === 'modern' && !modernFailed) {
+    if (modern) setModernOn(true);
+    else void createModern();
+  } else setModernOn(false);
+}
+
+function setModernOn(on: boolean): void {
+  if (on === modernOn) return;
+  modernOn = on;
+  const holder = document.getElementById('board');
+  holder?.classList.toggle('look-modern', on);
+  ui.setModernBoard(on);
+  if (on) {
+    // What happened while it was hidden shows as it is now: the board rebuilds, so nothing splashes late.
+    modernOpens = -1;
+    if (classicRaf) cancelAnimationFrame(classicRaf);
+    classicRaf = 0;
+    modern?.resize();
+    modern?.setActive(!editorUp);
+    showModern();
+  } else {
+    if (modernRaf) cancelAnimationFrame(modernRaf);
+    modernRaf = 0;
+    modern?.setActive(false);
+    runClassic();
+  }
+}
+
+/* The editor has its own board: the modern one draws nothing while the editor covers it. */
+function behindEditor(up: boolean): void {
+  if (up === editorUp) return;
+  editorUp = up;
+  if (!up) modernOpens = -1;
+  if (modernOn) {
+    modern?.setActive(!up);
+    if (!up) showModern();
+  }
+}
+
+async function createModern(): Promise<void> {
+  if (modernLoading) return;
+  modernLoading = true;
+  const lib = await loadModern();
+  const canvas = document.getElementById('stage3d') as HTMLCanvasElement;
+  try {
+    modern = lib
+      ? lib.createModernBoard({
+        canvas,
+        overlay: document.querySelector('#modern .modern-overlay') as HTMLElement,
+        atlas,
+        image,
+        blocked: () => ui.cardsOpen(),
+        gesture: () => ui.closeStart(),
+        reducedMotion: () => reduced,
+      })
+      : null;
+  } catch (e) {
+    console.error('Crete: the modern board could not start', e);
+    modern = null;
+  }
+  modernLoading = false;
+  if (!modern) {
+    noModern(NO_WEBGL);
+    return;
+  }
+  modern.walls(settings.walls.get());
+  modern.setActive(false);
+  canvas.addEventListener('webglcontextlost', e => {
+    // Kept so the browser may give it back; until it does, the classic board shows.
+    e.preventDefault();
+    noModern(LOST_WEBGL);
+  });
+  canvas.addEventListener('webglcontextrestored', () => {
+    modernFailed = false;
+    modernOpens = -1;
+    showLook(settings.look.get());
+  });
+  if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (modernOn) modern?.resize(); }).observe(canvas);
+  showLook(settings.look.get());
+}
+
+const NO_WEBGL = 'The modern look needs WebGL, which this browser does not have; showing Classic.';
+const LOST_WEBGL = 'The modern look stopped working in this browser; showing Classic.';
+
+/* The modern board cannot draw here: the classic one shows, the stored choice stays, and the toast says why once. */
+function noModern(why: string): void {
+  modernFailed = true;
+  modernFailure = why;
+  setModernOn(false);
+  if (!modernWarned && settings.look.get() === 'modern') {
+    modernWarned = true;
+    ui.say(why, 'info');
+  }
 }
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
   });
   const background = settings.musicHidden.get() === 'on';
@@ -262,6 +427,9 @@ function start(): void {
     audio.setMusic(false);
     ui.setMusic(false);
   }
+  ui.setLook(settings.look.get(), settings.walls.get());
+  ui.setMoveDir(dir => screenToGrid(dir, modernOn && modern ? modern.yaw() : DEFAULT_YAW));
+  showLook(settings.look.get());
   followMusicSwitches();
   let direct = false;
   try {
@@ -276,7 +444,10 @@ function start(): void {
   followHash();
   window.addEventListener('hashchange', followHash);
   mountTitleInstall(window, document.getElementById('title-install'));
-  image.onload = () => { requestAnimationFrame(loop); };
+  image.onload = () => {
+    tilesLoaded = true;
+    runClassic();
+  };
   image.onerror = () => {
     const msg = 'The board pictures did not load. Check your connection and reload the page.';
     console.error(`Crete: ${image.src} failed to load`);
@@ -326,4 +497,13 @@ const editorHook = {
     ui.showEditor(fromLevel(parse(text)));
   },
 };
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook };
+/* The modern board, as far as the browser specs read it. */
+const modernHook = {
+  frames: () => modern?.frames() ?? 0,
+  yaw: () => modern?.yaw() ?? DEFAULT_YAW,
+  zoom: () => modern?.zoom() ?? 0,
+  floating: () => modern?.floating() ?? [],
+  splashing: () => modern?.splashing() ?? [],
+  get active() { return modernOn && !editorUp; },
+};
+window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };

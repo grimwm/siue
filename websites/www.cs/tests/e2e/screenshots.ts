@@ -61,6 +61,7 @@ declare global {
 type CreteHook = {
   solve(s: unknown): { solved: boolean; line: { kind: string; dir?: string; tool?: string }[] };
   game: { run: { now: unknown } };
+  modern?: { frames(): number; active: boolean };
 };
 
 /** The CIC's nuke flies at the cursor and ends the run if it lands within
@@ -139,6 +140,15 @@ const SHOTS: Record<string, Shot> = {
       await page.click('#level-9');
       await page.click('#start-begin');
       await page.waitForSelector('#start-veil[hidden]', { state: 'attached' });
+      // The modern board loads on demand: wait until it has drawn.
+      await page.waitForFunction(() => {
+        const m = (window as unknown as { __creteTest: CreteHook }).__creteTest.modern;
+        return !!m && m.active && m.frames() > 0;
+      }, null, { timeout: 30_000 });
+      // One step out, so the shot shows more of the level and less of the dark beyond it.
+      await page.click('#cam-zoom-out');
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.mouse.move(0, 0);
       await page.waitForTimeout(300);
       return null;
     },

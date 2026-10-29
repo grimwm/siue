@@ -9,6 +9,13 @@ export const SOUND_KEY = "crete-sound";
 export const MUSIC_KEY = "crete-music";
 export const MUSIC_HIDDEN_KEY = "crete-music-hidden";
 export const FULLSCREEN_KEY = "crete-fullscreen";
+export const LOOK_KEY = "crete-look";
+export const WALLS_KEY = "crete-walls";
+
+/** How the board is drawn: the painted 3D look, or the flat tiles. */
+export type Look = "modern" | "classic";
+/** How the modern look draws the walls that stand in front of the player. */
+export type WallMode = "solid" | "ghosted" | "low";
 
 export interface Settings {
   sound: Pref<OnOff>;
@@ -18,6 +25,9 @@ export interface Settings {
   musicHidden: Pref<OnOff>;
   /** Whether the player was in full screen last; Play goes back there. */
   fullscreen: Pref<OnOff>;
+  look: Pref<Look>;
+  /** Only the modern look has walls to show. */
+  walls: Pref<WallMode>;
 }
 
 export function createSettings(storage: StorageLike | null): Settings {
@@ -26,5 +36,7 @@ export function createSettings(storage: StorageLike | null): Settings {
     music: pref<OnOff>(MUSIC_KEY, "on", oneOf<OnOff>(["on", "off"], "on"), storage),
     musicHidden: pref<OnOff>(MUSIC_HIDDEN_KEY, "on", oneOf<OnOff>(["on", "off"], "on"), storage),
     fullscreen: pref<OnOff>(FULLSCREEN_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
+    look: pref<Look>(LOOK_KEY, "modern", oneOf<Look>(["modern", "classic"], "modern"), storage),
+    walls: pref<WallMode>(WALLS_KEY, "solid", oneOf<WallMode>(["solid", "ghosted", "low"], "solid"), storage),
   };
 }

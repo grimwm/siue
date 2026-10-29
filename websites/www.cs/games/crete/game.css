@@ -106,6 +106,77 @@ button:disabled { opacity: 0.45; cursor: default; }
   touch-action: manipulation;
 }
 
+/* The modern look (src/main.ts) hides the classic canvas: its own canvas and the layer over it fill the board's
+   space inside the board's padding, and nothing scrolls. */
+.board.look-modern .stage { display: none; }
+.board:not(.look-modern) .modern-area { display: none; }
+.modern-area {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: inherit;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+.modern-area > * { grid-area: 1 / 1; min-width: 0; min-height: 0; width: 100%; height: 100%; }
+.modern-area > .modern-overlay { position: relative; inset: auto; }
+.stage3d { display: block; user-select: none; }
+
+/* The modern look's layer over its canvas (src/modern/controls.ts, src/modern/minimap.ts): camera buttons at the
+   top-right, shown on a fine pointer or a wide screen and behind a View button on a narrow touch screen, and the
+   mini map at the bottom-left. Only its controls take the pointer; the canvas under the rest does. */
+.modern-overlay { position: absolute; inset: 0; pointer-events: none; }
+.modern-overlay .modern-ui[hidden] { display: none; }
+.modern-overlay button, .modern-overlay .minimap { pointer-events: auto; }
+.modern-overlay .cam {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: none;
+  grid-template-columns: repeat(2, 44px);
+  gap: 6px;
+}
+.modern-overlay .cam.open { display: grid; }
+.modern-overlay .cbtn, .modern-overlay .modern-viewbtn {
+  color: var(--ink);
+  background: rgba(22, 27, 34, 0.84);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-weight: 600;
+}
+.modern-overlay .cbtn:hover, .modern-overlay .modern-viewbtn:hover { border-color: var(--accent); filter: none; }
+.modern-overlay .cbtn { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; font-size: 0.85rem; }
+.modern-overlay .cbtn svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.modern-overlay .cam .wide { grid-column: span 2; width: auto; }
+.modern-overlay .modern-viewbtn { position: absolute; top: 10px; right: 10px; height: 36px; padding: 0 12px; }
+.modern-overlay .modern-viewbtn[aria-expanded="true"] ~ .cam { top: 52px; }
+@media (pointer: fine), (min-width: 700px) {
+  .modern-overlay .cam { display: grid; }
+  .modern-overlay .modern-viewbtn { display: none; }
+}
+.modern-overlay .minimap {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0d0b0a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  line-height: 0;
+  cursor: pointer;
+}
+.modern-overlay .minimap canvas { display: block; touch-action: none; }
+.modern-overlay #minimap-view { position: absolute; left: 0; top: 0; }
+
 .toast {
   position: absolute;
   left: 50%;
@@ -239,6 +310,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 .menu h3 { margin: 0 0 0.3rem; font-size: 1rem; color: var(--accent); }
 .menu-sec { margin: 0.9rem 0 0; }
 .menu-sec > button { margin-right: 0.4rem; }
+.menu-sec > button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.menu-label { margin-right: 0.4rem; }
 .help { margin: 0; padding-left: 1.1rem; }
 .help li { margin-bottom: 0.35rem; }
 .log { list-style: none; margin: 0; padding: 0; max-height: 12rem; overflow-y: auto; display: grid; gap: 0.35rem; }

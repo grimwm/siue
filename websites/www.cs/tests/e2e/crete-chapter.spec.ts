@@ -5,6 +5,10 @@
 import { test, expect } from '@playwright/test';
 
 const PAGE = 'games/crete/';
+/* These specs walk the rules, not the look: the classic board keeps the page quick on a software-GL runner. */
+const pinClassic = (): void => localStorage.setItem('crete-look', 'classic');
+
+test.beforeEach(async ({ page }) => { await page.addInitScript(pinClassic); });
 const BUTTON: Record<string, string> = { up: '.mv-up', down: '.mv-down', left: '.mv-left', right: '.mv-right', wait: '#btn-wait' };
 
 interface Act { kind: string; dir?: string }

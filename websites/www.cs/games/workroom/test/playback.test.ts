@@ -1,6 +1,7 @@
 // The Player against a stub <audio> and the Sheet against a fake notation
 // library: a seek during playback is never undone, a clip stops at its end, the
-// frame loop ends with the Player, and switching lanes leaves one drawing.
+// frame loop ends with the Player, the transport buttons seek, the piece loops
+// unless a clip is playing, and switching lanes leaves one drawing.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
@@ -20,12 +21,13 @@ Object.assign(globalThis, {
 });
 const frame = (): void => { const run = [...frames.values()]; frames.clear(); for (const cb of run) cb(0); };
 
-interface StubAudio extends StubElement { currentTime: number; paused: boolean; play(): Promise<void>; pause(): void; canPlayType(t: string): string }
+interface StubAudio extends StubElement { currentTime: number; paused: boolean; loop: boolean; play(): Promise<void>; pause(): void; canPlayType(t: string): string }
 const audios: StubAudio[] = [];
 const asAudio = (el: StubElement): StubAudio => {
   const a = el as StubAudio;
   a.currentTime = 0;
   a.paused = true;
+  a.loop = false;
   a.canPlayType = () => 'maybe';
   a.play = () => { a.paused = false; fire(a, 'play'); return Promise.resolve(); };
   a.pause = () => { a.paused = true; fire(a, 'pause'); };
@@ -49,9 +51,39 @@ const ui = await (await import('../../_kit/test/tsx.ts')).importTsx<{
 const { createSheet } = await import('../src/sheetlife.ts');
 
 const SRC = [{ file: 'audio.webm' as const, type: 'audio/webm; codecs=opus' }];
-const playerProps = (over: Record<string, unknown> = {}) => ({ src: SRC, audioSrc: (f: string) => f, time: 0, bar: null, onTime: () => {}, clip: null, onClipDone: () => {}, ...over });
+const playerProps = (over: Record<string, unknown> = {}) => ({ src: SRC, audioSrc: (f: string) => f, time: 0, bar: null, onTime: () => {}, clip: null, onClipDone: () => {}, duration: 60, starts: [0, 8, 20], onSeek: () => {}, ...over });
 const button = (root: StubElement, name: string): StubElement => walk(root).find(e => e.localName === 'button' && e.textContent === name)!;
 const pending = (): number => frames.size;
+const labelled = (root: StubElement, name: string): StubElement => walk(root).find(e => e.localName === 'button' && e.getAttribute('aria-label') === name)!;
+
+test('the transport buttons seek five seconds and by section from where the audio is', async () => {
+  const root = makeEl('root');
+  const seeks: number[] = [];
+  await act(() => { render(h(ui.player.Player, playerProps({ onSeek: (t: number) => seeks.push(t) })), renderTarget(root)); });
+  const audio = audios.at(-1)!;
+  audio.currentTime = 12;
+  for (const name of ['Back 5 seconds', 'Ahead 5 seconds', 'Previous section', 'Next section']) fire(labelled(root, name), 'click');
+  assert.deepEqual(seeks, [7, 17, 8, 20]);
+  render(null, renderTarget(root));
+});
+
+test('the piece loops by default, Loop turns it off, and a clip never loops', async () => {
+  const root = makeEl('root');
+  await act(() => { render(h(ui.player.Player, playerProps()), renderTarget(root)); });
+  const audio = audios.at(-1)!;
+  const loop = button(root, 'Loop');
+  assert.equal(audio.loop, true, 'on by default');
+  assert.equal(loop.getAttribute('aria-pressed'), 'true');
+  await act(() => { fire(loop, 'click'); });
+  assert.equal(audio.loop, false);
+  assert.equal(button(root, 'Loop').getAttribute('aria-pressed'), 'false');
+  await act(() => { fire(button(root, 'Loop'), 'click'); });
+  await act(() => { render(h(ui.player.Player, playerProps({ clip: { from: 2, to: 4 } })), renderTarget(root)); });
+  assert.equal(audio.loop, false, 'a clip stops at its end');
+  await act(() => { render(h(ui.player.Player, playerProps()), renderTarget(root)); });
+  assert.equal(audio.loop, true, 'back on once the clip is done');
+  render(null, renderTarget(root));
+});
 
 test('a seek while playing writes the audio position at once and the old time never comes back', async () => {
   const root = makeEl('root');

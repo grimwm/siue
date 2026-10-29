@@ -119,7 +119,7 @@ music-e2e: ## Music workroom browser check (test keyring, fake microphone)
 	echo MUSIC-E2E-OK
 
 # The music workroom's key and note tool (music/tools/siue-music), run in its own virtualenv.
-.PHONY: music-setup music-status music-pickup music-publish music-delete music-rotate music-forget music-test music-image music-compose-test music-render
+.PHONY: music-setup music-status music-pickup music-publish music-delete music-rotate music-forget music-mcp music-mcp-setup music-test music-image music-compose-test music-render
 MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
 # The tool's interpreter as an absolute path when it is one (the browser check runs it from tests/e2e); a bare python3 stays a command name.
 MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))
@@ -143,6 +143,11 @@ music-rotate: ## Make a new notes key (earlier notes still open)
 	@$(MUSIC_TOOL) keys rotate
 music-forget: ## Delete this computer's cached keys
 	@$(MUSIC_TOOL) keys forget
+music-mcp: ## Run the MCP server on stdin and stdout (to test it by hand)
+	@$(MUSIC_TOOL) mcp
+music-mcp-setup: ## Prepare the MCP server and print how to connect your AI
+	@music/tools/ensure-venv music/tools/.venv music/tools/requirements-mcp.txt mcp
+	@music/tools/.venv/bin/python music/tools/siue-music mcp-setup
 music-test: ## Run the key tool's tests
 	$(MUSIC_PY) -m unittest discover -s music/tools/tests -t music/tools/tests
 

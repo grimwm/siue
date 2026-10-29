@@ -1,7 +1,8 @@
 <?php
-// The API-key routes: pickup of sealed notes, publishing and deleting drafts and
-// uploading the locked keyring. Every route checks its key and scope first, then the
-// method, then the declared length; deleting one draft is the only delete here.
+// The API-key routes: pickup of sealed notes, listing, publishing and deleting
+// drafts, and uploading the locked keyring. Every route checks its key and scope
+// first, then the method, then the declared length; deleting one draft is the only
+// delete here.
 declare(strict_types=1);
 
 namespace Music;
@@ -62,13 +63,17 @@ final class Api
     }
 
     /**
-     * POST ?piece=&version=, drafts:publish; the body is a SIUED1 draft bundle. $read(int $n) returns the request
-     * body's first $n bytes and is called only after the key, the method and the declared length have passed.
+     * drafts:publish. GET answers the published drafts, newest first. POST ?piece=&version= takes a SIUED1 draft
+     * bundle as the body. $read(int $n) returns the request body's first $n bytes and is called only after the key,
+     * the method and the declared length have passed.
      */
     public function publishDraft(\Admin\Request $r, \Closure $read): \Admin\Response
     {
-        if ($res = $this->gate($r, 'drafts:publish', 'POST')) {
+        if ($res = $this->gate($r, 'drafts:publish', ['GET', 'POST'])) {
             return $res;
+        }
+        if ($r->method === 'GET') {
+            return Http::json(200, ['drafts' => $this->store->drafts()]);
         }
         $body = $this->body($r, $read, Store::MAX_REQUEST_BYTES, $res);
         if ($body === null) {

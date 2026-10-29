@@ -2,13 +2,15 @@
 // owner's notes wait for pickup. The panel is the same one a piece page has
 // (Answers), here for the general notes, which are tied to no piece: the owner
 // writes one, sees the general notes already written, and answers to them. The
-// counts come from every note the panel loads.
+// counts come from every note the panel loads. Under it, how to connect an AI
+// app to the workroom (ConnectAi).
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { waitingByPiece } from '../history.ts';
 import { guardLeaving, unsavedWork } from '../leave.ts';
 import { UNLOCK_MESSAGES } from '../notes-session.ts';
 import type { NotesSession } from '../notes-session.ts';
 import { Answers } from './Answers.tsx';
+import { ConnectAi } from './ConnectAi.tsx';
 import { Panel } from './console/Panel.tsx';
 import { showWaiting } from './waiting.ts';
 
@@ -22,10 +24,18 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
   useEffect(() => { void p.notes.hasKeyring().then(setKeyring, () => setKeyring(true)); }, [p.notes]);
   if (!keyring) {
     return (
-      <Panel title="Your notes" class="mx-auto grid max-w-xl gap-3" data={{ 'data-pieces-notes': '' }}>
-        <p class="text-sm text-dim">{UNLOCK_MESSAGES.noKeyring}</p>
-      </Panel>
+      <div class="mx-auto grid max-w-xl gap-4">
+        <Panel title="Your notes" class="grid gap-3" data={{ 'data-pieces-notes': '' }}>
+          <p class="text-sm text-dim">{UNLOCK_MESSAGES.noKeyring}</p>
+        </Panel>
+        <ConnectAi />
+      </div>
     );
   }
-  return <div class="mx-auto max-w-xl"><Answers notes={p.notes} score={null} version={1} refresh={0} ask={null} onUnlocked={() => {}} onItems={items => showWaiting(p.list, waitingByPiece(items))} draft={{ text, onText: setText }} /></div>;
+  return (
+    <div class="mx-auto grid max-w-xl gap-4">
+      <Answers notes={p.notes} score={null} version={1} refresh={0} ask={null} onUnlocked={() => {}} onItems={items => showWaiting(p.list, waitingByPiece(items))} draft={{ text, onText: setText }} />
+      <ConnectAi />
+    </div>
+  );
 }

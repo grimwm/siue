@@ -1,0 +1,4 @@
+# The MCP server's packages: the key tool's and the official MCP Python SDK. Edit this, then refresh
+# requirements-mcp.txt (music/README.md, "Locked packages").
+-r requirements.in
+mcp==2.3.0

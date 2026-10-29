@@ -11,7 +11,7 @@ TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
 
 from siue_music import sealing  # noqa: E402
-from siue_music.keys import Cache, Keys, KEY_TAG, PREVIOUS_SUFFIX, WORKROOM_URL  # noqa: E402
+from siue_music.keys import Cache, Keys, KEY_TAG, PREVIOUS_SUFFIX  # noqa: E402
 from siue_music.op import Op  # noqa: E402
 
 SITE = TOOLS.parents[1]
@@ -55,7 +55,7 @@ class World:
             {"id": "password", "type": "CONCEALED", "purpose": "PASSWORD", "label": "password", "value": passphrase},
             {"id": "private_key", "type": "CONCEALED", "label": "private_key", "value": base64.b64encode(private_key or pkcs8).decode()},
             {"id": "fingerprint", "type": "STRING", "label": "fingerprint", "value": fp},
-        ], urls=[WORKROOM_URL])
+        ], urls=[self.keys.base])
         return fp
 
 

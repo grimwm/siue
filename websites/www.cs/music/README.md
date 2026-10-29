@@ -42,10 +42,11 @@ Session routes (same-origin, signed in): `index.php`, `piece.php?id=&v=` (pages)
 (POST), `keyring.php`, `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data).
 
 API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
-`api/picked-up.php` (POST) need `notes:pickup`; `api/drafts.php` (POST) needs
-`drafts:publish`; `api/delete-draft.php?piece=&version=` (POST) needs
-`drafts:delete` and deletes that one draft, its row and files (404 `not_found` when
-it is not stored, 422 `bad_piece` or `bad_version` as for a publish); `api/keyring.php` needs `keys:publish` (POST uploads
+`api/picked-up.php` (POST) need `notes:pickup`; `api/drafts.php` (GET lists the
+published drafts, newest first; POST publishes one) needs `drafts:publish`;
+`api/delete-draft.php?piece=&version=` (POST) needs `drafts:delete` and deletes that
+one draft, its row and files (404 `not_found` when it is not stored, 422 `bad_piece`
+or `bad_version` as for a publish); `api/keyring.php` needs `keys:publish` (POST uploads
 `{keyring, current, previous}`; GET answers the stored fingerprints).
 
 ## The look
@@ -155,11 +156,64 @@ standard input and are never printed.
 - `make music-status` prints the current notes key in 1Password, in this computer's cache and on the server (it asks the server, so it needs the network), whether they match (exit 3 when they differ or the server cannot be asked), whether each saved API key still works and has the right permission, and ends with a "What's left" checklist (done or not): key in 1Password, key in the cache, both API keys saved, the server's current key is yours. It ends with `Next: make music-setup` while anything is missing and says setup is complete otherwise. The "Notes key on the server" line is the one the admin hub shows as "Music notes key" (`https://www.cs.siue.edu/~wgrim/admin/`).
 - `make music-rotate` makes a new pair under a new passphrase (so a passphrase that leaked can neither unlock nor forge the new keyring); the new item becomes current in 1Password and the old one is retitled `(previous)`, and the full keyring, current key first, is uploaded with its fingerprints (current, then previous), replacing the stored one, and read back to check it. 1Password decides which key is current: the one `siue-music-key` item whose title does not end in `(previous)`; none, or more than one, stops every command with what to fix in the titles. It refuses when the server holds a key neither 1Password nor the cache has the private key for. A retitle that fails (the approval timed out) stops before the upload and names the item to retitle by hand. It exits 4 when the keyring was not uploaded: run `make music-setup`, which uploads it. A 429 on any API call is retried after back-off pauses that add up to more than the server's one-minute window.
 - `make music-forget` deletes the cache. A key removed from 1Password stays usable from this computer's cache until you run it; every cached key is checked against its fingerprint before it is used.
-- `make music-test` runs the tool's tests.
+- `make music-test` runs the tool's tests; the MCP server's protocol test runs when the virtualenv has the SDK (`make music-mcp-setup`) and is skipped otherwise.
 - `make music-pickup` downloads each waiting note with the `music-pickup` API key, checks its length and SHA-256 against the listing, opens it with the cached keyring and saves it under the notes folder (`~/Library/Application Support/siue-music/notes/` on macOS, `$XDG_DATA_HOME/siue-music/notes/` elsewhere on Unix, `%APPDATA%\siue-music\notes\` on Windows; `SIUE_MUSIC_NOTES_DIR` overrides; the tool refuses a folder inside the repository) as `<arrival date>-<id>/` with `note.json` and `audio.webm|m4a|ogg` (a general note, piece `general`, is filed the same way beside the piece notes, and the closing line counts them: `Picked up 3 notes (1 general) into ...`). Only then does it mark the note picked up. A note whose download is corrupt or that will not open stays waiting, is reported with its reason, and the run goes on with the next; the exit code is 1 when any note was left. Every API call, the listing included, waits out a 429 and is retried; a 429 that never clears leaves that note waiting and the run goes on.
 - Speech notes (webm, m4a or ogg audio; ffmpeg is told the format and never sniffs it) also get `transcript.txt` (local Whisper, `faster-whisper`; `SIUE_MUSIC_WHISPER_MODEL` picks the model, default `small.en`) and hum notes `motif.mid` (`librosa.pyin` and `mido`). Both are optional: `music/tools/.venv/bin/pip install -r music/tools/requirements-answering.txt` and `brew install ffmpeg`. Without them pickup still opens and saves every note and prints one line naming what is missing.
+- The server address is `SIUE_MUSIC_BASE`, else `"base"` in `~/.config/siue/music-config.json` (`$SIUE_CONFIG_DIR/music-config.json` when that is set), else `https://www.cs.siue.edu/~wgrim/music/`. The same file may hold `"poll_seconds"` for the MCP server below. The 1Password items the tool makes link to that address.
 - `make music-publish PIECE=ch1-labyrinth [VERSION=3]` checks `music/pieces/<piece>/v<N>/score.json` with the page's rules (glossary ids from `games/workroom/src/glossary.json`), requires the audio, the spectrogram and, for music, `score.musicxml`, refuses a draft over 8 MB before sending, and publishes it with the `music-publish` API key. The newest version is the default.
 - `make music-delete PIECE=ch1-labyrinth VERSION=3` deletes that one published draft from the server with the `music-publish` API key (which holds `drafts:delete`); the files under `music/pieces/` are untouched. A bad piece id or version is refused before anything is sent; a draft the server does not hold exits 1 with `not_found`. `make music-status` says whether the key may delete drafts; the key is healthy either way.
+
+## Your AI: the MCP server
+
+`siue-music mcp` is an MCP server for the owner's own AI app (Claude Code, Claude
+Desktop, any app that speaks MCP). The app starts it on the owner's computer over
+stdio; it uses the key tool above, so keys, sealing and refusals are those of
+`make music-publish`, `make music-delete` and `make music-pickup`, the private notes key comes from
+1Password through `op`, and no answer carries a key. It is built on the official MCP
+Python SDK (`mcp`, pinned in `tools/requirements-mcp.in`), installed into
+`music/tools/.venv` from the hashed lock (see Locked packages).
+
+- `make music-mcp-setup` installs the SDK into the virtualenv (making it when needed)
+  and prints the commands to connect: the `claude mcp add --scope user ...` line for
+  Claude Code and the JSON block for Claude Desktop's `claude_desktop_config.json`,
+  with this checkout's absolute paths, `SIUE_MUSIC_BASE` (the server address), and
+  `SIUE_OP` (op's full path, since an app started from the dock has no shell PATH).
+  It talks to neither the server nor 1Password. Before it, run `make music-setup` once.
+- `make music-mcp` runs the server by hand (it waits for JSON-RPC on standard input).
+- The workroom's front page has a "Connect your AI" panel with the same steps.
+
+Tools:
+
+| Tool | What it does |
+| --- | --- |
+| `list_pieces` | The drafts published on the server (GET `api/drafts.php`, with the `music-publish` key) and the local drafts in `music/pieces` with their files. |
+| `read_score(piece, version?)` | A local draft's `score.json` (newest when no version), its path, and what publish would refuse in it. |
+| `publish_draft(piece, version?)` | `make music-publish`: the same checks and refusals. |
+| `delete_draft(piece, version)` | `make music-delete`: deletes that one published draft from the server with the `music-publish` key's `drafts:delete` permission (publish keys have it); the files in `music/pieces` stay. The piece id and version are checked first; a key without the permission is told to run `make music-setup`, and a draft the server does not hold is named. |
+| `pick_up_notes` | `make music-pickup`: downloads, opens, saves, then marks each note picked up. Answers each note's kind, piece, draft, span, bars, lane, text, reaction, energy curve, transcript, and the paths of its recording, `transcript.txt` and `motif.mid`. |
+| `read_notes(limit?, piece?)` | The notes already in the notes folder, newest first, in the same shape. |
+| `wait_for_notes(timeout_seconds, poll_seconds?)` | Lists the waiting notes every `poll_seconds` (default `SIUE_MUSIC_POLL_SECONDS`, else `poll_seconds` in `music-config.json`, else 10; never under 2) and answers as soon as one waits, or at the timeout (at most 3600 s). It only lists; it reports each empty poll as MCP progress when the app asks for progress. |
+
+`delete_draft` is the only delete: the AI cannot delete notes, which the owner deletes
+on the workroom pages.
+
+## Locked packages
+
+The tool's virtualenv installs only hashed locks: `music/tools/ensure-venv` runs
+`pip install --require-hashes -r` on `tools/requirements.txt` (`make music-setup`) or
+`tools/requirements-mcp.txt` (`make music-mcp-setup`), so pip refuses any package or
+release the lock does not name. The locks are compiled from the files people edit,
+`tools/requirements.in` and `tools/requirements-mcp.in`, for every platform and Python
+3.10 and newer. To change a package, edit the `.in` file and recompile both locks with
+uv in a throwaway virtualenv (from `websites/www.cs/music/tools`):
+
+    python3 -m venv /tmp/uv && /tmp/uv/bin/pip install uv
+    /tmp/uv/bin/uv pip compile --universal --python-version 3.10 --generate-hashes --no-cache requirements.in -o requirements.txt
+    /tmp/uv/bin/uv pip compile --universal --python-version 3.10 --generate-hashes --no-cache requirements-mcp.in -c requirements.txt -o requirements-mcp.txt
+
+The second lock is constrained by the first, so both install the same `cryptography`.
+`make music-test` checks every pin is exact and hashed. `requirements-answering.txt`
+(the optional speech and humming steps) is installed by hand and is not locked.
 
 ## The local browser check
 

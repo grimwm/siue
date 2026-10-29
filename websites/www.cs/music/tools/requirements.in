@@ -1,0 +1,2 @@
+# The key tool's packages. Edit this, then refresh requirements.txt (music/README.md, "Locked packages").
+cryptography>=43

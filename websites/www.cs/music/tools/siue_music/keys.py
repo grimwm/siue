@@ -15,7 +15,6 @@ from .paths import DEFAULT_BASE
 
 KEY_TAG = "siue-music-key"
 API_TAG = "siue-music-api"
-WORKROOM_URL = "https://www.cs.siue.edu/~wgrim/music/"
 _API_KEY = re.compile(r"[0-9a-f]{64}")
 _API_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,47}")
 KEY_TITLE = "SIUE music notes key "
@@ -348,7 +347,7 @@ class Keys:
         new_id = self.op.create(f"SIUE music API {name}", "API_CREDENTIAL", [API_TAG], [
             {"id": "name", "type": "STRING", "label": "name", "value": name},
             {"id": "credential", "type": "CONCEALED", "label": "credential", "value": secret},
-        ], urls=[WORKROOM_URL])
+        ], urls=[self.base])
         stored = self.op.fields(new_id)
         for label, want in (("name", name), ("credential", secret)):
             if not hmac.compare_digest(stored.get(label, "").encode(), want.encode()):
@@ -415,7 +414,7 @@ class Keys:
             {"id": "password", "type": "CONCEALED", "purpose": "PASSWORD", "label": "password", "value": passphrase},
             {"id": "private_key", "type": "CONCEALED", "label": "private_key", "value": private_key},
             {"id": "fingerprint", "type": "STRING", "label": "fingerprint", "value": fp},
-        ], urls=[WORKROOM_URL])
+        ], urls=[self.base])
         try:
             stored = self.op.fields(new_id)
             bad = next((label for label, want in (("password", passphrase), ("private_key", private_key), ("fingerprint", fp))

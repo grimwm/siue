@@ -1,13 +1,18 @@
 #!/bin/sh
-# usage: ensure-venv VENV_DIR REQUIREMENTS_FILE
+# usage: ensure-venv VENV_DIR REQUIREMENTS_FILE [MODULE]
 # Makes the tool's virtualenv, and makes it again when it is missing or cannot import cryptography
-# (a moved folder, an upgraded Python, a half-finished install). $SIUE_MUSIC_PYTHON picks the Python that builds it.
+# (a moved folder, an upgraded Python, a half-finished install). A working one that cannot import MODULE
+# (the MCP server's `mcp`) gets REQUIREMENTS_FILE installed into it. REQUIREMENTS_FILE is a hashed lock
+# (requirements.txt, requirements-mcp.txt), installed with --require-hashes. $SIUE_MUSIC_PYTHON picks the Python that builds it.
 set -e
 venv="$1"
 requirements="$2"
+module="${3:-cryptography}"
 base="${SIUE_MUSIC_PYTHON:-python3}"
 if ! "$venv/bin/python" -c 'import cryptography' >/dev/null 2>&1; then
 	rm -rf "$venv"
 	"$base" -m venv "$venv"
-	"$venv/bin/pip" install --quiet -r "$requirements"
+	"$venv/bin/pip" install --quiet --require-hashes -r "$requirements"
+elif ! "$venv/bin/python" -c "import $module" >/dev/null 2>&1; then
+	"$venv/bin/pip" install --quiet --require-hashes -r "$requirements"
 fi

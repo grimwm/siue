@@ -35,6 +35,19 @@
     { "id": "foley", "word": "foley", "lines": ["Everyday sounds made by hand to match what is on screen.", "Footsteps, creaking leather and rustling cloth are all foley."] },
     { "id": "ambience", "word": "ambience", "lines": ["The quiet background sound that makes a place feel real.", "Wind, far-off machinery or a hum of insects sets the scene without being noticed."] },
     { "id": "low-pass-filter", "word": "low-pass filter", "lines": ["A filter that keeps the low sounds and cuts the high ones.", "It muffles a sound, like hearing music through a wall."] },
-    { "id": "distortion", "word": "distortion", "lines": ["Deliberately overloading a sound so it turns rough and gritty.", "It adds bite and aggression, like an overdriven guitar or a crunchy explosion."] }
+    { "id": "distortion", "word": "distortion", "lines": ["Deliberately overloading a sound so it turns rough and gritty.", "It adds bite and aggression, like an overdriven guitar or a crunchy explosion."] },
+    { "id": "staff", "word": "staff", "match": [], "lines": ["The five lines that sheet music is written on.", "A note on a higher line or gap sounds higher, like a step up a ladder."] },
+    { "id": "clef", "word": "clef", "lines": ["The sign at the start of each staff that says which note each line stands for.", "A treble clef is for higher instruments; a bass clef is for lower ones."] },
+    { "id": "whole-note", "word": "whole note", "lines": ["An open oval with no stem: a note held for four beats.", "It is the longest note most music uses, a long held sound."] },
+    { "id": "half-note", "word": "half note", "lines": ["An open oval with a stem: a note held for two beats.", "Two half notes last as long as one whole note."] },
+    { "id": "quarter-note", "word": "quarter note", "lines": ["A filled-in oval with a stem: a note that lasts one beat.", "In most music it is the note you tap your foot to."] },
+    { "id": "eighth-note", "word": "eighth note", "lines": ["A filled-in note with a flag, or joined to its neighbours by a beam: half a beat.", "Two eighth notes fit in one beat, like saying \"one-and\"."] },
+    { "id": "dotted-note", "word": "dotted note", "lines": ["A note with a dot after it, which makes it half as long again.", "A dotted half note lasts three beats: two, plus half of two."] },
+    { "id": "rest", "word": "rest", "match": ["quarter rest", "half rest", "whole rest", "eighth rest", "whole-bar rest"], "lines": ["A sign for silence: the instrument plays nothing for that long.", "Each note length has a matching rest, so the silences are counted as carefully as the notes."] },
+    { "id": "time-signature", "word": "time signature", "lines": ["The two stacked numbers at the start of the music: beats in each bar over the kind of note that gets one beat.", "4 over 4 means four quarter-note beats in every bar: one, two, three, four."] },
+    { "id": "key-signature", "word": "key signature", "lines": ["Sharps or flats written right after the clef, which hold for the whole piece.", "They save writing the same sign beside every note, and they hint at the music's home note."] },
+    { "id": "accidental", "word": "accidental", "match": ["accidentals"], "lines": ["A sharp (♯), flat (♭) or natural (♮) sign beside a note, raising it, lowering it or putting it back.", "It lasts until the end of its bar, and often gives a sudden new colour."] },
+    { "id": "half-step", "word": "half step", "lines": ["The smallest distance between two notes, like moving to the very next key on a piano.", "Melodies that move by half steps sound tense, like creeping."] },
+    { "id": "tie", "word": "tie", "match": ["tied note", "tied notes"], "lines": ["A curved line joining two notes of the same pitch, played as one held note.", "It lets a note last across a bar line, like holding a breath over a page turn."] }
   ]
 }

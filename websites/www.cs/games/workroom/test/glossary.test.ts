@@ -40,3 +40,11 @@ test('a phrase is one term', () => {
   const parts = splitTerms('A low-pass filter on the Reverb Tail.');
   assert.deepEqual(parts.map(p => ('term' in p ? `[${p.term.id}]` : p.text)).join(''), 'A [low-pass-filter] on the [reverb-tail].');
 });
+
+test('everyday words link only in their musical phrases', () => {
+  const linked = (text: string): string => splitTerms(text).map(p => ('term' in p ? `[${p.term.id}]` : p.text)).join('');
+  assert.equal(linked('Keep the rest of the piece; the staff liked it; tie the themes together; an accidental change.'), 'Keep the rest of the piece; the staff liked it; tie the themes together; an accidental change.');
+  assert.equal(linked('A quarter rest, then tied notes and two accidentals.'), 'A [rest], then [tie] and two [accidental].');
+  assert.equal(linked('A whole note and a dotted note on the second line'), 'A [whole-note] and a [dotted-note] on the second line');
+  for (const id of ['rest', 'tie', 'staff', 'accidental']) assert.ok(term(id), `${id} still has a card`);
+});

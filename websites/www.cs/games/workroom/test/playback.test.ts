@@ -235,3 +235,22 @@ test('a view left before its file arrives mounts nothing and rejects nothing', a
   assert.equal(mounts, 0);
   assert.deepEqual(unhandled, []);
 });
+
+test('Download offers the audio the Player plays, the sheet music and the score, named for the draft', async () => {
+  const root = makeEl('root');
+  const src = [{ file: 'audio.m4a' as const, type: 'audio/mp4' }, ...SRC];
+  await act(() => { render(h(ui.player.Player, playerProps({ src, audioSrc: (f: string) => `draft.php?file=${f}`, download: { piece: 'crete-title', version: 3, sheet: true } })), renderTarget(root)); });
+  const group = walk(root).find(e => e.getAttribute('role') === 'group' && e.getAttribute('aria-label') === 'Download this draft')!;
+  assert.ok(group, 'a labelled Download group');
+  const links = walk(group).filter(e => e.localName === 'a');
+  assert.deepEqual(links.map(a => [a.textContent, a.getAttribute('href'), a.getAttribute('download')]), [
+    ['Audio', 'draft.php?file=audio.m4a', 'crete-title-v3.m4a'],
+    ['Sheet music', 'draft.php?file=score.musicxml', 'crete-title-v3.musicxml'],
+    ['Score', 'draft.php?file=score.json', 'crete-title-v3.json'],
+  ]);
+  assert.equal(links[0]!.getAttribute('aria-label'), 'Download audio, crete-title-v3.m4a');
+  assert.ok(links.every(a => /\bmin-h-11\b/.test(a.getAttribute('class') ?? '') && /\bmin-w-11\b/.test(a.getAttribute('class') ?? '')), '44 px targets');
+  await act(() => { render(h(ui.player.Player, playerProps({ download: { piece: 'rain', version: 1, sheet: false } })), renderTarget(root)); });
+  assert.deepEqual(walk(root).filter(e => e.localName === 'a').map(a => a.textContent), ['Audio', 'Score'], 'no sheet music on a piece without one');
+  render(null, renderTarget(root));
+});

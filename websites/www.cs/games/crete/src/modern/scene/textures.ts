@@ -310,6 +310,36 @@ const handTex = () => {
   return t;
 };
 
+/** A dressed stone block with a labrys cut in its face, in the Classic block's sandstone. */
+const blockTex = () => tex(256, (g, s) => {
+  const R = rng(41);
+  g.fillStyle = '#ad9f86';
+  g.fillRect(0, 0, s, s);
+  blobs(g, s, R, 300, '60,52,44', 0.15, 4, 20, false);
+  blobs(g, s, R, 1500, '50,44,38', 0.2, 0.6, 2, false);
+  cracks(g, s, R, 4, 'rgba(60,50,40,.45)', 2, 40);
+  const labrys = (dx: number, dy: number, col: string) => {
+    g.save();
+    g.translate(s / 2 + dx, s / 2 + dy);
+    g.fillStyle = col;
+    g.fillRect(-7, -80, 14, 160);
+    for (const sx of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(0, -38);
+      g.quadraticCurveTo(sx * 60, -70, sx * 78, -50);
+      g.quadraticCurveTo(sx * 58, 0, sx * 78, 50);
+      g.quadraticCurveTo(sx * 60, 70, 0, 38);
+      g.fill();
+    }
+    g.restore();
+  };
+  labrys(3, 3, 'rgba(225,210,185,.35)');
+  labrys(0, 0, 'rgba(40,32,26,.4)');
+  g.strokeStyle = 'rgba(40,32,26,.6)';
+  g.lineWidth = 6;
+  g.strokeRect(10, 10, s - 20, s - 20);
+});
+
 const haloTex = () => {
   const t = tex(64, (g, s) => {
     const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
@@ -343,7 +373,7 @@ export function createKit(renderer: WebGLRenderer) {
   const t = {
     brick: brickTex(), cap: capTex(), water: waterNormalTex(), ember: emberTex(), wood: woodTex(), force: forceTex(),
     ice: iceTex(), dirt: dirtTex(), gravel: gravelTex(), wreath: wreathTex(), swirl: swirlTex(), hand: handTex(),
-    halo: haloTex(), flags: [101, 202, 303].map(flagTex),
+    halo: haloTex(), block: blockTex(), flags: [101, 202, 303].map(flagTex),
   };
   const m = {
     under: std(0x0c0a08, { roughness: 1 }),
@@ -384,6 +414,34 @@ export function createKit(renderer: WebGLRenderer) {
     swirl: new MeshStandardMaterial({ map: t.swirl, emissiveMap: t.swirl, emissive: new Color(0x6ab8ff), emissiveIntensity: 0.9, roughness: 0.3 }),
     hand: std(0xffffff, { map: t.hand, roughness: 0.6 }),
     clay: std(0xb07448, { roughness: 0.75 }),
+    block: std(0xffffff, { map: t.block, roughness: 0.85 }),
+    // The figures and the pieces Theseus takes.
+    skin: std(0xc08a62, { roughness: 0.7 }),
+    tunic: std(0x245e7a, { roughness: 0.8 }),
+    cloak: std(0x8a2a1e),
+    leather: std(0x5a3a22, { roughness: 0.8 }),
+    steel: metal(0xc9cdd0, 0.3),
+    fur: std(0x3e2618, { roughness: 0.95 }),
+    furDark: std(0x26170f, { roughness: 0.95 }),
+    snout: std(0x6a4a36),
+    ivory: std(0xe2d6ba, { roughness: 0.5 }),
+    kilt: std(0x7a1e16),
+    hoof: std(0x141010),
+    eye: new MeshBasicMaterial({ color: 0xff4a1a }),
+    statue: std(0x8e8c88, { roughness: 0.9 }),
+    statueDark: std(0x6a6864, { roughness: 0.92 }),
+    parchment: std(0xe2d0a2),
+    teal: std(0x2b9a92, { roughness: 0.4 }),
+    boot: std(0x8e2a14, { roughness: 0.6 }),
+    bootTrim: std(0xe08a20, { emissive: 0x5a2200 }),
+    skate: std(0xa8b8c8, { roughness: 0.5 }),
+    suction: std(0x2a6a4a, { roughness: 0.55 }),
+    mirror: metal(0xe6e6e6, 0.08, { envMapIntensity: 1 }),
+    gorgon: std(0x2f7a4a, { roughness: 0.5 }),
+    cake: std(0xe0a040, { roughness: 0.6 }),
+    hide: std(0xeee6d8, { roughness: 0.7 }),
+    patch: std(0x5a3220, { roughness: 0.8 }),
+    feather: std(0x6a4426, { roughness: 0.85 }),
     halo: t.halo,
     env,
   };

@@ -1,8 +1,9 @@
 /* The Island of Crete, modern look: the walls. Each wall cell is one mesh of its outer faces only (its top and
  * the sides that face no other wall), with its own pair of materials so it can fade on its own. A hidden face
  * toward a neighbouring wall shows only while that neighbour is the more see-through, so overlapping glass
- * never shows inner seams. Ghosted walls fade by how much of a figure or piece they hide from the camera,
- * sampled with rays; low walls stand at a third of their height. */
+ * never shows inner seams. A wall fades by how much of the things it is given it hides from the camera, sampled
+ * with rays (the board gives Theseus alone, or everything in Ghosted); low walls stand at a third of their
+ * height. */
 import { BufferGeometry, Float32BufferAttribute, Group, Mesh, Vector3 } from 'three';
 import type { Camera, MeshStandardMaterial } from 'three';
 import { easeOpacity, ghostTarget } from '../ghost.ts';
@@ -58,7 +59,7 @@ export interface Wall {
   inner: { k: Side; mesh: Mesh; nb: Wall | null }[];
 }
 
-/** Something a ghosted wall should not hide: a box `half` wide each way and `h` tall, standing on the floor. */
+/** Something a wall should not hide: a box `half` wide each way and `h` tall, standing on the floor. */
 export interface Seen { x: number; z: number; half: number; h: number }
 
 export interface Walls {
@@ -172,23 +173,22 @@ export function createWalls(kit: Kit): Walls {
     },
     aim(camera, seen) {
       const cover = new Map<Wall, number>();
-      if (mode === 'ghosted') {
-        camera.getWorldDirection(camDir);
-        const d: V3 = [camDir.x, camDir.y, camDir.z], L = 30;
-        for (const th of seen) {
-          const near = walls.filter(w => Math.abs(w.x - th.x) < 3.2 && Math.abs(w.z - th.z) < 3.2);
-          if (near.length === 0) continue;
-          const hits = new Map<Wall, number>();
-          for (const [a, b, c] of SAMPLES) {
-            const p: V3 = [th.x - th.half + 2 * th.half * a, FY + th.h * b, th.z - th.half + 2 * th.half * c];
-            const o: V3 = [p[0] - d[0] * L, p[1] - d[1] * L, p[2] - d[2] * L];
-            for (const w of near) {
-              const t = rayBoxT(o, d, [w.x - 0.49, 0, w.z - 0.49], [w.x + 0.49, WALL_H, w.z + 0.49]);
-              if (t >= 0 && t < L - 0.01) hits.set(w, (hits.get(w) ?? 0) + 1);
-            }
+      const top = mode === 'low' ? LOW_H : WALL_H;
+      camera.getWorldDirection(camDir);
+      const d: V3 = [camDir.x, camDir.y, camDir.z], L = 30;
+      for (const th of seen) {
+        const near = walls.filter(w => Math.abs(w.x - th.x) < 3.2 && Math.abs(w.z - th.z) < 3.2);
+        if (near.length === 0) continue;
+        const hits = new Map<Wall, number>();
+        for (const [a, b, c] of SAMPLES) {
+          const p: V3 = [th.x - th.half + 2 * th.half * a, FY + th.h * b, th.z - th.half + 2 * th.half * c];
+          const o: V3 = [p[0] - d[0] * L, p[1] - d[1] * L, p[2] - d[2] * L];
+          for (const w of near) {
+            const t = rayBoxT(o, d, [w.x - 0.49, 0, w.z - 0.49], [w.x + 0.49, top, w.z + 0.49]);
+            if (t >= 0 && t < L - 0.01) hits.set(w, (hits.get(w) ?? 0) + 1);
           }
-          for (const [w, n] of hits) cover.set(w, Math.max(cover.get(w) ?? 0, n / SAMPLES.length));
         }
+        for (const [w, n] of hits) cover.set(w, Math.max(cover.get(w) ?? 0, n / SAMPLES.length));
       }
       for (const w of walls) {
         // A wall that only grazes a thing stays solid; one that hides half of it or more fades all the way.

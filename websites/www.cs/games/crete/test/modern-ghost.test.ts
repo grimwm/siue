@@ -1,7 +1,7 @@
 // Wall ghosting: the opacity a covering wall settles at, and how it eases there.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { easeOpacity, ghostTarget } from '../src/modern/ghost.ts';
+import { easeOpacity, ghostSubjects, ghostTarget } from '../src/modern/ghost.ts';
 
 test('ghostTarget runs from opaque to a third, clamping the cover', () => {
   assert.equal(ghostTarget(0), 1);
@@ -27,4 +27,11 @@ test('easeOpacity is exact once within 0.005 and never overshoots', () => {
     assert.ok(o <= 1);
   }
   assert.equal(o, 1);
+});
+
+test('walls fade for Theseus in every mode, and for everything else only in Ghosted', () => {
+  assert.deepEqual(ghostSubjects('solid', 'hero', ['minotaur', 'key']), ['hero']);
+  assert.deepEqual(ghostSubjects('low', 'hero', ['minotaur']), ['hero']);
+  assert.deepEqual(ghostSubjects('ghosted', 'hero', ['minotaur', 'key']), ['hero', 'minotaur', 'key']);
+  assert.deepEqual(ghostSubjects('solid', null, ['minotaur']), []);
 });

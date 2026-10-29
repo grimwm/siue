@@ -1,10 +1,12 @@
 /* The modern board: a three.js scene drawn on the modern canvas, only when something changes. A level builds the
  * ground, the walls, one model per cell and the light; a shown state rebuilds only the cells whose model
- * changed. A frame is drawn when the board is told of a change, and more follow only while the camera eases,
- * a wall fades or the tile loops tick. The camera looks down at 45° through an orthographic lens, and follows
- * Theseus. */
-import { Color, CylinderGeometry, Group, Mesh, OrthographicCamera, PCFSoftShadowMap, Scene, SphereGeometry, Vector3, WebGLRenderer } from 'three';
-import type { BufferGeometry, Material, Object3D } from 'three';
+ * changed, and stands the pieces and figures where the state and the turn put them, with Ariadne's thread on
+ * the floor. A frame is drawn when the board is told of a change, and more follow only while the camera eases,
+ * a wall fades, a figure turns or the tile loops tick. The camera looks down at 45° through an orthographic lens,
+ * and follows Theseus. A wall that hides Theseus fades in every walls mode; in Ghosted, one that hides any
+ * figure or piece fades too. */
+import { Color, Group, OrthographicCamera, PCFSoftShadowMap, Scene, Vector3, WebGLRenderer } from 'three';
+import type { Object3D } from 'three';
 import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
@@ -12,18 +14,21 @@ import type { WallMode } from '../settings.ts';
 import { DEFAULT_YAW, PITCH, clampCam, easeCam, nearestYaw, viewRows } from './camera.ts';
 import type { Cam } from './camera.ts';
 import { changedCells } from './diff.ts';
-import { SURFACES, terrainModel } from './model-names.ts';
+import { ghostSubjects } from './ghost.ts';
+import { SURFACES, placed, terrainModel } from './model-names.ts';
 import type { TerrainModel } from './model-names.ts';
-import { nextQuality } from './quality.ts';
+import { frameSample, nextQuality } from './quality.ts';
 import type { Quality } from './quality.ts';
+import { createActors } from './scene/figures.ts';
 import { FY, cellX, cellZ, createFloor } from './scene/floor.ts';
+import { createIconSheet } from './scene/icons.ts';
 import { createLights } from './scene/light.ts';
 import type { Lights } from './scene/light.ts';
 import { createPaint } from './scene/paint.ts';
 import { TERRAIN_MODELS, disposeModel } from './scene/terrain.ts';
 import type { PieceInfo } from './scene/terrain.ts';
 import { createKit } from './scene/textures.ts';
-import type { Kit } from './scene/textures.ts';
+import { createThread } from './scene/thread.ts';
 import { LOW_H, WALL_H, createWalls } from './scene/walls.ts';
 import type { Seen } from './scene/walls.ts';
 
@@ -58,26 +63,7 @@ export interface ModernBoard {
 }
 
 const BACKGROUND = 0x060504;
-/** A frame this soon after the last counts as part of one animation, for the quality ladder. */
-const ANIMATING_GAP_MS = 200;
 const RAD = Math.PI / 180;
-
-/** A stand-in for Theseus until the figures have their models: a linen-robed, bronze-capped pawn. */
-function makeHero(kit: Kit): Group {
-  const { m } = kit;
-  const g = new Group();
-  const part = (geo: BufferGeometry, mat: Material, y: number) => {
-    const o = new Mesh(geo, mat);
-    o.position.y = y;
-    o.castShadow = o.receiveShadow = true;
-    g.add(o);
-  };
-  part(new CylinderGeometry(0.15, 0.24, 0.6, 18), m.cream, FY + 0.3);
-  part(new CylinderGeometry(0.17, 0.15, 0.2, 18), m.bronze, FY + 0.66);
-  part(new SphereGeometry(0.12, 18, 12), m.clay, FY + 0.86);
-  part(new SphereGeometry(0.135, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2), m.bronze, FY + 0.88);
-  return g;
-}
 
 export function createModernBoard(host: ModernHost): ModernBoard {
   const renderer = new WebGLRenderer({ canvas: host.canvas, antialias: false, powerPreference: 'high-performance' });
@@ -93,9 +79,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const floor = createFloor(kit);
   const wallSet = createWalls(kit);
   const pieceGroup = new Group();
-  scene.add(floor.group, wallSet.group, pieceGroup);
-  const hero = makeHero(kit);
-  scene.add(hero);
+  const sheet = host.atlas && host.image ? createIconSheet(host.atlas, host.image) : null;
+  const actors = createActors(kit, sheet, () => host.reducedMotion());
+  const thread = createThread();
+  scene.add(floor.group, wallSet.group, pieceGroup, actors.group, thread.group);
 
   let active = true;
   let drawn = 0;
@@ -108,7 +95,6 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   let mode: WallMode = 'solid';
   let last: State | null = null;
   let lastPlayer: Pos | null = null;
-  let seenFigures: Seen[] = [];
   let models: TerrainModel[] = [];
   let pieces: (Object3D | null)[] = [];
   let lights: Lights | null = null;
@@ -141,10 +127,11 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   /** True while any looping thing stands in the camera's view. */
   function loopOnScreen(): boolean {
     applyCamera();
-    return (lights?.anchors ?? []).some(v => {
+    const on = (v: Vector3) => {
       ndc.copy(v).project(camera);
       return Math.abs(ndc.x) < 1.05 && Math.abs(ndc.y) < 1.05;
-    });
+    };
+    return (lights?.anchors ?? []).some(on) || actors.looping().some(o => on(o.position));
   }
 
   function applyCamera(): void {
@@ -169,22 +156,18 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     Object.assign(goal, clampCam(goal, cols(), rows()));
   }
 
-  /** What a ghosted wall should not hide: the figures, the objects and the pieces. */
+  /** What the walls fade for: Theseus in every mode; in Ghosted, every figure, piece and tall tile too. */
   function seen(): Seen[] {
-    const out = [...seenFigures];
-    if (!last) return out;
-    const nc = cols(), nr = rows();
-    last.objects.forEach((o, i) => {
-      if (!o) return;
-      const block = o === 'block';
-      out.push({ x: cellX(i % nc, nc), z: cellZ(Math.floor(i / nc), nr), half: block ? 0.42 : 0.2, h: block ? 0.9 : 0.42 });
-    });
-    pieces.forEach((p, i) => {
-      const info = p?.userData as PieceInfo | undefined;
-      if (!info || info.h <= 0) return;
-      out.push({ x: cellX(i % nc, nc), z: cellZ(Math.floor(i / nc), nr), half: info.half, h: info.h * (mode === 'low' ? 0.4 : 1) });
-    });
-    return out;
+    const { hero, rest } = actors.seen();
+    if (mode === 'ghosted' && last) {
+      const nc = cols(), nr = rows();
+      pieces.forEach((p, i) => {
+        const info = p?.userData as PieceInfo | undefined;
+        if (!info || info.h <= 0) return;
+        rest.push({ x: cellX(i % nc, nc), z: cellZ(Math.floor(i / nc), nr), half: info.half, h: info.h });
+      });
+    }
+    return ghostSubjects(mode, hero, rest);
   }
 
   function applyQuality(): void {
@@ -198,10 +181,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     if (!active) { chained = false; return; }
     const gap = now - lastNow;
     lastNow = now;
-    // A frame asked for by the one before it, or soon after it, is part of an animation: its gap is a frame time.
-    const animating = chained || gap <= ANIMATING_GAP_MS;
-    if (animating) {
-      frameMs.push(gap);
+    // Only a frame the one before it asked for is part of an animation: its gap is a frame time.
+    const sample = frameSample(chained, gap);
+    if (sample !== null) {
+      frameMs.push(sample);
       if (frameMs.length > 20) frameMs = frameMs.slice(-20);
       const q = nextQuality(quality, frameMs);
       if (q !== quality) {
@@ -210,7 +193,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
         applyQuality();
       }
     }
-    const dt = animating ? Math.min(0.1, gap / 1000) : 1 / 60;
+    const dt = sample !== null ? Math.min(0.1, gap / 1000) : 1 / 60;
     aimGoal();
     let busy = easeCam(cur, goal, dt, snap());
     if (busy) aimWalls = true;
@@ -220,9 +203,14 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       aimWalls = false;
     }
     busy = wallSet.ease(dt, snap()) || busy;
+    if (actors.ease(dt, snap())) {
+      busy = true;
+      shadowsDirty = true;
+    }
     if (loopsDirty) {
       floor.loop(loopT);
       lights?.loop(loopT);
+      actors.loop(loopT);
       for (const p of pieces) (p?.userData as PieceInfo | undefined)?.loop?.(loopT);
       loopsDirty = false;
     }
@@ -268,23 +256,21 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     pieces[i] = o;
   }
 
-  function setFigures(f: Figures): boolean {
-    const p = f.player;
-    const moved = !lastPlayer || lastPlayer.r !== p.r || lastPlayer.c !== p.c;
-    lastPlayer = { r: p.r, c: p.c };
-    const nc = cols(), nr = rows();
-    hero.position.set(cellX(p.c, nc), 0, cellZ(p.r, nr));
-    lights?.hero(hero.position.x, hero.position.z);
-    seenFigures = [{ x: hero.position.x, z: hero.position.z, half: 0.26, h: 1.2 }];
-    if (f.minotaur) seenFigures.push({ x: cellX(f.minotaur.c, nc), z: cellZ(f.minotaur.r, nr), half: 0.36, h: 1.6 });
-    for (const hz of f.hazards) seenFigures.push({ x: cellX(hz.at.c, nc), z: cellZ(hz.at.r, nr), half: 0.3, h: 0.6 });
-    return moved;
+  /** Stands the pieces and figures; true when any moved, turned, came or went. */
+  function setFigures(s: State, f: Figures): boolean {
+    lastPlayer = { r: f.player.r, c: f.player.c };
+    const changed = actors.set(placed(s, f), cols(), rows(), snap());
+    const hero = actors.hero();
+    if (hero) lights?.hero(hero.position.x, hero.position.z);
+    return changed;
   }
 
   function teardown(): void {
     for (const p of pieces) if (p) { pieceGroup.remove(p); disposeModel(p, kit); }
     pieces = [];
     if (lights) { scene.remove(lights.group); lights.dispose(); lights = null; }
+    actors.clear();
+    thread.set(null, 0, 0);
   }
 
   function level(s: State): void {
@@ -301,7 +287,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     lights.shadows(quality >= 3);
     scene.add(lights.group);
     lastPlayer = null;
-    setFigures({ player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) });
+    setFigures(s, { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) });
     follow = true;
     aimGoal();
     Object.assign(cur, goal);
@@ -309,7 +295,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     invalidate();
   }
 
-  function show(f: { state: State; figures: Figures }): void {
+  function show(f: { state: State; figures: Figures }, threadCells: readonly Cell[] | null): void {
     const s = f.state;
     if (!last || s.level !== last.level) {
       level(s);
@@ -318,16 +304,25 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     const changed = changedCells(prev, s);
     if (prev.relicsLeft !== s.relicsLeft) s.terrain.forEach((t, i) => { if (t === 'gate') changed.push(i); });
     let ground = false, walled = false;
+    const { rows: nr, cols: nc } = s.level;
+    const near = new Set<number>();
     for (const i of changed) {
       const md = terrainModel(s, i), was = models[i]!;
       if (md === was) continue;
       if (SURFACES[md] !== SURFACES[was]) ground = true;
-      if ((md === 'wall') !== (was === 'wall')) walled = true;
+      if ((md === 'wall') !== (was === 'wall')) {
+        walled = true;
+        // A door, a gate or the exit turns by the walls beside it.
+        const r = Math.floor(i / nc), c = i % nc;
+        for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+          if (r + dr >= 0 && r + dr < nr && c + dc >= 0 && c + dc < nc) near.add((r + dr) * nc + c + dc);
+        }
+      }
       models[i] = md;
       placePiece(i);
       lights?.piece(i, md);
     }
-    const { rows: nr, cols: nc } = s.level;
+    for (const i of near) if (!changed.includes(i)) placePiece(i);
     if (ground) floor.set(models, nr, nc);
     if (walled) {
       // A pop-up wall rose: its neighbours' faces change with it.
@@ -335,8 +330,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       wallSet.setMode(mode);
     }
     last = s;
-    const moved = setFigures(f.figures);
-    if (changed.length === 0 && !moved && s === prev) return;
+    const moved = setFigures(s, f.figures);
+    const threaded = thread.set(threadCells, nc, nr);
+    if (changed.length === 0 && !moved && !threaded && s === prev) return;
     if (changed.length || moved) { aimWalls = true; shadowsDirty = true; }
     invalidate();
   }
@@ -354,7 +350,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   return {
     level,
-    show: f => show(f),
+    show,
     walls,
     yaw: () => cur.yaw,
     reset() {
@@ -380,7 +376,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       teardown();
       floor.dispose();
       wallSet.dispose();
-      disposeModel(hero, kit);
+      actors.dispose();
+      thread.dispose();
+      sheet?.dispose();
       paint.dispose();
       kit.dispose();
       renderer.dispose();

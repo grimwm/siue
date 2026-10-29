@@ -34,12 +34,12 @@ export interface PieceInfo {
   loop?: (t: number) => void;
 }
 
-const at = <T extends Object3D>(o: T, x: number, y: number, z: number): T => (o.position.set(x, y, z), o);
+export const at = <T extends Object3D>(o: T, x: number, y: number, z: number): T => (o.position.set(x, y, z), o);
 const cylG = (rt: number, rb: number, h: number, seg = 14) => new CylinderGeometry(rt, rb, h, seg);
-const cyl = (rt: number, rb: number, h: number, mat: Material, seg = 14) => new Mesh(cylG(rt, rb, h, seg), mat);
-const box = (x: number, y: number, z: number, mat: Material) => new Mesh(new BoxGeometry(x, y, z), mat);
+export const cyl = (rt: number, rb: number, h: number, mat: Material, seg = 14) => new Mesh(cylG(rt, rb, h, seg), mat);
+export const box = (x: number, y: number, z: number, mat: Material) => new Mesh(new BoxGeometry(x, y, z), mat);
 /** `o` turned a quarter about x, so a cylinder or ring lies along z or flat. */
-const flat = <T extends Object3D>(o: T): T => (o.rotation.x = Math.PI / 2, o);
+export const flat = <T extends Object3D>(o: T): T => (o.rotation.x = Math.PI / 2, o);
 
 /** Merges a group's meshes into one mesh per material, casting and taking shadows. */
 function bake(g: Group): Group {
@@ -64,7 +64,7 @@ function bake(g: Group): Group {
   return out;
 }
 
-function piece(g: Group, info: PieceInfo, live: Object3D[] = []): Group {
+export function piece(g: Group, info: PieceInfo, live: Object3D[] = []): Group {
   const out = bake(g);
   if (live.length) out.add(...live);
   out.userData = info;

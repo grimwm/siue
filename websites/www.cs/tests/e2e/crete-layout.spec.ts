@@ -27,6 +27,8 @@ async function open(browser: Browser, [, width, height, touch]: Device) {
 
 /** A dialog's close button sits on the title's row: its vertical centre is inside the title's box, and it ends to the title's right. */
 async function closeOnTitleRow(page: Page, dialog: string): Promise<void> {
+  await expect(page.locator(`#${dialog}-title`), `${dialog}: title shown`).toBeVisible();
+  await expect(page.locator(`#${dialog}-close`), `${dialog}: close shown`).toBeVisible();
   const row = await page.evaluate((d) => {
     const t = document.querySelector(`#${d}-title`)!.getBoundingClientRect();
     const c = document.querySelector(`#${d}-close`)!.getBoundingClientRect();

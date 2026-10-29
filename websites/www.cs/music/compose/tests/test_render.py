@@ -58,6 +58,12 @@ class RenderTest(unittest.TestCase):
             problems = render(p, 1, Path(tmp), MANIFEST, SAMPLES, "2026-10-28T12:00:00Z")
             self.assertTrue(any("same notes" in x for x in problems), problems)
             self.assertFalse((Path(tmp) / "audio.webm").exists())
+        # A score-only draft has no audio to withhold: it keeps no score.json, so publish has nothing to send.
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "score.json").write_text("{}")  # an earlier render's
+            problems = render(p, 1, Path(tmp), MANIFEST, SAMPLES, "2026-10-28T12:00:00Z", score_only=True)
+            self.assertTrue(any("same notes" in x for x in problems), problems)
+            self.assertFalse((Path(tmp) / "score.json").exists())
 
 
 if __name__ == "__main__":

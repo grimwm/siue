@@ -109,7 +109,8 @@ def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, m
            score_only: bool = False) -> list[str]:
     """
     Writes the draft folder; returns the checks' problems. With any problem the audio is removed, so publish refuses the draft.
-    A score-only draft is still rendered, for the checks, but keeps only its score: the workroom builds its sound.
+    A score-only draft is still rendered, for the checks, but keeps only its score: the workroom builds its sound. With any
+    problem it keeps no score.json, so publish refuses it too.
     """
     out = Path(out)
     work = out / "work"
@@ -141,7 +142,11 @@ def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, m
         (out / "audio.webm").unlink()
     if score_only:
         (out / "spectrogram.png").unlink()
-    (out / "score.json").write_text(json.dumps(score_json(piece, draft, made, changes, score_only), indent=1) + "\n")
+    if problems and score_only:
+        # A score-only draft has no audio to withhold, so it keeps no score.json, and publish has nothing to send.
+        (out / "score.json").unlink(missing_ok=True)
+    else:
+        (out / "score.json").write_text(json.dumps(score_json(piece, draft, made, changes, score_only), indent=1) + "\n")
     (out / "score.musicxml").write_text(musicxml(piece))
     shutil.rmtree(work)
     return problems

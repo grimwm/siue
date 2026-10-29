@@ -51,7 +51,8 @@ def main(argv: list[str]) -> int:
     # A piece's SCORE_ONLY drafts keep only their score; the workroom builds their sound.
     problems = render(piece, draft, out, manifest, root, made, getattr(module, "CHANGES", {}).get(draft),
                       draft in getattr(module, "SCORE_ONLY", ()))
-    problems += validate(json.loads((out / "score.json").read_text()), glossary_ids(GLOSSARY), library_ids(LIBRARY))
+    if (out / "score.json").is_file():  # a score-only draft that breaks a check keeps none
+        problems += validate(json.loads((out / "score.json").read_text()), glossary_ids(GLOSSARY), library_ids(LIBRARY))
     size = sum((out / f).stat().st_size for f in DRAFT_FILES if (out / f).is_file())
     if size > MAX_REQUEST_BYTES:
         problems.append(f"the draft is {size} bytes, over the 8 MB limit")

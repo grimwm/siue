@@ -68,6 +68,17 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(seen["data"], draft_container(files))
         self.assertEqual(seen["headers"]["Authorization"], "Bearer " + "k" * 64)
 
+    def test_the_published_drafts_are_listed_by_a_get_on_the_drafts_route(self):
+        seen = {}
+        listed = [{"piece": "ch1-labyrinth", "version": 3, "published_at": 1, "project_id": "crete", "project_name": "Crete", "kind": "music"}]
+
+        def opener(request, timeout=None):
+            seen["url"], seen["method"], seen["auth"] = request.full_url, request.get_method(), request.get_header("Authorization")
+            return FakeResponse(json.dumps({"drafts": listed}).encode())
+
+        self.assertEqual(Api("https://example.test/music/", "k" * 64, opener).drafts(), listed)
+        self.assertEqual((seen["url"], seen["method"], seen["auth"]), ("https://example.test/music/api/drafts.php", "GET", "Bearer " + "k" * 64))
+
     def test_a_body_past_the_servers_limit_is_never_sent(self):
         sent = []
         files = self.files(audio_webm=MAX_REQUEST_BYTES)

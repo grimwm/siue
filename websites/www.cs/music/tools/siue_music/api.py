@@ -100,6 +100,10 @@ class Api:
     def mark_picked_up(self, note_id: str) -> None:
         self._request("POST", "api/picked-up.php", {"id": note_id}, body=b"")
 
+    def drafts(self) -> list[dict]:
+        """The published drafts, newest first: {"piece", "version", "published_at", "project_id", "project_name", "kind"}."""
+        return json.loads(self._request("GET", "api/drafts.php"))["drafts"]
+
     def publish_draft(self, piece: str, version: int, files: Mapping[str, Path]) -> None:
         size = draft_size(files)
         if size > MAX_REQUEST_BYTES:
@@ -113,7 +117,8 @@ class Api:
     def holds(self, scope: str) -> str:
         """Whether this key holds `scope`, by a GET that changes nothing: "yes", "no" (403), "invalid" (401: revoked or
         mistyped), "https" (403 because the address is not https://) or "unknown" (the server could not be asked).
-        The publish and delete routes answer a GET 405 once the key is accepted; the keyring route answers 200, or 404 while none is stored."""
+        Once the key is accepted the drafts route answers a GET 200 (or 405 where the server does not list drafts), the
+        delete route a GET 405, and the keyring route 200, or 404 while none is stored."""
         routes = {"notes:pickup": ("api/notes.php", {"state": "waiting"}), "keys:publish": ("api/keyring.php", None),
                   "drafts:publish": ("api/drafts.php", None), "drafts:delete": ("api/delete-draft.php", None)}
         if scope not in routes:

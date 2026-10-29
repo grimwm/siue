@@ -127,7 +127,10 @@ final class MusicApiTest extends TestCase
                 'getNote' => [fn(string $k) => $this->api->getNote($this->as($k, ['query' => ['id' => $id]])), 200],
                 'pickedUp' => [fn(string $k) => $this->api->pickedUp($this->as($k, ['method' => 'POST', 'query' => ['id' => $id]])), 200],
             ],
-            'drafts:publish' => ['publishDraft' => [fn(string $k) => $this->api->publishDraft($this->post($k, [], ''), $this->reading('')), 422]],
+            'drafts:publish' => [
+                'publishDraft' => [fn(string $k) => $this->api->publishDraft($this->post($k, [], ''), $this->reading('')), 422],
+                'listDrafts' => [fn(string $k) => $this->api->publishDraft($this->as($k), $this->reading('')), 200],
+            ],
             'drafts:delete' => ['deleteDraft' => [fn(string $k) => $this->api->deleteDraft($this->as($k, ['method' => 'POST'])), 422]],
             'keys:publish' => [
                 'publishKeyring' => [fn(string $k) => $this->api->publishKeyring($this->post($k, [], ''), $this->reading('')), 422],
@@ -472,6 +475,23 @@ final class MusicApiTest extends TestCase
         self::assertSame($reads, $this->reads, 'an oversized keyring is refused from its declared length');
     }
 
+    public function testAGetOnTheDraftsRouteListsThePublishedDraftsNewestFirst(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        self::assertSame(['drafts' => []], $this->body($this->api->publishDraft($this->as($k), $this->reading(''))));
+        self::assertSame(201, $this->publish($k, $this->draftFiles(), 'ch1-labyrinth', 1)->status);
+        self::assertSame(201, $this->publish($k, $this->draftFiles('cannon-fire', 1, 'sound', 'tankity'), 'cannon-fire', 1)->status);
+        $reads = $this->reads;
+        $res = $this->api->publishDraft($this->as($k), $this->reading(''));
+        self::assertSame(200, $res->status);
+        self::assertSame($reads, $this->reads, 'a listing reads no body');
+        $drafts = $this->body($res)['drafts'];
+        self::assertSame([['cannon-fire', 1, 'sound', 'tankity'], ['ch1-labyrinth', 1, 'music', 'crete']],
+            array_map(fn(array $d) => [$d['piece'], $d['version'], $d['kind'], $d['project_id']], $drafts));
+        self::assertSame(['piece', 'version', 'published_at', 'project_id', 'project_name', 'kind'], array_keys($drafts[0]));
+        self::assertSame(405, $this->api->publishDraft($this->as($k, ['method' => 'DELETE']), $this->reading(''))->status);
+    }
+
     public function testDeletingADraftIsTheApisOnlyWayToDelete(): void
     {
         $methods = array_map(fn(ReflectionMethod $m) => $m->name, (new ReflectionClass(Music\Api::class))->getMethods(ReflectionMethod::IS_PUBLIC));
@@ -660,7 +680,7 @@ final class MusicApiTest extends TestCase
         self::assertSame($before, $this->store->keyring());
     }
 
-    /** The key tool probes with a GET: 403 means the scope is missing, 405 means the key is accepted. */
+    /** The key tool probes with a GET: 403 means the scope is missing; 200, or 405 on the POST-only delete route, means the key is accepted. */
     public function testAGetProbeSaysWhetherTheKeyHoldsTheScope(): void
     {
         $lacking = $this->keys->create('pickup', ['notes:pickup']);
@@ -668,7 +688,7 @@ final class MusicApiTest extends TestCase
         $read = $this->reading('');
         foreach (['publishKeyring', 'publishDraft', 'deleteDraft'] as $route) {
             self::assertSame(403, $this->api->$route($this->as($lacking), $read)->status, "$route without its scope");
-            self::assertSame($route === 'publishKeyring' ? 200 : 405, $this->api->$route($this->as($holding), $read)->status, "$route with its scope");
+            self::assertSame($route === 'deleteDraft' ? 405 : 200, $this->api->$route($this->as($holding), $read)->status, "$route with its scope");
             self::assertSame(401, $this->api->$route($this->as(str_repeat('0', 64)), $read)->status, "$route with an unknown key");
         }
         self::assertSame(0, $this->reads, 'a probe reads no body');

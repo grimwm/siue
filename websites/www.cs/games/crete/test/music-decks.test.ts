@@ -63,6 +63,27 @@ test('a deck streams its file through its own gain, silent until faded in, onto 
   assert.equal(el.volume, 1);
 });
 
+test('an equal-power fade follows a sine curve from where the gain is', async () => {
+  const ctx = fakeAudioContext();
+  const sources = withMedia(ctx);
+  const core = createAudioCore({ createContext: () => asAudioContext(ctx) });
+  const deck = mediaDeck(core, 'a.webm', fakeMedia() as unknown as MediaLike);
+  await deck.play();
+  const gain = sources[0]!.node.to[0] as FakeGain;
+  const curves: Array<{ values: number[]; at: number; seconds: number }> = [];
+  Object.assign(gain.gain, { setValueCurveAtTime(values: Float32Array, at: number, seconds: number) { curves.push({ values: [...values], at, seconds }); } });
+  deck.fade(1, 0.03, 'equal-power');
+  const [up] = curves;
+  assert.ok(up);
+  assert.deepEqual([up.at, up.seconds, up.values[0], up.values[up.values.length - 1]], [10, 0.03, 0, 1]);
+  const mid = up.values[Math.floor(up.values.length / 2)]!;
+  assert.ok(Math.abs(mid - Math.SQRT1_2) < 0.05, `half way is about -3 dB (${mid})`);
+  gain.gain.value = 1;
+  deck.fade(0, 0.03, 'equal-power');
+  const down = curves[1]!;
+  assert.deepEqual([down.values[0], down.values[down.values.length - 1]], [1, 0]);
+});
+
 test('a deck reads and moves the element’s time, and pauses it', () => {
   const core = createAudioCore({ createContext: () => null });
   const el = fakeMedia();

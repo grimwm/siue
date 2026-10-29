@@ -118,3 +118,14 @@ test('the closing chapter card opens over the end card; Q returns to it', () => 
   assert.equal(layers.pressBack(), 'closed');
   assert.equal(layers.top(), 'end');
 });
+
+test('the stack reads from the bottom card up, and is a copy', () => {
+  const { layers } = make();
+  layers.open('title');
+  layers.open('story');
+  layers.open('levels');
+  const stack = layers.stack();
+  assert.deepEqual(stack, ['title', 'story', 'levels']);
+  stack.pop();
+  assert.equal(layers.top(), 'levels');
+});

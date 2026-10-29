@@ -238,7 +238,7 @@ const levels: Levels = {
 const tracks: Array<Track | null> = [];
 const flow = ui.page.createUi({
   atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, levels, sfx: n => heard.push(n),
-  cards: view => tracks.push(trackFor(view)),
+  cards: stack => tracks.push(trackFor(stack)),
 });
 const game: Game = createGame({
   sfx() {}, say() {}, progress, pages: found, timers: m.timers, clock: m.clock, levels,
@@ -387,6 +387,15 @@ test('every change of cards reaches the page, which picks the music from them', 
   key('Enter');
   const changes = tracks.filter((t, i) => i === 0 || t !== tracks[i - 1]);
   assert.deepEqual(changes, ['title', 'story', 'title', 'story', null]);
+});
+
+test('the level list over the story card keeps the story cut', () => {
+  reset();
+  flow.showTitle(false);
+  key('i');
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  assert.equal(tracks[tracks.length - 1], 'story');
 });
 
 test('left and right in the levels list keep the one released chapter shown', () => {

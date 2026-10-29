@@ -7,6 +7,20 @@
 import type { AudioCore } from "../../_kit/audio/core.ts";
 import type { Deck } from "./music.ts";
 
+/** Points in an equal-power fade's curve. */
+const CURVE_POINTS = 32;
+
+/** An equal-power fade from `from` to `to`: a quarter sine up, or a quarter cosine down. */
+function equalPower(from: number, to: number): Float32Array {
+  const curve = new Float32Array(CURVE_POINTS);
+  for (let i = 0; i < CURVE_POINTS; i++) {
+    const x = i / (CURVE_POINTS - 1);
+    curve[i] = to >= from ? from + (to - from) * Math.sin((x * Math.PI) / 2) : to + (from - to) * Math.cos((x * Math.PI) / 2);
+  }
+  curve[CURVE_POINTS - 1] = to;
+  return curve;
+}
+
 /** One encoding of a track, with the type canPlayType is asked about. */
 export interface AudioSource {
   url: string;
@@ -62,7 +76,7 @@ export function mediaDeck(core: AudioCore, url: string, el: MediaLike): Deck {
       }
     },
     duration: () => el.duration,
-    fade(to, seconds) {
+    fade(to, seconds, shape) {
       const g = wire();
       const c = core.peek();
       if (!g || !c) {
@@ -72,6 +86,14 @@ export function mediaDeck(core: AudioCore, url: string, el: MediaLike): Deck {
       const now = c.currentTime;
       const from = g.gain.value;
       g.gain.cancelScheduledValues(now);
+      if (seconds > 0 && shape === "equal-power" && typeof g.gain.setValueCurveAtTime === "function") {
+        try {
+          g.gain.setValueCurveAtTime(equalPower(from, to), now, seconds);
+          return;
+        } catch {
+          // A curve that clashes with an automation event: the linear ramp below.
+        }
+      }
       g.gain.setValueAtTime(seconds > 0 ? from : to, now);
       if (seconds > 0) g.gain.linearRampToValueAtTime(to, now + seconds);
     },

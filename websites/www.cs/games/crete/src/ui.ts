@@ -56,7 +56,7 @@ export interface UiDeps {
   /** Voices an event (the chapter card's sound). */
   sfx?(name: SfxName): void;
   /** Told the cards after every change to them (the music follows them, src/music.ts trackFor). */
-  cards?(view: { top: LayerName | null; has(name: LayerName): boolean }): void;
+  cards?(stack: LayerName[]): void;
 }
 
 /** What a key press or click asks of the page. */
@@ -191,7 +191,7 @@ export function createUi(deps: UiDeps): Ui {
       (controls?.game ?? game)?.resume();
     }
     drawLayers();
-    deps.cards?.({ top: layers.top(), has: (name) => layers.has(name) });
+    deps.cards?.(layers.stack());
   });
 
   /** The campaign index of chapter `n`'s first level. */

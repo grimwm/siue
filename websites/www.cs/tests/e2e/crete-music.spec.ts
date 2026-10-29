@@ -36,6 +36,8 @@ test('the title theme plays on the title card, the story cut on the chapter card
   await page.locator('#title-veil .kicker').click();
   await expect.poll(async () => (await sounding(page)).names, { timeout: 10_000 }).toEqual(['title']);
   await expect.poll(async () => (await sounding(page)).t, { message: 'the theme streams' }).toBeGreaterThan(0.5);
+  expect(await page.evaluate(() => window.__media.filter(e => /\/title\./.test(e.src)).length),
+    'the loop point\'s second element is readied in the gesture, long before the seam').toBe(2);
 
   await page.locator('#title-play').click();
   await expect(page.locator('#chapter-veil')).toBeVisible();

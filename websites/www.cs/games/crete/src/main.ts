@@ -87,7 +87,7 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   bestWon: (text, moves) => editor.tryWon(text, moves),
 });
 const levels = outside.levels;
-const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx, cards: view => music.want(trackFor(view)) });
+const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx, cards: stack => music.want(trackFor(stack)) });
 /* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
    which comes first. */
 const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());

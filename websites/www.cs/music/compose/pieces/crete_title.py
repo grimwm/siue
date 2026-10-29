@@ -177,6 +177,10 @@ CHANGES = {
         {"from_bar": 31, "to_bar": 38, "lane": "organ-tune", "answers": [],
          "text": "The peak: the organ takes the tune, the horn answers, and the turn lands on a D major chord."},
     ],
+    3: [
+        {"from_bar": 1, "to_bar": 56, "lane": None, "answers": [],
+         "text": "Same music as draft 2; the sheet music now shows."},
+    ],
 }
 
 

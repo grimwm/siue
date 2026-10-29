@@ -244,19 +244,29 @@ test('the opening chapter card shows the kicker, name, words and quotation, with
   assert.equal(maybeById(root, 'chapter-next'), undefined);
 });
 
-test('the closing chapter card shows the closing words, says the next chapter is not yet released, and has only Continue', () => {
+test('the closing chapter card shows the closing words and only Continue; the next chapter, released, gets no line', () => {
   const root = mount();
   let closed = 0;
   renderChapter(root, chapterProps({ closing: true, onClose: () => { closed++; } }));
   assert.equal(byId(root, 'chapter-text').textContent, CH1.lore!.closing.text);
   const quote = walk(byId(root, 'chapter-veil')).find(n => n.localName === 'blockquote');
   assert.ok(quote?.textContent.includes(CH1.lore!.closing.quote!.text));
-  assert.equal(byId(root, 'chapter-next').textContent, 'Chapter 2 is not yet released');
+  assert.equal(maybeById(root, 'chapter-next'), undefined, 'Chapter 2 is released');
   assert.equal(maybeById(root, 'chapter-enter'), undefined);
   assert.equal(maybeById(root, 'chapter-levels'), undefined);
   assert.equal(globalThis.__focused?.id, 'chapter-continue');
   click(byId(root, 'chapter-continue'));
   assert.equal(closed, 1);
+});
+
+test("Chapter 2's closing card says Chapter 3 is not yet released", () => {
+  const root = mount();
+  const two = CHAPTERS[1]!;
+  renderChapter(root, chapterProps({ chapter: two, closing: true, next: nextChapter(2) }));
+  assert.equal(byId(root, 'chapter-kicker').textContent, 'Chapter 2 of 10');
+  assert.equal(byId(root, 'chapter-title').textContent, 'The Winding Ways');
+  assert.equal(byId(root, 'chapter-text').textContent, two.lore!.closing.text);
+  assert.equal(byId(root, 'chapter-next').textContent, 'Chapter 3 is not yet released');
 });
 
 // ---- levels list ----
@@ -285,18 +295,19 @@ test('the levels list has a button per level with its title and standing, and pi
   assert.deepEqual(seen, [0, 1, 2]);
 });
 
-test('the levels list has ten chapter tabs: chapter 1 pressed, the rest disabled and marked soon', () => {
+test('the levels list has ten chapter tabs: chapter 1 pressed, chapter 2 open, the rest disabled and marked soon', () => {
   const root = mount();
   const seen: number[] = [];
   renderLevels(root, levelsProps({ onTab: n => seen.push(n) }));
   for (let n = 1; n <= 10; n++) {
     const tab = byId(root, `levels-tab-${n}`);
     assert.equal(tab.getAttribute('aria-pressed'), n === 1 ? 'true' : 'false', `tab ${n}`);
-    assert.equal(tab.disabled, n !== 1, `tab ${n}`);
-    assert.equal(tab.textContent, n === 1 ? 'Ch 1' : `Ch ${n} · soon`, `tab ${n}`);
+    assert.equal(tab.disabled, n > 2, `tab ${n}`);
+    assert.equal(tab.textContent, n <= 2 ? `Ch ${n}` : `Ch ${n} · soon`, `tab ${n}`);
   }
   click(byId(root, 'levels-tab-1'));
-  assert.deepEqual(seen, [1]);
+  click(byId(root, 'levels-tab-2'));
+  assert.deepEqual(seen, [1, 2]);
 });
 
 test('the levels list waits hidden, focuses the level in play, and closes with a button tabbed with Q', () => {
@@ -345,7 +356,7 @@ function loreProps(over: Partial<LoreProps> = {}): LoreProps {
 }
 const PAGES = CH1.lore!.pages;
 
-test('the Lore book lists Chapter 1 with its opening card, and chapters 2 to 10 as not yet released', () => {
+test('the Lore book lists Chapters 1 and 2 with their opening cards, and chapters 3 to 10 as not yet released', () => {
   const root = mount();
   renderLore(root, loreProps({ open: false }));
   assert.equal(byId(root, 'lore-veil').hidden, true);
@@ -356,8 +367,12 @@ test('the Lore book lists Chapter 1 with its opening card, and chapters 2 to 10 
   assert.ok(text.includes('The Outer Halls'));
   assert.ok(byId(root, 'lore-opening-1').textContent.includes('Opening'));
   assert.equal(maybeById(root, 'lore-closing-1'), undefined, 'the closing card waits until it has been seen');
+  assert.ok(text.includes('Chapter 2 · The Winding Ways'));
+  assert.ok(byId(root, 'lore-opening-2').textContent.includes('Opening'));
+  assert.ok(byId(root, 'lore-page-ch2-lots').textContent.includes('hides in level 9'));
+  assert.ok(byId(root, 'lore-page-ch2-black-sail').textContent.includes('hides in level 10'));
   const soon = walk(byId(root, 'lore-veil')).filter(n => n.className === 'lore-soon');
-  assert.equal(soon.length, 9);
+  assert.equal(soon.length, 8);
   assert.ok(soon.every(n => n.textContent.includes('Not yet released')));
 });
 

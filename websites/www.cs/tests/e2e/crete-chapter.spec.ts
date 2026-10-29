@@ -1,6 +1,7 @@
-// Crete's Chapter 1 flow: Play shows the chapter card, a win that takes a story page names it on the end card,
+// Crete's chapter flow: Play shows the chapter card, a win that takes a story page names it on the end card,
 // and the menu's Lore book lists it. The page-taking line is solved in the page from a copy of level 9 whose page
-// is a relic, so the solver's win must take it; the same line then wins the real level through the strip.
+// is a relic, so the solver's win must take it; the same line then wins the real level through the strip. Then
+// level 10's win opens Chapter 1's closing card, whose Continue goes on to Chapter 2.
 import { test, expect } from '@playwright/test';
 
 const PAGE = 'games/crete/';
@@ -75,5 +76,41 @@ test('Play shows the chapter card; a page-taking win names the page, and the Lor
   await expect(page.locator('#lore-veil')).toBeVisible();
   await page.keyboard.press('q');
   await expect(page.locator('#lore-veil')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test("Chapter 1's closing card goes on to Chapter 2: its opening card, then its first level", async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(PAGE);
+  await page.locator('#title-play').click();
+  await expect(page.locator('#chapter-veil')).toBeVisible();
+  await page.keyboard.press('n');
+  await page.locator('#level-10').click();
+  await expect(page.locator('#start-veil')).toBeVisible();
+  await page.locator('#start-begin').click();
+  // Level 10 won through the controller: its closing card opens over the end card.
+  await page.evaluate(() => {
+    const t = (window as unknown as { __creteTest: CreteTest & { game: { press(a: Act): void } } }).__creteTest;
+    const r = t.solve(t.initial(t.trialLevel(9)));
+    for (const a of r.line) t.game.press(a);
+  });
+  await expect(page.locator('#chapter-veil')).toBeVisible();
+  await expect(page.locator('#chapter-kicker')).toHaveText('Chapter 1 of 10');
+  await expect(page.locator('#chapter-next')).toHaveCount(0);
+  await page.locator('#chapter-continue').click();
+  await expect(page.locator('#chapter-kicker')).toHaveText('Chapter 2 of 10');
+  await expect(page.locator('#chapter-title')).toHaveText('The Winding Ways');
+  await expect(page.locator('#chapter-text')).toContainText('loose stone');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#start-veil')).toBeVisible();
+  await expect(page.locator('#start-veil .kicker')).toHaveText('Chapter 2 · Level 1');
+  await expect(page.locator('#start-title')).toHaveText('The Loose Stone');
+  // The level list shows Chapter 2, with level 10 of Chapter 1 cleared behind it.
+  await page.keyboard.press('n');
+  await expect(page.locator('#levels-tab-2')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('#level-10')).toContainText('cleared');
   expect(errors).toEqual([]);
 });

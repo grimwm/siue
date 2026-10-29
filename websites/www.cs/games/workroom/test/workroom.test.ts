@@ -521,6 +521,7 @@ test('a sound that could not be built says why, Play is disabled, and the other 
   await act(async () => {});
   assert.match(root.textContent, /The sound could not be built: the sample library's index could not be loaded: the server answered 404/);
   assert.equal(button(root, 'Play').disabled, true);
+  assert.ok(!walk(root).some(e => e.localName === 'a' && e.textContent === 'Audio (WAV)'), 'no audio to download');
   await act(() => { fire(button(root, 'Piano roll'), 'click'); });
   assert.ok(walk(root).some(e => e._attrs['data-note'] !== undefined), 'the piano roll draws its notes');
   unmount(root);

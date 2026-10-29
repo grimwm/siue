@@ -329,6 +329,8 @@ function setModernOn(on: boolean): void {
   holder?.classList.toggle('look-modern', on);
   ui.setModernBoard(on);
   if (on) {
+    // What happened while it was hidden shows as it is now: the board rebuilds, so nothing splashes late.
+    modernOpens = -1;
     if (classicRaf) cancelAnimationFrame(classicRaf);
     classicRaf = 0;
     modern?.resize();
@@ -346,7 +348,11 @@ function setModernOn(on: boolean): void {
 function behindEditor(up: boolean): void {
   if (up === editorUp) return;
   editorUp = up;
-  if (modernOn) modern?.setActive(!up);
+  if (!up) modernOpens = -1;
+  if (modernOn) {
+    modern?.setActive(!up);
+    if (!up) showModern();
+  }
 }
 
 async function createModern(): Promise<void> {
@@ -399,7 +405,7 @@ function noModern(why: string): void {
   modernFailed = true;
   modernFailure = why;
   setModernOn(false);
-  if (!modernWarned) {
+  if (!modernWarned && settings.look.get() === 'modern') {
     modernWarned = true;
     ui.say(why, 'info');
   }
@@ -497,6 +503,7 @@ const modernHook = {
   yaw: () => modern?.yaw() ?? DEFAULT_YAW,
   zoom: () => modern?.zoom() ?? 0,
   floating: () => modern?.floating() ?? [],
+  splashing: () => modern?.splashing() ?? [],
   get active() { return modernOn && !editorUp; },
 };
 window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };

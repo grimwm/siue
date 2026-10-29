@@ -28,11 +28,23 @@ export function easeCam(cur: Cam, goal: Cam, dtSec: number, snap: boolean): bool
   return moving;
 }
 
-/** The camera with its target held within the board, one cell beyond its edge cells. */
-export function clampCam(c: Cam, cols: number, rows: number): Cam {
-  const hx = (cols - 1) / 2 + 1;
-  const hz = (rows - 1) / 2 + 1;
-  return { ...c, tx: Math.max(-hx, Math.min(hx, c.tx)), tz: Math.max(-hz, Math.min(hz, c.tz)) };
+const hold = (v: number, reach: number): number => Math.max(-Math.max(0, reach), Math.min(Math.max(0, reach), v));
+
+/** The camera with its target held so the view stays within the level, one cell of margin. The level and the view
+ *  are compared on the screen's own axes (across, and deep along the ground, which is foreshortened by sin(pitch)):
+ *  on an axis where the level fits the view, the level is centred on it; otherwise the view may reach one cell past
+ *  the level's edge and no further. The level is `cols` × `rows` cells centred at the origin, the screen `aspect`
+ *  wide to high. */
+export function clampView(c: Cam, cols: number, rows: number, aspect: number): Cam {
+  const y = (c.yaw * Math.PI) / 180;
+  const cs = Math.cos(y), sn = Math.sin(y);
+  const across = c.tx * cs - c.tz * sn;
+  const deep = -c.tx * sn - c.tz * cs;
+  const halfAcross = (cols * Math.abs(cs) + rows * Math.abs(sn)) / 2;
+  const halfDeep = (cols * Math.abs(sn) + rows * Math.abs(cs)) / 2;
+  const a = hold(across, halfAcross + 1 - (c.zoom * aspect) / 2);
+  const b = hold(deep, halfDeep + 1 - c.zoom / 2 / SIN_PITCH);
+  return { ...c, tx: a * cs - b * sn, tz: -a * sn - b * cs };
 }
 
 /** A screen drag of (dxPx, dyPx) as a ground move: the board follows the finger, and the ground's depth axis
@@ -69,10 +81,10 @@ export interface ZoomLimits {
 }
 
 /** How far the view may zoom on a `cols` × `rows` level at screen `aspect`: in to about five rows, out until the
- *  whole level fits whichever way the view is turned, but never past 22 rows nor short of the default view. */
+ *  whole level and a cell's margin fit whichever way the view is turned, but never past 22 rows nor short of the default view. */
 export function zoomLimits(aspect: number, cols: number, rows: number): ZoomLimits {
-  const d = Math.hypot(cols, rows);
-  const whole = Math.max(d * SIN_PITCH, d / aspect) + 1;
+  const d = Math.hypot(cols, rows) + 2;
+  const whole = Math.max(d * SIN_PITCH, d / aspect);
   return { min: ZOOM_MIN, max: Math.max(viewRows(aspect), Math.min(ZOOM_MAX, whole)) };
 }
 

@@ -49,7 +49,7 @@ interface Hooked {
     game: { run: { now: { player: { r: number; c: number } } } };
     parse(text: string): unknown;
     playLevel(level: unknown): void;
-    modern?: { frames(): number; yaw(): number; zoom(): number; floating(): number[]; active: boolean };
+    modern?: { frames(): number; yaw(): number; zoom(): number; floating(): number[]; splashing(): number[]; active: boolean };
   };
 }
 
@@ -233,6 +233,22 @@ test('a block pushed into water splashes in and floats there; undo takes it out'
   expect(errors).toEqual([]);
 });
 
+test('a block sunk while the modern look is hidden floats at once when it returns', async ({ page }) => {
+  const errors = await openHall(page, POOL, 'no-preference');
+  await page.keyboard.press('q');
+  await page.locator('#look-classic').click();
+  await page.keyboard.press('q');
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => (await player(page)).c, 'Theseus pushes the block in').toBe(3);
+  await page.waitForTimeout(1500); // the turn's animation ends
+  await page.keyboard.press('q');
+  await page.locator('#look-modern').click();
+  await expect.poll(async () => (await modern(page))!.active).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.floating())).toEqual([POOL_CELL]);
+  expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.splashing()), 'no late splash').toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test('Walls: Ghosted is kept through a reload', async ({ page }) => {
   await openHall(page);
   await page.keyboard.press('q');
@@ -290,4 +306,21 @@ test('without WebGL the classic board shows and the choice stays modern', async 
   await expect(page.locator('#stage3d')).toBeHidden();
   await expect.poll(() => classicPainted(page)).toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('crete-look'))).not.toBe('classic');
+});
+
+test('a lost WebGL context warns only when the player chose the modern look', async ({ page }) => {
+  const lose = () => page.evaluate(() => {
+    const gl = (document.getElementById('stage3d') as HTMLCanvasElement).getContext('webgl2') ?? (document.getElementById('stage3d') as HTMLCanvasElement).getContext('webgl');
+    gl!.getExtension('WEBGL_lose_context')!.loseContext();
+  });
+  const errors = await openHall(page);
+  await page.keyboard.press('q');
+  await page.locator('#look-classic').click();
+  await page.waitForTimeout(3500); // the "Classic look." toast has gone
+  await lose();
+  await page.waitForTimeout(1000);
+  await expect(page.locator('#toast')).not.toContainText('stopped working');
+  await page.locator('#look-modern').click();
+  await expect(page.locator('#toast')).toContainText('stopped working');
+  expect(errors).toEqual([]);
 });

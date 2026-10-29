@@ -14,7 +14,7 @@ import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { DEFAULT_YAW, PITCH, clampCam, clampZoom, easeCam, nearestYaw, panCam, viewRows, zoomAbout, zoomLimits } from './camera.ts';
+import { DEFAULT_YAW, PITCH, clampView, clampZoom, easeCam, nearestYaw, panCam, viewRows, zoomAbout, zoomLimits } from './camera.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
 import { changedCells } from './diff.ts';
@@ -75,6 +75,7 @@ export interface ModernBoard {
   quality(): number;
   /** The cells a block floats in, for tests. */
   floating(): number[];
+  splashing(): number[];
   dispose(): void;
 }
 
@@ -203,7 +204,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       goal.tz = cellZ(lastPlayer.r, rows());
     }
     goal.zoom = zoomed ? clampZoom(goal.zoom, limits()) : viewRows(aspect());
-    Object.assign(goal, clampCam(goal, cols(), rows()));
+    Object.assign(goal, clampView(goal, cols(), rows(), aspect()));
   }
 
   /** What the walls fade for: Theseus in every mode; in Ghosted, every figure, piece and tall tile too. */
@@ -457,7 +458,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     pan(dx: number, dy: number) {
       follow = false;
       const upp = cur.zoom / height;
-      for (const c of [cur, goal]) Object.assign(c, clampCam(panCam(c, dx, dy, upp), cols(), rows()));
+      for (const c of [cur, goal]) Object.assign(c, clampView(panCam(c, dx, dy, upp), cols(), rows(), aspect()));
       aimWalls = true;
       invalidate();
     },
@@ -470,7 +471,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
         const off = Math.abs(fx) > ZOOM_CENTRE || Math.abs(fy) > ZOOM_CENTRE;
         if (off) follow = false;
         const u = off ? fx * aspect() : 0, v = off ? fy : 0;
-        for (const c of [cur, goal]) Object.assign(c, clampCam(zoomAbout(c, factor, u, v, lim), cols(), rows()));
+        for (const c of [cur, goal]) Object.assign(c, clampView(zoomAbout(c, factor, u, v, lim), cols(), rows(), aspect()));
       }
       aimWalls = true;
       invalidate();
@@ -542,6 +543,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     frames: () => drawn,
     quality: () => quality,
     floating: () => floats.cells(),
+    splashing: () => floats.splashing(),
     dispose() {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;

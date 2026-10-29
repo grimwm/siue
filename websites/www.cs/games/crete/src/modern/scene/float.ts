@@ -46,6 +46,8 @@ export interface Floats {
   loop(t: number, still: boolean): void;
   /** The floating cells, for tests. */
   cells(): number[];
+  /** The cells whose block is still splashing in, for tests. */
+  splashing(): number[];
   clear(): void;
   dispose(): void;
 }
@@ -116,6 +118,7 @@ export function createFloats(kit: Kit): Floats {
       }
       return changed;
     },
+    splashing: () => [...floaters].filter(([, f]) => f.splash).map(([i]) => i),
     frame(now) {
       let playing = false;
       for (const f of floaters.values()) {

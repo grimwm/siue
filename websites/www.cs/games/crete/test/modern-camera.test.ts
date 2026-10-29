@@ -1,7 +1,7 @@
 // The modern look's camera maths: easing, clamping, panning, zooming, yaw choice and view height.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ZOOM_MAX, ZOOM_MIN, clampCam, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, viewRows, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
+import { ZOOM_MAX, ZOOM_MIN, clampView, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, viewRows, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
 import type { Cam } from '../src/modern/camera.ts';
 
 test('easeCam closes on the goal, reports motion, and settles exactly', () => {
@@ -19,9 +19,46 @@ test('easeCam snaps at once under reduced motion', () => {
   assert.deepEqual(cur, { yaw: 45, tx: 2, tz: 2, zoom: 6 });
 });
 
-test('clampCam pulls a far target back to one cell beyond the board and keeps a near one', () => {
-  assert.deepEqual(clampCam({ yaw: 7, tx: 50, tz: -50, zoom: 8 }, 5, 3), { yaw: 7, tx: 3, tz: -2, zoom: 8 });
-  assert.deepEqual(clampCam({ yaw: 0, tx: 1, tz: 0.5, zoom: 8 }, 5, 3), { yaw: 0, tx: 1, tz: 0.5, zoom: 8 });
+const ASPECT = 1.6;
+const gap = (a: number, b: number, eps = 1e-9): void => assert.ok(Math.abs(a - b) < eps, `${a} is not ${b}`);
+
+test('clampView centres a level that fits the default view, wherever the target is', () => {
+  const c = clampView({ yaw: 15, tx: 3, tz: -3, zoom: viewRows(ASPECT) }, 7, 7, ASPECT);
+  gap(c.tx, 0);
+  gap(c.tz, 0);
+  assert.equal(c.yaw, 15);
+  assert.equal(c.zoom, viewRows(ASPECT));
+});
+
+test('clampView centres a small level zoomed fully out, at any turn', () => {
+  const lim = zoomLimits(ASPECT, 9, 6);
+  for (const yaw of [0, 15, 105, 195]) {
+    const c = clampView({ yaw, tx: 4, tz: 3, zoom: lim.max }, 9, 6, ASPECT);
+    gap(c.tx, 0);
+    gap(c.tz, 0);
+  }
+});
+
+test('clampView centres only the axis the level fits on', () => {
+  const c = clampView({ yaw: 0, tx: 40, tz: 40, zoom: viewRows(ASPECT) }, 9, 30, ASPECT);
+  gap(c.tx, 0);
+  // 30 rows: the view (7.5 rows tall, 10.6 ground deep) may reach one cell past the north and south walls.
+  gap(c.tz, 15 + 1 - 7.5 / 2 / Math.sin(Math.PI / 4));
+});
+
+test('clampView lets a big level follow the target inside its bounds and keeps the view within one cell of it', () => {
+  const cam = { yaw: 0, tx: 2, tz: -3, zoom: viewRows(ASPECT) };
+  assert.deepEqual(clampView(cam, 30, 20, ASPECT), cam);
+  const far = clampView({ ...cam, tx: -99, tz: 99 }, 30, 20, ASPECT);
+  gap(far.tx, -(15 + 1 - (viewRows(ASPECT) * ASPECT) / 2));
+  gap(far.tz, 10 + 1 - viewRows(ASPECT) / 2 / Math.sin(Math.PI / 4));
+});
+
+test('clampView gives the same result at yaw 15 and 195', () => {
+  const a = clampView({ yaw: 15, tx: 99, tz: 99, zoom: 8 }, 30, 20, ASPECT);
+  const b = clampView({ yaw: 195, tx: -99, tz: -99, zoom: 8 }, 30, 20, ASPECT);
+  gap(a.tx, -b.tx);
+  gap(a.tz, -b.tz);
 });
 
 test('panCam: the board follows the finger, with depth foreshortened by sin 45 degrees', () => {
@@ -91,7 +128,7 @@ test('zoomLimits: in to five rows, out to the whole level within 22 rows, never 
   assert.equal(big.max, ZOOM_MAX, 'a huge level stops at 22 rows');
   const mid = zoomLimits(1.6, 20, 12);
   const d = Math.hypot(20, 12);
-  assert.ok(near(mid.max, d * Math.SQRT1_2 + 1), 'a middling level fits its diagonal, foreshortened, plus a margin');
+  assert.ok(near(mid.max, (d + 2) * Math.SQRT1_2), 'a middling level fits its diagonal, foreshortened, and a margin');
   assert.ok(zoomLimits(0.46, 20, 12).max >= viewRows(0.46), 'a phone in portrait');
   assert.equal(clampZoom(2, mid), ZOOM_MIN);
   assert.equal(clampZoom(99, mid), mid.max);

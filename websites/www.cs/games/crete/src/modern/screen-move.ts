@@ -1,4 +1,4 @@
-/* The Island of Crete, modern look: a key or swipe is a direction on the screen; the board moves along the
+/* The Island of Crete, modern look: a key or pad press is a direction on the screen; the board moves along the
  * grid. The view is turned to the nearest quarter, so screen-up is a grid direction. DOM-free. */
 import type { Dir } from '../puzzle/tiles.ts';
 

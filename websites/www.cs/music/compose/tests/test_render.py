@@ -40,6 +40,16 @@ class RenderTest(unittest.TestCase):
             steps = np.abs(np.diff(np.concatenate([audio[-near:, 0], audio[:near, 0]])))
             self.assertLessEqual(float(steps[near - 1]), 2 * float(np.delete(steps, near - 1).max()))
 
+    def test_a_score_only_draft_keeps_only_its_score(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            problems = render(piece(), 1, out, MANIFEST, SAMPLES, "2026-10-28T12:00:00Z", score_only=True)
+            self.assertEqual(problems, [])
+            self.assertEqual(sorted(p.name for p in out.iterdir() if p.is_file()), ["score.json", "score.musicxml"])
+            score = json.loads((out / "score.json").read_text())
+            self.assertEqual(score["audio"], [])
+            self.assertNotIn("spectrogram", score)
+
     def test_a_draft_that_fails_a_check_cannot_be_published(self):
         from siue_compose.piece import Note
         tune = [Note("lyre", b, 1, 62 + b, 50, "ariadne") for b in (0, 1)]

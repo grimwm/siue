@@ -182,6 +182,10 @@ CHANGES = {
         {"from_bar": 1, "to_bar": 56, "lane": None, "answers": [],
          "text": "Same music as draft 2; the sheet music now shows."},
     ],
+    4: [
+        {"from_bar": 1, "to_bar": 56, "lane": None, "answers": [],
+         "text": "Built in your browser from the score; it should sound the same as draft 3"},
+    ],
 }
 
 # The game's story pages: the lyre and the drones as they are, the organ held well back, the horn and the cellos' tune
@@ -189,6 +193,9 @@ CHANGES = {
 CUTS = {
     "story": Cut({"organ": -15.0, "organ-tune": -12.0, "horn": -6.0, "cellos": -3.0}, loudness=-24.0),
 }
+
+# Drafts sent as their score alone: the workroom builds their sound from the shared sample library.
+SCORE_ONLY = {4}
 
 
 def compose(draft: int) -> Piece:

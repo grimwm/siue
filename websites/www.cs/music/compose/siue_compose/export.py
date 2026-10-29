@@ -29,11 +29,12 @@ def _motif_spans(piece: Piece, motif: str) -> list[dict]:
     return [{"lane": lane, "from": _s(piece, a), "to": _s(piece, b)} for lane, (a, b) in sorted(spans, key=lambda s: s[1][0])]
 
 
-def score_json(piece: Piece, draft: int, made: str, changes: list[dict] | None = None) -> dict:
+def score_json(piece: Piece, draft: int, made: str, changes: list[dict] | None = None, score_only: bool = False) -> dict:
+    """The draft's score.json. A score-only draft lists no audio and no spectrogram: the workroom builds both from its sound and mix."""
     duration = round(piece.duration, 6)
     energy = [[_s(piece, b), v] for b, v in piece.energy if b < piece.beats]
     energy.append([duration, piece.energy[-1][1]])
-    return {
+    score = {
         "schema": 1,
         "kind": "music",
         "project": {"id": piece.project_id, "name": piece.project_name},
@@ -58,6 +59,10 @@ def score_json(piece: Piece, draft: int, made: str, changes: list[dict] | None =
         "musicxml": "score.musicxml",
         "changes": changes or [],
     }
+    if score_only:
+        score["audio"] = []
+        del score["spectrogram"]
+    return score
 
 
 def musicxml(piece: Piece) -> str:

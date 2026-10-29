@@ -8,7 +8,11 @@
 // typed note, pick it up with the owner's tool, read and delete it on a second
 // device; a composer that asks for the unlock first; hum (and find a recording
 // kept, not lost, when the mode changes mid-recording), react, draw the energy,
-// and a note made offline that waits and then goes.
+// and a note made offline that waits and then goes; then a draft sent as its
+// score alone, whose sound the page builds from the shared sample library, plays
+// and downloads as a WAV that loops without a click. With MUSIC_E2E_LISTEN=<dir>,
+// it also builds the Crete title theme's score-only draft and saves the WAV and
+// the build's timing there, for the listening check against the container render.
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -19,6 +23,7 @@ const SITE = join(import.meta.dirname, '..', '..');
 const FIXTURE_DRAFTS = {
   draft: { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft'), piece: 'test-piece' },
   'draft-sound': { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft-sound'), piece: 'cannon-fire' },
+  'draft-score': { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft-score'), piece: 'built-piece' },
 } as const;
 
 // The tests share one browser worker and one sign-in: the admin sign-in link is limited to three a hour per address,
@@ -98,9 +103,13 @@ function draftBundle(files: Record<string, Buffer>): Buffer {
 
 export async function publishFixtureDraft(request: APIRequestContext, base: string, key: string, fixture: keyof typeof FIXTURE_DRAFTS = 'draft'): Promise<void> {
   const { dir, piece } = FIXTURE_DRAFTS[fixture];
-  // A music draft carries score.musicxml; a sound draft does not.
+  await publishDraft(request, base, key, dir, piece, 1);
+}
+
+/** Publishes the draft files found in `dir`: a music draft carries score.musicxml, a sound draft does not, and a score-only draft has no audio or spectrogram. */
+async function publishDraft(request: APIRequestContext, base: string, key: string, dir: string, piece: string, version: number): Promise<void> {
   const files = Object.fromEntries(['score.json', 'score.musicxml', 'audio.webm', 'spectrogram.png'].filter(name => existsSync(join(dir, name))).map(name => [name, readFileSync(join(dir, name))]));
-  const res = await request.post(`${base}music/api/drafts.php?piece=${piece}&version=1`, {
+  const res = await request.post(`${base}music/api/drafts.php?piece=${piece}&version=${version}`, {
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/octet-stream' },
     data: draftBundle(files),
   });
@@ -789,6 +798,114 @@ test('every screen at 390 and 1280 px, dark and light: no sideways scroll, 44 px
       }
     }
     expect(violations).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+/** A 16-bit PCM WAV as the page writes it (render/master.ts wav): its rate, and its first channel scaled to [-1, 1]. */
+function readWav(bytes: Buffer): { rate: number; channels: number; frames: number; left: Float64Array } {
+  expect(bytes.subarray(0, 4).toString()).toBe('RIFF');
+  expect(bytes.readUInt16LE(34)).toBe(16);
+  const channels = bytes.readUInt16LE(22);
+  const rate = bytes.readUInt32LE(24);
+  const frames = bytes.readUInt32LE(40) / (channels * 2);
+  const left = Float64Array.from({ length: frames }, (_, i) => bytes.readInt16LE(44 + i * channels * 2) / 32767);
+  return { rate, channels, frames, left };
+}
+
+/** The built sound's WAV, saved through the page's "Audio (WAV)" link. */
+async function downloadWav(page: Page, name: string): Promise<Buffer> {
+  const saved = page.waitForEvent('download');
+  await page.getByRole('link', { name: `Download audio (wav), ${name}` }).click();
+  const download = await saved;
+  expect(download.suggestedFilename()).toBe(name);
+  return readFileSync((await download.path())!);
+}
+
+test('a score-only draft: the page builds its sound from the library, plays it, draws it and downloads a WAV that loops cleanly', async ({ browser, request, baseURL }) => {
+  test.setTimeout(240_000);
+  const base = baseURL!;
+  // The library is public (CC0): it answers without a session, while the composing sources stay closed.
+  const index = await request.get(`${base}music/library/library.json`);
+  expect(index.status()).toBe(200);
+  const lib = await index.json() as { instruments: Record<string, { files: { file: string }[] }> };
+  const flac = await request.get(`${base}music/library/${lib.instruments.horn!.files[0]!.file}`);
+  expect(flac.status()).toBe(200);
+  expect(flac.headers()['content-type']).toBe('audio/flac');
+  expect((await flac.body()).subarray(0, 4).toString()).toBe('fLaC');
+  expect((await request.get(`${base}music/compose/README.md`)).status()).toBe(403);
+  expect((await request.get(`${base}music/compose/`)).status()).toBe(403);
+
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    const violations: string[] = [];
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
+    await publishFixtureDraft(request, base, await createKey(page, base, 'e2e score only', ['drafts:publish']), 'draft-score');
+    // The library's index is held back a moment, so the build is on screen long enough to see.
+    await page.route('**/music/library/library.json', async route => { await new Promise(r => setTimeout(r, 1500)); await route.continue(); });
+
+    await page.goto(`${base}music/piece.php?id=built-piece`);
+    await expect(page.getByText('Building the sound…')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Play' })).toBeDisabled();
+    await expect(page.getByText('Building the sound…')).toBeHidden({ timeout: 60_000 });
+    await expect(page.getByText('The sound could not be built')).toHaveCount(0);
+    await expect(page.locator('audio')).toHaveAttribute('src', /^blob:/);
+
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(() => page.locator('audio').evaluate(a => (a as HTMLAudioElement).currentTime)).toBeGreaterThan(0.2);
+    await page.getByRole('button', { name: 'Pause' }).click();
+
+    await page.getByRole('tab', { name: 'Sound picture' }).click();
+    await expect(page.locator('canvas[data-spectrogram]')).toBeVisible();
+
+    const wav = readWav(await downloadWav(page, 'built-piece-v1.wav'));
+    expect(wav.rate).toBe(48000);
+    expect(wav.channels).toBe(2);
+    expect(Math.abs(wav.frames / wav.rate - 16)).toBeLessThanOrEqual(0.02);
+    // The loop point: the step from the last sample to the first is no bigger than twice the largest step beside it
+    // (the container render's own test, music/compose/tests/test_render.py).
+    const near = Math.round(0.01 * wav.rate);
+    const around = [...wav.left.subarray(wav.frames - near), ...wav.left.subarray(0, near)];
+    const steps = around.slice(1).map((v, i) => Math.abs(v - around[i]!));
+    const seam = steps[near - 1]!;
+    expect(seam).toBeLessThanOrEqual(2 * Math.max(...steps.filter((_, i) => i !== near - 1)));
+    expect(wav.left.reduce((m, v) => Math.max(m, Math.abs(v)), 0)).toBeGreaterThan(0.1);
+    expect(violations).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+const LISTEN = process.env.MUSIC_E2E_LISTEN ?? '';
+
+test('the listening check: the Crete title theme built from its score, saved with how long the build took', async ({ browser, request, baseURL }) => {
+  test.skip(!LISTEN, 'set MUSIC_E2E_LISTEN=<folder> to build the theme (render music/pieces/crete-title/v4 first)');
+  test.setTimeout(900_000);
+  const base = baseURL!;
+  const dir = join(SITE, 'music', 'pieces', 'crete-title', 'v4');
+  const score = JSON.parse(readFileSync(join(dir, 'score.json'), 'utf8')) as { duration: number; audio: unknown[] };
+  expect(score.audio).toEqual([]);
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    await publishDraft(request, base, await createKey(page, base, 'e2e listen', ['drafts:publish']), dir, 'crete-title', 4);
+    await page.goto(`${base}music/piece.php?id=crete-title`);
+    await expect(page.getByText('Building the sound…')).toBeVisible();
+    const started = Date.now();
+    await expect(page.getByText('Building the sound…')).toBeHidden({ timeout: 840_000 });
+    const seconds = (Date.now() - started) / 1000;
+    // What the build fetched from the library: its index and the samples the score plays.
+    const library = await page.evaluate(() => performance.getEntriesByType('resource')
+      .filter(e => e.name.includes('/music/library/'))
+      .map(e => (e as PerformanceResourceTiming).encodedBodySize));
+    const libraryBytes = library.reduce((sum, bytes) => sum + bytes, 0);
+    await expect(page.getByText('The sound could not be built')).toHaveCount(0);
+    const bytes = await downloadWav(page, 'crete-title-v4.wav');
+    const wav = readWav(bytes);
+    expect(Math.abs(wav.frames / wav.rate - score.duration)).toBeLessThanOrEqual(0.02);
+    mkdirSync(LISTEN, { recursive: true });
+    writeFileSync(join(LISTEN, 'crete-title-v4.wav'), bytes);
+    writeFileSync(join(LISTEN, 'build.json'), JSON.stringify({ seconds, libraryBytes, libraryFiles: library.length, duration: score.duration }, null, 1) + '\n');
   } finally {
     await context.close();
   }

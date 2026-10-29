@@ -10,11 +10,15 @@ and as a slow, high fragment as it fades. Source:
 
 Make a draft's audio and spectrogram with `make music-render PIECE=crete-title VERSION=<n>`
 (they are not committed), then publish it with `make music-publish PIECE=crete-title`.
+A score-only draft (v4) has no audio or spectrogram to make: its render writes the score.
 
 - v1: a one-minute sketch of the sound: the tune once, one organ swell, then the
   drone alone, returning to the start. It is also its own piece,
   `crete-title-short`.
 - v2: the full theme.
+- v3: the same music as v2, with working sheet music.
+- v4: the same music as v3, sent as its score alone: the workroom builds its
+  sound in the browser. Publish it, then compare it with v3 by ear.
 
 The game plays draft 3: `CUT=full` under the title card and `CUT=story` (the
 organ held back, 4 LU quieter) on the story cards, as

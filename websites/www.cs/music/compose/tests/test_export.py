@@ -22,6 +22,13 @@ class ExportTest(unittest.TestCase):
                                              "attack": lane.attack, "release": lane.release})
         self.assertEqual(validate(s, glossary_ids(support.GLOSSARY_JSON), library_ids(support.LIBRARY_JSON)), [])
 
+    def test_a_score_only_draft_lists_no_audio_and_no_spectrogram(self):
+        s = score_json(piece(), 1, MADE, score_only=True)
+        self.assertEqual(s["audio"], [])
+        self.assertNotIn("spectrogram", s)
+        self.assertEqual(s["mix"], {"style": "lofi", "loudness": -20})
+        self.assertEqual(validate(s, glossary_ids(support.GLOSSARY_JSON), library_ids(support.LIBRARY_JSON)), [])
+
     def test_seconds_follow_the_tempo(self):
         s = score_json(piece(), 1, MADE)
         self.assertEqual(s["duration"], 8.0)

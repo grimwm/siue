@@ -48,7 +48,9 @@ def main(argv: list[str]) -> int:
     manifest = json.loads((COMPOSE / "samples.json").read_text())
     root = fetch(manifest)[piece.lanes[0].instrument]
     made = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    problems = render(piece, draft, out, manifest, root, made, getattr(module, "CHANGES", {}).get(draft))
+    # A piece's SCORE_ONLY drafts keep only their score; the workroom builds their sound.
+    problems = render(piece, draft, out, manifest, root, made, getattr(module, "CHANGES", {}).get(draft),
+                      draft in getattr(module, "SCORE_ONLY", ()))
     problems += validate(json.loads((out / "score.json").read_text()), glossary_ids(GLOSSARY), library_ids(LIBRARY))
     size = sum((out / f).stat().st_size for f in DRAFT_FILES if (out / f).is_file())
     if size > MAX_REQUEST_BYTES:

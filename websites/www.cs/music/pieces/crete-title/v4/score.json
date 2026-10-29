@@ -10,7 +10,7 @@
   "title": "Crete: title theme"
  },
  "draft": 4,
- "made": "2026-10-29T07:14:28Z",
+ "made": "2026-10-29T07:50:04Z",
  "duration": 216.774194,
  "bars": 56,
  "tempo": [
@@ -2910,7 +2910,7 @@
    "to_bar": 56,
    "lane": null,
    "answers": [],
-   "text": "Built in your browser from the score; it should sound the same as draft 3"
+   "text": "Built in your browser from the score; it should sound the same as draft 3."
   }
  ]
 }

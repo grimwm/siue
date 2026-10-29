@@ -184,7 +184,7 @@ CHANGES = {
     ],
     4: [
         {"from_bar": 1, "to_bar": 56, "lane": None, "answers": [],
-         "text": "Built in your browser from the score; it should sound the same as draft 3"},
+         "text": "Built in your browser from the score; it should sound the same as draft 3."},
     ],
 }
 

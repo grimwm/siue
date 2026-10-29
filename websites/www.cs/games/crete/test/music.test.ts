@@ -126,25 +126,40 @@ test('the title theme starts at its beginning and fades in; its second deck is m
   assert.equal(decks.length, 2);
 });
 
-test('the loop runs the whole file: the second deck starts as the first reaches its end, with a short equal-power crossfade', async () => {
-  const { music, decks, advance, playing } = rig(20);
+test('every pass is the whole file: the second deck starts from 0 as the first ends, a short equal-power dip hiding the join', async () => {
+  const { music, decks, advance, playing, clock } = rig(20);
+  /** When each deck began to sound, in seconds of the clock, and from where in the file. */
+  const starts: Array<{ deck: FakeDeck; at: number; from: number }> = [];
   music.want('title');
   await settle();
   const [a, b] = pair(decks, 'title');
-  assert.ok(LOOP_XF_S >= 0.02 && LOOP_XF_S <= 0.05, `a crossfade of ${LOOP_XF_S} s only hides a decoder gap`);
+  for (const d of [a, b]) {
+    const play = d.play.bind(d);
+    d.play = () => {
+      const from = d.t;
+      const r = play();
+      if (d.playing) starts.push({ deck: d, at: clock.clock.now() / 1000, from });
+      return r;
+    };
+  }
+  assert.ok(LOOP_XF_S >= 0.02 && LOOP_XF_S <= 0.05, `a fade of ${LOOP_XF_S} s only hides a decoder gap`);
   advance(20 - LOOP_XF_S - 0.02);
+  assert.deepEqual(playing(), [a]);
+  assert.deepEqual(last(a), [1, FADE_IN_S], 'the first deck is still at full gain');
+  advance(0.04);
   assert.deepEqual(playing(), [a], 'nothing of the start overlaps the end');
+  const out = last(a);
+  assert.ok(out && out[0] === 0 && out[2] === 'equal-power' && out[1] <= LOOP_XF_S, `its last ${LOOP_XF_S} s fade out (${out})`);
   advance(0.04);
-  assert.ok(b.playing && b.t <= 0.03, `the second deck plays from its start (at ${b.t})`);
-  assert.ok(a.t >= 20 - LOOP_XF_S - 0.01, `the first deck was ${(20 - a.t).toFixed(3)} s from its end`);
+  assert.ok(b.playing, 'the second deck takes over');
   assert.deepEqual(last(b), [1, LOOP_XF_S, 'equal-power']);
-  assert.deepEqual(last(a), [0, LOOP_XF_S, 'equal-power']);
-  advance(0.2);
-  assert.deepEqual(playing(), [b], 'the first deck stops once faded');
-  advance(20 - LOOP_XF_S - b.t - 0.02);
-  assert.deepEqual(playing(), [b], 'a whole file again before the next seam');
-  advance(0.04);
-  assert.ok(a.playing && a.t <= 0.03, 'the first deck takes its turn again');
+  advance(20);
+  advance(0.1);
+  const [first, second] = starts;
+  assert.ok(first && second, `two starts at the loop points (${starts.length})`);
+  assert.deepEqual([first.deck, first.from, second.deck, second.from], [b, 0, a, 0], 'each from the start of the file');
+  assert.ok(Math.abs(first.at - 20) <= 0.011, `the first pass lasted ${first.at} s, the file's 20 s`);
+  assert.ok(Math.abs(second.at - first.at - 20) <= 0.011, `the second pass lasted ${second.at - first.at} s`);
   assert.equal(decks.length, 2);
 });
 

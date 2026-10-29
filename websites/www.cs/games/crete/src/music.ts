@@ -5,8 +5,11 @@
  * src/music-decks.ts), two a track. The render's tail is folded onto its
  * start, so the file runs on from its end into its start; the browser's own
  * media loop would leave a gap there, so as the first deck reaches its end the
- * second starts the file again, under a crossfade just long enough to hide a
- * decoder's gap, and the two take turns. Changing track starts the new one at
+ * second starts the file again from 0, and the two take turns: every pass is
+ * the whole file, so the music's beat never slips. A file has nothing past its
+ * end to overlap, so the join is a short equal-power dip (the first deck's
+ * last moments fade out, the second's first fade in) that hides a decoder's
+ * gap. Changing track starts the new one at
  * the same point of the music, crossfading. DOM-free: the decks and timers are
  * ports. */
 import type { Timers } from "../../_kit/ports.ts";
@@ -57,8 +60,8 @@ export const FADE_IN_S = 2;
 export const FADE_OUT_S = 1.5;
 /** Seconds one track takes to cross into the other. */
 export const SWITCH_S = 2.5;
-/** Seconds of the equal-power crossfade at the loop point: the second deck starts this long before the first ends,
- *  enough to hide a decoder's gap and too short to blur the music. */
+/** Seconds of each half of the equal-power dip at the loop point: the first deck fades out over its last this long
+ *  and the second fades in over its first, enough to hide a decoder's gap and too short to hear. */
 export const LOOP_XF_S = 0.03;
 /** How often the loop asks again for a length the browser does not know yet. */
 const POLL_MS = 250;
@@ -99,6 +102,8 @@ interface Player {
   /** Counts plays of each deck, so a refusal of a play since superseded is ignored. */
   plays: [number, number];
   loop: number;
+  /** The live deck is fading out over its last moments, into the loop point. */
+  ending: boolean;
   /** The pause at the end of a fade-out. */
   stop: number;
 }
@@ -120,7 +125,7 @@ export function createMusic(ports: MusicPorts): Music {
     if (!p) {
       p = {
         track, decks: [ports.deck(track), ports.deck(track)], live: 0, on: false, blocked: false,
-        ready: [false, false], plays: [0, 0], loop: 0, stop: 0,
+        ready: [false, false], plays: [0, 0], loop: 0, ending: false, stop: 0,
       };
       players.set(track, p);
     }
@@ -172,7 +177,8 @@ export function createMusic(ports: MusicPorts): Music {
     if (id) timers.clearTimeout(id);
   }
 
-  /** Waits for the live deck's loop point, asking its position again when the timer fires (playback can stall). */
+  /** Waits for the live deck's end, asking its position again when a timer fires (playback can stall): its last
+   *  LOOP_XF_S fade out, and at the end the loop point. */
   function schedule(p: Player): void {
     clearTimer(p.loop);
     const d = p.decks[p.live];
@@ -181,7 +187,15 @@ export function createMusic(ports: MusicPorts): Music {
       p.loop = timers.setTimeout(() => schedule(p), POLL_MS);
       return;
     }
-    const left = dur - d.position() - LOOP_XF_S;
+    const left = dur - d.position();
+    if (!p.ending && left > LOOP_XF_S + SEAM_SLACK_S) {
+      p.loop = timers.setTimeout(() => schedule(p), (left - LOOP_XF_S) * 1000);
+      return;
+    }
+    if (!p.ending) {
+      p.ending = true;
+      d.fade(0, Math.max(0, left), "equal-power");
+    }
     if (left > SEAM_SLACK_S) {
       p.loop = timers.setTimeout(() => schedule(p), left * 1000);
       return;
@@ -190,7 +204,7 @@ export function createMusic(ports: MusicPorts): Music {
     seam(p);
   }
 
-  /** The loop point: the idle deck starts the file again as the live one ends. Should the browser refuse it, the
+  /** The loop point: the idle deck starts the file again from 0 as the live one ends. Should the browser refuse it, the
    *  live deck plays the file again itself (with the media loop's gap) and the next loop point tries again. */
   function seam(p: Player): void {
     const was = p.live;
@@ -198,6 +212,7 @@ export function createMusic(ports: MusicPorts): Music {
     const now = other(was);
     const next = p.decks[now];
     p.live = now;
+    p.ending = false;
     next.seek(0);
     next.fade(0, 0);
     playDeck(p, now, () => {
@@ -205,21 +220,19 @@ export function createMusic(ports: MusicPorts): Music {
       next.pause();
       p.live = was;
       old.seek(0);
-      old.fade(1, 0);
+      old.fade(1, LOOP_XF_S, "equal-power");
       playDeck(p, was, () => { if (p.live === was) p.blocked = true; });
       schedule(p);
     });
     next.fade(1, LOOP_XF_S, "equal-power");
-    old.fade(0, LOOP_XF_S, "equal-power");
-    timers.setTimeout(() => {
-      if (p.live !== was) old.pause();
-    }, LOOP_XF_S * 1000 + PAUSE_PAD_MS);
+    old.pause();
     schedule(p);
   }
 
   function start(track: Track, at: number, fadeIn: number): void {
     const p = player(track);
     p.on = true;
+    p.ending = false;
     if (p.stop) {
       // Still fading out: it comes back up from where it is.
       clearTimer(p.stop);
@@ -238,6 +251,7 @@ export function createMusic(ports: MusicPorts): Music {
     p.blocked = false;
     clearTimer(p.loop);
     p.loop = 0;
+    p.ending = false;
     clearTimer(p.stop);
     p.stop = 0;
     const pauseAll = (): void => {

@@ -5,7 +5,7 @@ import support
 from fixture_piece import piece
 from siue_compose.piece import Note
 from siue_compose.export import midi_files, musicxml, score_json
-from siue_music.score import glossary_ids, validate
+from siue_music.score import glossary_ids, library_ids, validate
 
 MADE = "2026-10-28T12:00:00Z"
 
@@ -13,6 +13,14 @@ MADE = "2026-10-28T12:00:00Z"
 class ExportTest(unittest.TestCase):
     def test_score_validates(self):
         self.assertEqual(validate(score_json(piece(), 1, MADE), glossary_ids(support.GLOSSARY_JSON)), [])
+
+    def test_score_carries_its_sound_and_mix(self):
+        s = score_json(piece(), 1, MADE)
+        self.assertEqual(s["mix"], {"style": "lofi", "loudness": -20})
+        for lane, spec in zip(piece().lanes, s["lanes"]):
+            self.assertEqual(spec["sound"], {"instrument": lane.instrument, "gain_db": lane.gain_db,
+                                             "attack": lane.attack, "release": lane.release})
+        self.assertEqual(validate(s, glossary_ids(support.GLOSSARY_JSON), library_ids(support.LIBRARY_JSON)), [])
 
     def test_seconds_follow_the_tempo(self):
         s = score_json(piece(), 1, MADE)

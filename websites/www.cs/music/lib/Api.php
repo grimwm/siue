@@ -230,6 +230,20 @@ final class Api
         return $at === $end ? $files : null;
     }
 
+    /** A renderable score lists no audio file and gives every lane a sound and the piece a mix: the page plays it itself. */
+    private static function isRenderable(array $score): bool
+    {
+        if (($score['audio'] ?? null) !== [] || !is_array($score['mix'] ?? null) || !is_array($score['lanes'] ?? null) || $score['lanes'] === []) {
+            return false;
+        }
+        foreach ($score['lanes'] as $lane) {
+            if (!is_array($lane) || !is_array($lane['sound'] ?? null)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /**
      * The first reason the files cannot be kept, or null; then $about holds the score's project and kind.
      * @param array<string, string> $files
@@ -262,7 +276,7 @@ final class Api
         if (isset($files['audio.m4a']) && substr($files['audio.m4a'], 4, 4) !== 'ftyp') {
             return 'bad_file';
         }
-        if (!isset($files['audio.webm']) && !isset($files['audio.m4a'])) {
+        if (!isset($files['audio.webm']) && !isset($files['audio.m4a']) && !self::isRenderable($score)) {
             return 'missing_file';
         }
         if (!isset($files['score.musicxml'])) {

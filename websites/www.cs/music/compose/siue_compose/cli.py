@@ -17,9 +17,10 @@ sys.path.insert(0, str(COMPOSE))
 
 from siue_music.api import MAX_REQUEST_BYTES  # noqa: E402
 from siue_music.publish import DRAFT_FILES  # noqa: E402
-from siue_music.score import glossary_ids, validate  # noqa: E402
+from siue_music.score import glossary_ids, library_ids, validate  # noqa: E402
 
 GLOSSARY = MUSIC.parent / "games" / "workroom" / "src" / "glossary.json"
+LIBRARY = MUSIC / "library" / "library.json"
 
 
 def main(argv: list[str]) -> int:
@@ -48,7 +49,7 @@ def main(argv: list[str]) -> int:
     root = fetch(manifest)[piece.lanes[0].instrument]
     made = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     problems = render(piece, draft, out, manifest, root, made, getattr(module, "CHANGES", {}).get(draft))
-    problems += validate(json.loads((out / "score.json").read_text()), glossary_ids(GLOSSARY))
+    problems += validate(json.loads((out / "score.json").read_text()), glossary_ids(GLOSSARY), library_ids(LIBRARY))
     size = sum((out / f).stat().st_size for f in DRAFT_FILES if (out / f).is_file())
     if size > MAX_REQUEST_BYTES:
         problems.append(f"the draft is {size} bytes, over the 8 MB limit")

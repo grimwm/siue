@@ -15,7 +15,11 @@ export interface Project { id: string; name: string }
 export interface Tempo { bar: number; bpm: number; beats: number; unit: 1 | 2 | 4 | 8 | 16 }
 /** A music section spans bars (from_bar, to_bar); a sound section is a named moment in seconds (from, to). parseScore guarantees the pair that fits the score's kind and none of the other. */
 export interface Section { id: string; name: string; color: string; from_bar?: number; to_bar?: number; from?: number; to?: number }
-export interface Lane { id: string; name: string; family: Family; icon: Family; color: string }
+/** How the browser renders a lane: an instrument of the shared library, its level and its envelope in seconds. */
+export interface Sound { instrument: string; gain_db: number; attack: number; release: number }
+export interface Lane { id: string; name: string; family: Family; icon: Family; color: string; sound?: Sound }
+export const MIX_STYLES = ['lofi'] as const;
+export interface Mix { style: (typeof MIX_STYLES)[number]; loudness: number }
 /** A character belongs to the score: the page has none built in. */
 export interface Character { id: string; name: string; color: string }
 export interface MotifSpan { lane: string; from: number; to: number }
@@ -31,10 +35,15 @@ export interface Score {
   schema: 1; kind: Kind; project: Project; piece: { id: string; title: string }; draft: number; made: string; duration: number;
   bars?: number; tempo?: Tempo[];                          // music only; absent for sound
   sections: Section[]; lanes: Lane[]; characters: Character[]; motifs: Motif[]; notes: ScoreNote[];
-  energy: [number, number][]; glossary: GlossaryUse[]; audio: AudioSource[]; spectrogram: Spectrogram;
+  energy: [number, number][]; glossary: GlossaryUse[];
+  audio: AudioSource[];                                    // empty only when the score is renderable
+  spectrogram?: Spectrogram;                               // required unless the score is renderable
+  mix?: Mix;                                               // with a sound on every lane, the score is renderable
   musicxml?: 'score.musicxml';                             // required for music, optional for sound
   changes: Change[];
 }
+/** A renderable score has a sound on every lane and a mix: the page can play it without an audio file. */
+export const isRenderable = (s: Pick<Score, 'lanes' | 'mix'>): boolean => s.mix !== undefined && s.lanes.every(l => l.sound !== undefined);
 export type Parsed = { ok: true; score: Score } | { ok: false; error: string };
 
 export function unknownSchemaMessage(n: unknown): string {
@@ -80,20 +89,24 @@ function uniqueIds<T extends { id: string }>(items: T[], path: string): void {
   });
 }
 
-/** Validates every rule in the plan's schema table; the first broken rule is the error, naming its path (e.g. "sections[1].from_bar"). */
-export function parseScore(raw: unknown): Parsed {
+/**
+ * Validates every rule in the plan's schema table; the first broken rule is the error, naming its path (e.g. "sections[1].from_bar").
+ * `instruments` is the library's instrument ids. The page has not fetched the library before it parses a score, so
+ * without it `sound.instrument` is checked only for the id format; the renderer refuses an instrument the library lacks.
+ */
+export function parseScore(raw: unknown, instruments?: ReadonlySet<string>): Parsed {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { ok: false, error: 'score: must be an object' };
   const schema = (raw as Obj)['schema'];
   if (schema !== SCHEMA) return { ok: false, error: unknownSchemaMessage(schema) };
   try {
-    return { ok: true, score: build(raw as Obj) };
+    return { ok: true, score: build(raw as Obj, instruments) };
   } catch (e) {
     if (e instanceof Fail) return { ok: false, error: e.message };
     throw e;
   }
 }
 
-function build(r: Obj): Score {
+function build(r: Obj, instruments: ReadonlySet<string> | undefined): Score {
   const kind = oneOf(r['kind'], 'kind', KINDS);
   const music = kind === 'music';
   const pr = obj(r['project'], 'project');
@@ -136,9 +149,17 @@ function build(r: Obj): Score {
   const lanes = arr(r['lanes'], 'lanes', 1).map((l, i): Lane => {
     const p = `lanes[${i}]`;
     const o = obj(l, p);
-    return { id: id(o['id'], `${p}.id`), name: text(o['name'], `${p}.name`, 60), family: oneOf(o['family'], `${p}.family`, FAMILIES), icon: oneOf(o['icon'], `${p}.icon`, FAMILIES), color: color(o['color'], `${p}.color`) };
+    const lane: Lane = { id: id(o['id'], `${p}.id`), name: text(o['name'], `${p}.name`, 60), family: oneOf(o['family'], `${p}.family`, FAMILIES), icon: oneOf(o['icon'], `${p}.icon`, FAMILIES), color: color(o['color'], `${p}.color`) };
+    if (o['sound'] != null) lane.sound = soundOf(o['sound'], `${p}.sound`, instruments);
+    return lane;
   });
   uniqueIds(lanes, 'lanes');
+  let mix: Mix | undefined;
+  if (r['mix'] != null) {
+    const mo = obj(r['mix'], 'mix');
+    mix = { style: oneOf(mo['style'], 'mix.style', MIX_STYLES), loudness: inRange(mo['loudness'], 'mix.loudness', -30, -10) };
+  }
+  const renderable = isRenderable({ lanes, mix });
   const laneIds = new Set(lanes.map(l => l.id));
 
   const characters = arr(r['characters'], 'characters').map((c, i): Character => {
@@ -209,7 +230,7 @@ function build(r: Obj): Score {
     return { term: t, from, to };
   });
 
-  const audio = arr(r['audio'], 'audio', 1).map((a, i): AudioSource => {
+  const audio = arr(r['audio'], 'audio', renderable ? 0 : 1).map((a, i): AudioSource => {
     const p = `audio[${i}]`;
     const o = obj(a, p);
     const file = oneOf(o['file'], `${p}.file`, ['audio.webm', 'audio.m4a']);
@@ -217,12 +238,8 @@ function build(r: Obj): Score {
     return { file, type: AUDIO_TYPES[file]! };
   });
 
-  const so = obj(r['spectrogram'], 'spectrogram');
-  const low_hz = num(so['low_hz'], 'spectrogram.low_hz');
-  const high_hz = num(so['high_hz'], 'spectrogram.high_hz');
-  if (!(low_hz > 0)) fail('spectrogram.low_hz', 'must be above 0');
-  if (!(high_hz > low_hz)) fail('spectrogram.high_hz', 'must be above low_hz');
-  const spectrogram: Spectrogram = { file: so['file'] === 'spectrogram.png' ? 'spectrogram.png' : fail('spectrogram.file', 'must be spectrogram.png'), low_hz, high_hz, scale: oneOf(so['scale'], 'spectrogram.scale', ['log', 'linear']) };
+  let spectrogram: Spectrogram | undefined;
+  if (r['spectrogram'] != null || !renderable) spectrogram = spectrogramOf(r['spectrogram']);
 
   let musicxml: 'score.musicxml' | undefined;
   if (r['musicxml'] !== undefined) musicxml = r['musicxml'] === 'score.musicxml' ? 'score.musicxml' : fail('musicxml', 'must be score.musicxml');
@@ -253,11 +270,34 @@ function build(r: Obj): Score {
     return ch;
   });
 
-  const score: Score = { schema: 1, kind, project, piece, draft, made, duration, sections, lanes, characters, motifs, notes, energy, glossary, audio, spectrogram, changes };
+  const score: Score = { schema: 1, kind, project, piece, draft, made, duration, sections, lanes, characters, motifs, notes, energy, glossary, audio, changes };
+  if (spectrogram !== undefined) score.spectrogram = spectrogram;
+  if (mix !== undefined) score.mix = mix;
   if (bars !== undefined) score.bars = bars;
   if (tempo !== undefined) score.tempo = tempo;
   if (musicxml !== undefined) score.musicxml = musicxml;
   return score;
+}
+
+function inRange(v: unknown, path: string, min: number, max: number): number {
+  const n = num(v, path);
+  return n >= min && n <= max ? n : fail(path, `must be from ${min} to ${max}`);
+}
+
+function soundOf(v: unknown, path: string, instruments: ReadonlySet<string> | undefined): Sound {
+  const o = obj(v, path);
+  const instrument = id(o['instrument'], `${path}.instrument`);
+  if (instruments && !instruments.has(instrument)) fail(`${path}.instrument`, 'must be an instrument id in the sample library');
+  return { instrument, gain_db: inRange(o['gain_db'], `${path}.gain_db`, -40, 20), attack: inRange(o['attack'], `${path}.attack`, 0, 10), release: inRange(o['release'], `${path}.release`, 0, 20) };
+}
+
+function spectrogramOf(v: unknown): Spectrogram {
+  const so = obj(v, 'spectrogram');
+  const low_hz = num(so['low_hz'], 'spectrogram.low_hz');
+  const high_hz = num(so['high_hz'], 'spectrogram.high_hz');
+  if (!(low_hz > 0)) fail('spectrogram.low_hz', 'must be above 0');
+  if (!(high_hz > low_hz)) fail('spectrogram.high_hz', 'must be above low_hz');
+  return { file: so['file'] === 'spectrogram.png' ? 'spectrogram.png' : fail('spectrogram.file', 'must be spectrogram.png'), low_hz, high_hz, scale: oneOf(so['scale'], 'spectrogram.scale', ['log', 'linear']) };
 }
 
 function sectionsOf(v: unknown, music: boolean, bars: number | undefined, duration: number): Section[] {

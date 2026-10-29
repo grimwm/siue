@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from support import FIXTURES, GLOSSARY_JSON
+from support import FIXTURES, GLOSSARY_JSON, LIBRARY_JSON
 from siue_music.publish import PublishError, latest_version, publish
-from siue_music.score import glossary_ids, validate
+from siue_music.score import glossary_ids, library_ids, validate
 
 
 class FakeApi:
@@ -29,6 +29,7 @@ class PublishTest(unittest.TestCase):
         shutil.copytree(FIXTURES / "draft", self.v1)
         self.api = FakeApi()
         self.ids = glossary_ids(GLOSSARY_JSON)
+        self.library = library_ids(LIBRARY_JSON)
 
     def test_publishes_the_newest_valid_draft(self):
         v2 = self.pieces / "test-piece" / "v2"
@@ -38,6 +39,51 @@ class PublishTest(unittest.TestCase):
         self.assertEqual(latest_version(self.pieces / "test-piece"), 2)
         self.assertEqual(publish("test-piece", None, self.pieces, self.api, self.ids), 2)
         self.assertEqual(self.api.sent, [("test-piece", 2, ["audio.webm", "score.json", "score.musicxml", "spectrogram.png"])])
+
+    def make_renderable(self):
+        """v1 as a renderable draft: sound on every lane and a mix in score.json, no audio and no spectrogram."""
+        shutil.copy(FIXTURES / "score-renderable-v1.json", self.v1 / "score.json")
+        (self.v1 / "audio.webm").unlink()
+        (self.v1 / "spectrogram.png").unlink()
+
+    def test_a_renderable_music_score_publishes_without_audio_or_spectrogram(self):
+        self.make_renderable()
+        self.assertEqual(publish("test-piece", 1, self.pieces, self.api, self.ids, self.library), 1)
+        self.assertEqual(self.api.sent, [("test-piece", 1, ["score.json", "score.musicxml"])])
+
+    def test_a_renderable_music_score_still_needs_its_musicxml(self):
+        self.make_renderable()
+        (self.v1 / "score.musicxml").unlink()
+        with self.assertRaises(PublishError) as e:
+            publish("test-piece", 1, self.pieces, self.api, self.ids, self.library)
+        self.assertIn("score.musicxml", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+
+    def test_an_instrument_the_library_lacks_never_leaves_the_computer(self):
+        self.make_renderable()
+        score = json.loads((self.v1 / "score.json").read_text())
+        score["lanes"][0]["sound"]["instrument"] = "kazoo"
+        (self.v1 / "score.json").write_text(json.dumps(score))
+        with self.assertRaises(PublishError) as e:
+            publish("test-piece", 1, self.pieces, self.api, self.ids, self.library)
+        self.assertIn("lanes[0].sound.instrument", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+
+    def test_a_score_with_neither_audio_nor_sound_never_leaves_the_computer(self):
+        score = json.loads((self.v1 / "score.json").read_text())
+        score["audio"] = []
+        (self.v1 / "score.json").write_text(json.dumps(score))
+        with self.assertRaises(PublishError) as e:
+            publish("test-piece", 1, self.pieces, self.api, self.ids, self.library)
+        self.assertIn("audio", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+
+    def test_a_draft_whose_score_names_audio_but_lacks_the_file_never_leaves_the_computer(self):
+        (self.v1 / "audio.webm").unlink()
+        with self.assertRaises(PublishError) as e:
+            publish("test-piece", 1, self.pieces, self.api, self.ids, self.library)
+        self.assertIn("audio.webm or audio.m4a", str(e.exception))
+        self.assertEqual(self.api.sent, [])
 
     def test_the_general_notes_piece_id_is_not_publishable(self):
         with self.assertRaises(PublishError) as raised:

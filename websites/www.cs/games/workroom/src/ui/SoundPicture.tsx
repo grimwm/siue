@@ -15,6 +15,7 @@ export function SoundPicture(p: SoundPictureProps) {
   const { score, view } = p;
   const surface = useSurface({ view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold });
   const height = PICTURE_H + AXIS_H;
+  if (!score.spectrogram) return null; // a renderable score may have no picture
   return (
     <div class="sound-picture">
       <div class="picture relative block max-w-full touch-none select-none overflow-hidden" data-picture="" style={{ width: `${view.width}px`, height: `${height}px` }} {...surface}>

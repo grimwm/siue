@@ -18,7 +18,7 @@ from .op import Op, OpError
 from .paths import BadConfig, NotesInsideRepo
 from .pickup import pickup
 from .publish import GENERAL_PIECE, PublishError, publish
-from .score import ID_RE, glossary_ids
+from .score import ID_RE, glossary_ids, library_ids
 from .setup import Setup
 
 USAGE = """usage: siue-music setup
@@ -125,7 +125,7 @@ def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
             version = int(args[3]) if len(args) == 4 else None
             keys.ensure_synced()
             api = make_api(base(env), keys.api_key(PUBLISH_KEY, f"make music-publish PIECE={args[1]}"))
-            done = publish(args[1], version, paths.pieces_dir(), api, glossary_ids(paths.glossary_path()))
+            done = publish(args[1], version, paths.pieces_dir(), api, glossary_ids(paths.glossary_path()), library_ids(paths.library_path()))
             print(f"Published {args[1]} v{done}.")
             return 0
         if args[:1] == ["delete"] and len(args) == 3:

@@ -10,6 +10,7 @@ COLOR_RE = re.compile(r"#[0-9a-f]{6}")
 MADE_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z")
 ANSWER_RE = re.compile(r"[0-9a-f]{32}")
 KINDS = ("music", "sound")
+MIX_STYLES = ("lofi",)
 MIN_SOUND_SECONDS = 0.05
 FAMILIES = ("strings", "brass", "woodwinds", "percussion", "choir", "keys", "synth", "harp", "bells",
             "impact", "whoosh", "ambience", "voice", "electronic", "foley", "ui")
@@ -29,6 +30,11 @@ def _fail(path: str, rule: str):
 def glossary_ids(path: Path) -> frozenset[str]:
     """The term ids in glossary.json, the one glossary source the page and this tool share."""
     return frozenset(t["id"] for t in json.loads(Path(path).read_text(encoding="utf-8"))["terms"])
+
+
+def library_ids(path: Path) -> frozenset[str]:
+    """The instrument ids in library.json, the one sample library the renderer and this tool share."""
+    return frozenset(json.loads(Path(path).read_text(encoding="utf-8"))["instruments"])
 
 
 def _is_num(v) -> bool:
@@ -73,6 +79,11 @@ def _one_of(v, path, allowed):
     return v if isinstance(v, str) and v in allowed else _fail(path, f"must be one of {', '.join(str(a) for a in allowed)}")
 
 
+def _range(v, path, minimum, maximum):
+    n = _num(v, path)
+    return n if minimum <= n <= maximum else _fail(path, f"must be from {minimum} to {maximum}")
+
+
 def _absent(o, key, path, why):
     if key in o and o[key] is not None:
         _fail(key if path == "" else f"{path}.{key}", why)
@@ -94,20 +105,23 @@ def _valid_time(s: str) -> bool:
         return False
 
 
-def validate(obj: object, glossary_ids: frozenset[str]) -> list[str]:
-    """The first broken rule as a one-item list naming its path (e.g. "sections[1].from_bar"); [] when the score is valid."""
+def validate(obj: object, glossary_ids: frozenset[str], instrument_ids: frozenset[str] | None = None) -> list[str]:
+    """The first broken rule as a one-item list naming its path (e.g. "sections[1].from_bar"); [] when the score is valid.
+
+    instrument_ids is the library's instrument ids. Without them `sound.instrument` is checked only for the id format,
+    as parseScore does before the page has the library."""
     if not isinstance(obj, dict):
         return ["score: must be an object"]
     if obj.get("schema") != 1 or isinstance(obj.get("schema"), bool):
         return [f"schema: this draft uses score schema {obj.get('schema')}, which this tool does not know"]
     try:
-        _build(obj, glossary_ids)
+        _build(obj, glossary_ids, instrument_ids)
     except _Fail as e:
         return [str(e)]
     return []
 
 
-def _build(r: dict, glossary: frozenset[str]) -> None:
+def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None) -> None:
     kind = _one_of(r.get("kind"), "kind", KINDS)
     music = kind == "music"
     pr = _obj(r.get("project"), "project")
@@ -157,6 +171,7 @@ def _build(r: dict, glossary: frozenset[str]) -> None:
 
     _sections(r.get("sections"), music, bars, duration)
     lanes = []
+    has_sound = []
     for i, l in enumerate(_arr(r.get("lanes"), "lanes", 1)):
         p = f"lanes[{i}]"
         o = _obj(l, p)
@@ -165,7 +180,16 @@ def _build(r: dict, glossary: frozenset[str]) -> None:
         _one_of(o.get("family"), f"{p}.family", FAMILIES)
         _one_of(o.get("icon"), f"{p}.icon", FAMILIES)
         _color(o.get("color"), f"{p}.color")
+        if o.get("sound") is not None:
+            _sound(o["sound"], f"{p}.sound", instruments)
+        has_sound.append(o.get("sound") is not None)
     _unique(lanes, "lanes")
+    mix = r.get("mix")
+    if mix is not None:
+        mo = _obj(mix, "mix")
+        _one_of(mo.get("style"), "mix.style", MIX_STYLES)
+        _range(mo.get("loudness"), "mix.loudness", -30, -10)
+    renderable = mix is not None and all(has_sound)
     lane_ids = {l["id"] for l in lanes}
 
     characters = []
@@ -239,22 +263,23 @@ def _build(r: dict, glossary: frozenset[str]) -> None:
         if end - start > 15 + EPS:
             _fail(p, "a clip is at most 15 seconds")
 
-    for i, a in enumerate(_arr(r.get("audio"), "audio", 1)):
+    for i, a in enumerate(_arr(r.get("audio"), "audio", 0 if renderable else 1)):
         p = f"audio[{i}]"
         o = _obj(a, p)
         f = _one_of(o.get("file"), f"{p}.file", ("audio.webm", "audio.m4a"))
         if o.get("type") != AUDIO_TYPES[f]:
             _fail(f"{p}.type", f"must be {AUDIO_TYPES[f]} for {f}")
 
-    so = _obj(r.get("spectrogram"), "spectrogram")
-    low, high = _num(so.get("low_hz"), "spectrogram.low_hz"), _num(so.get("high_hz"), "spectrogram.high_hz")
-    if not low > 0:
-        _fail("spectrogram.low_hz", "must be above 0")
-    if not high > low:
-        _fail("spectrogram.high_hz", "must be above low_hz")
-    if so.get("file") != "spectrogram.png":
-        _fail("spectrogram.file", "must be spectrogram.png")
-    _one_of(so.get("scale"), "spectrogram.scale", ("log", "linear"))
+    if r.get("spectrogram") is not None or not renderable:
+        so = _obj(r.get("spectrogram"), "spectrogram")
+        low, high = _num(so.get("low_hz"), "spectrogram.low_hz"), _num(so.get("high_hz"), "spectrogram.high_hz")
+        if not low > 0:
+            _fail("spectrogram.low_hz", "must be above 0")
+        if not high > low:
+            _fail("spectrogram.high_hz", "must be above low_hz")
+        if so.get("file") != "spectrogram.png":
+            _fail("spectrogram.file", "must be spectrogram.png")
+        _one_of(so.get("scale"), "spectrogram.scale", ("log", "linear"))
 
     if r.get("musicxml") is not None:
         if r["musicxml"] != "score.musicxml":
@@ -285,6 +310,16 @@ def _build(r: dict, glossary: frozenset[str]) -> None:
         for j, x in enumerate(_arr(o.get("answers"), f"{p}.answers")):
             if not (isinstance(x, str) and ANSWER_RE.fullmatch(x)):
                 _fail(f"{p}.answers[{j}]", "must be a note id (32 hex digits)")
+
+
+def _sound(v, path, instruments) -> None:
+    o = _obj(v, path)
+    instrument = _id(o.get("instrument"), f"{path}.instrument")
+    if instruments is not None and instrument not in instruments:
+        _fail(f"{path}.instrument", "must be an instrument id in the sample library")
+    _range(o.get("gain_db"), f"{path}.gain_db", -40, 20)
+    _range(o.get("attack"), f"{path}.attack", 0, 10)
+    _range(o.get("release"), f"{path}.release", 0, 20)
 
 
 def _sections(v, music, bars, duration) -> None:

@@ -304,7 +304,7 @@ export function Workroom(p: WorkroomProps) {
                 {tab === 'story' ? <Timeline score={score} tempo={tempo} view={view} time={time} onSeek={seek} onView={setView} onHold={setHolding} onTerm={openCard} overlay={pins}
                   select={mode === 'pin' ? { span: preview ?? span, onPick: pick } : undefined} marks={marks} /> : null}
                 {tab === 'roll' ? <PianoRoll score={score} tempo={tempo} view={view} time={time} lanes={lanes} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
-                {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram.file)} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
+                {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram?.file ?? 'spectrogram.png')} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
                 {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane}
                   tempo={tempo} duration={score.duration} time={time} onHear={hear} onTerm={openCard} /> : null}
               </>

@@ -183,6 +183,8 @@ button:disabled { opacity: 0.45; cursor: default; }
   border-radius: 12px;
 }
 .card h2 { margin: 0.2rem 0 0.5rem; }
+.card .kit-dialog-head { margin: 0.2rem 0 0.5rem; }
+.card .kit-dialog-head h2 { margin: 0; }
 .kicker { margin: 0; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; }
 .runstats { color: var(--dim); font-size: 0.9rem; }
 .title-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
@@ -209,7 +211,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 .chapter-tab { min-height: 32px; padding: 0 0.5rem; font-size: 0.78rem; font-weight: 600; background: var(--bg); color: var(--dim); border: 1px solid var(--line); }
 .chapter-tab[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); }
 .chapter-tab:disabled { opacity: 0.45; }
-.levels .close { position: absolute; top: 0.7rem; right: 0.7rem; float: none; margin: 0; }
 .level-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 6px; }
 .level-pick {
   width: 100%;
@@ -227,8 +228,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 .level-n { grid-area: n; color: var(--accent); font-variant-numeric: tabular-nums; }
 .level-name { grid-area: name; }
 .level-status { grid-area: status; color: var(--dim); font-size: 0.8rem; font-weight: 400; }
-.card .close { float: right; margin: -0.3rem -0.3rem 0 0.5rem; }
-.lore .close { position: absolute; top: 0.7rem; right: 0.7rem; float: none; margin: 0; }
 .lore h3 { margin: 0.8rem 0 0.3rem; font-size: 1rem; color: var(--accent); }
 .lore .story { color: var(--dim); }
 .lore-entries { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }

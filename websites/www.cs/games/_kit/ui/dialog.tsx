@@ -22,6 +22,8 @@ export interface DialogProps {
   kicker?: ComponentChildren;
   kickerId?: string;
   kickerClass?: string;
+  /** A close button, laid out at the end of the title's row, centred on it (.kit-dialog-head). */
+  close?: ComponentChildren;
   describedBy?: string;
   /** The element focused on opening; otherwise the panel's first usable button (enabled, and
       neither it nor anything around it in the panel `hidden`), else the panel. */
@@ -161,7 +163,12 @@ export function Dialog(p: DialogProps) {
       <div class={p.panelClass} role={p.role ?? 'dialog'} aria-modal="true" aria-labelledby={p.titleId}
         aria-describedby={p.describedBy} tabIndex={-1} ref={panel}>
         {p.kicker != null && p.kicker !== false && <p class={p.kickerClass} id={p.kickerId}>{p.kicker}</p>}
-        <h2 id={p.titleId} class={p.titleClass}>{p.title}</h2>
+        {p.close != null && p.close !== false ? (
+          <div class="kit-dialog-head">
+            <h2 id={p.titleId} class={p.titleClass}>{p.title}</h2>
+            {p.close}
+          </div>
+        ) : <h2 id={p.titleId} class={p.titleClass}>{p.title}</h2>}
         {p.children}
       </div>
     </div>

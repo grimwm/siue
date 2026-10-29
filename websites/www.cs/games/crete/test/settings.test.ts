@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
-import { createSettings, FULLSCREEN_KEY, MUSIC_KEY, SOUND_KEY } from '../src/settings.ts';
+import { createSettings, FULLSCREEN_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, SOUND_KEY } from '../src/settings.ts';
 
-test('defaults: sound on, music on, fullscreen off', () => {
+test('defaults: sound on, music on, music in the background on, fullscreen off', () => {
   const s = createSettings(memoryStorage());
-  assert.deepEqual([s.sound.get(), s.music.get(), s.fullscreen.get()], ['on', 'on', 'off']);
+  assert.deepEqual([s.sound.get(), s.music.get(), s.musicHidden.get(), s.fullscreen.get()], ['on', 'on', 'on', 'off']);
 });
 
 test('music is its own setting, kept apart from sound', () => {
@@ -41,4 +41,14 @@ test('storage that throws, or none at all, never throws back and still remembers
     s.sound.set('off');
     assert.equal(s.sound.get(), 'off');
   }
+});
+
+test('music in the background is its own setting and defaults to on', () => {
+  const storage = memoryStorage();
+  createSettings(storage).musicHidden.set('off');
+  assert.equal(storage.data.get(MUSIC_HIDDEN_KEY), 'off');
+  assert.equal(MUSIC_HIDDEN_KEY, 'crete-music-hidden');
+  const again = createSettings(storage);
+  assert.deepEqual([again.music.get(), again.musicHidden.get()], ['on', 'off']);
+  assert.equal(createSettings(memoryStorage({ [MUSIC_HIDDEN_KEY]: 'sometimes' })).musicHidden.get(), 'on');
 });

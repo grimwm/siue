@@ -21,14 +21,14 @@ function equalPower(from: number, to: number): Float32Array {
   return curve;
 }
 
-/** One encoding of a track, with the type canPlayType is asked about. */
+/** One encoding of the music, with the type canPlayType is asked about. */
 export interface AudioSource {
   url: string;
   type: string;
 }
 
 /** What a deck uses of an HTMLAudioElement. */
-export type MediaLike = Pick<HTMLAudioElement, "src" | "preload" | "currentTime" | "duration" | "volume" | "play" | "pause">;
+export type MediaLike = Pick<HTMLAudioElement, "src" | "preload" | "currentTime" | "duration" | "volume" | "play" | "pause" | "addEventListener">;
 
 /** The first source the browser says it can play, or null. */
 export function pickSource(sources: readonly AudioSource[], canPlay: (type: string) => string): AudioSource | null {
@@ -76,6 +76,9 @@ export function mediaDeck(core: AudioCore, url: string, el: MediaLike): Deck {
       }
     },
     duration: () => el.duration,
+    onEnded(listener) {
+      el.addEventListener("ended", listener);
+    },
     fade(to, seconds, shape) {
       const g = wire();
       const c = core.peek();

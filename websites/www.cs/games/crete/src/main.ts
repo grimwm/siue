@@ -4,8 +4,7 @@
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
 import { createAudio } from './audio.ts';
 import { createAudioCore } from '../../_kit/audio/core.ts';
-import { createMusic, trackFor } from './music.ts';
-import type { Track } from './music.ts';
+import { createMusic } from './music.ts';
 import { mediaDeck, pickSource } from './music-decks.ts';
 import type { AudioSource } from './music-decks.ts';
 import { createBoard } from './board.ts';
@@ -46,27 +45,22 @@ declare global {
 // The music files' content hashes, injected by the build (build.json versions), so a new render is fetched.
 declare const TITLE_WEBM_V: string;
 declare const TITLE_M4A_V: string;
-declare const STORY_WEBM_V: string;
-declare const STORY_M4A_V: string;
 
 const atlas = atlasJson as Atlas;
 const clock = { now: (): number => performance.now() };
 const core = createAudioCore();
 const audio = createAudio(core);
-/* The title theme and its story cut, each as Opus in WebM or, for Safari, AAC. They stream on demand: the service
+/* The title theme, as Opus in WebM or, for Safari, AAC. They stream on demand: the service
    worker neither precaches them nor keeps them, so offline play goes on without music. */
 const OPUS = 'audio/webm; codecs="opus"';
 const AAC = 'audio/mp4; codecs="mp4a.40.2"';
-const MUSIC_FILES: Record<Track, AudioSource[]> = {
-  title: [{ url: `audio/music/title.webm?v=${TITLE_WEBM_V}`, type: OPUS }, { url: `audio/music/title.m4a?v=${TITLE_M4A_V}`, type: AAC }],
-  story: [{ url: `audio/music/story.webm?v=${STORY_WEBM_V}`, type: OPUS }, { url: `audio/music/story.m4a?v=${STORY_M4A_V}`, type: AAC }],
-};
+const TITLE_FILES: AudioSource[] = [{ url: `audio/music/title.webm?v=${TITLE_WEBM_V}`, type: OPUS }, { url: `audio/music/title.m4a?v=${TITLE_M4A_V}`, type: AAC }];
 /** Whether this browser can stream either encoding at all. */
-const canStream = typeof Audio === 'function' && pickSource(MUSIC_FILES.title, t => new Audio().canPlayType(t)) !== null;
+const canStream = typeof Audio === 'function' && pickSource(TITLE_FILES, t => new Audio().canPlayType(t)) !== null;
 const music = createMusic({
-  deck: track => {
+  deck: () => {
     const el = new Audio();
-    return mediaDeck(core, pickSource(MUSIC_FILES[track], t => el.canPlayType(t))?.url ?? '', el);
+    return mediaDeck(core, pickSource(TITLE_FILES, t => el.canPlayType(t))?.url ?? '', el);
   },
   timers: browserTimers,
 });
@@ -87,7 +81,7 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   bestWon: (text, moves) => editor.tryWon(text, moves),
 });
 const levels = outside.levels;
-const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx, cards: stack => music.want(trackFor(stack)) });
+const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx });
 /* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
    which comes first. */
 const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
@@ -191,6 +185,15 @@ function toggleMusic(): void {
   ui.say(on ? 'Music on.' : 'Music off.', 'info');
 }
 
+/* The Music in the background switch: whether a hidden page keeps the music going. */
+function toggleBackground(): void {
+  const on = settings.musicHidden.get() !== 'on';
+  settings.musicHidden.set(on ? 'on' : 'off');
+  music.setBackground(on);
+  ui.setBackground(on);
+  ui.say(on ? 'Music goes on in the background.' : 'Music stops in the background.', 'info');
+}
+
 /* A gesture wakes the speakers and starts music the browser held back until one. */
 function wake(): void {
   audio.ensure();
@@ -245,9 +248,12 @@ function loop(now: number): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
   });
+  const background = settings.musicHidden.get() === 'on';
+  music.setBackground(background);
+  ui.setBackground(background);
   if (settings.sound.get() === 'off') {
     audio.toggleMute();
     ui.setMuted(true);
@@ -283,7 +289,7 @@ function start(): void {
   };
   image.src = 'fx/sprites/tiles.png';
 }
-// A hidden tab runs no play-out and holds the music; showing it again leaves the play-out stopped and the music going on.
+// A hidden tab runs no play-out and, unless Music in the background is on, holds the music; showing it again leaves the play-out stopped and the music going on.
 followPage({ doc: document, win: window }, {
   hide: () => {
     game.stop();

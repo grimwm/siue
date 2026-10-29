@@ -32,8 +32,6 @@ import { frameOf } from '../src/game.ts';
 import type { Progress } from '../src/progress.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
-import { trackFor } from '../src/music.ts';
-import type { Track } from '../src/music.ts';
 
 installDocument();
 const ui = await importTsx<{
@@ -234,11 +232,8 @@ const levels: Levels = {
   level: i => (i === outsideAt && outsideLevel) || (i === 0 && ownLevel) || CAMPAIGN_LEVELS.level(i),
   scratch: i => i === outsideAt, outside: i => (i === outsideAt ? ownOutside : null),
 };
-/* The track each change of cards calls for, in order. */
-const tracks: Array<Track | null> = [];
 const flow = ui.page.createUi({
   atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, levels, sfx: n => heard.push(n),
-  cards: stack => tracks.push(trackFor(stack)),
 });
 const game: Game = createGame({
   sfx() {}, say() {}, progress, pages: found, timers: m.timers, clock: m.clock, levels,
@@ -246,6 +241,7 @@ const game: Game = createGame({
 });
 let toggled = 0;
 let musics = 0;
+let backgrounds = 0;
 let backs = 0;
 /* The editor as the page sees it: what it was asked to do, and every key it was handed. */
 const edits: string[] = [];
@@ -256,12 +252,12 @@ const editor = {
   key: (ev: KeyboardEvent) => { editorKeys.push(ev.key); return false; },
 };
 flow.bindControls({
-  game, toggleMute() {}, toggleMusic() { musics++; }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; },
+  game, toggleMute() {}, toggleMusic() { musics++; }, toggleBackground() { backgrounds++; }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; },
   editor, leftEditor: () => { edits.push('left'); },
 });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
 const pick = (n: number) => click(byId(document.getElementById('levels-root'), `level-${n}`));
-const reset = () => { cleared.clear(); heard.length = 0; musics = 0; flow.closeLayers(); tracks.length = 0; game.stop(); reduced = true; ownLevel = null; outsideAt = -1; ownOutside = null; outsideLevel = null; backs = 0; edits.length = 0; editorKeys.length = 0; };
+const reset = () => { cleared.clear(); heard.length = 0; musics = 0; backgrounds = 0; flow.closeLayers(); game.stop(); reduced = true; ownLevel = null; outsideAt = -1; ownOutside = null; outsideLevel = null; backs = 0; edits.length = 0; editorKeys.length = 0; };
 // Elements of unmounted overlay tests linger in the stub by id, so a page element is looked up inside its root.
 const rootOf = (id: string) => document.getElementById(`${id.split('-')[0]}-root`)!;
 const el = (id: string) => maybeById(rootOf(id), id);
@@ -341,15 +337,17 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   toggled = 0;
   key('q');
   const at = () => document.activeElement?.id;
-  const order = ['menu-close', 'mute', 'music', 'fullscreen', 'menu-lore', 'quit'];
+  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'menu-lore', 'quit'];
   const first = order.indexOf(at() ?? '');
   assert.ok(first >= 0, `focus is on a menu button, not ${at()}`);
-  for (let i = 0; i < 6; i++) key('ArrowUp');
+  for (let i = 0; i < 8; i++) key('ArrowUp');
   assert.equal(at(), 'menu-close', 'clamped at the top');
   key('ArrowDown');
   assert.equal(at(), 'mute');
   key('j');
   assert.equal(at(), 'music');
+  key('s');
+  assert.equal(at(), 'music-hidden');
   key('s');
   assert.equal(at(), 'fullscreen');
   key('j');
@@ -358,7 +356,7 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   assert.equal(at(), 'fullscreen');
   key('Enter');
   assert.equal(toggled, 1);
-  for (let i = 0; i < 6; i++) key('ArrowDown');
+  for (let i = 0; i < 8; i++) key('ArrowDown');
   assert.equal(at(), 'quit', 'clamped at the bottom');
 });
 
@@ -374,28 +372,6 @@ test('Music sits beside Sound in the menu, says whether it is on, and asks for i
   assert.equal(music().textContent, '🎶 Music off');
   flow.setMusic(true);
   assert.equal(music().textContent, '🎶 Music');
-});
-
-test('every change of cards reaches the page, which picks the music from them', () => {
-  reset();
-  flow.showTitle(false);
-  key('i');
-  key('q');
-  key('n');
-  key('Enter');
-  assert.equal(game.run !== null, true);
-  key('Enter');
-  const changes = tracks.filter((t, i) => i === 0 || t !== tracks[i - 1]);
-  assert.deepEqual(changes, ['title', 'story', 'title', 'story', null]);
-});
-
-test('the level list over the story card keeps the story cut', () => {
-  reset();
-  flow.showTitle(false);
-  key('i');
-  key('n');
-  assert.equal(flow.top(), 'levels');
-  assert.equal(tracks[tracks.length - 1], 'story');
 });
 
 test('left and right in the levels list switch between the released chapters, clamped at the ends', () => {
@@ -1079,4 +1055,17 @@ test('Q in the editor closes it to the title card', () => {
   assert.deepEqual(editorKeys, ['q'], 'the editor sees Q first, to close a dialog of its own');
   fireDocument('keydown', { key: 'q', repeat: true, target: { tagName: 'DIV' } });
   assert.equal(flow.top(), 'title', 'a held Q does not go on to open the menu');
+});
+
+test('Music in the background sits under Music, says whether it is on, and asks for its switch', () => {
+  reset();
+  key('q');
+  const hidden = () => byId(rootOf('menu'), 'music-hidden');
+  assert.equal(hidden().textContent, '🎶 Music in the background: On');
+  click(hidden());
+  assert.equal(backgrounds, 1);
+  flow.setBackground(false);
+  assert.equal(hidden().textContent, '🎶 Music in the background: Off');
+  flow.setBackground(true);
+  assert.equal(hidden().textContent, '🎶 Music in the background: On');
 });

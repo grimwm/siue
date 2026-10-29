@@ -62,7 +62,7 @@ def publish(piece: str, version: int | None, pieces: Path, api, glossary_ids: fr
     if score["audio"]:  # a renderable score lists none: the page plays it from its sound and mix
         if "audio.webm" not in files and "audio.m4a" not in files:
             raise PublishError(f"{folder} has no audio.webm or audio.m4a")
-    if "spectrogram" in score and "spectrogram.png" not in files:
+    if score.get("spectrogram") is not None and "spectrogram.png" not in files:
         raise PublishError(f"{folder} has no spectrogram.png")
     size = draft_size(files)
     if size > MAX_REQUEST_BYTES:

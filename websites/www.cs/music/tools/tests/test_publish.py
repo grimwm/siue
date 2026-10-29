@@ -51,6 +51,14 @@ class PublishTest(unittest.TestCase):
         self.assertEqual(publish("test-piece", 1, self.pieces, self.api, self.ids, self.library), 1)
         self.assertEqual(self.api.sent, [("test-piece", 1, ["score.json", "score.musicxml"])])
 
+    def test_a_renderable_score_with_a_null_spectrogram_publishes_without_one(self):
+        self.make_renderable()
+        score = json.loads((self.v1 / "score.json").read_text())
+        (self.v1 / "score.json").write_text(json.dumps({**score, "spectrogram": None}))
+        self.assertEqual(validate({**score, "spectrogram": None}, self.ids, self.library), [])
+        self.assertEqual(publish("test-piece", 1, self.pieces, self.api, self.ids, self.library), 1)
+        self.assertEqual(self.api.sent, [("test-piece", 1, ["score.json", "score.musicxml"])])
+
     def test_a_renderable_music_score_still_needs_its_musicxml(self):
         self.make_renderable()
         (self.v1 / "score.musicxml").unlink()

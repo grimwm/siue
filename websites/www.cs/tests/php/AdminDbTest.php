@@ -1,6 +1,6 @@
 <?php
-// The admin database: private file, secure_delete on, schema present, and the
-// copy of the kit's StoreDir never drifts from the kit's.
+// The admin database: private file, secure_delete on, schema present, the
+// one-time steps run once, and the copy of the kit's StoreDir never drifts from the kit's.
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
@@ -13,7 +13,7 @@ final class AdminDbTest extends TestCase
     {
         $db = admin_tmp_db();
         $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
-        self::assertSame(['devices', 'key_hits', 'keys', 'link_requests', 'links', 'probes', 'sessions'], $tables);
+        self::assertSame(['devices', 'key_hits', 'keys', 'link_requests', 'links', 'migrations', 'probes', 'sessions'], $tables);
         self::assertSame(1, (int) $db->query('PRAGMA secure_delete')->fetchColumn());
     }
 
@@ -28,6 +28,60 @@ final class AdminDbTest extends TestCase
         self::assertContains('browser_hash', array_column($db->query('PRAGMA table_info(links)')->fetchAll(PDO::FETCH_ASSOC), 'name'));
         self::assertNull($db->query('SELECT browser_hash FROM links')->fetchColumn(), 'the old row has no hash');
         Admin\Db::open($dir);
+    }
+
+    /** A database with keys made before drafts:delete existed: a publish key, a pickup key and a revoked publish key. */
+    private function keysBeforeDraftsDelete(string $dir): void
+    {
+        $old = new PDO('sqlite:' . $dir . '/' . Admin\Db::FILE);
+        $old->exec('CREATE TABLE keys (id INTEGER PRIMARY KEY, label TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)');
+        $old->exec('INSERT INTO keys VALUES (1, \'music-publish\', \'h1\', \'["drafts:publish","keys:publish"]\', 1, 5, NULL)');
+        $old->exec('INSERT INTO keys VALUES (2, \'music-pickup\', \'h2\', \'["notes:pickup"]\', 1, NULL, NULL)');
+        $old->exec('INSERT INTO keys VALUES (3, \'music-publish\', \'h3\', \'["drafts:publish","keys:publish"]\', 1, NULL, 2)');
+    }
+
+    /** @return array<int, list<string>> id => scopes */
+    private static function scopesById(PDO $db): array
+    {
+        $out = [];
+        foreach ($db->query('SELECT id, scopes FROM keys ORDER BY id')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[(int) $row['id']] = json_decode((string) $row['scopes'], true);
+        }
+        return $out;
+    }
+
+    public function testOpeningGivesEveryActivePublishingKeyTheDraftsDeleteScopeInPlace(): void
+    {
+        $dir = admin_tmp_dir();
+        $this->keysBeforeDraftsDelete($dir);
+        $db = Admin\Db::open($dir);
+        self::assertSame([
+            1 => ['drafts:publish', 'keys:publish', 'drafts:delete'],
+            2 => ['notes:pickup'],
+            3 => ['drafts:publish', 'keys:publish'],
+        ], self::scopesById($db), 'only the active key that publishes drafts gains it');
+        self::assertSame(['h1', 'h2', 'h3'], $db->query('SELECT key_hash FROM keys ORDER BY id')->fetchAll(PDO::FETCH_COLUMN), 'no key is remade');
+        self::assertSame(5, (int) $db->query('SELECT last_used_at FROM keys WHERE id = 1')->fetchColumn());
+    }
+
+    public function testTheDraftsDeleteStepRunsOnceAndNeverAgain(): void
+    {
+        $dir = admin_tmp_dir();
+        $this->keysBeforeDraftsDelete($dir);
+        $first = self::scopesById(Admin\Db::open($dir));
+        $db = Admin\Db::open($dir);
+        self::assertSame($first, self::scopesById($db), 'a second open changes nothing');
+        // A key made after the step keeps exactly the scopes it was made with.
+        $db->exec('INSERT INTO keys VALUES (4, \'narrow\', \'h4\', \'["drafts:publish"]\', 9, NULL, NULL)');
+        self::assertSame(['drafts:publish'], self::scopesById(Admin\Db::open($dir))[4]);
+        self::assertSame(1, (int) $db->query("SELECT COUNT(*) FROM migrations WHERE name = 'keys-drafts-delete'")->fetchColumn());
+    }
+
+    public function testANewDatabaseRecordsTheStepWithNothingToChange(): void
+    {
+        $db = admin_tmp_db();
+        self::assertSame([], self::scopesById($db));
+        self::assertSame(['keys-drafts-delete'], $db->query('SELECT name FROM migrations')->fetchAll(PDO::FETCH_COLUMN));
     }
 
     public function testDatabaseFileIsPrivate(): void

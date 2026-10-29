@@ -195,8 +195,8 @@ final class Store
      * Keeps one draft. In one transaction, before any file is written: refuses when the files total more than
      * MAX_REQUEST_BYTES (too_large), when the draft exists, or when the new draft plus every stored draft that
      * remains (all of them, less this piece's drafts older than its newest KEEP_DRAFTS - 1) total more than
-     * MAX_DRAFT_TOTAL_BYTES (over_quota). After the files are written, deletes this piece's drafts (rows and files)
-     * older than its newest KEEP_DRAFTS: each piece keeps its own history, and other pieces are never touched.
+     * MAX_DRAFT_TOTAL_BYTES (over_quota). After the files are written, deletes this piece's drafts (rows and files, the
+     * files before the COMMIT) older than its newest KEEP_DRAFTS: each piece keeps its own history, and other pieces are never touched.
      * $about is taken from the validated score.json: project_id (matches validProjectId), project_name (1 to 80 characters) and
      * kind (one of KINDS); anything else throws DraftRejected('bad_score') before the transaction opens. null records no
      * project: '' and '' and 'music' (a published draft always has one).
@@ -224,7 +224,7 @@ final class Store
         if (!self::aboutIsKeepable($about)) {
             throw new DraftRejected('bad_score');
         }
-        $evicted = $this->transaction(function () use ($piece, $version, $files, $about): array {
+        $this->transaction(function () use ($piece, $version, $files, $about): void {
             $size = array_sum(array_map('strlen', $files));
             if ($size > self::MAX_REQUEST_BYTES) {
                 throw new DraftRejected('too_large');
@@ -255,11 +255,31 @@ final class Store
                 $this->removeDraftFiles($piece, $version);
                 throw $e;
             }
-            return $old;
+            foreach ($old as $row) {
+                $this->removeDraftFiles((string) $row['piece'], (int) $row['version']);
+            }
         });
-        foreach ($evicted as $row) {
-            $this->removeDraftFiles((string) $row['piece'], (int) $row['version']);
+    }
+
+    /**
+     * Deletes one draft's row and its files in one transaction, the files before the COMMIT, so a publish of the
+     * same draft (which writes its files under the same lock) never loses its new files; false for a bad piece id
+     * or version, or a draft that is not stored.
+     */
+    public function deleteDraft(string $piece, int $version): bool
+    {
+        if (!self::validPieceId($piece) || $version < 1 || $version > 9999) {
+            return false;
         }
+        return $this->transaction(function () use ($piece, $version): bool {
+            $drop = $this->db->prepare('DELETE FROM music_drafts WHERE piece = ? AND version = ?');
+            $drop->execute([$piece, $version]);
+            if ($drop->rowCount() === 0) {
+                return false;
+            }
+            $this->removeDraftFiles($piece, $version);
+            return true;
+        });
     }
 
     /** @return list<array{piece: string, version: int, published_at: int, project_id: string, project_name: string, kind: string}> newest first */

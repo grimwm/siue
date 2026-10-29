@@ -27,8 +27,11 @@ if (PHP_SAPI === 'cli' && is_file($kitPhp . '/score-guard.php')) {
 }
 unset($kitPhp);
 
-/** The scopes an API key may carry. Workrooms add theirs here. */
-const ADMIN_KEY_SCOPES = ['notes:pickup', 'drafts:publish', 'keys:publish'];
+/**
+ * The scopes an API key may carry. Workrooms add theirs here. A key that publishes drafts may
+ * also delete them: Db::open gave drafts:delete to every active key holding drafts:publish.
+ */
+const ADMIN_KEY_SCOPES = ['notes:pickup', 'drafts:publish', 'drafts:delete', 'keys:publish'];
 
 /** Dashboard links for the hub, label => path relative to /admin/. Workrooms add themselves here. */
 function admin_dashboards(): array

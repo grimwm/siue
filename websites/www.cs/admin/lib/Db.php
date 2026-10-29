@@ -23,6 +23,7 @@ final class Db
         'CREATE TABLE IF NOT EXISTS probes (name TEXT PRIMARY KEY, ok INTEGER NOT NULL, at INTEGER NOT NULL)',
         'CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, label TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)',
         'CREATE TABLE IF NOT EXISTS key_hits (key_id INTEGER NOT NULL, at INTEGER NOT NULL)',
+        'CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, at INTEGER NOT NULL)',
         'CREATE INDEX IF NOT EXISTS link_requests_at ON link_requests(at)',
         'CREATE INDEX IF NOT EXISTS link_requests_ip_at ON link_requests(ip, at)',
         'CREATE INDEX IF NOT EXISTS key_hits_key_at ON key_hits(key_id, at)',
@@ -84,6 +85,7 @@ final class Db
             if (!in_array('browser_hash', $have, true)) {
                 $db->exec('ALTER TABLE links ADD COLUMN browser_hash TEXT');
             }
+            self::once($db, 'keys-drafts-delete', [self::class, 'grantDraftsDelete']);
         } finally {
             umask($old);
         }
@@ -93,5 +95,51 @@ final class Db
             }
         }
         return $db;
+    }
+
+    /**
+     * Runs a one-time step and records its name in `migrations`, in one transaction, so it never runs again on
+     * this database (a new database records it with nothing to change).
+     *
+     * @param callable(\PDO): void $step
+     */
+    private static function once(\PDO $db, string $name, callable $step): void
+    {
+        $done = $db->prepare('SELECT 1 FROM migrations WHERE name = ?');
+        $done->execute([$name]);
+        if ($done->fetchColumn() !== false) {
+            return;
+        }
+        $db->exec('BEGIN IMMEDIATE');
+        try {
+            $done->execute([$name]);
+            if ($done->fetchColumn() === false) {
+                $step($db);
+                $db->prepare('INSERT INTO migrations (name, at) VALUES (?, ?)')->execute([$name, time()]);
+            }
+            $db->exec('COMMIT');
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->exec('ROLLBACK');
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * A key that publishes drafts may also delete them: every active key holding drafts:publish gains
+     * drafts:delete in place, keeping its secret, label and history. Revoked keys and other keys are left alone,
+     * and a key made later carries only the scopes it is made with.
+     */
+    private static function grantDraftsDelete(\PDO $db): void
+    {
+        $update = $db->prepare('UPDATE keys SET scopes = ? WHERE id = ?');
+        foreach ($db->query('SELECT id, scopes FROM keys WHERE revoked_at IS NULL')->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+            $scopes = json_decode((string) $row['scopes'], true);
+            if (is_array($scopes) && in_array('drafts:publish', $scopes, true) && !in_array('drafts:delete', $scopes, true)) {
+                $scopes[] = 'drafts:delete';
+                $update->execute([json_encode(array_values($scopes), JSON_THROW_ON_ERROR), (int) $row['id']]);
+            }
+        }
     }
 }

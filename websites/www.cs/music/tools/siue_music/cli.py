@@ -1,6 +1,7 @@
 """siue-music's command line. Every location comes from the env it is given."""
 import getpass
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -14,15 +15,19 @@ from .answering import default_steps
 from .op import Op, OpError
 from .paths import NotesInsideRepo
 from .pickup import pickup
-from .publish import PublishError, publish
-from .score import glossary_ids
+from .publish import GENERAL_PIECE, PublishError, publish
+from .score import ID_RE, glossary_ids
 from .setup import Setup
 
 USAGE = """usage: siue-music setup
        siue-music keys status|pull|forget|rotate
        siue-music pickup
        siue-music publish PIECE [--version N]
+       siue-music delete PIECE VERSION   (deletes that one published draft from the server)
        siue-music api-key-set NAME   (the key is read from the terminal, or one line of stdin)"""
+
+
+_VERSION = re.compile(r"[1-9][0-9]{0,3}")  # 1 to 9999, as the server accepts
 
 
 def build_keys(env: Mapping[str, str], out=print) -> Keys:
@@ -98,6 +103,18 @@ def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
             api = make_api(paths.api_base(env), keys.api_key(PUBLISH_KEY, f"make music-publish PIECE={args[1]}"))
             done = publish(args[1], version, paths.pieces_dir(), api, glossary_ids(paths.glossary_path()))
             print(f"Published {args[1]} v{done}.")
+            return 0
+        if args[:1] == ["delete"] and len(args) == 3:
+            piece, version = args[1], args[2]
+            if not ID_RE.fullmatch(piece) or piece == GENERAL_PIECE:
+                print(f"{piece!r} is not a piece id (lowercase letters, digits and hyphens)", file=sys.stderr)
+                return 1
+            if not _VERSION.fullmatch(version):
+                print(f"{version!r} is not a draft version (1 to 9999)", file=sys.stderr)
+                return 1
+            api = make_api(paths.api_base(env), keys.api_key(PUBLISH_KEY, f"make music-delete PIECE={piece} VERSION={version}"))
+            api.delete_draft(piece, int(version))
+            print(f"Deleted {piece} v{version}.")
             return 0
         if args[:1] == ["api-key-set"] and len(args) == 2:
             try:

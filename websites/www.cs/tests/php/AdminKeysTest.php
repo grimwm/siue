@@ -28,7 +28,7 @@ final class AdminKeysTest extends TestCase
 
     public function testProductionRegistryHoldsTheWorkroomScopes(): void
     {
-        self::assertSame(['notes:pickup', 'drafts:publish', 'keys:publish'], Admin\Keys::SCOPES);
+        self::assertSame(['notes:pickup', 'drafts:publish', 'drafts:delete', 'keys:publish'], Admin\Keys::SCOPES);
     }
 
     public function testCreateReturnsSixtyFourHexAndStoresOnlyItsHash(): void

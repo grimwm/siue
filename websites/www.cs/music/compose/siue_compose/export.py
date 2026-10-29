@@ -68,7 +68,6 @@ def musicxml(piece: Piece) -> str:
             if n.lane == lane.id:
                 raw.insert(n.beat, music21.note.Note(n.pitch, quarterLength=n.beats))
         part = raw.chordify() if raw.notes else raw
-        part.id = lane.id
         part.partName = lane.name
         part.insert(0, music21.meter.TimeSignature(f"{piece.beats_per_bar}/4"))
         if lane is piece.lanes[0]:
@@ -76,10 +75,14 @@ def musicxml(piece: Piece) -> str:
         part.makeRests(fillGaps=True, refStreamOrTimeRange=(0, piece.beats), inPlace=True)
         score.insert(0, part.makeNotation())
     exporter = music21.musicxml.m21ToXml.GeneralObjectExporter(score)
-    # The encoding date and music21's random part ids would change the file on every render.
+    # The encoding date would change the file on every render, and music21 names the parts itself; each part
+    # (in lane order) takes its lane's id, which the workroom's Sheet music view looks a lane up by.
     xml = re.sub(r"\s*<encoding-date>[^<]*</encoding-date>", "", exporter.parse().decode("utf-8"))
-    ids: dict[str, str] = {}
-    return re.sub(r'"(P[0-9a-f]{32})"', lambda m: '"%s"' % ids.setdefault(m.group(1), f"P{len(ids) + 1}"), xml)
+    names = re.findall(r'<score-part id="([^"]+)"', xml)
+    if len(names) != len(piece.lanes):
+        raise ValueError(f"the MusicXML has {len(names)} parts for {len(piece.lanes)} lanes")
+    lane_of = dict(zip(names, (l.id for l in piece.lanes)))
+    return re.sub(r'(<(?:score-part|part) id=")([^"]+)"', lambda m: f'{m.group(1)}{lane_of.get(m.group(2), m.group(2))}"', xml)
 
 
 def midi_files(piece: Piece) -> dict[str, mido.MidiFile]:

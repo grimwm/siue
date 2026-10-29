@@ -8,7 +8,7 @@
  */
 declare(strict_types=1);
 
-const GAMES_HUB_KEYS = ['title', 'kicker', 'description', 'button', 'play', 'start', 'order', 'hidden', 'image', 'short_name', 'theme_color', 'background_color', 'accent_color', 'screenshot'];
+const GAMES_HUB_KEYS = ['title', 'kicker', 'description', 'button', 'play', 'start', 'order', 'hidden', 'image', 'short_name', 'theme_color', 'background_color', 'accent_color', 'screenshot', 'preview', 'video', 'genre'];
 const GAMES_HUB_DEFAULT_ORDER = 100;
 const GAMES_HUB_DEFAULT_COLOR = '#0c0e12';
 const GAMES_HUB_DEFAULT_ACCENT = '#ff4d4d';
@@ -180,6 +180,38 @@ function games_hub_card(string $id, array $meta, string $dir): array
         if (is_string($hash)) {
             $card['screenshot'] .= '?v=' . substr($hash, 0, 10);
         }
+    }
+
+    // Animated card picture (3-5 s of play, looping): the card shows it in
+    // place of `screenshot`, which stays the still for reduced motion.
+    // Link-preview clip: a silent MP4 of play, the share pages' og:video.
+    foreach (['preview' => 'webp', 'video' => 'mp4'] as $key => $ext) {
+        $file = trim($meta[$key] ?? '');
+        if ($file === '') {
+            continue;
+        }
+        if (!games_hub_safe_path($file) || !preg_match("/\\.$ext\$/i", $file)) {
+            return [null, "`$key` must be a .$ext file inside the game folder"];
+        }
+        if (!is_file("$dir/$file")) {
+            return [null, "`$key` names $file, which is not in the game folder"];
+        }
+        if ($key === 'preview' && !isset($card['screenshot'])) {
+            return [null, '`preview` needs a `screenshot` to show when motion is reduced'];
+        }
+        $card[$key] = "games/$id/$file";
+        if ($key === 'preview') {
+            $hash = @hash_file('sha256', "$dir/$file");
+            if (is_string($hash)) {
+                $card[$key] .= '?v=' . substr($hash, 0, 10);
+            }
+        }
+    }
+
+    // Genre for search engines' game data (JSON-LD), like Puzzle or Artillery.
+    $genre = trim($meta['genre'] ?? '');
+    if ($genre !== '') {
+        $card['genre'] = $genre;
     }
 
     if ($play !== '') {

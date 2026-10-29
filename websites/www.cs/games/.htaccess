@@ -4,6 +4,14 @@
     Require all denied
 </FilesMatch>
 
+# The Games-page animations and the link-preview clips (make screenshots):
+# named here so they are served with their types whatever the host's
+# mime.types lists; a link preview ignores a clip of the wrong type.
+<IfModule mod_mime.c>
+    AddType image/webp .webp
+    AddType video/mp4 .mp4
+</IfModule>
+
 # The host sends nothing compressed by default. Text assets (game.json alone
 # is 70 KB) go out gzipped to browsers that accept it. Images and audio are
 # compressed already and left alone, which is why this lists extensions

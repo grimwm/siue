@@ -593,6 +593,11 @@ body.cylon-game-live .cic-enter-btn {
   background: var(--bg-elevated);
 }
 
+.games-hub-card-pic {
+  /* Only a wrapper for the animated preview's source: the picture inside lays out as before. */
+  display: contents;
+}
+
 .games-hub-card-shot {
   /* Bleeds to the card's edges, over its padding. */
   display: block;

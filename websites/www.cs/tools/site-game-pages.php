@@ -7,9 +7,12 @@
  *     full-height frame showing the game's own page (games/<id>/...);
  *   - a `start` game (mounted in the site page): a page that forwards to the
  *     site with ?game=<id>.
- * Both carry the game's link-preview tags (Open Graph, Twitter card), so a
+ * Both carry the game's link-preview tags (Open Graph, Twitter card, and
+ * og:video when the game has a `video` clip) and its JSON-LD game data, so a
  * shared link shows that game, not the home page. Crawlers never run
- * scripts, so the tags must sit in the served HTML.
+ * scripts, so the tags must sit in the served HTML. The picture and clip
+ * URLs carry a hash of the file, so a recaptured one (make screenshots)
+ * makes the page stale until this tool runs again.
  *
  *   php tools/site-game-pages.php          write every stale page
  *   php tools/site-game-pages.php --check  list stale pages, exit 1 if any
@@ -44,12 +47,48 @@ function site_pages_esc(string $s): string
     return htmlspecialchars($s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 }
 
-/** A game's link-preview tags, for the site page that shares it. */
-function site_pages_preview(array $card, string $site): array
+/** Search and preview text: the description cut at the last whole sentence
+ *  that fits in $max characters (search results show about 160), or at a
+ *  word with an ellipsis when even the first sentence is longer. */
+function site_pages_summary(string $text, int $max = 160): string
+{
+    $text = trim((string) preg_replace('/\s+/', ' ', $text));
+    if (mb_strlen($text) <= $max) {
+        return $text;
+    }
+    $cut = '';
+    foreach (preg_split('/(?<=[.!?])\s+/', $text) ?: [] as $sentence) {
+        $next = $cut === '' ? $sentence : "$cut $sentence";
+        if (mb_strlen($next) > $max) {
+            break;
+        }
+        $cut = $next;
+    }
+    if ($cut !== '') {
+        return $cut;
+    }
+    $words = mb_substr($text, 0, $max - 1);
+    return rtrim(mb_substr($words, 0, (int) mb_strrpos($words, ' ')), ' ,;:') . '…';
+}
+
+/** An absolute URL for a file under the site root, versioned with its content
+ *  hash: chat apps and social sites cache a preview by URL, so a recaptured
+ *  picture needs a new address to show. $siteRoot is the site's folder. */
+function site_pages_asset_url(string $site, string $path, string $siteRoot): string
+{
+    $hash = @hash_file('sha256', "$siteRoot/$path");
+    return $site . $path . (is_string($hash) ? '?v=' . substr($hash, 0, 10) : '');
+}
+
+/** A game's link-preview tags (Open Graph, Twitter card) and its search
+ *  engines' game data (JSON-LD), for the site page that shares it.
+ *  $siteRoot is the site's folder, holding games/. */
+function site_pages_preview(array $card, string $site, string $siteRoot): array
 {
     $url = $site . 'play/' . $card['id'] . '/';
     $title = site_pages_esc($card['title']);
-    $desc = site_pages_esc($card['description']);
+    $summary = site_pages_summary($card['description']);
+    $desc = site_pages_esc($summary);
     $lines = [
         '<meta name="description" content="' . $desc . '">',
         '<link rel="canonical" href="' . site_pages_esc($url) . '">',
@@ -58,22 +97,73 @@ function site_pages_preview(array $card, string $site): array
         '<meta property="og:title" content="' . $title . '">',
         '<meta property="og:description" content="' . $desc . '">',
         '<meta property="og:url" content="' . site_pages_esc($url) . '">',
+        '<meta property="og:locale" content="en_US">',
     ];
+    $kicker = trim($card['kicker'] ?? '');
+    $alt = site_pages_esc($card['title'] . ' in play' . ($kicker !== '' ? ': ' . mb_strtolower($kicker) : ''));
+    $image = null;
     if (isset($card['image'])) {
-        $img = site_pages_esc($site . $card['image']);
+        $image = site_pages_asset_url($site, $card['image'], $siteRoot);
+        $img = site_pages_esc($image);
+        $type = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'webp' => 'image/webp'][strtolower(pathinfo($card['image'], PATHINFO_EXTENSION))] ?? 'image/png';
         array_push($lines,
             '<meta property="og:image" content="' . $img . '">',
+            '<meta property="og:image:secure_url" content="' . $img . '">',
+            '<meta property="og:image:type" content="' . $type . '">',
             '<meta property="og:image:width" content="1200">',
             '<meta property="og:image:height" content="630">',
-            '<meta property="og:image:alt" content="' . $title . '">',
+            '<meta property="og:image:alt" content="' . $alt . '">');
+    }
+    // A short silent clip of play, for the apps that play a link's video
+    // (Facebook, LinkedIn, Discord, ...); the still stays the preview
+    // everywhere else.
+    if (isset($card['video'])) {
+        $vid = site_pages_esc(site_pages_asset_url($site, $card['video'], $siteRoot));
+        array_push($lines,
+            '<meta property="og:video" content="' . $vid . '">',
+            '<meta property="og:video:secure_url" content="' . $vid . '">',
+            '<meta property="og:video:type" content="video/mp4">',
+            '<meta property="og:video:width" content="1280">',
+            '<meta property="og:video:height" content="720">');
+    }
+    if ($image !== null) {
+        array_push($lines,
             '<meta name="twitter:card" content="summary_large_image">',
-            '<meta name="twitter:image" content="' . $img . '">');
+            '<meta name="twitter:image" content="' . site_pages_esc($image) . '">',
+            '<meta name="twitter:image:alt" content="' . $alt . '">');
     } else {
         $lines[] = '<meta name="twitter:card" content="summary">';
     }
     array_push($lines,
         '<meta name="twitter:title" content="' . $title . '">',
         '<meta name="twitter:description" content="' . $desc . '">');
+    // What the game is, for search engines and AI answers: free, in the browser.
+    $data = [
+        '@context' => 'https://schema.org',
+        '@type' => ['VideoGame', 'WebApplication'],
+        'name' => $card['title'],
+        'description' => $summary,
+        'url' => $url,
+        'applicationCategory' => 'GameApplication',
+        'operatingSystem' => 'Any (web browser)',
+        'gamePlatform' => 'Web browser',
+        'isAccessibleForFree' => true,
+        'offers' => ['@type' => 'Offer', 'price' => '0', 'priceCurrency' => 'USD'],
+        'author' => ['@type' => 'Person', 'name' => 'William Grim', 'url' => $site],
+    ];
+    if (isset($card['genre'])) {
+        $data['genre'] = $card['genre'];
+    }
+    if ($image !== null) {
+        $data['image'] = $image;
+    }
+    if (isset($card['screenshot'])) {
+        $data['screenshot'] = $site . $card['screenshot'];
+    }
+    // JSON_HEX_TAG keeps a `</script>` in any text from closing the block.
+    $lines[] = '<script type="application/ld+json">'
+        . json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP)
+        . '</script>';
     return $lines;
 }
 
@@ -126,7 +216,7 @@ const SITE_PAGES_GAMES_ICON = '<svg class="play-icon" viewBox="0 0 24 24" width=
 /** The site's page for a play game: its navbar, in the game's colours, over
  *  a frame showing the game. ../../ is the site root from play/<id>/.
  *  $versions maps play.css, play.js and the game's install.js to their `?v=`. */
-function site_pages_wrapper(array $card, string $site, array $versions): string
+function site_pages_wrapper(array $card, string $site, array $versions, string $siteRoot): string
 {
     $id = $card['id'];
     $title = site_pages_esc($card['title']);
@@ -134,7 +224,7 @@ function site_pages_wrapper(array $card, string $site, array $versions): string
     $head = array_merge(
         ['<meta charset="utf-8">', '<meta name="viewport" content="width=device-width, initial-scale=1">',
          "<title>$title · William Grim</title>"],
-        site_pages_preview($card, $site),
+        site_pages_preview($card, $site, $siteRoot),
         site_pages_install($card, "../../games/$id/"),
         [INSTALL_PROMPT_STASH,
          '<link rel="icon" href="../../favicon-32.png" sizes="32x32">',
@@ -165,12 +255,12 @@ function site_pages_wrapper(array $card, string $site, array $versions): string
 /** The site's page for a game mounted in the site page: its preview tags,
  *  then straight on to the site with ?game=<id>, keeping the address's query
  *  and hash (?install). */
-function site_pages_forward_page(array $card, string $site): string
+function site_pages_forward_page(array $card, string $site, string $siteRoot): string
 {
     // Relative, so the forward stays on whichever host serves the page.
     $to = site_pages_esc('../../?game=' . rawurlencode($card['id']));
     $js = json_encode('../../?game=' . rawurlencode($card['id']), JSON_UNESCAPED_SLASHES);
-    $lines = array_merge(site_pages_preview($card, $site), site_pages_install($card, "../../games/{$card['id']}/"));
+    $lines = array_merge(site_pages_preview($card, $site, $siteRoot), site_pages_install($card, "../../games/{$card['id']}/"));
     return "<!doctype html>\n<!-- Generated by tools/site-game-pages.php from games/{$card['id']}/metadata.yaml; do not edit. -->\n"
         . "<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
         . '<title>' . site_pages_esc($card['title']) . "</title>\n"
@@ -208,9 +298,9 @@ function site_pages_sync(string $root, string $site, bool $write): array
                 $broken = true;
                 continue;
             }
-            $content = site_pages_wrapper($card, $site, $versions + ['install.js' => site_pages_version($bar)]);
+            $content = site_pages_wrapper($card, $site, $versions + ['install.js' => site_pages_version($bar)], dirname($root));
         } else {
-            $content = site_pages_forward_page($card, $site);
+            $content = site_pages_forward_page($card, $site, dirname($root));
         }
         $path = "$playRoot/{$card['id']}/index.html";
         if ((string) @file_get_contents($path) !== $content) {

@@ -14,3 +14,6 @@ theme_color: "#0e1320"
 background_color: "#0e1320"
 accent_color: "#f0b429"
 screenshot: screenshot.jpg            # Games-page card picture (make screenshots)
+preview: preview.webp                # its looping animation (make screenshots)
+video: preview.mp4                   # link-preview clip, og:video (make screenshots)
+genre: Puzzle

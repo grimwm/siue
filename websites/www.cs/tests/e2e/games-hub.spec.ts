@@ -13,12 +13,38 @@ test('the Games page builds a card per metadata.yaml, each with a share link', a
   const cards = page.locator('#games-hub-list .games-hub-card');
   await expect(cards).toHaveCount(GAMES.length);
   expect(await cards.evaluateAll(els => els.map(e => (e as HTMLElement).dataset.game))).toEqual(GAMES);
-  // Every card leads with its game's screenshot, loaded and 16:9.
-  const shots = await page.locator('.games-hub-card-shot').evaluateAll(imgs => Promise.all(imgs.map(i => (i as HTMLImageElement).decode().then(() => [(i as HTMLImageElement).naturalWidth, (i as HTMLImageElement).naturalHeight]))));
-  expect(shots).toEqual(GAMES.map(() => [800, 450]));
+  // Every card leads with its game in motion: the looping preview, loaded and 16:9, named for the game.
+  const shots = page.locator('.games-hub-card-shot');
+  await shots.evaluateAll(imgs => imgs.forEach(i => { (i as HTMLImageElement).loading = 'eager'; }));
+  const moving = await shots.evaluateAll(imgs => Promise.all(imgs.map(i => (i as HTMLImageElement).decode().then(() => {
+    const img = i as HTMLImageElement;
+    return [new URL(img.currentSrc).pathname.split('/').pop(), img.naturalWidth, img.naturalHeight, img.alt];
+  }))));
+  expect(moving).toEqual(GAMES.map(() => ['preview.webp', 640, 360, expect.stringMatching(/ in play$/)]));
+  const markup = await page.locator('.games-hub-card picture').evaluateAll(pics => pics.map(p => {
+    const src = p.querySelector('source')!;
+    return [src.type, src.media, /\?v=[0-9a-f]{10}$/.test(src.srcset), p.querySelector('img')!.getAttribute('src')!.includes('screenshot.jpg')];
+  }));
+  expect(markup).toEqual(GAMES.map(() => ['image/webp', '(prefers-reduced-motion: no-preference)', true, true]));
   const shares = await page.locator('.games-share-btn').evaluateAll(els => els.map(e => (e as HTMLElement).title));
   for (const id of GAMES) expect(shares.some(u => u.endsWith(`/play/${id}/`))).toBe(true);
   await page.screenshot({ path: 'test-results/games-hub.png', fullPage: true });
+});
+
+test('with reduced motion the cards show the still screenshots, lazily', async ({ browser, baseURL }) => {
+  const ctx = await browser.newContext({ baseURL, reducedMotion: 'reduce', viewport: { width: 1280, height: 860 } });
+  const page = await ctx.newPage();
+  await page.goto('./#games');
+  await expect(page.locator('#games-hub-list .games-hub-card')).toHaveCount(GAMES.length);
+  const shots = page.locator('.games-hub-card-shot');
+  expect(await shots.evaluateAll(imgs => imgs.map(i => i.getAttribute('loading')))).toEqual(GAMES.map(() => 'lazy'));
+  await shots.evaluateAll(imgs => imgs.forEach(i => { (i as HTMLImageElement).loading = 'eager'; }));
+  const still = await shots.evaluateAll(imgs => Promise.all(imgs.map(i => (i as HTMLImageElement).decode().then(() => {
+    const img = i as HTMLImageElement;
+    return [new URL(img.currentSrc).pathname.split('/').pop(), img.naturalWidth, img.naturalHeight];
+  }))));
+  expect(still).toEqual(GAMES.map(() => ['screenshot.jpg', 800, 450]));
+  await ctx.close();
 });
 
 // Pages revalidate on every visit, so a browser never keeps a page that names
@@ -60,13 +86,28 @@ for (const id of GAMES) {
     expect(og('title')).toBeTruthy();
     expect(og('title')).not.toMatch(/William Grim/);
     expect(og('url')).toMatch(new RegExp(`/play/${id}/$`));
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+    expect(html).toMatch(/<meta name="description" content="[^"]{20,160}">/);
     const img = og('image');
-    expect(img).toMatch(/og\.png$/);
-    // The picture itself is served from this host.
-    const local = new URL(img!).pathname.replace(/^.*?\/games\//, 'games/');
-    const res = await request.get(local);
-    expect(res.status()).toBe(200);
-    expect(res.headers()['content-type']).toMatch(/image\/png/);
+    expect(img).toMatch(/^https:\/\/.*\/games\/[a-z]+\/og\.png\?v=[0-9a-f]{10}$/);
+    expect(html).toContain(`<meta name="twitter:image" content="${img}">`);
+    expect(og('image:width')).toBe('1200');
+    expect(og('image:height')).toBe('630');
+    expect(og('image:alt')).toMatch(/ in play/);
+    const video = og('video');
+    expect(video).toMatch(/^https:\/\/.*\/games\/[a-z]+\/preview\.mp4\?v=[0-9a-f]{10}$/);
+    expect(og('video:secure_url')).toBe(video);
+    expect(og('video:type')).toBe('video/mp4');
+    expect([og('video:width'), og('video:height')]).toEqual(['1280', '720']);
+    const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)![1]!);
+    expect(ld).toMatchObject({ '@type': ['VideoGame', 'WebApplication'], image: img, isAccessibleForFree: true, offers: { price: '0' } });
+    // The picture and clip themselves are served from this host, with their types.
+    for (const [url, type] of [[img!, /image\/png/], [video!, /video\/mp4/]] as const) {
+      const local = new URL(url).pathname.replace(/^.*?\/games\//, 'games/');
+      const res = await request.get(local);
+      expect(res.status(), local).toBe(200);
+      expect(res.headers()['content-type']).toMatch(type);
+    }
     expect(baseURL).toBeTruthy();
   });
 }

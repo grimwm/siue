@@ -15,3 +15,6 @@ theme_color: "#05060f"
 background_color: "#05060f"
 accent_color: "#ffc93c"
 screenshot: screenshot.jpg            # Games-page card picture (make screenshots)
+preview: preview.webp                # its looping animation (make screenshots)
+video: preview.mp4                   # link-preview clip, og:video (make screenshots)
+genre: Artillery

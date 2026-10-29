@@ -16,3 +16,6 @@ theme_color: "#05060d"
 background_color: "#05060d"
 accent_color: "#ff3b3b"
 screenshot: screenshot.jpg            # Games-page card picture (make screenshots)
+preview: preview.webp                # its looping animation (make screenshots)
+video: preview.mp4                   # link-preview clip, og:video (make screenshots)
+genre: Shooter

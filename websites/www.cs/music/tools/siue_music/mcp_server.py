@@ -1,5 +1,5 @@
 """The music workroom's MCP server (siue-music mcp): the Workroom's tools over stdio, for an AI app on the owner's computer.
-Built on the official MCP Python SDK (requirements-mcp.txt)."""
+Built on the official MCP Python SDK (requirements-mcp.in, locked with hashes in requirements-mcp.txt)."""
 import sys
 from pathlib import Path
 from typing import Any, Mapping

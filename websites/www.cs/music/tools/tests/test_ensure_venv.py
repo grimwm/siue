@@ -41,7 +41,7 @@ class EnsureVenvTest(unittest.TestCase):
     def test_a_missing_venv_is_built_and_filled(self):
         self.assertEqual(self.ensure().returncode, 0)
         self.assertTrue(any(line.startswith("base -m venv") for line in self.lines()))
-        self.assertTrue(any(line.startswith("pip install --quiet -r") for line in self.lines()))
+        self.assertTrue(any(line.startswith("pip install --quiet --require-hashes -r") for line in self.lines()))
 
     def test_a_working_venv_is_left_alone(self):
         self.ensure()
@@ -63,7 +63,7 @@ class EnsureVenvTest(unittest.TestCase):
         self.log.unlink()
         self.assertEqual(self.ensure("mcp", MISSING="mcp").returncode, 0)
         self.assertFalse(any(line.startswith("base -m venv") for line in self.lines()))
-        self.assertTrue(any(line.startswith("pip install --quiet -r") for line in self.lines()))
+        self.assertTrue(any(line.startswith("pip install --quiet --require-hashes -r") for line in self.lines()))
 
     def test_a_working_venv_that_has_the_named_module_is_left_alone(self):
         self.ensure()

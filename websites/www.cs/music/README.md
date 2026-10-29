@@ -170,8 +170,8 @@ Desktop, any app that speaks MCP). The app starts it on the owner's computer ove
 stdio; it uses the key tool above, so keys, sealing and refusals are those of
 `make music-publish` and `make music-pickup`, the private notes key comes from
 1Password through `op`, and no answer carries a key. It is built on the official MCP
-Python SDK (`mcp`, pinned in `tools/requirements-mcp.txt`), installed into
-`music/tools/.venv`.
+Python SDK (`mcp`, pinned in `tools/requirements-mcp.in`), installed into
+`music/tools/.venv` from the hashed lock (see Locked packages).
 
 - `make music-mcp-setup` installs the SDK into the virtualenv (making it when needed)
   and prints the commands to connect: the `claude mcp add --scope user ...` line for
@@ -195,6 +195,24 @@ Tools:
 
 There is no delete tool: the API keys cannot delete (see Security model), so the AI
 cannot delete drafts or notes.
+
+## Locked packages
+
+The tool's virtualenv installs only hashed locks: `music/tools/ensure-venv` runs
+`pip install --require-hashes -r` on `tools/requirements.txt` (`make music-setup`) or
+`tools/requirements-mcp.txt` (`make music-mcp-setup`), so pip refuses any package or
+release the lock does not name. The locks are compiled from the files people edit,
+`tools/requirements.in` and `tools/requirements-mcp.in`, for every platform and Python
+3.10 and newer. To change a package, edit the `.in` file and recompile both locks with
+uv in a throwaway virtualenv (from `websites/www.cs/music/tools`):
+
+    python3 -m venv /tmp/uv && /tmp/uv/bin/pip install uv
+    /tmp/uv/bin/uv pip compile --universal --python-version 3.10 --generate-hashes --no-cache requirements.in -o requirements.txt
+    /tmp/uv/bin/uv pip compile --universal --python-version 3.10 --generate-hashes --no-cache requirements-mcp.in -c requirements.txt -o requirements-mcp.txt
+
+The second lock is constrained by the first, so both install the same `cryptography`.
+`make music-test` checks every pin is exact and hashed. `requirements-answering.txt`
+(the optional speech and humming steps) is installed by hand and is not locked.
 
 ## The local browser check
 

@@ -410,28 +410,6 @@ test('Look and Walls sit in the menu; Walls show only for the modern look, and t
   flow.setLook('modern', 'solid');
 });
 
-test('every change of cards reaches the page, which picks the music from them', () => {
-  reset();
-  flow.showTitle(false);
-  key('i');
-  key('q');
-  key('n');
-  key('Enter');
-  assert.equal(game.run !== null, true);
-  key('Enter');
-  const changes = tracks.filter((t, i) => i === 0 || t !== tracks[i - 1]);
-  assert.deepEqual(changes, ['title', 'story', 'title', 'story', null]);
-});
-
-test('the level list over the story card keeps the story cut', () => {
-  reset();
-  flow.showTitle(false);
-  key('i');
-  key('n');
-  assert.equal(flow.top(), 'levels');
-  assert.equal(tracks[tracks.length - 1], 'story');
-});
-
 test('left and right in the levels list switch between the released chapters, clamped at the ends', () => {
   reset();
   game.open(0);

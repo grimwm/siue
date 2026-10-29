@@ -57,6 +57,8 @@ export interface UiDeps {
   levels?: Pick<Levels, "outside">;
   /** Voices an event (the chapter card's sound). */
   sfx?(name: SfxName): void;
+  /** Told the cards after every change to them (the modern board hides behind the editor). */
+  cards?(stack: LayerName[]): void;
 }
 
 /** What a key press or click asks of the page. */
@@ -219,6 +221,7 @@ export function createUi(deps: UiDeps): Ui {
       (controls?.game ?? game)?.resume();
     }
     drawLayers();
+    deps.cards?.(layers.stack());
   });
 
   /** The campaign index of chapter `n`'s first level. */

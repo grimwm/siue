@@ -51,19 +51,19 @@ const ui = await (await import('../../_kit/test/tsx.ts')).importTsx<{
 const { createSheet } = await import('../src/sheetlife.ts');
 
 const SRC = [{ file: 'audio.webm' as const, type: 'audio/webm; codecs=opus' }];
-const playerProps = (over: Record<string, unknown> = {}) => ({ src: SRC, audioSrc: (f: string) => f, time: 0, bar: null, onTime: () => {}, clip: null, onClipDone: () => {}, duration: 60, starts: [0, 8, 20], onSeek: () => {}, ...over });
+const playerProps = (over: Record<string, unknown> = {}) => ({ src: SRC, audioSrc: (f: string) => f, time: 0, bar: null, onTime: () => {}, clip: null, onClipDone: () => {}, duration: 60, onSeek: () => {}, ...over });
 const button = (root: StubElement, name: string): StubElement => walk(root).find(e => e.localName === 'button' && e.textContent === name)!;
 const pending = (): number => frames.size;
 const labelled = (root: StubElement, name: string): StubElement => walk(root).find(e => e.localName === 'button' && e.getAttribute('aria-label') === name)!;
 
-test('the transport buttons seek five seconds and by section from where the audio is', async () => {
+test('the transport buttons seek five seconds, and to the start and end of the whole track, from where the audio is', async () => {
   const root = makeEl('root');
   const seeks: number[] = [];
   await act(() => { render(h(ui.player.Player, playerProps({ onSeek: (t: number) => seeks.push(t) })), renderTarget(root)); });
   const audio = audios.at(-1)!;
   audio.currentTime = 12;
-  for (const name of ['Back 5 seconds', 'Ahead 5 seconds', 'Previous section', 'Next section']) fire(labelled(root, name), 'click');
-  assert.deepEqual(seeks, [7, 17, 8, 20]);
+  for (const name of ['Back 5 seconds', 'Ahead 5 seconds', 'To the start', 'To the end']) fire(labelled(root, name), 'click');
+  assert.deepEqual(seeks, [7, 17, 0, 60]);
   render(null, renderTarget(root));
 });
 

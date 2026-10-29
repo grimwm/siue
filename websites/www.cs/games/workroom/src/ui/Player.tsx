@@ -1,5 +1,5 @@
-// The audio: Play/Pause, five seconds back and ahead, previous and next
-// section, Loop (on by default; a hear-it clip never loops), the time readout
+// The audio: Play/Pause, five seconds back and ahead, the start and end
+// of the track, Loop (on by default; a hear-it clip never loops), the time readout
 // (and the bar on a music piece), and the playhead's time kept in step with the
 // <audio> element in both directions.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -11,14 +11,14 @@ import { Readout } from './console/Readout.tsx';
 
 // The transport buttons' 16 px icons (paths in a 16-unit box) and accessible names.
 const SKIPS: readonly { kind: Skip; label: string; icon: string }[] = [
-  { kind: 'prev', label: 'Previous section', icon: 'M3 3v10M13 3 6 8l7 5Z' },
+  { kind: 'start', label: 'To the start', icon: 'M3 3v10M13 3 6 8l7 5Z' },
   { kind: 'back5', label: 'Back 5 seconds', icon: 'M8 3 2 8l6 5ZM14 3 8 8l6 5Z' },
   { kind: 'ahead5', label: 'Ahead 5 seconds', icon: 'M8 3l6 5-6 5ZM2 3l6 5-6 5Z' },
-  { kind: 'next', label: 'Next section', icon: 'M13 3v10M3 3l7 5-7 5Z' },
+  { kind: 'end', label: 'To the end', icon: 'M13 3v10M3 3l7 5-7 5Z' },
 ];
 
-/** duration is the piece's length in seconds and starts its sections' start times, ascending; onSeek is the page's seek, which moves the audio, the playhead and the view together. */
-export interface PlayerProps { src: AudioSource[]; duration: number; starts: readonly number[]; onSeek(t: number): void; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void; pauseRef?: { current: (() => void) | null } }
+/** duration is the piece's length in seconds; onSeek is the page's seek, which moves the audio, the playhead and the view together. */
+export interface PlayerProps { src: AudioSource[]; duration: number; onSeek(t: number): void; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void; pauseRef?: { current: (() => void) | null } }
 
 export function Player(p: PlayerProps) {
   const audio = useRef<HTMLAudioElement>(null);
@@ -88,7 +88,7 @@ export function Player(p: PlayerProps) {
     if (!a) return;
     if (a.paused) start(a); else a.pause();
   };
-  const skip = (kind: Skip): void => p.onSeek(skipTarget(kind, audio.current?.currentTime ?? p.time, p.duration, p.starts));
+  const skip = (kind: Skip): void => p.onSeek(skipTarget(kind, audio.current?.currentTime ?? p.time, p.duration));
   return (
     <div class="player flex flex-wrap items-center gap-3 rounded-lg bg-panel p-3 ring-1 ring-rule">
       {source ? (

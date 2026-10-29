@@ -1,5 +1,6 @@
 """A Piece to a complete workroom draft: one stem per lane with sfizz, then the lo-fi master, the folded loop, Opus and the spectrogram."""
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,6 +15,8 @@ from .sfz import write_sfz
 RATE = 48000
 TAIL = 6.0  # seconds of reverb and release rendered past the end, then folded onto the start
 BITRATE = "96k"
+LOUDNESS = -20.0  # LUFS
+PEAK = -3.0  # dBFS
 
 
 class RenderError(Exception):
@@ -62,6 +65,22 @@ def fold(samples: np.ndarray, length: int) -> np.ndarray:
     return out
 
 
+def loudness(path: Path) -> float:
+    """Integrated loudness in LUFS (EBU R128)."""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(path), "-af", "ebur128", "-f", "null", "-"], capture_output=True, text=True)
+    found = re.findall(r"I:\s+(-?[\d.]+) LUFS", r.stderr)
+    if not found:
+        raise RenderError(f"could not measure the loudness of {path}")
+    return float(found[-1])
+
+
+def level(path: Path, samples: np.ndarray) -> float:
+    """One gain for the whole piece (a changing gain would break the loop point): LOUDNESS, or less if a peak would pass PEAK."""
+    gain = 10 ** ((LOUDNESS - loudness(path)) / 20)
+    peak = float(np.abs(samples).max())
+    return min(gain, 10 ** (PEAK / 20) / peak) if peak > 0 else gain
+
+
 def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, made: str, changes: list[dict] | None = None) -> list[str]:
     """Writes the draft folder; returns the checks' problems (empty when the draft may be published)."""
     out = Path(out)
@@ -95,9 +114,9 @@ def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, m
     )
     _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "dry.wav"), "-i", str(work / "ir.wav"),
          "-filter_complex", chain, "-map", "[o]", "-c:a", "pcm_f32le", str(work / "wet.wav"))
-    _write(fold(_read(work / "wet.wav"), length), work / "folded.wav")
-    _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "folded.wav"),
-         "-af", "loudnorm=I=-20:TP=-3:LRA=14,aresample=48000", "-ar", "48000", "-c:a", "pcm_f32le", str(work / "master.wav"))
+    folded = fold(_read(work / "wet.wav"), length)
+    _write(folded, work / "folded.wav")
+    _write(folded * level(work / "folded.wav", folded), work / "master.wav")
     _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "master.wav"), "-c:a", "libopus", "-b:a", BITRATE,
          "-t", f"{piece.duration:.6f}", str(out / "audio.webm"))
     _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "master.wav"), "-lavfi",

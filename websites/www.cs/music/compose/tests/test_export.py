@@ -3,6 +3,7 @@ import unittest
 
 import support
 from fixture_piece import piece
+from siue_compose.piece import Note
 from siue_compose.export import midi_files, musicxml, score_json
 from siue_music.score import glossary_ids, validate
 
@@ -54,6 +55,17 @@ class ExportTest(unittest.TestCase):
         ons = [m for t in files["lyre"].tracks for m in t if m.type == "note_on" and m.velocity > 0]
         self.assertEqual([m.note for m in ons], [62, 65, 69, 74])
         self.assertEqual(files["lyre"].ticks_per_beat, 480)
+
+    def test_same_pitch_overlap_ends_the_earlier_note_where_the_later_starts(self):
+        p = piece([Note("drone", 0, 6, 38, 50), Note("drone", 4, 4, 38, 50)])
+        events, now = [], 0
+        for m in midi_files(p)["drone"].tracks[0]:
+            now += m.time
+            if m.type in ("note_on", "note_off"):
+                events.append((now, "on" if m.type == "note_on" and m.velocity else "off"))
+        self.assertEqual(events, [(0, "on"), (1920, "off"), (1920, "on"), (3840, "off")])
+        notes = [(n["start"], n["length"]) for n in score_json(p, 1, MADE)["notes"]]
+        self.assertEqual(notes, [(0.0, 4.0), (4.0, 4.0)])
 
 
 if __name__ == "__main__":

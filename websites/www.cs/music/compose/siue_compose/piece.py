@@ -76,7 +76,14 @@ class Piece:
         return self.beats * self.seconds_per_beat
 
     def clipped_notes(self) -> list[Note]:
-        """The notes that start before the end, each cut to end by the end, in time order."""
-        out = [Note(n.lane, n.beat, min(n.beats, self.beats - n.beat), n.pitch, n.velocity, n.motif)
-               for n in self.notes if n.beat < self.beats]
-        return sorted(out, key=lambda n: (n.beat, n.lane, n.pitch))
+        """The notes that start before the end, in time order, each cut to end by the end and, because MIDI cannot
+        tell two notes of one pitch apart, by the start of the next note of its pitch in its lane."""
+        out = sorted((n for n in self.notes if n.beat < self.beats), key=lambda n: (n.beat, n.lane, n.pitch))
+        cut = []
+        for i, n in enumerate(out):
+            end = min(n.beat + n.beats, self.beats)
+            later = [m.beat for m in out[i + 1:] if m.lane == n.lane and m.pitch == n.pitch and m.beat > n.beat]
+            if later:
+                end = min(end, later[0])
+            cut.append(Note(n.lane, n.beat, end - n.beat, n.pitch, n.velocity, n.motif))
+        return cut

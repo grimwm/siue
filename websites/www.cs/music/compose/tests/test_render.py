@@ -33,8 +33,12 @@ class RenderTest(unittest.TestCase):
             names = sorted(p.name for p in out.iterdir() if p.is_file())
             self.assertEqual(names, ["audio.webm", "score.json", "score.musicxml", "spectrogram.png"])
             self.assertEqual(sorted(p.name for p in (out / "stems").iterdir()), ["drone.wav", "lyre.wav"])
-            seconds = len(_read(out / "audio.webm")) / RATE
-            self.assertAlmostEqual(seconds, piece().duration, delta=0.02)
+            audio = _read(out / "audio.webm")
+            self.assertAlmostEqual(len(audio) / RATE, piece().duration, delta=0.02)
+            # The loop point: the step from the last sample to the first is no bigger than the steps beside it.
+            near = int(0.01 * RATE)
+            steps = np.abs(np.diff(np.concatenate([audio[-near:, 0], audio[:near, 0]])))
+            self.assertLessEqual(float(steps[near - 1]), 2 * float(np.delete(steps, near - 1).max()))
 
 
 if __name__ == "__main__":

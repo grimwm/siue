@@ -56,20 +56,23 @@ test('Music off is remembered and plays nothing on the title card; Sound stays o
   await page.addInitScript(mediaProbe);
   await page.goto(PAGE);
   await expect(page.locator('#title-veil')).toBeVisible();
+  // Q is a gesture too: the theme starts, so turning Music off has something to stop.
   await page.keyboard.press('q');
   await expect(page.locator('#menu-veil')).toBeVisible();
   await expect(page.locator('#music')).toHaveText('🎶 Music');
+  await expect.poll(async () => (await sounding(page)).names, { timeout: 10_000, message: 'the theme plays over the menu' }).toEqual(['title']);
   await page.locator('#music').click();
   await expect(page.locator('#music')).toHaveText('🎶 Music off');
   await expect(page.locator('#mute')).toContainText('Sound');
   expect(await page.evaluate(() => localStorage.getItem('crete-music'))).toBe('off');
-  await expect.poll(async () => (await sounding(page)).names, { timeout: 5_000 }).toEqual([]);
+  expect((await sounding(page)).names, 'Music off stops it at once').toEqual([]);
 
   await page.reload();
   await expect(page.locator('#title-veil')).toBeVisible();
   await page.locator('#title-veil .kicker').click();
-  await page.waitForTimeout(1500);
-  expect((await sounding(page)).names).toEqual([]);
+  // Two frames after the gesture its handlers have all run: with Music off no element was ever played.
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  expect(await page.evaluate(() => window.__media.length), 'no music element plays while Music is off').toBe(0);
   await page.keyboard.press('q');
   await expect(page.locator('#music')).toHaveText('🎶 Music off');
 });

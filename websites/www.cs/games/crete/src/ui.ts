@@ -70,7 +70,7 @@ export interface Controls {
   wake(): void;
   /** Leave the game (the menu's Quit). */
   quit(): void;
-  /** Play on the title card: opens Chapter 1's card. */
+  /** Play on the title card: opens the card of the chapter to play on (`Ui.playChapter`). */
   play(): void;
   /** Back to the editor from a try: offered in the menu and on the end card while a try is in play. */
   backToEditor?(): void;
@@ -99,6 +99,9 @@ export interface Ui {
   /** Chapter `n`'s card, over whatever is showing: the opening one (Enter starts the first level this browser
    *  has not cleared), or the closing one. */
   showChapter(n: number, closing: boolean): void;
+  /** The chapter to play on: the first released chapter with a level this browser has not cleared; Chapter 1 once
+   *  every level is cleared. */
+  playChapter(): number;
   /** Closes every card. */
   closeLayers(): void;
   /** The card showing now, if any. */
@@ -217,6 +220,22 @@ export function createUi(deps: UiDeps): Ui {
     return firstOf(n) + Math.max(0, i);
   }
 
+  function playChapter(): number {
+    return CHAPTERS.find((c) => c.released && c.levelIds.some((id) => !progress.get(id).cleared))?.n ?? 1;
+  }
+
+  /** Continue on a closing card: the next chapter's opening card when it is released, else back to the end card. */
+  function goOn(): void {
+    const next = nextChapter(chapterN);
+    if (next?.released) showChapter(next.n, false);
+    else leave("chapter");
+  }
+
+  /** Next level from the end card: a chapter's first level shows that chapter's opening card first. */
+  function nextLevel(): void {
+    pick((controls?.game ?? game)!.trial + 1);
+  }
+
   function showChapter(n: number, closing: boolean, target = resumeOf(n)): void {
     chapterN = n;
     chapterClosing = closing;
@@ -316,7 +335,7 @@ export function createUi(deps: UiDeps): Ui {
       next: nextChapter(chapterN),
       onEnter: enter,
       onLevels: () => layers.open("levels"),
-      onClose: () => leave("chapter"),
+      onClose: () => (chapterClosing ? goOn() : leave("chapter")),
     });
     renderLevels($("levels-root"), {
       open: layers.isOpen("levels"),
@@ -345,7 +364,7 @@ export function createUi(deps: UiDeps): Ui {
     renderEndCard($("end-root"), {
       ...end,
       open: layers.isOpen("end"),
-      onNext: () => open((g?.trial ?? 0) + 1),
+      onNext: nextLevel,
       onRetry: () => open(g?.trial ?? 0),
       onTrials: () => layers.open("levels"),
       onUndo: () => g?.press("undo"),
@@ -533,6 +552,7 @@ export function createUi(deps: UiDeps): Ui {
       pending = [];
       const name = out ? out.name : s.level.title;
       log.push({ text: s.level.intro ? `${name}: ${s.level.intro}` : name, tone: "info" });
+      if (!out) listed = chapterOf(g.trial).chapter.n;
       layers.open("start");
     }
 
@@ -782,7 +802,7 @@ export function createUi(deps: UiDeps): Ui {
       // Enter presses that button instead.
       if (layers.isOpen("chapter") && action === "begin" && onDefault(focused?.id, "chapter-", "chapter-enter", "chapter-continue")) {
         ev.preventDefault();
-        if (chapterClosing) layers.close("chapter");
+        if (chapterClosing) goOn();
         else enter();
         return;
       }
@@ -791,7 +811,7 @@ export function createUi(deps: UiDeps): Ui {
       if (layers.isOpen("end") && end.won) {
         if (action === "begin" && end.hasNext && onDefault(focused?.id, "end-", "end-next")) {
           ev.preventDefault();
-          open(c.game.trial + 1);
+          nextLevel();
           return;
         }
         if (action === "restart") {
@@ -870,6 +890,7 @@ export function createUi(deps: UiDeps): Ui {
     showTitle,
     showLevels: () => layers.open("levels"),
     showChapter: (n, closing) => showChapter(n, closing),
+    playChapter,
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
     showEditor,

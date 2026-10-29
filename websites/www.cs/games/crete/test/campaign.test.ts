@@ -2,15 +2,13 @@
 // placed in exactly one level, every quotation cited by author, work, section, translator and year.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHAPTERS, LEVEL_IDS, chapterOf, pageHome, nextChapter } from '../src/campaign/chapters.ts';
+import { CHAPTERS, LEVEL_IDS, chapterOf, pageHome, nextChapter, levelById } from '../src/campaign/chapters.ts';
 import type { Quote } from '../src/campaign/lore.ts';
-import { TRIALS, trialLevel } from '../src/puzzle/trials.ts';
+import { trialLevel } from '../src/puzzle/trials.ts';
 
 const CITE = /^[A-Z][^,]+, .+, .+, tr\. .+ \(\d{4}\)$/;
 const released = CHAPTERS.filter(c => c.released);
-/** The levels that exist so far, by level index (Task 3 adds levels 9 and 10). */
-const existing = LEVEL_IDS.flatMap((id, i) => (TRIALS.some(t => t.id === id) ? [i] : []));
-const levelOf = (i: number) => trialLevel(TRIALS.findIndex(t => t.id === LEVEL_IDS[i]));
+const levelOf = (i: number) => levelById(LEVEL_IDS[i]!);
 
 test('ten chapters, numbered 1 to 10; Chapter 1 is The Outer Halls and released', () => {
   assert.equal(CHAPTERS.length, 10);
@@ -54,23 +52,26 @@ test('chapterOf maps a level index to its chapter and place in it', () => {
 
 test('nextChapter is the following chapter, or null after the last', () => {
   assert.equal(nextChapter(1), CHAPTERS[1]);
-  assert.equal(nextChapter(1)!.released, false);
+  assert.equal(nextChapter(1)!.released, true);
+  assert.equal(nextChapter(2)!.released, false);
   assert.equal(nextChapter(10), null);
 });
 
-test('Chapter 1 has two pages with ch1- ids; page ids are unique across chapters', () => {
+test('each released chapter has two pages with chN- ids; page ids are unique across chapters', () => {
   const ids = released.flatMap(c => c.lore!.pages.map(p => p.id));
-  assert.equal(CHAPTERS[0]!.lore!.pages.length, 2);
   ids.forEach(id => assert.match(id, /^[a-z0-9-]+$/));
-  CHAPTERS[0]!.lore!.pages.forEach(p => {
-    assert.match(p.id, /^ch1-/);
-    assert.ok(p.title.length > 0 && p.text.length > 0, `page ${p.id} is empty`);
+  released.forEach(c => {
+    assert.equal(c.lore!.pages.length, 2, `chapter ${c.n}`);
+    c.lore!.pages.forEach(p => {
+      assert.match(p.id, new RegExp(`^ch${c.n}-`));
+      assert.ok(p.title.length > 0 && p.text.length > 0, `page ${p.id} is empty`);
+    });
   });
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test('every page a level names is in its chapter\'s lore (levels that exist so far)', () => {
-  for (const i of existing) {
+test('every page a level names is in its chapter\'s lore', () => {
+  for (let i = 0; i < LEVEL_IDS.length; i++) {
     const { chapter } = chapterOf(i);
     const known = new Set(chapter.lore!.pages.map(p => p.id));
     levelOf(i).pageIds.forEach(id => assert.ok(known.has(id), `level ${i + 1} names unknown page ${id}`));
@@ -96,8 +97,17 @@ test('every quotation has text and a full citation', () => {
   });
 });
 
-test('the closing card leaves the next chapter to the UI', () => {
-  assert.doesNotMatch(CHAPTERS[0]!.lore!.closing.text, /chapter 2|not yet released/i);
+test('the closing cards leave the next chapter to the UI', () => {
+  released.forEach(c => assert.doesNotMatch(c.lore!.closing.text, /chapter \d|not yet released/i, `chapter ${c.n}`));
+});
+
+test("Chapter 2's quotations are all Plutarch's Life of Theseus in Perrin's 1914 translation, chapters 15 to 17", () => {
+  const l = CHAPTERS[1]!.lore!;
+  const quotes = [l.opening.quote, l.closing.quote, ...l.pages.map(p => p.quote)];
+  quotes.forEach(q => {
+    assert.ok(q, 'every card and page has its quotation');
+    assert.match(q.cite, /^Plutarch, Theseus, 1[5-7]\.\d, tr\. Bernadotte Perrin \(1914\)$/);
+  });
 });
 
 test('trial 8 no longer ends the tribute', () => {

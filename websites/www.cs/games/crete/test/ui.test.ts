@@ -270,7 +270,7 @@ const text = (id: string) => byId(rootOf(id), id).textContent;
 function win(i: number): void {
   game.open(i);
   key('Enter');
-  const r = solve(initial(trialLevel(i)));
+  const r = solve(initial(levels.level(i)));
   assert.ok(r.solved);
   for (const a of r.line) game.press(a);
   assert.equal(game.run!.now.outcome, 'won');
@@ -398,17 +398,29 @@ test('the level list over the story card keeps the story cut', () => {
   assert.equal(tracks[tracks.length - 1], 'story');
 });
 
-test('left and right in the levels list keep the one released chapter shown', () => {
+test('left and right in the levels list switch between the released chapters, clamped at the ends', () => {
   reset();
+  game.open(0);
+  key('Enter');
   key('n');
   assert.equal(flow.top(), 'levels');
+  const pressed = (n: number) => byId(rootOf(`levels-tab-${n}`), `levels-tab-${n}`).getAttribute('aria-pressed');
   key('ArrowRight');
+  assert.equal(pressed(2), 'true');
+  assert.ok(byId(document.getElementById('levels-root'), 'level-1').textContent.includes(levels.level(10).title), "Chapter 2's levels are listed");
   key('d');
+  assert.equal(pressed(2), 'true', 'clamped at the last released chapter');
   key('ArrowLeft');
+  assert.equal(pressed(1), 'true');
   key('a');
+  assert.equal(pressed(1), 'true', 'clamped at the first');
   assert.equal(flow.top(), 'levels');
-  assert.equal(byId(rootOf('levels-tab-1'), 'levels-tab-1').getAttribute('aria-pressed'), 'true');
-  assert.ok(byId(document.getElementById('levels-root'), 'level-1'));
+  key('ArrowRight');
+  pick(1);
+  assert.equal(flow.top(), 'chapter', "Chapter 2's first level shows its opening card first");
+  assert.equal(text('chapter-title'), 'The Winding Ways');
+  key('Enter');
+  assert.equal(game.trial, 10);
 });
 
 test('Enter on the end card with the focus moved to Levels opens the list, not the next level', () => {
@@ -447,14 +459,16 @@ test('a held Enter repeats nothing: it does not close the start card or start a 
   assert.equal(flow.top(), 'start');
 });
 
-test('a held Enter after level 10 closes the closing card once and does not restart the level', () => {
+test('a held Enter after level 10 goes on from the closing card once and starts no level', () => {
   reset();
   win(9);
   const opens = game.opens;
   key('Enter');
-  assert.equal(flow.top(), 'end');
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Winding Ways');
   fireDocument('keydown', { key: 'Enter', repeat: true, target: { tagName: 'DIV' } });
   assert.equal(game.opens, opens);
+  assert.equal(flow.top(), 'chapter');
 });
 
 test('Play opens the chapter card, and Enter on it starts level 1 when nothing is cleared', () => {
@@ -525,15 +539,64 @@ test('N opens the levels list over a level in play', () => {
   assert.equal(flow.top(), 'levels');
 });
 
-test('the closing card takes Enter as Continue, and does not start a level', () => {
+test("Chapter 1's closing card takes Enter as Continue to Chapter 2's opening card, and starts no level", () => {
   reset();
   const opened = game.opens;
   flow.showChapter(1, true);
   assert.equal(flow.top(), 'chapter');
-  assert.match(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /Chapter 2 is not yet released/);
+  assert.doesNotMatch(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /not yet released/);
+  key('Enter');
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-kicker'), 'Chapter 2 of 10');
+  assert.equal(text('chapter-title'), 'The Winding Ways');
+  assert.ok(el('chapter-enter'), 'the opening card');
+  assert.equal(game.opens, opened);
+  key('Enter');
+  assert.equal(game.trial, 10, "Enter the halls starts Chapter 2's first level");
+  assert.equal(flow.top(), 'start');
+});
+
+test("Continue on Chapter 1's closing card, clicked, opens Chapter 2's opening card too", () => {
+  reset();
+  flow.showChapter(1, true);
+  click(byId(rootOf('chapter-continue'), 'chapter-continue'));
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Winding Ways');
+  assert.ok(el('chapter-enter'));
+});
+
+test("Chapter 2's closing card says Chapter 3 is not yet released, and Continue puts it away", () => {
+  reset();
+  const opened = game.opens;
+  flow.showChapter(2, true);
+  assert.match(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /Chapter 3 is not yet released/);
   key('Enter');
   assert.equal(flow.top(), null);
   assert.equal(game.opens, opened);
+});
+
+test('Play opens the chapter to play on: the first with a level not yet cleared', () => {
+  reset();
+  assert.equal(flow.playChapter(), 1);
+  for (const id of LEVEL_IDS.slice(0, 10)) cleared.add(id);
+  assert.equal(flow.playChapter(), 2);
+  flow.showChapter(flow.playChapter(), false);
+  key('Enter');
+  assert.equal(game.trial, 10);
+  for (const id of LEVEL_IDS) cleared.add(id);
+  assert.equal(flow.playChapter(), 1, 'every level cleared: back to Chapter 1');
+});
+
+test("the level list opens on the chapter of the level in play", () => {
+  reset();
+  game.open(12);
+  key('Enter');
+  key('n');
+  assert.equal(flow.top(), 'levels');
+  assert.equal(byId(rootOf('levels-tab-2'), 'levels-tab-2').getAttribute('aria-pressed'), 'true');
+  assert.equal(document.activeElement?.id, 'level-3', 'the level in play has the focus');
+  key('Enter');
+  assert.equal(game.trial, 12);
 });
 
 test('the end card words a win as Level N cleared and a loss as Level failed', () => {
@@ -763,12 +826,32 @@ test('a win that takes no page has no page line', () => {
   assert.equal(el('end-pages'), undefined);
 });
 
-test('winning level 10 opens the closing card over the end card, and the end card waits until Continue', () => {
+test('winning level 10 opens the closing card over the end card; Continue goes on to Chapter 2', () => {
   reset();
   win(9);
   assert.equal(flow.top(), 'chapter');
   assert.match(text('chapter-text'), /Labyrinth begins here/);
   assert.equal(byId(rootOf('end-veil'), 'end-veil').hidden, true);
+  key('Enter');
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Winding Ways');
+  // Q puts Chapter 2's card away: the end card under it offers Next level, which shows the card again.
+  key('q');
+  assert.equal(flow.top(), 'end');
+  assert.equal(text('end-kicker'), 'Level 10 cleared');
+  assert.ok(el('end-next'), 'Chapter 2 is next');
+  key('Enter');
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Winding Ways');
+  key('Enter');
+  assert.equal(game.trial, 10);
+});
+
+test("winning Chapter 2's last level opens its closing card, and no Next level follows it", () => {
+  reset();
+  win(19);
+  assert.equal(flow.top(), 'chapter');
+  assert.match(text('chapter-veil'), /Chapter 3 is not yet released/);
   key('Enter');
   assert.equal(flow.top(), 'end');
   assert.equal(el('end-next'), undefined);

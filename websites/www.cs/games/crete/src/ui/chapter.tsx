@@ -1,7 +1,8 @@
 // The Island of Crete: a chapter's card. The opening card (the chapter's words and quotation, Enter the halls
 // and Levels) shows before its first level; the closing card (its own words and quotation, what comes next,
-// Continue) shows after its last. src/ui.ts picks which and owns the keys (Enter is Begin, N is Levels, Q is
-// back), so the dialog is given no onDismiss.
+// Continue, which goes on to the next chapter's opening card once that chapter is released) shows after its
+// last. src/ui.ts picks which and owns the keys (Enter is Begin, N is Levels, Q is back), so the dialog is given
+// no onDismiss.
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';

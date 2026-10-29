@@ -3,9 +3,11 @@
  * play order; a level index is a place in it. DOM-free. */
 import type { ChapterLore } from './lore.ts';
 import { CHAPTER_1 } from './chapter-1.ts';
+import { CHAPTER_2 } from './chapter-2.ts';
 import type { Level } from '../puzzle/level.ts';
 import type { Action } from '../puzzle/step.ts';
 import { TRIALS, trialLevel } from '../puzzle/trials.ts';
+import { WAYS, wayLevel } from '../puzzle/ways.ts';
 
 export interface Chapter {
   n: number; name: string; released: boolean; levelIds: readonly string[];
@@ -24,13 +26,25 @@ export const CHAPTERS: readonly Chapter[] = [
     teaching: 8,
     lore: CHAPTER_1,
   },
-  ...Array.from({ length: 9 }, (_, i) => unreleased(i + 2)),
+  {
+    n: 2, name: 'The Winding Ways', released: true,
+    levelIds: WAYS.map(w => w.id),
+    teaching: 3,
+    lore: CHAPTER_2,
+  },
+  ...Array.from({ length: 8 }, (_, i) => unreleased(i + 3)),
 ];
 
 export const LEVEL_IDS: readonly string[] = CHAPTERS.filter(c => c.released).flatMap(c => c.levelIds);
 
-/** A released level's level, by id. */
-export const levelById = (id: string): Level => trialLevel(TRIALS.findIndex(t => t.id === id));
+/** A released level's level, by id: a trial (Chapter 1) or one of the winding ways (Chapter 2). */
+export function levelById(id: string): Level {
+  const t = TRIALS.findIndex(x => x.id === id);
+  if (t >= 0) return trialLevel(t);
+  const w = WAYS.findIndex(x => x.id === id);
+  if (w >= 0) return wayLevel(w);
+  throw new RangeError(`no level ${id}`);
+}
 
 /** A level from outside the campaign: one the author is trying in the editor, or one a link shared. */
 export interface OutsideLevel {
@@ -58,7 +72,7 @@ export interface Levels {
   won?(i: number, moves: number, assisted: boolean): void;
 }
 
-/** LEVEL_IDS, each built from its trial. */
+/** LEVEL_IDS, each built from its level text. */
 export const CAMPAIGN_LEVELS: Levels = {
   count: LEVEL_IDS.length,
   id: i => LEVEL_IDS[i]!,
@@ -78,10 +92,7 @@ export function chapterOf(levelIndex: number): { chapter: Chapter; within: numbe
 
 /** The level indexes whose `pages:` header names `pageId`. */
 export function pageHome(pageId: string): number[] {
-  return LEVEL_IDS.flatMap((id, i) => {
-    const t = TRIALS.findIndex(x => x.id === id);
-    return t >= 0 && trialLevel(t).pageIds.includes(pageId) ? [i] : [];
-  });
+  return LEVEL_IDS.flatMap((id, i) => (levelById(id).pageIds.includes(pageId) ? [i] : []));
 }
 
 /** The chapter after `n`, released or not; null after the last. */

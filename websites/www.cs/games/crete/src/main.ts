@@ -216,10 +216,10 @@ function onFullscreenChange(): void {
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
-/* Play on the title card opens Chapter 1's card. A click is the gesture that lets a remembered full screen return. */
+/* Play on the title card opens the card of the chapter to play on. A click is the gesture that lets a remembered full screen return. */
 function play(): void {
   if (settings.fullscreen.get() === 'on' && !appEnv.fullscreenElement()) toggleFullscreen();
-  ui.showChapter(1, false);
+  ui.showChapter(ui.playChapter(), false);
 }
 
 /* Quit (the menu's): the cards close and the editor's visit ends; an installed app closes where it may, and

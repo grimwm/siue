@@ -1,8 +1,13 @@
-/* Entry: wires the game, the board, audio, the UI, the level editor and share links, opens the title card (or, with
+/* Entry: wires the game, the board, audio and music, the UI, the level editor and share links, opens the title card (or, with
  * ?seed=, Chapter 1's card over it; with #edit, the editor; with a share link, its card), and exposes
  * window.__creteTest for the browser specs. */
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
 import { createAudio } from './audio.ts';
+import { createAudioCore } from '../../_kit/audio/core.ts';
+import { createMusic, trackFor } from './music.ts';
+import type { Track } from './music.ts';
+import { mediaDeck, pickSource } from './music-decks.ts';
+import type { AudioSource } from './music-decks.ts';
 import { createBoard } from './board.ts';
 import { drawList } from './board-plan.ts';
 import type { Atlas } from './board-plan.ts';
@@ -38,9 +43,35 @@ declare global {
   }
 }
 
+// The music files' content hashes, injected by the build (build.json versions), so a new render is fetched.
+declare const TITLE_WEBM_V: string;
+declare const TITLE_M4A_V: string;
+declare const STORY_WEBM_V: string;
+declare const STORY_M4A_V: string;
+
 const atlas = atlasJson as Atlas;
 const clock = { now: (): number => performance.now() };
-const audio = createAudio();
+const core = createAudioCore();
+const audio = createAudio(core);
+/* The title theme and its story cut, each as Opus in WebM or, for Safari, AAC. They stream on demand: the service
+   worker neither precaches them nor keeps them, so offline play goes on without music. */
+const OPUS = 'audio/webm; codecs="opus"';
+const AAC = 'audio/mp4; codecs="mp4a.40.2"';
+const MUSIC_FILES: Record<Track, AudioSource[]> = {
+  title: [{ url: `audio/music/title.webm?v=${TITLE_WEBM_V}`, type: OPUS }, { url: `audio/music/title.m4a?v=${TITLE_M4A_V}`, type: AAC }],
+  story: [{ url: `audio/music/story.webm?v=${STORY_WEBM_V}`, type: OPUS }, { url: `audio/music/story.m4a?v=${STORY_M4A_V}`, type: AAC }],
+};
+/** Whether this browser can stream either encoding at all. */
+const canStream = typeof Audio === 'function' && pickSource(MUSIC_FILES.title, t => new Audio().canPlayType(t)) !== null;
+const music = createMusic({
+  deck: track => {
+    const el = new Audio();
+    return mediaDeck(core, pickSource(MUSIC_FILES[track], t => el.canPlayType(t))?.url ?? '', el);
+  },
+  timers: browserTimers,
+});
+/** Music plays when the browser can stream it and both switches are on. */
+const followMusicSwitches = (): void => music.setEnabled(canStream && audio.musicHeard());
 const settings = createSettings(browserStorage());
 const appEnv = browserAppEnv();
 const image = new Image();
@@ -56,7 +87,7 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   bestWon: (text, moves) => editor.tryWon(text, moves),
 });
 const levels = outside.levels;
-const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx });
+const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx, cards: view => music.want(trackFor(view)) });
 /* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
    which comes first. */
 const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
@@ -146,7 +177,24 @@ function toggleMute(): void {
   const muted = audio.toggleMute();
   ui.setMuted(muted);
   settings.sound.set(muted ? 'off' : 'on');
+  followMusicSwitches();
   ui.say(muted ? 'Sound off.' : 'Sound on.', 'info');
+}
+
+/* The Music switch: the music bus alone. Sound off still silences it. */
+function toggleMusic(): void {
+  const on = settings.music.get() !== 'on';
+  settings.music.set(on ? 'on' : 'off');
+  audio.setMusic(on);
+  ui.setMusic(on);
+  followMusicSwitches();
+  ui.say(on ? 'Music on.' : 'Music off.', 'info');
+}
+
+/* A gesture wakes the speakers and starts music the browser held back until one. */
+function wake(): void {
+  audio.ensure();
+  music.kick();
 }
 
 function toggleFullscreen(): void {
@@ -197,13 +245,18 @@ function loop(now: number): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleFullscreen, wake: audio.ensure, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
   });
   if (settings.sound.get() === 'off') {
     audio.toggleMute();
     ui.setMuted(true);
   }
+  if (settings.music.get() === 'off') {
+    audio.setMusic(false);
+    ui.setMusic(false);
+  }
+  followMusicSwitches();
   let direct = false;
   try {
     direct = new URL(window.location.href).searchParams.has('seed');
@@ -230,8 +283,14 @@ function start(): void {
   };
   image.src = 'fx/sprites/tiles.png';
 }
-// A hidden tab runs no play-out; showing it again leaves it stopped.
-followPage({ doc: document, win: window }, { hide: game.stop, show: () => {} });
+// A hidden tab runs no play-out and holds the music; showing it again leaves the play-out stopped and the music going on.
+followPage({ doc: document, win: window }, {
+  hide: () => {
+    game.stop();
+    music.hold();
+  },
+  show: music.release,
+});
 // The page going away cancels a shared level's rating; a page brought back from the browser's cache rates it again.
 window.addEventListener('pagehide', () => visit.leave());
 window.addEventListener('pageshow', e => { if (e.persisted) visit.back(); });

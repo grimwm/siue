@@ -49,3 +49,10 @@ test("the help names Daedalus's snare, the Bronze ball, the Harpy and Talos's fi
   }
   assert.match(all, /you, then the hazards, then the Minotaur/);
 });
+
+test('the help says what the Music switch does and credits the music and its samples', () => {
+  const all = text(helpLines(KEYS, TOOLS));
+  assert.match(all, /Music in this menu turns the music off; M silences everything\./);
+  assert.match(all, /VSCO-2 Community Edition by Versilian Studios \(CC0\)/);
+  assert.match(all, /organ sampled by Simon Dalzell of Ivy Audio/);
+});

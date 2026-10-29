@@ -6,10 +6,13 @@ import type { StorageLike } from "../../_kit/ports.ts";
 
 export type OnOff = "on" | "off";
 export const SOUND_KEY = "crete-sound";
+export const MUSIC_KEY = "crete-music";
 export const FULLSCREEN_KEY = "crete-fullscreen";
 
 export interface Settings {
   sound: Pref<OnOff>;
+  /** The title theme and the story cut; Sound off silences them too. */
+  music: Pref<OnOff>;
   /** Whether the player was in full screen last; Play goes back there. */
   fullscreen: Pref<OnOff>;
 }
@@ -17,6 +20,7 @@ export interface Settings {
 export function createSettings(storage: StorageLike | null): Settings {
   return {
     sound: pref<OnOff>(SOUND_KEY, "on", oneOf<OnOff>(["on", "off"], "on"), storage),
+    music: pref<OnOff>(MUSIC_KEY, "on", oneOf<OnOff>(["on", "off"], "on"), storage),
     fullscreen: pref<OnOff>(FULLSCREEN_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
   };
 }

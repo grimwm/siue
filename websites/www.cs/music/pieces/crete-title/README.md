@@ -16,6 +16,10 @@ Make a draft's audio and spectrogram with `make music-render PIECE=crete-title V
   `crete-title-short`.
 - v2: the full theme.
 
+The game plays draft 3: `CUT=full` under the title card and `CUT=story` (the
+organ held back, 4 LU quieter) on the story cards, as
+`games/crete/audio/music/`.
+
 ## Credits
 
 Samples: VSCO-2 Community Edition 1.1.0 by Versilian Studios (CC0 1.0): harp,

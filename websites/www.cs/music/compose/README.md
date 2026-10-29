@@ -13,6 +13,13 @@ draft folders `make music-publish` sends (`music/pieces/<piece>/v<n>/`).
   writes `score.json`, `score.musicxml`, `audio.webm` (Opus, 96 kb/s) and
   `spectrogram.png`. It refuses a draft that breaks a check, fails the
   workroom's score rules or is over 8 MB.
+- `make music-render PIECE=crete-title VERSION=3 CUT=story` mixes that rendered
+  draft's stems again as a cut (`siue_compose/cut.py`): each lane's gain moved
+  by the piece's `CUTS[<name>]`, through the same master chain and loop fold,
+  to the cut's own loudness. It writes `cuts/<name>.webm` (Opus, 96 kb/s) and
+  `cuts/<name>.m4a` (AAC, 96 kb/s, for Safari) in the draft folder. `CUT=full`
+  is every piece's: every lane as composed, the draft's own mix. Games take
+  their music from cuts.
 - `make music-compose-test` runs the tests in the container.
 
 ## Checks
@@ -32,5 +39,5 @@ are used; their credits go in each piece's README.
 - VSCO-2 Community Edition 1.1.0 (CC0 1.0) by Versilian Studios; the organ was
   sampled by Simon Dalzell of Ivy Audio.
 
-Renders (`audio.webm`, `spectrogram.png`, `stems/`, `midi/`) are git-ignored:
+Renders (`audio.webm`, `spectrogram.png`, `stems/`, `midi/`, `cuts/`) are git-ignored:
 the same source, container and samples make them again.

@@ -12,6 +12,8 @@
 *.ico   binary
 *.mp3   binary
 *.ogg   binary
+*.webm  binary
+*.m4a   binary
 *.woff  binary
 *.woff2 binary
 

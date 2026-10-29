@@ -74,6 +74,14 @@ test('Tabs: the arrows wrap around the ends', async () => {
   assert.deepEqual(picked, ['a']);
 });
 
+test('Button: a pressed toggle is drawn filled amber, and unpressed it is drawn as its variant', async () => {
+  const find = async (pressed: boolean) => walk(await mount(h(c.button.Button, { pressed, onClick: () => {} }, 'Loop'))).find(e => e.localName === 'button')!;
+  const on = await find(true);
+  assert.ok(classes(on).includes('bg-amber') && classes(on).includes('text-on-accent') && !classes(on).includes('bg-panel'), classes(on).join(' '));
+  const off = await find(false);
+  assert.ok(classes(off).includes('bg-panel') && !classes(off).includes('bg-amber'), classes(off).join(' '));
+});
+
 test('Chip: a glossary word carries its term; a toggle carries aria-pressed', async () => {
   let n = 0;
   const word = await mount(h(c.chip.Chip, { term: 'ostinato', onClick: () => { n++; } }, 'ostinato'));

@@ -62,6 +62,13 @@ class ExportTest(unittest.TestCase):
                         got.add((float(n.getOffsetInHierarchy(parsed)), x.pitch.midi))
         self.assertEqual(got, {(float(n.beat), n.pitch) for n in p.notes})
 
+    def test_musicxml_parts_are_named_by_lane_id(self):
+        # The workroom's Sheet music view finds a lane's part by this id (games/workroom/src/musicxml.ts onlyLane).
+        import re
+        xml = musicxml(piece())
+        self.assertEqual(re.findall(r'<score-part id="([^"]+)"', xml), ["lyre", "drone"])
+        self.assertEqual(re.findall(r'<part id="([^"]+)"', xml), ["lyre", "drone"])
+
     def test_midi_has_every_note(self):
         files = midi_files(piece())
         self.assertEqual(sorted(files), ["drone", "lyre"])

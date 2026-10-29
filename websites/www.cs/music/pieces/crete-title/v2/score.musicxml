@@ -21,30 +21,30 @@
     </scaling>
   </defaults>
   <part-list>
-    <score-part id="P1">
+    <score-part id="lyre">
       <part-name>Lyre</part-name>
     </score-part>
-    <score-part id="P2">
+    <score-part id="cellos">
       <part-name>Cellos (tune)</part-name>
     </score-part>
-    <score-part id="P3">
+    <score-part id="organ-tune">
       <part-name>Organ (tune)</part-name>
     </score-part>
-    <score-part id="P4">
+    <score-part id="organ">
       <part-name>Organ</part-name>
     </score-part>
-    <score-part id="P5">
+    <score-part id="horn">
       <part-name>Horn (far)</part-name>
     </score-part>
-    <score-part id="P6">
+    <score-part id="drone">
       <part-name>Drone (cellos)</part-name>
     </score-part>
-    <score-part id="P7">
+    <score-part id="deep">
       <part-name>Deep drone (bass)</part-name>
     </score-part>
   </part-list>
   <!--=========================== Part 1 ===========================-->
-  <part id="P1">
+  <part id="lyre">
     <!--========================= Measure 1 ==========================-->
     <measure implicit="no" number="1">
       <attributes>
@@ -3124,7 +3124,7 @@
     </measure>
   </part>
   <!--=========================== Part 2 ===========================-->
-  <part id="P2">
+  <part id="cellos">
     <!--========================= Measure 1 ==========================-->
     <measure implicit="no" number="1">
       <attributes>
@@ -3710,7 +3710,7 @@
     </measure>
   </part>
   <!--=========================== Part 3 ===========================-->
-  <part id="P3">
+  <part id="organ-tune">
     <!--========================= Measure 1 ==========================-->
     <measure implicit="no" number="1">
       <attributes>
@@ -4296,7 +4296,7 @@
     </measure>
   </part>
   <!--=========================== Part 4 ===========================-->
-  <part id="P4">
+  <part id="organ">
     <!--========================= Measure 1 ==========================-->
     <measure implicit="no" number="1">
       <attributes>
@@ -6157,7 +6157,7 @@
     </measure>
   </part>
   <!--=========================== Part 5 ===========================-->
-  <part id="P5">
+  <part id="horn">
     <!--========================= Measure 1 ==========================-->
     <measure implicit="no" number="1">
       <attributes>
@@ -6717,7 +6717,7 @@
     </measure>
   </part>
   <!--=========================== Part 6 ===========================-->
-  <part id="P6">
+  <part id="drone">
     <!--========================= Measure 1 ==========================-->
     <measure implicit="no" number="1">
       <attributes>
@@ -8526,7 +8526,7 @@
     </measure>
   </part>
   <!--=========================== Part 7 ===========================-->
-  <part id="P7">
+  <part id="deep">
     <!--========================= Measure 1 ==========================-->
     <measure implicit="no" number="1">
       <attributes>

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { axisTicks, formatSeconds, secondsTicks, thinTicks } from '../src/axis.ts';
+import { axisTicks, formatClock, formatSeconds, secondsTicks, thinTicks } from '../src/axis.ts';
 import { tempoMap } from '../src/tempo.ts';
 import { fitView, zoomAt, boundsFor } from '../src/zoom.ts';
 import type { Score } from '../src/score.ts';
@@ -41,4 +41,8 @@ test('labels that would overlap are skipped, never squeezed', () => {
   const ticks = [{ x: 0, label: '1', bar: 1 }, { x: 10, label: '2', bar: 2 }, { x: 40, label: '300 ms', bar: null }, { x: 45, label: '350 ms', bar: null }, { x: 120, label: '400 ms', bar: null }];
   assert.deepEqual(thinTicks(ticks).map(t => t.label), ['1', '300 ms', '400 ms']);
   assert.deepEqual(thinTicks([]), []);
+});
+
+test('formatClock: minutes, seconds and hundredths, always the same width, never rounding up into the next second', () => {
+  assert.deepEqual([0, 0.05, 1.5, 9.999, 62.345, 216.8, 600].map(formatClock), ['0:00.00', '0:00.05', '0:01.50', '0:09.99', '1:02.34', '3:36.80', '10:00.00']);
 });

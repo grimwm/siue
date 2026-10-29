@@ -125,9 +125,9 @@ test('Sheet: the phone handle says what it holds and opens or closes it', async 
   assert.deepEqual(toggles, [true]);
 });
 
-test('Readout: time always, the bar only on a music piece', async () => {
+test('Readout: time always, as a fixed-width clock; the bar only on a music piece', async () => {
   const music = await mount(h(c.readout.Readout, { time: 1.5, bar: 3 }));
-  assert.equal(walk(music).find(e => e._attrs['data-clock'] !== undefined)!.textContent, '1.5 s');
+  assert.equal(walk(music).find(e => e._attrs['data-clock'] !== undefined)!.textContent, '0:01.50');
   assert.equal(walk(music).find(e => e._attrs['data-bar'] !== undefined)!.textContent, 'bar 3');
   const sound = await mount(h(c.readout.Readout, { time: 0.05, bar: null }));
   assert.equal(walk(sound).filter(e => e._attrs['data-bar'] !== undefined).length, 0);

@@ -1,11 +1,13 @@
-"""python3 -m siue_compose.cli render <piece> <version>: compose, render, check and validate one draft."""
+"""python3 -m siue_compose.cli render <piece> <version> [--cut <name>]: compose, render, check and validate one draft;
+with --cut, mix the rendered draft's stems again as that cut (the piece's CUTS, or full) into cuts/<name>.webm and .m4a."""
 import importlib
 import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .render import render
+from .cut import RenderError, cut_named
+from .render import render, render_cut
 from .samples import fetch
 
 COMPOSE = Path(__file__).resolve().parent.parent
@@ -21,8 +23,9 @@ GLOSSARY = MUSIC.parent / "games" / "workroom" / "src" / "glossary.json"
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3 or argv[0] != "render" or not argv[2].isdigit() or int(argv[2]) < 1:
-        print("usage: siue_compose.cli render <piece> <version>", file=sys.stderr)
+    shape = len(argv) == 3 or (len(argv) == 5 and argv[3] == "--cut")
+    if not shape or argv[0] != "render" or not argv[2].isdigit() or int(argv[2]) < 1:
+        print("usage: siue_compose.cli render <piece> <version> [--cut <name>]", file=sys.stderr)
         return 2
     piece_id, draft = argv[1], int(argv[2])
     module = importlib.import_module(f"pieces.{piece_id.replace('-', '_')}")
@@ -30,9 +33,19 @@ def main(argv: list[str]) -> int:
     if piece.piece_id != piece_id:
         print(f"pieces/{piece_id.replace('-', '_')}.py composes {piece.piece_id}, not {piece_id}", file=sys.stderr)
         return 1
+    out = MUSIC / "pieces" / piece_id / f"v{draft}"
+    cut = argv[4] if len(argv) == 5 else None
+    if cut is not None:
+        try:
+            made = render_cut(piece, out, cut, cut_named(getattr(module, "CUTS", {}), cut))
+        except RenderError as e:
+            print(e, file=sys.stderr)
+            return 1
+        for path in made:
+            print(f"{path}: {path.stat().st_size / 1e6:.1f} MB")
+        return 0
     manifest = json.loads((COMPOSE / "samples.json").read_text())
     root = fetch(manifest)[piece.lanes[0].instrument]
-    out = MUSIC / "pieces" / piece_id / f"v{draft}"
     made = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     problems = render(piece, draft, out, manifest, root, made, getattr(module, "CHANGES", {}).get(draft))
     problems += validate(json.loads((out / "score.json").read_text()), glossary_ids(GLOSSARY))

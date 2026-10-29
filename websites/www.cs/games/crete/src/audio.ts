@@ -1,7 +1,8 @@
 /* The Island of Crete: sound. A tiny synth on the kit's audio core, no
  * assets: the game names an event (`sfx('caught')`) and this module voices
- * it. A muted player, or a browser without Web Audio, hears nothing. DOM
- * program (src/tsconfig.dom.json). */
+ * it. The music (src/music.ts) plays on the core's music bus, which has its
+ * own switch; the Sound switch silences both. A muted player, or a browser
+ * without Web Audio, hears nothing. DOM program (src/tsconfig.dom.json). */
 import { createAudioCore } from "../../_kit/audio/core.ts";
 import type { AudioCore } from "../../_kit/audio/core.ts";
 import type { SfxName } from "./game.ts";
@@ -11,9 +12,16 @@ export interface Audio {
   ensure(): void;
   /** Voice an event. */
   sfx(name: SfxName): void;
-  /** Flip the mute switch; returns whether the sound is now muted. */
+  /** Flip the mute switch, which silences the effects and the music; returns whether the sound is now muted. */
   toggleMute(): boolean;
+  /** The Music switch: the music bus alone. */
+  setMusic(on: boolean): void;
+  /** Whether music can be heard: Sound on and Music on. */
+  musicHeard(): boolean;
 }
+
+/** The music bus's gain: the renders are mastered to -20 LUFS, which would cover the synth's quiet effects. */
+export const MUSIC_GAIN = 0.5;
 
 type Voice = [freq: number, dur: number, type?: OscillatorType, vol?: number, when?: number];
 
@@ -49,6 +57,10 @@ const VOICES: Record<SfxName, Voice[]> = {
 };
 
 export function createAudio(core: AudioCore = createAudioCore()): Audio {
+  let musicOn = true;
+  const musicHeard = (): boolean => musicOn && !core.isMuted("sfx");
+  const applyMusic = (): void => core.setMuted("music", !musicHeard());
+  core.setGain("music", MUSIC_GAIN);
   return {
     ensure() {
       if (!core.isMuted("sfx")) core.unlock();
@@ -61,8 +73,14 @@ export function createAudio(core: AudioCore = createAudioCore()): Audio {
     toggleMute() {
       const muted = !core.isMuted("sfx");
       core.setMuted("sfx", muted);
+      applyMusic();
       if (!muted) core.unlock();
       return muted;
     },
+    setMusic(on) {
+      musicOn = on;
+      applyMusic();
+    },
+    musicHeard,
   };
 }

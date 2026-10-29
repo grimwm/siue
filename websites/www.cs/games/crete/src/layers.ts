@@ -11,6 +11,8 @@ export type BackResult = "closed" | "opened" | "kept";
 
 export interface Layers {
   top(): LayerName | null;
+  /** Every open card, from the bottom up (a copy). */
+  stack(): LayerName[];
   /** True when `name` is the top card: the one a dialog shows. */
   isOpen(name: LayerName): boolean;
   /** True when `name` is anywhere in the stack. */
@@ -32,6 +34,7 @@ export function createLayers(onChange: () => void): Layers {
   const top = (): LayerName | null => stack[stack.length - 1] ?? null;
   return {
     top,
+    stack: () => [...stack],
     isOpen: (name) => top() === name,
     has: (name) => stack.includes(name),
     any: () => stack.length > 0,

@@ -61,9 +61,9 @@ test('Play and a ?seed= link open the chapter card', () => {
   assert.match(main, /if \(direct\) \{[^}]*ui\.showChapter\(1, false\)/);
 });
 
-test('the entry follows the page: hidden ends the play-out', () => {
+test('the entry follows the page: hidden ends the play-out and holds the music, shown goes on with the music', () => {
   const main = read('src/main.ts');
-  assert.match(main, /followPage\(\{ doc: document, win: window \}, \{ hide: game\.stop, show: \(\) => \{\} \}\)/);
+  assert.match(main, /followPage\(\{ doc: document, win: window \}, \{\s*hide: \(\) => \{\s*game\.stop\(\);\s*music\.hold\(\);\s*\},\s*show: music\.release,\s*\}\)/);
 });
 
 test('the page is one frame: no header, side panels or seed form, the board is a canvas, and the cards are inside it', () => {

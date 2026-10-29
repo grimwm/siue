@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from .checks import repetition, sharpness
+from .cut import LOUDNESS, Cut, RenderError, lane_gains
 from .export import midi_files, musicxml, score_json
 from .piece import Piece
 from .sfz import write_sfz
@@ -15,12 +16,8 @@ from .sfz import write_sfz
 RATE = 48000
 TAIL = 6.0  # seconds of reverb and release rendered past the end, then folded onto the start
 BITRATE = "96k"
-LOUDNESS = -20.0  # LUFS
+AAC_BITRATE = "96k"  # a cut's M4A, for browsers without Opus in WebM (Safari)
 PEAK = -3.0  # dBFS
-
-
-class RenderError(Exception):
-    pass
 
 
 def _run(*args: str) -> None:
@@ -74,11 +71,38 @@ def loudness(path: Path) -> float:
     return float(found[-1])
 
 
-def level(path: Path, samples: np.ndarray) -> float:
-    """One gain for the whole piece (a changing gain would break the loop point): LOUDNESS, or less if a peak would pass PEAK."""
-    gain = 10 ** ((LOUDNESS - loudness(path)) / 20)
+def level(path: Path, samples: np.ndarray, target: float = LOUDNESS) -> float:
+    """One gain for the whole piece (a changing gain would break the loop point): `target` LUFS, or less if a peak would pass PEAK."""
+    gain = 10 ** ((target - loudness(path)) / 20)
     peak = float(np.abs(samples).max())
     return min(gain, 10 ** (PEAK / 20) / peak) if peak > 0 else gain
+
+
+def _stem(path: Path, length: int, gain: float) -> np.ndarray:
+    """A lane's stem at its gain, cut or padded to the piece plus TAIL."""
+    audio = _read(path)[: length + int(TAIL * RATE)] * gain
+    return np.pad(audio, ((0, max(0, length + int(TAIL * RATE) - len(audio))), (0, 0)))
+
+
+def mixdown(stems: list[np.ndarray], length: int, work: Path) -> np.ndarray:
+    """The stems summed and through the lo-fi chain, the tail folded onto the start, with the hiss: the loop before its level."""
+    dry = np.sum(stems, axis=0)
+    _write(dry, work / "dry.wav")
+    _write(reverb_ir(), work / "ir.wav")
+    chain = (
+        "[0:a]asoftclip=type=tanh,vibrato=f=0.45:d=0.012,vibrato=f=5.5:d=0.003,highpass=f=30,lowpass=f=6500,lowpass=f=9000,asplit[d][w];"
+        "[w][1:a]afir=dry=0:wet=10[r];"
+        "[d][r]amix=inputs=2:weights='1 0.55':normalize=0,aformat=channel_layouts=stereo[o]"
+    )
+    _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "dry.wav"), "-i", str(work / "ir.wav"),
+         "-filter_complex", chain, "-map", "[o]", "-c:a", "pcm_f32le", str(work / "wet.wav"))
+    # The hiss goes on after the fold, so the loop's start does not carry two layers of it.
+    _run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+         f"anoisesrc=color=pink:amplitude=0.0015:sample_rate={RATE}:seed=3:duration={length / RATE:.6f},lowpass=f=5000",
+         "-ac", "2", "-c:a", "pcm_f32le", str(work / "hiss.wav"))
+    folded = fold(_read(work / "wet.wav"), length) + fold(_read(work / "hiss.wav"), length)
+    _write(folded, work / "folded.wav")
+    return folded
 
 
 def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, made: str, changes: list[dict] | None = None) -> list[str]:
@@ -98,26 +122,10 @@ def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, m
         sfz = write_sfz(lane, manifest["instruments"][lane.instrument], samples, work)
         stem = out / "stems" / f"{lane.id}.wav"
         _run("sfizz_render", "--sfz", str(sfz), "--midi", str(midi), "--wav", str(stem), "-s", str(RATE), "-q", "3")
-        audio = _read(stem)[: length + int(TAIL * RATE)] * (10 ** (lane.gain_db / 20))
-        stems.append(np.pad(audio, ((0, max(0, length + int(TAIL * RATE) - len(audio))), (0, 0))))
+        stems.append(_stem(stem, length, 10 ** (lane.gain_db / 20)))
     if not stems:
         raise RenderError("the piece has no notes")
-    dry = np.sum(stems, axis=0)
-    _write(dry, work / "dry.wav")
-    _write(reverb_ir(), work / "ir.wav")
-    chain = (
-        "[0:a]asoftclip=type=tanh,vibrato=f=0.45:d=0.012,vibrato=f=5.5:d=0.003,highpass=f=30,lowpass=f=6500,lowpass=f=9000,asplit[d][w];"
-        "[w][1:a]afir=dry=0:wet=10[r];"
-        "[d][r]amix=inputs=2:weights='1 0.55':normalize=0,aformat=channel_layouts=stereo[o]"
-    )
-    _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "dry.wav"), "-i", str(work / "ir.wav"),
-         "-filter_complex", chain, "-map", "[o]", "-c:a", "pcm_f32le", str(work / "wet.wav"))
-    # The hiss goes on after the fold, so the loop's start does not carry two layers of it.
-    _run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
-         f"anoisesrc=color=pink:amplitude=0.0015:sample_rate={RATE}:seed=3:duration={length / RATE:.6f},lowpass=f=5000",
-         "-ac", "2", "-c:a", "pcm_f32le", str(work / "hiss.wav"))
-    folded = fold(_read(work / "wet.wav"), length) + fold(_read(work / "hiss.wav"), length)
-    _write(folded, work / "folded.wav")
+    folded = mixdown(stems, length, work)
     _write(folded * level(work / "folded.wav", folded), work / "master.wav")
     _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "master.wav"), "-c:a", "libopus", "-b:a", BITRATE,
          "-t", f"{piece.duration:.6f}", str(out / "audio.webm"))
@@ -131,3 +139,27 @@ def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, m
     (out / "score.musicxml").write_text(musicxml(piece))
     shutil.rmtree(work)
     return problems
+
+
+def render_cut(piece: Piece, out: Path, name: str, cut: Cut) -> list[Path]:
+    """Mixes a rendered draft's stems again as `cut` and writes cuts/<name>.webm (Opus) and cuts/<name>.m4a (AAC)."""
+    out = Path(out)
+    gains = lane_gains(piece, cut)
+    length = round(piece.duration * RATE)
+    paths = [out / "stems" / f"{lane}.wav" for lane in gains]
+    present = [p for p in paths if p.is_file()]
+    if not present:
+        raise RenderError(f"{out} has no stems; run make music-render PIECE={piece.piece_id} first")
+    work = out / "work"
+    cuts = out / "cuts"
+    for d in (work, cuts):
+        d.mkdir(parents=True, exist_ok=True)
+    folded = mixdown([_stem(p, length, gains[p.stem]) for p in present], length, work)
+    _write(folded * level(work / "folded.wav", folded, cut.loudness), work / "master.wav")
+    made = [cuts / f"{name}.webm", cuts / f"{name}.m4a"]
+    _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "master.wav"), "-c:a", "libopus", "-b:a", BITRATE,
+         "-t", f"{piece.duration:.6f}", str(made[0]))
+    _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "master.wav"), "-c:a", "aac", "-b:a", AAC_BITRATE,
+         "-t", f"{piece.duration:.6f}", "-movflags", "+faststart", str(made[1]))
+    shutil.rmtree(work)
+    return made

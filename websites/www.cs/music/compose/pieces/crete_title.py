@@ -2,6 +2,7 @@
 (about 3.6 minutes) that loop. The tune comes four times and never the same way: on the lyre, in the cellos under a
 lyre ostinato, on the organ with the horn answering at the swell's peak (the turn lands on D major), and as a slow,
 high fragment as it fades. Draft 1 was the one-minute sketch, now its own piece (crete_title_short.py)."""
+from siue_compose.cut import Cut
 from siue_compose.piece import Character, Lane, Motif, Note, Piece, Section
 
 from pieces.crete_title_short import BAR, BPM, CHORDS, TUNE, sketch
@@ -181,6 +182,12 @@ CHANGES = {
         {"from_bar": 1, "to_bar": 56, "lane": None, "answers": [],
          "text": "Same music as draft 2; the sheet music now shows."},
     ],
+}
+
+# The game's story pages: the lyre and the drones as they are, the organ held well back, the horn and the cellos' tune
+# a little; quieter than the title card.
+CUTS = {
+    "story": Cut({"organ": -15.0, "organ-tune": -12.0, "horn": -6.0, "cellos": -3.0}, loudness=-24.0),
 }
 
 

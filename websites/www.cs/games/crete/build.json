@@ -6,6 +6,12 @@
     { "in": "src/tiles-page.ts", "out": "tiles-test", "format": "iife" },
     { "in": "src/solver-worker.ts", "out": "solver-worker", "format": "iife" }
   ],
-  "versions": { "SOLVER_WORKER_V": "dist/solver-worker.js" },
+  "versions": {
+    "SOLVER_WORKER_V": "dist/solver-worker.js",
+    "TITLE_WEBM_V": "audio/music/title.webm",
+    "TITLE_M4A_V": "audio/music/title.m4a",
+    "STORY_WEBM_V": "audio/music/story.webm",
+    "STORY_M4A_V": "audio/music/story.m4a"
+  },
   "kitCss": true
 }

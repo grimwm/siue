@@ -79,5 +79,10 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
       { strong: k("fullscreen") }, " toggles full screen and ", { strong: k("lore") }, " opens the Lore book. A story page you take opens in the Lore book at once; Enter, Space or ",
       { strong: k("menu") }, " closes it and play goes on.",
     ],
+    [
+      { strong: "Music" }, " in this menu turns the music off; ", { strong: k("mute") }, " silences everything. ",
+      "The title theme and its quieter cut on the story cards were made for the game, with samples from ",
+      "VSCO-2 Community Edition by Versilian Studios (CC0), the organ sampled by Simon Dalzell of Ivy Audio.",
+    ],
   ];
 }

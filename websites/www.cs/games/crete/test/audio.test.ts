@@ -2,7 +2,7 @@
 // and the gesture that wakes the speakers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createAudio } from '../src/audio.ts';
+import { MUSIC_GAIN, createAudio } from '../src/audio.ts';
 import { createAudioCore } from '../../_kit/audio/core.ts';
 import { asAudioContext, fakeAudioContext, gainAt, nodeOf, nodesOf } from '../../_kit/test/audio.ts';
 import type { FakeContext, ParamCall } from '../../_kit/test/audio.ts';
@@ -86,4 +86,33 @@ test('the new voices differ from each other and from the old ones', () => {
     assert.ok(!seen.has(n), `${name} sounds like ${seen.get(n)}`);
     seen.set(n, name);
   }
+});
+
+test('music has its own switch, on the music bus alone; Sound off silences the music too', () => {
+  const core = createAudioCore({ createContext: () => asAudioContext(fakeAudioContext()) });
+  const audio = createAudio(core);
+  assert.equal(audio.musicHeard(), true);
+  audio.setMusic(false);
+  assert.deepEqual([core.isMuted('music'), core.isMuted('sfx'), audio.musicHeard()], [true, false, false]);
+  audio.setMusic(true);
+  assert.deepEqual([core.isMuted('music'), audio.musicHeard()], [false, true]);
+  audio.toggleMute();
+  assert.deepEqual([core.isMuted('music'), core.isMuted('sfx'), audio.musicHeard()], [true, true, false]);
+  audio.setMusic(true);
+  assert.equal(core.isMuted('music'), true, 'Music on does not get past Sound off');
+  audio.toggleMute();
+  assert.deepEqual([core.isMuted('music'), audio.musicHeard()], [false, true]);
+  audio.setMusic(false);
+  audio.toggleMute();
+  audio.toggleMute();
+  assert.equal(core.isMuted('music'), true, 'Sound on again keeps Music off');
+});
+
+test('the music bus sits under the effects', () => {
+  const ctx = fakeAudioContext();
+  const core = createAudioCore({ createContext: () => asAudioContext(ctx) });
+  createAudio(core);
+  core.context();
+  assert.ok(MUSIC_GAIN > 0 && MUSIC_GAIN < 1);
+  assert.equal(nodeOf(ctx, 'gain', 1).gain.value, MUSIC_GAIN);
 });

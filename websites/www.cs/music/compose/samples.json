@@ -1,0 +1,393 @@
+{
+ "library": "VSCO-2 Community Edition 1.1.0",
+ "licence": "CC0 1.0 Universal",
+ "credit": "Versilian Studios; organ sampled by Simon Dalzell of Ivy Audio",
+ "source": "https://raw.githubusercontent.com/sgossner/VSCO-2-CE",
+ "commit": "28092772094b2d9f1148d84cea97f4545b8c687d",
+ "instruments": {
+  "harp": {
+   "files": [
+    {
+     "path": "Strings/Harp/KSHarp_A2_mf.wav",
+     "sha256": "1df9f4d138ca3931fcb458bcdf01304cadf2e5f4eef67bbc17b0e42c0e60fce6",
+     "pitch": 45
+    },
+    {
+     "path": "Strings/Harp/KSHarp_A4_mf.wav",
+     "sha256": "3665f3975cad4a33f46784aa4f896f4b4319ba2b7831e892d975bc38c9f09f23",
+     "pitch": 69
+    },
+    {
+     "path": "Strings/Harp/KSHarp_A6_mf.wav",
+     "sha256": "4605355d22fae6f58190bf0d033d2ebdd745d63e2e43204d6f41ad27e4f09af0",
+     "pitch": 93
+    },
+    {
+     "path": "Strings/Harp/KSHarp_B1_mf.wav",
+     "sha256": "284034807efbb429cb63f6fb744834b18e6281a4914e6460de0a5818b5d0d0e6",
+     "pitch": 35
+    },
+    {
+     "path": "Strings/Harp/KSHarp_B3_mf.wav",
+     "sha256": "f6f71be8c640822ef48a448b245585659acdfcc7ed5774e10f37be2fc02fcab4",
+     "pitch": 59
+    },
+    {
+     "path": "Strings/Harp/KSHarp_B5_mf.wav",
+     "sha256": "f2757b674c6b7301bed52e17a1ae3e3d34d628b3f7edc5773ebb25798d2541f7",
+     "pitch": 83
+    },
+    {
+     "path": "Strings/Harp/KSHarp_B6_mf.wav",
+     "sha256": "720e56b99f84d4ef1b9bc8cd3c217170320f523edb68488af3da76d2217e16f7",
+     "pitch": 95
+    },
+    {
+     "path": "Strings/Harp/KSHarp_C3_mf.wav",
+     "sha256": "e5d232771704e140959819de8cf2a3e0ba49d021ca77354c42664ce4fce6d9f3",
+     "pitch": 48
+    },
+    {
+     "path": "Strings/Harp/KSHarp_C5_mf.wav",
+     "sha256": "7c8b862f6fd3f1442ed87537af976d84bda8c05a5b4900e8907d570b5202a517",
+     "pitch": 72
+    },
+    {
+     "path": "Strings/Harp/KSHarp_D2_mf.wav",
+     "sha256": "b9cbdc08e43fc0b28ac70246df991cb390f5cbd7f31519b3cc7f70d283b70566",
+     "pitch": 38
+    },
+    {
+     "path": "Strings/Harp/KSHarp_D4_mf.wav",
+     "sha256": "ebfde8aab4411019e37e3426f4dd88d6a52a38c2d0261d7f10ec63d8ff584dc7",
+     "pitch": 62
+    },
+    {
+     "path": "Strings/Harp/KSHarp_D6_mf.wav",
+     "sha256": "b040b61fb279efa1a9b9c60dcbd8626a37f57ffb30f3b50747a2123ee4db5bd2",
+     "pitch": 86
+    },
+    {
+     "path": "Strings/Harp/KSHarp_D7_f.wav",
+     "sha256": "87ca6f45c5c242d9cd595911278290a4abdba587f71ed263acb1650236fcd4a7",
+     "pitch": 98
+    },
+    {
+     "path": "Strings/Harp/KSHarp_E1_f.wav",
+     "sha256": "70f534627d6155bab46262e0383a8b431c25fde78ca029947d453748b1f73038",
+     "pitch": 28
+    },
+    {
+     "path": "Strings/Harp/KSHarp_E3_mf.wav",
+     "sha256": "aafa9d41ec0f77da8f2891055af8b3f9557e0ba1f1df93d53ae6e1fda07afae5",
+     "pitch": 52
+    },
+    {
+     "path": "Strings/Harp/KSHarp_E5_mf.wav",
+     "sha256": "95dd9ddb0bd15bee7687906e00f25aafcaa43020cc9501f0e8b6cabf0e9a53ec",
+     "pitch": 76
+    },
+    {
+     "path": "Strings/Harp/KSHarp_F2_mf.wav",
+     "sha256": "d5c0fb42c176af334fd6f6d1b97858556619c51e177efb5b0c6c23bc19ce6dad",
+     "pitch": 41
+    },
+    {
+     "path": "Strings/Harp/KSHarp_F4_mf.wav",
+     "sha256": "db27ebbb37334c10e06f2ae63f4d9ff555e4d11704fcc6f0bcf503863867e577",
+     "pitch": 65
+    },
+    {
+     "path": "Strings/Harp/KSHarp_F6_mf.wav",
+     "sha256": "7cf4c012542df737be39900af262fdd980681956e734f43af106718184f34213",
+     "pitch": 89
+    },
+    {
+     "path": "Strings/Harp/KSHarp_F7_f.wav",
+     "sha256": "638b40d6c6c674257daa89b0b1e5108973ccbf13d7cc282e21266d3fb71500c5",
+     "pitch": 101
+    },
+    {
+     "path": "Strings/Harp/KSHarp_G1_mp.wav",
+     "sha256": "f9fa1a6ea784320125fef31495ff223ceea675641d0728c2a33b431c06a78bfb",
+     "pitch": 31
+    },
+    {
+     "path": "Strings/Harp/KSHarp_G3_mf.wav",
+     "sha256": "62600eb1b37bc2829ca65351f7ca7e506c9ae472abd5bea0765a8b8fa7df2772",
+     "pitch": 55
+    },
+    {
+     "path": "Strings/Harp/KSHarp_G5_mf.wav",
+     "sha256": "f2004dfc617997fbabc6f849add2af06f4f859361c44a8fca0f993dc7f999540",
+     "pitch": 79
+    }
+   ]
+  },
+  "cello": {
+   "files": [
+    {
+     "path": "Strings/Cello Section/susvib/susvib_A2_v1_1.wav",
+     "sha256": "c97a003184fdcb153d6b6c0bae8d82a90592a1b04b06bd7caaeda8b9776d5284",
+     "pitch": 57
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_B1_v1_1.wav",
+     "sha256": "4f95c087c4b8d87ee591e9d39c3c9caf085c6f1b9125eac3ca9e4e637da628ee",
+     "pitch": 47
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_B3_v1_1.wav",
+     "sha256": "bd25d66c1c4e73f5827bf3b931244e51ec8388594d8004529a762be81258097f",
+     "pitch": 71
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_C1_v1_1.wav",
+     "sha256": "abdcea431f384e135c469b0f3e4ac2a437f282f521dc5bcbe22abc221536e8de",
+     "pitch": 36
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_C3_v1_1.wav",
+     "sha256": "a614ee7ca821b44660236e47b89620cf914ec6ad27a99bc0d9764f47dbe512e1",
+     "pitch": 60
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_D2_v1_1.wav",
+     "sha256": "e8640dec9febc6e39fcf06b19d2c95a85d5ff8c38f13c9879e69f551eaf38ab8",
+     "pitch": 50
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_D4_v1_1.wav",
+     "sha256": "b4aa3a7fec1f0e783fa560f493868c17045feb271738e3d6834d1b00594b1c38",
+     "pitch": 74
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_E1_v1_1.wav",
+     "sha256": "de31a61b02d4e1d5a79b8bc432b0f35fe2e434290ad34402cc0f2dd7dc278cde",
+     "pitch": 40
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_E3_v1_1.wav",
+     "sha256": "d2f961e30bf64021cf4acbd88e0e7a1fd1840943ae78c62a711bcce3d109216e",
+     "pitch": 64
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_F2_v1_1.wav",
+     "sha256": "162054eab4ba118924f8f8986cf1b17ccfd65211d1945743ffbae30b4953f901",
+     "pitch": 53
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_F4_v1_1.wav",
+     "sha256": "a9888547b4b684c7649a882e693d61964848f18401a18e4646a8449b40c08bad",
+     "pitch": 77
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_G1_v1_1.wav",
+     "sha256": "9e5d24e8e28d6c7f650f9bb2b33d43c13e341a8bd33124c64e23881378b181ba",
+     "pitch": 43
+    },
+    {
+     "path": "Strings/Cello Section/susvib/susvib_G3_v1_1.wav",
+     "sha256": "8d658346b8d2054fd534b3222b5d7a23196d22a83a68c3a04ffb76b21853a3db",
+     "pitch": 67
+    }
+   ],
+   "loop": [
+    2.5,
+    6.5
+   ]
+  },
+  "bass": {
+   "files": [
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_A#0_v1_rr1.wav",
+     "sha256": "b3800588b7aeff8f0c81998bdc4bfe47b3fc3e621f166de3df68f614a9f53afd",
+     "pitch": 34
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_A1_v1_rr1.wav",
+     "sha256": "06057880075d08c3f5a9df78bb7ec07f4cd41bd26e09a69f7a2e92cc66f308d9",
+     "pitch": 45
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_B2_v1_rr1.wav",
+     "sha256": "75e9119ac1c1e0d60fdd28ae88c3628a40a21d4ef91731cbd890b0cd29b08ce0",
+     "pitch": 59
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_C#2_v1_rr1.wav",
+     "sha256": "2bbc1f013bf4725dc45dde12d1a83c71bf6681920824932059799c1d4c7e1a4b",
+     "pitch": 49
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_C1_v1_rr1.wav",
+     "sha256": "c930941735e707b109878f4734110412ebe26b983c2b3e300510175aedf5e61c",
+     "pitch": 36
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_D1_v1_rr1.wav",
+     "sha256": "d07634bec7bb0d736375bfb0c514f3d7586d9a625c4f56f4936556e247b33812",
+     "pitch": 38
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_E0_v1_rr1.wav",
+     "sha256": "b510c6c2eb4fb0acba5eaaaa703ebe19025cad3749f645c41f883e4217b338fa",
+     "pitch": 28
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_E1_v1_rr1.wav",
+     "sha256": "90428ce30d89c2eab94187a2d2c589758bc7027b8f0c8d3e2cce165972f60e21",
+     "pitch": 40
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_E2_v1_rr1.wav",
+     "sha256": "1b9d36042135c2eda513881612fb550a1b2669caddf70a7a514caeb4725fbbf2",
+     "pitch": 52
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_F#0_v1_rr1.wav",
+     "sha256": "416f46ccdf1c27cc15767c1f1053a2246a690e8e1b150fc8f08da4548e7f2ca4",
+     "pitch": 30
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_F#1_v1_rr1.wav",
+     "sha256": "a678ba2e2399b7da502628962575e904127d5f5a2a68a6ab6c4237c7281dee4b",
+     "pitch": 42
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_G#1_v1_rr1.wav",
+     "sha256": "c7adf9c807d5425e3ce88246a5ad716fdfa573b6b1185540052a5b5cf8118ac8",
+     "pitch": 44
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_G#2_v1_rr1.wav",
+     "sha256": "cfa576d12284ab9fad6e6f300cd2bd682a80b331673105c1b5d208f04230460d",
+     "pitch": 56
+    },
+    {
+     "path": "Strings/Solo Contrabass/SusNV/BKCtbss_SusNV_G0_v1_rr1.wav",
+     "sha256": "d363b0e026cae6e86dcb60e353672fbec2f1bab9e8ee4c95903d9fa83fd47606",
+     "pitch": 31
+    }
+   ],
+   "loop": [
+    2.0,
+    6.0
+   ]
+  },
+  "organ": {
+   "files": [
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_122_rr1.wav",
+     "sha256": "daad4df8c2cd9444a6ff04269149ea92dace2326c481cc6a07da67d7a2e5e76d",
+     "pitch": 36
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_125_rr1.wav",
+     "sha256": "f92037a1ad643c330b22257484e591a3712532e577ce10d0eb9dda2b45a63d41",
+     "pitch": 39
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_128_rr1.wav",
+     "sha256": "0a85d53636f262c91730a808ef2c38ae0a8d2bd9fe1b39795526a77e062de29e",
+     "pitch": 42
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_131_rr1.wav",
+     "sha256": "f19bf401923e49178fd88a0bc3076de35a5ef5af3ca1afb75f721ae9fd6214cc",
+     "pitch": 45
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_134_rr1.wav",
+     "sha256": "5906348057006cfa5451a2cb3f02b8cd639d89f9ddf3cc98df3102f5c942cd5a",
+     "pitch": 48
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_137_rr1.wav",
+     "sha256": "eb92c50999e9a117939de73e74b263730b66eadbdb868f67b9bd89681ed8f113",
+     "pitch": 51
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_140_rr1.wav",
+     "sha256": "3afa6caad64d5ef3c527b8bc4c22b7a0c55bc5dfaa6701c8b2b98c53de5876ae",
+     "pitch": 54
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_143_rr1.wav",
+     "sha256": "c39ec6c7e26dee6a3661e54a96c4a2a04bce08130864244458a7db1b627b3c93",
+     "pitch": 57
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_146_rr1.wav",
+     "sha256": "55b246625c8a2fe71c271d2335ba6cc5f12d3cd48cc691aa047197b7f825084f",
+     "pitch": 60
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_149_rr1.wav",
+     "sha256": "fa2784dca7e6ef639be46a2d9f129f480755b678c9cce145d257bb59839a77a9",
+     "pitch": 63
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_152_rr1.wav",
+     "sha256": "7ad4206bebfaffe36d3c506e55670abf4a5bed9c72d52a8eea44fe5a20c62b9a",
+     "pitch": 66
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_155_rr1.wav",
+     "sha256": "97df359ea6827d9b751cf85de91fb460d8c95871cb98dff0441494bc35ca1cb1",
+     "pitch": 69
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_158_rr1.wav",
+     "sha256": "14f3a97253046b883e9689d9fb5420b9eb69e7b65564e2396b5098f245b0cd10",
+     "pitch": 72
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_161_rr1.wav",
+     "sha256": "f7547dc90d06e1329420f3e9db4b11d0cb616878357949884dd411ce693fc508",
+     "pitch": 75
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_164_rr1.wav",
+     "sha256": "e7e1996aaf564294f3c0476592b3055fc00e6e6d19348172ea604170a1b07076",
+     "pitch": 78
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_167_rr1.wav",
+     "sha256": "9b23b50db700b4b881ddac02ca8d99922d745c3cd9fcc31022b0fa48a2eec31c",
+     "pitch": 81
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_170_rr1.wav",
+     "sha256": "16c3916dbf17c878d4430fd4c5fe7b15aeb4fd0c568f651d05149b22e72c8bc8",
+     "pitch": 84
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_173_rr1.wav",
+     "sha256": "ce6f6f9e7bfde82ce2feaa5fc3f76137b917934f54835fb43e2ca4fd62bde9c9",
+     "pitch": 87
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_176_rr1.wav",
+     "sha256": "7dc91dd5dfec81db6e17bea27ef6da160fe46b250353e96754157fcb7bc805b0",
+     "pitch": 90
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_179_rr1.wav",
+     "sha256": "105b97482af93c91e29cef8e1816091b0542ffa52997327f47c8097a05fa5a2b",
+     "pitch": 93
+    },
+    {
+     "path": "Keys/Organ/Quiet/NT5_Man3Quiet_182_rr1.wav",
+     "sha256": "178b87af471722aec4fbb7c22408e9509727d2dccd7ec927ebdec9b0d5d537ec",
+     "pitch": 96
+    }
+   ],
+   "loop": [
+    3.0,
+    9.0
+   ]
+  }
+ },
+ "notes": "Pitches are the sounding MIDI notes: VSCO names its cello and contrabass samples an octave below how they sound, and numbers the organ's keys MIDI + 86 (manual 3 only). loop is the sustained stretch, in seconds, that long notes repeat with a crossfade."
+}

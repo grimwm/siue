@@ -2,12 +2,16 @@
 // of the track, Loop (on by default; a hear-it clip never loops), the time readout
 // (and the bar on a music piece), the draft's downloads (the audio it plays,
 // the sheet music, the score), and the playhead's time kept in step with the
-// <audio> element in both directions.
+// <audio> element in both directions. A draft played from its score plays the
+// sound built in the page: while it is built the Player says so with a progress
+// line, and a build that failed says why; either way nothing can play.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { downloadLinks } from '../download.ts';
 import type { DownloadLink } from '../download.ts';
 import { clipDone, pickSource, skipTarget } from '../player.ts';
 import type { Clip, Skip } from '../player.ts';
+import { BUILD_STAGES, STAGE_WORDS } from '../render/sound.ts';
+import type { DraftSound } from '../render/sound.ts';
 import type { AudioSource } from '../score.ts';
 import { Button, buttonClass } from './console/Button.tsx';
 import { Readout } from './console/Readout.tsx';
@@ -20,8 +24,8 @@ const SKIPS: readonly { kind: Skip; label: string; icon: string }[] = [
   { kind: 'end', label: 'To the end', icon: 'M13 3v10M3 3l7 5-7 5Z' },
 ];
 
-/** duration is the piece's length in seconds; onSeek is the page's seek, which moves the audio, the playhead and the view together. download names the draft on screen (sheet: it has sheet music); without it, no downloads. */
-export interface PlayerProps { src: AudioSource[]; duration: number; onSeek(t: number): void; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void; pauseRef?: { current: (() => void) | null }; download?: { piece: string; version: number; sheet: boolean } }
+/** duration is the piece's length in seconds; onSeek is the page's seek, which moves the audio, the playhead and the view together. download names the draft on screen (sheet: it has sheet music); without it, no downloads. rendered is the sound built for a draft played from its score, played in place of src. */
+export interface PlayerProps { src: AudioSource[]; rendered?: DraftSound; duration: number; onSeek(t: number): void; audioSrc(file: string): string; time: number; bar: number | null; onTime(t: number): void; clip: Clip | null; onClipDone(): void; seekRef?: { current: ((t: number) => void) | null }; clipRef?: { current: ((c: Clip) => void) | null }; onPlaying?(playing: boolean): void; pauseRef?: { current: (() => void) | null }; download?: { piece: string; version: number; sheet: boolean } }
 
 export function Player(p: PlayerProps) {
   const audio = useRef<HTMLAudioElement>(null);
@@ -32,6 +36,8 @@ export function Player(p: PlayerProps) {
     const probe = document.createElement('audio');
     return pickSource(p.src, t => probe.canPlayType(t));
   }, [p.src]);
+  const rendered = p.rendered;
+  const url = rendered ? (rendered.state === 'ready' ? rendered.url : null) : source ? p.audioSrc(source.file) : null;
   const live = useRef(p);
   live.current = p;
 
@@ -94,26 +100,40 @@ export function Player(p: PlayerProps) {
   const skip = (kind: Skip): void => p.onSeek(skipTarget(kind, audio.current?.currentTime ?? p.time, p.duration));
   return (
     <div class="player flex flex-wrap items-center gap-3 rounded-lg bg-panel p-3 ring-1 ring-rule">
-      {source ? (
-        <audio ref={audio} preload="metadata" loop={loop && !p.clip} src={p.audioSrc(source.file)}
+      {url ? (
+        <audio ref={audio} preload="metadata" loop={loop && !p.clip} src={url}
           onError={() => setProblem("This draft's audio could not play. Reload the page, or open another draft.")}
           onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onTimeUpdate={() => { if (audio.current) p.onTime(audio.current.currentTime); }} />
-      ) : <p class="error w-full" role="alert">This browser cannot play this draft's audio.</p>}
+      ) : rendered ? <Building sound={rendered} /> : <p class="error w-full" role="alert">This browser cannot play this draft's audio.</p>}
       {problem ? <p class="error w-full" role="alert">{problem}</p> : null}
       <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Transport">
-        {SKIPS.slice(0, 2).map(s => <SkipButton {...s} disabled={!source} onClick={() => skip(s.kind)} />)}
-        <Button variant="primary" class="min-w-24" disabled={!source} onClick={toggle}>{playing ? 'Pause' : 'Play'}</Button>
-        {SKIPS.slice(2).map(s => <SkipButton {...s} disabled={!source} onClick={() => skip(s.kind)} />)}
-        <Button variant="secondary" pressed={loop} pressedLook="outline" disabled={!source} onClick={() => setLoop(l => !l)}>Loop</Button>
+        {SKIPS.slice(0, 2).map(s => <SkipButton {...s} disabled={!url} onClick={() => skip(s.kind)} />)}
+        <Button variant="primary" class="min-w-24" disabled={!url} onClick={toggle}>{playing ? 'Pause' : 'Play'}</Button>
+        {SKIPS.slice(2).map(s => <SkipButton {...s} disabled={!url} onClick={() => skip(s.kind)} />)}
+        <Button variant="secondary" pressed={loop} pressedLook="outline" disabled={!url} onClick={() => setLoop(l => !l)}>Loop</Button>
       </div>
       <Readout time={p.time} bar={p.bar} />
-      {p.download ? <Downloads links={downloadLinks({ ...p.download, audio: source }, p.audioSrc)} /> : null}
+      {p.download ? <Downloads links={downloadLinks({ ...p.download, audio: rendered ? null : source, ...(rendered?.state === 'ready' ? { wav: rendered.url } : {}) }, p.audioSrc)} /> : null}
     </div>
   );
 }
 
-// Plain same-origin links: the download attribute saves the file under the draft's name.
+/** The sound being built, with a progress line through the build's stages, or why it could not be built. */
+function Building(p: { sound: DraftSound }) {
+  const s = p.sound;
+  if (s.state === 'failed') return <p class="error w-full" role="alert">The sound could not be built: {s.reason}</p>;
+  if (s.state !== 'building') return null;
+  const step = BUILD_STAGES.indexOf(s.stage) + 1;
+  return (
+    <div class="grid w-full gap-1" role="status">
+      <p class="text-sm">Building the sound… <span class="font-mono text-xs text-dim">{STAGE_WORDS[s.stage]}</span></p>
+      <progress class="h-1 w-full accent-amber" max={BUILD_STAGES.length} value={step} aria-label="Building the sound" />
+    </div>
+  );
+}
+
+// Plain same-origin links (a built sound's is its blob address): the download attribute saves the file under the draft's name.
 const DOWNLOAD_ICON = 'M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10';
 function Downloads(p: { links: DownloadLink[] }) {
   return (

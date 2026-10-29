@@ -17,6 +17,7 @@ from siue_music.op import Op  # noqa: E402
 SITE = TOOLS.parents[1]
 FIXTURES = SITE / "games" / "workroom" / "test" / "fixtures"
 GLOSSARY_JSON = SITE / "games" / "workroom" / "src" / "glossary.json"
+LIBRARY_JSON = SITE / "music" / "library" / "library.json"
 _POOL: list[tuple[str, bytes, bytes]] = []
 
 

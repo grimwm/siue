@@ -27,3 +27,10 @@ test('a piece without sheet music offers no sheet music, and no playable audio o
   assert.deepEqual(downloadLinks({ piece: 'rain', version: 1, audio: WEBM, sheet: false }, url).map(l => l.name), ['rain-v1.webm', 'rain-v1.json']);
   assert.deepEqual(downloadLinks({ piece: 'rain', version: 1, audio: null, sheet: false }, url).map(l => l.name), ['rain-v1.json']);
 });
+
+test('a draft played from its score offers the rendered sound as Audio (WAV), from its own address', () => {
+  const links = downloadLinks({ piece: 'rain', version: 4, audio: null, wav: 'blob:https://x/1', sheet: true }, url);
+  assert.deepEqual(links[0], { label: 'Audio (WAV)', href: 'blob:https://x/1', name: 'rain-v4.wav' });
+  assert.deepEqual(links.map(l => l.label), ['Audio (WAV)', 'Sheet music', 'Score']);
+  assert.equal(downloadName('rain', 4, 'audio.wav'), 'rain-v4.wav');
+});

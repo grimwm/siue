@@ -16,3 +16,9 @@
 <If "%{REQUEST_URI} =~ m#/music/(lib|tools|compose|pieces|keys)/#">
     Require all denied
 </If>
+
+# The sample library is public (CC0) and large: plain FLAC files that revalidate rather than reload.
+AddType audio/flac .flac
+<If "%{REQUEST_URI} =~ m#/music/library/#">
+    Header always set Cache-Control "no-cache"
+</If>

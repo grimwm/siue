@@ -248,6 +248,27 @@ final class MusicApiTest extends TestCase
         self::assertSame(201, $this->publish($k, $withXml, 'cannon-fire', 3)->status, 'a sound draft may carry one');
     }
 
+    public function testARenderableMusicScoreNeedsOnlyScoreJsonAndMusicXml(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $sound = ['instrument' => 'cello', 'gain_db' => 0, 'attack' => 0.35, 'release' => 2.5];
+        $renderable = ['audio' => [], 'mix' => ['style' => 'lofi', 'loudness' => -20], 'lanes' => [['id' => 'a', 'sound' => $sound], ['id' => 'b', 'sound' => $sound]]];
+        $files = array_diff_key($this->draftFiles('ch3-renderer', 1), ['audio.webm' => 1, 'spectrogram.png' => 1]);
+        self::assertSame(['score.json', 'score.musicxml'], array_keys($files));
+        self::assertSame(422, $this->publish($k, $files, 'ch3-renderer', 1)->status, 'no audio and no sound in the score');
+        $res = $this->publish($k, $this->withScore($files, $renderable), 'ch3-renderer', 1);
+        self::assertSame(201, $res->status, 'a renderable score needs no audio or spectrogram');
+        self::assertCount(1, $this->store->drafts());
+        self::assertNull($this->store->draftFile('ch3-renderer', 1, 'audio.webm'));
+        self::assertNotNull($this->store->draftFile('ch3-renderer', 1, 'score.musicxml'));
+
+        $noXml = array_diff_key($this->withScore($this->draftFiles('ch3-renderer', 2), $renderable), ['audio.webm' => 1, 'spectrogram.png' => 1, 'score.musicxml' => 1]);
+        $res = $this->publish($k, $noXml, 'ch3-renderer', 2);
+        self::assertSame(['missing_file', 422], [$this->body($res)['error'], $res->status], 'music still needs score.musicxml');
+        $lacksSound = array_diff_key($this->withScore($this->draftFiles('ch3-renderer', 3), ['audio' => [], 'mix' => $renderable['mix'], 'lanes' => [['id' => 'a', 'sound' => $sound], ['id' => 'b']]]), ['audio.webm' => 1, 'spectrogram.png' => 1]);
+        self::assertSame(422, $this->publish($k, $lacksSound, 'ch3-renderer', 3)->status, 'one lane without sound is not renderable');
+    }
+
     public function testADraftWithoutAProjectOrKindTheServerCanRecordIsRefused(): void
     {
         $k = $this->keys->create('publish', ['drafts:publish']);

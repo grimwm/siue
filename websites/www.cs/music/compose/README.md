@@ -20,6 +20,10 @@ draft folders `make music-publish` sends (`music/pieces/<piece>/v<n>/`).
   `cuts/<name>.m4a` (AAC, 96 kb/s, for Safari) in the draft folder. `CUT=full`
   is every piece's: every lane as composed, the draft's own mix. Games take
   their music from cuts.
+- A draft listed in its piece's `SCORE_ONLY` is rendered the same way, for the
+  checks, but keeps only `score.json` (with no audio and no spectrogram) and
+  `score.musicxml`: the workroom builds its sound in the browser from the
+  shared sample library (`music/library/`).
 - `make music-compose-test` runs the tests in the container.
 
 ## Checks

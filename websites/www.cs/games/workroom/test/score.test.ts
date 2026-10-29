@@ -128,3 +128,68 @@ test('the page has no characters or colours of its own', () => {
   const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? files(join(dir, e.name)) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : []));
   for (const f of files(src)) assert.doesNotMatch(readFileSync(f, 'utf8'), /Ariadne|Minotaur|Daedalus|Athens|CHARACTER_COLORS/, f);
 });
+
+// A renderable score carries its own sound: every lane has `sound`, and `mix` is present.
+const LIBRARY = new Set(['harp', 'cello', 'bass', 'organ', 'horn']);
+const renderable = (): Score => read('score-renderable-v1.json');
+const brokenRenderable = (change: (s: Score) => void, ids: ReadonlySet<string> | undefined = LIBRARY): string => {
+  const s = renderable();
+  change(s);
+  const r = parseScore(s, ids);
+  assert.equal(r.ok, false);
+  return r.ok ? '' : r.error;
+};
+
+test('a renderable score needs no audio file and no spectrogram', () => {
+  const s = renderable();
+  assert.deepEqual([s.audio, s.spectrogram], [[], undefined]);
+  const r = parseScore(s, LIBRARY);
+  assert.ok(r.ok, r.ok ? '' : r.error);
+  assert.deepEqual(r.ok && [r.score.lanes[0]!.sound?.instrument, r.score.mix], ['cello', { style: 'lofi', loudness: -20 }]);
+  assert.ok(parseScore(s).ok, 'without the library only the id format is checked');
+});
+
+test('the sound of a lane and the mix are checked, naming their paths', () => {
+  assert.match(brokenRenderable(s => { s.lanes[0]!.sound!.instrument = 'kazoo'; }), /^lanes\[0\]\.sound\.instrument/);
+  assert.ok(parseScore((() => { const s = renderable(); s.lanes[0]!.sound!.instrument = 'kazoo'; return s; })()).ok, 'no library, no lookup');
+  assert.match(brokenRenderable(s => { s.lanes[0]!.sound!.instrument = 'Not An Id'; }, undefined), /^lanes\[0\]\.sound\.instrument/);
+  assert.match(brokenRenderable(s => { s.lanes[1]!.sound!.gain_db = 21; }), /^lanes\[1\]\.sound\.gain_db/);
+  assert.match(brokenRenderable(s => { s.lanes[1]!.sound!.gain_db = -41; }), /^lanes\[1\]\.sound\.gain_db/);
+  assert.match(brokenRenderable(s => { s.lanes[0]!.sound!.attack = 11; }), /^lanes\[0\]\.sound\.attack/);
+  assert.match(brokenRenderable(s => { s.lanes[0]!.sound!.attack = -1; }), /^lanes\[0\]\.sound\.attack/);
+  assert.match(brokenRenderable(s => { s.lanes[0]!.sound!.release = 21; }), /^lanes\[0\]\.sound\.release/);
+  assert.match(brokenRenderable(s => { (s.lanes[0] as { sound: unknown }).sound = 'cello'; }), /^lanes\[0\]\.sound:/);
+  assert.match(brokenRenderable(s => { s.mix!.style = 'hall' as never; }), /^mix\.style/);
+  assert.match(brokenRenderable(s => { s.mix!.loudness = -9; }), /^mix\.loudness/);
+  assert.match(brokenRenderable(s => { s.mix!.loudness = -31; }), /^mix\.loudness/);
+  assert.match(brokenRenderable(s => { (s as { mix: unknown }).mix = 'lofi'; }), /^mix:/);
+});
+
+test('a score with no audio file and no complete sound is refused at audio', () => {
+  assert.match(brokenRenderable(s => { delete s.lanes[1]!.sound; }), /^audio/);
+  assert.match(brokenRenderable(s => { delete s.mix; }), /^audio/);
+  assert.match(brokenRenderable(s => { delete s.lanes[0]!.sound; delete s.lanes[1]!.sound; delete s.mix; }), /^audio/);
+  assert.match(brokenRenderable(s => { s.audio = []; delete s.mix; s.spectrogram = fixture().spectrogram; }), /^audio/);
+});
+
+test('a score that is not renderable still needs its spectrogram; a renderable one may omit it', () => {
+  const noPicture = renderable();
+  noPicture.audio = fixture().audio;
+  assert.ok(parseScore(noPicture, LIBRARY).ok);
+  const both = renderable();
+  both.audio = fixture().audio;
+  both.spectrogram = fixture().spectrogram;
+  assert.ok(parseScore(both, LIBRARY).ok);
+  const plain = fixture();
+  delete plain.spectrogram;
+  const r = parseScore(plain);
+  assert.deepEqual(r.ok ? '' : r.error.slice(0, 12), 'spectrogram:');
+});
+
+test('a lane with sound but no mix, or a mix with a lane lacking sound, keeps its audio rules', () => {
+  const s = fixture();
+  s.lanes[0]!.sound = { instrument: 'harp', gain_db: 0, attack: 0.05, release: 1.5 };
+  assert.ok(parseScore(s, LIBRARY).ok, 'sound is optional per lane when the audio files are there');
+  s.mix = { style: 'lofi', loudness: -20 };
+  assert.ok(parseScore(s, LIBRARY).ok);
+});

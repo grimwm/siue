@@ -7,6 +7,10 @@
 // and whenever the answer bar's dock shows (pinning, a recording running or
 // waiting to be sent) for the dock too, so the Story view can scroll to the
 // top of the screen above it.
+// A draft with no audio file is played from its score: the page builds its
+// sound once (the Player and the Sound picture show it being built, then play
+// and draw it, or say why it could not be built); a draft with audio files
+// plays them.
 // With a notes session it also holds the answering: the answer bar, the span
 // being picked, the energy drawing and the owner's notes on the Story view;
 // before an unlock the bar's buttons open the notes panel at the unlock form.
@@ -29,6 +33,7 @@ import type { DemoId } from '../demo.ts';
 import { follow } from '../player.ts';
 import type { Clip } from '../player.ts';
 import type { MediaPorts } from '../recorder.ts';
+import type { BuildSound, DraftSound } from '../render/sound.ts';
 import type { Change, Score } from '../score.ts';
 import { energyLegend, legendFor, pickTab, tabsFor } from '../tabs.ts';
 import type { Tab } from '../tabs.ts';
@@ -58,6 +63,8 @@ export interface WorkroomProps { score: Score; version: number; versions: number
   notes?: NotesSession;
   /** The microphone: null or undefined, no Hum it and no Record. */
   media?: MediaPorts | null;
+  /** Builds the sound of a draft with no audio file. */
+  buildSound?: BuildSound;
   now?(): Date;
 }
 
@@ -200,6 +207,22 @@ export function Workroom(p: WorkroomProps) {
     setGuideOpen(true);
   }, [guideView, score.kind]);
   const bounds = useMemo(() => boundsFor(score.duration, width), [score.duration, width]);
+  /** The built sound of a draft with no audio file; null, the draft plays its files. */
+  const [sound, setSound] = useState<DraftSound | null>(null);
+  const builds = score.audio.length === 0;
+  useEffect(() => {
+    if (!builds) { setSound(null); return; }
+    const build = p.buildSound;
+    if (!build) { setSound({ state: 'failed', reason: 'this page cannot build sound' }); return; }
+    let live = true;
+    setSound({ state: 'building', stage: 'instruments' });
+    build(`${score.piece.id}/v${p.version}`, score, stage => { if (live) setSound({ state: 'building', stage }); }).then(
+      s => { if (live) setSound({ state: 'ready', ...s }); },
+      (e: unknown) => { if (live) setSound({ state: 'failed', reason: e instanceof Error ? e.message : String(e) }); },
+    );
+    return () => { live = false; };
+  }, [score, p.version, builds]);
+  const rendered = builds ? sound ?? { state: 'building' as const, stage: 'instruments' as const } : undefined;
 
   // The views are as wide as the stage: measured on mount and whenever the stage changes width (a window resize, a scrollbar appearing, the sheet opening). A browser without ResizeObserver falls back to the window's resize.
   useLayoutEffect(() => {
@@ -283,7 +306,7 @@ export function Workroom(p: WorkroomProps) {
             </select>
           </label>
         </header>
-        <Player src={score.audio} duration={score.duration} onSeek={seek} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} download={{ piece: score.piece.id, version: p.version, sheet: score.musicxml !== undefined }} />
+        <Player src={score.audio} rendered={rendered} duration={score.duration} onSeek={seek} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} download={{ piece: score.piece.id, version: p.version, sheet: score.musicxml !== undefined }} />
         {answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} access={access} onLocked={askUnlock} onFront={() => setSheetOpen(false)} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} draft={draft} onDraft={setDraft} onRecording={r => setRec(was => (was.live === r.live && was.held === r.held ? was : r))} /> : null}
         <div class="flex flex-wrap items-end justify-end gap-x-3 gap-y-2 lg:flex-nowrap">
           <div class="min-w-0 flex-1 basis-full lg:basis-0"><ViewTabs tabs={tabs} tab={tab} onTab={t => { setWanted(t); if (mode === 'pin' || mode === 'energy') changeMode('none'); }} /></div>
@@ -304,7 +327,7 @@ export function Workroom(p: WorkroomProps) {
                 {tab === 'story' ? <Timeline score={score} tempo={tempo} view={view} time={time} onSeek={seek} onView={setView} onHold={setHolding} onTerm={openCard} overlay={pins}
                   select={mode === 'pin' ? { span: preview ?? span, onPick: pick } : undefined} marks={marks} /> : null}
                 {tab === 'roll' ? <PianoRoll score={score} tempo={tempo} view={view} time={time} lanes={lanes} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
-                {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram.file)} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
+                {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram?.file ?? 'spectrogram.png')} rendered={rendered} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
                 {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane}
                   tempo={tempo} duration={score.duration} time={time} onHear={hear} onTerm={openCard} /> : null}
               </>

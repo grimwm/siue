@@ -188,6 +188,17 @@ class WorkroomTest(unittest.TestCase):
         self.assertIn("general notes", str(e.exception))
         self.assertEqual(self.api.sent, [])
 
+    def test_an_instrument_the_library_lacks_is_refused_as_publish_py_refuses_it(self):
+        v1 = self.pieces / "test-piece" / "v1"
+        score = json.loads((FIXTURES / "score-renderable-v1.json").read_text())
+        score["lanes"][0]["sound"]["instrument"] = "kazoo"
+        (v1 / "score.json").write_text(json.dumps(score))
+        self.assertTrue(any("lanes[0].sound.instrument" in p for p in self.room.read_score("test-piece", 1)["problems"]))
+        with self.assertRaises(WorkroomError) as e:
+            self.room.publish_draft("test-piece", 1)
+        self.assertIn("lanes[0].sound.instrument", str(e.exception))
+        self.assertEqual(self.api.sent, [])
+
     # notes
 
     def test_pick_up_saves_marks_and_answers_each_note(self):

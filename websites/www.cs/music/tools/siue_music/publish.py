@@ -24,7 +24,7 @@ def latest_version(piece_dir: Path) -> int:
     return max(found)
 
 
-def publish(piece: str, version: int | None, pieces: Path, api, glossary_ids: frozenset[str]) -> int:
+def publish(piece: str, version: int | None, pieces: Path, api, glossary_ids: frozenset[str], instrument_ids: frozenset[str] | None = None) -> int:
     if not ID_RE.fullmatch(piece):
         raise PublishError(f"{piece!r} is not a piece id (lowercase letters, digits and hyphens)")
     if piece == GENERAL_PIECE:
@@ -45,7 +45,7 @@ def publish(piece: str, version: int | None, pieces: Path, api, glossary_ids: fr
         score = json.loads((folder / "score.json").read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         raise PublishError(f"{folder / 'score.json'} could not be read: {e}") from None
-    errors = validate(score, glossary_ids)
+    errors = validate(score, glossary_ids, instrument_ids)
     if errors:
         raise PublishError(f"score.json is not valid: {errors[0]}")
     if score["piece"]["id"] != piece or score["draft"] != version:
@@ -59,9 +59,10 @@ def publish(piece: str, version: int | None, pieces: Path, api, glossary_ids: fr
             files[name] = path
     if score["kind"] == "music" and "score.musicxml" not in files:
         raise PublishError(f"a music draft needs score.musicxml, which {folder} lacks")
-    if "audio.webm" not in files and "audio.m4a" not in files:
-        raise PublishError(f"{folder} has no audio.webm or audio.m4a")
-    if "spectrogram.png" not in files:
+    if score["audio"]:  # a renderable score lists none: the page plays it from its sound and mix
+        if "audio.webm" not in files and "audio.m4a" not in files:
+            raise PublishError(f"{folder} has no audio.webm or audio.m4a")
+    if score.get("spectrogram") is not None and "spectrogram.png" not in files:
         raise PublishError(f"{folder} has no spectrogram.png")
     size = draft_size(files)
     if size > MAX_REQUEST_BYTES:

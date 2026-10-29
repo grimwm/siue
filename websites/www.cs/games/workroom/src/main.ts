@@ -15,6 +15,7 @@ import { draftUrl, loadDraft } from './load.ts';
 import { createNotesSession } from './notes-session.ts';
 import type { NotesSession } from './notes-session.ts';
 import { createOutbox } from './outbox.ts';
+import { browserSound } from './render/browser-sound.ts';
 import { indexedDbKeyMemory } from './remember.ts';
 import { startTheme } from './theme.ts';
 import { createVault } from './vault.ts';
@@ -68,6 +69,7 @@ if (view === 'piece' && piece) {
       onVersion: v => { location.search = `?id=${encodeURIComponent(piece)}&v=${v}`; },
       notes,
       media: browserMedia(),
+      buildSound: browserSound(),
     })), root);
   }
 } else if (view === 'index') {

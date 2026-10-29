@@ -17,7 +17,7 @@ from .api import ApiError
 from .keys import PICKUP_KEY, PUBLISH_KEY
 from .pickup import GENERAL_PIECE, pickup
 from .publish import DRAFT_FILES, PublishError, latest_version, publish
-from .score import ID_RE, glossary_ids, validate
+from .score import ID_RE, glossary_ids, library_ids, validate
 
 _VERSION_DIR = re.compile(r"v([1-9][0-9]*)")
 _NOTE_DIR = re.compile(r"\d{4}-\d{2}-\d{2}-([0-9a-f]{32})")
@@ -111,10 +111,14 @@ class Workroom:
             score = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
             raise WorkroomError(f"{path} could not be read: {e}") from None
-        return {"piece": piece, "version": version, "path": str(path), "score": score, "problems": validate(score, self.glossary())}
+        return {"piece": piece, "version": version, "path": str(path), "score": score, "problems": validate(score, self.glossary(), self.instruments())}
 
     def glossary(self) -> frozenset[str]:
         return self._glossary if self._glossary is not None else glossary_ids(paths.glossary_path())
+
+    def instruments(self) -> frozenset[str]:
+        """The sample library's instrument ids, which a score's lane sounds must name, as make music-publish checks."""
+        return library_ids(paths.library_path())
 
     def publish_draft(self, piece: str, version: int | None = None) -> dict:
         """Publishes a local draft as `make music-publish PIECE= VERSION=` does, with the same checks and refusals."""
@@ -123,7 +127,7 @@ class Workroom:
         keys.ensure_synced()
         api = self._make_api(self.base(), keys.api_key(PUBLISH_KEY, rerun))
         try:
-            done = publish(piece, version, self.pieces_dir(), api, self.glossary())
+            done = publish(piece, version, self.pieces_dir(), api, self.glossary(), self.instruments())
         except PublishError as e:
             raise WorkroomError(str(e)) from None
         return {"piece": piece, "version": done, "published": True, "server": self.base()}

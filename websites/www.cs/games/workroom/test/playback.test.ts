@@ -254,3 +254,110 @@ test('Download offers the audio the Player plays, the sheet music and the score,
   assert.deepEqual(walk(root).filter(e => e.localName === 'a').map(a => a.textContent), ['Audio', 'Score'], 'no sheet music on a piece without one');
   render(null, renderTarget(root));
 });
+
+// --- A draft played from its score ---
+
+const { soundBuilder } = await import('../src/render/sound.ts');
+const renderable = (await import('../src/score.ts')).parseScore(JSON.parse((await import('node:fs')).readFileSync(new URL('./fixtures/score-renderable-v1.json', import.meta.url), 'utf8')));
+assert.ok(renderable.ok);
+const library = { version: 1 as const, source: '', commit: '', licence: '', credit: '', instruments: {} };
+
+test('a draft is built once and kept in memory: the library and each draft render once, a failure is tried again', async () => {
+  const calls = { library: 0, load: 0, render: 0, url: 0 };
+  let fail = true;
+  const build = soundBuilder({
+    library: async () => { calls.library++; return library; },
+    load: async () => { calls.load++; },
+    render: async () => { calls.render++; if (fail) throw new Error('the cello sample cello/c3.flac could not be loaded: the server answered 404'); return { channels: [new Float32Array(4), new Float32Array(4)], rate: 48000 }; },
+    url: bytes => { calls.url++; return `blob:${bytes.length}`; },
+  });
+  const stages: string[] = [];
+  await assert.rejects(build('rain/v1', renderable.score, s => stages.push(s)), /the server answered 404/);
+  fail = false;
+  const a = await build('rain/v1', renderable.score, s => stages.push(s));
+  const b = await build('rain/v1', renderable.score, s => stages.push(s));
+  assert.equal(a, b, 'the same sound, not a second render');
+  assert.equal(a.url, 'blob:60', 'a 16-bit stereo WAV: a 44-byte header and 4 frames of 4 bytes');
+  assert.equal(a.rate, 48000);
+  assert.deepEqual(calls, { library: 1, load: 2, render: 2, url: 1 }, 'the failed render is tried again; the library is fetched once');
+  await build('rain/v2', renderable.score, () => {});
+  assert.equal(calls.render, 3, 'another draft is its own render');
+  assert.deepEqual(stages, ['instruments', 'rendering', 'instruments', 'rendering', 'finishing']);
+});
+
+test('once the WAV is made, the built sound keeps one channel, the mix, in the left channel\'s own memory', async () => {
+  const left = Float32Array.from([0.1, 0.2, -0.4, 0]);
+  const right = Float32Array.from([0.3, 0.2, 0, 0.5]);
+  const [l0, r0] = [[...left], [...right]];
+  let bytes: Uint8Array | null = null;
+  const build = soundBuilder({
+    library: async () => library,
+    load: async () => {},
+    render: async () => ({ channels: [left, right], rate: 48000 }),
+    url: b => { bytes = b; return 'blob:x'; },
+  });
+  const built = await build('mix/v1', renderable.score, () => {});
+  const v = new DataView(bytes!.buffer);
+  assert.deepEqual([v.getInt16(44, true), v.getInt16(46, true)], [Math.round(0.1 * 32767), Math.round(0.3 * 32767)], 'the WAV is the stereo audio');
+  assert.equal(built.channels.length, 1);
+  assert.equal(built.channels[0], left, 'no new array: the mix is written over the left channel');
+  assert.deepEqual([...built.channels[0]!], l0.map((x, i) => Math.fround(Math.fround(x / 2) + r0[i]! / 2)), 'the mean, summed as the sound picture sums it');
+});
+
+test('a failed library fetch is tried again by the next build', async () => {
+  let tries = 0;
+  const build = soundBuilder({
+    library: async () => { if (++tries === 1) throw new Error('the server answered 503'); return library; },
+    load: async () => {},
+    render: async () => ({ channels: [new Float32Array(2)], rate: 48000 }),
+    url: () => 'blob:x',
+  });
+  await assert.rejects(build('a/v1', renderable.score, () => {}), /503/);
+  assert.equal((await build('a/v1', renderable.score, () => {})).url, 'blob:x');
+});
+
+test('while the sound is built the Player says so with a progress line, and nothing plays', async () => {
+  const root = makeEl('root');
+  const before = audios.length;
+  await act(() => { render(h(ui.player.Player, playerProps({ src: [], rendered: { state: 'building', stage: 'rendering' }, download: { piece: 'rain', version: 1, sheet: false } })), renderTarget(root)); });
+  assert.match(root.textContent, /Building the sound…/);
+  const bar = walk(root).find(e => e.localName === 'progress')!;
+  assert.ok(bar, 'a progress line');
+  assert.equal(String(bar.value), '2', 'the second of three stages');
+  assert.equal(bar.getAttribute('max'), '3');
+  assert.equal(audios.length, before, 'no <audio> yet');
+  assert.equal(button(root, 'Play').disabled, true);
+  assert.doesNotMatch(root.textContent, /cannot play/);
+  assert.deepEqual(walk(root).filter(e => e.localName === 'a').map(a => a.textContent), ['Score'], 'no audio to download yet');
+  render(null, renderTarget(root));
+});
+
+test('a built sound plays from its blob URL and downloads as Audio (WAV)', async () => {
+  const root = makeEl('root');
+  const asked: string[] = [];
+  await act(() => { render(h(ui.player.Player, playerProps({ src: [], audioSrc: (f: string) => { asked.push(f); return `draft.php?file=${f}`; }, rendered: { state: 'ready', url: 'blob:https://x/7', channels: [], rate: 48000 }, download: { piece: 'rain', version: 2, sheet: false } })), renderTarget(root)); });
+  const audio = audios.at(-1)!;
+  assert.equal(audio.getAttribute('src'), 'blob:https://x/7');
+  assert.equal(button(root, 'Play').disabled, false);
+  await act(() => { fire(button(root, 'Play'), 'click'); });
+  assert.equal(audio.paused, false);
+  assert.doesNotMatch(root.textContent, /Building the sound/);
+  const links = walk(root).filter(e => e.localName === 'a');
+  assert.deepEqual(links.map(a => [a.textContent, a.getAttribute('href'), a.getAttribute('download')]), [
+    ['Audio (WAV)', 'blob:https://x/7', 'rain-v2.wav'],
+    ['Score', 'draft.php?file=score.json', 'rain-v2.json'],
+  ]);
+  assert.ok(!asked.some(f => f.startsWith('audio.')), 'no draft audio file is asked for');
+  render(null, renderTarget(root));
+});
+
+test('a sound that could not be built says why, and Play is disabled', async () => {
+  const root = makeEl('root');
+  await act(() => { render(h(ui.player.Player, playerProps({ src: [], rendered: { state: 'failed', reason: 'the server answered 404' }, download: { piece: 'rain', version: 1, sheet: false } })), renderTarget(root)); });
+  const alert = walk(root).find(e => e.getAttribute('role') === 'alert')!;
+  assert.equal(alert.textContent, 'The sound could not be built: the server answered 404');
+  assert.equal(button(root, 'Play').disabled, true);
+  assert.ok(['Back 5 seconds', 'Ahead 5 seconds', 'To the start', 'To the end'].every(n => labelled(root, n).disabled === true));
+  assert.doesNotMatch(root.textContent, /Building the sound|cannot play/);
+  render(null, renderTarget(root));
+});

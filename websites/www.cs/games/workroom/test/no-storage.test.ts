@@ -1,7 +1,8 @@
 // Unlocking, loading the vault, sealing and opening touch no IndexedDB,
 // localStorage, sessionStorage, cookie or Cache API, and the key modules do not
 // even name them: the one place an unlock is stored is remember.ts, which keeps
-// only non-extractable keys (test/remember.test.ts).
+// only non-extractable keys (test/remember.test.ts). A draft's built sound is
+// kept in memory only, so the render modules do not name them either.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -37,5 +38,12 @@ test('the modules that handle keys never name a browser store', () => {
   for (const file of ['note', 'seal', 'unlock', 'vault', 'answer', 'api', 'outbox', 'history', 'notes-session', 'recorder', 'energy']) {
     const source = readFileSync(new URL(`../src/${file}.ts`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /indexedDB|localStorage|sessionStorage|document\.cookie|\bcaches\b/, `${file}.ts`);
+  }
+});
+
+test('a draft\'s built sound is kept in memory: the render modules never name a browser store', () => {
+  for (const file of ['engine', 'master', 'plan', 'sound', 'spectrum', 'browser-sound']) {
+    const source = readFileSync(new URL(`../src/render/${file}.ts`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /indexedDB|localStorage|sessionStorage|document\.cookie|\bcaches\b/, `render/${file}.ts`);
   }
 });

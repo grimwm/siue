@@ -487,3 +487,51 @@ test("a change note's everyday \"rest\" is plain text, not a glossary word", asy
   assert.deepEqual(walk(note).filter(e => e._attrs['data-term'] !== undefined).map(e => e.textContent), ['quarter rest'], 'only the musical phrase links');
   unmount(root);
 });
+
+// --- A draft played from its score ---
+
+const parsedRenderable = (await import('../src/score.ts')).parseScore(JSON.parse(readFileSync(new URL('./fixtures/score-renderable-v1.json', import.meta.url), 'utf8')));
+assert.ok(parsedRenderable.ok);
+const renderableScore = parsedRenderable.score;
+
+test('a draft with no audio file is built once, says so while it builds, then plays the built sound', async () => {
+  const asked: string[] = [];
+  let finish!: (s: { url: string; channels: Float32Array[]; rate: number }) => void;
+  const buildSound = (key: string, _s: Score, onStage: (s: 'instruments' | 'rendering' | 'finishing') => void) => {
+    asked.push(key);
+    onStage('rendering');
+    return new Promise<{ url: string; channels: Float32Array[]; rate: number }>(r => { finish = r; });
+  };
+  const before = audios.length;
+  const root = await mount({ score: renderableScore, version: 3, versions: [3], buildSound });
+  assert.deepEqual(asked, [`${renderableScore.piece.id}/v3`]);
+  assert.match(root.textContent, /Building the sound…/);
+  assert.equal(audios.length, before, 'nothing to play yet');
+  await act(async () => { finish({ url: 'blob:built', channels: [new Float32Array(8)], rate: 48000 }); });
+  assert.doesNotMatch(root.textContent, /Building the sound/);
+  assert.equal(audios.at(-1)!.getAttribute('src'), 'blob:built');
+  assert.equal(button(root, 'Play').disabled, false);
+  assert.ok(walk(root).some(e => e.localName === 'a' && e.textContent === 'Audio (WAV)' && e.getAttribute('download') === `${renderableScore.piece.id}-v3.wav`));
+  assert.deepEqual(asked.length, 1, 'built once');
+  unmount(root);
+});
+
+test('a sound that could not be built says why, Play is disabled, and the other views still work', async () => {
+  const root = await mount({ score: renderableScore, buildSound: () => Promise.reject(new Error('the sample library\'s index could not be loaded: the server answered 404')) });
+  await act(async () => {});
+  assert.match(root.textContent, /The sound could not be built: the sample library's index could not be loaded: the server answered 404/);
+  assert.equal(button(root, 'Play').disabled, true);
+  assert.ok(!walk(root).some(e => e.localName === 'a' && e.textContent === 'Audio (WAV)'), 'no audio to download');
+  await act(() => { fire(button(root, 'Piano roll'), 'click'); });
+  assert.ok(walk(root).some(e => e._attrs['data-note'] !== undefined), 'the piano roll draws its notes');
+  unmount(root);
+});
+
+test('a draft with audio files plays them and never builds', async () => {
+  let builds = 0;
+  const root = await mount({ buildSound: () => { builds++; return new Promise(() => {}); } });
+  assert.equal(builds, 0);
+  assert.equal(audios.at(-1)!.getAttribute('src'), 'audio.webm');
+  assert.doesNotMatch(root.textContent, /Building the sound/);
+  unmount(root);
+});

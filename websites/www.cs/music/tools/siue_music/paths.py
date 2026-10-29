@@ -34,6 +34,10 @@ def glossary_path() -> Path:
     return site_dir() / "games" / "workroom" / "src" / "glossary.json"
 
 
+def library_path() -> Path:
+    return site_dir() / "music" / "library" / "library.json"
+
+
 def pieces_dir() -> Path:
     return site_dir() / "music" / "pieces"
 

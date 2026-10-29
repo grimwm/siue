@@ -254,3 +254,35 @@ test('two timelines get their own glow filter', () => {
   });
   assert.notEqual(ids[0], ids[1]);
 });
+
+test('a draft played from its score draws its sound picture from the rendered audio', async () => {
+  const { act } = await import('preact/test-utils');
+  const { SoundPicture } = (await importTsx<{ sp: typeof import('../src/ui/SoundPicture.tsx') }>(import.meta.dirname, { sp: '../src/ui/SoundPicture.tsx' })).sp;
+  const { parseScore } = await import('../src/score.ts');
+  const parsed = parseScore(JSON.parse(readFileSync(new URL('./fixtures/score-renderable-v1.json', import.meta.url), 'utf8')));
+  assert.ok(parsed.ok);
+  const { spectrogram: _none, ...bare } = parsed.score;
+  const made: { width: number; height: number }[] = [];
+  Object.assign(globalThis, { ImageData: class { constructor(_data: Uint8ClampedArray, width: number, height: number) { made.push({ width, height }); } } });
+  const channels = [new Float32Array(Math.round(bare.duration * 8000)).map((_, i) => Math.sin(i / 3))];
+  const base = { score: bare, view: fitView(bare.duration, 800), time: 0, imageSrc: 'spectrogram.png', onSeek: () => {}, onView: () => {} };
+  const root = makeEl('root');
+  await act(() => { render(h(SoundPicture, { ...base, rendered: { state: 'building', stage: 'instruments' } }), renderTarget(root)); });
+  assert.match(root.textContent, /Building the sound…/);
+  assert.equal(walk(root).filter(e => e.localName === 'img').length, 0, 'no picture file is asked for');
+  await act(() => { render(h(SoundPicture, { ...base, rendered: { state: 'ready', url: 'blob:x', channels, rate: 8000 } }), renderTarget(root)); });
+  const canvas = withAttr(root, 'data-spectrogram')[0]!;
+  assert.equal(canvas.localName, 'canvas');
+  assert.equal(walk(root).filter(e => e.localName === 'img').length, 0);
+  assert.equal(made.length, 1, 'the picture is drawn once');
+  assert.equal(String(made[0]!.height), '200');
+  assert.equal(canvas.getAttribute('height'), '200');
+  assert.equal(canvas.getAttribute('width'), String(made[0]!.width));
+  assert.deepEqual(withAttr(root, 'data-freq').map(e => e.textContent), ['high', '10 kHz', '1 kHz', '100 Hz', 'low'], '20 Hz to 12 kHz');
+  await act(() => { render(h(SoundPicture, { ...base, rendered: { state: 'failed', reason: 'the server answered 404' } }), renderTarget(root)); });
+  assert.match(root.textContent, /The sound could not be built: the server answered 404/);
+  assert.equal(withAttr(root, 'data-spectrogram').length, 0);
+  await act(() => { render(h(SoundPicture, { ...base, score }), renderTarget(root)); });
+  assert.equal(withAttr(root, 'data-spectrogram')[0]!.localName, 'img', 'a draft with its own picture shows that file');
+  render(null, renderTarget(root));
+});

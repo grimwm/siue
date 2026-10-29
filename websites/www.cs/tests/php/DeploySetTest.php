@@ -9,7 +9,8 @@ final class DeploySetTest extends TestCase
     /**
      * Never served: authoring sources, build setup, tools, tests and notes. The
      * rule is a pattern over every tracked file, so a new test, source or config
-     * needs no entry in a test: it is kept back by what it is.
+     * needs no entry in a test: it is kept back by what it is. The sample
+     * library's FLACs are the one exception: they are the product.
      */
     private const NEVER_SHIPS = '~'
         . '(^|/)src/|(^|/)tools/|^tests/|/protocol/|/node_modules/'
@@ -18,6 +19,11 @@ final class DeploySetTest extends TestCase
         . '|(^|/)\.gitignore$|^games/[^/]+/test/|(^|/)README\.md$|/fx-editor\.|/dist/pow-bench\.|/fx/blender/|^games/tankity/game\.yaml$'
         . '|\.(blend1?|wav|flac|aiff?)$'
         . '~';
+
+    private static function neverShips(string $f): bool
+    {
+        return !str_starts_with($f, 'music/library/') && (bool) preg_match(self::NEVER_SHIPS, $f);
+    }
 
     /** @var array{int, list<string>}|null the one deploy-list run, shared by every test */
     private static ?array $run = null;
@@ -169,7 +175,7 @@ final class DeploySetTest extends TestCase
         $set = self::set();
         $out = self::deploy()[1];
         $tracked = self::tracked();
-        $kept = array_values(array_filter($tracked, fn(string $f): bool => (bool) preg_match(self::NEVER_SHIPS, $f)));
+        $kept = array_values(array_filter($tracked, fn(string $f): bool => self::neverShips($f)));
         self::assertTrue(count($kept) > 80, 'the rule matches the authoring files' . ' :: ' . (string) count($kept));
         foreach (['games/tankity/src/sim.ts', 'games/tankity/test/smoke.test.ts', 'games/tankity/protocol/sim-vectors.json', 'games/tankity/dist/fx-editor.js',
             'games/tankity/dist/pow-bench.js', 'games/crete/dist/tiles-test.js', 'games/cylon/src/state.ts', 'games/crete/src/puzzle/step.ts', 'src/main.ts', 'tools/ts-build.mjs', 'tsconfig.json'] as $f) {
@@ -177,7 +183,7 @@ final class DeploySetTest extends TestCase
         }
         $shipped = array_values(array_filter($kept, fn(string $f): bool => isset($set[$f])));
         self::assertTrue($shipped === [], 'keeps back every authoring file' . ' :: ' . implode(', ', $shipped));
-        $leaks = array_values(array_filter($out, fn(string $f): bool => (bool) preg_match(self::NEVER_SHIPS, $f)));
+        $leaks = array_values(array_filter($out, fn(string $f): bool => self::neverShips($f)));
         self::assertTrue($leaks === [], 'ships no authoring or test files' . ' :: ' . implode(', ', $leaks));
     }
 

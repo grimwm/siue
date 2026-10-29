@@ -105,8 +105,13 @@ def mixdown(stems: list[np.ndarray], length: int, work: Path) -> np.ndarray:
     return folded
 
 
-def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, made: str, changes: list[dict] | None = None) -> list[str]:
-    """Writes the draft folder; returns the checks' problems. With any problem the audio is removed, so publish refuses the draft."""
+def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, made: str, changes: list[dict] | None = None,
+           score_only: bool = False) -> list[str]:
+    """
+    Writes the draft folder; returns the checks' problems. With any problem the audio is removed, so publish refuses the draft.
+    A score-only draft is still rendered, for the checks, but keeps only its score: the workroom builds its sound. With any
+    problem it keeps no score.json, so publish refuses it too.
+    """
     out = Path(out)
     work = out / "work"
     for d in (out / "stems", out / "midi", work):
@@ -132,10 +137,16 @@ def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, m
     _run("ffmpeg", "-v", "error", "-y", "-i", str(work / "master.wav"), "-lavfi",
          "aresample=24000,showspectrumpic=s=1600x480:legend=0:fscale=log:color=intensity:scale=log", str(out / "spectrogram.png"))
     problems += sharpness(work / "master.wav")
-    if problems:
-        # publish needs the audio, so a draft that breaks a check cannot be sent.
+    if problems or score_only:
+        # publish needs the audio of a draft that lists it, so a draft that breaks a check cannot be sent; a score-only draft lists none.
         (out / "audio.webm").unlink()
-    (out / "score.json").write_text(json.dumps(score_json(piece, draft, made, changes), indent=1) + "\n")
+    if score_only:
+        (out / "spectrogram.png").unlink()
+    if problems and score_only:
+        # A score-only draft has no audio to withhold, so it keeps no score.json, and publish has nothing to send.
+        (out / "score.json").unlink(missing_ok=True)
+    else:
+        (out / "score.json").write_text(json.dumps(score_json(piece, draft, made, changes, score_only), indent=1) + "\n")
     (out / "score.musicxml").write_text(musicxml(piece))
     shutil.rmtree(work)
     return problems

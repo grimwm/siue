@@ -55,7 +55,9 @@ class ConnectTest(unittest.TestCase):
         self.assertIn("%APPDATA%\\Claude\\claude_desktop_config.json", self.text(platform="win32"))
         self.assertIn("SIUE_MUSIC_BASE", text)
         self.assertIn("/home/me/.config/siue/music-config.json", text)
-        self.assertIn("cannot delete", text)
+        self.assertIn("delete published drafts", text)
+        self.assertIn("drafts:delete", text)
+        self.assertIn("cannot delete notes", text)
 
     def test_a_vault_other_than_the_default_is_passed_on_and_a_missing_op_is_named(self):
         argv = self.claude_line(self.text(vault="Music", op=None))

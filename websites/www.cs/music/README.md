@@ -168,7 +168,7 @@ standard input and are never printed.
 `siue-music mcp` is an MCP server for the owner's own AI app (Claude Code, Claude
 Desktop, any app that speaks MCP). The app starts it on the owner's computer over
 stdio; it uses the key tool above, so keys, sealing and refusals are those of
-`make music-publish` and `make music-pickup`, the private notes key comes from
+`make music-publish`, `make music-delete` and `make music-pickup`, the private notes key comes from
 1Password through `op`, and no answer carries a key. It is built on the official MCP
 Python SDK (`mcp`, pinned in `tools/requirements-mcp.in`), installed into
 `music/tools/.venv` from the hashed lock (see Locked packages).
@@ -189,12 +189,13 @@ Tools:
 | `list_pieces` | The drafts published on the server (GET `api/drafts.php`, with the `music-publish` key) and the local drafts in `music/pieces` with their files. |
 | `read_score(piece, version?)` | A local draft's `score.json` (newest when no version), its path, and what publish would refuse in it. |
 | `publish_draft(piece, version?)` | `make music-publish`: the same checks and refusals. |
+| `delete_draft(piece, version)` | `make music-delete`: deletes that one published draft from the server with the `music-publish` key's `drafts:delete` permission (publish keys have it); the files in `music/pieces` stay. The piece id and version are checked first; a key without the permission is told to run `make music-setup`, and a draft the server does not hold is named. |
 | `pick_up_notes` | `make music-pickup`: downloads, opens, saves, then marks each note picked up. Answers each note's kind, piece, draft, span, bars, lane, text, reaction, energy curve, transcript, and the paths of its recording, `transcript.txt` and `motif.mid`. |
 | `read_notes(limit?, piece?)` | The notes already in the notes folder, newest first, in the same shape. |
 | `wait_for_notes(timeout_seconds, poll_seconds?)` | Lists the waiting notes every `poll_seconds` (default `SIUE_MUSIC_POLL_SECONDS`, else `poll_seconds` in `music-config.json`, else 10; never under 2) and answers as soon as one waits, or at the timeout (at most 3600 s). It only lists; it reports each empty poll as MCP progress when the app asks for progress. |
 
-There is no delete tool: the API keys cannot delete (see Security model), so the AI
-cannot delete drafts or notes.
+`delete_draft` is the only delete: the AI cannot delete notes, which the owner deletes
+on the workroom pages.
 
 ## Locked packages
 

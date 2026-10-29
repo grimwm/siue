@@ -1,6 +1,7 @@
 // The front page's Connect your AI help: what the MCP server is, what it needs,
 // the one command that prints the connect commands, things to ask, and that the
-// AI cannot delete; numbered steps, no secret, and the pieces list shows it
+// AI may delete a published draft with the publish key's delete permission but
+// not notes; numbered steps, no secret, and the pieces list shows it
 // whether or not a keyring is uploaded.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -51,11 +52,15 @@ test('the steps are numbered and the one command that prints the connect command
   assert.match(steps.textContent, /claude mcp add/);
 });
 
-test('it gives things to ask and says the AI cannot delete drafts or notes', async () => {
+test('it gives things to ask, says deleting a draft needs the publish key\'s delete permission, and that notes cannot be deleted', async () => {
   const text = panel(await mount(h(ui.connect.ConnectAi, {})))!.textContent;
   assert.match(text, /wait for my notes and make the next draft/);
   assert.match(text, /publish draft 4 of crete-title/);
-  assert.match(text, /cannot delete drafts or notes/);
+  assert.match(text, /delete draft 2 of crete-title/);
+  assert.match(text, /delete permission/);
+  assert.match(text, /publish keys have/);
+  assert.match(text, /cannot delete notes/);
+  assert.doesNotMatch(text, /cannot delete drafts/);
 });
 
 test('it shows no secret: no key, passphrase or address with one in it', async () => {

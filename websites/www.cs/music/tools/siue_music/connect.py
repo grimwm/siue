@@ -48,5 +48,6 @@ def connect_text(python: Path, tool: Path, base: str, op: str | None, vault: str
     ]
     if not op:
         lines += ["", "The 1Password CLI (op) was not found on this PATH: install it and sign in, then run make music-mcp-setup again."]
-    lines += ["", "The AI can list, read, publish, pick up and wait for notes. It cannot delete drafts or notes."]
+    lines += ["", "The AI can list and read drafts, publish and delete published drafts, and wait for, pick up and read notes.",
+              "Deleting needs the music-publish key's drafts:delete permission, which publish keys have. It cannot delete notes."]
     return "\n".join(lines) + "\n"

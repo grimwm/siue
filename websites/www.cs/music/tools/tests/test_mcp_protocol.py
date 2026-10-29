@@ -1,5 +1,5 @@
-"""`siue-music mcp` over stdio as an MCP client sees it: it starts, initializes, lists its tools (none deletes), and its
-list, wait and pickup tools answer from a fake API on 127.0.0.1, with every line on stdout a JSON-RPC message and no key
+"""`siue-music mcp` over stdio as an MCP client sees it: it starts, initializes, lists its tools (delete_draft is the one
+delete), and its list, wait, pickup and delete tools answer from a fake API on 127.0.0.1, with every line on stdout a JSON-RPC message and no key
 in anything it says. It needs the MCP SDK: this Python's, or the tool's virtualenv (make music-mcp-setup)."""
 import json
 import os
@@ -16,7 +16,7 @@ from siue_music import sealing
 
 PICKUP, PUBLISH = "3" * 64, "4" * 64
 NOTE = "d" * 32
-TOOL_NAMES = {"list_pieces", "read_score", "publish_draft", "pick_up_notes", "read_notes", "wait_for_notes"}
+TOOL_NAMES = {"list_pieces", "read_score", "publish_draft", "delete_draft", "pick_up_notes", "read_notes", "wait_for_notes"}
 
 
 def python_with_mcp() -> str | None:
@@ -103,14 +103,17 @@ class McpProtocolTest(unittest.TestCase):
     def test_initialize_and_list_the_tools(self):
         result = self.initialize()
         self.assertEqual(result["serverInfo"]["name"], "siue-music")
-        self.assertIn("cannot delete", result["instructions"])
+        self.assertIn("delete_draft", result["instructions"])
+        self.assertIn("cannot delete notes", result["instructions"])
         tools = self.request("tools/list")["tools"]
         self.assertEqual({t["name"] for t in tools}, TOOL_NAMES)
         wait = next(t for t in tools if t["name"] == "wait_for_notes")
         self.assertIn("timeout_seconds", wait["inputSchema"]["required"])
         for t in tools:
             self.assertTrue(t["description"], t["name"])
-            self.assertNotIn("delete", t["name"])
+        self.assertEqual([t["name"] for t in tools if "delete" in t["name"]], ["delete_draft"])
+        delete = next(t for t in tools if t["name"] == "delete_draft")
+        self.assertEqual(sorted(delete["inputSchema"]["required"]), ["piece", "version"])
 
     def test_list_then_wait_then_pick_up_against_the_fake_api(self):
         self.initialize()
@@ -153,6 +156,28 @@ class McpProtocolTest(unittest.TestCase):
         self.assertTrue(result["isError"])
         self.assertIn("not a piece id", result["content"][0]["text"])
         self.assertEqual(self.call("list_pieces", {})["server"], self.server.base, "the server still answers")
+
+    def test_delete_a_draft_and_a_key_without_the_permission(self):
+        self.initialize()
+        self.server.drafts.append({"piece": "test-piece", "version": 1, "published_at": 1_700_000_000, "project_id": "crete",
+                                   "project_name": "Crete", "kind": "music"})
+        self.assertEqual(self.call("delete_draft", {"piece": "test-piece", "version": 2})["deleted"], True)
+        self.assertEqual([(d["piece"], d["version"]) for d in self.call("list_pieces", {})["published"]], [("test-piece", 1)])
+        self.assertIn("POST /music/api/delete-draft.php", self.server.requests)
+
+        result = self.request("tools/call", {"name": "delete_draft", "arguments": {"piece": "test-piece", "version": 2}})
+        self.assertTrue(result["isError"])
+        self.assertIn("does not hold test-piece v2", result["content"][0]["text"])
+
+        self.server.keys[PUBLISH].discard("drafts:delete")
+        result = self.request("tools/call", {"name": "delete_draft", "arguments": {"piece": "test-piece", "version": 1}})
+        self.assertTrue(result["isError"])
+        self.assertIn("drafts:delete", result["content"][0]["text"])
+        self.assertIn("make music-setup", result["content"][0]["text"])
+        self.assertEqual(len(self.server.drafts), 1, "the refused delete removed nothing")
+
+        result = self.request("tools/call", {"name": "delete_draft", "arguments": {"piece": "general", "version": 1}})
+        self.assertTrue(result["isError"])
 
 
 if __name__ == "__main__":

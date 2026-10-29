@@ -6,14 +6,14 @@ import type { ComponentChildren } from 'preact';
 import { Panel } from './console/Panel.tsx';
 
 const Code = (p: { children: ComponentChildren }) => <code class="rounded bg-well px-1 font-mono text-sm">{p.children}</code>;
-const ASK = ['wait for my notes and make the next draft', 'publish draft 4 of crete-title', 'what did I say about crete-title?'];
+const ASK = ['wait for my notes and make the next draft', 'publish draft 4 of crete-title', 'delete draft 2 of crete-title', 'what did I say about crete-title?'];
 
 export function ConnectAi() {
   return (
     <Panel title="Connect your AI" class="grid gap-3" data={{ 'data-connect-ai': '' }}>
       <p class="text-sm">
         Your AI app (Claude Code, Claude Desktop, or any app that speaks MCP) can work in this workroom for you: list the pieces,
-        read a draft's score, publish a draft, wait for your notes and read them. A small program on your computer, the
+        read a draft's score, publish a draft or delete a published one, wait for your notes and read them. A small program on your computer, the
         workroom's MCP server, does this with your keys; this page only explains how to set it up.
       </p>
       <details class="grid gap-3 text-sm">
@@ -32,7 +32,7 @@ export function ConnectAi() {
           <li>Ask your AI, in your own words, for example: {ASK.map((a, i) => <span key={a}>{i > 0 ? ', ' : ''}“{a}”</span>)}.</li>
         </ol>
         <p class="mt-2">The printed commands name the workroom's server address. For a workroom on another server, the printed text says where to change it.</p>
-        <p class="mt-2 text-dim">Your AI cannot delete drafts or notes: the workroom's API keys cannot delete. You delete notes yourself, here in the workroom.</p>
+        <p class="mt-2 text-dim">Deleting a published draft needs the publish key's delete permission, which publish keys have; the draft's files on your computer stay. Your AI cannot delete notes: you delete those yourself, here in the workroom.</p>
       </details>
     </Panel>
   );

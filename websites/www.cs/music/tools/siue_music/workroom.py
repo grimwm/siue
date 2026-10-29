@@ -1,6 +1,7 @@
 """What the MCP server's tools do, for an AI working on the owner's computer: list the pieces, read a score, publish a
-draft, pick up and read the owner's notes, and wait for notes. Keys, sealing and refusals are the ones `make
-music-publish` and `make music-pickup` use. No answer carries a key, and nothing here can delete."""
+draft, delete one published draft, pick up and read the owner's notes, and wait for notes. Keys, sealing and refusals
+are the ones `make music-publish`, `make music-delete` and `make music-pickup` use. No answer carries a key, and
+deleting one published draft is the only delete."""
 import asyncio
 import json
 import math
@@ -33,6 +34,7 @@ def _stderr(line: str) -> None:
 
 class Workroom:
     MAX_WAIT_SECONDS = 3600
+    MAX_VERSION = 9999  # the highest draft version the server accepts
     MAX_NOTES_READ = 200
 
     def __init__(self, env: Mapping[str, str], home: Path | None = None, keys: Callable[[], object] | None = None,
@@ -125,6 +127,28 @@ class Workroom:
         except PublishError as e:
             raise WorkroomError(str(e)) from None
         return {"piece": piece, "version": done, "published": True, "server": self.base()}
+
+    def delete_draft(self, piece: str, version: int) -> dict:
+        """Deletes one published draft from the server, as `make music-delete PIECE= VERSION=` does, with the publish
+        key's drafts:delete permission. The local files in music/pieces are untouched."""
+        if not (isinstance(piece, str) and ID_RE.fullmatch(piece)) or piece == GENERAL_PIECE:
+            raise WorkroomError(f"{piece!r} is not a piece id (lowercase letters, digits and hyphens)")
+        if isinstance(version, bool) or not isinstance(version, int) or not 1 <= version <= self.MAX_VERSION:
+            raise WorkroomError(f"{version!r} is not a draft version (1 to {self.MAX_VERSION})")
+        api = self._api(PUBLISH_KEY, f"make music-delete PIECE={piece} VERSION={version}")
+        try:
+            api.delete_draft(piece, version)
+        except ApiError as e:
+            if e.status == 403:
+                raise WorkroomError("The music-publish API key may not delete drafts (it lacks the drafts:delete permission). "
+                                    "Run make music-setup to save a publish key that has it; if the key already has it, the "
+                                    "server must be updated to one that deletes drafts.") from None
+            if e.status == 404 and str(e).endswith(": not_found"):
+                raise WorkroomError(f"The server does not hold {piece} v{version}; list_pieces shows the published drafts.") from None
+            if e.status in (404, 405):
+                raise WorkroomError(f"The server has no draft delete route ({e}): it must be updated to one that deletes drafts.") from None
+            raise
+        return {"piece": piece, "version": version, "deleted": True, "server": self.base()}
 
     # notes
 

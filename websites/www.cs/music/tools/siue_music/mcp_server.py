@@ -18,8 +18,8 @@ INSTRUCTIONS = """The SIUE music workroom: the owner listens to drafts of game m
 owner's keys. Drafts live in the repository's music/pieces/<piece>/v<n>/ folders; a draft needs score.json,
 score.musicxml (music only), audio.webm or audio.m4a, and spectrogram.png before it can be published.
 A usual loop: wait_for_notes, then pick_up_notes, read what the owner said, make the next draft in music/pieces, then
-publish_draft. Published drafts and notes cannot be deleted through these tools: the server's API keys cannot delete,
-so the AI cannot delete drafts or notes; the owner does that on the workroom pages."""
+publish_draft. delete_draft removes one published draft from the server (never the local files); it needs the
+music-publish API key's drafts:delete permission. The AI cannot delete notes: the owner does that on the workroom pages."""
 
 _REFUSALS = (WorkroomError, KeysError, KeyMismatch, NotUploaded, OpError, ApiError, NotesInsideRepo, BadConfig)
 
@@ -49,8 +49,15 @@ def build(room: Workroom) -> MCPServer:
     @server.tool(structured_output=True)
     def publish_draft(piece: str, version: int | None = None) -> dict[str, Any]:
         """Publishes a local draft (the newest when no version is given) to the workroom, exactly as make music-publish
-        does: the same checks and refusals, and a published version can never be replaced or deleted."""
+        does: the same checks and refusals. A published version cannot be replaced; delete_draft removes one."""
         return _answer(lambda: room.publish_draft(piece, version))
+
+    @server.tool(structured_output=True)
+    def delete_draft(piece: str, version: int) -> dict[str, Any]:
+        """Deletes one published draft (piece and version, both required) from the workroom, as make music-delete does.
+        The local files in music/pieces stay. It needs the music-publish API key's drafts:delete permission; a key
+        without it is refused with what to do."""
+        return _answer(lambda: room.delete_draft(piece, version))
 
     @server.tool(structured_output=True)
     def pick_up_notes() -> dict[str, Any]:

@@ -1,6 +1,6 @@
 """What the MCP server's tools do, without the protocol: list the pieces (published and local), read a score, publish
 with publish.py's refusals, pick up notes the way `make music-pickup` does and read them back, and wait for notes by
-polling the waiting list. No answer carries a key, and there is no way to delete."""
+polling the waiting list, and delete one published draft. No answer carries a key; deleting one draft is the only delete."""
 import asyncio
 import hashlib
 import json
@@ -46,6 +46,7 @@ class FakeApi:
         self.calls: list[str] = []
         self.listings: list[list[str]] | None = None  # per waiting() call, the ids listed; None lists self.notes
         self.drafts_error: ApiError | None = None
+        self.delete_error: ApiError | None = None
 
     def waiting(self):
         self.calls.append("list")
@@ -69,6 +70,11 @@ class FakeApi:
 
     def publish_draft(self, piece, version, files):
         self.sent.append((piece, version, sorted(files)))
+
+    def delete_draft(self, piece, version):
+        self.calls.append(f"delete {piece} {version}")
+        if self.delete_error:
+            raise self.delete_error
 
 
 class WorkroomTest(unittest.TestCase):
@@ -276,9 +282,43 @@ class WorkroomTest(unittest.TestCase):
             with self.assertRaises(WorkroomError):
                 asyncio.run(self.room.wait_for_notes(bad))
 
-    def test_there_is_no_way_to_delete(self):
+    # deleting
+
+    def test_delete_removes_one_published_draft_with_the_publish_key_and_leaves_the_local_files(self):
+        answer = self.room.delete_draft("test-piece", 1)
+        self.assertEqual(answer, {"piece": "test-piece", "version": 1, "deleted": True, "server": "https://music.example.org/music/"})
+        self.assertEqual(self.api.calls, ["delete test-piece 1"])
+        self.assertEqual(self.made, [("https://music.example.org/music/", PUBLISH_SECRET)])
+        self.assertTrue((self.pieces / "test-piece" / "v1" / "score.json").is_file())
+
+    def test_delete_refuses_what_is_not_a_piece_or_a_version_before_asking_for_a_key(self):
+        for piece, version in (("../etc", 1), ("general", 1), ("Test", 1), ("test-piece", 0), ("test-piece", 10000),
+                               ("test-piece", None), ("test-piece", True), ("test-piece", "1")):
+            with self.assertRaises(WorkroomError):
+                self.room.delete_draft(piece, version)
+        self.assertEqual((self.api.calls, self.keys.asked), ([], []))
+
+    def test_a_key_without_the_delete_permission_is_told_what_to_do(self):
+        self.api.delete_error = ApiError("api/delete-draft.php answered 403: scope", 403)
+        with self.assertRaises(WorkroomError) as e:
+            self.room.delete_draft("test-piece", 1)
+        self.assertIn("drafts:delete", str(e.exception))
+        self.assertIn("make music-setup", str(e.exception))
+        self.assertIn("server", str(e.exception))
+
+    def test_a_draft_the_server_does_not_hold_and_a_server_without_the_route_are_told_apart(self):
+        self.api.delete_error = ApiError("api/delete-draft.php answered 404: not_found", 404)
+        with self.assertRaises(WorkroomError) as e:
+            self.room.delete_draft("test-piece", 3)
+        self.assertIn("does not hold test-piece v3", str(e.exception))
+        self.api.delete_error = ApiError("api/delete-draft.php answered 404: Not Found", 404)
+        with self.assertRaises(WorkroomError) as e:
+            self.room.delete_draft("test-piece", 3)
+        self.assertIn("must be updated", str(e.exception))
+
+    def test_deleting_one_draft_is_the_only_delete(self):
         names = [n for n in dir(Workroom) if not n.startswith("_")]
-        self.assertFalse([n for n in names if "delete" in n or "remove" in n or "forget" in n])
+        self.assertEqual([n for n in names if "delete" in n or "remove" in n or "forget" in n], ["delete_draft"])
 
 
 if __name__ == "__main__":

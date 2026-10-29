@@ -1,5 +1,5 @@
 """The music API's key routes over real HTTP on 127.0.0.1, for tests that run the tool in another process: it lists, serves
-and marks notes for the pickup key, and lists and keeps drafts for the publish key, as music/lib/Api.php does."""
+and marks notes for the pickup key, and lists, keeps and deletes drafts for the publish key, as music/lib/Api.php does."""
 import hashlib
 import json
 import threading
@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 class FakeServer:
     def __init__(self, pickup_key: str, publish_key: str):
-        self.keys = {pickup_key: "notes:pickup", publish_key: "drafts:publish"}
+        self.keys = {pickup_key: {"notes:pickup"}, publish_key: {"drafts:publish", "drafts:delete"}}
         self.notes: dict[str, bytes] = {}
         self.marked: list[str] = []
         self.drafts: list[dict] = []
@@ -58,15 +58,15 @@ class _Handler(BaseHTTPRequestHandler):
         query = dict(urllib.parse.parse_qsl(url.query))
         s.requests.append(f"{method} {url.path}")
         auth = self.headers.get("Authorization", "")
-        scope = s.keys.get(auth.removeprefix("Bearer ")) if auth.startswith("Bearer ") else None
-        if scope is None:
+        scopes = s.keys.get(auth.removeprefix("Bearer ")) if auth.startswith("Bearer ") else None
+        if scopes is None:
             return self._json(401, {"error": "key"})
         route = url.path.removeprefix("/music/")
         need = {"api/notes.php": "notes:pickup", "api/note.php": "notes:pickup", "api/picked-up.php": "notes:pickup",
-                "api/drafts.php": "drafts:publish"}.get(route)
+                "api/drafts.php": "drafts:publish", "api/delete-draft.php": "drafts:delete"}.get(route)
         if need is None:
             return self._json(404, {"error": "not_found"})
-        if need != scope:
+        if need not in scopes:
             return self._json(403, {"error": "scope"})
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0)) if method == "POST" else b""
         with s.lock:
@@ -85,6 +85,12 @@ class _Handler(BaseHTTPRequestHandler):
                 s.drafts.insert(0, {"piece": query["piece"], "version": int(query["version"]), "published_at": 1_800_000_000,
                                     "project_id": "", "project_name": "", "kind": "music", "bytes": len(body)})
                 return self._json(201, {"piece": query["piece"], "version": int(query["version"])})
+            if route == "api/delete-draft.php" and method == "POST":
+                kept = [d for d in s.drafts if (d["piece"], str(d["version"])) != (query.get("piece"), query.get("version"))]
+                if len(kept) == len(s.drafts):
+                    return self._json(404, {"error": "not_found"})
+                s.drafts = kept
+                return self._json(200, {"piece": query["piece"], "version": int(query["version"]), "deleted": True})
         return self._json(405, {"error": "method"})
 
     def do_GET(self):

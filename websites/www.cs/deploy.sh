@@ -151,6 +151,8 @@ while IFS= read -r -d '' f; do
     games/*/package.json | games/*/package-lock.json | games/*/tsconfig.json | games/*/tsconfig.test.json | games/*/node_modules/* | games/*/.gitignore) continue ;;
     # Authoring sources (Git LFS audio and Blender scenes, see .gitattributes;
     # TypeScript in games/*/src/): never served.
+    # The shared sample library (CC0) ships whole, ahead of the *.flac rule below: its index, README and FLACs.
+    music/library/library.json | music/library/README.md | music/library/*/*.flac) ;;
     *.blend | *.blend1 | *.wav | *.flac | *.aif | *.aiff | games/*/src/*) continue ;;
     # The shared build kit, its tests and the games' build setup (the kit's
     # package files and each game's build.json; test/ is skipped above); the

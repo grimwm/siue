@@ -1,0 +1,537 @@
+{
+ "version": 1,
+ "source": "https://raw.githubusercontent.com/sgossner/VSCO-2-CE",
+ "commit": "28092772094b2d9f1148d84cea97f4545b8c687d",
+ "licence": "CC0 1.0 Universal",
+ "credit": "Versilian Studios; organ sampled by Simon Dalzell of Ivy Audio",
+ "instruments": {
+  "harp": {
+   "files": [
+    {
+     "pitch": 28,
+     "file": "harp/28.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 31,
+     "file": "harp/31.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 35,
+     "file": "harp/35.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 38,
+     "file": "harp/38.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 41,
+     "file": "harp/41.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 45,
+     "file": "harp/45.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 48,
+     "file": "harp/48.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 52,
+     "file": "harp/52.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 55,
+     "file": "harp/55.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 59,
+     "file": "harp/59.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 62,
+     "file": "harp/62.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 65,
+     "file": "harp/65.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 69,
+     "file": "harp/69.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "harp/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 76,
+     "file": "harp/76.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 79,
+     "file": "harp/79.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 83,
+     "file": "harp/83.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 86,
+     "file": "harp/86.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 89,
+     "file": "harp/89.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 93,
+     "file": "harp/93.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 95,
+     "file": "harp/95.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 98,
+     "file": "harp/98.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 101,
+     "file": "harp/101.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ]
+  },
+  "cello": {
+   "files": [
+    {
+     "pitch": 36,
+     "file": "cello/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 40,
+     "file": "cello/40.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 43,
+     "file": "cello/43.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 47,
+     "file": "cello/47.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 50,
+     "file": "cello/50.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 53,
+     "file": "cello/53.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "cello/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "cello/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 64,
+     "file": "cello/64.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 67,
+     "file": "cello/67.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 71,
+     "file": "cello/71.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 74,
+     "file": "cello/74.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 77,
+     "file": "cello/77.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    2.5,
+    6.5
+   ]
+  },
+  "bass": {
+   "files": [
+    {
+     "pitch": 28,
+     "file": "bass/28.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 30,
+     "file": "bass/30.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 31,
+     "file": "bass/31.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 34,
+     "file": "bass/34.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 36,
+     "file": "bass/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 38,
+     "file": "bass/38.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 40,
+     "file": "bass/40.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 42,
+     "file": "bass/42.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 44,
+     "file": "bass/44.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 45,
+     "file": "bass/45.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 49,
+     "file": "bass/49.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 52,
+     "file": "bass/52.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 56,
+     "file": "bass/56.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 59,
+     "file": "bass/59.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    2.0,
+    6.0
+   ]
+  },
+  "organ": {
+   "files": [
+    {
+     "pitch": 36,
+     "file": "organ/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 39,
+     "file": "organ/39.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 42,
+     "file": "organ/42.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 45,
+     "file": "organ/45.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 48,
+     "file": "organ/48.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 51,
+     "file": "organ/51.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 54,
+     "file": "organ/54.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "organ/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "organ/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 63,
+     "file": "organ/63.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 66,
+     "file": "organ/66.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 69,
+     "file": "organ/69.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "organ/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 75,
+     "file": "organ/75.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 78,
+     "file": "organ/78.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 81,
+     "file": "organ/81.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "organ/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 87,
+     "file": "organ/87.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 90,
+     "file": "organ/90.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 93,
+     "file": "organ/93.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 96,
+     "file": "organ/96.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    3.0,
+    9.0
+   ]
+  },
+  "horn": {
+   "files": [
+    {
+     "pitch": 33,
+     "file": "horn/33.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 36,
+     "file": "horn/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 39,
+     "file": "horn/39.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 43,
+     "file": "horn/43.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 46,
+     "file": "horn/46.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 50,
+     "file": "horn/50.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 53,
+     "file": "horn/53.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "horn/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "horn/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 74,
+     "file": "horn/74.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 77,
+     "file": "horn/77.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    1.5,
+    4.0
+   ]
+  }
+ }
+}

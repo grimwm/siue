@@ -119,7 +119,7 @@ music-e2e: ## Music workroom browser check (test keyring, fake microphone)
 	echo MUSIC-E2E-OK
 
 # The music workroom's key and note tool (music/tools/siue-music), run in its own virtualenv.
-.PHONY: music-setup music-status music-pickup music-publish music-delete music-rotate music-forget music-mcp music-mcp-setup music-test music-image music-compose-test music-render
+.PHONY: music-setup music-status music-pickup music-publish music-delete music-rotate music-forget music-mcp music-mcp-setup music-test music-image music-compose-test music-render music-library
 MUSIC_PY ?= $(if $(wildcard music/tools/.venv/bin/python),music/tools/.venv/bin/python,python3)
 # The tool's interpreter as an absolute path when it is one (the browser check runs it from tests/e2e); a bare python3 stays a command name.
 MUSIC_PY_ABS = $(if $(findstring /,$(MUSIC_PY)),$(abspath $(MUSIC_PY)),$(MUSIC_PY))
@@ -165,3 +165,5 @@ music-compose-test: ## Run the composing tests in the container
 music-render: ## Compose and render a draft (PIECE=<id> VERSION=n [CUT=<name>])
 	@test -n "$(PIECE)" -a -n "$(VERSION)" || { echo "usage: make music-render PIECE=crete-title VERSION=1" >&2; exit 1; }
 	@$(MUSIC_RUN) python3 -m siue_compose.cli render "$(PIECE)" "$(VERSION)" $(if $(CUT),--cut "$(CUT)")
+music-library: ## Rebuild the shared FLAC sample library (music/library/)
+	@$(MUSIC_RUN) python3 -m siue_compose.library

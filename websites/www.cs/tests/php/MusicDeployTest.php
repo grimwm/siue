@@ -30,6 +30,30 @@ final class MusicDeployTest extends TestCase
         }
     }
 
+    public function testShipsTheSampleLibrary(): void
+    {
+        $list = self::shipped();
+        self::assertContains('music/library/library.json', $list);
+        self::assertContains('music/library/README.md', $list);
+        self::assertContains('music/library/harp/28.flac', $list);
+        $index = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/music/library/library.json'), true);
+        foreach ($index['instruments'] as $inst) {
+            foreach ($inst['files'] as $f) {
+                self::assertContains('music/library/' . $f['file'], $list, $f['file']);
+            }
+        }
+    }
+
+    public function testServesTheSampleLibraryPlainly(): void
+    {
+        $conf = (string) file_get_contents(dirname(__DIR__, 2) . '/docker/nginx/default.conf');
+        self::assertStringNotContainsString('/music/library/ { deny all; }', $conf);
+        self::assertStringContainsString('location ~ ^/music/library/.*\.flac$ {', $conf);
+        self::assertStringContainsString('default_type audio/flac;', $conf);
+        $ht = (string) file_get_contents(dirname(__DIR__, 2) . '/music/.htaccess');
+        self::assertStringContainsString('AddType audio/flac .flac', $ht);
+    }
+
     public function testNeverShipsToolsDraftsOrDocs(): void
     {
         foreach (self::shipped() as $f) {

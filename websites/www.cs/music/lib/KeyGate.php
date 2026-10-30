@@ -26,7 +26,7 @@ final class KeyGate
     public function check(\Admin\Request $r, string $scope): int|\Admin\Response
     {
         if (!$r->https && !\admin_is_local_base($this->baseUrl)) {
-            return self::error(403, 'HTTPS required.');
+            return \Admin\Keys::error(403, 'HTTPS required.');
         }
         $header = $r->headers['authorization'] ?? '';
         if (preg_match('/^Bearer ([0-9a-f]{64})$/D', $header, $m) === 1) {
@@ -41,39 +41,11 @@ final class KeyGate
         return $deny ?? $this->accounts->ownerId();
     }
 
+    /** The AI key's account, metered like an admin key; a scope outside AiKeys::SCOPES is refused whatever its row holds. */
     private function aiKey(int $id, int $account, string $scopes, string $scope): int|\Admin\Response
     {
-        $now = $this->clock->now();
-        $this->db->exec('BEGIN IMMEDIATE');
-        try {
-            $this->db->prepare('DELETE FROM studio_key_hits WHERE at <= ?')->execute([$now - 60]);
-            $st = $this->db->prepare('SELECT COUNT(*) FROM studio_key_hits WHERE key_id = ?');
-            $st->execute([$id]);
-            $over = (int) $st->fetchColumn() >= \Admin\Keys::PER_MINUTE;
-            if (!$over) {
-                $this->db->prepare('INSERT INTO studio_key_hits (key_id, at) VALUES (?, ?)')->execute([$id, $now]);
-            }
-            $held = json_decode($scopes, true);
-            $allowed = isset(AiKeys::SCOPES[$scope]) && is_array($held) && in_array($scope, $held, true);
-            if (!$over && $allowed) {
-                $this->db->prepare('UPDATE studio_keys SET last_used_at = ? WHERE id = ?')->execute([$now, $id]);
-            }
-            $this->db->exec('COMMIT');
-        } catch (\Throwable $e) {
-            if ($this->db->inTransaction()) {
-                $this->db->exec('ROLLBACK');
-            }
-            throw $e;
-        }
-        if ($over) {
-            return self::error(429, 'Too many requests.');
-        }
-        return $allowed ? $account : self::error(403, 'This key lacks the scope.');
-    }
-
-    /** A 403 or 429 in Admin\Keys' shape, so a tool cannot tell an AI key's refusal from an admin key's. */
-    private static function error(int $status, string $message): \Admin\Response
-    {
-        return new \Admin\Response($status, \Admin\Headers::apply(['Content-Type' => 'application/json']), json_encode(['error' => $message], JSON_THROW_ON_ERROR));
+        $held = json_decode($scopes, true);
+        $allowed = isset(AiKeys::SCOPES[$scope]) && is_array($held) && in_array($scope, $held, true);
+        return \Admin\Keys::meter($this->db, $this->clock, 'studio_keys', $id, $allowed) ?? $account;
     }
 }

@@ -16,18 +16,20 @@ final class MailTemplate
     public const MUTED = '#5a6578';
     public const RED = '#c81010';
 
-    /** @return array{subject:string,mime:string} */
-    public static function link(string $url, int $minutes): array
+    /** @return array{subject:string,mime:string} $studio: the music studio's link, else the admin pages' */
+    public static function link(string $url, int $minutes, bool $studio = false): array
     {
         $good = 'Good for ' . $minutes . ($minutes === 1 ? ' minute' : ' minutes') . ', once.';
-        $text = "Sign in\r\n\r\n"
+        $heading = $studio ? 'Sign in to your music studio' : 'Sign in';
+        $text = "$heading\r\n\r\n"
             . "$good\r\n\r\n"
             . $url . "\r\n\r\n"
             . "If you did not ask for this, ignore it.\r\n";
         $body = self::p($good)
             . self::button($url, 'Sign in')
             . self::p('If you did not ask for this, ignore it.', true);
-        return ['subject' => 'Your sign-in link', 'mime' => self::multipart($text, self::page('Sign in', $body))];
+        $subject = $studio ? 'Your music studio sign-in link' : 'Your sign-in link';
+        return ['subject' => $subject, 'mime' => self::multipart($text, self::page($heading, $body, $studio ? 'MUSIC STUDIO' : 'ADMIN'))];
     }
 
     /** @return array{subject:string,mime:string} */

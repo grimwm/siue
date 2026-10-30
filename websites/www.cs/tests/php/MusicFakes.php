@@ -1,7 +1,7 @@
 <?php
 // Helpers for the music workroom's tests: fixed fingerprints, a fake sealed
 // bundle (only its clear header is real), a draft bundle, a store in a temp
-// directory, and a signed-in request.
+// directory, the pages on studio sessions, and signed-in requests.
 declare(strict_types=1);
 
 require_once __DIR__ . '/AdminFakes.php';
@@ -56,10 +56,46 @@ function music_world(bool $keyed = true, string $email = Admin\Auth::OWNER, stri
     return [$store, $db, $dir, $clock, $accounts, $id];
 }
 
-/** A request with a live session cookie (and HTTPS). */
-function music_signed_in(Admin\Sessions $sessions, array $over = []): Admin\Request
+/** A request carrying a live studio session of $account (and HTTPS); $studio is a studio realm's Sessions. */
+function music_signed_in(Admin\Sessions $studio, int $account, array $over = []): Admin\Request
 {
-    $header = $sessions->start(req(['https' => true]));
-    preg_match('/' . preg_quote(Admin\Sessions::COOKIE, '/') . '=([0-9a-f]{64})/', $header, $m);
+    $header = $studio->start(req(['https' => true]), $account);
+    preg_match('/^__Secure-studio=([0-9a-f]{64});/', $header, $m);
+    return req(array_replace(['https' => true, 'cookies' => ['__Secure-studio' => $m[1]]], $over));
+}
+
+/** A request carrying a live admin session (and HTTPS); $admin is the admin realm's Sessions. */
+function music_admin_signed_in(Admin\Sessions $admin, array $over = []): Admin\Request
+{
+    $header = $admin->start(req(['https' => true]));
+    preg_match('/^' . preg_quote(Admin\Sessions::COOKIE, '/') . '=([0-9a-f]{64});/', $header, $m);
     return req(array_replace(['https' => true, 'cookies' => [Admin\Sessions::COOKIE => $m[1]]], $over));
+}
+
+/** fn(int $account): Music\Store on $db and $dir, each account with the limits its address has under $people (studio.json's shape). */
+function music_store_for(PDO $db, string $dir, Admin\Clock $clock, string $people = '{}'): Closure
+{
+    $named = Admin\People::fromJson($people) ?? throw new InvalidArgumentException('bad people JSON');
+    $accounts = new Music\Accounts($db, $clock, $named);
+    return static fn(int $account): Music\Store => new Music\Store($db, $dir, $clock, $account, Music\Limits::for($named, (string) $accounts->emailOf($account)), $accounts);
+}
+
+/**
+ * The workroom's pages on $db and $dir, as music_run builds them, with studio sessions beside the admin folder $base.
+ * @return array{Music\Pages, Admin\Sessions, Closure, Music\Accounts} pages, studio sessions, store for an account, accounts
+ */
+function music_pages(PDO $db, string $dir, Admin\Clock $clock, string $base, string $people = '{}'): array
+{
+    $named = Admin\People::fromJson($people) ?? throw new InvalidArgumentException('bad people JSON');
+    $accounts = new Music\Accounts($db, $clock, $named);
+    $storeFor = music_store_for($db, $dir, $clock, $people);
+    $sessions = new Admin\Sessions($db, $clock, Admin\Realm::studio($base));
+    return [new Music\Pages($storeFor, $accounts, $named, $sessions, '0123456789', $base), $sessions, $storeFor, $accounts];
+}
+
+/** A locked keyring envelope of the pinned shape (Music\Keyring), random inside. */
+function music_locked_keyring(array $over = []): array
+{
+    return $over + ['v' => 1, 'kdf' => 'PBKDF2-SHA-256', 'iterations' => 600000, 'salt' => base64_encode(random_bytes(16)),
+        'iv' => base64_encode(random_bytes(12)), 'ct' => base64_encode(random_bytes(2400))];
 }

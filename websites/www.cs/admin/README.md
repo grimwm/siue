@@ -43,8 +43,8 @@ database elsewhere, but reaches PHP only where the server passes environment thr
   `@siue.edu` address (no `+`, no subdomain), with `__Secure-studio*` cookies on `Path=/~wgrim/music/`, the
   `studio_` tables and an account on each device and session. A link, device or session is looked up only in its
   own realm's tables, so neither realm opens the other. Mail goes only to plain `@siue.edu` addresses.
-  The studio realm's pages are `music/login.php`, `verify.php` and `logout.php`; its sign-in notice says
-  "music studio", and `SignIn` refuses to be built for it without the step that finds the account.
+  The studio realm's pages are `music/login.php`, `verify.php` and `logout.php`; its link mail and
+  sign-in notice say "music studio", and `SignIn` refuses to be built for it without the step that finds the account.
 - Requests and limits: every response carries the security headers (`lib/Headers.php`, mirrored in
   `.htaccess`); plain HTTP is refused except for a local base URL; page requests made by a script
   (`Sec-Fetch-Mode` other than `navigate`) are refused; link requests are rate limited per hour: links issued

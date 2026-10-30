@@ -7,6 +7,8 @@ require_once __DIR__ . '/Store.php';
 require_once __DIR__ . '/Limits.php';
 require_once __DIR__ . '/Accounts.php';
 require_once __DIR__ . '/Http.php';
+require_once __DIR__ . '/Usage.php';
+require_once __DIR__ . '/Keyring.php';
 require_once __DIR__ . '/Api.php';
 require_once __DIR__ . '/Pages.php';
 
@@ -79,10 +81,12 @@ function music_asset_version(?string $dist = null): string
 
 /**
  * Runs music_early_refusal($kind, ...) FIRST and emits a refusal without opening the database, then builds the
- * database, key store, sessions and controllers, runs $route and emits the response. Storage that is refused
- * becomes the admin 503 page. Session, CSRF and scope checks live in Music\Pages and Music\Api, per route.
+ * database and the controller for $kind, runs $route and emits the response. A 'page' or 'data' route gets
+ * Music\Pages on studio sessions, which builds a store only for the account its session names; an 'api' route gets
+ * Music\Api on the owner's studio. Storage that is refused becomes the admin 503 page. Session, CSRF and scope
+ * checks live in Music\Pages and Music\Api, per route.
  *
- * @param callable(Music\Pages, Music\Api, Admin\Request): Admin\Response $route
+ * @param callable(Music\Pages, Admin\Request): Admin\Response|callable(Music\Api, Admin\Request): Admin\Response $route
  */
 function music_run(string $kind, callable $route): void
 {
@@ -96,12 +100,15 @@ function music_run(string $kind, callable $route): void
     try {
         $db = Admin\Db::open(Admin\Db::dataDir());
         $clock = new Admin\SystemClock();
-        $store = music_store($db, $clock, (new Music\Accounts($db, $clock, admin_people()))->ownerId());
-        $keys = new Admin\Keys($db, $clock, null, $base);
-        $sessions = new Admin\Sessions($db, $clock, Admin\Realm::admin(admin_people(), $base));
-        $admin = new Admin\Pages($db, $clock, admin_mailer($r->host, null, $base), $base, null, $keys);
-        $pages = new Music\Pages($store, $admin, $sessions, music_asset_version(), $base);
-        $res = $route($pages, new Music\Api($store, $keys), $r);
+        $people = admin_people();
+        $accounts = new Music\Accounts($db, $clock, $people);
+        if ($kind === 'api') {
+            $res = $route(new Music\Api(music_store($db, $clock, $accounts->ownerId()), new Admin\Keys($db, $clock, null, $base)), $r);
+        } else {
+            $storeFor = static fn(int $account): Music\Store => music_store($db, $clock, $account);
+            $sessions = new Admin\Sessions($db, $clock, studio_realm());
+            $res = $route(new Music\Pages($storeFor, $accounts, $people, $sessions, music_asset_version(), $base), $r);
+        }
     } catch (Admin\StorageUnavailable | PDOException $e) {
         error_log('music: storage unavailable: ' . $e->getMessage());
         $res = Music\Http::finish(Admin\Pages::fromStorageError($e));

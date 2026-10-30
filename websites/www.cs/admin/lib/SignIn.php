@@ -64,7 +64,7 @@ final class SignIn
             if ($token !== null && $to !== null) {
                 $next = self::safeNext($r->post['next'] ?? null, $this->realm->name);
                 $url = $this->realm->baseUrl . 'verify.php?token=' . $token . ($next === '' ? '' : '&next=' . rawurlencode($next));
-                $mail = MailTemplate::link($url, intdiv(Auth::LINK_TTL, 60));
+                $mail = MailTemplate::link($url, intdiv(Auth::LINK_TTL, 60), $this->realm->name === 'studio');
                 $this->queue[] = ['to' => $to, 'subject' => $mail['subject'], 'mime' => $mail['mime'], 'token' => $token];
             }
         } catch (\Throwable $e) {

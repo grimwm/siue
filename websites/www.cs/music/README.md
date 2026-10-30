@@ -1,6 +1,6 @@
 # Music workroom
 
-A signed-in admin page on www.cs for music and sound-effect drafts, with
+A private studio on www.cs for every plain `@siue.edu` address, for music and sound-effect drafts, with
 end-to-end-encrypted notes. It serves any project: a piece's `score.json` names
 its project, its kind (`music` or `sound`) and its characters.
 
@@ -12,9 +12,12 @@ its project, its kind (`music` or `sound`) and its characters.
 - The private keys live in one locked keyring (PBKDF2-SHA-256, 600,000 rounds,
   AES-256-GCM) that only a signed-in session can fetch; it is unlocked in the
   browser, in memory, and never stored there.
-- Pages need the admin session. Page loads must be browser navigations; the JSON
-  and byte routes refuse cross-site requests; every POST needs the session's
-  CSRF token. All routes refuse plain HTTP.
+- Pages need a studio session (`__Secure-studio`, its path the `music/` folder), and
+  each serves only the studio of the session's account: every note, draft and
+  keyring query names that account, never one from the request. An admin session
+  opens no studio page, and the studio cookie never reaches `/admin/`. Page loads
+  must be browser navigations; the JSON and byte routes refuse cross-site requests;
+  every POST needs the session's CSRF token. All routes refuse plain HTTP.
 - The only browser storage the workroom writes besides the theme and the guide
   flags is the outbox: sealed notes waiting to be sent. Nothing of any key, and
   nothing in the clear about a note, is stored in the browser.
@@ -44,9 +47,16 @@ POST signs in) and `logout.php` (POST; `?all=1` is everywhere for the account). 
 spent does a full studio answer "The studio is full" and start no session, so the reply to a request never
 tells who has an account. Its sessions are separate from the admin hub's.
 
-Session routes (same-origin, signed in): `index.php`, `piece.php?id=&v=` (pages);
-`csrf.php`, `notes.php` (GET list, POST upload), `note.php?id=`, `delete.php`
-(POST), `keyring.php`, `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data).
+Session routes (same-origin, a studio session, the session's own studio): `index.php`,
+`piece.php?id=&v=` (pages); `csrf.php`, `notes.php` (GET list, POST upload), `note.php?id=`,
+`delete.php` (POST `id`, or `all=1`), `keyring.php` (GET the locked keyring; POST stores
+`{keyring, current, previous}`, the rules `api/keyring.php` keeps), `delete-draft.php` (POST
+`piece` and `v` deletes one draft, `piece` alone the whole piece; 404 `not_found` when none
+went), `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data). Signed out, a page goes to
+`login.php?next=` (the page, when sign-in may return to it) and a data route answers 401
+`{"error":"signed_out"}`. Each POST's answer carries the next CSRF token. The page shells'
+`<body>` carries `data-note-max` (the largest note), `data-room` (bytes the studio may still
+store), `data-named` (`1` with the allowance) and `data-account-has-key` (`1` once a keyring is stored).
 
 API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
 `api/picked-up.php` (POST) need `notes:pickup`; `api/drafts.php` (GET lists the
@@ -109,7 +119,7 @@ music-setup)."
   Delete; Delete, Delete all and Discard (for a note not sent yet) each ask
   first, in plain words. Notes on the server are marked Waiting until they are
   picked up; notes this browser has not sent yet are listed under Not sent yet.
-- **Signing in:** a signed-out visit goes to the admin sign-in, which returns only to the admin's own `index.php` or `keys.php` (`Admin\SignIn::safeNext`), so it lands on the hub.
+- **Signing in:** a signed-out visit goes to the studio's own sign-in (`login.php`), which returns to the page asked for.
 - **General notes** are written on the front page (`/music/`), under the same
   passphrase, tied to no piece: plain words only, sealed and sent like any other
   note. Their body has piece `general`, draft 1, from 0 to 0, no bars, lane or
@@ -146,7 +156,13 @@ music-setup)."
 
 ## Limits
 
-- A sealed note is at most 2,097,152 bytes; 2,000 notes are kept.
+- A sealed note is at most 1,048,576 bytes in a studio and 2,097,152 bytes with the
+  allowance; 2,000 notes are kept per studio.
+- A studio stores at most 5 MB, or 100 MB with the allowance (drafts as stored plus
+  sealed notes). A note that would pass it is refused with 413 `over_quota`, the
+  `room` left in bytes and a `message` such as "Your studio has 926 KB of 5 MB left.
+  Delete drafts or picked-up notes to make room." (`Music\Usage`); nothing is deleted
+  to make room.
 - A draft request is at most 8 MB (declared `Content-Length`, refused with 413
   before the script reads the body); each piece keeps its newest 20 drafts, like an
   undo history (its oldest rolls off; other pieces are never touched); a publish that

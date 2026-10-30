@@ -16,6 +16,8 @@ final class MusicPagesTest extends TestCase
     private Music\Pages $pages;
     private Music\Store $store;
     private Admin\Sessions $sessions;
+    private Admin\Sessions $adminSessions;
+    private Closure $storeFor;
     private Admin\Keys $keys;
     private PDO $db;
     private FakeClock $clock;
@@ -27,10 +29,9 @@ final class MusicPagesTest extends TestCase
         [$this->store, $db, $this->dir, $clock, , $this->account] = music_world();
         $this->db = $db;
         $this->clock = $clock;
-        $this->sessions = new Admin\Sessions($db, $clock, admin_realm(self::BASE));
+        [$this->pages, $this->sessions, $this->storeFor] = music_pages($db, $this->dir, $clock, self::BASE);
+        $this->adminSessions = new Admin\Sessions($db, $clock, admin_realm(self::BASE));
         $this->keys = new Admin\Keys($db, $clock, null, self::BASE);
-        $admin = new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true, $this->keys);
-        $this->pages = new Music\Pages($this->store, $admin, $this->sessions, '0123456789', self::BASE);
     }
 
     private function csrfFor(Admin\Request $r): string
@@ -41,24 +42,26 @@ final class MusicPagesTest extends TestCase
     public function testEveryRouteNeedsASession(): void
     {
         $anon = req(['https' => true, 'query' => ['id' => str_repeat('0', 32), 'piece' => 'x', 'v' => '1', 'file' => 'score.json']]);
-        $login = self::BASE . 'login.php';
-        foreach (['csrf', 'note', 'keyring', 'drafts', 'draftFile', 'delete'] as $route) {
+        foreach (['csrf', 'note', 'keyring', 'drafts', 'draftFile', 'delete', 'deleteDraft'] as $route) {
             $res = $this->pages->$route($anon);
-            self::assertSame(303, $res->status, $route);
-            self::assertSame($login, $res->headers['Location'], "$route sends the browser to the admin login, not to /music/login.php");
+            self::assertSame([401, ['error' => 'signed_out']], [$res->status, json_decode($res->body, true)], $route);
+            self::assertArrayNotHasKey('Location', $res->headers, "$route is fetched by the page's script, which shows the sign-in itself");
         }
-        $res = $this->pages->notes($anon, '');
-        self::assertSame([303, $login], [$res->status, $res->headers['Location']]);
+        foreach (['notes' => $this->pages->notes($anon, ''), 'keyring upload' => $this->pages->keyring(req(['https' => true, 'method' => 'POST']), '{}')] as $route => $res) {
+            self::assertSame(401, $res->status, $route);
+        }
     }
 
-    public function testTheWorkroomPagesSendTheBrowserToTheAdminLoginWithoutANext(): void
+    public function testTheWorkroomPagesSendTheBrowserToTheStudioLoginWithTheirNext(): void
     {
-        // The admin sign-in returns only to admin pages (Admin\SignIn::safeNext), so a workroom page is not remembered.
-        $login = self::BASE . 'login.php';
+        $login = 'https://example.test/~wgrim/music/login.php';
         $index = $this->pages->index(req(['https' => true]));
-        self::assertSame([303, $login], [$index->status, $index->headers['Location']]);
+        self::assertSame([303, "$login?next=index.php"], [$index->status, $index->headers['Location']]);
         $piece = $this->pages->piece(req(['https' => true, 'query' => ['id' => 'ch1-labyrinth', 'v' => '3']]));
-        self::assertSame([303, $login], [$piece->status, $piece->headers['Location']]);
+        self::assertSame([303, $login . '?next=' . rawurlencode('piece.php?id=ch1-labyrinth&v=3')], [$piece->status, $piece->headers['Location']]);
+        $bad = $this->pages->piece(req(['https' => true, 'query' => ['id' => '../admin/']]));
+        self::assertSame([303, $login], [$bad->status, $bad->headers['Location']], 'a malformed piece is not remembered');
+        self::assertSame(Music\Http::csp(), $index->headers['Content-Security-Policy']);
     }
 
     public function testAnApiKeyIsNotASession(): void
@@ -67,15 +70,15 @@ final class MusicPagesTest extends TestCase
         $id = $this->store->addNote(music_sealed())['id'];
         $this->store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
         $bearer = ['authorization' => "Bearer $key"];
-        self::assertSame(303, $this->pages->delete(req(['https' => true, 'method' => 'POST', 'headers' => $bearer, 'post' => ['id' => $id]]))->status);
+        self::assertSame(401, $this->pages->delete(req(['https' => true, 'method' => 'POST', 'headers' => $bearer, 'post' => ['id' => $id]]))->status);
         self::assertNotNull($this->store->noteBytes($id), 'an API key cannot delete a note');
-        self::assertSame(303, $this->pages->keyring(req(['https' => true, 'headers' => $bearer]))->status, 'the keyring goes only to a session');
-        self::assertSame(303, $this->pages->note(req(['https' => true, 'headers' => $bearer, 'query' => ['id' => $id]]))->status);
+        self::assertSame(401, $this->pages->keyring(req(['https' => true, 'headers' => $bearer]))->status, 'the keyring goes only to a session');
+        self::assertSame(401, $this->pages->note(req(['https' => true, 'headers' => $bearer, 'query' => ['id' => $id]]))->status);
     }
 
     public function testHttpsIsRequired(): void
     {
-        $r = music_signed_in($this->sessions, ['https' => false]);
+        $r = music_signed_in($this->sessions, $this->account, ['https' => false]);
         foreach (['index', 'piece', 'csrf', 'keyring', 'drafts'] as $route) {
             self::assertSame(403, $this->pages->$route($r)->status, $route);
         }
@@ -87,9 +90,9 @@ final class MusicPagesTest extends TestCase
         $navigation = ['sec-fetch-mode' => 'navigate', 'sec-fetch-dest' => 'document', 'sec-fetch-site' => 'none'];
         foreach (['index', 'piece'] as $route) {
             $query = ['query' => ['id' => 'ch1-labyrinth']];
-            self::assertSame(403, $this->pages->$route(music_signed_in($this->sessions, ['headers' => $script] + $query))->status, "$route by script");
-            self::assertSame(200, $this->pages->$route(music_signed_in($this->sessions, ['headers' => $navigation] + $query))->status, "$route by navigation");
-            self::assertSame(200, $this->pages->$route(music_signed_in($this->sessions, $query))->status, "$route without Fetch Metadata headers");
+            self::assertSame(403, $this->pages->$route(music_signed_in($this->sessions, $this->account, ['headers' => $script] + $query))->status, "$route by script");
+            self::assertSame(200, $this->pages->$route(music_signed_in($this->sessions, $this->account, ['headers' => $navigation] + $query))->status, "$route by navigation");
+            self::assertSame(200, $this->pages->$route(music_signed_in($this->sessions, $this->account, $query))->status, "$route without Fetch Metadata headers");
         }
     }
 
@@ -97,20 +100,20 @@ final class MusicPagesTest extends TestCase
     {
         $this->store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
         foreach (['cross-site', 'same-site'] as $site) {
-            $r = music_signed_in($this->sessions, ['headers' => ['sec-fetch-site' => $site]]);
+            $r = music_signed_in($this->sessions, $this->account, ['headers' => ['sec-fetch-site' => $site]]);
             foreach (['csrf', 'notes', 'keyring', 'drafts'] as $route) {
                 $res = $route === 'notes' ? $this->pages->notes($r, '') : $this->pages->$route($r);
                 self::assertSame(403, $res->status, "$route from $site");
             }
         }
-        $own = music_signed_in($this->sessions, ['headers' => ['sec-fetch-site' => 'same-origin', 'sec-fetch-mode' => 'cors', 'sec-fetch-dest' => 'empty']]);
+        $own = music_signed_in($this->sessions, $this->account, ['headers' => ['sec-fetch-site' => 'same-origin', 'sec-fetch-mode' => 'cors', 'sec-fetch-dest' => 'empty']]);
         self::assertSame(200, $this->pages->keyring($own)->status, "the page's own script is same-origin");
     }
 
     public function testUploadNeedsCsrfAndReturnsTheNextToken(): void
     {
         // Every check spends the session's token, right or wrong (Admin\Sessions::checkCsrf), so the order below matters.
-        $r = music_signed_in($this->sessions, ['method' => 'POST']);
+        $r = music_signed_in($this->sessions, $this->account, ['method' => 'POST']);
         $cookies = req(['https' => true, 'cookies' => $r->cookies]);
         $withToken = fn(string $t) => req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies, 'headers' => ['x-csrf' => $t]]);
         self::assertSame(403, $this->pages->notes($r, music_sealed())->status, 'no token');
@@ -133,7 +136,7 @@ final class MusicPagesTest extends TestCase
 
     public function testUploadLimitsAreReported(): void
     {
-        $r = music_signed_in($this->sessions);
+        $r = music_signed_in($this->sessions, $this->account);
         $post = fn() => req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies, 'headers' => ['x-csrf' => $this->csrfFor($r)]]);
         self::assertSame(413, $this->pages->notes($post(), music_sealed(MUSIC_FP_CURRENT, Music\Store::MAX_NOTE_BYTES))->status);
         self::assertSame(422, $this->pages->notes($post(), music_sealed(str_repeat('ef', 32)))->status);
@@ -141,7 +144,7 @@ final class MusicPagesTest extends TestCase
 
     public function testDeleteOneAndAllRemoveRowAndFile(): void
     {
-        $r = music_signed_in($this->sessions);
+        $r = music_signed_in($this->sessions, $this->account);
         $a = $this->store->addNote(music_sealed())['id'];
         $b = $this->store->addNote(music_sealed())['id'];
         $post = fn(array $fields, ?string $t = null) => req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies,
@@ -159,7 +162,7 @@ final class MusicPagesTest extends TestCase
 
     public function testTheKeyringAndTheHistoryGoToTheSession(): void
     {
-        $r = music_signed_in($this->sessions);
+        $r = music_signed_in($this->sessions, $this->account);
         $this->db->exec('DELETE FROM music_keyring');
         $none = $this->pages->keyring($r);
         self::assertSame(404, $none->status);
@@ -172,7 +175,7 @@ final class MusicPagesTest extends TestCase
         $tag = json_decode($res->body, true)['session'];
         self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $tag);
         self::assertSame($tag, json_decode($this->pages->keyring($r)->body, true)['session'], 'one session, one tag');
-        self::assertNotSame($tag, json_decode($this->pages->keyring(music_signed_in($this->sessions))->body, true)['session'], 'a new sign-in, a new tag');
+        self::assertNotSame($tag, json_decode($this->pages->keyring(music_signed_in($this->sessions, $this->account))->body, true)['session'], 'a new sign-in, a new tag');
         $id = $this->store->addNote(music_sealed())['id'];
         $this->store->markPickedUp($id);
         $notes = json_decode($this->pages->notes($r, '')->body, true)['notes'];
@@ -182,7 +185,7 @@ final class MusicPagesTest extends TestCase
 
     public function testPieceShellLoadsTheBundleAndCarriesAToken(): void
     {
-        $r = music_signed_in($this->sessions, ['query' => ['id' => 'ch1-labyrinth']]);
+        $r = music_signed_in($this->sessions, $this->account, ['query' => ['id' => 'ch1-labyrinth']]);
         $res = $this->pages->piece($r);
         self::assertSame(200, $res->status);
         self::assertStringContainsString('src="../games/workroom/dist/workroom.js?v=0123456789"', $res->body);
@@ -191,7 +194,7 @@ final class MusicPagesTest extends TestCase
         self::assertStringContainsString('<p class="crumb"><a href="./">All pieces</a></p>', $res->body, 'a way back to the pieces');
         self::assertStringNotContainsString('<h1>', $res->body, 'the piece page is headed by the piece, which the script draws');
         self::assertSame(Music\Http::csp(), $res->headers['Content-Security-Policy']);
-        self::assertSame(400, $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => '<script>']]))->status);
+        self::assertSame(400, $this->pages->piece(music_signed_in($this->sessions, $this->account, ['query' => ['id' => '<script>']]))->status);
     }
 
     public function testTheIndexListsEachPieceAsALinkNamedByItsTitle(): void
@@ -200,7 +203,7 @@ final class MusicPagesTest extends TestCase
             ['text' => 'Horns carry the theme.'], ['text' => 'Strings < softer'], ['text' => 'Third change'], ['text' => 'Fourth-change-text'],
         ]];
         $this->store->putDraft('test-piece', 1, ['score.json' => json_encode($score)], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
-        $res = $this->pages->index(music_signed_in($this->sessions));
+        $res = $this->pages->index(music_signed_in($this->sessions, $this->account));
         self::assertSame(200, $res->status);
         self::assertStringContainsString(
             '<a href="piece.php?id=test-piece" data-waiting="test-piece">Test piece: &lt;the&gt; Labyrinth wakes</a><span class="waiting-count"></span><span class="version">v1</span>',
@@ -221,7 +224,7 @@ final class MusicPagesTest extends TestCase
         $put('ch1-labyrinth', 'Chapter 1', 'crete', 'Crete', 'music');
         $put('cannon-fire', 'Cannon fire', 'tankity', 'Tankity <Games>', 'sound');
         $put('ch2-descent', 'Chapter 2', 'crete', 'Crete', 'music');
-        $res = $this->pages->index(music_signed_in($this->sessions));
+        $res = $this->pages->index(music_signed_in($this->sessions, $this->account));
         self::assertSame(200, $res->status);
         // Crete published most recently (chapter 2), so its heading comes first and chapter 2 leads inside it; Tankity follows.
         preg_match_all('~<h2 class="project">(.*?)</h2>~', $res->body, $headings);
@@ -232,7 +235,7 @@ final class MusicPagesTest extends TestCase
         self::assertStringContainsString('<li class="piece" data-kind="sound"><a href="piece.php?id=cannon-fire"', $res->body);
         // A fresh publish in the older project moves that project to the front.
         $put('mortar-fire', 'Mortar fire', 'tankity', 'Tankity <Games>', 'sound');
-        preg_match_all('~<h2 class="project">(.*?)</h2>~', $this->pages->index(music_signed_in($this->sessions))->body, $again);
+        preg_match_all('~<h2 class="project">(.*?)</h2>~', $this->pages->index(music_signed_in($this->sessions, $this->account))->body, $again);
         self::assertSame(['Tankity &lt;Games&gt;', 'Crete'], $again[1]);
     }
 
@@ -241,7 +244,7 @@ final class MusicPagesTest extends TestCase
         $db = admin_tmp_db();
         $clock = new FakeClock(1_800_000_000);
         $sessions = new Admin\Sessions($db, $clock, admin_realm(self::BASE));
-        $hub = (new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true))->hub(music_signed_in($sessions));
+        $hub = (new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true))->hub(music_admin_signed_in($sessions));
         self::assertSame(200, $hub->status);
         self::assertStringContainsString('href="../music/"', $hub->body);
         self::assertStringContainsString('Music notes key', $hub->body);
@@ -260,7 +263,7 @@ final class MusicPagesTest extends TestCase
 
     public function testTheHubOffersToRemoveTheNotesKeyOnlyWhileOneIsStored(): void
     {
-        $in = music_signed_in($this->sessions);
+        $in = music_admin_signed_in($this->adminSessions);
         $with = $this->adminPages()->hub($in)->body;
         self::assertStringContainsString('<details class="remover"><summary>Remove the notes key</summary>', $with);
         self::assertStringContainsString('1Password is not touched.', $with);
@@ -273,19 +276,19 @@ final class MusicPagesTest extends TestCase
 
     public function testRemovingTheNotesKeyNeedsASessionAndAFreshToken(): void
     {
-        $in = music_signed_in($this->sessions);
+        $in = music_admin_signed_in($this->adminSessions);
         $csrf = $this->hubCsrf($in);
         $post = ['do' => 'remove-key', 'label' => 'Music notes key'];
         $anon = $this->adminPages()->removeKey(req(['https' => true, 'method' => 'POST', 'post' => $post + ['csrf' => $csrf]]));
         self::assertSame([303, 'login.php'], [$anon->status, $anon->headers['Location']]);
-        $wrong = $this->adminPages()->removeKey(music_signed_in($this->sessions, ['method' => 'POST', 'post' => $post + ['csrf' => 'nope']]));
+        $wrong = $this->adminPages()->removeKey(music_admin_signed_in($this->adminSessions, ['method' => 'POST', 'post' => $post + ['csrf' => 'nope']]));
         self::assertSame(403, $wrong->status);
         self::assertNotNull(Music\Store::fingerprintsIn($this->db, $this->account), 'a refused request removes nothing');
     }
 
     public function testRemovingTheNotesKeyForgetsTheKeyringAndTheHubSaysNotMadeYet(): void
     {
-        $in = music_signed_in($this->sessions);
+        $in = music_admin_signed_in($this->adminSessions);
         $csrf = $this->hubCsrf($in);
         $done = $this->adminPages()->removeKey($this->postAs($in, ['do' => 'remove-key', 'label' => 'Music notes key', 'csrf' => $csrf]));
         self::assertSame([303, 'index.php?removed=1'], [$done->status, $done->headers['Location']]);
@@ -298,7 +301,7 @@ final class MusicPagesTest extends TestCase
 
     public function testRemovingAKeyTheHubDoesNotListIsNotFound(): void
     {
-        $in = music_signed_in($this->sessions);
+        $in = music_admin_signed_in($this->adminSessions);
         $csrf = $this->hubCsrf($in);
         $res = $this->adminPages()->removeKey($this->postAs($in, ['do' => 'remove-key', 'label' => 'Other', 'csrf' => $csrf]));
         self::assertSame(404, $res->status);
@@ -346,7 +349,7 @@ final class MusicPagesTest extends TestCase
     public function testACorruptStoredKeyringIsABadKeyringNotAMissingOne(): void
     {
         $this->store->putKeyring('not json', MUSIC_FP_CURRENT, []);
-        $res = $this->pages->keyring(music_signed_in($this->sessions));
+        $res = $this->pages->keyring(music_signed_in($this->sessions, $this->account));
         self::assertSame(500, $res->status);
         self::assertSame(['error' => 'bad_keyring'], json_decode($res->body, true));
     }
@@ -355,7 +358,7 @@ final class MusicPagesTest extends TestCase
     {
         $files = ['score.json' => '{"piece":{"title":"T"}}', 'audio.webm' => '0123456789', 'spectrogram.png' => 'png', 'audio.m4a' => 'm4a', 'score.musicxml' => '<x/>'];
         $this->store->putDraft('p1', 1, $files, ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
-        $get = fn(string $file, array $headers = [], string $v = '1') => $this->pages->draftFile(music_signed_in($this->sessions, ['query' => ['piece' => 'p1', 'v' => $v, 'file' => $file], 'headers' => $headers]));
+        $get = fn(string $file, array $headers = [], string $v = '1') => $this->pages->draftFile(music_signed_in($this->sessions, $this->account, ['query' => ['piece' => 'p1', 'v' => $v, 'file' => $file], 'headers' => $headers]));
         $types = ['score.json' => 'application/json', 'score.musicxml' => 'application/vnd.recordare.musicxml+xml', 'audio.webm' => 'audio/webm', 'audio.m4a' => 'audio/mp4', 'spectrogram.png' => 'image/png'];
         foreach ($types as $name => $mime) {
             $res = $get($name);
@@ -370,17 +373,20 @@ final class MusicPagesTest extends TestCase
 
     public function testAWrongMethodWithASessionIs405(): void
     {
-        $post = music_signed_in($this->sessions, ['method' => 'POST']);
-        foreach (['csrf', 'note', 'keyring', 'drafts', 'draftFile'] as $route) {
+        $post = music_signed_in($this->sessions, $this->account, ['method' => 'POST']);
+        foreach (['csrf', 'note', 'drafts', 'draftFile'] as $route) {
             self::assertSame(405, $this->pages->$route($post)->status, $route);
         }
-        self::assertSame(405, $this->pages->notes(music_signed_in($this->sessions, ['method' => 'PUT']), '')->status);
-        self::assertSame(405, $this->pages->delete(music_signed_in($this->sessions))->status, 'delete takes POST only');
+        $put = music_signed_in($this->sessions, $this->account, ['method' => 'PUT']);
+        self::assertSame(405, $this->pages->notes($put, '')->status);
+        self::assertSame(405, $this->pages->keyring($put, '')->status);
+        self::assertSame(405, $this->pages->delete(music_signed_in($this->sessions, $this->account))->status, 'delete takes POST only');
+        self::assertSame(405, $this->pages->deleteDraft(music_signed_in($this->sessions, $this->account))->status, 'deleteDraft takes POST only');
     }
 
     public function testStorageDownIsThe503Page(): void
     {
-        $r = music_signed_in($this->sessions, ['query' => ['piece' => 'p1']]);
+        $r = music_signed_in($this->sessions, $this->account, ['query' => ['piece' => 'p1']]);
         $this->store->drafts(); // the table exists now; drop it so the next read fails
         (new ReflectionProperty($this->store, 'db'))->getValue($this->store)->exec('DROP TABLE music_drafts');
         $res = $this->pages->drafts($r);
@@ -390,7 +396,7 @@ final class MusicPagesTest extends TestCase
 
     public function testABadIdDeleteIs400AndKeepsTheNotes(): void
     {
-        $r = music_signed_in($this->sessions);
+        $r = music_signed_in($this->sessions, $this->account);
         $id = $this->store->addNote(music_sealed())['id'];
         $res = $this->pages->delete(req(['https' => true, 'method' => 'POST', 'cookies' => $r->cookies, 'headers' => ['x-csrf' => $this->csrfFor($r)], 'post' => ['id' => 'nope']]));
         self::assertSame(400, $res->status);
@@ -399,16 +405,152 @@ final class MusicPagesTest extends TestCase
 
     public function testTheIndexHasANoProjectGroupAndAnEmptyState(): void
     {
-        $empty = $this->pages->index(music_signed_in($this->sessions));
+        $empty = $this->pages->index(music_signed_in($this->sessions, $this->account));
         self::assertStringContainsString('No drafts have been published yet.', $empty->body);
         $this->store->putDraft('loose', 1, ['score.json' => '{"piece":{"title":"Loose"}}'], ['project_id' => '', 'project_name' => '', 'kind' => 'music']);
         $this->clock->now += 10;
         $this->store->putDraft('ch1', 1, ['score.json' => '{"piece":{"title":"C"}}'], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
         $this->clock->now += 10;
         $this->store->putDraft('loose2', 1, ['score.json' => '{"piece":{"title":"Loose2"}}'], ['project_id' => '', 'project_name' => '', 'kind' => 'music']);
-        $body = $this->pages->index(music_signed_in($this->sessions))->body;
+        $body = $this->pages->index(music_signed_in($this->sessions, $this->account))->body;
         preg_match_all('~<h2 class="project">(.*?)</h2>~', $body, $h);
         self::assertSame(['Crete', 'No project'], $h[1], 'the unprojected group is last whatever its recency');
+    }
+
+    /** A studio account (5 MB, 1 MB notes) on this database, with a keyring naming the fixed fingerprints; [its id, its store]. */
+    private function student(string $email = 'student@siue.edu', bool $keyed = true): array
+    {
+        $id = (int) (new Music\Accounts($this->db, $this->clock, Admin\People::fromJson('{}')))->signIn($email);
+        $store = ($this->storeFor)($id);
+        if ($keyed) {
+            $store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
+        }
+        return [$id, $store];
+    }
+
+    /** A POST as $account with a fresh CSRF token. */
+    private function postWithToken(int $account, array $over = []): Admin\Request
+    {
+        $in = music_signed_in($this->sessions, $account);
+        return req(array_replace(['https' => true, 'method' => 'POST', 'cookies' => $in->cookies, 'headers' => ['x-csrf' => $this->csrfFor($in)]], $over));
+    }
+
+    public function testANoteOverTheStudioLimitIsRefusedWithTheRoom(): void
+    {
+        [$id, $store] = $this->student();
+        for ($i = 0; $i < 4; $i++) {
+            $store->addNote(music_sealed(MUSIC_FP_CURRENT, 1_048_576 - 38));
+        }
+        $store->addNote(music_sealed(MUSIC_FP_CURRENT, 100_000 - 38));
+        $room = 5_242_880 - 4 * 1_048_576 - 100_000;
+        self::assertSame($room, $store->room());
+        $res = $this->pages->notes($this->postWithToken($id), music_sealed(MUSIC_FP_CURRENT, $room + 1 - 38));
+        self::assertSame(413, $res->status);
+        $body = json_decode($res->body, true);
+        self::assertSame('over_quota', $body['error']);
+        self::assertSame($room, $body['room']);
+        self::assertSame('Your studio has 926 KB of 5 MB left. Delete drafts or picked-up notes to make room.', $body['message']);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $body['csrf'], 'the next token, as for every refusal after CSRF');
+        self::assertCount(5, $store->notes(), 'nothing is stored and nothing deleted to make room');
+        self::assertSame(201, $this->pages->notes($this->postWithToken($id), music_sealed(MUSIC_FP_CURRENT, $room - 38))->status, 'exactly the room fits');
+    }
+
+    public function testAStudioNoteOverOneMegabyteIsTooLarge(): void
+    {
+        [$id] = $this->student();
+        $res = $this->pages->notes($this->postWithToken($id), music_sealed(MUSIC_FP_CURRENT, 1_048_576 + 1 - 38));
+        self::assertSame([413, 'too_large'], [$res->status, json_decode($res->body, true)['error']]);
+        self::assertSame(201, $this->pages->notes($this->postWithToken($id), music_sealed(MUSIC_FP_CURRENT, 1_048_576 - 38))->status, 'exactly 1 MB');
+        $owner = $this->pages->notes($this->postWithToken($this->account), music_sealed(MUSIC_FP_CURRENT, 1_048_576 + 1 - 38));
+        self::assertSame(201, $owner->status, 'the allowance takes notes up to 2 MB');
+    }
+
+    public function testTheShellCarriesTheNoteMaxRoomAndNamed(): void
+    {
+        $attrs = static function (Admin\Response $res): array {
+            preg_match('~<body ([^>]*)>~', $res->body, $m);
+            preg_match_all('~(data-[a-z-]+)="([^"]*)"~', $m[1], $pairs, PREG_SET_ORDER);
+            return array_column($pairs, 2, 1);
+        };
+        $owner = $attrs($this->pages->index(music_signed_in($this->sessions, $this->account)));
+        self::assertSame(['2097152', (string) $this->store->room(), '1', '1'], [$owner['data-note-max'], $owner['data-room'], $owner['data-named'], $owner['data-account-has-key']]);
+        [$id, $store] = $this->student('fresh@siue.edu', false);
+        $fresh = $attrs($this->pages->piece(music_signed_in($this->sessions, $id, ['query' => ['id' => 'p']])));
+        self::assertSame(['1048576', '5242880', '0', '0'], [$fresh['data-note-max'], $fresh['data-room'], $fresh['data-named'], $fresh['data-account-has-key']]);
+        self::assertSame('piece', $fresh['data-view']);
+        $store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
+        $store->addNote(music_sealed(MUSIC_FP_CURRENT, 1000 - 38));
+        $keyed = $attrs($this->pages->index(music_signed_in($this->sessions, $id)));
+        self::assertSame(['5241880', '1'], [$keyed['data-room'], $keyed['data-account-has-key']]);
+    }
+
+    public function testKeyringUploadNeedsSessionAndCsrfAndKeepsTheEnvelopeRules(): void
+    {
+        [$id, $store] = $this->student('fresh@siue.edu', false);
+        $env = music_locked_keyring();
+        $good = json_encode(['keyring' => $env, 'current' => MUSIC_FP_CURRENT, 'previous' => []], JSON_UNESCAPED_SLASHES);
+        self::assertSame(401, $this->pages->keyring(req(['https' => true, 'method' => 'POST']), $good)->status, 'no session');
+        $noToken = music_signed_in($this->sessions, $id, ['method' => 'POST']);
+        self::assertSame(403, $this->pages->keyring($noToken, $good)->status, 'no CSRF token');
+        self::assertSame(403, $this->pages->keyring($this->postWithToken($id, ['headers' => ['x-csrf' => 'nope']]), $good)->status, 'a wrong token');
+        self::assertNull($store->keyring(), 'refused before anything is stored');
+        $wrapped = fn(array $keyring, array $over = []): string => json_encode(array_replace(['keyring' => $keyring, 'current' => MUSIC_FP_CURRENT, 'previous' => []], $over), JSON_UNESCAPED_SLASHES);
+        foreach ([
+            'weak KDF' => $wrapped(music_locked_keyring(['iterations' => 1000])),
+            'wrong KDF' => $wrapped(music_locked_keyring(['kdf' => 'scrypt'])),
+            'short salt' => $wrapped(music_locked_keyring(['salt' => base64_encode('short')])),
+            'extra field' => $wrapped(music_locked_keyring(['fingerprint' => MUSIC_FP_CURRENT])),
+            'upper-case hex' => $wrapped($env, ['current' => strtoupper(MUSIC_FP_CURRENT)]),
+            'previous repeats current' => $wrapped($env, ['previous' => [MUSIC_FP_CURRENT]]),
+            'a bare envelope' => json_encode($env),
+            'not json' => 'not json',
+        ] as $why => $bad) {
+            $res = $this->pages->keyring($this->postWithToken($id), $bad);
+            $body = json_decode($res->body, true);
+            self::assertSame([422, 'bad_keyring'], [$res->status, $body['error']], $why);
+            self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $body['csrf'], $why);
+        }
+        $huge = $wrapped(music_locked_keyring(['ct' => base64_encode(random_bytes(Music\Store::MAX_KEYRING_BYTES))]));
+        self::assertSame(413, $this->pages->keyring($this->postWithToken($id), $huge)->status, 'over the keyring limit');
+        self::assertNull($store->keyring(), 'refused uploads store nothing');
+        $res = $this->pages->keyring($this->postWithToken($id), $good);
+        self::assertSame(201, $res->status);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', json_decode($res->body, true)['csrf']);
+        self::assertSame(json_encode($env, JSON_UNESCAPED_SLASHES), $store->keyring()['locked']);
+        self::assertSame(['current' => MUSIC_FP_CURRENT, 'previous' => []], $store->fingerprints());
+        $read = json_decode($this->pages->keyring(music_signed_in($this->sessions, $id))->body, true);
+        self::assertSame($env, $read['keyring'], 'the page reads back what it stored');
+    }
+
+    public function testDeleteDraftRemovesOneDraftOrAWholePiece(): void
+    {
+        foreach ([1, 2] as $v) {
+            $this->clock->now += 1;
+            $this->store->putDraft('p1', $v, ['score.json' => '{"piece":{"title":"T"}}'], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
+        }
+        $this->store->putDraft('p2', 1, ['score.json' => '{"piece":{"title":"U"}}'], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
+        $del = fn(array $post, ?string $token = null) => $this->pages->deleteDraft($token === null ? $this->postWithToken($this->account, ['post' => $post])
+            : req(['https' => true, 'method' => 'POST', 'cookies' => music_signed_in($this->sessions, $this->account)->cookies, 'headers' => ['x-csrf' => $token], 'post' => $post]));
+        self::assertSame(403, $del(['piece' => 'p1', 'v' => '1'], 'nope')->status);
+        self::assertCount(3, $this->store->drafts());
+        foreach ([[['piece' => '../x'], 'bad_piece'], [['piece' => 'p1', 'v' => '0'], 'bad_version'], [['piece' => 'p1', 'v' => 'x'], 'bad_version']] as [$post, $error]) {
+            $res = $del($post);
+            self::assertSame([400, $error], [$res->status, json_decode($res->body, true)['error']], json_encode($post));
+        }
+        $one = $del(['piece' => 'p1', 'v' => '1']);
+        self::assertSame(200, $one->status);
+        $body = json_decode($one->body, true);
+        self::assertSame(1, $body['deleted']);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $body['csrf']);
+        self::assertSame([2], array_column($this->store->drafts('p1'), 'version'));
+        self::assertSame(404, $del(['piece' => 'p1', 'v' => '1'])->status, 'already gone');
+        $this->clock->now += 1;
+        $this->store->putDraft('p1', 3, ['score.json' => '{"piece":{"title":"T"}}'], ['project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']);
+        self::assertSame(2, json_decode($del(['piece' => 'p1'])->body, true)['deleted'], 'no v: the whole piece');
+        self::assertSame([], $this->store->drafts('p1'));
+        self::assertDirectoryDoesNotExist("{$this->dir}/drafts/{$this->account}/p1");
+        self::assertSame(['p2'], array_column($this->store->drafts(), 'piece'), 'other pieces stay');
+        self::assertSame(404, $del(['piece' => 'p1'])->status);
     }
 
     private const HEAD_ASSETS = '<script src="../games/workroom/dist/theme.js?v=0123456789"></script>'
@@ -426,10 +568,10 @@ final class MusicPagesTest extends TestCase
 
     public function testEveryShellLinksTheConsoleStylesheetAndTheThemeBoot(): void
     {
-        $piece = $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => 'ch1-labyrinth']]));
+        $piece = $this->pages->piece(music_signed_in($this->sessions, $this->account, ['query' => ['id' => 'ch1-labyrinth']]));
         self::assertConsoleShell($piece->body);
         self::assertStringContainsString('<header class="console-head"><p class="crumb"><a href="./">All pieces</a></p><div id="theme-switch"></div></header>', $piece->body);
-        $index = $this->pages->index(music_signed_in($this->sessions));
+        $index = $this->pages->index(music_signed_in($this->sessions, $this->account));
         self::assertConsoleShell($index->body);
         self::assertStringContainsString('<header class="console-head"><h1>Music workroom</h1><div id="theme-switch"></div></header>', $index->body);
         self::assertStringContainsString('<div class="index-body"><p class="waiting-total">', $index->body);
@@ -437,7 +579,7 @@ final class MusicPagesTest extends TestCase
 
     public function testTheErrorPageWearsTheConsoleToo(): void
     {
-        $res = $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => '<script>']]));
+        $res = $this->pages->piece(music_signed_in($this->sessions, $this->account, ['query' => ['id' => '<script>']]));
         self::assertSame(400, $res->status);
         $head = substr($res->body, 0, (int) strpos($res->body, '</head>'));
         self::assertStringContainsString(self::HEAD_ASSETS, $head);
@@ -447,7 +589,7 @@ final class MusicPagesTest extends TestCase
 
     public function testTheNoSuchPiecePageMountsNothing(): void
     {
-        $res = $this->pages->piece(music_signed_in($this->sessions, ['query' => ['id' => '<script>']]));
+        $res = $this->pages->piece(music_signed_in($this->sessions, $this->account, ['query' => ['id' => '<script>']]));
         self::assertSame(400, $res->status);
         self::assertStringContainsString('No such piece.', $res->body);
         preg_match_all('~<script\b[^>]*>~', $res->body, $scripts);

@@ -116,6 +116,22 @@ final class StudioSignInTest extends TestCase
         self::assertStringNotContainsString('admin pages', $mime);
     }
 
+    public function testTheLinkMailSaysMusicStudio(): void
+    {
+        [$s, , $m] = $this->flow();
+        $s->requestLink(req(['method' => 'POST', 'post' => ['email' => 'student@siue.edu']]));
+        $s->flush();
+        self::assertCount(1, $m->sent);
+        self::assertSame('Your music studio sign-in link', $m->sent[0]['subject']);
+        $mime = quoted_printable_decode($m->sent[0]['mime']);
+        self::assertStringContainsString('WWW.CS &middot; MUSIC STUDIO', $mime);
+        self::assertStringContainsString('Sign in to your music studio', $mime);
+        self::assertStringNotContainsString('ADMIN', $mime);
+        $admin = Admin\MailTemplate::link('https://www.cs.siue.edu/~wgrim/admin/verify.php?token=x', 15);
+        self::assertSame('Your sign-in link', $admin['subject'], 'the admin link keeps its wording');
+        self::assertStringContainsString('WWW.CS &middot; ADMIN', quoted_printable_decode($admin['mime']));
+    }
+
     public function testNextStaysInsideTheStudio(): void
     {
         foreach (['../admin/', '../admin/index.php', 'https://evil.test/', '//evil.test', 'keys.php', 'studio.php/../x'] as $bad) {

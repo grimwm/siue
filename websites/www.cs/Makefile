@@ -103,9 +103,9 @@ e2e-changed: ## Only the browser specs your changes need
 admin-smoke: ## Admin sign-in check in a throwaway docker project
 	tests/admin-smoke.sh
 
-# The workroom's browser check against its own docker project, with the
+# The workroom's and the studio's browser checks against their own docker project, with the
 # admin mail capture. Local only.
-music-e2e: ## Music workroom browser check (test keyring, fake microphone)
+music-e2e: ## Music workroom and studio browser checks (E2E_ARGS: one spec)
 	@name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml"; \
 	export ADMIN_SMOKE_DIR=/tmp/$$name; \
 	trap 'docker compose $$files -p $$name down -v >/dev/null 2>&1' EXIT; \
@@ -116,7 +116,7 @@ music-e2e: ## Music workroom browser check (test keyring, fake microphone)
 	docker compose $$files -p $$name exec -T -u apache www-cs-php mkdir -p $$ADMIN_SMOKE_DIR/mail && \
 	MUSIC_E2E_COMPOSE="$$files" MUSIC_E2E_PROJECT=$$name MUSIC_E2E_MAIL_DIR=$$ADMIN_SMOKE_DIR/mail \
 	MUSIC_PY=$(MUSIC_PY_ABS) \
-	E2E_BASE_URL=http://localhost:$$port/ tests/e2e/run.sh -c local.config.ts && \
+	E2E_BASE_URL=http://localhost:$$port/ tests/e2e/run.sh -c local.config.ts $(E2E_ARGS) && \
 	echo MUSIC-E2E-OK
 
 # The music workroom's key and note tool (music/tools/siue-music), run in its own virtualenv.

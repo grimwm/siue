@@ -4,6 +4,63 @@ A private studio on www.cs for every plain `@siue.edu` address, for music and so
 end-to-end-encrypted notes. It serves any project: a piece's `score.json` names
 its project, its kind (`music` or `sound`) and its characters.
 
+## Studios
+
+Anyone with a plain `@siue.edu` address (no `+`, no subdomain; trimmed and lower-cased) signs in at
+`https://www.cs.siue.edu/~wgrim/music/` with a link mailed to them. The first completed sign-in makes
+their studio: one account per address, holding only their own pieces, drafts, notes, notes key and AI
+keys. Nobody else's studio is ever visible to them.
+
+- **Two sign-ins.** The studio has its own sign-in (`music/login.php`, the studio realm); the admin hub
+  keeps its own (`admin/login.php`, named admins only). A studio session never reaches `admin/`, and an
+  admin session never opens a studio page. The owner signs in to each separately.
+- **Named people** come from the `studio-config` field of the SIUE 1Password item, which the deploy writes
+  to `admin/config/studio.json` (never from git; see `admin/README.md`). A named person may be an admin
+  (the hub) and may have the allowance (the larger limits and full drafts). The owner, `wgrim@siue.edu`,
+  is always both. Everyone else is a student, with the studio limits below.
+- **The notes key** is made on the page the first time (the "Make your notes key" panel: a passphrase of
+  at least 12 characters, typed twice). The page makes an RSA-4096 key, locks it with the passphrase
+  (PBKDF2-SHA-256, 600,000 rounds, AES-256-GCM), uploads the locked copy and unlocks it. Nobody can reset
+  it; a forgotten passphrase means Start over.
+- **Your studio** (`studio.php`) shows the address, the usage against the studio's limit, the AI keys
+  and Start over.
+- **AI keys** are made on Your studio. Each is 64 hex characters, shown once and stored as SHA-256, with
+  any of three permissions: "read notes" (`notes:pickup`), "publish drafts" (`drafts:publish`) and
+  "delete drafts" (`drafts:delete`). An AI key never uploads a notes key, never makes another key and
+  never starts over. A studio holds at most 10 active AI keys, each limited to 60 requests a minute.
+  An AI key works only in its own studio.
+- **Drafts in a studio are scores only:** one renderable `score.json` (every lane has a `sound` whose
+  `instrument` is in `music/library/library.json`, and `mix` is present), which the page plays by building
+  the sound in the browser from the shared sample library. People with the allowance may also publish
+  full drafts (MusicXML, audio, spectrogram).
+- **Start over** on Your studio deletes every piece, draft and note, the notes key and the AI keys, after
+  the person types `start over`. Nobody can undo it. The account and its sign-in stay, and the next visit
+  asks for a new notes key.
+- **Studios on the admin hub:** `admin/studios.php` lists every studio's address, usage and last sign-in,
+  never a piece, title or note.
+
+### Limits
+
+| Limit | Studio | With the allowance |
+| --- | --- | --- |
+| Stored (drafts as stored plus sealed notes, hums included) | 5 MB (5,242,880 bytes) | 100 MB (104,857,600 bytes) |
+| One draft request | 262,208 bytes | 8 MB |
+| `score.json` | 262,144 bytes, 20,000 notes, 16 lanes | the same |
+| One sealed note | 1,048,576 bytes | 2,097,152 bytes |
+| Notes kept | 2,000 | 2,000 |
+| Drafts kept per piece | the newest 20 | the newest 20 |
+| Active AI keys | 10, each 60 requests a minute | the same |
+
+Every studio without the allowance also shares one pool: 1,073,741,824 bytes (about 1 GB) in all, and at
+most 500 accounts (`max_shared_bytes` and `max_accounts` in the configuration). When either is reached, a
+new sign-up gets "The studio is full". An upload past a limit is refused, and nothing is deleted to make
+room; the refusal says how much room is left (the smaller of the studio's own room and the shared room)
+and to delete drafts or picked-up notes. `score.json` and `score.musicxml` are stored gzip-compressed and
+count at their stored size.
+
+Sign-in links (each hour): 300 overall, 100 requests from one IP (a class behind one campus address can
+sign in at once), 3 per address, 3,000 request rows kept.
+
 ## Security model
 
 - Notes are sealed in the browser (AES-256-GCM per note, key wrapped with RSA-OAEP
@@ -21,7 +78,8 @@ its project, its kind (`music` or `sound`) and its characters.
 - The only browser storage the workroom writes besides the theme and the guide
   flags is the outbox: sealed notes waiting to be sent. Nothing of any key, and
   nothing in the clear about a note, is stored in the browser.
-- API keys are made on the admin hub and carry scopes. The one thing a key can
+- AI keys are made on Your studio and serve only their own studio (see Studios).
+  The owner's API keys are made on the admin hub and carry scopes. The one thing a key can
   delete is a published draft, with `drafts:delete`: a key that publishes drafts may
   also delete them. Every active key that held `drafts:publish` before
   `drafts:delete` existed holds it too, added in place by a one-time step when the
@@ -117,9 +175,9 @@ Notes are sealed in the browser to the current key of the keyring the passphrase
 unlocks. Before an unlock each of the four asks for it: the notes panel opens at
 the unlock form with one line saying why, and Pin a note, React or Draw the
 energy opens once unlocked. Hum it waits for the next tap, since iOS grants the
-microphone only inside one. With no keyring on the server (before `make
-music-setup`) the bar says "Notes are off until a notes key is uploaded (make
-music-setup)."
+microphone only inside one. With no keyring on the server the bar says "Notes are
+off until you make your notes key under Your notes.", and the notes panel shows the
+"Make your notes key" panel.
 
 - **Pinning** scrolls the Story view into view and picks a span on it: a drag, or a
   tap for one moment; the lane only when the drag starts and ends in one lane. On a
@@ -168,19 +226,14 @@ music-setup)."
 - Chrome may offer to save the unlock form's username and passphrase; the owner
   answers Never (1Password fills the form either way).
 
-## Limits
+## Refusals
 
-- A sealed note is at most 1,048,576 bytes in a studio and 2,097,152 bytes with the
-  allowance; 2,000 notes are kept per studio.
-- A studio stores at most 5 MB, or 100 MB with the allowance (drafts as stored plus
-  sealed notes). A note that would pass it is refused with 413 `over_quota`, the
-  `room` left in bytes and a `message` such as "Your studio has 926 KB of 5 MB left.
-  Delete drafts or picked-up notes to make room." (`Music\Usage`); nothing is deleted
-  to make room.
-- A draft request is at most 8 MB (declared `Content-Length`, refused with 413
-  before the script reads the body); each piece keeps its newest 20 drafts, like an
-  undo history (its oldest rolls off; other pieces are never touched); a publish that
-  would leave more than 100 MB stored is refused with 413.
+The limits are in [Studios](#limits). A note or draft past the stored limit is refused
+with 413 `over_quota`, the `room` left in bytes and a `message` such as "Your studio has
+926 KB of 5 MB left. Delete drafts or picked-up notes to make room." (`Music\Usage`). A
+draft request over the account's request limit is refused with 413 from its declared
+`Content-Length`, before the script reads the body. Each piece keeps its newest 20
+drafts, like an undo history: its oldest rolls off, and other pieces are never touched.
 
 ## The owner's key tool
 
@@ -254,9 +307,21 @@ The second lock is constrained by the first, so both install the same `cryptogra
 
 ## The local browser check
 
-`make music-e2e` (local only; CI never runs it) brings up its own docker project
-with the admin mail capture, signs in through the captured email, publishes the
-fixture drafts with an API key made on the hub, and drives the page in Chrome:
+`make music-e2e` (local only; CI never runs it; `E2E_ARGS=studio.local.ts` runs one
+spec) brings up its own docker project with the mail capture and
+`tests/e2e/studio-config.json` (it names only the owner), and runs two specs in Chrome.
+
+`tests/e2e/studio.local.ts` is a student's studio from first sign-in to start over:
+`student1@siue.edu` signs in through the captured mail to an empty studio, makes a
+notes key on the page and pins a typed note; makes an AI key with all three
+permissions on Your studio, seen once; publishes the score-only fixture with it and
+plays the sound the page builds; deletes the draft on the page; starts over, back to an
+empty studio with no notes key; the old AI key gets 401, and `admin/` sends the browser
+to the admin sign-in.
+
+`tests/e2e/workroom.local.ts` signs the owner in to the studio and, separately, to the
+admin hub, publishes the fixture drafts with API keys made on the hub, and drives the
+page:
 play, seek, the four views, a glossary card, the sheet music and its reading lesson, a sound effect from
 a second project, and no content security policy violation. It also uploads the
 committed TEST keyring (`games/workroom/test/fixtures/test-key.json`) with its
@@ -271,8 +336,9 @@ unlock first, hums, reacts, draws the energy, and sends a note made offline once
 the connection is back. `MUSIC_E2E_SHOTS=<folder>` saves every screen. It prints
 `MUSIC-E2E-OK` and tears the project down. The page it drives is the shipped
 `games/workroom/dist/workroom.js`.
-The admin sign-in link is limited to three a hour per address; one run asks for
-two. The fixtures under `games/workroom/test/fixtures/draft*/` come from
+Sign-in links are limited to three an hour per address in each realm; one run asks
+the studio for three for the owner and one for the student, and the admin hub for one.
+The fixtures under `games/workroom/test/fixtures/draft*/` come from
 `node games/workroom/tools/make-draft-fixture.ts` and `ffmpeg` (see that script).
 
 ## After a deploy

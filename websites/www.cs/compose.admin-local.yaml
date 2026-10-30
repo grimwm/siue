@@ -1,10 +1,13 @@
-# Local only (make admin-smoke); CI and the host never read it. Points the admin
-# pages at a local base URL and has them write each mail to a file instead of
-# sending it. The base URL has no port because nginx's host port is ephemeral:
-# the smoke sends Host: localhost to that port and rewrites the mailed link.
+# Local only (make admin-smoke, make music-e2e); CI and the host never read it.
+# Points the admin pages at a local base URL and has them write each mail to a
+# file instead of sending it. The base URL has no port because nginx's host port
+# is ephemeral: the checks send Host: localhost to that port and rewrite the
+# mailed link. The studio configuration names only the owner (the repo is
+# public), so every other address signs in as a student.
 services:
   www-cs-php:
     environment:
       ADMIN_BASE_URL: http://localhost/admin/
       ADMIN_DATA_DIR: ${ADMIN_SMOKE_DIR:?set by tests/admin-smoke.sh}
       ADMIN_MAIL_CAPTURE_DIR: ${ADMIN_SMOKE_DIR:?set by tests/admin-smoke.sh}/mail
+      STUDIO_CONFIG_FILE: /var/www/html/tests/e2e/studio-config.json

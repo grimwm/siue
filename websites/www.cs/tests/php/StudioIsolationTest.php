@@ -177,6 +177,12 @@ final class StudioIsolationTest extends TestCase
         $before = $this->bHolds();
         $mine = music_locked_keyring();
         $body = json_encode(['keyring' => $mine, 'current' => MUSIC_FP_PREVIOUS, 'previous' => []], JSON_UNESCAPED_SLASHES);
+        // A already holds a keyring, which the page never replaces; once A starts over, A's upload lands in A's studio.
+        $res = $this->pages->keyring($this->postAsA(), $body);
+        self::assertSame([409, 'key_exists'], [$res->status, self::json($res)['error']]);
+        self::assertSame($this->keyring['A'], json_decode($this->store($this->a)->keyring()['locked'], true));
+        self::assertSame($before, $this->bHolds());
+        $this->store($this->a)->wipe();
         $res = $this->pages->keyring($this->postAsA(), $body);
         self::assertSame(201, $res->status);
         self::assertSame(json_encode($mine, JSON_UNESCAPED_SLASHES), $this->store($this->a)->keyring()['locked']);

@@ -57,6 +57,11 @@ database elsewhere, but reaches PHP only where the server passes environment thr
 - API keys are 64 hex characters shown once and kept as SHA-256, each with scopes from
   `ADMIN_KEY_SCOPES`, a per-minute limit and revocation. They are read from the `Authorization:
   Bearer` header only.
+- Who is an admin, and who has the allowance, comes only from `admin/config/studio.json` (see
+  [Named people and caps](#named-people-and-caps)), which the deploy writes and the web server never serves.
+  It is readable by other host accounts' PHP, like everything stored (see Shared host): it names
+  addresses and caps, never a secret. Admins and studios sign in separately: an admin session never
+  opens a studio page, and a studio session never reaches `admin/`.
 
 ### Shared host
 
@@ -106,8 +111,8 @@ make admin-smoke
 ```
 
 It starts the docker stack in its own throwaway project (an ephemeral port, never one a dev server
-uses) with `compose.admin-local.yaml`, which sets `ADMIN_BASE_URL=http://localhost/admin/` and
-captures mail to a folder of the container's own filesystem (`/tmp/admin-smoke-<random>`), with the
+uses) with `compose.admin-local.yaml`, which sets `ADMIN_BASE_URL=http://localhost/admin/`, points
+`STUDIO_CONFIG_FILE` at `tests/e2e/studio-config.json` (it names only the owner) and captures mail to a folder of the container's own filesystem (`/tmp/admin-smoke-<random>`), with the
 database beside it, so it never touches a developer's `admin/data/`. It then requests a link, reads the captured mail, signs in with the button,
 loads the hub, signs out, signs in again by opening a second link in the browser that asked for it (a stranger still gets the button), and checks that `lib/`, `data/` and script-made requests are refused and
 that `health.php` reports the database. It prints `ADMIN-SMOKE-OK` and removes the project and its

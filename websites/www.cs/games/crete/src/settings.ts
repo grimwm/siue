@@ -11,11 +11,14 @@ export const MUSIC_HIDDEN_KEY = "crete-music-hidden";
 export const FULLSCREEN_KEY = "crete-fullscreen";
 export const LOOK_KEY = "crete-look";
 export const WALLS_KEY = "crete-walls";
+export const VIEW_KEY = "crete-view";
 
 /** How the board is drawn: the painted 3D look, or the flat tiles. */
 export type Look = "modern" | "classic";
 /** How the modern look draws the walls that stand in front of the player. */
 export type WallMode = "solid" | "ghosted" | "low";
+/** How the modern camera looks at the board: at 45° (Angled), or straight down like the classic look (Top-down). */
+export type View = "angled" | "top";
 
 export interface Settings {
   sound: Pref<OnOff>;
@@ -28,6 +31,8 @@ export interface Settings {
   look: Pref<Look>;
   /** Only the modern look has walls to show. */
   walls: Pref<WallMode>;
+  /** Only the modern look has a camera to tilt. */
+  view: Pref<View>;
 }
 
 export function createSettings(storage: StorageLike | null): Settings {
@@ -38,5 +43,6 @@ export function createSettings(storage: StorageLike | null): Settings {
     fullscreen: pref<OnOff>(FULLSCREEN_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
     look: pref<Look>(LOOK_KEY, "modern", oneOf<Look>(["modern", "classic"], "modern"), storage),
     walls: pref<WallMode>(WALLS_KEY, "solid", oneOf<WallMode>(["solid", "ghosted", "low"], "solid"), storage),
+    view: pref<View>(VIEW_KEY, "angled", oneOf<View>(["angled", "top"], "angled"), storage),
   };
 }

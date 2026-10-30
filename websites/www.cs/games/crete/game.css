@@ -146,6 +146,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 .modern-overlay .cbtn:hover, .modern-overlay .modern-viewbtn:hover { border-color: var(--accent); filter: none; }
 .modern-overlay .cbtn { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; font-size: 0.85rem; }
+.modern-overlay .cbtn[hidden] { display: none; }
 .modern-overlay .cbtn svg {
   width: 22px;
   height: 22px;
@@ -373,8 +374,9 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 @media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
 /* Walls: one control in three parts; the part chosen is filled gold with dark text. */
 .menu-walls { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.2rem; }
-.menu-label { flex: none; font-weight: 600; }
+.menu-label { flex: none; min-width: 2.8rem; font-weight: 600; }
 .seg { flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 3px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
+.seg-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .seg-opt { min-height: 38px; padding: 0 0.4rem; background: transparent; color: var(--ink); font-weight: 600; }
 .seg-opt:hover { background: rgba(240, 180, 41, 0.1); filter: none; }
 .seg-opt[aria-pressed="true"] { background: var(--accent); color: #1a1a1a; }

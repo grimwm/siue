@@ -64,6 +64,21 @@ const line = (page: Page) => page.evaluate(() => {
   const r = t.solve(t.game.run.now);
   return r.solved ? r.line.map(a => (a.kind === 'move' ? a.dir! : a.kind)) : [];
 });
+/** A one-finger touch swipe of (dx, dy) CSS pixels across the middle of `sel`, as pointer events. */
+async function swipe(page: Page, sel: string, dx: number, dy: number): Promise<void> {
+  await page.evaluate(([sel, dx, dy]) => {
+    const el = document.querySelector(sel as string)!;
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const ev = (type: string, px: number, py: number) => el.dispatchEvent(new PointerEvent(type, {
+      pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: px, clientY: py, bubbles: true, button: 0,
+    }));
+    ev('pointerdown', x, y);
+    for (let i = 1; i <= 5; i++) ev('pointermove', x + (dx as number) * i / 5, y + (dy as number) * i / 5);
+    ev('pointerup', x + (dx as number), y + (dy as number));
+  }, [sel, dx, dy] as const);
+}
+
 const now = (page: Page) => page.evaluate(() => {
   const s = window.__creteTest.game.run.now;
   return { moves: s.moves, hearts: s.hearts, outcome: s.outcome };
@@ -341,4 +356,15 @@ test('Full screen from the menu takes the Esc lock; Esc changes nothing and the 
   expect(await page.evaluate(() => document.fullscreenElement?.id ?? null)).toBe('frame');
   expect(errors).toEqual([]);
   await ctx.close();
+});
+
+test('a finger swipe on the classic board moves Theseus that way', async ({ page }) => {
+  const errors = await beginTrial1(page);
+  const from = await now(page);
+  for (const [dx, dy] of [[60, 0], [-60, 0], [0, 60], [0, -60]]) {
+    await swipe(page, '#stage', dx!, dy!);
+    if ((await now(page)).moves > from.moves) break;
+  }
+  expect((await now(page)).moves, 'one swipe, one move').toBe(from.moves + 1);
+  expect(errors).toEqual([]);
 });

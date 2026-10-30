@@ -34,7 +34,7 @@ import { fromLevel } from './editor/model.ts';
 import { createRater } from './share/rating.ts';
 import { createVisit, fragmentKind } from './share/visit.ts';
 import { createSettings } from './settings.ts';
-import type { Look, WallMode } from './settings.ts';
+import type { Look, View, WallMode } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
@@ -226,6 +226,13 @@ function applyLook(look: Look): void {
   showLook(look);
 }
 
+function applyView(view: View): void {
+  settings.view.set(view);
+  ui.setView(view);
+  modern?.view(view);
+  ui.say(view === 'top' ? 'Top-down view.' : 'Angled view.', 'info');
+}
+
 function applyWalls(walls: WallMode): void {
   settings.walls.set(walls);
   ui.setLook(settings.look.get(), walls);
@@ -369,6 +376,7 @@ async function createModern(): Promise<void> {
         image,
         blocked: () => ui.cardsOpen(),
         gesture: () => ui.closeStart(),
+        swipe: dir => ui.swipe(dir),
         reducedMotion: () => reduced,
       })
       : null;
@@ -382,6 +390,7 @@ async function createModern(): Promise<void> {
     return;
   }
   modern.walls(settings.walls.get());
+  modern.view(settings.view.get());
   modern.setActive(false);
   canvas.addEventListener('webglcontextlost', e => {
     // Kept so the browser may give it back; until it does, the classic board shows.
@@ -413,7 +422,7 @@ function noModern(why: string): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setView: applyView, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
   });
   const background = settings.musicHidden.get() === 'on';
@@ -428,6 +437,7 @@ function start(): void {
     ui.setMusic(false);
   }
   ui.setLook(settings.look.get(), settings.walls.get());
+  ui.setView(settings.view.get());
   ui.setMoveDir(dir => screenToGrid(dir, modernOn && modern ? modern.yaw() : DEFAULT_YAW));
   showLook(settings.look.get());
   followMusicSwitches();
@@ -502,6 +512,8 @@ const modernHook = {
   frames: () => modern?.frames() ?? 0,
   yaw: () => modern?.yaw() ?? DEFAULT_YAW,
   zoom: () => modern?.zoom() ?? 0,
+  pitch: () => modern?.pitch() ?? 0,
+  following: () => modern?.following() ?? true,
   floating: () => modern?.floating() ?? [],
   splashing: () => modern?.splashing() ?? [],
   get active() { return modernOn && !editorUp; },

@@ -373,7 +373,7 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   toggled = 0;
   key('q');
   const at = () => document.activeElement?.id;
-  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'look-modern', 'look-classic', 'walls-solid', 'walls-ghosted', 'walls-low', 'menu-lore', 'quit'];
+  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'look-modern', 'look-classic', 'view-angled', 'view-top', 'walls-solid', 'walls-ghosted', 'walls-low', 'menu-lore', 'quit'];
   const first = order.indexOf(at() ?? '');
   assert.ok(first >= 0, `focus is on a menu button, not ${at()}`);
   for (let i = 0; i < 8; i++) key('ArrowUp');
@@ -388,13 +388,13 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   assert.equal(at(), 'fullscreen');
   key('j');
   assert.equal(at(), 'look-modern');
-  for (let i = 0; i < 5; i++) key('j');
+  for (let i = 0; i < 7; i++) key('j');
   assert.equal(at(), 'menu-lore');
-  for (let i = 0; i < 6; i++) key('k');
+  for (let i = 0; i < 8; i++) key('k');
   assert.equal(at(), 'fullscreen');
   key('Enter');
   assert.equal(toggled, 1);
-  for (let i = 0; i < 12; i++) key('ArrowDown');
+  for (let i = 0; i < order.length + 2; i++) key('ArrowDown');
   assert.equal(at(), 'quit', 'clamped at the bottom');
 });
 
@@ -687,6 +687,21 @@ test('the end card words a win as Level N cleared and a loss as Level failed', (
   assert.equal(text('end-kicker'), 'Level 1 cleared');
   assert.ok(text('end-next').includes('Next level'));
   assert.ok(text('end-trials').startsWith('Levels'));
+});
+
+test('a swipe moves Theseus as a move key does and closes the start card; with a card up it does nothing', () => {
+  reset();
+  game.open(0);
+  assert.equal(flow.top(), 'start');
+  const before = game.run!.now.moves;
+  const tryAll = () => { for (const d of ['up', 'down', 'left', 'right'] as const) { flow.swipe(d); if (game.run!.now.moves > before) return; } };
+  tryAll();
+  assert.equal(game.run!.now.moves, before + 1, 'a swipe moved Theseus');
+  assert.equal(flow.top(), null, 'the start card closed');
+  key('q');
+  assert.equal(flow.top(), 'menu');
+  tryAll();
+  assert.equal(game.run!.now.moves, before + 1, 'the menu holds swipes');
 });
 
 test('Next level carries the Enter tab, and Enter on a won card opens the next level', () => {

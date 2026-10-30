@@ -154,10 +154,10 @@ test('a tool names itself, its count and what it does to a screen reader', () =>
 // ---- menu ----
 function menuProps(over: Partial<MenuProps> = {}): MenuProps {
   return {
-    open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid',
+    open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', view: 'angled',
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onView: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 
@@ -167,7 +167,7 @@ test('the menu holds sound and full screen, the story log, how to play and Quit,
   const veil = byId(root, 'menu-veil');
   assert.equal(veil.hidden, false);
   assert.equal(byId(root, 'menu-title').textContent, 'Menu');
-  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'look', 'walls', 'lore', 'log', 'help', 'quit']);
+  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'look', 'view', 'walls', 'lore', 'log', 'help', 'quit']);
   for (const gone of ['seed-form', 'seed-input', 'random-run', 'run-stats']) assert.equal(maybeById(root, gone), undefined, gone);
   assert.equal(walk(veil).some(n => n.className === 'menu-empty'), false, 'a log with lines says nothing of being empty');
   renderMenu(root, menuProps({ log: [] }));
@@ -186,6 +186,22 @@ test('the menu offers Modern and Classic, and Solid, Ghosted and Low only while 
   renderMenu(root, menuProps({ look: 'classic' }));
   assert.deepEqual(['look-modern', 'look-classic'].map(pressed), ['false', 'true']);
   assert.equal(maybeById(root, 'walls-solid'), undefined);
+});
+
+test('the menu offers Angled and Top-down while the look is modern, and Walls only while angled', () => {
+  const root = mount();
+  const seen: string[] = [];
+  renderMenu(root, menuProps({ view: 'angled', onView: v => seen.push(v) }));
+  const pressed = (id: string) => byId(root, id).getAttribute('aria-pressed');
+  assert.deepEqual(['view-angled', 'view-top'].map(pressed), ['true', 'false']);
+  assert.ok(maybeById(root, 'walls-solid'), 'Walls shows while angled');
+  click(byId(root, 'view-top'));
+  assert.deepEqual(seen, ['top']);
+  renderMenu(root, menuProps({ view: 'top' }));
+  assert.deepEqual(['view-angled', 'view-top'].map(pressed), ['false', 'true']);
+  assert.equal(maybeById(root, 'walls-solid'), undefined, 'straight down no wall stands in front, so Walls goes');
+  renderMenu(root, menuProps({ look: 'classic', view: 'top' }));
+  assert.equal(maybeById(root, 'view-top'), undefined, 'Classic has no camera');
 });
 
 test('the menu has a Lore book button that calls back', () => {

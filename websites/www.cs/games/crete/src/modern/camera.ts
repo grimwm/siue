@@ -1,28 +1,39 @@
-/* The Island of Crete, modern look: the fixed-pitch camera as pure maths. The view turns about the vertical
- * axis, slides over the board and zooms within limits; it never tilts. The board is centred at the origin, one cell is
+/* The Island of Crete, modern look: the camera as pure maths. The view turns about the vertical axis, slides over
+ * the board and zooms within limits; its pitch is the View setting's, 45° (Angled) or 75° (Top-down, square to the board
+ * like the classic look), and eases between them, never under the player's hand. The board is centred at the origin, one cell is
  * one unit, and cell (r, c) sits at x = c - (cols - 1) / 2, z = r - (rows - 1) / 2. DOM-free. */
 
-export const PITCH = 45;
+import type { View } from '../settings.ts';
+
+export type { View };
+/** Top-down looks steeply down, square to the board like the classic look: a wall hides about a quarter of the cell
+ *  behind it, and the figures still show their faces. */
+export const PITCHES: Record<View, number> = { angled: 45, top: 75 };
 export const DEFAULT_YAW = 15;
+/** The yaw a view starts at, and Reset returns to: Top-down is square to the board, as the classic look is. */
+export const VIEW_YAW: Record<View, number> = { angled: DEFAULT_YAW, top: 0 };
 
 export interface Cam {
   yaw: number;
+  /** Degrees above the ground: 45 (Angled) or 75 (Top-down). */
+  pitch: number;
   tx: number;
   tz: number;
   /** The view's height in ground rows: smaller is closer. */
   zoom: number;
 }
 
-const SIN_PITCH = Math.sin((PITCH * Math.PI) / 180);
+/** How much the ground's depth axis is foreshortened at pitch `deg`: 1 looking straight down. */
+const sinPitch = (deg: number): number => Math.sin((deg * Math.PI) / 180);
 
 /** Ease `cur` toward `goal` in place; true while it is still moving. `snap` (reduced motion) jumps at once. */
 export function easeCam(cur: Cam, goal: Cam, dtSec: number, snap: boolean): boolean {
   const k = snap ? 1 : 1 - Math.exp(-dtSec * 11);
   let moving = false;
-  for (const key of ['yaw', 'tx', 'tz', 'zoom'] as const) {
+  for (const key of ['yaw', 'pitch', 'tx', 'tz', 'zoom'] as const) {
     const d = goal[key] - cur[key];
     if (d === 0) continue;
-    cur[key] = Math.abs(d) > (key === 'yaw' ? 0.02 : 0.002) && !snap ? cur[key] + d * k : goal[key];
+    cur[key] = Math.abs(d) > (key === 'yaw' || key === 'pitch' ? 0.02 : 0.002) && !snap ? cur[key] + d * k : goal[key];
     if (cur[key] !== goal[key]) moving = true;
   }
   return moving;
@@ -43,7 +54,7 @@ export function clampView(c: Cam, cols: number, rows: number, aspect: number): C
   const halfAcross = (cols * Math.abs(cs) + rows * Math.abs(sn)) / 2;
   const halfDeep = (cols * Math.abs(sn) + rows * Math.abs(cs)) / 2;
   const a = hold(across, halfAcross + 1 - (c.zoom * aspect) / 2);
-  const b = hold(deep, halfDeep + 1 - c.zoom / 2 / SIN_PITCH);
+  const b = hold(deep, halfDeep + 1 - c.zoom / 2 / sinPitch(c.pitch));
   return { ...c, tx: a * cs - b * sn, tz: -a * sn - b * cs };
 }
 
@@ -56,7 +67,7 @@ export function panCam(c: Cam, dxPx: number, dyPx: number, unitsPerPx: number): 
   const fx = -Math.sin(y);
   const fz = -Math.cos(y);
   const dx = dxPx * unitsPerPx;
-  const dy = (dyPx * unitsPerPx) / SIN_PITCH;
+  const dy = (dyPx * unitsPerPx) / sinPitch(c.pitch);
   return { ...c, tx: c.tx - rx * dx + fx * dy, tz: c.tz - rz * dx + fz * dy };
 }
 
@@ -80,11 +91,12 @@ export interface ZoomLimits {
   max: number;
 }
 
-/** How far the view may zoom on a `cols` × `rows` level at screen `aspect`: in to about five rows, out until the
- *  whole level and a cell's margin fit whichever way the view is turned, but never past 22 rows nor short of the default view. */
-export function zoomLimits(aspect: number, cols: number, rows: number): ZoomLimits {
+/** How far the view may zoom on a `cols` × `rows` level at screen `aspect` and camera `pitch`: in to about five
+ *  rows, out until the whole level and a cell's margin fit whichever way the view is turned, but never past 22 rows
+ *  nor short of the default view. */
+export function zoomLimits(aspect: number, cols: number, rows: number, pitch: number): ZoomLimits {
   const d = Math.hypot(cols, rows) + 2;
-  const whole = Math.max(d * SIN_PITCH, d / aspect);
+  const whole = Math.max(d * sinPitch(pitch), d / aspect);
   return { min: ZOOM_MIN, max: Math.max(viewRows(aspect), Math.min(ZOOM_MAX, whole)) };
 }
 
@@ -99,7 +111,7 @@ export interface Ground {
  *  orthographic, so a screen-up offset reaches 1 / sin(pitch) as far along the ground. */
 export function groundAt(c: Cam, sx: number, sy: number): Ground {
   const y = (c.yaw * Math.PI) / 180;
-  const fy = sy / SIN_PITCH;
+  const fy = sy / sinPitch(c.pitch);
   return { x: c.tx + Math.cos(y) * sx - Math.sin(y) * fy, z: c.tz - Math.sin(y) * sx - Math.cos(y) * fy };
 }
 

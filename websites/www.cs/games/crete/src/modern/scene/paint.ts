@@ -34,7 +34,7 @@ void main(){
   }
   float l = dot(col, vec3(.2126, .7152, .0722));
   col = mix(vec3(l), col, 0.78);
-  col = col * vec3(1.05, 1.0, 0.9) + vec3(0.018, 0.009, 0.0) * (1.0 - l);
+  col = col * vec3(1.02, 1.0, 0.96) + vec3(0.018, 0.009, 0.0) * (1.0 - l);
   vec2 q = (vUv - 0.5) * vec2(res.x / res.y, 1.0);
   col *= 1.0 - 0.5 * smoothstep(0.35, 0.95, length(q));
   vec2 fc = gl_FragCoord.xy / dpr;
@@ -54,7 +54,7 @@ export interface Paint {
 export function createPaint(renderer: WebGLRenderer): Paint {
   const quadCam = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const tone = new ShaderMaterial({
-    uniforms: { tDiffuse: { value: null }, exposure: { value: 1.3 } },
+    uniforms: { tDiffuse: { value: null }, exposure: { value: 1.4 } },
     vertexShader: VS, fragmentShader: TONE, depthTest: false, depthWrite: false,
   });
   const paintMat = new ShaderMaterial({

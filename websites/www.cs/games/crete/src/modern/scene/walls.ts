@@ -4,7 +4,7 @@
  * never shows inner seams. A wall fades by how much of the things it is given it hides from the camera, sampled
  * with rays (the board gives Theseus alone, or everything in Ghosted); low walls stand at a third of their
  * height. */
-import { BufferGeometry, Float32BufferAttribute, Group, Mesh, Vector3 } from 'three';
+import { BufferGeometry, Float32BufferAttribute, Group, Mesh, PlaneGeometry, Vector3 } from 'three';
 import type { Camera, MeshStandardMaterial } from 'three';
 import { easeOpacity, ghostTarget } from '../ghost.ts';
 import type { WallMode } from '../../settings.ts';
@@ -14,6 +14,24 @@ import type { Kit } from './textures.ts';
 
 export const WALL_H = 1.25;
 export const LOW_H = 0.38;
+/** How bright an outside wall's top is beside a wall that faces the rooms. */
+const DEEP_TOP = 0.16;
+/** How far the shade at a wall's foot reaches across the floor, and how wide the dark rim round a wall's top is. */
+const AO_W = 0.26;
+const RIM_W = 0.05;
+/** The turn that lays the foot shade's dark edge against each side of a wall. */
+const AO_TURN: Record<Side, number> = { s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 };
+
+/** The dark rim along a top edge on side `k`: a strip of the top face, `RIM_W` wide, just above it. */
+function rimFace(k: Side): Face {
+  const [nx, , nz] = SIDES[k].n, y = 1.002;
+  const o = 0.5, i = 0.5 - RIM_W;
+  const v: V3[] = nx !== 0
+    ? [[nx * i, y, -0.5 * nx], [nx * i, y, 0.5 * nx], [nx * o, y, 0.5 * nx], [nx * o, y, -0.5 * nx]]
+    : [[0.5 * nz, y, nz * i], [-0.5 * nz, y, nz * i], [-0.5 * nz, y, nz * o], [0.5 * nz, y, nz * o]];
+  if (nx < 0 || nz < 0) v.reverse();
+  return { v, n: [0, 1, 0], uvs: [[0, 0], [1, 0], [1, 1], [0, 1]], mat: 2 };
+}
 
 type V3 = readonly [number, number, number];
 interface Face { v: readonly V3[]; n: V3; uvs: readonly (readonly [number, number])[]; mat: number }
@@ -99,6 +117,9 @@ function rayBoxT(o: V3, d: V3, mn: V3, mx: V3): number {
 export function createWalls(kit: Kit): Walls {
   const group = new Group();
   let walls: Wall[] = [];
+  const aoGeo = new PlaneGeometry(1, AO_W);
+  aoGeo.rotateX(-Math.PI / 2);
+  let shades: Mesh[] = [];
   const byCell = new Map<number, Wall>();
   let cols = 0;
   let mode: WallMode = 'solid';
@@ -120,6 +141,8 @@ export function createWalls(kit: Kit): Walls {
     }
     walls = [];
     byCell.clear();
+    for (const m of shades) group.remove(m);
+    shades = [];
   };
 
   return {
@@ -144,8 +167,25 @@ export function createWalls(kit: Kit): Walls {
           const nr = r + dr, nc = c + dc;
           if (isWall(nr, nc) && nr >= 0 && nc >= 0 && nr < rows && nc < cols) inner.push(k);
           else faces.push(sideFace(k, x0, z0));
+          if (isWall(nr, nc)) continue;
+          // An open side: a dark rim on the top's edge, and shade on the floor at the wall's foot.
+          faces.push(rimFace(k));
+          const [nx, , nz] = SIDES[k].n;
+          const ao = new Mesh(aoGeo, kit.m.ao);
+          ao.position.set(x0 + nx * (0.5 + AO_W / 2), FY + 0.003, z0 + nz * (0.5 + AO_W / 2));
+          ao.rotation.y = AO_TURN[k];
+          ao.renderOrder = 1;
+          group.add(ao);
+          shades.push(ao);
         }
-        const mats = [kit.m.side.clone(), kit.m.top.clone()];
+        const mats = [kit.m.side.clone(), kit.m.top.clone(), kit.m.edge.clone()];
+        // The board's rim, and walls that touch no open cell, lie outside the rooms: their tops sink into the dark.
+        let deep = r === 0 || c === 0 || r === rows - 1 || c === cols - 1;
+        if (!deep) {
+          deep = true;
+          for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if (!isWall(r + dr, c + dc)) deep = false;
+        }
+        if (deep) mats[1]!.color.multiplyScalar(DEEP_TOP);
         const mesh = new Mesh(quadGeo(faces), mats);
         mesh.position.set(x0, 0, z0);
         mesh.scale.y = h;
@@ -207,6 +247,6 @@ export function createWalls(kit: Kit): Walls {
       if (busy) for (const w of walls) for (const f of w.inner) f.mesh.visible = !!f.nb && f.nb.op < 0.999 && w.op > f.nb.op + 0.02;
       return busy;
     },
-    dispose: clear,
+    dispose() { clear(); aoGeo.dispose(); },
   };
 }

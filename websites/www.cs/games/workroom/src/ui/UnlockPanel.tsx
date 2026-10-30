@@ -1,9 +1,8 @@
 
 // The passphrase form that unlocks the notes on this page view. A password
-// manager fills it (a username it never shows, and a current-password field).
-// Nothing is remembered by the page: the field is cleared on submit and the
-// passphrase is asked on every visit. Chrome's own password manager may offer
-// to save the pair; the owner dismisses that prompt.
+// manager fills it (a username it never shows, and a current-password field)
+// with the passphrase it saved when the key was made. Nothing of
+// the passphrase is kept by the page: the field is cleared on submit.
 import { useState } from 'preact/hooks';
 import { Button } from './console/Button.tsx';
 

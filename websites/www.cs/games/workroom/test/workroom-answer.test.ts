@@ -58,8 +58,12 @@ function fakeNotes(answer: (key: string) => AddReport = key => ({ key, memoryOnl
   const sent: { body: NoteBody; audio: Uint8Array | null }[] = [];
   let failing = failures;
   let open = opts.unlocked ?? true;
+  let keyring = opts.keyring ?? true;
+  const made: string[] = [];
   const session: NotesSession = {
-    hasKeyring: async () => opts.keyring ?? true,
+    hasKeyring: async () => keyring,
+    makeKey: async p => { made.push(p); keyring = true; open = true; return null; },
+    keyStored: () => keyring,
     unlocked: () => open,
     unlock: async () => { open = true; return null; },
     restore: async () => false,
@@ -72,7 +76,7 @@ function fakeNotes(answer: (key: string) => AddReport = key => ({ key, memoryOnl
     },
     flush: async () => ({ sent: [], kept: [] }), kept: async () => [], discard: async () => {}, remove: async () => {}, removeAll: async () => 0, lock() {}, memoryOnly: () => false, unreadable: () => 0,
   };
-  return { session, sent };
+  return { session, sent, made };
 }
 
 function fakeMedia(): { ports: MediaPorts; clock: { ms: number }; released: { tracks: number } } {
@@ -109,15 +113,27 @@ const unmount = (root: StubElement): void => { render(null, renderTarget(root));
 afterEach(() => { for (const root of mounted.splice(0)) unmount(root); });
 const at = (x: number, y: number, t: number) => ({ pointerId: 1, clientX: x, clientY: y, timeStamp: t });
 
-test('without notes there is no answer bar; with no keyring on the server, notes are off', async () => {
+test('without notes there is no answer bar; with no keyring on the server, notes are off until the notes panel makes the key', async () => {
   const none = await mount();
   assert.ok(named(none, 'data-answer-bar') === undefined);
   assert.ok(named(none, 'data-answer-off') === undefined);
   unmount(none);
-  const { session } = fakeNotes(undefined, 0, { unlocked: false, keyring: false });
+  const { session, made } = fakeNotes(undefined, 0, { unlocked: false, keyring: false });
   const off = await mount({ notes: session });
-  assert.equal(named(off, 'data-answer-off')!.textContent, 'Notes are off until a notes key is uploaded (make music-setup).');
+  assert.equal(named(off, 'data-answer-off')!.textContent, 'Notes are off until you make your notes key under Your notes.');
+  assert.doesNotMatch(off.textContent, /music-setup/);
   assert.ok(button(off, 'Pin a note') === undefined);
+  assert.ok(named(off, 'data-answers') === undefined, 'no unlock form while there is no key to unlock');
+  const fields = walk(named(off, 'data-make-key')!).filter(e => e._attrs['autocomplete'] === 'new-password');
+  assert.equal(fields.length, 2);
+  for (const f of fields) { f.value = 'twelve chars or more'; await act(() => { fire(f, 'input'); }); }
+  await act(() => { fire(walk(named(off, 'data-make-key')!).find(e => e.localName === 'form')!, 'submit'); });
+  await settle();
+  assert.deepEqual(made, ['twelve chars or more']);
+  assert.ok(named(off, 'data-make-key') === undefined);
+  assert.ok(named(off, 'data-answer-off') === undefined);
+  assert.ok(button(off, 'Pin a note'), 'the bar is on, unlocked');
+  assert.ok(named(off, 'data-answers'));
   unmount(off);
 });
 
@@ -573,6 +589,35 @@ test('a note kept because the sign-in ended locks the notes; the next tap asks f
   await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
   assert.ok(named(root, 'data-pin-composer') === undefined);
   assert.equal(named(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST);
+  unmount(root);
+});
+
+test('a key made but left locked shows why at the unlock; once unlocked, a later lock asks with the usual reason', async () => {
+  const { session } = fakeNotes(undefined, 0, { unlocked: false, keyring: false });
+  let open = false;
+  let stored = false;
+  Object.assign(session, {
+    unlocked: () => open,
+    lock: () => { open = false; },
+    keyStored: () => stored,
+    makeKey: async () => { stored = true; return 'Could not reach the server. Check the connection and try again.'; },
+    unlock: async () => { open = true; return null; },
+    send: async () => ({ key: 'k1', memoryOnly: false, sent: [], kept: [{ key: 'k1', reason: 'signed_out' }] }),
+  });
+  const root = await mount({ notes: session });
+  const fields = walk(named(root, 'data-make-key')!).filter(e => e._attrs['autocomplete'] === 'new-password');
+  for (const f of fields) { f.value = 'twelve chars or more'; await act(() => { fire(f, 'input'); }); }
+  await act(() => { fire(walk(named(root, 'data-make-key')!).find(e => e.localName === 'form')!, 'submit'); });
+  await settle();
+  assert.equal(named(root, 'data-unlock-reason')!.textContent, 'Could not reach the server. Check the connection and try again.');
+  await unlockInPanel(root);
+  assert.ok(named(root, 'data-unlock-reason') === undefined, 'the reason goes with the unlock');
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  await act(() => { fire(button(root, 'Calmer')!, 'click'); });
+  await settle();
+  assert.equal(open, false, 'the kept note locked the notes');
+  await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  assert.equal(named(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST, 'not the old reason the key was made with');
   unmount(root);
 });
 

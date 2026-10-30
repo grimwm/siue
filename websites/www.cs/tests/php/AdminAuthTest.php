@@ -13,16 +13,25 @@ final class AdminAuthTest extends TestCase
     {
         $c ??= new FakeClock(1_000_000);
         $db = admin_tmp_db();
-        return [new Admin\Auth($db, $c), $db, $c];
+        return [new Admin\Auth($db, $c, admin_realm()), $db, $c];
+    }
+
+    /** Auth in an admin realm that also names a0@siue.edu to a29@siue.edu as admins, to fill the overall limit with links. */
+    private function authWithAdmins(): Admin\Auth
+    {
+        $people = [];
+        for ($i = 0; $i < 30; $i++) $people[] = ['email' => "a$i@siue.edu", 'admin' => true];
+        $realm = Admin\Realm::admin(Admin\People::fromJson((string) json_encode(['people' => $people])), 'https://www.cs.siue.edu/admin/');
+        return new Admin\Auth(admin_tmp_db(), new FakeClock(1_000_000), $realm);
     }
 
     public function testOnlyTheOneAddress(): void
     {
-        foreach (['wgrim@siue.edu', ' WGRIM@siue.edu ', 'Wgrim@SIUE.EDU'] as $ok) self::assertTrue(Admin\Auth::allowed($ok), $ok);
-        foreach (['wgrim@siue.edu.evil.com', 'x@siue.edu', "wgrim@siue.edu\r\nBcc: a@b.c", 'wgrim@siue.edu,x@y.z', '', 'wgrim'] as $bad) {
-            self::assertFalse(Admin\Auth::allowed($bad), $bad);
-        }
         [$a] = $this->auth();
+        foreach (['wgrim@siue.edu', ' WGRIM@siue.edu ', 'Wgrim@SIUE.EDU'] as $ok) self::assertTrue($a->allowed($ok), $ok);
+        foreach (['wgrim@siue.edu.evil.com', 'x@siue.edu', "wgrim@siue.edu\r\nBcc: a@b.c", 'wgrim@siue.edu,x@y.z', '', 'wgrim'] as $bad) {
+            self::assertFalse($a->allowed($bad), $bad);
+        }
         self::assertNull($a->requestLink('someone@siue.edu', '1.2.3.4'));
     }
 
@@ -70,13 +79,17 @@ final class AdminAuthTest extends TestCase
         self::assertNotNull($a->requestLink('wgrim@siue.edu', '10.0.0.9'));
     }
 
-    public function testIpAndGlobalLimitsCountRefusedAddressesToo(): void
+    public function testTheIpLimitCountsRefusedAddressesAndTheGlobalLimitCountsLinks(): void
     {
         [$a] = $this->auth();
         for ($i = 0; $i < 20; $i++) $a->requestLink("x$i@example.com", '9.9.9.9');
         self::assertNull($a->requestLink('wgrim@siue.edu', '9.9.9.9'), 'per-IP limit');
-        for ($i = 0; $i < 10; $i++) $a->requestLink("y$i@example.com", "8.8.8.$i");
-        self::assertNull($a->requestLink('wgrim@siue.edu', '7.7.7.7'), 'global limit of 30');
+        for ($i = 0; $i < 30; $i++) $a->requestLink("y$i@example.com", "8.8.8.$i");
+        self::assertNotNull($a->requestLink('wgrim@siue.edu', '7.7.7.7'), 'refused requests use up no links');
+
+        $b = $this->authWithAdmins();
+        for ($i = 0; $i < 30; $i++) self::assertNotNull($b->requestLink("a$i@siue.edu", "8.8.8.$i"));
+        self::assertNull($b->requestLink('wgrim@siue.edu', '7.7.7.7'), 'global limit of 30 links');
     }
 
     public function testForgetAndForgetAll(): void
@@ -107,11 +120,11 @@ final class AdminAuthTest extends TestCase
 
     public function testTrustedDeviceSurvivesLockoutButNotThePerIpLimit(): void
     {
-        [$a, , $c] = $this->auth();
+        $a = $this->authWithAdmins();
         $dev = $a->issueDevice();
         self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $dev);
-        for ($i = 0; $i < 30; $i++) $a->requestLink("z$i@example.com", "6.6.6.$i");
-        self::assertNull($a->requestLink('wgrim@siue.edu', '5.5.5.5'), 'global limit locks strangers out');
+        for ($i = 0; $i < 30; $i++) $a->requestLink("a$i@siue.edu", "6.6.6.$i");
+        self::assertNull($a->requestLink('wgrim@siue.edu', '5.5.5.5'), 'global limit locks the owner out');
         self::assertTrue($a->isTrustedDevice($dev));
         self::assertNotNull($a->requestLink('wgrim@siue.edu', '5.5.5.5', true));
         self::assertNull($a->requestLink('someone@example.com', '5.5.5.5', true), 'only ALLOWED gets a link');

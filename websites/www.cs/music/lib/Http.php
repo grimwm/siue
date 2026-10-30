@@ -55,13 +55,9 @@ final class Http
         return $res;
     }
 
-    /** 200 whole file or 206 one byte range ("bytes=a-b", "bytes=a-", "bytes=-n"); 416 on a bad range; 404 when unreadable. */
-    public static function serveFile(string $path, string $mime, ?string $range): \Admin\Response
+    /** 200 with $bytes whole, or 206 with one byte range ("bytes=a-b", "bytes=a-", "bytes=-n"); 416 on a bad range. */
+    public static function serveBytes(string $bytes, string $mime, ?string $range): \Admin\Response
     {
-        $bytes = is_file($path) ? @file_get_contents($path) : false;
-        if ($bytes === false) {
-            return self::json(404, ['error' => 'not_found']);
-        }
         $size = strlen($bytes);
         $headers = ['Content-Type' => $mime, 'Accept-Ranges' => 'bytes'];
         if ($range === null) {

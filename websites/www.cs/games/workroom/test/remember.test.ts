@@ -27,6 +27,8 @@ function server() {
     remove: async () => 0,
     removeAll: async () => 0,
     keyring: async () => { state.keyringCalls++; if (state.fail) throw state.fail; return { locked: state.keyring, session: state.session }; },
+    uploadKeyring: async () => {},
+    deleteDraft: async () => 0,
   };
   return { api, state };
 }

@@ -1,5 +1,6 @@
-// The workroom in a real browser against local docker (make music-e2e): sign in
-// through the captured mail, publish a draft with an API key made on the hub,
+// The workroom in a real browser against local docker (make music-e2e): the owner
+// signs in to the studio through the captured mail, and to the admin hub
+// separately, as a named admin does; publish a draft with an API key made on the hub,
 // open the piece, play, move the playhead, switch views, open a glossary card,
 // and never trip the content security policy; then a sound effect from another
 // project: two projects on the list, a seconds axis, no sheet music; then the
@@ -18,6 +19,7 @@ import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { draftBundle, signInAt } from './music-mail.ts';
 
 const SITE = join(import.meta.dirname, '..', '..');
 const FIXTURE_DRAFTS = {
@@ -26,44 +28,28 @@ const FIXTURE_DRAFTS = {
   'draft-score': { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft-score'), piece: 'built-piece' },
 } as const;
 
-// The tests share one browser worker and one sign-in: the admin sign-in link is limited to three a hour per address,
-// so a run makes two link requests at most (this shared session, and the second device in the second test).
+// The tests share one browser worker and one sign-in to each realm: a sign-in link is limited to three an hour per
+// address in each, so a run asks the studio for three (this shared session, and the second device's two) and the admin
+// hub for one.
 test.describe.configure({ mode: 'serial' });
 
-// The admin mail is captured inside the PHP container (compose.admin-local.yaml), as in tests/admin-smoke.sh.
-function inPhp(command: string): string {
-  const compose = (process.env.MUSIC_E2E_COMPOSE ?? '').split(' ').filter(Boolean);
-  const run = spawnSync('docker', ['compose', ...compose, '-p', process.env.MUSIC_E2E_PROJECT!, 'exec', '-T', 'www-cs-php', 'sh', '-c', command], { encoding: 'utf8', cwd: SITE });
-  if (run.error || run.signal) throw new Error(`docker compose exec failed: ${run.error?.message ?? run.signal}`);
-  if (run.status !== 0) throw new Error(`docker compose exec exited ${run.status}: ${run.stderr}`);
-  return run.stdout;
-}
-// An empty mail directory is the expected start: the glob matches nothing and the listing ends in `true`.
-const mailFiles = (): string[] => inPhp(`ls ${process.env.MUSIC_E2E_MAIL_DIR}/*.eml 2>/dev/null || true`).split('\n').filter(Boolean);
-
+/** Signs the owner in to their studio at music/login.php. */
 export async function signIn(page: Page, base: string): Promise<void> {
-  const known = new Set(mailFiles());
-  await page.goto(`${base}admin/login.php`);
-  await page.getByLabel('Email').fill('wgrim@siue.edu');
-  await page.getByRole('button', { name: 'Email me a link' }).click();
-  let token = '';
-  await expect.poll(() => {
-    const fresh = mailFiles().filter(f => !known.has(f));
-    for (const f of fresh) {
-      // The mail is quoted-printable: undo its soft line breaks and =XX escapes before reading the link.
-      const text = inPhp(`cat ${f}`).replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (_m, h: string) => String.fromCharCode(parseInt(h, 16)));
-      const m = text.match(/verify\.php\?token=([0-9a-f]{64})/);
-      if (m) { token = m[1]!; break; }
-    }
-    return token;
-  }, { timeout: 20_000 }).not.toBe('');
-  // The mailed link names http://localhost/ with no port. Opened in the browser that asked for it, it signs in at once.
-  await page.goto(`${base}admin/verify.php?token=${token}`);
-  await expect(page).toHaveURL(/admin\/(index\.php)?$/);
+  await signInAt(page, base, 'music', 'wgrim@siue.edu');
 }
 
+/** Signs the owner in to the admin hub, a separate sign-in from the studio's. */
+export async function adminSignIn(page: Page, base: string): Promise<void> {
+  await signInAt(page, base, 'admin', 'wgrim@siue.edu');
+}
+
+/** An admin API key made on the hub's Keys page; a browser with no admin session signs in to admin/ first. */
 export async function createKey(page: Page, base: string, label: string, scopes: string[]): Promise<string> {
   await page.goto(`${base}admin/keys.php`);
+  if (/\/admin\/login\.php/.test(page.url())) {
+    await adminSignIn(page, base);
+    await page.goto(`${base}admin/keys.php`);
+  }
   await page.getByLabel('Label').fill(label);
   for (const s of scopes) await page.getByLabel(s).check();
   await page.getByRole('button', { name: 'Create key' }).click();
@@ -75,11 +61,13 @@ let session: Session | undefined;
 
 const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
 
-/** A fresh browser context signed in as the owner. The first call signs in and keeps the session; later calls reuse it. Unless guideSeen is false, every view's guide counts as seen, so none opens over the page. */
+/** A fresh browser context signed in as the owner, to the studio and to the admin hub. The first call signs in to both and keeps the sessions; later calls reuse them. Unless guideSeen is false, every view's guide counts as seen, so none opens over the page. */
 export async function signedInPage(browser: Browser, base: string, opts: { guideSeen?: boolean } = {}): Promise<{ context: BrowserContext; page: Page }> {
   if (!session) {
     const first = await browser.newContext();
-    await signIn(await first.newPage(), base);
+    const page = await first.newPage();
+    await signIn(page, base);
+    await adminSignIn(page, base);
     session = await first.storageState();
     await first.close();
   }
@@ -88,17 +76,6 @@ export async function signedInPage(browser: Browser, base: string, opts: { guide
     await context.addInitScript((tabs: readonly string[]) => { for (const t of tabs) { localStorage.setItem(`workroom-guide-${t}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${t}`, 'seen'); } }, GUIDE_VIEWS);
   }
   return { context, page: await context.newPage() };
-}
-
-/** The SIUED1 bundle (Formats): "SIUED1", a file count, then per file a name length, the name, a uint32 size and the bytes. */
-function draftBundle(files: Record<string, Buffer>): Buffer {
-  const parts: Buffer[] = [Buffer.from('SIUED1'), Buffer.from([Object.keys(files).length])];
-  for (const [name, bytes] of Object.entries(files)) {
-    const size = Buffer.alloc(4);
-    size.writeUInt32BE(bytes.length);
-    parts.push(Buffer.from([name.length]), Buffer.from(name), size, bytes);
-  }
-  return Buffer.concat(parts);
 }
 
 export async function publishFixtureDraft(request: APIRequestContext, base: string, key: string, fixture: keyof typeof FIXTURE_DRAFTS = 'draft'): Promise<void> {
@@ -604,7 +581,7 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
       await expect(p2.getByText('louder and slower right here')).toBeVisible();
 
       // Sign out, sign in again: the remembered unlock is forgotten and the passphrase is asked.
-      await p2.goto(`${base}admin/`);
+      await p2.goto(`${base}music/studio.php`);
       await p2.getByRole('button', { name: 'Sign out', exact: true }).click();
       await signIn(p2, base);
       await p2.goto(`${base}music/piece.php?id=test-piece`);
@@ -745,6 +722,8 @@ const SCREENS: Screen[] = [
   { name: 'energy', path: 'music/piece.php?id=test-piece', ready: async p => {
     await unlockThenClose(p);
     await p.getByRole('button', { name: 'Draw the energy' }).click();
+    // On a phone the drawing starts below the fold, under the notes handle: scroll it up, as a person would.
+    await p.locator('[data-energy-editor]').evaluate(el => el.scrollIntoView({ block: 'center' }));
     await dragAcross(p, '[data-energy-editor]', 0.3, 0.7, 140, 30);
     await expect(p.locator('[data-energy-drawn]')).toBeVisible();
   } },

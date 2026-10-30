@@ -8,6 +8,7 @@
 import { render, h } from 'preact';
 import { createAudioCore } from '../../_kit/audio/core.ts';
 import { createApi } from './api.ts';
+import type { PageApi } from './api.ts';
 import { browserLock, browserMedia, browserStorage, browserThemePorts } from './browser.ts';
 import { guideStore } from './guide.ts';
 import { indexedDbOutbox } from './idb.ts';
@@ -15,11 +16,13 @@ import { draftUrl, loadDraft } from './load.ts';
 import { createNotesSession } from './notes-session.ts';
 import type { NotesSession } from './notes-session.ts';
 import { createOutbox } from './outbox.ts';
+import { readLimits } from './studio-limits.ts';
 import { browserSound } from './render/browser-sound.ts';
 import { indexedDbKeyMemory } from './remember.ts';
 import { startTheme } from './theme.ts';
 import { createVault } from './vault.ts';
 import { demoPlayer } from './ui/demo-player.ts';
+import { DeleteDraft } from './ui/DeleteDraft.tsx';
 import { PiecesIndex } from './ui/PiecesIndex.tsx';
 import { ThemeRoot, ThemeSwitch } from './ui/ThemeSwitch.tsx';
 import { Workroom } from './ui/Workroom.tsx';
@@ -31,12 +34,14 @@ if (switchHost) render(h(ThemeSwitch, { handle: theme }), switchHost);
 const root = document.getElementById('workroom')!;
 const playDemo = demoPlayer(createAudioCore());
 const { view, piece, version } = document.body.dataset;
+/** What this studio may hold (the body's data-note-max, data-room); `named`: the address has the allowance, so it gets the AI app's setup help. */
+const { noteMax, named } = readLimits(document.body);
 const fetcher = window.fetch.bind(window);
+const api: PageApi = createApi(fetcher, document.querySelector('meta[name="csrf"]')?.getAttribute('content') ?? '');
 
 /** The notes on this page view: the unlocked keys are remembered in IndexedDB as non-extractable keys; the outbox holds sealed notes only. */
 function notesSession(): NotesSession {
-  const api = createApi(fetcher, document.querySelector('meta[name="csrf"]')?.getAttribute('content') ?? '');
-  return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock()), memory: indexedDbKeyMemory() });
+  return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock(), noteMax), memory: indexedDbKeyMemory() });
 }
 const notes = notesSession();
 /** How long the page waits to restore a remembered unlock before drawing locked: a stalled request must not keep it blank. */
@@ -67,6 +72,10 @@ if (view === 'piece' && piece) {
       playDemo,
       stopDemo: playDemo.stop,
       onVersion: v => { location.search = `?id=${encodeURIComponent(piece)}&v=${v}`; },
+      manage: h(DeleteDraft, {
+        piece, title: loaded.score.piece.title, version: loaded.version, versions: loaded.versions,
+        remove: (id, v) => api.deleteDraft(id, v), confirm: q => window.confirm(q), go: url => { location.assign(url); },
+      }),
       notes,
       media: browserMedia(),
       buildSound: browserSound(),
@@ -75,7 +84,7 @@ if (view === 'piece' && piece) {
 } else if (view === 'index') {
   root.textContent = '';
   const list = document.querySelector('.index-body');
-  if (list) render(h(ThemeRoot, { handle: theme }, h(PiecesIndex, { notes, list })), root);
+  if (list) render(h(ThemeRoot, { handle: theme }, h(PiecesIndex, { notes, list, named })), root);
 } else {
   root.textContent = '';
 }

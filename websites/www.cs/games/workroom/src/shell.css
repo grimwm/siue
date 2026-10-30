@@ -1,5 +1,5 @@
 /* The server-rendered parts of the workroom pages (music/lib/Pages.php: the
-   header, the pieces list, the error page) keep their own class names; this
+   header, the pieces list, Your studio, the error page) keep their own class names; this
    file gives them the console look from the tokens. error, empty and loading
    are shared with the page script. */
 @layer base {
@@ -23,6 +23,25 @@
   .error { @apply rounded-lg border border-record bg-panel p-4 text-ink; }
   .empty { @apply text-dim; }
   .loading { @apply font-mono text-sm text-dim; }
+  .index-body.studio { @apply max-w-3xl; }
+  .studio h1 { @apply font-display text-3xl font-semibold tracking-wide uppercase; }
+  .studio-card { @apply grid gap-3 rounded-lg border border-rule bg-panel p-4; }
+  .studio-card h2 { @apply font-display text-lg font-semibold tracking-widest uppercase text-dim; }
+  .studio-card h3 { @apply font-display font-semibold tracking-wide uppercase; }
+  .studio-card address { @apply font-mono not-italic; }
+  .studio-card meter { @apply h-4 w-full; }
+  .studio-card .usage { @apply font-mono text-sm text-dim; }
+  .studio-card code.secret { @apply block rounded-md bg-well p-3 font-mono text-sm break-all text-amber select-all; }
+  .studio-card form { @apply flex flex-wrap items-center gap-2; }
+  .studio-card fieldset { @apply flex flex-wrap gap-x-4 gap-y-2; }
+  .studio-card fieldset label { @apply inline-flex min-h-11 items-center gap-2; }
+  .studio-card input[type="text"] { @apply min-h-11 min-w-0 flex-1 rounded-md border border-rule bg-well px-3 text-ink; }
+  .studio-card button { @apply min-h-11 rounded-md border border-rule px-4 font-display font-semibold tracking-wide uppercase hover:border-amber focus-visible:outline-2 focus-visible:outline-amber; }
+  .studio-card button.danger { @apply border-record; }
+  ul.studio-keys { @apply grid gap-3; }
+  ul.studio-keys li { @apply grid gap-1 border-b border-rule pb-3 text-sm; }
+  ul.studio-keys strong { @apply font-display text-base uppercase; }
+  .studio-signout { @apply flex flex-wrap gap-3; }
   #workroom { @apply mx-auto block max-w-7xl px-4 pt-4 pb-24 lg:pb-6; }
   #workroom:empty { display: none; }
 }

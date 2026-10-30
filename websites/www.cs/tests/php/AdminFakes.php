@@ -40,6 +40,12 @@ function admin_tmp_db(): PDO
     return Admin\Db::open(admin_tmp_dir());
 }
 
+/** The admin realm for $baseUrl, with only the owner named (Admin\People defaults). */
+function admin_realm(string $baseUrl = 'https://www.cs.siue.edu/admin/'): Admin\Realm
+{
+    return Admin\Realm::admin(Admin\People::fromJson('{}'), $baseUrl);
+}
+
 /** A request as the endpoints see it; override only what a test cares about. */
 function req(array $with = []): Admin\Request
 {

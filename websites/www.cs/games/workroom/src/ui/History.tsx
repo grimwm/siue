@@ -9,7 +9,7 @@ import { KIND_LABELS, REACTION_LABELS, spanLabel } from '../answer.ts';
 import type { HistoryItem } from '../history.ts';
 import { GENERAL_PIECE } from '../note.ts';
 import type { NoteBody } from '../note.ts';
-import { KEPT_MESSAGES } from '../outbox.ts';
+import { keptMessage } from '../outbox.ts';
 import type { Pending } from '../outbox.ts';
 import { Button } from './console/Button.tsx';
 import { Chip } from './console/Chip.tsx';
@@ -84,7 +84,7 @@ export function Kept(p: { kept: readonly Pending[]; busy: boolean; onDiscard(key
         {p.kept.map(k => (
           <li key={k.key} data-kept-note={k.key} class="grid gap-1 rounded-md border border-rule bg-well p-3">
             <span class="font-mono text-xs text-dim">Made {stamp(new Date(k.made))}</span>
-            <p class="text-sm">{k.reason === 'new' ? 'Sending…' : KEPT_MESSAGES[k.reason]}</p>
+            <p class="text-sm">{k.reason === 'new' ? 'Sending…' : keptMessage(k.reason, k.room)}</p>
             {asking === k.key ? (
               <div class="flex flex-wrap gap-2">
                 <Button disabled={p.busy} onClick={() => { setAsking(null); p.onDiscard(k.key); }}>Discard this note</Button>

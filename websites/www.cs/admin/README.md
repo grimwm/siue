@@ -1,16 +1,18 @@
 # Admin pages
 
 A private area of www.cs.siue.edu/~wgrim for the site owner: a sign-in page, a hub that links to
-dashboards, and a panel for API keys. Nobody but `wgrim@siue.edu` can sign in. Dashboards for
+dashboards, and a panel for API keys. Only named admins sign in: the owner, `wgrim@siue.edu`, and anyone
+the deploy's `admin/config/studio.json` marks `admin` (`lib/People.php`). Dashboards for
 workrooms hang off the hub; the owner's Mac talks to the site with scoped API keys, never with the
 login.
 
 | Page | What it does |
 | --- | --- |
-| `login.php` | Asks for the address and mails a one-time link to the allowed address only. The reply, a `__Secure-admin-pending` cookie included, is the same whoever asks. |
+| `login.php` | Asks for the address and mails a one-time link to a named admin only. The reply, a `__Secure-admin-pending` cookie included, is the same whoever asks. |
 | `verify.php` | Opened in the browser that asked for the link, the mailed link signs in at once and the page moves on to `index.php` (or the page the visit came from). Opened anywhere else, it shows a button; pressing it spends the link and starts a session. |
 | `index.php` | The hub: dashboard links, encryption-key fingerprints (with a "Remove the notes key" control while one is stored), sign out and sign out everywhere. |
 | `keys.php` | Create and revoke scoped API keys. A new key is shown once, and its card in the list is tagged as that key. For `music-publish` and `music-pickup` the page says which active key creating replaces. |
+| `studios.php` | Every studio's address, usage and last sign-in, with the shared usage and the account count against their caps. Remove takes the typed address; the owner's studio has no Remove. Never any piece, title or note. |
 | `logout.php` | Ends the session (POST), or every session with `?all=1`. |
 | `health.php` | `{"mail":"yes\|no","db":"yes\|no","store":"site\|fallback"}` for a deploy check; reveals nothing else. |
 
@@ -35,17 +37,31 @@ database elsewhere, but reaches PHP only where the server passes environment thr
   does, behind a CSRF mark tied to a cookie.
 - Sessions are server-side, last 7 days idle and 30 days at most, and survive closing the browser. Cookies are `__Secure-admin*`,
   `Secure`, `HttpOnly`, `SameSite=Strict`, with `Path` taken from `ADMIN_BASE_URL` (`/~wgrim/` on
-  the host). Each sign-in mails the owner a notice.
+  the host). Each sign-in mails a notice to the address that signed in.
+- Realms (`lib/Realm.php`): the sign-in flow (`lib/SignIn.php`) runs in a realm that names who may sign in,
+  its base URL, cookies, tables and hourly limits. The admin realm admits named admins, with
+  `links`, `link_requests`, `devices` and `sessions`. The studio realm, under `music/`, admits any plain
+  `@siue.edu` address (no `+`, no subdomain), with `__Secure-studio*` cookies on `Path=/~wgrim/music/`, the
+  `studio_` tables and an account on each device and session. A link, device or session is looked up only in its
+  own realm's tables, so neither realm opens the other. Mail goes only to plain `@siue.edu` addresses.
+  The studio realm's pages are `music/login.php`, `verify.php` and `logout.php`; its link mail and
+  sign-in notice say "music studio", and `SignIn` refuses to be built for it without the step that finds the account.
 - Requests and limits: every response carries the security headers (`lib/Headers.php`, mirrored in
   `.htaccess`); plain HTTP is refused except for a local base URL; page requests made by a script
-  (`Sec-Fetch-Mode` other than `navigate`) are refused; link requests are rate limited per address,
-  per IP and overall.
+  (`Sec-Fetch-Mode` other than `navigate`) are refused; link requests are rate limited per hour: links issued
+  overall, requests per IP, links per address, and request rows kept (admin 30 / 20 / 3 / 1000, studio
+  300 / 100 / 3 / 3000, so a class behind one campus address can sign in at once).
 - Mail links are built only from `ADMIN_BASE_URL`, never from the request's Host header. The mail
   capture (`ADMIN_MAIL_CAPTURE_DIR`) works only with a local base URL, a local request host and
   PHP under FPM or its built-in server; otherwise mail goes to `smtp.siue.edu`.
 - API keys are 64 hex characters shown once and kept as SHA-256, each with scopes from
   `ADMIN_KEY_SCOPES`, a per-minute limit and revocation. They are read from the `Authorization:
   Bearer` header only.
+- Who is an admin, and who has the allowance, comes only from `admin/config/studio.json` (see
+  [Named people and caps](#named-people-and-caps)), which the deploy writes and the web server never serves.
+  It is readable by other host accounts' PHP, like everything stored (see Shared host): it names
+  addresses and caps, never a secret. Admins and studios sign in separately: an admin session never
+  opens a studio page, and a studio session never reaches `admin/`.
 
 ### Shared host
 
@@ -77,6 +93,16 @@ other accounts. `.htaccess` sets the security headers with `Header always set` s
 before PHP runs carry them too; a page PHP sends can therefore show each header twice, with the same
 value.
 
+## Named people and caps
+
+The deploy writes `admin/config/studio.json` from the `studio-config` field of the Secure Note `SIUE music studio config` in the SIUE 1Password vault (never from git; the folder is not served). The note is optional. Its shape:
+
+```json
+{"people":[{"email":"a@siue.edu","admin":false,"allowance":false}],"max_accounts":500,"max_shared_mb":1024}
+```
+
+Each email must be a plain `@siue.edu` address (no `+`); the two caps are optional (`max_accounts`, and `max_shared_mb` in MiB) and default to 500 and 1024 (1 GiB); any other key makes the file invalid. `wgrim@siue.edu` is always an admin with the allowance. A missing or malformed file gives the defaults: the owner is the only admin, with the allowance, and the caps are 500 accounts and 1 GiB shared. Without the note (or with an empty field) the deploy stages no file and the site runs on those defaults; the deploy workflow loads the note in its own step, so a missing note never stops the deploy. `tools/studio-config.php` validates a field that is set, and an invalid value stops the deploy so a typo cannot silently drop named people. A deploy that stages no file removes the host's earlier `admin/config/studio.json` (the deploy workflow prunes files the last deploy sent that this one does not), so deleting the note returns the site to the defaults. After editing the field, run the deploy workflow on `main`.
+
 ## Run the local smoke test
 
 ```bash
@@ -85,8 +111,8 @@ make admin-smoke
 ```
 
 It starts the docker stack in its own throwaway project (an ephemeral port, never one a dev server
-uses) with `compose.admin-local.yaml`, which sets `ADMIN_BASE_URL=http://localhost/admin/` and
-captures mail to a folder of the container's own filesystem (`/tmp/admin-smoke-<random>`), with the
+uses) with `compose.admin-local.yaml`, which sets `ADMIN_BASE_URL=http://localhost/admin/`, points
+`STUDIO_CONFIG_FILE` at `tests/e2e/studio-config.json` (it names only the owner) and captures mail to a folder of the container's own filesystem (`/tmp/admin-smoke-<random>`), with the
 database beside it, so it never touches a developer's `admin/data/`. It then requests a link, reads the captured mail, signs in with the button,
 loads the hub, signs out, signs in again by opening a second link in the browser that asked for it (a stranger still gets the button), and checks that `lib/`, `data/` and script-made requests are refused and
 that `health.php` reports the database. It prints `ADMIN-SMOKE-OK` and removes the project and its

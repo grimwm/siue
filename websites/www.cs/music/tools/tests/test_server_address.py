@@ -85,13 +85,14 @@ class ServerAddressTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("music-config.json", err.getvalue())
 
-    def test_the_1password_items_name_the_configured_server(self):
+    def test_the_notes_key_item_names_the_configured_server_and_the_api_key_item_no_address(self):
         w = World(self)
         w.keys.base = "https://moved.example.org/music/"
         w.keys.api_key_set("music-pickup", "c" * 64)
         w.keys.ensure_key(None)
         store = json.loads((w.root / "op.json").read_text())
-        self.assertEqual({u["href"] for item in store["items"] for u in item["urls"]}, {"https://moved.example.org/music/"})
+        urls = {item["title"]: [u["href"] for u in item["urls"]] for item in store["items"]}
+        self.assertEqual(urls, {"SIUE music notes key": ["https://moved.example.org/music/"], "SIUE music API key: pickup": []})
 
 
 if __name__ == "__main__":

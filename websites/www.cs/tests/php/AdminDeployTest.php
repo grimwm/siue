@@ -123,6 +123,39 @@ final class AdminDeployTest extends TestCase
         }
     }
 
+    /** neither server serves the folder the deploy writes the studio configuration into */
+    public function testTheConfigFolderIsNeverServed(): void
+    {
+        $htaccess = (string) file_get_contents(self::site() . '/admin/.htaccess');
+        self::assertMatchesRegularExpression('#\(lib\|config\|data\)/#', $htaccess);
+        $nginx = (string) file_get_contents(self::site() . '/docker/nginx/default.conf');
+        self::assertMatchesRegularExpression('#location \^~ /admin/config/ \{ deny all; \}#', $nginx);
+    }
+
+    /** the configuration is staged only from STUDIO_CONFIG; without it the deploy goes on, with an invalid one it stops */
+    public function testTheDeployWritesTheConfigOnlyFromTheEnvironment(): void
+    {
+        $site = escapeshellarg(self::site());
+        $with = [];
+        exec("cd $site && LIST=1 STUDIO_CONFIG='{\"people\":[]}' ./deploy.sh 2>&1", $with, $code);
+        self::assertSame(0, $code, implode(' | ', array_slice($with, -3)));
+        self::assertContains('admin/config/studio.json', $with);
+        $without = [];
+        exec("cd $site && env -u STUDIO_CONFIG LIST=1 ./deploy.sh 2>&1", $without, $code);
+        self::assertSame(0, $code);
+        self::assertNotContains('admin/config/studio.json', $without);
+        $empty = [];
+        exec("cd $site && STUDIO_CONFIG= LIST=1 ./deploy.sh 2>&1", $empty, $code);
+        self::assertSame(0, $code);
+        self::assertNotContains('admin/config/studio.json', $empty);
+        $bad = [];
+        exec("cd $site && LIST=1 STUDIO_CONFIG='{\"people\":[{\"email\":\"x@evil.test\"}]}' ./deploy.sh 2>&1", $bad, $code);
+        self::assertNotSame(0, $code, 'an invalid configuration stops the deploy');
+        $src = (string) file_get_contents(self::site() . '/deploy.sh');
+        self::assertStringNotContainsString('STUDIO_CONFIG is not set', $src, 'a deploy without the optional configuration goes on');
+        self::assertStringContainsString('deploy: STUDIO_CONFIG is not valid', $src);
+    }
+
     /** the admin-data batch makes the folder right after admin/, every line failure-tolerant, 770 before the setgid try */
     public function testTheAdminDataBatchIsOrderedAndFailureTolerant(): void
     {

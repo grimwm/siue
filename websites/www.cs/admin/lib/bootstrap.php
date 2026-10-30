@@ -7,12 +7,16 @@ require_once __DIR__ . '/Db.php';
 require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Html.php';
 require_once __DIR__ . '/Pages.php';
+require_once __DIR__ . '/SignIn.php';
+require_once __DIR__ . '/Realm.php';
 require_once __DIR__ . '/Request.php';
 require_once __DIR__ . '/Sessions.php';
 require_once __DIR__ . '/Keys.php';
 require_once __DIR__ . '/Headers.php';
 require_once __DIR__ . '/Mailer.php';
 require_once __DIR__ . '/MailTemplate.php';
+require_once __DIR__ . '/Address.php';
+require_once __DIR__ . '/People.php';
 
 // The kit's StoreDir and StoreModes. The command-line test suites share one
 // process with the kit's own tests and load the kit's files, so a class is never
@@ -33,18 +37,38 @@ unset($kitPhp);
  */
 const ADMIN_KEY_SCOPES = ['notes:pickup', 'drafts:publish', 'drafts:delete', 'keys:publish'];
 
+/** The named people and studio caps from the deploy's configuration file (defaults when it is missing). */
+function admin_people(): Admin\People
+{
+    return Admin\People::load();
+}
+
 /** Dashboard links for the hub, label => path relative to /admin/. Workrooms add themselves here. */
 function admin_dashboards(): array
 {
-    return ['Music workroom' => '../music/'];
+    return ['Music workroom' => '../music/', 'Studios' => 'studios.php'];
 }
 
-/** Encryption-key fingerprints for the hub, label => fingerprint. Workrooms add their own here. */
-function admin_key_fingerprints(\PDO $db): array
+/** The studios' storage, <admin data dir>/music: what the music store writes and what removing or starting over a studio empties. */
+function music_dir(): string
+{
+    return Admin\Db::dataDir() . '/music';
+}
+
+/** The owner's music account, or null before the workroom has made it. */
+function admin_music_owner(\PDO $db): ?int
 {
     require_once __DIR__ . '/../../music/lib/Store.php';
+    require_once __DIR__ . '/../../music/lib/Accounts.php';
+    return (new Music\Accounts($db, new Admin\SystemClock(), admin_people()))->idFor(Admin\Auth::OWNER);
+}
+
+/** Encryption-key fingerprints for the hub, label => fingerprint: the owner's notes key. Workrooms add their own here. */
+function admin_key_fingerprints(\PDO $db): array
+{
+    $owner = admin_music_owner($db);
     try {
-        $prints = Music\Store::fingerprintsIn($db);
+        $prints = $owner === null ? null : Music\Store::fingerprintsIn($db, $owner);
     } catch (PDOException) {
         // The music tables do not exist until the workroom first runs.
         return ['Music notes key' => 'not made yet (make music-setup)'];
@@ -60,9 +84,12 @@ function admin_key_fingerprints(\PDO $db): array
  */
 function admin_key_removers(\PDO $db): array
 {
-    require_once __DIR__ . '/../../music/lib/Store.php';
+    $owner = admin_music_owner($db);
+    if ($owner === null) {
+        return [];
+    }
     try {
-        if (Music\Store::fingerprintsIn($db) === null) {
+        if (Music\Store::fingerprintsIn($db, $owner) === null) {
             return [];
         }
     } catch (PDOException) {
@@ -77,7 +104,7 @@ function admin_key_removers(\PDO $db): array
             '1Password is not touched.',
         ],
         'button' => 'Remove the notes key',
-        'remove' => static fn(\PDO $d): bool => Music\Store::removeKeyring($d),
+        'remove' => static fn(\PDO $d): bool => Music\Store::removeKeyring($d, $owner),
     ]];
 }
 

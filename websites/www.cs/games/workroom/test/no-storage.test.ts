@@ -1,4 +1,4 @@
-// Unlocking, loading the vault, sealing and opening touch no IndexedDB,
+// Making a notes key, unlocking, loading the vault, sealing and opening touch no IndexedDB,
 // localStorage, sessionStorage, cookie or Cache API, and the key modules do not
 // even name them: the one place an unlock is stored is remember.ts, which keeps
 // only non-extractable keys (test/remember.test.ts). A draft's built sound is
@@ -6,6 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { makeNotesKey } from '../src/keymaker.ts';
 import { createVault } from '../src/vault.ts';
 import { unlockKeyring } from '../src/unlock.ts';
 import { open, seal } from '../src/seal.ts';
@@ -34,8 +35,14 @@ test('unlocking, using and clearing the vault touch no browser storage', async (
   assert.deepEqual(touched, []);
 });
 
+test('making a notes key writes nothing of it to browser storage', async () => {
+  const made = await makeNotesKey('a passphrase of the test');
+  assert.equal((await unlockKeyring(made.locked, 'a passphrase of the test')).current.fingerprint, made.current);
+  assert.deepEqual(touched, []);
+});
+
 test('the modules that handle keys never name a browser store', () => {
-  for (const file of ['note', 'seal', 'unlock', 'vault', 'answer', 'api', 'outbox', 'history', 'notes-session', 'recorder', 'energy']) {
+  for (const file of ['note', 'seal', 'unlock', 'keymaker','vault', 'answer', 'api', 'outbox', 'history', 'notes-session', 'recorder', 'energy']) {
     const source = readFileSync(new URL(`../src/${file}.ts`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /indexedDB|localStorage|sessionStorage|document\.cookie|\bcaches\b/, `${file}.ts`);
   }

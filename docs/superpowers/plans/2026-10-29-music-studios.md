@@ -24,7 +24,7 @@
   - **Allowance:** 100 MB = `104_857_600` bytes (today's `Store::MAX_DRAFT_TOTAL_BYTES`).
   - **Per piece:** each piece keeps its newest 20 drafts (`Store::KEEP_DRAFTS`), whoever owns it.
 - **Shared caps** (from `admin/config/studio.json`, with these defaults):
-  - `max_shared_bytes` `1_073_741_824` (about 1 GB), the total of every account without the allowance;
+  - `max_shared_mb` `1024` (1 GiB), the total of every account without the allowance;
   - `max_accounts` `500`.
   - When either is reached, a new sign-up gets a plain "The studio is full" page.
 - **Usage** is stored bytes after compression: draft files as stored plus sealed notes, hums included.
@@ -107,7 +107,7 @@
 - Produces, in `Admin\Address`:
   - `normalize(string $raw): ?string` gives trimmed lower case, or null on CR/LF or no single `@`;
   - `studio(string $raw): ?string` gives the normalized address when its domain is exactly `siue.edu` and its local part matches `/^[a-z0-9._-]{1,64}$/` (no `+`), else null.
-- The file's shape is `{"people":[{"email":"a@siue.edu","admin":bool,"allowance":bool}],"max_accounts":int,"max_shared_bytes":int}`. The two caps are optional, and each entry's email must pass `Address::studio()`.
+- The file's shape is `{"people":[{"email":"a@siue.edu","admin":bool,"allowance":bool}],"max_accounts":int,"max_shared_mb":int}`. The two caps are optional, and each entry's email must pass `Address::studio()`.
 
 - [ ] **Step 1: Write the failing tests** in `AdminPeopleTest`:
   - `testTheOwnerIsAlwaysAnAdminWithTheAllowance` (no file, an empty list, a list without the owner);
@@ -132,7 +132,7 @@
 - [ ] **Step 5: Write the owner's steps** into the PR description, under "Before merging (owner)":
   > 1. Open 1Password, vault **SIUE**, item **SIUE** (the deploy login).
   > 2. Add a field named exactly `studio-config` (type: text) with this value, adding a line per named person if you have any:
-  >    `{"people":[{"email":"wgrim@siue.edu","admin":true,"allowance":true}],"max_accounts":500,"max_shared_bytes":1073741824}`
+  >    `{"people":[{"email":"wgrim@siue.edu","admin":true,"allowance":true}],"max_accounts":500,"max_shared_mb":1024}`
   > 3. Save. Until this field exists, every deploy stops at "Load the deploy login" and the site stays as it is.
   > 4. Later changes to the list: edit the field, then GitHub, **Actions**, **deploy**, **Run workflow** on `main`.
 - [ ] **Step 6: Commit** `git commit -m "Admin: named people and studio caps from the deploy's configuration"`
@@ -554,7 +554,7 @@
 - **`studio-limits.ts`:**
   - `readLimits(body: HTMLElement): { noteMax: number; room: number; named: boolean }`, falling back to `MAX_NOTE_BYTES` and `Infinity` when the attributes are absent;
   - `humanBytes(n: number): string`, the same rule as PHP's `Usage::human`.
-- **The outbox** pre-checks against `noteMax`, not the constant. `KEPT_MESSAGES.over_quota(room)` reads: "Your studio is full: {humanBytes(room)} left. Delete drafts or picked-up notes to make room; this note stays on this device until then."
+- **The outbox** pre-checks against `noteMax`, not the constant. `KEPT_MESSAGES.over_quota(room)` reads: "There is no room for this note: {humanBytes(room)} left. Delete drafts or picked-up notes to make room; this note stays on this device until then."
 - **The piece page** gets "Delete this draft" and "Delete this piece". Each asks with the browser's own confirm (`window.confirm`), POSTs `delete-draft.php`, then goes to the next newest draft or to the pieces list.
 
 - [ ] **Step 1: Write the failing tests:**

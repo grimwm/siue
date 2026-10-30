@@ -5,11 +5,12 @@
 // deletes forget what they removed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, type PageApi } from '../src/api.ts';
-import { DISCARD_FAILED, NO_CRYPTO, UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession, describeFailure, failureReason } from '../src/notes-session.ts';
+import { KeyExists, NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, type PageApi } from '../src/api.ts';
+import { DISCARD_FAILED, NO_CRYPTO, UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession, describeFailure, failureReason, studioInvalid } from '../src/notes-session.ts';
 import { SEND_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
 import { PROBLEMS, downloadProblem } from '../src/history.ts';
 import { headerFingerprint, seal } from '../src/seal.ts';
+import { PASSPHRASE_MESSAGES } from '../src/keymaker.ts';
 import { NoCrypto } from '../src/unlock.ts';
 import type { LockedKeyring } from '../src/unlock.ts';
 import { createVault } from '../src/vault.ts';
@@ -21,7 +22,7 @@ const note = (text: string, piece = 'test-piece'): NoteBody => ({ v: 1, kind: 't
 function server() {
   const notes: { id: string; bytes: Uint8Array<ArrayBuffer>; arrived: number; picked: number | null }[] = [];
   let n = 0;
-  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, session: 'tag-1', broken: new Set<string>(), downloads: 0, unreadable: 0 };
+  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, session: 'tag-1', broken: new Set<string>(), downloads: 0, unreadable: 0, uploaded: [] as string[] };
   const api: PageApi = {
     upload: async b => { const id = (++n).toString(16).padStart(32, '0'); notes.push({ id, bytes: b, arrived: n, picked: null }); return { kind: 'sent', id }; },
     list: async () => ({ notes: notes.map(x => ({ id: x.id, size: x.bytes.length, arrived_at: x.arrived, picked_up_at: x.picked })), unreadable: state.unreadable }),
@@ -29,6 +30,8 @@ function server() {
     remove: async id => { const i = notes.findIndex(x => x.id === id); if (i >= 0) notes.splice(i, 1); return i >= 0 ? 1 : 0; },
     removeAll: async () => { const k = notes.length; notes.length = 0; return k; },
     keyring: async () => { if (state.failKeyring) throw state.failKeyring; return { locked: state.keyring, session: state.session }; },
+    uploadKeyring: async (locked, current) => { state.keyring = locked; state.failKeyring = null; state.uploaded.push(current); },
+    deleteDraft: async () => 0,
   };
   return { api, notes, state };
 }
@@ -52,6 +55,21 @@ test('unlock: no keyring yet, a damaged keyring, a wrong passphrase, then the ri
   await assert.rejects(notes.history(), /locked/);
   assert.equal(await notes.unlock(fx.passphrase), null);
   assert.equal(notes.unlocked(), true);
+});
+
+test('makeKey refuses a short passphrase, never replaces a key the server holds, otherwise uploads its key and unlocks it', async () => {
+  const { s, notes } = session();
+  assert.equal(await notes.makeKey('too short'), PASSPHRASE_MESSAGES.short);
+  assert.equal(await notes.makeKey('a passphrase long enough'), UNLOCK_MESSAGES.keyExists);
+  assert.deepEqual(s.state.uploaded, []);
+  assert.equal(s.state.keyring, fx.keyring, 'the key the server holds stays');
+  s.state.failKeyring = new NoKeyring('none');
+  assert.equal(await notes.makeKey('a passphrase long enough'), null);
+  assert.equal(s.state.uploaded.length, 1);
+  assert.equal(notes.unlocked(), true, 'unlocked at once with the same passphrase');
+  const sent = await notes.send(note('to the new key'), null);
+  assert.equal(headerFingerprint(s.notes.find(n => n.id === sent.sent[0]!.id)!.bytes), s.state.uploaded[0]);
+  assert.deepEqual((await notes.history()).map(i => i.opened?.body.text), ['to the new key']);
 });
 
 test('nothing is sealed before an unlock or after a lock; an unlocked session seals to the keyring\'s current key', async () => {
@@ -230,4 +248,49 @@ test('notes the server listed but this page cannot read are counted', async () =
   assert.equal(notes.unreadable(), 2);
   notes.lock();
   assert.equal(notes.unreadable(), 0);
+});
+
+test('a keyring the server refuses as already there is the key-exists message, and the key is the studio\'s', async () => {
+  const { s, notes } = session();
+  s.state.failKeyring = new NoKeyring('none');
+  s.api.uploadKeyring = async () => { throw new KeyExists('there'); };
+  assert.equal(await notes.makeKey('a passphrase long enough'), UNLOCK_MESSAGES.keyExists);
+  assert.equal(notes.keyStored(), true, 'a retry unlocks, it does not make another key');
+});
+
+test('a key uploaded whose unlock then fails is stored: the panel must offer the unlock, not another make', async () => {
+  const { s, notes } = session();
+  s.state.failKeyring = new NoKeyring('none');
+  assert.equal(notes.keyStored(), false);
+  s.api.uploadKeyring = async (locked, current) => { s.state.keyring = locked; s.state.uploaded.push(current); s.state.failKeyring = new NetworkError('down'); };
+  assert.equal(await notes.makeKey('a passphrase long enough'), UNLOCK_MESSAGES.offline);
+  assert.equal(notes.unlocked(), false);
+  assert.equal(notes.keyStored(), true);
+});
+
+test('a key that failed to upload is not stored', async () => {
+  const { s, notes } = session();
+  s.state.failKeyring = new NoKeyring('none');
+  s.api.uploadKeyring = async () => { throw new ServerError(500); };
+  assert.match((await notes.makeKey('a passphrase long enough'))!, /500/);
+  assert.equal(notes.keyStored(), false);
+});
+
+test('a lock during makeKey leaves the key stored and says so, not silence', async () => {
+  const { s, notes } = session();
+  s.state.failKeyring = new NoKeyring('none');
+  let uploaded = false;
+  const upload = s.api.uploadKeyring;
+  const keyring = s.api.keyring;
+  s.api.uploadKeyring = async (l, c) => { await upload(l, c); uploaded = true; };
+  s.api.keyring = async () => { const k = await keyring(); if (uploaded) notes.lock(); return k; };
+  assert.equal(await notes.makeKey('a passphrase long enough'), UNLOCK_MESSAGES.lockedAgain);
+  assert.equal(notes.unlocked(), false);
+  assert.equal(notes.keyStored(), true);
+});
+
+test('the damaged-key message sends studio people to Start over, and named people to make music-setup', () => {
+  assert.match(UNLOCK_MESSAGES.invalid, /make music-setup/);
+  assert.match(studioInvalid, /Start over on Your studio/);
+  assert.doesNotMatch(studioInvalid, /make music/);
 });

@@ -7,5 +7,6 @@ vendor/
 .phpunit.result.cache
 games/tankity/data/
 admin/data/
+admin/config/
 music/tools/.venv/
 music/tools/**/__pycache__/

@@ -14,6 +14,12 @@ name: deploy
 # The login itself is the SIUE item in the SIUE 1Password vault, referenced
 # by id so renaming either never breaks the deploy:
 #   vault khvwk3iogv3mhhjui4se7xqyni, item ioa6izbxvctbalcb65y5fr3esu
+# The studios' named people and caps are optional, in their own item so a
+# missing one cannot stop the login loading:
+#   item "SIUE music studio config" in the same vault, field studio-config,
+#   JSON (see websites/www.cs/admin/README.md). deploy.sh validates it and
+#   writes it to admin/config/studio.json on the host; without the item the
+#   site runs on the defaults.
 #     username - the SIUE address (wgrim@siue.edu); the host account is the
 #                part before the @
 #     password - its password, fed to sftp/scp through sshpass
@@ -104,6 +110,16 @@ jobs:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           SIUE_USER: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/username
           SIUE_PASSWORD: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/password
+
+      - name: Load the studio config (optional)
+        if: steps.tip.outputs.skip != '1'
+        continue-on-error: true
+        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          STUDIO_CONFIG: op://khvwk3iogv3mhhjui4se7xqyni/SIUE music studio config/studio-config
 
       - name: Deploy
         if: steps.tip.outputs.skip != '1'

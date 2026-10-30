@@ -135,27 +135,38 @@ final class Keys
         if ($row === false) {
             return self::error(401, 'A valid API key is required.');
         }
-        $id = (int) $row['id'];
-        $now = $this->clock->now();
-        // Every request with a live key counts toward its limit, a wrong-scope one included.
-        $this->db->exec('BEGIN IMMEDIATE');
+        $scopes = json_decode((string) $row['scopes'], true);
+        return self::meter($this->db, $this->clock, 'keys', (int) $row['id'], is_array($scopes) && in_array($scope, $scopes, true));
+    }
+
+    /** The rate-limit table of each key table: the admin keys' and the studio's AI keys' (Music\KeyGate). */
+    private const HITS = ['keys' => 'key_hits', 'studio_keys' => 'studio_key_hits'];
+
+    /**
+     * One use of the live key $id of $keysTable (a key of HITS, never input): null when it is under PER_MINUTE and
+     * $allowed (its last use is stamped), else the 429 or 403 to send. Every request with a live key counts toward
+     * its limit, a wrong-scope one included.
+     */
+    public static function meter(\PDO $db, Clock $clock, string $keysTable, int $id, bool $allowed): ?Response
+    {
+        $hitsTable = self::HITS[$keysTable] ?? throw new \InvalidArgumentException("Unknown key table: $keysTable");
+        $now = $clock->now();
+        $db->exec('BEGIN IMMEDIATE');
         try {
-            $this->db->prepare('DELETE FROM key_hits WHERE at <= ?')->execute([$now - 60]);
-            $st = $this->db->prepare('SELECT COUNT(*) FROM key_hits WHERE key_id = ?');
+            $db->prepare("DELETE FROM $hitsTable WHERE at <= ?")->execute([$now - 60]);
+            $st = $db->prepare("SELECT COUNT(*) FROM $hitsTable WHERE key_id = ?");
             $st->execute([$id]);
             $over = (int) $st->fetchColumn() >= self::PER_MINUTE;
             if (!$over) {
-                $this->db->prepare('INSERT INTO key_hits (key_id, at) VALUES (?, ?)')->execute([$id, $now]);
+                $db->prepare("INSERT INTO $hitsTable (key_id, at) VALUES (?, ?)")->execute([$id, $now]);
             }
-            $scopes = json_decode((string) $row['scopes'], true);
-            $allowed = is_array($scopes) && in_array($scope, $scopes, true);
             if (!$over && $allowed) {
-                $this->db->prepare('UPDATE keys SET last_used_at = ? WHERE id = ?')->execute([$now, $id]);
+                $db->prepare("UPDATE $keysTable SET last_used_at = ? WHERE id = ?")->execute([$now, $id]);
             }
-            $this->db->exec('COMMIT');
+            $db->exec('COMMIT');
         } catch (\Throwable $e) {
-            if ($this->db->inTransaction()) {
-                $this->db->exec('ROLLBACK');
+            if ($db->inTransaction()) {
+                $db->exec('ROLLBACK');
             }
             throw $e;
         }
@@ -165,7 +176,8 @@ final class Keys
         return $allowed ? null : self::error(403, 'This key lacks the scope.');
     }
 
-    private static function error(int $status, string $message): Response
+    /** A key refusal: JSON {"error": $message}, with WWW-Authenticate on a 401. */
+    public static function error(int $status, string $message): Response
     {
         $headers = ['Content-Type' => 'application/json'];
         if ($status === 401) {

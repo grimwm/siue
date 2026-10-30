@@ -24,9 +24,25 @@ final class Db
         'CREATE TABLE IF NOT EXISTS keys (id INTEGER PRIMARY KEY, label TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)',
         'CREATE TABLE IF NOT EXISTS key_hits (key_id INTEGER NOT NULL, at INTEGER NOT NULL)',
         'CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, at INTEGER NOT NULL)',
+        'CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, last_sign_in_at INTEGER)',
+        // The studio realm's sign-in tables (Realm::studio): the admin ones' shape, each device and session for one account.
+        'CREATE TABLE IF NOT EXISTS studio_links (token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER, browser_hash TEXT)',
+        'CREATE TABLE IF NOT EXISTS studio_link_requests (id INTEGER PRIMARY KEY, ip TEXT NOT NULL, email TEXT NOT NULL, at INTEGER NOT NULL)',
+        'CREATE TABLE IF NOT EXISTS studio_devices (token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)',
+        'CREATE TABLE IF NOT EXISTS studio_sessions (id_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, created_at INTEGER NOT NULL, seen_at INTEGER NOT NULL, ip TEXT NOT NULL, agent TEXT NOT NULL, csrf_nonce TEXT)',
+        // Each account's AI keys (Music\AiKeys): the admin keys' shape, each key for one account.
+        'CREATE TABLE IF NOT EXISTS studio_keys (id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL, label TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)',
+        'CREATE TABLE IF NOT EXISTS studio_key_hits (key_id INTEGER NOT NULL, at INTEGER NOT NULL)',
         'CREATE INDEX IF NOT EXISTS link_requests_at ON link_requests(at)',
         'CREATE INDEX IF NOT EXISTS link_requests_ip_at ON link_requests(ip, at)',
+        'CREATE INDEX IF NOT EXISTS studio_link_requests_at ON studio_link_requests(at)',
+        'CREATE INDEX IF NOT EXISTS studio_link_requests_ip_at ON studio_link_requests(ip, at)',
+        'CREATE INDEX IF NOT EXISTS studio_links_email ON studio_links(email, created_at)',
+        'CREATE INDEX IF NOT EXISTS studio_sessions_account ON studio_sessions(account_id)',
+        'CREATE INDEX IF NOT EXISTS studio_devices_account ON studio_devices(account_id)',
         'CREATE INDEX IF NOT EXISTS key_hits_key_at ON key_hits(key_id, at)',
+        'CREATE INDEX IF NOT EXISTS studio_keys_account ON studio_keys(account_id)',
+        'CREATE INDEX IF NOT EXISTS studio_key_hits_key_at ON studio_key_hits(key_id, at)',
     ];
 
     private static function store(): \Kit\StoreDir
@@ -99,11 +115,14 @@ final class Db
 
     /**
      * Runs a one-time step and records its name in `migrations`, in one transaction, so it never runs again on
-     * this database (a new database records it with nothing to change).
+     * this database (a new database records it with nothing to change). When anything throws after the step
+     * began and the transaction is still held, $undo runs before the ROLLBACK, for work outside the database
+     * (files) that the ROLLBACK cannot reverse.
      *
      * @param callable(\PDO): void $step
+     * @param (callable(\PDO): void)|null $undo
      */
-    private static function once(\PDO $db, string $name, callable $step): void
+    public static function once(\PDO $db, string $name, callable $step, ?callable $undo = null): void
     {
         $done = $db->prepare('SELECT 1 FROM migrations WHERE name = ?');
         $done->execute([$name]);
@@ -111,16 +130,24 @@ final class Db
             return;
         }
         $db->exec('BEGIN IMMEDIATE');
+        $began = false;
         try {
             $done->execute([$name]);
             if ($done->fetchColumn() === false) {
+                $began = true;
                 $step($db);
                 $db->prepare('INSERT INTO migrations (name, at) VALUES (?, ?)')->execute([$name, time()]);
             }
             $db->exec('COMMIT');
         } catch (\Throwable $e) {
             if ($db->inTransaction()) {
-                $db->exec('ROLLBACK');
+                try {
+                    if ($began && $undo !== null) {
+                        $undo($db);
+                    }
+                } finally {
+                    $db->exec('ROLLBACK');
+                }
             }
             throw $e;
         }

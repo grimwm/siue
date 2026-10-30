@@ -9,6 +9,8 @@ import type { LockedKeyring } from './unlock.ts';
 
 export class SignedOut extends Error {}
 export class NoKeyring extends Error {}
+/** This studio already holds a notes key: the page never replaces it. */
+export class KeyExists extends Error {}
 /** fetch itself failed (offline, DNS, refused): a TypeError, as fetch rejects, but known to come from the network and not from this page's own code. */
 export class NetworkError extends TypeError {}
 /** The server answered 2xx, but not with what the page needs (no list, no keyring, not JSON). */
@@ -23,11 +25,12 @@ export class ServerError extends Error {
     this.status = status;
   }
 }
-export type RefusedReason = 'too_large' | 'full' | 'no_key' | 'bad_header' | 'unknown_key';
-export const REFUSED_REASONS: readonly RefusedReason[] = ['too_large', 'full', 'no_key', 'bad_header', 'unknown_key'];
+export type RefusedReason = 'too_large' | 'over_quota' | 'full' | 'no_key' | 'bad_header' | 'unknown_key';
+export const REFUSED_REASONS: readonly RefusedReason[] = ['too_large', 'over_quota', 'full', 'no_key', 'bad_header', 'unknown_key'];
 export interface KeyringAnswer { locked: LockedKeyring; session: string }
 export interface ServerNote { id: string; size: number; arrived_at: number; picked_up_at: number | null }
-export type UploadResult = { kind: 'sent'; id: string } | { kind: 'refused'; reason: RefusedReason };
+/** `room`: with over_quota, the bytes the studio has left. */
+export type UploadResult = { kind: 'sent'; id: string } | { kind: 'refused'; reason: RefusedReason; room?: number };
 export interface PageApi {
   upload(bundle: Uint8Array<ArrayBuffer>): Promise<UploadResult>;
   /** Every note row the page can read, and how many rows it could not (they are left out, the rest still come). */
@@ -37,6 +40,10 @@ export interface PageApi {
   removeAll(): Promise<number>;
   /** The locked keyring, and the server's tag for this sign-in ('' when it gave none). */
   keyring(): Promise<KeyringAnswer>;
+  /** Stores a keyring made on this page: `current` is its one key's fingerprint, and there are no previous keys. Rejects with KeyExists when the studio holds one already. */
+  uploadKeyring(locked: LockedKeyring, current: string): Promise<void>;
+  /** Deletes one draft of a piece, or every draft of it without a version; how many went. A draft that is already gone is a ServerError (404). */
+  deleteDraft(piece: string, version?: number): Promise<number>;
 }
 
 type Reply = Awaited<ReturnType<Fetch>>;
@@ -111,7 +118,12 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
       const id = data['id'];
       if (reply.status === 201 && typeof id === 'string' && NOTE_ID.test(id)) return { kind: 'sent', id };
       const error = data['error'];
-      if (!reply.ok && typeof error === 'string' && (REFUSED_REASONS as readonly string[]).includes(error)) return { kind: 'refused', reason: error as RefusedReason };
+      if (!reply.ok && typeof error === 'string' && (REFUSED_REASONS as readonly string[]).includes(error)) {
+        const room = data['room'];
+        return error === 'over_quota' && typeof room === 'number' && Number.isInteger(room) && room >= 0
+          ? { kind: 'refused', reason: 'over_quota', room }
+          : { kind: 'refused', reason: error as RefusedReason };
+      }
       throw failed(reply);
     },
     async list() {
@@ -138,6 +150,17 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
       if (!reply.ok) throw failed(reply);
       if (typeof keyring !== 'object' || keyring === null) throw new UnreadableAnswer();
       return { locked: keyring as LockedKeyring, session: typeof data['session'] === 'string' ? data['session'] : '' };
+    },
+    async uploadKeyring(locked, current) {
+      const { reply, data } = await post('keyring.php', 'application/json', encoder.encode(JSON.stringify({ keyring: locked, current, previous: [] })));
+      if (reply.status === 409 && data['error'] === 'key_exists') throw new KeyExists('This studio has a notes key already.');
+      if (!reply.ok) throw failed(reply);
+    },
+    async deleteDraft(piece, version) {
+      const form = `piece=${encodeURIComponent(piece)}${version === undefined ? '' : `&v=${version}`}`;
+      const { reply, data } = await post('delete-draft.php', 'application/x-www-form-urlencoded', encoder.encode(form));
+      if (!reply.ok) throw failed(reply);
+      return typeof data['deleted'] === 'number' ? data['deleted'] : 0;
     },
   };
 }

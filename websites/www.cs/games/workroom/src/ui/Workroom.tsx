@@ -13,7 +13,8 @@
 // plays them.
 // With a notes session it also holds the answering: the answer bar, the span
 // being picked, the energy drawing and the owner's notes on the Story view;
-// before an unlock the bar's buttons open the notes panel at the unlock form.
+// before an unlock the bar's buttons open the notes panel at the unlock form,
+// and with no notes key yet the notes panel makes one.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { energyNote } from '../answer.ts';
@@ -28,13 +29,14 @@ import { guardLeaving, unsavedWork } from '../leave.ts';
 import type { NoteBody } from '../note.ts';
 import { UNLOCK_FIRST } from '../notes-session.ts';
 import type { NotesSession } from '../notes-session.ts';
-import { KEPT_MESSAGES, MEMORY_NOTICE, SENT_MESSAGE, SEND_MESSAGES } from '../outbox.ts';
+import { MEMORY_NOTICE, SENT_MESSAGE, SEND_MESSAGES, keptMessage } from '../outbox.ts';
 import type { DemoId } from '../demo.ts';
 import { follow } from '../player.ts';
 import type { Clip } from '../player.ts';
 import type { MediaPorts } from '../recorder.ts';
 import type { BuildSound, DraftSound } from '../render/sound.ts';
 import type { Change, Score } from '../score.ts';
+import { pageLimits } from '../studio-limits.ts';
 import { energyLegend, legendFor, pickTab, tabsFor } from '../tabs.ts';
 import type { Tab } from '../tabs.ts';
 import { changeTimes, sectionTimes, tempoMap } from '../tempo.ts';
@@ -51,6 +53,7 @@ import { Sheet } from './console/Sheet.tsx';
 import { panelId, tabId } from './console/Tabs.tsx';
 import { EnergyEditor } from './EnergyEditor.tsx';
 import { Card, Word } from './Glossary.tsx';
+import { MakeKeyPanel } from './MakeKeyPanel.tsx';
 import { PianoRoll } from './PianoRoll.tsx';
 import { Player } from './Player.tsx';
 import { SheetMusic } from './SheetMusic.tsx';
@@ -59,6 +62,8 @@ import { Timeline } from './Timeline.tsx';
 import { ViewTabs } from './ViewTabs.tsx';
 
 export interface WorkroomProps { score: Score; version: number; versions: number[]; audioSrc: (file: string) => string; onVersion(v: number): void; guide?: GuideStore; playDemo?(id: DemoId): void; stopDemo?(): void; children?: ComponentChildren;
+  /** Under the views: what this page offers to manage the piece (delete a draft, delete the piece). */
+  manage?: ComponentChildren;
   /** The owner's notes: undefined, the page has no answering. */
   notes?: NotesSession;
   /** The microphone: null or undefined, no Hum it and no Record. */
@@ -80,8 +85,9 @@ const SMALL_CAPS = 'font-display text-xs font-semibold tracking-widest uppercase
 
 export function Workroom(p: WorkroomProps) {
   const { score } = p;
+  const { scoreOnly } = pageLimits();
   const tempo = useMemo(() => tempoMap(score), [score]);
-  const tabs = useMemo(() => tabsFor(score), [score]);
+  const tabs = useMemo(() => tabsFor(score, { sheet: !scoreOnly }), [score, scoreOnly]);
   const uses = useMemo(() => termsIn(score), [score]);
   const stage = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(FALLBACK_WIDTH);
@@ -109,6 +115,8 @@ export function Workroom(p: WorkroomProps) {
   const now = p.now ?? ((): Date => new Date());
   const [unlocked, setUnlocked] = useState(notes?.unlocked() ?? false);
   const [keyring, setKeyring] = useState(true);
+  /** Why the unlock is shown first, when the key was made but did not unlock; an unlock clears it. */
+  const [keyWhy, setKeyWhy] = useState<string | null>(null);
   const [asked, setAsked] = useState<Asked | null>(null);
   const [mode, setMode] = useState<AnswerMode>('none');
   const [span, setSpan] = useState<Span | null>(null);
@@ -159,7 +167,7 @@ export function Workroom(p: WorkroomProps) {
     try {
       const r = await notes.send(body, audio);
       const kept = r.kept.find(k => k.key === r.key);
-      setStatus(kept ? `${KEPT_MESSAGES[kept.reason]}${r.memoryOnly ? ` ${MEMORY_NOTICE}` : ''}` : SENT_MESSAGE);
+      setStatus(kept ? `${keptMessage(kept.reason, kept.room)}${r.memoryOnly ? ` ${MEMORY_NOTICE}` : ''}` : SENT_MESSAGE);
       // The note is stored; a sign-in that ended locks the notes until the owner signs in and unlocks again.
       if (r.kept.some(k => k.reason === 'signed_out')) notes.lock();
       const from: AnswerMode | null = body.kind === 'text' ? 'pin' : body.kind === 'energy' ? 'energy' : null;
@@ -185,13 +193,14 @@ export function Workroom(p: WorkroomProps) {
     }
     void send(body, null);
   };
-  // A server with no keyring (make music-setup has not run) turns the bar off.
+  // A server with no keyring turns the bar off until the notes panel makes the key.
   useEffect(() => { if (notes) void notes.hasKeyring().then(setKeyring); }, [notes]);
   /** Before an unlock nothing can be sealed: the notes panel opens at the unlock form, with the reason, and remembers what was asked for. */
   const askUnlock = (what: Asked): void => { setAsked(what); setSheetOpen(true); };
   /** After the unlock the bar opens what was asked for, with the sheet closed so the timeline shows; Hum it waits for the next tap (iOS grants the microphone only inside one). */
   const unlockedNow = (): void => {
     syncLock();
+    setKeyWhy(null);
     const what = asked;
     setAsked(null);
     if (what === 'hum') setStatus(HUM_AFTER_UNLOCK);
@@ -306,7 +315,7 @@ export function Workroom(p: WorkroomProps) {
             </select>
           </label>
         </header>
-        <Player src={score.audio} rendered={rendered} duration={score.duration} onSeek={seek} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} download={{ piece: score.piece.id, version: p.version, sheet: score.musicxml !== undefined }} />
+        <Player src={score.audio} rendered={rendered} duration={score.duration} onSeek={seek} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} download={{ piece: score.piece.id, version: p.version, sheet: score.musicxml !== undefined && !scoreOnly }} />
         {answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} access={access} onLocked={askUnlock} onFront={() => setSheetOpen(false)} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} draft={draft} onDraft={setDraft} onRecording={r => setRec(was => (was.live === r.live && was.held === r.held ? was : r))} /> : null}
         <div class="flex flex-wrap items-end justify-end gap-x-3 gap-y-2 lg:flex-nowrap">
           <div class="min-w-0 flex-1 basis-full lg:basis-0"><ViewTabs tabs={tabs} tab={tab} onTab={t => { setWanted(t); if (mode === 'pin' || mode === 'energy') changeMode('none'); }} /></div>
@@ -335,9 +344,11 @@ export function Workroom(p: WorkroomProps) {
           </div>
           <Legend items={mode === 'energy' ? energyLegend(score) : legendFor(tab, score, { notes: marks.length > 0 })} />
         </div>
+        {p.manage ?? null}
       </div>
       <Sheet title="Notes & answers" open={sheetOpen} onToggle={setSheetOpen}>
-        {notes ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} ask={asked ? UNLOCK_FIRST : null} onUnlocked={unlockedNow} onLocked={syncLock} onItems={setItems} /> : null}
+        {notes && !keyring ? <MakeKeyPanel notes={notes} onMade={() => { setKeyring(true); unlockedNow(); }} onStored={m => { setKeyWhy(m); setKeyring(true); }} /> : null}
+        {notes && keyring ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} ask={keyWhy ?? (asked ? UNLOCK_FIRST : null)} onUnlocked={unlockedNow} onLocked={syncLock} onItems={setItems} /> : null}
         {openTerm ? <Card cardRef={cardRef} term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={closeCard} /> : null}
         {seen.length > 0 ? (
           <div class="words grid gap-2" aria-label="Words in this piece">

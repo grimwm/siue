@@ -145,7 +145,7 @@ async function importPaired(entry: { fingerprint: string; pkcs8: Uint8Array<Arra
   }
 }
 
-/** The format Python's lock_keyring writes (current key first); the page never locks, tests and fixtures do. */
+/** The format Python's lock_keyring writes (current key first); the page locks a key it makes with it (keymaker.ts). */
 export async function lockKeyring(keys: readonly { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[], passphrase: string): Promise<LockedKeyring> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));

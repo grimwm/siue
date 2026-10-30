@@ -4,12 +4,12 @@ import type { Score } from './score.ts';
 export type Tab = 'story' | 'roll' | 'sound' | 'sheet';
 export const TAB_LABELS: Readonly<Record<Tab, string>> = { story: 'Story', roll: 'Piano roll', sound: 'Sound picture', sheet: 'Sheet music' };
 
-/** The views a piece offers, in this order: Story and Sound picture always; Piano roll only when the score has notes; Sheet music only for a music piece (a sound piece never shows it, even when it carries MusicXML). */
-export function tabsFor(score: Score): Tab[] {
+/** The views a piece offers, in this order: Story and Sound picture always; Piano roll only when the score has notes; Sheet music only for a music piece (a sound piece never shows it, even when it carries MusicXML), and not when `opts.sheet` is false (a score-only draft stores no MusicXML to show). */
+export function tabsFor(score: Score, opts: { sheet?: boolean } = {}): Tab[] {
   const tabs: Tab[] = ['story'];
   if (score.notes.length > 0) tabs.push('roll');
   tabs.push('sound');
-  if (score.kind === 'music') tabs.push('sheet');
+  if (score.kind === 'music' && opts.sheet !== false) tabs.push('sheet');
   return tabs;
 }
 

@@ -17,7 +17,7 @@ KEY_TAG = "siue-music-key"
 API_TAG = "siue-music-api"
 _API_KEY = re.compile(r"[0-9a-f]{64}")
 _API_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,47}")
-KEY_TITLE = "SIUE music notes key "
+KEY_TITLE = "SIUE music notes key"
 PREVIOUS_SUFFIX = " (previous)"
 PUBLISH_KEY = "music-publish"
 PICKUP_KEY = "music-pickup"
@@ -344,10 +344,10 @@ class Keys:
 
     def api_item_add(self, name: str, secret: str) -> str:
         """Makes the 1Password item for an API key and reads it back; an item that was not stored as sent is removed."""
-        new_id = self.op.create(f"SIUE music API {name}", "API_CREDENTIAL", [API_TAG], [
+        new_id = self.op.create(f"SIUE music API key: {name.removeprefix('music-')}", "API_CREDENTIAL", [API_TAG], [
             {"id": "name", "type": "STRING", "label": "name", "value": name},
             {"id": "credential", "type": "CONCEALED", "label": "credential", "value": secret},
-        ], urls=[self.base])
+        ])  # no url: the key is for the CLI, so 1Password never offers it on a page
         stored = self.op.fields(new_id)
         for label, want in (("name", name), ("credential", secret)):
             if not hmac.compare_digest(stored.get(label, "").encode(), want.encode()):
@@ -410,7 +410,7 @@ class Keys:
 
     def _create_key_item(self, pkcs8: bytes, fp: str, passphrase: str) -> None:
         private_key = base64.b64encode(pkcs8).decode("ascii")
-        new_id = self.op.create(KEY_TITLE + fp[:16], "PASSWORD", [KEY_TAG], [
+        new_id = self.op.create(KEY_TITLE, "PASSWORD", [KEY_TAG], [
             {"id": "password", "type": "CONCEALED", "purpose": "PASSWORD", "label": "password", "value": passphrase},
             {"id": "private_key", "type": "CONCEALED", "label": "private_key", "value": private_key},
             {"id": "fingerprint", "type": "STRING", "label": "fingerprint", "value": fp},
@@ -520,7 +520,7 @@ class Keys:
         try:
             item = self._item(old)
             item_id = item["id"]
-            title = item.get("title") or KEY_TITLE + old[:16]
+            title = item.get("title") or KEY_TITLE
             if not title.endswith(PREVIOUS_SUFFIX):
                 self.op.retitle(item_id, title + PREVIOUS_SUFFIX)
         except Exception as e:  # noqa: BLE001

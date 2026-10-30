@@ -13,7 +13,7 @@ final class AdminSessionsTest extends TestCase
     {
         $c = new FakeClock(1_000_000);
         $db = admin_tmp_db();
-        return [new Admin\Sessions($db, $c, '/'), $db, $c];
+        return [new Admin\Sessions($db, $c, admin_realm()), $db, $c];
     }
 
     private function idOf(string $cookie): string
@@ -297,7 +297,7 @@ final class AdminSessionsTest extends TestCase
 
     public function testCookiesCarryTheGivenPath(): void
     {
-        $s = new Admin\Sessions(admin_tmp_db(), new FakeClock(), '/~wgrim/');
+        $s = new Admin\Sessions(admin_tmp_db(), new FakeClock(), admin_realm('https://www.cs.siue.edu/~wgrim/admin/'));
         self::assertStringContainsString('; Path=/~wgrim/; Secure; HttpOnly; SameSite=Strict', $s->start(req()));
         self::assertStringContainsString('; Path=/~wgrim/; Secure', $s->end(req()));
         self::assertSame(

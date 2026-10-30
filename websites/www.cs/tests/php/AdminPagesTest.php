@@ -107,33 +107,6 @@ final class AdminPagesTest extends TestCase
         self::assertSame($next, $done->headers['Location']);
     }
 
-    /** @return array<string,array{0:string}> */
-    public static function musicNexts(): array
-    {
-        return [
-            'the index' => ['../music/'],
-            'a piece' => ['../music/piece.php?id=ch1-labyrinth'],
-            'a piece and its draft' => ['../music/piece.php?id=ch1-labyrinth&v=3'],
-        ];
-    }
-
-    #[\PHPUnit\Framework\Attributes\DataProvider('musicNexts')]
-    public function testSignInCanReturnToTheMusicWorkroom(string $next): void
-    {
-        [$p, , , $m] = $this->pages();
-        self::assertSame($next, Admin\Pages::safeNext($next));
-        self::assertStringContainsString('<input type="hidden" name="next" value="' . htmlspecialchars($next) . '">', $p->loginForm(req(['query' => ['next' => $next]]))->body);
-        $p->requestLink($this->post(['email' => 'wgrim@siue.edu', 'next' => $next]));
-        $p->flush();
-        self::assertStringContainsString('&next=' . rawurlencode($next), quoted_printable_decode($m->sent[0]['mime']));
-        $token = $this->tokenOf($m);
-        $confirm = $p->confirm(req(['query' => ['token' => $token, 'next' => $next]]));
-        $mark = $this->cookieValue($confirm, Admin\Pages::CONFIRM_COOKIE);
-        $done = $p->signIn($this->post(['token' => $token, 'csrf' => $mark, 'next' => $next], ['cookies' => [Admin\Pages::CONFIRM_COOKIE => $mark]]));
-        self::assertSame(303, $done->status);
-        self::assertSame($next, $done->headers['Location']);
-    }
-
     /** @return array<string,array{0:mixed}> */
     public static function unsafeNexts(): array
     {
@@ -148,6 +121,7 @@ final class AdminPagesTest extends TestCase
             'javascript' => ['javascript:alert(1)'], 'newline' => ["keys.php?a=1\r\nSet-Cookie: x=1"], 'loop' => ['login.php'],
             'verify' => ['verify.php?token=x'], 'health' => ['health.php'], 'other page' => ['future.php?a=1'], 'not a page' => ['keys'], 'too long' => ['keys.php?' . str_repeat('a', 400)],
             'array' => [['keys.php']], 'empty' => [''], 'space' => ['keys.php?a b'],
+            'music index' => ['../music/'], 'music piece' => ['../music/piece.php?id=ch1-labyrinth'], 'music piece and draft' => ['../music/piece.php?id=ch1-labyrinth&v=3'],
         ];
     }
 
@@ -220,7 +194,7 @@ final class AdminPagesTest extends TestCase
             self::assertStringContainsString('name="token" value="' . $token . '"', $r->body);
             self::assertMatchesRegularExpression('/name="csrf" value="[0-9a-f]{64}"/', $r->body);
         }
-        self::assertSame('wgrim@siue.edu', (new Admin\Auth($db, new FakeClock()))->peek($token));
+        self::assertSame('wgrim@siue.edu', (new Admin\Auth($db, new FakeClock(), admin_realm(self::BASE)))->peek($token));
         self::assertSame(403, $p->confirm(req(['query' => ['token' => str_repeat('0', 64)]]))->status);
     }
 
@@ -449,7 +423,7 @@ final class AdminPagesTest extends TestCase
         $out = $p->signOutEverywhere($this->post(['csrf' => $t], ['cookies' => $in->cookies, 'query' => ['all' => '1']]));
         self::assertSame(0, (int) $db->query('SELECT COUNT(*) FROM sessions')->fetchColumn());
         self::assertSame(0, (int) $db->query('SELECT COUNT(*) FROM devices')->fetchColumn());
-        self::assertNull((new Admin\Auth($db, new FakeClock()))->peek($token));
+        self::assertNull((new Admin\Auth($db, new FakeClock(), admin_realm(self::BASE)))->peek($token));
         self::assertNotNull($this->cookieValue($out, Admin\Sessions::COOKIE));
         self::assertContains(Admin\Sessions::expireDeviceCookie('/~wgrim/'), $out->cookies);
     }
@@ -460,7 +434,7 @@ final class AdminPagesTest extends TestCase
         $dev = $this->signedIn($p, $m);
         $device = $dev->cookies[Admin\Sessions::DEVICE_COOKIE] ?? null;
         self::assertNotNull($device, 'sign-in sets the device cookie');
-        self::assertTrue((new Admin\Auth($db, new FakeClock()))->isTrustedDevice($device));
+        self::assertTrue((new Admin\Auth($db, new FakeClock(), admin_realm(self::BASE)))->isTrustedDevice($device));
 
         // Strangers exhaust the address and global limits from other addresses.
         for ($i = 0; $i < 31; $i++) {
@@ -644,7 +618,7 @@ final class AdminPagesTest extends TestCase
     {
         [$p] = $this->pages();
         $body = $p->loginForm(req())->body;
-        self::assertStringNotContainsString(Admin\Auth::ALLOWED, $body);
+        self::assertStringNotContainsString(Admin\Auth::OWNER, $body);
         self::assertStringNotContainsString('siue.edu', $body);
         self::assertSame(1, preg_match('/<input\b[^>]*\bname="email"[^>]*>/', $body, $input), 'the form has an email input');
         self::assertDoesNotMatchRegularExpression('/\bvalue\s*=/', $input[0], 'the email input carries no value');

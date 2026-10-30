@@ -52,7 +52,7 @@ class World:
     def add_key_to_op(self, i: int, passphrase: str = "a test passphrase", private_key: bytes | None = None, previous: bool = False) -> str:
         """A notes key item in 1Password, titled as the tool titles it (plus " (previous)" when `previous`)."""
         fp, pkcs8, _ = pool_key(i)
-        self.op.create(f"SIUE music notes key {fp[:16]}" + (PREVIOUS_SUFFIX if previous else ""), "PASSWORD", [KEY_TAG], [
+        self.op.create("SIUE music notes key" + (PREVIOUS_SUFFIX if previous else ""), "PASSWORD", [KEY_TAG], [
             {"id": "password", "type": "CONCEALED", "purpose": "PASSWORD", "label": "password", "value": passphrase},
             {"id": "private_key", "type": "CONCEALED", "label": "private_key", "value": base64.b64encode(private_key or pkcs8).decode()},
             {"id": "fingerprint", "type": "STRING", "label": "fingerprint", "value": fp},

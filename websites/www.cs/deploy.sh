@@ -22,6 +22,14 @@
 #             in the host's .deploy-hash manifest) that this one does not
 #   LIST=1    print the deploy set, one path per line, and stop (no host,
 #             no password needed)
+#
+# STUDIO_CONFIG (the studio-config field of the SIUE music studio config
+# item in 1Password) is optional: the studios' named people and caps as JSON.
+# When set it is validated by tools/studio-config.php (an invalid value stops
+# the deploy) and staged as admin/config/studio.json, so it joins the hash and
+# the manifest; it is never in git. When unset or empty nothing is staged and
+# the site runs on Admin\People's defaults. A host's earlier studio.json is a
+# file the last deploy sent that this one does not, so PRUNE=1 deletes it.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -191,6 +199,14 @@ while IFS= read -r -d '' f; do
   mkdir -p "$stage/$(dirname "$f")"
   cp -L "$f" "$stage/$f"
 done < <(git ls-files -z --cached --others --exclude-standard --deduplicate -- .)
+# The studios' configuration comes from the environment only, and only when set.
+if [ -n "${STUDIO_CONFIG:-}" ]; then
+  mkdir -p "$stage/admin/config"
+  if ! printf '%s' "$STUDIO_CONFIG" | php tools/studio-config.php >"$stage/admin/config/studio.json"; then
+    echo "deploy: STUDIO_CONFIG is not valid (the studio-config field of the SIUE music studio config item)" >&2
+    exit 1
+  fi
+fi
 find "$stage" -type d -exec chmod 755 {} +
 find "$stage" -type f -exec chmod 644 {} +
 

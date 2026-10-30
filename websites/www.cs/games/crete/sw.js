@@ -3,7 +3,7 @@
 // Network first, so an online player always gets the current files; the
 // precached copies answer only when the network does not.
 const PREFIX = 'game-crete-';
-const CACHE = PREFIX + 'd85ce660575b';
+const CACHE = PREFIX + '499eb915c18a';
 const PRECACHE = ["./","dist/install.js","dist/kit.css","dist/main.js","dist/modern.js","dist/solver-worker.js","fx/sprites/tiles.json","fx/sprites/tiles.png","game.css","icon-192.png","icon-512.png","icon-apple-180.png","icon-maskable-192.png","icon-maskable-512.png","icon-monochrome-512.png","index.html","manifest.webmanifest"];
 const SCOPE_PATH = new URL('./', self.location).pathname;
 

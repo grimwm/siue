@@ -36,8 +36,9 @@ final class Pages
     /**
      * @param (callable():bool)|null $mailProbe true when the SMTP server greets us; defaults to a live check
      * @param Keys|null $keys the key store; defaults to the configured scope registry
+     * @param string|null $studiosDir the studios' storage that removing a studio empties; defaults to music_dir()
      */
-    public function __construct(private \PDO $db, private Clock $clock, private Mailer $mailer, private string $baseUrl, ?callable $mailProbe = null, ?Keys $keys = null)
+    public function __construct(private \PDO $db, private Clock $clock, private Mailer $mailer, private string $baseUrl, ?callable $mailProbe = null, ?Keys $keys = null, private ?string $studiosDir = null)
     {
         $this->keys = $keys ?? new Keys($db, $clock, null, $baseUrl);
         $realm = Realm::admin(admin_people(), $baseUrl);
@@ -82,7 +83,7 @@ final class Pages
         return $this->signIn->signIn($r);
     }
 
-    /** The admin page to return to after sign-in, else '' (SignIn::safeNext): index.php or keys.php with an optional query. */
+    /** The admin page to return to after sign-in, else '' (SignIn::safeNext): index.php, keys.php or studios.php with an optional query. */
     public static function safeNext(mixed $next): string
     {
         return SignIn::safeNext($next, 'admin');
@@ -212,6 +213,45 @@ final class Pages
                 return $this->keysPage(400, $r, $e->getMessage());
             }
             return $this->keysPage(200, $r, null, $made['key'], false, $made['replaced'], trim(is_string($label) ? $label : ''), $made['id']);
+        });
+    }
+
+    /** GET studios.php: every studio's address, usage and last sign-in, with Remove; never a piece, title or note. */
+    public function studios(Request $r): Response
+    {
+        return $this->guard(function () use ($r): Response {
+            $gate = $this->requireAdmin($r, 'studios.php');
+            return $gate ?? $this->studiosPage(200, $r, ($r->query['removed'] ?? '') === '1' ? 'The studio was removed.' : null);
+        });
+    }
+
+    /** POST studios.php: remove a studio after its typed address; the owner's cannot be removed. */
+    public function studiosAction(Request $r): Response
+    {
+        return $this->guard(function () use ($r): Response {
+            $gate = $this->requireAdmin($r);
+            if ($gate !== null) {
+                return $gate;
+            }
+            $given = $r->post['csrf'] ?? '';
+            if (!is_string($given) || !$this->sessions->checkCsrf($r, $given)) {
+                return self::html(403, 'Form expired', Html::p('This form expired. Open the page again.') . '<a class="button" href="studios.php">Back</a>');
+            }
+            $accounts = $this->studioAccounts();
+            $id = $r->post['id'] ?? '';
+            $email = is_string($id) && ctype_digit($id) ? $accounts->emailOf((int) $id) : null;
+            if (($r->post['action'] ?? '') !== 'remove' || $email === null) {
+                return $this->studiosPage(404, $r, 'No studio has that id.');
+            }
+            if ($email === Auth::OWNER) {
+                return $this->studiosPage(400, $r, "The owner's studio cannot be removed here.");
+            }
+            $confirm = $r->post['confirm'] ?? '';
+            if (!is_string($confirm) || strtolower(trim($confirm)) !== $email) {
+                return $this->studiosPage(400, $r, 'Type the studio\'s address to remove it.');
+            }
+            $accounts->remove((int) $id);
+            return self::redirect('studios.php?removed=1');
         });
     }
 
@@ -347,6 +387,47 @@ final class Pages
         }
         $body .= '<p><a href="index.php">Back to the hub</a></p>';
         return self::html($status, $title, $body, [], $newKey !== null);
+    }
+
+    private function studioAccounts(): \Music\Accounts
+    {
+        require_once __DIR__ . '/../../music/lib/bootstrap.php';
+        return new \Music\Accounts($this->db, $this->clock, admin_people(), $this->studiosDir ?? \music_dir());
+    }
+
+    private function studiosPage(int $status, Request $r, ?string $note = null): Response
+    {
+        $csrf = $this->sessions->csrf($r);
+        if ($csrf === '') {
+            return self::redirect('login.php');
+        }
+        $accounts = $this->studioAccounts();
+        $people = admin_people();
+        $body = '';
+        if ($note !== null) {
+            $body .= Html::p($note, $status >= 400 ? 'error' : '');
+        }
+        $list = $accounts->list();
+        $body .= Html::p('Shared usage: ' . \Music\Usage::human($accounts->sharedUsage()) . ' of ' . \Music\Usage::human($people->maxSharedBytes()))
+            . Html::p('Accounts: ' . count($list) . ' of ' . $people->maxAccounts());
+        if ($list === []) {
+            $body .= Html::p('No studios yet.');
+        } else {
+            $body .= '<table><thead><tr><th>Address</th><th>Usage</th><th>Last sign-in</th><th></th></tr></thead><tbody>';
+            foreach ($list as $a) {
+                $remove = $a['email'] === Auth::OWNER ? '' : '<form method="post" action="studios.php"><input type="hidden" name="action" value="remove">'
+                    . '<input type="hidden" name="id" value="' . $a['id'] . '"><input type="hidden" name="csrf" value="' . Html::e($csrf) . '">'
+                    . '<label>Type ' . Html::e($a['email']) . ' <input type="text" name="confirm" autocomplete="off" required></label> '
+                    . '<button type="submit" class="button danger">Remove</button></form>';
+                $body .= '<tr><td>' . Html::e($a['email']) . ($a['named'] ? ' <span class="tag">named</span>' : '') . '</td>'
+                    . '<td>' . \Music\Usage::human($a['usage']) . '</td>'
+                    . '<td>' . ($a['last_sign_in_at'] === null ? 'never' : gmdate('Y-m-d', $a['last_sign_in_at'])) . '</td>'
+                    . '<td>' . $remove . '</td></tr>';
+            }
+            $body .= '</tbody></table>';
+        }
+        $body .= '<p><a href="index.php">Back to the hub</a></p>';
+        return self::html($status, 'Studios', $body);
     }
 
     private static function when(int $t): string

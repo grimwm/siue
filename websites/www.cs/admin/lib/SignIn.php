@@ -163,7 +163,7 @@ final class SignIn
 
     /**
      * The page to return to after sign-in, else '': one of the realm's own pages with an optional query
-     * string (admin: index.php or keys.php; studio: index.php, studio.php or piece.php). Nothing else can
+     * string (admin: index.php, keys.php or studios.php; studio: index.php, studio.php or piece.php). Nothing else can
      * pass: no scheme, host, backslash, control character, fragment or path separator, so the value can
      * only ever point at one of those pages in the realm's own folder.
      */
@@ -172,7 +172,7 @@ final class SignIn
         if (!is_string($next) || strlen($next) > 300) {
             return '';
         }
-        $pages = $realm === 'studio' ? 'index|studio|piece' : 'index|keys';
+        $pages = $realm === 'studio' ? 'index|studio|piece' : 'index|keys|studios';
         $query = '[A-Za-z0-9_.~%=&,+\-\[\]:]';
         return preg_match("/^(?:$pages)\\.php(?:\\?$query*)?$/D", $next) === 1 ? $next : '';
     }

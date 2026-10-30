@@ -206,7 +206,8 @@ final class StudioPageTest extends TestCase
     public function testAPublishThatWonTheLockBeforeStartOverLeavesNoFilesAfter(): void
     {
         $path = (string) $this->db->query('PRAGMA database_list')->fetch(PDO::FETCH_ASSOC)['file'];
-        $signal = admin_tmp_dir() . '/files-written';
+        $tmp = admin_tmp_dir();
+        $signal = "$tmp/files-written";
         $child = <<<'PHP'
             <?php
             declare(strict_types=1);
@@ -222,7 +223,7 @@ final class StudioPageTest extends TestCase
                         // Called for the draft's row, after its files are written, while the lock is held.
                         $this->armed = false;
                         touch($this->signal);
-                        usleep(700_000);
+                        usleep(2_000_000);
                     }
                     return 1_800_000_000;
                 }
@@ -236,7 +237,6 @@ final class StudioPageTest extends TestCase
             $store->putDraft('race-piece', 1, ['score.json' => '{"schema":1}']);
             echo 'published';
             PHP;
-        $tmp = admin_tmp_dir();
         file_put_contents("$tmp/publish.php", $child);
         // The child writes to files, not pipes: reading a pipe would wait for the child to end.
         $proc = proc_open([PHP_BINARY, "$tmp/publish.php", dirname(__DIR__, 2), dirname($path), $this->dir, (string) $this->account, $signal], [1 => ['file', "$tmp/out", 'w'], 2 => ['file', "$tmp/err", 'w']], $pipes);
@@ -252,7 +252,7 @@ final class StudioPageTest extends TestCase
 
         $began = microtime(true);
         $this->accounts->startOver($this->account);
-        self::assertGreaterThan(0.2, microtime(true) - $began, "start over waited for the publish's lock");
+        self::assertGreaterThan(1.0, microtime(true) - $began, "start over waited for the publish's lock");
 
         self::assertSame(0, proc_close($proc), file_get_contents("$tmp/err"));
         self::assertSame('published', file_get_contents("$tmp/out"), 'the publish committed first');

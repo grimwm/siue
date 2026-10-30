@@ -12,6 +12,7 @@ login.
 | `verify.php` | Opened in the browser that asked for the link, the mailed link signs in at once and the page moves on to `index.php` (or the page the visit came from). Opened anywhere else, it shows a button; pressing it spends the link and starts a session. |
 | `index.php` | The hub: dashboard links, encryption-key fingerprints (with a "Remove the notes key" control while one is stored), sign out and sign out everywhere. |
 | `keys.php` | Create and revoke scoped API keys. A new key is shown once, and its card in the list is tagged as that key. For `music-publish` and `music-pickup` the page says which active key creating replaces. |
+| `studios.php` | Every studio's address, usage and last sign-in, with the shared usage and the account count against their caps. Remove takes the typed address; the owner's studio has no Remove. Never any piece, title or note. |
 | `logout.php` | Ends the session (POST), or every session with `?all=1`. |
 | `health.php` | `{"mail":"yes\|no","db":"yes\|no","store":"site\|fallback"}` for a deploy check; reveals nothing else. |
 

@@ -46,7 +46,13 @@ function admin_people(): Admin\People
 /** Dashboard links for the hub, label => path relative to /admin/. Workrooms add themselves here. */
 function admin_dashboards(): array
 {
-    return ['Music workroom' => '../music/'];
+    return ['Music workroom' => '../music/', 'Studios' => 'studios.php'];
+}
+
+/** The studios' storage, <admin data dir>/music: what the music store writes and what removing or starting over a studio empties. */
+function music_dir(): string
+{
+    return Admin\Db::dataDir() . '/music';
 }
 
 /** The owner's music account, or null before the workroom has made it. */

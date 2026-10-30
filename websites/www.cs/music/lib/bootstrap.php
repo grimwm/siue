@@ -21,7 +21,7 @@ function music_store(\PDO $db, Admin\Clock $clock, int $account): Music\Store
     $people = admin_people();
     $accounts = new Music\Accounts($db, $clock, $people);
     $limits = Music\Limits::for($people, (string) $accounts->emailOf($account));
-    return new Music\Store($db, Admin\Db::dataDir() . '/music', $clock, $account, $limits, $accounts);
+    return new Music\Store($db, music_dir(), $clock, $account, $limits, $accounts);
 }
 
 /** The library's instrument names, read once per request. @return list<string> */

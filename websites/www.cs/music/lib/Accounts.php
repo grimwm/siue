@@ -8,7 +8,7 @@ namespace Music;
 
 final class Accounts
 {
-    /** $dir: the studios' storage (<admin data dir>/music), the folder start over empties; null is the deploy's. */
+    /** $dir: the studios' storage (music_dir()), the folder start over and remove empty; null is the deploy's. */
     public function __construct(private \PDO $db, private \Admin\Clock $clock, private \Admin\People $people, private ?string $dir = null)
     {
     }
@@ -73,11 +73,40 @@ final class Accounts
      */
     public function startOver(int $account): void
     {
-        $store = new Store($this->db, $this->dir ?? \Admin\Db::dataDir() . '/music', $this->clock, $account, Limits::for($this->people, (string) $this->emailOf($account)), $this);
+        $store = new Store($this->db, $this->dir ?? \music_dir(), $this->clock, $account, Limits::for($this->people, (string) $this->emailOf($account)), $this);
         $this->db->exec('BEGIN IMMEDIATE');
         try {
             (new AiKeys($this->db, $this->clock))->deleteAll($account);
             $store->wipe();
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->exec('ROLLBACK');
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Removes the account: starts it over (its AI keys, notes, drafts, files and keyring), then deletes its row, its
+     * studio sessions and trusted devices, and the unused sign-in links of its address. The owner's account is refused.
+     */
+    public function remove(int $account): void
+    {
+        $email = $this->emailOf($account);
+        if ($email === null) {
+            return;
+        }
+        if ($email === \Admin\Auth::OWNER) {
+            throw new \LogicException("The owner's studio cannot be removed.");
+        }
+        $this->startOver($account);
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            $this->db->prepare('DELETE FROM studio_sessions WHERE account_id = ?')->execute([$account]);
+            $this->db->prepare('DELETE FROM studio_devices WHERE account_id = ?')->execute([$account]);
+            $this->db->prepare('DELETE FROM studio_links WHERE used_at IS NULL AND email = ?')->execute([$email]);
+            $this->db->prepare('DELETE FROM accounts WHERE id = ?')->execute([$account]);
             $this->db->exec('COMMIT');
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {

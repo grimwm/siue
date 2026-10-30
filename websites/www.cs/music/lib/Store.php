@@ -675,9 +675,13 @@ final class Store
                 $from = "{$this->dir}/drafts/$piece/$version";
                 $to = $this->files->claim($this->files->claim("$next/$owner/$piece", true) . "/$version", true);
                 foreach (self::DRAFT_FILES as $name) {
-                    $bytes = is_file("$from/$name") && !is_link("$from/$name") ? @file_get_contents("$from/$name") : false;
+                    if (!is_file("$from/$name") || is_link("$from/$name")) {
+                        continue; // a file the draft never had
+                    }
+                    // A file that is there but cannot be read stops the move: the ROLLBACK and restoreDrafts keep it.
+                    $bytes = @file_get_contents("$from/$name");
                     if ($bytes === false) {
-                        continue;
+                        $this->files->refuse("$from/$name", 'cannot be read', 'fix its permissions');
                     }
                     $kept = self::storedBytes($name, $bytes);
                     $this->writeFile("$to/" . self::storedName($name), $kept);

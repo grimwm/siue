@@ -256,4 +256,31 @@ final class MusicMigrationTest extends TestCase
         $this->assertEveryDraftReads($s);
         self::assertSame([(string) $owner], array_values(array_diff(scandir("{$this->dir}/drafts"), ['.', '..'])));
     }
+
+    public function testADraftFileThatCannotBeReadStopsTheMoveAndKeepsEverything(): void
+    {
+        $locked = "{$this->dir}/drafts/ch1-labyrinth/1/audio.webm";
+        chmod($locked, 0000);
+        if (is_readable($locked)) {
+            chmod($locked, 0600);
+            self::markTestSkipped('this user reads files whatever their mode (root); run as a regular user');
+        }
+        try {
+            $this->open();
+            self::fail('an unreadable draft file must stop the move');
+        } catch (Admin\StorageUnavailable $e) {
+            self::assertStringContainsString('cannot be read', $e->getMessage());
+        } finally {
+            chmod($locked, 0600);
+        }
+        $db = Admin\Db::open($this->data);
+        self::assertNotContains('account_id', $this->columns($db, 'music_drafts'), 'the database still records the old layout');
+        $files = $this->files;
+        ksort($files);
+        self::assertSame($files, $this->tree("{$this->dir}/drafts"), 'every old file is still there, byte for byte');
+        self::assertDirectoryDoesNotExist("{$this->dir}/drafts.old");
+        self::assertDirectoryDoesNotExist("{$this->dir}/drafts.new");
+        [$s] = $this->open($db);
+        $this->assertEveryDraftReads($s);
+    }
 }

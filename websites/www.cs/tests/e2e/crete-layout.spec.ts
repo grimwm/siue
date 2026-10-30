@@ -66,7 +66,11 @@ function measure() {
   const cell = Number(document.getElementById('stage')!.dataset.cell);
   if (!(cell >= 8)) probs.push(`cells are ${cell}px`);
   // A phone's Thread panel, shut, keeps Hint, Route and Auto out of sight: the Thread button stands for them.
-  const controls = [...document.querySelectorAll<HTMLElement>('#status-root button, #strip-root button')].filter(b => !b.closest('[hidden]'));
+  // Menu stands in the status bar, or, on a portrait phone, in the strip's bottom row: exactly one of the two shows.
+  const menus = ['btn-menu', 'btn-menu-strip'].filter(id => { const m = document.getElementById(id); return m !== null && shown(m); });
+  if (menus.length !== 1) probs.push(`${menus.length} Menu buttons show`);
+  const controls = [...document.querySelectorAll<HTMLElement>('#status-root button, #strip-root button')]
+    .filter(b => !b.closest('[hidden]') && !(b.id.startsWith('btn-menu') && !shown(b)));
   const want = document.getElementById('btn-thread') ? 13 : 15;
   if (controls.length !== want) probs.push(`${controls.length} controls, not ${want}`);
   const strip = document.getElementById('strip-root')!;
@@ -186,7 +190,7 @@ for (const device of DEVICES) {
     else expect(tabs).toBe(TABS);
 
     // The menu is a card that fits and scrolls inside itself, never the page.
-    await page.locator('#btn-menu').click();
+    await page.locator('#btn-menu:visible, #btn-menu-strip:visible').first().click();
     await expect(page.locator('#menu-veil')).toBeVisible();
     expect(await page.evaluate(cardFits, '#menu-veil .card'), 'menu on screen').toBe(true);
     await closeOnTitleRow(page, 'menu');
@@ -259,7 +263,7 @@ function clearOfArrows() {
 const PHONES = DEVICES.filter(d => /iPhone|Android/.test(d[0]));
 for (const device of PHONES) {
   for (const side of ['left', 'right'] as const) {
-    test(`${device[0]}, arrows on the ${side}: a connected cross pad clear of every other button, the thread behind Thread`, async ({ browser }) => {
+    test(`${device[0]}, arrows on the ${side}: a connected cross pad clear of every other button, the thread behind Hints`, async ({ browser }) => {
       const { ctx, page, errors } = await open(browser, device, side);
       await openLevel(page, 1);
       await page.locator('#start-begin').click();
@@ -268,18 +272,22 @@ for (const device of PHONES) {
       expect(await page.evaluate(() => document.getElementById('frame')!.classList.contains('pad-right'))).toBe(side === 'right');
       expect(await page.evaluate(plusPad, { side, min: 44 })).toEqual([]);
       expect(await page.evaluate(clearOfArrows)).toEqual([]);
-      // Hint, Route and Auto wait behind Thread, which stands on the far side from the pad.
+      // Hint, Route and Auto wait behind Hints, which stands left of the look swap on either side.
       for (const id of ['btn-hint', 'btn-route', 'btn-auto']) await expect(page.locator(`#${id}`)).toBeHidden();
       const thread = page.locator('#btn-thread');
       await expect(thread).toBeVisible();
       await expect(thread).toHaveAttribute('aria-expanded', 'false');
-      const away = await page.evaluate(() => {
-        const t = document.getElementById('btn-thread')!.getBoundingClientRect();
-        const up = document.querySelector('.mv-up')!.getBoundingClientRect();
-        return (t.left + t.right) / 2 - (up.left + up.right) / 2;
-      });
-      if (side === 'left') expect(away, 'Thread on the far side from the pad').toBeGreaterThan(0);
-      else expect(away, 'Thread on the far side from the pad').toBeLessThan(0);
+      if (device[0].includes('portrait')) {
+        // The bottom row reads Hints, Menu, look swap on either side; Menu has left the status bar for it.
+        await expect(page.locator('#btn-menu-strip')).toBeVisible();
+        await expect(page.locator('#btn-menu')).toBeHidden();
+        const order = await page.evaluate(() => ['btn-thread', 'btn-menu-strip', 'btn-look']
+          .map(id => document.getElementById(id)!.getBoundingClientRect().left));
+        expect(order, 'Hints, Menu, look swap from left to right').toEqual([...order].sort((a, b) => a - b));
+      } else {
+        await expect(page.locator('#btn-menu-strip')).toBeHidden();
+        await expect(page.locator('#btn-menu')).toBeVisible();
+      }
       await thread.click();
       await expect(thread).toHaveAttribute('aria-expanded', 'true');
       for (const id of ['btn-hint', 'btn-route', 'btn-auto']) await expect(page.locator(`#${id}`)).toBeVisible();
@@ -343,7 +351,7 @@ test('iPhone SE, portrait: Arrows in the menu moves the pad at once, and the cho
   await page.locator('#start-begin').click();
   await page.waitForSelector('#stage[data-cell]');
   expect(await page.evaluate(plusPad, { side: 'left', min: 44 })).toEqual([]);
-  await page.locator('#btn-menu').click();
+  await page.locator('#btn-menu:visible, #btn-menu-strip:visible').first().click();
   await expect(page.locator('#pad-left')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#pad-right').click();
   await expect(page.locator('#pad-right')).toHaveAttribute('aria-pressed', 'true');

@@ -32,4 +32,9 @@ final class MusicUsageTest extends TestCase
         self::assertSame('Your studio has 1.2 MB of 5 MB left. Delete drafts or picked-up notes to make room.', Music\Usage::refusal(1_258_291, 5_242_880));
         self::assertSame('Your studio has 0 KB of 100 MB left. Delete drafts or picked-up notes to make room.', Music\Usage::refusal(0, 104_857_600));
     }
+
+    public function testTheRefusalNamesTheSharedSpaceWhenThatIsWhatRanShort(): void
+    {
+        self::assertSame('The studios\' shared space has 500 KB left. Delete drafts or picked-up notes to make room.', Music\Usage::refusal(512_000, 5_242_880, true));
+    }
 }

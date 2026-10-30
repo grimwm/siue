@@ -18,9 +18,12 @@ final class Usage
         return (int) round($bytes / 1024) . ' KB';
     }
 
-    /** The refusal of an upload that would pass the limit: the room left of $quota, and how to free some. */
-    public static function refusal(int $room, int $quota): string
+    /** The refusal of an upload that would pass the limit: the room left of $quota (or, when $shared, of the studios' shared space), and how to free some. */
+    public static function refusal(int $room, int $quota, bool $shared = false): string
     {
+        if ($shared) {
+            return 'The studios\' shared space has ' . self::human($room) . ' left. Delete drafts or picked-up notes to make room.';
+        }
         return 'Your studio has ' . self::human($room) . ' of ' . self::human($quota) . ' left. Delete drafts or picked-up notes to make room.';
     }
 }

@@ -306,6 +306,34 @@ final class MusicApiTest extends TestCase
         self::assertSame(201, $send($only)->status);
     }
 
+    public function testTheOverQuotaMessageNamesWhicheverRoomRanShort(): void
+    {
+        $clock = new FakeClock(1_800_000_000);
+        $try = function (string $people, ?int $own) use ($clock): array {
+            $dir = $this->dir . '-room' . ($own === null ? 'shared' : 'own');
+            $people = Admin\People::fromJson($people);
+            $accounts = new Music\Accounts($this->db, $clock, $people, $dir);
+            $api = new Music\Api(music_store_for($this->db, $dir, $clock, $own === null ? '{"max_shared_bytes": 100}' : '{}'), new Music\KeyGate($this->db, $clock, $this->keys, $accounts, self::BASE));
+            $id = (int) $accounts->signIn($own === null ? 'pooled@siue.edu' : 'roomy@siue.edu');
+            if ($own !== null) {
+                $this->db->prepare('INSERT INTO music_drafts (account_id, piece, version, published_at, size) VALUES (?, ?, ?, ?, ?)')->execute([$id, 'seed', 1, 1, $own]);
+            }
+            $k = (new Music\AiKeys($this->db, $clock))->create($id, 'publish', ['drafts:publish']);
+            $sound = ['instrument' => 'cello', 'gain_db' => 0, 'attack' => 0.35, 'release' => 2.5];
+            $renderable = ['audio' => [], 'mix' => ['style' => 'lofi', 'loudness' => -20], 'lanes' => [['id' => 'a', 'sound' => $sound]]];
+            $files = ['score.json' => $this->withScore($this->draftFiles('ch3-renderer', 1), $renderable)['score.json']];
+            $body = music_draft_bundle($files);
+            $res = $api->publishDraft($this->post($k, ['piece' => 'ch3-renderer', 'version' => '1'], $body), $this->reading($body));
+            return [$res->status, $this->body($res)['message'] ?? null];
+        };
+        [$status, $message] = $try('{"max_shared_bytes": 100}', null);
+        self::assertSame(413, $status);
+        self::assertSame('The studios\' shared space has 0 KB left. Delete drafts or picked-up notes to make room.', $message);
+        [$status, $message] = $try('{}', 5_242_880 - 10);
+        self::assertSame(413, $status);
+        self::assertSame('Your studio has 0 KB of 5 MB left. Delete drafts or picked-up notes to make room.', $message);
+    }
+
     public function testADraftWithoutAProjectOrKindTheServerCanRecordIsRefused(): void
     {
         $k = $this->keys->create('publish', ['drafts:publish']);

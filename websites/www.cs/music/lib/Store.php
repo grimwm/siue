@@ -10,8 +10,8 @@ namespace Music;
 
 final class NoteRejected extends \RuntimeException
 {
-    /** @param string $reason too_large | full | over_quota | bad_header | unknown_key | no_key; $room is the bytes left, for over_quota */
-    public function __construct(public readonly string $reason, public readonly int $room = 0)
+    /** @param string $reason too_large | full | over_quota | bad_header | unknown_key | no_key; $room is the bytes left and $shared whether the studios' shared space (not this account's own room) is what ran short, for over_quota */
+    public function __construct(public readonly string $reason, public readonly int $room = 0, public readonly bool $shared = false)
     {
         parent::__construct($reason);
     }
@@ -19,8 +19,8 @@ final class NoteRejected extends \RuntimeException
 
 final class DraftRejected extends \RuntimeException
 {
-    /** @param string $reason bad_piece | bad_version | missing_file | bad_file | too_large | over_quota | exists | bad_score; $room is the bytes left, for over_quota */
-    public function __construct(public readonly string $reason, public readonly int $room = 0)
+    /** @param string $reason bad_piece | bad_version | missing_file | bad_file | too_large | over_quota | exists | bad_score; $room is the bytes left and $shared whether the studios' shared space (not this account's own room) is what ran short, for over_quota */
+    public function __construct(public readonly string $reason, public readonly int $room = 0, public readonly bool $shared = false)
     {
         parent::__construct($reason);
     }
@@ -135,9 +135,9 @@ final class Store
             if ((int) $count->fetchColumn() >= self::MAX_NOTES) {
                 throw new NoteRejected('full');
             }
-            $room = $this->roomLeft();
+            [$room, $shared] = $this->roomBinding();
             if ($size > $room) {
-                throw new NoteRejected('over_quota', max(0, $room));
+                throw new NoteRejected('over_quota', max(0, $room), $shared);
             }
             $this->writeFile($path, $sealed);
             try {
@@ -268,9 +268,9 @@ final class Store
             }
             $rollsOff = $this->db->prepare('SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM music_drafts WHERE account_id = ? AND piece = ? ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . (self::KEEP_DRAFTS - 1) . ')');
             $rollsOff->execute([$this->account, $piece]);
-            $room = $this->roomLeft();
+            [$room, $shared] = $this->roomBinding();
             if ($size - (int) $rollsOff->fetchColumn() > $room) {
-                throw new DraftRejected('over_quota', max(0, $room));
+                throw new DraftRejected('over_quota', max(0, $room), $shared);
             }
             $this->writeDraftFiles($piece, $version, $stored);
             try {
@@ -628,8 +628,18 @@ final class Store
     /** The room before clamping: below zero when the account (or the shared pool) is already over. */
     private function roomLeft(): int
     {
-        $room = $this->limits->quotaBytes - $this->accounts->usage($this->account);
-        return $this->limits->sharedPool ? min($room, $this->accounts->sharedRoom()) : $room;
+        return $this->roomBinding()[0];
+    }
+
+    /** The room before clamping, and whether it is the shared space's (smaller than the account's own) rather than the account's own. @return array{int, bool} */
+    private function roomBinding(): array
+    {
+        $own = $this->limits->quotaBytes - $this->accounts->usage($this->account);
+        if (!$this->limits->sharedPool) {
+            return [$own, false];
+        }
+        $shared = $this->accounts->sharedRoom();
+        return $shared < $own ? [$shared, true] : [$own, false];
     }
 
     /** Deletes this account's note rows, then their files; inside the caller's transaction. @return list<string> the ids */

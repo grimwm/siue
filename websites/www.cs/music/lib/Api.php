@@ -111,7 +111,7 @@ final class Api
             $store->putDraft($piece, (int) $version, $files, $about);
         } catch (DraftRejected $e) {
             if ($e->reason === 'over_quota') {
-                return Http::json(413, ['error' => 'over_quota', 'room' => $e->room, 'message' => Usage::refusal($e->room, $limits->quotaBytes)]);
+                return Http::json(413, ['error' => 'over_quota', 'room' => $e->room, 'message' => Usage::refusal($e->room, $limits->quotaBytes, $e->shared)]);
             }
             return Http::json(match ($e->reason) {
                 'exists' => 409,

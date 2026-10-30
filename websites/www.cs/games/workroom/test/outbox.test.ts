@@ -191,7 +191,7 @@ test('over_quota keeps the note and names the room', async () => {
   const r = await box.add(one(1), 'a');
   assert.deepEqual(r.kept, [{ key: 'k1', reason: 'over_quota', room: 1_258_291 }]);
   assert.deepEqual((await store.all()).map(p => [p.reason, p.room]), [['over_quota', 1_258_291]]);
-  assert.equal(KEPT_MESSAGES.over_quota(1_258_291), 'Your studio is full: 1.2 MB left. Delete drafts or picked-up notes to make room; this note stays on this device until then.');
+  assert.equal(KEPT_MESSAGES.over_quota(1_258_291), 'There is no room for this note: 1.2 MB left. Delete drafts or picked-up notes to make room; this note stays on this device until then.');
   assert.equal(keptMessage('over_quota', 5_242_880), KEPT_MESSAGES.over_quota(5_242_880));
   assert.equal(keptMessage('over_quota', undefined), KEPT_MESSAGES.over_quota(0), 'a note kept before the room was known still says it is full');
 });

@@ -46,7 +46,7 @@ export const STUDIO_UNKNOWN_KEY = 'The server does not take notes sealed to this
 
 /** Per reason; the two that depend on the studio take its room left (over_quota) or its note max (too_large). */
 export const KEPT_MESSAGES: Readonly<Record<Exclude<KeptReason, 'over_quota' | 'too_large'>, string>> & { over_quota(room: number): string; too_large(noteMax: number): string } = {
-  over_quota: room => `Your studio is full: ${humanBytes(room)} left. Delete drafts or picked-up notes to make room; this note stays on this device until then.`,
+  over_quota: room => `There is no room for this note: ${humanBytes(room)} left. Delete drafts or picked-up notes to make room; this note stays on this device until then.`,
   offline: 'No connection: this note is kept on this device and will be sent when you are back online.',
   signed_out: 'Your sign-in ended. Sign in again; the note stays on this device.',
   server: 'The server had a problem. This note stays on this device and is sent on the next try.',

@@ -554,7 +554,7 @@
 - **`studio-limits.ts`:**
   - `readLimits(body: HTMLElement): { noteMax: number; room: number; named: boolean }`, falling back to `MAX_NOTE_BYTES` and `Infinity` when the attributes are absent;
   - `humanBytes(n: number): string`, the same rule as PHP's `Usage::human`.
-- **The outbox** pre-checks against `noteMax`, not the constant. `KEPT_MESSAGES.over_quota(room)` reads: "Your studio is full: {humanBytes(room)} left. Delete drafts or picked-up notes to make room; this note stays on this device until then."
+- **The outbox** pre-checks against `noteMax`, not the constant. `KEPT_MESSAGES.over_quota(room)` reads: "There is no room for this note: {humanBytes(room)} left. Delete drafts or picked-up notes to make room; this note stays on this device until then."
 - **The piece page** gets "Delete this draft" and "Delete this piece". Each asks with the browser's own confirm (`window.confirm`), POSTs `delete-draft.php`, then goes to the next newest draft or to the pieces list.
 
 - [ ] **Step 1: Write the failing tests:**

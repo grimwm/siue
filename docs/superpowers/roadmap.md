@@ -31,12 +31,19 @@ full keyboard play, the fast solver and the level editor.
 
 ## Music workroom
 
-Design `specs/2026-10-17-music-workroom-design.md`; the workroom and its
-answering are live.
+Designs `specs/2026-10-17-music-workroom-design.md` (the workroom and its
+answering) and `specs/2026-10-29-music-studios-design.md` (studios for
+everyone, in four projects). Live: the workroom, its answering, the owner's MCP
+server, the browser renderer and the shared FLAC sample library (a score-only
+draft plays, draws its sound picture and downloads in the browser). The Crete
+title theme is finished and plays in Crete on every screen.
 
-1. **The first piece: the Crete title theme.** Design
-   `specs/2026-10-28-crete-title-theme-design.md`; the composing pipeline
-   (`music/compose/`) and draft 1, a one-minute sketch, are built. Next: the
-   owner publishes it, answers it in the workroom, and each later draft
-   follows those notes until the owner says it is done. Then the theme goes
-   into Crete under the title card and story pages (its own plan).
+1. **Studios for everyone** (project 2) — plan
+   `plans/2026-10-29-music-studios.md`: accounts for any `@siue.edu` address,
+   per-account storage and limits, the notes key made on the page, AI keys,
+   start over, and the admin view of accounts.
+2. **The MCP server for everyone and AI sealing keys** (project 3) — the live
+   connection and the `SIUEN2` note format; its plan is written when work on it
+   begins.
+3. **Composing in the editor** (project 4) — its own design first, then its
+   plan.

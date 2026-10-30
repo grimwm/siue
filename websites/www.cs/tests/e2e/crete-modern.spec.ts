@@ -49,7 +49,7 @@ interface Hooked {
     game: { run: { now: { player: { r: number; c: number } } } };
     parse(text: string): unknown;
     playLevel(level: unknown): void;
-    modern?: { frames(): number; yaw(): number; zoom(): number; floating(): number[]; splashing(): number[]; active: boolean };
+    modern?: { frames(): number; yaw(): number; zoom(): number; pitch(): number; following(): boolean; floating(): number[]; splashing(): number[]; active: boolean };
   };
 }
 
@@ -273,6 +273,44 @@ test('a tap on the mini map moves the camera there', async ({ page }) => {
   await settled(page);
   expect((await modern(page))!.frames, 'the board draws the new view').toBeGreaterThan(frames);
   expect((await view.screenshot()).equals(before), 'the view outline moved').toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('after a look elsewhere on the mini map, Theseus\'s next step brings the camera back to him', async ({ page }) => {
+  const errors = await openHall(page);
+  const following = () => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.following());
+  expect(await following(), 'the camera starts on Theseus').toBe(true);
+  const box = (await page.locator('#minimap-view').boundingBox())!;
+  await page.mouse.click(box.x + 4, box.y + 4);
+  await settled(page);
+  expect(await following(), 'the mini map looks elsewhere').toBe(false);
+  const from = await player(page);
+  for (const k of ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp']) {
+    await page.keyboard.press(k);
+    if (JSON.stringify(await player(page)) !== JSON.stringify(from)) break;
+  }
+  expect(await player(page), 'Theseus stepped').not.toEqual(from);
+  await expect.poll(following, { message: 'the step brings the camera back' }).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('Top-down tips the camera to 75° and squares it to the board; Angled tips it back, and the choice is kept', async ({ page }) => {
+  const errors = await openHall(page);
+  const cam = () => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; });
+  expect(await cam()).toEqual({ pitch: 45, yaw: 15 });
+  await page.keyboard.press('q');
+  await expect(page.locator('#view-angled')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#walls-solid')).toBeVisible();
+  await page.locator('#view-top').click();
+  await expect(page.locator('#view-top')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#walls-solid'), 'no Walls choice from above').toHaveCount(0);
+  await page.keyboard.press('q');
+  await expect.poll(cam).toEqual({ pitch: 75, yaw: 0 });
+  await page.reload();
+  await page.locator('#title-settings').click();
+  await expect(page.locator('#view-top')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#view-angled').click();
+  await expect(page.locator('#walls-solid')).toBeVisible();
   expect(errors).toEqual([]);
 });
 

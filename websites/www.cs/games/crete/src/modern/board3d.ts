@@ -14,7 +14,7 @@ import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { DEFAULT_YAW, PITCH, clampView, clampZoom, easeCam, nearestYaw, panCam, viewRows, zoomAbout, zoomLimits } from './camera.ts';
+import { DEFAULT_YAW, PITCHES, VIEW_YAW, clampView, clampZoom, easeCam, nearestYaw, panCam, viewRows, zoomAbout, zoomLimits } from './camera.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
 import { changedCells } from './diff.ts';
@@ -38,6 +38,7 @@ import type { PieceInfo } from './scene/terrain.ts';
 import { createKit } from './scene/textures.ts';
 import { createThread } from './scene/thread.ts';
 import { LOW_H, WALL_H, createWalls } from './scene/walls.ts';
+import type { View } from './camera.ts';
 import type { Seen } from './scene/walls.ts';
 
 export interface ModernHost {
@@ -61,10 +62,16 @@ export interface ModernBoard {
   /** Applies the state and figures locally and draws once. */
   show(f: { state: State; figures: Figures }, thread: readonly Cell[] | null): void;
   walls(m: WallMode): void;
+  /** The View setting: the camera eases to 45° or to straight down. */
+  view(v: View): void;
   /** The camera's yaw in degrees, for screenToGrid. */
   yaw(): number;
   /** The view's height in ground rows, for tests. */
   zoom(): number;
+  /** The camera's pitch in degrees, for tests. */
+  pitch(): number;
+  /** Whether the camera follows Theseus, for tests. */
+  following(): boolean;
   reset(): void;
   resize(): void;
   /** A hidden board draws nothing and stops its loops. */
@@ -135,8 +142,11 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   /** The camera: where it is, where it eases to, whether its target follows Theseus, and whether the player chose
    *  its zoom (otherwise it keeps the default for the screen's shape). */
-  const cur: Cam = { yaw: DEFAULT_YAW, tx: 0, tz: 0, zoom: viewRows(1) };
+  let viewing: View = 'angled';
+  const cur: Cam = { yaw: DEFAULT_YAW, pitch: PITCHES.angled, tx: 0, tz: 0, zoom: viewRows(1) };
   const goal: Cam = { ...cur };
+  /** Whether the camera's target is Theseus: a pan, an off-centre zoom or the mini map look elsewhere until his next
+   *  step. */
   let follow = true;
   let zoomed = false;
 
@@ -146,7 +156,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const cols = () => last?.level.cols ?? 1;
   const aspect = () => width / height;
   const shown = (s: State, i: number): TerrainModel => (filled.has(i) ? 'water' : terrainModel(s, i));
-  const limits = () => zoomLimits(aspect(), cols(), rows());
+  const limits = () => zoomLimits(aspect(), cols(), rows(), goal.pitch);
 
   function invalidate(): void {
     if (!raf && active) raf = requestAnimationFrame(frame);
@@ -185,7 +195,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   }
 
   function applyCamera(): void {
-    const y = cur.yaw * RAD, p = PITCH * RAD, D = 40;
+    const y = cur.yaw * RAD, p = cur.pitch * RAD, D = 40;
     camera.position.set(cur.tx + Math.sin(y) * Math.cos(p) * D, FY + Math.sin(p) * D, cur.tz + Math.cos(y) * Math.cos(p) * D);
     camera.up.set(-Math.sin(y), 0, -Math.cos(y)); // screen-up is the board's forward
     camera.lookAt(cur.tx, FY, cur.tz);
@@ -199,6 +209,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   }
 
   function aimGoal(): void {
+    goal.pitch = PITCHES[viewing];
     if (follow && lastPlayer) {
       goal.tx = cellX(lastPlayer.c, cols());
       goal.tz = cellZ(lastPlayer.r, rows());
@@ -347,6 +358,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   /** Stands the pieces and figures; true when any moved, turned, came or went. */
   function setFigures(s: State, f: Figures): boolean {
+    // A step by Theseus brings the camera back to him, wherever the player had looked.
+    if (lastPlayer && (lastPlayer.r !== f.player.r || lastPlayer.c !== f.player.c)) follow = true;
     lastPlayer = { r: f.player.r, c: f.player.c };
     const changed = actors.set(placed(s, f), cols(), rows(), snap());
     const hero = actors.hero();
@@ -447,6 +460,14 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     invalidate();
   }
 
+  function view(v: View): void {
+    if (v === viewing) return;
+    viewing = v;
+    goal.yaw = nearestYaw(VIEW_YAW[v], cur.yaw);
+    aimWalls = shadowsDirty = true;
+    invalidate();
+  }
+
   /** The camera under the player's hand. */
   const cam = {
     turn(deg: number, eased: boolean) {
@@ -479,7 +500,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     reset() {
       follow = true;
       zoomed = false;
-      goal.yaw = nearestYaw(DEFAULT_YAW, cur.yaw);
+      goal.yaw = nearestYaw(VIEW_YAW[viewing], cur.yaw);
       invalidate();
     },
   };
@@ -525,8 +546,11 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     level,
     show,
     walls,
+    view,
     yaw: () => cur.yaw,
     zoom: () => cur.zoom,
+    pitch: () => cur.pitch,
+    following: () => follow,
     reset: cam.reset,
     resize() { resize(); invalidate(); },
     setActive(on) {

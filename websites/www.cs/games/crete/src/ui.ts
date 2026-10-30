@@ -38,7 +38,7 @@ import { renderStoryCard } from "./ui/story.tsx";
 import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
-import type { Look, WallMode } from "./settings.ts";
+import type { Look, View, WallMode } from "./settings.ts";
 import { renderTitleCard } from "./ui/title.tsx";
 import { renderLookPick } from "./ui/look-pick.tsx";
 import { ratingText, renderSharedCard } from "./ui/shared.tsx";
@@ -72,8 +72,10 @@ export interface Controls {
   toggleBackground?(): void;
   /** The Look choice (the new-game card and the menu). */
   setLook?(look: Look): void;
-  /** The Walls choice, shown while the look is modern. */
+  /** The Walls choice, shown while the look is modern and the view angled. */
   setWalls?(walls: WallMode): void;
+  /** The View choice, shown while the look is modern. */
+  setView?(view: View): void;
   toggleFullscreen(): void;
   /** Wake the speakers: any gesture does. */
   wake(): void;
@@ -104,6 +106,8 @@ export interface Ui {
   setFullscreen(on: boolean): void;
   /** Shows the look and wall choices the page restored or changed. */
   setLook(look: Look, walls: WallMode): void;
+  /** Shows the view choice the page restored or changed. */
+  setView(view: View): void;
   /** Whether the modern board shows: it fills the board's space, so the classic canvas is not fitted and nothing
    *  scrolls. */
   setModernBoard(on: boolean): void;
@@ -175,6 +179,7 @@ export function createUi(deps: UiDeps): Ui {
   let full = false;
   let look: Look = "modern";
   let walls: WallMode = "solid";
+  let view: View = "angled";
   let toastTimer = 0;
   let controls: Controls | null = null;
   let game: Game | null = null;
@@ -450,6 +455,7 @@ export function createUi(deps: UiDeps): Ui {
       fullscreen: full,
       look,
       walls,
+      view,
       log,
       help: helpLines(KEYS, TOOLS),
       onSound: () => {
@@ -467,6 +473,7 @@ export function createUi(deps: UiDeps): Ui {
       onFullscreen: () => controls?.toggleFullscreen(),
       onLook: (l) => controls?.setLook?.(l),
       onWalls: (w) => controls?.setWalls?.(w),
+      onView: (v) => controls?.setView?.(v),
       onLore: () => {
         loreShown = null;
         loreFromPickup = false;
@@ -998,6 +1005,10 @@ export function createUi(deps: UiDeps): Ui {
     setLook: (l, w) => {
       look = l;
       walls = w;
+      drawLayers();
+    },
+    setView: (v) => {
+      view = v;
       drawLayers();
     },
     setModernBoard: (on) => {

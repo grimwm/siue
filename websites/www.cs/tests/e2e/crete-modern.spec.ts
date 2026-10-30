@@ -87,6 +87,8 @@ async function openHall(page: Page, text = HALL, reducedMotion: 'reduce' | 'no-p
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion });
+  // These specs turn the camera, so they start Angled unless a test has chosen a view.
+  await page.addInitScript(() => { if (localStorage.getItem('crete-view') === null) localStorage.setItem('crete-view', 'angled'); });
   await page.goto(PAGE);
   await page.locator('#title-play').click();
   await page.locator('#pick-enter').click();
@@ -320,6 +322,21 @@ test('a finger swipe moves Theseus and leaves the camera\'s turn alone', async (
   expect(await player(page), 'Theseus moved').not.toEqual(from);
   expect((await modern(page))!.yaw, 'one finger never turns').toBe(yaw0);
   expect(errors).toEqual([]);
+});
+
+test('a new player starts in Top-down: 75°, square to the board, no turn buttons and no Walls choice', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(PAGE);
+  await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
+  await page.locator('#chapter-enter').click();
+  await page.locator('#start-begin').click();
+  await page.waitForFunction(() => (window as unknown as Hooked).__creteTest.modern?.active === true);
+  await expect.poll(() => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; })).toEqual({ pitch: 75, yaw: 0 });
+  await expect(page.locator('#cam-left')).toBeHidden();
+  await page.keyboard.press('q');
+  await expect(page.locator('#view-top')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#walls-solid')).toHaveCount(0);
 });
 
 test('Top-down tips the camera to 75° and squares it to the board; Angled tips it back, and the choice is kept', async ({ page }) => {

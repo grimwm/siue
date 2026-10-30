@@ -371,6 +371,7 @@ test('F toggles full screen and L opens the Lore book while the menu is up, and 
 
 test('in the menu, down and up (or j and k) move the focus through its buttons and Enter presses the focused one', () => {
   reset();
+  flow.setView('angled'); // Walls shows only while Angled
   toggled = 0;
   key('q');
   const at = () => document.activeElement?.id;
@@ -416,6 +417,7 @@ test('Music sits beside Sound in the menu, says whether it is on, and asks for i
 
 test('Look and Walls sit in the menu; Walls show only for the modern look', () => {
   reset();
+  flow.setView('angled'); // Walls shows only while Angled
   looks.length = 0;
   flow.setLook('modern', 'low');
   key('q');

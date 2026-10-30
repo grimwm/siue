@@ -183,7 +183,7 @@ export function createUi(deps: UiDeps): Ui {
   let full = false;
   let look: Look = "modern";
   let walls: WallMode = "solid";
-  let view: View = "angled";
+  let view: View = "top";
   let toastTimer = 0;
   let controls: Controls | null = null;
   let game: Game | null = null;

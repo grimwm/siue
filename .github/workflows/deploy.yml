@@ -112,11 +112,12 @@ jobs:
           SIUE_PASSWORD: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/password
 
       - name: Load the studio config (optional)
+        id: studio
         if: steps.tip.outputs.skip != '1'
         continue-on-error: true
         uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5
         with:
-          export-env: true
+          export-env: false
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           STUDIO_CONFIG: op://khvwk3iogv3mhhjui4se7xqyni/SIUE music studio config/studio-config
@@ -125,6 +126,7 @@ jobs:
         if: steps.tip.outputs.skip != '1'
         env:
           FORCE: ${{ inputs.force && '1' || '0' }}
+          STUDIO_CONFIG: ${{ steps.studio.outputs.STUDIO_CONFIG }}
         run: |
           set -euo pipefail
           umask 077

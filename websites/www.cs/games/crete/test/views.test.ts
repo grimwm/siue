@@ -92,8 +92,8 @@ const ROWS: ToolRow[] = TOOL_KINDS.map((kind, i) => ({
 }));
 function stripProps(over: Partial<StripProps> = {}): StripProps {
   return {
-    tools: ROWS, playing: false, route: false, over: false, look: 'modern',
-    onMove: noop, onWait: noop, onUndo: noop, onRestart: noop, onHint: noop, onRoute: noop, onAuto: noop, onTool: noop, onLook: noop, ...over,
+    tools: ROWS, playing: false, route: false, over: false, look: 'modern', compact: false, threadOpen: false,
+    onThread: noop, onMove: noop, onWait: noop, onUndo: noop, onRestart: noop, onHint: noop, onRoute: noop, onAuto: noop, onTool: noop, onLook: noop, ...over,
   };
 }
 
@@ -110,8 +110,8 @@ test('every strip button wears a tab that prints what the key table says', () =>
     assert.equal(tab.getAttribute('data-keyhint'), action);
   }
   const pad = walk(root).filter(n => n.className.startsWith('mv mv-'));
-  assert.deepEqual(pad.map(b => b.className), ['mv mv-up', 'mv mv-left', 'mv mv-down', 'mv mv-right']);
-  const padActions: Action[] = ['up', 'left', 'down', 'right'];
+  assert.deepEqual(pad.map(b => b.className), ['mv mv-up', 'mv mv-left', 'mv mv-right', 'mv mv-down']);
+  const padActions: Action[] = ['up', 'left', 'right', 'down'];
   pad.forEach((b, i) => assert.equal(tabsOf(b)[0]?.textContent, KEYS[padActions[i]!].label));
   for (const row of ROWS) assert.equal(tabsOf(byId(root, `tool-${row.kind}`))[0]?.textContent, row.key);
   assert.equal(maybeById(root, 'btn-bash'), undefined);
@@ -139,7 +139,7 @@ test('the pad, Wait, Undo, Restart, the thread and the tools call back', () => {
   for (const b of walk(root).filter(n => n.className.startsWith('mv '))) click(b);
   for (const id of ['btn-wait', 'btn-undo', 'btn-restart', 'btn-hint', 'btn-route', 'btn-auto']) click(byId(root, id));
   click(byId(root, 'tool-cake'));
-  assert.deepEqual(seen, ['move:up', 'move:left', 'move:down', 'move:right', 'wait', 'undo', 'restart', 'hint', 'route', 'auto', 'tool:cake']);
+  assert.deepEqual(seen, ['move:up', 'move:left', 'move:right', 'move:down', 'wait', 'undo', 'restart', 'hint', 'route', 'auto', 'tool:cake']);
 });
 
 test('an unusable tool cannot be pressed, Route and Auto show when on, and a finished try keeps Undo and Restart', () => {
@@ -155,6 +155,76 @@ test('an unusable tool cannot be pressed, Route and Auto show when on, and a fin
   assert.equal(walk(root).filter(n => n.className.startsWith('mv ')).every(b => b.disabled), true);
 });
 
+test('the pad is a plus: up, then left and right on one row with an empty centre between them, then down', () => {
+  const root = mount();
+  renderStrip(root, stripProps());
+  const pad = walk(root).find(n => n.className === 'pad')!;
+  const cells = pad.children.map(c => (c as StubElement).className);
+  assert.deepEqual(cells, ['mv mv-up', 'mv mv-left', 'pad-hub', 'mv mv-right', 'mv mv-down']);
+  const hub = walk(pad).find(n => n.className === 'pad-hub')!;
+  assert.equal(hub.localName, 'span');
+  assert.equal(hub.getAttribute('aria-hidden'), 'true');
+});
+
+test('on a wide strip Hint, Route and Auto stand in the strip and there is no Thread button', () => {
+  const root = mount();
+  renderStrip(root, stripProps({ compact: false }));
+  for (const id of ['btn-hint', 'btn-route', 'btn-auto']) assert.ok(maybeById(root, id), id);
+  assert.equal(maybeById(root, 'btn-thread'), undefined);
+  assert.equal(maybeById(root, 'thread-panel'), undefined);
+});
+
+test('on a phone the thread is one Thread button whose panel, shut until asked, holds Hint, Route and Auto', () => {
+  const root = mount();
+  const asked: boolean[] = [];
+  renderStrip(root, stripProps({ compact: true, onThread: o => asked.push(o) }));
+  const thread = byId(root, 'btn-thread');
+  assert.equal(thread.getAttribute('aria-expanded'), 'false');
+  assert.equal(thread.getAttribute('aria-controls'), 'thread-panel');
+  assert.equal(byId(root, 'thread-panel').hidden, true);
+  click(thread);
+  assert.deepEqual(asked, [true]);
+  renderStrip(root, stripProps({ compact: true, threadOpen: true, onThread: o => asked.push(o) }));
+  assert.equal(byId(root, 'btn-thread').getAttribute('aria-expanded'), 'true');
+  const panel = byId(root, 'thread-panel');
+  assert.equal(panel.hidden, false);
+  for (const id of ['btn-hint', 'btn-route', 'btn-auto']) {
+    assert.equal(walk(panel).includes(byId(root, id)), true, `${id} is in the panel`);
+    assert.equal(tabsOf(byId(root, id))[0]?.textContent, KEYS[id.slice(4) as Action].label);
+  }
+  click(byId(root, 'btn-thread'));
+  assert.deepEqual(asked, [true, false], 'a second tap shuts it');
+});
+
+test('a choice in the Thread panel acts, shuts the panel and gives the focus back to Thread', () => {
+  const root = mount();
+  const seen: string[] = [];
+  renderStrip(root, stripProps({
+    compact: true, threadOpen: true, onThread: o => seen.push(`open:${o}`),
+    onHint: () => seen.push('hint'), onRoute: () => seen.push('route'), onAuto: () => seen.push('auto'),
+  }));
+  for (const id of ['btn-hint', 'btn-route', 'btn-auto']) {
+    globalThis.__focused = null;
+    click(byId(root, id));
+    assert.equal(globalThis.__focused, byId(root, 'btn-thread'), id);
+  }
+  assert.deepEqual(seen, ['hint', 'open:false', 'route', 'open:false', 'auto', 'open:false']);
+});
+
+test('the Thread button shows on while the route is drawn or the play-out runs, and the panel shows which', () => {
+  const root = mount();
+  renderStrip(root, stripProps({ compact: true }));
+  assert.equal(byId(root, 'btn-thread').className, 'thread-btn');
+  renderStrip(root, stripProps({ compact: true, route: true }));
+  assert.equal(byId(root, 'btn-thread').className, 'thread-btn on');
+  assert.match(byId(root, 'btn-thread').getAttribute('aria-label') ?? '', /drawn/);
+  renderStrip(root, stripProps({ compact: true, playing: true, threadOpen: true }));
+  assert.equal(byId(root, 'btn-thread').className, 'thread-btn on');
+  assert.match(byId(root, 'btn-thread').getAttribute('aria-label') ?? '', /playing/);
+  assert.equal(byId(root, 'btn-auto').getAttribute('aria-pressed'), 'true');
+  assert.equal(byId(root, 'btn-route').getAttribute('aria-pressed'), 'false');
+});
+
 test('a tool names itself, its count and what it does to a screen reader', () => {
   const root = mount();
   renderStrip(root, stripProps());
@@ -166,10 +236,10 @@ test('a tool names itself, its count and what it does to a screen reader', () =>
 // ---- menu ----
 function menuProps(over: Partial<MenuProps> = {}): MenuProps {
   return {
-    open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', view: 'angled',
+    open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', view: 'angled', pad: 'left',
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onView: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onView: noop, onPad: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 
@@ -179,7 +249,7 @@ test('the menu holds sound and full screen, the story log, how to play and Quit,
   const veil = byId(root, 'menu-veil');
   assert.equal(veil.hidden, false);
   assert.equal(byId(root, 'menu-title').textContent, 'Menu');
-  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'look', 'view', 'walls', 'lore', 'log', 'help', 'quit']);
+  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'look', 'view', 'walls', 'pad', 'lore', 'log', 'help', 'quit']);
   for (const gone of ['seed-form', 'seed-input', 'random-run', 'run-stats']) assert.equal(maybeById(root, gone), undefined, gone);
   assert.equal(walk(veil).some(n => n.className === 'menu-empty'), false, 'a log with lines says nothing of being empty');
   renderMenu(root, menuProps({ log: [] }));

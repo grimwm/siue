@@ -289,7 +289,7 @@ const editor = {
 };
 const looks: string[] = [];
 flow.bindControls({
-  game, toggleMute() {}, toggleMusic() { musics++; }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; },
+  game, toggleMute() {}, toggleMusic() { musics++; }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, setPad(side) { looks.push(`pad:${side}`); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; },
   editor, leftEditor: () => { edits.push('left'); },
 });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
@@ -375,7 +375,7 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   toggled = 0;
   key('q');
   const at = () => document.activeElement?.id;
-  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'look-modern', 'look-classic', 'view-angled', 'view-top', 'walls-solid', 'walls-ghosted', 'walls-low', 'menu-lore', 'quit'];
+  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'look-modern', 'look-classic', 'view-angled', 'view-top', 'walls-solid', 'walls-ghosted', 'walls-low', 'pad-left', 'pad-right', 'menu-lore', 'quit'];
   const first = order.indexOf(at() ?? '');
   assert.ok(first >= 0, `focus is on a menu button, not ${at()}`);
   for (let i = 0; i < 8; i++) key('ArrowUp');
@@ -390,9 +390,9 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   assert.equal(at(), 'fullscreen');
   key('j');
   assert.equal(at(), 'look-modern');
-  for (let i = 0; i < 7; i++) key('j');
+  for (let i = 0; i < 9; i++) key('j');
   assert.equal(at(), 'menu-lore');
-  for (let i = 0; i < 8; i++) key('k');
+  for (let i = 0; i < 10; i++) key('k');
   assert.equal(at(), 'fullscreen');
   key('Enter');
   assert.equal(toggled, 1);
@@ -458,6 +458,83 @@ test('the strip\'s look button names the other look and asks for it; B does the 
   key('b');
   assert.equal(looks.length, 4, 'B waits while the menu is up');
   flow.setLook('modern', 'solid');
+});
+
+/** Sizes the stub's frame as a screen of `w` x `h` (the strip asks it whether it is a phone's). */
+function screen(w: number | undefined, h: number | undefined): void {
+  const frame = document.getElementById('frame');
+  Object.defineProperty(frame, 'clientWidth', { value: w, configurable: true });
+  Object.defineProperty(frame, 'clientHeight', { value: h, configurable: true });
+}
+
+test('Arrows in the menu: Left or Right, the one shown pressed, and a pick asks for that side', () => {
+  reset();
+  looks.length = 0;
+  flow.setPad('left');
+  key('q');
+  const pressed = (id: string) => byId(rootOf('menu'), id).getAttribute('aria-pressed');
+  assert.deepEqual(['pad-left', 'pad-right'].map(pressed), ['true', 'false']);
+  click(byId(rootOf('menu'), 'pad-right'));
+  assert.deepEqual(looks, ['pad:right']);
+  flow.setPad('right');
+  assert.deepEqual(['pad-left', 'pad-right'].map(pressed), ['false', 'true']);
+  flow.setLook('classic', 'solid');
+  assert.ok(byId(rootOf('menu'), 'pad-left'), 'Arrows shows in either look');
+  flow.setLook('modern', 'solid');
+  flow.setPad('left');
+});
+
+test('the frame wears pad-right while the arrows are on the right, and nothing else changes it', () => {
+  const frame = document.getElementById('frame');
+  frame.className = 'kept';
+  flow.setPad('right');
+  assert.deepEqual(frame.className.split(' ').sort(), ['kept', 'pad-right']);
+  flow.setPad('right');
+  assert.deepEqual(frame.className.split(' ').sort(), ['kept', 'pad-right']);
+  flow.setPad('left');
+  assert.equal(frame.className, 'kept');
+  frame.className = '';
+});
+
+test('on a phone the thread is a Thread button: tap opens it, Q or a tap outside shuts it, H V T still answer', () => {
+  reset();
+  screen(390, 844);
+  try {
+    game.open(0);
+    key('Enter');
+    const strip = () => document.getElementById('strip-root')!;
+    assert.equal(maybeById(strip(), 'btn-hint')?.parentNode?.id, 'thread-panel');
+    assert.equal(byId(strip(), 'thread-panel').hidden, true, 'shut until asked');
+    click(byId(strip(), 'btn-thread'));
+    assert.equal(byId(strip(), 'thread-panel').hidden, false);
+    key('q');
+    assert.equal(byId(strip(), 'thread-panel').hidden, true, 'Q shuts the panel');
+    assert.equal(flow.top(), null, 'and opens no menu');
+    assert.equal(document.activeElement, byId(strip(), 'btn-thread'), 'the focus is back on Thread');
+    click(byId(strip(), 'btn-thread'));
+    fireDocument('pointerdown', { target: byId(strip(), 'btn-thread') });
+    assert.equal(byId(strip(), 'thread-panel').hidden, false, 'a tap on Thread itself is its own click');
+    fireDocument('pointerdown', { target: document.getElementById('board') });
+    assert.equal(byId(strip(), 'thread-panel').hidden, true, 'a tap outside shuts it');
+    click(byId(strip(), 'btn-thread'));
+    click(byId(strip(), 'btn-hint'));
+    assert.equal(byId(strip(), 'thread-panel').hidden, true, 'a choice shuts it');
+    const moves = game.run!.now.moves;
+    key('h');
+    assert.equal(game.run!.now.moves, moves + 1, 'H takes a step');
+    key('v');
+    assert.equal(byId(strip(), 'btn-thread').className, 'thread-btn on', 'V draws the route, and Thread shows it');
+    key('t');
+    assert.equal(game.playing, true, 'T plays it out');
+    key('t');
+    screen(1280, 800);
+    flow.render(game);
+    assert.equal(maybeById(strip(), 'btn-thread'), undefined, 'a wide screen has no Thread button');
+    assert.ok(byId(strip(), 'btn-hint'));
+  } finally {
+    screen(undefined, undefined);
+    game.stop();
+  }
 });
 
 test('Play opens the new-game card: a picked look is drawn at once, Enter the halls opens the chapter card, Back the title', () => {

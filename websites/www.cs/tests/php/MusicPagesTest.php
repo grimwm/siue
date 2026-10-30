@@ -455,6 +455,31 @@ final class MusicPagesTest extends TestCase
         self::assertSame(201, $this->pages->notes($this->postWithToken($id), music_sealed(MUSIC_FP_CURRENT, $room - 38))->status, 'exactly the room fits');
     }
 
+    public function testANoteRefusedForTheSharedSpaceSaysSo(): void
+    {
+        $dir = $this->dir . '-pool';
+        [$pages, $sessions, $storeFor] = music_pages($this->db, $dir, $this->clock, self::BASE, '{"max_shared_bytes": 600000}');
+        $id = (int) (new Music\Accounts($this->db, $this->clock, Admin\People::fromJson('{}')))->signIn('pool@siue.edu');
+        $storeFor($id)->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
+        $in = music_signed_in($sessions, $id);
+        $csrf = json_decode($pages->csrf($in)->body, true)['csrf'];
+        $res = $pages->notes(req(['https' => true, 'method' => 'POST', 'cookies' => $in->cookies, 'headers' => ['x-csrf' => $csrf]]), music_sealed(MUSIC_FP_CURRENT, 700_000 - 38));
+        $body = json_decode($res->body, true);
+        self::assertSame([413, 'over_quota', 600_000], [$res->status, $body['error'], $body['room']]);
+        self::assertSame('The studios\' shared space has 586 KB left. Delete drafts or picked-up notes to make room.', $body['message']);
+    }
+
+    public function testAScoreOnlyStudioShellSaysSoAndTheOwnersDoesNot(): void
+    {
+        $attr = static function (Admin\Response $res): string {
+            preg_match('~<body [^>]*data-score-only="([01])"~', $res->body, $m);
+            return $m[1] ?? 'missing';
+        };
+        self::assertSame('0', $attr($this->pages->index(music_signed_in($this->sessions, $this->account))));
+        [$id] = $this->student('fresh@siue.edu', false);
+        self::assertSame('1', $attr($this->pages->piece(music_signed_in($this->sessions, $id, ['query' => ['id' => 'p']]))));
+    }
+
     public function testAStudioNoteOverOneMegabyteIsTooLarge(): void
     {
         [$id] = $this->student();

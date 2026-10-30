@@ -13,6 +13,11 @@ test('a music piece offers all four views', () => {
   assert.deepEqual(Object.values(TAB_LABELS), ['Story', 'Piano roll', 'Sound picture', 'Sheet music']);
 });
 
+test('a score-only studio draft has no sheet music to show', () => {
+  assert.deepEqual(tabsFor(read('score-v1.json'), { sheet: false }), ['story', 'roll', 'sound']);
+  assert.deepEqual(tabsFor(read('score-v1.json'), { sheet: true }), ['story', 'roll', 'sound', 'sheet']);
+});
+
 test('a sound effect without notes offers the story and the sound picture only', () => {
   assert.deepEqual(tabsFor(read('score-sound-v1.json')), ['story', 'sound']);
 });

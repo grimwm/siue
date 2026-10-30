@@ -119,7 +119,7 @@ went), `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data). Signed out, a pa
 `login.php?next=` (the page, when sign-in may return to it) and a data route answers 401
 `{"error":"signed_out"}`. Each POST's answer carries the next CSRF token. The page shells'
 `<body>` carries `data-note-max` (the largest note), `data-room` (bytes the studio may still
-store), `data-named` (`1` with the allowance) and `data-account-has-key` (`1` once a keyring is stored).
+store), `data-named` (`1` with the allowance), `data-score-only` (`1` when drafts hold a score and no MusicXML) and `data-account-has-key` (`1` once a keyring is stored).
 
 API routes (Bearer key, HTTPS; `lib/KeyGate.php`): an AI key (`lib/AiKeys.php`, the
 `studio_keys` table: per account, at most 10 active, 60 requests a minute, scopes

@@ -232,7 +232,7 @@ final class Pages
                     $note = $store->addNote($body);
                 } catch (NoteRejected $e) {
                     $more = $e->reason === 'over_quota'
-                        ? ['room' => $e->room, 'message' => Usage::refusal($e->room, $this->limitsOf($account)->quotaBytes)]
+                        ? ['room' => $e->room, 'message' => Usage::refusal($e->room, $this->limitsOf($account)->quotaBytes, $e->shared)]
                         : [];
                     return $this->refuseWithToken(self::NOTE_ERRORS[$e->reason] ?? 422, $e->reason, $r, $more);
                 }
@@ -471,7 +471,7 @@ final class Pages
 
     /**
      * The page shell. The body tells the script this studio's largest note (data-note-max), its room in bytes
-     * (data-room), whether its address has the allowance (data-named) and whether its keyring is stored
+     * (data-room), whether its address has the allowance (data-named), whether it stores scores only, with no MusicXML (data-score-only) and whether its keyring is stored
      * (data-account-has-key); each flag is "1" or "0".
      */
     private function shell(int $status, string $title, string $view, string $piece, string $version, string $body, \Admin\Request $r, Store $store, int $account): \Admin\Response
@@ -479,6 +479,7 @@ final class Pages
         $email = (string) $this->accounts->emailOf($account);
         $studio = ' data-note-max="' . $this->limitsOf($account)->maxNoteBytes . '" data-room="' . $store->room() . '"'
             . ' data-named="' . ($this->people->hasAllowance($email) ? '1' : '0') . '"'
+            . ' data-score-only="' . ($this->limitsOf($account)->scoreOnly ? '1' : '0') . '"'
             . ' data-account-has-key="' . ($store->keyring() === null ? '0' : '1') . '"';
         $v = Html::e($this->assetVersion);
         $heading = ($view === 'piece' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>')

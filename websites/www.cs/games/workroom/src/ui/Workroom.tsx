@@ -36,6 +36,7 @@ import type { Clip } from '../player.ts';
 import type { MediaPorts } from '../recorder.ts';
 import type { BuildSound, DraftSound } from '../render/sound.ts';
 import type { Change, Score } from '../score.ts';
+import { pageLimits } from '../studio-limits.ts';
 import { energyLegend, legendFor, pickTab, tabsFor } from '../tabs.ts';
 import type { Tab } from '../tabs.ts';
 import { changeTimes, sectionTimes, tempoMap } from '../tempo.ts';
@@ -84,8 +85,9 @@ const SMALL_CAPS = 'font-display text-xs font-semibold tracking-widest uppercase
 
 export function Workroom(p: WorkroomProps) {
   const { score } = p;
+  const { scoreOnly } = pageLimits();
   const tempo = useMemo(() => tempoMap(score), [score]);
-  const tabs = useMemo(() => tabsFor(score), [score]);
+  const tabs = useMemo(() => tabsFor(score, { sheet: !scoreOnly }), [score, scoreOnly]);
   const uses = useMemo(() => termsIn(score), [score]);
   const stage = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(FALLBACK_WIDTH);
@@ -313,7 +315,7 @@ export function Workroom(p: WorkroomProps) {
             </select>
           </label>
         </header>
-        <Player src={score.audio} rendered={rendered} duration={score.duration} onSeek={seek} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} download={{ piece: score.piece.id, version: p.version, sheet: score.musicxml !== undefined }} />
+        <Player src={score.audio} rendered={rendered} duration={score.duration} onSeek={seek} audioSrc={p.audioSrc} time={time} bar={tempo.barAt(time)} onTime={setTime} clip={clip} onClipDone={() => setClip(null)} seekRef={seekAudio} clipRef={playClip} onPlaying={setPlaying} pauseRef={pauseAudio} download={{ piece: score.piece.id, version: p.version, sheet: score.musicxml !== undefined && !scoreOnly }} />
         {answering ? <AnswerBar score={score} tempo={tempo} version={p.version} time={time} span={span} mode={mode} onMode={changeMode} access={access} onLocked={askUnlock} onFront={() => setSheetOpen(false)} media={p.media ?? null} now={now} busy={sending} send={send} say={setStatus} status={status} draft={draft} onDraft={setDraft} onRecording={r => setRec(was => (was.live === r.live && was.held === r.held ? was : r))} /> : null}
         <div class="flex flex-wrap items-end justify-end gap-x-3 gap-y-2 lg:flex-nowrap">
           <div class="min-w-0 flex-1 basis-full lg:basis-0"><ViewTabs tabs={tabs} tab={tab} onTab={t => { setWanted(t); if (mode === 'pin' || mode === 'energy') changeMode('none'); }} /></div>

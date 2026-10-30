@@ -48,6 +48,8 @@ export interface StripProps {
   onTool: (kind: Tool) => void;
   /** The swap button asks for this look. */
   onLook: (look: Look) => void;
+  /** Opens the menu: a compact strip carries its own Menu button, in thumb reach. */
+  onMenu: () => void;
 }
 
 // In reading order, so the focus goes up, left, right, down; the CSS places them round the centre.
@@ -96,9 +98,9 @@ export function Strip(p: StripProps) {
           <div class="thread thread-fold">
             <button type="button" id="btn-thread" ref={threadBtn} class={threadOn ? 'thread-btn on' : 'thread-btn'}
               aria-expanded={p.threadOpen} aria-controls="thread-panel"
-              aria-label={`Thread${p.playing ? ', playing out' : p.route ? ', route drawn' : ''}`}
+              aria-label={`Hints${p.playing ? ', playing out' : p.route ? ', route drawn' : ''}`}
               title="Ariadne's thread: Hint, Route, Auto" onClick={() => p.onThread(!p.threadOpen)}>
-              Thread
+              Hints
             </button>
             <div id="thread-panel" class="thread-panel" role="group" aria-label="Ariadne's thread" hidden={!p.threadOpen}>
               {helps}
@@ -116,7 +118,8 @@ export function Strip(p: StripProps) {
             </Button>
           ))}
         </div>
-        <div class="view" role="group" aria-label="Look">
+        <div class={p.compact ? 'view with-menu' : 'view'} role="group" aria-label={p.compact ? 'Menu and look' : 'Look'}>
+          {p.compact && <Button id="btn-menu-strip" class="strip-menu" onClick={p.onMenu}>Menu</Button>}
           <Button id="btn-look" title={p.look === 'modern' ? 'Show the classic tiles' : 'Show the modern board'}
             onClick={() => p.onLook(p.look === 'modern' ? 'classic' : 'modern')}>
             {p.look === 'modern' ? 'Classic' : 'Modern'}<Tab action="look" />

@@ -93,7 +93,7 @@ const ROWS: ToolRow[] = TOOL_KINDS.map((kind, i) => ({
 function stripProps(over: Partial<StripProps> = {}): StripProps {
   return {
     tools: ROWS, playing: false, route: false, over: false, look: 'modern', compact: false, threadOpen: false,
-    onThread: noop, onMove: noop, onWait: noop, onUndo: noop, onRestart: noop, onHint: noop, onRoute: noop, onAuto: noop, onTool: noop, onLook: noop, ...over,
+    onThread: noop, onMove: noop, onWait: noop, onUndo: noop, onRestart: noop, onHint: noop, onRoute: noop, onAuto: noop, onTool: noop, onLook: noop, onMenu: noop, ...over,
   };
 }
 
@@ -174,11 +174,13 @@ test('on a wide strip Hint, Route and Auto stand in the strip and there is no Th
   assert.equal(maybeById(root, 'thread-panel'), undefined);
 });
 
-test('on a phone the thread is one Thread button whose panel, shut until asked, holds Hint, Route and Auto', () => {
+test('on a phone the thread is one Hints button whose panel, shut until asked, holds Hint, Route and Auto', () => {
   const root = mount();
   const asked: boolean[] = [];
   renderStrip(root, stripProps({ compact: true, onThread: o => asked.push(o) }));
   const thread = byId(root, 'btn-thread');
+  assert.equal(thread.textContent?.trim(), 'Hints');
+  assert.match(thread.getAttribute('aria-label') ?? '', /^Hints/);
   assert.equal(thread.getAttribute('aria-expanded'), 'false');
   assert.equal(thread.getAttribute('aria-controls'), 'thread-panel');
   assert.equal(byId(root, 'thread-panel').hidden, true);
@@ -549,4 +551,18 @@ test('the Lore book closes with a button tabbed with Q', () => {
   assert.equal(tabsOf(byId(root, 'lore-close'))[0]?.textContent, KEYS.menu.label);
   click(byId(root, 'lore-close'));
   assert.equal(closed, 1);
+});
+
+test('a compact strip carries Menu between Hints and the look swap; a wide strip leaves Menu to the status bar', () => {
+  const root = mount();
+  let opened = 0;
+  renderStrip(root, stripProps({ compact: true, onMenu: () => { opened++; } }));
+  const menu = byId(root, 'btn-menu-strip');
+  assert.equal(menu.textContent?.trim(), 'Menu');
+  click(menu);
+  assert.equal(opened, 1);
+  const view = menu.parentElement!;
+  assert.deepEqual([...view.children].map(c => (c as { id?: string }).id), ['btn-menu-strip', 'btn-look'], 'Menu sits left of the look swap');
+  renderStrip(root, stripProps({ compact: false }));
+  assert.equal(maybeById(root, 'btn-menu-strip'), undefined);
 });

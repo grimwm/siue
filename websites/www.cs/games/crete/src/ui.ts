@@ -757,6 +757,7 @@ export function createUi(deps: UiDeps): Ui {
         threadOpen = open;
         drawStrip(g);
       },
+      onMenu: () => layers.open("menu"),
       look,
       onMove: (dir) => act(() => {
         layers.close("start");

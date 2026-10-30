@@ -324,6 +324,24 @@ test('a finger swipe moves Theseus and leaves the camera\'s turn alone', async (
   expect(errors).toEqual([]);
 });
 
+test('the page opens in the saved view at once: on a slow computer Top-down draws no more frames than Angled', async ({ browser }) => {
+  // A slow CPU, where every frame drawn on load shows (an eased tilt from 45° drew several).
+  const frames: Record<string, number> = {};
+  for (const view of ['angled', 'top']) {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: 6 });
+    await page.addInitScript(v => localStorage.setItem('crete-view', v), view);
+    await page.goto(PAGE);
+    await page.waitForFunction(() => { const m = (window as unknown as Hooked).__creteTest.modern; return !!m && m.frames() > 0; }, null, { timeout: 60_000 });
+    await page.waitForTimeout(3000);
+    frames[view] = await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.frames());
+    expect(await page.evaluate(() => Math.round((window as unknown as Hooked).__creteTest.modern!.pitch()))).toBe(view === 'top' ? 75 : 45);
+    await ctx.close();
+  }
+  expect(frames.top, `frames on load: ${JSON.stringify(frames)}`).toBeLessThanOrEqual(frames.angled!);
+});
+
 test('a new player starts in Top-down: 75°, square to the board, no turn buttons and no Walls choice', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(PAGE);

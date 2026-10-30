@@ -467,6 +467,12 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     if (v === viewing) return;
     viewing = v;
     goal.yaw = nearestYaw(VIEW_YAW[v], cur.yaw);
+    // Before a level is built the view is the saved one, not a change to show: no eased frames to draw.
+    if (!last) {
+      goal.pitch = PITCHES[v];
+      cur.yaw = goal.yaw;
+      cur.pitch = goal.pitch;
+    }
     controls.setTurnable(v !== 'top');
     aimWalls = shadowsDirty = true;
     invalidate();

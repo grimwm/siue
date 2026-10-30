@@ -88,17 +88,31 @@ button:disabled { opacity: 0.45; cursor: default; }
   min-width: 0;
   min-height: 0;
   display: grid;
-  place-items: center;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   padding: 6px;
   overflow: hidden;
 }
-/* A big level (more than 12 in a direction) keeps cells of at least 32px and scrolls inside the board; src/ui.ts
-   follows the player. The canvas is centred on the axis where it fits. */
-.board.scrolls { display: flex; overflow: auto; scrollbar-width: none; overscroll-behavior: contain; }
-.board.scrolls::-webkit-scrollbar { display: none; }
-.board.scrolls .stage { flex: none; margin: auto; }
+/* The classic board's view fills the board's space and centres the canvas, which src/ui.ts fits to show the whole
+   level. Zoomed in (src/zoom.ts) the canvas is bigger than the view, which scrolls, without bars, to follow the player
+   and under a two-finger or right-button drag. */
+.stage-view {
+  grid-area: 1 / 1;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+}
+.stage-view.scrolls { display: flex; overflow: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.stage-view.scrolls::-webkit-scrollbar { display: none; }
+.stage-view.scrolls .stage { flex: none; margin: auto; }
+/* The classic board's zoom buttons wear the modern camera buttons' look, over the view and not scrolling with it. */
+.board > .classic-overlay { grid-area: 1 / 1; position: relative; inset: auto; }
+.board.look-modern .stage-view, .board.look-modern .classic-overlay { display: none; }
 /* The board is a canvas: src/ui.ts has it sized in whole device pixels (src/board.ts) to the largest cell that
-   fits, and the browser never rescales it. */
+   shows the whole level, or to the zoomed cell, and the browser never rescales it. */
 .stage {
   display: block;
   image-rendering: auto;
@@ -108,7 +122,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 /* The modern look (src/main.ts) hides the classic canvas: its own canvas and the layer over it fill the board's
    space inside the board's padding, and nothing scrolls. */
-.board.look-modern .stage { display: none; }
 .board:not(.look-modern) .modern-area { display: none; }
 .modern-area {
   position: absolute;

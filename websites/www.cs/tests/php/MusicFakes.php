@@ -34,7 +34,7 @@ function music_draft_bundle(array $files): string
 function music_store_of(PDO $db, string $dir, Admin\Clock $clock, string $email = Admin\Auth::OWNER, string $people = '{}'): array
 {
     $named = Admin\People::fromJson($people) ?? throw new InvalidArgumentException('bad people JSON');
-    $accounts = new Music\Accounts($db, $clock, $named);
+    $accounts = new Music\Accounts($db, $clock, $named, $dir);
     $id = $accounts->signIn($email) ?? throw new RuntimeException("no account for $email");
     $store = new Music\Store($db, $dir, $clock, $id, Music\Limits::for($named, $email), $accounts);
     return [$store, $accounts, $id];
@@ -76,7 +76,7 @@ function music_admin_signed_in(Admin\Sessions $admin, array $over = []): Admin\R
 function music_store_for(PDO $db, string $dir, Admin\Clock $clock, string $people = '{}'): Closure
 {
     $named = Admin\People::fromJson($people) ?? throw new InvalidArgumentException('bad people JSON');
-    $accounts = new Music\Accounts($db, $clock, $named);
+    $accounts = new Music\Accounts($db, $clock, $named, $dir);
     return static fn(int $account): Music\Store => new Music\Store($db, $dir, $clock, $account, Music\Limits::for($named, (string) $accounts->emailOf($account)), $accounts);
 }
 
@@ -87,10 +87,10 @@ function music_store_for(PDO $db, string $dir, Admin\Clock $clock, string $peopl
 function music_pages(PDO $db, string $dir, Admin\Clock $clock, string $base, string $people = '{}'): array
 {
     $named = Admin\People::fromJson($people) ?? throw new InvalidArgumentException('bad people JSON');
-    $accounts = new Music\Accounts($db, $clock, $named);
+    $accounts = new Music\Accounts($db, $clock, $named, $dir);
     $storeFor = music_store_for($db, $dir, $clock, $people);
     $sessions = new Admin\Sessions($db, $clock, Admin\Realm::studio($base));
-    return [new Music\Pages($storeFor, $accounts, $named, $sessions, '0123456789', $base), $sessions, $storeFor, $accounts];
+    return [new Music\Pages($storeFor, $accounts, $named, $sessions, '0123456789', $base, new Music\AiKeys($db, $clock)), $sessions, $storeFor, $accounts];
 }
 
 /** A locked keyring envelope of the pinned shape (Music\Keyring), random inside. */

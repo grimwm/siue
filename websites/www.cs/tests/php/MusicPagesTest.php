@@ -570,10 +570,10 @@ final class MusicPagesTest extends TestCase
     {
         $piece = $this->pages->piece(music_signed_in($this->sessions, $this->account, ['query' => ['id' => 'ch1-labyrinth']]));
         self::assertConsoleShell($piece->body);
-        self::assertStringContainsString('<header class="console-head"><p class="crumb"><a href="./">All pieces</a></p><div id="theme-switch"></div></header>', $piece->body);
+        self::assertStringContainsString('<header class="console-head"><p class="crumb"><a href="./">All pieces</a></p><p class="crumb"><a href="studio.php">Your studio</a></p><div id="theme-switch"></div></header>', $piece->body);
         $index = $this->pages->index(music_signed_in($this->sessions, $this->account));
         self::assertConsoleShell($index->body);
-        self::assertStringContainsString('<header class="console-head"><h1>Music workroom</h1><div id="theme-switch"></div></header>', $index->body);
+        self::assertStringContainsString('<header class="console-head"><h1>Music workroom</h1><p class="crumb"><a href="studio.php">Your studio</a></p><div id="theme-switch"></div></header>', $index->body);
         self::assertStringContainsString('<div class="index-body"><p class="waiting-total">', $index->body);
     }
 

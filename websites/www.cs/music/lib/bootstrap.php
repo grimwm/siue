@@ -123,7 +123,7 @@ function music_run(string $kind, callable $route): void
             $res = $route(new Music\Api($storeFor, $gate), $r);
         } else {
             $sessions = new Admin\Sessions($db, $clock, studio_realm());
-            $res = $route(new Music\Pages($storeFor, $accounts, $people, $sessions, music_asset_version(), $base), $r);
+            $res = $route(new Music\Pages($storeFor, $accounts, $people, $sessions, music_asset_version(), $base, new Music\AiKeys($db, $clock)), $r);
         }
     } catch (Admin\StorageUnavailable | PDOException $e) {
         error_log('music: storage unavailable: ' . $e->getMessage());

@@ -28,7 +28,8 @@ final class Pages
     /**
      * $storeFor: fn(int $account): Store, the studio of one account; $sessions: the studio realm's sessions;
      * $assetVersion: 10 hex over games/workroom/dist's workroom.js, sheet.js, theme.js and workroom.css (the ?v= on
-     * each; the script passes it on to sheet.js); $baseUrl: admin_base_url(), the studio's folder sits beside it.
+     * each; the script passes it on to sheet.js); $baseUrl: admin_base_url(), the studio's folder sits beside it;
+     * $aiKeys: every studio's AI keys, of which a page shows and changes only its own account's.
      */
     public function __construct(
         private \Closure $storeFor,
@@ -37,6 +38,7 @@ final class Pages
         private \Admin\Sessions $sessions,
         private string $assetVersion,
         private string $baseUrl,
+        private AiKeys $aiKeys,
     ) {
         $this->login = \Admin\Realm::studio($baseUrl)->baseUrl . 'login.php';
     }
@@ -98,6 +100,121 @@ final class Pages
             }
             return $this->shell(200, 'Music workroom', 'piece', $id, $v, '', $r, $store, $account);
         }, null, self::pieceBack($r));
+    }
+
+    /** GET studio.php: Your studio, a plain page that needs no script. */
+    public function studio(\Admin\Request $r): \Admin\Response
+    {
+        return $this->guarded($r, true, false, fn(Store $store, int $account): \Admin\Response => $this->studioPage(200, $r, $account), 'GET', 'studio.php');
+    }
+
+    /**
+     * POST studio.php: action make-key (label, scopes[]), revoke-key (id) or start-over (confirm, "start over" in any
+     * case and spacing around it), each with the session's token in the csrf field. A new key is shown on this response
+     * only; a revoke or a start over goes back to the page.
+     */
+    public function studioAction(\Admin\Request $r): \Admin\Response
+    {
+        return $this->guarded($r, true, false, function (Store $store, int $account) use ($r): \Admin\Response {
+            $given = $r->post['csrf'] ?? '';
+            if (!is_string($given) || !$this->sessions->checkCsrf($r, $given)) {
+                return $this->studioPage(403, $r, $account, 'This form expired. Try again.');
+            }
+            $field = static fn(string $name): string => is_string($r->post[$name] ?? null) ? $r->post[$name] : '';
+            switch ($field('action')) {
+                case 'make-key':
+                    $scopes = is_array($r->post['scopes'] ?? null) ? array_values($r->post['scopes']) : [];
+                    try {
+                        $key = $this->aiKeys->create($account, $field('label'), $scopes);
+                    } catch (\InvalidArgumentException $e) {
+                        return $this->studioPage(400, $r, $account, $e->getMessage());
+                    }
+                    return $this->studioPage(200, $r, $account, null, ['key' => $key, 'label' => trim($field('label'))]);
+                case 'revoke-key':
+                    $id = $field('id');
+                    if (!ctype_digit($id) || !$this->aiKeys->revoke($account, (int) $id)) {
+                        return $this->studioPage(404, $r, $account, 'No active key of yours has that id.');
+                    }
+                    return Http::finish(new \Admin\Response(303, ['Location' => 'studio.php'], ''));
+                case 'start-over':
+                    if (strtolower(trim($field('confirm'))) !== 'start over') {
+                        return $this->studioPage(400, $r, $account, 'Nothing was deleted. Type start over to confirm.');
+                    }
+                    $this->accounts->startOver($account);
+                    return Http::finish(new \Admin\Response(303, ['Location' => 'studio.php'], ''));
+                default:
+                    return $this->studioPage(400, $r, $account, 'Unknown action.');
+            }
+        }, 'POST', 'studio.php');
+    }
+
+    /**
+     * Your studio: the address, usage of the account's limit, its AI keys with the form that makes one, start over,
+     * and sign out. $error explains a refused form; $made is a key just made, shown here and never again.
+     *
+     * @param array{key: string, label: string}|null $made
+     */
+    private function studioPage(int $status, \Admin\Request $r, int $account, ?string $error = null, ?array $made = null): \Admin\Response
+    {
+        $csrf = Html::e($this->sessions->csrf($r));
+        $hidden = static fn(string $action): string => '<input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="action" value="' . $action . '">';
+        $usage = $this->accounts->usage($account);
+        $quota = $this->limitsOf($account)->quotaBytes;
+        $body = '<h1>Your studio</h1>';
+        if ($error !== null) {
+            $body .= '<p class="error" role="alert">' . Html::e($error) . '</p>';
+        }
+        if ($made !== null) {
+            $body .= '<section class="studio-card newkey" role="status"><h2>Your new AI key: ' . Html::e($made['label']) . '</h2>'
+                . '<code class="secret">' . Html::e($made['key']) . '</code><p>Copy it now: it is not shown again.</p></section>';
+        }
+        $body .= '<section class="studio-card"><address>' . Html::e((string) $this->accounts->emailOf($account)) . '</address>'
+            . '<meter min="0" max="' . $quota . '" value="' . $usage . '">' . Usage::human($usage) . '</meter>'
+            . '<p class="usage">' . Usage::human($usage) . ' of ' . Usage::human($quota) . ' used</p></section>';
+
+        $keys = '';
+        foreach ($this->aiKeys->list($account) as $k) {
+            $words = implode(', ', array_map(static fn(string $s): string => AiKeys::SCOPES[$s] ?? $s, $k['scopes']));
+            $keys .= '<li><strong>' . Html::e($k['label']) . '</strong><p>Permissions: ' . Html::e($words) . '</p>'
+                . '<p>Last used: ' . ($k['last_used_at'] === null ? 'never' : self::when($k['last_used_at'])) . '</p>'
+                . ($k['revoked_at'] === null
+                    ? '<form method="post" action="studio.php">' . $hidden('revoke-key') . '<input type="hidden" name="id" value="' . $k['id'] . '"><button type="submit">Revoke</button></form>'
+                    : '<p>Revoked ' . self::when($k['revoked_at']) . '</p>')
+                . '</li>';
+        }
+        $checks = '';
+        foreach (AiKeys::SCOPES as $scope => $words) {
+            $checks .= '<label><input type="checkbox" name="scopes[]" value="' . Html::e($scope) . '"> ' . Html::e($words) . '</label>';
+        }
+        $body .= '<section class="studio-card"><h2>AI keys</h2><p>An AI key lets one AI work in your studio with the permissions you give it.</p>'
+            . ($keys === '' ? '<p class="empty">No AI keys yet.</p>' : '<ul class="studio-keys">' . $keys . '</ul>')
+            . '<h3>Make an AI key</h3><form method="post" action="studio.php">' . $hidden('make-key')
+            . '<label for="key-label">Label</label><input id="key-label" type="text" name="label" maxlength="' . AiKeys::LABEL_MAX . '" required>'
+            . '<fieldset><legend>Permissions</legend>' . $checks . '</fieldset><button type="submit">Make key</button></form></section>';
+
+        $body .= '<section class="studio-card"><h2>Start over</h2>'
+            . '<p>Start over deletes every piece, draft and note in your studio, your notes key and your AI keys. Nobody can undo it, and nobody can get them back. Use it if you forgot your passphrase. Type start over to confirm.</p>'
+            . '<form method="post" action="studio.php">' . $hidden('start-over')
+            . '<label for="confirm">Type start over</label><input id="confirm" type="text" name="confirm" autocomplete="off" required>'
+            . '<button type="submit" class="danger">Start over</button></form></section>';
+
+        $body .= '<section class="studio-card studio-signout">'
+            . Html::form('logout.php', ['csrf' => $this->sessions->csrf($r)], 'Sign out', 'quiet')
+            . Html::form('logout.php?all=1', ['csrf' => $this->sessions->csrf($r)], 'Sign out everywhere', 'danger')
+            . '</section>';
+
+        $html = '<!doctype html>' . "\n"
+            . '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="dark light">'
+            . '<title>Your studio</title>' . $this->assets() . '</head>'
+            . '<body data-view="studio"><header class="console-head"><p class="crumb"><a href="./">All pieces</a></p></header>'
+            . '<main class="index-body studio">' . $body . '</main></body></html>';
+        return Http::finish(new \Admin\Response($status, ['Content-Type' => 'text/html; charset=utf-8'], $html));
+    }
+
+    private static function when(int $t): string
+    {
+        return gmdate('Y-m-d H:i', $t) . ' UTC';
     }
 
     /** GET csrf.php: the session's current token. */
@@ -362,7 +479,8 @@ final class Pages
             . ' data-named="' . ($this->people->hasAllowance($email) ? '1' : '0') . '"'
             . ' data-account-has-key="' . ($store->keyring() === null ? '0' : '1') . '"';
         $v = Html::e($this->assetVersion);
-        $heading = $view === 'piece' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>';
+        $heading = ($view === 'piece' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>')
+            . '<p class="crumb"><a href="studio.php">Your studio</a></p>';
         $html = '<!doctype html>' . "\n"
             . '<html lang="en"><head><meta charset="utf-8">'
             . '<meta name="viewport" content="width=device-width, initial-scale=1">'

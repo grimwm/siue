@@ -48,7 +48,11 @@ spent does a full studio answer "The studio is full" and start no session, so th
 tells who has an account. Its sessions are separate from the admin hub's.
 
 Session routes (same-origin, a studio session, the session's own studio): `index.php`,
-`piece.php?id=&v=` (pages); `csrf.php`, `notes.php` (GET list, POST upload), `note.php?id=`,
+`piece.php?id=&v=` (pages); `studio.php` (Your studio, a plain page that needs no script: the address,
+usage of the studio's limit, its AI keys, sign out; POST `action` `make-key` (`label`, `scopes[]`) shows the
+new key once, `revoke-key` (`id`), or `start-over` (`confirm` typed `start over`, any case), each with the
+session's token in a `csrf` field. Start over (`Music\Accounts::startOver`) deletes the AI keys, notes, drafts,
+files and keyring in one transaction; the account and its sessions stay); `csrf.php`, `notes.php` (GET list, POST upload), `note.php?id=`,
 `delete.php` (POST `id`, or `all=1`), `keyring.php` (GET the locked keyring; POST stores
 `{keyring, current, previous}`, the rules `api/keyring.php` keeps), `delete-draft.php` (POST
 `piece` and `v` deletes one draft, `piece` alone the whole piece; 404 `not_found` when none

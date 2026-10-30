@@ -8,7 +8,8 @@ namespace Music;
 
 final class Accounts
 {
-    public function __construct(private \PDO $db, private \Admin\Clock $clock, private \Admin\People $people)
+    /** $dir: the studios' storage (<admin data dir>/music), the folder start over empties; null is the deploy's. */
+    public function __construct(private \PDO $db, private \Admin\Clock $clock, private \Admin\People $people, private ?string $dir = null)
     {
     }
 
@@ -63,6 +64,27 @@ final class Accounts
     {
         $this->db->prepare('INSERT OR IGNORE INTO accounts (email, created_at) VALUES (?, ?)')->execute([\Admin\Auth::OWNER, $this->clock->now()]);
         return (int) $this->idFor(\Admin\Auth::OWNER);
+    }
+
+    /**
+     * Start over: deletes the account's AI keys, then its notes, drafts, files and keyring (Store::wipe), in one
+     * BEGIN IMMEDIATE, so it waits for a publish that holds the lock and removes what that publish wrote. The account,
+     * its sign-in and its sessions stay.
+     */
+    public function startOver(int $account): void
+    {
+        $store = new Store($this->db, $this->dir ?? \Admin\Db::dataDir() . '/music', $this->clock, $account, Limits::for($this->people, (string) $this->emailOf($account)), $this);
+        $this->db->exec('BEGIN IMMEDIATE');
+        try {
+            (new AiKeys($this->db, $this->clock))->deleteAll($account);
+            $store->wipe();
+            $this->db->exec('COMMIT');
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->exec('ROLLBACK');
+            }
+            throw $e;
+        }
     }
 
     /** The account's stored bytes: its drafts as stored plus its sealed notes. */

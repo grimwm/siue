@@ -27,7 +27,7 @@ final class MusicPagesTest extends TestCase
         [$this->store, $db, $this->dir, $clock, , $this->account] = music_world();
         $this->db = $db;
         $this->clock = $clock;
-        $this->sessions = new Admin\Sessions($db, $clock, '/~wgrim/');
+        $this->sessions = new Admin\Sessions($db, $clock, admin_realm(self::BASE));
         $this->keys = new Admin\Keys($db, $clock, null, self::BASE);
         $admin = new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true, $this->keys);
         $this->pages = new Music\Pages($this->store, $admin, $this->sessions, '0123456789', self::BASE);
@@ -51,17 +51,14 @@ final class MusicPagesTest extends TestCase
         self::assertSame([303, $login], [$res->status, $res->headers['Location']]);
     }
 
-    public function testTheWorkroomPagesSendTheBrowserToTheLoginAndBackToThemselves(): void
+    public function testTheWorkroomPagesSendTheBrowserToTheAdminLoginWithoutANext(): void
     {
-        $login = self::BASE . 'login.php?next=';
+        // The admin sign-in returns only to admin pages (Admin\SignIn::safeNext), so a workroom page is not remembered.
+        $login = self::BASE . 'login.php';
         $index = $this->pages->index(req(['https' => true]));
-        self::assertSame([303, $login . rawurlencode('../music/')], [$index->status, $index->headers['Location']]);
-        $piece = $this->pages->piece(req(['https' => true, 'query' => ['id' => 'ch1-labyrinth', 'v' => '3', 'junk' => 'x y']]));
-        self::assertSame([303, $login . rawurlencode('../music/piece.php?id=ch1-labyrinth&v=3')], [$piece->status, $piece->headers['Location']]);
-        $bare = $this->pages->piece(req(['https' => true, 'query' => ['id' => 'ch1-labyrinth']]));
-        self::assertSame($login . rawurlencode('../music/piece.php?id=ch1-labyrinth'), $bare->headers['Location']);
-        $bad = $this->pages->piece(req(['https' => true, 'query' => ['id' => '../../evil', 'v' => 'x']]));
-        self::assertSame(self::BASE . 'login.php', $bad->headers['Location'], 'a piece id that is not one is not remembered');
+        self::assertSame([303, $login], [$index->status, $index->headers['Location']]);
+        $piece = $this->pages->piece(req(['https' => true, 'query' => ['id' => 'ch1-labyrinth', 'v' => '3']]));
+        self::assertSame([303, $login], [$piece->status, $piece->headers['Location']]);
     }
 
     public function testAnApiKeyIsNotASession(): void
@@ -243,7 +240,7 @@ final class MusicPagesTest extends TestCase
     {
         $db = admin_tmp_db();
         $clock = new FakeClock(1_800_000_000);
-        $sessions = new Admin\Sessions($db, $clock, '/~wgrim/');
+        $sessions = new Admin\Sessions($db, $clock, admin_realm(self::BASE));
         $hub = (new Admin\Pages($db, $clock, new MemoryMailer(), self::BASE, static fn(): bool => true))->hub(music_signed_in($sessions));
         self::assertSame(200, $hub->status);
         self::assertStringContainsString('href="../music/"', $hub->body);

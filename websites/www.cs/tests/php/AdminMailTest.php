@@ -119,7 +119,7 @@ final class AdminMailTest extends TestCase
     {
         $dir = admin_tmp_dir();
         try {
-            (new Admin\CaptureMailer($dir))->send('x@siue.edu', 'Hi', 'm');
+            (new Admin\CaptureMailer($dir))->send('x@example.com', 'Hi', 'm');
             self::fail('expected a refusal');
         } catch (RuntimeException $e) {
             self::assertStringContainsString('recipient', $e->getMessage());
@@ -167,7 +167,7 @@ final class AdminMailTest extends TestCase
     {
         $mailer = new Admin\SmtpMailer('127.0.0.1', 1);
         try {
-            $mailer->send('x@siue.edu', 'Hello', 'MIME-Version: 1.0');
+            $mailer->send('x@example.com', 'Hello', 'MIME-Version: 1.0');
             self::fail('expected a refusal');
         } catch (RuntimeException $e) {
             self::assertStringContainsString('recipient', $e->getMessage());

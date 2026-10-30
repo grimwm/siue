@@ -13,16 +13,16 @@ final class AdminAuthTest extends TestCase
     {
         $c ??= new FakeClock(1_000_000);
         $db = admin_tmp_db();
-        return [new Admin\Auth($db, $c), $db, $c];
+        return [new Admin\Auth($db, $c, admin_realm()), $db, $c];
     }
 
     public function testOnlyTheOneAddress(): void
     {
-        foreach (['wgrim@siue.edu', ' WGRIM@siue.edu ', 'Wgrim@SIUE.EDU'] as $ok) self::assertTrue(Admin\Auth::allowed($ok), $ok);
-        foreach (['wgrim@siue.edu.evil.com', 'x@siue.edu', "wgrim@siue.edu\r\nBcc: a@b.c", 'wgrim@siue.edu,x@y.z', '', 'wgrim'] as $bad) {
-            self::assertFalse(Admin\Auth::allowed($bad), $bad);
-        }
         [$a] = $this->auth();
+        foreach (['wgrim@siue.edu', ' WGRIM@siue.edu ', 'Wgrim@SIUE.EDU'] as $ok) self::assertTrue($a->allowed($ok), $ok);
+        foreach (['wgrim@siue.edu.evil.com', 'x@siue.edu', "wgrim@siue.edu\r\nBcc: a@b.c", 'wgrim@siue.edu,x@y.z', '', 'wgrim'] as $bad) {
+            self::assertFalse($a->allowed($bad), $bad);
+        }
         self::assertNull($a->requestLink('someone@siue.edu', '1.2.3.4'));
     }
 

@@ -1,6 +1,6 @@
 <?php
-// Outgoing mail: an SMTP client over implicit TLS for the one allowed address, and a
-// capture mailer that writes each message to a file. Message bodies are never logged.
+// Outgoing mail, from the owner's address to plain @siue.edu addresses only (Address::studio): an SMTP
+// client over implicit TLS, and a capture mailer that writes each message to a file. Message bodies are never logged.
 declare(strict_types=1);
 
 namespace Admin;
@@ -19,7 +19,7 @@ final class SmtpMailer implements Mailer
     public function __construct(
         private string $host = 'smtp.siue.edu',
         private int $port = 465,
-        private string $from = 'wgrim@siue.edu',
+        private string $from = Auth::OWNER,
         private int $timeout = 20,
     ) {
     }
@@ -27,10 +27,7 @@ final class SmtpMailer implements Mailer
     public function send(string $to, string $subject, string $mime): void
     {
         // Every refusal happens before a socket is opened.
-        if (!Auth::allowed($to)) {
-            throw new \RuntimeException('refused: recipient not allowed');
-        }
-        $to = Auth::ALLOWED;
+        $to = Address::studio($to) ?? throw new \RuntimeException('refused: recipient not allowed');
         self::assertSingleLine($to, $this->from, $subject);
         $data = self::stuff(self::data($this->from, $to, $subject, $mime, time()));
 
@@ -152,11 +149,9 @@ final class CaptureMailer implements Mailer
 
     public function send(string $to, string $subject, string $mime): void
     {
-        if (!Auth::allowed($to)) {
-            throw new \RuntimeException('refused: recipient not allowed');
-        }
+        $to = Address::studio($to) ?? throw new \RuntimeException('refused: recipient not allowed');
         $name = $this->dir . '/' . time() . '-' . bin2hex(random_bytes(4)) . '.eml';
-        $eml = SmtpMailer::data(Auth::ALLOWED, $to, $subject, $mime, time());
+        $eml = SmtpMailer::data(Auth::OWNER, $to, $subject, $mime, time());
         if (@file_put_contents($name, $eml) === false) {
             throw new \RuntimeException('capture failed');
         }

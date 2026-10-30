@@ -183,7 +183,7 @@ final class AdminKeysTest extends TestCase
     {
         $db = admin_tmp_db();
         $clock = new FakeClock(1_000_000);
-        $s = new Admin\Sessions($db, $clock, '/');
+        $s = new Admin\Sessions($db, $clock, admin_realm());
         $cookie = $s->start(req());
         $id = explode(';', substr($cookie, strlen(Admin\Sessions::COOKIE) + 1))[0];
         $k = new Admin\Keys($db, $clock, self::SCOPES, self::BASE);

@@ -1,13 +1,14 @@
 # Admin pages
 
 A private area of www.cs.siue.edu/~wgrim for the site owner: a sign-in page, a hub that links to
-dashboards, and a panel for API keys. Nobody but `wgrim@siue.edu` can sign in. Dashboards for
+dashboards, and a panel for API keys. Only named admins sign in: the owner, `wgrim@siue.edu`, and anyone
+the deploy's `admin/config/studio.json` marks `admin` (`lib/People.php`). Dashboards for
 workrooms hang off the hub; the owner's Mac talks to the site with scoped API keys, never with the
 login.
 
 | Page | What it does |
 | --- | --- |
-| `login.php` | Asks for the address and mails a one-time link to the allowed address only. The reply, a `__Secure-admin-pending` cookie included, is the same whoever asks. |
+| `login.php` | Asks for the address and mails a one-time link to a named admin only. The reply, a `__Secure-admin-pending` cookie included, is the same whoever asks. |
 | `verify.php` | Opened in the browser that asked for the link, the mailed link signs in at once and the page moves on to `index.php` (or the page the visit came from). Opened anywhere else, it shows a button; pressing it spends the link and starts a session. |
 | `index.php` | The hub: dashboard links, encryption-key fingerprints (with a "Remove the notes key" control while one is stored), sign out and sign out everywhere. |
 | `keys.php` | Create and revoke scoped API keys. A new key is shown once, and its card in the list is tagged as that key. For `music-publish` and `music-pickup` the page says which active key creating replaces. |
@@ -35,11 +36,18 @@ database elsewhere, but reaches PHP only where the server passes environment thr
   does, behind a CSRF mark tied to a cookie.
 - Sessions are server-side, last 7 days idle and 30 days at most, and survive closing the browser. Cookies are `__Secure-admin*`,
   `Secure`, `HttpOnly`, `SameSite=Strict`, with `Path` taken from `ADMIN_BASE_URL` (`/~wgrim/` on
-  the host). Each sign-in mails the owner a notice.
+  the host). Each sign-in mails a notice to the address that signed in.
+- Realms (`lib/Realm.php`): the sign-in flow (`lib/SignIn.php`) runs in a realm that names who may sign in,
+  its base URL, cookies, tables and hourly limits. The admin realm admits named admins, with
+  `links`, `link_requests`, `devices` and `sessions`. The studio realm, under `music/`, admits any plain
+  `@siue.edu` address (no `+`, no subdomain), with `__Secure-studio*` cookies on `Path=/~wgrim/music/`, the
+  `studio_` tables and an account on each device and session. A link, device or session is looked up only in its
+  own realm's tables, so neither realm opens the other. Mail goes only to plain `@siue.edu` addresses.
 - Requests and limits: every response carries the security headers (`lib/Headers.php`, mirrored in
   `.htaccess`); plain HTTP is refused except for a local base URL; page requests made by a script
-  (`Sec-Fetch-Mode` other than `navigate`) are refused; link requests are rate limited per address,
-  per IP and overall.
+  (`Sec-Fetch-Mode` other than `navigate`) are refused; link requests are rate limited per hour: links
+  overall, requests per IP, links per address, and request rows kept (admin 30 / 20 / 3 / 1000, studio
+  300 / 100 / 3 / 3000, so a class behind one campus address can sign in at once).
 - Mail links are built only from `ADMIN_BASE_URL`, never from the request's Host header. The mail
   capture (`ADMIN_MAIL_CAPTURE_DIR`) works only with a local base URL, a local request host and
   PHP under FPM or its built-in server; otherwise mail goes to `smtp.siue.edu`.

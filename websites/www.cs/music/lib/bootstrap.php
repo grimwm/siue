@@ -98,7 +98,7 @@ function music_run(string $kind, callable $route): void
         $clock = new Admin\SystemClock();
         $store = music_store($db, $clock, (new Music\Accounts($db, $clock, admin_people()))->ownerId());
         $keys = new Admin\Keys($db, $clock, null, $base);
-        $sessions = new Admin\Sessions($db, $clock, admin_cookie_path($base));
+        $sessions = new Admin\Sessions($db, $clock, Admin\Realm::admin(admin_people(), $base));
         $admin = new Admin\Pages($db, $clock, admin_mailer($r->host, null, $base), $base, null, $keys);
         $pages = new Music\Pages($store, $admin, $sessions, music_asset_version(), $base);
         $res = $route($pages, new Music\Api($store, $keys), $r);

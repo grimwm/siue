@@ -1,6 +1,6 @@
 <?php
-// The admin pages' controllers: the sign-in flow, the hub, sign-out and the health probe.
-// Every response is returned with the required headers already applied.
+// The admin pages' controllers: the hub, keys and the health probe, with the sign-in flow (SignIn) in the
+// admin realm, which admits named admins only. Every response is returned with the required headers already applied.
 declare(strict_types=1);
 
 namespace Admin;
@@ -27,11 +27,8 @@ final class Pages
     /** Seconds between live SMTP probes. */
     public const PROBE_EVERY = 600;
 
-    private Auth $auth;
+    private SignIn $signIn;
     private Sessions $sessions;
-    private string $cookiePath;
-    /** @var list<array{to:string,subject:string,mime:string,token:?string}> */
-    private array $queue = [];
     private Keys $keys;
     /** @var callable():bool */
     private $mailProbe;
@@ -43,9 +40,9 @@ final class Pages
     public function __construct(private \PDO $db, private Clock $clock, private Mailer $mailer, private string $baseUrl, ?callable $mailProbe = null, ?Keys $keys = null)
     {
         $this->keys = $keys ?? new Keys($db, $clock, null, $baseUrl);
-        $this->auth = new Auth($db, $clock);
-        $this->cookiePath = admin_cookie_path($baseUrl);
-        $this->sessions = new Sessions($db, $clock, $this->cookiePath);
+        $realm = Realm::admin(admin_people(), $baseUrl);
+        $this->signIn = new SignIn($db, $clock, $mailer, $realm);
+        $this->sessions = new Sessions($db, $clock, $realm);
         $this->mailProbe = $mailProbe ?? self::smtpGreets(...);
     }
 
@@ -64,136 +61,31 @@ final class Pages
     /** GET login.php. */
     public function loginForm(Request $r): Response
     {
-        $next = self::safeNext($r->query['next'] ?? null);
-        $form = '<form method="post" action="login.php">'
-            . ($next === '' ? '' : '<input type="hidden" name="next" value="' . Html::e($next) . '">')
-            . '<label for="email">Email</label>'
-            . '<input id="email" type="email" name="email" autocomplete="username" required>'
-            . '<button type="submit" class="button">Email me a link</button></form>';
-        return self::html(200, 'Sign in', $form);
+        return $this->signIn->loginForm($r);
     }
 
-    /**
-     * POST login.php. The reply is the same whether or not a link was issued, and
-     * whether or not storage failed (the pending cookie included); the mail goes out in flush(), after the reply.
-     */
+    /** POST login.php: the same reply whoever asks; a link goes only to a named admin, in flush(). */
     public function requestLink(Request $r): Response
     {
-        $email = $r->post['email'] ?? '';
-        $mark = bin2hex(random_bytes(32));
-        // Lax, not Strict: the mail app's click is a cross-site navigation, and the cookie must ride along.
-        $pending = self::PENDING_COOKIE . '=' . $mark . '; Max-Age=' . Auth::LINK_TTL . '; ' . Sessions::attributes($this->cookiePath, 'Lax');
-        try {
-            $token = $this->auth->requestLink(
-                is_string($email) ? $email : '',
-                $r->ip,
-                $this->auth->isTrustedDevice(Sessions::deviceToken($r)),
-                hash('sha256', $mark),
-            );
-            if ($token !== null) {
-                $next = self::safeNext($r->post['next'] ?? null);
-                $url = $this->baseUrl . 'verify.php?token=' . $token . ($next === '' ? '' : '&next=' . rawurlencode($next));
-                $mail = MailTemplate::link($url, intdiv(Auth::LINK_TTL, 60));
-                $this->queue[] = ['to' => Auth::ALLOWED, 'subject' => $mail['subject'], 'mime' => $mail['mime'], 'token' => $token];
-            }
-        } catch (\Throwable $e) {
-            error_log('admin: link request failed: ' . get_class($e));
-        }
-        return self::html(200, 'Check your email', Html::p('If that address may sign in, a link is on its way. It works once, for fifteen minutes.'), [$pending]);
+        return $this->signIn->requestLink($r);
     }
 
-    /**
-     * GET verify.php?token=: in the browser that asked for the link, signs in; anywhere else a button
-     * form, and opening the link there never spends it (mail scanners fetch every link).
-     */
+    /** GET verify.php?token=. */
     public function confirm(Request $r): Response
     {
-        return $this->guard(function () use ($r): Response {
-            $token = $r->query['token'] ?? '';
-            if (!is_string($token) || $this->auth->peek($token) === null) {
-                return self::html(403, 'Link not valid', Html::p('This link has expired or was already used. Request a new one.') . '<a class="button" href="login.php">Back to sign in</a>');
-            }
-            $pending = $r->cookies[self::PENDING_COOKIE] ?? null;
-            if (is_string($pending) && $this->auth->peekFor($token, $pending) && $this->auth->consume($token) !== null) {
-                // A page, not a redirect: the session cookie is SameSite=Strict, and a browser drops it on
-                // a navigation whose redirect chain began on another site (the mail client). The page's own
-                // refresh is a same-origin navigation. A meta refresh is not script, so the CSP allows it.
-                $next = self::safeNext($r->query['next'] ?? null) ?: 'index.php';
-                $to = Html::e($next);
-                return self::html(
-                    200,
-                    'Signed in',
-                    Html::p('You are signed in.') . '<a class="button" href="' . $to . '">Continue</a>',
-                    $this->startSession($r, [$this->clearPending()]),
-                    false,
-                    '<meta http-equiv="refresh" content="0;url=' . $to . '">',
-                );
-            }
-            $mark = bin2hex(random_bytes(32));
-            $next = self::safeNext($r->query['next'] ?? null);
-            $form = Html::form('verify.php', ['token' => $token, 'csrf' => $mark] + ($next === '' ? [] : ['next' => $next]), 'Sign in');
-            $cookie = self::CONFIRM_COOKIE . '=' . $mark . '; Max-Age=' . Auth::LINK_TTL . '; ' . Sessions::attributes($this->cookiePath);
-            return self::html(200, 'Confirm sign-in', Html::p('Press the button to finish signing in.') . $form, [$cookie]);
-        });
+        return $this->signIn->confirm($r);
     }
 
-    /** POST verify.php: the form's mark must match its cookie, then the link is spent, a session starts, a notice is queued. */
+    /** POST verify.php. */
     public function signIn(Request $r): Response
     {
-        return $this->guard(function () use ($r): Response {
-            $mark = $r->cookies[self::CONFIRM_COOKIE] ?? null;
-            $given = $r->post['csrf'] ?? null;
-            if (!is_string($mark) || $mark === '' || !is_string($given) || !hash_equals($mark, $given)) {
-                return self::html(403, 'Form expired', Html::p('This form expired. Open the link again.'), [$this->clearConfirm()]);
-            }
-            $token = $r->post['token'] ?? '';
-            if (!is_string($token) || $this->auth->consume($token) === null) {
-                return self::html(403, 'Link not valid', Html::p('This link has expired or was already used. Request a new one.') . '<a class="button" href="login.php">Back to sign in</a>', [$this->clearConfirm()]);
-            }
-            return self::redirect(self::safeNext($r->post['next'] ?? null) ?: 'index.php', $this->startSession($r));
-        });
+        return $this->signIn->signIn($r);
     }
 
-    /**
-     * The steps both sign-in paths share once a link is spent: end the session the browser already
-     * had, start a new one with a trusted-device cookie, clear the one-shot cookies, queue the notice.
-     * Returns the Set-Cookie values.
-     *
-     * @param list<string> $more cookies to set alongside
-     * @return list<string>
-     */
-    private function startSession(Request $r, array $more = []): array
-    {
-        // A browser that already carries a session does not keep it alive beside the new one.
-        $this->sessions->end($r);
-        $cookies = [
-            $this->sessions->start($r),
-            Sessions::deviceCookie($this->auth->issueDevice(), $this->cookiePath),
-            $this->clearConfirm(),
-            ...$more,
-        ];
-        $mail = MailTemplate::notice($this->clock->now(), $r->ip, $r->agent, $this->baseUrl . 'index.php');
-        $this->queue[] = ['to' => Auth::ALLOWED, 'subject' => $mail['subject'], 'mime' => $mail['mime'], 'token' => null];
-        return $cookies;
-    }
-
-    /**
-     * The page to return to after sign-in, else '': index.php or keys.php with an optional query
-     * string, or one of the music workroom's pages, which sits beside the admin folder: its index
-     * (../music/) or a piece page with a query (../music/piece.php?id=...&v=...). Nothing else can
-     * pass: no scheme, host, backslash, control character, fragment or further path separator, so
-     * the value can only ever point at one of those pages.
-     */
+    /** The admin page to return to after sign-in, else '' (SignIn::safeNext): index.php or keys.php with an optional query. */
     public static function safeNext(mixed $next): string
     {
-        if (!is_string($next) || strlen($next) > 300) {
-            return '';
-        }
-        $query = '[A-Za-z0-9_.~%=&,+\-\[\]:]';
-        if (preg_match("/^(?:(?:index|keys)\\.php(?:\\?$query*)?|\\.\\.\\/music\\/|\\.\\.\\/music\\/piece\\.php\\?$query+)$/D", $next) !== 1) {
-            return '';
-        }
-        return $next;
+        return SignIn::safeNext($next, 'admin');
     }
 
     /** The sign-in redirect for a signed-out visit to $page, remembering the page and its query. */
@@ -207,29 +99,13 @@ final class Pages
     /** POST logout.php: ends this session. */
     public function signOut(Request $r): Response
     {
-        return $this->guard(function () use ($r): Response {
-            $refused = $this->refuseSignOut($r);
-            if ($refused !== null) {
-                return $refused;
-            }
-            return self::redirect('login.php', [$this->sessions->end($r)]);
-        });
+        return $this->signIn->signOut($r);
     }
 
-    /** POST logout.php?all=1: ends every session, every unused link and every trusted device. */
+    /** POST logout.php?all=1: ends every admin session, every unused admin link and every admin trusted device. */
     public function signOutEverywhere(Request $r): Response
     {
-        return $this->guard(function () use ($r): Response {
-            $refused = $this->refuseSignOut($r);
-            if ($refused !== null) {
-                return $refused;
-            }
-            $cookie = $this->sessions->end($r);
-            $this->sessions->endAll();
-            $this->auth->forgetAll();
-            $this->auth->forgetDevices();
-            return self::redirect('login.php', [$cookie, Sessions::expireDeviceCookie($this->cookiePath)]);
-        });
+        return $this->signIn->signOutEverywhere($r);
     }
 
     /** GET index.php. */
@@ -383,25 +259,10 @@ final class Pages
         }
     }
 
-    /** Sends the queued mail. A link that cannot be sent is deleted so it cannot be used. */
+    /** Sends the queued mail (SignIn::flush). */
     public function flush(): void
     {
-        $queue = $this->queue;
-        $this->queue = [];
-        foreach ($queue as $m) {
-            try {
-                $this->mailer->send($m['to'], $m['subject'], $m['mime']);
-            } catch (\Throwable $e) {
-                error_log('admin: mail not sent: ' . get_class($e));
-                if ($m['token'] !== null) {
-                    try {
-                        $this->auth->forget($m['token']);
-                    } catch (\Throwable $f) {
-                        error_log('admin: unsent link not removed: ' . get_class($f));
-                    }
-                }
-            }
-        }
+        $this->signIn->flush();
     }
 
     /** The keys page; $newKey is shown once, at the top, with $newId its row in the list; $error explains a refused create. */
@@ -517,9 +378,9 @@ final class Pages
     }
 
     /** @param list<string> $cookies */
-    private static function html(int $status, string $title, string $body, array $cookies = [], bool $script = false, string $head = ''): Response
+    private static function html(int $status, string $title, string $body, array $cookies = [], bool $script = false): Response
     {
-        return self::make($status, Html::page($title, $body, $script, $head), ['Content-Type' => 'text/html; charset=utf-8'], $cookies);
+        return self::make($status, Html::page($title, $body, $script), ['Content-Type' => 'text/html; charset=utf-8'], $cookies);
     }
 
     /** @param list<string> $cookies */
@@ -576,16 +437,6 @@ final class Pages
         } catch (\Throwable $e) {
             return false;
         }
-    }
-
-    private function clearConfirm(): string
-    {
-        return self::CONFIRM_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . Sessions::attributes($this->cookiePath);
-    }
-
-    private function clearPending(): string
-    {
-        return self::PENDING_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . Sessions::attributes($this->cookiePath, 'Lax');
     }
 
     private static function smtpGreets(): bool

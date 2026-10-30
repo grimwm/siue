@@ -102,7 +102,7 @@ music-setup)."
   Delete; Delete, Delete all and Discard (for a note not sent yet) each ask
   first, in plain words. Notes on the server are marked Waiting until they are
   picked up; notes this browser has not sent yet are listed under Not sent yet.
-- **Signing in** from the front page or a piece page returns to it: the pages send `next=../music/` or `next=../music/piece.php?id=...&v=...` to the admin sign-in, whose `safeNext` accepts only those and the admin's own `index.php` and `keys.php`.
+- **Signing in:** a signed-out visit goes to the admin sign-in, which returns only to the admin's own `index.php` or `keys.php` (`Admin\SignIn::safeNext`), so it lands on the hub.
 - **General notes** are written on the front page (`/music/`), under the same
   passphrase, tied to no piece: plain words only, sealed and sent like any other
   note. Their body has piece `general`, draft 1, from 0 to 0, no bars, lane or

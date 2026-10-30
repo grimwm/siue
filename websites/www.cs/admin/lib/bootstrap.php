@@ -7,6 +7,8 @@ require_once __DIR__ . '/Db.php';
 require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Html.php';
 require_once __DIR__ . '/Pages.php';
+require_once __DIR__ . '/SignIn.php';
+require_once __DIR__ . '/Realm.php';
 require_once __DIR__ . '/Request.php';
 require_once __DIR__ . '/Sessions.php';
 require_once __DIR__ . '/Keys.php';

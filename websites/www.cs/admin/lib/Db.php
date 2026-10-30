@@ -25,8 +25,18 @@ final class Db
         'CREATE TABLE IF NOT EXISTS key_hits (key_id INTEGER NOT NULL, at INTEGER NOT NULL)',
         'CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, at INTEGER NOT NULL)',
         'CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, last_sign_in_at INTEGER)',
+        // The studio realm's sign-in tables (Realm::studio): the admin ones' shape, each device and session for one account.
+        'CREATE TABLE IF NOT EXISTS studio_links (token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER, browser_hash TEXT)',
+        'CREATE TABLE IF NOT EXISTS studio_link_requests (id INTEGER PRIMARY KEY, ip TEXT NOT NULL, email TEXT NOT NULL, at INTEGER NOT NULL)',
+        'CREATE TABLE IF NOT EXISTS studio_devices (token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)',
+        'CREATE TABLE IF NOT EXISTS studio_sessions (id_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, created_at INTEGER NOT NULL, seen_at INTEGER NOT NULL, ip TEXT NOT NULL, agent TEXT NOT NULL, csrf_nonce TEXT)',
         'CREATE INDEX IF NOT EXISTS link_requests_at ON link_requests(at)',
         'CREATE INDEX IF NOT EXISTS link_requests_ip_at ON link_requests(ip, at)',
+        'CREATE INDEX IF NOT EXISTS studio_link_requests_at ON studio_link_requests(at)',
+        'CREATE INDEX IF NOT EXISTS studio_link_requests_ip_at ON studio_link_requests(ip, at)',
+        'CREATE INDEX IF NOT EXISTS studio_links_email ON studio_links(email, created_at)',
+        'CREATE INDEX IF NOT EXISTS studio_sessions_account ON studio_sessions(account_id)',
+        'CREATE INDEX IF NOT EXISTS studio_devices_account ON studio_devices(account_id)',
         'CREATE INDEX IF NOT EXISTS key_hits_key_at ON key_hits(key_id, at)',
     ];
 

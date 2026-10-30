@@ -12,8 +12,11 @@ final class Html
         return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
-    /** A complete page: $body is trusted markup built with e(). $script adds the one same-origin script; $head is trusted markup for the head. */
-    public static function page(string $title, string $body, bool $script = false, string $head = ''): string
+    /**
+     * A complete page: $body is trusted markup built with e(). $script adds the one same-origin script; $head is
+     * trusted markup for the head; $stylesheet is the admin stylesheet's path from the page (Realm::$stylesheet).
+     */
+    public static function page(string $title, string $body, bool $script = false, string $head = '', string $stylesheet = 'admin.css'): string
     {
         $t = self::e($title);
         return '<!doctype html>' . "\n"
@@ -22,7 +25,7 @@ final class Html
             . '<meta name="robots" content="noindex, nofollow">'
             . '<meta name="color-scheme" content="dark">'
             . "<title>$t</title>"
-            . '<link rel="stylesheet" href="admin.css">'
+            . '<link rel="stylesheet" href="' . self::e($stylesheet) . '">'
             . ($script ? '<script src="admin.js" defer></script>' : '')
             . $head
             . '</head><body><main class="card">'

@@ -58,7 +58,11 @@ test('Q on the title card opens the menu over it; N there is Play and M still re
   assert.equal(page.top(), 'menu');
   press('q');
   assert.equal(page.top(), 'title');
-  assert.deepEqual(press('n').calls, ['play']);
+  // N is Play: it opens the new-game card, and Enter there goes on.
+  assert.deepEqual(press('n').calls, []);
+  assert.equal(page.top(), 'look');
+  assert.deepEqual(press('Enter').calls, ['play']);
+  page.showTitle(false);
   assert.deepEqual(press('m').calls, ['mute']);
   assert.equal(page.top(), 'title');
   page.showLevels();

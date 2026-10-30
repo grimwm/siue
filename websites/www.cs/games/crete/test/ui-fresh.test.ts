@@ -31,7 +31,9 @@ const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 
 test('Q on the chapter card reached by picking level 1 in a fresh session shows the title, never a blank screen', () => {
   assert.equal(game.run, null);
   flow.showTitle(false);
-  key('n'); // the title's Play is worded N: it opens the chapter card
+  key('n'); // the title's Play is worded N: it opens the new-game card, and Enter there the chapter card
+  assert.equal(flow.top(), 'look');
+  key('Enter');
   assert.equal(flow.top(), 'chapter');
   key('n');
   assert.equal(flow.top(), 'levels');

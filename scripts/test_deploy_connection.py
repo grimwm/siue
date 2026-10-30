@@ -91,6 +91,7 @@ class DeployConnectionTest(unittest.TestCase):
             "SSHPASS_FILE": self.passfile,
             "TMPDIR": self.tmpdir,
             "FAKE_REMOTE": self.remote,
+            "STUDIO_CONFIG": '{"people":[]}',
             **extra,
         }
         return subprocess.run(["bash", DEPLOY], capture_output=True, text=True, env=env, timeout=300)

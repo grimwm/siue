@@ -23,7 +23,7 @@ function tex(size: number, draw: (g: Ctx, s: number) => void, srgb = true): Canv
   const t = new CanvasTexture(cv);
   if (srgb) t.colorSpace = SRGBColorSpace;
   t.wrapS = t.wrapT = RepeatWrapping;
-  t.anisotropy = 4;
+  t.anisotropy = 8;
   return t;
 }
 

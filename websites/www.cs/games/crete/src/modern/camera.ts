@@ -76,28 +76,31 @@ export function nearestYaw(target: number, current: number): number {
   return target + 360 * Math.round((current - target) / 360);
 }
 
-/** Ground rows visible top to bottom by default: more on a tall, narrow screen so the width still fits. */
-export function viewRows(aspect: number): number {
-  return Math.min(14, Math.max(7.5, 7.5 / aspect));
-}
-
 /** The closest view: about five rows. */
 export const ZOOM_MIN = 5;
-/** The farthest view never shows more than this many rows. */
-export const ZOOM_MAX = 22;
 
 export interface ZoomLimits {
   min: number;
   max: number;
 }
 
+/** The whole-level view: the view's height in ground rows that shows all of a `cols` × `rows` level and a cell's
+ *  margin round it, as the camera is turned (`yaw`) and tipped (`pitch`), on a screen `aspect` wide to high. It is
+ *  the view every level opens at, and the one Reset returns to. */
+export function wholeZoom(aspect: number, cols: number, rows: number, pitch: number, yaw: number): number {
+  const y = (yaw * Math.PI) / 180;
+  const cs = Math.abs(Math.cos(y)), sn = Math.abs(Math.sin(y));
+  const w = cols + 2, h = rows + 2;
+  const across = w * cs + h * sn;
+  const deep = (w * sn + h * cs) * sinPitch(pitch);
+  return Math.max(ZOOM_MIN, deep, across / aspect);
+}
+
 /** How far the view may zoom on a `cols` × `rows` level at screen `aspect` and camera `pitch`: in to about five
- *  rows, out until the whole level and a cell's margin fit whichever way the view is turned, but never past 22 rows
- *  nor short of the default view. */
+ *  rows, out until the whole level and a cell's margin fit whichever way the view is turned, however big it is. */
 export function zoomLimits(aspect: number, cols: number, rows: number, pitch: number): ZoomLimits {
-  const d = Math.hypot(cols, rows) + 2;
-  const whole = Math.max(d * sinPitch(pitch), d / aspect);
-  return { min: ZOOM_MIN, max: Math.max(viewRows(aspect), Math.min(ZOOM_MAX, whole)) };
+  const d = Math.hypot(cols + 2, rows + 2);
+  return { min: ZOOM_MIN, max: Math.max(ZOOM_MIN, d * sinPitch(pitch), d / aspect) };
 }
 
 export const clampZoom = (z: number, lim: ZoomLimits): number => Math.max(lim.min, Math.min(lim.max, z));

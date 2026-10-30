@@ -43,6 +43,6 @@ export function createSettings(storage: StorageLike | null): Settings {
     fullscreen: pref<OnOff>(FULLSCREEN_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
     look: pref<Look>(LOOK_KEY, "modern", oneOf<Look>(["modern", "classic"], "modern"), storage),
     walls: pref<WallMode>(WALLS_KEY, "solid", oneOf<WallMode>(["solid", "ghosted", "low"], "solid"), storage),
-    view: pref<View>(VIEW_KEY, "angled", oneOf<View>(["angled", "top"], "angled"), storage),
+    view: pref<View>(VIEW_KEY, "top", oneOf<View>(["angled", "top"], "top"), storage),
   };
 }

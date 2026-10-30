@@ -15,7 +15,7 @@ export interface LookTilesProps {
 }
 
 const LOOKS: { look: Look; name: string; blurb: string; alt: string }[] = [
-  { look: 'modern', name: 'Modern', blurb: 'Painted 3D you can turn and zoom', alt: 'The modern look: a painted, torchlit 3D board' },
+  { look: 'modern', name: 'Modern', blurb: 'Painted, torchlit 3D you can zoom', alt: 'The modern look: a painted, torchlit 3D board' },
   { look: 'classic', name: 'Classic', blurb: 'Flat and top-down; runs on any computer', alt: 'The classic look: the flat, top-down tile board' },
 ];
 

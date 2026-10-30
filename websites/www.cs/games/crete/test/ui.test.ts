@@ -9,6 +9,7 @@ import { asElement, byId, childEl, click, document, installDocument, makeEl, may
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import type { EndCardProps } from '../src/ui/end.tsx';
 import type { TitleCardProps } from '../src/ui/title.tsx';
+import type { LookPickProps } from '../src/ui/look-pick.tsx';
 import type { SharedCardProps } from '../src/ui/shared.tsx';
 import { KEYS } from '../src/keys.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
@@ -30,6 +31,7 @@ import { icedPages } from './puzzle-grid.ts';
 import { SLIDE_MS } from '../src/board-plan.ts';
 import { frameOf } from '../src/game.ts';
 import type { Progress } from '../src/progress.ts';
+import type { Look } from '../src/settings.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
 
@@ -37,13 +39,15 @@ installDocument();
 const ui = await importTsx<{
   end: typeof import('../src/ui/end.tsx');
   title: typeof import('../src/ui/title.tsx');
+  look: typeof import('../src/ui/look-pick.tsx');
   shared: typeof import('../src/ui/shared.tsx');
   page: typeof import('../src/ui.ts');
-}>(import.meta.dirname, { end: '../src/ui/end.tsx', title: '../src/ui/title.tsx', shared: '../src/ui/shared.tsx', page: '../src/ui.ts' });
+}>(import.meta.dirname, { end: '../src/ui/end.tsx', title: '../src/ui/title.tsx', look: '../src/ui/look-pick.tsx', shared: '../src/ui/shared.tsx', page: '../src/ui.ts' });
 (globalThis as { getComputedStyle?: unknown }).getComputedStyle = () => ({ paddingLeft: '0', paddingRight: '0', paddingTop: '0', paddingBottom: '0', display: 'block' });
 // The overlays render into a DOM Element; the stub stands in for one.
 const renderEndCard = (root: StubElement, props: EndCardProps): void => ui.end.renderEndCard(asElement(root), props);
 const renderTitleCard = (root: StubElement, props: TitleCardProps): void => ui.title.renderTitleCard(asElement(root), props);
+const renderLookPick = (root: StubElement, props: LookPickProps): void => ui.look.renderLookPick(asElement(root), props);
 const renderSharedCard = (root: StubElement, props: SharedCardProps & { open: boolean }): void => ui.shared.renderSharedCard(asElement(root), props);
 const render = (vnode: ComponentChildren, root: StubElement): void => preactRender(vnode, renderTarget(root));
 
@@ -161,17 +165,35 @@ test('Story and Settings appear when the page gives them, and call back', () => 
   assert.deepEqual(seen, ['story', 'settings']);
 });
 
-test('the title card has one Look switch that shows the look now drawn and flips it', () => {
+test('the title card leaves the look to the new-game card and the menu', () => {
   const root = makeEl('title-root');
   renderTitleCard(root, { open: true, hint: false, onPlay() {} });
   assert.equal(maybeById(root, 'title-look'), undefined);
-  let flips = 0;
-  renderTitleCard(root, { open: true, hint: false, onPlay() {}, look: 'modern', onLook: () => { flips++; } });
-  assert.equal(byId(root, 'title-look').textContent, 'Look: Modern');
-  click(byId(root, 'title-look'));
-  assert.equal(flips, 1);
-  renderTitleCard(root, { open: true, hint: false, onPlay() {}, look: 'classic', onLook: () => { flips++; } });
-  assert.equal(byId(root, 'title-look').textContent, 'Look: Classic');
+});
+
+test('the new-game card shows both looks as named pictures, the one drawn now picked, with Enter the halls and Back', () => {
+  const root = makeEl('look-root');
+  const seen: string[] = [];
+  const props = { open: true, onLook: (l: Look) => seen.push(l), onEnter: () => seen.push('enter'), onBack: () => seen.push('back') };
+  renderLookPick(root, { ...props, look: 'modern' });
+  assert.equal(byId(root, 'look-title').textContent, 'How should the Labyrinth look?');
+  assert.equal(globalThis.__focused?.id, 'pick-enter');
+  const pressed = (id: string) => byId(root, id).getAttribute('aria-pressed');
+  assert.deepEqual(['pick-modern', 'pick-classic'].map(pressed), ['true', 'false']);
+  for (const [id, name, src] of [['pick-modern', 'Modern', 'fx/looks/modern.jpg'], ['pick-classic', 'Classic', 'fx/looks/classic.jpg']] as const) {
+    const tile = byId(root, id);
+    const img = walk(tile).find(n => n.localName === 'img');
+    assert.equal(img?.getAttribute('src'), src);
+    assert.ok(img?.getAttribute('alt'), `${id} has a description`);
+    assert.ok(tile.textContent.includes(name));
+    // The picture comes before its name.
+    const order = walk(tile).map(n => n.localName === 'img' ? 'img' : n.getAttribute('class') === 'look-name' ? 'name' : '').filter(Boolean);
+    assert.deepEqual(order, ['img', 'name']);
+  }
+  for (const id of ['pick-classic', 'pick-enter', 'pick-back']) click(byId(root, id));
+  assert.deepEqual(seen, ['classic', 'enter', 'back']);
+  renderLookPick(root, { ...props, look: 'classic' });
+  assert.deepEqual(['pick-modern', 'pick-classic'].map(pressed), ['false', 'true']);
 });
 
 test('the title card keeps a slot for the kit install bar', () => {
@@ -381,16 +403,17 @@ test('Music sits beside Sound in the menu, says whether it is on, and asks for i
   key('q');
   assert.equal(flow.top(), 'menu');
   const music = () => byId(rootOf('menu'), 'music');
-  assert.equal(music().textContent, '🎶 Music');
+  assert.equal(music().getAttribute('role'), 'switch');
+  assert.equal(music().getAttribute('aria-checked'), 'true');
   click(music());
   assert.equal(musics, 1);
   flow.setMusic(false);
-  assert.equal(music().textContent, '🎶 Music off');
+  assert.equal(music().getAttribute('aria-checked'), 'false');
   flow.setMusic(true);
-  assert.equal(music().textContent, '🎶 Music');
+  assert.equal(music().getAttribute('aria-checked'), 'true');
 });
 
-test('Look and Walls sit in the menu; Walls show only for the modern look, and the title card flips the look', () => {
+test('Look and Walls sit in the menu; Walls show only for the modern look', () => {
   reset();
   looks.length = 0;
   flow.setLook('modern', 'low');
@@ -402,12 +425,58 @@ test('Look and Walls sit in the menu; Walls show only for the modern look, and t
   assert.deepEqual(looks, ['classic', 'ghosted']);
   flow.setLook('classic', 'low');
   assert.equal(maybeById(rootOf('menu'), 'walls-low'), undefined);
-  flow.closeLayers();
-  flow.showTitle(false);
-  assert.equal(byId(document.getElementById('title-root'), 'title-look').textContent, 'Look: Classic');
-  click(byId(document.getElementById('title-root'), 'title-look'));
-  assert.equal(looks.at(-1), 'modern');
   flow.setLook('modern', 'solid');
+});
+
+test('Play opens the new-game card: a picked look is drawn at once, Enter the halls opens the chapter card, Back the title', () => {
+  reset();
+  looks.length = 0;
+  flow.setLook('modern', 'solid');
+  flow.showTitle(false);
+  click(byId(rootOf('title'), 'title-play'));
+  assert.equal(flow.top(), 'look');
+  click(byId(rootOf('look'), 'pick-modern'));
+  assert.deepEqual(looks, [], 'the look drawn now is not asked for again');
+  click(byId(rootOf('look'), 'pick-classic'));
+  assert.deepEqual(looks, ['classic']);
+  flow.setLook('classic', 'solid');
+  click(byId(rootOf('look'), 'pick-back'));
+  assert.equal(flow.top(), 'title');
+  click(byId(rootOf('title'), 'title-play'));
+  click(byId(rootOf('look'), 'pick-enter'));
+  assert.equal(flow.top(), 'chapter');
+  key('q');
+  assert.equal(flow.top(), 'title', 'Q on the chapter card goes back to the title, not the new-game card');
+  flow.setLook('modern', 'solid');
+});
+
+test('on the new-game card left and right pick a look, Enter goes in and Q goes back', () => {
+  reset();
+  looks.length = 0;
+  flow.setLook('modern', 'solid');
+  flow.showTitle(false);
+  key('n');
+  assert.equal(flow.top(), 'look');
+  key('ArrowRight');
+  assert.deepEqual(looks, ['classic']);
+  flow.setLook('classic', 'solid');
+  key('a');
+  assert.deepEqual(looks, ['classic', 'modern']);
+  flow.setLook('modern', 'solid');
+  key('n');
+  assert.equal(flow.top(), 'look', 'N opens no list over the new-game card');
+  // Space or Enter on a focused picture picks it and stays on the card.
+  looks.length = 0;
+  document.getElementById('pick-classic')!.focus();
+  fireDocument('keydown', { key: ' ', target: document.getElementById('pick-classic') });
+  assert.deepEqual(looks, ['classic']);
+  assert.equal(flow.top(), 'look');
+  flow.setLook('modern', 'solid');
+  key('q');
+  assert.equal(flow.top(), 'title');
+  key('n');
+  key('Enter');
+  assert.equal(flow.top(), 'chapter');
 });
 
 test('left and right in the levels list switch between the released chapters, clamped at the ends', () => {
@@ -452,7 +521,7 @@ test('N on the title card does what Play does, and elsewhere still opens the lis
   reset();
   flow.showTitle(false);
   key('n');
-  assert.equal(flow.top(), 'chapter');
+  assert.equal(flow.top(), 'look');
   reset();
   key('n');
   assert.equal(flow.top(), 'levels');
@@ -1097,11 +1166,12 @@ test('Music in the background sits under Music, says whether it is on, and asks 
   reset();
   key('q');
   const hidden = () => byId(rootOf('menu'), 'music-hidden');
-  assert.equal(hidden().textContent, '🎶 Music in the background: On');
+  assert.ok(hidden().textContent.startsWith('Music in the background'));
+  assert.equal(hidden().getAttribute('aria-checked'), 'true');
   click(hidden());
   assert.equal(backgrounds, 1);
   flow.setBackground(false);
-  assert.equal(hidden().textContent, '🎶 Music in the background: Off');
+  assert.equal(hidden().getAttribute('aria-checked'), 'false');
   flow.setBackground(true);
-  assert.equal(hidden().textContent, '🎶 Music in the background: On');
+  assert.equal(hidden().getAttribute('aria-checked'), 'true');
 });

@@ -89,6 +89,7 @@ async function openHall(page: Page, text = HALL, reducedMotion: 'reduce' | 'no-p
   await page.emulateMedia({ reducedMotion });
   await page.goto(PAGE);
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await page.locator('#chapter-enter').click();
   await expect(page.locator('#start-veil')).toBeVisible();
   await page.evaluate(text => {
@@ -301,6 +302,7 @@ test('without WebGL the classic board shows and the choice stays modern', async 
   await page.goto(PAGE);
   await expect(page.locator('#toast')).toHaveText('The modern look needs WebGL, which this browser does not have; showing Classic.');
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await page.locator('#chapter-enter').click();
   await page.locator('#start-begin').click();
   await expect(page.locator('#stage')).toBeVisible();

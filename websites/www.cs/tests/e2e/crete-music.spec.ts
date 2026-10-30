@@ -41,6 +41,8 @@ test('the title theme plays on the title card and goes on over the chapter card 
     'the loop point\'s second element is readied in the gesture, long before the seam').toBe(2);
 
   await page.locator('#title-play').click();
+
+  await page.locator('#pick-enter').click();
   await expect(page.locator('#chapter-veil')).toBeVisible();
   const onCard = await sounding(page);
   expect(onCard.names, 'the same theme goes on under the chapter card').toEqual(['title']);
@@ -63,11 +65,11 @@ test('Music off is remembered and plays nothing on the title card; Sound stays o
   // Q is a gesture too: the theme starts, so turning Music off has something to stop.
   await page.keyboard.press('q');
   await expect(page.locator('#menu-veil')).toBeVisible();
-  await expect(page.locator('#music')).toHaveText('🎶 Music');
+  await expect(page.locator('#music')).toHaveAttribute('aria-checked', 'true');
   await expect.poll(async () => (await sounding(page)).names, { timeout: 10_000, message: 'the theme plays over the menu' }).toEqual(['title']);
   await page.locator('#music').click();
-  await expect(page.locator('#music')).toHaveText('🎶 Music off');
-  await expect(page.locator('#mute')).toContainText('Sound');
+  await expect(page.locator('#music')).toHaveAttribute('aria-checked', 'false');
+  await expect(page.locator('#mute')).toHaveAttribute('aria-checked', 'true');
   expect(await page.evaluate(() => localStorage.getItem('crete-music'))).toBe('off');
   expect((await sounding(page)).names, 'Music off stops it at once').toEqual([]);
 
@@ -78,5 +80,5 @@ test('Music off is remembered and plays nothing on the title card; Sound stays o
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   expect(await page.evaluate(() => window.__media.length), 'no music element plays while Music is off').toBe(0);
   await page.keyboard.press('q');
-  await expect(page.locator('#music')).toHaveText('🎶 Music off');
+  await expect(page.locator('#music')).toHaveAttribute('aria-checked', 'false');
 });

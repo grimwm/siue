@@ -25,6 +25,7 @@ test('Play shows the chapter card; a page-taking win names the page, and the Lor
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(PAGE);
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await expect(page.locator('#chapter-veil')).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.locator('#start-veil')).toBeVisible();
@@ -89,6 +90,7 @@ test("Chapter 1's closing card goes on to Chapter 2: its opening card, then its 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(PAGE);
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await expect(page.locator('#chapter-veil')).toBeVisible();
   await page.keyboard.press('n');
   await page.locator('#level-10').click();

@@ -31,6 +31,7 @@ async function openTrial1(page: Page): Promise<string[]> {
   await page.goto(PAGE);
   await expect(page.locator('#title-veil')).toBeVisible();
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await expect(page.locator('#chapter-veil'), 'Play opens the chapter card').toBeVisible();
   await expect(page.locator('#chapter-title')).toHaveText('The Outer Halls');
   await page.locator('#chapter-enter').click();
@@ -180,10 +181,10 @@ test('N opens the level list, which has ten levels and ten chapter tabs; M mutes
   await expect(page.locator('#levels-veil')).toBeHidden();
   await page.keyboard.press('m');
   await page.keyboard.press('q');
-  await expect(page.locator('#mute')).toContainText('Muted');
+  await expect(page.locator('#mute')).toHaveAttribute('aria-checked', 'false');
   await page.reload();
   await page.locator('#title-settings').click();
-  await expect(page.locator('#mute')).toContainText('Muted');
+  await expect(page.locator('#mute')).toHaveAttribute('aria-checked', 'false');
   expect(errors).toEqual([]);
 });
 
@@ -204,6 +205,7 @@ test('Enter the halls starts the first level this browser has not cleared', asyn
   await page.evaluate(() => localStorage.setItem('crete-progress', JSON.stringify({ 'trial-1': { cleared: true, best: 20 }, 'trial-2': { cleared: true, best: null } })));
   await page.reload();
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await page.locator('#chapter-enter').click();
   await expect(page.locator('#hud-trial')).toHaveText('3/10');
   await expect(page.locator('#start-veil')).toBeVisible();
@@ -224,6 +226,7 @@ test('a win leads on: Next level shows level 2\'s start card, and the list keeps
   await expect(page.locator('#level-1')).toContainText(cleared);
   await page.reload();
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await page.locator('#chapter-levels').click();
   await expect(page.locator('#level-1')).toContainText(cleared);
   expect(errors).toEqual([]);
@@ -258,6 +261,7 @@ test('Quit in the menu ends the try and shows the title card in a browser tab; P
   await expect(page.locator('#menu-veil')).toBeHidden();
   await expect(page.locator('#title-hint')).toHaveCount(0);
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await expect(page.locator('#chapter-veil')).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -320,12 +324,13 @@ test('Full screen from the menu takes the Esc lock; Esc changes nothing and the 
   await page.addInitScript(pinClassic);
   await page.goto(PAGE);
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await page.locator('#chapter-enter').click();
   await page.keyboard.press('q'); // closes the start card
   await page.keyboard.press('q');
   await page.locator('#fullscreen').click();
   await expect.poll(() => page.evaluate(() => document.fullscreenElement?.id ?? null)).toBe('frame');
-  await expect(page.locator('#fullscreen')).toContainText('Leave full screen');
+  await expect(page.locator('#fullscreen')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#menu-veil'), 'the cards are inside the full screen frame').toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__locks.filter(l => l.keys?.includes('Escape') && l.outcome === 'granted').length)).toBeGreaterThan(0);
   await page.keyboard.press('Escape');

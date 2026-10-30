@@ -40,6 +40,7 @@ import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
 import type { Look, WallMode } from "./settings.ts";
 import { renderTitleCard } from "./ui/title.tsx";
+import { renderLookPick } from "./ui/look-pick.tsx";
 import { ratingText, renderSharedCard } from "./ui/shared.tsx";
 import type { SharedView } from "./share/visit.ts";
 import type { RatingState } from "./share/rating.ts";
@@ -69,7 +70,7 @@ export interface Controls {
   toggleMusic?(): void;
   /** The Music in the background switch, under Music in the menu. */
   toggleBackground?(): void;
-  /** The Look choice (menu and title card). */
+  /** The Look choice (the new-game card and the menu). */
   setLook?(look: Look): void;
   /** The Walls choice, shown while the look is modern. */
   setWalls?(walls: WallMode): void;
@@ -78,7 +79,8 @@ export interface Controls {
   wake(): void;
   /** Leave the game (the menu's Quit). */
   quit(): void;
-  /** Play on the title card: opens the card of the chapter to play on (`Ui.playChapter`). */
+  /** Enter the halls on the new-game card (after the title card's Play): opens the card of the chapter to play on
+   *  (`Ui.playChapter`). */
   play(): void;
   /** Back to the editor from a try: offered in the menu and on the end card while a try is in play. */
   backToEditor?(): void;
@@ -293,6 +295,18 @@ export function createUi(deps: UiDeps): Ui {
     } else open(i);
   }
 
+  /** A look picked on the new-game card: drawn at once and remembered. */
+  function pickLook(l: Look): void {
+    controls?.wake();
+    if (l !== look) controls?.setLook?.(l);
+  }
+
+  /** Enter the halls on the new-game card: the card closes and the chapter card opens over the title. */
+  function enterHalls(): void {
+    layers.close("look");
+    controls?.play();
+  }
+
   /** Enter on the opening card starts the level it was opened for. */
   function enter(): void {
     open(chapterTarget);
@@ -339,15 +353,17 @@ export function createUi(deps: UiDeps): Ui {
       open: layers.isOpen("title"),
       hint: titleHint,
       ...(titleNote ? { note: titleNote } : {}),
-      onPlay: () => controls?.play(),
+      onPlay: () => layers.open("look"),
       onStory: () => layers.open("story"),
       ...(controls?.editor ? { onEditor: showEditor } : {}),
       onSettings: () => layers.open("menu"),
+    });
+    renderLookPick($("look-root"), {
+      open: layers.isOpen("look"),
       look,
-      onLook: () => {
-        controls?.wake();
-        controls?.setLook?.(look === "modern" ? "classic" : "modern");
-      },
+      onLook: pickLook,
+      onEnter: enterHalls,
+      onBack: () => layers.close("look"),
     });
     const card = controls?.shared?.card() ?? null;
     renderSharedCard($("shared-root"), {
@@ -762,11 +778,12 @@ export function createUi(deps: UiDeps): Ui {
         ev.preventDefault();
         return;
       }
-      // The title's Play is worded N: there it opens the chapter card, elsewhere N opens the list.
+      // The title's Play is worded N: there it opens the new-game card, elsewhere N opens the list (not over the
+      // new-game card, which has no list to show).
       if (action === "new") {
         ev.preventDefault();
-        if (layers.isOpen("title")) c.play();
-        else layers.open("levels");
+        if (layers.isOpen("title")) layers.open("look");
+        else if (!layers.isOpen("look")) layers.open("levels");
         return;
       }
       if (action === "mute") {
@@ -843,6 +860,20 @@ export function createUi(deps: UiDeps): Ui {
           pick(firstOf(listed) + Number(chosen[1]) - 1);
           return;
         }
+      }
+      // The new-game card: left and right (or A and D) pick a look; Enter goes in while the focus is on nothing or on
+      // Enter the halls, and otherwise presses the focused picture or Back.
+      if (layers.isOpen("look") && (action === "left" || action === "right")) {
+        ev.preventDefault();
+        const to: Look = action === "left" ? "modern" : "classic";
+        pickLook(to);
+        document.getElementById(`pick-${to}`)?.focus();
+        return;
+      }
+      if (layers.isOpen("look") && action === "begin" && onDefault(focused?.id, "pick-", "pick-enter")) {
+        ev.preventDefault();
+        enterHalls();
+        return;
       }
       // Begin on the chapter card: the opening one starts a level, the closing one goes on. Tabbed to Levels,
       // Enter presses that button instead.

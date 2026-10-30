@@ -134,6 +134,7 @@ const SHOTS: Record<string, Shot> = {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.goto('games/crete/');
       await page.click('#title-play');
+      await page.click('#pick-enter');
       await page.click('#chapter-enter');
       await page.waitForSelector('#start-veil:not([hidden])');
       await page.keyboard.press('n');

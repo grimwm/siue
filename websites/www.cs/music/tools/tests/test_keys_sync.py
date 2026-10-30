@@ -55,7 +55,7 @@ class SyncTest(unittest.TestCase):
         old = self.w.add_key_to_op(0)
         self.w.keys.pull()
         new = self.w.add_key_to_op(1)  # a rotation made on another computer
-        self.w.op.retitle(self.w.op.list_items("siue-music-key")[0]["id"], "SIUE music notes key x (previous)")
+        self.w.op.retitle(self.w.op.list_items("siue-music-key")[0]["id"], "SIUE music notes key (previous)")
         ring = self.w.keys.ensure_synced()
         self.assertEqual(list(ring), [new, old])
         self.assertEqual(self.w.cache.load()["current"], new)

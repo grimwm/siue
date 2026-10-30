@@ -95,13 +95,13 @@ value.
 
 ## Named people and caps
 
-The deploy writes `admin/config/studio.json` from the `studio-config` field of the SIUE 1Password item (never from git; the folder is not served). Its shape:
+The deploy writes `admin/config/studio.json` from the `studio-config` field of the Secure Note `SIUE music studio config` in the SIUE 1Password vault (never from git; the folder is not served). The note is optional. Its shape:
 
 ```json
 {"people":[{"email":"a@siue.edu","admin":false,"allowance":false}],"max_accounts":500,"max_shared_bytes":1073741824}
 ```
 
-Each email must be a plain `@siue.edu` address (no `+`); the two caps are optional and default to 500 and 1 GiB. `wgrim@siue.edu` is always an admin with the allowance. A missing or malformed file gives the defaults. `tools/studio-config.php` validates the JSON, and a real deploy without the field stops. After editing the field, run the deploy workflow on `main`.
+Each email must be a plain `@siue.edu` address (no `+`); the two caps are optional and default to 500 and 1 GiB. `wgrim@siue.edu` is always an admin with the allowance. A missing or malformed file gives the defaults: the owner is the only admin, with the allowance, and the caps are 500 accounts and 1 GiB shared. Without the note (or with an empty field) the deploy stages no file and the site runs on those defaults; the deploy workflow loads the note in its own step, so a missing note never stops the deploy. `tools/studio-config.php` validates a field that is set, and an invalid value stops the deploy so a typo cannot silently drop named people. A deploy that stages no file removes the host's earlier `admin/config/studio.json` (the deploy workflow prunes files the last deploy sent that this one does not), so deleting the note returns the site to the defaults. After editing the field, run the deploy workflow on `main`.
 
 ## Run the local smoke test
 

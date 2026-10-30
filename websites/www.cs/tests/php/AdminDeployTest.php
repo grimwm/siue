@@ -132,7 +132,7 @@ final class AdminDeployTest extends TestCase
         self::assertMatchesRegularExpression('#location \^~ /admin/config/ \{ deny all; \}#', $nginx);
     }
 
-    /** the configuration is staged only from STUDIO_CONFIG, and a real deploy without it stops */
+    /** the configuration is staged only from STUDIO_CONFIG; without it the deploy goes on, with an invalid one it stops */
     public function testTheDeployWritesTheConfigOnlyFromTheEnvironment(): void
     {
         $site = escapeshellarg(self::site());
@@ -144,11 +144,16 @@ final class AdminDeployTest extends TestCase
         exec("cd $site && env -u STUDIO_CONFIG LIST=1 ./deploy.sh 2>&1", $without, $code);
         self::assertSame(0, $code);
         self::assertNotContains('admin/config/studio.json', $without);
+        $empty = [];
+        exec("cd $site && STUDIO_CONFIG= LIST=1 ./deploy.sh 2>&1", $empty, $code);
+        self::assertSame(0, $code);
+        self::assertNotContains('admin/config/studio.json', $empty);
         $bad = [];
         exec("cd $site && LIST=1 STUDIO_CONFIG='{\"people\":[{\"email\":\"x@evil.test\"}]}' ./deploy.sh 2>&1", $bad, $code);
         self::assertNotSame(0, $code, 'an invalid configuration stops the deploy');
         $src = (string) file_get_contents(self::site() . '/deploy.sh');
-        self::assertStringContainsString('deploy: STUDIO_CONFIG is not set (the studio-config field of the SIUE 1Password item)', $src);
+        self::assertStringNotContainsString('STUDIO_CONFIG is not set', $src, 'a deploy without the optional configuration goes on');
+        self::assertStringContainsString('deploy: STUDIO_CONFIG is not valid', $src);
     }
 
     /** the admin-data batch makes the folder right after admin/, every line failure-tolerant, 770 before the setgid try */

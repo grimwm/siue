@@ -75,14 +75,24 @@ class LifecycleTest(unittest.TestCase):
             self.w.keys.upload_keyring(Forgetful())
         self.assertIn("did not keep the keyring", str(e.exception))
 
+    def test_items_are_named_by_role_and_only_the_notes_key_has_an_address(self):
+        self.w.keys.api_key_set("music-publish", "a" * 64)
+        self.w.keys.api_key_set("music-pickup", "b" * 64)
+        self.w.keys.ensure_key(self.server)
+        self.assertEqual(sorted(i["title"] for i in self.w.op.list_items("siue-music-api")),
+                         ["SIUE music API key: pickup", "SIUE music API key: publish"])
+        self.assertEqual(self.w.op.list_items("siue-music-key")[0]["title"], "SIUE music notes key")
+        self.assertEqual(self.w.keys.api_secrets(), {"music-publish": "a" * 64, "music-pickup": "b" * 64})
+
     def test_rotate_makes_the_new_key_current_retitles_the_old_and_uploads(self):
         old = self.w.add_key_to_op(0, passphrase="pp")
         new = self.w.keys.rotate(self.server)
         self.assertNotEqual(new, old)
-        titles = {i["title"] for i in self.w.op.list_items("siue-music-key")}
-        self.assertEqual(len(titles), 2)
-        self.assertTrue(any(t.endswith("(previous)") and old[:16] in t for t in titles))
-        self.assertTrue(any(not t.endswith("(previous)") and new[:16] in t for t in titles))
+        titles = sorted(i["title"] for i in self.w.op.list_items("siue-music-key"))
+        self.assertEqual(titles, ["SIUE music notes key", "SIUE music notes key (previous)"])
+        by_fp = {self.w.op.fields(i["id"])["fingerprint"]: i["title"] for i in self.w.op.list_items("siue-music-key")}
+        self.assertEqual(by_fp, {old: "SIUE music notes key (previous)", new: "SIUE music notes key"})
+        self.assertEqual(self.w.op.fields(self.w.keys._item(new)["id"])["fingerprint"], new)
         fresh = self.w.keys.passphrase()
         self.assertNotEqual(fresh, "pp", "a rotation changes the passphrase, so a leaked one stops working")
         [sent] = self.server.uploads

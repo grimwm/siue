@@ -30,6 +30,9 @@ final class Db
         'CREATE TABLE IF NOT EXISTS studio_link_requests (id INTEGER PRIMARY KEY, ip TEXT NOT NULL, email TEXT NOT NULL, at INTEGER NOT NULL)',
         'CREATE TABLE IF NOT EXISTS studio_devices (token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)',
         'CREATE TABLE IF NOT EXISTS studio_sessions (id_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, created_at INTEGER NOT NULL, seen_at INTEGER NOT NULL, ip TEXT NOT NULL, agent TEXT NOT NULL, csrf_nonce TEXT)',
+        // Each account's AI keys (Music\AiKeys): the admin keys' shape, each key for one account.
+        'CREATE TABLE IF NOT EXISTS studio_keys (id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL, label TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)',
+        'CREATE TABLE IF NOT EXISTS studio_key_hits (key_id INTEGER NOT NULL, at INTEGER NOT NULL)',
         'CREATE INDEX IF NOT EXISTS link_requests_at ON link_requests(at)',
         'CREATE INDEX IF NOT EXISTS link_requests_ip_at ON link_requests(ip, at)',
         'CREATE INDEX IF NOT EXISTS studio_link_requests_at ON studio_link_requests(at)',
@@ -38,6 +41,8 @@ final class Db
         'CREATE INDEX IF NOT EXISTS studio_sessions_account ON studio_sessions(account_id)',
         'CREATE INDEX IF NOT EXISTS studio_devices_account ON studio_devices(account_id)',
         'CREATE INDEX IF NOT EXISTS key_hits_key_at ON key_hits(key_id, at)',
+        'CREATE INDEX IF NOT EXISTS studio_keys_account ON studio_keys(account_id)',
+        'CREATE INDEX IF NOT EXISTS studio_key_hits_key_at ON studio_key_hits(key_id, at)',
     ];
 
     private static function store(): \Kit\StoreDir

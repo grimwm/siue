@@ -10,6 +10,8 @@ require_once __DIR__ . '/Http.php';
 require_once __DIR__ . '/Usage.php';
 require_once __DIR__ . '/Keyring.php';
 require_once __DIR__ . '/ScoreRules.php';
+require_once __DIR__ . '/AiKeys.php';
+require_once __DIR__ . '/KeyGate.php';
 require_once __DIR__ . '/Api.php';
 require_once __DIR__ . '/Pages.php';
 
@@ -95,7 +97,8 @@ function music_asset_version(?string $dist = null): string
  * Runs music_early_refusal($kind, ...) FIRST and emits a refusal without opening the database, then builds the
  * database and the controller for $kind, runs $route and emits the response. A 'page' or 'data' route gets
  * Music\Pages on studio sessions, which builds a store only for the account its session names; an 'api' route gets
- * Music\Api on the owner's studio. Storage that is refused becomes the admin 503 page. Session, CSRF and scope
+ * Music\Api, which builds a store only for the account its key serves (Music\KeyGate: an AI key's own account, an
+ * admin key the owner's). Storage that is refused becomes the admin 503 page. Session, CSRF and scope
  * checks live in Music\Pages and Music\Api, per route.
  *
  * @param callable(Music\Pages, Admin\Request): Admin\Response|callable(Music\Api, Admin\Request): Admin\Response $route
@@ -114,10 +117,11 @@ function music_run(string $kind, callable $route): void
         $clock = new Admin\SystemClock();
         $people = admin_people();
         $accounts = new Music\Accounts($db, $clock, $people);
+        $storeFor = static fn(int $account): Music\Store => music_store($db, $clock, $account);
         if ($kind === 'api') {
-            $res = $route(new Music\Api(music_store($db, $clock, $accounts->ownerId()), new Admin\Keys($db, $clock, null, $base), Music\Limits::for($people, Admin\Auth::OWNER), music_library_instruments()), $r);
+            $gate = new Music\KeyGate($db, $clock, new Admin\Keys($db, $clock, null, $base), $accounts, $base);
+            $res = $route(new Music\Api($storeFor, $gate), $r);
         } else {
-            $storeFor = static fn(int $account): Music\Store => music_store($db, $clock, $account);
             $sessions = new Admin\Sessions($db, $clock, studio_realm());
             $res = $route(new Music\Pages($storeFor, $accounts, $people, $sessions, music_asset_version(), $base), $r);
         }

@@ -58,12 +58,21 @@ went), `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data). Signed out, a pa
 `<body>` carries `data-note-max` (the largest note), `data-room` (bytes the studio may still
 store), `data-named` (`1` with the allowance) and `data-account-has-key` (`1` once a keyring is stored).
 
-API routes (Bearer key, HTTPS): `api/notes.php` and `api/note.php?id=` (GET) and
+API routes (Bearer key, HTTPS; `lib/KeyGate.php`): an AI key (`lib/AiKeys.php`, the
+`studio_keys` table: per account, at most 10 active, 60 requests a minute, scopes
+`notes:pickup`, `drafts:publish` and `drafts:delete` only) serves its own account's studio;
+any other key is checked as one of the owner's admin keys and serves the owner's studio.
+`api/notes.php` and `api/note.php?id=` (GET) and
 `api/picked-up.php` (POST) need `notes:pickup`; `api/drafts.php` (GET lists the
-published drafts, newest first; POST publishes one) needs `drafts:publish`;
+published drafts, newest first; POST publishes one, of at most the account's request
+limit: 8 MB with the allowance, 262,208 bytes without; 413 `too_large` above it, 413
+`{"error":"over_quota","room","message"}` past the studio limit) needs `drafts:publish`;
 `api/delete-draft.php?piece=&version=` (POST) needs `drafts:delete` and deletes that
 one draft, its row and files (404 `not_found` when it is not stored, 422 `bad_piece`
-or `bad_version` as for a publish); `api/keyring.php` needs `keys:publish` (POST uploads
+or `bad_version` as for a publish); `api/delete-piece.php?piece=` (POST) needs
+`drafts:delete` and deletes every draft of that piece, answering `{"piece","deleted":<n>}`
+(404 `not_found` when it has none, 422 `bad_piece`); `api/keyring.php` needs `keys:publish`,
+which only the owner's admin keys hold (POST uploads
 `{keyring, current, previous}`; GET answers the stored fingerprints).
 
 ## The look

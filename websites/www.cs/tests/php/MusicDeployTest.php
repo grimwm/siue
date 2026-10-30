@@ -24,7 +24,7 @@ final class MusicDeployTest extends TestCase
     public function testShipsThePagesApiAndLibrary(): void
     {
         $list = self::shipped();
-        foreach (['music/index.php', 'music/piece.php', 'music/notes.php', 'music/delete.php', 'music/keyring.php', 'music/api/note.php', 'music/api/picked-up.php', 'music/api/keyring.php',
+        foreach (['music/index.php', 'music/piece.php', 'music/notes.php', 'music/delete.php', 'music/keyring.php', 'music/api/note.php', 'music/api/picked-up.php', 'music/api/keyring.php', 'music/api/delete-piece.php',
             'music/lib/Store.php', 'music/lib/.htaccess', 'music/.htaccess'] as $f) {
             self::assertContains($f, $list, $f);
         }

@@ -1,8 +1,9 @@
 <?php
 // The API-key routes: pickup of sealed notes, listing, publishing and deleting
-// drafts, and uploading the locked keyring. Every route checks its key and scope
-// first, then the method, then the declared length; deleting one draft is the only
-// delete here.
+// drafts, deleting a piece, and uploading the locked keyring. Every route checks its key and
+// scope first (KeyGate, which names the account the key serves), then the method, then the
+// declared length, and works only in that account's studio. Deleting a draft or a piece are
+// the only deletes here.
 declare(strict_types=1);
 
 namespace Music;
@@ -12,33 +13,42 @@ final class Api
     public const DRAFT_MAGIC = 'SIUED1';
 
 
-    /** @param list<string> $instruments the library's instrument names */
-    public function __construct(private Store $store, private \Admin\Keys $keys, private Limits $limits, private array $instruments)
+    /** @var list<string> */
+    private array $instruments;
+
+    /**
+     * @param \Closure(int): Store $storeFor the studio of an account, with the limits its address has
+     * @param list<string>|null $instruments the library's instrument names; production passes none and reads the library
+     */
+    public function __construct(private \Closure $storeFor, private KeyGate $gate, ?array $instruments = null)
     {
+        $this->instruments = $instruments ?? \music_library_instruments();
     }
 
     public function listNotes(\Admin\Request $r): \Admin\Response
     {
-        if ($res = $this->gate($r, 'notes:pickup', 'GET')) {
-            return $res;
+        $store = $this->gate($r, 'notes:pickup', 'GET');
+        if ($store instanceof \Admin\Response) {
+            return $store;
         }
         $state = $r->query['state'] ?? null;
         if ($state !== null && $state !== 'waiting' && $state !== 'picked-up') {
             return Http::json(400, ['error' => 'bad_state']);
         }
-        return Http::json(200, ['notes' => $this->store->notes($state)]);
+        return Http::json(200, ['notes' => $store->notes($state)]);
     }
 
     public function getNote(\Admin\Request $r): \Admin\Response
     {
-        if ($res = $this->gate($r, 'notes:pickup', 'GET')) {
-            return $res;
+        $store = $this->gate($r, 'notes:pickup', 'GET');
+        if ($store instanceof \Admin\Response) {
+            return $store;
         }
         $id = $this->noteId($r);
         if ($id === null) {
             return Http::json(400, ['error' => 'bad_id']);
         }
-        $bytes = $this->store->noteBytes($id);
+        $bytes = $store->noteBytes($id);
         if ($bytes === null) {
             return Http::json(404, ['error' => 'not_found']);
         }
@@ -47,32 +57,36 @@ final class Api
 
     public function pickedUp(\Admin\Request $r): \Admin\Response
     {
-        if ($res = $this->gate($r, 'notes:pickup', 'POST')) {
-            return $res;
+        $store = $this->gate($r, 'notes:pickup', 'POST');
+        if ($store instanceof \Admin\Response) {
+            return $store;
         }
         $id = $this->noteId($r);
         if ($id === null) {
             return Http::json(400, ['error' => 'bad_id']);
         }
-        return $this->store->markPickedUp($id)
+        return $store->markPickedUp($id)
             ? Http::json(200, ['id' => $id, 'picked_up' => true])
             : Http::json(404, ['error' => 'not_found']);
     }
 
     /**
      * drafts:publish. GET answers the published drafts, newest first. POST ?piece=&version= takes a SIUED1 draft
-     * bundle as the body. $read(int $n) returns the request body's first $n bytes and is called only after the key,
-     * the method and the declared length have passed.
+     * bundle as the body, of at most the account's Limits::maxRequestBytes. $read(int $n) returns the request body's
+     * first $n bytes and is called only after the key, the method and the declared length have passed. A draft that
+     * would pass the studio limit answers 413 with the room left and Usage::refusal's words.
      */
     public function publishDraft(\Admin\Request $r, \Closure $read): \Admin\Response
     {
-        if ($res = $this->gate($r, 'drafts:publish', ['GET', 'POST'])) {
-            return $res;
+        $store = $this->gate($r, 'drafts:publish', ['GET', 'POST']);
+        if ($store instanceof \Admin\Response) {
+            return $store;
         }
         if ($r->method === 'GET') {
-            return Http::json(200, ['drafts' => $this->store->drafts()]);
+            return Http::json(200, ['drafts' => $store->drafts()]);
         }
-        $body = $this->body($r, $read, Store::MAX_REQUEST_BYTES, $res);
+        $limits = $store->limits();
+        $body = $this->body($r, $read, $limits->maxRequestBytes, $res);
         if ($body === null) {
             return $res;
         }
@@ -89,16 +103,19 @@ final class Api
             return Http::json(422, ['error' => 'bad_version']);
         }
         $about = null;
-        $error = $this->checkFiles($files, $piece, (int) $version, $about);
+        $error = $this->checkFiles($files, $piece, (int) $version, $limits, $about);
         if ($error !== null) {
             return Http::json(422, ['error' => $error]);
         }
         try {
-            $this->store->putDraft($piece, (int) $version, $files, $about);
+            $store->putDraft($piece, (int) $version, $files, $about);
         } catch (DraftRejected $e) {
+            if ($e->reason === 'over_quota') {
+                return Http::json(413, ['error' => 'over_quota', 'room' => $e->room, 'message' => Usage::refusal($e->room, $limits->quotaBytes)]);
+            }
             return Http::json(match ($e->reason) {
                 'exists' => 409,
-                'too_large', 'over_quota' => 413,
+                'too_large' => 413,
                 default => 422,
             }, ['error' => $e->reason]);
         }
@@ -108,8 +125,9 @@ final class Api
     /** POST ?piece=&version=, drafts:delete: deletes that one draft, its row and its files. A missing draft answers 404. */
     public function deleteDraft(\Admin\Request $r): \Admin\Response
     {
-        if ($res = $this->gate($r, 'drafts:delete', 'POST')) {
-            return $res;
+        $store = $this->gate($r, 'drafts:delete', 'POST');
+        if ($store instanceof \Admin\Response) {
+            return $store;
         }
         $piece = $r->query['piece'] ?? null;
         $version = $r->query['version'] ?? null;
@@ -119,22 +137,41 @@ final class Api
         if (!Store::validVersion($version)) {
             return Http::json(422, ['error' => 'bad_version']);
         }
-        return $this->store->deleteDraft($piece, (int) $version)
+        return $store->deleteDraft($piece, (int) $version)
             ? Http::json(200, ['piece' => $piece, 'version' => (int) $version, 'deleted' => true])
             : Http::json(404, ['error' => 'not_found']);
     }
 
+    /** POST ?piece=, drafts:delete: deletes every draft of that piece, rows and files, and says how many. None stored answers 404. */
+    public function deletePiece(\Admin\Request $r): \Admin\Response
+    {
+        $store = $this->gate($r, 'drafts:delete', 'POST');
+        if ($store instanceof \Admin\Response) {
+            return $store;
+        }
+        $piece = $r->query['piece'] ?? null;
+        if (!Store::validPieceId($piece)) {
+            return Http::json(422, ['error' => 'bad_piece']);
+        }
+        $deleted = $store->deletePiece($piece);
+        return $deleted > 0
+            ? Http::json(200, ['piece' => $piece, 'deleted' => $deleted])
+            : Http::json(404, ['error' => 'not_found']);
+    }
+
     /**
-     * keys:publish. GET answers the stored fingerprints (never the locked keyring). POST takes
+     * keys:publish, which only the owner's admin keys hold (AiKeys never grants it), so this is the owner's keyring.
+     * GET answers the stored fingerprints (never the locked keyring). POST takes
      * {"keyring": <locked envelope>, "current": <hex>, "previous": [<hex>, ...]}. $read as for publishDraft.
      */
     public function publishKeyring(\Admin\Request $r, \Closure $read): \Admin\Response
     {
-        if ($res = $this->gate($r, 'keys:publish', ['GET', 'POST'])) {
-            return $res;
+        $store = $this->gate($r, 'keys:publish', ['GET', 'POST']);
+        if ($store instanceof \Admin\Response) {
+            return $store;
         }
         if ($r->method === 'GET') {
-            $row = $this->store->keyring();
+            $row = $store->keyring();
             if ($row === null || $row['current'] === '') {
                 return Http::json(404, ['error' => 'no_keyring']);
             }
@@ -148,18 +185,24 @@ final class Api
         if ($parsed === null) {
             return Http::json(422, ['error' => 'bad_keyring']);
         }
-        $this->store->putKeyring($parsed['locked'], $parsed['current'], $parsed['previous']);
+        $store->putKeyring($parsed['locked'], $parsed['current'], $parsed['previous']);
         return Http::json(201, ['uploaded' => true]);
     }
 
-    /** The refusal for a bad key, scope or method (in that order), or null. $methods is one method or the allowed list. */
-    private function gate(\Admin\Request $r, string $scope, string|array $methods): ?\Admin\Response
+    /**
+     * The studio of the account the key serves, or the refusal for a bad key, scope or method (in that order).
+     * $methods is one method or the allowed list.
+     */
+    private function gate(\Admin\Request $r, string $scope, string|array $methods): Store|\Admin\Response
     {
-        $deny = $this->keys->check($r, $scope);
-        if ($deny !== null) {
-            return Http::finish($deny);
+        $account = $this->gate->check($r, $scope);
+        if ($account instanceof \Admin\Response) {
+            return Http::finish($account);
         }
-        return in_array($r->method, (array) $methods, true) ? null : Http::json(405, ['error' => 'method']);
+        if (!in_array($r->method, (array) $methods, true)) {
+            return Http::json(405, ['error' => 'method']);
+        }
+        return ($this->storeFor)($account);
     }
 
     private function noteId(\Admin\Request $r): ?string
@@ -246,7 +289,7 @@ final class Api
      * @param array<string, string> $files
      * @param array{project_id: string, project_name: string, kind: string}|null $about
      */
-    private function checkFiles(array $files, string $piece, int $version, ?array &$about): ?string
+    private function checkFiles(array $files, string $piece, int $version, Limits $limits, ?array &$about): ?string
     {
         if (!isset($files['score.json'])) {
             return 'missing_file';
@@ -259,7 +302,7 @@ final class Api
             || !is_array($score['project'] ?? null)) {
             return 'bad_score';
         }
-        if ($refusal = ScoreRules::check($files, $score, $this->limits, $this->instruments)) {
+        if ($refusal = ScoreRules::check($files, $score, $limits, $this->instruments)) {
             return $refusal;
         }
         $id = $score['project']['id'] ?? null;
@@ -280,7 +323,7 @@ final class Api
             return 'missing_file';
         }
         if (!isset($files['score.musicxml'])) {
-            if ($score['kind'] === 'music' && !$this->limits->scoreOnly) {
+            if ($score['kind'] === 'music' && !$limits->scoreOnly) {
                 return 'missing_file';
             }
         } elseif (!str_contains($files['score.musicxml'], '<score-partwise')) {

@@ -367,6 +367,12 @@ final class Store
         return $bytes === false ? null : $bytes;
     }
 
+    /** What this account may store: the limits its address has. */
+    public function limits(): Limits
+    {
+        return $this->limits;
+    }
+
     /** The bytes this account may still store: the smaller of its own room and, without the allowance, the shared pool's; never below 0. */
     public function room(): int
     {

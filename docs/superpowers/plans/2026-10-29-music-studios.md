@@ -8,7 +8,7 @@
 - The admin sign-in kit becomes realm-aware. One `Admin\Realm` value names a realm's cookies, tables, base URL, who may sign in and its rate limits. The admin realm admits named admins only. The studio realm admits any `@siue.edu` address and lives under `music/` with its own cookie (`__Secure-studio`, Path `/~wgrim/music/`), links, devices and sessions tables, with an account id on each session.
 - An `accounts` table holds one row per address. A one-time migration turns the workroom's single-user tables into per-account tables and gives every existing row and file to the owner's account. `Music\Store` is built for one account and every query names it.
 - Named people (admin flag, allowance flag) and the two caps come from `admin/config/studio.json`. The deploy writes that file from a 1Password field, so no address but the owner's (already public in `Admin\Auth`) is in git.
-- AI keys are a per-account table behind `Music\KeyGate`. The gate resolves an AI key to its account, and an owner's admin API key to the owner's account, so his 1Password publish and pickup flow keeps working.
+- AI keys are a per-account table behind `Music\KeyGate`. The gate resolves an AI key to its account, and an owner's admin API key to the owner's account, so the owner's 1Password publish and pickup flow keeps working.
 - The page makes the notes key in the browser (RSA-4096, locked with PBKDF2-SHA-256 600,000 rounds and AES-GCM). It uploads the key with the session and CSRF.
 
 **Tech Stack:** PHP 8.4 (PDO SQLite, zlib), PHPUnit; TypeScript + Preact (node:test, Web Crypto); Playwright (`make music-e2e`); GitHub Actions (`deploy.yml`) with the 1Password load-secrets action.
@@ -110,7 +110,7 @@
 - The file's shape is `{"people":[{"email":"a@siue.edu","admin":bool,"allowance":bool}],"max_accounts":int,"max_shared_bytes":int}`. The two caps are optional, and each entry's email must pass `Address::studio()`.
 
 - [ ] **Step 1: Write the failing tests** in `AdminPeopleTest`:
-  - `testTheOwnerIsAlwaysAnAdminWithTheAllowance` (no file, an empty list, a list without him);
+  - `testTheOwnerIsAlwaysAnAdminWithTheAllowance` (no file, an empty list, a list without the owner);
   - `testFlagsComeFromTheFile`;
   - `testDefaultsAre500AccountsAndOneGigabyte`: `maxAccounts() === 500` and `maxSharedBytes() === 1_073_741_824`;
   - `testAMalformedFileGivesTheDefaults`: bad JSON, a non-siue address, a `+` address, a negative cap;
@@ -215,7 +215,7 @@
   - Keep the existing column-adding code ahead of it, for databases older than the columns.
   - Room is `min(quota - usage, sharedPool ? max_shared - sharedUsage : PHP_INT_MAX)`, clamped at 0.
 - [ ] **Step 4: Run** the same filter plus `PHPUNIT --filter 'MusicApi|MusicPages'` (callers updated to pass the owner's account for now). Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -m "Music: accounts, per-account storage with limits, the owner's data moved to his account"`
+- [ ] **Step 5: Commit** `git commit -m "Music: accounts, per-account storage with limits, the owner's data moved to the owner's account"`
 
 ### Task 3: Realms in the sign-in kit; the admin hub for named admins only
 

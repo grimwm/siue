@@ -7,8 +7,10 @@ each step starts from. A step with a design but no plan gets its plan written
 ## Crete
 
 The vision and its parts are in `specs/2026-10-16-crete-redesign-vision.md`.
-Live: the shell, the engine, Chapter 1 (ten levels, story pages, the Lore book),
-full keyboard play, the fast solver and the level editor.
+Live: the shell, the engine, Chapters 1 and 2 (ten levels each, story pages, the
+Lore book), full keyboard play and swipes, the fast solver, the level editor,
+the title theme on every screen, and two looks: Modern (painted 3D, Top-down by
+default, or Angled) and Classic, chosen when a new game starts.
 
 1. **Nine new pieces** — design `specs/2026-10-21-crete-pieces-design.md`,
    plan `plans/2026-10-27-crete-pieces.md`. Live in the engine, both solvers,
@@ -22,8 +24,8 @@ full keyboard play, the fast solver and the level editor.
    (Part 2 there). Live on the game page at `games/crete/#edit`: painting,
    Check with Stop and a progress bar, Try it on the full game screen, Share as
    a link and opening a link, with the OPFS solve cache trimmed. The README's
-   "The editor" section describes it. The next step is Chapter 2, built in it.
-3. **Chapters 2 to 10**, one pull request each, built in the editor and
+   "The editor" section describes it.
+3. **Chapters 3 to 10**, one pull request each, built in the editor and
    exported to the repo. Every level passes the difficulty gate
    (`src/puzzle/difficulty.ts`); a level that is winnable but easy is refused.
    Each chapter gets its music once the first piece is done.

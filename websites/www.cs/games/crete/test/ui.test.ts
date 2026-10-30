@@ -32,6 +32,7 @@ import { SLIDE_MS } from '../src/board-plan.ts';
 import { frameOf } from '../src/game.ts';
 import type { Progress } from '../src/progress.ts';
 import type { Look } from '../src/settings.ts';
+import { FEWEST } from '../src/campaign/fewest.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
 
@@ -702,6 +703,18 @@ test('a swipe moves Theseus as a move key does and closes the start card; with a
   assert.equal(flow.top(), 'menu');
   tryAll();
   assert.equal(game.run!.now.moves, before + 1, 'the menu holds swipes');
+});
+
+test('a win sets its moves against the fewest possible, and the level list names each level\'s fewest', () => {
+  reset();
+  win(0);
+  assert.ok(text('end-score').startsWith(`${FEWEST['trial-1']} moves · best possible ${FEWEST['trial-1']} · perfect`), text('end-score'));
+  reset();
+  game.open(0);
+  flow.closeLayers();
+  key('n');
+  const status = (n: number) => byId(document.getElementById('levels-root'), `level-${n}`).textContent;
+  assert.ok(status(2).includes(`not yet · best possible ${FEWEST['trial-2']}`), status(2));
 });
 
 test('Next level carries the Enter tab, and Enter on a won card opens the next level', () => {

@@ -21,6 +21,7 @@ import type { State } from "./puzzle/state.ts";
 import { TOOLS } from "./puzzle/tiles.ts";
 import type { Tool } from "./puzzle/tiles.ts";
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter } from "./campaign/chapters.ts";
+import { FEWEST, againstFewest } from "./campaign/fewest.ts";
 import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
 import { cellFor } from "./fit.ts";
@@ -243,9 +244,11 @@ export function createUi(deps: UiDeps): Ui {
     const first = firstOf(n);
     return CHAPTERS[n - 1]!.levelIds.map((id, i) => {
       const p = progress.get(id);
+      const fewest = FEWEST[id];
+      const target = fewest === undefined ? "" : p.cleared && !p.assisted ? ` · ${againstFewest(p.best!, fewest)}` : ` · best possible ${fewest}`;
       return {
         title: CAMPAIGN_LEVELS.level(first + i).title,
-        status: !p.cleared ? "not yet" : p.assisted ? "cleared with help" : `cleared · best ${p.best}`,
+        status: (!p.cleared ? "not yet" : p.assisted ? "cleared with help" : `cleared · your best ${p.best}`) + target,
       };
     });
   }
@@ -595,14 +598,17 @@ export function createUi(deps: UiDeps): Ui {
         text: how + author, score: [`${s.moves} moves`, help].filter(Boolean).join(" · "),
       };
     }
-    const best = progress.get(LEVEL_IDS[g.trial]!).best;
+    const id = LEVEL_IDS[g.trial]!;
+    const best = progress.get(id).best;
+    const fewest = FEWEST[id];
     // Every page this win took, not only the new ones: a replayed win still shows its page line.
     const titles = CHAPTERS.flatMap((c) => c.lore?.pages ?? []);
     const pages = pagesTaken(s).map((id) => titles.find((p) => p.id === id)?.title ?? id);
     return {
       open: true, won, hasNext: g.trial + 1 < LEVEL_IDS.length, hasLevels: true, pages, kicker: `Level ${chapterOf(g.trial).within + 1} cleared`, title: s.level.title,
       text: how,
-      score: [`${s.moves} moves`, best !== null ? `best ${best}` : "", help].filter(Boolean).join(" · "),
+      score: [`${s.moves} moves`, fewest !== undefined ? againstFewest(s.moves, fewest) : "", best !== null && best !== s.moves ? `your best ${best}` : "", help]
+        .filter(Boolean).join(" · "),
     };
   }
 

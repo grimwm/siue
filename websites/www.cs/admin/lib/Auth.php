@@ -60,7 +60,10 @@ final class Auth
             $this->db->prepare("DELETE FROM {$t}links WHERE expires_at <= :old OR (used_at IS NOT NULL AND created_at <= :since)")
                 ->execute([':old' => $now - self::WINDOW, ':since' => $since]);
 
-            $global = $this->count("SELECT COUNT(*) FROM {$t}link_requests", []);
+            // Links issued in the window: refused requests never use up the overall limit. The request
+            // rows serve the per-IP limit and the row cap.
+            $issued = $this->count("SELECT COUNT(*) FROM {$t}links WHERE created_at > :since", [':since' => $since]);
+            $rows = $this->count("SELECT COUNT(*) FROM {$t}link_requests", []);
             $perIp = $this->count("SELECT COUNT(*) FROM {$t}link_requests WHERE ip = :ip", [':ip' => $ip]);
             $perAddress = $address === null ? 0
                 : $this->count("SELECT COUNT(*) FROM {$t}links WHERE email = :e AND created_at > :since", [':e' => $address, ':since' => $since]);
@@ -68,14 +71,14 @@ final class Auth
             // Every request counts, allowed or not, until its address is over the limit: past it the
             // window already holds, and a flood must not keep growing the table. The address column
             // holds an allowed address in its normal form, never what a refused stranger typed.
-            if ($perIp < $limit['ip'] && $global < $limit['rows']) {
+            if ($perIp < $limit['ip'] && $rows < $limit['rows']) {
                 $this->db->prepare("INSERT INTO {$t}link_requests (ip, email, at) VALUES (:ip, :e, :at)")
                     ->execute([':ip' => $ip, ':e' => $address ?? '', ':at' => $now]);
             }
 
             $token = null;
             if ($address !== null && $perIp < $limit['ip']
-                && ($trustedDevice || ($global < $limit['global'] && $perAddress < $limit['address']))) {
+                && ($trustedDevice || ($issued < $limit['global'] && $perAddress < $limit['address']))) {
                 $token = bin2hex(random_bytes(32));
                 $this->db->prepare("INSERT INTO {$t}links (token_hash, email, created_at, expires_at, used_at, browser_hash) VALUES (:h, :e, :c, :x, NULL, :b)")
                     ->execute([':h' => hash('sha256', $token), ':e' => $address, ':c' => $now, ':x' => $now + self::LINK_TTL, ':b' => $browserHash]);
@@ -215,15 +218,19 @@ final class Auth
         }
     }
 
-    /** Deletes every unused link of the realm, or in the studio only those for $account's address (sign out everywhere). */
+    /**
+     * Spends every unused link of the realm, or in the studio only those for $account's address (sign out
+     * everywhere). Spent, not deleted: they still count against the hour's limits.
+     */
     public function forgetAll(?int $account = null): void
     {
         $t = $this->t;
+        $now = $this->clock->now();
         if ($account !== null && $this->studio()) {
-            $this->db->prepare("DELETE FROM {$t}links WHERE used_at IS NULL AND email = (SELECT email FROM accounts WHERE id = ?)")->execute([$account]);
+            $this->db->prepare("UPDATE {$t}links SET used_at = ? WHERE used_at IS NULL AND email = (SELECT email FROM accounts WHERE id = ?)")->execute([$now, $account]);
             return;
         }
-        $this->db->exec("DELETE FROM {$t}links WHERE used_at IS NULL");
+        $this->db->prepare("UPDATE {$t}links SET used_at = ? WHERE used_at IS NULL")->execute([$now]);
     }
 
     private function studio(): bool

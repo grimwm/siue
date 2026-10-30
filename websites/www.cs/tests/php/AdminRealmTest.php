@@ -208,6 +208,26 @@ final class AdminRealmTest extends TestCase
         self::assertNotNull($a->requestLink('student100@siue.edu', '146.163.1.2'), 'another address of the campus still gets one');
     }
 
+    public function testRefusedRequestsDoNotUseUpTheLinksOverall(): void
+    {
+        $db = admin_tmp_db();
+        $a = new Admin\Auth($db, new FakeClock(1_000_000), self::studioRealm());
+        for ($i = 0; $i < 300; $i++) {
+            self::assertNull($a->requestLink("junk$i@example.com", '203.0.113.' . intdiv($i, 100)));
+        }
+        self::assertSame(300, (int) $db->query('SELECT COUNT(*) FROM studio_link_requests')->fetchColumn());
+        self::assertNotNull($a->requestLink('student@siue.edu', '146.163.9.9'), 'the overall limit counts links issued, not requests');
+    }
+
+    public function testTheOverallLimitCountsLinksIssued(): void
+    {
+        $a = new Admin\Auth(admin_tmp_db(), new FakeClock(1_000_000), self::studioRealm());
+        for ($i = 0; $i < 300; $i++) {
+            self::assertNotNull($a->requestLink("student$i@siue.edu", '146.163.' . intdiv($i, 100) . '.1'), "student $i");
+        }
+        self::assertNull($a->requestLink('student300@siue.edu', '146.163.9.9'), 'link 301 in the hour');
+    }
+
     public function testAStudioLinkNeverOpensAnAdminSessionAndBack(): void
     {
         $db = admin_tmp_db();

@@ -45,7 +45,7 @@ database elsewhere, but reaches PHP only where the server passes environment thr
   own realm's tables, so neither realm opens the other. Mail goes only to plain `@siue.edu` addresses.
 - Requests and limits: every response carries the security headers (`lib/Headers.php`, mirrored in
   `.htaccess`); plain HTTP is refused except for a local base URL; page requests made by a script
-  (`Sec-Fetch-Mode` other than `navigate`) are refused; link requests are rate limited per hour: links
+  (`Sec-Fetch-Mode` other than `navigate`) are refused; link requests are rate limited per hour: links issued
   overall, requests per IP, links per address, and request rows kept (admin 30 / 20 / 3 / 1000, studio
   300 / 100 / 3 / 3000, so a class behind one campus address can sign in at once).
 - Mail links are built only from `ADMIN_BASE_URL`, never from the request's Host header. The mail

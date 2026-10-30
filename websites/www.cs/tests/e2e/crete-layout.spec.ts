@@ -214,6 +214,7 @@ function plusPad({ side, min }: { side: string | null; min: number }) {
   const hubEl = document.querySelector('.pad-hub') as HTMLElement | null;
   if (!hubEl) return ['no centre square'];
   const hub = hubEl.getBoundingClientRect();
+  if (getComputedStyle(hubEl).visibility !== 'visible') probs.push('the centre is not visible');
   const cx = (r: DOMRect) => (r.left + r.right) / 2;
   const cy = (r: DOMRect) => (r.top + r.bottom) / 2;
   if (Math.abs(cx(up) - cx(down)) > 1) probs.push('up is not over down');

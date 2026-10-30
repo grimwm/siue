@@ -861,7 +861,8 @@ export function createUi(deps: UiDeps): Ui {
           return;
         }
       }
-      // The new-game card: left and right (or A and D) pick a look; Enter goes in unless Back has the focus.
+      // The new-game card: left and right (or A and D) pick a look; Enter goes in while the focus is on nothing or on
+      // Enter the halls, and otherwise presses the focused picture or Back.
       if (layers.isOpen("look") && (action === "left" || action === "right")) {
         ev.preventDefault();
         const to: Look = action === "left" ? "modern" : "classic";
@@ -869,7 +870,7 @@ export function createUi(deps: UiDeps): Ui {
         document.getElementById(`pick-${to}`)?.focus();
         return;
       }
-      if (layers.isOpen("look") && action === "begin" && focused?.id !== "pick-back") {
+      if (layers.isOpen("look") && action === "begin" && onDefault(focused?.id, "pick-", "pick-enter")) {
         ev.preventDefault();
         enterHalls();
         return;

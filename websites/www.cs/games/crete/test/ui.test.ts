@@ -465,6 +465,13 @@ test('on the new-game card left and right pick a look, Enter goes in and Q goes 
   flow.setLook('modern', 'solid');
   key('n');
   assert.equal(flow.top(), 'look', 'N opens no list over the new-game card');
+  // Space or Enter on a focused picture picks it and stays on the card.
+  looks.length = 0;
+  document.getElementById('pick-classic')!.focus();
+  fireDocument('keydown', { key: ' ', target: document.getElementById('pick-classic') });
+  assert.deepEqual(looks, ['classic']);
+  assert.equal(flow.top(), 'look');
+  flow.setLook('modern', 'solid');
   key('q');
   assert.equal(flow.top(), 'title');
   key('n');

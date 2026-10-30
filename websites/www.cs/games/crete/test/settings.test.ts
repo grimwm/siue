@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
-import { createSettings, FULLSCREEN_KEY, LOOK_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, SOUND_KEY, WALLS_KEY } from '../src/settings.ts';
+import { createSettings, FULLSCREEN_KEY, LOOK_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, PAD_KEY, SOUND_KEY, WALLS_KEY } from '../src/settings.ts';
 
 test('defaults: sound on, music on, music in the background on, fullscreen off', () => {
   const s = createSettings(memoryStorage());
@@ -63,4 +63,14 @@ test('the look is modern and the walls solid until chosen; a stored choice reads
   assert.deepEqual([createSettings(storage).look.get(), createSettings(storage).walls.get()], ['classic', 'ghosted']);
   const odd = createSettings(memoryStorage({ [LOOK_KEY]: 'flat', [WALLS_KEY]: 'glass' }));
   assert.deepEqual([odd.look.get(), odd.walls.get()], ['modern', 'solid']);
+});
+
+test('the arrows stand on the left until chosen; Right is kept under crete-pad and reads back; an unknown word reads Left', () => {
+  assert.equal(PAD_KEY, 'crete-pad');
+  assert.equal(createSettings(null).pad.get(), 'left');
+  const storage = memoryStorage();
+  createSettings(storage).pad.set('right');
+  assert.equal(storage.data.get(PAD_KEY), 'right');
+  assert.equal(createSettings(storage).pad.get(), 'right');
+  assert.equal(createSettings(memoryStorage({ [PAD_KEY]: 'middle' })).pad.get(), 'left');
 });

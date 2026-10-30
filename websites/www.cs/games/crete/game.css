@@ -207,6 +207,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 .toast.info { border-color: var(--safe); }
 
 /* ---- control strip ---- */
+/* The move pad is a plus round an empty centre, at the strip's left edge, or its right one while the frame wears
+   pad-right (the Arrows setting); the actions take the other side. */
 .strip {
   display: flex;
   align-items: center;
@@ -219,17 +221,39 @@ button:disabled { opacity: 0.45; cursor: default; }
 .pad {
   display: grid;
   grid-template-columns: repeat(3, 44px);
-  grid-template-areas: ". up ." "left down right";
+  grid-template-areas: ". up ." "left hub right" ". down .";
   gap: 6px;
   flex: none;
 }
 .pad button { padding: 0; }
 .mv-up { grid-area: up; }
 .mv-left { grid-area: left; }
-.mv-down { grid-area: down; }
+.pad-hub { grid-area: hub; }
 .mv-right { grid-area: right; }
+.mv-down { grid-area: down; }
 .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px 14px; }
 .turn, .thread, .tools, .view { display: flex; gap: 8px; }
+#frame.pad-right .strip { flex-direction: row-reverse; }
+#frame.pad-right .actions { justify-content: flex-start; }
+/* A phone's Thread button and its panel, which floats over the board's foot on the actions' side, clear of the pad. */
+.strip .thread-btn.on { border-color: var(--accent); color: var(--accent); }
+.strip .thread-btn[aria-expanded="true"] { background: var(--line); }
+.thread-panel {
+  position: absolute;
+  z-index: 5;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+.thread-panel[hidden] { display: none; }
+.strip .thread-panel button { min-width: 64px; }
+#frame.pad-right .thread-panel { right: auto; left: 8px; }
 .tool .n { margin-left: 0.3rem; font-weight: 700; }
 
 /* ---- cards: title, menu, story, ending ---- */
@@ -404,42 +428,46 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 .log li.info { border-color: var(--safe); }
 
 /* ---- phones ---- */
-/* Portrait: the status bar in two rows, the strip under the maze. */
+/* Portrait: the status bar in two rows, the strip under the maze: the pad down one edge, and beside it, a gap away,
+   three rows: Wait, Undo and Restart; the tools; the look swap and Thread, Thread the farthest from the pad. */
 @container frame (max-width: 760px) and (orientation: portrait) {
   .status { align-items: flex-start; gap: 6px; padding: 6px; }
   .hud { display: grid; grid-template-columns: repeat(3, auto); gap: 2px 8px; }
   .menu-btn { padding: 0 0.55rem; }
   .stat { flex-direction: column; align-items: flex-start; gap: 0; }
-  .strip { flex-wrap: wrap; justify-content: center; gap: 8px 12px; padding: 12px 10px 10px; }
-  .actions { flex: 1 1 10rem; justify-content: center; gap: 8px; }
+  .strip {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto repeat(2, minmax(0, 12rem));
+    grid-template-areas: "pad turn turn" "pad tools tools" "pad view thread";
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px 20px;
+    padding: 10px 10px 8px;
+  }
+  #frame.pad-right .strip { grid-template-columns: repeat(2, minmax(0, 12rem)) auto; grid-template-areas: "turn turn pad" "tools tools pad" "thread view pad"; }
+  .strip button { min-width: 0; min-height: 40px; padding: 0 0.3rem; }
+  .pad { grid-area: pad; gap: 4px; }
+  .actions { display: contents; }
+  .turn, .tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .turn { grid-area: turn; }
+  .tools { grid-area: tools; }
+  .view { grid-area: view; }
+  .thread { grid-area: thread; }
+  .view, .thread { display: grid; }
 }
-/* The narrowest phones (320 px): three stats a row, and the strip in two rows: the pad beside Wait, Undo and
-   Restart, then the thread, the tools and the look swap side by side. */
+/* The narrowest phones (320 px to 400 px): three stats a row, and a smaller strip. */
 @container frame (max-width: 400px) and (orientation: portrait) {
   .hud { grid-template-columns: repeat(3, minmax(0, auto)); gap: 2px 10px; }
   .stat dt { font-size: 0.7rem; }
   .stat dd { font-size: 0.85rem; overflow-wrap: anywhere; white-space: normal; }
-  .strip {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas: "pad turn turn" "thread tools view";
-    justify-content: stretch;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 8px 8px;
-  }
-  .strip button { min-width: 0; min-height: 40px; padding: 0 0.1rem; font-size: 0.68rem; }
-  .pad { grid-area: pad; grid-template-columns: repeat(3, 36px); gap: 4px; }
-  .pad button { min-width: 36px; }
-  .actions { display: contents; }
-  .turn, .thread, .tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
-  .turn { grid-area: turn; }
-  .thread { grid-area: thread; }
-  .tools { grid-area: tools; }
-  .view { grid-area: view; }
+  .strip { gap: 6px 14px; padding: 10px 8px 8px; }
+  .strip button { padding: 0 0.1rem; font-size: 0.68rem; }
+  .pad { grid-template-columns: repeat(3, 40px); }
+  .turn, .tools { gap: 4px; }
 }
 
-/* Landscape: the pad and the actions sit in the margins left and right of the board, over the board's row. */
+/* Landscape: the pad and the actions sit in the margins either side of the board (the pad on its own side), over the board's row. */
 @container frame (orientation: landscape) and (max-height: 500px) {
   .status { padding: 2px 8px; }
   .hud { display: flex; flex-wrap: wrap; gap: 0 10px; }
@@ -447,8 +475,8 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   .stat dt { font-size: 0.7rem; }
   .stat dd { font-size: 0.85rem; }
   .menu-btn { min-height: 30px; padding: 0 0.6rem; }
-  /* The rails the board leaves clear: 148px on the left holds the 3-column pad (3 x 40px + 2 x 4px gaps) with its
-     8px edge, 220px on the right holds the widest action column ("Restart" with its key-tab chip) with its edge. */
+  /* The rails the board leaves clear: 148px on the pad's side holds the 3-column pad (3 x 40px + 2 x 4px gaps) with its
+     8px edge, 220px on the other side holds the widest action column ("Restart" with its key-tab chip) with its edge. */
   .board { padding: 4px 220px 4px 148px; }
   .strip {
     position: absolute;
@@ -462,15 +490,18 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
     pointer-events: none;
   }
   .strip button { pointer-events: auto; min-width: 40px; min-height: 40px; padding: 0 0.3rem; font-size: 0.8rem; background: rgba(22, 27, 34, 0.92); }
+  .strip .thread-panel { pointer-events: auto; }
   .pad { grid-template-columns: repeat(3, 40px); gap: 4px; }
   .actions { flex-direction: column; align-items: flex-end; gap: 4px; }
   .turn, .thread, .tools, .view { gap: 4px; }
+  #frame.pad-right .board { padding: 4px 148px 4px 220px; }
+  #frame.pad-right .actions { align-items: flex-start; }
 }
 
 /* A short frame this wide has room beside the board without reserving rails: the board is limited by height and
    centred, far from the buttons at the frame's edges. */
 @container frame (orientation: landscape) and (max-height: 500px) and (min-width: 900px) {
-  .board { padding: 4px; }
+  .board, #frame.pad-right .board { padding: 4px; }
 }
 
 /* ---- the level editor: a layer over the whole frame. The bar runs across the top, the board fills the rest and

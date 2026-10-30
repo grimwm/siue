@@ -1,6 +1,6 @@
 // The Island of Crete: the menu, in three sections under small headings. Sound and screen: switches for sound, music,
 // music in the background and full screen. Board: the two looks as pictures and, for the modern look, the view
-// (Angled or Top-down) and, while angled, the walls.
+// (Angled or Top-down) and, while angled, the walls; then which edge of the strip the arrows stand at.
 // The story: the Lore book, the story log and how to play (folded). Then Back to the editor or Shared level (the
 // shared level's card; each only when the page gives it), and Quit on its own. On a wide screen the sections stand
 // in two columns.
@@ -13,7 +13,7 @@ import { Button } from '../../../_kit/ui/button.tsx';
 import { KEYS } from '../keys.ts';
 import type { Seg } from '../help.ts';
 import type { Tone as LogTone } from '../game.ts';
-import type { Look, View, WallMode } from '../settings.ts';
+import type { Look, PadSide, View, WallMode } from '../settings.ts';
 import { LookTiles } from './look-tiles.tsx';
 
 export interface LogLine {
@@ -34,6 +34,8 @@ export interface MenuProps {
   walls: WallMode;
   /** Shown only while the look is modern. */
   view: View;
+  /** The edge of the strip the arrows stand at. */
+  pad: PadSide;
   log: LogLine[];
   help: Seg[][];
   onSound: () => void;
@@ -43,6 +45,7 @@ export interface MenuProps {
   onLook: (look: Look) => void;
   onWalls: (walls: WallMode) => void;
   onView: (view: View) => void;
+  onPad: (side: PadSide) => void;
   onLore: () => void;
   onQuit: () => void;
   onClose: () => void;
@@ -54,6 +57,7 @@ export interface MenuProps {
 
 const WALL_CHOICES: [WallMode, string][] = [['solid', 'Solid'], ['ghosted', 'Ghosted'], ['low', 'Low']];
 const VIEW_CHOICES: [View, string][] = [['angled', 'Angled'], ['top', 'Top-down']];
+const PAD_CHOICES: [PadSide, string][] = [['left', 'Left'], ['right', 'Right']];
 
 const segs = (line: Seg[]) => line.map(s => (typeof s === 'string' ? s : <strong>{s.strong}</strong>));
 
@@ -110,6 +114,14 @@ export function Menu(p: MenuProps) {
                 </div>
               </div>
             )}
+            <div class="menu-walls" data-section="pad">
+              <span class="menu-label" id="menu-pad-label">Arrows</span>
+              <div class="seg seg-2" role="group" aria-labelledby="menu-pad-label">
+                {PAD_CHOICES.map(([side, name]) => (
+                  <Button key={side} id={`pad-${side}`} class="seg-opt" pressed={p.pad === side} onClick={() => p.onPad(side)}>{name}</Button>
+                ))}
+              </div>
+            </div>
           </section>
         </div>
         <div class="menu-col">

@@ -34,7 +34,7 @@ import { fromLevel } from './editor/model.ts';
 import { createRater } from './share/rating.ts';
 import { createVisit, fragmentKind } from './share/visit.ts';
 import { createSettings } from './settings.ts';
-import type { Look, View, WallMode } from './settings.ts';
+import type { Look, PadSide, View, WallMode } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
@@ -233,6 +233,12 @@ function applyView(view: View): void {
   ui.say(view === 'top' ? 'Top-down view.' : 'Angled view.', 'info');
 }
 
+function applyPad(side: PadSide): void {
+  settings.pad.set(side);
+  ui.setPad(side);
+  ui.say(side === 'right' ? 'Arrows on the right.' : 'Arrows on the left.', 'info');
+}
+
 function applyWalls(walls: WallMode): void {
   settings.walls.set(walls);
   ui.setLook(settings.look.get(), walls);
@@ -422,7 +428,7 @@ function noModern(why: string): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setView: applyView, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setView: applyView, setPad: applyPad, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
   });
   const background = settings.musicHidden.get() === 'on';
@@ -438,6 +444,7 @@ function start(): void {
   }
   ui.setLook(settings.look.get(), settings.walls.get());
   ui.setView(settings.view.get());
+  ui.setPad(settings.pad.get());
   ui.setMoveDir(dir => screenToGrid(dir, modernOn && modern ? modern.yaw() : DEFAULT_YAW));
   showLook(settings.look.get());
   followMusicSwitches();

@@ -1,6 +1,8 @@
 // The Island of Crete on ten screens: the frame fills the window, nothing scrolls, every control is on screen
 // and not clipped, no control covers the board, the board keeps at least 8 px per cell, and key tabs show only
-// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The new-game card, the chapter card, the level list, the start card and the menu are
+// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The move pad is a plus on every screen; on a
+// phone nothing else stands within 12 px of an arrow, at either edge the Arrows setting puts the pad, and Hint, Route
+// and Auto wait behind the Thread button. The new-game card, the chapter card, the level list, the start card and the menu are
 // checked too, and level 8, the largest board, at the smallest phone sizes.
 import { test, expect } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
@@ -19,12 +21,13 @@ const DEVICES: Device[] = [
 ];
 const TABS = 15; // every control carries a key tab with a keyboard at hand
 
-async function open(browser: Browser, [, width, height, touch]: Device) {
+async function open(browser: Browser, [, width, height, touch]: Device, pad?: 'left' | 'right') {
   const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.addInitScript(pinClassic);
+  if (pad) await page.addInitScript((side: string) => localStorage.setItem('crete-pad', side), pad);
   await page.goto('games/crete/');
   return { ctx, page, errors };
 }
@@ -61,8 +64,10 @@ function measure() {
   if (!inside(stage)) probs.push('the board is off screen');
   const cell = Number(document.getElementById('stage')!.dataset.cell);
   if (!(cell >= 8)) probs.push(`cells are ${cell}px`);
-  const controls = [...document.querySelectorAll<HTMLElement>('#status-root button, #strip-root button')];
-  if (controls.length !== 15) probs.push(`${controls.length} controls`);
+  // A phone's Thread panel, shut, keeps Hint, Route and Auto out of sight: the Thread button stands for them.
+  const controls = [...document.querySelectorAll<HTMLElement>('#status-root button, #strip-root button')].filter(b => !b.closest('[hidden]'));
+  const want = document.getElementById('btn-thread') ? 13 : 15;
+  if (controls.length !== want) probs.push(`${controls.length} controls, not ${want}`);
   const strip = document.getElementById('strip-root')!;
   if (strip.scrollWidth > strip.clientWidth + 0.5) probs.push(`the strip is wider than its row by ${strip.scrollWidth - strip.clientWidth}px`);
   for (const el of controls) {
@@ -198,6 +203,158 @@ for (const device of DEVICES) {
     await ctx.close();
   });
 }
+
+/** The move pad is a plus: up centred over down, left and right level with each other either side of an empty
+ *  centre as wide as a button; `side` names the half of the screen the pad stands in. */
+function plusPad(side: string | null) {
+  const probs: string[] = [];
+  const box = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+  const [up, left, right, down] = ['.mv-up', '.mv-left', '.mv-right', '.mv-down'].map(box) as [DOMRect, DOMRect, DOMRect, DOMRect];
+  const cx = (r: DOMRect) => (r.left + r.right) / 2;
+  const cy = (r: DOMRect) => (r.top + r.bottom) / 2;
+  if (Math.abs(cx(up) - cx(down)) > 1) probs.push('up is not over down');
+  if (Math.abs(cy(left) - cy(right)) > 1) probs.push('left and right are not level');
+  if (!(up.bottom <= left.top && down.top >= left.bottom)) probs.push('up and down are not above and below the middle row');
+  if (Math.abs(cx(up) - (cx(left) + cx(right)) / 2) > 1) probs.push('up is not centred between left and right');
+  if (right.left - left.right < up.width - 1) probs.push('no empty centre between left and right');
+  if (Math.abs(cy(up) - cy(left) + (cy(down) - cy(left))) > 1) probs.push('the middle row is not halfway between up and down');
+  for (const el of document.querySelectorAll('.pad > *')) {
+    const r = el.getBoundingClientRect();
+    if (el.tagName === 'BUTTON') continue;
+    if (Math.abs(cx(r) - cx(up)) > 1 || Math.abs(cy(r) - cy(left)) > 1) probs.push('the centre holds something off centre');
+  }
+  const centre = document.elementFromPoint(cx(up), cy(left));
+  if (centre?.closest('button')) probs.push(`a button sits in the centre: ${centre.closest('button')!.className}`);
+  if (side === 'left' && cx(up) > innerWidth / 2) probs.push('the pad is not on the left');
+  if (side === 'right' && cx(up) < innerWidth / 2) probs.push('the pad is not on the right');
+  return probs;
+}
+
+/** No button but an arrow, shown in the strip (or the Thread panel), touches an arrow or stands within 12 px of one. */
+function clearOfArrows() {
+  const probs: string[] = [];
+  const shown = (el: Element) => el.getClientRects().length > 0;
+  const arrows = [...document.querySelectorAll('.mv')].map(b => b.getBoundingClientRect());
+  for (const b of document.querySelectorAll<HTMLElement>('#strip-root button:not(.mv), #status-root button')) {
+    if (!shown(b)) continue;
+    const r = b.getBoundingClientRect();
+    for (const a of arrows) {
+      const dx = Math.max(a.left - r.right, r.left - a.right, 0);
+      const dy = Math.max(a.top - r.bottom, r.top - a.bottom, 0);
+      if (Math.hypot(dx, dy) < 12) probs.push(`${b.id || b.className} is ${Math.hypot(dx, dy).toFixed(1)}px from an arrow`);
+    }
+  }
+  const strip = document.getElementById('strip-root')!;
+  if (strip.scrollWidth > strip.clientWidth + 0.5) probs.push(`the strip overflows sideways by ${strip.scrollWidth - strip.clientWidth}px`);
+  if (document.documentElement.scrollWidth > innerWidth + 0.5) probs.push('the page is wider than the screen');
+  return [...new Set(probs)];
+}
+
+const PHONES = DEVICES.filter(d => /iPhone|Android/.test(d[0]));
+for (const device of PHONES) {
+  for (const side of ['left', 'right'] as const) {
+    test(`${device[0]}, arrows on the ${side}: a plus pad clear of every other button, the thread behind Thread`, async ({ browser }) => {
+      const { ctx, page, errors } = await open(browser, device, side);
+      await openLevel(page, 1);
+      await page.locator('#start-begin').click();
+      await expect(page.locator('#start-veil')).toBeHidden();
+      await page.waitForSelector('#stage[data-cell]');
+      expect(await page.evaluate(() => document.getElementById('frame')!.classList.contains('pad-right'))).toBe(side === 'right');
+      expect(await page.evaluate(plusPad, side)).toEqual([]);
+      expect(await page.evaluate(clearOfArrows)).toEqual([]);
+      // Hint, Route and Auto wait behind Thread, which stands on the far side from the pad.
+      for (const id of ['btn-hint', 'btn-route', 'btn-auto']) await expect(page.locator(`#${id}`)).toBeHidden();
+      const thread = page.locator('#btn-thread');
+      await expect(thread).toBeVisible();
+      await expect(thread).toHaveAttribute('aria-expanded', 'false');
+      const away = await page.evaluate(() => {
+        const t = document.getElementById('btn-thread')!.getBoundingClientRect();
+        const up = document.querySelector('.mv-up')!.getBoundingClientRect();
+        return (t.left + t.right) / 2 - (up.left + up.right) / 2;
+      });
+      if (side === 'left') expect(away, 'Thread on the far side from the pad').toBeGreaterThan(0);
+      else expect(away, 'Thread on the far side from the pad').toBeLessThan(0);
+      await thread.click();
+      await expect(thread).toHaveAttribute('aria-expanded', 'true');
+      for (const id of ['btn-hint', 'btn-route', 'btn-auto']) await expect(page.locator(`#${id}`)).toBeVisible();
+      expect(await page.evaluate(clearOfArrows), 'the open panel stays clear of the arrows').toEqual([]);
+      expect(await page.evaluate(() => {
+        const r = document.getElementById('thread-panel')!.getBoundingClientRect();
+        return r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5;
+      }), 'the panel is on screen').toBe(true);
+      // A tap outside shuts it; a choice acts, shuts it and gives the focus back to Thread.
+      await page.locator('#status-root .stat').first().click();
+      await expect(page.locator('#thread-panel')).toBeHidden();
+      await thread.click();
+      await page.locator('#btn-hint').click();
+      await expect(page.locator('#thread-panel')).toBeHidden();
+      await expect.poll(() => page.evaluate(runState)).toMatchObject({ moves: 1 });
+      await expect(thread).toBeFocused();
+      expect(errors).toEqual([]);
+      await ctx.close();
+    });
+  }
+}
+
+test('iPhone 15, portrait: H, V and T still work, and Thread shows the route and the play-out', async ({ browser }) => {
+  const { ctx, page, errors } = await open(browser, DEVICES.find(d => d[0] === 'iPhone 15, portrait')!);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openLevel(page, 1);
+  await page.locator('#start-begin').click();
+  await page.waitForSelector('#stage[data-cell]');
+  await page.keyboard.press('h');
+  await expect.poll(() => page.evaluate(runState)).toMatchObject({ moves: 1 });
+  await expect(page.locator('#btn-thread')).not.toHaveClass(/\bon\b/);
+  await page.keyboard.press('v');
+  await expect(page.locator('#btn-thread')).toHaveClass(/\bon\b/);
+  await page.locator('#btn-thread').click();
+  await expect(page.locator('#btn-route')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('q');
+  await expect(page.locator('#thread-panel'), 'Q shuts the panel').toBeHidden();
+  await expect(page.locator('#menu-veil'), 'and opens no menu').toBeHidden();
+  await expect(page.locator('#btn-thread')).toBeFocused();
+  await page.keyboard.press('t');
+  await expect.poll(() => page.evaluate(runState)).toMatchObject({ outcome: 'won' });
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+test('Desktop: the pad is a plus on the left, and Hint, Route and Auto stand in the strip with no Thread button', async ({ browser }) => {
+  const { ctx, page, errors } = await open(browser, DEVICES[0]!);
+  await openLevel(page, 1);
+  await page.locator('#start-begin').click();
+  await page.waitForSelector('#stage[data-cell]');
+  expect(await page.evaluate(plusPad, 'left')).toEqual([]);
+  for (const id of ['btn-hint', 'btn-route', 'btn-auto']) await expect(page.locator(`#${id}`)).toBeVisible();
+  await expect(page.locator('#btn-thread')).toHaveCount(0);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+test('iPhone SE, portrait: Arrows in the menu moves the pad at once, and the choice survives a reload', async ({ browser }) => {
+  const { ctx, page, errors } = await open(browser, DEVICES.find(d => d[0] === 'iPhone SE, portrait')!);
+  await openLevel(page, 1);
+  await page.locator('#start-begin').click();
+  await page.waitForSelector('#stage[data-cell]');
+  expect(await page.evaluate(plusPad, 'left')).toEqual([]);
+  await page.locator('#btn-menu').click();
+  await expect(page.locator('#pad-left')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#pad-right').click();
+  await expect(page.locator('#pad-right')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#menu-close').click();
+  expect(await page.evaluate(plusPad, 'right')).toEqual([]);
+  expect(await page.evaluate(clearOfArrows)).toEqual([]);
+  expect(await page.evaluate(() => localStorage.getItem('crete-pad'))).toBe('right');
+  await page.reload();
+  await expect(page.locator('#title-veil')).toBeVisible();
+  expect(await page.evaluate(() => document.getElementById('frame')!.classList.contains('pad-right')), 'mirrored from the start').toBe(true);
+  await openLevel(page, 1);
+  await page.locator('#start-begin').click();
+  await page.waitForSelector('#stage[data-cell]');
+  expect(await page.evaluate(plusPad, 'right')).toEqual([]);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
 
 // Level 8 is the largest board of the first eight (12 x 10): it must still keep 8 px cells and every control on the smallest phone.
 for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE'))) {

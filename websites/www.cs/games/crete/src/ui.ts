@@ -40,7 +40,7 @@ import { renderStoryCard } from "./ui/story.tsx";
 import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
-import type { Look, View, WallMode } from "./settings.ts";
+import type { Look, PadSide, View, WallMode } from "./settings.ts";
 import { renderTitleCard } from "./ui/title.tsx";
 import { renderLookPick } from "./ui/look-pick.tsx";
 import { ratingText, renderSharedCard } from "./ui/shared.tsx";
@@ -78,6 +78,8 @@ export interface Controls {
   setWalls?(walls: WallMode): void;
   /** The View choice, shown while the look is modern. */
   setView?(view: View): void;
+  /** The Arrows choice in the menu: the edge of the strip the move pad stands at. */
+  setPad?(side: PadSide): void;
   toggleFullscreen(): void;
   /** Wake the speakers: any gesture does. */
   wake(): void;
@@ -110,6 +112,8 @@ export interface Ui {
   setLook(look: Look, walls: WallMode): void;
   /** Shows the view choice the page restored or changed. */
   setView(view: View): void;
+  /** Puts the move pad at this edge of the strip (the frame wears `pad-right` for the right). */
+  setPad(side: PadSide): void;
   /** Whether the modern board shows: it fills the board's space, so the classic canvas is not fitted and nothing
    *  scrolls. */
   setModernBoard(on: boolean): void;
@@ -184,6 +188,10 @@ export function createUi(deps: UiDeps): Ui {
   let look: Look = "modern";
   let walls: WallMode = "solid";
   let view: View = "top";
+  let pad: PadSide = "left";
+  /** The strip as last drawn: a phone's, and whether its Thread panel is open. */
+  let compact = false;
+  let threadOpen = false;
   let toastTimer = 0;
   let controls: Controls | null = null;
   let game: Game | null = null;
@@ -462,6 +470,7 @@ export function createUi(deps: UiDeps): Ui {
       look,
       walls,
       view,
+      pad,
       log,
       help: helpLines(KEYS, TOOLS),
       onSound: () => {
@@ -480,6 +489,7 @@ export function createUi(deps: UiDeps): Ui {
       onLook: (l) => controls?.setLook?.(l),
       onWalls: (w) => controls?.setWalls?.(w),
       onView: (v) => controls?.setView?.(v),
+      onPad: (side) => controls?.setPad?.(side),
       onLore: () => {
         loreShown = null;
         loreFromPickup = false;
@@ -666,17 +676,46 @@ export function createUi(deps: UiDeps): Ui {
     drawLayers();
   }
 
+  /** Whether the frame is a phone's, as the phone layouts in game.css read it: portrait at most 760 px wide, or
+   *  landscape at most 500 px tall. */
+  function phone(): boolean {
+    const f = $("frame");
+    const w = f.clientWidth;
+    const h = f.clientHeight;
+    return (h >= w && w <= 760) || (w > h && h <= 500);
+  }
+
+  /** The strip again when the screen turns between a phone's and a wider one. */
+  function restrip(): void {
+    if (game?.run && phone() !== compact) drawStrip(game);
+  }
+
+  /** Shuts the Thread panel; `refocus` hands the focus back to Thread (Q does; a tap elsewhere keeps its own). */
+  function shutThread(refocus: boolean): void {
+    threadOpen = false;
+    if (game?.run) drawStrip(game);
+    if (refocus) document.getElementById("btn-thread")?.focus();
+  }
+
   /** The strip, for a game with a level open. */
   function drawStrip(g: Game): void {
     const act = (fn: () => void) => (): void => {
       controls?.wake();
       fn();
     };
+    compact = phone();
+    if (!compact) threadOpen = false;
     renderStrip($("strip-root"), {
       tools: toolRows(g),
       playing: g.playing,
       route: g.thread !== null,
       over: g.run!.now.outcome !== "playing",
+      compact,
+      threadOpen,
+      onThread: (open) => {
+        threadOpen = open;
+        drawStrip(g);
+      },
       look,
       onMove: (dir) => act(() => {
         layers.close("start");
@@ -784,6 +823,12 @@ export function createUi(deps: UiDeps): Ui {
       if (isBackKey(ev)) {
         ev.preventDefault();
         if (ev.repeat) return;
+        // An open Thread panel shuts first, unless a card other than the start card is over it.
+        const over = layers.top();
+        if (threadOpen && (over === null || over === "start")) {
+          shutThread(true);
+          return;
+        }
         // An open Lore entry goes back to the list; the next Q closes the book.
         if (layers.isOpen("lore") && loreShown && !loreFromPickup) {
           loreShown = null;
@@ -1007,8 +1052,20 @@ export function createUi(deps: UiDeps): Ui {
     // A tap on the toast puts it away.
     $("toast").addEventListener("click", () => $("toast").classList.remove("show"));
 
-    if (typeof ResizeObserver === "function") new ResizeObserver(fit).observe($("board"));
-    if (typeof window !== "undefined") window.addEventListener("resize", fit);
+    // A tap anywhere but on the Thread panel or its button shuts the panel.
+    document.addEventListener("pointerdown", (e) => {
+      if (!threadOpen) return;
+      const fold = document.getElementById("btn-thread")?.parentNode;
+      for (let n = e.target as Node | null; n; n = n.parentNode) if (n === fold) return;
+      shutThread(false);
+    });
+
+    const resized = (): void => {
+      fit();
+      restrip();
+    };
+    if (typeof ResizeObserver === "function") new ResizeObserver(resized).observe($("board"));
+    if (typeof window !== "undefined") window.addEventListener("resize", resized);
   }
 
   drawLayers();
@@ -1055,6 +1112,13 @@ export function createUi(deps: UiDeps): Ui {
     },
     setView: (v) => {
       view = v;
+      drawLayers();
+    },
+    setPad: (side) => {
+      pad = side;
+      const frame = $("frame");
+      const rest = frame.className.split(" ").filter((c) => c && c !== "pad-right");
+      frame.className = (side === "right" ? [...rest, "pad-right"] : rest).join(" ");
       drawLayers();
     },
     setModernBoard: (on) => {

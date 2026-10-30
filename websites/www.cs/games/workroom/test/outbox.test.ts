@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { KEPT_MESSAGES, createOutbox, keptMessage, memoryOutbox } from '../src/outbox.ts';
-import type { OutboxLock, OutboxStore } from '../src/outbox.ts';
+import type { KeptReason, OutboxLock, OutboxStore } from '../src/outbox.ts';
 import { SignedOut, type UploadResult } from '../src/api.ts';
 import { MAX_NOTE_BYTES } from '../src/note.ts';
 
@@ -48,7 +48,7 @@ test('refusals, a lost session and a server error keep the note with their reaso
     const r = await createOutbox(store, { upload }, keys()).add(one(1), 'a');
     assert.deepEqual(r.kept.map(x => x.reason), [reason]);
     assert.equal((await store.all())[0]?.reason, reason);
-    assert.ok(KEPT_MESSAGES[reason as keyof typeof KEPT_MESSAGES].length > 0);
+    assert.ok(keptMessage(reason as KeptReason, 0).length > 0);
   }
 });
 
@@ -61,7 +61,7 @@ test('a note over 2 MB is never sent and does not hold up the next one', async (
   const small = await box.add(one(2), '2026-10-20T00:00:02.000Z');
   assert.deepEqual([small.sent.map(s => s.key), small.kept], [['k2'], [{ key: 'k1', reason: 'too_large' }]]);
   assert.deepEqual(sizes, [1]);
-  assert.match(KEPT_MESSAGES.too_large, /2 MB/);
+  assert.match(keptMessage('too_large'), /2 MB/);
 });
 
 test('back online, kept notes go in the order they were made', async () => {
@@ -194,6 +194,13 @@ test('over_quota keeps the note and names the room', async () => {
   assert.equal(KEPT_MESSAGES.over_quota(1_258_291), 'Your studio is full: 1.2 MB left. Delete drafts or picked-up notes to make room; this note stays on this device until then.');
   assert.equal(keptMessage('over_quota', 5_242_880), KEPT_MESSAGES.over_quota(5_242_880));
   assert.equal(keptMessage('over_quota', undefined), KEPT_MESSAGES.over_quota(0), 'a note kept before the room was known still says it is full');
+});
+
+test('too_large names the note limit it was given, and the page limit by default', () => {
+  assert.equal(KEPT_MESSAGES.too_large(1_048_576), 'This note is over 1 MB, so it stays on this device. Record a shorter one, then discard this one.');
+  assert.match(KEPT_MESSAGES.too_large(2_097_152), /over 2 MB/);
+  assert.equal(keptMessage('too_large'), KEPT_MESSAGES.too_large(MAX_NOTE_BYTES), 'with no page limits, the default note max');
+  for (const words of Object.values(KEPT_MESSAGES)) if (typeof words === 'string') assert.doesNotMatch(words, /\d MB/, 'no fixed size in the table');
 });
 
 test('the unknown-key message points studio people to Start over, named people to make music-status', () => {

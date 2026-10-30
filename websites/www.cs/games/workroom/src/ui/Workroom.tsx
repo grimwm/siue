@@ -113,7 +113,7 @@ export function Workroom(p: WorkroomProps) {
   const now = p.now ?? ((): Date => new Date());
   const [unlocked, setUnlocked] = useState(notes?.unlocked() ?? false);
   const [keyring, setKeyring] = useState(true);
-  /** Why the unlock is shown first, when the key was made but did not unlock. */
+  /** Why the unlock is shown first, when the key was made but did not unlock; an unlock clears it. */
   const [keyWhy, setKeyWhy] = useState<string | null>(null);
   const [asked, setAsked] = useState<Asked | null>(null);
   const [mode, setMode] = useState<AnswerMode>('none');
@@ -198,6 +198,7 @@ export function Workroom(p: WorkroomProps) {
   /** After the unlock the bar opens what was asked for, with the sheet closed so the timeline shows; Hum it waits for the next tap (iOS grants the microphone only inside one). */
   const unlockedNow = (): void => {
     syncLock();
+    setKeyWhy(null);
     const what = asked;
     setAsked(null);
     if (what === 'hum') setStatus(HUM_AFTER_UNLOCK);

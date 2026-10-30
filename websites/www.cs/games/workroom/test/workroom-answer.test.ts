@@ -592,6 +592,35 @@ test('a note kept because the sign-in ended locks the notes; the next tap asks f
   unmount(root);
 });
 
+test('a key made but left locked shows why at the unlock; once unlocked, a later lock asks with the usual reason', async () => {
+  const { session } = fakeNotes(undefined, 0, { unlocked: false, keyring: false });
+  let open = false;
+  let stored = false;
+  Object.assign(session, {
+    unlocked: () => open,
+    lock: () => { open = false; },
+    keyStored: () => stored,
+    makeKey: async () => { stored = true; return 'Could not reach the server. Check the connection and try again.'; },
+    unlock: async () => { open = true; return null; },
+    send: async () => ({ key: 'k1', memoryOnly: false, sent: [], kept: [{ key: 'k1', reason: 'signed_out' }] }),
+  });
+  const root = await mount({ notes: session });
+  const fields = walk(named(root, 'data-make-key')!).filter(e => e._attrs['autocomplete'] === 'new-password');
+  for (const f of fields) { f.value = 'twelve chars or more'; await act(() => { fire(f, 'input'); }); }
+  await act(() => { fire(walk(named(root, 'data-make-key')!).find(e => e.localName === 'form')!, 'submit'); });
+  await settle();
+  assert.equal(named(root, 'data-unlock-reason')!.textContent, 'Could not reach the server. Check the connection and try again.');
+  await unlockInPanel(root);
+  assert.ok(named(root, 'data-unlock-reason') === undefined, 'the reason goes with the unlock');
+  await act(() => { fire(button(root, 'React')!, 'click'); });
+  await act(() => { fire(button(root, 'Calmer')!, 'click'); });
+  await settle();
+  assert.equal(open, false, 'the kept note locked the notes');
+  await act(() => { fire(button(root, 'Pin a note')!, 'click'); });
+  assert.equal(named(root, 'data-unlock-reason')!.textContent, UNLOCK_FIRST, 'not the old reason the key was made with');
+  unmount(root);
+});
+
 test('a spoken note leaves the words typed in the composer, and the composer open', async () => {
   const { session, sent } = fakeNotes();
   const media = fakeMedia();

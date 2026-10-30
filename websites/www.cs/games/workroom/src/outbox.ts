@@ -44,23 +44,24 @@ export const MEMORY_NOTICE = 'This browser would not save it on this device, so 
 /** The studio people's words for a note the server cannot take: they have no make targets, and Start over on Your studio is how they get a new key. */
 export const STUDIO_UNKNOWN_KEY = 'The server does not take notes sealed to this key, so this note stays on this device. Use Start over on Your studio to make a new notes key.';
 
-export const KEPT_MESSAGES: Readonly<Record<Exclude<KeptReason, 'over_quota'>, string>> & { over_quota(room: number): string } = {
+/** Per reason; the two that depend on the studio take its room left (over_quota) or its note max (too_large). */
+export const KEPT_MESSAGES: Readonly<Record<Exclude<KeptReason, 'over_quota' | 'too_large'>, string>> & { over_quota(room: number): string; too_large(noteMax: number): string } = {
   over_quota: room => `Your studio is full: ${humanBytes(room)} left. Delete drafts or picked-up notes to make room; this note stays on this device until then.`,
   offline: 'No connection: this note is kept on this device and will be sent when you are back online.',
   signed_out: 'Your sign-in ended. Sign in again; the note stays on this device.',
   server: 'The server had a problem. This note stays on this device and is sent on the next try.',
-  too_large: 'This note is over 2 MB, so it stays on this device. Record a shorter one, then discard this one.',
+  too_large: noteMax => `This note is over ${humanBytes(noteMax)}, so it stays on this device. Record a shorter one, then discard this one.`,
   full: `The workroom holds ${MAX_NOTES.toLocaleString('en-US')} notes. Delete some old ones; this note stays on this device until then.`,
   no_key: 'The server has no notes key yet, so this note stays on this device. Make your notes key under Your notes.',
   bad_header: 'The server did not accept this note’s key. Reload the page; the note stays on this device.',
   unknown_key: 'The server does not take notes sealed to this key, so this note stays on this device. Run make music-status to compare the notes keys.',
 };
 
-/** The words for a kept note: `room` is the Pending's, `named` defaults to this page's. The 2 MB of too_large is this studio's note max. */
+/** The words for a kept note: `room` is the Pending's, `named` defaults to this page's, and too_large names this page's note max. */
 export function keptMessage(reason: KeptReason, room?: number, named: boolean = pageLimits().named): string {
   if (reason === 'over_quota') return KEPT_MESSAGES.over_quota(room ?? 0);
   if (reason === 'unknown_key' && !named) return STUDIO_UNKNOWN_KEY;
-  if (reason === 'too_large') return `This note is over ${humanBytes(pageLimits().noteMax)}, so it stays on this device. Record a shorter one, then discard this one.`;
+  if (reason === 'too_large') return KEPT_MESSAGES.too_large(pageLimits().noteMax);
   return KEPT_MESSAGES[reason];
 }
 

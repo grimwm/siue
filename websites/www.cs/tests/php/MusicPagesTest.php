@@ -20,10 +20,11 @@ final class MusicPagesTest extends TestCase
     private PDO $db;
     private FakeClock $clock;
     private string $dir;
+    private int $account;
 
     protected function setUp(): void
     {
-        [$this->store, $db, $this->dir, $clock] = music_world();
+        [$this->store, $db, $this->dir, $clock, , $this->account] = music_world();
         $this->db = $db;
         $this->clock = $clock;
         $this->sessions = new Admin\Sessions($db, $clock, '/~wgrim/');
@@ -282,7 +283,7 @@ final class MusicPagesTest extends TestCase
         self::assertSame([303, 'login.php'], [$anon->status, $anon->headers['Location']]);
         $wrong = $this->adminPages()->removeKey(music_signed_in($this->sessions, ['method' => 'POST', 'post' => $post + ['csrf' => 'nope']]));
         self::assertSame(403, $wrong->status);
-        self::assertNotNull(Music\Store::fingerprintsIn($this->db), 'a refused request removes nothing');
+        self::assertNotNull(Music\Store::fingerprintsIn($this->db, $this->account), 'a refused request removes nothing');
     }
 
     public function testRemovingTheNotesKeyForgetsTheKeyringAndTheHubSaysNotMadeYet(): void
@@ -291,7 +292,7 @@ final class MusicPagesTest extends TestCase
         $csrf = $this->hubCsrf($in);
         $done = $this->adminPages()->removeKey($this->postAs($in, ['do' => 'remove-key', 'label' => 'Music notes key', 'csrf' => $csrf]));
         self::assertSame([303, 'index.php?removed=1'], [$done->status, $done->headers['Location']]);
-        self::assertNull(Music\Store::fingerprintsIn($this->db));
+        self::assertNull(Music\Store::fingerprintsIn($this->db, $this->account));
         self::assertNull($this->store->keyring());
         $hub = $this->adminPages()->hub($in);
         self::assertStringContainsString('not made yet (make music-setup)', $hub->body);
@@ -308,16 +309,16 @@ final class MusicPagesTest extends TestCase
 
     public function testRemoveKeyringToleratesAMissingTableAndReportsWhetherARowWent(): void
     {
-        self::assertFalse(Music\Store::removeKeyring(admin_tmp_db()), 'a database the workroom never touched');
-        self::assertTrue(Music\Store::removeKeyring($this->db));
-        self::assertFalse(Music\Store::removeKeyring($this->db), 'nothing left to remove');
+        self::assertFalse(Music\Store::removeKeyring(admin_tmp_db(), $this->account), 'a database the workroom never touched');
+        self::assertTrue(Music\Store::removeKeyring($this->db, $this->account));
+        self::assertFalse(Music\Store::removeKeyring($this->db, $this->account), 'nothing left to remove');
     }
 
     public function testRemoveKeyringThrowsAStorageErrorRatherThanReportNothingRemoved(): void
     {
         $this->db->exec("CREATE TRIGGER keep_keyring BEFORE DELETE ON music_keyring BEGIN SELECT RAISE(ABORT, 'database is locked'); END");
         $this->expectException(PDOException::class);
-        Music\Store::removeKeyring($this->db);
+        Music\Store::removeKeyring($this->db, $this->account);
     }
 
     private function postAs(Admin\Request $in, array $post): Admin\Request

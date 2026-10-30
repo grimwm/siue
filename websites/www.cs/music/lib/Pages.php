@@ -193,11 +193,11 @@ final class Pages
             if (!Store::validPieceId($piece) || !Store::validVersion($v) || !is_string($file) || !isset(self::MIME[$file])) {
                 return Http::json(400, ['error' => 'bad_request']);
             }
-            $path = $this->store->draftFile($piece, (int) $v, $file);
-            if ($path === null) {
+            $bytes = $this->store->draftBytes($piece, (int) $v, $file);
+            if ($bytes === null) {
                 return Http::json(404, ['error' => 'not_found']);
             }
-            return Http::serveFile($path, self::MIME[$file], Http::header($r, 'Range'));
+            return Http::serveBytes($bytes, self::MIME[$file], Http::header($r, 'Range'));
         }, 'GET');
     }
 
@@ -248,9 +248,8 @@ final class Pages
     private function pieceRow(array $row): string
     {
         $score = [];
-        $path = $this->store->draftFile($row['piece'], $row['version'], 'score.json');
-        $json = $path === null ? false : @file_get_contents($path);
-        $decoded = $json === false ? null : json_decode($json, true);
+        $json = $this->store->draftBytes($row['piece'], $row['version'], 'score.json');
+        $decoded = $json === null ? null : json_decode($json, true);
         if (is_array($decoded)) {
             $score = $decoded;
         }

@@ -27,17 +27,33 @@ function music_draft_bundle(array $files): string
     return $out;
 }
 
-/** @return array{Music\Store, PDO, string, FakeClock} store, database, music dir, clock; $keyed stores a keyring naming the fixed fingerprints */
-function music_world(bool $keyed = true): array
+/**
+ * The store of $email's account (signed in first) on $db, with the named people and caps of $people (studio.json's shape).
+ * @return array{Music\Store, Music\Accounts, int} store, accounts, the account's id
+ */
+function music_store_of(PDO $db, string $dir, Admin\Clock $clock, string $email = Admin\Auth::OWNER, string $people = '{}'): array
+{
+    $named = Admin\People::fromJson($people) ?? throw new InvalidArgumentException('bad people JSON');
+    $accounts = new Music\Accounts($db, $clock, $named);
+    $id = $accounts->signIn($email) ?? throw new RuntimeException("no account for $email");
+    $store = new Music\Store($db, $dir, $clock, $id, Music\Limits::for($named, $email), $accounts);
+    return [$store, $accounts, $id];
+}
+
+/**
+ * @return array{Music\Store, PDO, string, FakeClock, Music\Accounts, int} store, database, music dir, clock, accounts, the
+ * account's id; the account is the owner's unless $email names another; $keyed stores a keyring naming the fixed fingerprints
+ */
+function music_world(bool $keyed = true, string $email = Admin\Auth::OWNER, string $people = '{}'): array
 {
     $clock = new FakeClock(1_800_000_000);
     $db = admin_tmp_db();
     $dir = admin_tmp_dir() . '/music';
-    $store = new Music\Store($db, $dir, $clock);
+    [$store, $accounts, $id] = music_store_of($db, $dir, $clock, $email, $people);
     if ($keyed) {
         $store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, [MUSIC_FP_PREVIOUS]);
     }
-    return [$store, $db, $dir, $clock];
+    return [$store, $db, $dir, $clock, $accounts, $id];
 }
 
 /** A request with a live session cookie (and HTTPS). */

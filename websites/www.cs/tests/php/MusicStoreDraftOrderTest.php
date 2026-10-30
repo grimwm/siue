@@ -29,6 +29,7 @@ final class MusicStoreDraftOrderTest extends TestCase
     private Music\Store $store;
     private CommitSpyPdo $db;
     private string $dir;
+    private int $account;
 
     protected function setUp(): void
     {
@@ -36,7 +37,7 @@ final class MusicStoreDraftOrderTest extends TestCase
         Admin\Db::open($data);
         $this->db = new CommitSpyPdo('sqlite:' . $data . '/' . Admin\Db::FILE, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         $this->dir = admin_tmp_dir() . '/music';
-        $this->store = new Music\Store($this->db, $this->dir, new FakeClock(1_800_000_000));
+        [$this->store, , $this->account] = music_store_of($this->db, $this->dir, new FakeClock(1_800_000_000));
     }
 
     private function files(): array
@@ -57,8 +58,8 @@ final class MusicStoreDraftOrderTest extends TestCase
     public function testADeletedDraftsFilesAreGoneBeforeItsDeletionCommits(): void
     {
         $this->store->putDraft('ch1-labyrinth', 1, $this->files());
-        $versionDir = "{$this->dir}/drafts/ch1-labyrinth/1";
-        self::assertFileExists("$versionDir/score.json");
+        $versionDir = "{$this->dir}/drafts/{$this->account}/ch1-labyrinth/1";
+        self::assertFileExists("$versionDir/score.json.gz");
         $seen = $this->watch($versionDir);
         self::assertTrue($this->store->deleteDraft('ch1-labyrinth', 1));
         self::assertSame([false], $seen->getArrayCopy(), 'the files were removed inside the transaction');
@@ -69,8 +70,8 @@ final class MusicStoreDraftOrderTest extends TestCase
         for ($v = 1; $v <= Music\Store::KEEP_DRAFTS; $v++) {
             $this->store->putDraft('ch1-labyrinth', $v, $this->files());
         }
-        $oldest = "{$this->dir}/drafts/ch1-labyrinth/1";
-        self::assertFileExists("$oldest/score.json");
+        $oldest = "{$this->dir}/drafts/{$this->account}/ch1-labyrinth/1";
+        self::assertFileExists("$oldest/score.json.gz");
         $seen = $this->watch($oldest);
         $this->store->putDraft('ch1-labyrinth', Music\Store::KEEP_DRAFTS + 1, $this->files());
         self::assertSame([false], $seen->getArrayCopy(), 'the evicted draft\'s files were removed inside the transaction');

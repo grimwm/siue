@@ -13,7 +13,7 @@ final class AdminDbTest extends TestCase
     {
         $db = admin_tmp_db();
         $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
-        self::assertSame(['devices', 'key_hits', 'keys', 'link_requests', 'links', 'migrations', 'probes', 'sessions'], $tables);
+        self::assertSame(['accounts', 'devices', 'key_hits', 'keys', 'link_requests', 'links', 'migrations', 'probes', 'sessions'], $tables);
         self::assertSame(1, (int) $db->query('PRAGMA secure_delete')->fetchColumn());
     }
 

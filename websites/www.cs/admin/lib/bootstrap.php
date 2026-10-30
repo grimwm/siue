@@ -47,12 +47,20 @@ function admin_dashboards(): array
     return ['Music workroom' => '../music/'];
 }
 
-/** Encryption-key fingerprints for the hub, label => fingerprint. Workrooms add their own here. */
-function admin_key_fingerprints(\PDO $db): array
+/** The owner's music account, or null before the workroom has made it. */
+function admin_music_owner(\PDO $db): ?int
 {
     require_once __DIR__ . '/../../music/lib/Store.php';
+    require_once __DIR__ . '/../../music/lib/Accounts.php';
+    return (new Music\Accounts($db, new Admin\SystemClock(), admin_people()))->idFor(Admin\Auth::OWNER);
+}
+
+/** Encryption-key fingerprints for the hub, label => fingerprint: the owner's notes key. Workrooms add their own here. */
+function admin_key_fingerprints(\PDO $db): array
+{
+    $owner = admin_music_owner($db);
     try {
-        $prints = Music\Store::fingerprintsIn($db);
+        $prints = $owner === null ? null : Music\Store::fingerprintsIn($db, $owner);
     } catch (PDOException) {
         // The music tables do not exist until the workroom first runs.
         return ['Music notes key' => 'not made yet (make music-setup)'];
@@ -68,9 +76,12 @@ function admin_key_fingerprints(\PDO $db): array
  */
 function admin_key_removers(\PDO $db): array
 {
-    require_once __DIR__ . '/../../music/lib/Store.php';
+    $owner = admin_music_owner($db);
+    if ($owner === null) {
+        return [];
+    }
     try {
-        if (Music\Store::fingerprintsIn($db) === null) {
+        if (Music\Store::fingerprintsIn($db, $owner) === null) {
             return [];
         }
     } catch (PDOException) {
@@ -85,7 +96,7 @@ function admin_key_removers(\PDO $db): array
             '1Password is not touched.',
         ],
         'button' => 'Remove the notes key',
-        'remove' => static fn(\PDO $d): bool => Music\Store::removeKeyring($d),
+        'remove' => static fn(\PDO $d): bool => Music\Store::removeKeyring($d, $owner),
     ]];
 }
 

@@ -18,12 +18,14 @@ final class MusicApiTest extends TestCase
     private Admin\Keys $keys;
     private PDO $db;
     private string $dir;
+    private Music\Accounts $accounts;
+    private int $account;
     /** How many times a route read its request body. */
     private int $reads = 0;
 
     protected function setUp(): void
     {
-        [$this->store, $this->db, $this->dir, $clock] = music_world();
+        [$this->store, $this->db, $this->dir, $clock, $this->accounts, $this->account] = music_world();
         $this->keys = new Admin\Keys($this->db, $clock, null, self::BASE);
         $this->api = new Music\Api($this->store, $this->keys);
     }
@@ -206,7 +208,7 @@ final class MusicApiTest extends TestCase
         $res = $this->publish($k, $files, 'ch1-labyrinth', 1);
         self::assertSame(201, $res->status);
         self::assertSame(['piece' => 'ch1-labyrinth', 'version' => 1], $this->body($res));
-        self::assertSame($files['audio.webm'], file_get_contents((string) $this->store->draftFile('ch1-labyrinth', 1, 'audio.webm')));
+        self::assertSame($files['audio.webm'], $this->store->draftBytes('ch1-labyrinth', 1, 'audio.webm'));
         self::assertSame(
             [['piece' => 'ch1-labyrinth', 'version' => 1, 'published_at' => 1_800_000_000, 'project_id' => 'crete', 'project_name' => 'Crete', 'kind' => 'music']],
             $this->store->drafts(),
@@ -259,8 +261,8 @@ final class MusicApiTest extends TestCase
         $res = $this->publish($k, $this->withScore($files, $renderable), 'ch3-renderer', 1);
         self::assertSame(201, $res->status, 'a renderable score needs no audio or spectrogram');
         self::assertCount(1, $this->store->drafts());
-        self::assertNull($this->store->draftFile('ch3-renderer', 1, 'audio.webm'));
-        self::assertNotNull($this->store->draftFile('ch3-renderer', 1, 'score.musicxml'));
+        self::assertNull($this->store->draftBytes('ch3-renderer', 1, 'audio.webm'));
+        self::assertNotNull($this->store->draftBytes('ch3-renderer', 1, 'score.musicxml'));
 
         $noXml = array_diff_key($this->withScore($this->draftFiles('ch3-renderer', 2), $renderable), ['audio.webm' => 1, 'spectrogram.png' => 1, 'score.musicxml' => 1]);
         $res = $this->publish($k, $noXml, 'ch3-renderer', 2);
@@ -312,7 +314,7 @@ final class MusicApiTest extends TestCase
         self::assertSame(8_388_608, strlen($body));
         $res = $this->api->publishDraft($this->post($k, ['piece' => 'ch1-labyrinth', 'version' => '1'], $body), $this->reading($body));
         self::assertSame(201, $res->status);
-        self::assertSame(array_sum(array_map('strlen', $files)), $this->store->draftBytes());
+        self::assertSame($files, array_map(fn(string $name): ?string => $this->store->draftBytes('ch1-labyrinth', 1, $name), array_combine(array_keys($files), array_keys($files))), 'every file is kept whole');
     }
 
     public function testADraftNeedsADeclaredLengthThatTheBodyMatches(): void
@@ -339,16 +341,16 @@ final class MusicApiTest extends TestCase
             self::assertSame(201, $this->publish($k, $this->draftFiles('ch1-labyrinth', $v), 'ch1-labyrinth', $v)->status, "draft $v");
         }
         self::assertCount(21, $this->store->drafts(), 'twenty of ch1-labyrinth and one of other-piece');
-        self::assertNull($this->store->draftFile('ch1-labyrinth', 1, 'score.json'), 'the piece\'s oldest is gone');
-        self::assertNotNull($this->store->draftFile('ch1-labyrinth', 2, 'score.json'));
-        self::assertNotNull($this->store->draftFile('ch1-labyrinth', 21, 'score.json'));
-        self::assertNotNull($this->store->draftFile('other-piece', 1, 'score.json'), 'another piece\'s only draft stays');
+        self::assertNull($this->store->draftBytes('ch1-labyrinth', 1, 'score.json'), 'the piece\'s oldest is gone');
+        self::assertNotNull($this->store->draftBytes('ch1-labyrinth', 2, 'score.json'));
+        self::assertNotNull($this->store->draftBytes('ch1-labyrinth', 21, 'score.json'));
+        self::assertNotNull($this->store->draftBytes('other-piece', 1, 'score.json'), 'another piece\'s only draft stays');
     }
 
     public function testWhenStorageIsFullAnotherPiecesDraftsAreNeverDroppedToMakeRoom(): void
     {
         $k = $this->keys->create('publish', ['drafts:publish']);
-        $add = $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)');
+        $add = $this->db->prepare('INSERT INTO music_drafts (account_id, piece, version, published_at, size) VALUES (' . $this->account . ', ?, ?, ?, ?)');
         $add->execute(['big-piece', 1, 1, Music\Store::MAX_DRAFT_TOTAL_BYTES - 20]);
         for ($v = 1; $v <= 19; $v++) {
             $add->execute(['ch1-labyrinth', $v, 1 + $v, 1]);
@@ -362,26 +364,26 @@ final class MusicApiTest extends TestCase
     public function testThePiecesOwnOldestDraftRollingOffMakesRoom(): void
     {
         $k = $this->keys->create('publish', ['drafts:publish']);
-        $add = $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)');
+        $add = $this->db->prepare('INSERT INTO music_drafts (account_id, piece, version, published_at, size) VALUES (' . $this->account . ', ?, ?, ?, ?)');
         $add->execute(['ch1-labyrinth', 1, 1, Music\Store::MAX_DRAFT_TOTAL_BYTES - 1000]);
         for ($v = 2; $v <= 20; $v++) {
             $add->execute(['ch1-labyrinth', $v, $v, 1]);
         }
         self::assertSame(201, $this->publish($k, $this->draftFiles('ch1-labyrinth', 21), 'ch1-labyrinth', 21)->status, 'v1 rolls off, so v21 fits');
-        self::assertNull($this->store->draftFile('ch1-labyrinth', 1, 'score.json'));
+        self::assertNull($this->store->draftBytes('ch1-labyrinth', 1, 'score.json'));
     }
 
     public function testADraftThatWouldPassTheQuotaIsRefusedAndNothingIsWritten(): void
     {
         $k = $this->keys->create('publish', ['drafts:publish']);
-        $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size) VALUES (?, ?, ?, ?)')
+        $this->db->prepare('INSERT INTO music_drafts (account_id, piece, version, published_at, size) VALUES (' . $this->account . ', ?, ?, ?, ?)')
             ->execute(['seed', 1, 1, Music\Store::MAX_DRAFT_TOTAL_BYTES - 10]);
         $before = $this->store->drafts();
         $res = $this->publish($k, $this->draftFiles(), 'ch1-labyrinth', 1);
         self::assertSame(413, $res->status);
         self::assertSame('over_quota', $this->body($res)['error']);
         self::assertSame($before, $this->store->drafts());
-        self::assertNull($this->store->draftFile('ch1-labyrinth', 1, 'score.json'));
+        self::assertNull($this->store->draftBytes('ch1-labyrinth', 1, 'score.json'));
     }
 
     public function testKeyringUploadNeedsKeysScopeAndAWellFormedEnvelope(): void
@@ -532,24 +534,24 @@ final class MusicApiTest extends TestCase
         foreach ([['ch1-labyrinth', 1], ['ch1-labyrinth', 2], ['ch2-sea', 1]] as [$piece, $v]) {
             self::assertSame(201, $this->publish($publish, $this->draftFiles($piece, $v), $piece, $v)->status);
         }
-        $before = $this->store->draftBytes();
-        $gone = "{$this->dir}/drafts/ch1-labyrinth/2";
+        $before = $this->accounts->usage($this->account);
+        $gone = "{$this->dir}/drafts/{$this->account}/ch1-labyrinth/2";
         self::assertDirectoryExists($gone);
         $res = $this->deleting($publish, ['piece' => 'ch1-labyrinth', 'version' => '2']);
         self::assertSame(200, $res->status);
         self::assertSame(['piece' => 'ch1-labyrinth', 'version' => 2, 'deleted' => true], $this->body($res));
         self::assertSame('application/json', $res->headers['Content-Type']);
         self::assertDirectoryDoesNotExist($gone, 'its files and folder are gone');
-        self::assertNull($this->store->draftFile('ch1-labyrinth', 2, 'score.json'));
+        self::assertNull($this->store->draftBytes('ch1-labyrinth', 2, 'score.json'));
         self::assertSame([['ch1-labyrinth', 1], ['ch2-sea', 1]], array_map(fn(array $d) => [$d['piece'], $d['version']], array_reverse($this->store->drafts())));
-        self::assertNotNull($this->store->draftFile('ch1-labyrinth', 1, 'audio.webm'), 'the piece\'s other draft is untouched');
-        self::assertNotNull($this->store->draftFile('ch2-sea', 1, 'score.json'), 'another piece is untouched');
-        self::assertLessThan($before, $this->store->draftBytes(), 'its bytes no longer count toward the quota');
+        self::assertNotNull($this->store->draftBytes('ch1-labyrinth', 1, 'audio.webm'), 'the piece\'s other draft is untouched');
+        self::assertNotNull($this->store->draftBytes('ch2-sea', 1, 'score.json'), 'another piece is untouched');
+        self::assertLessThan($before, $this->accounts->usage($this->account), 'its bytes no longer count toward the quota');
         self::assertSame(404, $this->deleting($publish, ['piece' => 'ch1-labyrinth', 'version' => '2'])->status, 'deleting twice finds nothing');
         self::assertSame(['error' => 'not_found'], $this->body($this->deleting($publish, ['piece' => 'ch9-none', 'version' => '1'])));
         // The last draft of a piece takes the piece's folder with it.
         self::assertSame(200, $this->deleting($publish, ['piece' => 'ch2-sea', 'version' => '1'])->status);
-        self::assertDirectoryDoesNotExist("{$this->dir}/drafts/ch2-sea");
+        self::assertDirectoryDoesNotExist("{$this->dir}/drafts/{$this->account}/ch2-sea");
     }
 
     public function testDeletingADraftNeedsItsScopePostAndHttps(): void
@@ -589,16 +591,15 @@ final class MusicApiTest extends TestCase
         self::assertFalse($this->store->deleteDraft('ch1-labyrinth', 3));
     }
 
-    public function testServeFileRanges(): void
+    public function testServeBytesRanges(): void
     {
-        $f = admin_tmp_dir() . '/a.bin';
-        file_put_contents($f, '0123456789');
-        self::assertSame(['200', '0123456789'], [(string) Music\Http::serveFile($f, 'audio/webm', null)->status, Music\Http::serveFile($f, 'audio/webm', null)->body]);
-        $part = Music\Http::serveFile($f, 'audio/webm', 'bytes=2-4');
+        $b = '0123456789';
+        self::assertSame(['200', '0123456789'], [(string) Music\Http::serveBytes($b, 'audio/webm', null)->status, Music\Http::serveBytes($b, 'audio/webm', null)->body]);
+        $part = Music\Http::serveBytes($b, 'audio/webm', 'bytes=2-4');
         self::assertSame([206, '234', 'bytes 2-4/10'], [$part->status, $part->body, $part->headers['Content-Range']]);
-        self::assertSame('789', Music\Http::serveFile($f, 'audio/webm', 'bytes=-3')->body);
-        self::assertSame(416, Music\Http::serveFile($f, 'audio/webm', 'bytes=20-30')->status);
-        self::assertSame('bytes', Music\Http::serveFile($f, 'audio/webm', null)->headers['Accept-Ranges']);
+        self::assertSame('789', Music\Http::serveBytes($b, 'audio/webm', 'bytes=-3')->body);
+        self::assertSame(416, Music\Http::serveBytes($b, 'audio/webm', 'bytes=20-30')->status);
+        self::assertSame('bytes', Music\Http::serveBytes($b, 'audio/webm', null)->headers['Accept-Ranges']);
     }
 
     public function testCrossSiteRequestsAreRefusedForSessionData(): void

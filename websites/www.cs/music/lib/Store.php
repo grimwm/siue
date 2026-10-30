@@ -1,15 +1,17 @@
 <?php
-// The workroom's storage: sealed notes the server cannot read, immutable
-// drafts under a count and a byte budget, and one locked keyring. Rows live in
-// the admin database; the bytes live in private files beside it.
+// One account's studio storage: sealed notes the server cannot read, immutable
+// drafts kept per piece within the account's room, and one locked keyring. Rows
+// live in the admin database, each naming its account; the bytes live in private
+// files beside it, drafts under drafts/<account>/<piece>/<version>/ with their
+// scores gzipped.
 declare(strict_types=1);
 
 namespace Music;
 
 final class NoteRejected extends \RuntimeException
 {
-    /** @param string $reason too_large | full | bad_header | unknown_key | no_key */
-    public function __construct(public readonly string $reason)
+    /** @param string $reason too_large | full | over_quota | bad_header | unknown_key | no_key; $room is the bytes left, for over_quota */
+    public function __construct(public readonly string $reason, public readonly int $room = 0)
     {
         parent::__construct($reason);
     }
@@ -17,8 +19,8 @@ final class NoteRejected extends \RuntimeException
 
 final class DraftRejected extends \RuntimeException
 {
-    /** @param string $reason bad_piece | bad_version | missing_file | bad_file | too_large | over_quota | exists | bad_score */
-    public function __construct(public readonly string $reason)
+    /** @param string $reason bad_piece | bad_version | missing_file | bad_file | too_large | over_quota | exists | bad_score; $room is the bytes left, for over_quota */
+    public function __construct(public readonly string $reason, public readonly int $room = 0)
     {
         parent::__construct($reason);
     }
@@ -27,18 +29,24 @@ final class DraftRejected extends \RuntimeException
 final class Store
 {
     public const MAGIC = 'SIUEN1';
+    /** The largest note for an account with the allowance (Limits). */
     public const MAX_NOTE_BYTES = 2_097_152;
+    /** The most notes one account keeps. */
     public const MAX_NOTES = 2000;
-    /** The most a draft request may carry, and so the most one draft holds: 8 MB. */
+    /** The most a draft request may carry, and so the most one draft holds, for an account with the allowance: 8 MB. */
     public const MAX_REQUEST_BYTES = 8_388_608;
     /** Each piece keeps only this many drafts; a publish deletes that piece's older ones. */
     public const KEEP_DRAFTS = 20;
-    /** The most the kept drafts may hold in total: 100 MB. */
+    /** The allowance: the most an account with it may store, 100 MB. */
     public const MAX_DRAFT_TOTAL_BYTES = 104_857_600;
     /** The upload: the locked keyring (about 4.5 KB per retained RSA-4096 key, room for a dozen rotations, 64 KB) plus the fingerprints beside it. */
     public const MAX_KEYRING_BYTES = 65_536 + 33 * 70;
     public const KINDS = ['music', 'sound'];
     public const DRAFT_FILES = ['score.json', 'score.musicxml', 'audio.webm', 'audio.m4a', 'spectrogram.png'];
+    /** The draft files stored gzipped, as <name>.gz, and served whole. */
+    public const GZIPPED = ['score.json', 'score.musicxml'];
+    /** The one-time move of the single-studio tables and files into the owner's account. */
+    public const MIGRATION = 'music-accounts-1';
 
     private const ID = '/^[0-9a-f]{32}$/D';
     /** The shape of a piece id and of a project id. */
@@ -48,13 +56,23 @@ final class Store
 
     private \Kit\StoreDir $files;
 
-    /** $dir is <admin data dir>/music; claimed private (0700) with notes/ and drafts/ inside; creates the music tables. */
-    public function __construct(private \PDO $db, private string $dir, private \Admin\Clock $clock)
-    {
+    /**
+     * The studio of $account. $dir is <admin data dir>/music; claimed private (0700) with notes/ and drafts/ inside;
+     * creates the music tables and, once per database, moves what the single studio stored into the owner's account.
+     */
+    public function __construct(
+        private \PDO $db,
+        private string $dir,
+        private \Admin\Clock $clock,
+        private int $account,
+        private Limits $limits,
+        private Accounts $accounts,
+    ) {
         $this->files = new \Kit\StoreDir('music storage:', \Admin\StorageUnavailable::class);
         $this->files->claim($dir, true);
         $this->files->claim("$dir/notes", true);
         $this->files->claim("$dir/drafts", true);
+        // The tables in the single studio's shape, for a database that has none yet; MIGRATION then rebuilds them keyed by account.
         $this->db->exec('CREATE TABLE IF NOT EXISTS music_notes (id TEXT PRIMARY KEY, size INTEGER NOT NULL, sha256 TEXT NOT NULL, arrived_at INTEGER NOT NULL, picked_up_at INTEGER)');
         $this->db->exec("CREATE TABLE IF NOT EXISTS music_drafts (piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, size INTEGER NOT NULL, project_id TEXT NOT NULL DEFAULT '', project_name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'music', PRIMARY KEY (piece, version))");
         // A database made before these columns existed gains them here; each is added only when the table lacks it.
@@ -86,16 +104,19 @@ final class Store
                 }
             }
         }
+        \Admin\Db::once($this->db, self::MIGRATION, fn() => $this->moveIntoAccounts(), fn() => $this->restoreDrafts());
+        // The move committed but its process ended before it cleared away the old files it set aside.
+        $this->removeTree("$dir/drafts.old");
     }
 
     /** @return array{id: string, size: int, sha256: string, arrived_at: int} @throws NoteRejected */
     public function addNote(string $sealed): array
     {
         $size = strlen($sealed);
-        if ($size > self::MAX_NOTE_BYTES) {
+        if ($size > $this->limits->maxNoteBytes) {
             throw new NoteRejected('too_large');
         }
-        $prints = self::fingerprintsIn($this->db);
+        $prints = $this->fingerprints();
         if ($prints === null) {
             throw new NoteRejected('no_key');
         }
@@ -108,14 +129,20 @@ final class Store
         $id = bin2hex(random_bytes(16));
         $note = ['id' => $id, 'size' => $size, 'sha256' => hash('sha256', $sealed), 'arrived_at' => $this->clock->now()];
         $path = "{$this->dir}/notes/$id.sealed";
-        $this->transaction(function () use ($sealed, $note, $path): void {
-            if ((int) $this->db->query('SELECT COUNT(*) FROM music_notes')->fetchColumn() >= self::MAX_NOTES) {
+        $this->transaction(function () use ($sealed, $note, $path, $size): void {
+            $count = $this->db->prepare('SELECT COUNT(*) FROM music_notes WHERE account_id = ?');
+            $count->execute([$this->account]);
+            if ((int) $count->fetchColumn() >= self::MAX_NOTES) {
                 throw new NoteRejected('full');
+            }
+            $room = $this->roomLeft();
+            if ($size > $room) {
+                throw new NoteRejected('over_quota', max(0, $room));
             }
             $this->writeFile($path, $sealed);
             try {
-                $this->db->prepare('INSERT INTO music_notes (id, size, sha256, arrived_at) VALUES (?, ?, ?, ?)')
-                    ->execute([$note['id'], $note['size'], $note['sha256'], $note['arrived_at']]);
+                $this->db->prepare('INSERT INTO music_notes (id, account_id, size, sha256, arrived_at) VALUES (?, ?, ?, ?, ?)')
+                    ->execute([$note['id'], $this->account, $note['size'], $note['sha256'], $note['arrived_at']]);
             } catch (\Throwable $e) {
                 @unlink($path);
                 throw $e;
@@ -128,11 +155,13 @@ final class Store
     public function notes(?string $state = null): array
     {
         $where = match ($state) {
-            'waiting' => 'WHERE picked_up_at IS NULL',
-            'picked-up' => 'WHERE picked_up_at IS NOT NULL',
+            'waiting' => 'AND picked_up_at IS NULL',
+            'picked-up' => 'AND picked_up_at IS NOT NULL',
             default => '',
         };
-        $rows = $this->db->query("SELECT id, size, sha256, arrived_at, picked_up_at FROM music_notes $where ORDER BY arrived_at ASC, rowid ASC")->fetchAll(\PDO::FETCH_ASSOC);
+        $q = $this->db->prepare("SELECT id, size, sha256, arrived_at, picked_up_at FROM music_notes WHERE account_id = ? $where ORDER BY arrived_at ASC, rowid ASC");
+        $q->execute([$this->account]);
+        $rows = $q->fetchAll(\PDO::FETCH_ASSOC);
         return array_map(static fn(array $r): array => [
             'id' => (string) $r['id'],
             'size' => (int) $r['size'],
@@ -157,7 +186,7 @@ final class Store
         if (preg_match(self::ID, $id) !== 1) {
             return false;
         }
-        $this->db->prepare('UPDATE music_notes SET picked_up_at = ? WHERE id = ? AND picked_up_at IS NULL')->execute([$this->clock->now(), $id]);
+        $this->db->prepare('UPDATE music_notes SET picked_up_at = ? WHERE id = ? AND account_id = ? AND picked_up_at IS NULL')->execute([$this->clock->now(), $id, $this->account]);
         return $this->noteExists($id);
     }
 
@@ -167,36 +196,35 @@ final class Store
             return false;
         }
         return $this->transaction(function () use ($id): bool {
-            $gone = $this->db->prepare('DELETE FROM music_notes WHERE id = ?');
-            $gone->execute([$id]);
+            $gone = $this->db->prepare('DELETE FROM music_notes WHERE id = ? AND account_id = ?');
+            $gone->execute([$id, $this->account]);
+            if ($gone->rowCount() === 0) {
+                return false; // another account's note keeps its file
+            }
             @unlink("{$this->dir}/notes/$id.sealed");
-            return $gone->rowCount() > 0;
+            return true;
         });
     }
 
     public function deleteAllNotes(): int
     {
-        return $this->transaction(function (): int {
-            $ids = $this->db->query('SELECT id FROM music_notes')->fetchAll(\PDO::FETCH_COLUMN);
-            $this->db->exec('DELETE FROM music_notes');
-            foreach ($ids as $id) {
-                @unlink("{$this->dir}/notes/$id.sealed");
-            }
-            return count($ids);
-        });
+        return $this->transaction(fn(): int => count($this->deleteNotesOfAccount()));
     }
 
     public function waitingCount(): int
     {
-        return (int) $this->db->query('SELECT COUNT(*) FROM music_notes WHERE picked_up_at IS NULL')->fetchColumn();
+        $q = $this->db->prepare('SELECT COUNT(*) FROM music_notes WHERE account_id = ? AND picked_up_at IS NULL');
+        $q->execute([$this->account]);
+        return (int) $q->fetchColumn();
     }
 
     /**
-     * Keeps one draft. In one transaction, before any file is written: refuses when the files total more than
-     * MAX_REQUEST_BYTES (too_large), when the draft exists, or when the new draft plus every stored draft that
-     * remains (all of them, less this piece's drafts older than its newest KEEP_DRAFTS - 1) total more than
-     * MAX_DRAFT_TOTAL_BYTES (over_quota). After the files are written, deletes this piece's drafts (rows and files, the
-     * files before the COMMIT) older than its newest KEEP_DRAFTS: each piece keeps its own history, and other pieces are never touched.
+     * Keeps one draft. Refuses, before any file is written, when the files as sent total more than the account's
+     * request limit (too_large); then, in one transaction, when the draft exists, or when its stored bytes (scores
+     * gzipped) less what this piece's drafts older than its newest KEEP_DRAFTS - 1 hold would pass the room left
+     * (over_quota, with that room): nothing is deleted to make room. After the files are written, deletes this piece's
+     * drafts (rows and files, the files before the COMMIT) older than its newest KEEP_DRAFTS: each piece keeps its own
+     * history, and other pieces are never touched.
      * $about is taken from the validated score.json: project_id (matches validProjectId), project_name (1 to 80 characters) and
      * kind (one of KINDS); anything else throws DraftRejected('bad_score') before the transaction opens. null records no
      * project: '' and '' and 'music' (a published draft always has one).
@@ -224,39 +252,43 @@ final class Store
         if (!self::aboutIsKeepable($about)) {
             throw new DraftRejected('bad_score');
         }
-        $this->transaction(function () use ($piece, $version, $files, $about): void {
-            $size = array_sum(array_map('strlen', $files));
-            if ($size > self::MAX_REQUEST_BYTES) {
-                throw new DraftRejected('too_large');
-            }
-            $exists = $this->db->prepare('SELECT 1 FROM music_drafts WHERE piece = ? AND version = ?');
-            $exists->execute([$piece, $version]);
+        if (array_sum(array_map('strlen', $files)) > $this->limits->maxRequestBytes) {
+            throw new DraftRejected('too_large');
+        }
+        $stored = [];
+        foreach ($files as $name => $bytes) {
+            $stored[self::storedName($name)] = self::storedBytes($name, $bytes);
+        }
+        $this->transaction(function () use ($piece, $version, $stored, $about): void {
+            $size = array_sum(array_map('strlen', $stored));
+            $exists = $this->db->prepare('SELECT 1 FROM music_drafts WHERE account_id = ? AND piece = ? AND version = ?');
+            $exists->execute([$this->account, $piece, $version]);
             if ($exists->fetchColumn() !== false) {
                 throw new DraftRejected('exists');
             }
-            $rollsOff = $this->db->prepare('SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM music_drafts WHERE piece = ? ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . (self::KEEP_DRAFTS - 1) . ')');
-            $rollsOff->execute([$piece]);
-            $remaining = (int) $this->db->query('SELECT COALESCE(SUM(size), 0) FROM music_drafts')->fetchColumn() - (int) $rollsOff->fetchColumn();
-            if ($size + $remaining > self::MAX_DRAFT_TOTAL_BYTES) {
-                throw new DraftRejected('over_quota');
+            $rollsOff = $this->db->prepare('SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM music_drafts WHERE account_id = ? AND piece = ? ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . (self::KEEP_DRAFTS - 1) . ')');
+            $rollsOff->execute([$this->account, $piece]);
+            $room = $this->roomLeft();
+            if ($size - (int) $rollsOff->fetchColumn() > $room) {
+                throw new DraftRejected('over_quota', max(0, $room));
             }
-            $this->writeDraftFiles($piece, $version, $files);
+            $this->writeDraftFiles($piece, $version, $stored);
             try {
-                $this->db->prepare('INSERT INTO music_drafts (piece, version, published_at, size, project_id, project_name, kind) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                    ->execute([$piece, $version, $this->clock->now(), $size, $about['project_id'], $about['project_name'], $about['kind']]);
-                $history = $this->db->prepare('SELECT piece, version FROM music_drafts WHERE piece = ? ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . self::KEEP_DRAFTS);
-                $history->execute([$piece]);
-                $old = $history->fetchAll(\PDO::FETCH_ASSOC);
-                $drop = $this->db->prepare('DELETE FROM music_drafts WHERE piece = ? AND version = ?');
-                foreach ($old as $row) {
-                    $drop->execute([$row['piece'], $row['version']]);
+                $this->db->prepare('INSERT INTO music_drafts (account_id, piece, version, published_at, size, project_id, project_name, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$this->account, $piece, $version, $this->clock->now(), $size, $about['project_id'], $about['project_name'], $about['kind']]);
+                $history = $this->db->prepare('SELECT version FROM music_drafts WHERE account_id = ? AND piece = ? ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . self::KEEP_DRAFTS);
+                $history->execute([$this->account, $piece]);
+                $old = array_map('intval', $history->fetchAll(\PDO::FETCH_COLUMN));
+                $drop = $this->db->prepare('DELETE FROM music_drafts WHERE account_id = ? AND piece = ? AND version = ?');
+                foreach ($old as $v) {
+                    $drop->execute([$this->account, $piece, $v]);
                 }
             } catch (\Throwable $e) {
                 $this->removeDraftFiles($piece, $version);
                 throw $e;
             }
-            foreach ($old as $row) {
-                $this->removeDraftFiles((string) $row['piece'], (int) $row['version']);
+            foreach ($old as $v) {
+                $this->removeDraftFiles($piece, $v);
             }
         });
     }
@@ -272,8 +304,8 @@ final class Store
             return false;
         }
         return $this->transaction(function () use ($piece, $version): bool {
-            $drop = $this->db->prepare('DELETE FROM music_drafts WHERE piece = ? AND version = ?');
-            $drop->execute([$piece, $version]);
+            $drop = $this->db->prepare('DELETE FROM music_drafts WHERE account_id = ? AND piece = ? AND version = ?');
+            $drop->execute([$this->account, $piece, $version]);
             if ($drop->rowCount() === 0) {
                 return false;
             }
@@ -282,11 +314,30 @@ final class Store
         });
     }
 
+    /** Deletes every draft of $piece, rows and files (the files before the COMMIT); how many went. 0 for a bad piece id. */
+    public function deletePiece(string $piece): int
+    {
+        if (!self::validPieceId($piece)) {
+            return 0;
+        }
+        return $this->transaction(function () use ($piece): int {
+            $versions = $this->db->prepare('SELECT version FROM music_drafts WHERE account_id = ? AND piece = ?');
+            $versions->execute([$this->account, $piece]);
+            $gone = array_map('intval', $versions->fetchAll(\PDO::FETCH_COLUMN));
+            $this->db->prepare('DELETE FROM music_drafts WHERE account_id = ? AND piece = ?')->execute([$this->account, $piece]);
+            foreach ($gone as $v) {
+                $this->removeDraftFiles($piece, $v);
+            }
+            $this->removeTree("{$this->dir}/drafts/{$this->account}/$piece");
+            return count($gone);
+        });
+    }
+
     /** @return list<array{piece: string, version: int, published_at: int, project_id: string, project_name: string, kind: string}> newest first */
     public function drafts(?string $piece = null): array
     {
-        $q = $this->db->prepare('SELECT piece, version, published_at, project_id, project_name, kind FROM music_drafts WHERE (? IS NULL OR piece = ?) ORDER BY published_at DESC, rowid DESC');
-        $q->execute([$piece, $piece]);
+        $q = $this->db->prepare('SELECT piece, version, published_at, project_id, project_name, kind FROM music_drafts WHERE account_id = ? AND (? IS NULL OR piece = ?) ORDER BY published_at DESC, rowid DESC');
+        $q->execute([$this->account, $piece, $piece]);
         return array_map(static fn(array $r): array => [
             'piece' => (string) $r['piece'],
             'version' => (int) $r['version'],
@@ -297,22 +348,43 @@ final class Store
         ], $q->fetchAll(\PDO::FETCH_ASSOC));
     }
 
-    /** The bytes of every stored draft, as recorded when each was kept. */
-    public function draftBytes(): int
-    {
-        return (int) $this->db->query('SELECT COALESCE(SUM(size), 0) FROM music_drafts')->fetchColumn();
-    }
-
-    /** Absolute path, or null for an unknown draft or a name outside DRAFT_FILES. */
-    public function draftFile(string $piece, int $version, string $name): ?string
+    /** One draft file's bytes as published (a score decompressed), or null for an unknown draft, a name outside DRAFT_FILES, or a file that is missing or damaged. */
+    public function draftBytes(string $piece, int $version, string $name): ?string
     {
         if (!self::validPieceId($piece) || $version < 1 || $version > 9999 || !in_array($name, self::DRAFT_FILES, true)) {
             return null;
         }
-        $known = $this->db->prepare('SELECT 1 FROM music_drafts WHERE piece = ? AND version = ?');
-        $known->execute([$piece, $version]);
-        $path = "{$this->dir}/drafts/$piece/$version/$name";
-        return $known->fetchColumn() !== false && is_file($path) ? $path : null;
+        $known = $this->db->prepare('SELECT 1 FROM music_drafts WHERE account_id = ? AND piece = ? AND version = ?');
+        $known->execute([$this->account, $piece, $version]);
+        if ($known->fetchColumn() === false) {
+            return null;
+        }
+        $path = $this->draftDir($piece, $version) . '/' . self::storedName($name);
+        $bytes = is_file($path) ? @file_get_contents($path) : false;
+        if ($bytes !== false && in_array($name, self::GZIPPED, true)) {
+            $bytes = @gzdecode($bytes);
+        }
+        return $bytes === false ? null : $bytes;
+    }
+
+    /** The bytes this account may still store: the smaller of its own room and, without the allowance, the shared pool's; never below 0. */
+    public function room(): int
+    {
+        return max(0, $this->roomLeft());
+    }
+
+    /**
+     * Deletes every note, draft and file of this account and its keyring, in one transaction (the caller's, when it
+     * holds one), the files before the COMMIT. The account itself stays.
+     */
+    public function wipe(): void
+    {
+        $this->transaction(function (): void {
+            $this->deleteNotesOfAccount();
+            $this->db->prepare('DELETE FROM music_drafts WHERE account_id = ?')->execute([$this->account]);
+            $this->db->prepare('DELETE FROM music_keyring WHERE account_id = ?')->execute([$this->account]);
+            $this->removeTree("{$this->dir}/drafts/{$this->account}");
+        });
     }
 
     /**
@@ -323,14 +395,16 @@ final class Store
      */
     public function putKeyring(string $lockedJson, string $current, array $previous): void
     {
-        $this->db->prepare('INSERT INTO music_keyring (id, locked, uploaded_at, current_fp, previous_fps) VALUES (1, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET locked = excluded.locked, uploaded_at = excluded.uploaded_at, current_fp = excluded.current_fp, previous_fps = excluded.previous_fps')
-            ->execute([$lockedJson, $this->clock->now(), $current, json_encode(array_values($previous))]);
+        $this->db->prepare('INSERT INTO music_keyring (account_id, locked, uploaded_at, current_fp, previous_fps) VALUES (?, ?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET locked = excluded.locked, uploaded_at = excluded.uploaded_at, current_fp = excluded.current_fp, previous_fps = excluded.previous_fps')
+            ->execute([$this->account, $lockedJson, $this->clock->now(), $current, json_encode(array_values($previous))]);
     }
 
     /** @return array{locked: string, uploaded_at: int, current: string, previous: list<string>}|null */
     public function keyring(): ?array
     {
-        $row = $this->db->query('SELECT locked, uploaded_at, current_fp, previous_fps FROM music_keyring WHERE id = 1')->fetch(\PDO::FETCH_ASSOC);
+        $q = $this->db->prepare('SELECT locked, uploaded_at, current_fp, previous_fps FROM music_keyring WHERE account_id = ?');
+        $q->execute([$this->account]);
+        $row = $q->fetch(\PDO::FETCH_ASSOC);
         if ($row === false) {
             return null;
         }
@@ -345,13 +419,15 @@ final class Store
     /** The fingerprints notes may be sealed to, or null when no keyring has been uploaded with a current one. */
     public function fingerprints(): ?array
     {
-        return self::fingerprintsIn($this->db);
+        return self::fingerprintsIn($this->db, $this->account);
     }
 
     /** @return array{current: string, previous: list<string>}|null as fingerprints(), for callers with a database and no store */
-    public static function fingerprintsIn(\PDO $db): ?array
+    public static function fingerprintsIn(\PDO $db, int $account): ?array
     {
-        $row = $db->query('SELECT current_fp, previous_fps FROM music_keyring WHERE id = 1')->fetch(\PDO::FETCH_ASSOC);
+        $q = $db->prepare('SELECT current_fp, previous_fps FROM music_keyring WHERE account_id = ?');
+        $q->execute([$account]);
+        $row = $q->fetch(\PDO::FETCH_ASSOC);
         if ($row === false || $row['current_fp'] === '') {
             return null;
         }
@@ -359,13 +435,15 @@ final class Store
     }
 
     /**
-     * Forgets the locked keyring and its fingerprints. True when a keyring was stored; false when none was or the table
-     * does not exist. Any other storage error (a busy or read-only database) is thrown.
+     * Forgets $account's locked keyring and its fingerprints. True when a keyring was stored; false when none was or the
+     * table does not exist. Any other storage error (a busy or read-only database) is thrown.
      */
-    public static function removeKeyring(\PDO $db): bool
+    public static function removeKeyring(\PDO $db, int $account): bool
     {
         try {
-            return $db->exec('DELETE FROM music_keyring WHERE id = 1') > 0;
+            $q = $db->prepare('DELETE FROM music_keyring WHERE account_id = ?');
+            $q->execute([$account]);
+            return $q->rowCount() > 0;
         } catch (\PDOException $e) {
             if (str_contains($e->getMessage(), 'no such table')) {
                 return false;
@@ -436,14 +514,20 @@ final class Store
 
     private function noteExists(string $id): bool
     {
-        $q = $this->db->prepare('SELECT 1 FROM music_notes WHERE id = ?');
-        $q->execute([$id]);
+        $q = $this->db->prepare('SELECT 1 FROM music_notes WHERE id = ? AND account_id = ?');
+        $q->execute([$id, $this->account]);
         return $q->fetchColumn() !== false;
     }
 
-    /** Runs $work between BEGIN IMMEDIATE and COMMIT; any throw rolls back and is rethrown. */
+    /**
+     * Runs $work between BEGIN IMMEDIATE and COMMIT; any throw rolls back and is rethrown. Inside a transaction the
+     * caller already holds, $work runs in it, and the caller commits or rolls back.
+     */
     private function transaction(\Closure $work): mixed
     {
+        if ($this->db->inTransaction()) {
+            return $work();
+        }
         $this->db->exec('BEGIN IMMEDIATE');
         try {
             $result = $work();
@@ -480,13 +564,14 @@ final class Store
         @chmod($path, \Kit\StoreModes::modes()['file']);
     }
 
-    /** @param array<string, string> $files */
-    private function writeDraftFiles(string $piece, int $version, array $files): void
+    /** @param array<string, string> $stored stored name => stored bytes */
+    private function writeDraftFiles(string $piece, int $version, array $stored): void
     {
-        $pieceDir = $this->files->claim("{$this->dir}/drafts/$piece", true);
+        $accountDir = $this->files->claim("{$this->dir}/drafts/{$this->account}", true);
+        $pieceDir = $this->files->claim("$accountDir/$piece", true);
         $versionDir = $this->files->claim("$pieceDir/$version", true);
         try {
-            foreach ($files as $name => $bytes) {
+            foreach ($stored as $name => $bytes) {
                 $path = "$versionDir/$name";
                 @unlink($path);
                 $this->writeFile($path, $bytes);
@@ -500,12 +585,144 @@ final class Store
     /** Deletes a draft's files and its empty directories; whatever is not there is skipped. */
     private function removeDraftFiles(string $piece, int $version): void
     {
-        $versionDir = "{$this->dir}/drafts/$piece/$version";
+        $versionDir = $this->draftDir($piece, $version);
         foreach (self::DRAFT_FILES as $name) {
-            @unlink("$versionDir/$name");
-            @unlink("$versionDir/$name.tmp");
+            $stored = self::storedName($name);
+            @unlink("$versionDir/$stored");
+            @unlink("$versionDir/$stored.tmp");
         }
         @rmdir($versionDir);
-        @rmdir("{$this->dir}/drafts/$piece");
+        @rmdir("{$this->dir}/drafts/{$this->account}/$piece");
+        @rmdir("{$this->dir}/drafts/{$this->account}");
+    }
+
+    private function draftDir(string $piece, int $version): string
+    {
+        return "{$this->dir}/drafts/{$this->account}/$piece/$version";
+    }
+
+    private static function storedName(string $name): string
+    {
+        return in_array($name, self::GZIPPED, true) ? "$name.gz" : $name;
+    }
+
+    private static function storedBytes(string $name, string $bytes): string
+    {
+        return in_array($name, self::GZIPPED, true) ? gzencode($bytes, 9) : $bytes;
+    }
+
+    /** The room before clamping: below zero when the account (or the shared pool) is already over. */
+    private function roomLeft(): int
+    {
+        $room = $this->limits->quotaBytes - $this->accounts->usage($this->account);
+        return $this->limits->sharedPool ? min($room, $this->accounts->sharedRoom()) : $room;
+    }
+
+    /** Deletes this account's note rows, then their files; inside the caller's transaction. @return list<string> the ids */
+    private function deleteNotesOfAccount(): array
+    {
+        $q = $this->db->prepare('SELECT id FROM music_notes WHERE account_id = ?');
+        $q->execute([$this->account]);
+        $ids = $q->fetchAll(\PDO::FETCH_COLUMN);
+        $this->db->prepare('DELETE FROM music_notes WHERE account_id = ?')->execute([$this->account]);
+        foreach ($ids as $id) {
+            @unlink("{$this->dir}/notes/$id.sealed");
+        }
+        return $ids;
+    }
+
+    /**
+     * The one-time move (MIGRATION), inside Db::once's transaction. Every note, draft and keyring row becomes the
+     * owner's: the three tables are rebuilt keyed by account. The draft files are copied, scores gzipped, into
+     * drafts.new/<owner>/<piece>/<version>/ and each row's size becomes its stored bytes; then drafts/ is set aside as
+     * drafts.old/ and drafts.new/ takes its place, still before the COMMIT. A throw restores drafts/ (restoreDrafts) before
+     * the ROLLBACK; a process that dies first leaves drafts.old/, which the next move restores before it starts, since
+     * only the COMMIT makes the new layout the one the database records. The constructor deletes drafts.old/ after it.
+     */
+    private function moveIntoAccounts(): void
+    {
+        $this->restoreDrafts();
+        $any = false;
+        foreach (['music_notes', 'music_drafts', 'music_keyring'] as $table) {
+            $any = $any || $this->db->query("SELECT 1 FROM $table LIMIT 1")->fetchColumn() !== false;
+        }
+        $owner = $any ? $this->accounts->ownerId() : 0; // with no rows, no account is named
+        $db = $this->db;
+        $db->exec('CREATE TABLE music_notes_next (id TEXT PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES accounts(id), size INTEGER NOT NULL, sha256 TEXT NOT NULL, arrived_at INTEGER NOT NULL, picked_up_at INTEGER)');
+        $db->prepare('INSERT INTO music_notes_next (rowid, id, account_id, size, sha256, arrived_at, picked_up_at) SELECT rowid, id, ?, size, sha256, arrived_at, picked_up_at FROM music_notes')->execute([$owner]);
+        $db->exec("CREATE TABLE music_drafts_next (account_id INTEGER NOT NULL REFERENCES accounts(id), piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, size INTEGER NOT NULL, project_id TEXT NOT NULL DEFAULT '', project_name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'music', PRIMARY KEY (account_id, piece, version))");
+        $db->prepare('INSERT INTO music_drafts_next (rowid, account_id, piece, version, published_at, size, project_id, project_name, kind) SELECT rowid, ?, piece, version, published_at, size, project_id, project_name, kind FROM music_drafts')->execute([$owner]);
+        $db->exec("CREATE TABLE music_keyring_next (account_id INTEGER PRIMARY KEY REFERENCES accounts(id), locked TEXT NOT NULL, uploaded_at INTEGER NOT NULL, current_fp TEXT NOT NULL DEFAULT '', previous_fps TEXT NOT NULL DEFAULT '[]')");
+        $db->prepare('INSERT INTO music_keyring_next (account_id, locked, uploaded_at, current_fp, previous_fps) SELECT ?, locked, uploaded_at, current_fp, previous_fps FROM music_keyring')->execute([$owner]);
+        foreach (['music_notes', 'music_drafts', 'music_keyring'] as $table) {
+            $db->exec("DROP TABLE $table");
+            $db->exec("ALTER TABLE {$table}_next RENAME TO $table");
+        }
+        $db->exec('CREATE INDEX music_notes_account ON music_notes(account_id)');
+
+        $rows = $db->query('SELECT piece, version FROM music_drafts')->fetchAll(\PDO::FETCH_ASSOC);
+        if ($rows === []) {
+            return;
+        }
+        $next = $this->files->claim("{$this->dir}/drafts.new", true);
+        $this->files->claim("$next/$owner", true);
+        $size = $db->prepare('UPDATE music_drafts SET size = ? WHERE account_id = ? AND piece = ? AND version = ?');
+        foreach ($rows as $row) {
+            $piece = (string) $row['piece'];
+            $version = (int) $row['version'];
+            $stored = 0;
+            if (self::validPieceId($piece) && $version >= 1 && $version <= 9999) {
+                $from = "{$this->dir}/drafts/$piece/$version";
+                $to = $this->files->claim($this->files->claim("$next/$owner/$piece", true) . "/$version", true);
+                foreach (self::DRAFT_FILES as $name) {
+                    $bytes = is_file("$from/$name") && !is_link("$from/$name") ? @file_get_contents("$from/$name") : false;
+                    if ($bytes === false) {
+                        continue;
+                    }
+                    $kept = self::storedBytes($name, $bytes);
+                    $this->writeFile("$to/" . self::storedName($name), $kept);
+                    $stored += strlen($kept);
+                }
+            }
+            $size->execute([$stored, $owner, $piece, $version]);
+        }
+        $this->swap("{$this->dir}/drafts", "{$this->dir}/drafts.old");
+        $this->swap($next, "{$this->dir}/drafts");
+    }
+
+    /** Puts drafts/ back as the move found it, when drafts.old/ was set aside and its move never committed, and deletes drafts.new/. */
+    private function restoreDrafts(): void
+    {
+        $old = "{$this->dir}/drafts.old";
+        if (is_dir($old) && !is_link($old)) {
+            $this->removeTree("{$this->dir}/drafts");
+            $this->swap($old, "{$this->dir}/drafts");
+        }
+        $this->removeTree("{$this->dir}/drafts.new");
+    }
+
+    private function swap(string $from, string $to): void
+    {
+        if (!@rename($from, $to)) {
+            $this->files->refuse($from, "cannot be renamed to $to", 'fix its directory');
+        }
+    }
+
+    /** Deletes $path and everything under it, never following a link; a missing path is skipped. */
+    private function removeTree(string $path): void
+    {
+        if (is_link($path) || is_file($path)) {
+            @unlink($path);
+            return;
+        }
+        if (!is_dir($path)) {
+            return;
+        }
+        foreach (scandir($path) ?: [] as $entry) {
+            if ($entry !== '.' && $entry !== '..') {
+                $this->removeTree("$path/$entry");
+            }
+        }
+        @rmdir($path);
     }
 }

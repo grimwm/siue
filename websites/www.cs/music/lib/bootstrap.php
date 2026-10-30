@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../admin/lib/bootstrap.php';
 require_once __DIR__ . '/Store.php';
+require_once __DIR__ . '/Limits.php';
+require_once __DIR__ . '/Accounts.php';
 require_once __DIR__ . '/Http.php';
 require_once __DIR__ . '/Api.php';
 require_once __DIR__ . '/Pages.php';
 
-function music_store(\PDO $db, Admin\Clock $clock): Music\Store
+/** The studio of $account, with the limits its address has under the deploy's configuration. */
+function music_store(\PDO $db, Admin\Clock $clock, int $account): Music\Store
 {
-    return new Music\Store($db, Admin\Db::dataDir() . '/music', $clock);
+    $people = admin_people();
+    $accounts = new Music\Accounts($db, $clock, $people);
+    $limits = Music\Limits::for($people, (string) $accounts->emailOf($account));
+    return new Music\Store($db, Admin\Db::dataDir() . '/music', $clock, $account, $limits, $accounts);
 }
 
 /** Admin\Request::fromGlobals() plus the content-length header: PHP keeps CONTENT_LENGTH out of the HTTP_* variables Request reads. */
@@ -90,7 +96,7 @@ function music_run(string $kind, callable $route): void
     try {
         $db = Admin\Db::open(Admin\Db::dataDir());
         $clock = new Admin\SystemClock();
-        $store = music_store($db, $clock);
+        $store = music_store($db, $clock, (new Music\Accounts($db, $clock, admin_people()))->ownerId());
         $keys = new Admin\Keys($db, $clock, null, $base);
         $sessions = new Admin\Sessions($db, $clock, admin_cookie_path($base));
         $admin = new Admin\Pages($db, $clock, admin_mailer($r->host, null, $base), $base, null, $keys);

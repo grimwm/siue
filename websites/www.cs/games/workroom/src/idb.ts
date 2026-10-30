@@ -95,7 +95,7 @@ export function indexedDbOutbox(idb: IDBFactory | null = typeof indexedDB === 'u
     },
     async put(p) {
       try {
-        await transact('readwrite', s => s.put({ key: p.key, bundle: p.bundle, made: p.made, reason: p.reason }));
+        await transact('readwrite', s => s.put({ key: p.key, bundle: p.bundle, made: p.made, reason: p.reason, ...(p.room === undefined ? {} : { room: p.room }) }));
         await fallback.remove(p.key);
         return false;
       } catch {

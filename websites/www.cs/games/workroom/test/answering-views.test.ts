@@ -187,6 +187,7 @@ function fakeSession(over: Partial<NotesSession> = {}): NotesSession & { calls: 
     calls,
     hasKeyring: async () => true,
     makeKey: async () => null,
+    keyStored: () => false,
     unlocked: () => open,
     unlock: async p => { calls.push(`unlock ${p}`); if (p !== 'right') return 'That passphrase did not unlock the key.'; open = true; return null; },
     restore: async () => false,

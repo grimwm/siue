@@ -71,8 +71,9 @@ test('it shows no secret: no key, passphrase or address with one in it', async (
 });
 
 /** A locked notes session with nothing in it; hasKeyring says whether a keyring is uploaded. */
-const session = (hasKeyring: boolean, made: string[] = []): NotesSession => ({
+const session = (hasKeyring: boolean, made: string[] = [], stored = false): NotesSession => ({
   hasKeyring: async () => hasKeyring,
+  keyStored: () => stored,
   makeKey: async p => { made.push(p); return made.length === 1 ? 'There is a notes key already. Reload the page and unlock it with its passphrase.' : null; },
   unlocked: () => made.length > 1,
   unlock: async () => null,
@@ -129,5 +130,40 @@ test('with no keyring the pieces list makes the notes key: two passphrases, chec
   assert.deepEqual(made, ['twelve chars or more', 'twelve chars or more']);
   assert.ok(walk(root).find(e => e._attrs['data-make-key'] !== undefined) === undefined, 'made and unlocked: the notes panel takes its place');
   assert.ok(walk(root).find(e => e._attrs['data-pieces-notes'] !== undefined));
+  await act(() => { render(null, renderTarget(root)); });
+});
+
+test('a key that was stored but did not unlock takes the panel to the unlock form with the reason, so a retry cannot make another key', async () => {
+  const made: string[] = [];
+  const notes = session(false, made, true);
+  notes.makeKey = async p => { made.push(p); return 'Could not reach the server. Check the connection and try again.'; };
+  notes.unlocked = () => false;
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, named: false }));
+  await settle();
+  const form = walk(root).find(e => e._attrs['data-make-key'] !== undefined)!;
+  const [first, again] = walk(form).filter(e => e._attrs['autocomplete'] === 'new-password');
+  first!.value = 'twelve chars or more'; await act(() => { fire(first!, 'input'); });
+  again!.value = 'twelve chars or more'; await act(() => { fire(again!, 'input'); });
+  await act(() => { fire(walk(form).find(e => e.localName === 'form')!, 'submit'); });
+  await settle();
+  assert.deepEqual(made, ['twelve chars or more']);
+  assert.ok(walk(root).find(e => e._attrs['data-make-key'] !== undefined) === undefined, 'no make form: the key exists');
+  assert.equal(walk(root).find(e => e._attrs['data-unlock-reason'] !== undefined)?.textContent, 'Could not reach the server. Check the connection and try again.');
+  await act(() => { render(null, renderTarget(root)); });
+});
+
+test('a make that returns nothing and unlocks nothing says so instead of going silent', async () => {
+  const notes = session(false, []);
+  notes.makeKey = async () => null;
+  notes.unlocked = () => false;
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, named: false }));
+  await settle();
+  const form = walk(root).find(e => e._attrs['data-make-key'] !== undefined)!;
+  const [first, again] = walk(form).filter(e => e._attrs['autocomplete'] === 'new-password');
+  first!.value = 'twelve chars or more'; await act(() => { fire(first!, 'input'); });
+  again!.value = 'twelve chars or more'; await act(() => { fire(again!, 'input'); });
+  await act(() => { fire(walk(form).find(e => e.localName === 'form')!, 'submit'); });
+  await settle();
+  assert.match(walk(root).find(e => e._attrs['role'] === 'alert')?.textContent ?? '', /locked again/);
   await act(() => { render(null, renderTarget(root)); });
 });

@@ -3,7 +3,7 @@
 // (read from the status, never the Content-Type), and limits are refusals.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, createApi } from '../src/api.ts';
+import { KeyExists, NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, createApi } from '../src/api.ts';
 import type { Fetch } from '../src/load.ts';
 
 type Init = Parameters<Fetch>[1];
@@ -158,4 +158,35 @@ test('a fetch that rejects with a TypeError is a NetworkError (still a TypeError
   await assert.rejects(down.bytes(A), NetworkError);
   const odd = new RangeError('odd');
   await assert.rejects(createApi(async () => { throw odd; }, 'x').list(), (e: unknown) => e === odd);
+});
+
+test('deleteDraft posts piece and version with CSRF; no version deletes the piece', async () => {
+  const sent: { url: string; init: Init }[] = [];
+  let status = 200;
+  const fetch: Fetch = async (url, init?: Init) => { sent.push({ url, init }); return reply(status, status === 200 ? { deleted: 3, csrf: 'next' } : { error: 'not_found', csrf: 'next' }); };
+  const api = createApi(fetch, 't0');
+  assert.equal(await api.deleteDraft('a-piece', 2), 3);
+  assert.equal(sent[0]!.url, 'delete-draft.php');
+  assert.equal(sent[0]!.init?.method, 'POST');
+  assert.equal(sent[0]!.init?.headers?.['X-CSRF'], 't0');
+  assert.equal(sent[0]!.init?.headers?.['Content-Type'], 'application/x-www-form-urlencoded');
+  assert.equal(new TextDecoder().decode(sent[0]!.init?.body), 'piece=a-piece&v=2');
+  await api.deleteDraft('a-piece');
+  assert.equal(new TextDecoder().decode(sent[1]!.init?.body), 'piece=a-piece');
+  assert.equal(sent[1]!.init?.headers?.['X-CSRF'], 'next');
+  status = 404;
+  await assert.rejects(api.deleteDraft('a-piece', 9), (e: unknown) => e instanceof ServerError && e.status === 404);
+});
+
+test('an over-quota upload is a refusal that carries the room', async () => {
+  const fetch: Fetch = async () => reply(413, { error: 'over_quota', room: 1234, message: 'Your studio has 1 KB of 5 MB left.', csrf: 'n' });
+  assert.deepEqual(await createApi(fetch, 'x').upload(new Uint8Array(4)), { kind: 'refused', reason: 'over_quota', room: 1234 });
+  const odd: Fetch = async () => reply(413, { error: 'over_quota', csrf: 'n' });
+  assert.deepEqual(await createApi(odd, 'x').upload(new Uint8Array(4)), { kind: 'refused', reason: 'over_quota' });
+});
+
+test('a keyring that already exists is KeyExists, not a failure to retry', async () => {
+  const locked = { v: 1 as const, kdf: 'PBKDF2-SHA-256' as const, iterations: 600000, salt: 's', iv: 'i', ct: 'c' };
+  const fetch: Fetch = async () => reply(409, { error: 'key_exists', csrf: 'n' });
+  await assert.rejects(createApi(fetch, 'x').uploadKeyring(locked, 'f'.repeat(64)), KeyExists);
 });

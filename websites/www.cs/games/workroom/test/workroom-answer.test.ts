@@ -63,6 +63,7 @@ function fakeNotes(answer: (key: string) => AddReport = key => ({ key, memoryOnl
   const session: NotesSession = {
     hasKeyring: async () => keyring,
     makeKey: async p => { made.push(p); keyring = true; open = true; return null; },
+    keyStored: () => keyring,
     unlocked: () => open,
     unlock: async () => { open = true; return null; },
     restore: async () => false,

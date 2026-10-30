@@ -1,10 +1,12 @@
 // "Your notes" before there is a notes key: the person chooses a passphrase,
 // typed twice, and this page makes the key, locks it with the passphrase,
-// uploads it and unlocks it at once. A password manager offers to save the new
+// uploads it and unlocks it at once. When the key is stored but the unlock failed,
+// the unlock form takes over (the key exists, and a second make would discard it). A password manager offers to save the new
 // passphrase (a username it never shows, and new-password fields). The fields
 // are cleared on submit; the page keeps nothing of the passphrase.
 import { useState } from 'preact/hooks';
 import { PASSPHRASE_MESSAGES, checkPassphrase } from '../keymaker.ts';
+import { UNLOCK_MESSAGES } from '../notes-session.ts';
 import type { NotesSession } from '../notes-session.ts';
 import { Button } from './console/Button.tsx';
 import { Panel } from './console/Panel.tsx';
@@ -18,6 +20,8 @@ export interface MakeKeyPanelProps {
   notes: NotesSession;
   /** The key is made, uploaded and unlocked. */
   onMade(): void;
+  /** The studio holds the key now (this page uploaded it, or another tab did) but it is not unlocked: show the unlock form, with why. */
+  onStored(why: string): void;
 }
 
 export function MakeKeyPanel(p: MakeKeyPanelProps) {
@@ -32,8 +36,10 @@ export function MakeKeyPanel(p: MakeKeyPanelProps) {
     setError(null);
     const problem = await p.notes.makeKey(a);
     setBusy(false);
-    if (problem) setError(problem);
-    else if (p.notes.unlocked()) p.onMade();
+    if (problem === null && p.notes.unlocked()) { p.onMade(); return; }
+    const why = problem ?? UNLOCK_MESSAGES.lockedAgain;
+    if (p.notes.keyStored()) p.onStored(why);
+    else setError(why);
   };
   return (
     <Panel title="Your notes" class="grid gap-3" data={{ 'data-make-key': '' }}>

@@ -405,6 +405,14 @@ final class Store
             ->execute([$this->account, $lockedJson, $this->clock->now(), $current, json_encode(array_values($previous))]);
     }
 
+    /** Stores the keyring only when this account has none, in one statement; false when it already has one. */
+    public function createKeyring(string $lockedJson, string $current, array $previous): bool
+    {
+        $q = $this->db->prepare('INSERT INTO music_keyring (account_id, locked, uploaded_at, current_fp, previous_fps) VALUES (?, ?, ?, ?, ?) ON CONFLICT(account_id) DO NOTHING');
+        $q->execute([$this->account, $lockedJson, $this->clock->now(), $current, json_encode(array_values($previous))]);
+        return $q->rowCount() === 1;
+    }
+
     /** @return array{locked: string, uploaded_at: int, current: string, previous: list<string>}|null */
     public function keyring(): ?array
     {

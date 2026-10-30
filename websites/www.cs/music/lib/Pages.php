@@ -282,8 +282,8 @@ final class Pages
 
     /**
      * GET keyring.php: the locked keyring, and this session's unlock tag (the page forgets a remembered unlock when it
-     * changes). POST stores the keyring the page made or rewrote ($body, Keyring::parseUpload's wrapper), replacing
-     * this studio's.
+     * changes). POST stores the keyring the page made ($body, Keyring::parseUpload's wrapper) when this studio has none;
+     * 409 key_exists when it has one (the owner's CLI replaces keyrings through the API, the page never does).
      */
     public function keyring(\Admin\Request $r, string $body = ''): \Admin\Response
     {
@@ -296,7 +296,9 @@ final class Pages
                 if ($parsed === null) {
                     return $this->refuseWithToken(422, 'bad_keyring', $r);
                 }
-                $store->putKeyring($parsed['locked'], $parsed['current'], $parsed['previous']);
+                if (!$store->createKeyring($parsed['locked'], $parsed['current'], $parsed['previous'])) {
+                    return $this->refuseWithToken(409, 'key_exists', $r);
+                }
                 return Http::json(201, ['uploaded' => true, 'csrf' => $this->sessions->csrf($r)]);
             }, 'POST');
         }

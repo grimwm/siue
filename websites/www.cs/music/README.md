@@ -54,7 +54,8 @@ new key once, `revoke-key` (`id`), or `start-over` (`confirm` typed `start over`
 session's token in a `csrf` field. Start over (`Music\Accounts::startOver`) deletes the AI keys, notes, drafts,
 files and keyring in one transaction; the account and its sessions stay); `csrf.php`, `notes.php` (GET list, POST upload), `note.php?id=`,
 `delete.php` (POST `id`, or `all=1`), `keyring.php` (GET the locked keyring; POST stores
-`{keyring, current, previous}`, the rules `api/keyring.php` keeps), `delete-draft.php` (POST
+`{keyring, current, previous}`, the rules `api/keyring.php` keeps, only while the studio has none: 409
+`key_exists` otherwise), `delete-draft.php` (POST
 `piece` and `v` deletes one draft, `piece` alone the whole piece; 404 `not_found` when none
 went), `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data). Signed out, a page goes to
 `login.php?next=` (the page, when sign-in may return to it) and a data route answers 401

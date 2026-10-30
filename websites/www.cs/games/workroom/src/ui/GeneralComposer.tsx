@@ -4,7 +4,7 @@
 import { useState } from 'preact/hooks';
 import { NoteEmpty, NoteTooLong, generalNote } from '../answer.ts';
 import { MAX_TEXT } from '../note.ts';
-import { KEPT_MESSAGES, MEMORY_NOTICE, SENT_MESSAGE, SEND_MESSAGES } from '../outbox.ts';
+import { MEMORY_NOTICE, SENT_MESSAGE, SEND_MESSAGES, keptMessage } from '../outbox.ts';
 import type { NotesSession } from '../notes-session.ts';
 import { Button } from './console/Button.tsx';
 
@@ -28,7 +28,7 @@ export function GeneralComposer(p: { notes: NotesSession; busy: boolean; text: s
     try {
       const r = await p.notes.send(body, null);
       const kept = r.kept.find(k => k.key === r.key);
-      setStatus(kept ? `${KEPT_MESSAGES[kept.reason]}${r.memoryOnly ? ` ${MEMORY_NOTICE}` : ''}` : SENT_MESSAGE);
+      setStatus(kept ? `${keptMessage(kept.reason, kept.room)}${r.memoryOnly ? ` ${MEMORY_NOTICE}` : ''}` : SENT_MESSAGE);
       setText(now => (now.trim() === sentWords ? '' : now)); // words typed while it was sent stay
       p.onStored();
     } catch (e) {

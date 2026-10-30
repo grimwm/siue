@@ -29,7 +29,7 @@ import { guardLeaving, unsavedWork } from '../leave.ts';
 import type { NoteBody } from '../note.ts';
 import { UNLOCK_FIRST } from '../notes-session.ts';
 import type { NotesSession } from '../notes-session.ts';
-import { KEPT_MESSAGES, MEMORY_NOTICE, SENT_MESSAGE, SEND_MESSAGES } from '../outbox.ts';
+import { MEMORY_NOTICE, SENT_MESSAGE, SEND_MESSAGES, keptMessage } from '../outbox.ts';
 import type { DemoId } from '../demo.ts';
 import { follow } from '../player.ts';
 import type { Clip } from '../player.ts';
@@ -61,6 +61,8 @@ import { Timeline } from './Timeline.tsx';
 import { ViewTabs } from './ViewTabs.tsx';
 
 export interface WorkroomProps { score: Score; version: number; versions: number[]; audioSrc: (file: string) => string; onVersion(v: number): void; guide?: GuideStore; playDemo?(id: DemoId): void; stopDemo?(): void; children?: ComponentChildren;
+  /** Under the views: what this page offers to manage the piece (delete a draft, delete the piece). */
+  manage?: ComponentChildren;
   /** The owner's notes: undefined, the page has no answering. */
   notes?: NotesSession;
   /** The microphone: null or undefined, no Hum it and no Record. */
@@ -111,6 +113,8 @@ export function Workroom(p: WorkroomProps) {
   const now = p.now ?? ((): Date => new Date());
   const [unlocked, setUnlocked] = useState(notes?.unlocked() ?? false);
   const [keyring, setKeyring] = useState(true);
+  /** Why the unlock is shown first, when the key was made but did not unlock. */
+  const [keyWhy, setKeyWhy] = useState<string | null>(null);
   const [asked, setAsked] = useState<Asked | null>(null);
   const [mode, setMode] = useState<AnswerMode>('none');
   const [span, setSpan] = useState<Span | null>(null);
@@ -161,7 +165,7 @@ export function Workroom(p: WorkroomProps) {
     try {
       const r = await notes.send(body, audio);
       const kept = r.kept.find(k => k.key === r.key);
-      setStatus(kept ? `${KEPT_MESSAGES[kept.reason]}${r.memoryOnly ? ` ${MEMORY_NOTICE}` : ''}` : SENT_MESSAGE);
+      setStatus(kept ? `${keptMessage(kept.reason, kept.room)}${r.memoryOnly ? ` ${MEMORY_NOTICE}` : ''}` : SENT_MESSAGE);
       // The note is stored; a sign-in that ended locks the notes until the owner signs in and unlocks again.
       if (r.kept.some(k => k.reason === 'signed_out')) notes.lock();
       const from: AnswerMode | null = body.kind === 'text' ? 'pin' : body.kind === 'energy' ? 'energy' : null;
@@ -337,10 +341,11 @@ export function Workroom(p: WorkroomProps) {
           </div>
           <Legend items={mode === 'energy' ? energyLegend(score) : legendFor(tab, score, { notes: marks.length > 0 })} />
         </div>
+        {p.manage ?? null}
       </div>
       <Sheet title="Notes & answers" open={sheetOpen} onToggle={setSheetOpen}>
-        {notes && !keyring ? <MakeKeyPanel notes={notes} onMade={() => { setKeyring(true); unlockedNow(); }} /> : null}
-        {notes && keyring ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} ask={asked ? UNLOCK_FIRST : null} onUnlocked={unlockedNow} onLocked={syncLock} onItems={setItems} /> : null}
+        {notes && !keyring ? <MakeKeyPanel notes={notes} onMade={() => { setKeyring(true); unlockedNow(); }} onStored={m => { setKeyWhy(m); setKeyring(true); }} /> : null}
+        {notes && keyring ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} ask={keyWhy ?? (asked ? UNLOCK_FIRST : null)} onUnlocked={unlockedNow} onLocked={syncLock} onItems={setItems} /> : null}
         {openTerm ? <Card cardRef={cardRef} term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={closeCard} /> : null}
         {seen.length > 0 ? (
           <div class="words grid gap-2" aria-label="Words in this piece">

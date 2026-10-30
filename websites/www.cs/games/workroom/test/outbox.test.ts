@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { KEPT_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
+import { KEPT_MESSAGES, createOutbox, keptMessage, memoryOutbox } from '../src/outbox.ts';
 import type { OutboxLock, OutboxStore } from '../src/outbox.ts';
 import { SignedOut, type UploadResult } from '../src/api.ts';
 import { MAX_NOTE_BYTES } from '../src/note.ts';
@@ -171,4 +171,34 @@ test('the outbox says while a note is held only in memory', async () => {
   assert.equal(box.memoryOnly(), true);
   await box.discard('k1');
   assert.equal(box.memoryOnly(), false);
+});
+
+test("a note over the studio's note max stays on the device as too_large", async () => {
+  const store = memoryOutbox();
+  const sizes: number[] = [];
+  const box = createOutbox(store, { upload: async b => { sizes.push(b.length); return SENT(); } }, keys(), null, 1_048_576);
+  const r = await box.add(new Uint8Array(1_048_577), '2026-10-20T00:00:01.000Z');
+  assert.deepEqual(r.kept, [{ key: 'k1', reason: 'too_large' }]);
+  assert.deepEqual(sizes, [], 'never sent');
+  assert.equal((await store.all()).length, 1);
+  const fits = await box.add(new Uint8Array(1_048_576), '2026-10-20T00:00:02.000Z');
+  assert.deepEqual(fits.sent.map(x => x.key), ['k2']);
+});
+
+test('over_quota keeps the note and names the room', async () => {
+  const store = memoryOutbox();
+  const box = createOutbox(store, { upload: async () => ({ kind: 'refused', reason: 'over_quota', room: 1_258_291 }) as UploadResult }, keys());
+  const r = await box.add(one(1), 'a');
+  assert.deepEqual(r.kept, [{ key: 'k1', reason: 'over_quota', room: 1_258_291 }]);
+  assert.deepEqual((await store.all()).map(p => [p.reason, p.room]), [['over_quota', 1_258_291]]);
+  assert.equal(KEPT_MESSAGES.over_quota(1_258_291), 'Your studio is full: 1.2 MB left. Delete drafts or picked-up notes to make room; this note stays on this device until then.');
+  assert.equal(keptMessage('over_quota', 5_242_880), KEPT_MESSAGES.over_quota(5_242_880));
+  assert.equal(keptMessage('over_quota', undefined), KEPT_MESSAGES.over_quota(0), 'a note kept before the room was known still says it is full');
+});
+
+test('the unknown-key message points studio people to Start over, named people to make music-status', () => {
+  assert.match(keptMessage('unknown_key', undefined, true), /make music-status/);
+  assert.doesNotMatch(keptMessage('unknown_key', undefined, false), /make music/);
+  assert.match(keptMessage('unknown_key', undefined, false), /Start over on Your studio/);
+  assert.equal(keptMessage('offline', undefined, false), KEPT_MESSAGES.offline);
 });

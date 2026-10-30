@@ -6,7 +6,7 @@
 // unlock is also remembered in this browser (remember.ts) for the same sign-in
 // and keyring, so a reload restores it, and a lock forgets it. Before an unlock
 // or a restore nothing can be sealed.
-import { NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer } from './api.ts';
+import { KeyExists, NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer } from './api.ts';
 import type { PageApi } from './api.ts';
 import { DownloadFailed, buildHistory } from './history.ts';
 import type { HistoryItem, OpenOutcome } from './history.ts';
@@ -19,6 +19,7 @@ import { PASSPHRASE_MESSAGES, checkPassphrase, makeNotesKey } from './keymaker.t
 import { KeyringInvalid, NoCrypto, WrongPassphrase, unlockKeyring } from './unlock.ts';
 import { forgetfulMemory, keyringDigest } from './remember.ts';
 import type { KeyMemory } from './remember.ts';
+import { pageLimits } from './studio-limits.ts';
 import type { Vault } from './vault.ts';
 
 export const UNLOCK_MESSAGES = {
@@ -26,9 +27,13 @@ export const UNLOCK_MESSAGES = {
   keyExists: 'There is a notes key already. Reload the page and unlock it with its passphrase.',
   wrong: 'That passphrase did not unlock the key.',
   invalid: 'The notes key on the server is damaged or does not match its fingerprints. Run make music-setup, then reload the page.',
+  lockedAgain: 'Your notes key is made, but the notes were locked again before they opened. Unlock it with your passphrase.',
   signedOut: 'Your sign-in ended. Sign in again.',
   offline: 'Could not reach the server. Check the connection and try again.',
 } as const;
+
+/** What studio people are told for a damaged key: they have no make targets, and Start over on Your studio is how they begin again. */
+export const studioInvalid = 'The notes key on the server is damaged or does not match its fingerprints. Use Start over on Your studio, then reload the page.';
 
 export const NO_CRYPTO = 'This browser cannot unlock or seal notes: it has no Web Crypto. Use a current browser, on the https page.';
 export const DISCARD_FAILED = 'The saved note could not be discarded from this browser. Try again.';
@@ -61,9 +66,11 @@ export const UNLOCK_FIRST = 'Unlock your notes first: each note is sealed to you
 export interface SessionDeps { api: PageApi; vault: Vault; outbox: Outbox; memory?: KeyMemory }
 export interface NotesSession {
   hasKeyring(): Promise<boolean>;
-  /** Makes a notes key locked with the passphrase, uploads it, then unlocks it with the same passphrase; what went wrong, or null. Never replaces a key the server already holds. */
+  /** Makes a notes key locked with the passphrase, uploads it, then unlocks it with the same passphrase; what went wrong, or null. Never replaces a key the server already holds. A null that left the notes locked is a lock that came in between, so it says lockedAgain instead. */
   makeKey(passphrase: string): Promise<string | null>;
   unlocked(): boolean;
+  /** True once this session's makeKey found or stored the studio's key: the next step is the unlock, never another make. */
+  keyStored(): boolean;
   unlock(passphrase: string): Promise<string | null>;
   /** Unlocks with what this browser remembers, when it was remembered under this sign-in and this keyring; true when it did. Forgets it when either changed. Never throws. */
   restore(): Promise<boolean>;
@@ -93,9 +100,11 @@ export function createNotesSession(d: SessionDeps): NotesSession {
   /** Incremented by lock(): an operation that started before a lock drops its result. */
   let epoch = 0;
   let skipped = 0;
+  let stored = false;
   const say = (e: unknown): string => (e instanceof NoKeyring ? UNLOCK_MESSAGES.noKeyring
     : e instanceof WrongPassphrase ? UNLOCK_MESSAGES.wrong
-    : e instanceof KeyringInvalid ? UNLOCK_MESSAGES.invalid
+    : e instanceof KeyringInvalid ? (pageLimits().named ? UNLOCK_MESSAGES.invalid : studioInvalid)
+    : e instanceof KeyExists ? UNLOCK_MESSAGES.keyExists
     : describeFailure(e));
   const openOne = async (id: string, ring: ReadonlyMap<string, CryptoKey>, at: number): Promise<void> => {
     let bytes: Uint8Array<ArrayBuffer>;
@@ -131,17 +140,21 @@ export function createNotesSession(d: SessionDeps): NotesSession {
         // Another tab may have made one while this key was being made: never seal over it.
         try {
           await d.api.keyring();
+          stored = true;
           return UNLOCK_MESSAGES.keyExists;
         } catch (e) {
           if (!(e instanceof NoKeyring)) throw e;
         }
         await d.api.uploadKeyring(made.locked, made.current);
+        stored = true;
       } catch (e) {
+        if (e instanceof KeyExists) stored = true;
         return say(e);
       }
-      return session.unlock(passphrase);
+      return (await session.unlock(passphrase)) ?? (current === null ? UNLOCK_MESSAGES.lockedAgain : null);
     },
     unlocked: () => current !== null,
+    keyStored: () => stored,
     unreadable: () => skipped,
     async unlock(passphrase) {
       const at = epoch;

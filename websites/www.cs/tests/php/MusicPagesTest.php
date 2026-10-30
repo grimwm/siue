@@ -522,6 +522,21 @@ final class MusicPagesTest extends TestCase
         self::assertSame($env, $read['keyring'], 'the page reads back what it stored');
     }
 
+    public function testKeyringUploadNeverReplacesAKeyTheStudioHolds(): void
+    {
+        [$id, $store] = $this->student('second@siue.edu', false);
+        $first = music_locked_keyring();
+        $second = music_locked_keyring(['ct' => base64_encode(str_repeat('x', 48))]);
+        $upload = fn(array $env, string $fp) => $this->pages->keyring($this->postWithToken($id), json_encode(['keyring' => $env, 'current' => $fp, 'previous' => []], JSON_UNESCAPED_SLASHES));
+        self::assertSame(201, $upload($first, MUSIC_FP_CURRENT)->status);
+        $refused = $upload($second, str_repeat('cd', 32));
+        $body = json_decode($refused->body, true);
+        self::assertSame([409, 'key_exists'], [$refused->status, $body['error']]);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $body['csrf'], 'the page gets a fresh token');
+        self::assertSame(json_encode($first, JSON_UNESCAPED_SLASHES), $store->keyring()['locked'], 'the first key stays');
+        self::assertSame(['current' => MUSIC_FP_CURRENT, 'previous' => []], $store->fingerprints());
+    }
+
     public function testDeleteDraftRemovesOneDraftOrAWholePiece(): void
     {
         foreach ([1, 2] as $v) {

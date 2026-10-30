@@ -1,6 +1,7 @@
 // The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns under a drag, zooms
 // under the wheel and its buttons, moves Theseus the way the screen shows, ignores the camera while a card is up,
-// keeps the Walls choice, follows the mini map, and hands the board back to the classic look and takes it again.
+// keeps the Walls choice, follows the mini map, and hands the board back to the classic look and takes it again,
+// from the menu or the strip's look button and its B key.
 // A block pushed into water floats there, and undo takes it out. Without WebGL the classic board shows.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
@@ -393,6 +394,36 @@ test('switching to Classic shows the classic board, and back', async ({ page }) 
   await expect(page.locator('#stage3d')).toBeVisible();
   await expect(page.locator('#stage')).toBeHidden();
   await expect.poll(async () => (await modern(page))!.active).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('the strip\'s look button swaps to Classic mid-level, keeps the moves and the choice, and B swaps back', async ({ page }) => {
+  const errors = await openHall(page);
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => (await player(page)).c, 'Theseus moves').toBe(11);
+  const moves = await page.locator('#hud-moves').textContent();
+  await expect(page.locator('#btn-look')).toHaveText(/^Classic/);
+  await page.locator('#btn-look').click();
+  await expect(page.locator('#stage')).toBeVisible();
+  await expect(page.locator('#stage3d')).toBeHidden();
+  await expect.poll(() => classicPainted(page), 'the classic board paints').toBe(true);
+  await expect(page.locator('#btn-look')).toHaveText(/^Modern/);
+  await expect(page.locator('#hud-moves')).toHaveText(moves!);
+  expect(await page.evaluate(() => localStorage.getItem('crete-look'))).toBe('classic');
+  // The arrows still move Theseus after the press.
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(async () => (await player(page)).c, 'Theseus moves back').toBe(10);
+  await page.keyboard.press('b');
+  await expect(page.locator('#stage3d')).toBeVisible();
+  await expect(page.locator('#stage')).toBeHidden();
+  await expect.poll(async () => (await modern(page))!.active).toBe(true);
+  await expect(page.locator('#btn-look')).toHaveText(/^Classic/);
+  expect(await page.evaluate(() => localStorage.getItem('crete-look'))).toBe('modern');
+  await page.keyboard.press('b');
+  await page.reload();
+  expect(await page.evaluate(() => localStorage.getItem('crete-look')), 'the choice is kept through a reload').toBe('classic');
+  await page.locator('#title-play').click();
+  await expect(page.locator('#pick-classic')).toHaveAttribute('aria-pressed', 'true');
   expect(errors).toEqual([]);
 });
 

@@ -17,7 +17,7 @@ const DEVICES: Device[] = [
   ['iPhone 15, landscape', 852, 393, true], ['Small Android, landscape', 740, 360, true],
   ['iPhone SE, landscape', 568, 320, true],
 ];
-const TABS = 14; // every control carries a key tab with a keyboard at hand
+const TABS = 15; // every control carries a key tab with a keyboard at hand
 
 async function open(browser: Browser, [, width, height, touch]: Device) {
   const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
@@ -62,7 +62,9 @@ function measure() {
   const cell = Number(document.getElementById('stage')!.dataset.cell);
   if (!(cell >= 8)) probs.push(`cells are ${cell}px`);
   const controls = [...document.querySelectorAll<HTMLElement>('#status-root button, #strip-root button')];
-  if (controls.length !== 14) probs.push(`${controls.length} controls`);
+  if (controls.length !== 15) probs.push(`${controls.length} controls`);
+  const strip = document.getElementById('strip-root')!;
+  if (strip.scrollWidth > strip.clientWidth + 0.5) probs.push(`the strip is wider than its row by ${strip.scrollWidth - strip.clientWidth}px`);
   for (const el of controls) {
     const name = el.id || el.className;
     if (!shown(el)) { probs.push(`${name} hidden`); continue; }

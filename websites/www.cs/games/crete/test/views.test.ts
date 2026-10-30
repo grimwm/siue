@@ -92,8 +92,8 @@ const ROWS: ToolRow[] = TOOL_KINDS.map((kind, i) => ({
 }));
 function stripProps(over: Partial<StripProps> = {}): StripProps {
   return {
-    tools: ROWS, playing: false, route: false, over: false,
-    onMove: noop, onWait: noop, onUndo: noop, onRestart: noop, onHint: noop, onRoute: noop, onAuto: noop, onTool: noop, ...over,
+    tools: ROWS, playing: false, route: false, over: false, look: 'modern',
+    onMove: noop, onWait: noop, onUndo: noop, onRestart: noop, onHint: noop, onRoute: noop, onAuto: noop, onTool: noop, onLook: noop, ...over,
   };
 }
 
@@ -101,7 +101,7 @@ test('every strip button wears a tab that prints what the key table says', () =>
   const root = mount();
   renderStrip(root, stripProps());
   const expected: [string, Action][] = [
-    ['wait', 'wait'], ['undo', 'undo'], ['restart', 'restart'], ['hint', 'hint'], ['route', 'route'], ['auto', 'auto'],
+    ['wait', 'wait'], ['undo', 'undo'], ['restart', 'restart'], ['hint', 'hint'], ['route', 'route'], ['auto', 'auto'], ['look', 'look'],
   ];
   for (const [id, action] of expected) {
     const tab = tabsOf(byId(root, `btn-${id}`))[0];
@@ -115,6 +115,18 @@ test('every strip button wears a tab that prints what the key table says', () =>
   pad.forEach((b, i) => assert.equal(tabsOf(b)[0]?.textContent, KEYS[padActions[i]!].label));
   for (const row of ROWS) assert.equal(tabsOf(byId(root, `tool-${row.kind}`))[0]?.textContent, row.key);
   assert.equal(maybeById(root, 'btn-bash'), undefined);
+});
+
+test('the look button names the other look and asks for it: Classic in Modern, Modern in Classic', () => {
+  const root = mount();
+  const asked: string[] = [];
+  renderStrip(root, stripProps({ look: 'modern', onLook: l => asked.push(l) }));
+  assert.match(byId(root, 'btn-look').textContent, /^Classic/);
+  click(byId(root, 'btn-look'));
+  renderStrip(root, stripProps({ look: 'classic', onLook: l => asked.push(l) }));
+  assert.match(byId(root, 'btn-look').textContent, /^Modern/);
+  click(byId(root, 'btn-look'));
+  assert.deepEqual(asked, ['classic', 'modern']);
 });
 
 test('the pad, Wait, Undo, Restart, the thread and the tools call back', () => {

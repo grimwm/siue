@@ -54,6 +54,7 @@ test('the help explains the Look setting and the camera gestures', () => {
   const all = text(helpLines(KEYS, TOOLS));
   assert.match(all, /Look in this menu picks the modern board or the classic tiles/);
   assert.match(all, /Walls \(modern only\)/);
+  assert.match(all, /Classic or Modern \(B\) under the board swaps between them/);
   assert.match(all, /double tap or double click/);
 });
 

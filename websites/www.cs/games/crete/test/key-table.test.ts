@@ -31,6 +31,8 @@ test('the rows the trials use', () => {
   assert.deepEqual(KEYS.story, { label: 'I', keys: ['i'] });
   assert.deepEqual(KEYS.fullscreen, { label: 'F', keys: ['f'] });
   assert.deepEqual(KEYS.lore, { label: 'L', keys: ['l'] });
+  assert.deepEqual(KEYS.look, { label: 'B', keys: ['b'] });
+  assert.equal(actionFor('B'), 'look');
   assert.equal('bash' in KEYS, false);
 });
 

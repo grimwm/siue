@@ -10,6 +10,7 @@ import { DISCARD_FAILED, NO_CRYPTO, UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSe
 import { SEND_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
 import { PROBLEMS, downloadProblem } from '../src/history.ts';
 import { headerFingerprint, seal } from '../src/seal.ts';
+import { PASSPHRASE_MESSAGES } from '../src/keymaker.ts';
 import { NoCrypto } from '../src/unlock.ts';
 import type { LockedKeyring } from '../src/unlock.ts';
 import { createVault } from '../src/vault.ts';
@@ -21,7 +22,7 @@ const note = (text: string, piece = 'test-piece'): NoteBody => ({ v: 1, kind: 't
 function server() {
   const notes: { id: string; bytes: Uint8Array<ArrayBuffer>; arrived: number; picked: number | null }[] = [];
   let n = 0;
-  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, session: 'tag-1', broken: new Set<string>(), downloads: 0, unreadable: 0 };
+  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, session: 'tag-1', broken: new Set<string>(), downloads: 0, unreadable: 0, uploaded: [] as string[] };
   const api: PageApi = {
     upload: async b => { const id = (++n).toString(16).padStart(32, '0'); notes.push({ id, bytes: b, arrived: n, picked: null }); return { kind: 'sent', id }; },
     list: async () => ({ notes: notes.map(x => ({ id: x.id, size: x.bytes.length, arrived_at: x.arrived, picked_up_at: x.picked })), unreadable: state.unreadable }),
@@ -29,6 +30,7 @@ function server() {
     remove: async id => { const i = notes.findIndex(x => x.id === id); if (i >= 0) notes.splice(i, 1); return i >= 0 ? 1 : 0; },
     removeAll: async () => { const k = notes.length; notes.length = 0; return k; },
     keyring: async () => { if (state.failKeyring) throw state.failKeyring; return { locked: state.keyring, session: state.session }; },
+    uploadKeyring: async (locked, current) => { state.keyring = locked; state.failKeyring = null; state.uploaded.push(current); },
   };
   return { api, notes, state };
 }
@@ -52,6 +54,21 @@ test('unlock: no keyring yet, a damaged keyring, a wrong passphrase, then the ri
   await assert.rejects(notes.history(), /locked/);
   assert.equal(await notes.unlock(fx.passphrase), null);
   assert.equal(notes.unlocked(), true);
+});
+
+test('makeKey refuses a short passphrase, never replaces a key the server holds, otherwise uploads its key and unlocks it', async () => {
+  const { s, notes } = session();
+  assert.equal(await notes.makeKey('too short'), PASSPHRASE_MESSAGES.short);
+  assert.equal(await notes.makeKey('a passphrase long enough'), UNLOCK_MESSAGES.keyExists);
+  assert.deepEqual(s.state.uploaded, []);
+  assert.equal(s.state.keyring, fx.keyring, 'the key the server holds stays');
+  s.state.failKeyring = new NoKeyring('none');
+  assert.equal(await notes.makeKey('a passphrase long enough'), null);
+  assert.equal(s.state.uploaded.length, 1);
+  assert.equal(notes.unlocked(), true, 'unlocked at once with the same passphrase');
+  const sent = await notes.send(note('to the new key'), null);
+  assert.equal(headerFingerprint(s.notes.find(n => n.id === sent.sent[0]!.id)!.bytes), s.state.uploaded[0]);
+  assert.deepEqual((await notes.history()).map(i => i.opened?.body.text), ['to the new key']);
 });
 
 test('nothing is sealed before an unlock or after a lock; an unlocked session seals to the keyring\'s current key', async () => {

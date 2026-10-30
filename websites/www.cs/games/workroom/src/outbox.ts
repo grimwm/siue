@@ -45,7 +45,7 @@ export const KEPT_MESSAGES: Readonly<Record<KeptReason, string>> = {
   server: 'The server had a problem. This note stays on this device and is sent on the next try.',
   too_large: 'This note is over 2 MB, so it stays on this device. Record a shorter one, then discard this one.',
   full: `The workroom holds ${MAX_NOTES.toLocaleString('en-US')} notes. Delete some old ones; this note stays on this device until then.`,
-  no_key: 'The workroom has no notes key yet (make music-setup), so this note stays on this device.',
+  no_key: 'The server has no notes key yet, so this note stays on this device. Make your notes key under Your notes.',
   bad_header: 'The server did not accept this note’s key. Reload the page; the note stays on this device.',
   unknown_key: 'The server does not take notes sealed to this key, so this note stays on this device. Run make music-status to compare the notes keys.',
 };

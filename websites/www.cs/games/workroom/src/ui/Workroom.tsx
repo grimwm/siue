@@ -13,7 +13,8 @@
 // plays them.
 // With a notes session it also holds the answering: the answer bar, the span
 // being picked, the energy drawing and the owner's notes on the Story view;
-// before an unlock the bar's buttons open the notes panel at the unlock form.
+// before an unlock the bar's buttons open the notes panel at the unlock form,
+// and with no notes key yet the notes panel makes one.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { energyNote } from '../answer.ts';
@@ -51,6 +52,7 @@ import { Sheet } from './console/Sheet.tsx';
 import { panelId, tabId } from './console/Tabs.tsx';
 import { EnergyEditor } from './EnergyEditor.tsx';
 import { Card, Word } from './Glossary.tsx';
+import { MakeKeyPanel } from './MakeKeyPanel.tsx';
 import { PianoRoll } from './PianoRoll.tsx';
 import { Player } from './Player.tsx';
 import { SheetMusic } from './SheetMusic.tsx';
@@ -185,7 +187,7 @@ export function Workroom(p: WorkroomProps) {
     }
     void send(body, null);
   };
-  // A server with no keyring (make music-setup has not run) turns the bar off.
+  // A server with no keyring turns the bar off until the notes panel makes the key.
   useEffect(() => { if (notes) void notes.hasKeyring().then(setKeyring); }, [notes]);
   /** Before an unlock nothing can be sealed: the notes panel opens at the unlock form, with the reason, and remembers what was asked for. */
   const askUnlock = (what: Asked): void => { setAsked(what); setSheetOpen(true); };
@@ -337,7 +339,8 @@ export function Workroom(p: WorkroomProps) {
         </div>
       </div>
       <Sheet title="Notes & answers" open={sheetOpen} onToggle={setSheetOpen}>
-        {notes ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} ask={asked ? UNLOCK_FIRST : null} onUnlocked={unlockedNow} onLocked={syncLock} onItems={setItems} /> : null}
+        {notes && !keyring ? <MakeKeyPanel notes={notes} onMade={() => { setKeyring(true); unlockedNow(); }} /> : null}
+        {notes && keyring ? <Answers notes={notes} score={score} version={p.version} refresh={refresh} ask={asked ? UNLOCK_FIRST : null} onUnlocked={unlockedNow} onLocked={syncLock} onItems={setItems} /> : null}
         {openTerm ? <Card cardRef={cardRef} term={openTerm} clip={openClip ? { from: openClip.from, to: openClip.to } : null} onHear={hear} onClose={closeCard} /> : null}
         {seen.length > 0 ? (
           <div class="words grid gap-2" aria-label="Words in this piece">

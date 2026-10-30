@@ -31,6 +31,8 @@ if (switchHost) render(h(ThemeSwitch, { handle: theme }), switchHost);
 const root = document.getElementById('workroom')!;
 const playDemo = demoPlayer(createAudioCore());
 const { view, piece, version } = document.body.dataset;
+/** The address has the allowance: it gets the AI app's setup help. */
+const named = document.body.dataset['named'] === '1';
 const fetcher = window.fetch.bind(window);
 
 /** The notes on this page view: the unlocked keys are remembered in IndexedDB as non-extractable keys; the outbox holds sealed notes only. */
@@ -75,7 +77,7 @@ if (view === 'piece' && piece) {
 } else if (view === 'index') {
   root.textContent = '';
   const list = document.querySelector('.index-body');
-  if (list) render(h(ThemeRoot, { handle: theme }, h(PiecesIndex, { notes, list })), root);
+  if (list) render(h(ThemeRoot, { handle: theme }, h(PiecesIndex, { notes, list, named })), root);
 } else {
   root.textContent = '';
 }

@@ -37,6 +37,8 @@ export interface PageApi {
   removeAll(): Promise<number>;
   /** The locked keyring, and the server's tag for this sign-in ('' when it gave none). */
   keyring(): Promise<KeyringAnswer>;
+  /** Stores a keyring made on this page: `current` is its one key's fingerprint, and there are no previous keys. */
+  uploadKeyring(locked: LockedKeyring, current: string): Promise<void>;
 }
 
 type Reply = Awaited<ReturnType<Fetch>>;
@@ -138,6 +140,10 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
       if (!reply.ok) throw failed(reply);
       if (typeof keyring !== 'object' || keyring === null) throw new UnreadableAnswer();
       return { locked: keyring as LockedKeyring, session: typeof data['session'] === 'string' ? data['session'] : '' };
+    },
+    async uploadKeyring(locked, current) {
+      const { reply } = await post('keyring.php', 'application/json', encoder.encode(JSON.stringify({ keyring: locked, current, previous: [] })));
+      if (!reply.ok) throw failed(reply);
     },
   };
 }

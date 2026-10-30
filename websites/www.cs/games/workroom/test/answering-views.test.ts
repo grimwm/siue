@@ -186,6 +186,7 @@ function fakeSession(over: Partial<NotesSession> = {}): NotesSession & { calls: 
   return {
     calls,
     hasKeyring: async () => true,
+    makeKey: async () => null,
     unlocked: () => open,
     unlock: async p => { calls.push(`unlock ${p}`); if (p !== 'right') return 'That passphrase did not unlock the key.'; open = true; return null; },
     restore: async () => false,
@@ -305,7 +306,7 @@ test('on the pieces list, a Discard that fails says so in plain words and lists 
   const notes = fakeSession({ kept: async () => { listed++; return [waiting]; }, discard: async () => { throw new DOMException('The connection is closing.', 'InvalidStateError'); } });
   let root: StubElement | null = null;
   const unhandled = await unhandledDuring(async () => {
-    root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+    root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, named: true }));
     await settle();
     await act(() => { fire(button(root!, 'Discard')!, 'click'); });
     await act(() => { fire(walk(root!).filter(e => e.localName === 'button' && /^Discard/.test(e.textContent)).at(-1)!, 'click'); });
@@ -349,7 +350,7 @@ test('the notes panel says how many listed notes it could not read, and a failed
 test('on the pieces list, a recount that fails after an unlock keeps the unlock form away and says why', async () => {
   const { ServerError } = ui.api;
   const notes = fakeSession({ history: async () => { throw new ServerError(500); } });
-  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, named: true }));
   await settle();
   await unlockWith(root, 'right');
   assert.equal(byAttr(root, 'autocomplete', 'current-password'), undefined, 'the notes are unlocked, so the form is gone');
@@ -362,7 +363,7 @@ test('on the pieces list, a recount after a flush that fails says so, and the co
   let failing = false;
   let flushes = 0;
   const notes = fakeSession({ flush: async () => { flushes++; return { sent: [], kept: [] }; }, history: async () => { if (failing) throw new ServerError(502); return [item('a')]; } });
-  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, named: true }));
   await settle();
   await unlockWith(root, 'right');
   assert.equal(alerts(root), '');
@@ -379,7 +380,7 @@ test('on the pieces list, a recount after a flush that fails says so, and the co
 
 test('on the pieces list, notes the page could not read are counted in a message', async () => {
   const notes = fakeSession({ unreadable: () => 1 });
-  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, named: true }));
   await settle();
   await unlockWith(root, 'right');
   assert.match(alerts(root), /1 note .*could not be read/);
@@ -388,7 +389,7 @@ test('on the pieces list, notes the page could not read are counted in a message
 const flush = async (): Promise<void> => { await settle(); await settle(); };
 const unlockedPieces = async (over: Partial<NotesSession>) => {
   const notes = fakeSession(over);
-  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, named: true }));
   await settle();
   await unlockWith(root, 'right');
   assert.equal(alerts(root), '', 'nothing to say before the action');
@@ -519,7 +520,7 @@ test('general notes: locked, there is no box to write in', async () => {
 test('the front page is the general notes panel: it unlocks, fills the per-piece counts from every note, and keeps the counts hint', async () => {
   const notes = fakeSession();
   const list = makeEl('ol');
-  const root = await mount(h(ui.index.PiecesIndex, { notes, list: list as unknown as ParentNode }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: list as unknown as ParentNode, named: true }));
   await settle();
   assert.ok(byAttr(root, 'data-pieces-notes'), 'the panel keeps its marker');
   await unlockWith(root, 'right');
@@ -540,7 +541,7 @@ const typeGeneral = async (root: StubElement, text: string): Promise<void> => {
 
 test('front page: leaving with words in the general box asks first; once the note is stored it does not', async () => {
   const notes = fakeSession({ send: async () => ({ key: 'k', memoryOnly: false, sent: [{ key: 'k', id: 'a'.repeat(32) }], kept: [] }) });
-  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, named: true }));
   await settle();
   await unlockWith(root, 'right');
   assert.equal(leaveAsks(), false, 'nothing typed, nothing to lose');
@@ -559,7 +560,7 @@ test('front page: a lost sign-in keeps the typed words, tells so, and shows them
     unlocked: () => open, unlock: async p => { if (p !== 'right') return 'no'; open = true; return null; }, lock: () => { open = false; },
     history: async () => { if (failing) throw new SignedOut(); return []; },
   });
-  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, named: true }));
   await settle();
   await unlockWith(root, 'right');
   await typeGeneral(root, 'do not lose this');

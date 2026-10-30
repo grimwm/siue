@@ -30,7 +30,7 @@ import { RecordButton } from './RecordButton.tsx';
 export type AnswerMode = 'none' | 'pin' | 'react' | 'energy';
 /** What a tap before an unlock asked for. */
 export type Asked = Exclude<AnswerMode, 'none'> | 'hum';
-export const NOTES_OFF = 'Notes are off until a notes key is uploaded (make music-setup).';
+export const NOTES_OFF = 'Notes are off until you make your notes key under Your notes.';
 /** After an unlock that Hum it asked for: iOS grants the microphone only inside a tap, so the recording waits for the next one. */
 export const HUM_AFTER_UNLOCK = 'Unlocked. Tap Hum it to start recording.';
 export interface AnswerBarProps {

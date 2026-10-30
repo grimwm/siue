@@ -97,6 +97,25 @@ test('the keyring and the sign-in tag come from keyring.php; before the first up
   assert.deepEqual(urls, ['keyring.php', 'keyring.php']);
 });
 
+test('uploadKeyring posts the three fields with the CSRF header', async () => {
+  const locked = { v: 1 as const, kdf: 'PBKDF2-SHA-256' as const, iterations: 600000, salt: 's', iv: 'i', ct: 'c' };
+  const current = 'f'.repeat(64);
+  const sent: { url: string; init: Init }[] = [];
+  let status = 201;
+  const fetch: Fetch = async (url, init?: Init) => { sent.push({ url, init }); return reply(status, status === 201 ? { uploaded: true, csrf: 'next' } : { error: 'bad_keyring', csrf: 'next' }); };
+  const api = createApi(fetch, 't0');
+  await api.uploadKeyring(locked, current);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]!.url, 'keyring.php');
+  assert.equal(sent[0]!.init?.method, 'POST');
+  assert.equal(sent[0]!.init?.headers?.['X-CSRF'], 't0');
+  assert.equal(sent[0]!.init?.headers?.['Content-Type'], 'application/json');
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(sent[0]!.init?.body)), { keyring: locked, current, previous: [] });
+  status = 422;
+  await assert.rejects(api.uploadKeyring(locked, current), (e: unknown) => e instanceof ServerError && e.status === 422);
+  assert.equal(sent[1]!.init?.headers?.['X-CSRF'], 'next', 'the next POST carries the token the last answer gave');
+});
+
 test('an upload is a raw octet-stream; limits come back as refusals, not errors', async () => {
   const types: string[] = [];
   let status = 201;

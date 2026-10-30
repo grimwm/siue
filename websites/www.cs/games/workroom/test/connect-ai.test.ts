@@ -1,13 +1,14 @@
 // The front page's Connect your AI help: what the MCP server is, what it needs,
 // the one command that prints the connect commands, things to ask, and that the
 // AI may delete a published draft with the publish key's delete permission but
-// not notes; numbered steps, no secret, and the pieces list shows it
-// whether or not a keyring is uploaded.
+// not notes; numbered steps, no secret, and the pieces list shows it to people
+// with the allowance whether or not a keyring is uploaded, and to no one else.
+// With no keyring the pieces list makes the notes key.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
 import { act } from 'preact/test-utils';
-import { installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
+import { fire, installDocument, makeEl, renderTarget, walk } from '../../_kit/test/dom-stub.ts';
 import type { ComponentChild } from 'preact';
 import type { StubElement } from '../../_kit/test/dom-stub.ts';
 import { importTsx } from '../../_kit/test/tsx.ts';
@@ -70,9 +71,10 @@ test('it shows no secret: no key, passphrase or address with one in it', async (
 });
 
 /** A locked notes session with nothing in it; hasKeyring says whether a keyring is uploaded. */
-const session = (hasKeyring: boolean): NotesSession => ({
+const session = (hasKeyring: boolean, made: string[] = []): NotesSession => ({
   hasKeyring: async () => hasKeyring,
-  unlocked: () => false,
+  makeKey: async p => { made.push(p); return made.length === 1 ? 'There is a notes key already. Reload the page and unlock it with its passphrase.' : null; },
+  unlocked: () => made.length > 1,
   unlock: async () => null,
   restore: async () => false,
   history: async () => [],
@@ -87,11 +89,45 @@ const session = (hasKeyring: boolean): NotesSession => ({
   unreadable: () => 0,
 });
 
-test('the pieces list shows the panel, with or without an uploaded keyring', async () => {
-  for (const hasKeyring of [false, true]) {
-    const root = await mount(h(ui.index.PiecesIndex, { notes: session(hasKeyring), list: makeEl('ol') as unknown as ParentNode }));
-    await settle();
-    assert.ok(panel(root), `keyring ${hasKeyring ? 'uploaded' : 'missing'}`);
-    await act(() => { render(null, renderTarget(root)); });
+test('the pieces list shows the panel to people with the allowance, with or without an uploaded keyring, and to no one else', async () => {
+  for (const named of [true, false]) {
+    for (const hasKeyring of [false, true]) {
+      const root = await mount(h(ui.index.PiecesIndex, { notes: session(hasKeyring), list: makeEl('ol') as unknown as ParentNode, named }));
+      await settle();
+      assert.equal(panel(root) !== undefined, named, `keyring ${hasKeyring ? 'uploaded' : 'missing'}, ${named ? 'named' : 'studio'}`);
+      if (!named) assert.doesNotMatch(root.textContent, /music-setup/);
+      await act(() => { render(null, renderTarget(root)); });
+    }
   }
+});
+
+test('with no keyring the pieces list makes the notes key: two passphrases, checked, then made and unlocked', async () => {
+  const made: string[] = [];
+  const root = await mount(h(ui.index.PiecesIndex, { notes: session(false, made), list: makeEl('ol') as unknown as ParentNode, named: false }));
+  await settle();
+  const form = () => walk(root).find(e => e._attrs['data-make-key'] !== undefined)!;
+  assert.equal(walk(form()).find(e => e.localName === 'p')!.textContent,
+    'Make your notes key. Your notes are sealed in this browser with a key only your passphrase unlocks. Nobody can reset it, not even the people who run this site. If you forget it, the only way back is Start over on Your studio, which deletes everything.');
+  assert.ok(walk(form()).find(e => e.localName === 'button' && e.textContent === 'Make my notes key'));
+  const type = async (a: string, b: string): Promise<void> => {
+    const [first, again] = walk(form()).filter(e => e._attrs['autocomplete'] === 'new-password');
+    first!.value = a; await act(() => { fire(first!, 'input'); });
+    again!.value = b; await act(() => { fire(again!, 'input'); });
+    await act(() => { fire(walk(form()).find(e => e.localName === 'form')!, 'submit'); });
+    await settle();
+  };
+  const alert = () => walk(form()).find(e => e._attrs['role'] === 'alert')?.textContent;
+  await type('short', 'short');
+  assert.equal(alert(), 'Choose a passphrase of at least 12 characters.');
+  await type('twelve chars or more', 'twelve chars or less');
+  assert.equal(alert(), 'The two passphrases are not the same. Type it again in both fields.');
+  assert.deepEqual(made, [], 'nothing is made until the two agree');
+  assert.ok(walk(form()).filter(e => e._attrs['autocomplete'] === 'new-password').every(e => e.value === ''), 'the fields are cleared');
+  await type('twelve chars or more', 'twelve chars or more');
+  assert.equal(alert(), 'There is a notes key already. Reload the page and unlock it with its passphrase.');
+  await type('twelve chars or more', 'twelve chars or more');
+  assert.deepEqual(made, ['twelve chars or more', 'twelve chars or more']);
+  assert.ok(walk(root).find(e => e._attrs['data-make-key'] !== undefined) === undefined, 'made and unlocked: the notes panel takes its place');
+  assert.ok(walk(root).find(e => e._attrs['data-pieces-notes'] !== undefined));
+  await act(() => { render(null, renderTarget(root)); });
 });

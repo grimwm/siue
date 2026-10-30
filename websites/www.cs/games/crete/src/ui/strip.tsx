@@ -1,5 +1,5 @@
 // The Island of Crete: the control strip. The move pad, Wait, Undo and Restart, Ariadne's thread (Hint, Route,
-// Auto) and the three tools with their counts, each with a key tab printed from the key table (the tools'
+// Auto), the three tools with their counts and the look swap, each with a key tab printed from the key table (the tools'
 // from their own definition). src/ui.ts builds the rows; this draws them and reports presses.
 import { render } from 'preact';
 import { Button } from '../../../_kit/ui/button.tsx';
@@ -7,6 +7,7 @@ import { KeyChip } from '../../../_kit/ui/key-chip.tsx';
 import { KEYS } from '../keys.ts';
 import type { Action, MoveAction } from '../keys.ts';
 import type { Tool } from '../puzzle/tiles.ts';
+import type { Look } from '../settings.ts';
 
 export interface ToolRow {
   kind: Tool;
@@ -27,6 +28,8 @@ export interface StripProps {
   route: boolean;
   /** The try is over: moves and tools wait for an Undo or a Restart. */
   over: boolean;
+  /** The look the board is drawn in; the swap button names the other one. */
+  look: Look;
   onMove: (dir: MoveAction) => void;
   onWait: () => void;
   onUndo: () => void;
@@ -35,6 +38,8 @@ export interface StripProps {
   onRoute: () => void;
   onAuto: () => void;
   onTool: (kind: Tool) => void;
+  /** The swap button asks for this look. */
+  onLook: (look: Look) => void;
 }
 
 const PAD: { dir: MoveAction; glyph: string; name: string }[] = [
@@ -77,6 +82,12 @@ export function Strip(p: StripProps) {
               <KeyChip variant="tab" label={t.key} at={`item:${t.kind}`} decorative />
             </Button>
           ))}
+        </div>
+        <div class="view" role="group" aria-label="Look">
+          <Button id="btn-look" title={p.look === 'modern' ? 'Show the classic tiles' : 'Show the modern board'}
+            onClick={() => p.onLook(p.look === 'modern' ? 'classic' : 'modern')}>
+            {p.look === 'modern' ? 'Classic' : 'Modern'}<Tab action="look" />
+          </Button>
         </div>
       </div>
     </>

@@ -431,6 +431,35 @@ test('Look and Walls sit in the menu; Walls show only for the modern look', () =
   flow.setLook('modern', 'solid');
 });
 
+test('the strip\'s look button names the other look and asks for it; B does the same, but not under a card', () => {
+  reset();
+  looks.length = 0;
+  flow.setLook('modern', 'solid');
+  game.open(0);
+  key('Enter');
+  const strip = () => document.getElementById('strip-root')!;
+  const before = game.run!.now.moves;
+  assert.match(byId(strip(), 'btn-look').textContent, /^Classic/);
+  click(byId(strip(), 'btn-look'));
+  assert.deepEqual(looks, ['classic']);
+  flow.setLook('classic', 'solid');
+  assert.match(byId(strip(), 'btn-look').textContent, /^Modern/);
+  click(byId(strip(), 'btn-look'));
+  assert.deepEqual(looks, ['classic', 'modern']);
+  flow.setLook('modern', 'solid');
+  key('b');
+  assert.deepEqual(looks, ['classic', 'modern', 'classic']);
+  flow.setLook('classic', 'solid');
+  key('B');
+  assert.deepEqual(looks, ['classic', 'modern', 'classic', 'modern']);
+  flow.setLook('modern', 'solid');
+  assert.equal(game.run!.now.moves, before, 'the swap is not a move');
+  key('q');
+  key('b');
+  assert.equal(looks.length, 4, 'B waits while the menu is up');
+  flow.setLook('modern', 'solid');
+});
+
 test('Play opens the new-game card: a picked look is drawn at once, Enter the halls opens the chapter card, Back the title', () => {
   reset();
   looks.length = 0;

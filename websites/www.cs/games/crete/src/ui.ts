@@ -648,27 +648,7 @@ export function createUi(deps: UiDeps): Ui {
       onMenu: () => layers.open("menu"),
     });
 
-    const act = (fn: () => void) => (): void => {
-      controls?.wake();
-      fn();
-    };
-    renderStrip($("strip-root"), {
-      tools: toolRows(g),
-      playing: g.playing,
-      route: g.thread !== null,
-      over: s.outcome !== "playing",
-      onMove: (dir) => act(() => {
-        layers.close("start");
-        g.press({ kind: "move", dir: moveDir(dir) });
-      })(),
-      onWait: act(() => g.press({ kind: "wait" })),
-      onUndo: act(() => g.press("undo")),
-      onRestart: act(() => g.press("restart")),
-      onHint: act(() => g.hint()),
-      onRoute: act(() => g.route()),
-      onAuto: act(() => g.auto()),
-      onTool: (tool) => act(() => g.press({ kind: "tool", tool }))(),
-    });
+    drawStrip(g);
 
     // The ending card waits for the last step to land; a try taken back or begun again lets the next ending show.
     if (s.outcome === "playing") {
@@ -684,6 +664,33 @@ export function createUi(deps: UiDeps): Ui {
     }
     announcePages(g);
     drawLayers();
+  }
+
+  /** The strip, for a game with a level open. */
+  function drawStrip(g: Game): void {
+    const act = (fn: () => void) => (): void => {
+      controls?.wake();
+      fn();
+    };
+    renderStrip($("strip-root"), {
+      tools: toolRows(g),
+      playing: g.playing,
+      route: g.thread !== null,
+      over: g.run!.now.outcome !== "playing",
+      look,
+      onMove: (dir) => act(() => {
+        layers.close("start");
+        g.press({ kind: "move", dir: moveDir(dir) });
+      })(),
+      onWait: act(() => g.press({ kind: "wait" })),
+      onUndo: act(() => g.press("undo")),
+      onRestart: act(() => g.press("restart")),
+      onHint: act(() => g.hint()),
+      onRoute: act(() => g.route()),
+      onAuto: act(() => g.auto()),
+      onTool: (tool) => act(() => g.press({ kind: "tool", tool }))(),
+      onLook: (l) => act(() => controls?.setLook?.(l))(),
+    });
   }
 
   /** A story page taken this turn opens its Lore entry over everything else: while the turn animates, the
@@ -967,6 +974,9 @@ export function createUi(deps: UiDeps): Ui {
       } else if (action === "auto") {
         ev.preventDefault();
         g.auto();
+      } else if (action === "look") {
+        ev.preventDefault();
+        if (!ev.repeat) c.setLook?.(look === "modern" ? "classic" : "modern");
       } else {
         const tool = itemFor(k, TOOLS);
         if (tool) {
@@ -1040,6 +1050,7 @@ export function createUi(deps: UiDeps): Ui {
     setLook: (l, w) => {
       look = l;
       walls = w;
+      if (game?.run) drawStrip(game);
       drawLayers();
     },
     setView: (v) => {

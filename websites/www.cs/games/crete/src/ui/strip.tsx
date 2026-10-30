@@ -1,4 +1,4 @@
-// The Island of Crete: the control strip. The move pad (a plus, its centre empty), Wait, Undo and Restart, Ariadne's
+// The Island of Crete: the control strip. The move pad (a connected cross round an inert centre), Wait, Undo and Restart, Ariadne's
 // thread (Hint, Route, Auto), the three tools with their counts and the look swap, each with a key tab printed from the
 // key table (the tools' from their own definition). On a phone the thread is one Thread button whose panel holds the
 // three. src/ui.ts builds the rows and decides which strip a screen gets; this draws them and reports presses.
@@ -50,7 +50,7 @@ export interface StripProps {
   onLook: (look: Look) => void;
 }
 
-// In reading order, so the focus goes up, left, right, down; the CSS places them round the empty centre.
+// In reading order, so the focus goes up, left, right, down; the CSS places them round the centre.
 const PAD: { dir: MoveAction; glyph: string; name: string }[] = [
   { dir: 'up', glyph: '▲', name: 'Move up' },
   { dir: 'left', glyph: '◀', name: 'Move left' },

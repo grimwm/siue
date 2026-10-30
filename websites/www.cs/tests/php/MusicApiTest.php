@@ -283,6 +283,24 @@ final class MusicApiTest extends TestCase
         self::assertSame([], $this->store->drafts());
     }
 
+    public function testAScoreOnlyAccountPublishesOneRenderableFileAndNothingElse(): void
+    {
+        $student = Admin\People::fromJson('{}');
+        $api = new Music\Api($this->store, $this->keys, Music\Limits::for($student, 'student@siue.edu'), music_library_instruments());
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $sound = ['instrument' => 'cello', 'gain_db' => 0, 'attack' => 0.35, 'release' => 2.5];
+        $renderable = ['audio' => [], 'mix' => ['style' => 'lofi', 'loudness' => -20], 'lanes' => [['id' => 'a', 'sound' => $sound]]];
+        $files = $this->withScore($this->draftFiles('ch3-renderer', 1), $renderable);
+        $only = ['score.json' => $files['score.json']];
+        $send = function (array $f) use ($api, $k): Admin\Response {
+            $body = music_draft_bundle($f);
+            return $api->publishDraft($this->post($k, ['piece' => 'ch3-renderer', 'version' => '1'], $body), $this->reading($body));
+        };
+        $res = $send($only + ['score.musicxml' => '<score-partwise></score-partwise>']);
+        self::assertSame([422, 'score_only'], [$res->status, $this->body($res)['error']]);
+        self::assertSame(201, $send($only)->status);
+    }
+
     public function testADraftWithoutAProjectOrKindTheServerCanRecordIsRefused(): void
     {
         $k = $this->keys->create('publish', ['drafts:publish']);

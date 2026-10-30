@@ -280,7 +280,7 @@ final class Api
             return 'missing_file';
         }
         if (!isset($files['score.musicxml'])) {
-            if ($score['kind'] === 'music') {
+            if ($score['kind'] === 'music' && !$this->limits->scoreOnly) {
                 return 'missing_file';
             }
         } elseif (!str_contains($files['score.musicxml'], '<score-partwise')) {

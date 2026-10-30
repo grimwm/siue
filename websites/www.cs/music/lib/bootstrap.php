@@ -108,3 +108,52 @@ function music_run(string $kind, callable $route): void
     }
     admin_emit($res);
 }
+
+/** The studios' sign-in realm, beside the admin folder named by ADMIN_BASE_URL. */
+function studio_realm(): Admin\Realm
+{
+    return Admin\Realm::studio(admin_base_url());
+}
+
+/**
+ * The studio's sign-in flow: once a link is spent, Accounts::signIn finds or makes the account; a full studio
+ * (null there) is false to SignIn, so no session starts.
+ */
+function studio_sign_in(\PDO $db, Admin\Clock $clock, Admin\Mailer $mailer, ?Admin\Realm $realm = null, ?Admin\People $people = null): Admin\SignIn
+{
+    $accounts = new Music\Accounts($db, $clock, $people ?? admin_people());
+    return new Admin\SignIn($db, $clock, $mailer, $realm ?? studio_realm(), static fn(string $email): int|false => $accounts->signIn($email) ?? false);
+}
+
+/**
+ * The whole of a thin sign-in page: music_early_refusal('page') first, then the database, $route(SignIn,
+ * Request), the response, and the queued mail once the client has it. Storage that is refused becomes the admin 503 page.
+ *
+ * @param callable(Admin\SignIn, Admin\Request): Admin\Response $route
+ */
+function studio_sign_in_serve(callable $route): void
+{
+    $r = music_request();
+    $base = admin_base_url();
+    $refused = music_early_refusal('page', $r, $base);
+    if ($refused !== null) {
+        admin_emit($refused);
+        return;
+    }
+    $signIn = null;
+    try {
+        $db = Admin\Db::open(Admin\Db::dataDir());
+        $signIn = studio_sign_in($db, new Admin\SystemClock(), admin_mailer($r->host, null, $base));
+        $res = $route($signIn, $r);
+    } catch (Admin\StorageUnavailable | PDOException $e) {
+        error_log('music: storage unavailable: ' . $e->getMessage());
+        $res = Music\Http::finish(Admin\Pages::fromStorageError($e));
+    }
+    admin_emit($res);
+    if ($signIn !== null) {
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+        $signIn->flush();
+    }
+}

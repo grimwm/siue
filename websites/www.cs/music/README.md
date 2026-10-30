@@ -37,6 +37,13 @@ its project, its kind (`music` or `sound`) and its characters.
 
 ## Routes
 
+Sign-in pages (the studio realm, any plain `@siue.edu` address; `lib/bootstrap.php` wires `Admin\SignIn`
+to `Music\Accounts::signIn`): `login.php` (GET form, POST asks for a link), `verify.php` (GET confirm,
+POST signs in) and `logout.php` (POST; `?all=1` is everywhere for the account). Sign-in returns to `index.php`,
+`studio.php` or `piece.php?id=&v=` in this folder. The link is mailed to any such address; only after it is
+spent does a full studio answer "The studio is full" and start no session, so the reply to a request never
+tells who has an account. Its sessions are separate from the admin hub's.
+
 Session routes (same-origin, signed in): `index.php`, `piece.php?id=&v=` (pages);
 `csrf.php`, `notes.php` (GET list, POST upload), `note.php?id=`, `delete.php`
 (POST), `keyring.php`, `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data).

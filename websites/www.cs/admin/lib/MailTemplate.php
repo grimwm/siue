@@ -31,8 +31,9 @@ final class MailTemplate
     }
 
     /** @return array{subject:string,mime:string} */
-    public static function notice(int $when, string $ip, string $agent, string $hubUrl): array
+    public static function notice(int $when, string $ip, string $agent, string $hubUrl, bool $studio = false): array
     {
+        $place = $studio ? 'music studio' : 'admin pages';
         $at = (new \DateTimeImmutable('@' . $when))->setTimezone(new \DateTimeZone('America/Chicago'))->format('D j M Y, g:i A T');
         $ip = self::oneLine($ip, 45);
         $agent = self::oneLine($agent, 120);
@@ -45,11 +46,11 @@ final class MailTemplate
                 . self::e($label) . '</td><td style="padding:6px 0;font-family:\'Source Sans 3\',Arial,sans-serif;color:' . self::TEXT . ';font-size:16px;word-break:break-word;">'
                 . self::e($value) . '</td></tr>';
         }
-        $body = self::p('Someone signed in to your admin pages.')
+        $body = self::p("Someone signed in to your $place.")
             . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px 0;">' . $rows . '</table>'
             . self::p('If this was not you, sign in and press Sign out everywhere.', true, false)
-            . self::button($hubUrl, 'Open the admin pages');
-        return ['subject' => 'New sign-in to your admin pages', 'mime' => self::multipart($text, self::page('New sign-in', $body))];
+            . self::button($hubUrl, "Open the $place");
+        return ['subject' => "New sign-in to your $place", 'mime' => self::multipart($text, self::page('New sign-in', $body, $studio ? 'MUSIC STUDIO' : 'ADMIN'))];
     }
 
     private static function e(string $s): string
@@ -82,7 +83,7 @@ final class MailTemplate
             . self::e($label) . '</a></td></tr></table>';
     }
 
-    private static function page(string $heading, string $body): string
+    private static function page(string $heading, string $body, string $area = 'ADMIN'): string
     {
         $h = self::e($heading);
         $bar = '<tr><td height="6" bgcolor="' . self::RED . '" style="background:' . self::RED . ';height:6px;font-size:1px;line-height:6px;">&nbsp;</td></tr>';
@@ -95,7 +96,7 @@ final class MailTemplate
             . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">'
             . $bar
             . '<tr><td bgcolor="' . self::CARD . '" style="background:' . self::CARD . ';padding:36px 28px;">'
-            . "<p style=\"margin:0 0 12px 0;font-family:Orbitron,'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:bold;letter-spacing:2px;color:" . self::RED . ";\">WWW.CS &middot; ADMIN</p>"
+            . "<p style=\"margin:0 0 12px 0;font-family:Orbitron,'Source Sans 3',Arial,sans-serif;font-size:13px;font-weight:bold;letter-spacing:2px;color:" . self::RED . ";\">WWW.CS &middot; $area</p>"
             . "<h1 style=\"margin:0;font-family:Orbitron,'Source Sans 3',Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:bold;color:" . self::TEXT . ";\">$h</h1>"
             . $body
             . '</td></tr>'

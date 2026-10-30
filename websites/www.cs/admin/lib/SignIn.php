@@ -14,7 +14,8 @@ final class SignIn
 
     /**
      * @param \Closure(string): (int|false|null)|null $onSignedIn runs with the address once its link is spent: an
-     *        account id, false when the studio is full (no session starts), or null in the admin realm (no account)
+     *        account id, false when the studio is full (no session starts), or null in the admin realm (no account).
+     *        The studio realm requires it, and a null from it there is a refusal like false.
      */
     public function __construct(
         private \PDO $db,
@@ -23,6 +24,9 @@ final class SignIn
         private Realm $realm,
         private ?\Closure $onSignedIn = null,
     ) {
+        if ($realm->name === 'studio' && $onSignedIn === null) {
+            throw new \InvalidArgumentException('the studio realm needs an onSignedIn step to find the account');
+        }
         $this->auth = new Auth($db, $clock, $realm);
         $this->sessions = new Sessions($db, $clock, $realm);
     }
@@ -141,7 +145,7 @@ final class SignIn
     private function startSession(Request $r, string $email, array $more = []): ?array
     {
         $account = $this->onSignedIn === null ? null : ($this->onSignedIn)($email);
-        if ($account === false) {
+        if ($account === false || ($account === null && $this->realm->name === 'studio')) {
             return null;
         }
         // A browser that already carries a session does not keep it alive beside the new one.
@@ -152,7 +156,7 @@ final class SignIn
             $this->clearConfirm(),
             ...$more,
         ];
-        $mail = MailTemplate::notice($this->clock->now(), $r->ip, $r->agent, $this->realm->baseUrl . 'index.php');
+        $mail = MailTemplate::notice($this->clock->now(), $r->ip, $r->agent, $this->realm->baseUrl . 'index.php', $this->realm->name === 'studio');
         $this->queue[] = ['to' => $email, 'subject' => $mail['subject'], 'mime' => $mail['mime'], 'token' => null];
         return $cookies;
     }

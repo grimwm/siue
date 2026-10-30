@@ -1,6 +1,6 @@
 // The Island of Crete on ten screens: the frame fills the window, nothing scrolls, every control is on screen
 // and not clipped, no control covers the board, the board keeps at least 8 px per cell, and key tabs show only
-// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The chapter card, the level list and the start card are
+// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The new-game card, the chapter card, the level list, the start card and the menu are
 // checked too, and level 8, the largest board, at the smallest phone sizes.
 import { test, expect } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
@@ -85,9 +85,46 @@ const cardFits = (sel: string) => {
   return card.left >= -0.5 && card.top >= -0.5 && card.right <= innerWidth + 0.5 && card.bottom <= innerHeight + 0.5;
 };
 
-/** Play, the chapter card's Levels, then level `n`; level 1 shows the chapter card first, so Enter the halls follows. */
+/** The look pictures in `sel`: two, each loaded, side by side, the same size, each above its name. */
+const lookTiles = (sel: string) => {
+  const probs: string[] = [];
+  const tiles = [...document.querySelectorAll<HTMLElement>(`${sel} .look-tile`)];
+  if (tiles.length !== 2) return [`${tiles.length} tiles`];
+  const boxes = tiles.map(t => t.getBoundingClientRect());
+  if (Math.abs(boxes[0]!.top - boxes[1]!.top) > 0.5 || boxes[0]!.right > boxes[1]!.left + 0.5) probs.push('tiles not side by side');
+  if (Math.abs(boxes[0]!.width - boxes[1]!.width) > 0.5) probs.push('tiles differ in width');
+  for (const t of tiles) {
+    const img = t.querySelector('img')!;
+    if (!img.complete || img.naturalWidth === 0) probs.push(`${t.id}: picture not loaded`);
+    const name = t.querySelector('.look-name')!.getBoundingClientRect();
+    if (name.top < img.getBoundingClientRect().bottom - 0.5) probs.push(`${t.id}: name not under the picture`);
+  }
+  return probs;
+};
+
+/** The menu: nothing clipped or wider than the card, every switch row the full width of its list, and every picked
+ *  control's text a different colour from its fill. */
+const menuTidy = () => {
+  const probs: string[] = [];
+  const card = document.querySelector('#menu-veil .card')!;
+  if (card.scrollWidth > card.clientWidth + 0.5) probs.push('menu scrolls sideways');
+  for (const b of card.querySelectorAll<HTMLElement>('button')) {
+    if (b.scrollWidth > b.clientWidth + 0.5) probs.push(`${b.id} clipped`);
+    const cs = getComputedStyle(b);
+    if ((b.getAttribute('aria-pressed') === 'true' || b.classList.contains('seg-opt')) && cs.color === cs.backgroundColor) probs.push(`${b.id}: text the colour of its fill`);
+  }
+  for (const row of card.querySelectorAll<HTMLElement>('.menu-row')) {
+    const list = row.closest('.menu-list')!.getBoundingClientRect();
+    if (Math.abs(row.getBoundingClientRect().width - list.width) > 2.5) probs.push(`${row.id} not full width`);
+  }
+  return probs;
+};
+
+/** Play, Enter the halls on the new-game card, the chapter card's Levels, then level `n`; level 1 shows the chapter
+ *  card first, so Enter the halls follows. */
 async function openLevel(page: Page, n: number): Promise<void> {
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await page.locator('#chapter-levels').click();
   await page.locator(`#level-${n}`).click();
   if (n === 1) await page.locator('#chapter-enter').click();
@@ -102,7 +139,14 @@ for (const device of DEVICES) {
     expect(await page.evaluate(cardFits, '#title-veil .card'), 'title card on screen').toBe(true);
     for (const id of ['title-play', 'title-story', 'title-settings']) await expect(page.locator(`#${id}`)).toBeVisible();
     await page.locator('#title-play').click();
-    // Play opens Chapter 1's card, with both its buttons on screen; Levels opens the list over it.
+    // Play opens the new-game card: both looks as loaded pictures above their names, Classic picked here.
+    await expect(page.locator('#look-veil')).toBeVisible();
+    expect(await page.evaluate(cardFits, '#look-veil .card'), 'new-game card on screen').toBe(true);
+    await expect(page.locator('#pick-classic')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#pick-modern')).toHaveAttribute('aria-pressed', 'false');
+    expect(await page.evaluate(lookTiles, '#look-veil'), 'new-game card pictures').toEqual([]);
+    await page.locator('#pick-enter').click();
+    // Enter the halls opens Chapter 1's card, with both its buttons on screen; Levels opens the list over it.
     await expect(page.locator('#chapter-veil')).toBeVisible();
     expect(await page.evaluate(cardFits, '#chapter-veil .card'), 'chapter card on screen').toBe(true);
     for (const id of ['chapter-enter', 'chapter-levels']) await expect(page.locator(`#${id}`)).toBeVisible();
@@ -138,6 +182,11 @@ for (const device of DEVICES) {
     await expect(page.locator('#menu-veil')).toBeVisible();
     expect(await page.evaluate(cardFits, '#menu-veil .card'), 'menu on screen').toBe(true);
     await closeOnTitleRow(page, 'menu');
+    expect(await page.evaluate(lookTiles, '#menu-veil'), 'menu pictures').toEqual([]);
+    expect(await page.evaluate(menuTidy), 'menu laid out').toEqual([]);
+    // Two columns where there is room, one on a phone.
+    const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.menu-cols')!).gridTemplateColumns.split(' ').length);
+    expect(cols, 'menu columns').toBe(width >= 760 ? 2 : 1);
     await page.locator('#menu-lore').click();
     await expect(page.locator('#lore-veil')).toBeVisible();
     await closeOnTitleRow(page, 'lore');

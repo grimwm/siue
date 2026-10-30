@@ -40,6 +40,7 @@ async function open(page: Page): Promise<string[]> {
   await page.addInitScript(pinClassic);
   await page.goto(PAGE);
   await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
   await page.locator('#chapter-enter').click();
   await expect(page.locator('#start-veil')).toBeVisible();
   await page.evaluate(text => {

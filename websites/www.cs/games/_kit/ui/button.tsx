@@ -13,6 +13,8 @@ export interface ButtonProps {
   title?: string;
   /** aria-pressed, for a toggle. */
   pressed?: boolean;
+  /** An on/off switch: role="switch" with this as aria-checked. */
+  checked?: boolean;
   /** The key that does the same, shown after the text as the kit's dark keycap (.kit-key-inline). */
   keyLabel?: string;
   children?: ComponentChildren;
@@ -28,7 +30,7 @@ export function lastPressed(): Element | null {
 export function Button(p: ButtonProps) {
   return (
     <button type="button" id={p.id} class={p.class} disabled={p.disabled} aria-label={p.label} title={p.title}
-      aria-pressed={p.pressed} onClick={ev => {
+      aria-pressed={p.pressed} role={p.checked === undefined ? undefined : 'switch'} aria-checked={p.checked} onClick={ev => {
         pressed = ev.currentTarget;
         ev.currentTarget.blur();
         p.onClick();

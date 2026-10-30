@@ -1,5 +1,8 @@
-// The Island of Crete: the menu. In order: sound, music, music in the background and full screen, the look (and, for the modern look, the walls), the Lore book, the story log, how to play, Back to
-// the editor or Shared level (the shared level's card; each only when the page gives it), Quit.
+// The Island of Crete: the menu, in three sections under small headings. Sound and screen: switches for sound, music,
+// music in the background and full screen. Board: the two looks as pictures and, for the modern look, the walls.
+// The story: the Lore book, the story log and how to play (folded). Then Back to the editor or Shared level (the
+// shared level's card; each only when the page gives it), and Quit on its own. On a wide screen the sections stand
+// in two columns.
 // Q (the kit's back key) is handled by src/ui.ts, which owns every card, so the dialog is given no onDismiss;
 // the Close button is for a pointer or a finger.
 import { render } from 'preact';
@@ -10,6 +13,7 @@ import { KEYS } from '../keys.ts';
 import type { Seg } from '../help.ts';
 import type { Tone as LogTone } from '../game.ts';
 import type { Look, WallMode } from '../settings.ts';
+import { LookTiles } from './look-tiles.tsx';
 
 export interface LogLine {
   text: string;
@@ -58,52 +62,75 @@ export function Menu(p: MenuProps) {
     <Dialog open={p.open} id="menu-veil" veilClass="veil" panelClass="card menu" kicker="The Island of Crete" kickerClass="kicker"
       titleId="menu-title" title="Menu"
       close={<Button id="menu-close" class="close" label="Close menu" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>}>
-      <div class="menu-sec" data-section="audio">
-        <Button id="mute" keyLabel={KEYS.mute.label} onClick={p.onSound}>{p.muted ? '🔇 Muted' : '🔊 Sound'}</Button>
-        <Button id="music" onClick={p.onMusic}>{p.music ? '🎶 Music' : '🎶 Music off'}</Button>
-        <Button id="music-hidden" onClick={p.onBackground}>{p.background ? '🎶 Music in the background: On' : '🎶 Music in the background: Off'}</Button>
-        <Button id="fullscreen" keyLabel={KEYS.fullscreen.label} onClick={p.onFullscreen}>{p.fullscreen ? 'Leave full screen' : 'Full screen'}</Button>
-      </div>
-      <div class="menu-sec" data-section="look" role="group" aria-labelledby="menu-look-label">
-        <span class="menu-label" id="menu-look-label">Look:</span>
-        <Button id="look-modern" pressed={p.look === 'modern'} onClick={() => p.onLook('modern')}>Modern</Button>
-        <Button id="look-classic" pressed={p.look === 'classic'} onClick={() => p.onLook('classic')}>Classic</Button>
-      </div>
-      {p.look === 'modern' && (
-        <div class="menu-sec" data-section="walls" role="group" aria-labelledby="menu-walls-label">
-          <span class="menu-label" id="menu-walls-label">Walls:</span>
-          {WALL_CHOICES.map(([mode, name]) => (
-            <Button key={mode} id={`walls-${mode}`} pressed={p.walls === mode} onClick={() => p.onWalls(mode)}>{name}</Button>
-          ))}
+      <div class="menu-cols">
+        <div class="menu-col">
+          <section class="menu-sec" data-section="audio" aria-labelledby="menu-audio-h">
+            <h3 id="menu-audio-h">Sound and screen</h3>
+            <div class="menu-list">
+              <Button id="mute" class="menu-row" checked={!p.muted} keyLabel={KEYS.mute.label} onClick={p.onSound}>
+                <span class="menu-row-name">Sound</span><span class="switch" aria-hidden="true" />
+              </Button>
+              <Button id="music" class="menu-row" checked={p.music} onClick={p.onMusic}>
+                <span class="menu-row-name">Music</span><span class="switch" aria-hidden="true" />
+              </Button>
+              <Button id="music-hidden" class="menu-row" checked={p.background} onClick={p.onBackground}>
+                <span class="menu-row-name">Music in the background<small>Keeps playing in another tab</small></span>
+                <span class="switch" aria-hidden="true" />
+              </Button>
+              <Button id="fullscreen" class="menu-row" checked={p.fullscreen} keyLabel={KEYS.fullscreen.label} onClick={p.onFullscreen}>
+                <span class="menu-row-name">Full screen</span><span class="switch" aria-hidden="true" />
+              </Button>
+            </div>
+          </section>
+          <section class="menu-sec" data-section="look" aria-labelledby="menu-board-h">
+            <h3 id="menu-board-h">Board</h3>
+            <LookTiles look={p.look} idPrefix="look" label="Look" onPick={p.onLook} />
+            {p.look === 'modern' && (
+              <div class="menu-walls" data-section="walls">
+                <span class="menu-label" id="menu-walls-label">Walls</span>
+                <div class="seg" role="group" aria-labelledby="menu-walls-label">
+                  {WALL_CHOICES.map(([mode, name]) => (
+                    <Button key={mode} id={`walls-${mode}`} class="seg-opt" pressed={p.walls === mode} onClick={() => p.onWalls(mode)}>{name}</Button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
         </div>
-      )}
-      <div class="menu-sec" data-section="lore">
-        <Button id="menu-lore" keyLabel={KEYS.lore.label} onClick={p.onLore}>📖 Lore book</Button>
-      </div>
-      <section class="menu-sec" data-section="log">
-        <h3>Story log</h3>
-        <ol id="log" class="log" aria-live="polite" ref={list}>
-          {p.log.map((l, i) => <li key={i} class={l.tone}>{l.text}</li>)}
-        </ol>
-      </section>
-      <section class="menu-sec" data-section="help">
-        <h3>How to play</h3>
-        <ul class="help">
-          {p.help.map((line, i) => <li key={i}>{segs(line)}</li>)}
-        </ul>
-      </section>
-      {p.onBackToEditor && (
-        <div class="menu-sec" data-section="editor">
-          <Button id="menu-editor" onClick={p.onBackToEditor}>Back to the editor</Button>
+        <div class="menu-col">
+          <section class="menu-sec" aria-labelledby="menu-story-h">
+            <h3 id="menu-story-h">The story</h3>
+            <div class="menu-list">
+              <div data-section="lore">
+                <Button id="menu-lore" class="menu-row" keyLabel={KEYS.lore.label} onClick={p.onLore}>
+                  <span class="menu-row-name">📖 Lore book</span><span class="menu-row-go" aria-hidden="true">›</span>
+                </Button>
+              </div>
+              <div class="menu-fold" data-section="log">
+                <h4>Story log</h4>
+                <ol id="log" class="log" aria-live="polite" ref={list}>
+                  {p.log.map((l, i) => <li key={i} class={l.tone}>{l.text}</li>)}
+                </ol>
+                {p.log.length === 0 && <p class="menu-empty">Nothing yet: what happens in the Labyrinth is told here.</p>}
+              </div>
+              <details class="menu-fold" data-section="help">
+                <summary>How to play</summary>
+                <ul class="help">
+                  {p.help.map((line, i) => <li key={i}>{segs(line)}</li>)}
+                </ul>
+              </details>
+            </div>
+          </section>
+          {(p.onBackToEditor || p.onSharedCard) && (
+            <div class="menu-sec menu-more">
+              {p.onBackToEditor && <div data-section="editor"><Button id="menu-editor" class="quiet" onClick={p.onBackToEditor}>Back to the editor</Button></div>}
+              {p.onSharedCard && <div data-section="shared"><Button id="menu-shared" class="quiet" onClick={p.onSharedCard}>Shared level</Button></div>}
+            </div>
+          )}
+          <div class="menu-sec menu-quit" data-section="quit">
+            <Button id="quit" class="danger" title="End this run and leave the game" onClick={p.onQuit}>⏻ Quit this run</Button>
+          </div>
         </div>
-      )}
-      {p.onSharedCard && (
-        <div class="menu-sec" data-section="shared">
-          <Button id="menu-shared" onClick={p.onSharedCard}>Shared level</Button>
-        </div>
-      )}
-      <div class="menu-sec" data-section="quit">
-        <Button id="quit" title="End this run and leave the game" onClick={p.onQuit}>⏻ Quit</Button>
       </div>
     </Dialog>
   );

@@ -169,6 +169,9 @@ test('the menu holds sound and full screen, the story log, how to play and Quit,
   assert.equal(byId(root, 'menu-title').textContent, 'Menu');
   assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'look', 'walls', 'lore', 'log', 'help', 'quit']);
   for (const gone of ['seed-form', 'seed-input', 'random-run', 'run-stats']) assert.equal(maybeById(root, gone), undefined, gone);
+  assert.equal(walk(veil).some(n => n.className === 'menu-empty'), false, 'a log with lines says nothing of being empty');
+  renderMenu(root, menuProps({ log: [] }));
+  assert.equal(walk(byId(root, 'menu-veil')).some(n => n.className === 'menu-empty'), true, 'an empty log says so');
 });
 
 test('the menu offers Modern and Classic, and Solid, Ghosted and Low only while the look is modern', () => {
@@ -206,13 +209,14 @@ test('Sound shows its state and key; Full screen, Quit and Close call back', () 
   const root = mount();
   const seen: string[] = [];
   renderMenu(root, menuProps({ muted: true, onSound: () => seen.push('sound'), onFullscreen: () => seen.push('full'), onQuit: () => seen.push('quit'), onClose: () => seen.push('close') }));
-  assert.match(byId(root, 'mute').textContent, /Muted/);
+  assert.equal(byId(root, 'mute').getAttribute('role'), 'switch');
+  assert.equal(byId(root, 'mute').getAttribute('aria-checked'), 'false', 'muted: the Sound switch is off');
   assert.equal(tabsOf(byId(root, 'mute'))[0]?.textContent, KEYS.mute.label);
   assert.equal(tabsOf(byId(root, 'menu-close'))[0]?.textContent, KEYS.menu.label);
   for (const id of ['mute', 'fullscreen', 'quit', 'menu-close']) click(byId(root, id));
   assert.deepEqual(seen, ['sound', 'full', 'quit', 'close']);
   renderMenu(root, menuProps({ fullscreen: true }));
-  assert.match(byId(root, 'fullscreen').textContent, /Leave full screen/);
+  assert.equal(byId(root, 'fullscreen').getAttribute('aria-checked'), 'true');
 });
 
 test('the story log lists every line; how to play comes from the help lines', () => {

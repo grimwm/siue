@@ -3,6 +3,7 @@
  * right or middle button pans, the wheel zooms toward the pointer, and a double tap or double click resets. Buttons
  * at the board's top-right turn the view 15° either way, zoom it in and out, and reset it; on a narrow touch screen
  * a View button shows and hides them. Every control is ignored while a layer covers the board. */
+import type { MoveAction } from '../keys.ts';
 import { createGestures } from './gestures.ts';
 import type { CamOp, Ptr } from './gestures.ts';
 
@@ -24,9 +25,13 @@ export interface ControlHost {
   blocked(): boolean;
   /** A camera gesture happened (closes the start card). */
   gesture(): void;
+  /** A finger swiped the board: move Theseus that way as the screen shows it. */
+  swipe(dir: MoveAction): void;
 }
 
 export interface Controls {
+  /** Shows or hides the turn buttons (Top-down does not turn). */
+  setTurnable(on: boolean): void;
   dispose(): void;
 }
 
@@ -64,7 +69,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     if (!ops.length || host.blocked()) return;
     host.gesture();
     for (const op of ops) {
-      if (op.kind === 'turn') cam.turn(op.deg, false);
+      if (op.kind === 'swipe') host.swipe(op.dir);
+      else if (op.kind === 'turn') cam.turn(op.deg, false);
       else if (op.kind === 'pan') cam.pan(op.dx, op.dy);
       else if (op.kind === 'zoom') {
         const r = canvas.getBoundingClientRect();
@@ -142,6 +148,9 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   });
 
   return {
+    setTurnable(on) {
+      left.hidden = right.hidden = !on;
+    },
     dispose() {
       canvas.removeEventListener('pointerdown', down);
       canvas.removeEventListener('pointermove', move);

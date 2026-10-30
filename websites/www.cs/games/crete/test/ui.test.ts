@@ -689,6 +689,21 @@ test('the end card words a win as Level N cleared and a loss as Level failed', (
   assert.ok(text('end-trials').startsWith('Levels'));
 });
 
+test('a swipe moves Theseus as a move key does and closes the start card; with a card up it does nothing', () => {
+  reset();
+  game.open(0);
+  assert.equal(flow.top(), 'start');
+  const before = game.run!.now.moves;
+  const tryAll = () => { for (const d of ['up', 'down', 'left', 'right'] as const) { flow.swipe(d); if (game.run!.now.moves > before) return; } };
+  tryAll();
+  assert.equal(game.run!.now.moves, before + 1, 'a swipe moved Theseus');
+  assert.equal(flow.top(), null, 'the start card closed');
+  key('q');
+  assert.equal(flow.top(), 'menu');
+  tryAll();
+  assert.equal(game.run!.now.moves, before + 1, 'the menu holds swipes');
+});
+
 test('Next level carries the Enter tab, and Enter on a won card opens the next level', () => {
   reset();
   win(0);

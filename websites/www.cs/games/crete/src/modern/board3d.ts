@@ -39,6 +39,7 @@ import { createKit } from './scene/textures.ts';
 import { createThread } from './scene/thread.ts';
 import { LOW_H, WALL_H, createWalls } from './scene/walls.ts';
 import type { View } from './camera.ts';
+import type { MoveAction } from '../keys.ts';
 import type { Seen } from './scene/walls.ts';
 
 export interface ModernHost {
@@ -53,6 +54,8 @@ export interface ModernHost {
   blocked(): boolean;
   /** A camera gesture happened (closes the start card). */
   gesture(): void;
+  /** A finger swiped the board (src/swipe.ts): move Theseus that way as the screen shows it. */
+  swipe(dir: MoveAction): void;
   reducedMotion(): boolean;
 }
 
@@ -464,6 +467,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     if (v === viewing) return;
     viewing = v;
     goal.yaw = nearestYaw(VIEW_YAW[v], cur.yaw);
+    controls.setTurnable(v !== 'top');
     aimWalls = shadowsDirty = true;
     invalidate();
   }
@@ -471,6 +475,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   /** The camera under the player's hand. */
   const cam = {
     turn(deg: number, eased: boolean) {
+      // Top-down stays square to the board, as the classic look is.
+      if (viewing === 'top') return;
       goal.yaw += deg;
       if (!eased) cur.yaw += deg;
       aimWalls = true;

@@ -14,14 +14,49 @@ const sum = (ops: CamOp[], kind: 'turn' | 'pan'): [number, number] => {
   return [a, b];
 };
 
-test('one finger dragging +100 px across turns -35 degrees; a vertical drag does nothing', () => {
+test('the mouse dragging +100 px across turns -35 degrees; a vertical drag does nothing', () => {
   const g = createGestures(() => 0);
-  g.down(p(1, 50, 50));
+  g.down(p(1, 50, 50, 'mouse'));
   const ops: CamOp[] = [];
-  for (let x = 60; x <= 150; x += 10) ops.push(...g.move(p(1, x, 50)));
+  for (let x = 60; x <= 150; x += 10) ops.push(...g.move(p(1, x, 50, 'mouse')));
   assert.ok(Math.abs(sum(ops, 'turn')[0] + 35) < 1e-9);
-  assert.deepEqual(g.move(p(1, 150, 90)), []);
+  assert.deepEqual(g.move(p(1, 150, 90, 'mouse')), []);
   assert.ok(ops.every(o => o.kind === 'turn'));
+});
+
+test('one finger never moves the camera; a quick stroke is a swipe the way it went most', () => {
+  let t = 0;
+  const g = createGestures(() => t);
+  for (const [x, y, dir] of [[90, 52, 'right'], [10, 45, 'left'], [55, 10, 'up'], [48, 95, 'down']] as const) {
+    g.down(p(1, 50, 50));
+    assert.deepEqual(g.move(p(1, x, y)), [], 'no turn or pan under one finger');
+    t += 200;
+    assert.deepEqual(g.up(p(1, x, y)), [{ kind: 'swipe', dir }]);
+    t += 1000;
+  }
+});
+
+test('a short, slow or two-finger stroke is no swipe', () => {
+  let t = 0;
+  const g = createGestures(() => t);
+  g.down(p(1, 50, 50));
+  t += 100;
+  assert.deepEqual(g.up(p(1, 60, 50)), [], 'too short');
+  t += 1000;
+  g.down(p(1, 50, 50));
+  t += 900;
+  assert.deepEqual(g.up(p(1, 150, 50)), [], 'too slow');
+  t += 1000;
+  g.down(p(1, 50, 50));
+  g.down(p(2, 150, 50));
+  g.move(p(1, 50, 150));
+  t += 100;
+  assert.deepEqual(g.up(p(2, 150, 50)), []);
+  assert.deepEqual(g.up(p(1, 50, 150)), [], 'the last finger of a two-finger touch');
+  t += 1000;
+  g.down(p(1, 50, 50, 'mouse'));
+  t += 100;
+  assert.deepEqual(g.up(p(1, 150, 50, 'mouse')), [], 'a mouse drag turns, never swipes');
 });
 
 test('two fingers dragging in parallel pan by the midpoint motion and do not turn', () => {

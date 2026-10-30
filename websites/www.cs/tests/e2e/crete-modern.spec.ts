@@ -115,6 +115,21 @@ async function drag(page: Page, dx: number): Promise<void> {
   await page.mouse.up();
 }
 
+/** A one-finger touch swipe of (dx, dy) CSS pixels across the middle of `sel`, as pointer events. */
+async function swipe(page: Page, sel: string, dx: number, dy: number): Promise<void> {
+  await page.evaluate(([sel, dx, dy]) => {
+    const el = document.querySelector(sel as string)!;
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const ev = (type: string, px: number, py: number) => el.dispatchEvent(new PointerEvent(type, {
+      pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: px, clientY: py, bubbles: true, button: 0,
+    }));
+    ev('pointerdown', x, y);
+    for (let i = 1; i <= 5; i++) ev('pointermove', x + (dx as number) * i / 5, y + (dy as number) * i / 5);
+    ev('pointerup', x + (dx as number), y + (dy as number));
+  }, [sel, dx, dy] as const);
+}
+
 /** True when the classic canvas has drawn anything. */
 const classicPainted = (page: Page) => page.evaluate(() => {
   const stage = document.getElementById('stage') as HTMLCanvasElement;
@@ -294,6 +309,19 @@ test('after a look elsewhere on the mini map, Theseus\'s next step brings the ca
   expect(errors).toEqual([]);
 });
 
+test('a finger swipe moves Theseus and leaves the camera\'s turn alone', async ({ page }) => {
+  const errors = await openHall(page);
+  const yaw0 = (await modern(page))!.yaw;
+  const from = await player(page);
+  for (const [dx, dy] of [[80, 0], [-80, 0], [0, 80], [0, -80]]) {
+    await swipe(page, '#stage3d', dx!, dy!);
+    if (JSON.stringify(await player(page)) !== JSON.stringify(from)) break;
+  }
+  expect(await player(page), 'Theseus moved').not.toEqual(from);
+  expect((await modern(page))!.yaw, 'one finger never turns').toBe(yaw0);
+  expect(errors).toEqual([]);
+});
+
 test('Top-down tips the camera to 75° and squares it to the board; Angled tips it back, and the choice is kept', async ({ page }) => {
   const errors = await openHall(page);
   const cam = () => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; });
@@ -306,6 +334,10 @@ test('Top-down tips the camera to 75° and squares it to the board; Angled tips 
   await expect(page.locator('#walls-solid'), 'no Walls choice from above').toHaveCount(0);
   await page.keyboard.press('q');
   await expect.poll(cam).toEqual({ pitch: 75, yaw: 0 });
+  // Top-down does not turn: no turn buttons, and a mouse drag leaves it square.
+  await expect(page.locator('#cam-left')).toBeHidden();
+  await drag(page, 120);
+  expect(await cam()).toEqual({ pitch: 75, yaw: 0 });
   await page.reload();
   await page.locator('#title-settings').click();
   await expect(page.locator('#view-top')).toHaveAttribute('aria-pressed', 'true');

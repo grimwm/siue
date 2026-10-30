@@ -146,6 +146,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 .modern-overlay .cbtn:hover, .modern-overlay .modern-viewbtn:hover { border-color: var(--accent); filter: none; }
 .modern-overlay .cbtn { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; font-size: 0.85rem; }
+.modern-overlay .cbtn[hidden] { display: none; }
 .modern-overlay .cbtn svg {
   width: 22px;
   height: 22px;

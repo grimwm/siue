@@ -25,6 +25,7 @@ import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
 import { cellFor } from "./fit.ts";
 import { follow } from "./follow.ts";
+import { swipeDir } from "./swipe.ts";
 import { helpLines } from "./help.ts";
 import { renderChapterCard } from "./ui/chapter.tsx";
 import { renderEndCard } from "./ui/end.tsx";
@@ -117,6 +118,8 @@ export interface Ui {
   cardsOpen(): boolean;
   /** Closes the start card, as a move does. */
   closeStart(): void;
+  /** A finger swiped the board (either look): Theseus moves that way as the screen shows it, unless a card is up. */
+  swipe(dir: MoveAction): void;
   bindControls(controls: Controls): void;
   /** The title card, alone; `hint` adds how to close an installed app, and `note` why a share link did not open. */
   showTitle(hint: boolean, note?: string): void;
@@ -740,6 +743,15 @@ export function createUi(deps: UiDeps): Ui {
     return id === undefined || !id.startsWith(prefix) || defaults.includes(id);
   }
 
+  /** A swipe on either board: a move as the screen shows it, closing the start card as a move key does. */
+  function swipe(dir: MoveAction): void {
+    const g = controls?.game;
+    if (!g || layers.stack().some((n) => n !== "start")) return;
+    controls?.wake();
+    layers.close("start");
+    g.press({ kind: "move", dir: moveDir(dir) });
+  }
+
   /* ---------- input: moves, tools and guides never share a key ---------- */
   function bindControls(c: Controls): void {
     controls = c;
@@ -959,6 +971,23 @@ export function createUi(deps: UiDeps): Ui {
     });
 
     document.addEventListener("pointerdown", c.wake);
+    // A finger swiped across the classic board moves Theseus, as on the modern one (whose camera reads its own).
+    const stage = $("stage");
+    stage.style.touchAction = "none";
+    let touch: { id: number; x: number; y: number; t: number } | null = null;
+    stage.addEventListener("pointerdown", (e) => {
+      const p = e as PointerEvent;
+      if (p.pointerType === "mouse") return;
+      touch = touch ? null : { id: p.pointerId, x: p.clientX, y: p.clientY, t: performance.now() };
+    });
+    stage.addEventListener("pointerup", (e) => {
+      const p = e as PointerEvent;
+      if (!touch || touch.id !== p.pointerId) return;
+      const dir = swipeDir(p.clientX - touch.x, p.clientY - touch.y, performance.now() - touch.t);
+      touch = null;
+      if (dir) swipe(dir);
+    });
+    stage.addEventListener("pointercancel", () => { touch = null; });
     // A tap on the toast puts it away.
     $("toast").addEventListener("click", () => $("toast").classList.remove("show"));
 
@@ -1021,5 +1050,6 @@ export function createUi(deps: UiDeps): Ui {
     },
     cardsOpen: () => layers.stack().some((n) => n !== "start"),
     closeStart: () => layers.close("start"),
+    swipe,
   };
 }

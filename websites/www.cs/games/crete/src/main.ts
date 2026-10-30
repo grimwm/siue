@@ -376,6 +376,7 @@ async function createModern(): Promise<void> {
         image,
         blocked: () => ui.cardsOpen(),
         gesture: () => ui.closeStart(),
+        swipe: dir => ui.swipe(dir),
         reducedMotion: () => reduced,
       })
       : null;

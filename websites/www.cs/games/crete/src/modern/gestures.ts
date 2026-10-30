@@ -1,11 +1,13 @@
-/* The Island of Crete, modern look: pointer gestures as camera operations. A reader holds only the pointers
- * down and the last tap; the caller owns the camera and applies the operations. One finger or the primary
- * mouse button turns, two fingers pan, twist and pinch, the middle or right mouse button pans, the wheel zooms,
- * and a quick double tap resets. DOM-free. */
+/* The Island of Crete, modern look: pointer gestures as camera operations, and a finger's swipe as a move. A reader
+ * holds only the pointers down and the last tap; the caller owns the camera and applies the operations. One finger
+ * swipes Theseus (src/swipe.ts) and never moves the camera; two fingers pan, twist and pinch; the primary mouse
+ * button turns, the middle or right one pans, the wheel zooms, and a quick double tap resets. DOM-free. */
+import type { MoveAction } from '../keys.ts';
+import { swipeDir } from '../swipe.ts';
 
 /** A zoom multiplies the view's height by `factor` (under 1 is closer) about the screen point `(x, y)`. */
 export type CamOp = { kind: 'turn'; deg: number } | { kind: 'pan'; dx: number; dy: number }
-  | { kind: 'zoom'; factor: number; x: number; y: number } | { kind: 'reset' };
+  | { kind: 'zoom'; factor: number; x: number; y: number } | { kind: 'reset' } | { kind: 'swipe'; dir: MoveAction };
 
 export interface Ptr {
   id: number;
@@ -54,6 +56,8 @@ export function createGestures(now: () => number): Gestures {
   const held = new Map<number, Held>();
   let two: Two | null = null;
   let lastTap: { t: number; x: number; y: number } | null = null;
+  /** True once a second finger has come down, until every finger is up: such a touch is never a swipe or a tap. */
+  let multi = false;
 
   const twoInfo = (): Two => {
     const [a, b] = [...held.values()];
@@ -65,6 +69,7 @@ export function createGestures(now: () => number): Gestures {
     down(p) {
       held.set(p.id, { x: p.x, y: p.y, x0: p.x, y0: p.y, t0: now(), type: p.type, button: p.button });
       two = held.size === 2 ? twoInfo() : null;
+      if (held.size > 1) multi = true;
       return [];
     },
     move(p) {
@@ -76,7 +81,8 @@ export function createGestures(now: () => number): Gestures {
       h.y = p.y;
       const ops: CamOp[] = [];
       if (held.size === 1) {
-        if (h.type === 'mouse' && (h.button === 1 || h.button === 2)) {
+        if (h.type !== 'mouse') return ops;
+        if (h.button === 1 || h.button === 2) {
           if (dx !== 0 || dy !== 0) ops.push({ kind: 'pan', dx, dy });
         } else if (dx !== 0) ops.push({ kind: 'turn', deg: -dx * TURN_PER_PX });
       } else if (held.size === 2 && two) {
@@ -99,8 +105,15 @@ export function createGestures(now: () => number): Gestures {
       if (!h) return [];
       held.delete(p.id);
       two = null;
-      if (h.type === 'mouse' || held.size !== 0) return [];
+      const wasMulti = multi;
+      if (held.size === 0) multi = false;
+      if (h.type === 'mouse' || held.size !== 0 || wasMulti) return [];
       const t = now();
+      const dir = swipeDir(p.x - h.x0, p.y - h.y0, t - h.t0);
+      if (dir) {
+        lastTap = null;
+        return [{ kind: 'swipe', dir }];
+      }
       if (t - h.t0 >= TAP_MS || Math.hypot(p.x - h.x0, p.y - h.y0) >= TAP_PX) return [];
       if (lastTap && t - lastTap.t < DOUBLE_MS && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < DOUBLE_PX) {
         lastTap = null;
@@ -112,6 +125,7 @@ export function createGestures(now: () => number): Gestures {
     cancel(id) {
       held.delete(id);
       two = null;
+      if (held.size === 0) multi = false;
     },
     wheel(deltaY, x, y) {
       return deltaY === 0 ? [] : [{ kind: 'zoom', factor: Math.exp(deltaY * WHEEL_RATE), x, y }];

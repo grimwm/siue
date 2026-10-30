@@ -27,7 +27,7 @@ final class MusicApiTest extends TestCase
     {
         [$this->store, $this->db, $this->dir, $clock, $this->accounts, $this->account] = music_world();
         $this->keys = new Admin\Keys($this->db, $clock, null, self::BASE);
-        $this->api = new Music\Api($this->store, $this->keys);
+        $this->api = new Music\Api($this->store, $this->keys, Music\Limits::for(Admin\People::fromJson('{}'), Admin\Auth::OWNER), music_library_instruments());
     }
 
     private function as(string $key, array $over = []): Admin\Request
@@ -269,6 +269,18 @@ final class MusicApiTest extends TestCase
         self::assertSame(['missing_file', 422], [$this->body($res)['error'], $res->status], 'music still needs score.musicxml');
         $lacksSound = array_diff_key($this->withScore($this->draftFiles('ch3-renderer', 3), ['audio' => [], 'mix' => $renderable['mix'], 'lanes' => [['id' => 'a', 'sound' => $sound], ['id' => 'b']]]), ['audio.webm' => 1, 'spectrogram.png' => 1]);
         self::assertSame(422, $this->publish($k, $lacksSound, 'ch3-renderer', 3)->status, 'one lane without sound is not renderable');
+    }
+
+    public function testPublishDraftAppliesTheScoreRules(): void
+    {
+        $k = $this->keys->create('publish', ['drafts:publish']);
+        $many = $this->withScore($this->draftFiles('ch3-renderer', 1), ['lanes' => array_fill(0, 17, ['id' => 'a'])]);
+        $res = $this->publish($k, $many, 'ch3-renderer', 1);
+        self::assertSame([422, 'too_many_lanes'], [$res->status, $this->body($res)['error']]);
+        $odd = $this->withScore($this->draftFiles('ch3-renderer', 1), ['lanes' => [['id' => 'a', 'sound' => ['instrument' => 'kazoo']]]]);
+        $res = $this->publish($k, $odd, 'ch3-renderer', 1);
+        self::assertSame([422, 'unknown_instrument'], [$res->status, $this->body($res)['error']]);
+        self::assertSame([], $this->store->drafts());
     }
 
     public function testADraftWithoutAProjectOrKindTheServerCanRecordIsRefused(): void

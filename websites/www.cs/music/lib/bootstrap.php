@@ -9,6 +9,7 @@ require_once __DIR__ . '/Accounts.php';
 require_once __DIR__ . '/Http.php';
 require_once __DIR__ . '/Usage.php';
 require_once __DIR__ . '/Keyring.php';
+require_once __DIR__ . '/ScoreRules.php';
 require_once __DIR__ . '/Api.php';
 require_once __DIR__ . '/Pages.php';
 
@@ -19,6 +20,17 @@ function music_store(\PDO $db, Admin\Clock $clock, int $account): Music\Store
     $accounts = new Music\Accounts($db, $clock, $people);
     $limits = Music\Limits::for($people, (string) $accounts->emailOf($account));
     return new Music\Store($db, Admin\Db::dataDir() . '/music', $clock, $account, $limits, $accounts);
+}
+
+/** The library's instrument names, read once per request. @return list<string> */
+function music_library_instruments(): array
+{
+    static $names = null;
+    if ($names === null) {
+        $lib = json_decode((string) @file_get_contents(__DIR__ . '/../library/library.json'), true);
+        $names = is_array($lib['instruments'] ?? null) ? array_map('strval', array_keys($lib['instruments'])) : [];
+    }
+    return $names;
 }
 
 /** Admin\Request::fromGlobals() plus the content-length header: PHP keeps CONTENT_LENGTH out of the HTTP_* variables Request reads. */
@@ -103,7 +115,7 @@ function music_run(string $kind, callable $route): void
         $people = admin_people();
         $accounts = new Music\Accounts($db, $clock, $people);
         if ($kind === 'api') {
-            $res = $route(new Music\Api(music_store($db, $clock, $accounts->ownerId()), new Admin\Keys($db, $clock, null, $base)), $r);
+            $res = $route(new Music\Api(music_store($db, $clock, $accounts->ownerId()), new Admin\Keys($db, $clock, null, $base), Music\Limits::for($people, Admin\Auth::OWNER), music_library_instruments()), $r);
         } else {
             $storeFor = static fn(int $account): Music\Store => music_store($db, $clock, $account);
             $sessions = new Admin\Sessions($db, $clock, studio_realm());

@@ -12,7 +12,8 @@ final class Api
     public const DRAFT_MAGIC = 'SIUED1';
 
 
-    public function __construct(private Store $store, private \Admin\Keys $keys)
+    /** @param list<string> $instruments the library's instrument names */
+    public function __construct(private Store $store, private \Admin\Keys $keys, private Limits $limits, private array $instruments)
     {
     }
 
@@ -88,7 +89,7 @@ final class Api
             return Http::json(422, ['error' => 'bad_version']);
         }
         $about = null;
-        $error = self::checkFiles($files, $piece, (int) $version, $about);
+        $error = $this->checkFiles($files, $piece, (int) $version, $about);
         if ($error !== null) {
             return Http::json(422, ['error' => $error]);
         }
@@ -245,7 +246,7 @@ final class Api
      * @param array<string, string> $files
      * @param array{project_id: string, project_name: string, kind: string}|null $about
      */
-    private static function checkFiles(array $files, string $piece, int $version, ?array &$about): ?string
+    private function checkFiles(array $files, string $piece, int $version, ?array &$about): ?string
     {
         if (!isset($files['score.json'])) {
             return 'missing_file';
@@ -257,6 +258,9 @@ final class Api
             || !in_array($score['kind'] ?? null, Store::KINDS, true)
             || !is_array($score['project'] ?? null)) {
             return 'bad_score';
+        }
+        if ($refusal = ScoreRules::check($files, $score, $this->limits, $this->instruments)) {
+            return $refusal;
         }
         $id = $score['project']['id'] ?? null;
         $name = $score['project']['name'] ?? null;

@@ -24,9 +24,11 @@ import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter } from "./
 import { FEWEST, againstFewest } from "./campaign/fewest.ts";
 import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
-import { cellFor } from "./fit.ts";
-import { follow } from "./follow.ts";
-import { swipeDir } from "./swipe.ts";
+import { wholeCell } from "./fit.ts";
+import { ZOOM_STEP, afterStep, clampZoom, restarted, zoomScroll, zoomedCell } from "./zoom.ts";
+import type { Run } from "./puzzle/run.ts";
+import { createGestures } from "./modern/gestures.ts";
+import type { CamOp, Ptr } from "./modern/gestures.ts";
 import { helpLines } from "./help.ts";
 import { renderChapterCard } from "./ui/chapter.tsx";
 import { renderEndCard } from "./ui/end.tsx";
@@ -159,6 +161,11 @@ const TOOL_KINDS = Object.keys(TOOLS) as Tool[];
 
 const LOG_LIMIT = 80;
 const TOAST_MS = 3000;
+/** A wheel line, in pixels. */
+const WHEEL_LINE_PX = 16;
+/** The classic board's zoom buttons, drawn as the modern board's camera buttons are. */
+const ZOOM_IN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>';
+const ZOOM_OUT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
@@ -203,6 +210,12 @@ export function createUi(deps: UiDeps): Ui {
   /** The try whose ending card has been shown, so closing the card does not bring it back. */
   let endFor: unknown = null;
   let sized = "";
+  /** The classic board's zoom over its whole-level cell, and that cell in CSS px (src/zoom.ts). */
+  let zoom = 1;
+  let wholePx = 0;
+  /** The opening and the try the zoom was kept for: a new level or a restart goes back to the whole level. */
+  let zoomOpen = -1;
+  let zoomRun: Run | null = null;
   /** The opening the start card was last shown for. */
   let shownOpen = 0;
   /** The chapter card's chapter, whether it is the closing card, and the level Enter on it starts. */
@@ -516,61 +529,80 @@ export function createUi(deps: UiDeps): Ui {
     if (layers.isOpen("menu")) drawLayers();
   }
 
-  /** The cell size: the largest whole pixel count whose canvas, as the board actually sizes it
-   *  (whole device pixels), fits the space the board has left. A big level (src/fit.ts) keeps cells of at least
-   *  32 px instead and scrolls inside the board. */
+  /** The cell size at the whole-level fit: the largest whole pixel count whose canvas, as the board actually sizes it
+   *  (whole device pixels), shows every cell of the level in the space the board has, however small; then the zoom,
+   *  if any (src/zoom.ts), on top of it. */
   function fit(): void {
     const run = game?.run;
     if (!run) return;
     const { cols, rows } = run.now.level;
-    const holder = $("board");
+    const view = $("stage-view");
     if (modernBoard) {
-      setScrolls(holder, false);
+      setScrolls(view, false);
       sized = "";
       return;
     }
     const canvas = $("stage");
-    setScrolls(holder, false); // measured as if it did not scroll: a scroll bar must not change the answer
-    const bs = getComputedStyle(holder);
-    const w = holder.clientWidth - parseFloat(bs.paddingLeft) - parseFloat(bs.paddingRight);
-    const h = holder.clientHeight - parseFloat(bs.paddingTop) - parseFloat(bs.paddingBottom);
-    const fitted = cellFor(w, h, cols, rows, 0, boardRows(run.now.level, atlas));
-    let cell = Math.max(1, fitted.cell);
+    setScrolls(view, false); // measured as if it did not scroll: a scroll bar must not change the answer
+    const w = view.clientWidth;
+    const h = view.clientHeight;
+    let cell = wholeCell(w, h, cols, boardRows(run.now.level, atlas));
     board.size(cols, rows, cell);
     // The board snaps a cell to whole device pixels, which can round it up: read what it made.
-    while (!fitted.scrolls && cell > 1 && (parseFloat(canvas.style.width) > w || parseFloat(canvas.style.height) > h)) {
+    while (cell > 1 && (parseFloat(canvas.style.width) > w || parseFloat(canvas.style.height) > h)) {
       cell--;
       board.size(cols, rows, cell);
     }
-    setScrolls(holder, fitted.scrolls);
+    wholePx = cell;
     sized = `${cols}x${rows}`;
-    followPlayer(run.now);
+    if (zoom > 1) applyZoom();
+    else followPlayer(run.now);
   }
 
-  function setScrolls(holder: HTMLElement, on: boolean): void {
-    const rest = holder.className.split(" ").filter((c) => c && c !== "scrolls");
-    holder.className = (on ? [...rest, "scrolls"] : rest).join(" ");
+  /** Draws the classic board at the zoom, scrolling inside its space while zoomed in. About the screen point `at`, the
+   *  same spot of the board stays under it; otherwise the view follows Theseus. */
+  function applyZoom(at?: { x: number; y: number }): void {
+    const run = game?.run;
+    if (!run || modernBoard || !wholePx) return;
+    const { cols, rows } = run.now.level;
+    const view = $("stage-view");
+    const canvas = $("stage");
+    zoom = clampZoom(zoom, wholePx);
+    const before = { w: parseFloat(canvas.style.width), left: canvas.offsetLeft, top: canvas.offsetTop, x: view.scrollLeft, y: view.scrollTop };
+    board.size(cols, rows, zoomedCell(wholePx, zoom, window.devicePixelRatio || 1));
+    setScrolls(view, zoom > 1);
+    if (at && zoom > 1 && before.w > 0) {
+      const r = view.getBoundingClientRect();
+      const ratio = parseFloat(canvas.style.width) / before.w;
+      view.scrollLeft = zoomScroll(before.x, at.x - r.left, before.left, canvas.offsetLeft, ratio);
+      view.scrollTop = zoomScroll(before.y, at.y - r.top, before.top, canvas.offsetTop, ratio);
+    } else followPlayer(run.now);
   }
 
-  /** Scrolls a big board, instantly, to keep the player two cells inside the view. */
+  function setScrolls(view: HTMLElement, on: boolean): void {
+    const rest = view.className.split(" ").filter((c) => c && c !== "scrolls");
+    view.className = (on ? [...rest, "scrolls"] : rest).join(" ");
+  }
+
+  /** Pans a zoomed board, instantly, to keep the player two cells inside the view; the zoom stays as it is. */
   function followPlayer(s: State): void {
-    const holder = $("board");
-    if (!holder.className.split(" ").includes("scrolls")) {
-      holder.scrollLeft = 0;
-      holder.scrollTop = 0;
+    const view = $("stage-view");
+    if (!view.className.split(" ").includes("scrolls")) {
+      view.scrollLeft = 0;
+      view.scrollTop = 0;
       return;
     }
     const canvas = $("stage");
     const cell = parseFloat(canvas.style.width) / s.level.cols;
     const rise = parseFloat(canvas.style.height) - s.level.rows * cell;
-    const to = follow(
-      { x: holder.scrollLeft, y: holder.scrollTop, w: holder.clientWidth, h: holder.clientHeight },
-      { w: holder.scrollWidth, h: holder.scrollHeight },
+    const to = afterStep(
+      { zoom, x: view.scrollLeft, y: view.scrollTop },
+      { w: view.clientWidth, h: view.clientHeight },
+      { w: view.scrollWidth, h: view.scrollHeight },
       { left: canvas.offsetLeft + s.player.c * cell, top: canvas.offsetTop + rise + s.player.r * cell, size: cell },
-      2 * cell,
     );
-    holder.scrollLeft = to.x;
-    holder.scrollTop = to.y;
+    view.scrollLeft = to.x;
+    view.scrollTop = to.y;
   }
 
   function toolRows(g: Game): ToolRow[] {
@@ -631,6 +663,15 @@ export function createUi(deps: UiDeps): Ui {
     }
     const s = run.now;
     const out = outsideOf(g);
+    // A new level or a restart shows the whole level again; a step or an undo keeps the zoom.
+    if (g.opens !== zoomOpen || restarted(zoomRun, run)) {
+      zoomOpen = g.opens;
+      if (zoom !== 1) {
+        zoom = 1;
+        sized = "";
+      }
+    }
+    zoomRun = run;
     if (sized !== `${s.level.cols}x${s.level.rows}`) fit();
     else followPlayer(s);
     // A level opened: the start card shows (a restart does not); the story log keeps its words.
@@ -802,6 +843,107 @@ export function createUi(deps: UiDeps): Ui {
     controls?.wake();
     layers.close("start");
     g.press({ kind: "move", dir: moveDir(dir) });
+  }
+
+  /** The classic board's own pointer controls and zoom buttons, as the modern board's camera has them (without the
+   *  turn): one finger swipes Theseus a cell; two fingers pinch to zoom and drag to pan; the wheel zooms toward the
+   *  pointer; the right or middle button drags to pan; a double tap or double click goes back to the whole level. The
+   *  + / − / Reset buttons stand at the board's top-right, behind a View button on a narrow touch screen. Every
+   *  control is ignored while a card other than the start card is open. */
+  function bindClassicView(): void {
+    const view = $("stage-view");
+    $("stage").style.touchAction = "none";
+    view.style.touchAction = "none";
+    const gestures = createGestures(() => performance.now());
+    const blocked = (): boolean => modernBoard || layers.stack().some((n) => n !== "start");
+    const zoomBy = (k: number, at?: { x: number; y: number }): void => {
+      zoom = clampZoom(zoom * k, wholePx);
+      applyZoom(at);
+    };
+    const reset = (): void => {
+      zoom = 1;
+      applyZoom();
+    };
+    const apply = (ops: CamOp[]): void => {
+      if (!ops.length || blocked()) return;
+      for (const op of ops) {
+        if (op.kind === "swipe") swipe(op.dir);
+        else if (op.kind === "zoom") zoomBy(1 / op.factor, { x: op.x, y: op.y });
+        else if (op.kind === "pan") {
+          view.scrollLeft -= op.dx;
+          view.scrollTop -= op.dy;
+        } else if (op.kind === "reset") reset();
+        // A turn does nothing: the classic board is always square to the grid.
+      }
+    };
+    const ptr = (e: PointerEvent): Ptr => ({
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      type: e.pointerType === "touch" || e.pointerType === "pen" ? e.pointerType : "mouse",
+      button: e.button,
+    });
+    view.addEventListener("pointerdown", (e) => {
+      const p = e as PointerEvent;
+      if (blocked()) return;
+      try {
+        view.setPointerCapture(p.pointerId);
+      } catch {
+        // A synthetic pointer cannot be captured; its moves still reach the board.
+      }
+      apply(gestures.down(ptr(p)));
+    });
+    view.addEventListener("pointermove", (e) => apply(gestures.move(ptr(e as PointerEvent))));
+    view.addEventListener("pointerup", (e) => apply(gestures.up(ptr(e as PointerEvent))));
+    view.addEventListener("pointercancel", (e) => gestures.cancel((e as PointerEvent).pointerId));
+    view.addEventListener("dblclick", () => {
+      if (!blocked()) reset();
+    });
+    view.addEventListener("contextmenu", (e) => e.preventDefault());
+    view.addEventListener("wheel", (e) => {
+      const w = e as WheelEvent;
+      if (blocked()) return;
+      w.preventDefault();
+      const px = w.deltaMode === 1 ? WHEEL_LINE_PX : w.deltaMode === 2 ? view.clientHeight : 1;
+      apply(gestures.wheel(w.deltaY * px, w.clientX, w.clientY));
+    }, { passive: false });
+
+    const cam = $("classic-cam");
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "modern-viewbtn";
+    toggle.textContent = "View";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-controls", "classic-cam-buttons");
+    const group = document.createElement("div");
+    group.id = "classic-cam-buttons";
+    group.className = "cam";
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", "Zoom");
+    const button = (id: string, label: string, html: string, className: string, fn: () => void): HTMLButtonElement => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.id = id;
+      b.className = className;
+      b.setAttribute("aria-label", label);
+      b.title = label;
+      b.innerHTML = html;
+      b.addEventListener("click", () => {
+        if (!blocked()) fn();
+      });
+      return b;
+    };
+    group.append(
+      button("classic-zoom-in", "Zoom in", ZOOM_IN_ICON, "cbtn", () => zoomBy(ZOOM_STEP)),
+      button("classic-zoom-out", "Zoom out", ZOOM_OUT_ICON, "cbtn", () => zoomBy(1 / ZOOM_STEP)),
+      button("classic-reset", "Show the whole level", "Reset", "cbtn wide", reset),
+    );
+    toggle.addEventListener("click", () => {
+      const open = !group.className.split(" ").includes("open");
+      group.className = open ? "cam open" : "cam";
+      toggle.setAttribute("aria-expanded", String(open));
+    });
+    cam.append(toggle, group);
   }
 
   /* ---------- input: moves, tools and guides never share a key ---------- */
@@ -1032,23 +1174,7 @@ export function createUi(deps: UiDeps): Ui {
     });
 
     document.addEventListener("pointerdown", c.wake);
-    // A finger swiped across the classic board moves Theseus, as on the modern one (whose camera reads its own).
-    const stage = $("stage");
-    stage.style.touchAction = "none";
-    let touch: { id: number; x: number; y: number; t: number } | null = null;
-    stage.addEventListener("pointerdown", (e) => {
-      const p = e as PointerEvent;
-      if (p.pointerType === "mouse") return;
-      touch = touch ? null : { id: p.pointerId, x: p.clientX, y: p.clientY, t: performance.now() };
-    });
-    stage.addEventListener("pointerup", (e) => {
-      const p = e as PointerEvent;
-      if (!touch || touch.id !== p.pointerId) return;
-      const dir = swipeDir(p.clientX - touch.x, p.clientY - touch.y, performance.now() - touch.t);
-      touch = null;
-      if (dir) swipe(dir);
-    });
-    stage.addEventListener("pointercancel", () => { touch = null; });
+    bindClassicView();
     // A tap on the toast puts it away.
     $("toast").addEventListener("click", () => $("toast").classList.remove("show"));
 

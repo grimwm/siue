@@ -3,7 +3,8 @@
 // where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The move pad is a connected cross on every screen; on a
 // phone nothing else stands within 12 px of an arrow, at either edge the Arrows setting puts the pad, and Hint, Route
 // and Auto wait behind the Thread button. The new-game card, the chapter card, the level list, the start card and the menu are
-// checked too, and level 8, the largest board, at the smallest phone sizes.
+// checked too, and level 8 at the smallest phone sizes. Every Chapter 1 level shows whole on every screen, without
+// scrolling; zoomed in, a step keeps the zoom and pans to keep Theseus in view, and Reset shows the whole level again.
 import { test, expect } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
 
@@ -361,9 +362,9 @@ test('iPhone SE, portrait: Arrows in the menu moves the pad at once, and the cho
   await ctx.close();
 });
 
-// Level 8 is the largest board of the first eight (12 x 10): it must still keep 8 px cells and every control on the smallest phone.
+// Level 8 (12 x 10) keeps 8 px cells and every control on the smallest phone.
 for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE'))) {
-  test(`${device[0]}: level 8, the largest board, keeps 8 px cells and every control on screen`, async ({ browser }) => {
+  test(`${device[0]}: level 8 keeps 8 px cells and every control on screen`, async ({ browser }) => {
     const { ctx, page, errors } = await open(browser, device);
     await openLevel(page, 8);
     await page.locator('#start-begin').click();
@@ -377,24 +378,31 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE'))) {
   });
 }
 
-// Levels up to 12 x 12 fit their board exactly: #board never scrolls, on every device.
+/** Problems with the classic board at its default: the view does not scroll and the whole canvas is inside it. */
+const wholeShown = () => {
+  const out: string[] = [];
+  const v = document.getElementById('stage-view')!;
+  if (v.classList.contains('scrolls')) out.push('the view scrolls');
+  if (v.scrollWidth > v.clientWidth || v.scrollHeight > v.clientHeight) out.push('the view overflows');
+  const r = document.getElementById('stage')!.getBoundingClientRect();
+  const b = v.getBoundingClientRect();
+  if (r.left < b.left - 0.5 || r.top < b.top - 0.5 || r.right > b.right + 0.5 || r.bottom > b.bottom + 0.5) out.push('the level is cut off');
+  return out;
+};
+
+// Every level of Chapter 1, level 10 (20 x 13) included, shows whole at the start, with nothing scrolling, on every device.
 for (const device of DEVICES) {
-  test(`${device[0]}: levels 1 to 9 keep the board unscrolled`, async ({ browser }) => {
+  test(`${device[0]}: levels 1 to 10 show whole, unscrolled`, async ({ browser }) => {
     const { ctx, page, errors } = await open(browser, device);
-    for (let i = 1; i <= 9; i++) {
+    for (let i = 1; i <= 10; i++) {
       await page.goto('games/crete/');
       await openLevel(page, i);
       await expect(page.locator('#start-veil .kicker')).toHaveText(`Chapter 1 · Level ${i}`);
       await page.locator('#start-begin').click();
       await expect(page.locator('#start-veil')).toBeHidden();
       await page.waitForSelector('#stage[data-cell]');
-      const board = await page.evaluate(() => {
-        const b = document.getElementById('board')!;
-        return { sw: b.scrollWidth - b.clientWidth, sh: b.scrollHeight - b.clientHeight, scrolls: b.classList.contains('scrolls') };
-      });
-      expect(board, `level ${i}`).toEqual({ sw: expect.any(Number), sh: expect.any(Number), scrolls: false });
-      expect(board.sw, `level ${i} wide`).toBeLessThanOrEqual(0);
-      expect(board.sh, `level ${i} tall`).toBeLessThanOrEqual(0);
+      expect(await page.evaluate(wholeShown), `level ${i}`).toEqual([]);
+      expect(Number(await page.locator('#stage').getAttribute('data-cell')), `level ${i} cells`).toBeGreaterThanOrEqual(10);
     }
     expect(errors).toEqual([]);
     await ctx.close();
@@ -418,30 +426,74 @@ const playerVisible = () => {
   const rise = sr.height - rows * cell;
   const left = sr.left + p.c * cell;
   const top = sr.top + rise + p.r * cell;
-  const b = document.getElementById('board')!.getBoundingClientRect();
+  const b = document.getElementById('stage-view')!.getBoundingClientRect();
   return left >= b.left - 0.5 && top >= b.top - 0.5 && left + cell <= b.right + 0.5 && top + cell <= b.bottom + 0.5;
 };
 
-// Level 10 (20 x 13) is wider than a phone: it scrolls inside #board, never the page, and follows Theseus.
+const cellOf = (page: Page) => page.locator('#stage').getAttribute('data-cell').then(Number);
+
+/** Clicks a zoom button, opening the View button first where it stands for them (a narrow touch screen). */
+async function zoomButton(page: Page, id: string): Promise<void> {
+  const view = page.locator('#classic-cam .modern-viewbtn');
+  if (await view.isVisible() && await view.getAttribute('aria-expanded') === 'false') await view.click();
+  await page.locator(`#${id}`).click();
+}
+
+/** Two fingers spread apart over the middle of the board, as pointer events. */
+const pinchOut = () => {
+  const v = document.getElementById('stage-view')!;
+  const r = v.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  const fire = (type: string, id: number, x: number) =>
+    v.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: x, clientY: cy, bubbles: true, isPrimary: id === 1 }));
+  fire('pointerdown', 1, cx - 20);
+  fire('pointerdown', 2, cx + 20);
+  for (let d = 20; d <= 60; d += 10) {
+    fire('pointermove', 1, cx - d);
+    fire('pointermove', 2, cx + d);
+  }
+  fire('pointerup', 1, cx - 60);
+  fire('pointerup', 2, cx + 60);
+};
+
+// Level 10 (20 x 13) is wider than a phone: it shows whole at the start; zoomed in, its board scrolls inside the view,
+// never the page, keeps the zoom at every step and follows Theseus; Reset shows the whole level again.
 const MOVE: Record<string, string> = { up: '.mv-up', down: '.mv-down', left: '.mv-left', right: '.mv-right', wait: '#btn-wait' };
 for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') || d[0].startsWith('iPhone 15, portrait'))) {
-  test(`${device[0]}: level 10 scrolls inside the board and keeps Theseus in view`, async ({ browser }) => {
+  test(`${device[0]}: level 10 shows whole; zoomed in, every step keeps the zoom and Theseus in view`, async ({ browser }) => {
     const { ctx, page, errors } = await open(browser, device);
     await openLevel(page, 10);
     await page.locator('#start-begin').click();
     await expect(page.locator('#start-veil')).toBeHidden();
     await page.waitForSelector('#stage[data-cell]');
+    expect(await page.evaluate(wholeShown), 'the whole level at the start').toEqual([]);
+    const whole = await cellOf(page);
+    expect(whole).toBeGreaterThanOrEqual(15);
+
+    // A pinch zooms in; Reset shows the whole level again.
+    await page.evaluate(pinchOut);
+    await expect.poll(() => cellOf(page), 'a pinch zooms in').toBeGreaterThan(whole);
+    await zoomButton(page, 'classic-reset');
+    await expect.poll(() => cellOf(page), 'Reset').toBe(whole);
+    expect(await page.evaluate(wholeShown), 'the whole level after Reset').toEqual([]);
+
+    // + zooms in twice; the view then scrolls, and the page never does.
+    await zoomButton(page, 'classic-zoom-in');
+    await zoomButton(page, 'classic-zoom-in');
+    const zoomed = await cellOf(page);
+    expect(zoomed).toBeGreaterThan(whole * 1.3);
     const probs = await page.evaluate(() => {
       const out: string[] = [];
       const doc = document.documentElement;
       if (doc.scrollHeight > innerHeight + 0.5) out.push('page taller than the screen');
       if (doc.scrollWidth > innerWidth + 0.5) out.push('page wider than the screen');
-      const b = document.getElementById('board')!;
-      if (!(b.scrollWidth > b.clientWidth)) out.push('the board does not scroll sideways');
+      const v = document.getElementById('stage-view')!;
+      if (!(v.scrollWidth > v.clientWidth)) out.push('the zoomed board does not scroll sideways');
       return out;
     });
     expect(probs).toEqual([]);
-    expect(await page.evaluate(playerVisible), 'visible at the start').toBe(true);
+    expect(await page.evaluate(playerVisible), 'visible once zoomed').toBe(true);
 
     const steps = await page.evaluate(() => {
       const t = (window as unknown as { __creteTest: { game: { run: { now: unknown } }; solve(s: unknown): { solved: boolean; line: { kind: string; dir?: string; tool?: string }[] } } }).__creteTest;
@@ -456,26 +508,36 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
       await page.locator(MOVE[s] ?? `#${s}`).click();
       await expect.poll(() => page.evaluate(runState), `step ${i + 1} (${s}) is a turn`).toMatchObject({ moves: before.moves + 1 });
       expect(await page.evaluate(playerVisible), `step ${i + 1} (${s})`).toBe(true);
+      expect(await cellOf(page), `step ${i + 1} (${s}) keeps the zoom`).toBe(zoomed);
+      // Undo keeps the zoom too.
+      if (i === 0) {
+        await page.locator('#btn-undo').click();
+        await expect.poll(() => page.evaluate(runState), 'undone').toMatchObject({ moves: before.moves });
+        expect(await cellOf(page), 'Undo keeps the zoom').toBe(zoomed);
+        await page.locator(MOVE[s] ?? `#${s}`).click();
+        await expect.poll(() => page.evaluate(runState), 'step 1 again').toMatchObject({ moves: before.moves + 1 });
+      }
       // Once the board has scrolled, a toast is still inside the board's visible rect (it does not scroll away).
-      if (!toasted && device[0].startsWith('iPhone 15') && await page.evaluate(() => document.getElementById('board')!.scrollLeft > 0)) {
+      if (!toasted && device[0].startsWith('iPhone 15') && await page.evaluate(() => document.getElementById('stage-view')!.scrollLeft > 0)) {
         toasted = true;
         const inside = await page.evaluate(() => {
           const t = document.getElementById('toast')!;
           t.textContent = 'Relic taken';
           t.className = 'toast show good';
           const r = t.getBoundingClientRect();
-          const b = document.getElementById('board')!.getBoundingClientRect();
+          const b = document.getElementById('stage-view')!.getBoundingClientRect();
           return r.width > 0 && r.left >= b.left - 0.5 && r.top >= b.top - 0.5 && r.right <= b.right + 0.5 && r.bottom <= b.bottom + 0.5;
         });
         expect(inside, 'the toast stays on the visible board after it scrolled').toBe(true);
       }
-      // Half way through, a phone turned sideways and back keeps the player in view.
+      // Half way through, a phone turned sideways and back keeps the player in view and the zoom.
       if (!flipped && i >= steps.length / 2 && device[0].startsWith('iPhone 15')) {
         flipped = true;
         await page.setViewportSize({ width: 852, height: 393 });
         await expect.poll(() => page.evaluate(playerVisible), 'landscape').toBe(true);
         await page.setViewportSize({ width: 393, height: 852 });
         await expect.poll(() => page.evaluate(playerVisible), 'back to portrait').toBe(true);
+        await expect.poll(() => cellOf(page), 'back to portrait, the same zoom').toBe(zoomed);
       }
     }
     await expect.poll(() => page.evaluate(runState), 'the route ends in a win').toMatchObject({ outcome: 'won' });
@@ -484,3 +546,34 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
     await ctx.close();
   });
 }
+
+// With a mouse: the wheel zooms toward the pointer, the zoom buttons stand at the board's top-right, and a double
+// click and Restart show the whole level again.
+test('Desktop: the wheel zooms the classic board; a double click and Restart show the whole level', async ({ browser }) => {
+  const { ctx, page, errors } = await open(browser, DEVICES[0]!);
+  await openLevel(page, 10);
+  await page.locator('#start-begin').click();
+  await expect(page.locator('#start-veil')).toBeHidden();
+  await page.waitForSelector('#stage[data-cell]');
+  const whole = await cellOf(page);
+  await expect(page.locator('#classic-zoom-in')).toBeVisible();
+  await expect(page.locator('#classic-cam .modern-viewbtn')).toBeHidden();
+  const box = (await page.locator('#stage').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.8);
+  await page.mouse.wheel(0, -400);
+  await expect.poll(() => cellOf(page), 'the wheel zooms in').toBeGreaterThan(whole);
+  expect(await cellOf(page)).toBeLessThanOrEqual(64);
+  expect(await page.evaluate(() => document.getElementById('stage-view')!.scrollLeft), 'toward the pointer, right of centre').toBeGreaterThan(0);
+  await page.locator('#stage-view').dblclick();
+  await expect.poll(() => cellOf(page), 'a double click').toBe(whole);
+  expect(await page.evaluate(wholeShown)).toEqual([]);
+  // Restart begins the level again at the whole level.
+  await page.locator('#classic-zoom-in').click();
+  await expect.poll(() => cellOf(page), '+').toBeGreaterThan(whole);
+  await page.locator('#btn-wait').click();
+  await expect.poll(() => page.evaluate(runState)).toMatchObject({ moves: 1 });
+  await page.locator('#btn-restart').click();
+  await expect.poll(() => cellOf(page), 'Restart shows the whole level').toBe(whole);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});

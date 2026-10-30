@@ -7,7 +7,8 @@ namespace Admin;
 
 final class Auth
 {
-    public const ALLOWED = 'wgrim@siue.edu';
+    public const OWNER = 'wgrim@siue.edu';
+    public const ALLOWED = self::OWNER;
     public const LINK_TTL = 900;
     public const DEVICE_TTL = 7776000;
 

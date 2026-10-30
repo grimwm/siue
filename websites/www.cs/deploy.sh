@@ -22,6 +22,11 @@
 #             in the host's .deploy-hash manifest) that this one does not
 #   LIST=1    print the deploy set, one path per line, and stop (no host,
 #             no password needed)
+#
+# STUDIO_CONFIG (the studio-config field of the SIUE 1Password item) is the
+# studios' named people and caps as JSON. It is validated by
+# tools/studio-config.php and staged as admin/config/studio.json, so it joins
+# the hash and the manifest; it is never in git. A real deploy needs it.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -191,12 +196,25 @@ while IFS= read -r -d '' f; do
   mkdir -p "$stage/$(dirname "$f")"
   cp -L "$f" "$stage/$f"
 done < <(git ls-files -z --cached --others --exclude-standard --deduplicate -- .)
+# The studios' configuration comes from the environment only.
+if [ -n "${STUDIO_CONFIG:-}" ]; then
+  mkdir -p "$stage/admin/config"
+  if ! printf '%s' "$STUDIO_CONFIG" | php tools/studio-config.php >"$stage/admin/config/studio.json"; then
+    echo "deploy: STUDIO_CONFIG is not valid (the studio-config field of the SIUE 1Password item)" >&2
+    exit 1
+  fi
+fi
 find "$stage" -type d -exec chmod 755 {} +
 find "$stage" -type f -exec chmod 644 {} +
 
 if [ "${LIST:-0}" = 1 ]; then
   (cd "$stage" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
   exit 0
+fi
+
+if [ -z "${STUDIO_CONFIG:-}" ] && [ "${DRY_RUN:-0}" != 1 ]; then
+  echo "deploy: STUDIO_CONFIG is not set (the studio-config field of the SIUE 1Password item)" >&2
+  exit 1
 fi
 
 # Without a readable password file ssh would sit at a prompt forever.

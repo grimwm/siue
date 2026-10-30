@@ -13,6 +13,8 @@ require_once __DIR__ . '/Keys.php';
 require_once __DIR__ . '/Headers.php';
 require_once __DIR__ . '/Mailer.php';
 require_once __DIR__ . '/MailTemplate.php';
+require_once __DIR__ . '/Address.php';
+require_once __DIR__ . '/People.php';
 
 // The kit's StoreDir and StoreModes. The command-line test suites share one
 // process with the kit's own tests and load the kit's files, so a class is never
@@ -32,6 +34,12 @@ unset($kitPhp);
  * also delete them: Db::open gave drafts:delete to every active key holding drafts:publish.
  */
 const ADMIN_KEY_SCOPES = ['notes:pickup', 'drafts:publish', 'drafts:delete', 'keys:publish'];
+
+/** The named people and studio caps from the deploy's configuration file (defaults when it is missing). */
+function admin_people(): Admin\People
+{
+    return Admin\People::load();
+}
 
 /** Dashboard links for the hub, label => path relative to /admin/. Workrooms add themselves here. */
 function admin_dashboards(): array

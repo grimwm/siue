@@ -77,6 +77,16 @@ other accounts. `.htaccess` sets the security headers with `Header always set` s
 before PHP runs carry them too; a page PHP sends can therefore show each header twice, with the same
 value.
 
+## Named people and caps
+
+The deploy writes `admin/config/studio.json` from the `studio-config` field of the SIUE 1Password item (never from git; the folder is not served). Its shape:
+
+```json
+{"people":[{"email":"a@siue.edu","admin":false,"allowance":false}],"max_accounts":500,"max_shared_bytes":1073741824}
+```
+
+Each email must be a plain `@siue.edu` address (no `+`); the two caps are optional and default to 500 and 1 GiB. `wgrim@siue.edu` is always an admin with the allowance. A missing or malformed file gives the defaults. `tools/studio-config.php` validates the JSON, and a real deploy without the field stops. After editing the field, run the deploy workflow on `main`.
+
 ## Run the local smoke test
 
 ```bash

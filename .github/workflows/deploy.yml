@@ -17,6 +17,9 @@ name: deploy
 #     username - the SIUE address (wgrim@siue.edu); the host account is the
 #                part before the @
 #     password - its password, fed to sftp/scp through sshpass
+#     studio-config - the studios' named people and caps, as JSON (see
+#                websites/www.cs/admin/README.md); deploy.sh writes it to
+#                admin/config/studio.json on the host
 # ssh only accepts the host keys in .github/ssh_known_hosts.
 
 on:
@@ -104,6 +107,7 @@ jobs:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           SIUE_USER: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/username
           SIUE_PASSWORD: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/password
+          STUDIO_CONFIG: op://khvwk3iogv3mhhjui4se7xqyni/ioa6izbxvctbalcb65y5fr3esu/studio-config
 
       - name: Deploy
         if: steps.tip.outputs.skip != '1'

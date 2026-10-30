@@ -106,4 +106,26 @@ final class MusicAccountsTest extends TestCase
         self::assertSame(Admin\Auth::OWNER, $a->emailOf($id));
         self::assertNull($db->query('SELECT last_sign_in_at FROM accounts')->fetchColumn(), 'making the account is not a sign-in');
     }
+
+    /** Removal is one transaction: when its last step fails, the wipe, the sessions and the AI keys come back too. */
+    public function testRemoveIsOneTransaction(): void
+    {
+        [$store, $db, , $clock, $accounts, $id] = music_world(true, 'student@siue.edu');
+        $store->putDraft('piece', 1, ['score.json' => '{"schema":1}']);
+        $store->addNote(music_sealed());
+        (new Music\AiKeys($db, $clock))->create($id, 'ai', ['drafts:publish']);
+        $db->prepare('INSERT INTO studio_sessions (id_hash, account_id, created_at, seen_at, ip, agent) VALUES (?, ?, 1, 1, ?, ?)')->execute([str_repeat('a', 64), $id, '203.0.113.9', 'x']);
+        $db->exec("CREATE TRIGGER refuse_delete BEFORE DELETE ON accounts BEGIN SELECT RAISE(ABORT, 'refused'); END");
+        try {
+            $accounts->remove($id);
+            self::fail('the delete of the account row was refused');
+        } catch (PDOException) {
+            self::assertFalse($db->inTransaction(), 'the transaction ended');
+        }
+        $count = static fn(string $table): int => (int) $db->query("SELECT COUNT(*) FROM $table WHERE account_id = $id")->fetchColumn();
+        foreach (['music_drafts', 'music_notes', 'music_keyring', 'studio_keys', 'studio_sessions'] as $table) {
+            self::assertSame(1, $count($table), "$table rolled back with the rest");
+        }
+        self::assertSame($id, $accounts->idFor('student@siue.edu'));
+    }
 }

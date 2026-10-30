@@ -73,40 +73,44 @@ final class Accounts
      */
     public function startOver(int $account): void
     {
-        $store = new Store($this->db, $this->dir ?? \music_dir(), $this->clock, $account, Limits::for($this->people, (string) $this->emailOf($account)), $this);
-        $this->db->exec('BEGIN IMMEDIATE');
-        try {
-            (new AiKeys($this->db, $this->clock))->deleteAll($account);
-            $store->wipe();
-            $this->db->exec('COMMIT');
-        } catch (\Throwable $e) {
-            if ($this->db->inTransaction()) {
-                $this->db->exec('ROLLBACK');
-            }
-            throw $e;
-        }
+        $this->emptied($account, false);
     }
 
     /**
-     * Removes the account: starts it over (its AI keys, notes, drafts, files and keyring), then deletes its row, its
-     * studio sessions and trusted devices, and the unused sign-in links of its address. The owner's account is refused.
+     * Removes the account: everything start over deletes, its studio sessions and trusted devices, the unused sign-in
+     * links of its address and its row, all in one BEGIN IMMEDIATE, so no session can store anything in between. The
+     * owner's account is refused.
      */
     public function remove(int $account): void
     {
+        $this->emptied($account, true);
+    }
+
+    /** The one transaction behind startOver and remove; $drop also deletes the account and what signs it in. */
+    private function emptied(int $account, bool $drop): void
+    {
         $email = $this->emailOf($account);
-        if ($email === null) {
-            return;
+        if ($drop) {
+            if ($email === null) {
+                return;
+            }
+            if ($email === \Admin\Auth::OWNER) {
+                throw new \LogicException("The owner's studio cannot be removed.");
+            }
         }
-        if ($email === \Admin\Auth::OWNER) {
-            throw new \LogicException("The owner's studio cannot be removed.");
-        }
-        $this->startOver($account);
+        $store = new Store($this->db, $this->dir ?? \music_dir(), $this->clock, $account, Limits::for($this->people, (string) $email), $this);
         $this->db->exec('BEGIN IMMEDIATE');
         try {
-            $this->db->prepare('DELETE FROM studio_sessions WHERE account_id = ?')->execute([$account]);
-            $this->db->prepare('DELETE FROM studio_devices WHERE account_id = ?')->execute([$account]);
-            $this->db->prepare('DELETE FROM studio_links WHERE used_at IS NULL AND email = ?')->execute([$email]);
-            $this->db->prepare('DELETE FROM accounts WHERE id = ?')->execute([$account]);
+            if ($drop) {
+                $this->db->prepare('DELETE FROM studio_sessions WHERE account_id = ?')->execute([$account]);
+                $this->db->prepare('DELETE FROM studio_devices WHERE account_id = ?')->execute([$account]);
+                $this->db->prepare('DELETE FROM studio_links WHERE used_at IS NULL AND email = ?')->execute([$email]);
+            }
+            (new AiKeys($this->db, $this->clock))->deleteAll($account);
+            $store->wipe();
+            if ($drop) {
+                $this->db->prepare('DELETE FROM accounts WHERE id = ?')->execute([$account]);
+            }
             $this->db->exec('COMMIT');
         } catch (\Throwable $e) {
             if ($this->db->inTransaction()) {

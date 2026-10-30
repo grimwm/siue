@@ -1,6 +1,6 @@
 // The Island of Crete on ten screens: the frame fills the window, nothing scrolls, every control is on screen
 // and not clipped, no control covers the board, the board keeps at least 8 px per cell, and key tabs show only
-// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The move pad is a plus on every screen; on a
+// where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The move pad is a connected cross on every screen; on a
 // phone nothing else stands within 12 px of an arrow, at either edge the Arrows setting puts the pad, and Hint, Route
 // and Auto wait behind the Thread button. The new-game card, the chapter card, the level list, the start card and the menu are
 // checked too, and level 8, the largest board, at the smallest phone sizes.
@@ -204,26 +204,30 @@ for (const device of DEVICES) {
   });
 }
 
-/** The move pad is a plus: up centred over down, left and right level with each other either side of an empty
- *  centre as wide as a button; `side` names the half of the screen the pad stands in. */
-function plusPad(side: string | null) {
+/** The move pad is one connected cross: up over down, left and right level with each other, and all four arms touch
+ *  an inert centre square (no button, no gap); `side` names the half of the screen the pad stands in, `min` the
+ *  smallest arm. */
+function plusPad({ side, min }: { side: string | null; min: number }) {
   const probs: string[] = [];
   const box = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
   const [up, left, right, down] = ['.mv-up', '.mv-left', '.mv-right', '.mv-down'].map(box) as [DOMRect, DOMRect, DOMRect, DOMRect];
+  const hubEl = document.querySelector('.pad-hub') as HTMLElement | null;
+  if (!hubEl) return ['no centre square'];
+  const hub = hubEl.getBoundingClientRect();
   const cx = (r: DOMRect) => (r.left + r.right) / 2;
   const cy = (r: DOMRect) => (r.top + r.bottom) / 2;
   if (Math.abs(cx(up) - cx(down)) > 1) probs.push('up is not over down');
   if (Math.abs(cy(left) - cy(right)) > 1) probs.push('left and right are not level');
-  if (!(up.bottom <= left.top && down.top >= left.bottom)) probs.push('up and down are not above and below the middle row');
-  if (Math.abs(cx(up) - (cx(left) + cx(right)) / 2) > 1) probs.push('up is not centred between left and right');
-  if (right.left - left.right < up.width - 1) probs.push('no empty centre between left and right');
-  if (Math.abs(cy(up) - cy(left) + (cy(down) - cy(left))) > 1) probs.push('the middle row is not halfway between up and down');
-  for (const el of document.querySelectorAll('.pad > *')) {
-    const r = el.getBoundingClientRect();
-    if (el.tagName === 'BUTTON') continue;
-    if (Math.abs(cx(r) - cx(up)) > 1 || Math.abs(cy(r) - cy(left)) > 1) probs.push('the centre holds something off centre');
+  if (Math.abs(cx(up) - cx(hub)) > 1 || Math.abs(cy(left) - cy(hub)) > 1) probs.push('the centre is off centre');
+  if (Math.abs(hub.top - up.bottom) > 1) probs.push(`up is ${hub.top - up.bottom}px from the centre`);
+  if (Math.abs(down.top - hub.bottom) > 1) probs.push(`down is ${down.top - hub.bottom}px from the centre`);
+  if (Math.abs(hub.left - left.right) > 1) probs.push(`left is ${hub.left - left.right}px from the centre`);
+  if (Math.abs(right.left - hub.right) > 1) probs.push(`right is ${right.left - hub.right}px from the centre`);
+  for (const r of [up, left, right, down]) {
+    if (r.width < min - 0.5 || r.height < min - 0.5) probs.push(`an arm is ${r.width}x${r.height}, under ${min}px`);
   }
-  const centre = document.elementFromPoint(cx(up), cy(left));
+  if (hubEl.tagName === 'BUTTON' || hubEl.closest('button') || hubEl.getAttribute('aria-hidden') !== 'true') probs.push('the centre is not an inert, hidden square');
+  const centre = document.elementFromPoint(cx(hub), cy(hub));
   if (centre?.closest('button')) probs.push(`a button sits in the centre: ${centre.closest('button')!.className}`);
   if (side === 'left' && cx(up) > innerWidth / 2) probs.push('the pad is not on the left');
   if (side === 'right' && cx(up) < innerWidth / 2) probs.push('the pad is not on the right');
@@ -253,14 +257,14 @@ function clearOfArrows() {
 const PHONES = DEVICES.filter(d => /iPhone|Android/.test(d[0]));
 for (const device of PHONES) {
   for (const side of ['left', 'right'] as const) {
-    test(`${device[0]}, arrows on the ${side}: a plus pad clear of every other button, the thread behind Thread`, async ({ browser }) => {
+    test(`${device[0]}, arrows on the ${side}: a connected cross pad clear of every other button, the thread behind Thread`, async ({ browser }) => {
       const { ctx, page, errors } = await open(browser, device, side);
       await openLevel(page, 1);
       await page.locator('#start-begin').click();
       await expect(page.locator('#start-veil')).toBeHidden();
       await page.waitForSelector('#stage[data-cell]');
       expect(await page.evaluate(() => document.getElementById('frame')!.classList.contains('pad-right'))).toBe(side === 'right');
-      expect(await page.evaluate(plusPad, side)).toEqual([]);
+      expect(await page.evaluate(plusPad, { side, min: 44 })).toEqual([]);
       expect(await page.evaluate(clearOfArrows)).toEqual([]);
       // Hint, Route and Auto wait behind Thread, which stands on the far side from the pad.
       for (const id of ['btn-hint', 'btn-route', 'btn-auto']) await expect(page.locator(`#${id}`)).toBeHidden();
@@ -319,12 +323,12 @@ test('iPhone 15, portrait: H, V and T still work, and Thread shows the route and
   await ctx.close();
 });
 
-test('Desktop: the pad is a plus on the left, and Hint, Route and Auto stand in the strip with no Thread button', async ({ browser }) => {
+test('Desktop: the pad is a connected cross on the left, and Hint, Route and Auto stand in the strip with no Thread button', async ({ browser }) => {
   const { ctx, page, errors } = await open(browser, DEVICES[0]!);
   await openLevel(page, 1);
   await page.locator('#start-begin').click();
   await page.waitForSelector('#stage[data-cell]');
-  expect(await page.evaluate(plusPad, 'left')).toEqual([]);
+  expect(await page.evaluate(plusPad, { side: 'left', min: 44 })).toEqual([]);
   for (const id of ['btn-hint', 'btn-route', 'btn-auto']) await expect(page.locator(`#${id}`)).toBeVisible();
   await expect(page.locator('#btn-thread')).toHaveCount(0);
   expect(errors).toEqual([]);
@@ -336,13 +340,13 @@ test('iPhone SE, portrait: Arrows in the menu moves the pad at once, and the cho
   await openLevel(page, 1);
   await page.locator('#start-begin').click();
   await page.waitForSelector('#stage[data-cell]');
-  expect(await page.evaluate(plusPad, 'left')).toEqual([]);
+  expect(await page.evaluate(plusPad, { side: 'left', min: 44 })).toEqual([]);
   await page.locator('#btn-menu').click();
   await expect(page.locator('#pad-left')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#pad-right').click();
   await expect(page.locator('#pad-right')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#menu-close').click();
-  expect(await page.evaluate(plusPad, 'right')).toEqual([]);
+  expect(await page.evaluate(plusPad, { side: 'right', min: 44 })).toEqual([]);
   expect(await page.evaluate(clearOfArrows)).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('crete-pad'))).toBe('right');
   await page.reload();
@@ -351,7 +355,7 @@ test('iPhone SE, portrait: Arrows in the menu moves the pad at once, and the cho
   await openLevel(page, 1);
   await page.locator('#start-begin').click();
   await page.waitForSelector('#stage[data-cell]');
-  expect(await page.evaluate(plusPad, 'right')).toEqual([]);
+  expect(await page.evaluate(plusPad, { side: 'right', min: 44 })).toEqual([]);
   expect(errors).toEqual([]);
   await ctx.close();
 });

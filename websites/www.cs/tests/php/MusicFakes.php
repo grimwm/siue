@@ -27,13 +27,26 @@ function music_draft_bundle(array $files): string
     return $out;
 }
 
+/** The People of $json (studio.json's shape); a test-only `max_shared_bytes` key sets a pool smaller than a MiB. */
+function music_people(string $json): Admin\People
+{
+    $d = json_decode($json, true);
+    $bytes = is_array($d) ? ($d['max_shared_bytes'] ?? null) : null;
+    if ($bytes !== null) {
+        unset($d['max_shared_bytes']);
+        $json = (string) json_encode($d === [] ? new stdClass() : $d);
+    }
+    $people = Admin\People::fromJson($json) ?? throw new InvalidArgumentException('bad people JSON');
+    return $bytes === null ? $people : $people->withMaxSharedBytes($bytes);
+}
+
 /**
  * The store of $email's account (signed in first) on $db, with the named people and caps of $people (studio.json's shape).
  * @return array{Music\Store, Music\Accounts, int} store, accounts, the account's id
  */
 function music_store_of(PDO $db, string $dir, Admin\Clock $clock, string $email = Admin\Auth::OWNER, string $people = '{}'): array
 {
-    $named = Admin\People::fromJson($people) ?? throw new InvalidArgumentException('bad people JSON');
+    $named = music_people($people);
     $accounts = new Music\Accounts($db, $clock, $named, $dir);
     $id = $accounts->signIn($email) ?? throw new RuntimeException("no account for $email");
     $store = new Music\Store($db, $dir, $clock, $id, Music\Limits::for($named, $email), $accounts);
@@ -75,7 +88,7 @@ function music_admin_signed_in(Admin\Sessions $admin, array $over = []): Admin\R
 /** fn(int $account): Music\Store on $db and $dir, each account with the limits its address has under $people (studio.json's shape). */
 function music_store_for(PDO $db, string $dir, Admin\Clock $clock, string $people = '{}'): Closure
 {
-    $named = Admin\People::fromJson($people) ?? throw new InvalidArgumentException('bad people JSON');
+    $named = music_people($people);
     $accounts = new Music\Accounts($db, $clock, $named, $dir);
     return static fn(int $account): Music\Store => new Music\Store($db, $dir, $clock, $account, Music\Limits::for($named, (string) $accounts->emailOf($account)), $accounts);
 }
@@ -86,7 +99,7 @@ function music_store_for(PDO $db, string $dir, Admin\Clock $clock, string $peopl
  */
 function music_pages(PDO $db, string $dir, Admin\Clock $clock, string $base, string $people = '{}'): array
 {
-    $named = Admin\People::fromJson($people) ?? throw new InvalidArgumentException('bad people JSON');
+    $named = music_people($people);
     $accounts = new Music\Accounts($db, $clock, $named, $dir);
     $storeFor = music_store_for($db, $dir, $clock, $people);
     $sessions = new Admin\Sessions($db, $clock, Admin\Realm::studio($base));

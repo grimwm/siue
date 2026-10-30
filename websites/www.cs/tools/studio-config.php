@@ -7,7 +7,7 @@ require_once __DIR__ . '/../admin/lib/People.php';
 
 $json = (string) stream_get_contents(STDIN);
 if (Admin\People::fromJson($json) === null) {
-    fwrite(STDERR, "studio-config: not valid. Expected {\"people\":[{\"email\":\"a@siue.edu\",\"admin\":false,\"allowance\":false}],\"max_accounts\":500,\"max_shared_bytes\":1073741824}; each email a plain @siue.edu address, caps positive integers.\n");
+    fwrite(STDERR, "studio-config: not valid. Expected {\"people\":[{\"email\":\"a@siue.edu\",\"admin\":false,\"allowance\":false}],\"max_accounts\":500,\"max_shared_mb\":1024}; each email a plain @siue.edu address, caps positive integers.\n");
     exit(1);
 }
 echo rtrim($json), "\n";

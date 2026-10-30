@@ -32,7 +32,7 @@ final class AdminPeopleTest extends TestCase
 
     public function testFlagsComeFromTheFile(): void
     {
-        $p = Admin\People::load($this->file('{"people":[{"email":"a@siue.edu","admin":true,"allowance":false},{"email":"b@siue.edu","allowance":true},{"email":"c@siue.edu"}],"max_accounts":10,"max_shared_bytes":2048}'));
+        $p = Admin\People::load($this->file('{"people":[{"email":"a@siue.edu","admin":true,"allowance":false},{"email":"b@siue.edu","allowance":true},{"email":"c@siue.edu"}],"max_accounts":10,"max_shared_mb":2}'));
         self::assertTrue($p->isAdmin('a@siue.edu'));
         self::assertFalse($p->hasAllowance('a@siue.edu'));
         self::assertFalse($p->isAdmin('b@siue.edu'));
@@ -41,7 +41,7 @@ final class AdminPeopleTest extends TestCase
         self::assertFalse($p->isAdmin('c@siue.edu') || $p->hasAllowance('c@siue.edu'));
         self::assertFalse($p->isNamed('d@siue.edu') || $p->isAdmin('d@siue.edu') || $p->hasAllowance('d@siue.edu'));
         self::assertSame(10, $p->maxAccounts());
-        self::assertSame(2048, $p->maxSharedBytes());
+        self::assertSame(2_097_152, $p->maxSharedBytes(), 'max_shared_mb is in MiB');
     }
 
     public function testDefaultsAre500AccountsAndOneGigabyte(): void
@@ -61,7 +61,12 @@ final class AdminPeopleTest extends TestCase
             '{"people":[{"email":"a@example.com","admin":true}]}',
             '{"people":[{"email":"a+b@siue.edu","admin":true}]}',
             '{"people":[],"max_accounts":-1}',
-            '{"people":[],"max_shared_bytes":0}',
+            '{"people":[],"max_shared_mb":0}',
+            '{"people":[],"max_shared_mb":-5}',
+            '{"people":[],"max_shared_mb":1.5}',
+            '{"people":[],"max_shared_mb":"10"}',
+            '{"people":[],"max_shared_bytes":1073741824}',
+            '{"people":[],"max_acounts":5}',
             '{"people":[],"max_accounts":"5"}',
             '{"people":[{"email":"a@siue.edu","admin":"yes"}]}',
             '{"people":"a@siue.edu"}',

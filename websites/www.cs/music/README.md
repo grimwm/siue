@@ -53,7 +53,7 @@ keys. Nobody else's studio is ever visible to them.
 | Active AI keys | 10, each 60 requests a minute | the same |
 
 Every studio without the allowance also shares one pool: 1,073,741,824 bytes (about 1 GB) in all, and at
-most 500 accounts (`max_shared_bytes` and `max_accounts` in the configuration). When either is reached, a
+most 500 accounts (`max_shared_mb` and `max_accounts` in the configuration). When either is reached, a
 new sign-up gets "The studio is full". An upload past a limit is refused, and nothing is deleted to make
 room; the refusal says how much room is left (the smaller of the studio's own room and the shared room)
 and to delete drafts or picked-up notes. `score.json` and `score.musicxml` are stored gzip-compressed and

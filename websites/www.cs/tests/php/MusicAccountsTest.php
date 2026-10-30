@@ -46,7 +46,7 @@ final class MusicAccountsTest extends TestCase
     public function testANewAddressIsRefusedOnceTheSharedPoolIsFull(): void
     {
         [, $db, , $clock, , $id] = music_world(false, 'a@siue.edu', '{"max_shared_bytes": 1000}');
-        $a = new Music\Accounts($db, $clock, Admin\People::fromJson('{"max_shared_bytes": 1000}'));
+        $a = new Music\Accounts($db, $clock, music_people('{"max_shared_bytes": 1000}'));
         $db->prepare('INSERT INTO music_drafts (account_id, piece, version, published_at, size) VALUES (?, ?, ?, ?, ?)')->execute([$id, 'p', 1, 1, 999]);
         self::assertIsInt($a->signIn('b@siue.edu'), '999 of 1000 bytes: room for one more account');
         $db->prepare('INSERT INTO music_drafts (account_id, piece, version, published_at, size) VALUES (?, ?, ?, ?, ?)')->execute([$id, 'p', 2, 2, 1]);

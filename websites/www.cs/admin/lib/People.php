@@ -10,7 +10,8 @@ require_once __DIR__ . '/Auth.php';
 final class People
 {
     public const DEFAULT_MAX_ACCOUNTS = 500;
-    public const DEFAULT_MAX_SHARED_BYTES = 1_073_741_824;
+    public const DEFAULT_MAX_SHARED_MB = 1024;
+    public const DEFAULT_MAX_SHARED_BYTES = self::DEFAULT_MAX_SHARED_MB * 1_048_576;
 
     /** @param array<string, array{admin: bool, allowance: bool}> $named keyed by normalized address */
     private function __construct(
@@ -39,7 +40,8 @@ final class People
         return $people;
     }
 
-    /** Null when the JSON is malformed: bad shape, an address that is not a studio address, a cap that is not a positive integer. */
+    /** Null when the JSON is malformed: bad shape, an address that is not a studio address, a cap that is not a positive integer, a key that is not part of the shape (so
+     *  a stale `max_shared_bytes` is caught rather than ignored). The shared-space cap is `max_shared_mb`, in MiB. */
     public static function fromJson(string $json): ?self
     {
         $d = json_decode($json, true);
@@ -59,15 +61,18 @@ final class People
             }
             $named[$email] = ['admin' => $admin, 'allowance' => $allowance];
         }
+        if (array_diff(array_keys($d), ['people', 'max_accounts', 'max_shared_mb']) !== []) {
+            return null;
+        }
         $caps = [];
-        foreach (['max_accounts' => self::DEFAULT_MAX_ACCOUNTS, 'max_shared_bytes' => self::DEFAULT_MAX_SHARED_BYTES] as $key => $default) {
+        foreach (['max_accounts' => self::DEFAULT_MAX_ACCOUNTS, 'max_shared_mb' => self::DEFAULT_MAX_SHARED_MB] as $key => $default) {
             $v = $d[$key] ?? $default;
             if (!is_int($v) || $v < 1) {
                 return null;
             }
             $caps[] = $v;
         }
-        return new self($named, $caps[0], $caps[1]);
+        return new self($named, $caps[0], $caps[1] * 1_048_576);
     }
 
     public function isAdmin(string $email): bool
@@ -89,6 +94,12 @@ final class People
     public function maxAccounts(): int
     {
         return $this->maxAccounts;
+    }
+
+    /** A copy with the shared-space cap set in bytes, for tests that need a pool smaller than a MiB. */
+    public function withMaxSharedBytes(int $bytes): self
+    {
+        return new self($this->named, $this->maxAccounts, $bytes);
     }
 
     public function maxSharedBytes(): int

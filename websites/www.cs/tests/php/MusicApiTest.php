@@ -311,7 +311,7 @@ final class MusicApiTest extends TestCase
         $clock = new FakeClock(1_800_000_000);
         $try = function (string $people, ?int $own) use ($clock): array {
             $dir = $this->dir . '-room' . ($own === null ? 'shared' : 'own');
-            $people = Admin\People::fromJson($people);
+            $people = music_people($people);
             $accounts = new Music\Accounts($this->db, $clock, $people, $dir);
             $api = new Music\Api(music_store_for($this->db, $dir, $clock, $own === null ? '{"max_shared_bytes": 100}' : '{}'), new Music\KeyGate($this->db, $clock, $this->keys, $accounts, self::BASE));
             $id = (int) $accounts->signIn($own === null ? 'pooled@siue.edu' : 'roomy@siue.edu');

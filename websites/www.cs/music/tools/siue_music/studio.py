@@ -35,6 +35,9 @@ _NOTE = re.compile(r"[0-9a-f]{32}")
 _NOTE_DIR = re.compile(r"\d{4}-\d{2}-\d{2}-([0-9a-f]{32})")
 MAX_WAIT_SECONDS = 3600
 MAX_VERSION = 9999
+# The composer's instrument categories in picker order (games/workroom/src/catalogue.ts), and what list_instruments tells the AI.
+CATEGORIES = ("strings", "woodwinds", "brass", "keys", "pitched", "drums", "voices")
+INSTRUMENT_FIELDS = ("name", "category", "range", "expert", "clef", "written", "gm", "gm_name", "pieces", "standin_note")
 
 
 class StudioError(Exception):
@@ -394,6 +397,20 @@ class Studio:
     def _check_version(version: object) -> None:
         if isinstance(version, bool) or not isinstance(version, int) or not 1 <= version <= MAX_VERSION:
             raise StudioError(f"{version!r} is not a draft version (1 to {MAX_VERSION}).")
+
+    def list_instruments(self) -> dict:
+        """The studio's instruments as the composer's catalogue lists them (music/library/library.json), in picker order."""
+        try:
+            data = json.loads(self._fetch(self.base().rstrip("/") + "/library/library.json"))
+            library = data["instruments"]
+            if not isinstance(library, dict) or not all(isinstance(e, dict) for e in library.values()):
+                raise TypeError("instruments is not an object of objects")
+        except Exception as e:  # noqa: BLE001 - any failure is "cannot read it"
+            raise StudioError(f"The studio's instrument library could not be read ({type(e).__name__}). Try again in a minute.") from None
+        order = {c: n for n, c in enumerate(CATEGORIES)}
+        picked = [(i, e) for i, e in library.items() if e.get("name") and e.get("category") in order]
+        picked.sort(key=lambda p: order[p[1]["category"]])  # stable: library order within a category
+        return {"instruments": [{"id": i, **{k: e.get(k) for k in INSTRUMENT_FIELDS}} for i, e in picked]}
 
     def _instruments(self) -> frozenset[str] | None:
         """The site's instrument ids (music/library/library.json), or None when it cannot be read: the server checks them too."""

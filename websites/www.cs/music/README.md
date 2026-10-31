@@ -51,6 +51,12 @@ keys. Nobody else's studio is ever visible to them.
   `instrument` is in `music/library/library.json`, and `mix` is present), which the page plays by building
   the sound in the browser from the shared sample library. People with the allowance may also publish
   full drafts (MusicXML, audio, spectrogram).
+- **The shared sample library** (`music/library/`, its README lists each instrument and its source) holds
+  27 instruments from two CC0 libraries, VSCO-2 CE and VCSL, as lossless FLAC. `library.json` also carries
+  each instrument's catalogue entry for the composer (category, ranges, clef, written transposition, General
+  MIDI program, drum pieces, icon). Drums play each sample on its own key only. Celesta, Choir and Lyre are
+  stand-ins, marked as such, playing another instrument's samples. `make music-library` rebuilds it from
+  `music/compose/samples.json`; `music/compose/tools/vsco-files` helps write new manifest entries.
 - **Start over** on Your studio deletes every piece, draft and note, the notes key and the AI keys, after
   the emailed confirmation below. Nobody can undo it. The account and its sign-in stay, and the next visit
   asks for a new notes key.
@@ -358,6 +364,7 @@ Tools (each within the AI key's permissions, which the server enforces from the 
 | `studio_status` | The studio's address, the key's label and permissions, the pairing code, whether it is paired, and the next step to tell the person. |
 | `list_pieces` | The studio's pieces with their project, kind and draft versions. |
 | `read_score(piece, version?)` | A draft's `score.json` (the newest when no version) and its page. |
+| `list_instruments()` | The instruments a lane may use, in the picker's order, from the site's `library/library.json`: name, category, normal and expert range, clef, written transposition, General MIDI program, drum pieces and any stand-in note. Needs no key. |
 | `publish_draft(score)` | Checks the score as the page does (the glossary built into the wheel, the site's `library/library.json`) and publishes it as draft `score.draft` of `score.piece.id`; a published version is never replaced. |
 | `delete_draft(piece, version)`, `delete_piece(piece)` | Delete one draft, or every draft of a piece (`drafts:delete`). |
 | `read_new_notes(limit?)` | Downloads the waiting notes sealed to this AI, checks their length and SHA-256, opens them here and saves them in the notes folder; marks none. Same note shape as the owner's `pick_up_notes`. |

@@ -26,6 +26,7 @@ const FIXTURE_DRAFTS = {
   draft: { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft'), piece: 'test-piece' },
   'draft-sound': { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft-sound'), piece: 'cannon-fire' },
   'draft-score': { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft-score'), piece: 'built-piece' },
+  'draft-orchestra': { dir: join(SITE, 'games', 'workroom', 'test', 'fixtures', 'draft-orchestra'), piece: 'orchestra-piece' },
 } as const;
 
 // The tests share one browser worker and one sign-in to each realm: a sign-in link is limited to three an hour per
@@ -888,6 +889,32 @@ test('a score-only draft: the page builds its sound from the library, plays it, 
     expect(seam).toBeLessThanOrEqual(2 * Math.max(...steps.filter((_, i) => i !== near - 1)));
     expect(wav.left.reduce((m, v) => Math.max(m, Math.abs(v)), 0)).toBeGreaterThan(0.1);
     expect(violations).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('orchestra score plays: violin, flute, the drum kit and the celesta stand-in, from the library', async ({ browser, request, baseURL }) => {
+  test.setTimeout(180_000);
+  const base = baseURL!;
+  const { context, page } = await signedInPage(browser, base);
+  try {
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await publishFixtureDraft(request, base, await createKey(page, base, 'e2e orchestra', ['drafts:publish']), 'draft-orchestra');
+    await page.goto(`${base}music/piece.php?id=orchestra-piece`);
+    await expect(page.getByText('Building the sound…')).toBeHidden({ timeout: 60_000 });
+    await expect(page.getByText('The sound could not be built')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Play' }).click();
+    await expect.poll(() => page.locator('audio').evaluate(a => (a as HTMLAudioElement).currentTime), { timeout: 30_000 }).toBeGreaterThan(2);
+    await page.getByRole('button', { name: 'Pause' }).click();
+    // What the build fetched: each lane's own samples, and the glockenspiel's for the celesta, which has none of its own.
+    const fetched = await page.evaluate(() => performance.getEntriesByType('resource').map(e => new URL(e.name).pathname));
+    for (const want of [/\/music\/library\/violin\/\d+\.flac$/, /\/music\/library\/kit\/36\.flac$/, /\/music\/library\/glock\/\d+\.flac$/]) {
+      expect(fetched.some(path => want.test(path)), String(want)).toBe(true);
+    }
+    expect(fetched.some(path => path.includes('/music/library/celesta/'))).toBe(false);
+    expect(errors).toEqual([]);
   } finally {
     await context.close();
   }

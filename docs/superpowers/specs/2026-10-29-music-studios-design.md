@@ -69,16 +69,23 @@ for a class.
     page in the studio that says exactly what will be deleted, with one
     button; the deletion happens only on that button's POST, never on a GET
     (mail scanners fetch links).
-- **A hard limit of 4–6 MB per person** for everyone except specially named
-  people, who get more. The design uses **5 MB** (my call within that range).
-- **Store the composition, not its renders.** A long piece's score is about
+- **A hard limit per person** for everyone except specially named people, who
+  get more: **5 MB**, rising to **25 MB** with the composer's Vocal Tracks
+  (`2026-10-31-composer-editor-design.md`, phase 4f), when recorded voice
+  becomes the one kind of audio a studio keeps. The owner chose "Perfect
+  Quality, More Space": 25 MB is about 8 to 10 minutes of lossless singing.
+  From 4f the limit is a config value, beside the shared total below.
+- **Store the composition, not its renders** (Vocal Tracks' recorded voice is
+  the one exception). A long piece's score is about
   45 KB, or about 4 KB compressed; its audio is 2.7 MB. The browser builds
   the audio, the sheet music and the sound picture from the score and a
   shared sample library.
 - **Lossless compression on the server** for everything stored:
   - scores and other text are compressed with a lossless general compressor;
   - the shared instrument samples are stored as FLAC;
-  - nothing is ever re-encoded lossily.
+  - nothing is ever re-encoded lossily. The one exception is a Vocal Tracks take
+    the person explicitly saves as Good To The Ear (Opus), as the composer
+    design says; every other take is FLAC.
 - **Drafts appear at once,** and deleting (on the page, or by the AI through
   the MCP) is always available.
 - **Drafts are each piece's undo history.**
@@ -280,11 +287,17 @@ comes first because a score-only studio cannot be heard without it.
 - **One account per person:**
   - addresses with `+` are refused;
   - the server caps the number of accounts, and the total disk of all accounts
-    other than named people at **about 1 GB** (owner's decision), both set in
-    its configuration (the host's disk is 1.5 TB with 1.4 TB free, checked
-    2026-10-29; an account quota, if the university sets one, is not visible
-    from sftp);
-  - when either cap is reached, new sign-ups get a plain "the studio is full"
+    other than named people, both set in its configuration. The total is
+    about 1 GB today. With Vocal Tracks (composer phase 4f) its default
+    becomes **20 GB**, raisable at any time in config with no code change
+    (owner's decision). The host's disk is 1.5 TB; an account quota, if the
+    university sets one, is not visible from sftp;
+  - a safety floor from 4f: uploads are refused while the host's free disk
+    (`disk_free_space`) would drop below a config minimum, **50 GB** by
+    default;
+  - the admin view shows the total used and the cap, and warns at 80% of the
+    cap;
+  - when a cap is reached, new sign-ups get a plain "the studio is full"
     page.
 - **Untrusted scores** get limits on top of today's validator:
   - `score.json` at most 256 KB;
@@ -314,7 +327,6 @@ comes first because a score-only studio cannot be heard without it.
 
 ## Open (Claude's calls, marked for the owner)
 
-- **5 MB** for studio users (the owner said 4–6 MB).
 - **The named-person allowance** stays at today's draft limits: 20 drafts and
   100 MB.
 - **AI key scopes:** read notes, publish drafts, delete drafts. Never create

@@ -21,6 +21,8 @@ final class Pages
     ];
     private const NOTE_ERRORS = ['too_large' => 413, 'over_quota' => 413, 'full' => 409, 'bad_header' => 422, 'unknown_key' => 422, 'no_key' => 503];
     private const LISTED_CHANGES = 3;
+    /** Where the pairing code comes from: the siue-music server on the person's computer makes it, so no page here can show it. */
+    private const PAIRING_ASK = 'Your AI app makes the pairing code, so this site cannot show it. Ask your AI “What’s my siue-music pairing code?”';
 
     /** Where a signed-out page visit goes: the studio's own sign-in. */
     private string $login;
@@ -269,15 +271,15 @@ final class Pages
     {
         $status = $this->pairing->status($account, $id);
         if ($status === null) {
-            return '<p class="pairing" data-pairing="none">Pairing: not started. Add this key to your AI app; then ask your AI for its siue-music pairing code and type it here.</p>';
+            return '<p class="pairing" data-pairing="none">Pairing: not started. Add this key to your AI app first. ' . self::PAIRING_ASK . ' Type the code here.</p>';
         }
         if ($status['paired']) {
             return '<p class="pairing" data-pairing="paired">Pairing: paired ' . self::when((int) $status['paired_at']) . '. Your AI reads the notes you send from then on.</p>';
         }
         if (!$keyed) {
-            return '<p class="pairing" data-pairing="no-key">Pairing: make your notes key on All pieces first; then type your AI\'s pairing code here.</p>';
+            return '<p class="pairing" data-pairing="no-key">Pairing: make your notes key on All pieces first. ' . self::PAIRING_ASK . ' Type the code here once your notes key is made.</p>';
         }
-        return '<div class="pairing" data-pairing="waiting"><p>Pairing: waiting for the code. Ask your AI for its siue-music pairing code and type it here with your passphrase.</p>'
+        return '<div class="pairing" data-pairing="waiting"><p>Pairing: waiting for the code. ' . self::PAIRING_ASK . ' Type the code here, with your passphrase.</p>'
             . '<noscript><p>Pairing needs script, because your notes key is opened in this browser.</p></noscript>'
             . '<div data-pair-ai="' . $id . '" data-label="' . Html::e($label) . '"></div></div>';
     }
@@ -290,11 +292,11 @@ final class Pages
             return '';
         }
         $out = '<h3>Connect Your AI</h3><ol class="connect-steps"><li>Install uv: <a href="' . Html::e(Connect::UV_INSTALL) . '">uv\'s installation page</a>.</li>'
-            . '<li>Add the siue-music server to your AI app, with this key already in it:<dl class="connect-commands">';
+            . '<li>Add the siue-music server to your AI app, with this key already in it. Open the one for your app:<div class="connect-commands">';
         foreach (Connect::commands($this->realm->baseUrl, $release, $key) as $c) {
-            $out .= '<dt>' . Html::e($c['app']) . '</dt><dd><p>' . Html::e($c['how']) . '</p><pre><code>' . Html::e($c['text']) . '</code></pre></dd>';
+            $out .= '<details data-connect-app="' . Html::e($c['app']) . '"><summary>' . Html::e($c['app']) . '</summary><p>' . Html::e($c['how']) . '</p><pre><code>' . Html::e($c['text']) . '</code></pre></details>';
         }
-        return $out . '</dl></li><li>Ask your AI for its siue-music pairing code, and type it on this key\'s row below with your passphrase.</li></ol>';
+        return $out . '</div></li><li>' . self::PAIRING_ASK . ' Type the code on this key\'s row below, with your passphrase.</li></ol>';
     }
 
     private static function when(int $t): string

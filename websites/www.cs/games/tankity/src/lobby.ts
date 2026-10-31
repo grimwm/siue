@@ -6,6 +6,7 @@
  * match, the question before leaving one, and leaving it. Every seat taken is
  * remembered in this browser (seats.ts): the room link, or Your games, resumes
  * it; Step out keeps it; only Leave gives it up. A running match is room.ts. The game's state, the room client and the rest arrive as deps. */
+import { track } from './track.ts';
 import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
@@ -340,6 +341,7 @@ export function createLobby(deps: LobbyDeps) {
       MATCH.initials = initials;
       await net.host(initials, mapId || '', G.body, difficulty.get(), LOBBY.turnSecs, signal);
       rememberSeat(initials);
+      track('room_host');
       lobbySay('');
       say(`Room ${net.code} hosted. Read the code to your friends.`, 'info');
       await netRefreshRoster();
@@ -660,6 +662,7 @@ export function createLobby(deps: LobbyDeps) {
     say('Nobody else joined, so this match plays here on your device.', 'info');
   }
   function startNetMatch(room: RoomSnapshot): void {
+    track('match_start', 'room');
     endTutorial(false);
     closeTitle();
     G.demo = false;

@@ -93,8 +93,12 @@ final class Collector
             return null;
         }
         $origin = $headers['origin'] ?? '';
-        if ($origin !== '' && strtolower((string) parse_url($origin, PHP_URL_HOST)) !== strtolower($this->host)) {
-            return null;
+        if ($origin !== '') {
+            $parts = parse_url($origin);
+            $at = strtolower((string) ($parts['host'] ?? '')) . (isset($parts['port']) ? ':' . $parts['port'] : '');
+            if ($at !== strtolower($this->host)) {
+                return null;
+            }
         }
         $site = $headers['sec-fetch-site'] ?? '';
         if ($site !== '' && $site !== 'same-origin') {
@@ -198,7 +202,7 @@ final class Collector
             ->execute([
                 $now, $day, Days::hourOf($now), $m['p'], $view ? 'view' : 'event',
                 $view ? null : $m['n'], $view ? null : ($m['k'] ?? null), $view ? $m['pv'] : null, $m['sid'], $vid, $dhash, $who,
-                $view ? Classify::referrer((string) ($m['r'] ?? ''), $this->host) : null,
+                $view ? Classify::referrer((string) ($m['r'] ?? ''), (string) preg_replace('/:\d+$/', '', $this->host)) : null,
                 $view ? Classify::device($ua, max(0, (int) ($m['tp'] ?? 0)), max(0, (int) ($m['sw'] ?? 0))) : null,
             ]);
         if ($vid !== null) {

@@ -4,6 +4,10 @@
 // a corner bar, and only when the address asks (?install).
 import { mountInstallBar } from './ui/install-bar.tsx';
 import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS, versionedShareUrl, versionOf } from './install.ts';
+import { tracker } from './stats.ts';
+
+/** The last folder name of a URL: the game's id in games/<id>/. */
+const folderId = (url: URL): string => url.pathname.split('/').filter(Boolean).pop() ?? '';
 
 const asked = asksInstall(location.search);
 const sitePage = document.getElementById('play-install');
@@ -15,11 +19,12 @@ if (sitePage) {
     installPage: new URL(sitePage.dataset.gamePage ?? './', location.href).href,
     promptsHere: OUT_OF_SCOPE_PROMPTS,
     asked,
+    onEvent: tracker(folderId(new URL(sitePage.dataset.gamePage ?? './', location.href))),
   }, browserInstallEnv());
 } else if (asked) {
   // games/<id>/: its site page is ../../play/<id>/.
   const folder = new URL('./', location.href);
-  const id = folder.pathname.split('/').filter(Boolean).pop() ?? '';
+  const id = folderId(folder);
   const entry = document.querySelector<HTMLScriptElement>('script[type="module"][src*="dist/main.js"]');
   const corner = document.createElement('div');
   corner.className = 'kit-install-corner';
@@ -30,5 +35,6 @@ if (sitePage) {
     installPage: null,
     promptsHere: true,
     asked,
+    onEvent: tracker(id),
   }, browserInstallEnv());
 }

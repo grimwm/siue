@@ -121,6 +121,17 @@ final class StatsCollectorTest extends TestCase
         self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM hits')->fetchColumn());
     }
 
+    public function testAnOriginWithAPortMatchesAHostWithOne(): void
+    {
+        $c = new Stats\Collector($this->db, $this->clock, 'localhost:8123', static fn(): array => ['crete']);
+        $body = (string) json_encode(stats_view(['r' => 'localhost']));
+        $c->handle('POST', ['origin' => 'http://localhost:8123'], $body, '198.51.100.7', STATS_UA);
+        $c->handle('POST', ['origin' => 'http://localhost:9999'], (string) json_encode(stats_view()), '198.51.100.7', STATS_UA);
+        $rows = $this->rows();
+        self::assertCount(1, $rows);
+        self::assertSame('site', $rows[0]['ref']);
+    }
+
     public function testOtherMethodsAre405(): void
     {
         self::assertSame(405, $this->c->handle('GET', [], '', '198.51.100.7', STATS_UA));

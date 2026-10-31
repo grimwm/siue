@@ -186,7 +186,7 @@
           onToggle();
         });
       }
-      html('span', 'key ' + (kind === 'line' ? 'ln ' : '') + s.cls, null, item);
+      html('span', 'swatch ' + (kind === 'line' ? 'ln ' : '') + s.cls, null, item);
       html('span', '', s.label, item);
     });
   }
@@ -277,14 +277,15 @@
       });
       if (labels) {
         ends.sort(function (a, b) { return a.y - b.y; });
-        var apart = ends.every(function (e, i) { return i === 0 || e.y - ends[i - 1].y >= 13; });
+        // Direct labels only where every line ends on the last day and the labels stand clear of each other.
+        var apart = ends.length === shown.length && ends.every(function (e, i) { return e.x === xOf(n - 1) && (i === 0 || e.y - ends[i - 1].y >= 13); });
         if (apart) {
           ends.forEach(function (e) {
             svg('text', { class: 'lab', x: e.x + 8, y: e.y + 4 }, g).textContent = e.s.label;
           });
         }
       }
-      var cross = svg('line', { class: 'cross', y1: m.t, y2: H - m.b, x1: -10, x2: -10 }, g);
+      var cross = svg('line', { class: 'cross', y1: m.t, y2: H - m.b, x1: 0, x2: 0, visibility: 'hidden' }, g);
       var marks = svg('g', {}, g);
       var hit = svg('rect', { class: 'hit', x: m.l, y: m.t, width: Math.max(1, W - m.l - m.r), height: H - m.t - m.b, tabindex: 0, 'aria-label': opts.title + ': use the arrow keys to read each day' }, root);
       hover(hit, n, function (cx, cy, at) {
@@ -293,6 +294,7 @@
         i = Math.max(0, Math.min(n - 1, n === 1 ? 0 : i));
         cross.setAttribute('x1', xOf(i));
         cross.setAttribute('x2', xOf(i));
+        cross.setAttribute('visibility', 'visible');
         marks.textContent = '';
         shown.forEach(function (s) {
           if (s.values[i] !== null) {
@@ -303,8 +305,7 @@
         showTip(hit, (opts.titleOf || day)(opts.dates[i]), rows, cx !== null ? cx : box.left + xOf(i), cy !== null ? cy : box.top + m.t);
         return i;
       }, function () {
-        cross.setAttribute('x1', -10);
-        cross.setAttribute('x2', -10);
+        cross.setAttribute('visibility', 'hidden');
         marks.textContent = '';
       });
     }
@@ -405,7 +406,7 @@
           if (row.values[k] > 0) {
             svg('path', { class: 'bar ' + s.cls, d: barPath(m.l + 1, y, Math.max(2, w), thick, 'right') }, grp);
           }
-          svg('text', { class: 'val', x: m.l + 1 + Math.max(2, w) + 6, y: y + thick / 2 + 4 }, grp).textContent = (opts.valueText || num)(row, k);
+          svg('text', { class: 'val', x: m.l + 1 + Math.max(2, w) + 6, y: y + thick / 2 + 4 }, grp).textContent = opts.valueText ? opts.valueText(row, k) : num(row.values[k]);
         });
         groups.push(grp);
       });

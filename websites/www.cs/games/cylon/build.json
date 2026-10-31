@@ -1,6 +1,9 @@
 {
   "programs": ["tsconfig.json", "src/tsconfig.dom.json", "tsconfig.test.json"],
-  "entries": [{ "in": "src/main.ts", "out": "main", "format": "esm" }],
+  "entries": [
+    { "in": "src/main.ts", "out": "main", "format": "esm" },
+    { "in": "../_kit/stats-page.ts", "out": "stats", "format": "iife" }
+  ],
   "versions": { "MOUNT_HTML_V": "mount.html" },
   "kitCss": true
 }

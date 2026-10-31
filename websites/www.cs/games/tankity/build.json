@@ -6,6 +6,7 @@
     { "in": "src/fx/engine.ts", "out": "fx", "format": "iife" },
     { "in": "src/fx/editor.ts", "out": "fx-editor", "format": "iife" },
     { "in": "../_kit/install-page.ts", "out": "install", "format": "iife" },
+    { "in": "../_kit/stats-page.ts", "out": "stats", "format": "iife" },
     { "in": "src/pow-bench.ts", "out": "pow-bench", "format": "esm" }
   ]
 }

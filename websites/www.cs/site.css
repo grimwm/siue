@@ -697,3 +697,18 @@ a.games-enter-btn {
   border-color: var(--crimson-hot);
   box-shadow: 0 0 18px rgba(255, 40, 40, 0.25);
 }
+
+/* The privacy note's links: under the games list and at the foot of every panel. */
+.games-privacy {
+  margin-top: 1rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+.site-foot {
+  padding: 1.5rem 1rem 2rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.site-foot a { color: var(--text-muted); }
+.site-foot a:hover { color: var(--link-hover); }

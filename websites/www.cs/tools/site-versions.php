@@ -7,6 +7,8 @@
  * ignorant of it. It rewrites only the version value inside a recognised
  * reference:
  *   - site.css and main.js, the site shell;
+ *   - games/cylon/dist/stats.js, the visitor beacon (the kit's, built with the
+ *     mounted game);
  *   - games/cylon/css/*.css, the mounted game's stylesheets, one <link> each.
  *     The order of those <link> tags is the cascade, so the page must list
  *     them in the order below, and every file in the folder must be linked;
@@ -41,6 +43,7 @@ const SITE_VERSIONS_PAGE = 'index.html';
 const SITE_VERSIONS_REFS = [
     ['attr', 'site.css'],
     ['attr', 'main.js'],
+    ['attr', 'games/cylon/dist/stats.js'],
     ['attr', 'games/cylon/dist/kit.css'],
     ['attr', 'games/cylon/css/eye.css'],
     ['attr', 'games/cylon/css/nav.css'],

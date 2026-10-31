@@ -178,7 +178,7 @@ while IFS= read -r -d '' f; do
     admin/lib/*/*) continue ;;
     admin/lib/*.php | admin/lib/.htaccess) ;;
     admin/*/*) continue ;;
-    admin/*.php | admin/admin.css | admin/admin.js | admin/.htaccess) ;;
+    admin/*.php | admin/admin.css | admin/admin.js | admin/stats.css | admin/stats.js | admin/.htaccess) ;;
     admin/*) continue ;;
     # The music workroom: its pages, API and library
     # (its stylesheet, scripts and fonts ship from games/workroom/dist/). Its tools, committed drafts and README stay home. A case
@@ -190,6 +190,12 @@ while IFS= read -r -d '' f; do
     music/*/*) continue ;;
     music/*.php | music/.htaccess) ;;
     music/*) continue ;;
+    # The visitor statistics' endpoint and its library (its database lives with the admin login's, in admin/data/).
+    stats/lib/*/*) continue ;;
+    stats/lib/*.php | stats/lib/.htaccess) ;;
+    stats/*/*) continue ;;
+    stats/*.php | stats/.htaccess) ;;
+    stats/*) continue ;;
     games/*) ;;
     # The site's generated page per game (navbar plus the game in a frame).
     play/*) ;;

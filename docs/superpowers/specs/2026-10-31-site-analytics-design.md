@@ -62,9 +62,17 @@ device class, and a weekday-by-hour heatmap.
   other. Only the referring host leaves the browser; only the bucket is stored.
 - **(agent)** Device: phone, tablet or desktop, from the user agent plus the
   touch points and the screen's short side.
+- **(agent)** Unique visitors (per day, DAU/WAU/MAU, per range) count the
+  visitor ID where the browser keeps one and the daily hash where it does not,
+  so DAU ≤ WAU ≤ MAU always holds.
 - **(agent)** Day-1 return: new visitors of a day who came back the next day.
   Day-7 return: those who came back within the following 7 days. A visitor
-  without an ID cannot return and counts as new.
+  without an ID cannot be recognised again: it counts as new and is left out
+  of the return rates.
+- **(agent)** Returning share (the KPI): visitors in the range seen on a later
+  day than their first.
+- **(agent)** Crete names levels `<chapter>-<level>` (`1-3`), so the funnel
+  sorts in campaign order.
 
 ## Game events
 

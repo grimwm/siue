@@ -58,6 +58,8 @@ export interface InstallSetup {
   promptsHere: boolean;
   /** The address asked for installing (?install). */
   asked: boolean;
+  /** Told when Share is pressed and when the game is installed (the visitor statistics' track). */
+  onEvent?: (name: 'share' | 'install') => void;
 }
 
 /** 'copied': "Link copied" is up; 'field': the address is shown to copy by hand. */
@@ -199,6 +201,7 @@ export function createInstall(env: InstallEnv, setup: InstallSetup, onChange: (v
       changed();
     });
     env.onInstalled(() => {
+      setup.onEvent?.('install');
       installed = true;
       prompt = null;
       steps = false;
@@ -244,6 +247,7 @@ export function createInstall(env: InstallEnv, setup: InstallSetup, onChange: (v
     },
     async pressShare() {
       if (off) return;
+      setup.onEvent?.('share');
       await sharing.press();
     },
     closeShare: sharing.close,

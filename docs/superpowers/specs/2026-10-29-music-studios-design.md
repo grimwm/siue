@@ -83,7 +83,9 @@ for a class.
 - **Lossless compression on the server** for everything stored:
   - scores and other text are compressed with a lossless general compressor;
   - the shared instrument samples are stored as FLAC;
-  - nothing is ever re-encoded lossily.
+  - nothing is ever re-encoded lossily. The one exception is a Vocal Tracks take
+    the person explicitly saves as Good To The Ear (Opus), as the composer
+    design says; every other take is FLAC.
 - **Drafts appear at once,** and deleting (on the page, or by the AI through
   the MCP) is always available.
 - **Drafts are each piece's undo history.**
@@ -325,7 +327,6 @@ comes first because a score-only studio cannot be heard without it.
 
 ## Open (Claude's calls, marked for the owner)
 
-- **5 MB** for studio users until Vocal Tracks, then **25 MB** (owner's decision).
 - **The named-person allowance** stays at today's draft limits: 20 drafts and
   100 MB.
 - **AI key scopes:** read notes, publish drafts, delete drafts. Never create

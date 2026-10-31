@@ -403,6 +403,8 @@ class Studio:
         try:
             data = json.loads(self._fetch(self.base().rstrip("/") + "/library/library.json"))
             library = data["instruments"]
+            if not isinstance(library, dict) or not all(isinstance(e, dict) for e in library.values()):
+                raise TypeError("instruments is not an object of objects")
         except Exception as e:  # noqa: BLE001 - any failure is "cannot read it"
             raise StudioError(f"The studio's instrument library could not be read ({type(e).__name__}). Try again in a minute.") from None
         order = {c: n for n, c in enumerate(CATEGORIES)}

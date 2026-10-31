@@ -142,7 +142,7 @@ The instrument picker is grouped by category, each category with its own icon:
 
   | Instrument | Stand-in |
   |---|---|
-  | Celesta | Glockenspiel, an octave lower |
+  | Celesta | Glockenspiel's samples, played at the celesta's pitches |
   | Choir | Organ, with a soft attack |
   | Lyre | VCSL's folk harp |
   | Drum Kit's Ride | A suspended cymbal struck with a stick |
@@ -286,8 +286,18 @@ A studio may hold recorded voice: the one thing the editor stores that is not a 
   config minimum, 50 GB by default. The studio shows the space and minutes left. A save that would pass the
   person's limit, the shared total or the floor is refused, with a plain message saying how much is needed. The
   admin view shows the total used and the cap, and warns at 80% of the cap.
-- **The server checks every take:** its kind by magic bytes (`fLaC`, `OggS`, or WebM's EBML header), its size and
-  its duration. It refuses anything else.
+- **The server checks every take.** Magic bytes (`fLaC`, `OggS`, or WebM's EBML header) only pick the parser. The
+  server then parses the container, checks that the codec is FLAC or Opus, and takes the duration from the validated
+  frames, never from a header field. It checks the file's size and a decoded-size limit (a config value, like the
+  other limits), and refuses anything else.
+- **Saving is one step.** Save To Studio sends one draft bundle (SIUED1, through `save-draft.php` with the session
+  and CSRF token) that holds `score.json` and every new take the score names. The server checks all of it, then
+  commits the draft and its takes together or not at all. A score may name only takes in its own bundle or takes
+  its own account already holds.
+- **Takes belong to the account.** A take is stored once per account as `vocal-<sha256>.<flac|ogg|webm>`, and drafts
+  refer to it, so a new draft of the same piece costs nothing for an unchanged take. A take is deleted, in the same
+  step as the change that frees it, once no draft of the account refers to it any more: when a draft rolls off or is
+  deleted, a piece is deleted, or the person starts over.
 - **Export** carries the vocals at the quality they were saved in.
 
 ### DJ & Effects
@@ -302,7 +312,7 @@ as score settings, never audio.
   - **Colour:** Bitcrusher, Ring Mod, Phaser, Flanger, Auto-Wah, Rotary Speaker.
   - **Time and Space:** Echo Out, Ping-Pong Echo, Reverse, Reverse Reverb, Granular Freeze, Wide / 8D, Doppler
     Fly-By.
-  - **Pitch and Voice:** Pitch Shift, Harmoniser, Vocoder, Pitch Correction.
+  - **Pitch and Voice:** Pitch Shift, Harmonizer, Vocoder, Pitch Correction.
   - **Live DJ Tools:** Crossfader, Hot Cues, Looper, XY Pad.
 - **Way One, Place On The Timeline:**
   - drag an effect onto bars, or tap the effect and then a bar;
@@ -337,10 +347,17 @@ as score settings, never audio.
   - `lane.fx`: the part's Sound settings;
   - `mix.room`, `mix.limiter`;
   - `fx_clips`: effect, lane or the whole piece, from bar, to bar, and settings;
-  - `lane.voice`: a Voice Effects chain, for a lane that is a voice.
-- **Vocal Tracks** add a `vocal` lane kind: its clips (take file, where it starts in the piece, trim in and out,
-  volume, fades) and its takes. A take's file sits beside `score.json` in the draft as `vocal-<id>.flac`, `.ogg` or
-  `.webm`.
+  - `lane.voice`: a Voice Effects chain for a lane that is a voice, at most 4 effects, applied in the order listed.
+    Each is one of these, with its settings:
+    - `vocoder`: `carrier` (a lane id), `bands` 8–32;
+    - `autotune`: `strength` 0–1 (Natural 0, Hard 1), `retune_ms` 0–400;
+    - `harmonizer`: `voices` (1–3 of `third`, `fifth`, `octave_up`, `octave_down`), `mix` 0–1;
+    - `pitch`: `semitones` −12 to 12, `formant` −12 to 12;
+    - `talkbox`: `carrier` (a lane id), `mix` 0–1;
+    - `robot`: `mix` 0–1;
+    - `whisper`: `mix` 0–1.
+- **Vocal Tracks** add a `vocal` lane kind: its clips (the take, where it starts in the piece, trim in and out,
+  volume, fades) and its takes, each named by its stored file (`vocal-<sha256>.flac`, `.ogg` or `.webm`).
 
   The page, PHP (`ScoreRules`) and Python (`siue_music/score.py`) all accept schema 2 in the same PR. The MCP
   tells the AI about the new fields.
@@ -403,7 +420,7 @@ preview switches (Phone, Desktop, Theme) are not part of the editor.
 | Rhythm: Stutter, Trance Gate, Wobble, Tremolo, Auto-Pan | 4g |
 | Colour: Bitcrusher, Ring Mod, Phaser, Flanger, Auto-Wah, Rotary Speaker | 4g |
 | Time and Space: Echo Out, Ping-Pong Echo, Reverse, Reverse Reverb, Granular Freeze, Wide / 8D, Doppler Fly-By | 4g |
-| Pitch and Voice: Pitch Shift, Harmoniser, Vocoder, Pitch Correction (Auto-Tune) | 4g as timeline clips; the effects themselves from 4e |
+| Pitch and Voice: Pitch Shift, Harmonizer, Vocoder, Pitch Correction (Auto-Tune) | 4g as timeline clips; the effects themselves from 4e |
 | Live DJ Tools: Platter, Crossfader, Hot Cues, Performance Pads (Crush, Echo, Filter and the rest), XY Pad, Looper | 4g |
 | Timeline: Place On The Timeline, Hear From Here, Shorter, Longer, Remove; Record To Timeline; The Score Stores This; What A Browser Does Less Well | 4g |
 

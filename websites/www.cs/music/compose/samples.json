@@ -1557,7 +1557,6 @@
   },
   "celesta": {
    "standin": "glock",
-   "standin_shift": -12,
    "name": "Celesta",
    "category": "keys",
    "range": [
@@ -1574,7 +1573,7 @@
    "gm": 9,
    "gm_name": "Celesta",
    "pieces": null,
-   "standin_note": "Plays the Glockenspiel samples, an octave lower.",
+   "standin_note": "Plays the Glockenspiel samples.",
    "attack": 0.005,
    "release": 0.4
   },

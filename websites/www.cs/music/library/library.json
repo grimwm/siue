@@ -1767,37 +1767,37 @@
   "celesta": {
    "files": [
     {
-     "pitch": 67,
+     "pitch": 79,
      "file": "glock/79.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 72,
+     "pitch": 84,
      "file": "glock/84.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 79,
+     "pitch": 91,
      "file": "glock/91.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 84,
+     "pitch": 96,
      "file": "glock/96.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 91,
+     "pitch": 103,
      "file": "glock/103.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 96,
+     "pitch": 108,
      "file": "glock/108.flac",
      "rate": 44100,
      "channels": 2
@@ -1820,7 +1820,7 @@
    "gm": 9,
    "gm_name": "Celesta",
    "pieces": null,
-   "standin_note": "Plays the Glockenspiel samples, an octave lower.",
+   "standin_note": "Plays the Glockenspiel samples.",
    "attack": 0.005,
    "release": 0.4
   },

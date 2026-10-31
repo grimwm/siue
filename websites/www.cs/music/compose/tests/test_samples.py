@@ -138,6 +138,13 @@ class ManifestTest(unittest.TestCase):
         self.assertTrue({"harp", "organ", "cello", "bass", "horn"} <= named, named)
         self.assertEqual(named - set(library), set())
 
+    def test_a_stand_in_plays_its_samples_where_they_sound(self):
+        # Scores hold sounding pitch, so a borrowed sample keeps its own root; the renderer repitches it to each note.
+        library = json.loads((ROOT.parent / "library" / "library.json").read_text())["instruments"]
+        for i, e in library.items():
+            if "standin" in e:
+                self.assertEqual(e["files"], library[e["standin"]]["files"], i)
+
     def test_published_instruments_unchanged(self):
         published = json.loads((ROOT / "tests" / "fixtures" / "published-instruments.json").read_text())
         for i, want in published.items():

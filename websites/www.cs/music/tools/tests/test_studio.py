@@ -82,9 +82,10 @@ class StudioTest(unittest.TestCase):
         self.assertEqual([i["category"] for i in instruments][-1], "voices")
 
     def test_list_instruments_says_when_the_library_cannot_be_read(self):
-        studio = Studio(self.env, self.root, "linux", steps=_no_steps(), fetch=lambda _url: b"not json")
-        with self.assertRaises(StudioError):
-            studio.list_instruments()
+        for body in (b"not json", b"[]", b'{"instruments": []}', b'{"instruments": {"violin": "x"}}'):
+            studio = Studio(self.env, self.root, "linux", steps=_no_steps(), fetch=lambda _url, body=body: body)
+            with self.assertRaises(StudioError, msg=body):
+                studio.list_instruments()
 
     def test_the_key_and_the_sealing_key_are_private_and_made_once(self):
         studio = self.studio(SIUE_MUSIC_AI_KEY="")

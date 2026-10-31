@@ -43,7 +43,7 @@ CE names Glockenspiel, Xylophone and Piccolo by their written pitch.
 | `tuba` | Tuba | VSCO-2 CE | `Brass/Tuba/sus` |
 | `piano` | Piano | VSCO-2 CE | `Keys/Upright Piano` |
 | `organ` | Organ | VSCO-2 CE | `Keys/Organ/Quiet` |
-| `celesta` | Celesta | — | Stand-in: Glockenspiel, an octave lower |
+| `celesta` | Celesta | — | Stand-in: Glockenspiel |
 | `timpani` | Timpani | VSCO-2 CE | `Percussion/Timpani` |
 | `glock` | Glockenspiel | VSCO-2 CE | `Percussion/Glock` |
 | `xylo` | Xylophone | VSCO-2 CE | `Percussion/Xylo` |
@@ -55,7 +55,7 @@ CE names Glockenspiel, Xylophone and Piccolo by their written pitch.
 | `choir` | Choir (Aahs / Oohs) | — | Stand-in: Organ |
 
 What is not the instrument itself (the picker says "Stand-In Sound"):
-- **Celesta** plays the Glockenspiel an octave lower, and **Choir** the Organ with a soft start: neither VSCO-2 CE nor VCSL has
+- **Celesta** plays the Glockenspiel's samples at its own pitches, and **Choir** the Organ with a soft start: neither VSCO-2 CE nor VCSL has
   them, and no CC0 or public-domain multisample of either was found.
 - **Lyre** plays VCSL's folk harp: no lyre has been recorded under a CC0 or public-domain licence.
 - **Drum Kit**'s ride is a suspended cymbal struck with a stick; the rest of the kit is its own (VCSL).

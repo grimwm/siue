@@ -5,9 +5,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { constants, createDecipheriv, createPrivateKey, createPublicKey, privateDecrypt, publicEncrypt } from 'node:crypto';
-import { FingerprintMismatch, NoteUnreadable, fingerprintOf, headerFingerprint, open, seal } from '../src/seal.ts';
+import { FingerprintMismatch, NoteUnreadable, fingerprintOf, headerFingerprint, open, seal, sealTo, siuen2Header } from '../src/seal.ts';
 import type { NoteBody } from '../src/note.ts';
-import { b64, current, fx, hex, importPrivate } from './fixture-key.ts';
+import { b64, current, fx, hex, importPrivate, otherKey } from './fixture-key.ts';
 
 const body: NoteBody = {
   v: 1, kind: 'text', piece: 'test-piece', draft: 1, from: 8, to: 12, fromBar: 5, toBar: 6, lane: 'brass',
@@ -119,4 +119,64 @@ test('a public key that is not RSA-4096 is refused', async () => {
   const small = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['encrypt', 'decrypt']);
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', small.publicKey));
   await assert.rejects(seal(body, null, { fingerprint: await fingerprintOf(spki), spki: Buffer.from(spki).toString('base64') }), FingerprintMismatch);
+});
+
+// SIUEN2: one AES key, wrapped once per recipient, each wrap after its fingerprint; the additional data is the magic,
+// the count and every fingerprint, so a header with a recipient swapped or dropped does not open.
+test('a note sealed to the person and an AI opens with either key, and names both', async () => {
+  const bundle = await sealTo(body, new Uint8Array([7, 8, 9]), [current, otherKey]);
+  assert.equal(new TextDecoder().decode(bundle.slice(0, 6)), 'SIUEN2');
+  assert.equal(bundle[6], 2);
+  assert.deepEqual(siuen2Header(bundle)!.wraps.map(w => w.fingerprint), [fx.fingerprint, fx.other.fingerprint]);
+  for (const key of [fx, fx.other]) {
+    const opened = await open(bundle, new Map([[key.fingerprint, await importPrivate(key.pkcs8)]]));
+    assert.equal(opened.fingerprint, key.fingerprint);
+    assert.equal(opened.body.text, body.text);
+    assert.deepEqual([...opened.audio!], [7, 8, 9]);
+  }
+  await assert.rejects(open(bundle, new Map()), isReason('unknown-key'));
+});
+
+test('one key seals SIUEN1 as before; repeated or too many keys are refused', async () => {
+  assert.equal(new TextDecoder().decode((await sealTo(body, null, [current])).slice(0, 6)), 'SIUEN1');
+  await assert.rejects(sealTo(body, null, [current, current]));
+  await assert.rejects(sealTo(body, null, []));
+  await assert.rejects(sealTo(body, null, [current, { fingerprint: fx.other.fingerprint, spki: fx.spki }]), FingerprintMismatch);
+});
+
+test('a SIUEN2 header that was edited does not open', async () => {
+  const bundle = await sealTo(body, null, [current, otherKey]);
+  const ring = new Map([[fx.fingerprint, await importPrivate(fx.pkcs8)]]);
+  const swapped = bundle.slice();
+  swapped.set(hex(fx.fingerprint.replace(/^./, c => (c === '0' ? '1' : '0'))), 7 + 32 + 2 + 512); // the AI's fingerprint changed
+  await assert.rejects(open(swapped, ring), isReason('tampered'));
+  const truncated = bundle.slice(0, 7 + 34 + 100);
+  await assert.rejects(open(truncated, ring), isReason('format'));
+  const zero = bundle.slice();
+  zero[6] = 0;
+  await assert.rejects(open(zero, ring), isReason('format'));
+});
+
+test('the format is exactly as documented: node:crypto alone opens it', async () => {
+  const bundle = Buffer.from(await sealTo(body, null, [current, otherKey]));
+  const fp = bundle.subarray(7, 39).toString('hex');
+  const len = bundle.readUInt16BE(39);
+  assert.equal(fp, fx.fingerprint);
+  const aesKey = privateDecrypt({ key: createPrivateKey({ key: Buffer.from(fx.pkcs8, 'base64'), format: 'der', type: 'pkcs8' }), padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, bundle.subarray(41, 41 + len));
+  const second = 41 + len;
+  const ivAt = second + 34 + bundle.readUInt16BE(second + 32);
+  const aad = Buffer.concat([Buffer.from('SIUEN2'), Buffer.from([2]), bundle.subarray(7, 39), bundle.subarray(second, second + 32)]);
+  const d = createDecipheriv('aes-256-gcm', aesKey, bundle.subarray(ivAt, ivAt + 12));
+  d.setAAD(aad);
+  d.setAuthTag(bundle.subarray(bundle.length - 16));
+  const plain = Buffer.concat([d.update(bundle.subarray(ivAt + 12, bundle.length - 16)), d.final()]);
+  assert.equal(JSON.parse(plain.subarray(4, 4 + plain.readUInt32BE(0)).toString()).text, body.text);
+});
+
+test('the committed SIUEN2 fixture (the Python tool opens the same bytes) opens with both TEST keys', async () => {
+  const fixture = Uint8Array.from(readFileSync(new URL('./fixtures/siuen2-note.bin', import.meta.url)));
+  for (const key of [fx, fx.other]) {
+    const opened = await open(fixture, new Map([[key.fingerprint, await importPrivate(key.pkcs8)]]));
+    assert.equal(opened.body.text, 'sealed to the person and an AI');
+  }
 });

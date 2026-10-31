@@ -183,6 +183,9 @@ final class Pages
         if ($notice === null && ($r->query['changed'] ?? null) === 'passphrase') {
             $notice = 'Your passphrase is changed. Unlock your notes with the new one.';
         }
+        if ($notice === null && ($r->query['paired'] ?? null) === '1') {
+            $notice = 'Your AI is paired. The notes you send from now on are sealed to it too. Reload the pieces page if it is open, so it seals to your AI.';
+        }
         $keyed = (($this->storeFor)($account))->keyring() !== null;
         $csrf = Html::e($this->sessions->csrf($r));
         $hidden = static fn(string $action): string => '<input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="action" value="' . $action . '">';
@@ -526,8 +529,8 @@ final class Pages
 
     /**
      * POST pair.php {"key": <AI key id>, "code": <the typed pairing code>}: one pairing try (Pairing::check, counted and
-     * limited). 200 {spki, fingerprint, csrf} when the code is the code of the sealing key that AI key registered; 403
-     * wrong_code; 429 too_many; 404 no_key (not an active key of this studio); 409 not_registered (its AI has not started
+     * limited). 200 {spki, fingerprint, csrf} when the code is the code of the sealing key that AI key registered; 422
+     * wrong_code (not 403, which the page reads as a sign-in that ended); 429 too_many; 404 no_key (not an active key of this studio); 409 not_registered (its AI has not started
      * yet). The browser checks the code against the key itself before it adds the key to the keyring.
      */
     public function pair(\Admin\Request $r, string $body): \Admin\Response
@@ -539,7 +542,7 @@ final class Pages
             }
             $found = $this->pairing->check($account, $doc['key'], $doc['code']);
             if (is_string($found)) {
-                return $this->refuseWithToken(match ($found) { 'wrong_code' => 403, 'too_many' => 429, 'no_key' => 404, default => 409 }, $found, $r);
+                return $this->refuseWithToken(match ($found) { 'wrong_code' => 422, 'too_many' => 429, 'no_key' => 404, default => 409 }, $found, $r);
             }
             return Http::json(200, $found + ['csrf' => $this->sessions->csrf($r)]);
         }, 'POST');
@@ -573,7 +576,7 @@ final class Pages
         }
         $found = $this->pairing->check($account, $pair['key'], $pair['code']);
         if (is_string($found)) {
-            return $this->refuseWithToken(match ($found) { 'wrong_code' => 403, 'too_many' => 429, 'no_key' => 404, default => 409 }, $found, $r);
+            return $this->refuseWithToken(match ($found) { 'wrong_code' => 422, 'too_many' => 429, 'no_key' => 404, default => 409 }, $found, $r);
         }
         if (!hash_equals($found['fingerprint'], $pair['fingerprint'])) {
             return $this->refuseWithToken(409, 'key_changed', $r);

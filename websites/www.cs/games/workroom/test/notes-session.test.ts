@@ -9,7 +9,8 @@ import { KeyExists, NetworkError, NoKeyring, ServerError, SignedOut, UnreadableA
 import { DISCARD_FAILED, NO_CRYPTO, UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession, describeFailure, failureReason } from '../src/notes-session.ts';
 import { SEND_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
 import { PROBLEMS, downloadProblem } from '../src/history.ts';
-import { headerFingerprint, seal } from '../src/seal.ts';
+import { headerFingerprint, open, seal, siuen2Header } from '../src/seal.ts';
+import { keyringWithAi, makeAiKey } from './ai-key.ts';
 import { PASSPHRASE_MESSAGES } from '../src/keymaker.ts';
 import { NoCrypto } from '../src/unlock.ts';
 import type { LockedKeyring } from '../src/unlock.ts';
@@ -22,17 +23,19 @@ const note = (text: string, piece = 'test-piece'): NoteBody => ({ v: 1, kind: 't
 function server() {
   const notes: { id: string; bytes: Uint8Array<ArrayBuffer>; arrived: number; picked: number | null }[] = [];
   let n = 0;
-  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, session: 'tag-1', broken: new Set<string>(), downloads: 0, unreadable: 0, uploaded: [] as string[] };
+  const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, session: 'tag-1', broken: new Set<string>(), downloads: 0, unreadable: 0, uploaded: [] as string[], ai: [] as string[] };
   const api: PageApi = {
     upload: async b => { const id = (++n).toString(16).padStart(32, '0'); notes.push({ id, bytes: b, arrived: n, picked: null }); return { kind: 'sent', id }; },
     list: async () => ({ notes: notes.map(x => ({ id: x.id, size: x.bytes.length, arrived_at: x.arrived, picked_up_at: x.picked })), unreadable: state.unreadable }),
     bytes: async id => { state.downloads++; if (state.broken.has(id)) throw new ServerError(500); return notes.find(x => x.id === id)!.bytes; },
     remove: async id => { const i = notes.findIndex(x => x.id === id); if (i >= 0) notes.splice(i, 1); return i >= 0 ? 1 : 0; },
     removeAll: async () => { const k = notes.length; notes.length = 0; return k; },
-    keyring: async () => { if (state.failKeyring) throw state.failKeyring; return { locked: state.keyring, session: state.session }; },
+    keyring: async () => { if (state.failKeyring) throw state.failKeyring; return { locked: state.keyring, session: state.session, ai: state.ai }; },
     uploadKeyring: async (locked, current) => { state.keyring = locked; state.failKeyring = null; state.uploaded.push(current); },
     changeKeyring: async locked => { state.keyring = locked; },
     deleteDraft: async () => 0,
+    checkPairing: async () => 'wrong_code',
+    pairKeyring: async () => null,
   };
   return { api, notes, state };
 }
@@ -294,4 +297,26 @@ test('the damaged-key message sends everyone, the owner included, to a reload an
   assert.match(UNLOCK_MESSAGES.invalid, /Reload the page/);
   assert.match(UNLOCK_MESSAGES.invalid, /Forgot your passphrase\? on Your studio/);
   for (const words of Object.values(UNLOCK_MESSAGES)) assert.doesNotMatch(words, /make music|terminal|checkout|repositor|1Password|\bop\b/i, 'no command-line step on the page');
+});
+
+// Sealing to a paired AI: only an AI key the unlocked keyring holds AND the server lists as active; the list is asked
+// again before each note, so a key revoked since the unlock is dropped.
+test('a note is sealed to the person and every active paired AI key, and a revoked one is dropped', async () => {
+  const ai = await makeAiKey(5);
+  const { s, notes } = session();
+  s.state.keyring = await keyringWithAi([ai]);
+  assert.equal(await notes.unlock(fx.passphrase), null);
+  const sendOne = async (text: string): Promise<Uint8Array<ArrayBuffer>> => {
+    const sent = await notes.send(note(text), null);
+    return s.notes.find(n => n.id === sent.sent[0]!.id)!.bytes;
+  };
+  assert.equal(new TextDecoder().decode((await sendOne('before the server lists it')).slice(0, 6)), 'SIUEN1', 'paired in the keyring but not active: the person only');
+  s.state.ai = [ai.fingerprint];
+  const both = await sendOne('to both');
+  assert.deepEqual(siuen2Header(both)!.wraps.map(w => w.fingerprint), [fx.fingerprint, ai.fingerprint]);
+  assert.equal((await open(both, new Map([[ai.fingerprint, ai.priv]]))).body.text, 'to both', 'the AI opens it with its own key');
+  s.state.ai = [];
+  assert.equal(new TextDecoder().decode((await sendOne('after revoking')).slice(0, 6)), 'SIUEN1');
+  s.state.ai = [ai.fingerprint, 'f'.repeat(64)];
+  assert.equal(siuen2Header(await sendOne('a key the server lists but the keyring lacks'))!.wraps.length, 2, 'the server cannot add a recipient');
 });

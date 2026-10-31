@@ -214,7 +214,7 @@ final class MusicPairingTest extends TestCase
         $this->register($secret, self::$ai['der']);
         $as = $this->signedIn();
         $wrong = $this->pages->pair($this->data($as, 'POST'), (string) json_encode(['key' => $id, 'code' => 'AAAA-AAAA-AAAA']));
-        self::assertSame(403, $wrong->status);
+        self::assertSame(422, $wrong->status);
         self::assertSame('wrong_code', $this->json($wrong)['error']);
         self::assertArrayHasKey('csrf', $this->json($wrong));
 
@@ -226,7 +226,7 @@ final class MusicPairingTest extends TestCase
 
         $before = $this->store->keyring()['locked'];
         $badCode = $this->pages->keyring($this->data($as, 'POST', ['query' => ['pair' => '1']]), $this->pairBody($as, $id, 'AAAA-AAAA-AAAA', self::$ai['fp']));
-        self::assertSame(403, $badCode->status);
+        self::assertSame(422, $badCode->status);
         $otherFp = $this->pages->keyring($this->data($as, 'POST', ['query' => ['pair' => '1']]), $this->pairBody($as, $id, $code, self::$other['fp']));
         self::assertSame(409, $otherFp->status, 'the fingerprint named must be the registered key');
         $body = json_decode($this->pairBody($as, $id, $code, self::$ai['fp']), true);

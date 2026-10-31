@@ -7,7 +7,7 @@
 import { expect, test } from '@playwright/test';
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { signInAt } from './music-mail.ts';
@@ -19,6 +19,8 @@ const STUDENT = 'student3@siue.edu';
 const PASSPHRASE = 'a long passphrase for the AI test';
 const NOTE = 'the strings could enter at bar five';
 const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
+/** MUSIC_E2E_SHOTS=<folder> saves the new-key panel, the pairing form and Connect Your AI at phone width. */
+const SHOTS = process.env.MUSIC_E2E_SHOTS;
 
 /** An MCP client over the server's stdin and stdout, one JSON-RPC line each way. */
 class Mcp {
@@ -88,6 +90,7 @@ test("a student's own AI connects through the published wheel, pairs, and reads 
     const release = JSON.parse(readFileSync(join(SITE, 'music', 'dist', 'release.json'), 'utf8')) as { file: string; sha256: string };
     await expect(connect.locator('[data-connect-app="Claude Code"] code')).toContainText(`uvx --from http://localhost/music/dist/${release.file} siue-music mcp`);
     await expect(connect).toContainText(`SHA-256 ${release.sha256}`);
+    if (SHOTS) { mkdirSync(SHOTS, { recursive: true }); await connect.screenshot({ path: join(SHOTS, 'connect-your-ai.png') }); }
 
     // Your studio: an AI key that reads notes and publishes drafts. The new-key panel has the commands with the key in them.
     await page.goto(`${base}music/studio.php`);
@@ -97,6 +100,13 @@ test("a student's own AI connects through the published wheel, pairs, and reads 
     const key = (await page.locator('code.secret').textContent())!.trim();
     expect(key).toMatch(/^[0-9a-f]{64}$/);
     await expect(page.locator('.connect-commands')).toContainText(`SIUE_MUSIC_AI_KEY=${key} -- uvx --from http://localhost/music/dist/${release.file} siue-music mcp`);
+    const narrow = async (where: string): Promise<void> => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), `${where} at 390 px scrolls sideways`).toBeLessThanOrEqual(0);
+      if (SHOTS) await page.screenshot({ path: join(SHOTS, `${where}-390.png`), fullPage: true });
+      await page.setViewportSize({ width: 1280, height: 800 });
+    };
+    await narrow('new-key');
 
     // The wheel as the site serves it, checked against the SHA-256 the page showed, installed into a fresh virtualenv.
     const served = await request.get(`${base}music/dist/${release.file}`);
@@ -120,7 +130,7 @@ test("a student's own AI connects through the published wheel, pairs, and reads 
     const init = await mcp.initialize();
     expect((init['serverInfo'] as { name: string }).name).toBe('siue-music');
     const before = await mcp.call('studio_status');
-    expect(before['connected']).toBe(true);
+    expect(before['connected'], JSON.stringify(before)).toBe(true);
     expect(before['paired']).toBe(false);
     const code = before['pairing_code'] as string;
     expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/);
@@ -130,6 +140,8 @@ test("a student's own AI connects through the published wheel, pairs, and reads 
     await page.goto(`${base}music/studio.php`);
     const row = page.locator('.studio-keys li', { hasText: 'my own AI' });
     const form = row.locator('[data-pair-form]');
+    await expect(form).toBeVisible();
+    await narrow('pairing');
     await form.getByLabel('Pairing Code').fill('AAAA-AAAA-AAAA');
     await form.getByLabel('Passphrase').fill(PASSPHRASE);
     await form.getByRole('button', { name: 'Pair' }).click();

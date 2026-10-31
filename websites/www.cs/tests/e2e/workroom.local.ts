@@ -573,7 +573,7 @@ test('pin a note, pick it up with the tool, read and delete it on a second devic
           };
         };
       }));
-      expect(remembered.fields).toEqual(['current', 'id', 'keyring', 'ring', 'session']);
+      expect(remembered.fields).toEqual(['ai', 'current', 'id', 'keyring', 'ring', 'session']);
       expect(remembered.keys.length).toBeGreaterThan(0);
       expect(remembered.keys.every(Boolean), 'every remembered key is non-extractable').toBe(true);
       await p2.reload();

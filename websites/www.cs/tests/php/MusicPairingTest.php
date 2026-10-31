@@ -314,6 +314,33 @@ final class MusicPairingTest extends TestCase
         self::assertSame(0, (int) $this->db->query('SELECT COUNT(*) FROM studio_seal_keys')->fetchColumn());
     }
 
+    public function testParallelKeyChecksNeverFailWithALockedDatabase(): void
+    {
+        // An AI app may call several tools at once. Each request checks its key (a read) and meters it (BEGIN
+        // IMMEDIATE); a read cursor left open made that BEGIN fail at once with "database is locked" whenever
+        // another request wrote in between. Eight processes, forty checks each, on one database file.
+        [$secret] = $this->key($this->account);
+        $dir = dirname((string) $this->db->query('PRAGMA database_list')->fetch(PDO::FETCH_ASSOC)['file']);
+        $script = 'require ' . var_export(dirname(__DIR__, 2) . '/music/lib/bootstrap.php', true) . ';'
+            . '$db = Admin\\Db::open(' . var_export($dir, true) . '); $c = new Admin\\SystemClock();'
+            . '$gate = new Music\\KeyGate($db, $c, new Admin\\Keys($db, $c, null, "https://example.test/admin/"), new Music\\Accounts($db, $c, admin_people()), "https://example.test/admin/");'
+            . '$r = new Admin\\Request("GET", "127.0.0.1", true, "example.test", ["authorization" => "Bearer ' . $secret . '"], [], [], [], "");'
+            . 'for ($i = 0; $i < 40; $i++) { $db->exec("DELETE FROM studio_key_hits"); try { $a = $gate->caller($r, null); echo $a instanceof Music\\Caller ? "." : "x"; } catch (Throwable $e) { echo "E"; } }';
+        $procs = [];
+        for ($i = 0; $i < 8; $i++) {
+            $procs[] = proc_open([PHP_BINARY, '-r', $script], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+            $outs[] = $pipes;
+        }
+        $all = '';
+        foreach ($procs as $i => $p) {
+            $all .= stream_get_contents($outs[$i][1]);
+            $err = stream_get_contents($outs[$i][2]);
+            proc_close($p);
+            self::assertSame('', $err);
+        }
+        self::assertSame(str_repeat('.', 320), $all);
+    }
+
     public function testYourStudioShowsEachKeysPairing(): void
     {
         [$secret, $id] = $this->key($this->account);

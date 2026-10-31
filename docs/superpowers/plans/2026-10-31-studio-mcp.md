@@ -193,3 +193,12 @@ pieces, score, publish, delete, notes, wait, mark), `studio_mcp.py`, `sealing.py
   owner registers the studio MCP (or reruns `make music-mcp-setup`).
 - **The owner's 1Password rotate** writes a keyring without the `ai` list; the AI then reports "not paired" until the
   person pairs again. Cost: one re-pairing after a rotate.
+
+## Found while building
+
+- **Parallel API requests failed with 503** (`database is locked`): the key check left its read cursor open,
+  so the meter's `BEGIN IMMEDIATE` failed at once under a concurrent write instead of waiting. An AI app calls
+  several tools at once, so the key checks (`Music\KeyGate`, `Admin\Keys`) now close the cursor first;
+  `MusicPairingTest::testParallelKeyChecksNeverFailWithALockedDatabase` runs eight processes against one file.
+- **The wheel runs on Python 3.10** (uv picks the oldest Python that fits `Requires-Python`): a module that
+  named `Path` only in annotations failed there; the tool's suite passes on 3.10.

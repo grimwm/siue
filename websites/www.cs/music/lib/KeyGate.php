@@ -62,6 +62,9 @@ final class KeyGate
             $st = $this->db->prepare('SELECT id, account_id, label, scopes FROM studio_keys WHERE key_hash = ? AND revoked_at IS NULL');
             $st->execute([hash('sha256', $m[1])]);
             $row = $st->fetch(\PDO::FETCH_ASSOC);
+            // An open cursor holds a read snapshot; meter's BEGIN IMMEDIATE would then fail at once (SQLITE_BUSY,
+            // no busy wait) whenever another request wrote since. Close it first.
+            $st->closeCursor();
             if ($row !== false) {
                 $held = json_decode((string) $row['scopes'], true);
                 $held = is_array($held) ? array_values(array_filter($held, static fn(mixed $s): bool => is_string($s) && isset(AiKeys::SCOPES[$s]))) : [];

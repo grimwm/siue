@@ -38,7 +38,15 @@
   .studio-card input[type="text"] { @apply min-h-11 min-w-0 flex-1 rounded-md border border-rule bg-well px-3 text-ink; }
   .studio-card button { @apply min-h-11 rounded-md border border-rule px-4 font-display font-semibold tracking-wide uppercase hover:border-amber focus-visible:outline-2 focus-visible:outline-amber; }
   .studio-card button.danger { @apply border-record; }
-  .studio-card form[data-change-form] { @apply grid items-stretch; }
+  .studio-card form[data-change-form], .studio-card form[data-pair-form] { @apply grid items-stretch; }
+  .studio-card .pairing { @apply grid gap-2; }
+  .studio-card ol.connect-steps { @apply grid min-w-0 list-decimal gap-3 pl-5; }
+  .studio-card ol.connect-steps > li { @apply min-w-0; }
+  .studio-card ol.connect-steps a { @apply inline-flex min-h-11 items-center underline; }
+  .studio-card dl.connect-commands { @apply grid min-w-0 gap-2; }
+  .studio-card dl.connect-commands dt { @apply font-semibold; }
+  .studio-card dl.connect-commands dd { @apply grid min-w-0 gap-1; }
+  .studio-card dl.connect-commands pre { @apply overflow-x-auto rounded-md border border-rule bg-well p-2 font-mono text-xs; }
   .notice { @apply rounded-lg border border-amber bg-panel p-4 text-ink; }
   ul.confirm-gone { @apply list-disc pl-5; }
   .studio a.button { @apply inline-flex min-h-11 items-center rounded-md border border-amber px-4 font-display font-semibold tracking-wide uppercase; }

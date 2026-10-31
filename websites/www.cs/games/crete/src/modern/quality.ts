@@ -1,6 +1,5 @@
 /* The Island of Crete, modern look: the render quality ladder, judged by the measured frame rate. 3 is full
- * (shadows, paint, pixel ratio up to 2, anti-aliased), 2 drops shadows, 1 drops the paint filter, 0 drops to pixel
- * ratio 1. Only animating frames are measured: idle waits, loop ticks, stalls (a tab switch, a hidden board) and the
+ * (shadows, pixel ratio up to 2, FXAA), 2 drops shadows, 1 drops FXAA, 0 drops to pixel ratio 1. Only animating frames are measured: idle waits, loop ticks, stalls (a tab switch, a hidden board) and the
  * first frames after a level opens or the ladder moves count for nothing. One step down when the rate stays under
  * 40 fps over two seconds of animation; one step back up when it stays over 55 fps for three seconds, unless that
  * step has already proved too slow twice. A single slow frame never moves it. DOM-free. */

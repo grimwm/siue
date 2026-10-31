@@ -34,7 +34,7 @@ import { createMarkers } from './scene/markers.ts';
 import type { MarkerInfo } from './scene/markers.ts';
 import { createLights } from './scene/light.ts';
 import type { Lights } from './scene/light.ts';
-import { createPaint } from './scene/paint.ts';
+import { createFinish } from './scene/finish.ts';
 import { TERRAIN_MODELS, disposeModel } from './scene/terrain.ts';
 import type { PieceInfo } from './scene/terrain.ts';
 import { createKit } from './scene/textures.ts';
@@ -113,7 +113,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   const ndc = new Vector3();
   const right = new Vector3(), up = new Vector3();
-  const paint = createPaint(renderer);
+  const finish = createFinish(renderer);
   const floor = createFloor(kit);
   const wallSet = createWalls(kit);
   const pieceGroup = new Group();
@@ -295,7 +295,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       renderer.shadowMap.needsUpdate = true;
       shadowsDirty = false;
     }
-    paint.render(scene, camera, quality >= 2);
+    finish.render(scene, camera, quality >= 2);
     if (markers.group.children.length) {
       markers.place(camera, cur.pitch, loopT, snap());
       keepMarkers();
@@ -348,7 +348,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     const r = dpr();
     renderer.setPixelRatio(r);
     renderer.setSize(w, h, false);
-    paint.setSize(Math.round(w * r), Math.round(h * r), r);
+    finish.setSize(Math.round(w * r), Math.round(h * r));
     mini?.fit(host.overlay.clientWidth || w, host.overlay.clientHeight || h);
     if (!zoomed) {
       aimGoal();
@@ -622,7 +622,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       floats.dispose();
       thread.dispose();
       markers.dispose();
-      paint.dispose();
+      finish.dispose();
       kit.dispose();
       renderer.dispose();
     },

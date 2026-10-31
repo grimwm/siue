@@ -4,7 +4,7 @@
  * easing round unless motion is reduced. A thing keeps its model from frame to frame by its id, or, when it has
  * none (a hazard, a sliding block), by its model and the nearest place it stood. Theseus, the Minotaur, the items
  * and the hazards carry a floating marker (src/modern/markers.ts) over them. */
-import { CatmullRomCurve3, ConeGeometry, CylinderGeometry, Group, Mesh, SphereGeometry, TorusGeometry, TubeGeometry, Vector3 } from 'three';
+import { CatmullRomCurve3, ConeGeometry, CylinderGeometry, Group, Mesh, RingGeometry, SphereGeometry, TorusGeometry, TubeGeometry, Vector3 } from 'three';
 import type { Material, Object3D } from 'three';
 import type { Dir } from '../../puzzle/tiles.ts';
 import type { FigureModel, PieceModel, Placed } from '../model-names.ts';
@@ -19,47 +19,68 @@ import type { Kit } from './textures.ts';
 import type { Seen } from './walls.ts';
 
 const sph = (r: number, mat: Material, ws = 16, hs = 12) => new Mesh(new SphereGeometry(r, ws, hs), mat);
-/** Built with its feet at 0 and stood on the floor at the sample's size. */
-function stand(g: Group, info: PieceInfo): Group {
-  g.scale.setScalar(1.3);
+/** Built with its feet at 0 and stood on the floor at `scale` times the sample's size, with a thin dark rim round
+ *  it (`outlined`). `live` stays out of the bake. */
+function stand(kit: Kit, g: Group, info: PieceInfo, scale = 1.3, live: Object3D[] = []): Group {
+  g.scale.setScalar(scale);
   g.position.y = FY;
   const out = new Group();
   out.add(g);
-  return piece(out, info);
+  return outlined(kit, piece(out, info, live));
 }
 
-/** Theseus: a blue tunic, a red cloak, a round bronze shield and a short sword. */
+/** Adds a dark rim round every baked surface of `obj`: the same geometry, drawn from behind and pushed out. */
+function outlined(kit: Kit, obj: Group): Group {
+  const shells: Mesh[] = [];
+  for (const c of obj.children) if (c instanceof Mesh && !c.userData.live) shells.push(new Mesh(c.geometry, kit.m.outline));
+  obj.add(...shells);
+  return obj;
+}
+
+/** Theseus's size against the other figures: a little larger, so the eye finds him first. */
+const HERO_SCALE = 1.45;
+
+/** Theseus: a bright blue tunic, a red cloak, a round bronze shield and a short sword, a little larger than the
+ *  others, on a green ring with a dark edge. */
 function theseus(kit: Kit): Group {
   const { m } = kit;
   const g = new Group();
   for (const sx of [-1, 1]) {
-    g.add(at(cyl(0.045, 0.04, 0.28, m.skin), sx * 0.065, 0.14, 0));
-    g.add(at(box(0.07, 0.05, 0.12, m.leather), sx * 0.065, 0.025, 0.02));
+    g.add(at(cyl(0.045, 0.04, 0.28, m.heroSkin), sx * 0.065, 0.14, 0));
+    g.add(at(box(0.07, 0.05, 0.12, m.heroLeather), sx * 0.065, 0.025, 0.02));
   }
-  g.add(at(cyl(0.13, 0.2, 0.22, m.tunic), 0, 0.35, 0));
-  g.add(at(cyl(0.155, 0.13, 0.22, m.tunic), 0, 0.55, 0));
-  g.add(at(cyl(0.16, 0.16, 0.035, m.leather), 0, 0.45, 0));
-  const cloak = at(box(0.3, 0.44, 0.03, m.cloak), 0, 0.44, -0.14);
+  g.add(at(cyl(0.13, 0.2, 0.22, m.heroTunic), 0, 0.35, 0));
+  g.add(at(cyl(0.155, 0.13, 0.22, m.heroTunic), 0, 0.55, 0));
+  g.add(at(cyl(0.16, 0.16, 0.035, m.heroLeather), 0, 0.45, 0));
+  const cloak = at(box(0.3, 0.44, 0.03, m.heroCloak), 0, 0.44, -0.14);
   cloak.rotation.x = 0.12;
   g.add(cloak);
   for (const sx of [-1, 1]) {
-    const a = at(cyl(0.04, 0.035, 0.26, m.skin), sx * 0.19, 0.5, 0.02);
+    const a = at(cyl(0.04, 0.035, 0.26, m.heroSkin), sx * 0.19, 0.5, 0.02);
     a.rotation.z = sx * 0.18;
     g.add(a);
   }
-  g.add(at(sph(0.095, m.skin), 0, 0.75, 0));
-  g.add(at(new Mesh(new SphereGeometry(0.103, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), m.furDark), 0, 0.765, -0.012));
+  g.add(at(sph(0.095, m.heroSkin), 0, 0.75, 0));
+  g.add(at(new Mesh(new SphereGeometry(0.103, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), m.heroHair), 0, 0.765, -0.012));
   const shield = at(cyl(0.15, 0.15, 0.03, m.bronze, 24), -0.26, 0.5, 0.04);
   shield.rotation.z = Math.PI / 2;
   g.add(shield);
-  const boss = at(cyl(0.06, 0.06, 0.035, m.cloak, 16), -0.275, 0.5, 0.04);
+  const boss = at(cyl(0.06, 0.06, 0.035, m.heroCloak, 16), -0.275, 0.5, 0.04);
   boss.rotation.z = Math.PI / 2;
   g.add(boss);
   const sword = at(box(0.03, 0.34, 0.012, m.steel), 0.23, 0.5, 0.1);
   sword.rotation.x = 0.5;
   g.add(sword);
   g.add(at(box(0.09, 0.02, 0.03, m.bronze), 0.23, 0.37, 0.03));
-  return stand(g, { half: 0.26, h: 1.2 });
+  const flat = (inner: number, outer: number, mat: Material, y: number) => {
+    const r = new Mesh(new RingGeometry(inner, outer, 48), mat);
+    r.rotation.x = -Math.PI / 2;
+    r.position.y = FY + y;
+    r.userData.live = true;
+    return r;
+  };
+  const ring = [flat(0.33, 0.47, m.heroRingEdge, 0.01), flat(0.36, 0.44, m.heroRing, 0.012)];
+  return stand(kit, g, { half: 0.26 * HERO_SCALE / 1.3, h: 1.2 * HERO_SCALE / 1.3 }, HERO_SCALE, ring);
 }
 
 /** The Minotaur with his labrys: fur, a red kilt and ivory horns, or all grey stone while the mirror holds him. */
@@ -116,7 +137,7 @@ function minotaur(kit: Kit, stone: boolean): Group {
   ax.rotation.y = Math.PI / 2;
   ax.position.set(0.4, 0.62, 0.08);
   g.add(ax);
-  return stand(g, { half: 0.36, h: 1.6 });
+  return stand(kit, g, { half: 0.36, h: 1.6 });
 }
 
 export const FIGURE_MODELS: Record<FigureModel, (kit: Kit) => Object3D> = {

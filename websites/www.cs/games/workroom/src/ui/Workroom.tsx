@@ -40,7 +40,7 @@ import { pageLimits } from '../studio-limits.ts';
 import { energyLegend, legendFor, pickTab, tabsFor } from '../tabs.ts';
 import type { Tab } from '../tabs.ts';
 import { changeTimes, sectionTimes, tempoMap } from '../tempo.ts';
-import { boundsFor, fitView, resizeView, timeToX } from '../zoom.ts';
+import { boundsFor, fitView, isClosest, isWhole, resizeView, timeToX, zoomBy, ZOOM_STEP } from '../zoom.ts';
 import type { View } from '../zoom.ts';
 import { AnswerBar, HUM_AFTER_UNLOCK } from './AnswerBar.tsx';
 import type { AnswerMode, Asked } from './AnswerBar.tsx';
@@ -56,10 +56,12 @@ import { Card, Word } from './Glossary.tsx';
 import { MakeKeyPanel } from './MakeKeyPanel.tsx';
 import { PianoRoll } from './PianoRoll.tsx';
 import { Player } from './Player.tsx';
-import { SheetMusic } from './SheetMusic.tsx';
+import { DEFAULT_LOOK, SheetMusic } from './SheetMusic.tsx';
+import type { SheetLayout } from '../sheetlife.ts';
 import { SoundPicture } from './SoundPicture.tsx';
 import { Timeline } from './Timeline.tsx';
 import { ViewTabs } from './ViewTabs.tsx';
+import { ZoomBar } from './ZoomBar.tsx';
 
 export interface WorkroomProps { score: Score; version: number; versions: number[]; audioSrc: (file: string) => string; onVersion(v: number): void; guide?: GuideStore; playDemo?(id: DemoId): void; stopDemo?(): void; children?: ComponentChildren;
   /** Under the views: what this page offers to manage the piece (delete a draft, delete the piece). */
@@ -95,7 +97,9 @@ export function Workroom(p: WorkroomProps) {
   const [time, setTime] = useState(0);
   const [wanted, setWanted] = useState<Tab>('story');
   const [lanes, setLanes] = useState<ReadonlySet<string> | undefined>(undefined);
-  const [sheetLane, setSheetLane] = useState(score.lanes[0]!.id);
+  /** The sheet music's instrument; null is the Full Score. */
+  const [sheetLane, setSheetLane] = useState<string | null>(score.lanes[0]!.id);
+  const [sheetLook, setSheetLook] = useState<SheetLayout>(DEFAULT_LOOK);
   const [open, setOpen] = useState<string | null>(null);
   const [clip, setClip] = useState<Clip | null>(null);
   const [holding, setHolding] = useState(false);
@@ -325,9 +329,15 @@ export function Workroom(p: WorkroomProps) {
           </Button>
         </div>
         <div role="tabpanel" id={panelId('view')} aria-labelledby={tabId('view', tab)} class="grid gap-2">
-          {tab === 'roll' && mode !== 'energy' ? (
-            <div class="lane-picker flex flex-wrap gap-2" role="group" aria-label="Lanes shown" data-guide="lane-picker">
-              {score.lanes.map(l => <Chip pressed={!lanes || lanes.has(l.id)} onClick={() => toggleLane(l.id)}>{l.name}</Chip>)}
+          {tab !== 'sheet' && mode !== 'energy' ? (
+            <div class="flex flex-wrap items-end justify-between gap-2">
+              {tab === 'roll' ? (
+                <div class="lane-picker flex flex-wrap gap-2" role="group" aria-label="Lanes shown" data-guide="lane-picker">
+                  {score.lanes.map(l => <Chip pressed={!lanes || lanes.has(l.id)} onClick={() => toggleLane(l.id)}>{l.name}</Chip>)}
+                </div>
+              ) : <span />}
+              <ZoomBar canOut={!isWhole(view, bounds)} canIn={!isClosest(view, bounds)} atFit={isWhole(view, bounds)}
+                onOut={() => setView(v => zoomBy(v, 1 / ZOOM_STEP, bounds))} onIn={() => setView(v => zoomBy(v, ZOOM_STEP, bounds))} onFit={() => setView(fitView(score.duration, width))} />
             </div>
           ) : null}
           <div ref={stage} data-guide="view" class="overflow-hidden rounded-lg bg-well ring-1 ring-rule">
@@ -337,7 +347,8 @@ export function Workroom(p: WorkroomProps) {
                   select={mode === 'pin' ? { span: preview ?? span, onPick: pick } : undefined} marks={marks} /> : null}
                 {tab === 'roll' ? <PianoRoll score={score} tempo={tempo} view={view} time={time} lanes={lanes} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
                 {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram?.file ?? 'spectrogram.png')} rendered={rendered} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
-                {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane}
+                {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane} look={sheetLook} onLook={setSheetLook}
+                  title={score.piece.title} opening={score.tempo?.[0] ? { bpm: score.tempo[0].bpm, unit: score.tempo[0].unit } : null}
                   tempo={tempo} duration={score.duration} time={time} onHear={hear} onTerm={openCard} /> : null}
               </>
             )}

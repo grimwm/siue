@@ -1,5 +1,6 @@
 // Pointer events on a drawing surface, handed to the gesture machine: a tap
-// seeks, a drag pans (in select mode it picks a span), two fingers or ctrl+wheel zoom. A cancelled or lost
+// seeks, a drag pans (in select mode it picks a span), two fingers, ctrl or cmd
+// with the wheel, or a trackpad pinch (Safari's gesture events too) zoom. A cancelled or lost
 // pointer capture cancels the machine, so a missed pointerup cannot wedge it.
 import { useEffect, useRef } from 'preact/hooks';
 import { createGestures } from '../gestures.ts';
@@ -23,7 +24,9 @@ export interface SurfaceProps {
   onTap?(x: number, y: number): void;
 }
 interface PointerLike { pointerId: number; clientX: number; clientY: number; timeStamp: number; currentTarget: Element }
-interface WheelLike { clientX: number; deltaX: number; deltaY: number; ctrlKey: boolean; currentTarget: Element; preventDefault(): void }
+interface WheelLike { clientX: number; deltaX: number; deltaY: number; ctrlKey: boolean; metaKey?: boolean; currentTarget: Element; preventDefault(): void }
+/** Safari's gesture event: the scale since the pinch began. */
+interface GestureLike { clientX?: number; scale?: number; currentTarget: Element; preventDefault(): void }
 
 export interface SurfaceHandlers {
   onPointerDown(e: PointerLike): void;
@@ -32,6 +35,9 @@ export interface SurfaceHandlers {
   onPointerCancel(e: PointerLike): void;
   onLostPointerCapture(e: PointerLike): void;
   onWheel(e: WheelLike): void;
+  onGestureStart(e: GestureLike): void;
+  onGestureChange(e: GestureLike): void;
+  onGestureEnd(e: GestureLike): void;
 }
 
 /** Pointer coordinates relative to the surface; a missing left or top counts as 0. */
@@ -86,8 +92,12 @@ export function useSurface(p: SurfaceProps): SurfaceHandlers {
     onLostPointerCapture(e) { apply(g.cancel(e.pointerId)); hold(e.pointerId, false); },
     onWheel(e) {
       // Only a wheel that moved the view is stopped (and a pinch, which would otherwise zoom the whole page): the rest scrolls the page.
-      const moved = apply(g.wheel(local(e.currentTarget, e.clientX, 0).x, e.deltaX, e.deltaY, e.ctrlKey));
-      if (moved || e.ctrlKey) e.preventDefault();
+      const zoom = e.ctrlKey || e.metaKey === true;
+      const moved = apply(g.wheel(local(e.currentTarget, e.clientX, 0).x, e.deltaX, e.deltaY, zoom));
+      if (moved || zoom) e.preventDefault();
     },
+    onGestureStart(e) { e.preventDefault(); g.scaleEnd(); },
+    onGestureChange(e) { e.preventDefault(); apply(g.scale(local(e.currentTarget, e.clientX ?? 0, 0).x, e.scale ?? 1)); },
+    onGestureEnd(e) { e.preventDefault(); g.scaleEnd(); },
   };
 }

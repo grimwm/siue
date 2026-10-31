@@ -14,8 +14,12 @@ export interface Gestures {
   move(p: PointerIn): GestureOut[];
   up(p: PointerIn): GestureOut[];
   cancel(id: number): GestureOut[];
-  /** Trackpad pinch arrives as ctrl+wheel: zoom by exp(-deltaY / 200) about x; otherwise deltaX pans. */
+  /** Trackpad pinch arrives as ctrl+wheel (and ctrl or cmd with a wheel zooms too): zoom by exp(-deltaY / 200) about x; otherwise deltaX pans. */
   wheel(x: number, deltaX: number, deltaY: number, ctrl: boolean): GestureOut[];
+  /** Safari's trackpad pinch arrives as gesture events carrying the scale since the gesture began: zoom by its change since the last one, about x. */
+  scale(x: number, scale: number): GestureOut[];
+  /** The Safari gesture ended. */
+  scaleEnd(): void;
 }
 export const TAP_SLOP_PX = 8;
 export const TAP_MS = 300;
@@ -31,6 +35,8 @@ export function createGestures(view: () => View, bounds: () => Bounds, mode: () 
   let base: { a: number; b: number; ax: number; bx: number; view: View } | null = null;
   // An armed selection; shown once a select event has been emitted for it.
   let selecting: { x0: number; y: number; shown: boolean; x1: number } | null = null;
+  // The last scale of a Safari gesture, null between gestures.
+  let lastScale: number | null = null;
 
   const startPinch = (): void => {
     const [a, b] = [...fingers.entries()];
@@ -112,5 +118,12 @@ export function createGestures(view: () => View, bounds: () => Bounds, mode: () 
       if (ctrl) return [{ kind: 'view', view: zoomAt(view(), x, Math.exp(-deltaY / 200), bounds()) }];
       return deltaX === 0 ? [] : [{ kind: 'view', view: panBy(view(), -deltaX, bounds()) }];
     },
+    scale(x, scale) {
+      const was = lastScale ?? 1;
+      if (!(scale > 0) || !(was > 0)) return [];
+      lastScale = scale;
+      return scale === was ? [] : [{ kind: 'view', view: zoomAt(view(), x, scale / was, bounds()) }];
+    },
+    scaleEnd() { lastScale = null; },
   };
 }

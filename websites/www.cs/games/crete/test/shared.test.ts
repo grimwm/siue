@@ -195,7 +195,7 @@ test('the menu offers Shared level only while the open link\'s level is in play'
   await visit.open(ONE.fragment);
   click(byId(rootOf('shared-play'), 'shared-play'));
   key('Enter');
-  assert.equal(menuShared()?.textContent, 'Shared level');
+  assert.equal(menuShared()?.textContent, 'Shared Level');
   await visit.open('L1.not*base64');
   assert.equal(menuShared(), undefined, 'not after a bad link: there is no card');
   await visit.open(ONE.fragment);

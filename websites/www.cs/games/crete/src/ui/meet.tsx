@@ -1,5 +1,5 @@
 // The Island of Crete: the first card. The first time Theseus picks up a kind of item, or touches an active tile,
-// play waits on this card: its picture in the board's look, its name, a line of lore and what it does. Go on (Enter)
+// play waits on this card: its picture in the board's look, its name, a line of lore and what it does. Go On (Enter)
 // closes it, as do Space, ✕ and Q; src/ui.ts owns those keys, so the dialog is given no onDismiss.
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
@@ -32,7 +32,7 @@ export function MeetCard(p: MeetCardProps) {
         </div>
       )}
       <p class="meet-note">It is in the Dictionary now, under the menu.</p>
-      <Button id="meet-go" keyLabel={KEYS.begin.label} onClick={p.onClose}>Go on</Button>
+      <Button id="meet-go" keyLabel={KEYS.begin.label} onClick={p.onClose}>Go On</Button>
     </Dialog>
   );
 }

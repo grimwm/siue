@@ -157,7 +157,7 @@ for (const device of DEVICES) {
     expect(await page.evaluate(cardFits, '#title-veil .card'), 'title card on screen').toBe(true);
     for (const id of ['title-play', 'title-story', 'title-settings']) await expect(page.locator(`#${id}`)).toBeVisible();
     await page.locator('#title-play').click();
-    // Play opens the new-game card: both looks as loaded pictures above their names, Classic picked here.
+    // New Game opens the new-game card: both looks as loaded pictures above their names, Classic picked here.
     await expect(page.locator('#look-veil')).toBeVisible();
     expect(await page.evaluate(cardFits, '#look-veil .card'), 'new-game card on screen').toBe(true);
     await expect(page.locator('#pick-classic')).toHaveAttribute('aria-pressed', 'true');

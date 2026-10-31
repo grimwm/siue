@@ -45,12 +45,12 @@ export function EndCard(p: EndCardProps) {
       )}
       <p id="end-score" class="runstats">{p.score}</p>
       <div class="title-actions">
-        {p.won && p.hasNext && <Button id="end-next" keyLabel={KEYS.begin.label} onClick={p.onNext}>Next level</Button>}
+        {p.won && p.hasNext && <Button id="end-next" keyLabel={KEYS.begin.label} onClick={p.onNext}>Next Level</Button>}
         {p.won && <Button id="end-retry" keyLabel={KEYS.restart.label} onClick={p.onRetry}>Retry</Button>}
         {p.won && p.hasLevels && <Button id="end-trials" keyLabel={KEYS.new.label} onClick={p.onTrials}>Levels</Button>}
         {!p.won && <Button id="end-undo" keyLabel={KEYS.undo.label} onClick={p.onUndo}>Undo</Button>}
         {!p.won && <Button id="end-restart" keyLabel={KEYS.restart.label} onClick={p.onRestart}>Restart</Button>}
-        {p.onBackToEditor && <Button id="end-editor" onClick={p.onBackToEditor}>Back to the editor</Button>}
+        {p.onBackToEditor && <Button id="end-editor" onClick={p.onBackToEditor}>Back to the Editor</Button>}
       </div>
     </Dialog>
   );

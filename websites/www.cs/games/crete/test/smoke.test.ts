@@ -55,7 +55,7 @@ test('the game reaches no function the site script defines', { skip: !existsSync
   assert.deepEqual(reached, []);
 });
 
-test("Play opens Chapter 1's card, Continue the chapter card of its level, and a ?seed= link Chapter 1's", () => {
+test("New Game opens Chapter 1's card, Continue the chapter card of its level, and a ?seed= link Chapter 1's", () => {
   const main = read('src/main.ts');
   assert.match(main, /function play\(at\?: number\)[^}]*if \(at === undefined\) ui\.showChapter\(1, false\);\s*else ui\.showChapter\(chapterOf\(at\)\.chapter\.n, false, at\)/);
   assert.match(main, /if \(direct\) \{[^}]*ui\.showChapter\(1, false\)/);

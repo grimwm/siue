@@ -82,7 +82,7 @@ test('the Levels button on a won card is worded Levels', () => {
   const root = mount();
   renderEndCard(root, { open: true, ...WON, ...calls([]) });
   assert.ok(byId(root, 'end-trials').textContent.startsWith('Levels'));
-  assert.ok(byId(root, 'end-next').textContent.includes('Next level'));
+  assert.ok(byId(root, 'end-next').textContent.includes('Next Level'));
 });
 
 test('the ending card waits hidden until a trial ends', () => {
@@ -228,7 +228,7 @@ test('the shared card shows the name, rating… until the rating is in, the best
   assert.equal(byId(root, 'shared-best').textContent, 'beat 54');
   assert.equal(globalThis.__focused?.id, 'shared-play');
   assert.ok(byId(root, 'shared-play').textContent.includes('Play'));
-  assert.ok(byId(root, 'shared-edit').textContent.includes('Edit a copy'));
+  assert.ok(byId(root, 'shared-edit').textContent.includes('Edit a Copy'));
   click(byId(root, 'shared-play'));
   click(byId(root, 'shared-edit'));
   assert.deepEqual(seen, ['play', 'edit']);
@@ -634,7 +634,7 @@ test('on a phone the thread is a Thread button: tap opens it, Q or a tap outside
   }
 });
 
-test('Play opens the new-game card: a picked look is drawn at once, Enter the halls opens the chapter card, Back the title', () => {
+test('New Game opens the new-game card: a picked look is drawn at once, Enter the Halls opens the chapter card, Back the title', () => {
   reset();
   looks.length = 0;
   flow.setLook('modern', 'solid');
@@ -758,7 +758,7 @@ test('a held Enter after level 10 goes on from the closing card once and starts 
   assert.equal(flow.top(), 'chapter');
 });
 
-test("the title card offers no Continue while nothing is cleared, and Enter the halls opens Chapter 1's card", () => {
+test("the title card offers no Continue while nothing is cleared, and Enter the Halls opens Chapter 1's card", () => {
   reset();
   flow.showTitle(false);
   assert.equal(el('title-continue'), undefined);
@@ -766,11 +766,13 @@ test("the title card offers no Continue while nothing is cleared, and Enter the 
   assert.equal(flow.top(), 'title', 'Enter on the title card with no Continue starts nothing');
 });
 
-test('Continue on the title card goes to the first level not cleared, in order; Play still starts Chapter 1, Level 1', () => {
+test('Continue on the title card goes to the first level not cleared, in order; New Game still starts Chapter 1, Level 1', () => {
   reset();
   for (const id of [...LEVEL_IDS.slice(0, 12), LEVEL_IDS[14]!]) cleared.add(id);
   flow.showTitle(false);
-  assert.ok(text('title-continue').includes('Continue · Ch. 2 • Level 3'));
+  assert.equal(byId(rootOf('title-continue'), 'title-continue').textContent, `Continue${KEYS.begin.label}`);
+  assert.equal(byId(rootOf('title-continue'), 'title-continue').getAttribute('aria-label'), 'Continue at Chapter 2, Level 3');
+  assert.equal(byId(rootOf('title-continue'), 'title-continue').getAttribute('title'), 'Continue at Chapter 2, Level 3');
   assert.equal(document.activeElement?.id, 'title-continue');
   key('Enter');
   assert.equal(flow.top(), 'chapter');
@@ -798,7 +800,7 @@ test('with every released level cleared the title card offers no Continue', () =
   assert.equal(el('title-continue'), undefined);
 });
 
-test('Play opens the chapter card, and Enter on it starts level 1 when nothing is cleared', () => {
+test('New Game opens the chapter card, and Enter on it starts level 1 when nothing is cleared', () => {
   reset();
   flow.showTitle(false);
   flow.showChapter(1, false);
@@ -931,7 +933,7 @@ test('the end card words a win as Level N cleared and a loss as Level failed', (
   win(0);
   assert.equal(flow.top(), 'end');
   assert.equal(text('end-kicker'), 'Level 1 cleared');
-  assert.ok(text('end-next').includes('Next level'));
+  assert.ok(text('end-next').includes('Next Level'));
   assert.ok(text('end-trials').startsWith('Levels'));
 });
 
@@ -1049,7 +1051,7 @@ test('taking a story page opens its Lore entry over the board; Enter closes it a
   assert.ok(el('lore-entry-text'));
   const tabs = walk(el('lore-back')!).filter(n => n.localName === 'kbd').map(t => t.textContent);
   assert.deepEqual(tabs, [KEYS.begin.label], 'mid-level the page goes on with Enter');
-  assert.match(el('lore-back')!.textContent, /Go on/);
+  assert.match(el('lore-back')!.textContent, /Go On/);
   const moves = game.run!.now.moves;
   key('ArrowUp');
   assert.equal(game.run!.now.moves, moves, 'the game waits while the entry is open');
@@ -1238,7 +1240,7 @@ test('the menu opens the Lore book; Q leaves an open entry for the list, and Q a
   assert.equal(flow.top(), 'menu');
   click(byId(rootOf('menu-lore'), 'menu-lore'));
   assert.equal(flow.top(), 'lore');
-  assert.ok(text('lore-veil').includes('Lore book'));
+  assert.ok(text('lore-veil').includes('Lore Book'));
   click(byId(rootOf('lore-opening-1'), 'lore-opening-1'));
   assert.equal(text('lore-entry-title'), 'The Outer Halls');
   key('q');
@@ -1377,12 +1379,12 @@ test('Back to the editor shows in the menu and on the end card only for a try', 
   reset();
   outside({ kind: 'try', name: 'Your level', best: null });
   win(9);
-  assert.match(text('end-editor'), /Back to the editor/);
+  assert.match(text('end-editor'), /Back to the Editor/);
   click(el('end-editor')!);
   assert.equal(backs, 1);
   const button = menuEditor();
   assert.ok(button);
-  assert.match(button.textContent, /Back to the editor/);
+  assert.match(button.textContent, /Back to the Editor/);
   click(button);
   assert.equal(backs, 2);
 });
@@ -1393,7 +1395,7 @@ test('the title card offers Make a level when the page gives it, with its key', 
   assert.equal(maybeById(root, 'title-editor'), undefined);
   let made = 0;
   renderTitleCard(root, { open: true, hint: false, onPlay() {}, onEditor: () => { made++; } });
-  assert.equal(byId(root, 'title-editor').textContent, `Make a level${KEYS.editor.label}`);
+  assert.equal(byId(root, 'title-editor').textContent, `Make a Level${KEYS.editor.label}`);
   click(byId(root, 'title-editor'));
   assert.equal(made, 1);
 });
@@ -1447,7 +1449,7 @@ test('Music in the background sits under Music, says whether it is on, and asks 
   reset();
   key('q');
   const hidden = () => byId(rootOf('menu'), 'music-hidden');
-  assert.ok(hidden().textContent.startsWith('Music in the background'));
+  assert.ok(hidden().textContent.startsWith('Music in the Background'));
   assert.equal(hidden().getAttribute('aria-checked'), 'true');
   click(hidden());
   assert.equal(backgrounds, 1);

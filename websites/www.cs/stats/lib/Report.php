@@ -53,7 +53,10 @@ final class Report
     /** How many years back the numbers go from $today, at least 1: the most a "Years" range needs. */
     public static function yearsOfData(\PDO $db, string $today): int
     {
-        $first = self::firstDay($db);
+        // The daily totals can reach back further than the raw rows.
+        $days = [self::firstDay($db), $db->query('SELECT MIN(day) FROM daily')->fetchColumn()];
+        $days = array_filter($days, 'is_string');
+        $first = $days === [] ? null : min($days);
         $n = 1;
         while ($first !== null && $n < 99 && self::start($n . 'y', $today) > $first) {
             $n++;
@@ -301,7 +304,12 @@ final class Report
         }
         $out = $this->counts($page, $from, $to);
         if ($to < $this->today) {
-            $this->db->prepare('INSERT OR REPLACE INTO memo (k, v) VALUES (?, ?)')->execute([$key, json_encode($out, JSON_THROW_ON_ERROR)]);
+            // Only a cache: when a write holds the database too long, show the numbers without keeping them.
+            try {
+                $this->db->prepare('INSERT OR REPLACE INTO memo (k, v) VALUES (?, ?)')->execute([$key, json_encode($out, JSON_THROW_ON_ERROR)]);
+            } catch (\PDOException $e) {
+                error_log('stats: memo not kept: ' . $e->getMessage());
+            }
         }
         return $out;
     }

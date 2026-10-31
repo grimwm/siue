@@ -120,6 +120,28 @@ final class StatsReportTest extends TestCase
         self::assertSame(1, $r['kpis']['uniques']['value']);
     }
 
+    public function testABusyDatabaseDoesNotStopTheReport(): void
+    {
+        $dir = admin_tmp_dir();
+        $db = Stats\Db::open($dir);
+        $c = stats_collector($db, $this->clock);
+        $this->clock->now -= 14 * 86400;
+        stats_post($c, stats_view(['vid' => str_repeat('1', 32)]));
+        $this->clock->now += 14 * 86400;
+        $writer = Stats\Db::open($dir);
+        $writer->exec('BEGIN IMMEDIATE');
+        $db->exec('PRAGMA busy_timeout = 0');
+        $r = Report::build($db, $this->clock->now, '*', '7d', ['crete']);
+        self::assertSame(0, $r['kpis']['uniques']['prev'], 'the counts, though they could not be kept');
+        $writer->exec('ROLLBACK');
+    }
+
+    public function testTheYearsReachBackToTheOldestDailyTotals(): void
+    {
+        $this->db->exec("INSERT INTO daily (day, page, metric, value) VALUES ('2022-01-03', '*', 'views', 4)");
+        self::assertSame(5, Report::yearsOfData($this->db, '2026-10-15'));
+    }
+
     /** @return array<string, array{string, string, int}> range => from, bucket, number of buckets */
     public static function ranges(): array
     {

@@ -26,12 +26,17 @@ def _probe(path: Path) -> tuple[int, int, int]:
     return int(s["sample_rate"]), int(s["channels"]), int(s["duration_ts"])
 
 
-def _check_loop(name: str, loop: list[float], probed: list[tuple[str, int, int]]) -> None:
-    """The loop must be a forward stretch inside every one of the instrument's samples."""
+def _check_loop(name: str, loop: list[float], probed: list[tuple[int, str, int, int]], past_end: list[int]) -> None:
+    """
+    The loop must be a forward stretch inside every one of the instrument's samples. `past_end` names the pitches of a published
+    instrument whose loop already ran past their end; both renderers stop that loop at the sample's end, and it stays as published.
+    """
     if not 0 <= loop[0] < loop[1]:
         raise LibraryError(f"{name}: loop {loop} must start at 0 or later and end after it starts")
-    for rel, rate, frames in probed:
-        if loop[1] * rate > frames:
+    for pitch, rel, rate, frames in probed:
+        if loop[0] * rate >= frames:
+            raise LibraryError(f"{name}: loop {loop} starts after {rel}, which is {frames / rate:.3f} s long")
+        if loop[1] * rate > frames and pitch not in past_end:
             raise LibraryError(f"{name}: loop {loop} ends after {rel}, which is {frames / rate:.3f} s long")
 
 
@@ -58,14 +63,18 @@ def build(manifest: dict, samples: Path, out: Path) -> dict:
             _encode(Path(samples) / f["path"], out / rel)
             rate, channels, frames = _probe(out / rel)
             files.append({"pitch": f["pitch"], "file": rel, "rate": rate, "channels": channels})
-            probed.append((rel, rate, frames))
+            probed.append((f["pitch"], rel, rate, frames))
         instruments[name] = {"files": files}
         if "loop" in inst:
-            _check_loop(name, inst["loop"], probed)
+            _check_loop(name, inst["loop"], probed, inst.get("loop_past_end", []))
             instruments[name]["loop"] = inst["loop"]
     for name, inst in manifest["instruments"].items():
         if "standin" in inst:
-            instruments[name] = {k: v for k, v in instruments[inst["standin"]].items() if k in ("files", "loop")}
+            target = instruments[inst["standin"]]
+            # standin_shift moves the borrowed roots, so a sample plays that many semitones away from where it sounds in its own instrument.
+            shift = inst.get("standin_shift", 0)
+            instruments[name] = {"files": [{**f, "pitch": f["pitch"] + shift} for f in target["files"]],
+                                 **({"loop": target["loop"]} if "loop" in target else {})}
             instruments[name]["standin"] = inst["standin"]
         if inst.get("pitched") is False:
             instruments[name]["pitched"] = False
@@ -82,7 +91,8 @@ def main() -> None:
     for old in LIBRARY.glob("*/"):
         shutil.rmtree(old)
     index = build(manifest, root, LIBRARY)
-    print(f"{sum(len(i['files']) for i in index['instruments'].values())} samples in {LIBRARY}", file=sys.stderr)
+    files = {f["file"] for i in index["instruments"].values() for f in i["files"]}
+    print(f"{len(files)} samples for {len(index['instruments'])} instruments in {LIBRARY}", file=sys.stderr)
 
 
 if __name__ == "__main__":

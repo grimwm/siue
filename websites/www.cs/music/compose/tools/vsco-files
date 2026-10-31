@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Candidate samples.json files for one VSCO-2 CE instrument, read from the library's own SFZ map at the pinned commit.
+
+  tools/vsco-files <map.sfz> [--vel 80] [--keys 36,38,...] [--every 3]
+
+Prints {"files": [{path, sha256, pitch}]}: one region per root, the velocity layer that holds --vel (mf by default) and the
+first round robin, thinned to about every --every semitones (never leaving a gap over 4 where the map has a root to fill it).
+With --keys (drums), it takes exactly those keys and keeps each sample on its own key. A helper for writing samples.json;
+the build never runs it. Downloads go to the composing cache, so `make music-library` finds them already verified.
+"""
+import argparse
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+from urllib.parse import quote
+from urllib.request import urlopen
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from siue_compose.samples import DEFAULT_CACHE  # noqa: E402
+
+MANIFEST = Path(__file__).resolve().parents[1] / "samples.json"
+
+
+def get(url: str) -> bytes:
+    with urlopen(url, timeout=120) as r:
+        return r.read()
+
+
+def parse_sfz(text: str) -> list[dict]:
+    """Every <region> with the opcodes it inherits from <control>, <global> and its <group>."""
+    text = re.sub(r"//[^\n]*", "", text)
+    scopes = {"control": {}, "global": {}, "group": {}}
+    regions, current, header = [], None, None
+    for token in re.split(r"(<\w+>)", text):
+        m = re.fullmatch(r"<(\w+)>", token)
+        if m:
+            header = m.group(1)
+            if header == "group":
+                scopes["group"] = {}
+            if header == "region":
+                current = dict(scopes["group"])
+                regions.append(current)
+            continue
+        target = current if header == "region" else scopes.get(header)
+        if target is None:
+            continue
+        # sample= values may hold spaces, so read each opcode up to the next "name=".
+        for k, v in re.findall(r"(\w+)=(.*?)(?=\s+\w+=|\s*$)", token.strip(), flags=re.S):
+            target[k] = v.strip()
+    out = []
+    for r in regions:
+        merged = {**scopes["global"], **r}
+        base = scopes["control"].get("default_path", "")
+        key = merged.get("pitch_keycenter", merged.get("key", merged.get("lokey")))
+        out.append({"sample": (base + merged["sample"]).replace("\\", "/"), "key": int(key),
+                    "lokey": int(merged.get("lokey", key)), "hikey": int(merged.get("hikey", key)),
+                    "lovel": int(merged.get("lovel", 0)), "hivel": int(merged.get("hivel", 127)),
+                    "seq": int(merged.get("seq_position", 1))})
+    return out
+
+
+def thin(roots: list[int], every: int) -> list[int]:
+    kept = []
+    for i, c in enumerate(roots):
+        nxt = roots[i + 1] if i + 1 < len(roots) else None
+        if not kept or nxt is None or c - kept[-1] >= every or nxt - kept[-1] > 4:
+            kept.append(c)
+    return kept
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("sfz")
+    ap.add_argument("--vel", type=int, default=80)
+    ap.add_argument("--keys")
+    ap.add_argument("--every", type=int, default=3)
+    a = ap.parse_args()
+    manifest = json.loads(MANIFEST.read_text())
+    base = f"{manifest['source']}/{manifest['commit']}/"
+    regions = [r for r in parse_sfz(get(base + quote(a.sfz)).decode("utf-8", "replace")) if r["seq"] == 1]
+    if a.keys:
+        want = [int(k) for k in a.keys.split(",")]
+        picked = {}
+        for k in want:
+            hits = [r for r in regions if r["lokey"] <= k <= r["hikey"]]
+            hits.sort(key=lambda r: (not (r["lovel"] <= a.vel <= r["hivel"]), abs((r["lovel"] + r["hivel"]) / 2 - a.vel)))
+            if not hits:
+                sys.exit(f"{a.sfz}: no region plays key {k}")
+            picked[k] = hits[0]
+    else:
+        by_key = {}
+        for r in regions:
+            if r["lovel"] <= a.vel <= r["hivel"]:
+                by_key.setdefault(r["key"], r)
+        picked = {k: by_key[k] for k in thin(sorted(by_key), a.every)}
+    root = DEFAULT_CACHE / manifest["commit"]
+    files = []
+    for pitch, r in sorted(picked.items()):
+        path = root / r["sample"]
+        if not path.is_file():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(get(base + quote(r["sample"])))
+        files.append({"path": r["sample"], "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "pitch": pitch})
+    print(json.dumps({"files": files}, indent=1))
+
+
+if __name__ == "__main__":
+    main()

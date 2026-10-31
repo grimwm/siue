@@ -96,6 +96,14 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(choir["name"], "Choir")
         self.assertFalse((self.out / "choir").exists())
 
+    def test_standin_shift_moves_the_roots(self):
+        manifest = {**MANIFEST, "instruments": {**MANIFEST["instruments"], "celesta": {"standin": "harp", "standin_shift": -12}}}
+        index = build(manifest, self.samples, self.out)
+        harp, celesta = index["instruments"]["harp"]["files"], index["instruments"]["celesta"]["files"]
+        self.assertEqual([f["pitch"] for f in celesta], [f["pitch"] - 12 for f in harp])
+        self.assertEqual([f["file"] for f in celesta], [f["file"] for f in harp])
+        self.assertNotIn("standin_shift", index["instruments"]["celesta"])
+
     def test_standin_of_standin_refused(self):
         manifest = {**MANIFEST, "instruments": {**MANIFEST["instruments"], "choir": {"standin": "organ"}, "voice": {"standin": "choir"}}}
         with self.assertRaises(LibraryError) as e:
@@ -118,6 +126,13 @@ class BuildTest(unittest.TestCase):
         with self.assertRaises(LibraryError) as e:
             build(self._organ_loop([0.02, 0.2]), self.samples, self.out)
         self.assertIn("organ/48.flac", str(e.exception))
+
+    def test_published_loop_past_end_kept(self):
+        manifest = self._organ_loop([0.02, 0.2])
+        manifest["instruments"]["organ"]["loop_past_end"] = [48]
+        index = build(manifest, self.samples, self.out)
+        self.assertEqual(index["instruments"]["organ"]["loop"], [0.02, 0.2])
+        self.assertNotIn("loop_past_end", index["instruments"]["organ"])
 
     def test_bad_loop_interval_refused(self):
         for loop in ([-0.01, 0.05], [0.06, 0.06], [0.07, 0.03], [0.1, 0.2]):

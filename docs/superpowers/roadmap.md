@@ -44,8 +44,14 @@ and the studio MCP server with AI sealing keys, pairing and `SIUEN2` notes, so
 any studio connects its own AI app (project 3, `plans/2026-10-31-studio-mcp.md`).
 The Crete title theme is finished and plays in Crete on every screen.
 
-1. **Composing in the editor** (project 4) — in design; its plan follows the
-   design.
+1. **Composing in the editor** (project 4) — design `specs/2026-10-31-composer-editor-design.md`, in six
+   phases, each shipped on its own:
+   1. 4a, the instrument library and catalogue (`plans/2026-10-31-composer-4a-instrument-library.md`);
+   2. 4b, the core editor;
+   3. 4c, sheet music, import and export;
+   4. 4d, keyboards, Hum and Play Along;
+   5. 4e, speed, loudness and Sound;
+   6. 4f, DJ & Effects.
 
 ## Visitor statistics
 

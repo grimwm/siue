@@ -95,7 +95,9 @@ final class Report
         $bucket = $days > self::MONTHLY_PAST ? 'month' : ($days > self::WEEKLY_PAST ? 'week' : 'day');
         $r->load($pfrom, $today, $page, $pages);
         $first = self::firstDay($db);
-        $known = $first !== null && $first < $from;
+        // The earlier period compares only when counting had begun by its first day, so a sliver is never "the
+        // previous 3 years".
+        $known = $first !== null && $first <= $pfrom;
         $now = $r->counts($page, $from, $today);
         $prev = $known ? $r->finished($page, $pfrom, $pto) : ['who' => null, 'sid' => null, 'returning' => null];
 

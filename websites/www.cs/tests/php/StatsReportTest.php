@@ -47,7 +47,10 @@ final class StatsReportTest extends TestCase
 
     public function testKpisCompareWithThePreviousPeriod(): void
     {
-        $this->clock->now -= 8 * 86400;
+        // Counting began before the earlier period, so it is whole.
+        $this->clock->now -= 14 * 86400;
+        $this->visit(str_repeat('3', 32), 'home');
+        $this->clock->now += 6 * 86400;
         $this->visit(str_repeat('1', 32));
         $this->clock->now += 8 * 86400;
         $this->visit(str_repeat('1', 32));
@@ -75,11 +78,20 @@ final class StatsReportTest extends TestCase
         $this->visit(str_repeat('1', 32));
         $r = $this->report('*', '7d');
         self::assertNull($r['kpis']['uniques']['prev'], 'nothing was counted before the range');
+        $this->clock->now -= 8 * 86400;
+        $this->visit(str_repeat('2', 32));
+        $this->clock->now += 8 * 86400;
+        $r = $this->report('*', '7d');
+        foreach (['uniques', 'visits', 'dau', 'returning'] as $k) {
+            self::assertNull($r['kpis'][$k]['prev'], "$k: counting began partway through the earlier period");
+        }
     }
 
     public function testOldVisitsStillCountInLongRanges(): void
     {
-        $this->clock->now -= 150 * 86400;
+        $this->clock->now -= 200 * 86400;
+        $this->visit(str_repeat('1', 32));
+        $this->clock->now += 50 * 86400;
         $this->visit(str_repeat('1', 32));
         $this->clock->now += 150 * 86400;
         $this->visit(str_repeat('2', 32));
@@ -88,13 +100,15 @@ final class StatsReportTest extends TestCase
         self::assertSame(1, $r['kpis']['uniques']['prev'], 'raw rows are kept forever');
         $r = $this->report('*', '1y');
         self::assertSame(2, $r['kpis']['uniques']['value']);
-        self::assertSame(2, $r['kpis']['visits']['value']);
+        self::assertSame(3, $r['kpis']['visits']['value']);
         self::assertNull($r['kpis']['uniques']['prev'], 'counting began inside the year');
     }
 
     public function testAFinishedPeriodIsCountedOnce(): void
     {
-        $this->clock->now -= 8 * 86400;
+        $this->clock->now -= 14 * 86400;
+        $this->visit(str_repeat('3', 32), 'home');
+        $this->clock->now += 6 * 86400;
         $this->visit(str_repeat('1', 32));
         $this->clock->now += 8 * 86400;
         $this->visit(str_repeat('2', 32));

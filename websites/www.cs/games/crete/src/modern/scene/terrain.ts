@@ -28,6 +28,8 @@ export interface PieceInfo {
   /** Half its footprint and its height, for the ghosted walls. */
   half: number;
   h: number;
+  /** How far its top leans back from its foot toward -z (up the board), when it leans toward the camera. */
+  back?: number;
   /** It rises to the walls' height and sinks with them when they are low. */
   tall?: boolean;
   /** Its flames or discs at loop time `t` seconds. */
@@ -62,6 +64,15 @@ function bake(g: Group): Group {
     out.add(m);
   }
   return out;
+}
+
+/** Adds a dark rim round every baked surface of `obj` (not its live parts): the same geometry, drawn from behind
+ *  and pushed out along its normals (textures.ts `outline`). */
+export function outlined(kit: Kit, obj: Group): Group {
+  const shells: Mesh[] = [];
+  for (const c of obj.children) if (c instanceof Mesh && !c.userData.live) shells.push(new Mesh(c.geometry, kit.m.outline));
+  obj.add(...shells);
+  return obj;
 }
 
 export function piece(g: Group, info: PieceInfo, live: Object3D[] = []): Group {

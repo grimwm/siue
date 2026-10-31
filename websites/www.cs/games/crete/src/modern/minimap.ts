@@ -22,6 +22,8 @@ export interface Minimap {
   view(c: Cam, aspect: number): void;
   /** Sizes the cells to a board region `w` × `h` CSS pixels. */
   fit(w: number, h: number): void;
+  /** Shows or hides it. */
+  show(on: boolean): void;
   dispose(): void;
 }
 
@@ -35,6 +37,7 @@ export interface MinimapHost {
 export function createMinimap(parent: HTMLElement, atlas: Atlas, image: HTMLImageElement, host: MinimapHost): Minimap {
   const wrap = document.createElement('div');
   wrap.className = 'minimap';
+  wrap.hidden = true;
   const base = document.createElement('canvas');
   base.id = 'minimap';
   base.setAttribute('aria-hidden', 'true');
@@ -136,6 +139,9 @@ export function createMinimap(parent: HTMLElement, atlas: Atlas, image: HTMLImag
   over.addEventListener('pointercancel', end);
 
   return {
+    show(on) {
+      wrap.hidden = !on;
+    },
     paint(s, f, thread) {
       shown = { s, f, thread };
       size();

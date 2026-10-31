@@ -82,6 +82,8 @@ export interface Controls {
   setView?(view: View): void;
   /** The Arrows choice in the menu: the edge of the strip the move pad stands at. */
   setPad?(side: PadSide): void;
+  /** The Mini map switch, shown while the look is modern. */
+  toggleMinimap?(): void;
   toggleFullscreen(): void;
   /** Wake the speakers: any gesture does. */
   wake(): void;
@@ -116,6 +118,8 @@ export interface Ui {
   setView(view: View): void;
   /** Puts the move pad at this edge of the strip (the frame wears `pad-right` for the right). */
   setPad(side: PadSide): void;
+  /** Shows the Mini map switch's state. */
+  setMinimap(on: boolean): void;
   /** Whether the modern board shows: it fills the board's space, so the classic canvas is not fitted and nothing
    *  scrolls. */
   setModernBoard(on: boolean): void;
@@ -196,6 +200,7 @@ export function createUi(deps: UiDeps): Ui {
   let walls: WallMode = "solid";
   let view: View = "top";
   let pad: PadSide = "left";
+  let minimap = false;
   /** The strip as last drawn: a phone's, and whether its Thread panel is open. */
   let compact = false;
   let threadOpen = false;
@@ -484,6 +489,7 @@ export function createUi(deps: UiDeps): Ui {
       walls,
       view,
       pad,
+      minimap,
       log,
       help: helpLines(KEYS, TOOLS),
       onSound: () => {
@@ -503,6 +509,7 @@ export function createUi(deps: UiDeps): Ui {
       onWalls: (w) => controls?.setWalls?.(w),
       onView: (v) => controls?.setView?.(v),
       onPad: (side) => controls?.setPad?.(side),
+      onMinimap: () => controls?.toggleMinimap?.(),
       onLore: () => {
         loreShown = null;
         loreFromPickup = false;
@@ -1246,6 +1253,10 @@ export function createUi(deps: UiDeps): Ui {
       const frame = $("frame");
       const rest = frame.className.split(" ").filter((c) => c && c !== "pad-right");
       frame.className = (side === "right" ? [...rest, "pad-right"] : rest).join(" ");
+      drawLayers();
+    },
+    setMinimap: (on) => {
+      minimap = on;
       drawLayers();
     },
     setModernBoard: (on) => {

@@ -1,15 +1,19 @@
 /* The Island of Crete, modern look: the piece models, one per object and hazard sprite and one for the cow Theseus
  * sets down, each in the colour and shape of its Classic sprite. A model stands at its cell's centre on the
  * floor and faces +z (down the board) until it is turned; its static parts are merged by material, and flames
- * that loop stay apart, moved by `userData.loop(t)`. */
-import { ConeGeometry, ExtrudeGeometry, Group, LatheGeometry, Mesh, Shape, SphereGeometry, TorusGeometry, Vector2 } from 'three';
+ * that loop stay apart, moved by `userData.loop(t)`. Every object and hazard is sized to fill most of its cell, as
+ * Classic's sprites do, so it can be named at the whole-level view: about 0.8 of a cell across, never past its
+ * cell. One that reads best face-on (a relic, a key, the mirror, boots) leans back toward the camera, every one
+ * wears the figures' thin dark rim and stands on a dark disc that parts it from the pale floor. */
+import { CircleGeometry, ConeGeometry, ExtrudeGeometry, Group, LatheGeometry, Mesh, RingGeometry, Shape, SphereGeometry, TorusGeometry, Vector2 } from 'three';
 import type { Material, Object3D } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { PieceModel } from '../model-names.ts';
 import { FY } from './floor.ts';
-import { at, box, cyl, flat, piece } from './terrain.ts';
+import { at, box, cyl, flat, outlined, piece } from './terrain.ts';
 import type { PieceInfo } from './terrain.ts';
 import { flameMat } from './textures.ts';
+import { variant } from '../variants.ts';
 import type { Kit } from './textures.ts';
 
 const sph = (r: number, mat: Material, ws = 16, hs = 12) => new Mesh(new SphereGeometry(r, ws, hs), mat);
@@ -22,6 +26,45 @@ function slab(pts: readonly (readonly [number, number])[], depth: number, mat: M
   const geo = new ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 6 });
   geo.translate(0, 0, -depth / 2);
   return new Mesh(geo, mat);
+}
+
+/** `g`, built standing on the floor, at `scale` times its size and leaned back `lean` radians about its foot so its
+ *  face turns up toward the camera, its middle kept over the cell's centre; then baked (with `live` left apart) and
+ *  rimmed. `info` is its size as built. */
+function sized(kit: Kit, g: Group, info: PieceInfo, scale: number, lean = 0, live: Object3D[] = []): Group {
+  const H = info.h * scale;
+  g.position.y -= FY;
+  const tilt = new Group();
+  tilt.position.set(0, FY, (H / 2) * Math.sin(lean));
+  tilt.rotation.x = -lean;
+  tilt.scale.setScalar(scale);
+  tilt.add(g);
+  const out = new Group();
+  out.add(tilt);
+  return outlined(kit, piece(out, { ...info, half: Math.max(info.half * scale, (H / 2) * Math.sin(lean)), h: H * Math.cos(lean), back: H * Math.sin(lean) / 2 }, live));
+}
+
+/** A plate's radius and the width of its bright ring, in cells. */
+const PLATE_R = 0.45;
+const PLATE_RING = 0.035;
+/** `mesh` laid flat `y` above the floor, kept out of the bake. */
+function flatOn(mesh: Mesh, y: number): Mesh {
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = FY + y;
+  mesh.userData.live = true;
+  return mesh;
+}
+/** The dark disc under an object or a hazard that parts it from the pale floor. */
+const shade = (kit: Kit, r = 0.42): Mesh => flatOn(new Mesh(new CircleGeometry(r, 32), kit.m.itemShade), 0.006);
+
+/** An object Theseus can take: `sized`, on a dark disc; on plates (variants.ts) a little larger, with a bright ring
+ *  round the disc. */
+function item(kit: Kit, g: Group, info: PieceInfo, scale: number, lean = 0): Group {
+  const plate = variant().items === 'plate';
+  // On a plate the bright ring sits on the disc's edge, a thin line: the disc shows inside it, not round it.
+  const live = [shade(kit, plate ? PLATE_R : 0.42)];
+  if (plate) live.push(flatOn(new Mesh(new RingGeometry(PLATE_R - PLATE_RING, PLATE_R, 48), kit.m.itemRing), 0.008));
+  return sized(kit, g, info, plate ? scale * 1.12 : scale, lean, live);
 }
 
 /** The relic: a golden labrys on a dark pole. */
@@ -37,15 +80,15 @@ function relic(kit: Kit): Group {
     g.add(at(blade, 0, FY + 0.5, 0));
   }
   g.add(at(cyl(0.035, 0.035, 0.12, m.gold, 10), 0, FY + 0.5, 0));
-  return piece(g, { half: 0.22, h: 0.72 });
+  return item(kit, g, { half: 0.22, h: 0.72 }, 1.2, 0.85);
 }
 
-/** A key: bronze, standing aslant on an iron plate, with its colour set as a gem in the bow. */
+/** A key: a bronze shaft and bit, its bow and the gem in it in the key's colour, standing aslant. */
 function key(kit: Kit, color: 'red' | 'blue' | 'yellow' | 'green'): Group {
   const { m } = kit;
   const k = new Group();
-  k.add(at(new Mesh(new TorusGeometry(0.075, 0.026, 10, 20), m.bronze), 0, 0.2, 0));
-  k.add(flat(at(cyl(0.052, 0.052, 0.03, m.keyColor[color], 16), 0, 0.2, 0)));
+  k.add(at(new Mesh(new TorusGeometry(0.075, 0.03, 10, 20), m.keyColor[color]), 0, 0.2, 0));
+  k.add(flat(at(cyl(0.05, 0.05, 0.034, m.keyColor[color], 16), 0, 0.2, 0)));
   k.add(at(box(0.035, 0.24, 0.03, m.bronze), 0, 0, 0));
   k.add(at(box(0.07, 0.03, 0.03, m.bronze), 0.035, -0.08, 0));
   k.add(at(box(0.05, 0.03, 0.03, m.bronze), 0.025, -0.03, 0));
@@ -53,8 +96,7 @@ function key(kit: Kit, color: 'red' | 'blue' | 'yellow' | 'green'): Group {
   k.rotation.z = 0.25;
   const g = new Group();
   g.add(k);
-  g.add(at(cyl(0.16, 0.18, 0.03, m.iron, 20), 0, FY + 0.015, 0));
-  return piece(g, { half: 0.2, h: 0.42 });
+  return item(kit, g, { half: 0.12, h: 0.42 }, 2.05, 1.1);
 }
 
 function flippers(kit: Kit): Group {
@@ -74,7 +116,7 @@ function flippers(kit: Kit): Group {
     g.add(f);
     g.add(at(box(0.1, 0.07, 0.1, m.teal), sx * 0.1, FY + 0.06, 0.14));
   }
-  return piece(g, { half: 0.24, h: 0.2 });
+  return item(kit, g, { half: 0.24, h: 0.2 }, 1.8);
 }
 
 /** A pair of boots, `boot` with a `trim` at the top; `under` adds a sole of its own (a blade, a cup). */
@@ -99,7 +141,7 @@ function fireBoots(kit: Kit): Group {
     b.add(at(new Mesh(new ConeGeometry(0.025, 0.07, 6), m.gold), 0, 0.11, 0.05));
     return 0;
   });
-  return piece(g, { half: 0.2, h: 0.28 });
+  return item(kit, g, { half: 0.2, h: 0.28 }, 1.9, 0.7);
 }
 
 function skates(kit: Kit): Group {
@@ -109,7 +151,7 @@ function skates(kit: Kit): Group {
     for (const z of [-0.04, 0.12]) b.add(at(box(0.03, 0.03, 0.03, m.steel), 0, 0.05, z));
     return 0.05;
   });
-  return piece(g, { half: 0.2, h: 0.32 });
+  return item(kit, g, { half: 0.2, h: 0.32 }, 1.8, 0.7);
 }
 
 function suction(kit: Kit): Group {
@@ -118,7 +160,7 @@ function suction(kit: Kit): Group {
     b.add(at(cyl(0.1, 0.07, 0.035, m.bronze, 18), 0, 0.018, 0.03));
     return 0.035;
   });
-  return piece(g, { half: 0.22, h: 0.3 });
+  return item(kit, g, { half: 0.22, h: 0.3 }, 1.8, 0.7);
 }
 
 /** Medusa's mirror: a bronze hand mirror with the Gorgon's green head on its face. */
@@ -140,7 +182,7 @@ function mirror(kit: Kit): Group {
   g.add(face);
   g.add(at(cyl(0.018, 0.025, 0.2, m.bronze, 8), 0, FY + 0.1, 0));
   g.add(at(cyl(0.08, 0.09, 0.025, m.bronze), 0, FY + 0.012, 0));
-  return piece(g, { half: 0.18, h: 0.48 });
+  return item(kit, g, { half: 0.18, h: 0.48 }, 1.55, 0.9);
 }
 
 /** The honey cake: golden, iced, studded round, on a bronze plate. */
@@ -155,11 +197,11 @@ function cake(kit: Kit): Group {
     g.add(at(sph(0.022, m.cream, 8, 6), Math.cos(a) * 0.12, FY + 0.215, Math.sin(a) * 0.12));
   }
   g.add(at(sph(0.035, m.cake, 10, 8), 0, FY + 0.22, 0));
-  return piece(g, { half: 0.24, h: 0.26 });
+  return item(kit, g, { half: 0.24, h: 0.26 }, 1.4, 0.35);
 }
 
 /** Daedalus's wooden cow: a white, brown-patched cow on a wheeled cart, its head to +x. */
-function cow(kit: Kit, scale: number): Group {
+function cow(kit: Kit, scale: number, lean = 0, taken = false): Group {
   const { m } = kit;
   const c = new Group();
   c.add(at(box(0.56, 0.05, 0.3, m.wood), 0, 0.1, 0));
@@ -184,11 +226,10 @@ function cow(kit: Kit, scale: number): Group {
   tail.rotation.z = -0.4;
   c.add(tail);
   c.position.y = FY;
-  c.scale.setScalar(scale);
   c.rotation.y = 0.5;
   const g = new Group();
   g.add(c);
-  return piece(g, { half: 0.32 * scale, h: 0.56 * scale });
+  return (taken ? item : sized)(kit, g, { half: 0.32, h: 0.56 }, scale, lean);
 }
 
 /** A story page: a rolled scroll tied with a red band. */
@@ -208,7 +249,7 @@ function page(kit: Kit): Group {
   band.rotation.z = Math.PI / 2;
   g.add(band);
   g.rotation.y = 0.3;
-  return piece(g, { half: 0.2, h: 0.14 });
+  return item(kit, g, { half: 0.2, h: 0.14 }, 1.9, 0.5);
 }
 
 function block(kit: Kit): Group {
@@ -231,7 +272,7 @@ function ball(kit: Kit): Group {
     g.add(at(sph(0.022, m.gold, 6, 5), Math.cos(a) * 0.222, y, Math.sin(a) * 0.222));
     if (i % 2 === 0) g.add(at(sph(0.02, m.gold, 6, 5), 0, y + Math.cos(a + 0.3) * 0.224, Math.sin(a + 0.3) * 0.224));
   }
-  return piece(g, { half: 0.24, h: 0.46 });
+  return sized(kit, g, { half: 0.24, h: 0.46 }, 1.45, 0, [shade(kit)]);
 }
 
 /** The Harpy: a brown bird with a woman's pale face, wings spread wide, hanging above the floor. */
@@ -258,14 +299,14 @@ function glider(kit: Kit): Group {
   const tail = at(new Mesh(new ConeGeometry(0.06, 0.16, 6), m.feather), 0, y - 0.1, -0.12);
   tail.rotation.x = -2.4;
   g.add(tail);
-  return piece(g, { half: 0.36, h: 0.66 });
+  return sized(kit, g, { half: 0.36, h: 0.66 }, 1.05, 0, [shade(kit)]);
 }
 
+const FIREBALL_SCALE = 1.35;
 /** Talos's fire: a burning ball of flame on the floor, flickering. */
 function fireball(kit: Kit): Group {
   const g = new Group();
   g.add(at(sph(0.13, kit.m.bootTrim, 12, 8), 0, FY + 0.14, 0));
-  const out = piece(g, { half: 0.26, h: 0.5 });
   const flames: Mesh[] = [];
   const core = at(sph(0.16, flameMat(0xd04010, 0.5), 16, 12), 0, FY + 0.17, 0);
   flames.push(core);
@@ -276,7 +317,14 @@ function fireball(kit: Kit): Group {
     f.rotation.x = Math.sin(a) * 0.3;
     flames.push(f);
   }
-  out.add(...flames);
+  // The flames stay out of the bake, so they can flicker, and out of the rim.
+  const fire = new Group();
+  for (const f of flames) f.position.y -= FY;
+  fire.add(...flames);
+  fire.position.y = FY;
+  fire.scale.setScalar(FIREBALL_SCALE);
+  fire.userData.live = true;
+  const out = sized(kit, g, { half: 0.26, h: 0.5 }, FIREBALL_SCALE, 0, [fire, shade(kit)]);
   (out.userData as PieceInfo).loop = t => flames.forEach((f, i) => f.scale.set(1, 1 + 0.15 * Math.sin(t * (7 + i) + i * 1.7), 1));
   return out;
 }
@@ -293,8 +341,8 @@ export const PIECE_MODELS: Record<PieceModel, (kit: Kit) => Object3D> = {
   suction,
   mirror,
   cake,
-  cow: k => cow(k, 0.8),
-  'cow-standing': k => cow(k, 1.05),
+  cow: k => cow(k, 1.1, 0.35, true),
+  'cow-standing': k => cow(k, 1.1),
   page,
   block,
   ball,

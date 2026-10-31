@@ -1,11 +1,12 @@
 /* The Island of Crete, modern look: the procedural textures and the shared materials, painted once on canvases
  * from seeded noise, so every visit looks the same. One kit serves every level a board shows. */
 import {
-  AdditiveBlending, BackSide, CanvasTexture, ClampToEdgeWrapping, Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial, PMREMGenerator,
+  AdditiveBlending, BackSide, CanvasTexture, GreaterDepth, NotEqualStencilFunc, ClampToEdgeWrapping, Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial, PMREMGenerator,
   RepeatWrapping, SRGBColorSpace, Vector2, Vector3,
 } from 'three';
 import type { Material, Texture, WebGLRenderer } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { variant } from '../variants.ts';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -403,7 +404,7 @@ export function createKit(renderer: WebGLRenderer) {
   };
   const m = {
     under: std(0x0c0a08, { roughness: 1 }),
-    mortar: std(0x6e5c44, { roughness: 1 }),
+    mortar: std(variant().caps ? 0x1e1812 : 0x6e5c44, { roughness: 1 }),
     ao: new MeshBasicMaterial({ map: t.ao, transparent: true, depthWrite: false }),
     edge: std(0x0c0d10, { roughness: 1, side: DoubleSide }),
     flags: t.flags.map(map => std(0xffffff, { map, roughness: 0.88 })),
@@ -419,21 +420,21 @@ export function createKit(renderer: WebGLRenderer) {
     }),
     basin: std(0x0e1e20, { roughness: 0.9 }),
     side: std(0xb4b8c0, { map: t.brick, roughness: 0.93 }),
-    top: std(0xa4aab2, { map: t.cap, roughness: 0.95 }),
+    top: std(variant().caps ? 0xf2efe8 : 0xa4aab2, { map: t.cap, roughness: 0.95 }),
     wood: std(0xffffff, { map: t.wood, roughness: 0.75 }),
     darkWood: std(0x8a6a4a, { map: t.wood, roughness: 0.8 }),
     iron: metal(0x2e2a26, 0.6),
-    bronze: metal(0xb47a3a, 0.4),
-    gold: metal(0xd8a640, 0.3, { emissive: 0x2a1600 }),
+    bronze: metal(0xc08a44, 0.4, { emissive: 0x2a1808 }),
+    gold: metal(0xe8b440, 0.3, { emissive: 0x5a3600 }),
     stone: std(0x8a7c6a),
     paleStone: std(0xcab89a, { roughness: 0.85 }),
     dark: std(0x0a0807),
     glow: new MeshBasicMaterial({ color: 0xff9a40 }),
     keyColor: {
-      red: std(0xa8281c, { roughness: 0.5, emissive: 0x200402 }),
-      blue: std(0x2a5aa8, { roughness: 0.5, emissive: 0x040a20 }),
-      yellow: metal(0xd8a640, 0.3, { emissive: 0x2a1600 }),
-      green: std(0x3f7a52, { roughness: 0.45, metalness: 0.3, envMap: env, envMapIntensity: 0.3 }),
+      red: std(0xe0301e, { roughness: 0.45, emissive: 0x5a0c04 }),
+      blue: std(0x2f6ee0, { roughness: 0.45, emissive: 0x0c1e5a }),
+      yellow: std(0xf2c838, { roughness: 0.45, emissive: 0x5a4400 }),
+      green: std(0x2fb85c, { roughness: 0.45, emissive: 0x0c4a1e }),
     },
     brownButton: std(0x6a3e1e, { roughness: 0.55 }),
     redButton: std(0xb02a1c, { roughness: 0.45, emissive: 0x2a0402 }),
@@ -459,6 +460,17 @@ export function createKit(renderer: WebGLRenderer) {
     heroRing: new MeshBasicMaterial({ color: 0x139a44, depthWrite: false }),
     /** The ring's dark edge, so it shows on the palest floor. */
     heroRingEdge: new MeshBasicMaterial({ color: 0x06140a, transparent: true, opacity: 0.8, depthWrite: false }),
+    /** The dark disc on the floor under every object Theseus can take, so it stands out from the pale sand. */
+    itemShade: new MeshBasicMaterial({ color: 0x0a0604, transparent: true, opacity: 0.9, depthWrite: false }),
+    /** The bright ring round an object's disc, on plates (variants.ts). */
+    itemRing: new MeshBasicMaterial({ color: 0xfff0b8, depthWrite: false }),
+    /** The beacon's column of light over Theseus, drawn over the walls (variants.ts `beacon`). */
+    heroBeam: new MeshBasicMaterial({ color: 0x36d46c, transparent: true, opacity: 0.3, blending: AdditiveBlending, depthTest: false, depthWrite: false, side: DoubleSide }),
+    /** Theseus's outline where a wall stands in front of him (variants.ts `beacon`): drawn only behind something. */
+    heroXray: new MeshBasicMaterial({
+      color: 0x5cf08a, transparent: true, opacity: 0.6, depthFunc: GreaterDepth, depthWrite: false,
+      stencilWrite: true, stencilRef: 1, stencilFunc: NotEqualStencilFunc,
+    }),
     /** The dark rim round a figure (figures.ts `outlined`). */
     outline: outlineMat(),
     fur: std(0x5a3620, { roughness: 0.9, emissive: 0x120804 }),
@@ -470,18 +482,18 @@ export function createKit(renderer: WebGLRenderer) {
     eye: new MeshBasicMaterial({ color: 0xff4a1a }),
     statue: std(0x8e8c88, { roughness: 0.9 }),
     statueDark: std(0x6a6864, { roughness: 0.92 }),
-    parchment: std(0xe2d0a2),
-    teal: std(0x2b9a92, { roughness: 0.4 }),
-    boot: std(0x8e2a14, { roughness: 0.6 }),
+    parchment: std(0xf0deb0, { emissive: 0x2e2818 }),
+    teal: std(0x30b8ac, { roughness: 0.4, emissive: 0x0a3a36 }),
+    boot: std(0xc0361a, { roughness: 0.55, emissive: 0x3a0c04 }),
     bootTrim: std(0xe08a20, { emissive: 0x5a2200 }),
-    skate: std(0xa8b8c8, { roughness: 0.5 }),
-    suction: std(0x2a6a4a, { roughness: 0.55 }),
-    mirror: metal(0xe6e6e6, 0.08, { envMapIntensity: 1 }),
-    gorgon: std(0x2f7a4a, { roughness: 0.5 }),
-    cake: std(0xe0a040, { roughness: 0.6 }),
-    hide: std(0xeee6d8, { roughness: 0.7 }),
+    skate: std(0xc8d8e8, { roughness: 0.45, emissive: 0x28323c }),
+    suction: std(0x34945e, { roughness: 0.5, emissive: 0x0c2e1a }),
+    mirror: metal(0xe6e6e6, 0.08, { envMapIntensity: 1, emissive: 0x404448 }),
+    gorgon: std(0x34a85a, { roughness: 0.5, emissive: 0x0c3018 }),
+    cake: std(0xf0b048, { roughness: 0.55, emissive: 0x402408 }),
+    hide: std(0xf4eee2, { roughness: 0.65, emissive: 0x2c2a26 }),
     patch: std(0x5a3220, { roughness: 0.8 }),
-    feather: std(0x6a4426, { roughness: 0.85 }),
+    feather: std(0x8a5a32, { roughness: 0.8, emissive: 0x1e1008 }),
     halo: t.halo,
     env,
   };

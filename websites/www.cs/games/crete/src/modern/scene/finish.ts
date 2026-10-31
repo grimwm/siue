@@ -41,7 +41,7 @@ export function createFinish(renderer: WebGLRenderer): Finish {
   quad.frustumCulled = false;
   const quadScene = new Scene();
   quadScene.add(quad);
-  const hdr = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4 });
+  const hdr = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4, stencilBuffer: true });
   const ldr = new WebGLRenderTarget(1, 1);
 
   return {

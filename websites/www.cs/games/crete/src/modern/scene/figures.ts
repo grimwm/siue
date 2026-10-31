@@ -102,61 +102,95 @@ function theseus(kit: Kit): Group {
   return hero;
 }
 
-/** The Minotaur with his labrys: fur, a red kilt and ivory horns, or all grey stone while the mirror holds him. */
+/** How far the Minotaur's body leans in over his hips toward whoever he faces, in radians. */
+const MINOTAUR_LEAN = 0.24;
+
+/** The Minotaur with his labrys: fur, a red kilt and ivory horns, or all grey stone while the mirror holds him.
+ *  He stands tall on long legs, broad in the chest and shoulders over a narrow waist, leaning in with his head
+ *  low and thrust forward under wide horns, so he fills a doorway's height and a cell's width and reads from
+ *  above as shoulders and horns. Built 1.25 tall from hoof to horn tip, stood at 1.3 times that. */
 function minotaur(kit: Kit, stone: boolean): Group {
   const { m } = kit;
   const s = (mat: Material) => (stone ? m.statue : mat);
   const fur = s(m.fur), furDark = stone ? m.statueDark : m.furDark;
   const g = new Group();
+  // Legs: long, spread, one hoof a little ahead of the other.
   for (const sx of [-1, 1]) {
-    g.add(at(cyl(0.07, 0.06, 0.3, fur), sx * 0.1, 0.17, 0));
-    g.add(at(cyl(0.065, 0.07, 0.05, s(m.hoof)), sx * 0.1, 0.025, 0));
+    const dz = sx * -0.05;
+    g.add(at(cyl(0.06, 0.068, 0.05, s(m.hoof)), sx * 0.13, 0.025, dz + 0.01));
+    const shin = at(cyl(0.05, 0.06, 0.26, fur), sx * 0.125, 0.18, dz);
+    shin.rotation.z = sx * 0.04;
+    g.add(shin);
+    const thigh = at(cyl(0.09, 0.062, 0.26, fur), sx * 0.11, 0.42, dz * 0.6);
+    thigh.rotation.z = -sx * 0.1;
+    g.add(thigh);
   }
-  g.add(at(cyl(0.2, 0.26, 0.2, s(m.kilt)), 0, 0.38, 0));
-  const belt = at(new Mesh(new TorusGeometry(0.2, 0.02, 8, 24), s(m.gold)), 0, 0.47, 0);
+  g.add(at(cyl(0.15, 0.2, 0.14, s(m.kilt)), 0, 0.54, 0));
+  const belt = at(new Mesh(new TorusGeometry(0.155, 0.02, 8, 24), s(m.gold)), 0, 0.605, 0);
   belt.rotation.x = Math.PI / 2;
   g.add(belt);
-  const torso = at(sph(0.26, fur), 0, 0.66, 0);
-  torso.scale.set(1.05, 1, 0.75);
-  g.add(torso);
+  // Everything above the belt leans in over the hips.
+  const up = at(new Group(), 0, 0.6, 0);
+  up.rotation.x = MINOTAUR_LEAN;
+  g.add(up);
+  up.add(at(cyl(0.21, 0.15, 0.2, fur), 0, 0.09, 0));
+  const chest = at(sph(0.25, fur), 0, 0.29, 0.01);
+  chest.scale.set(1.42, 0.85, 0.92);
+  up.add(chest);
+  const hump = at(sph(0.17, furDark), 0, 0.42, -0.06);
+  hump.scale.set(1.5, 0.66, 1);
+  up.add(hump);
   for (const sx of [-1, 1]) {
-    g.add(at(sph(0.11, fur), sx * 0.26, 0.78, 0));
-    const arm = at(cyl(0.07, 0.055, 0.36, fur), sx * 0.31, 0.57, 0.03);
-    arm.rotation.z = sx * 0.2;
-    g.add(arm);
+    up.add(at(sph(0.12, fur), sx * 0.29, 0.39, 0));
+    const upper = at(cyl(0.088, 0.072, 0.26, fur), sx * 0.325, 0.24, 0.01);
+    upper.rotation.z = sx * 0.1;
+    up.add(upper);
+    const fore = at(cyl(0.074, 0.06, 0.24, fur), sx * 0.335, 0.04, 0.07);
+    fore.rotation.x = -0.45;
+    up.add(fore);
+    up.add(at(sph(0.072, furDark), sx * 0.33, -0.08, 0.13));
+    up.add(at(cyl(0.076, 0.076, 0.035, s(m.gold)), sx * 0.33, 0.14, 0.03));
   }
-  const head = at(sph(0.13, furDark), 0, 0.95, 0.06);
-  head.scale.set(1, 0.95, 1.15);
-  g.add(head);
-  const snout = at(sph(0.085, s(m.snout)), 0, 0.9, 0.19);
-  snout.scale.set(1.1, 0.8, 0.9);
-  g.add(snout);
-  g.add(at(new Mesh(new TorusGeometry(0.035, 0.008, 6, 16), s(m.gold)), 0, 0.85, 0.26));
+  // The head: low and forward between the shoulders, bowed, the horns sweeping out and up past the shoulders.
+  const head = at(new Group(), 0, 0.45, 0.13);
+  head.rotation.x = 0.3;
+  up.add(head);
+  const skull = sph(0.125, furDark);
+  skull.scale.set(1.05, 0.95, 1.15);
+  head.add(skull);
+  const snout = at(sph(0.085, s(m.snout)), 0, -0.05, 0.12);
+  snout.scale.set(1.1, 0.8, 0.95);
+  head.add(snout);
+  head.add(at(new Mesh(new TorusGeometry(0.035, 0.008, 6, 16), s(m.gold)), 0, -0.1, 0.19));
   for (const sx of [-1, 1]) {
-    g.add(at(sph(0.018, stone ? m.statueDark : m.eye, 8, 6), sx * 0.065, 0.99, 0.17));
-    const curve = new CatmullRomCurve3([
-      new Vector3(sx * 0.1, 1.0, 0.04), new Vector3(sx * 0.24, 1.03, 0.02), new Vector3(sx * 0.33, 1.12, 0.07), new Vector3(sx * 0.33, 1.22, 0.13),
-    ]);
-    g.add(new Mesh(new TubeGeometry(curve, 16, 0.028, 8), s(m.ivory)));
-    g.add(at(new Mesh(new ConeGeometry(0.028, 0.07, 8), s(m.ivory)), sx * 0.33, 1.25, 0.14));
-    const ear = at(sph(0.04, furDark), sx * 0.14, 0.97, 0.02);
+    head.add(at(sph(0.02, stone ? m.statueDark : m.eye, 8, 6), sx * 0.065, 0.03, 0.115));
+    const ear = at(sph(0.04, furDark), sx * 0.14, 0.02, -0.03);
     ear.scale.set(1.3, 0.6, 0.8);
-    g.add(ear);
+    head.add(ear);
+    const curve = new CatmullRomCurve3([
+      new Vector3(sx * 0.08, 0.06, 0), new Vector3(sx * 0.24, 0.07, -0.03), new Vector3(sx * 0.37, 0.15, 0.01), new Vector3(sx * 0.42, 0.3, 0.1),
+    ]);
+    head.add(new Mesh(new TubeGeometry(curve, 20, 0.036, 8), s(m.ivory)));
+    const tip = at(new Mesh(new ConeGeometry(0.036, 0.11, 8), s(m.ivory)), sx * 0.425, 0.36, 0.125);
+    tip.rotation.x = 0.35;
+    tip.rotation.z = -sx * 0.15;
+    head.add(tip);
   }
+  // The labrys, gripped in his right fist and held up across him.
   const ax = new Group();
-  ax.add(cyl(0.018, 0.018, 0.85, s(m.iron), 8));
+  ax.add(cyl(0.02, 0.02, 1.0, s(m.iron), 8));
   for (const sx of [-1, 1]) {
-    const blade = new Mesh(new CylinderGeometry(0.17, 0.17, 0.02, 24, 1, false, 0, Math.PI), s(m.steel));
+    const blade = new Mesh(new CylinderGeometry(0.17, 0.17, 0.022, 24, 1, false, 0, Math.PI), s(m.steel));
     blade.rotation.z = Math.PI / 2;
     blade.rotation.y = sx > 0 ? 0 : Math.PI;
-    blade.position.set(0, 0.3, 0);
+    blade.position.set(0, 0.36, 0);
     blade.scale.set(1, 1, 0.8);
     ax.add(blade);
   }
-  ax.rotation.y = Math.PI / 2;
-  ax.position.set(0.4, 0.62, 0.08);
-  g.add(ax);
-  return stand(kit, g, { half: 0.36, h: 1.6 });
+  ax.rotation.set(-0.12, Math.PI / 2, 0);
+  ax.position.set(0.33, 0.1, 0.13);
+  up.add(ax);
+  return stand(kit, g, { half: 0.42, h: 1.6 });
 }
 
 export const FIGURE_MODELS: Record<FigureModel, (kit: Kit) => Object3D> = {

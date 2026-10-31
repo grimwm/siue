@@ -172,7 +172,7 @@ final class SignIn
         if (!is_string($next) || strlen($next) > 300) {
             return '';
         }
-        $pages = $realm === 'studio' ? 'index|studio|piece' : 'index|keys|studios';
+        $pages = $realm === 'studio' ? 'index|studio|piece' : 'index|keys|studios|stats';
         $query = '[A-Za-z0-9_.~%=&,+\-\[\]:]';
         return preg_match("/^(?:$pages)\\.php(?:\\?$query*)?$/D", $next) === 1 ? $next : '';
     }

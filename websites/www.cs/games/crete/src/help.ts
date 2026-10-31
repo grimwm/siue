@@ -72,9 +72,9 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
       { strong: k("menu") }, " opens this menu and closes whatever is open.",
     ],
     [
-      { strong: "Look" }, " in this menu picks the modern board or the classic tiles; ", { strong: "Walls" },
-      " (modern only) draws the walls in front of you solid, ghosted or low. ", { strong: `Classic or Modern (${k("look")})` },
-      " under the board swaps between them in one press. On the modern board in Angled, two fingers twist to turn it and slide up or down together to tilt it toward straight down; two fingers drag to pan and pinch to zoom. With a mouse, drag with the left button to turn (across) and tilt (up and down), drag with the right or middle button to pan, and use the wheel to zoom. When you let go the view squares up to the nearest quarter turn. The compass in the corner points north; a tap on it, a double tap or a double click brings back the starting view. The arrows and the pad move him the way the screen shows. With ", { strong: "Mini Map" }, " on in this menu, the whole level shows in a corner of the modern board, and a tap on it looks there.",
+      "You pick the modern board or the classic tiles when you start a new game; the ", { strong: `Map (${k("look")})` },
+      " button under the board swaps between them in one press, its picture showing the squares round Theseus in the other look, and Theseus plays on in either. ",
+      { strong: "Walls" }, " (modern only) draws the walls in front of you solid, ghosted or low. On the modern board in Angled, two fingers twist to turn it and slide up or down together to tilt it toward straight down; two fingers drag to pan and pinch to zoom. With a mouse, drag with the left button to turn (across) and tilt (up and down), drag with the right or middle button to pan, and use the wheel to zoom. When you let go the view squares up to the nearest quarter turn. The compass in the corner points north; a tap on it, a double tap or a double click brings back the starting view. The arrows and the pad move him the way the screen shows. With ", { strong: "Mini Map" }, " on in this menu, the whole level shows in a corner of the modern board, and a tap on it looks there.",
     ],
     [
       "Every card works from the keyboard. ", { strong: `${k("up")} ${k("down")}` },

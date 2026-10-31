@@ -742,23 +742,6 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   .check-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }
 
-/* Map and Peek (src/modern/variants.ts) at the board's top-left, and the inset view of the whole level at its
-   bottom-right, over the compass. */
-.modern-overlay .cam-extra { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; }
-.modern-overlay .cam-extra .cbtn { width: auto; padding: 0 12px; }
-.modern-overlay .cam-extra .cbtn[aria-pressed="true"] { border-color: var(--accent); }
-.modern-overlay .inset {
-  position: absolute;
-  right: 10px;
-  bottom: 62px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
-  pointer-events: auto;
-  cursor: pointer;
-}
-.modern-overlay .inset[hidden] { display: none; }
-
 /* The compass (src/modern/controls.ts) at the board's bottom-right: its needle, red at the north end, turns with the
    view; a tap resets the view. */
 .modern-overlay .compass {
@@ -782,3 +765,27 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 @media (prefers-reduced-motion: reduce) {
   .modern-overlay .compass svg { transition: none; }
 }
+
+/* The Map button (src/ui/strip.tsx): its face is a live crop of the level round Theseus in the look it swaps to
+   (main.ts paints it), with a small badge naming the control in the corner farthest from Theseus and the Minotaur. */
+.strip .map-btn { position: relative; overflow: hidden; padding: 0; }
+@media (min-width: 700px) {
+  .strip .map-btn { min-width: 72px; }
+}
+.strip .map-btn .map-face { position: absolute; inset: 0; display: block; }
+.strip .map-btn .map-thumb { display: block; width: 100%; height: 100%; object-fit: cover; }
+.strip .map-btn .map-badge {
+  position: absolute;
+  left: 4px;
+  bottom: 3px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(13, 17, 23, 0.82);
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.strip .map-btn:has(.map-thumb[data-corner^="top"]) .map-badge { bottom: auto; top: 3px; }
+.strip .map-btn:has(.map-thumb[data-corner$="right"]) .map-badge { left: auto; right: 4px; }
+.strip .map-btn:hover, .strip .map-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }

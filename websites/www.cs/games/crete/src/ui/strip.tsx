@@ -1,5 +1,5 @@
 // The Island of Crete: the control strip. The move pad (a connected cross round an inert centre), Wait, Undo and Restart, Ariadne's
-// thread (Hint, Route, Auto), the three tools with their counts and the look swap, each with a key tab printed from the
+// thread (Hint, Route, Auto), the three tools with their counts and the Map button, each with a key tab printed from the
 // key table (the tools' from their own definition). On a phone the thread is one Thread button whose panel holds the
 // three. src/ui.ts builds the rows and decides which strip a screen gets; this draws them and reports presses.
 import { render } from 'preact';
@@ -30,8 +30,10 @@ export interface StripProps {
   route: boolean;
   /** The try is over: moves and tools wait for an Undo or a Restart. */
   over: boolean;
-  /** The look the board is drawn in; the swap button names the other one. */
+  /** The look the board is drawn in; the Map button swaps to the other one. */
   look: Look;
+  /** The Map button's face: a live picture of the level round Theseus in the other look (main.ts paints it). */
+  thumb?: HTMLCanvasElement;
   /** A phone's strip: Hint, Route and Auto sit in the Thread button's panel. */
   compact: boolean;
   /** The Thread panel is open (only on a compact strip). */
@@ -46,7 +48,7 @@ export interface StripProps {
   onRoute: () => void;
   onAuto: () => void;
   onTool: (kind: Tool) => void;
-  /** The swap button asks for this look. */
+  /** The Map button asks for this look. */
   onLook: (look: Look) => void;
   /** Opens the menu: a compact strip carries its own Menu button, in thumb reach. */
   onMenu: () => void;
@@ -120,9 +122,11 @@ export function Strip(p: StripProps) {
         </div>
         <div class={p.compact ? 'view with-menu' : 'view'} role="group" aria-label={p.compact ? 'Menu and look' : 'Look'}>
           {p.compact && <Button id="btn-menu-strip" class="strip-menu" onClick={p.onMenu}>Menu</Button>}
-          <Button id="btn-look" title={p.look === 'modern' ? 'Show the classic tiles' : 'Show the modern board'}
+          <Button id="btn-look" class="map-btn" label={p.look === 'modern' ? 'Switch to Classic' : 'Switch to Modern'}
+            title={p.look === 'modern' ? 'Map: the classic tiles, seen from above' : '3D: the modern board'}
             onClick={() => p.onLook(p.look === 'modern' ? 'classic' : 'modern')}>
-            {p.look === 'modern' ? 'Classic' : 'Modern'}<Tab action="look" />
+            <span class="map-face" aria-hidden="true" ref={el => { if (el && p.thumb && el.firstChild !== p.thumb) { while (el.firstChild) el.removeChild(el.firstChild); el.appendChild(p.thumb); } }} />
+            <span class="map-badge" aria-hidden="true">{p.look === 'modern' ? 'Map' : '3D'}</span><Tab action="look" />
           </Button>
         </div>
       </div>

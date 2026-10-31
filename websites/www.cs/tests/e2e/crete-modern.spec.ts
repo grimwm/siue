@@ -1,7 +1,7 @@
 // The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns and tilts under a drag or two fingers and squares up after, zooms
 // under the wheel and its buttons, moves Theseus the way the screen shows, ignores the camera while a card is up,
 // keeps the Walls choice, opens on the whole level, follows the mini map (a setting, off by default) once zoomed, floats a marker over each
-// figure and item, and hands the board back to the classic look and takes it again,
+// figure and item, and hands the board back to the classic look and takes it again with the Map button,
 // from the menu or the strip's look button and its B key.
 // A block pushed into water floats there, and undo takes it out. Without WebGL the classic board shows.
 import { test, expect } from '@playwright/test';
@@ -297,15 +297,12 @@ test('a block pushed into water splashes in and floats there; undo takes it out'
 
 test('a block sunk while the modern look is hidden floats at once when it returns', async ({ page }) => {
   const errors = await openHall(page, POOL, 'no-preference');
-  await page.keyboard.press('q');
-  await page.locator('#look-classic').click();
-  await page.keyboard.press('q');
+  await page.locator('#btn-look').click();
   await page.keyboard.press('ArrowRight');
   await expect.poll(async () => (await player(page)).c, 'Theseus pushes the block in').toBe(3);
   // No hook shows the classic board's turn while the modern one is hidden, so the turn's length is waited out.
   await page.waitForTimeout(1500);
-  await page.keyboard.press('q');
-  await page.locator('#look-modern').click();
+  await page.locator('#btn-look').click();
   await expect.poll(async () => (await modern(page))!.active).toBe(true);
   await expect.poll(() => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.floating())).toEqual([POOL_CELL]);
   expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.splashing()), 'no late splash').toEqual([]);
@@ -560,33 +557,49 @@ test('Top-down tips the camera to 75° and squares it to the board; Angled tips 
   expect(errors).toEqual([]);
 });
 
-test('switching to Classic shows the classic board, and back', async ({ page }) => {
+test('the menu has no Look setting; the Map button shows the classic board, and back', async ({ page }) => {
   const errors = await openHall(page);
   await page.keyboard.press('q');
-  await page.locator('#look-classic').click();
+  await expect(page.locator('#menu-veil')).toBeVisible();
+  await expect(page.locator('#look-classic')).toHaveCount(0);
+  await page.keyboard.press('q');
+  await page.locator('#btn-look').click();
   await expect(page.locator('#stage')).toBeVisible();
   await expect(page.locator('#stage3d')).toBeHidden();
   await expect.poll(() => classicPainted(page), 'the classic board paints').toBe(true);
   expect((await modern(page))!.active).toBe(false);
-  await page.locator('#look-modern').click();
+  await page.locator('#btn-look').click();
   await expect(page.locator('#stage3d')).toBeVisible();
   await expect(page.locator('#stage')).toBeHidden();
   await expect.poll(async () => (await modern(page))!.active).toBe(true);
   expect(errors).toEqual([]);
 });
 
-test('the strip\'s look button swaps to Classic mid-level, keeps the moves and the choice, and B swaps back', async ({ page }) => {
+test('the Map button swaps to Classic mid-level and back, keeps the moves and the choice, wears the other look, and B swaps too', async ({ page }) => {
   const errors = await openHall(page);
   await page.keyboard.press('ArrowRight');
   await expect.poll(async () => (await player(page)).c, 'Theseus moves').toBe(11);
   const moves = await page.locator('#hud-moves').textContent();
-  await expect(page.locator('#btn-look')).toHaveText(/^Classic/);
+  await expect(page.locator('#btn-look')).toHaveText(/^Map/);
+  await expect(page.locator('#btn-look')).toHaveAttribute('aria-label', 'Switch to Classic');
+  /** Whether the button's face has been painted (any opaque, non-background pixel). */
+  const facePainted = () => page.evaluate(() => {
+    const c = document.querySelector('#btn-look canvas') as HTMLCanvasElement | null;
+    if (!c) return false;
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+    let lit = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i]! + d[i + 1]! + d[i + 2]! > 120) lit++;
+    return lit > d.length / 40;
+  });
+  await expect.poll(facePainted, 'the Map face shows the classic tiles').toBe(true);
   await page.locator('#btn-look').click();
   await expect(page.locator('#stage')).toBeVisible();
   await expect(page.locator('#stage3d')).toBeHidden();
   await expect.poll(() => classicPainted(page), 'the classic board paints').toBe(true);
-  await expect(page.locator('#btn-look')).toHaveText(/^Modern/);
+  await expect(page.locator('#btn-look')).toHaveText(/^3D/);
+  await expect(page.locator('#btn-look')).toHaveAttribute('aria-label', 'Switch to Modern');
   await expect(page.locator('#hud-moves')).toHaveText(moves!);
+  await expect.poll(facePainted, 'the 3D face shows the modern board').toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('crete-look'))).toBe('classic');
   // The arrows still move Theseus after the press.
   await page.keyboard.press('ArrowLeft');
@@ -595,7 +608,7 @@ test('the strip\'s look button swaps to Classic mid-level, keeps the moves and t
   await expect(page.locator('#stage3d')).toBeVisible();
   await expect(page.locator('#stage')).toBeHidden();
   await expect.poll(async () => (await modern(page))!.active).toBe(true);
-  await expect(page.locator('#btn-look')).toHaveText(/^Classic/);
+  await expect(page.locator('#btn-look')).toHaveText(/^Map/);
   expect(await page.evaluate(() => localStorage.getItem('crete-look'))).toBe('modern');
   await page.keyboard.press('b');
   await page.reload();
@@ -631,13 +644,12 @@ test('a lost WebGL context warns only when the player chose the modern look', as
     gl!.getExtension('WEBGL_lose_context')!.loseContext();
   });
   const errors = await openHall(page);
-  await page.keyboard.press('q');
-  await page.locator('#look-classic').click();
+  await page.locator('#btn-look').click();
   await expect(page.locator('#toast')).not.toHaveClass(/\bshow\b/, { timeout: 10_000 }); // the "Classic look." toast has gone
   await lose();
   await page.waitForTimeout(1000);
   await expect(page.locator('#toast')).not.toContainText('stopped working');
-  await page.locator('#look-modern').click();
+  await page.locator('#btn-look').click();
   await expect(page.locator('#toast')).toContainText('stopped working');
   expect(errors).toEqual([]);
 });

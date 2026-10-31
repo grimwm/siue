@@ -1,5 +1,5 @@
 // The Island of Crete: the two looks as pictures side by side, each above its name, the one drawn now outlined in
-// gold. The new-game card shows them with a line under each; the menu's Board section shows them bare.
+// gold. The new-game card shows them, with a line under each.
 import { Button } from '../../../_kit/ui/button.tsx';
 import type { Look } from '../settings.ts';
 

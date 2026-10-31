@@ -479,7 +479,7 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   toggled = 0;
   key('q');
   const at = () => document.activeElement?.id;
-  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'look-modern', 'look-classic', 'view-angled', 'view-top', 'walls-solid', 'walls-ghosted', 'walls-low', 'minimap-switch', 'pad-left', 'pad-right', 'menu-lore', 'quit'];
+  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'view-angled', 'view-top', 'walls-solid', 'walls-ghosted', 'walls-low', 'minimap-switch', 'pad-left', 'pad-right', 'menu-lore', 'quit'];
   const first = order.indexOf(at() ?? '');
   assert.ok(first >= 0, `focus is on a menu button, not ${at()}`);
   for (let i = 0; i < 8; i++) key('ArrowUp');
@@ -493,10 +493,10 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   key('s');
   assert.equal(at(), 'fullscreen');
   key('j');
-  assert.equal(at(), 'look-modern');
-  for (let i = 0; i < 10; i++) key('j');
+  assert.equal(at(), 'view-angled');
+  for (let i = 0; i < 8; i++) key('j');
   assert.equal(at(), 'menu-lore');
-  for (let i = 0; i < 11; i++) key('k');
+  for (let i = 0; i < 9; i++) key('k');
   assert.equal(at(), 'fullscreen');
   key('Enter');
   assert.equal(toggled, 1);
@@ -519,23 +519,23 @@ test('Music sits beside Sound in the menu, says whether it is on, and asks for i
   assert.equal(music().getAttribute('aria-checked'), 'true');
 });
 
-test('Look and Walls sit in the menu; Walls show only for the modern look', () => {
+test('Walls sit in the menu, shown only for the modern look; the menu has no Look setting', () => {
   reset();
   flow.setView('angled'); // Walls shows only while Angled
   looks.length = 0;
   flow.setLook('modern', 'low');
   key('q');
   const pressed = (id: string) => byId(rootOf('menu'), id).getAttribute('aria-pressed');
-  assert.deepEqual(['look-modern', 'walls-solid', 'walls-low'].map(pressed), ['true', 'false', 'true']);
-  click(byId(rootOf('menu'), 'look-classic'));
+  assert.deepEqual(['walls-solid', 'walls-low'].map(pressed), ['false', 'true']);
+  assert.equal(maybeById(rootOf('menu'), 'look-classic'), undefined);
   click(byId(rootOf('menu'), 'walls-ghosted'));
-  assert.deepEqual(looks, ['classic', 'ghosted']);
+  assert.deepEqual(looks, ['ghosted']);
   flow.setLook('classic', 'low');
   assert.equal(maybeById(rootOf('menu'), 'walls-low'), undefined);
   flow.setLook('modern', 'solid');
 });
 
-test('the strip\'s look button names the other look and asks for it; B does the same, but not under a card', () => {
+test('the strip\'s Map button wears Map in Modern and 3D in Classic and asks for the other look; B does the same, but not under a card', () => {
   reset();
   looks.length = 0;
   flow.setLook('modern', 'solid');
@@ -543,11 +543,11 @@ test('the strip\'s look button names the other look and asks for it; B does the 
   key('Enter');
   const strip = () => document.getElementById('strip-root')!;
   const before = game.run!.now.moves;
-  assert.match(byId(strip(), 'btn-look').textContent, /^Classic/);
+  assert.match(byId(strip(), 'btn-look').textContent, /^Map/);
   click(byId(strip(), 'btn-look'));
   assert.deepEqual(looks, ['classic']);
   flow.setLook('classic', 'solid');
-  assert.match(byId(strip(), 'btn-look').textContent, /^Modern/);
+  assert.match(byId(strip(), 'btn-look').textContent, /^3D/);
   click(byId(strip(), 'btn-look'));
   assert.deepEqual(looks, ['classic', 'modern']);
   flow.setLook('modern', 'solid');

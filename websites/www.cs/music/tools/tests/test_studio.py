@@ -70,6 +70,22 @@ class StudioTest(unittest.TestCase):
         person = sealing.generate()[1]
         self.server.add_note(note_id, sealing.seal_to(body(text), b"", [person, studio.sealing_key()[2]]))
 
+    def test_list_instruments(self):
+        instruments = self.studio(SIUE_MUSIC_AI_KEY="").list_instruments()["instruments"]
+        self.assertEqual(len(instruments), 26)
+        self.assertEqual(instruments[0]["id"], "violin")
+        kit = next(i for i in instruments if i["id"] == "kit")
+        self.assertEqual(kit["pieces"][0], [36, "Kick"])
+        self.assertEqual(set(instruments[0]), {"id", "name", "category", "range", "expert", "clef", "written", "gm", "gm_name", "pieces",
+                                               "standin_note"})
+        self.assertEqual(next(i for i in instruments if i["id"] == "bass")["written"], 12)
+        self.assertEqual([i["category"] for i in instruments][-1], "voices")
+
+    def test_list_instruments_says_when_the_library_cannot_be_read(self):
+        studio = Studio(self.env, self.root, "linux", steps=_no_steps(), fetch=lambda _url: b"not json")
+        with self.assertRaises(StudioError):
+            studio.list_instruments()
+
     def test_the_key_and_the_sealing_key_are_private_and_made_once(self):
         studio = self.studio(SIUE_MUSIC_AI_KEY="")
         studio.save_key(KEY + "\n")

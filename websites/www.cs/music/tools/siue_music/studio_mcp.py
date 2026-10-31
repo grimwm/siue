@@ -19,7 +19,7 @@ First call studio_status. When it says "Not paired yet", tell the person the pai
 When the person asks for their siue-music pairing code, call studio_status and give them the code.
 
 A usual loop: wait_for_notes, then read_new_notes; read what the person said (and listen to any recording it saved);
-read_score the draft the note is about; publish_draft the next version (draft number one higher); then
+read_score the draft the note is about; list_instruments for the instruments a lane may use; publish_draft the next version (draft number one higher); then
 mark_notes_picked_up with the ids you acted on. delete_draft and delete_piece remove drafts when the person asks.
 You cannot delete notes: the person does that in the studio. Notes sent before this AI was paired cannot be opened here."""
 
@@ -51,9 +51,19 @@ def build(studio: Studio) -> MCPServer:
         return _answer(lambda: studio.read_score(piece, version))
 
     @server.tool(structured_output=True)
+    def list_instruments() -> dict[str, Any]:
+        """The instruments a lane's sound.instrument may name, in the studio's picker order, with each one's name, category,
+        normal range and expert range (inclusive MIDI pitches), clef, written transposition and General MIDI program. Choose
+        lane instruments from this list. A drum instrument (pieces set) has no high or low notes: use only its pieces'
+        pitches, one per drum. Notes outside expert are allowed but no person can play them. `written` is the semitones
+        between how the part sounds and how it is notated (Double Bass is written an octave up); scores hold sounding pitch.
+        A standin_note says another instrument's samples play for now; name the real instrument anyway."""
+        return _answer(studio.list_instruments)
+
+    @server.tool(structured_output=True)
     def publish_draft(score: dict[str, Any]) -> dict[str, Any]:
         """Publishes a score.json (schema 1) as draft score.draft of piece score.piece.id. It is checked first as the page
-        checks it (every lane needs a sound from the studio's instrument library, and a mix); a published version is never
+        checks it (every lane needs a sound whose instrument list_instruments gives, and a mix); a published version is never
         replaced, so publish the next number. The draft appears in the studio at once; the answer gives its page."""
         return _answer(lambda: studio.publish_draft(score))
 

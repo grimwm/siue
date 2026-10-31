@@ -24,7 +24,7 @@ interface CreteTest {
   trialLevel(i: number): Lv;
 }
 
-test('Play shows the chapter card; a page-taking win names the page, and the Lore book lists it', async ({ page }) => {
+test('New Game shows the chapter card; a page-taking win names the page, and the Lore book lists it', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });

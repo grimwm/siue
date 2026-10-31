@@ -36,7 +36,7 @@ export function SharedCard(p: SharedCardProps & { open: boolean }) {
       {p.best !== null && <p id="shared-best" class="runstats">{`beat ${p.best}`}</p>}
       <div class="title-actions">
         <Button id="shared-play" keyLabel={KEYS.begin.label} onClick={p.onPlay}>▶ Play</Button>
-        <Button id="shared-edit" onClick={p.onEdit}>Edit a copy</Button>
+        <Button id="shared-edit" onClick={p.onEdit}>Edit a Copy</Button>
       </div>
     </Dialog>
   );

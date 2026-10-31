@@ -79,7 +79,7 @@ def build(manifest: dict, samples: Path | Mapping[str, Path], out: Path) -> dict
             # standin_shift moves the borrowed roots, so a sample plays that many semitones away from where it sounds in its own instrument.
             shift = inst.get("standin_shift", 0)
             instruments[name] = {"files": [{**f, "pitch": f["pitch"] + shift} for f in target["files"]],
-                                 **({"loop": target["loop"]} if "loop" in target else {})}
+                                 **{k: target[k] for k in ("loop", "pitched") if k in target}}
             instruments[name]["standin"] = inst["standin"]
         if "from" in inst:
             instruments[name]["from"] = inst["from"]

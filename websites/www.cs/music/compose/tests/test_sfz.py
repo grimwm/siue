@@ -29,6 +29,13 @@ class SfzTest(unittest.TestCase):
         self.assertEqual(instrument(manifest, "choir"), {"files": FILES, "loop": [1, 2]})
         self.assertIs(instrument(manifest, "organ"), manifest["instruments"]["organ"])
 
+    def test_standin_shift_and_unpitched_target_carry_over(self):
+        manifest = {"instruments": {"glock": {"files": FILES}, "celesta": {"standin": "glock", "standin_shift": -12},
+                                    "kit": {"files": FILES, "pitched": False}, "pads": {"standin": "kit"}}}
+        self.assertEqual([f["pitch"] for f in instrument(manifest, "celesta")["files"]], [24, 26])
+        self.assertEqual([f["path"] for f in instrument(manifest, "celesta")["files"]], ["Drums/kick.wav", "Drums/snare.wav"])
+        self.assertIs(instrument(manifest, "pads")["pitched"], False)
+
 
 if __name__ == "__main__":
     unittest.main()

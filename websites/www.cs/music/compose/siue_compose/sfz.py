@@ -6,12 +6,14 @@ from .piece import Lane
 
 
 def instrument(manifest: dict, name: str) -> dict:
-    """samples.json's entry for an instrument; a stand-in plays its target's samples and loop."""
+    """samples.json's entry for an instrument; a stand-in plays its target's samples and loop, `standin_shift` semitones away."""
     inst = manifest["instruments"][name]
     if "standin" not in inst:
         return inst
     target = manifest["instruments"][inst["standin"]]
-    return {"files": target["files"], **({"loop": target["loop"]} if "loop" in target else {})}
+    shift = inst.get("standin_shift", 0)
+    return {"files": [{**f, "pitch": f["pitch"] + shift} for f in target["files"]],
+            **{k: target[k] for k in ("loop", "pitched") if k in target}}
 
 
 def regions(files: list[dict], pitched: bool = True) -> list[tuple[int, int, dict]]:

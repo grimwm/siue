@@ -3,7 +3,7 @@
 // (read from the status, never the Content-Type), and limits are refusals.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { KeyExists, NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, createApi } from '../src/api.ts';
+import { KeyChanged, KeyExists, NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, createApi } from '../src/api.ts';
 import type { Fetch } from '../src/load.ts';
 
 type Init = Parameters<Fetch>[1];
@@ -189,4 +189,23 @@ test('a keyring that already exists is KeyExists, not a failure to retry', async
   const locked = { v: 1 as const, kdf: 'PBKDF2-SHA-256' as const, iterations: 600000, salt: 's', iv: 'i', ct: 'c' };
   const fetch: Fetch = async () => reply(409, { error: 'key_exists', csrf: 'n' });
   await assert.rejects(createApi(fetch, 'x').uploadKeyring(locked, 'f'.repeat(64)), KeyExists);
+});
+
+test('changeKeyring posts the three fields to keyring.php?change=1; a key that changed is KeyChanged, none is NoKeyring', async () => {
+  const locked = { v: 1 as const, kdf: 'PBKDF2-SHA-256' as const, iterations: 600000, salt: 's', iv: 'i', ct: 'c' };
+  const sent: { url: string; init: Init }[] = [];
+  let answer = reply(200, { changed: true, csrf: 'next' });
+  const fetch: Fetch = async (url, init?: Init) => { sent.push({ url, init }); return answer; };
+  const api = createApi(fetch, 't0');
+  await api.changeKeyring(locked, 'f'.repeat(64), ['e'.repeat(64)]);
+  assert.equal(sent[0]!.url, 'keyring.php?change=1');
+  assert.equal(sent[0]!.init?.method, 'POST');
+  assert.equal(sent[0]!.init?.headers?.['X-CSRF'], 't0');
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(sent[0]!.init?.body)), { keyring: locked, current: 'f'.repeat(64), previous: ['e'.repeat(64)] });
+  answer = reply(409, { error: 'key_changed', csrf: 'n2' });
+  await assert.rejects(api.changeKeyring(locked, 'f'.repeat(64), []), KeyChanged);
+  answer = reply(404, { error: 'no_keyring', csrf: 'n3' });
+  await assert.rejects(api.changeKeyring(locked, 'f'.repeat(64), []), NoKeyring);
+  answer = reply(422, { error: 'bad_keyring', csrf: 'n4' });
+  await assert.rejects(api.changeKeyring(locked, 'f'.repeat(64), []), (e: unknown) => e instanceof ServerError && e.status === 422);
 });

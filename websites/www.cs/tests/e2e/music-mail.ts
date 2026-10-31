@@ -16,16 +16,12 @@ export function inPhp(command: string): string {
   return run.stdout;
 }
 // An empty mail directory is the expected start: the glob matches nothing and the listing ends in `true`.
-const mailFiles = (): string[] => inPhp(`ls ${process.env.MUSIC_E2E_MAIL_DIR}/*.eml 2>/dev/null || true`).split('\n').filter(Boolean);
+export const mailFiles = (): string[] => inPhp(`ls ${process.env.MUSIC_E2E_MAIL_DIR}/*.eml 2>/dev/null || true`).split('\n').filter(Boolean);
 
-/** Signs `email` in to one realm's folder (music/ for the studio, admin/ for the hub) through the captured mail. */
-export async function signInAt(page: Page, base: string, folder: 'music' | 'admin', email: string): Promise<void> {
-  const known = new Set(mailFiles());
-  await page.goto(`${base}${folder}/login.php`);
-  await page.getByLabel('Email').fill(email);
-  await page.getByRole('button', { name: 'Email me a link' }).click();
+/** The token of the first link to `page` (verify.php, confirm.php) in `folder` in a mail not in `known`, once one is captured. */
+export async function mailedToken(known: ReadonlySet<string>, folder: 'music' | 'admin', page: string): Promise<string> {
   let token = '';
-  const link = new RegExp(`/${folder}/verify\\.php\\?token=([0-9a-f]{64})`);
+  const link = new RegExp(`/${folder}/${page.replace('.', '\\.')}\\?token=([0-9a-f]{64})`);
   await expect.poll(() => {
     const fresh = mailFiles().filter(f => !known.has(f));
     for (const f of fresh) {
@@ -36,6 +32,16 @@ export async function signInAt(page: Page, base: string, folder: 'music' | 'admi
     }
     return token;
   }, { timeout: 20_000 }).not.toBe('');
+  return token;
+}
+
+/** Signs `email` in to one realm's folder (music/ for the studio, admin/ for the hub) through the captured mail. */
+export async function signInAt(page: Page, base: string, folder: 'music' | 'admin', email: string): Promise<void> {
+  const known = new Set(mailFiles());
+  await page.goto(`${base}${folder}/login.php`);
+  await page.getByLabel('Email').fill(email);
+  await page.getByRole('button', { name: 'Email me a link' }).click();
+  const token = await mailedToken(known, folder, 'verify.php');
   // The mailed link names http://localhost/ with no port. Opened in the browser that asked for it, it signs in at once.
   await page.goto(`${base}${folder}/verify.php?token=${token}`);
   await expect(page).toHaveURL(new RegExp(`${folder}/(index\\.php)?$`));

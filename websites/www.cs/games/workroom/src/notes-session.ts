@@ -32,8 +32,8 @@ export const UNLOCK_MESSAGES = {
   offline: 'Could not reach the server. Check the connection and try again.',
 } as const;
 
-/** What studio people are told for a damaged key: they have no make targets, and Start over on Your studio is how they begin again. */
-export const studioInvalid = 'The notes key on the server is damaged or does not match its fingerprints. Use Start over on Your studio, then reload the page.';
+/** What studio people are told for a damaged key: they have no make targets, and Forgot your passphrase on Your studio is how they make a new one. */
+export const studioInvalid = 'The notes key on the server is damaged or does not match its fingerprints. Use Forgot your passphrase on Your studio to make a new one; your pieces stay.';
 
 export const NO_CRYPTO = 'This browser cannot unlock or seal notes: it has no Web Crypto. Use a current browser, on the https page.';
 export const DISCARD_FAILED = 'The saved note could not be discarded from this browser. Try again.';

@@ -203,9 +203,9 @@ test('too_large names the note limit it was given, and the page limit by default
   for (const words of Object.values(KEPT_MESSAGES)) if (typeof words === 'string') assert.doesNotMatch(words, /\d MB/, 'no fixed size in the table');
 });
 
-test('the unknown-key message points studio people to Start over, named people to make music-status', () => {
+test('the unknown-key message points studio people to Forgot your passphrase, named people to make music-status', () => {
   assert.match(keptMessage('unknown_key', undefined, true), /make music-status/);
   assert.doesNotMatch(keptMessage('unknown_key', undefined, false), /make music/);
-  assert.match(keptMessage('unknown_key', undefined, false), /Start over on Your studio/);
+  assert.match(keptMessage('unknown_key', undefined, false), /Forgot your passphrase on Your studio/);
   assert.equal(keptMessage('offline', undefined, false), KEPT_MESSAGES.offline);
 });

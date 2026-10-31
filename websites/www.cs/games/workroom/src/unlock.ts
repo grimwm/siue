@@ -60,6 +60,40 @@ export interface Unlocked {
  * WrongPassphrase when the passphrase does not decrypt it.
  */
 export async function unlockKeyring(locked: LockedKeyring, passphrase: string): Promise<Unlocked> {
+  const entries = await openEntries(locked, passphrase);
+  const ring = new Map<string, CryptoKey>();
+  let current: PublicKey | undefined;
+  try {
+    for (const entry of entries) {
+      const { pub, priv } = await importPaired(entry);
+      current ??= pub;
+      ring.set(entry.fingerprint, priv);
+    }
+  } finally {
+    for (const entry of entries) entry.pkcs8.fill(0);
+  }
+  return { current: current!, ring };
+}
+
+/**
+ * A new passphrase for the same keys: opens the keyring with `passphrase`, checks every entry against its fingerprint
+ * as unlockKeyring does, and locks the same entries, in the same order, with `next` (a fresh salt and IV). `current`
+ * and `previous` are the fingerprints the server must already hold. The private keys' bytes are zeroed once locked.
+ * WrongPassphrase and KeyringInvalid as unlockKeyring.
+ */
+export async function relockKeyring(locked: LockedKeyring, passphrase: string, next: string): Promise<{ locked: LockedKeyring; current: string; previous: string[] }> {
+  const entries = await openEntries(locked, passphrase);
+  try {
+    for (const entry of entries) await importPaired(entry);
+    const fingerprints = entries.map(e => e.fingerprint);
+    return { locked: await lockKeyring(entries, next), current: fingerprints[0]!, previous: fingerprints.slice(1) };
+  } finally {
+    for (const entry of entries) entry.pkcs8.fill(0);
+  }
+}
+
+/** The keyring's entries, opened with the passphrase: at least one, none repeated. The caller zeroes their pkcs8 bytes. */
+async function openEntries(locked: LockedKeyring, passphrase: string): Promise<{ fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[]> {
   if (typeof crypto === 'undefined' || !crypto.subtle) throw new NoCrypto('this browser has no Web Crypto');
   const salt = fromBase64(locked.salt);
   const iv = fromBase64(locked.iv);
@@ -77,22 +111,14 @@ export async function unlockKeyring(locked: LockedKeyring, passphrase: string): 
     throw new WrongPassphrase('the passphrase does not unlock the keyring');
   }
 
-  const entries = parseEntries(plain);
-  plain.fill(0);
-  if (entries.length === 0) throw new KeyringInvalid('the keyring has no keys');
-
-  const ring = new Map<string, CryptoKey>();
-  let current: PublicKey | undefined;
+  let entries: { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[];
   try {
-    for (const entry of entries) {
-      const { pub, priv } = await importPaired(entry);
-      current ??= pub;
-      ring.set(entry.fingerprint, priv);
-    }
+    entries = parseEntries(plain);
   } finally {
-    for (const entry of entries) entry.pkcs8.fill(0);
+    plain.fill(0);
   }
-  return { current: current!, ring };
+  if (entries.length === 0) throw new KeyringInvalid('the keyring has no keys');
+  return entries;
 }
 
 function parseEntries(plain: Uint8Array): { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[] {
@@ -145,7 +171,7 @@ async function importPaired(entry: { fingerprint: string; pkcs8: Uint8Array<Arra
   }
 }
 
-/** The format Python's lock_keyring writes (current key first); the page locks a key it makes with it (keymaker.ts). */
+/** The format Python's lock_keyring writes (current key first); the page locks a key it makes with it (keymaker.ts), and the same keys again under a new passphrase (relockKeyring). */
 export async function lockKeyring(keys: readonly { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[], passphrase: string): Promise<LockedKeyring> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));

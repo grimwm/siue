@@ -108,7 +108,7 @@ test('with no keyring the pieces list makes the notes key: two passphrases, chec
   await settle();
   const form = () => walk(root).find(e => e._attrs['data-make-key'] !== undefined)!;
   assert.equal(walk(form()).find(e => e.localName === 'p')!.textContent,
-    'Make your notes key. Your notes are sealed in this browser with a key only your passphrase unlocks. Nobody can reset it, not even the people who run this site. If you forget it, the only way back is Start over on Your studio, which deletes everything.');
+    'Make your notes key. Your notes are sealed in this browser with a key only your passphrase unlocks. Nobody can reset it, not even the people who run this site. If you forget it, Forgot your passphrase on Your studio deletes your notes and this key so you can make a new one; your pieces stay.');
   assert.ok(walk(form()).find(e => e.localName === 'button' && e.textContent === 'Make my notes key'));
   const type = async (a: string, b: string): Promise<void> => {
     const [first, again] = walk(form()).filter(e => e._attrs['autocomplete'] === 'new-password');

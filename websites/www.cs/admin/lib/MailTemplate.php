@@ -1,5 +1,5 @@
 <?php
-// The two sign-in messages, each a multipart/alternative with the plain text first. The HTML
+// The sign-in messages and the studio's confirmation link, each a multipart/alternative with the plain text first. The HTML
 // part is table markup with inline styles and no images, in the site's light look: dark text on
 // white reads in every client, and clients with a dark mode invert it cleanly, where a dark design
 // gets lightened to grey with dimmed text.
@@ -30,6 +30,28 @@ final class MailTemplate
             . self::p('If you did not ask for this, ignore it.', true);
         $subject = $studio ? 'Your music studio sign-in link' : 'Your sign-in link';
         return ['subject' => $subject, 'mime' => self::multipart($text, self::page($heading, $body, $studio ? 'MUSIC STUDIO' : 'ADMIN'))];
+    }
+
+    /**
+     * The link that confirms a studio's destructive action, 'forgot-passphrase' or 'start-over': what the page it
+     * opens will delete, and that nothing is deleted before its button.
+     *
+     * @return array{subject:string,mime:string}
+     */
+    public static function confirm(string $url, int $minutes, string $action): array
+    {
+        [$subject, $heading, $what] = match ($action) {
+            'forgot-passphrase' => ['Confirm: delete your notes and notes key', 'Delete your notes and notes key',
+                'The button on the page this link opens deletes every note in your music studio and your notes key, so you can make a new key with a new passphrase. Your pieces, drafts and AI keys stay.'],
+            'start-over' => ['Confirm: start over in your music studio', 'Start over',
+                'The button on the page this link opens deletes every piece, draft and note in your music studio, your notes key and your AI keys. Your account and your sign-in stay.'],
+            default => throw new \InvalidArgumentException("Unknown action: $action"),
+        };
+        $good = 'Good for ' . $minutes . ($minutes === 1 ? ' minute' : ' minutes') . ', once.';
+        $safe = 'Nothing is deleted until you press the button on that page. If you did not ask for this, ignore it.';
+        $text = "$heading\r\n\r\n$what\r\n\r\n$good\r\n\r\n$url\r\n\r\n$safe\r\n";
+        $body = self::p($what) . self::p($good) . self::button($url, 'Open the confirmation page') . self::p($safe, true);
+        return ['subject' => $subject, 'mime' => self::multipart($text, self::page($heading, $body, 'MUSIC STUDIO'))];
     }
 
     /** @return array{subject:string,mime:string} */

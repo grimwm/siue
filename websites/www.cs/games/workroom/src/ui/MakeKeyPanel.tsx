@@ -11,7 +11,7 @@ import type { NotesSession } from '../notes-session.ts';
 import { Button } from './console/Button.tsx';
 import { Panel } from './console/Panel.tsx';
 
-export const MAKE_KEY_INTRO = 'Make your notes key. Your notes are sealed in this browser with a key only your passphrase unlocks. Nobody can reset it, not even the people who run this site. If you forget it, the only way back is Start over on Your studio, which deletes everything.';
+export const MAKE_KEY_INTRO = 'Make your notes key. Your notes are sealed in this browser with a key only your passphrase unlocks. Nobody can reset it, not even the people who run this site. If you forget it, Forgot your passphrase on Your studio deletes your notes and this key so you can make a new one; your pieces stay.';
 
 const FIELD = 'min-h-11 rounded-md border border-rule bg-well px-3 font-body text-base tracking-normal text-ink normal-case focus-visible:outline-2 focus-visible:outline-amber';
 const LABEL = 'grid gap-1 font-mono text-xs tracking-widest text-dim uppercase';

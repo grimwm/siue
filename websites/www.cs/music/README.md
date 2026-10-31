@@ -22,9 +22,15 @@ keys. Nobody else's studio is ever visible to them.
 - **The notes key** is made on the page the first time (the "Make your notes key" panel: a passphrase of
   at least 12 characters, typed twice). The page makes an RSA-4096 key, locks it with the passphrase
   (PBKDF2-SHA-256, 600,000 rounds, AES-256-GCM), uploads the locked copy and unlocks it. Nobody can reset
-  it; a forgotten passphrase means Start over.
-- **Your studio** (`studio.php`) shows the address, the usage against the studio's limit, the AI keys
-  and Start over.
+  it.
+- **Change your passphrase** on Your studio: the current passphrase, then the new one twice. The page opens
+  the keyring with the current one, locks the same keys, in the same order, under the new one, checks that
+  it opens, and uploads it; the server stores it only when its fingerprints are exactly the stored ones.
+  Every browser's remembered unlock is forgotten (the keyring changed), so the next unlock takes the new one.
+- **Forgot your passphrase?** on Your studio deletes every note and the notes key, after the emailed
+  confirmation below. Pieces, drafts and AI keys stay, and the pieces page asks for a new notes key.
+- **Your studio** (`studio.php`) shows the address, the usage against the studio's limit, Change your
+  passphrase and Forgot your passphrase (while the studio has a notes key), the AI keys and Start over.
 - **AI keys** are made on Your studio. Each is 64 hex characters, shown once and stored as SHA-256, with
   any of three permissions: "read notes" (`notes:pickup`), "publish drafts" (`drafts:publish`) and
   "delete drafts" (`drafts:delete`). An AI key never uploads a notes key, never makes another key and
@@ -35,8 +41,16 @@ keys. Nobody else's studio is ever visible to them.
   the sound in the browser from the shared sample library. People with the allowance may also publish
   full drafts (MusicXML, audio, spectrogram).
 - **Start over** on Your studio deletes every piece, draft and note, the notes key and the AI keys, after
-  the person types `start over`. Nobody can undo it. The account and its sign-in stay, and the next visit
+  the emailed confirmation below. Nobody can undo it. The account and its sign-in stay, and the next visit
   asks for a new notes key.
+- **Emailed confirmation** (`Music\Confirmations`, table `studio_confirms`): Forgot and Start over each mail
+  a link to the account's own address, `confirm.php?token=`. The token is 32 random bytes stored as SHA-256
+  with the account, its address and the action; it is good for 15 minutes, once, and at most 3 are mailed
+  per account an hour. The mail goes after the reply, and a link whose mail fails is deleted. Opening the
+  link (GET) deletes nothing and spends nothing: the page names what its one button deletes, with counts,
+  and what stays. The button's POST, carrying a mark the page set in a cookie, spends the link and the
+  account's other unspent ones, then deletes. It needs no studio session: the link proves the mailbox, as a
+  sign-in link does. Removing an account deletes its links.
 - **Studios on the admin hub:** `admin/studios.php` lists every studio's address, usage and last sign-in,
   never a piece, title or note.
 
@@ -108,13 +122,18 @@ tells who has an account. Its sessions are separate from the admin hub's.
 
 Session routes (same-origin, a studio session, the session's own studio): `index.php`,
 `piece.php?id=&v=` (pages); `studio.php` (Your studio, a plain page that needs no script: the address,
-usage of the studio's limit, its AI keys, sign out; POST `action` `make-key` (`label`, `scopes[]`) shows the
-new key once, `revoke-key` (`id`), or `start-over` (`confirm` typed `start over`, any case), each with the
-session's token in a `csrf` field. Start over (`Music\Accounts::startOver`) deletes the AI keys, notes, drafts,
-files and keyring in one transaction; the account and its sessions stay); `csrf.php`, `notes.php` (GET list, POST upload), `note.php?id=`,
-`delete.php` (POST `id`, or `all=1`), `keyring.php` (GET the locked keyring; POST stores
-`{keyring, current, previous}`, the rules `api/keyring.php` keeps, only while the studio has none: 409
-`key_exists` otherwise), `delete-draft.php` (POST
+usage of the studio's limit, its AI keys, sign out; the change of passphrase is the one part drawn by the
+page's script; POST `action` `make-key` (`label`, `scopes[]`) shows the new key once, `revoke-key` (`id`),
+`forgot-passphrase` (while the studio has a keyring) or `start-over`, each with the session's token in a
+`csrf` field; the last two mail a confirmation link and delete nothing); `confirm.php` (no session: GET
+`token` shows what the button deletes, POST `token` and `mark` does it; Forgot is `Music\Store::forgetNotesKey`,
+the notes and keyring in one transaction; Start over is `Music\Accounts::startOver`, the AI keys, notes, drafts,
+files and keyring in one transaction; the account and its sessions stay); `csrf.php`, `notes.php` (GET list,
+POST upload), `note.php?id=`, `delete.php` (POST `id`, or `all=1`), `keyring.php` (GET the locked keyring; POST
+stores `{keyring, current, previous}`, the rules `api/keyring.php` keeps, only while the studio has none: 409
+`key_exists` otherwise; POST `?change=1` stores the same keys under a new passphrase only when `current` and
+`previous` are exactly the stored fingerprints: 409 `key_changed` otherwise, 404 `no_keyring` when none),
+`delete-draft.php` (POST
 `piece` and `v` deletes one draft, `piece` alone the whole piece; 404 `not_found` when none
 went), `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data). Signed out, a page goes to
 `login.php?next=` (the page, when sign-in may return to it) and a data route answers 401
@@ -310,15 +329,23 @@ The second lock is constrained by the first, so both install the same `cryptogra
 
 `make music-e2e` (local only; CI never runs it; `E2E_ARGS=studio.local.ts` runs one
 spec) brings up its own docker project with the mail capture and
-`tests/e2e/studio-config.json` (it names only the owner), and runs two specs in Chrome.
+`tests/e2e/studio-config.json` (it names only the owner), and runs three specs in Chrome.
 
-`tests/e2e/studio.local.ts` is a student's studio from first sign-in to start over:
+`tests/e2e/studio.local.ts` is a student's studio from first sign-in to a deleted draft:
 `student1@siue.edu` signs in through the captured mail to an empty studio, makes a
 notes key on the page and pins a typed note; makes an AI key with all three
 permissions on Your studio, seen once; publishes the score-only fixture with it and
-plays the sound the page builds; deletes the draft on the page; starts over, back to an
-empty studio with no notes key; the old AI key gets 401, and `admin/` sends the browser
-to the admin sign-in.
+plays the sound the page builds; deletes the draft on the page; and `admin/` sends the
+browser to the admin sign-in.
+
+`tests/e2e/studio-keys.local.ts` is the notes key's life on Your studio, as
+`student2@siue.edu`: a wrong current passphrase changes nothing, the right one changes
+it, and then the old passphrase fails to unlock while the new one opens the same note;
+Forgot your passphrase mails a link that a plain GET (a mail scanner) never acts on,
+whose page names what goes and what stays, and whose one button deletes the notes and
+the key while the piece stays, back to Make your notes key, and works once; Start over
+mails a link the same way, and its button empties the studio, after which the AI key
+gets 401.
 
 `tests/e2e/workroom.local.ts` signs the owner in to the studio and, separately, to the
 admin hub, publishes the fixture drafts with API keys made on the hub, and drives the

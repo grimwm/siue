@@ -41,8 +41,8 @@ export const SEND_MESSAGES = {
 /** Added to a kept note's message when the browser would not store it on this device. */
 export const MEMORY_NOTICE = 'This browser would not save it on this device, so it is kept only until this page is closed or reloaded.';
 
-/** The studio people's words for a note the server cannot take: they have no make targets, and Start over on Your studio is how they get a new key. */
-export const STUDIO_UNKNOWN_KEY = 'The server does not take notes sealed to this key, so this note stays on this device. Use Start over on Your studio to make a new notes key.';
+/** The studio people's words for a note the server cannot take: they have no make targets, and Forgot your passphrase on Your studio is how they get a new key. */
+export const STUDIO_UNKNOWN_KEY = 'The server does not take notes sealed to this key, so this note stays on this device. Use Forgot your passphrase on Your studio to make a new notes key.';
 
 /** Per reason; the two that depend on the studio take its room left (over_quota) or its note max (too_large). */
 export const KEPT_MESSAGES: Readonly<Record<Exclude<KeptReason, 'over_quota' | 'too_large'>, string>> & { over_quota(room: number): string; too_large(noteMax: number): string } = {

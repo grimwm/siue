@@ -1,5 +1,6 @@
 // The Island of Crete: the status bar. src/ui.ts hands it finished words (src/status.ts); this draws them
-// and reports a press of Menu.
+// and reports a press of Menu. The level's stat reads "Ch. 1 • Level 3/10" with its "Level" label kept for a
+// screen reader only.
 import { render } from 'preact';
 import { Button } from '../../../_kit/ui/button.tsx';
 import { KeyChip } from '../../../_kit/ui/key-chip.tsx';
@@ -28,8 +29,8 @@ export function Status(p: StatusProps) {
     <>
       <dl class="hud">
         {STATS.map(s => (
-          <div class="stat" key={s.id} title={note(s.field)}>
-            <dt>{s.label}</dt>
+          <div class={s.field === 'trial' ? 'stat stat-trial' : 'stat'} key={s.id} title={note(s.field)}>
+            <dt class={s.field === 'trial' ? 'sr' : undefined}>{s.label}</dt>
             <dd id={s.id} aria-label={s.field === 'trial' ? p.view.trialNote || undefined : undefined}>{p.view[s.field] || '–'}</dd>
           </div>
         ))}

@@ -215,7 +215,7 @@ test('a ?seed= link opens Chapter 1\'s card with no title card, and Enter starts
   await expect(page.locator('#chapter-veil')).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.locator('#chapter-veil')).toBeHidden();
-  await expect(page.locator('#hud-trial')).toHaveText('Ch 1 · 1');
+  await expect(page.locator('#hud-trial')).toHaveText('Ch. 1 • Level 1/10');
   await expect(page.locator('#start-veil')).toBeVisible();
 });
 
@@ -230,13 +230,31 @@ test('a new game starts at Chapter 1, Level 1 whatever is cleared; Levels starts
   await expect(page.locator('#chapter-kicker')).toHaveText('Chapter 1 of 10');
   await expect(page.locator('#chapter-title')).toHaveText('The Outer Halls');
   await page.locator('#chapter-enter').click();
-  await expect(page.locator('#hud-trial')).toHaveText('Ch 1 · 1');
+  await expect(page.locator('#hud-trial')).toHaveText('Ch. 1 • Level 1/10');
   await expect(page.locator('#start-veil')).toBeVisible();
   await page.keyboard.press('n');
   await page.locator('#levels-tab-2').click();
   await page.locator('#level-3').click();
-  await expect(page.locator('#hud-trial')).toHaveText('Ch 2 · 3');
+  await expect(page.locator('#hud-trial')).toHaveText('Ch. 2 • Level 3/10');
   await expect(page.locator('#start-veil')).toBeVisible();
+});
+
+test('Continue on the title card goes to the first level not cleared, and is not offered on a fresh browser', async ({ page }) => {
+  await page.addInitScript(pinClassic);
+  await page.goto(PAGE);
+  await expect(page.locator('#title-continue')).toHaveCount(0);
+  const ch1 = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`trial-${i + 1}`, { cleared: true, best: 30 }]));
+  await page.evaluate(p => localStorage.setItem('crete-progress', JSON.stringify(p)), { ...ch1, 'ch2-1': { cleared: true, best: 12 }, 'ch2-2': { cleared: true, best: 17 } });
+  await page.reload();
+  await expect(page.locator('#title-continue')).toContainText('Continue · Ch. 2 • Level 3');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#chapter-title')).toHaveText('The Winding Ways');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#hud-trial')).toHaveText('Ch. 2 • Level 3/10');
+  await expect(page.locator('#hud-trial')).toHaveAttribute('aria-label', /^Chapter 2, Level 3: /);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-veil .kicker')).toHaveText('Ch. 2 • Level 3/10');
 });
 
 test('a win on the shortest line is perfect; Next level shows level 2\'s start card, and the list keeps the best through a reload', async ({ page }) => {
@@ -249,7 +267,7 @@ test('a win on the shortest line is perfect; Next level shows level 2\'s start c
   await page.locator('#end-next').click();
   await expect(page.locator('#end-veil')).toBeHidden();
   await expect(page.locator('#start-veil')).toBeVisible();
-  await expect(page.locator('#hud-trial')).toHaveText('Ch 1 · 2');
+  await expect(page.locator('#hud-trial')).toHaveText('Ch. 1 • Level 2/10');
   const cleared = `cleared · your best ${steps.length} · best possible ${steps.length} · perfect`;
   await page.keyboard.press('n');
   await expect(page.locator('#level-1')).toContainText(cleared);

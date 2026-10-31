@@ -103,8 +103,9 @@ export interface Controls {
   /** Leave the game (the menu's Quit). */
   quit(): void;
   /** Enter the halls on the new-game card (after the title card's Play): opens Chapter 1's opening card, whatever
-   *  this browser has cleared. */
-  play(): void;
+   *  this browser has cleared. Given level `at` (the title card's Continue), that level's chapter card instead,
+   *  whose Enter starts it. */
+  play(at?: number): void;
   /** Back to the editor from a try: offered in the menu and on the end card while a try is in play. */
   backToEditor?(): void;
   /** The level editor, when the page has one: Make a level on the title card opens it, and while it is the top
@@ -151,9 +152,9 @@ export interface Ui {
   showTitle(hint: boolean, note?: string): void;
   /** The level list, over whatever is showing. */
   showLevels(): void;
-  /** Chapter `n`'s card, over whatever is showing: the opening one (Enter starts the chapter's first level), or
-   *  the closing one. */
-  showChapter(n: number, closing: boolean): void;
+  /** Chapter `n`'s card, over whatever is showing: the opening one (Enter starts level `target`, the chapter's
+   *  first unless given), or the closing one. */
+  showChapter(n: number, closing: boolean, target?: number): void;
   /** Closes every card. */
   closeLayers(): void;
   /** The card showing now, if any. */
@@ -201,7 +202,7 @@ export function createUi(deps: UiDeps): Ui {
     title: string,
   ): { place?: string; levelName?: string } =>
     out ? { place: outsideKicker(out), levelName: out.name }
-      : at ? { place: placeWords(at.chapter.n, at.within + 1, title).kicker, levelName: title }
+      : at ? { place: placeWords(at.chapter.n, at.within + 1, title).short, levelName: title }
       : {};
   /** The shared card, while a shared level is in play and the open link's card is that level's. */
   const sharedCard = (g: Game | null): (() => void) | undefined => {
@@ -379,6 +380,29 @@ export function createUi(deps: UiDeps): Ui {
     if (l !== look) controls?.setLook?.(l);
   }
 
+  /** The first released level this browser has not cleared, in campaign order: where the title card's Continue
+   *  goes. Null when nothing is cleared yet (a new game is the only way in) or when everything is. */
+  function resume(): number | null {
+    const ids = LEVEL_IDS.map((id) => progress.get(id).cleared);
+    if (!ids.some(Boolean)) return null;
+    const i = ids.indexOf(false);
+    return i < 0 ? null : i;
+  }
+
+  /** Continue's words: "Continue · Ch. 2 • Level 3". */
+  function continueWords(i: number): string {
+    const { chapter, within } = chapterOf(i);
+    return `Continue · Ch. ${chapter.n} • Level ${within + 1}`;
+  }
+
+  /** Continue on the title card: the chapter card of the first level not cleared, whose Enter starts it. */
+  function goResume(): void {
+    const i = resume();
+    if (i === null) return;
+    controls?.wake();
+    controls?.play(i);
+  }
+
   /** Enter the halls on the new-game card: the card closes and the chapter card opens over the title. */
   function enterHalls(): void {
     layers.close("look");
@@ -432,6 +456,7 @@ export function createUi(deps: UiDeps): Ui {
       hint: titleHint,
       ...(titleNote ? { note: titleNote } : {}),
       onPlay: () => layers.open("look"),
+      ...(resume() !== null ? { resume: continueWords(resume()!), onContinue: goResume } : {}),
       onStory: () => layers.open("story"),
       ...(controls?.editor ? { onEditor: showEditor } : {}),
       onSettings: () => layers.open("menu"),
@@ -1268,6 +1293,12 @@ export function createUi(deps: UiDeps): Ui {
         document.getElementById(`pick-${to}`)?.focus();
         return;
       }
+      // Enter on the title card is Continue, when it is offered, unless another of its buttons has the focus.
+      if (top === "title" && action === "begin" && resume() !== null && onDefault(focused?.id, "title-", "title-continue")) {
+        ev.preventDefault();
+        goResume();
+        return;
+      }
       if (layers.isOpen("look") && action === "begin" && onDefault(focused?.id, "pick-", "pick-enter")) {
         ev.preventDefault();
         enterHalls();
@@ -1386,7 +1417,7 @@ export function createUi(deps: UiDeps): Ui {
     bindControls,
     showTitle,
     showLevels: () => layers.open("levels"),
-    showChapter: (n, closing) => showChapter(n, closing),
+    showChapter: (n, closing, target) => showChapter(n, closing, target),
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
     showEditor,

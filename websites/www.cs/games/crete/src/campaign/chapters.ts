@@ -90,14 +90,16 @@ export function chapterOf(levelIndex: number): { chapter: Chapter; within: numbe
   throw new RangeError(`no level ${levelIndex}`);
 }
 
-/** The words for a level's place in the campaign: `short` for the phone's status bar ("Ch 1 · 3"), `kicker` for a
- *  card's kicker ("Chapter 1 · Level 3"), and `full`, with the level's title, for a tooltip and a screen reader. */
+/** The words for a level's place in the campaign: `short` for the status bar and the menu's kicker ("Ch. 1 •
+ *  Level 3/10", out of the chapter's levels), `kicker` for a card's kicker ("Chapter 1 · Level 3"), and `full`, with
+ *  the level's title, for a tooltip and a screen reader. */
 export interface PlaceWords { short: string; kicker: string; full: string }
 
 /** Chapter `chapter`, level `number` (1-based), titled `title`, in words. */
 export function placeWords(chapter: number, number: number, title: string): PlaceWords {
+  const of = CHAPTERS[chapter - 1]?.levelIds.length || 10;
   return {
-    short: `Ch ${chapter} · ${number}`,
+    short: `Ch. ${chapter} • Level ${number}/${of}`,
     kicker: `Chapter ${chapter} · Level ${number}`,
     full: `Chapter ${chapter}, Level ${number}${title ? `: ${title}` : ''}`,
   };

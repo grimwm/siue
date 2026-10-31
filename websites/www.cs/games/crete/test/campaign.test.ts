@@ -117,8 +117,7 @@ test('trial 8 no longer ends the tribute', () => {
 
 test('a level\'s place reads short for the status bar, as a kicker for the cards, and in full with its title', () => {
   assert.deepEqual(placeWords(1, 3, 'The Doors of Daedalus'),
-    { short: 'Ch 1 · 3', kicker: 'Chapter 1 · Level 3', full: 'Chapter 1, Level 3: The Doors of Daedalus' });
+    { short: 'Ch. 1 • Level 3/10', kicker: 'Chapter 1 · Level 3', full: 'Chapter 1, Level 3: The Doors of Daedalus' });
   assert.equal(placeWords(10, 12, '').full, 'Chapter 10, Level 12', 'no title, no colon');
-  // The widest short form the ten chapters can give stays as narrow as the status bar's other stats.
-  assert.ok(placeWords(10, 12, '').short.length <= 'fire ice water'.length);
+  assert.equal(placeWords(2, 7, '').short, 'Ch. 2 • Level 7/10', "out of the chapter's own levels");
 });

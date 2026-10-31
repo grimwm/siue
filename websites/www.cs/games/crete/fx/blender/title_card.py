@@ -3,7 +3,8 @@
 The Labyrinth's entrance at night: a wall of cyclopean ashlar, red Minoan columns
 with black capitals, horns of consecration on the lintel, a gold labrys over the
 door, two bronze braziers, and a stair going down inside, lit from below by the
-fire of the depths, where the Minotaur stands as a silhouette. Light shafts rise
+fire of the depths. The Minotaur stands near the top of the stair, a horned
+silhouette with glowing eyes that fills most of the door. Light shafts rise
 out of the door through a thin haze. The upper third of the frame stays dark for
 the card's title. Everything is built in code from primitives and procedural
 materials (no outside assets); the render is crisp: no paint or blur pass, only
@@ -375,47 +376,58 @@ def flame(c, s=1.0):
 
 # ---------------------------------------------------------------- figures
 def build_minotaur(x, y, z, face, k):
-    """The beast as in the game's spike: hulking, horned, a labrys upright in his right hand."""
+    """The beast as in the game: tall on long legs, broad in the chest and shoulders over a
+    narrow waist, leaning in over his hips with his head low and thrust forward under wide
+    horns, which against the fire of the depths make his silhouette (the gold labrys over the
+    door carries his axe). His front is -y; 1.5 tall before `k`."""
     hide = solid('hide', '#4a2a18', '#2c180c', rough=0.9, scale=24, bump=0.7)
     hide2 = solid('hide2', '#2a160a', '#1a0d06', rough=0.9, scale=24, bump=0.6)
     horn = solid('horn', '#ece0c0', '#b0a080', rough=0.45, scale=10, grime=0.2)
     loin = solid('loin', '#5a1a14', '#3a0e0a', rough=0.85)
     bronze = solid('mbronze', '#8a5a24', '#4a2e10', rough=0.4, metal=0.35, scale=14)
-    steel = solid('axe', '#a8a49a', '#6a665e', rough=0.3, metal=0.35, scale=14)
     eye = glow('meye', '#ff5a10', 30.0)
     root = empty((x, y, z), face)
+    # legs: long and set wide, the left hoof a little ahead
     P = []
     for sx in (-1, 1):
-        P.append(cyl((sx * 0.12, 0, 0.14), 0.085, 0.07, 0.28, hide2))
-        P.append(box((sx * 0.12, -0.02, 0.03), (0.13, 0.15, 0.06), glow('hoof', '#0a0605', 1), 0.02))
-    P.append(cyl((0, 0, 0.33), 0.24, 0.18, 0.16, loin))
-    P.append(cyl((0, 0, 0.4), 0.215, 0.215, 0.05, bronze))
-    P.append(ball((0, 0.02, 0.56), 0.3, hide, (1.0, 0.72, 0.85)))
-    P.append(ball((0, 0.05, 0.68), 0.26, hide, (1.15, 0.7, 0.55)))
+        dy = -0.06 if sx < 0 else 0.04
+        P.append(box((sx * 0.16, dy - 0.02, 0.03), (0.13, 0.16, 0.06), glow('hoof', '#0a0605', 1), 0.02))
+        P.append(cyl((sx * 0.155, dy, 0.21), 0.065, 0.08, 0.32, hide2, rot=(0, sx * 0.05, 0)))
+        P.append(cyl((sx * 0.13, dy * 0.6, 0.5), 0.12, 0.085, 0.3, hide, rot=(0, -sx * 0.12, 0)))
+    P.append(cyl((0, 0, 0.67), 0.2, 0.25, 0.18, loin))
+    P.append(cyl((0, 0, 0.75), 0.2, 0.2, 0.05, bronze))
+    parent(P, root)
+    # everything above the belt leans in over the hips, toward the door
+    up = empty((0, 0, 0.76))
+    up.rotation_euler = (0.24, 0, 0)
+    up.parent = root
+    U = [cyl((0, 0, 0.11), 0.24, 0.19, 0.24, hide)]
+    U.append(ball((0, 0, 0.35), 0.3, hide, (1.4, 0.85, 0.85)))
+    U.append(ball((0, 0.08, 0.42), 0.2, hide2, (1.4, 1.0, 0.5)))
     for sx in (-1, 1):
-        P.append(ball((sx * 0.32, 0.03, 0.7), 0.12, hide))
-        P.append(cyl((sx * 0.37, 0.0, 0.52), 0.085, 0.1, 0.3, hide, rot=(0, -sx * 0.18, 0)))
-        P.append(ball((sx * 0.4, -0.02, 0.36), 0.09, hide2))
-        P.append(cyl((sx * 0.37, 0.0, 0.62), 0.11, 0.11, 0.04, bronze, rot=(0, -sx * 0.18, 0)))
-    hz = 0.86
-    P.append(ball((0, -0.06, hz), 0.13, hide, (1.0, 1.05, 0.95)))
-    P.append(ball((0, -0.17, hz - 0.05), 0.085, hide2, (1.0, 1.0, 0.8)))
+        U.append(ball((sx * 0.37, 0.0, 0.46), 0.15, hide))
+        U.append(cyl((sx * 0.43, 0.0, 0.28), 0.1, 0.11, 0.32, hide, rot=(0, -sx * 0.14, 0)))
+        U.append(cyl((sx * 0.43, -0.05, 0.37), 0.12, 0.12, 0.04, bronze, rot=(0, -sx * 0.14, 0)))
+        U.append(cyl((sx * 0.46, -0.08, 0.04), 0.075, 0.09, 0.28, hide, rot=(-0.3, 0, 0)))
+        U.append(ball((sx * 0.46, -0.13, -0.11), 0.09, hide2))
+    parent(U, up)
+    # the head: low between the shoulders, bowed, the horns sweeping out past them and up
+    head = empty((0, -0.14, 0.7))
+    head.rotation_euler = (0.1, 0, 0)
+    head.parent = up
+    H = [ball((0, 0, 0), 0.15, hide, (1.05, 1.05, 0.95))]
+    H.append(ball((0, -0.13, -0.06), 0.1, hide2, (1.0, 1.0, 0.8)))
+    H.append(torus((0, -0.21, -0.12), 0.04, 0.009, bronze, rot=(math.pi / 2, 0, 0)))
     for sx in (-1, 1):
-        P.append(ball((sx * 0.065, -0.155, hz + 0.03), 0.022, eye))
-        P.append(ball((sx * 0.14, -0.04, hz + 0.02), 0.055, hide2, (1.5, 0.5, 0.6)))
-        pt = Vector((sx * 0.1, -0.06, hz + 0.07))
-        for ang, ln, r0, r1 in ((80, 0.12, 0.05, 0.04), (40, 0.13, 0.04, 0.028), (-10, 0.12, 0.028, 0.008)):
+        H.append(ball((sx * 0.075, -0.13, 0.035), 0.026, eye))
+        H.append(ball((sx * 0.16, 0.01, 0.02), 0.06, hide2, (1.5, 0.5, 0.6)))
+        pt = Vector((sx * 0.11, -0.02, 0.08))
+        for ang, ln, r0, r1 in ((88, 0.22, 0.068, 0.056), (66, 0.2, 0.056, 0.042), (32, 0.18, 0.042, 0.03), (2, 0.14, 0.03, 0.018), (-22, 0.09, 0.018, 0.004)):
             a = math.radians(ang) * sx
             d = Vector((math.sin(a), 0.0, math.cos(a)))
-            P.append(cyl(pt + d * ln / 2, r0, r1, ln, horn, 10, rot=(0, a, 0)))
+            H.append(cyl(pt + d * ln / 2, r0, r1, ln, horn, 10, rot=(0, a, 0)))
             pt = pt + d * ln
-    P.append(cyl((0.42, -0.05, 0.6), 0.022, 0.022, 0.95, solid('haft', '#4a2c14', '#2a180a'), 8))
-    for sx in (-1, 1):
-        prof = [(0, -0.05), (sx * 0.2, -0.14), (sx * 0.24, 0.0), (sx * 0.2, 0.14), (0, 0.05)]
-        if sx < 0:
-            prof.reverse()
-        P.append(prism(prof, 0.025, steel, (0.42, -0.05, 0.98)))
-    parent(P, root)
+    parent(H, head)
     root.scale = (k, k, k)
     return root
 
@@ -704,9 +716,10 @@ def main():
     build_labrys()
     by, bz = build_stair()
     build_braziers()
-    # the beast, eight steps down, facing up the stair at whoever stands in the door
-    i = 7
-    build_minotaur(0.15, WALL_T + (i + 0.5) * STEP_D, -(i + 1) * STEP_H, math.pi, 1.95)
+    # the beast, two steps down, facing up the stair at whoever stands in the door and
+    # filling most of the doorway's height
+    i = 1
+    build_minotaur(0.1, WALL_T + (i + 0.5) * STEP_D, -(i + 1) * STEP_H, 0.0, 1.9)
     point((0.0, WALL_T + (i + 3) * STEP_D, -(i + 1) * STEP_H + 1.2), 900, '#ff5a1a', 0.6, 'rim')
 
     wide = camera('cam-wide', (0.7, -11.5, 5.6), (0.0, 2.0, 1.9), 27, 0.075)

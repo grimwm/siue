@@ -8,8 +8,9 @@ Composer page (`https://claude.ai/artifact/VhcoGPn94mm1jan8iPU3P5`) and the DJ &
 holds.
 
 The studios design (`2026-10-29-music-studios-design.md`) still governs accounts, storage, limits, sealing and
-the AI connection. The editor stores scores only. The browser renders everything else from the shared sample
-library: audio, sheet music, the spectrogram and every effect.
+the AI connection. The editor stores scores, plus the recorded voice of Vocal Tracks (below), which is the one
+exception. The browser renders everything else from the shared sample library: audio, sheet music, the
+spectrogram and every effect.
 
 ## Who it is for
 
@@ -48,8 +49,9 @@ Every entry mode writes into the same piano roll. A note entered one way can be 
 - **Play Live.** Play the on-screen keys, a computer keyboard or a plugged-in keyboard.
   - A key held down sets the note's length, the way a real piano does.
   - Recording starts on the first note and stops after one bar of quiet.
-  - "Snap To" sets how start times snap to the beat: 1/4, 1/8, 1/16 or Off. A held length snaps to the
-    nearest of ¼, ½, ¾, 1, 1½, 2, 3 or 4 beats. With Off, the timing is kept exactly as played.
+  - "Tidy To" sets how start times snap to the beat when recording stops ("quantize"): 1/4, 1/8, 1/16 or Off. A
+    held length snaps to the nearest of ¼, ½, ¾, 1, 1½, 2, 3 or 4 beats. With Off, the timing is kept exactly as
+    played.
   - A metronome count-in is optional.
 - **Step.**
   - Pick a length (Whole, Half, Quarter, Eighth, Sixteenth, each with its note icon, plus Dotted), then a
@@ -59,10 +61,12 @@ Every entry mode writes into the same piano roll. A note entered one way can be 
 - **Grid.**
   - Tap an empty cell to add a note of the current length.
   - Drag a note to move it in time or pitch. Drag its right end to change its length.
-  - Grid snapping follows Snap To.
+  - "Line Up To" (1/4, 1/8, 1/16 or Off) is how finely notes snap when they are added, moved or stretched.
 - **Hum.**
   - "● Record With Mic" listens to the microphone and turns the voice into notes. "Play The Demo Hum" shows the
-    same thing without a microphone.
+    same thing without a microphone. "Upload A Recording" takes an audio file of a hum instead; it is read in the
+    page and never uploaded.
+  - Hum's pitch tracker is the same one Auto-Tune uses (Voice Effects, below).
   - **The microphone, and where its sound goes.**
     - The browser asks for the microphone only when the person taps Record With Mic, never before.
     - The page stops every microphone track when recording stops, fails or is cancelled, and when the person
@@ -104,7 +108,7 @@ The instrument picker is grouped by category, each category with its own icon:
 
 | Category | Instruments |
 |---|---|
-| Strings | Violin, Viola, Cello, Double Bass, Harp |
+| Strings | Violin, Viola, Cello, Double Bass, Harp, Lyre |
 | Woodwinds | Flute, Piccolo, Oboe, Clarinet, Bassoon |
 | Brass | Trumpet, French Horn, Trombone, Tuba |
 | Keyboards | Piano, Organ, Celesta |
@@ -129,19 +133,23 @@ The instrument picker is grouped by category, each category with its own icon:
   - a note beyond the expert range is drawn **red** ("out of this instrument's range").
   "Move Them Into Range" is a button the person may choose. It shifts the red notes by octaves and can be undone.
   Nothing moves on its own.
-- **Samples.** Every instrument plays recorded samples from the shared library (VSCO-2 CE, CC0). Some
-  instruments have no samples of their own in VSCO-2 CE, and each of those plays a stand-in:
+- **Lyre** has its own icon in the picker. The Crete pieces' lyre parts already name the harp, and keep it.
+- **Samples.** Every instrument plays recorded samples from the shared library. The samples come from two CC0
+  libraries, VSCO-2 CE and the Versilian Community Sample Library (VCSL); the library's README names the source
+  and licence of each instrument. Vibraphone, Tubular Bells and the Drum Kit's kick, snare, toms and hi-hats are
+  VCSL's own recordings. Where neither library, nor any other CC0 or public-domain set, has the instrument, a
+  stand-in plays:
 
   | Instrument | Stand-in |
   |---|---|
   | Celesta | Glockenspiel, an octave lower |
-  | Vibraphone | Marimba, with a longer release |
   | Choir | Organ, with a soft attack |
-  | Kit Hi-Hat and Ride | VSCO-2 CE's cymbals |
-  | Tubular Bells | Its few bells, stretched |
+  | Lyre | VCSL's folk harp |
+  | Drum Kit's Ride | A suspended cymbal struck with a stick |
 
   The picker says "Stand-In Sound" on those, with a line saying what plays instead. The score names the
   instrument, not the stand-in, so a later sample replaces the stand-in without touching any score.
+- **Every instrument a shipped piece names** is in the library, and a test keeps it so.
 
 ### Views
 
@@ -236,12 +244,58 @@ The Sound panel is saved as score settings, never as audio.
   has a master limiter, which catches the loudest moments so nothing distorts, and the overall loudness.
 - **What The Score Saves** shows the settings as the score keeps them.
 
+### Voice Effects
+
+Voice Effects work on a voice: the microphone live, a Vocal Track (below), or any part used as the voice.
+
+- **Vocoder:** the voice is the modulator and any part is the carrier, with a Bands control.
+- **Auto-Tune:** snaps the voice to the piece's key and scale, with Strength from Natural to Hard (the robotic
+  sound) and a Retune Speed.
+- **Harmonizer:** adds 3rds, 5ths or octaves that follow the piece's key.
+- **Pitch Shift** with a Formant control, so a voice can move without sounding sped up.
+- **Talk Box**, **Robot** and **Whisper / Breathy**.
+
+A live microphone is heard through these effects in the page only (Play Along, DJ Mode, the Record With Mic
+preview), and is never stored. What is saved is the effect and its settings, as score settings. On a Vocal Track,
+the effects are applied on playback, so they can be changed later.
+
+### Vocal Tracks
+
+A studio may hold recorded voice: the one thing the editor stores that is not a score.
+
+- **Recording.** "Record A Vocal" records from the microphone in the page, over the piece (a one-bar count-in,
+  headphones advised). A track holds clips, which can be lined up with the piece, trimmed, moved and split. Each
+  recording is a take, and the person picks the take a clip plays. Each clip has its own volume and fades.
+- **The raw voice is kept untouched.** Every effect (Voice Effects, and the Sound panel's EQ, Echo, Room and the
+  rest) is applied on playback from score settings, so it can be changed later.
+- **On this device first.** A take is saved in the page's own storage (IndexedDB, as PCM or FLAC) and survives a
+  reload. Until the person taps "Save To Studio" it is marked "Only On This Device", and nothing is uploaded.
+- **Two qualities,** chosen per take, with a default in the studio's settings:
+  - **Perfect:** FLAC, lossless, mono at 44.1 or 48 kHz, encoded in the page;
+  - **Good To The Ear:** Opus, mono, about 96 kbps (stored as Ogg or WebM Opus). It sounds the same for a voice
+    at about a sixth of the size. It is encoded in the page with WebCodecs' AudioEncoder, or with MediaRecorder
+    where AudioEncoder is missing.
+  The library's rule of lossless audio only is waived just for takes the person saves as Good To The Ear.
+- **Choosing before saving.** Save To Studio first shows the take's exact size both ways, encoded for real, and how
+  much studio space and how many minutes each would leave. The person then chooses.
+- **Freeing space.** A saved Perfect take can be converted to Good To The Ear later. The page says this cannot be
+  undone, and never claims to restore the quality.
+- **Space.** A non-named person's studio limit is 25 MB, about 8 to 10 minutes of Perfect singing. All non-named
+  studios share a total of 20 GB by default, which can be raised at any time in config with no code change. A safety
+  floor sits under both: uploads are refused while the host's free disk (`disk_free_space`) would drop below a
+  config minimum, 50 GB by default. The studio shows the space and minutes left. A save that would pass the
+  person's limit, the shared total or the floor is refused, with a plain message saying how much is needed. The
+  admin view shows the total used and the cap, and warns at 80% of the cap.
+- **The server checks every take:** its kind by magic bytes (`fLaC`, `OggS`, or WebM's EBML header), its size and
+  its duration. It refuses anything else.
+- **Export** carries the vocals at the quality they were saved in.
+
 ### DJ & Effects
 
 The DJ & Effects page's effects are the performance side, played on top of the Sound panel. All of them are saved
 as score settings, never audio.
 
-- **Families and effects:**
+- **Families and effects** (Pitch and Voice uses the Voice Effects above):
   - **Turntable:** Scratch, Spinback, Tape Stop, Tape Start, Vinyl Crackle and Wow.
   - **Build-Up and Drop:** Riser, Snare Roll, Filter Sweep, Impact, Sidechain Pump.
   - **Rhythm:** Stutter, Trance Gate, Wobble, Tremolo, Auto-Pan.
@@ -282,7 +336,11 @@ as score settings, never audio.
   - `note.bend`: the Exact Pitch curve, as time and cents pairs;
   - `lane.fx`: the part's Sound settings;
   - `mix.room`, `mix.limiter`;
-  - `fx_clips`: effect, lane or the whole piece, from bar, to bar, and settings.
+  - `fx_clips`: effect, lane or the whole piece, from bar, to bar, and settings;
+  - `lane.voice`: a Voice Effects chain, for a lane that is a voice.
+- **Vocal Tracks** add a `vocal` lane kind: its clips (take file, where it starts in the piece, trim in and out,
+  volume, fades) and its takes. A take's file sits beside `score.json` in the draft as `vocal-<id>.flac`, `.ogg` or
+  `.webm`.
 
   The page, PHP (`ScoreRules`) and Python (`siue_music/score.py`) all accept schema 2 in the same PR. The MCP
   tells the AI about the new fields.
@@ -310,18 +368,53 @@ Each phase ships on its own, in this order:
 3. **4c: Sheet music, import and export.** The Grid / Sheet Music / Both views, written transposition on the
    sheet, MusicXML and MIDI import with the preview, and MusicXML and MIDI export.
 4. **4d: Keyboards, Hum and Play Along.** Web MIDI devices (velocity, sustain, drum pads, General MIDI names and
-   program changes), Hum with its three snaps and three placements, and Play Along.
+   program changes), Hum with its three snaps and three placements, Upload A Recording, and Play Along.
 5. **4e: Speed, loudness and Sound.** Schema 2: the piece's tempo line, each part's speed, loudness lines, Exact
-   Pitch bends, the Sound panel, the Room and the limiter.
-6. **4f: DJ & Effects.** The effects timeline, DJ Mode with Record To Timeline, and the Looper.
+   Pitch bends, the Sound panel, the Room and the limiter, and the Voice Effects on a live microphone and on any
+   part.
+6. **4f: Vocal Tracks.** Recording takes on this device, the two qualities and the size choice, clips, Save To
+   Studio, the 25 MB limit, the server's checks, converting to Good To The Ear, and Voice Effects on vocals.
+7. **4g: DJ & Effects.** The effects timeline, DJ Mode with Record To Timeline, and the Looper.
+
+## What the design pages show, phase by phase
+
+Every control and effect on the Composer and DJ & Effects pages, and the phase that builds it. The pages' own
+preview switches (Phone, Desktop, Theme) are not part of the editor.
+
+| On the pages | Phase |
+|---|---|
+| Parts In This Piece, Part Settings, the instrument picker by family with icons, Clear | 4b |
+| Play Live with Tidy To; Step with lengths, Dotted, + Rest and ‹ Back One; Grid with Line Up To; chords | 4b |
+| Tap to select then delete, Undo and Redo, Move Them Into Range, amber and red notes | 4b |
+| Hear With The Piece, Hear My Part Alone, Save Draft, Notes On Controls, Fill My Screen | 4b |
+| Show As Grid / Sheet Music / Both, the range picture | 4c |
+| Import Music File: Found In, Time Signature, Key and Length, part matching, What Can't Come Across, Add As New Parts, Start A New Piece, Export | 4c |
+| Your Keyboard, Choose Device, Sustain Pedal, drum pads on Channel 10, Sends GM, Studio Sounds | 4d |
+| Hum: Record With Mic, Play The Demo Hum, Upload A Recording, Hum Snaps To (Friendly Notes, All 12 Notes, Exact Pitch), Where Hummed Notes Go (After The Part, Replace The Part, At The Dashed Line) | 4d (Exact Pitch's bends are stored from 4e) |
+| Play Along, with the other parts as outlines | 4d |
+| Speed: Piece speed (Slow, Walking, Quick, Beats Per Minute), Steady, Slow Down, Speed Up, Sudden Change; This part's speed: Follow Piece, Ratio To Piece, Own BPM | 4e |
+| Loudness: Very Soft to Very Loud, Get Louder, Get Softer | 4e |
+| Sound, Each Part: Volume, Left / Right, Bass / Middle / Treble, Echo Amount and Repeats, Shimmer, Warmth, Brightness with Sweep, Even Out Loud And Soft, Room, Mute, Solo | 4e |
+| Sound, The Whole Piece: Room (Dry, Small Room, Concert Hall, Cathedral, Cave), the limiter, Overall Loudness, What The Score Saves | 4e |
+| Voice Effects: Vocoder, Auto-Tune, Harmonizer, Pitch Shift with Formant, Talk Box, Robot, Whisper / Breathy | 4e live; 4f on vocals |
+| Vocal Tracks: Record A Vocal, takes, clips, Perfect and Good To The Ear, Only On This Device, Save To Studio | 4f |
+| Turntable: Scratch, Spinback, Tape Stop, Tape Start, Vinyl Crackle and Wow | 4g |
+| Build-Up and Drop: Riser, Snare Roll, Filter Sweep, Impact, Sidechain Pump | 4g |
+| Rhythm: Stutter, Trance Gate, Wobble, Tremolo, Auto-Pan | 4g |
+| Colour: Bitcrusher, Ring Mod, Phaser, Flanger, Auto-Wah, Rotary Speaker | 4g |
+| Time and Space: Echo Out, Ping-Pong Echo, Reverse, Reverse Reverb, Granular Freeze, Wide / 8D, Doppler Fly-By | 4g |
+| Pitch and Voice: Pitch Shift, Harmoniser, Vocoder, Pitch Correction (Auto-Tune) | 4g as timeline clips; the effects themselves from 4e |
+| Live DJ Tools: Platter, Crossfader, Hot Cues, Performance Pads (Crush, Echo, Filter and the rest), XY Pad, Looper | 4g |
+| Timeline: Place On The Timeline, Hear From Here, Shorter, Longer, Remove; Record To Timeline; The Score Stores This; What A Browser Does Less Well | 4g |
 
 ## Decisions made with defaults
 
-- **Instruments VSCO-2 CE lacks.** These are Celesta, Vibraphone, Choir and the kit's hi-hat and ride, and
-  Tubular Bells is incomplete. They ship with the stand-ins above. Their own samples may come later from other
-  sources, only CC0 or public domain. The score names the real instrument, so no score changes when that happens.
-- **Library size.** Adding the instruments grows the library from about 36 MB to about 200 MB. It stays in plain
-  git and deploys whole, as today. The host has plenty of room (1.5 TB, 51 GB used).
+- **Instruments neither CC0 library has.** These are Celesta, Choir, a real Lyre and a ride cymbal. They ship with
+  the stand-ins above. The SF2 celesta and choir sets that some sites call public domain have no clear origin, so
+  they are not used. Real samples may come later, only CC0 or public domain. The score names the real instrument,
+  so no score changes when that happens.
+- **Library size.** The instruments grow the library from about 36 MB to about 180 MB. It stays in plain git and
+  deploys whole, as today. The host has plenty of room (1.5 TB, 51 GB used).
 - **One dynamic layer.** The library keeps one recorded dynamic per note, as today (mf, or the nearest).
   Loudness comes from velocity, the way the renderer already scales it.
 - **The renderer is the browser's.** The editor plays through the same renderer (`render/`) the piece page uses.

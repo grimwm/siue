@@ -5,6 +5,434 @@
  "licence": "CC0 1.0 Universal",
  "credit": "Versilian Studios; organ sampled by Simon Dalzell of Ivy Audio",
  "instruments": {
+  "violin": {
+   "files": [
+    {
+     "pitch": 55,
+     "file": "violin/55.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "violin/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "violin/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 64,
+     "file": "violin/64.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 67,
+     "file": "violin/67.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 69,
+     "file": "violin/69.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "violin/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 76,
+     "file": "violin/76.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 79,
+     "file": "violin/79.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 81,
+     "file": "violin/81.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "violin/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 88,
+     "file": "violin/88.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 91,
+     "file": "violin/91.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 93,
+     "file": "violin/93.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 96,
+     "file": "violin/96.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    4.0,
+    8.0
+   ],
+   "name": "Violin",
+   "category": "strings",
+   "range": [
+    55,
+    100
+   ],
+   "expert": [
+    55,
+    105
+   ],
+   "home": 67,
+   "clef": "treble",
+   "written": 0,
+   "gm": 41,
+   "gm_name": "Violin",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "viola": {
+   "files": [
+    {
+     "pitch": 48,
+     "file": "viola/48.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 52,
+     "file": "viola/52.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 55,
+     "file": "viola/55.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 59,
+     "file": "viola/59.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 62,
+     "file": "viola/62.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 65,
+     "file": "viola/65.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 69,
+     "file": "viola/69.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "viola/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 76,
+     "file": "viola/76.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 79,
+     "file": "viola/79.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 83,
+     "file": "viola/83.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 86,
+     "file": "viola/86.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    2.75,
+    6.75
+   ],
+   "name": "Viola",
+   "category": "strings",
+   "range": [
+    48,
+    88
+   ],
+   "expert": [
+    48,
+    93
+   ],
+   "home": 60,
+   "clef": "alto",
+   "written": 0,
+   "gm": 42,
+   "gm_name": "Viola",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "cello": {
+   "files": [
+    {
+     "pitch": 36,
+     "file": "cello/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 40,
+     "file": "cello/40.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 43,
+     "file": "cello/43.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 47,
+     "file": "cello/47.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 50,
+     "file": "cello/50.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 53,
+     "file": "cello/53.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "cello/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "cello/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 64,
+     "file": "cello/64.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 67,
+     "file": "cello/67.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 71,
+     "file": "cello/71.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 74,
+     "file": "cello/74.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 77,
+     "file": "cello/77.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    2.5,
+    6.5
+   ],
+   "name": "Cello",
+   "category": "strings",
+   "range": [
+    36,
+    84
+   ],
+   "expert": [
+    36,
+    93
+   ],
+   "home": 48,
+   "clef": "bass",
+   "written": 0,
+   "gm": 43,
+   "gm_name": "Cello",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "bass": {
+   "files": [
+    {
+     "pitch": 28,
+     "file": "bass/28.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 30,
+     "file": "bass/30.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 31,
+     "file": "bass/31.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 34,
+     "file": "bass/34.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 36,
+     "file": "bass/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 38,
+     "file": "bass/38.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 40,
+     "file": "bass/40.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 42,
+     "file": "bass/42.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 44,
+     "file": "bass/44.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 45,
+     "file": "bass/45.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 49,
+     "file": "bass/49.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 52,
+     "file": "bass/52.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 56,
+     "file": "bass/56.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 59,
+     "file": "bass/59.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    2.0,
+    6.0
+   ],
+   "name": "Double Bass",
+   "category": "strings",
+   "range": [
+    28,
+    67
+   ],
+   "expert": [
+    24,
+    72
+   ],
+   "home": 36,
+   "clef": "bass",
+   "written": 12,
+   "gm": 44,
+   "gm_name": "Contrabass",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
   "harp": {
    "files": [
     {
@@ -145,185 +573,1044 @@
      "rate": 44100,
      "channels": 2
     }
-   ]
-  },
-  "cello": {
-   "files": [
-    {
-     "pitch": 36,
-     "file": "cello/36.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 40,
-     "file": "cello/40.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 43,
-     "file": "cello/43.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 47,
-     "file": "cello/47.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 50,
-     "file": "cello/50.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 53,
-     "file": "cello/53.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 57,
-     "file": "cello/57.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 60,
-     "file": "cello/60.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 64,
-     "file": "cello/64.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 67,
-     "file": "cello/67.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 71,
-     "file": "cello/71.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 74,
-     "file": "cello/74.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 77,
-     "file": "cello/77.flac",
-     "rate": 44100,
-     "channels": 2
-    }
    ],
-   "loop": [
-    2.5,
-    6.5
-   ]
+   "name": "Harp",
+   "category": "strings",
+   "range": [
+    23,
+    104
+   ],
+   "expert": [
+    23,
+    104
+   ],
+   "home": 60,
+   "clef": "grand",
+   "written": 0,
+   "gm": 47,
+   "gm_name": "Orchestral Harp",
+   "pieces": null,
+   "attack": 0.005,
+   "release": 0.4
   },
-  "bass": {
+  "lyre": {
    "files": [
     {
-     "pitch": 28,
-     "file": "bass/28.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 30,
-     "file": "bass/30.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 31,
-     "file": "bass/31.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 34,
-     "file": "bass/34.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
      "pitch": 36,
-     "file": "bass/36.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 38,
-     "file": "bass/38.flac",
+     "file": "lyre/36.flac",
      "rate": 44100,
      "channels": 2
     },
     {
      "pitch": 40,
-     "file": "bass/40.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 42,
-     "file": "bass/42.flac",
+     "file": "lyre/40.flac",
      "rate": 44100,
      "channels": 2
     },
     {
      "pitch": 44,
-     "file": "bass/44.flac",
+     "file": "lyre/44.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 45,
-     "file": "bass/45.flac",
-     "rate": 44100,
-     "channels": 2
-    },
-    {
-     "pitch": 49,
-     "file": "bass/49.flac",
+     "pitch": 48,
+     "file": "lyre/48.flac",
      "rate": 44100,
      "channels": 2
     },
     {
      "pitch": 52,
-     "file": "bass/52.flac",
+     "file": "lyre/52.flac",
      "rate": 44100,
      "channels": 2
     },
     {
      "pitch": 56,
-     "file": "bass/56.flac",
+     "file": "lyre/56.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 59,
-     "file": "bass/59.flac",
+     "pitch": 60,
+     "file": "lyre/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 64,
+     "file": "lyre/64.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 68,
+     "file": "lyre/68.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "lyre/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 76,
+     "file": "lyre/76.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 80,
+     "file": "lyre/80.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "lyre/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 88,
+     "file": "lyre/88.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 92,
+     "file": "lyre/92.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "from": "vcsl",
+   "name": "Lyre",
+   "category": "strings",
+   "range": [
+    48,
+    84
+   ],
+   "expert": [
+    36,
+    92
+   ],
+   "home": 60,
+   "clef": "treble",
+   "written": 0,
+   "gm": 47,
+   "gm_name": "Orchestral Harp",
+   "pieces": null,
+   "standin_note": "Plays a folk harp's samples: no lyre has been recorded under a CC0 or public-domain licence.",
+   "icon": "lyre",
+   "attack": 0.02,
+   "release": 2.5
+  },
+  "flute": {
+   "files": [
+    {
+     "pitch": 60,
+     "file": "flute/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 64,
+     "file": "flute/64.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 69,
+     "file": "flute/69.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "flute/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 76,
+     "file": "flute/76.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 81,
+     "file": "flute/81.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "flute/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 88,
+     "file": "flute/88.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 93,
+     "file": "flute/93.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 96,
+     "file": "flute/96.flac",
      "rate": 44100,
      "channels": 2
     }
    ],
    "loop": [
-    2.0,
-    6.0
-   ]
+    2.7,
+    5.1
+   ],
+   "name": "Flute",
+   "category": "woodwinds",
+   "range": [
+    60,
+    96
+   ],
+   "expert": [
+    59,
+    101
+   ],
+   "home": 72,
+   "clef": "treble",
+   "written": 0,
+   "gm": 74,
+   "gm_name": "Flute",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "piccolo": {
+   "files": [
+    {
+     "pitch": 79,
+     "file": "piccolo/79.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "piccolo/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 91,
+     "file": "piccolo/91.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 96,
+     "file": "piccolo/96.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 103,
+     "file": "piccolo/103.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    1.3,
+    5.3
+   ],
+   "name": "Piccolo",
+   "category": "woodwinds",
+   "range": [
+    74,
+    105
+   ],
+   "expert": [
+    74,
+    108
+   ],
+   "home": 84,
+   "clef": "treble",
+   "written": -12,
+   "gm": 73,
+   "gm_name": "Piccolo",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "oboe": {
+   "files": [
+    {
+     "pitch": 58,
+     "file": "oboe/58.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 62,
+     "file": "oboe/62.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 65,
+     "file": "oboe/65.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 70,
+     "file": "oboe/70.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 74,
+     "file": "oboe/74.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 77,
+     "file": "oboe/77.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 82,
+     "file": "oboe/82.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 86,
+     "file": "oboe/86.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 89,
+     "file": "oboe/89.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    1.0,
+    5.0
+   ],
+   "name": "Oboe",
+   "category": "woodwinds",
+   "range": [
+    58,
+    91
+   ],
+   "expert": [
+    58,
+    93
+   ],
+   "home": 69,
+   "clef": "treble",
+   "written": 0,
+   "gm": 69,
+   "gm_name": "Oboe",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "clarinet": {
+   "files": [
+    {
+     "pitch": 50,
+     "file": "clarinet/50.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 53,
+     "file": "clarinet/53.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 58,
+     "file": "clarinet/58.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 62,
+     "file": "clarinet/62.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 65,
+     "file": "clarinet/65.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 70,
+     "file": "clarinet/70.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 74,
+     "file": "clarinet/74.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 77,
+     "file": "clarinet/77.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 82,
+     "file": "clarinet/82.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 86,
+     "file": "clarinet/86.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 89,
+     "file": "clarinet/89.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    1.0,
+    5.0
+   ],
+   "name": "Clarinet",
+   "category": "woodwinds",
+   "range": [
+    50,
+    91
+   ],
+   "expert": [
+    50,
+    94
+   ],
+   "home": 62,
+   "clef": "treble",
+   "written": 0,
+   "gm": 72,
+   "gm_name": "Clarinet",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "bassoon": {
+   "files": [
+    {
+     "pitch": 34,
+     "file": "bassoon/34.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 37,
+     "file": "bassoon/37.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 41,
+     "file": "bassoon/41.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 45,
+     "file": "bassoon/45.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 48,
+     "file": "bassoon/48.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 55,
+     "file": "bassoon/55.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "bassoon/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 63,
+     "file": "bassoon/63.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 68,
+     "file": "bassoon/68.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "bassoon/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 75,
+     "file": "bassoon/75.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    0.4,
+    4.4
+   ],
+   "name": "Bassoon",
+   "category": "woodwinds",
+   "range": [
+    34,
+    76
+   ],
+   "expert": [
+    34,
+    81
+   ],
+   "home": 48,
+   "clef": "bass",
+   "written": 0,
+   "gm": 71,
+   "gm_name": "Bassoon",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "trumpet": {
+   "files": [
+    {
+     "pitch": 53,
+     "file": "trumpet/53.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "trumpet/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "trumpet/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 63,
+     "file": "trumpet/63.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 67,
+     "file": "trumpet/67.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 70,
+     "file": "trumpet/70.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 74,
+     "file": "trumpet/74.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 77,
+     "file": "trumpet/77.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 81,
+     "file": "trumpet/81.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "trumpet/84.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    0.5,
+    3.7
+   ],
+   "name": "Trumpet",
+   "category": "brass",
+   "range": [
+    52,
+    82
+   ],
+   "expert": [
+    52,
+    86
+   ],
+   "home": 65,
+   "clef": "treble",
+   "written": 0,
+   "gm": 57,
+   "gm_name": "Trumpet",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "horn": {
+   "files": [
+    {
+     "pitch": 33,
+     "file": "horn/33.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 36,
+     "file": "horn/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 39,
+     "file": "horn/39.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 43,
+     "file": "horn/43.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 46,
+     "file": "horn/46.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 50,
+     "file": "horn/50.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 53,
+     "file": "horn/53.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "horn/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "horn/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 74,
+     "file": "horn/74.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 77,
+     "file": "horn/77.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    1.5,
+    4.0
+   ],
+   "name": "French Horn",
+   "category": "brass",
+   "range": [
+    35,
+    77
+   ],
+   "expert": [
+    29,
+    81
+   ],
+   "home": 53,
+   "clef": "treble",
+   "written": 0,
+   "gm": 61,
+   "gm_name": "French Horn",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "trombone": {
+   "files": [
+    {
+     "pitch": 34,
+     "file": "trombone/34.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 37,
+     "file": "trombone/37.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 41,
+     "file": "trombone/41.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 46,
+     "file": "trombone/46.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 50,
+     "file": "trombone/50.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 53,
+     "file": "trombone/53.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "trombone/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 63,
+     "file": "trombone/63.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 65,
+     "file": "trombone/65.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    0.9,
+    3.0
+   ],
+   "name": "Trombone",
+   "category": "brass",
+   "range": [
+    40,
+    72
+   ],
+   "expert": [
+    34,
+    77
+   ],
+   "home": 50,
+   "clef": "bass",
+   "written": 0,
+   "gm": 58,
+   "gm_name": "Trombone",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "tuba": {
+   "files": [
+    {
+     "pitch": 29,
+     "file": "tuba/29.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 34,
+     "file": "tuba/34.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 39,
+     "file": "tuba/39.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 41,
+     "file": "tuba/41.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 46,
+     "file": "tuba/46.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 50,
+     "file": "tuba/50.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 53,
+     "file": "tuba/53.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 58,
+     "file": "tuba/58.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 62,
+     "file": "tuba/62.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "loop": [
+    0.45,
+    3.0
+   ],
+   "name": "Tuba",
+   "category": "brass",
+   "range": [
+    26,
+    65
+   ],
+   "expert": [
+    22,
+    67
+   ],
+   "home": 38,
+   "clef": "bass",
+   "written": 0,
+   "gm": 59,
+   "gm_name": "Tuba",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
+  },
+  "piano": {
+   "files": [
+    {
+     "pitch": 21,
+     "file": "piano/21.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 25,
+     "file": "piano/25.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 29,
+     "file": "piano/29.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 33,
+     "file": "piano/33.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 37,
+     "file": "piano/37.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 41,
+     "file": "piano/41.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 45,
+     "file": "piano/45.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 49,
+     "file": "piano/49.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 53,
+     "file": "piano/53.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "piano/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 61,
+     "file": "piano/61.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 65,
+     "file": "piano/65.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 69,
+     "file": "piano/69.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 73,
+     "file": "piano/73.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 77,
+     "file": "piano/77.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 81,
+     "file": "piano/81.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 85,
+     "file": "piano/85.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 89,
+     "file": "piano/89.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 93,
+     "file": "piano/93.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 97,
+     "file": "piano/97.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 101,
+     "file": "piano/101.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 105,
+     "file": "piano/105.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 108,
+     "file": "piano/108.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "name": "Piano",
+   "category": "keys",
+   "range": [
+    21,
+    108
+   ],
+   "expert": [
+    21,
+    108
+   ],
+   "home": 60,
+   "clef": "grand",
+   "written": 0,
+   "gm": 1,
+   "gm_name": "Acoustic Grand Piano",
+   "pieces": null,
+   "attack": 0.005,
+   "release": 0.4
   },
   "organ": {
    "files": [
@@ -457,81 +1744,846 @@
    "loop": [
     3.0,
     9.0
-   ]
+   ],
+   "name": "Organ",
+   "category": "keys",
+   "range": [
+    24,
+    96
+   ],
+   "expert": [
+    12,
+    96
+   ],
+   "home": 60,
+   "clef": "grand",
+   "written": 0,
+   "gm": 20,
+   "gm_name": "Church Organ",
+   "pieces": null,
+   "attack": 0.05,
+   "release": 0.3
   },
-  "horn": {
+  "celesta": {
    "files": [
     {
-     "pitch": 33,
-     "file": "horn/33.flac",
+     "pitch": 67,
+     "file": "glock/79.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 36,
-     "file": "horn/36.flac",
+     "pitch": 72,
+     "file": "glock/84.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 39,
-     "file": "horn/39.flac",
+     "pitch": 79,
+     "file": "glock/91.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 43,
-     "file": "horn/43.flac",
+     "pitch": 84,
+     "file": "glock/96.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 91,
+     "file": "glock/103.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 96,
+     "file": "glock/108.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "standin": "glock",
+   "name": "Celesta",
+   "category": "keys",
+   "range": [
+    60,
+    108
+   ],
+   "expert": [
+    60,
+    108
+   ],
+   "home": 72,
+   "clef": "treble",
+   "written": -12,
+   "gm": 9,
+   "gm_name": "Celesta",
+   "pieces": null,
+   "standin_note": "Plays the Glockenspiel samples, an octave lower.",
+   "attack": 0.005,
+   "release": 0.4
+  },
+  "timpani": {
+   "files": [
+    {
+     "pitch": 42,
+     "file": "timpani/42.flac",
      "rate": 44100,
      "channels": 2
     },
     {
      "pitch": 46,
-     "file": "horn/46.flac",
+     "file": "timpani/46.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 50,
-     "file": "horn/50.flac",
+     "pitch": 49,
+     "file": "timpani/49.flac",
      "rate": 44100,
      "channels": 2
     },
+    {
+     "pitch": 52,
+     "file": "timpani/52.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 54,
+     "file": "timpani/54.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "name": "Timpani",
+   "category": "pitched",
+   "range": [
+    38,
+    57
+   ],
+   "expert": [
+    36,
+    60
+   ],
+   "home": 45,
+   "clef": "bass",
+   "written": 0,
+   "gm": 48,
+   "gm_name": "Timpani",
+   "pieces": null,
+   "attack": 0.005,
+   "release": 0.4
+  },
+  "glock": {
+   "files": [
+    {
+     "pitch": 79,
+     "file": "glock/79.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "glock/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 91,
+     "file": "glock/91.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 96,
+     "file": "glock/96.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 103,
+     "file": "glock/103.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 108,
+     "file": "glock/108.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "name": "Glockenspiel",
+   "category": "pitched",
+   "range": [
+    79,
+    108
+   ],
+   "expert": [
+    79,
+    108
+   ],
+   "home": 84,
+   "clef": "treble",
+   "written": -24,
+   "gm": 10,
+   "gm_name": "Glockenspiel",
+   "pieces": null,
+   "attack": 0.005,
+   "release": 0.4
+  },
+  "xylo": {
+   "files": [
+    {
+     "pitch": 67,
+     "file": "xylo/67.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "xylo/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 79,
+     "file": "xylo/79.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "xylo/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 91,
+     "file": "xylo/91.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 96,
+     "file": "xylo/96.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 103,
+     "file": "xylo/103.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 108,
+     "file": "xylo/108.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "name": "Xylophone",
+   "category": "pitched",
+   "range": [
+    65,
+    108
+   ],
+   "expert": [
+    60,
+    108
+   ],
+   "home": 79,
+   "clef": "treble",
+   "written": -12,
+   "gm": 14,
+   "gm_name": "Xylophone",
+   "pieces": null,
+   "attack": 0.005,
+   "release": 0.4
+  },
+  "marimba": {
+   "files": [
+    {
+     "pitch": 41,
+     "file": "marimba/41.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 48,
+     "file": "marimba/48.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 55,
+     "file": "marimba/55.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 59,
+     "file": "marimba/59.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 65,
+     "file": "marimba/65.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "marimba/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 79,
+     "file": "marimba/79.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 83,
+     "file": "marimba/83.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 89,
+     "file": "marimba/89.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 96,
+     "file": "marimba/96.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "name": "Marimba",
+   "category": "pitched",
+   "range": [
+    36,
+    96
+   ],
+   "expert": [
+    36,
+    96
+   ],
+   "home": 60,
+   "clef": "grand",
+   "written": 0,
+   "gm": 13,
+   "gm_name": "Marimba",
+   "pieces": null,
+   "attack": 0.005,
+   "release": 0.4
+  },
+  "vibes": {
+   "files": [
     {
      "pitch": 53,
-     "file": "horn/53.flac",
+     "file": "vibes/53.flac",
      "rate": 44100,
      "channels": 2
     },
     {
      "pitch": 57,
-     "file": "horn/57.flac",
+     "file": "vibes/57.flac",
      "rate": 44100,
      "channels": 2
     },
     {
      "pitch": 60,
-     "file": "horn/60.flac",
+     "file": "vibes/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 64,
+     "file": "vibes/64.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 67,
+     "file": "vibes/67.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 71,
+     "file": "vibes/71.flac",
      "rate": 44100,
      "channels": 2
     },
     {
      "pitch": 74,
-     "file": "horn/74.flac",
+     "file": "vibes/74.flac",
      "rate": 44100,
      "channels": 2
     },
     {
      "pitch": 77,
-     "file": "horn/77.flac",
+     "file": "vibes/77.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 81,
+     "file": "vibes/81.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "vibes/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 88,
+     "file": "vibes/88.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "from": "vcsl",
+   "name": "Vibraphone",
+   "category": "pitched",
+   "range": [
+    53,
+    89
+   ],
+   "expert": [
+    53,
+    89
+   ],
+   "home": 65,
+   "clef": "treble",
+   "written": 0,
+   "gm": 12,
+   "gm_name": "Vibraphone",
+   "pieces": null,
+   "attack": 0.005,
+   "release": 1.8
+  },
+  "bells": {
+   "files": [
+    {
+     "pitch": 60,
+     "file": "bells/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 62,
+     "file": "bells/62.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 64,
+     "file": "bells/64.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 65,
+     "file": "bells/65.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 67,
+     "file": "bells/67.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 69,
+     "file": "bells/69.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 71,
+     "file": "bells/71.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "bells/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 74,
+     "file": "bells/74.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 76,
+     "file": "bells/76.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 77,
+     "file": "bells/77.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "from": "vcsl",
+   "name": "Tubular Bells",
+   "category": "pitched",
+   "range": [
+    60,
+    77
+   ],
+   "expert": [
+    60,
+    79
+   ],
+   "home": 67,
+   "clef": "treble",
+   "written": 0,
+   "gm": 15,
+   "gm_name": "Tubular Bells",
+   "pieces": null,
+   "attack": 0.005,
+   "release": 0.4
+  },
+  "kit": {
+   "files": [
+    {
+     "pitch": 36,
+     "file": "kit/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 38,
+     "file": "kit/38.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 42,
+     "file": "kit/42.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 45,
+     "file": "kit/45.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 46,
+     "file": "kit/46.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 49,
+     "file": "kit/49.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 50,
+     "file": "kit/50.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 51,
+     "file": "kit/51.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "from": "vcsl",
+   "pitched": false,
+   "name": "Drum Kit",
+   "category": "drums",
+   "range": null,
+   "expert": null,
+   "home": null,
+   "clef": "percussion",
+   "written": 0,
+   "gm": 1,
+   "gm_name": "Standard Kit",
+   "pieces": [
+    [
+     36,
+     "Kick"
+    ],
+    [
+     38,
+     "Snare"
+    ],
+    [
+     42,
+     "Closed Hi-Hat"
+    ],
+    [
+     46,
+     "Open Hi-Hat"
+    ],
+    [
+     45,
+     "Low Tom"
+    ],
+    [
+     50,
+     "High Tom"
+    ],
+    [
+     49,
+     "Crash"
+    ],
+    [
+     51,
+     "Ride"
+    ]
+   ],
+   "standin_note": "Ride: a suspended cymbal struck with a stick; VCSL has no ride cymbal of its own.",
+   "attack": 0.005,
+   "release": 0.4
+  },
+  "orch": {
+   "files": [
+    {
+     "pitch": 35,
+     "file": "orch/35.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 54,
+     "file": "orch/54.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "orch/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 81,
+     "file": "orch/81.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "pitched": false,
+   "name": "Orchestral Percussion",
+   "category": "drums",
+   "range": null,
+   "expert": null,
+   "home": null,
+   "clef": "percussion",
+   "written": 0,
+   "gm": 49,
+   "gm_name": "Orchestra Kit",
+   "pieces": [
+    [
+     35,
+     "Bass Drum"
+    ],
+    [
+     57,
+     "Cymbals"
+    ],
+    [
+     81,
+     "Triangle"
+    ],
+    [
+     54,
+     "Tambourine"
+    ]
+   ],
+   "attack": 0.005,
+   "release": 0.4
+  },
+  "choir": {
+   "files": [
+    {
+     "pitch": 36,
+     "file": "organ/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 39,
+     "file": "organ/39.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 42,
+     "file": "organ/42.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 45,
+     "file": "organ/45.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 48,
+     "file": "organ/48.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 51,
+     "file": "organ/51.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 54,
+     "file": "organ/54.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 57,
+     "file": "organ/57.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "organ/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 63,
+     "file": "organ/63.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 66,
+     "file": "organ/66.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 69,
+     "file": "organ/69.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "organ/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 75,
+     "file": "organ/75.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 78,
+     "file": "organ/78.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 81,
+     "file": "organ/81.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "organ/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 87,
+     "file": "organ/87.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 90,
+     "file": "organ/90.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 93,
+     "file": "organ/93.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 96,
+     "file": "organ/96.flac",
      "rate": 44100,
      "channels": 2
     }
    ],
    "loop": [
-    1.5,
-    4.0
-   ]
+    3.0,
+    9.0
+   ],
+   "standin": "organ",
+   "name": "Choir (Aahs / Oohs)",
+   "category": "voices",
+   "range": [
+    40,
+    81
+   ],
+   "expert": [
+    36,
+    84
+   ],
+   "home": 57,
+   "clef": "grand",
+   "written": 0,
+   "gm": 53,
+   "gm_name": "Choir Aahs",
+   "pieces": null,
+   "standin_note": "Plays the Organ samples with a soft start.",
+   "attack": 0.25,
+   "release": 0.6
+  }
+ },
+ "sources": {
+  "vcsl": {
+   "library": "Versilian Community Sample Library (VCSL)",
+   "licence": "CC0 1.0 Universal",
+   "credit": "Versilian Studios and contributors",
+   "source": "https://raw.githubusercontent.com/sgossner/VCSL",
+   "commit": "c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e"
   }
  }
 }

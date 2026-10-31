@@ -56,7 +56,16 @@ class RenderableScoreParityTest(unittest.TestCase):
         return validate(s, self.glossary, self.library)
 
     def test_the_library_ids_are_the_ones_in_library_json(self):
-        self.assertEqual(self.library, frozenset({"harp", "cello", "bass", "organ", "horn"}))
+        self.assertEqual(self.library, frozenset({
+            "violin", "viola", "cello", "bass", "harp", "lyre", "flute", "piccolo", "oboe", "clarinet", "bassoon", "trumpet", "horn", "trombone",
+            "tuba", "piano", "organ", "celesta", "timpani", "glock", "xylo", "marimba", "vibes", "bells", "kit", "orch", "choir"}))
+
+    def test_stand_ins_drums_and_new_instruments_pass(self):
+        for pair in (("celesta", "kit"), ("violin", "choir")):
+            def orchestra(s, pair=pair):
+                for lane, instrument in zip(s["lanes"], pair):
+                    lane["sound"]["instrument"] = instrument
+            self.assertEqual(self.errors(orchestra), [], pair)
 
     def test_a_renderable_score_needs_no_audio_file_or_spectrogram(self):
         self.assertEqual(self.base["audio"], [])

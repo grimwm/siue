@@ -1,0 +1,333 @@
+{
+ "schema": 1,
+ "kind": "music",
+ "project": {
+  "id": "crete",
+  "name": "Crete"
+ },
+ "piece": {
+  "id": "orchestra-piece",
+  "title": "Orchestra piece: violin, flute, drums and celesta"
+ },
+ "draft": 1,
+ "made": "2026-10-17T12:00:00Z",
+ "duration": 8,
+ "bars": 4,
+ "tempo": [
+  {
+   "bar": 1,
+   "bpm": 120,
+   "beats": 4,
+   "unit": 4
+  }
+ ],
+ "sections": [
+  {
+   "id": "all",
+   "name": "The whole orchestra",
+   "from_bar": 1,
+   "to_bar": 4,
+   "color": "#2e4057"
+  }
+ ],
+ "lanes": [
+  {
+   "id": "violin",
+   "name": "Violin",
+   "family": "strings",
+   "icon": "strings",
+   "color": "#7a9cc6",
+   "sound": {
+    "instrument": "violin",
+    "gain_db": 0,
+    "attack": 0.05,
+    "release": 0.3
+   }
+  },
+  {
+   "id": "flute",
+   "name": "Flute",
+   "family": "woodwinds",
+   "icon": "woodwinds",
+   "color": "#6aa58a",
+   "sound": {
+    "instrument": "flute",
+    "gain_db": 0,
+    "attack": 0.05,
+    "release": 0.3
+   }
+  },
+  {
+   "id": "drums",
+   "name": "Drum Kit",
+   "family": "percussion",
+   "icon": "percussion",
+   "color": "#b05a4a",
+   "sound": {
+    "instrument": "kit",
+    "gain_db": 0,
+    "attack": 0.005,
+    "release": 0.4
+   }
+  },
+  {
+   "id": "celesta",
+   "name": "Celesta",
+   "family": "keys",
+   "icon": "keys",
+   "color": "#c9a23a",
+   "sound": {
+    "instrument": "celesta",
+    "gain_db": 0,
+    "attack": 0.005,
+    "release": 0.4
+   }
+  }
+ ],
+ "characters": [],
+ "motifs": [],
+ "notes": [
+  {
+   "lane": "drums",
+   "start": 0.0,
+   "length": 0.25,
+   "pitch": 36,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "violin",
+   "start": 0,
+   "length": 2,
+   "pitch": 67,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "celesta",
+   "start": 0.5,
+   "length": 0.5,
+   "pitch": 84,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 0.5,
+   "length": 0.25,
+   "pitch": 42,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 1.0,
+   "length": 0.25,
+   "pitch": 38,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "flute",
+   "start": 1,
+   "length": 1,
+   "pitch": 79,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 1.5,
+   "length": 0.25,
+   "pitch": 42,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 2.0,
+   "length": 0.25,
+   "pitch": 36,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "violin",
+   "start": 2,
+   "length": 2,
+   "pitch": 69,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "celesta",
+   "start": 2.5,
+   "length": 0.5,
+   "pitch": 88,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 2.5,
+   "length": 0.25,
+   "pitch": 42,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 3.0,
+   "length": 0.25,
+   "pitch": 38,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "flute",
+   "start": 3,
+   "length": 1,
+   "pitch": 76,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 3.5,
+   "length": 0.25,
+   "pitch": 42,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 4.0,
+   "length": 0.25,
+   "pitch": 36,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "violin",
+   "start": 4,
+   "length": 2,
+   "pitch": 71,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "celesta",
+   "start": 4.5,
+   "length": 0.5,
+   "pitch": 91,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 4.5,
+   "length": 0.25,
+   "pitch": 42,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 5.0,
+   "length": 0.25,
+   "pitch": 38,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "flute",
+   "start": 5,
+   "length": 1,
+   "pitch": 74,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 5.5,
+   "length": 0.25,
+   "pitch": 42,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 6.0,
+   "length": 0.25,
+   "pitch": 36,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "violin",
+   "start": 6,
+   "length": 2,
+   "pitch": 72,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "celesta",
+   "start": 6.5,
+   "length": 0.5,
+   "pitch": 96,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 6.5,
+   "length": 0.25,
+   "pitch": 42,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 7.0,
+   "length": 0.25,
+   "pitch": 38,
+   "velocity": 90,
+   "motif": null
+  },
+  {
+   "lane": "flute",
+   "start": 7,
+   "length": 1,
+   "pitch": 72,
+   "velocity": 80,
+   "motif": null
+  },
+  {
+   "lane": "drums",
+   "start": 7.5,
+   "length": 0.25,
+   "pitch": 42,
+   "velocity": 90,
+   "motif": null
+  }
+ ],
+ "energy": [
+  [
+   0,
+   0.4
+  ],
+  [
+   8,
+   0.7
+  ]
+ ],
+ "glossary": [],
+ "audio": [],
+ "musicxml": "score.musicxml",
+ "changes": [],
+ "mix": {
+  "style": "lofi",
+  "loudness": -20
+ }
+}

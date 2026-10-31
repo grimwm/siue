@@ -46,10 +46,10 @@ def main(argv: list[str]) -> int:
             print(f"{path}: {path.stat().st_size / 1e6:.1f} MB")
         return 0
     manifest = json.loads((COMPOSE / "samples.json").read_text())
-    root = fetch(manifest)[piece.lanes[0].instrument]
+    roots = fetch(manifest)
     made = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # A piece's SCORE_ONLY drafts keep only their score; the workroom builds their sound.
-    problems = render(piece, draft, out, manifest, root, made, getattr(module, "CHANGES", {}).get(draft),
+    problems = render(piece, draft, out, manifest, roots, made, getattr(module, "CHANGES", {}).get(draft),
                       draft in getattr(module, "SCORE_ONLY", ()))
     if (out / "score.json").is_file():  # a score-only draft that breaks a check keeps none
         problems += validate(json.loads((out / "score.json").read_text()), glossary_ids(GLOSSARY), library_ids(LIBRARY))

@@ -292,6 +292,28 @@ button:disabled { opacity: 0.45; cursor: default; }
   background: rgba(1, 4, 9, 0.78);
 }
 .veil[hidden] { display: none; }
+/* The title card stands at the top of the Labyrinth's entrance (fx/blender/title_card.py): the picture's dark sky
+   holds the card, the door and its fire show below it. A landscape frame gets the wide framing, a portrait frame
+   (a phone) the tall one, each covering the frame from its foot so the door stays in view. The scrim darkens the
+   sky behind the card and leaves the door's glow almost untouched. */
+#title-veil {
+  place-items: start center;
+  padding-top: clamp(0.75rem, 5cqh, 3rem);
+  background:
+    linear-gradient(to bottom, rgba(1, 4, 9, 0.55), rgba(1, 4, 9, 0.2) 55%, rgba(1, 4, 9, 0.1) 80%, rgba(1, 4, 9, 0.45)),
+    url("fx/title/title-wide.webp") center bottom / cover no-repeat,
+    #020308;
+}
+@container frame (orientation: portrait) {
+  #title-veil {
+    background:
+      linear-gradient(to bottom, rgba(1, 4, 9, 0.5), rgba(1, 4, 9, 0.15) 55%, rgba(1, 4, 9, 0.1) 80%, rgba(1, 4, 9, 0.45)),
+      url("fx/title/title-tall.webp") center bottom / cover no-repeat,
+      #020308;
+  }
+}
+/* Over the picture the card is a touch translucent, still dark enough for its text. */
+#title-veil .card { background: rgba(22, 27, 34, 0.9); }
 .card {
   position: relative;
   width: 100%;

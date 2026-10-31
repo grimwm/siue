@@ -1,4 +1,5 @@
-// The Island of Crete on ten screens: the frame fills the window, nothing scrolls, every control is on screen
+// The Island of Crete on ten screens: the title card over its picture (the wide framing on a desktop, the tall one
+// on a phone, its buttons on top and working), the frame fills the window, nothing scrolls, every control is on screen
 // and not clipped, no control covers the board, the board keeps at least 8 px per cell, and key tabs show only
 // where a keyboard is at hand (a mouse, and a frame at least 760 px wide). The move pad is a connected cross on every screen; on a
 // phone nothing else stands within 12 px of an arrow, at either edge the Arrows setting puts the pad, and Hint, Route
@@ -314,6 +315,55 @@ for (const device of PHONES) {
       await ctx.close();
     });
   }
+}
+
+/** The title card's picture: the file the veil's background names, and whether that file loads as an image. */
+const titleArt = async () => {
+  const bg = getComputedStyle(document.getElementById('title-veil')!).backgroundImage;
+  const url = /url\("?([^")]*title-(?:wide|tall)\.webp)"?\)/.exec(bg)?.[1];
+  if (!url) return { file: null, w: 0, h: 0 };
+  const img = new Image();
+  img.src = url;
+  try { await img.decode(); } catch { return { file: url.split('/').pop(), w: 0, h: 0 }; }
+  return { file: url.split('/').pop(), w: img.naturalWidth, h: img.naturalHeight };
+};
+
+/** Every button on the title card is the topmost thing at its own centre, so a tap there reaches it. */
+const titleButtonsOnTop = () => [...document.querySelectorAll<HTMLElement>('#title-veil .title-actions button')]
+  .filter(b => {
+    const r = b.getBoundingClientRect();
+    return !b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  }).map(b => b.id);
+
+for (const [name, file, w, h] of [['Desktop', 'title-wide.webp', 1920, 1080], ['iPhone 15, portrait', 'title-tall.webp', 1080, 1920]] as const) {
+  test(`${name}: the title card stands over the Labyrinth's entrance, its buttons on screen and working`, async ({ browser }) => {
+    const { ctx, page, errors } = await open(browser, DEVICES.find(d => d[0] === name)!);
+    // One level cleared, so Continue shows too.
+    await page.evaluate(() => localStorage.setItem('crete-progress', JSON.stringify({ 'trial-1': { cleared: true, best: 9 } })));
+    await page.reload();
+    await expect(page.locator('#title-veil')).toBeVisible();
+    // The framing that fits the screen: landscape for a desktop, portrait for a phone, and it loads.
+    expect(await page.evaluate(titleArt)).toEqual({ file, w, h });
+    expect(await page.evaluate(cardFits, '#title-veil .card'), 'title card on screen').toBe(true);
+    for (const id of ['title-continue', 'title-play', 'title-story', 'title-editor', 'title-settings']) await expect(page.locator(`#${id}`)).toBeVisible();
+    expect(await page.evaluate(titleButtonsOnTop), 'buttons covered by something').toEqual([]);
+    // The card's title sits in the picture's upper half (its dark sky), so the door shows below it.
+    const head = (await page.locator('#title-name').boundingBox())!;
+    expect(head.y + head.height).toBeLessThan((await page.evaluate(() => innerHeight)) / 2);
+    // The buttons still do what they did: Settings opens the menu, Q closes it, New Game opens the new-game card.
+    await page.locator('#title-settings').click();
+    await expect(page.locator('#menu-veil')).toBeVisible();
+    await page.keyboard.press('q');
+    await expect(page.locator('#menu-veil')).toBeHidden();
+    await page.locator('#title-play').click();
+    await expect(page.locator('#look-veil')).toBeVisible();
+    expect(await page.evaluate(lookTiles, '#look-veil'), 'new-game card pictures').toEqual([]);
+    await page.locator('#pick-back').click();
+    await page.locator('#title-continue').click();
+    await expect(page.locator('#chapter-veil')).toBeVisible();
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
 }
 
 test('iPhone 15, portrait: H, V and T still work, and Thread shows the route and the play-out', async ({ browser }) => {

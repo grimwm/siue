@@ -1,6 +1,7 @@
 // The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns under a drag, zooms
 // under the wheel and its buttons, moves Theseus the way the screen shows, ignores the camera while a card is up,
-// keeps the Walls choice, follows the mini map, and hands the board back to the classic look and takes it again,
+// keeps the Walls choice, opens on the whole level, follows the mini map once zoomed, floats a marker over each
+// figure and item, and hands the board back to the classic look and takes it again,
 // from the menu or the strip's look button and its B key.
 // A block pushed into water floats there, and undo takes it out. Without WebGL the classic board shows.
 import { test, expect } from '@playwright/test';
@@ -50,7 +51,10 @@ interface Hooked {
     game: { run: { now: { player: { r: number; c: number } } } };
     parse(text: string): unknown;
     playLevel(level: unknown): void;
-    modern?: { frames(): number; yaw(): number; zoom(): number; pitch(): number; following(): boolean; floating(): number[]; splashing(): number[]; active: boolean };
+    modern?: {
+      frames(): number; yaw(): number; zoom(): number; pitch(): number; following(): boolean; floating(): number[]; splashing(): number[]; active: boolean;
+      markers(): { kind: string; at: [number, number]; foot: [number, number]; cell: number }[];
+    };
   };
 }
 
@@ -106,6 +110,12 @@ async function openHall(page: Page, text = HALL, reducedMotion: 'reduce' | 'no-p
   if (reducedMotion === 'reduce') await settled(page);
   else await expect.poll(async () => (await modern(page))!.frames).toBeGreaterThan(0);
   return errors;
+}
+
+/** Zooms in with the button `n` times, past the whole-level view the board opens at, and waits for the board to rest. */
+async function zoomIn(page: Page, n = 4): Promise<void> {
+  for (let i = 0; i < n; i++) await page.locator('#cam-zoom-in').click();
+  await settled(page);
 }
 
 /** A left-button mouse drag of `dx` pixels across the middle of the modern board. */
@@ -282,6 +292,7 @@ test('Walls: Ghosted is kept through a reload', async ({ page }) => {
 
 test('a tap on the mini map moves the camera there', async ({ page }) => {
   const errors = await openHall(page);
+  await zoomIn(page);
   const view = page.locator('#minimap-view');
   await expect(view).toBeVisible();
   const before = await view.screenshot();
@@ -297,7 +308,8 @@ test('a tap on the mini map moves the camera there', async ({ page }) => {
 test('after a look elsewhere on the mini map, Theseus\'s next step brings the camera back to him', async ({ page }) => {
   const errors = await openHall(page);
   const following = () => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.following());
-  expect(await following(), 'the camera starts on Theseus').toBe(true);
+  await zoomIn(page);
+  expect(await following(), 'zoomed in, the camera is on Theseus').toBe(true);
   const box = (await page.locator('#minimap-view').boundingBox())!;
   await page.mouse.click(box.x + 4, box.y + 4);
   await settled(page);
@@ -309,6 +321,59 @@ test('after a look elsewhere on the mini map, Theseus\'s next step brings the ca
   }
   expect(await player(page), 'Theseus stepped').not.toEqual(from);
   await expect.poll(following, { message: 'the step brings the camera back' }).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('the board opens on the whole level, and Theseus\'s steps leave it there until the player zooms', async ({ page }) => {
+  const errors = await openHall(page);
+  const z0 = await zoom(page);
+  const frames = (await modern(page))!.frames;
+  const from = await player(page);
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => player(page)).not.toEqual(from);
+  await settled(page);
+  expect(await zoom(page), 'the zoom holds').toBe(z0);
+  expect((await modern(page))!.frames, 'a step draws').toBeGreaterThan(frames);
+  // The whole hall fits across the board.
+  const box = (await page.locator('#stage3d').boundingBox())!;
+  const cellPx = box.height / z0;
+  expect(21 * cellPx, 'the hall\'s width fits the board').toBeLessThanOrEqual(box.width);
+  await page.locator('#cam-zoom-in').click();
+  await expect.poll(() => zoom(page)).toBeLessThan(z0);
+  await page.locator('#cam-reset').click();
+  await expect.poll(() => zoom(page), 'Reset returns to the whole level').toBeCloseTo(z0, 3);
+  expect(errors).toEqual([]);
+});
+
+test('level 1 in Top-down: one small marker over each figure and item, the Minotaur\'s over its own cell', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => localStorage.setItem('crete-view', 'top'));
+  await page.goto(PAGE);
+  await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
+  await page.locator('#chapter-enter').click();
+  await page.locator('#start-begin').click();
+  await expect(page.locator('#start-veil')).toBeHidden();
+  await page.waitForFunction(() => (window as unknown as Hooked).__creteTest.modern?.active === true);
+  await settled(page);
+  expect(await page.evaluate(() => Math.round((window as unknown as Hooked).__creteTest.modern!.pitch()))).toBe(75);
+  const marks = await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.markers());
+  const want = await page.evaluate(() => {
+    const s = (window as unknown as { __creteTest: { game: { run: { now: { objects: (string | null)[]; hazards: unknown[]; minotaur: unknown } } } } }).__creteTest.game.run.now;
+    return { item: s.objects.filter(o => o && o !== 'block').length, hazard: s.hazards.length, minotaur: s.minotaur ? 1 : 0, theseus: 1 };
+  });
+  const count = (k: string) => marks.filter(m => m.kind === k).length;
+  expect({ item: count('item'), hazard: count('hazard'), minotaur: count('minotaur'), theseus: count('theseus') }).toEqual(want);
+  expect(marks.length).toBe(want.item + want.hazard + want.minotaur + want.theseus);
+  const half = Math.sin((75 * Math.PI) / 180) / 2;
+  for (const m of marks.filter(x => x.kind === 'minotaur' || x.kind === 'theseus')) {
+    expect(Math.abs(m.at[0] - m.foot[0]), `${m.kind}: straight over its piece`).toBeLessThan(m.cell * 0.1);
+    const up = (m.foot[1] - m.at[1]) / m.cell;
+    expect(up, `${m.kind}: above its foot`).toBeGreaterThan(0);
+    expect(up, `${m.kind}: its point inside its own cell`).toBeLessThan(half);
+  }
   expect(errors).toEqual([]);
 });
 

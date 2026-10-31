@@ -146,9 +146,6 @@ const SHOTS: Record<string, Shot> = {
         const m = (window as unknown as { __creteTest: CreteHook }).__creteTest.modern;
         return !!m && m.active && m.frames() > 0;
       }, null, { timeout: 30_000 });
-      // One step out, so the shot shows more of the level and less of the dark beyond it.
-      await page.click('#cam-zoom-out');
-      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
       await page.mouse.move(0, 0);
       await page.waitForTimeout(300);
       return null;

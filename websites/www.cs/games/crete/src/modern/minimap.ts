@@ -9,7 +9,11 @@ import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import { footprint, fromMini, miniCell, toMini } from './camera.ts';
 import type { Cam, Ground } from './camera.ts';
-import { imageReady } from './scene/icons.ts';
+
+/** True once `image` can be drawn: a still-loading or broken image element draws nothing. */
+function imageReady(image: CanvasImageSource): boolean {
+  return !(image instanceof HTMLImageElement) || (image.complete && image.naturalWidth > 0);
+}
 
 export interface Minimap {
   /** Paints the level as it stands. */

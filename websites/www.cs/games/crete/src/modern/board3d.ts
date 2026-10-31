@@ -3,10 +3,11 @@
  * changed, and stands the pieces and figures where the state and the turn put them, with Ariadne's thread on
  * the floor, and a block that filled water floating in it. A frame is drawn when the board is told of a change, and more follow only while the camera eases,
  * a wall fades, a figure turns, a block splashes into water or the tile loops tick. The tile loops tick at 12 fps, only while one is on screen,
- * the tab is visible, the board is in view and motion is not reduced. The camera looks down at 45° through an
- * orthographic lens, and follows Theseus until a pan or the mini map sends it elsewhere; the controls
+ * the tab is visible, the board is in view and motion is not reduced. The camera looks down through an orthographic
+ * lens at the whole level, a cell's margin round it, and holds still while Theseus moves; once the player zooms, it
+ * follows Theseus until a pan or the mini map sends it elsewhere. The controls
  * (controls.ts) turn, pan and zoom it, and the mini map (minimap.ts) shows what it sees. A wall that hides Theseus fades
- * in every walls mode; in Ghosted, one that hides any figure or piece fades too. The floating icons are drawn
+ * in every walls mode; in Ghosted, one that hides any figure or piece fades too. The floating markers are drawn
  * over the finished picture, slid inside the view when their piece shows but they would not. */
 import { Color, Group, OrthographicCamera, PCFSoftShadowMap, Scene, Vector3, WebGLRenderer } from 'three';
 import type { Object3D } from 'three';
@@ -14,22 +15,23 @@ import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { DEFAULT_YAW, PITCHES, VIEW_YAW, clampView, clampZoom, easeCam, nearestYaw, panCam, viewRows, zoomAbout, zoomLimits } from './camera.ts';
+import { DEFAULT_YAW, PITCHES, VIEW_YAW, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
 import { changedCells } from './diff.ts';
 import { filledWater } from './float.ts';
 import { ghostSubjects } from './ghost.ts';
-import { ICON_MARGIN, keepInView } from './icons.ts';
+import { MARKER_HEIGHT, MARKER_MARGIN, MARKER_WIDTH, keepInView } from './markers.ts';
+import type { MarkerKind } from './markers.ts';
 import { createMinimap } from './minimap.ts';
 import { SURFACES, placed, terrainModel } from './model-names.ts';
 import type { TerrainModel } from './model-names.ts';
-import { frameSample, nextQuality } from './quality.ts';
-import type { Quality } from './quality.ts';
+import { DOWN_MS, createLadder, frameSample, measure, rate, rewarm } from './quality.ts';
 import { createActors } from './scene/figures.ts';
 import { createFloats } from './scene/float.ts';
 import { FY, cellX, cellZ, createFloor } from './scene/floor.ts';
-import { createIconSheet } from './scene/icons.ts';
+import { createMarkers } from './scene/markers.ts';
+import type { MarkerInfo } from './scene/markers.ts';
 import { createLights } from './scene/light.ts';
 import type { Lights } from './scene/light.ts';
 import { createPaint } from './scene/paint.ts';
@@ -83,8 +85,13 @@ export interface ModernBoard {
   frames(): number;
   /** The render quality step (quality.ts), for tests. */
   quality(): number;
+  /** The frame rate measured over the last two seconds of animation, or null before there is that much. */
+  fps(): number | null;
   /** The cells a block floats in, for tests. */
   floating(): number[];
+  /** The floating markers as last drawn, for tests: each one's kind, its point and its piece's foot on the canvas
+   *  in CSS pixels, and a cell's width there. */
+  markers(): { kind: MarkerKind; at: [number, number]; foot: [number, number]; cell: number }[];
   splashing(): number[];
   dispose(): void;
 }
@@ -96,7 +103,7 @@ const LOOP_FPS = 12;
 const ZOOM_CENTRE = 0.12;
 
 export function createModernBoard(host: ModernHost): ModernBoard {
-  const renderer = new WebGLRenderer({ canvas: host.canvas, antialias: false, powerPreference: 'high-performance' });
+  const renderer = new WebGLRenderer({ canvas: host.canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
   renderer.shadowMap.autoUpdate = false;
@@ -110,21 +117,19 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const floor = createFloor(kit);
   const wallSet = createWalls(kit);
   const pieceGroup = new Group();
-  const sheet = host.atlas && host.image ? createIconSheet(host.atlas, host.image, () => invalidate()) : null;
-  const actors = createActors(kit, sheet, () => host.reducedMotion());
+  const markers = createMarkers();
+  const actors = createActors(kit, markers);
   const thread = createThread();
   const floats = createFloats(kit);
   scene.add(floor.group, wallSet.group, pieceGroup, actors.group, thread.group, floats.group);
-  const iconScene = new Scene();
-  iconScene.add(actors.icons);
 
   let active = true;
   let drawn = 0;
   let raf = 0;
   let lastNow = -1e9;
   let chained = false;
-  let quality: Quality = 3;
-  let frameMs: number[] = [];
+  const ladder = createLadder();
+  let quality = ladder.q;
   let width = 1, height = 1;
   let mode: WallMode = 'solid';
   let last: State | null = null;
@@ -144,9 +149,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   let shadowsDirty = true;
 
   /** The camera: where it is, where it eases to, whether its target follows Theseus, and whether the player chose
-   *  its zoom (otherwise it keeps the default for the screen's shape). */
+   *  its zoom (otherwise it shows the whole level, centred, whatever Theseus does). */
   let viewing: View = 'angled';
-  const cur: Cam = { yaw: DEFAULT_YAW, pitch: PITCHES.angled, tx: 0, tz: 0, zoom: viewRows(1) };
+  const cur: Cam = { yaw: DEFAULT_YAW, pitch: PITCHES.angled, tx: 0, tz: 0, zoom: 10 };
   const goal: Cam = { ...cur };
   /** Whether the camera's target is Theseus: a pan, an off-centre zoom or the mini map look elsewhere until his next
    *  step. */
@@ -213,11 +218,16 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   function aimGoal(): void {
     goal.pitch = PITCHES[viewing];
-    if (follow && lastPlayer) {
-      goal.tx = cellX(lastPlayer.c, cols());
-      goal.tz = cellZ(lastPlayer.r, rows());
+    if (!zoomed) {
+      goal.tx = goal.tz = 0;
+      goal.zoom = wholeZoom(aspect(), cols(), rows(), goal.pitch, goal.yaw);
+    } else {
+      if (follow && lastPlayer) {
+        goal.tx = cellX(lastPlayer.c, cols());
+        goal.tz = cellZ(lastPlayer.r, rows());
+      }
+      goal.zoom = clampZoom(goal.zoom, limits());
     }
-    goal.zoom = zoomed ? clampZoom(goal.zoom, limits()) : viewRows(aspect());
     Object.assign(goal, clampView(goal, cols(), rows(), aspect()));
   }
 
@@ -249,12 +259,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     // Only a frame the one before it asked for is part of an animation: its gap is a frame time.
     const sample = frameSample(chained, gap);
     if (sample !== null) {
-      frameMs.push(sample);
-      if (frameMs.length > 20) frameMs = frameMs.slice(-20);
-      const q = nextQuality(quality, frameMs);
+      const q = measure(ladder, sample);
       if (q !== quality) {
         quality = q;
-        frameMs = [];
         applyQuality();
       }
     }
@@ -289,12 +296,12 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       shadowsDirty = false;
     }
     paint.render(scene, camera, quality >= 2);
-    if (actors.icons.children.length) {
-      const moved = keepIcons();
+    if (markers.group.children.length) {
+      markers.place(camera, cur.pitch, loopT, snap());
+      keepMarkers();
       renderer.autoClear = false;
-      renderer.render(iconScene, camera);
+      renderer.render(markers.scene, camera);
       renderer.autoClear = true;
-      for (const [sp, x, y, z] of moved) sp.position.set(x, y, z);
     }
     const key = `${cur.yaw} ${cur.tx} ${cur.tz} ${cur.zoom} ${width} ${height}`;
     if (key !== viewKey) {
@@ -306,23 +313,31 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     if (busy) invalidate();
   }
 
-  /** Slides each icon whose piece shows on screen fully inside the view, for this frame's drawing; returns where
-   *  the moved ones stood. */
-  function keepIcons(): [Object3D, number, number, number][] {
+  /** Slides each marker whose piece shows on screen fully inside the view, for this frame's drawing. */
+  function keepMarkers(): void {
     const hh = cur.zoom / 2, hw = hh * aspect();
     right.setFromMatrixColumn(camera.matrixWorld, 0);
     up.setFromMatrixColumn(camera.matrixWorld, 1);
-    const moved: [Object3D, number, number, number][] = [];
-    for (const sp of actors.icons.children) {
-      ndc.set(sp.position.x, FY, sp.position.z).project(camera);
+    for (const m of markers.group.children) {
+      ndc.copy((m.userData as MarkerInfo).foot).project(camera);
       if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue;
-      ndc.copy(sp.position).project(camera);
-      const [dx, dy] = keepInView(ndc.x * hw, ndc.y * hh, sp.scale.x, sp.scale.y, hw, hh, ICON_MARGIN);
-      if (dx === 0 && dy === 0) continue;
-      moved.push([sp, sp.position.x, sp.position.y, sp.position.z]);
-      sp.position.addScaledVector(right, dx).addScaledVector(up, dy);
+      ndc.copy(m.position).project(camera);
+      const [dx, dy] = keepInView(ndc.x * hw, ndc.y * hh, MARKER_WIDTH, MARKER_HEIGHT, hw, hh, MARKER_MARGIN);
+      m.position.addScaledVector(right, dx).addScaledVector(up, dy);
     }
-    return moved;
+  }
+
+  /** Each marker's kind, the cell its piece stands in, and where its point and its piece's foot show on the
+   *  canvas, in CSS pixels; `cell` is one cell's width there. */
+  function markerSpots(): { kind: MarkerKind; at: [number, number]; foot: [number, number]; cell: number }[] {
+    const px = (v: Vector3): [number, number] => {
+      ndc.copy(v).project(camera);
+      return [((ndc.x + 1) / 2) * width, ((1 - ndc.y) / 2) * height];
+    };
+    return markers.group.children.map(m => {
+      const info = m.userData as MarkerInfo;
+      return { kind: info.kind, at: px(m.position), foot: px(info.foot), cell: height / cur.zoom };
+    });
   }
 
   function resize(): void {
@@ -335,7 +350,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     renderer.setSize(w, h, false);
     paint.setSize(Math.round(w * r), Math.round(h * r), r);
     mini?.fit(host.overlay.clientWidth || w, host.overlay.clientHeight || h);
-    if (!zoomed) cur.zoom = goal.zoom = viewRows(aspect());
+    if (!zoomed) {
+      aimGoal();
+      cur.zoom = goal.zoom;
+    }
     aimWalls = true;
   }
 
@@ -394,6 +412,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     lights.setMode(mode);
     lights.shadows(quality >= 3);
     scene.add(lights.group);
+    rewarm(ladder);
     lastPlayer = null;
     setFigures(s, { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) });
     follow = true;
@@ -534,7 +553,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     })
     : null;
 
-  const onVisible = () => scheduleLoops();
+  const onVisible = () => {
+    rewarm(ladder);
+    scheduleLoops();
+  };
   document.addEventListener('visibilitychange', onVisible);
   const seenIO = typeof IntersectionObserver === 'function'
     ? new IntersectionObserver(es => {
@@ -545,7 +567,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   seenIO?.observe(host.canvas);
   const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
   const onMotion = () => {
-    // The icons settle and the loops stop or start with the setting.
+    // The markers settle and the loops stop or start with the setting.
     loopsDirty = true;
     invalidate();
     scheduleLoops();
@@ -578,7 +600,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     },
     frames: () => drawn,
     quality: () => quality,
+    fps: () => rate(ladder.gaps, DOWN_MS),
     floating: () => floats.cells(),
+    markers: markerSpots,
     splashing: () => floats.splashing(),
     dispose() {
       if (raf) cancelAnimationFrame(raf);
@@ -597,7 +621,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       actors.dispose();
       floats.dispose();
       thread.dispose();
-      sheet?.dispose();
+      markers.dispose();
       paint.dispose();
       kit.dispose();
       renderer.dispose();

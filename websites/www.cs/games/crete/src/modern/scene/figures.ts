@@ -2,16 +2,16 @@
  * `placed`): Theseus, the Minotaur, the Minotaur turned to stone, and the pieces from pieces.ts. Each stands where
  * the state and the turn's figures put it, between cells while it moves, and turns to face along its last step,
  * easing round unless motion is reduced. A thing keeps its model from frame to frame by its id, or, when it has
- * none (a hazard, a sliding block), by its model and the nearest place it stood. The Minotaur, the items and the
- * hazards carry their floating icon (src/modern/icons.ts) above them. */
+ * none (a hazard, a sliding block), by its model and the nearest place it stood. Theseus, the Minotaur, the items
+ * and the hazards carry a floating marker (src/modern/markers.ts) over them. */
 import { CatmullRomCurve3, ConeGeometry, CylinderGeometry, Group, Mesh, SphereGeometry, TorusGeometry, TubeGeometry, Vector3 } from 'three';
-import type { Material, Object3D, Sprite } from 'three';
+import type { Material, Object3D } from 'three';
 import type { Dir } from '../../puzzle/tiles.ts';
 import type { FigureModel, PieceModel, Placed } from '../model-names.ts';
 import { FIGURE_MODEL_NAMES } from '../model-names.ts';
-import { ICON_LIFT, bob, iconFor } from '../icons.ts';
+import { markerFor } from '../markers.ts';
 import { FY, cellX, cellZ } from './floor.ts';
-import type { IconSheet } from './icons.ts';
+import type { MarkerSet } from './markers.ts';
 import { PIECE_MODELS } from './pieces.ts';
 import { at, box, cyl, disposeModel, piece } from './terrain.ts';
 import type { PieceInfo } from './terrain.ts';
@@ -137,15 +137,13 @@ const TURN_TAU = 0.05;
 const ON_MACHINE = { y: 0.37, scale: 0.7 };
 
 interface Actor {
-  model: PieceModel | FigureModel; id: string | null; obj: Object3D; icon: Sprite | null; r: number; c: number; yaw: number; goal: number;
+  model: PieceModel | FigureModel; id: string | null; obj: Object3D; marker: Mesh | null; foot: Vector3; r: number; c: number; yaw: number; goal: number;
   /** How high it stands: on the floor, or on a machine. */
   y: number;
 }
 
 export interface Actors {
   readonly group: Group;
-  /** The floating icons, drawn over the finished picture. */
-  readonly icons: Group;
   /** Stands the things placed on a board `cols` × `rows`; true when any moved, turned, came or went. */
   set(list: readonly Placed[], cols: number, rows: number, snap: boolean): boolean;
   /** Eases each turn toward its way; true while any is still turning. */
@@ -154,7 +152,7 @@ export interface Actors {
   seen(): { hero: Seen | null; rest: Seen[] };
   /** Theseus, where he stands. */
   hero(): Object3D | null;
-  /** Moves the flames and bobs the icons to loop time `t` seconds. */
+  /** Moves the flames to loop time `t` seconds. */
   loop(t: number): void;
   /** Where the things that loop stand, to tell whether one is on screen. */
   looping(): Object3D[];
@@ -164,24 +162,18 @@ export interface Actors {
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
-/** `sheet` draws the icons (none without it); `still` is true while motion is reduced. */
-export function createActors(kit: Kit, sheet: IconSheet | null, still: () => boolean): Actors {
+/** `markers` makes the floating markers. */
+export function createActors(kit: Kit, markers: MarkerSet): Actors {
   const group = new Group();
-  const icons = new Group();
   let actors: Actor[] = [];
-  let loopT = 0;
 
-  const iconOf = (p: Placed) => {
-    const name = iconFor(p);
-    const sp = name && sheet ? sheet.make(name) : null;
-    if (sp) icons.add(sp);
-    return sp;
+  const markerOf = (p: Placed, foot: Vector3, obj: Object3D) => {
+    const kind = markerFor(p);
+    return kind ? markers.make(kind, foot, (obj.userData as PieceInfo).h) : null;
   };
-  /** The icon over its piece, bobbing. */
+  /** Where its marker hangs from: the floor under it. */
   function lift(a: Actor): void {
-    if (!a.icon) return;
-    const p = a.obj.position;
-    a.icon.position.set(p.x, FY + (a.obj.userData as PieceInfo).h + ICON_LIFT + bob(loopT, still()), p.z);
+    a.foot.set(a.obj.position.x, FY + a.y, a.obj.position.z);
   }
   function model(p: Placed): Object3D {
     const obj = MODELS[p.model](kit);
@@ -191,18 +183,19 @@ export function createActors(kit: Kit, sheet: IconSheet | null, still: () => boo
   }
   function make(p: Placed, yaw: number): Actor {
     const y = p.id?.startsWith('machine') ? ON_MACHINE.y : 0;
-    return { model: p.model, id: p.id, obj: model(p), icon: iconOf(p), r: p.r, c: p.c, yaw, goal: yaw, y };
+    const obj = model(p), foot = new Vector3();
+    return { model: p.model, id: p.id, obj, marker: markerOf(p, foot, obj), foot, r: p.r, c: p.c, yaw, goal: yaw, y };
   }
   function drop(a: Actor): void {
     group.remove(a.obj);
     disposeModel(a.obj, kit);
-    if (a.icon) icons.remove(a.icon);
+    if (a.marker) markers.group.remove(a.marker);
   }
   function rebuild(a: Actor, p: Placed): void {
     drop(a);
     a.model = p.model;
     a.obj = model(p);
-    a.icon = iconOf(p);
+    a.marker = markerOf(p, a.foot, a.obj);
   }
 
   function set(list: readonly Placed[], cols: number, rows: number, snap: boolean): boolean {
@@ -278,7 +271,6 @@ export function createActors(kit: Kit, sheet: IconSheet | null, still: () => boo
 
   return {
     group,
-    icons,
     set,
     ease,
     seen() {
@@ -291,13 +283,9 @@ export function createActors(kit: Kit, sheet: IconSheet | null, still: () => boo
     },
     hero: () => actors.find(a => a.model === 'theseus')?.obj ?? null,
     loop(t) {
-      loopT = t;
-      for (const a of actors) {
-        (a.obj.userData as PieceInfo).loop?.(t);
-        lift(a);
-      }
+      for (const a of actors) (a.obj.userData as PieceInfo).loop?.(t);
     },
-    looping: () => actors.flatMap(a => (a.icon ? [a.icon] : (a.obj.userData as PieceInfo).loop ? [a.obj] : [])),
+    looping: () => actors.flatMap(a => (a.marker || (a.obj.userData as PieceInfo).loop ? [a.obj] : [])),
     clear,
     dispose: clear,
   };

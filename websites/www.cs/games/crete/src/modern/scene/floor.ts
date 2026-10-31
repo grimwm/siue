@@ -35,7 +35,7 @@ export interface Floor {
 export function createFloor(kit: Kit): Floor {
   const { m } = kit;
   const group = new Group();
-  const flagGeo = new RoundedBoxGeometry(0.93, 0.12, 0.93, 2, 0.035);
+  const flagGeo = new RoundedBoxGeometry(0.97, 0.12, 0.97, 2, 0.02);
   flagGeo.translate(0, FY - 0.06, 0);
   const waterGeo = new PlaneGeometry(1, 1);
   waterGeo.rotateX(-Math.PI / 2);

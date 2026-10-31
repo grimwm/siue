@@ -1,7 +1,7 @@
 /* The Island of Crete, modern look: the procedural textures and the shared materials, painted once on canvases
  * from seeded noise, so every visit looks the same. One kit serves every level a board shows. */
 import {
-  AdditiveBlending, CanvasTexture, ClampToEdgeWrapping, Color, MeshBasicMaterial, MeshStandardMaterial, PMREMGenerator,
+  AdditiveBlending, CanvasTexture, ClampToEdgeWrapping, Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial, PMREMGenerator,
   RepeatWrapping, SRGBColorSpace, Vector2, Vector3,
 } from 'three';
 import type { Material, Texture, WebGLRenderer } from 'three';
@@ -23,7 +23,7 @@ function tex(size: number, draw: (g: Ctx, s: number) => void, srgb = true): Canv
   const t = new CanvasTexture(cv);
   if (srgb) t.colorSpace = SRGBColorSpace;
   t.wrapS = t.wrapT = RepeatWrapping;
-  t.anisotropy = 4;
+  t.anisotropy = 8;
   return t;
 }
 
@@ -69,41 +69,41 @@ function cracks(g: Ctx, s: number, R: () => number, n: number, style: string, wi
 
 const flagTex = (seed: number) => tex(256, (g, s) => {
   const R = rng(seed);
-  g.fillStyle = '#7d6c5a';
+  g.fillStyle = '#dcc699';
   g.fillRect(0, 0, s, s);
-  blobs(g, s, R, 260, '40,32,26', 0.1, 6, 26, false);
-  blobs(g, s, R, 220, '170,150,124', 0.08, 5, 20, false);
-  blobs(g, s, R, 1800, '30,24,20', 0.18, 0.6, 2, false);
-  blobs(g, s, R, 900, '200,182,156', 0.12, 0.6, 1.6, false);
-  cracks(g, s, R, 2, 'rgba(28,22,18,.55)', 1.3, 60);
-  edgeShade(g, s, 0.55);
+  blobs(g, s, R, 260, '150,120,80', 0.06, 6, 26, false);
+  blobs(g, s, R, 220, '242,226,192', 0.1, 5, 20, false);
+  blobs(g, s, R, 1800, '120,96,66', 0.1, 0.6, 2, false);
+  blobs(g, s, R, 900, '250,238,212', 0.12, 0.6, 1.6, false);
+  cracks(g, s, R, 2, 'rgba(120,94,62,.4)', 1.3, 60);
+  edgeShade(g, s, 0.12);
 });
 
 const brickTex = () => tex(256, (g, s) => {
   const R = rng(7);
-  g.fillStyle = '#1b1612';
+  g.fillStyle = '#15171a';
   g.fillRect(0, 0, s, s);
   const ch = s / 4, bw = s / 2;
   for (let row = 0; row < 4; row++) {
     const off = row % 2 ? bw / 2 : 0;
     for (let i = -1; i < 3; i++) {
       const x = i * bw + off, y = row * ch, v = 0.75 + R() * 0.35;
-      g.fillStyle = `rgb(${(92 * v) | 0},${(81 * v) | 0},${(70 * v) | 0})`;
+      g.fillStyle = `rgb(${(90 * v) | 0},${(94 * v) | 0},${(100 * v) | 0})`;
       for (const ox of [0, s]) g.fillRect(x + 3 - ox, y + 3, bw - 6, ch - 6);
     }
   }
-  blobs(g, s, R, 1400, '20,16,12', 0.25, 0.7, 2.2);
-  blobs(g, s, R, 500, '160,140,118', 0.14, 0.7, 2);
-  blobs(g, s, R, 60, '25,20,16', 0.25, 4, 12);
+  blobs(g, s, R, 1400, '16,18,22', 0.25, 0.7, 2.2);
+  blobs(g, s, R, 500, '150,156,166', 0.14, 0.7, 2);
+  blobs(g, s, R, 60, '20,22,26', 0.25, 4, 12);
 });
 
 const capTex = () => tex(256, (g, s) => {
   const R = rng(11);
-  g.fillStyle = '#857a6c';
+  g.fillStyle = '#7a7e86';
   g.fillRect(0, 0, s, s);
-  blobs(g, s, R, 200, '30,26,22', 0.2, 6, 24);
-  blobs(g, s, R, 1500, '20,18,15', 0.25, 0.6, 2);
-  blobs(g, s, R, 600, '130,118,104', 0.12, 0.6, 1.8);
+  blobs(g, s, R, 200, '26,28,32', 0.2, 6, 24);
+  blobs(g, s, R, 1500, '16,18,20', 0.25, 0.6, 2);
+  blobs(g, s, R, 600, '140,146,156', 0.12, 0.6, 1.8);
 });
 
 function waterNormalTex(): CanvasTexture {
@@ -340,6 +340,20 @@ const blockTex = () => tex(256, (g, s) => {
   g.strokeRect(10, 10, s - 20, s - 20);
 });
 
+/** The shade where the floor meets a wall: dark at the top edge, clear by the bottom. */
+const aoTex = () => {
+  const t = tex(64, (g, s) => {
+    const gr = g.createLinearGradient(0, 0, 0, s);
+    gr.addColorStop(0, 'rgba(0,0,0,0.85)');
+    gr.addColorStop(0.18, 'rgba(0,0,0,0.6)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, s, s);
+  });
+  t.wrapS = t.wrapT = ClampToEdgeWrapping;
+  return t;
+};
+
 const haloTex = () => {
   const t = tex(64, (g, s) => {
     const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
@@ -373,11 +387,13 @@ export function createKit(renderer: WebGLRenderer) {
   const t = {
     brick: brickTex(), cap: capTex(), water: waterNormalTex(), ember: emberTex(), wood: woodTex(), force: forceTex(),
     ice: iceTex(), dirt: dirtTex(), gravel: gravelTex(), wreath: wreathTex(), swirl: swirlTex(), hand: handTex(),
-    halo: haloTex(), block: blockTex(), flags: [101, 202, 303].map(flagTex),
+    halo: haloTex(), ao: aoTex(), block: blockTex(), flags: [101, 202, 303].map(flagTex),
   };
   const m = {
     under: std(0x0c0a08, { roughness: 1 }),
-    mortar: std(0x17120e, { roughness: 1 }),
+    mortar: std(0x6e5c44, { roughness: 1 }),
+    ao: new MeshBasicMaterial({ map: t.ao, transparent: true, depthWrite: false }),
+    edge: std(0x0c0d10, { roughness: 1, side: DoubleSide }),
     flags: t.flags.map(map => std(0xffffff, { map, roughness: 0.88 })),
     ember: std(0xffffff, { map: t.ember, emissiveMap: t.ember, emissive: 0xff7a30, emissiveIntensity: 0.9, roughness: 0.9 }),
     ice: std(0x9cc4d4, { map: t.ice, roughness: 0.08, metalness: 0.1, envMap: env, envMapIntensity: 0.35 }),
@@ -390,8 +406,8 @@ export function createKit(renderer: WebGLRenderer) {
       envMap: env, envMapIntensity: 0.25,
     }),
     basin: std(0x0e1e20, { roughness: 0.9 }),
-    side: std(0xc2b4a2, { map: t.brick, roughness: 0.93 }),
-    top: std(0xb0a698, { map: t.cap, roughness: 0.95 }),
+    side: std(0xb4b8c0, { map: t.brick, roughness: 0.93 }),
+    top: std(0xa4aab2, { map: t.cap, roughness: 0.95 }),
     wood: std(0xffffff, { map: t.wood, roughness: 0.75 }),
     darkWood: std(0x8a6a4a, { map: t.wood, roughness: 0.8 }),
     iron: metal(0x2e2a26, 0.6),

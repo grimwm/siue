@@ -1,8 +1,10 @@
-/* The Island of Crete, modern look: the finish. The scene renders to a half-float target, is tone mapped with
- * ACES, then a Kuwahara filter paints it in small flat strokes, a warm grade and a vignette settle it, and a
- * canvas weave with fine grain lies over it. Without the paint pass the tone map draws straight to the screen. */
+/* The Island of Crete, modern look: the finish. The scene renders to a half-float target with four samples a
+ * pixel, is tone mapped with ACES, then a Kuwahara filter paints it in small flat strokes, a warm grade and a
+ * vignette settle it, and a canvas weave with fine grain lies over it. Last, FXAA smooths the stair-steps the
+ * strokes leave on edges as it draws to the screen. Without the paint pass the tone map goes straight to FXAA. */
 import { HalfFloatType, Mesh, OrthographicCamera, PlaneGeometry, Scene, ShaderMaterial, Vector2, WebGLRenderTarget } from 'three';
 import type { Camera, WebGLRenderer } from 'three';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
 const VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
@@ -34,7 +36,7 @@ void main(){
   }
   float l = dot(col, vec3(.2126, .7152, .0722));
   col = mix(vec3(l), col, 0.78);
-  col = col * vec3(1.05, 1.0, 0.9) + vec3(0.018, 0.009, 0.0) * (1.0 - l);
+  col = col * vec3(1.02, 1.0, 0.96) + vec3(0.018, 0.009, 0.0) * (1.0 - l);
   vec2 q = (vUv - 0.5) * vec2(res.x / res.y, 1.0);
   col *= 1.0 - 0.5 * smoothstep(0.35, 0.95, length(q));
   vec2 fc = gl_FragCoord.xy / dpr;
@@ -54,7 +56,7 @@ export interface Paint {
 export function createPaint(renderer: WebGLRenderer): Paint {
   const quadCam = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const tone = new ShaderMaterial({
-    uniforms: { tDiffuse: { value: null }, exposure: { value: 1.3 } },
+    uniforms: { tDiffuse: { value: null }, exposure: { value: 1.4 } },
     vertexShader: VS, fragmentShader: TONE, depthTest: false, depthWrite: false,
   });
   const paintMat = new ShaderMaterial({
@@ -64,17 +66,24 @@ export function createPaint(renderer: WebGLRenderer): Paint {
     },
     vertexShader: VS, fragmentShader: PAINT, depthTest: false, depthWrite: false,
   });
+  const fxaa = new ShaderMaterial({
+    uniforms: { tDiffuse: { value: null }, resolution: { value: new Vector2() } },
+    vertexShader: FXAAShader.vertexShader, fragmentShader: FXAAShader.fragmentShader, depthTest: false, depthWrite: false,
+  });
   const quad = new Mesh(new PlaneGeometry(2, 2), tone);
   quad.frustumCulled = false;
   const quadScene = new Scene();
   quadScene.add(quad);
   const hdr = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: 4 });
   const ldr = new WebGLRenderTarget(1, 1);
+  const painted = new WebGLRenderTarget(1, 1);
 
   return {
     setSize(pw, ph, dpr) {
       hdr.setSize(pw, ph);
       ldr.setSize(pw, ph);
+      painted.setSize(pw, ph);
+      (fxaa.uniforms.resolution!.value as Vector2).set(1 / pw, 1 / ph);
       const u = paintMat.uniforms;
       (u.texel!.value as Vector2).set(1 / pw, 1 / ph);
       (u.res!.value as Vector2).set(pw, ph);
@@ -86,18 +95,27 @@ export function createPaint(renderer: WebGLRenderer): Paint {
       renderer.render(scene, camera);
       quad.material = tone;
       tone.uniforms.tDiffuse!.value = hdr.texture;
-      renderer.setRenderTarget(paint ? ldr : null);
+      renderer.setRenderTarget(ldr);
       renderer.render(quadScene, quadCam);
-      if (!paint) return;
-      quad.material = paintMat;
-      paintMat.uniforms.tDiffuse!.value = ldr.texture;
+      let last = ldr;
+      if (paint) {
+        quad.material = paintMat;
+        paintMat.uniforms.tDiffuse!.value = ldr.texture;
+        renderer.setRenderTarget(painted);
+        renderer.render(quadScene, quadCam);
+        last = painted;
+      }
+      quad.material = fxaa;
+      fxaa.uniforms.tDiffuse!.value = last.texture;
       renderer.setRenderTarget(null);
       renderer.render(quadScene, quadCam);
     },
     dispose() {
       hdr.dispose();
       ldr.dispose();
+      painted.dispose();
       tone.dispose();
+      fxaa.dispose();
       paintMat.dispose();
       quad.geometry.dispose();
     },

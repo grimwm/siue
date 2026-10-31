@@ -523,6 +523,9 @@ const modernHook = {
   following: () => modern?.following() ?? true,
   floating: () => modern?.floating() ?? [],
   splashing: () => modern?.splashing() ?? [],
+  markers: () => modern?.markers() ?? [],
+  quality: () => modern?.quality() ?? 3,
+  fps: () => modern?.fps() ?? null,
   get active() { return modernOn && !editorUp; },
 };
 window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };

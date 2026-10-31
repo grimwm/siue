@@ -46,9 +46,9 @@ export function createLights(kit: Kit, models: readonly TerrainModel[], rows: nu
   const { m } = kit;
   const group = new Group();
   const owned: Material[] = [];
-  group.add(new HemisphereLight(0x6a6470, 0x1c140e, 1.5));
+  group.add(new HemisphereLight(0x9a98a0, 0x2a2420, 2.4));
   const span = Math.hypot(cols, rows) / 2 + 1.5;
-  const moon = new DirectionalLight(0x9aa4c0, 1.1);
+  const moon = new DirectionalLight(0xb0b8d0, 1.6);
   moon.position.set(-6, 14, 8);
   moon.castShadow = true;
   moon.shadow.mapSize.set(2048, 2048);

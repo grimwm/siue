@@ -1,7 +1,7 @@
-// Pointer gestures as camera operations: turning, panning, twisting, zooming and the double-tap reset.
+// Pointer gestures as camera operations: turning, tilting, panning, twisting, zooming, settling and the double-tap reset.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGestures } from '../src/modern/gestures.ts';
+import { TILT_PER_PX, createGestures } from '../src/modern/gestures.ts';
 import type { CamOp, Ptr } from '../src/modern/gestures.ts';
 
 const p = (id: number, x: number, y: number, type: Ptr['type'] = 'touch', button = 0): Ptr => ({ id, x, y, type, button });
@@ -14,14 +14,38 @@ const sum = (ops: CamOp[], kind: 'turn' | 'pan'): [number, number] => {
   return [a, b];
 };
 
-test('the mouse dragging +100 px across turns -35 degrees; a vertical drag does nothing', () => {
+test('the mouse dragging +100 px across turns -35 degrees; dragging up tilts toward straight down; letting go settles', () => {
   const g = createGestures(() => 0);
   g.down(p(1, 50, 50, 'mouse'));
   const ops: CamOp[] = [];
   for (let x = 60; x <= 150; x += 10) ops.push(...g.move(p(1, x, 50, 'mouse')));
   assert.ok(Math.abs(sum(ops, 'turn')[0] + 35) < 1e-9);
-  assert.deepEqual(g.move(p(1, 150, 90, 'mouse')), []);
   assert.ok(ops.every(o => o.kind === 'turn'));
+  assert.deepEqual(g.move(p(1, 150, 10, 'mouse')), [{ kind: 'tilt', deg: 40 * TILT_PER_PX }], 'up 40 px');
+  assert.deepEqual(g.move(p(1, 150, 30, 'mouse')), [{ kind: 'tilt', deg: -20 * TILT_PER_PX }], 'and back down');
+  assert.deepEqual(g.up(p(1, 150, 30, 'mouse')), [{ kind: 'settle' }]);
+});
+
+test('two fingers side by side sliding up together tilt, and nothing else; the touch then settles', () => {
+  const g = createGestures(() => 0);
+  g.down(p(1, 100, 300));
+  g.down(p(2, 200, 300));
+  const ops: CamOp[] = [];
+  for (let y = 296; y >= 240; y -= 4) ops.push(...g.move(p(1, 100, y)), ...g.move(p(2, 200, y)));
+  assert.ok(ops.length > 0 && ops.every(o => o.kind === 'tilt'), JSON.stringify(ops.slice(0, 3)));
+  const tilt = ops.reduce((a, o) => a + (o.kind === 'tilt' ? o.deg : 0), 0);
+  assert.ok(tilt > 0 && tilt <= 60 * TILT_PER_PX + 1e-9, `up tips toward straight down: ${tilt}`);
+  assert.deepEqual(g.up(p(1, 100, 240)), []);
+  assert.deepEqual(g.up(p(2, 200, 240)), [{ kind: 'settle' }]);
+});
+
+test('two fingers one above the other sliding up pan, not tilt', () => {
+  const g = createGestures(() => 0);
+  g.down(p(1, 150, 200));
+  g.down(p(2, 150, 300));
+  const ops = [...g.move(p(1, 150, 180)), ...g.move(p(2, 150, 280)), ...g.move(p(1, 150, 170)), ...g.move(p(2, 150, 270))];
+  assert.ok(!ops.some(o => o.kind === 'tilt'));
+  assert.ok(ops.some(o => o.kind === 'pan'));
 });
 
 test('one finger never moves the camera; a quick stroke is a swipe the way it went most', () => {
@@ -52,11 +76,12 @@ test('a short, slow or two-finger stroke is no swipe', () => {
   g.move(p(1, 50, 150));
   t += 100;
   assert.deepEqual(g.up(p(2, 150, 50)), []);
-  assert.deepEqual(g.up(p(1, 50, 150)), [], 'the last finger of a two-finger touch');
+  assert.deepEqual(g.up(p(1, 50, 150)), [{ kind: 'settle' }], 'the last finger of a two-finger touch only settles the view');
   t += 1000;
   g.down(p(1, 50, 50, 'mouse'));
+  g.move(p(1, 150, 50, 'mouse'));
   t += 100;
-  assert.deepEqual(g.up(p(1, 150, 50, 'mouse')), [], 'a mouse drag turns, never swipes');
+  assert.deepEqual(g.up(p(1, 150, 50, 'mouse')), [{ kind: 'settle' }], 'a mouse drag turns, never swipes');
 });
 
 test('two fingers dragging in parallel pan by the midpoint motion and do not turn', () => {
@@ -109,7 +134,7 @@ test('mouse button 2 and 1 drag pan; button 0 turns; a mouse click is never a ta
   g.up(p(1, 25, 14, 'mouse', 2));
   g.down(p(2, 10, 10, 'mouse', 0));
   assert.deepEqual(g.move(p(2, 30, 10, 'mouse', 0)), [{ kind: 'turn', deg: -7 }]);
-  assert.deepEqual(g.up(p(2, 30, 10, 'mouse', 0)), []);
+  assert.deepEqual(g.up(p(2, 30, 10, 'mouse', 0)), [{ kind: 'settle' }]);
   g.down(p(3, 10, 10, 'mouse', 1));
   assert.deepEqual(g.move(p(3, 11, 10, 'mouse', 1)), [{ kind: 'pan', dx: 1, dy: 0 }]);
 });

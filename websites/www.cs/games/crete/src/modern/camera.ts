@@ -9,9 +9,22 @@ export type { View };
 /** Top-down looks steeply down, square to the board like the classic look: a wall hides about a quarter of the cell
  *  behind it, and the figures still show their faces. */
 export const PITCHES: Record<View, number> = { angled: 45, top: 75 };
-export const DEFAULT_YAW = 15;
-/** The yaw a view starts at, and Reset returns to: Top-down is square to the board, as the classic look is. */
+/** The heading every view starts at and Reset returns to: square to the board, north up, as the classic look is. */
+export const DEFAULT_YAW = 0;
 export const VIEW_YAW: Record<View, number> = { angled: DEFAULT_YAW, top: 0 };
+/** Angled may be tilted from its own pitch up to straight down. */
+export const TILT_MAX = 90;
+
+/** The nearest quarter turn to `yaw`: where a turn settles when the player lets go, so the grid lines up with the
+ *  screen and the pad. */
+export function snapYaw(yaw: number): number {
+  return Math.round(yaw / 90) * 90;
+}
+
+/** `pitch` held between Angled's own pitch and straight down. */
+export function clampTilt(pitch: number): number {
+  return Math.max(PITCHES.angled, Math.min(TILT_MAX, pitch));
+}
 
 export interface Cam {
   yaw: number;

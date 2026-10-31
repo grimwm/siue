@@ -15,7 +15,7 @@ import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { DEFAULT_YAW, PITCHES, VIEW_YAW, clampView, clampZoom, easeCam, footprint, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
+import { DEFAULT_YAW, PITCHES, VIEW_YAW, clampTilt, clampView, clampZoom, easeCam, footprint, nearestYaw, panCam, snapYaw, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
@@ -109,6 +109,30 @@ const LOOP_FPS = 12;
 /** A zoom about a point this near the view's centre (a share of its width or height) keeps following Theseus. */
 const ZOOM_CENTRE = 0.12;
 
+/** Where this browser keeps Angled's heading and tilt. */
+export const CAM_KEY = 'crete-cam';
+
+function loadCam(fallback: { heading: number; tilt: number }): { heading: number; tilt: number } {
+  try {
+    const o = JSON.parse(localStorage.getItem(CAM_KEY) ?? 'null') as { heading?: unknown; tilt?: unknown } | null;
+    if (o && typeof o.heading === 'number' && typeof o.tilt === 'number' && Number.isFinite(o.heading) && Number.isFinite(o.tilt)) {
+      return { heading: snapYaw(o.heading), tilt: clampTilt(o.tilt) };
+    }
+  } catch {
+    // No storage, or something unreadable in it: the defaults.
+  }
+  return fallback;
+}
+
+function saveCam(v: { heading: number; tilt: number } | null): void {
+  try {
+    if (v) localStorage.setItem(CAM_KEY, JSON.stringify(v));
+    else localStorage.removeItem(CAM_KEY);
+  } catch {
+    // Without storage the view still works; it is only not kept.
+  }
+}
+
 export function createModernBoard(host: ModernHost): ModernBoard {
   let override: string | null = null;
   try { override = localStorage.getItem(VARIANT_KEY); } catch { override = null; }
@@ -148,7 +172,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   /** The whole level straight down: while Peek is held, or while Map is on (variants.ts). */
   let overhead: 'off' | 'peek' | 'map' = 'off';
   let savedYaw = 0;
-  const pitchOf = (v: View): number => (overhead !== 'off' ? OVERHEAD_PITCH : v === 'angled' && V.steep ? STEEP_PITCH : PITCHES[v]);
+  /** Angled's heading and tilt, as the player left them; this browser keeps them (CAM_KEY) until Reset. */
+  const angledDefault = (): { heading: number; tilt: number } => ({ heading: DEFAULT_YAW, tilt: V.steep ? STEEP_PITCH : PITCHES.angled });
+  let { heading, tilt } = loadCam(angledDefault());
+  const pitchOf = (v: View): number => (overhead !== 'off' ? OVERHEAD_PITCH : v === 'angled' ? tilt : PITCHES[v]);
   let last: State | null = null;
   let lastPlayer: Pos | null = null;
   let models: TerrainModel[] = [];
@@ -168,7 +195,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   /** The camera: where it is, where it eases to, whether its target follows Theseus, and whether the player chose
    *  its zoom (otherwise it shows the whole level, centred, whatever Theseus does). */
   let viewing: View = 'angled';
-  const cur: Cam = { yaw: DEFAULT_YAW, pitch: PITCHES.angled, tx: 0, tz: 0, zoom: 10 };
+  const cur: Cam = { yaw: heading, pitch: tilt, tx: 0, tz: 0, zoom: 10 };
   const goal: Cam = { ...cur };
   /** Whether the camera's target is Theseus: a pan, an off-centre zoom or the mini map look elsewhere until his next
    *  step. */
@@ -287,6 +314,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     let busy = easeCam(cur, goal, dt, snap());
     if (busy) aimWalls = true;
     applyCamera();
+    controls.setHeading(cur.yaw);
     if (aimWalls) {
       wallSet.aim(camera, seen());
       aimWalls = false;
@@ -515,7 +543,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   function view(v: View): void {
     if (v === viewing) return;
     viewing = v;
-    goal.yaw = nearestYaw(VIEW_YAW[v], cur.yaw);
+    goal.yaw = nearestYaw(v === 'angled' ? heading : VIEW_YAW[v], cur.yaw);
     // Before a level is built the view is the saved one, not a change to show: no eased frames to draw.
     if (!last) {
       goal.pitch = pitchOf(v);
@@ -557,10 +585,30 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       aimWalls = true;
       invalidate();
     },
+    tilt(deg: number) {
+      if (viewing !== 'angled' || overhead !== 'off') return;
+      tilt = clampTilt(tilt + deg);
+      cur.pitch = goal.pitch = tilt;
+      aimWalls = true;
+      invalidate();
+    },
+    settle() {
+      if (viewing !== 'angled' || overhead !== 'off') return;
+      goal.yaw = snapYaw(goal.yaw);
+      if (snap()) cur.yaw = goal.yaw;
+      heading = ((goal.yaw % 360) + 360) % 360;
+      saveCam({ heading, tilt });
+      aimWalls = true;
+      invalidate();
+    },
     reset() {
       follow = true;
       zoomed = false;
+      if (viewing === 'angled') ({ heading, tilt } = angledDefault());
+      saveCam(null);
       goal.yaw = nearestYaw(VIEW_YAW[viewing], cur.yaw);
+      if (snap()) cur.yaw = goal.yaw;
+      aimWalls = true;
       invalidate();
     },
   };
@@ -644,7 +692,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     insetCam.lookAt(0, FY, 0);
     insetCam.updateProjectionMatrix();
     insetCam.updateMatrixWorld();
-    const x = width - iw - 10, y = 10;
+    const x = width - iw - 10, y = 62;
     renderer.setScissorTest(true);
     renderer.setScissor(x, y, iw, ih);
     renderer.setViewport(x, y, iw, ih);

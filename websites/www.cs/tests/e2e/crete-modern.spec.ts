@@ -1,4 +1,4 @@
-// The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns under a drag, zooms
+// The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns and tilts under a drag or two fingers and squares up after, zooms
 // under the wheel and its buttons, moves Theseus the way the screen shows, ignores the camera while a card is up,
 // keeps the Walls choice, opens on the whole level, follows the mini map (a setting, off by default) once zoomed, floats a marker over each
 // figure and item, and hands the board back to the classic look and takes it again,
@@ -148,6 +148,35 @@ async function swipe(page: Page, sel: string, dx: number, dy: number): Promise<v
   }, [sel, dx, dy] as const);
 }
 
+/** Two fingers on the modern board, `gap` px apart side by side about its centre, turned together by `deg` (clockwise
+ *  on the screen) about their midpoint, or slid `dy` px together; then lifted. */
+async function twoFingers(page: Page, how: { deg?: number; dy?: number }): Promise<void> {
+  await page.evaluate(({ deg, dy }) => {
+    const el = document.getElementById('stage3d')!;
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2, half = 80;
+    const ev = (type: string, id: number, x: number, y: number) => el.dispatchEvent(new PointerEvent(type, {
+      pointerId: id, pointerType: 'touch', isPrimary: id === 21, clientX: x, clientY: y, bubbles: true, button: 0,
+    }));
+    const at = (t: number): [[number, number], [number, number]] => {
+      const a = ((deg ?? 0) * Math.PI / 180) * t, y = (dy ?? 0) * t;
+      const c = Math.cos(a), s = Math.sin(a);
+      return [[cx - half * c, cy - half * s + y], [cx + half * c, cy + half * s + y]];
+    };
+    const [a0, b0] = at(0);
+    ev('pointerdown', 21, ...a0);
+    ev('pointerdown', 22, ...b0);
+    for (let i = 1; i <= 12; i++) {
+      const [a, b] = at(i / 12);
+      ev('pointermove', 21, ...a);
+      ev('pointermove', 22, ...b);
+    }
+    const [a1, b1] = at(1);
+    ev('pointerup', 21, ...a1);
+    ev('pointerup', 22, ...b1);
+  }, { deg: how.deg ?? 0, dy: how.dy ?? 0 });
+}
+
 /** True when the classic canvas has drawn anything. */
 const classicPainted = (page: Page) => page.evaluate(() => {
   const stage = document.getElementById('stage') as HTMLCanvasElement;
@@ -173,8 +202,7 @@ test('a drag turns the board, and Up then moves Theseus the way the screen shows
   await drag(page, 200);
   await settled(page);
   const yaw = (await modern(page))!.yaw;
-  expect(yaw - yaw0, 'a 200 px drag right turns the view by about -70°').toBeGreaterThan(-80);
-  expect(yaw - yaw0).toBeLessThan(-60);
+  expect(yaw - yaw0, 'a 200 px drag right turns the view about -70°, and letting go settles it on -90°').toBeCloseTo(-90, 3);
 
   const from = await player(page);
   await page.keyboard.press('ArrowUp');
@@ -407,6 +435,61 @@ test('level 1 in Top-down: one small marker over each figure and item, the Minot
   expect(errors).toEqual([]);
 });
 
+test.describe('on a touch phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('a two-finger twist turns the view and settles on a quarter; a swipe up then goes away from the camera; the compass resets', async ({ page }) => {
+    const errors = await openHall(page);
+    const cam = () => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; });
+    expect(await cam()).toEqual({ pitch: 45, yaw: 0 });
+    await expect(page.locator('#cam-compass')).toBeVisible();
+    await twoFingers(page, { deg: 70 });
+    await settled(page);
+    const { yaw } = await cam();
+    expect(Math.abs(yaw) % 90, `the view settles on a quarter turn, not ${yaw}`).toBe(0);
+    expect(yaw).not.toBe(0);
+    const needle = await page.locator('#cam-compass svg').evaluate(n => (n as SVGElement).style.transform);
+    expect(needle, 'the compass turns with the view').toBe(`rotate(${yaw}deg)`);
+
+    const from = await player(page);
+    await swipe(page, '#stage3d', 0, -80);
+    const step = STEP[screenToGrid('up', yaw)];
+    await expect.poll(() => player(page), 'a swipe up goes away from the camera').toEqual({ r: from.r + step.r, c: from.c + step.c });
+
+    // Two fingers sliding up together tilt toward straight down.
+    await twoFingers(page, { dy: -120 });
+    await settled(page);
+    expect((await cam()).pitch, 'tilted').toBeGreaterThan(55);
+
+    await page.locator('#cam-compass').click();
+    await expect.poll(cam, 'the compass brings the starting view back').toEqual({ pitch: 45, yaw: 0 });
+    expect(errors).toEqual([]);
+  });
+});
+
+test('with a mouse, a left drag turns across and tilts up and down, the wheel zooms, and a double click resets', async ({ page }) => {
+  const errors = await openHall(page);
+  const cam = () => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; });
+  const z0 = await zoom(page);
+  const box = (await page.locator('#stage3d').boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(x, y - 8 * i);
+  await page.mouse.up();
+  await settled(page);
+  expect((await cam()).pitch, 'dragging up tilts toward straight down').toBeGreaterThan(60);
+  expect((await cam()).yaw).toBe(0);
+  const z1 = await zoom(page);
+  await page.mouse.wheel(0, -400);
+  await expect.poll(() => zoom(page), 'the wheel zooms in').toBeLessThan(z1);
+  await page.mouse.dblclick(x, y);
+  await expect.poll(cam, 'a double click resets the heading and tilt').toEqual({ pitch: 45, yaw: 0 });
+  await expect.poll(() => zoom(page), 'and the zoom').toBeCloseTo(z0, 3);
+  expect(await page.evaluate(() => localStorage.getItem('crete-cam')), 'nothing kept after a reset').toBeNull();
+  expect(errors).toEqual([]);
+});
+
 test('a finger swipe moves Theseus and leaves the camera\'s turn alone', async ({ page }) => {
   const errors = await openHall(page);
   const yaw0 = (await modern(page))!.yaw;
@@ -456,7 +539,7 @@ test('a new player starts in Top-down: 75°, square to the board, no turn button
 test('Top-down tips the camera to 75° and squares it to the board; Angled tips it back, and the choice is kept', async ({ page }) => {
   const errors = await openHall(page);
   const cam = () => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; });
-  expect(await cam()).toEqual({ pitch: 45, yaw: 15 });
+  expect(await cam()).toEqual({ pitch: 45, yaw: 0 });
   await page.keyboard.press('q');
   await expect(page.locator('#view-angled')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#walls-solid')).toBeVisible();

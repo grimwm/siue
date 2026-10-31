@@ -69,9 +69,14 @@ for a class.
     page in the studio that says exactly what will be deleted, with one
     button; the deletion happens only on that button's POST, never on a GET
     (mail scanners fetch links).
-- **A hard limit of 4–6 MB per person** for everyone except specially named
-  people, who get more. The design uses **5 MB** (my call within that range).
-- **Store the composition, not its renders.** A long piece's score is about
+- **A hard limit per person** for everyone except specially named people, who
+  get more: **5 MB**, rising to **25 MB** with the composer's Vocal Tracks
+  (`2026-10-31-composer-editor-design.md`, phase 4f), when recorded voice
+  becomes the one kind of audio a studio keeps. The owner chose "Perfect
+  Quality, More Space": 25 MB is about 8 to 10 minutes of lossless singing.
+  From 4f the limit is a config value, beside the 1 GB total.
+- **Store the composition, not its renders** (Vocal Tracks' recorded voice is
+  the one exception). A long piece's score is about
   45 KB, or about 4 KB compressed; its audio is 2.7 MB. The browser builds
   the audio, the sheet music and the sound picture from the score and a
   shared sample library.
@@ -314,7 +319,7 @@ comes first because a score-only studio cannot be heard without it.
 
 ## Open (Claude's calls, marked for the owner)
 
-- **5 MB** for studio users (the owner said 4–6 MB).
+- **5 MB** for studio users until Vocal Tracks, then **25 MB** (owner's decision).
 - **The named-person allowance** stays at today's draft limits: 20 drafts and
   100 MB.
 - **AI key scopes:** read notes, publish drafts, delete drafts. Never create

@@ -123,6 +123,22 @@ body {
 }
 .seg a:hover { background: var(--surface-2); }
 .seg a[aria-current="page"] { background: var(--ink); border-color: var(--ink); color: var(--surface-1); font-weight: 600; }
+/* The years choice sits with the range links and looks like one of them; it is dark while its range is shown. */
+.seg .years { display: inline-flex; align-items: center; gap: 0.25rem; margin: 0; }
+.seg .years label {
+  display: inline-flex; align-items: center; gap: 0.4rem; min-height: 36px; margin: 0; padding: 0 0.35rem 0 0.75rem;
+  border: 1px solid var(--grid); border-radius: 999px; color: var(--ink-2); font-size: 0.92rem;
+}
+.seg .years select {
+  min-height: 28px; padding: 0 0.25rem; background: var(--surface-1); color: var(--ink);
+  border: 1px solid var(--grid); border-radius: 999px; font: inherit;
+}
+.seg .years.on label { background: var(--ink); border-color: var(--ink); color: var(--surface-1); font-weight: 600; }
+.seg .years button {
+  min-height: 36px; padding: 0 0.75rem; background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--grid); border-radius: 999px; font: inherit; font-size: 0.92rem; cursor: pointer;
+}
+.seg .years button[hidden] { display: none; }
 .range { color: var(--ink-2); font-size: 0.9rem; margin-bottom: 1rem; }
 
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }

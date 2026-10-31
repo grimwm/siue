@@ -1,5 +1,5 @@
 <?php
-// admin/stats.php: only a signed-in admin sees any number; the range and page come from a fixed list.
+// admin/stats.php: only a signed-in admin sees any number; the range and page come from fixed lists.
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
@@ -74,6 +74,7 @@ final class StatsDashboardTest extends TestCase
         self::assertStringNotContainsString('style="', $res->body, 'no inline style');
         $data = self::data($res);
         self::assertSame('*', $data['report']['page']);
+        self::assertSame('30d', $data['report']['range']);
         self::assertSame(30, $data['report']['days']);
         self::assertSame(1, $data['report']['kpis']['uniques']['value']);
         self::assertSame(['home' => 'Faculty page', 'crete' => 'Crete', 'tankity' => 'Tankity', 'cylon' => 'The CIC'], $data['labels']);
@@ -85,7 +86,7 @@ final class StatsDashboardTest extends TestCase
 
     public function testAGamePageHasItsFunnel(): void
     {
-        $res = $this->serve(music_admin_signed_in($this->sessions, ['query' => ['page' => 'crete', 'days' => '7']]));
+        $res = $this->serve(music_admin_signed_in($this->sessions, ['query' => ['page' => 'crete', 'range' => '7d']]));
         $data = self::data($res);
         self::assertSame('crete', $data['report']['page']);
         self::assertSame(7, $data['report']['days']);
@@ -97,9 +98,52 @@ final class StatsDashboardTest extends TestCase
     {
         $data = self::data($this->serve(music_admin_signed_in($this->sessions, ['query' => ['page' => '../x', 'days' => '13']])));
         self::assertSame('*', $data['report']['page']);
-        self::assertSame(30, $data['report']['days']);
-        $data = self::data($this->serve(music_admin_signed_in($this->sessions, ['query' => ['page' => ['a'], 'days' => ['9']]])));
+        self::assertSame('30d', $data['report']['range']);
+        $data = self::data($this->serve(music_admin_signed_in($this->sessions, ['query' => ['page' => ['a'], 'days' => ['9'], 'range' => ['1y']]])));
         self::assertSame('*', $data['report']['page']);
+        self::assertSame('30d', $data['report']['range']);
+        foreach (['x', '13d', '3y', '1m'] as $bad) {
+            $data = self::data($this->serve(music_admin_signed_in($this->sessions, ['query' => ['range' => $bad]])));
+            self::assertSame('30d', $data['report']['range'], $bad);
+        }
+    }
+
+    public function testTheRangeChoices(): void
+    {
+        $res = $this->serve(music_admin_signed_in($this->sessions));
+        foreach (['7 Days' => '7d', '30 Days' => '30d', '90 Days' => '90d', '6 Months' => '6m', '1 Year' => '1y'] as $label => $key) {
+            self::assertStringContainsString('>' . $label . '</a>', $res->body);
+            if ($key !== '30d') {
+                self::assertStringContainsString('href="stats.php?range=' . $key . '"', $res->body, $label);
+            }
+        }
+        self::assertSame(1, preg_match('#<a href="stats.php"[^>]*aria-current="page">30 Days</a>#', $res->body), 'the default range is current and keeps a bare link');
+        self::assertStringContainsString('<option value="2y">2 Years</option>', $res->body);
+        self::assertStringNotContainsString('value="3y"', $res->body, 'no more years than there are numbers for');
+        self::assertStringContainsString('<select name="range"', $res->body);
+    }
+
+    public function testAYearsRange(): void
+    {
+        $this->clock->now -= 1500 * 86400;
+        stats_post(stats_collector($this->stats, $this->clock), stats_view(['vid' => str_repeat('9', 32)]));
+        $this->clock->now += 1500 * 86400;
+        $res = $this->serve(music_admin_signed_in($this->sessions, ['query' => ['range' => '5y', 'page' => 'crete']]));
+        $data = self::data($res);
+        self::assertSame('5y', $data['report']['range']);
+        self::assertSame('month', $data['report']['bucket']);
+        self::assertSame(2, $data['report']['kpis']['uniques']['value']);
+        self::assertStringContainsString('<option value="5y" selected>5 Years</option>', $res->body);
+        self::assertStringNotContainsString('value="6y"', $res->body);
+        self::assertStringContainsString('<input type="hidden" name="page" value="crete">', $res->body);
+        self::assertStringContainsString('<th scope="col">Month</th>', $res->body);
+        self::assertStringContainsString('previous 5 years', $res->body);
+    }
+
+    public function testTheOldDaysLinksStillWork(): void
+    {
+        $data = self::data($this->serve(music_admin_signed_in($this->sessions, ['query' => ['days' => '90']])));
+        self::assertSame('90d', $data['report']['range']);
     }
 
     public function testTheJsonCannotCloseItsScriptBlock(): void

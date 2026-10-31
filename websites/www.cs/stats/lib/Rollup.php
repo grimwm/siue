@@ -1,6 +1,7 @@
 <?php
 // Daily aggregates and the cleanup. The host has no cron, so a write runs the cleanup at most once an hour:
-// finished days roll into `daily`, week-old cohorts into `cohorts`, and old raw rows, salts and limits go.
+// finished days roll into `daily` and week-old cohorts into `cohorts`; past days' salts and past minutes'
+// write counts go. Visits and visitor IDs are kept forever.
 declare(strict_types=1);
 
 namespace Stats;
@@ -8,8 +9,6 @@ namespace Stats;
 final class Rollup
 {
     public const EVERY = 3600;
-    /** A visitor ID unseen this many days is forgotten. */
-    public const FORGET_VISITOR = 400;
 
     /** The cleanup, when the last one was an hour or more ago (one request claims it; the rest skip). */
     public static function maybeRun(\PDO $db, int $now): void
@@ -48,18 +47,18 @@ final class Rollup
             }
         }
         $db->prepare("INSERT OR REPLACE INTO meta (k, v) VALUES ('rolled_through', ?)")->execute([$yesterday]);
-        // A cohort is final once its seventh day has passed.
+        // A cohort is final once its seventh day has passed; `cohorts_through` is the last day finalized.
+        $final = Days::add($today, -8);
+        $after = $db->query("SELECT v FROM meta WHERE k = 'cohorts_through'")->fetchColumn();
         $put = $db->prepare('INSERT OR IGNORE INTO cohorts (day, page, size, d1, d7) VALUES (?, ?, ?, ?, ?)');
-        $pending = $db->prepare('SELECT DISTINCT v.first_day, v.page FROM visitors v WHERE v.first_day >= ? AND v.first_day <= ? AND NOT EXISTS (SELECT 1 FROM cohorts c WHERE c.day = v.first_day AND c.page = v.page)');
-        $pending->execute([Days::add($today, -Days::KEEP + 8), Days::add($today, -8)]);
+        $pending = $db->prepare('SELECT DISTINCT v.first_day, v.page FROM visitors v WHERE v.first_day > ? AND v.first_day <= ? AND NOT EXISTS (SELECT 1 FROM cohorts c WHERE c.day = v.first_day AND c.page = v.page)');
+        $pending->execute([$after === false ? '' : (string) $after, $final]);
         foreach ($pending->fetchAll(\PDO::FETCH_NUM) as [$day, $page]) {
             $c = self::cohort($db, (string) $day, (string) $page);
             $put->execute([$day, $page, $c['size'], $c['d1'], $c['d7']]);
         }
-        $cut = Days::add($today, -Days::KEEP);
-        $db->prepare('DELETE FROM hits WHERE day < ?')->execute([$cut]);
+        $db->prepare("INSERT OR REPLACE INTO meta (k, v) VALUES ('cohorts_through', ?)")->execute([$final]);
         $db->prepare('DELETE FROM salts WHERE day <> ?')->execute([$today]);
-        $db->prepare('DELETE FROM visitors WHERE last_day < ?')->execute([Days::add($today, -self::FORGET_VISITOR)]);
         $db->prepare('DELETE FROM rate WHERE minute < ?')->execute([intdiv($now, 60)]);
     }
 

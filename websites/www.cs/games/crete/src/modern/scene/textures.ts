@@ -1,7 +1,7 @@
 /* The Island of Crete, modern look: the procedural textures and the shared materials, painted once on canvases
  * from seeded noise, so every visit looks the same. One kit serves every level a board shows. */
 import {
-  AdditiveBlending, CanvasTexture, ClampToEdgeWrapping, Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial, PMREMGenerator,
+  AdditiveBlending, BackSide, CanvasTexture, ClampToEdgeWrapping, Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial, PMREMGenerator,
   RepeatWrapping, SRGBColorSpace, Vector2, Vector3,
 } from 'three';
 import type { Material, Texture, WebGLRenderer } from 'three';
@@ -373,6 +373,18 @@ const std = (color: number, o: ConstructorParameters<typeof MeshStandardMaterial
 export const flameMat = (color: number, opacity = 0.9): MeshBasicMaterial =>
   new MeshBasicMaterial({ color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false });
 
+/** The width of a figure's dark rim, in cells. */
+const OUTLINE_W = 0.022;
+/** Unlit and near-black, drawn from behind, each surface pushed out along its normal: round a figure it shows as a
+ *  thin dark rim that parts it from the floor. */
+function outlineMat(): MeshBasicMaterial {
+  const mat = new MeshBasicMaterial({ color: 0x0a0604, side: BackSide });
+  mat.onBeforeCompile = sh => {
+    sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `vec3 transformed = position + normal * ${OUTLINE_W.toFixed(3)};`);
+  };
+  return mat;
+}
+
 export type Kit = ReturnType<typeof createKit>;
 
 /** The textures and materials every level shares. `keeps` holds them so a level's teardown leaves them be. */
@@ -437,11 +449,23 @@ export function createKit(renderer: WebGLRenderer) {
     cloak: std(0x8a2a1e),
     leather: std(0x5a3a22, { roughness: 0.8 }),
     steel: metal(0xc9cdd0, 0.3),
-    fur: std(0x3e2618, { roughness: 0.95 }),
-    furDark: std(0x26170f, { roughness: 0.95 }),
+    // Theseus in clear, bright colours that glow a little, so he reads at once as his Classic sprite does.
+    heroSkin: std(0xe6b088, { roughness: 0.6, emissive: 0x2e160a }),
+    heroTunic: std(0x2f8fd0, { roughness: 0.55, emissive: 0x0a2a44 }),
+    heroCloak: std(0xd83a24, { roughness: 0.65, emissive: 0x420c04 }),
+    heroLeather: std(0x8a5a32, { roughness: 0.7, emissive: 0x1a0c04 }),
+    heroHair: std(0x5a3418, { roughness: 0.8, emissive: 0x140802 }),
+    /** The ring under Theseus, in his marker's green. */
+    heroRing: new MeshBasicMaterial({ color: 0x139a44, depthWrite: false }),
+    /** The ring's dark edge, so it shows on the palest floor. */
+    heroRingEdge: new MeshBasicMaterial({ color: 0x06140a, transparent: true, opacity: 0.8, depthWrite: false }),
+    /** The dark rim round a figure (figures.ts `outlined`). */
+    outline: outlineMat(),
+    fur: std(0x5a3620, { roughness: 0.9, emissive: 0x120804 }),
+    furDark: std(0x3c2414, { roughness: 0.9 }),
     snout: std(0x6a4a36),
     ivory: std(0xe2d6ba, { roughness: 0.5 }),
-    kilt: std(0x7a1e16),
+    kilt: std(0xb02a1c, { emissive: 0x2a0602 }),
     hoof: std(0x141010),
     eye: new MeshBasicMaterial({ color: 0xff4a1a }),
     statue: std(0x8e8c88, { roughness: 0.9 }),

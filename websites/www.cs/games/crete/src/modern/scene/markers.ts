@@ -1,7 +1,7 @@
 /* The Island of Crete, modern look: the floating markers' look (src/modern/markers.ts says who carries which).
  * Each is a six-sided glass crystal, point down, faceted, faintly lit from within and a little see-through. One
  * geometry and one material per kind serve every marker. The markers live in their own scene with their own
- * light, drawn over the finished picture, past the tone map and the paint, so walls never hide them; each turns
+ * light, drawn over the finished picture, past the tone map and FXAA, so walls never hide them; each turns
  * to face the camera, upright on screen, and hangs at its piece's head as the screen shows it. */
 import { AmbientLight, DirectionalLight, Group, LatheGeometry, Mesh, MeshPhongMaterial, Scene, Vector2, Vector3 } from 'three';
 import type { Camera } from 'three';

@@ -1,15 +1,18 @@
 // The story timeline: the energy as a glow behind everything, the sections,
 // one row per lane with its dimmed notes, each character's tune as a
 // constellation of stars over its lane, and the time axis, all on the shared view.
+// A constellation's lines are quiet: thin curves along the tune's top line;
+// stars off that line are dimmer; hovering, tapping or focusing a
+// constellation brightens it and adds its quiet links.
 import type { ComponentChildren } from 'preact';
-import { useMemo } from 'preact/hooks';
+import { useMemo, useState } from 'preact/hooks';
 import { readableOn } from '../color.ts';
 import { layoutTimeline, TIMELINE } from '../timeline.ts';
 import type { TimelineLayout } from '../timeline.ts';
 import { hitTimeline, spanBetween } from '../hit.ts';
 import type { Span } from '../hit.ts';
 import type { NoteMark } from '../answer.ts';
-import { layoutConstellations, STAR_R } from '../constellation.ts';
+import { layoutConstellations, nearestConstellation, STAR_R } from '../constellation.ts';
 import { splitTerms } from '../glossary.ts';
 import { axisTicks } from '../axis.ts';
 import type { Score } from '../score.ts';
@@ -51,6 +54,8 @@ function band(layout: TimelineLayout, laneId: string | null): { y: number; h: nu
 }
 
 let glowCount = 0;
+/** How near (in pixels) a pointer or a tap must come to a star to pick its constellation. */
+const PICK_REACH = 16;
 
 /** "<Name>'s tune: 3 notes, rising", from the first star against the last. */
 function tuneLabel(name: string, ys: number[]): string {
@@ -65,6 +70,10 @@ export function Timeline(p: TimelineProps) {
   const layout = layoutTimeline(score, tempo, view);
   const stars = layoutConstellations(score, layout, view);
   const hitAt = (x: number, y: number) => hitTimeline(layout, view, tempo, x, y);
+  // The constellation shown in full: the one under the mouse, else the one last tapped or focused.
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [picked, setPicked] = useState<number | null>(null);
+  const active = hovered ?? picked;
   const surface = useSurface({
     view, bounds: boundsFor(score.duration, view.width), duration: score.duration, onSeek: p.onSeek, onView: p.onView, onHold: p.onHold,
     mode: p.select ? 'select' : 'pan',
@@ -73,7 +82,7 @@ export function Timeline(p: TimelineProps) {
       p.select.onPick(cancelled ? null : spanBetween(hitAt(x0, y0), hitAt(x1, y1), tempo), done); // the lane survives only when both ends are in one
     },
     onTap: (x, y) => {
-      if (!p.select) return;
+      if (!p.select) { setPicked(nearestConstellation(stars, x, y, PICK_REACH)); return; }
       const hit = hitAt(x, y);
       p.select.onPick(spanBetween(hit, hit, tempo), true);
     },
@@ -86,8 +95,15 @@ export function Timeline(p: TimelineProps) {
   }, [theme, score]);
   const glowId = useMemo(() => `tl-glow-${++glowCount}`, []);
   const height = layout.height + AXIS_H;
+  const hover = (e: { pointerType?: string; clientX: number; clientY: number; currentTarget: Element }): void => {
+    if (e.pointerType !== 'mouse') return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const at = nearestConstellation(stars, e.clientX - (r.left || 0), e.clientY - (r.top || 0), PICK_REACH);
+    if (at !== hovered) setHovered(at);
+  };
   return (
-    <svg class="tl block max-w-full touch-none select-none" data-timeline="" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`} role="group" aria-label="Story timeline" {...surface}>
+    <svg class="tl block max-w-full touch-none select-none" data-timeline="" width={view.width} height={height} viewBox={`0 0 ${view.width} ${height}`} role="group" aria-label="Story timeline" {...surface}
+      onPointerMove={e => { surface.onPointerMove(e); hover(e); }} onPointerLeave={() => setHovered(null)}>
       <defs><filter id={glowId} x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="8" /></filter></defs>
       <polygon class="pointer-events-none fill-go opacity-25" data-glow="" aria-hidden="true" filter={`url(#${glowId})`} points={layout.glow.map(([x, y]) => `${x},${y}`).join(' ')} />
       {layout.sections.map(s => (
@@ -104,15 +120,22 @@ export function Timeline(p: TimelineProps) {
         </g>
       ))}
       {layout.notes.map(n => <rect class="pointer-events-none" data-lane-note={n.index} x={n.rect.x} y={n.rect.y} width={Math.max(1, n.rect.w)} height={n.rect.h} rx={1} fill={marks.lane.get(n.lane)?.mark} />)}
-      {stars.map(c => {
+      {stars.map((c, i) => {
         const mark = marks.color.get(c.color)?.mark ?? c.color;
         const text = marks.color.get(c.color)?.text ?? c.color;
         const first = c.stars[0];
+        const on = active === i;
+        const strong = c.links.filter(l => l.strong).map(l => l.d).join(' ');
+        const quiet = on ? c.links.filter(l => !l.strong).map(l => l.d).join(' ') : '';
+        // A star off the tune's top line (accompaniment under it) is dimmer, until its constellation is picked.
+        const lined = c.links.length === 0 ? null : new Set(c.links.flatMap(l => [l.from, l.to]));
         return (
-          <g class="pointer-events-none" data-motif={c.motif} data-character={c.character} role="img" aria-label={tuneLabel(c.name, c.stars.map(s => s.y))}>
+          <g class="pointer-events-none outline-none" data-motif={c.motif} data-character={c.character} data-active={on ? '' : undefined} role="img" aria-label={tuneLabel(c.name, c.stars.map(s => s.y))}
+            tabindex={c.stars.length > 1 ? 0 : undefined} onFocus={() => setPicked(i)} onBlur={() => setPicked(was => (was === i ? null : was))}>
             {c.ribbon ? <rect data-ribbon="" x={c.ribbon.x} y={c.ribbon.y} width={Math.max(0, c.ribbon.w)} height={c.ribbon.h} fill={mark} /> : null}
-            {c.stars.length > 1 ? <polyline data-constellation-line="" aria-hidden="true" fill="none" stroke={mark} stroke-width={1.5} stroke-linejoin="round" points={c.stars.map(s => `${s.x},${s.y}`).join(' ')} /> : null}
-            {c.stars.map(s => <circle data-star={s.note} aria-hidden="true" cx={s.x} cy={s.y} r={STAR_R[s.size]} fill={mark} />)}
+            {strong ? <path data-constellation-line="" aria-hidden="true" fill="none" stroke={mark} stroke-width={on ? 1.5 : 1} stroke-linecap="round" opacity={on ? 0.95 : 0.45} d={strong} /> : null}
+            {quiet ? <path data-constellation-quiet="" aria-hidden="true" fill="none" stroke={mark} stroke-width={1} stroke-linecap="round" stroke-dasharray="2 3" opacity={0.8} d={quiet} /> : null}
+            {c.stars.map((s, k) => <circle data-star={s.note} aria-hidden="true" cx={s.x} cy={s.y} r={STAR_R[s.size]} fill={mark} opacity={on || lined === null || lined.has(k) ? undefined : 0.45} />)}
             {first ? <text data-character-name="" class="font-display text-[11px] font-semibold tracking-wider uppercase" x={first.x + 7} y={Math.max(first.y - 6, layout.lanes[0]?.rect.y ?? 0) + 2} fill={text}>{c.name}</text> : null}
           </g>
         );

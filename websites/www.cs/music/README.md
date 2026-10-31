@@ -202,6 +202,22 @@ through the view's parts, one lit at a time, each with Hear it (a clip of the
 piece, or a built-in demo). It opens by itself the first time each view is
 shown in a browser (`workroom-guide-<view>` in localStorage).
 
+The Story, Piano roll and Sound picture share one time axis. It zooms with a
+pinch, with ctrl or cmd and the wheel, with a trackpad pinch, or with the
+**−**, **+** and **Fit** buttons above the view, and pans with a drag; zooming
+never scrolls the page. In the Story each character's tune is a constellation
+whose lines are kept quiet: thin curves along the tune's top line only (the
+accompaniment under it is dimmer stars with no line), and a link that leaps
+more than an octave, follows a long silence or would cross another star shows
+only while its constellation is hovered, tapped or focused.
+
+Sheet music shows the **Full Score** (every part stacked in standard score
+order, bars aligned, each staff named) or one instrument, in **Page View**
+(lines that wrap to the width) or **Continuous** (one long line that scrolls
+right). It zooms the same ways as the time views. **Print / Save PDF** draws
+the shown music on US letter pages, the piece's title and opening tempo on the
+first page and a page number on the rest, and prints it alone on white.
+
 Sheet music also has **Learn to read sheet music**: a six-step lesson beside the
 notation (staff and clef, note lengths and rests, bars and the time signature,
 sharps, flats and the key signature, ties, reading along). Each step uses the

@@ -110,3 +110,16 @@ test('select mode: a preview is closed when a second finger lands or the touch i
   c.g.down({ id: 1, x: 100, y: 120, t: 0 });
   assert.deepEqual(c.g.cancel(1), [], 'nothing was shown, nothing to close');
 });
+
+test("Safari's trackpad pinch (a gesture scale) zooms about the pointer, each change against the last", () => {
+  const { g, apply, view } = setup();
+  apply(g.scale(200, 1));
+  apply(g.scale(200, 2));
+  assert.ok(Math.abs(view().pxPerSec - 100) < 1e-9);
+  assert.ok(Math.abs(view().start - 2) < 1e-9, 'the time under the pointer stays');
+  apply(g.scale(200, 4));
+  assert.ok(Math.abs(view().pxPerSec - 200) < 1e-9);
+  g.scaleEnd();
+  apply(g.scale(200, 1));
+  assert.ok(Math.abs(view().pxPerSec - 200) < 1e-9, 'a new gesture starts from where the last one left off');
+});

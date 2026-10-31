@@ -52,3 +52,31 @@ export function pinch(v: View, before: readonly [number, number], after: readonl
   const clamped = Math.min(b.maxPxPerSec, Math.max(b.minPxPerSec, pxPerSec));
   return clampView({ start: t0 - after[0] / clamped, pxPerSec: clamped, width: v.width }, b);
 }
+
+/** Each press of the zoom buttons on the time views zooms by this much. */
+export const ZOOM_STEP = 1.5;
+
+/** Zooms about the middle of the view (the zoom buttons). */
+export function zoomBy(v: View, factor: number, b: Bounds): View {
+  return zoomAt(v, v.width / 2, factor, b);
+}
+
+/** The whole piece is on screen: zooming out and Fit have nothing to do. */
+export const isWhole = (v: View, b: Bounds): boolean => v.pxPerSec <= b.minPxPerSec * (1 + 1e-9);
+/** As close as the view goes: zooming in has nothing to do. */
+export const isClosest = (v: View, b: Bounds): boolean => v.pxPerSec >= b.maxPxPerSec * (1 - 1e-9);
+
+/** The sheet music's zoom: 1 is the notation's own size (fitted to the width in page view); a step per button press. */
+export const SHEET_ZOOM = { min: 0.5, max: 3, step: 1.25 } as const;
+
+/** The sheet zoom times factor (a button step, or a pinch's new spread over its old one), held to its limits; a broken factor changes nothing. */
+export function sheetZoom(zoom: number, factor: number): number {
+  if (!Number.isFinite(factor) || factor <= 0) return zoom;
+  return Math.min(SHEET_ZOOM.max, Math.max(SHEET_ZOOM.min, zoom * factor));
+}
+
+/** The full score's own size on a host this wide (in pixels): its natural size from 760 px up, shrinking with the width below that (half on a phone), never under the smallest zoom; an unmeasured width (0) changes nothing. */
+export function fullScoreFit(width: number): number {
+  if (!(width > 0)) return 1;
+  return Math.max(SHEET_ZOOM.min, Math.min(1, width / 760));
+}

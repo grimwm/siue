@@ -53,3 +53,28 @@
 @font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/barlow-condensed-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); }
+
+/* The printed sheet music (Print / Save PDF): the copy src/sheet.ts draws on
+   letter pages into #sheet-print, a child of the body, printed alone on white
+   with no page chrome; one OSMD page per printed page, so a page break always
+   falls between lines of music; the page number at the foot of every page after
+   the first. On screen the copy is drawn off to the side: it needs a width to lay
+   out, but is never seen. */
+.sheet-print { position: fixed; left: -10000px; top: 0; width: 720px; }
+
+@media print {
+  @page {
+    size: letter;
+    margin: 0.4in 0.4in 0.55in;
+    @bottom-center { content: counter(page); font-family: Georgia, "Times New Roman", serif; font-size: 10pt; color: #000; }
+  }
+  @page :first { @bottom-center { content: none; } }
+  :root, :root[data-theme="light"] { color-scheme: light; }
+  html, body { background: #fff !important; color: #000 !important; }
+  .console-head, button, [role="tablist"], [data-sheet] { display: none !important; }
+  body:has(> #sheet-print) > :not(#sheet-print) { display: none !important; }
+  .sheet-print { position: static; width: auto; }
+  .sheet-print > div { break-after: page; break-inside: avoid; }
+  .sheet-print > div:last-child { break-after: auto; }
+  .sheet-print svg { display: block; width: 100% !important; height: auto !important; }
+}

@@ -18,11 +18,13 @@ function setup() {
       render: () => { children.push('svg'); log.push('render'); },
       clear: () => { log.push('clear'); },
       mark: bar => { log.push(`mark ${bar}`); },
+      layout: l => { log.push(`layout ${l.continuous ? 'continuous' : 'pages'} ${l.zoom}`); },
+      preview: scale => { log.push(`preview ${scale}`); },
     };
     made.push(n);
     return n;
   };
-  const sheet = createSheet(host, make, win, (xml, lane) => `${xml}:${lane}`);
+  const sheet = createSheet(host, make, win, (xml, lane) => `${xml}:${lane ?? 'full'}`);
   return { sheet, children, listeners, log, made };
 }
 
@@ -85,4 +87,47 @@ test('lighting a bar with nothing drawn yet touches no notation', () => {
   const s = setup();
   s.sheet.mark(3);
   assert.deepEqual(s.log, []);
+});
+
+test('the full score is a show with no lane', async () => {
+  const s = setup();
+  await s.sheet.show('xml', null);
+  assert.deepEqual(s.log.filter(l => l.startsWith('load')), ['load xml:full']);
+});
+
+test('the layout is set before the first render, and a change redraws the drawing in place with its bar lit again', async () => {
+  const s = setup();
+  s.sheet.layout({ continuous: true, zoom: 1.5 });
+  assert.equal(s.log.length, 0, 'nothing drawn yet, nothing touched');
+  s.sheet.mark(4);
+  await s.sheet.show('xml', 'a');
+  assert.deepEqual(s.log.slice(-3), ['layout continuous 1.5', 'render', 'mark 4']);
+  s.sheet.layout({ continuous: false, zoom: 1 });
+  assert.deepEqual(s.log.slice(-3), ['layout pages 1', 'render', 'mark 4']);
+  assert.equal(s.log.filter(l => l.startsWith('load')).length, 1, 'a layout change does not load the music again');
+  for (const f of s.listeners) f();
+  assert.deepEqual(s.log.slice(-3), ['layout pages 1', 'render', 'mark 4'], 'a resize keeps the layout');
+  await s.sheet.show('xml', 'b');
+  assert.ok(s.log.includes('layout pages 1'));
+});
+
+test('a pinch previews its scale on the drawing without drawing it again', async () => {
+  const s = setup();
+  s.sheet.preview(1.2);
+  assert.equal(s.log.length, 0, 'nothing drawn, nothing to preview');
+  await s.sheet.show('xml', 'a');
+  const renders = s.log.filter(l => l === 'render').length;
+  s.sheet.preview(1.2);
+  assert.equal(s.log.at(-1), 'preview 1.2');
+  assert.equal(s.log.filter(l => l === 'render').length, renders);
+});
+
+test('a layout kept for the next drawing leaves the current one alone', async () => {
+  const s = setup();
+  await s.sheet.show('xml', 'a');
+  const renders = s.log.filter(l => l === 'render').length;
+  s.sheet.layout({ continuous: false, zoom: 0.5 }, false);
+  assert.equal(s.log.filter(l => l === 'render').length, renders);
+  await s.sheet.show('xml', null);
+  assert.ok(s.log.includes('layout pages 0.5'));
 });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boundsFor, fitView, resizeView, panBy, pinch, timeToX, xToTime, zoomAt, MAX_PX_PER_SEC } from '../src/zoom.ts';
+import { boundsFor, fitView, fullScoreFit, isClosest, isWhole, resizeView, panBy, pinch, sheetZoom, timeToX, xToTime, zoomAt, zoomBy, MAX_PX_PER_SEC, SHEET_ZOOM, ZOOM_STEP } from '../src/zoom.ts';
 
 const b = boundsFor(16, 800);
 const fit = fitView(16, 800);
@@ -61,4 +61,36 @@ test('a view at fit refits when the width changes; a zoomed or panned view keeps
   const kept = resizeView(zoomed, 720, 390, 16);
   assert.equal(kept.pxPerSec, zoomed.pxPerSec, 'the owner’s zoom survives');
   assert.equal(kept.width, 390);
+});
+
+test('the zoom buttons zoom about the middle of the view, by a step each way', () => {
+  const v = zoomBy(fit, ZOOM_STEP, b);
+  assert.ok(Math.abs(v.pxPerSec - 50 * ZOOM_STEP) < 1e-9);
+  assert.ok(Math.abs(xToTime(v, 400) - 8) < 1e-9, 'the middle stays put');
+  const back = zoomBy(v, 1 / ZOOM_STEP, b);
+  assert.ok(Math.abs(back.pxPerSec - 50) < 1e-9 && Math.abs(back.start) < 1e-9);
+});
+
+test('the view knows when it is whole and when it is as close as it goes', () => {
+  assert.equal(isWhole(fit, b), true);
+  assert.equal(isWhole(zoomBy(fit, 2, b), b), false);
+  assert.equal(isClosest(fit, b), false);
+  assert.equal(isClosest(zoomBy(fit, 1e6, b), b), true);
+});
+
+test('the sheet zoom: steps, a pinch ratio, and its limits', () => {
+  assert.equal(sheetZoom(1, SHEET_ZOOM.step), SHEET_ZOOM.step);
+  assert.equal(sheetZoom(1, 1e6), SHEET_ZOOM.max);
+  assert.equal(sheetZoom(1, 1e-6), SHEET_ZOOM.min);
+  assert.equal(sheetZoom(1, NaN), 1, 'a broken ratio changes nothing');
+  assert.equal(sheetZoom(1.5, 200 / 100), 3, 'fingers twice as far apart double it');
+  assert.equal(sheetZoom(0.8, 1), 0.8);
+});
+
+test('a full score starts smaller on a narrow screen, so a line holds more than one bar', () => {
+  assert.equal(fullScoreFit(1200), 1, 'a wide screen draws it at its own size');
+  assert.equal(fullScoreFit(760), 1);
+  assert.ok(Math.abs(fullScoreFit(380) - 0.5) < 1e-9, 'a phone draws it at half size');
+  assert.equal(fullScoreFit(100), SHEET_ZOOM.min, 'never below the smallest zoom');
+  assert.equal(fullScoreFit(0), 1, 'an unmeasured width changes nothing');
 });

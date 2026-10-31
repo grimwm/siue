@@ -247,6 +247,43 @@ test('open a piece, play, seek, switch views, read a term, no CSP violations', a
     await lesson.getByRole('button', { name: 'Close' }).click();
     await expect(page.locator('#sheet [data-sheet-bar]')).toHaveCount(0);
 
+    // The Full Score stacks every part; Continuous draws one long line that scrolls right; the zoom keeps the page still; the printed copy is letter pages.
+    const staves = () => page.locator('#sheet svg').evaluate(svg => svg.querySelectorAll('.vf-clef').length);
+    const oneLane = await staves();
+    await page.getByRole('button', { name: 'Full Score' }).click();
+    await expect.poll(staves).toBeGreaterThan(oneLane);
+    await page.getByRole('button', { name: 'Continuous' }).click();
+    await expect(page.locator('#sheet[data-layout="continuous"]')).toBeVisible();
+    await expect.poll(() => page.locator('#sheet').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+    const sheetWidth = () => page.locator('#sheet svg').evaluate(svg => svg.getBoundingClientRect().width);
+    const before = await sheetWidth();
+    const scrolled = await page.evaluate(() => scrollY);
+    await page.locator('.sheet-tools [data-zoom="in"]').click();
+    await expect.poll(sheetWidth).toBeGreaterThan(before * 1.1);
+    expect(await page.evaluate(() => scrollY)).toBe(scrolled);
+    await page.locator('.sheet-tools [data-zoom="fit"]').click();
+    await page.getByRole('button', { name: 'Page View' }).click();
+    await page.evaluate(() => { (window as unknown as { printed: number }).printed = 0; window.print = () => { (window as unknown as { printed: number }).printed++; }; });
+    await page.getByRole('button', { name: 'Print / Save PDF' }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { printed: number }).printed)).toBe(1);
+    await expect(page.locator('body > #sheet-print svg').first()).toBeAttached();
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('.console-head')).toBeHidden();
+    await expect(page.locator('#workroom')).toBeHidden();
+    await page.emulateMedia({ media: 'screen' });
+
+    // The story's zoom buttons zoom the time axis without moving the page; Fit shows the whole piece again.
+    await page.getByRole('tab', { name: 'Story' }).click();
+    const firstTick = () => page.locator('[data-tick]').first().textContent();
+    await expect(page.locator('[data-zoom="fit"]')).toBeDisabled();
+    const at = await page.evaluate(() => scrollY);
+    await page.locator('[data-zoom="in"]').click();
+    await page.locator('[data-zoom="in"]').click();
+    await expect(page.locator('[data-zoom="fit"]')).toBeEnabled();
+    expect(await page.evaluate(() => scrollY)).toBe(at);
+    await page.locator('[data-zoom="fit"]').click();
+    await expect.poll(firstTick).toBe('1');
+
     // The timeline belongs to the Story view alone.
     await page.getByRole('tab', { name: 'Story' }).click();
     await page.setViewportSize({ width: 390, height: 844 });

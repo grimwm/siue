@@ -1,8 +1,11 @@
 // websites/www.cs/games/_kit/stats-page.ts
-// Built into each game as dist/stats.js, a classic script. Its own tag says what to count:
-//   <script src="dist/stats.js?v=…" data-page="crete" data-endpoint="../../stats/collect.php"></script>
+// Built into each game as dist/stats.js, a classic script. On a game's own page (games/<id>/) the plain tag is
+// enough: <script src="dist/stats.js?v=…" defer></script>. The page is the folder's id, and the endpoint is the
+// site's ../../stats/collect.php, by the same convention as install-page.ts's ../../play/<id>/; inside the site's
+// /play/<id>/ frame it only hands events to that page's beacon. A site page names both on the tag:
+//   <script src="…/dist/stats.js?v=…" data-page="crete" data-endpoint="../../stats/collect.php"></script>
 // data-game-query (the faculty page) counts the page as the game its ?game= names, when it names one.
-// data-views="0" sends events only. Without data-endpoint it does nothing, so a game copied elsewhere stays silent.
+// data-views="0" sends events only.
 import { startStats, referrerHost, GLOBAL } from './stats.ts';
 import type { SiteStats, StatsEnv } from './stats.ts';
 import { browserTimers } from './ports.browser.ts';
@@ -10,8 +13,10 @@ import { browserTimers } from './ports.browser.ts';
 type Nav = Navigator & { globalPrivacyControl?: boolean; msDoNotTrack?: string };
 
 const tag = document.currentScript as HTMLScriptElement | null;
-const endpoint = tag?.dataset['endpoint'];
-let page = tag?.dataset['page'] ?? '';
+/** The game's folder (games/<id>/) when the tag names neither page nor endpoint. */
+const folder = new URL('./', location.href);
+const endpoint = tag?.dataset['endpoint'] ?? new URL('../../stats/collect.php', folder).href;
+let page = tag?.dataset['page'] ?? folder.pathname.split('/').filter(Boolean).pop() ?? '';
 if (tag && 'gameQuery' in tag.dataset) {
   const game = new URLSearchParams(location.search).get('game');
   if (game && /^[a-z0-9-]{1,32}$/.test(game)) page = game;

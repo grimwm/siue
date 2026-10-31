@@ -91,9 +91,11 @@ falls back to a value that lives for the session; nothing throws.
 
 `track(page, name, prop?)` (or `tracker('crete')('level_start', '1-3')`) sends a named game event through the
 page's beacon, or parks it until the beacon starts; it never throws. `stats-page.ts` is built per game as
-`dist/stats.js` (an `iife` entry in `build.json`) and starts the beacon from its own tag's `data-page` and
-`data-endpoint` (`data-game-query`: take the page from `?game=`; `data-views="0"`: events only). Without
-`data-endpoint` it does nothing, so a game copied elsewhere stays silent. A page view, its visible seconds
+`dist/stats.js` (an `iife` entry in `build.json`). A game's own page loads it with a plain tag (the page stays
+ignorant of the site): the page is the folder's id and the endpoint is `../../stats/collect.php`, the same
+`games/<id>/` to site convention as `install-page.ts`; a copy elsewhere posts to a missing path, which costs it
+nothing. A site page names `data-page` and `data-endpoint` on the tag (`data-game-query`: take the page from
+`?game=`; `data-views="0"`: events only). A page view, its visible seconds
 (every 30 s and when hidden), and events go to the endpoint; Do Not Track, Global Privacy Control and
 `navigator.webdriver` send nothing. `install.ts` reports Share and an install through `InstallSetup.onEvent`.
 The server keeps the allowlist of events (`stats/lib/Collector.php`); the admin README's "Visitor statistics"

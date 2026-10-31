@@ -1,10 +1,13 @@
-/* The Island of Crete: the Dictionary's entries, one row for everything a player can pick up or meet, and what the
- * board shows of them now. Every entry has its picture (a Classic sprite, which reads in both looks), its name, a
- * line of lore and what it does; a tool also has its key. Every terrain, object and hazard of the rules maps to an
- * entry here or is plain (floor and wall), so a new piece cannot reach the board without one. DOM-free. */
+/* The Island of Crete: the Dictionary's entries, one row for everything a player can pick up or meet, and what
+ * Theseus meets in a turn. Every entry has its picture (a Classic sprite, and a Modern icon by the same id in
+ * fx/sprites/modern-icons.json), its name, a line of lore and what it does; a tool also has its key. Every terrain,
+ * object and hazard of the rules maps to an entry here or is plain (floor and wall), so a new piece cannot reach the
+ * board without one. Items are met by picking them up; the active tiles (ACTIVE) by Theseus touching them; the
+ * rest are only read in the Dictionary. DOM-free. */
 import { TOOLS } from './puzzle/tiles.ts';
 import type { HazardKind, KeyColor, ObjectKind, Terrain, Tool } from './puzzle/tiles.ts';
 import type { State } from './puzzle/state.ts';
+import type { GameEvent } from './puzzle/step.ts';
 
 export type EntryKind = 'item' | 'hazard';
 
@@ -16,7 +19,7 @@ export interface Entry {
   readonly lore: string;
   /** What it does and how to use it, in full. */
   readonly effect: string;
-  /** What it does, in a few words: the banner on a later pickup and the backpack. */
+  /** What it does, in a few words: the banner on a later pickup or touch. */
   readonly short: string;
   /** The key that uses it (a tool's). */
   readonly key?: string;
@@ -95,7 +98,7 @@ export const ENTRIES: readonly Entry[] = [
   { id: 'gate', kind: 'hazard', name: 'The gate of Minos', sprite: 'gate-closed',
     lore: 'Minos barred the way out with bronze, and only the tribute of Athens lifts it.',
     effect: 'Shut until you have taken every relic in the level; then it stands open for you. The Minotaur, hazards and blocks never pass it.',
-    short: 'Opens when every relic is taken' },
+    short: 'Open once every relic is taken' },
   { id: 'water', kind: 'hazard', name: 'Water', sprite: 'water',
     lore: 'Black water from the springs under the island, cold enough to stop a heart.',
     effect: 'You need flippers to swim it. The Minotaur cannot enter it, and of the hazards only the Harpy flies over it. Push a block into it and the block sinks and fills it, so anyone can walk there.',
@@ -131,7 +134,7 @@ export const ENTRIES: readonly Entry[] = [
   { id: 'button', kind: 'hazard', name: 'Toggle button', sprite: 'button',
     lore: 'A bronze plate in the floor that turns Daedalus\'s walls about.',
     effect: 'Each time you, a block or a hazard arrives on it, every toggle wall in the level opens or closes.',
-    short: 'Flips the toggle walls' },
+    short: 'Opens or shuts the toggle walls' },
   { id: 'toggle', kind: 'hazard', name: 'Toggle wall', sprite: 'toggle-closed',
     lore: 'Walls on hidden hinges, that change places when the plate is trodden.',
     effect: 'The toggle button opens or closes it. Open, it is floor to you, the Minotaur and hazards, though a block cannot be pushed onto it; shut, it is a wall.',
@@ -139,11 +142,11 @@ export const ENTRIES: readonly Entry[] = [
   { id: 'trap', kind: 'hazard', name: "Daedalus's snare", sprite: 'trap',
     lore: 'A bronze jaw hidden in the floor, from the workshop of the man who built the Labyrinth.',
     effect: 'Whoever stands on it is held there (you, a block, a hazard or the Minotaur) until something holds down a brown button that works it. Held, you cannot move or push, but you can wait and use tools; a held block cannot be pushed.',
-    short: 'Holds whoever stands on it' },
+    short: 'Holds you until a brown button lets go' },
   { id: 'button-brown', kind: 'hazard', name: 'Brown button', sprite: 'button-brown',
     lore: 'A plate that springs Daedalus\'s snare when enough weight rests on it.',
     effect: 'While you, a block or a hazard stands on it, the snare it works lets go. It works the next snare along, counting left to right and top to bottom. The Minotaur and the cow never hold it down.',
-    short: 'Opens its snare while held down' },
+    short: 'Lets its snare go while held down' },
   { id: 'button-red', kind: 'hazard', name: 'Red button', sprite: 'button-red',
     lore: 'A plate that wakes one of Daedalus\'s clone machines.',
     effect: 'Each time you, a block or a hazard arrives on it, the clone machine it works makes its copy, if the square in front of the machine is free. It works the next machine along, counting left to right and top to bottom.',
@@ -171,7 +174,7 @@ export const ENTRIES: readonly Entry[] = [
   { id: 'teleport', kind: 'hazard', name: 'Teleport', sprite: 'teleport',
     lore: 'A doorway of Hermes, the messenger, who goes from place to place without crossing the space between.',
     effect: 'Step into it, or push a block in, and out it comes at the next teleport along (counting left to right and top to bottom, then round again), one square on the same way. A blocked way out is passed over for the next. The Minotaur and hazards cannot enter it, and a teleport alone in its level is a wall.',
-    short: 'Out at the next teleport' },
+    short: 'Out at the next teleport along' },
   { id: 'thief', kind: 'hazard', name: 'Thief', sprite: 'thief',
     lore: 'A light-fingered servant of Hermes, god of thieves, who haunts the halls.',
     effect: 'Step on it and it takes all your gear: flippers, fire boots, skates and suction boots. Your keys and tools stay with you.',
@@ -179,7 +182,7 @@ export const ENTRIES: readonly Entry[] = [
   { id: 'bomb', kind: 'hazard', name: 'Bomb', sprite: 'bomb',
     lore: 'A jar of naphtha and pitch from the forge, that bursts at a touch.',
     effect: 'Step on it and it bursts: you lose a heart and wake on your last safe zone (or where you began), and the bomb is gone. A block or a hazard that arrives on it is destroyed with it. The Minotaur never steps on it.',
-    short: 'Costs a heart; destroys blocks and hazards' },
+    short: 'Costs a heart, and is gone' },
 ];
 
 export const ENTRY: Readonly<Record<string, Entry>> = Object.fromEntries(ENTRIES.map(e => [e.id, e]));
@@ -206,24 +209,47 @@ export const OBJECT_ENTRY: Readonly<Record<ObjectKind, string>> = {
 
 export const HAZARD_ENTRY: Readonly<Record<HazardKind, string>> = { ball: 'ball', glider: 'glider', fireball: 'fireball' };
 
-/** Hidden pieces: they look like something else, so they are met when they are found, never on sight. */
-const HIDDEN: ReadonlySet<Terrain> = new Set<Terrain>(['fake-wall', 'invisible-wall']);
+/** The tiles that do something when Theseus steps on them or walks into them: the first touch shows a card. */
+export const ACTIVE: ReadonlySet<string> = new Set([
+  'button', 'button-brown', 'button-red', 'teleport', 'thief', 'trap', 'popup', 'bomb', 'fake-wall', 'invisible-wall', 'gate',
+]);
+/** Tiles that look like something else: locked in the Dictionary until first touched, so the trick is not spoiled. */
+export const HIDDEN: ReadonlySet<string> = new Set(['fake-wall', 'invisible-wall']);
 
-/** The hazard entries the board shows now, in the Dictionary's order: the special tiles in sight, the blocks, the
- *  moving hazards and the Minotaur. A fake or invisible wall counts once it is found, not while it hides. */
-export function inSight(s: State): string[] {
-  const ids = new Set<string>();
-  const start = s.level.terrain;
-  s.terrain.forEach((t, i) => {
-    const was = start[i]!;
-    if (HIDDEN.has(was) && t !== was) ids.add(TERRAIN_ENTRY[was]!);
-    const id = HIDDEN.has(t) ? null : TERRAIN_ENTRY[t];
-    if (id) ids.add(id);
-  });
-  if (s.objects.includes('block')) ids.add('block');
-  for (const h of s.hazards) ids.add(HAZARD_ENTRY[h.kind]);
-  if (s.minotaur) ids.add('minotaur');
-  return ENTRIES.filter(e => e.kind === 'hazard' && ids.has(e.id)).map(e => e.id);
+/** The id an entry is kept under in the met store (src/met.ts): an item's own id; a tile's first touch as
+ *  `touch-<id>`, so a bare tile id in the store means nothing. */
+export const metId = (id: string): string => (ENTRY[id]?.kind === 'item' ? id : `touch-${id}`);
+
+/** Whether the Dictionary shows the entry as a locked "???": an item until picked up, a hidden tile until touched;
+ *  every other hazard and tile is always open. */
+export const locked = (id: string, met: (key: string) => boolean): boolean =>
+  (ENTRY[id]?.kind === 'item' || HIDDEN.has(id)) && !met(metId(id));
+
+/** One meeting in a turn: an entry, and when the figure reaches it (ms into the turn's animation). */
+export interface Meeting { id: string; ms: number }
+
+/** What Theseus meets in a turn, in order, at the moment his figure reaches it (`step` ms a cell, as the board's
+ *  timeline counts): each thing he takes but a story page (which has its own card) and each active tile he touches:
+ *  a button, the thief, a teleport or the open gate he steps onto, a snare that holds him, a pop-up wall rising
+ *  behind him, a bomb under him, a fake or invisible wall he finds. */
+export function meetingsOf(before: State, events: readonly GameEvent[], step: number): Meeting[] {
+  const out: Meeting[] = [];
+  const cols = before.level.cols;
+  let t = 0;
+  const add = (id: string | null | undefined) => { if (id) out.push({ id, ms: t }); };
+  for (const e of events) {
+    if (e.kind === 'teleported' && e.who === 'player') t += step;
+    else if ((e.kind === 'moved' || e.kind === 'slid') && e.who === 'player') {
+      t += step;
+      const id = TERRAIN_ENTRY[before.terrain[e.to.r * cols + e.to.c]!];
+      if (id === 'button' || id === 'button-brown' || id === 'button-red' || id === 'thief' || id === 'teleport' || id === 'gate') add(id);
+    } else if (e.kind === 'took' && e.what !== 'page') add(OBJECT_ENTRY[e.what]);
+    else if (e.kind === 'held' && e.who === 'player') add('trap');
+    else if (e.kind === 'rose') add('popup');
+    else if (e.kind === 'exploded' && e.who === 'player') add('bomb');
+    else if (e.kind === 'revealed') add(e.what);
+  }
+  return out;
 }
 
 export interface Held { readonly entry: Entry; readonly count: number }

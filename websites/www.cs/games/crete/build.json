@@ -4,6 +4,7 @@
     { "in": "src/main.ts", "out": "main", "format": "esm" },
     { "in": "../_kit/install-page.ts", "out": "install", "format": "iife" },
     { "in": "src/tiles-page.ts", "out": "tiles-test", "format": "iife" },
+    { "in": "src/icons-page.ts", "out": "icons-test", "format": "iife" },
     { "in": "src/solver-worker.ts", "out": "solver-worker", "format": "iife" },
     { "in": "src/modern/entry.ts", "out": "modern", "format": "esm" }
   ],

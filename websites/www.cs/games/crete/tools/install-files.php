@@ -8,5 +8,5 @@ exit(install_run(dirname(__DIR__), [
     'kind' => 'play',
     'versioned' => ['dist/main.js', 'dist/install.js', 'dist/kit.css', 'game.css'],
     'precache_dirs' => ['dist', 'fx/sprites'],
-    'precache_exclude' => ['tiles-test.*'],
+    'precache_exclude' => ['tiles-test.*', 'icons-test.*'],
 ], $argv));

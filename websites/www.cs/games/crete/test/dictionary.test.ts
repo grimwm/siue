@@ -1,11 +1,14 @@
-// The Dictionary's table and what it reads off a try: every piece of the rules has an entry, the backpack lists only
-// what is held, the board's sights skip hidden walls until found, and the met store keeps what was met.
+// The Dictionary's table and what it reads off a try: every piece of the rules has an entry and a Modern icon, the
+// backpack lists only what is held, a turn's meetings are its items and active-tile touches, and the met store keeps
+// what was met.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
-import { ENTRIES, ENTRY, HAZARD_ENTRY, OBJECT_ENTRY, PLAIN, TERRAIN_ENTRY, backpack, inSight } from '../src/dictionary.ts';
+import { ACTIVE, ENTRIES, ENTRY, HAZARD_ENTRY, HIDDEN, OBJECT_ENTRY, PLAIN, TERRAIN_ENTRY, backpack, locked, meetingsOf, metId } from '../src/dictionary.ts';
+import iconsJson from '../fx/sprites/modern-icons.json' with { type: 'json' };
+import { ICON_MODELS } from '../src/icons-models.ts';
 import { ALL_MET, MET_KEY, createMet } from '../src/met.ts';
-import { meetings, pickupNotices } from '../src/notices.ts';
+import { meetNotices } from '../src/notices.ts';
 import { parse } from '../src/puzzle/level.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
@@ -69,31 +72,62 @@ test('the backpack lists only what is held, with counts, and is empty with no tr
   assert.deepEqual(backpack(s).map(h => [h.entry.id, h.count]), [['relic', 1], ['key-red', 1], ['flippers', 1], ['mirror', 1]], 'a used tool leaves');
 });
 
-test('in sight: the Minotaur and the special tiles at the start; a hidden wall only once found; a sunk block leaves filled water', () => {
-  assert.deepEqual(inSight(initial(trialLevel(0))), ['minotaur', 'exit']);
-  const lv = level(['#######', '#PO~WI#', '#.....#', '#....E#', '#######']);
-  let s = initial(lv);
-  assert.deepEqual(inSight(s), ['exit', 'water', 'block'], 'the fake and the invisible wall hide');
-  s = step(s, { kind: 'move', dir: 'right' }).state;
-  assert.deepEqual(inSight(s), ['exit', 'dirt'], 'the block sank and filled the water');
-  s = step(s, { kind: 'move', dir: 'right' }).state;
-  s = step(s, { kind: 'move', dir: 'right' }).state;
-  assert.ok(inSight(s).includes('fake-wall'), 'the fake wall, found');
-  assert.ok(!inSight(s).includes('invisible-wall'));
+test('a turn\'s meetings: items taken (never a story page) and the active tiles Theseus touches, at the moment he reaches them', () => {
+  const walk = (rows: string[], dirs: ('right' | 'left' | 'up' | 'down')[], head = '') => {
+    let s = initial(level(rows, head));
+    const out: string[][] = [];
+    for (const dir of dirs) {
+      const before = s;
+      const r = step(s, { kind: 'move', dir });
+      s = r.state;
+      out.push(meetingsOf(before, r.events, 100).map(m => `${m.id}@${m.ms}`));
+    }
+    return out;
+  };
+  assert.deepEqual(walk(['#######', '#Pz_$E#', '#######'], ['right', 'right', 'right']), [['mirror@100'], ['button@100'], ['thief@100']]);
+  assert.deepEqual(walk(['#######', '#P;..E#', '#######'], ['right', 'right']), [[], ['popup@100']], 'the pop-up wall, as it rises behind him');
+  assert.deepEqual(walk(['#######', '#PWI.E#', '#######'], ['right', 'right', 'right']), [['fake-wall@0'], [], ['invisible-wall@0']], 'a wall found by a bump');
+  assert.deepEqual(walk(['#######', '#P=p=E#', '#######'], ['right'], 'pages: a'), [[]], 'a story page is no meeting');
+  assert.deepEqual(walk(['#######', '#P==_E#', '#######'], ['right']), [['button@300']], 'at the end of a slide, where he reaches it');
+  assert.deepEqual(walk(['#######', '#P|..E#', '#######'], ['right']), [['gate@100']], 'the open gate');
+  assert.deepEqual(walk(['#######', '#P.-..#', '#&..E.#', '#######'], ['down', 'right']), [['trap@100'], []], 'held in a snare');
+  assert.deepEqual(walk(['#######', '#P!..E#', '#######'], ['right'], 'hearts: 2'), [['bomb@100']]);
+  assert.deepEqual(walk(['########', '#P@.@.E#', '########'], ['right']), [['teleport@100']]);
+  for (const id of ACTIVE) assert.equal(ENTRY[id]!.kind, 'hazard', `${id} is a tile`);
 });
 
-test('a first pickup is a card once; once met it is a banner; a page never has a banner; with cards off nothing is a first', () => {
-  const met = createMet(memory());
-  assert.deepEqual(pickupNotices(['mirror', 'key-red', 'mirror'], met, true), { cards: ['mirror', 'key-red'], banners: [] });
+test('the Dictionary locks only items not yet picked up and the hidden walls not yet found; every other hazard is open', () => {
+  const met = new Set<string>();
+  const has = (k: string) => met.has(k);
+  for (const e of ENTRIES) assert.equal(locked(e.id, has), e.kind === 'item' || HIDDEN.has(e.id), e.id);
   met.add('mirror');
-  assert.deepEqual(pickupNotices(['mirror', 'key-red'], met, true), { cards: ['key-red'], banners: ['mirror'] });
-  met.add('key-red');
-  assert.deepEqual(pickupNotices(['mirror', 'key-red', 'page'], met, true), { cards: ['page'], banners: ['mirror', 'key-red'] });
-  met.add('page');
-  assert.deepEqual(pickupNotices(['page', 'cake'], met, true, new Set(['cake'])), { cards: [], banners: [] }, 'shown at a stop: nothing more');
-  assert.deepEqual(pickupNotices(['cake', 'page'], createMet(null), false), { cards: [], banners: ['cake'] });
-  assert.deepEqual(meetings(initial(trialLevel(0)), createMet(null), false), []);
-  assert.deepEqual(meetings(initial(trialLevel(0)), met, true), ['minotaur', 'exit']);
+  met.add(metId('fake-wall'));
+  assert.equal(locked('mirror', has), false);
+  assert.equal(locked('fake-wall', has), false, 'found');
+  assert.equal(locked('invisible-wall', has), true, 'not yet found');
+  assert.equal(metId('mirror'), 'mirror');
+  assert.equal(metId('button'), 'touch-button', 'a touch is kept under its own id');
+});
+
+test('a first meeting is a card once; once met it is a banner; with cards off nothing is a first', () => {
+  const met = createMet(memory({ [MET_KEY]: JSON.stringify(['button', 'minotaur', 'exit']) }));
+  assert.deepEqual(meetNotices(['mirror', 'button', 'mirror'], met, true), { cards: ['mirror', 'button'], banners: [] }, 'a bare tile id is no touch');
+  met.add('mirror');
+  met.add(metId('button'));
+  assert.deepEqual(meetNotices(['mirror', 'button', 'cake'], met, true), { cards: ['cake'], banners: ['mirror', 'button'] });
+  assert.deepEqual(meetNotices(['cake'], met, true, new Set(['cake'])), { cards: [], banners: [] }, 'shown at a stop: nothing more');
+  assert.deepEqual(meetNotices(['cake', 'button'], createMet(null), false), { cards: [], banners: ['cake', 'button'] });
+});
+
+test('every entry has a Modern icon in the rendered sheet, and a model to render it from', () => {
+  const sheet = iconsJson as { cell: number; width: number; height: number; icons: Record<string, { x: number; y: number }> };
+  for (const e of ENTRIES) {
+    assert.ok(ICON_MODELS[e.id], `${e.id} has a model`);
+    const at = sheet.icons[e.id];
+    assert.ok(at, `${e.id} has an icon`);
+    assert.ok(at.x + sheet.cell <= sheet.width && at.y + sheet.cell <= sheet.height, `${e.id}'s icon lies in the sheet`);
+  }
+  assert.deepEqual(Object.keys(ICON_MODELS).sort(), ENTRIES.map(e => e.id).sort(), 'no icon for an entry that is gone');
 });
 
 test('the met store keeps what was met across loads; "*" is every entry; blocked or corrupt storage reads as none', () => {

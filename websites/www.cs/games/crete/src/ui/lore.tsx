@@ -1,7 +1,8 @@
 // The Island of Crete: the Lore book. One dialog with two views: the list (each released chapter's opening card,
 // its story pages found or hidden, its closing card once seen; the unreleased chapters in one line each), and one
-// entry in full with a Back button. src/ui.ts owns which entry shows and Q (an open entry goes back to the list,
-// then the book closes), so the dialog is given no onDismiss; Close is for a pointer.
+// entry in full with a Back button (Q), or Go On (Enter) when taking its page opened it mid-level. src/ui.ts owns
+// which entry shows and Q (an open entry goes back to the list, then the book closes), so the dialog is given no
+// onDismiss; Close is for a pointer.
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';
@@ -18,6 +19,8 @@ export interface LoreProps {
   found: (id: string) => boolean;
   /** Whether chapter `n`'s closing card has been seen. */
   closingSeen: (n: number) => boolean;
+  /** The entry was opened by taking its page mid-level: its button goes on with play (Enter), not back to the list. */
+  fromPickup?: boolean;
   /** The entry shown in full, or null for the list. */
   shown: LoreEntry | null;
   onShow: (e: LoreEntry | null) => void;
@@ -58,7 +61,9 @@ export function Lore(p: LoreProps) {
               <cite>{full.quote.cite}</cite>
             </blockquote>
           )}
-          <Button id="lore-back" keyLabel={KEYS.menu.label} onClick={() => p.onShow(null)}>Back</Button>
+          {p.fromPickup
+            ? <Button id="lore-back" keyLabel={KEYS.begin.label} onClick={() => p.onShow(null)}>Go On</Button>
+            : <Button id="lore-back" keyLabel={KEYS.menu.label} onClick={() => p.onShow(null)}>Back</Button>}
         </div>
       ) : (
         <div class="lore-list">

@@ -86,9 +86,9 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
       { strong: k("menu") }, " closes it and play goes on.",
     ],
     [
-      "The first time you pick up a kind of thing, or meet a hazard or a special tile, a card says what it is and what it does; Enter, Space or ",
-      { strong: k("menu") }, " closes it. After that a pickup shows a short banner. The ", { strong: "Dictionary" },
-      " in this menu lists what you carry now (", { strong: "Backpack" }, ") and everything you have met (", { strong: "Entries" }, ").",
+      "The first time you pick up a kind of thing, or step on or into a tile that does something (a button, a teleport, a snare, a bomb, a hidden wall), a card says what it is and what it does; Enter, Space or ",
+      { strong: k("menu") }, " closes it. After that it shows a short banner. The ", { strong: "Dictionary" },
+      " in this menu lists what you carry now (", { strong: "Backpack" }, ") and every item and tile (", { strong: "Entries" }, ").",
     ],
     [
       { strong: "Music" }, " in this menu turns the music off, and ", { strong: "Music in the background" }, " whether it goes on while this tab is hidden; ",

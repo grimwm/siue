@@ -29,7 +29,11 @@ export class ServerError extends Error {
 }
 export type RefusedReason = 'too_large' | 'over_quota' | 'full' | 'no_key' | 'bad_header' | 'unknown_key';
 export const REFUSED_REASONS: readonly RefusedReason[] = ['too_large', 'over_quota', 'full', 'no_key', 'bad_header', 'unknown_key'];
-export interface KeyringAnswer { locked: LockedKeyring; session: string }
+/** `ai`: the fingerprints of the paired AI keys the server still lists as active; the page seals only to those of them the unlocked keyring holds. */
+export interface KeyringAnswer { locked: LockedKeyring; session: string; ai: string[] }
+/** Why a pairing try was refused (pair.php, keyring.php?pair=1). */
+export type PairRefusal = 'wrong_code' | 'too_many' | 'no_key' | 'not_registered' | 'key_changed';
+export const PAIR_REFUSALS: readonly PairRefusal[] = ['wrong_code', 'too_many', 'no_key', 'not_registered', 'key_changed'];
 export interface ServerNote { id: string; size: number; arrived_at: number; picked_up_at: number | null }
 /** `room`: with over_quota, the bytes the studio has left. */
 export type UploadResult = { kind: 'sent'; id: string } | { kind: 'refused'; reason: RefusedReason; room?: number };
@@ -46,6 +50,10 @@ export interface PageApi {
   uploadKeyring(locked: LockedKeyring, current: string): Promise<void>;
   /** Stores the same keys locked under a new passphrase; the server takes it only when `current` and `previous` are the fingerprints it holds and `proof` is the current key's signature. KeyChanged when the fingerprints differ, NoKeyring when it holds none. */
   changeKeyring(locked: LockedKeyring, current: string, previous: string[], proof: ChangeProof): Promise<void>;
+  /** One pairing try: the AI key's sealing key when `code` is its code, or why not. The server counts every try. */
+  checkPairing(key: number, code: string): Promise<{ spki: string; fingerprint: string } | PairRefusal>;
+  /** Stores the keyring locked again with the AI key added, as changeKeyring does, and marks the key paired; null, or why not. */
+  pairKeyring(locked: LockedKeyring, current: string, previous: string[], proof: ChangeProof, pair: { key: number; code: string; fingerprint: string }): Promise<PairRefusal | null>;
   /** Deletes one draft of a piece, or every draft of it without a version; how many went. A draft that is already gone is a ServerError (404). */
   deleteDraft(piece: string, version?: number): Promise<number>;
 }
@@ -153,7 +161,8 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
       const keyring = data['keyring'];
       if (!reply.ok) throw failed(reply);
       if (typeof keyring !== 'object' || keyring === null) throw new UnreadableAnswer();
-      return { locked: keyring as LockedKeyring, session: typeof data['session'] === 'string' ? data['session'] : '' };
+      const ai = Array.isArray(data['ai']) ? data['ai'].filter((f): f is string => typeof f === 'string' && /^[0-9a-f]{64}$/.test(f)) : [];
+      return { locked: keyring as LockedKeyring, session: typeof data['session'] === 'string' ? data['session'] : '', ai };
     },
     async uploadKeyring(locked, current) {
       const { reply, data } = await post('keyring.php', 'application/json', encoder.encode(JSON.stringify({ keyring: locked, current, previous: [] })));
@@ -165,6 +174,22 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
       if (reply.status === 409 && data['error'] === 'key_changed') throw new KeyChanged('The notes key on the server changed.');
       if (reply.status === 404 && data['error'] === 'no_keyring') throw new NoKeyring('No notes key has been uploaded yet.');
       if (!reply.ok) throw failed(reply);
+    },
+    async checkPairing(key, code) {
+      const { reply, data } = await post('pair.php', 'application/json', encoder.encode(JSON.stringify({ key, code })));
+      const refused = PAIR_REFUSALS.find(r => r === data['error']);
+      if (!reply.ok && refused !== undefined) return refused;
+      if (!reply.ok) throw failed(reply);
+      if (typeof data['spki'] !== 'string' || typeof data['fingerprint'] !== 'string') throw new UnreadableAnswer();
+      return { spki: data['spki'], fingerprint: data['fingerprint'] };
+    },
+    async pairKeyring(locked, current, previous, proof, pair) {
+      const { reply, data } = await post('keyring.php?pair=1', 'application/json', encoder.encode(JSON.stringify({ keyring: locked, current, previous, proof, pair })));
+      if (reply.status === 404 && data['error'] === 'no_keyring') throw new NoKeyring('No notes key has been uploaded yet.');
+      const refused = PAIR_REFUSALS.find(r => r === data['error']);
+      if (!reply.ok && refused !== undefined) return refused;
+      if (!reply.ok) throw failed(reply);
+      return null;
     },
     async deleteDraft(piece, version) {
       const form = `piece=${encodeURIComponent(piece)}${version === undefined ? '' : `&v=${version}`}`;

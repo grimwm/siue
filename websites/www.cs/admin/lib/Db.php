@@ -33,6 +33,9 @@ final class Db
         // Each account's AI keys (Music\AiKeys): the admin keys' shape, each key for one account.
         'CREATE TABLE IF NOT EXISTS studio_keys (id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL, label TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)',
         'CREATE TABLE IF NOT EXISTS studio_key_hits (key_id INTEGER NOT NULL, at INTEGER NOT NULL)',
+        // An AI key's sealing key, registered by its MCP, and the pairing tries on Your studio (Music\Pairing).
+        'CREATE TABLE IF NOT EXISTS studio_seal_keys (key_id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL, spki TEXT NOT NULL, fingerprint TEXT NOT NULL, registered_at INTEGER NOT NULL, paired_at INTEGER)',
+        'CREATE TABLE IF NOT EXISTS studio_pair_tries (account_id INTEGER NOT NULL, key_id INTEGER NOT NULL, at INTEGER NOT NULL, ok INTEGER NOT NULL)',
         // The mailed links that confirm Forgot your passphrase and Start over (Music\Confirmations).
         'CREATE TABLE IF NOT EXISTS studio_confirms (token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL, email TEXT NOT NULL, action TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER)',
         'CREATE INDEX IF NOT EXISTS link_requests_at ON link_requests(at)',
@@ -45,6 +48,8 @@ final class Db
         'CREATE INDEX IF NOT EXISTS key_hits_key_at ON key_hits(key_id, at)',
         'CREATE INDEX IF NOT EXISTS studio_keys_account ON studio_keys(account_id)',
         'CREATE INDEX IF NOT EXISTS studio_key_hits_key_at ON studio_key_hits(key_id, at)',
+        'CREATE INDEX IF NOT EXISTS studio_seal_keys_account ON studio_seal_keys(account_id)',
+        'CREATE INDEX IF NOT EXISTS studio_pair_tries_account ON studio_pair_tries(account_id, at)',
         'CREATE INDEX IF NOT EXISTS studio_confirms_account ON studio_confirms(account_id, created_at)',
     ];
 

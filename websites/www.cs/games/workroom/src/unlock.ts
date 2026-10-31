@@ -1,6 +1,7 @@
 // Unlocking the locked keyring in the browser: PBKDF2 over the passphrase, AES-GCM, and the public half of every key
 // derived from the private key itself, so the key notes are sealed to is vouched for by the passphrase. The unlocked
-// keys are non-extractable.
+// keys are non-extractable. The keyring may also hold the public keys of the AI keys the person paired (`ai`): only
+// the unlocked page adds one, after the person typed its pairing code, so the server can never add a recipient.
 import { fingerprintOf } from './seal.ts';
 import type { PublicKey } from './seal.ts';
 
@@ -45,9 +46,14 @@ async function deriveKey(passphrase: string, salt: Uint8Array<ArrayBuffer>, iter
   return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, base, { name: 'AES-GCM', length: 256 }, false, [usage]);
 }
 
+/** A paired AI's public sealing key, as the keyring holds it: its fingerprint, its SPKI and the AI key's id on Your studio. */
+export interface AiRecipient extends PublicKey { key: number }
+
 export interface Unlocked {
   /** The public key to seal new notes to: the keyring's first entry. */
   current: PublicKey;
+  /** The paired AI keys, each checked (verifyAiKey); notes are also sealed to those the server still lists as active. */
+  ai: AiRecipient[];
   /** Every entry's non-extractable RSA-OAEP SHA-256 private key (usages ['decrypt']), by fingerprint, in keyring order. */
   ring: Map<string, CryptoKey>;
 }
@@ -60,7 +66,7 @@ export interface Unlocked {
  * WrongPassphrase when the passphrase does not decrypt it.
  */
 export async function unlockKeyring(locked: LockedKeyring, passphrase: string): Promise<Unlocked> {
-  const entries = await openEntries(locked, passphrase);
+  const { entries, ai } = await openEntries(locked, passphrase);
   const ring = new Map<string, CryptoKey>();
   let current: PublicKey | undefined;
   try {
@@ -72,27 +78,49 @@ export async function unlockKeyring(locked: LockedKeyring, passphrase: string): 
   } finally {
     for (const entry of entries) entry.pkcs8.fill(0);
   }
-  return { current: current!, ring };
+  for (const a of ai) if (!(await verifyAiKey(a.spki, a.fingerprint))) throw new KeyringInvalid(`the AI key ${a.fingerprint.slice(0, 16)} is not a sealing key`);
+  return { current: current!, ring, ai };
+}
+
+/**
+ * True when `spki` (base64 DER) is an RSA-OAEP RSA-4096 key with exponent 65537, in canonical DER (exporting it again
+ * gives the same bytes), whose SHA-256 is `fingerprint`: the only AI sealing key the page seals to or pairs.
+ */
+export async function verifyAiKey(spki: string, fingerprint: string): Promise<boolean> {
+  const der = fromBase64(spki);
+  if (der === null || der.length === 0 || (await fingerprintOf(der)) !== fingerprint) return false;
+  try {
+    const pub = await crypto.subtle.importKey('spki', der, RSA, true, ['encrypt']);
+    if ((pub.algorithm as RsaHashedKeyAlgorithm).modulusLength !== RSA_BITS) return false;
+    if ((await crypto.subtle.exportKey('jwk', pub)).e !== 'AQAB') return false;
+    const again = new Uint8Array(await crypto.subtle.exportKey('spki', pub));
+    return again.length === der.length && again.every((b, i) => b === der[i]);
+  } catch {
+    return false;
+  }
 }
 
 /**
  * A new passphrase for the same keys: opens the keyring with `passphrase`, checks every entry against its fingerprint
  * as unlockKeyring does, and locks the same entries, in the same order, with `next` (a fresh salt and IV). `current`
  * and `previous` are the fingerprints the server must already hold; `proof` is the current key's signature over
- * `tag` (the server's tag for this sign-in) and the new envelope. The private keys' bytes are zeroed once locked.
- * WrongPassphrase and KeyringInvalid as unlockKeyring.
+ * `tag` (the server's tag for this sign-in) and the new envelope. The paired AI keys stay, as `edit` leaves them
+ * (pairing adds one). The private keys' bytes are zeroed once locked. WrongPassphrase and KeyringInvalid as unlockKeyring.
  */
-export async function relockKeyring(locked: LockedKeyring, passphrase: string, next: string, tag: string): Promise<{ locked: LockedKeyring; current: string; previous: string[]; proof: ChangeProof }> {
-  const entries = await openEntries(locked, passphrase);
+export async function relockKeyring(locked: LockedKeyring, passphrase: string, next: string, tag: string,
+  edit: (ai: AiRecipient[]) => AiRecipient[] = ai => ai): Promise<{ locked: LockedKeyring; current: string; previous: string[]; proof: ChangeProof; ai: AiRecipient[] }> {
+  const opened = await openEntries(locked, passphrase);
+  const entries = opened.entries;
   try {
+    const ai = edit(opened.ai);
     const pubs: PublicKey[] = [];
     for (const entry of entries) pubs.push((await importPaired(entry)).pub);
     const fingerprints = entries.map(e => e.fingerprint);
-    const relocked = await lockKeyring(entries, next);
+    const relocked = await lockKeyring(entries, next, ai);
     // The same RSA key signs (RSASSA-PKCS1-v1_5): only the holder of the current private key can change its envelope.
     const signer = await crypto.subtle.importKey('pkcs8', entries[0]!.pkcs8, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
     const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', signer, new TextEncoder().encode(changeMessage(tag, fingerprints[0]!, relocked))));
-    return { locked: relocked, current: fingerprints[0]!, previous: fingerprints.slice(1), proof: { spki: pubs[0]!.spki, sig: toBase64(sig) } };
+    return { locked: relocked, current: fingerprints[0]!, previous: fingerprints.slice(1), proof: { spki: pubs[0]!.spki, sig: toBase64(sig) }, ai };
   } finally {
     for (const entry of entries) entry.pkcs8.fill(0);
   }
@@ -106,8 +134,10 @@ export function changeMessage(tag: string, current: string, locked: LockedKeyrin
   return ['siue-music-keyring-change-v1', tag, current, String(locked.iterations), locked.salt, locked.iv, locked.ct].join('\n');
 }
 
-/** The keyring's entries, opened with the passphrase: at least one, none repeated. The caller zeroes their pkcs8 bytes. */
-async function openEntries(locked: LockedKeyring, passphrase: string): Promise<{ fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[]> {
+type Entry = { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> };
+
+/** The keyring's entries, opened with the passphrase: at least one, none repeated; and its AI keys. The caller zeroes the entries' pkcs8 bytes. */
+async function openEntries(locked: LockedKeyring, passphrase: string): Promise<{ entries: Entry[]; ai: AiRecipient[] }> {
   if (typeof crypto === 'undefined' || !crypto.subtle) throw new NoCrypto('this browser has no Web Crypto');
   const salt = fromBase64(locked.salt);
   const iv = fromBase64(locked.iv);
@@ -125,25 +155,25 @@ async function openEntries(locked: LockedKeyring, passphrase: string): Promise<{
     throw new WrongPassphrase('the passphrase does not unlock the keyring');
   }
 
-  let entries: { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[];
+  let parsed: { entries: Entry[]; ai: AiRecipient[] };
   try {
-    entries = parseEntries(plain);
+    parsed = parseEntries(plain);
   } finally {
     plain.fill(0);
   }
-  if (entries.length === 0) throw new KeyringInvalid('the keyring has no keys');
-  return entries;
+  if (parsed.entries.length === 0) throw new KeyringInvalid('the keyring has no keys');
+  return parsed;
 }
 
-function parseEntries(plain: Uint8Array): { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[] {
+function parseEntries(plain: Uint8Array): { entries: Entry[]; ai: AiRecipient[] } {
   let data: unknown;
   try {
     data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plain));
   } catch {
     throw new KeyringInvalid('the keyring is not JSON');
   }
-  const obj = data as { v?: unknown; keys?: unknown } | null;
-  if (typeof obj !== 'object' || obj === null || obj.v !== 1 || !Array.isArray(obj.keys)) throw new KeyringInvalid('the keyring is malformed');
+  const obj = data as { v?: unknown; keys?: unknown; ai?: unknown } | null;
+  if (typeof obj !== 'object' || obj === null || obj.v !== 1 || !Array.isArray(obj.keys) || !(obj.ai === undefined || Array.isArray(obj.ai))) throw new KeyringInvalid('the keyring is malformed');
   const seen = new Set<string>();
   const entries: { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[] = [];
   for (const raw of obj.keys as unknown[]) {
@@ -156,7 +186,18 @@ function parseEntries(plain: Uint8Array): { fingerprint: string; pkcs8: Uint8Arr
     seen.add(e.fingerprint);
     entries.push({ fingerprint: e.fingerprint, pkcs8 });
   }
-  return entries;
+  const ai: AiRecipient[] = [];
+  for (const raw of (obj.ai ?? []) as unknown[]) {
+    const a = raw as { fingerprint?: unknown; spki?: unknown; key?: unknown } | null;
+    if (typeof a !== 'object' || a === null || typeof a.fingerprint !== 'string' || !/^[0-9a-f]{64}$/.test(a.fingerprint)
+      || typeof a.spki !== 'string' || fromBase64(a.spki) === null || !Number.isInteger(a.key) || (a.key as number) < 1) {
+      throw new KeyringInvalid('a keyring AI key is malformed');
+    }
+    if (seen.has(a.fingerprint)) throw new KeyringInvalid('the keyring repeats a fingerprint');
+    seen.add(a.fingerprint);
+    ai.push({ fingerprint: a.fingerprint, spki: a.spki, key: a.key as number });
+  }
+  return { entries, ai };
 }
 
 /**
@@ -186,11 +227,12 @@ async function importPaired(entry: { fingerprint: string; pkcs8: Uint8Array<Arra
 }
 
 /** The format Python's lock_keyring writes (current key first); the page locks a key it makes with it (keymaker.ts), and the same keys again under a new passphrase (relockKeyring). */
-export async function lockKeyring(keys: readonly { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[], passphrase: string): Promise<LockedKeyring> {
+export async function lockKeyring(keys: readonly { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[], passphrase: string, ai: readonly AiRecipient[] = []): Promise<LockedKeyring> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const aes = await deriveKey(passphrase, salt, ITERATIONS, 'encrypt');
-  const plain = new TextEncoder().encode(JSON.stringify({ v: 1, keys: keys.map((k) => ({ fingerprint: k.fingerprint, pkcs8: toBase64(k.pkcs8) })) }));
+  const plain = new TextEncoder().encode(JSON.stringify({ v: 1, keys: keys.map((k) => ({ fingerprint: k.fingerprint, pkcs8: toBase64(k.pkcs8) })),
+    ...(ai.length > 0 ? { ai: ai.map(a => ({ fingerprint: a.fingerprint, spki: a.spki, key: a.key })) } : {}) }));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(KEYRING_AAD) }, aes, plain));
   return { v: 1, kdf: 'PBKDF2-SHA-256', iterations: ITERATIONS, salt: toBase64(salt), iv: toBase64(iv), ct: toBase64(ct) };
 }

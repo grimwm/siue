@@ -4,7 +4,8 @@
 // keyring is refused.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { KeyringInvalid, NoCrypto, STRIPPED, WrongPassphrase, lockKeyring, normalizePassphrase, unlockKeyring } from '../src/unlock.ts';
+import { KeyringInvalid, NoCrypto, STRIPPED, WrongPassphrase, lockKeyring, normalizePassphrase, relockKeyring, unlockKeyring, verifyAiKey } from '../src/unlock.ts';
+import { keyringWithAi, makeAiKey } from './ai-key.ts';
 import { fingerprintOf, open, seal } from '../src/seal.ts';
 import { b64, current, fx, otherKey } from './fixture-key.ts';
 
@@ -116,4 +117,32 @@ test('a browser without Web Crypto is not a wrong passphrase', async () => {
   } finally {
     Object.defineProperty(globalThis, 'crypto', real);
   }
+});
+
+// The paired AI keys live inside the locked keyring, so only someone with the passphrase can add one.
+test('a keyring with a paired AI key unlocks it, and relocking keeps it', async () => {
+  const ai = await makeAiKey(3);
+  const locked = await keyringWithAi([ai]);
+  const unlocked = await unlockKeyring(locked, fx.passphrase);
+  assert.deepEqual(unlocked.ai, [{ fingerprint: ai.fingerprint, spki: ai.spki, key: 3 }]);
+  assert.equal(unlocked.current.fingerprint, fx.fingerprint, 'the person stays the current key');
+  assert.deepEqual([...unlocked.ring.keys()], [fx.fingerprint, fx.other.fingerprint], 'no AI private key, ever');
+  const changed = await relockKeyring(locked, fx.passphrase, 'a brand new passphrase', 'tag');
+  assert.deepEqual((await unlockKeyring(changed.locked, 'a brand new passphrase')).ai, unlocked.ai, 'a new passphrase keeps the pairing');
+  assert.deepEqual((await unlockKeyring(fx.keyring, fx.passphrase)).ai, [], 'a keyring from before pairing has none');
+});
+
+test('an AI key that is not a canonical RSA-4096 sealing key makes the keyring invalid', async () => {
+  const ai = await makeAiKey();
+  assert.equal(await verifyAiKey(ai.spki, ai.fingerprint), true);
+  assert.equal(await verifyAiKey(ai.spki, fx.fingerprint), false, 'a fingerprint of another key');
+  assert.equal(await verifyAiKey(fx.spki.slice(0, -4), ai.fingerprint), false);
+  const small = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['encrypt', 'decrypt']);
+  const der = new Uint8Array(await crypto.subtle.exportKey('spki', small.publicKey));
+  const spki = Buffer.from(der).toString('base64');
+  assert.equal(await verifyAiKey(spki, await fingerprintOf(der)), false, 'RSA-2048');
+  const bad = await keyringWithAi([{ fingerprint: await fingerprintOf(der), spki, key: 1 }]);
+  await assert.rejects(unlockKeyring(bad, fx.passphrase), KeyringInvalid);
+  const repeat = await keyringWithAi([{ fingerprint: fx.other.fingerprint, spki: fx.other.spki, key: 1 }]).catch(e => e);
+  assert.ok(repeat instanceof KeyringInvalid || (await unlockKeyring(repeat, fx.passphrase).catch(e => e)) instanceof KeyringInvalid, 'a person\'s key is never an AI recipient');
 });

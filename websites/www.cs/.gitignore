@@ -10,3 +10,4 @@ admin/data/
 admin/config/
 music/tools/.venv/
 music/tools/**/__pycache__/
+music/dist/*.whl

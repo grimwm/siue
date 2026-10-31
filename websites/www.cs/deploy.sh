@@ -185,6 +185,8 @@ while IFS= read -r -d '' f; do
     # pattern's * also matches /, so each folder is named and anything deeper skipped.
     music/api/*/* | music/lib/*/*) continue ;;
     music/api/*.php | music/lib/*.php | music/lib/.htaccess) ;;
+    # The studio MCP's wheel is built below; its release.json (version, file, SHA-256) ships beside it.
+    music/dist/release.json) ;;
     music/*/*) continue ;;
     music/*.php | music/.htaccess) ;;
     music/*) continue ;;
@@ -199,6 +201,12 @@ while IFS= read -r -d '' f; do
   mkdir -p "$stage/$(dirname "$f")"
   cp -L "$f" "$stage/$f"
 done < <(git ls-files -z --cached --others --exclude-standard --deduplicate -- .)
+# The studio MCP's wheel (music/tools/build-wheel): built here, reproducibly, and refused unless it is the one
+# music/dist/release.json names, so the SHA-256 the page shows is the file's.
+if ! python3 -I music/tools/build-wheel --check --out "$stage/music/dist" >/dev/null; then
+  echo "deploy: the siue-music wheel does not match music/dist/release.json (see music/README.md)" >&2
+  exit 1
+fi
 # The studios' configuration comes from the environment only, and only when set.
 if [ -n "${STUDIO_CONFIG:-}" ]; then
   mkdir -p "$stage/admin/config"

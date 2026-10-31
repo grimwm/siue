@@ -38,7 +38,15 @@ keys. Nobody else's studio is ever visible to them.
   any of three permissions: "read notes" (`notes:pickup`), "publish drafts" (`drafts:publish`) and
   "delete drafts" (`drafts:delete`). An AI key never uploads a notes key, never makes another key and
   never starts over. A studio holds at most 10 active AI keys, each limited to 60 requests a minute.
-  An AI key works only in its own studio.
+  An AI key works only in its own studio. Right after a key is made, the panel that shows it once also
+  shows the Connect Your AI commands with that key in them.
+- **Pairing an AI** (a key with "read notes"): the key's AI starts the studio MCP server (below), which
+  registers its own sealing key and shows a pairing code. The key's row on Your studio says "not started",
+  "waiting for the code" (with the form: Pairing Code, Passphrase, Pair) or "paired". Pairing checks the code
+  with the server, checks it again in the browser against the key the server handed back, and then adds
+  the AI's public key to the locked keyring (opened and locked again with the passphrase). From then on the
+  page seals each note to the person and to that AI (`SIUEN2`). Revoking the key forgets its sealing key;
+  Forgot your passphrase unpairs every key, and the same code pairs it again.
 - **Drafts in a studio are scores only:** one renderable `score.json` (every lane has a `sound` whose
   `instrument` is in `music/library/library.json`, and `mix` is present), which the page plays by building
   the sound in the browser from the shared sample library. People with the allowance may also publish
@@ -84,6 +92,15 @@ sign in at once), 3 per address, 3,000 request rows kept.
 - Notes are sealed in the browser (AES-256-GCM per note, key wrapped with RSA-OAEP
   to the current public key, which the browser takes from the unlocked keyring). The
   server stores sealed bytes only and never decrypts; www.cs PHP has no sodium and needs none.
+- A paired AI's public key is in that same locked keyring, put there only by the unlocked page after the
+  person typed the AI's pairing code: the server cannot add a recipient. The page seals to the AI keys the
+  keyring holds and the server still lists as active (`keyring.php`'s `ai`, asked again before each note);
+  the server accepts a note only when every key it names is the studio's current or an earlier notes key or
+  a paired active AI key, and at least one is the person's. The code is the first 80 bits of the AI key's
+  fingerprint (SHA-256 of its SPKI) in Crockford base32, and the page and the server both take only an
+  RSA-4096 key with exponent 65537 in canonical DER, so a server would need about 2^80 tries to find one of
+  its own with the same code. Pairing tries are limited: 5 wrong codes per AI key and 20 tries per
+  studio an hour.
 - The private keys live in one locked keyring (PBKDF2-SHA-256, 600,000 rounds,
   AES-256-GCM) that only a signed-in session can fetch; it is unlocked in the
   browser, in memory, and never stored there.
@@ -124,19 +141,23 @@ spent does a full studio answer "The studio is full" and start no session, so th
 tells who has an account. Its sessions are separate from the admin hub's.
 
 Session routes (same-origin, a studio session, the session's own studio): `index.php`,
-`piece.php?id=&v=` (pages); `studio.php` (Your studio, a plain page that needs no script: the address,
-usage of the studio's limit, its AI keys, sign out; the change of passphrase is the one part drawn by the
-page's script; POST `action` `make-key` (`label`, `scopes[]`) shows the new key once, `revoke-key` (`id`),
+`piece.php?id=&v=` (pages; the front page's body carries `data-connect`, the Connect Your AI commands from
+`Music\Connect`); `studio.php` (Your studio, a plain page that needs no script: the address,
+usage of the studio's limit, its AI keys and their pairing, sign out; the change of passphrase and the
+pairing forms are the parts drawn by the page's script; POST `action` `make-key` (`label`, `scopes[]`) shows the new key once, `revoke-key` (`id`),
 `forgot-passphrase` (while the studio has a keyring) or `start-over`, each with the session's token in a
 `csrf` field; the last two mail a confirmation link and delete nothing); `confirm.php` (no session: GET
 `token` shows what the button deletes, POST `token` and `mark` does it; Forgot is `Music\Store::forgetNotesKey`,
 the notes and keyring in one transaction; Start over is `Music\Accounts::startOver`, the AI keys, notes, drafts,
-files and keyring in one transaction; the account and its sessions stay); `csrf.php`, `notes.php` (GET list,
-POST upload), `note.php?id=`, `delete.php` (POST `id`, or `all=1`), `keyring.php` (GET the locked keyring; POST
+files and keyring in one transaction; the account and its sessions stay); `csrf.php`, `pair.php` (POST `{key, code}`: one counted pairing try; 200 `{spki, fingerprint}` when the code is
+that AI key's, 422 `wrong_code`, 429 `too_many`, 404 `no_key`, 409 `not_registered`), `notes.php` (GET list,
+POST upload, `SIUEN1` or `SIUEN2`), `note.php?id=`, `delete.php` (POST `id`, or `all=1`), `keyring.php` (GET the locked keyring, the session's tag and `ai`, the paired active AI keys' fingerprints; POST
 stores `{keyring, current, previous}`, the rules `api/keyring.php` keeps, only while the studio has none: 409
 `key_exists` otherwise; POST `?change=1` with `proof` `{spki, sig}` stores the same keys under a new passphrase
 only when `current` and `previous` are exactly the stored fingerprints (409 `key_changed` otherwise, 404
-`no_keyring` when none) and the proof holds (403 `bad_proof` otherwise)),
+`no_keyring` when none) and the proof holds (403 `bad_proof` otherwise); POST `?pair=1` is the same with `pair`
+`{key, code, fingerprint}`, the code checked again, and stores the keyring and marks the AI key paired in one
+transaction),
 `delete-draft.php` (POST
 `piece` and `v` deletes one draft, `piece` alone the whole piece; 404 `not_found` when none
 went), `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data). Signed out, a page goes to
@@ -150,7 +171,11 @@ API routes (Bearer key, HTTPS; `lib/KeyGate.php`): an AI key (`lib/AiKeys.php`, 
 `notes:pickup`, `drafts:publish` and `drafts:delete` only) serves its own account's studio;
 any other key is checked as one of the owner's admin keys and serves the owner's studio.
 `api/notes.php` and `api/note.php?id=` (GET) and
-`api/picked-up.php` (POST) need `notes:pickup`; `api/drafts.php` (GET lists the
+`api/picked-up.php` (POST) need `notes:pickup` (an AI key sees only the notes sealed to the key it is paired to,
+none before it is paired); `api/seal-key.php` is an AI key's sealing key (GET, any AI key: its label, scopes and
+`sealing` `{fingerprint, code, paired, paired_at}` or null; POST `{spki}`, `notes:pickup`: registers the MCP's
+public key, 409 `paired` when the key is paired to another, 422 `bad_key` unless it is RSA-4096, exponent 65537,
+canonical DER); `api/draft.php?piece=&version=` (GET, `drafts:publish`) answers that draft's `score.json`; `api/drafts.php` (GET lists the
 published drafts, newest first; POST publishes one, of at most the account's request
 limit: 8 MB with the allowance, 262,208 bytes without; 413 `too_large` above it, 413
 `{"error":"over_quota","room","message"}` past the studio limit) needs `drafts:publish`;
@@ -263,9 +288,9 @@ drafts, like an undo history: its oldest rolls off, and other pieces are never t
 
 Every `make music-*` step in this README is owner-only: it needs this repository, the owner's
 1Password and the owner's API keys, which studio people do not have. These steps live only in
-this README, never on the page: every studio, the owner's included, sees the same Connect your AI
-panel and messages, which point at what the page offers (Forgot your passphrase? and AI keys on
-Your studio, or a reload).
+this README, never on the page: every studio, the owner's included, sees the same Connect Your AI
+panel and messages, which point at what the page offers (uv, AI keys and pairing on Your studio,
+Forgot your passphrase?, or a reload).
 
 `music/tools/siue-music` keeps the notes keys in 1Password (vault `SIUE`, or
 `$OP_VAULT`; the `op` CLI must be 2.25 or newer) and a working copy in
@@ -283,26 +308,78 @@ standard input and are never printed.
 - `make music-publish PIECE=ch1-labyrinth [VERSION=3]` checks `music/pieces/<piece>/v<N>/score.json` with the page's rules (glossary ids from `games/workroom/src/glossary.json`), checks instrument ids against `music/library/library.json`, requires the audio and the spectrogram (a renderable score, below, needs neither) and, for music, `score.musicxml`, refuses a draft over 8 MB before sending, and publishes it with the `music-publish` API key. The newest version is the default.
 - `make music-delete PIECE=ch1-labyrinth VERSION=3` deletes that one published draft from the server with the `music-publish` API key (which holds `drafts:delete`); the files under `music/pieces/` are untouched. A bad piece id or version is refused before anything is sent; a draft the server does not hold exits 1 with `not_found`. `make music-status` says whether the key may delete drafts; the key is healthy either way.
 
-## Your AI: the MCP server
+## Your AI: the studio MCP server
 
-`siue-music mcp` is an MCP server for the owner's own AI app (Claude Code, Claude
-Desktop, any app that speaks MCP). The app starts it on the owner's computer over
-stdio; it uses the key tool above, so keys, sealing and refusals are those of
+`siue-music mcp` is the MCP server any studio's own AI app runs on that person's computer (Claude Code,
+Claude Desktop, Cursor, Codex, Gemini CLI, any app that speaks MCP over stdio). It needs no repository,
+make or 1Password: the app starts it with `uvx --from <wheel address> siue-music mcp`, and the front page's
+Connect Your AI panel (`Music\Connect`, `games/workroom/src/ui/ConnectAi.tsx`) shows the command or settings
+block for each app, with the studio's address and the wheel in it and `PASTE-YOUR-AI-KEY-HERE` where the key
+goes; Your studio shows the same with a new key filled in. uv (a link to its installation page) is the only
+thing to install.
+
+- **Configuration:** `SIUE_MUSIC_BASE` (the studio's `music/` address) and `SIUE_MUSIC_AI_KEY` (the AI key). When
+  `SIUE_MUSIC_AI_KEY` is missing or still the placeholder, the key comes from the `ai-key` file in the config
+  folder, which `uvx --from <wheel address> siue-music save-key` writes (it reads the key without echoing it):
+  one place for every app on a computer.
+- **The config folder** (`SIUE_MUSIC_CONFIG_DIR`, else `~/Library/Application Support/siue-music` on macOS,
+  `%APPDATA%\siue-music` on Windows, `$XDG_CONFIG_HOME/siue-music` or `~/.config/siue-music` elsewhere; 0700)
+  holds `ai-key` and `sealing-key.json` (0600): the AI's own RSA-4096 sealing key, made on first start and
+  shared by every app on that computer. Opened notes are saved in the notes folder (as for the owner's
+  pickup, below). Moving `sealing-key.json` away makes a new key, which needs a new pairing (and, once paired,
+  a new AI key).
+- **Pairing:** on start the server registers the sealing key's public half through the AI key (when it may
+  read notes) and logs `siue-music: this computer's pairing code is XXXX-XXXX-XXXX-XXXX` to the app's log;
+  `studio_status`, `siue-music pairing-code` and every notes tool before pairing give the code. The person
+  types it on that key's row on Your studio with their passphrase (see Studios).
+- Without a key, with the placeholder, or with a revoked key, the server still starts and every tool answers
+  what to do (make an AI key on Your studio, paste it, restart the app), never a traceback.
+
+Tools (each within the AI key's permissions, which the server enforces from the key):
+
+| Tool | What it does |
+| --- | --- |
+| `studio_status` | The studio's address, the key's label and permissions, the pairing code, whether it is paired, and the next step to tell the person. |
+| `list_pieces` | The studio's pieces with their project, kind and draft versions. |
+| `read_score(piece, version?)` | A draft's `score.json` (the newest when no version) and its page. |
+| `publish_draft(score)` | Checks the score as the page does (the glossary built into the wheel, the site's `library/library.json`) and publishes it as draft `score.draft` of `score.piece.id`; a published version is never replaced. |
+| `delete_draft(piece, version)`, `delete_piece(piece)` | Delete one draft, or every draft of a piece (`drafts:delete`). |
+| `read_new_notes(limit?)` | Downloads the waiting notes sealed to this AI, checks their length and SHA-256, opens them here and saves them in the notes folder; marks none. Same note shape as the owner's `pick_up_notes`. |
+| `mark_notes_picked_up(note_ids)` | Marks those notes picked up. |
+| `wait_for_notes(timeout_seconds, poll_seconds?)` | Asks every `poll_seconds` (default `SIUE_MUSIC_POLL_SECONDS`, else 10; never under 2) and answers as soon as a note waits that this computer has not opened, or at the timeout (at most 3600 s). |
+
+No tool deletes a note; the person does that on the pages.
+
+**The wheel.** `music/tools/build-wheel` builds `siue_music-<version>-py3-none-any.whl` with the standard
+library alone, reproducibly (stored entries, sorted, fixed times): the `siue_music` package, the page's
+glossary as `siue_music/data/glossary.json`, and metadata naming `cryptography` and `mcp` exactly as
+`music/tools/pyproject.toml` does, with the `siue-music` console script. `music/dist/release.json` (committed)
+names its version, file name and SHA-256; `deploy.sh` builds it into `music/dist/` and stops when it is not
+that wheel, and the page shows that address and SHA-256. To release a change to the tool or the glossary,
+raise `__version__` in `music/tools/siue_music/__init__.py`, run `music/tools/build-wheel --record`, and commit
+`music/dist/release.json` (`make music-test` fails until then). The deploy removes the previous wheel, so an
+app set up with an older one needs the new command from the page. The wheel is served with `Cache-Control: immutable` for a year:
+uv keeps the copy it first downloaded, so a file changed on the server later never reaches a computer that has
+it (uv cannot check a hash given with `--from`; the page's SHA-256 is for people to compare).
+
+## The owner's MCP server
+
+`siue-music owner-mcp` (`siue-music-owner`) is the owner's MCP server for this repository. The app starts it
+on the owner's computer over stdio; it uses the key tool above, so keys, sealing and refusals are those of
 `make music-publish`, `make music-delete` and `make music-pickup`, the private notes key comes from
 1Password through `op`, and no answer carries a key. It is built on the official MCP
 Python SDK (`mcp`, pinned in `tools/requirements-mcp.in`), installed into
 `music/tools/.venv` from the hashed lock (see Locked packages).
 
 - `make music-mcp-setup` installs the SDK into the virtualenv (making it when needed)
-  and prints the commands to connect: the `claude mcp add --scope user ...` line for
+  and prints the commands to connect: the `claude mcp add --scope user siue-music-owner ...` line for
   Claude Code and the JSON block for Claude Desktop's `claude_desktop_config.json`,
   with this checkout's absolute paths, `SIUE_MUSIC_BASE` (the server address), and
   `SIUE_OP` (op's full path, since an app started from the dock has no shell PATH).
   It talks to neither the server nor 1Password. Before it, run `make music-setup` once.
 - `make music-mcp` runs the server by hand (it waits for JSON-RPC on standard input).
-- These steps live only in this README. The workroom's front page has a "Connect your AI" panel
-  that is the same on every studio, the owner's included: it says connecting your own AI app is
-  coming and that AI keys are made on Your studio, with no commands.
+- A keyring that `make music-rotate` uploads holds no paired AI key, so a paired studio AI says "not paired"
+  until the owner pairs it again on Your studio.
 
 Tools:
 
@@ -333,15 +410,26 @@ uv in a throwaway virtualenv (from `websites/www.cs/music/tools`):
     /tmp/uv/bin/uv pip compile --universal --python-version 3.10 --generate-hashes --no-cache requirements.in -o requirements.txt
     /tmp/uv/bin/uv pip compile --universal --python-version 3.10 --generate-hashes --no-cache requirements-mcp.in -c requirements.txt -o requirements-mcp.txt
 
-The second lock is constrained by the first, so both install the same `cryptography`.
+The second lock is constrained by the first, so both install the same `cryptography`. The wheel names the
+same `cryptography` and `mcp` versions (`pyproject.toml`, `build-wheel`); uv resolves their own dependencies
+when a person's app first runs it.
 `make music-test` checks every pin is exact and hashed. `requirements-answering.txt`
 (the optional speech and humming steps) is installed by hand and is not locked.
 
 ## The local browser check
 
 `make music-e2e` (local only; CI never runs it; `E2E_ARGS=studio.local.ts` runs one
-spec) brings up its own docker project with the mail capture and
-`tests/e2e/studio-config.json` (it names only the owner), and runs three specs in Chrome.
+spec) builds the studio MCP wheel (`music/tools/build-wheel --check`), brings up its own docker project with
+the mail capture and `tests/e2e/studio-config.json` (it names only the owner), and runs four specs in Chrome.
+
+`tests/e2e/studio-ai.local.ts` is a studio's own AI connected as Connect Your AI says, as
+`student3@siue.edu`: a notes key and an AI key (read notes, publish drafts) on Your studio, whose panel shows the
+commands with the key in them; the wheel downloaded from the stack, checked against the SHA-256 the page shows,
+and installed into a fresh virtualenv outside the repository; its `siue-music mcp` over stdio gives the
+pairing code; a wrong code is refused and the right one pairs; a note typed in the browser reaches
+`wait_for_notes`, `read_new_notes` opens it and `mark_notes_picked_up` marks it; the AI publishes a draft the
+page lists; revoking the key stops it with what to do. Your studio's new-key panel and pairing form are checked
+at 390 px. `MUSIC_E2E_SHOTS=<folder>` saves them and the Connect Your AI panel.
 
 `tests/e2e/studio.local.ts` is a student's studio from first sign-in to a deleted draft:
 `student1@siue.edu` signs in through the captured mail to an empty studio, makes a
@@ -386,6 +474,9 @@ The fixtures under `games/workroom/test/fixtures/draft*/` come from
 `curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer throwaway' https://www.cs.siue.edu/~wgrim/music/api/notes.php`
 must answer 403 (or 200 with a real key), never 401: a 401 means Apache is not
 handing the Authorization header to PHP.
+
+`curl -s https://www.cs.siue.edu/~wgrim/music/dist/<file in music/dist/release.json> | sha256sum` must print the
+SHA-256 in `music/dist/release.json`.
 
 ## `score.json`, schema 1
 

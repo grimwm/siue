@@ -1,8 +1,8 @@
-// The front page's Connect your AI help, the same for every studio, the owner's
-// included: no make, terminal, checkout, repository or 1Password, only that
-// connecting is coming and that AI keys are made on Your studio. The pieces list
-// shows the panel to every studio whether or not a keyring is uploaded. With no
-// keyring the pieces list makes the notes key.
+// The front page's Connect Your AI panel, the same for every studio, the owner's
+// included: four numbered steps (uv, an AI key, the command per app, the pairing
+// code) and never make, a terminal, a checkout, a repository, GitHub, PyPI or
+// 1Password. The pieces list shows the panel to every studio whether or not a
+// keyring is uploaded. With no keyring the pieces list makes the notes key.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
@@ -15,6 +15,7 @@ import type { NotesSession } from '../src/notes-session.ts';
 
 installDocument();
 Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} } });
+import type { ConnectData } from '../src/ui/ConnectAi.tsx';
 const ui = await importTsx<{ connect: typeof import('../src/ui/ConnectAi.tsx'); index: typeof import('../src/ui/PiecesIndex.tsx') }>(
   import.meta.dirname, { connect: '../src/ui/ConnectAi.tsx', index: '../src/ui/PiecesIndex.tsx' });
 
@@ -42,25 +43,54 @@ const session = (hasKeyring: boolean, made: string[] = [], stored = false): Note
   unreadable: () => 0,
 });
 
-test('every studio, the owner\'s included, is told only what the page offers: no make, terminal, checkout, repository, GitHub or 1Password', async () => {
-  const root = await mount(h(ui.connect.ConnectAi, {}));
+const CONNECT: ConnectData = {
+  uv: 'https://docs.astral.sh/uv/getting-started/installation/',
+  wheel: 'https://www.cs.siue.edu/~wgrim/music/dist/siue_music-1.0.0-py3-none-any.whl',
+  version: '1.0.0', sha256: 'ab'.repeat(32), placeholder: 'PASTE-YOUR-AI-KEY-HERE',
+  commands: [
+    { app: 'Claude Code', how: 'Run this once, in any folder.', text: 'claude mcp add --scope user siue-music --env SIUE_MUSIC_BASE=https://www.cs.siue.edu/~wgrim/music/ --env SIUE_MUSIC_AI_KEY=PASTE-YOUR-AI-KEY-HERE -- uvx --from https://www.cs.siue.edu/~wgrim/music/dist/siue_music-1.0.0-py3-none-any.whl siue-music mcp' },
+    { app: 'Claude Desktop', how: 'Add this.', text: '{"mcpServers": {}}' },
+  ],
+};
+const FORBIDDEN = /\bmake music|\bmake\b(?! an AI key)|terminal|checkout|repositor|GitHub|PyPI|1Password|\bop\b/i;
+
+test('every studio sees four numbered steps naming only uv, the command for each app, an AI key and the pairing code', async () => {
+  const copied: string[] = [];
+  const root = await mount(h(ui.connect.ConnectAi, { connect: CONNECT, copy: async t => { copied.push(t); } }));
   const p = panel(root)!;
-  assert.ok(p, 'the panel is there');
-  assert.equal(p._attrs['aria-label'], 'Connect your AI');
-  assert.equal(walk(p).filter(e => e.localName === 'p').map(e => e.textContent).join(' '),
-    'Connecting your own AI app to your studio is coming. You can already make AI keys on Your studio. An AI key lets one AI work in your studio with the permissions you give it.');
-  assert.equal(walk(p).find(e => e.localName === 'a')?._attrs['href'], 'studio.php');
-  assert.doesNotMatch(p.textContent, /\bmake music|\bmake\b(?! AI keys)|terminal|checkout|repositor|GitHub|1Password|\bop\b/i);
-  assert.equal(walk(p).filter(e => e.localName === 'code' || e.localName === 'ol').length, 0, 'no commands, no steps');
+  assert.equal(p._attrs['aria-label'], 'Connect Your AI');
+  assert.deepEqual(walk(p).filter(e => e.localName === 'h3').map(e => e.textContent), ['Install uv', 'Make An AI Key', 'Add siue-music To Your AI App', 'Type The Pairing Code']);
+  assert.equal(walk(p).filter(e => e.localName === 'ol').length, 1);
+  assert.equal(walk(p).find(e => e.localName === 'a' && e.textContent === "uv's installation page")?._attrs['href'], CONNECT.uv);
+  assert.equal(walk(p).find(e => e.localName === 'a' && e.textContent === 'Your studio')?._attrs['href'], 'studio.php');
+  const codes = walk(p).filter(e => e.localName === 'code').map(e => e.textContent);
+  assert.deepEqual(codes, CONNECT.commands.map(c => c.text), 'one copyable command per app');
+  assert.match(codes[0]!, /uvx --from https:\/\/www\.cs\.siue\.edu\/~wgrim\/music\/dist\/siue_music-1\.0\.0-py3-none-any\.whl siue-music mcp$/);
+  assert.match(p.textContent, new RegExp(`SHA-256 ${CONNECT.sha256}`), 'the wheel\'s SHA-256 is shown');
+  assert.doesNotMatch(p.textContent, FORBIDDEN);
+  const copy = walk(p).find(e => e.localName === 'button' && e.textContent === 'Copy')!;
+  await act(() => { fire(copy, 'click'); });
+  await settle();
+  assert.deepEqual(copied, [CONNECT.commands[0]!.text]);
+  assert.equal(walk(p).find(e => e._attrs['role'] === 'status')?.textContent, 'Copied.');
 });
 
-test('the pieces list shows the same panel to every studio, with or without an uploaded keyring, and no command-line step', async () => {
+test('without the server\'s commands the panel says to reload, and still names no forbidden step', async () => {
+  const root = await mount(h(ui.connect.ConnectAi, { connect: null }));
+  assert.match(panel(root)!.textContent, /The commands could not be loaded\. Reload the page\./);
+  assert.doesNotMatch(panel(root)!.textContent, FORBIDDEN);
+  assert.equal(ui.connect.readConnect('{"uv":1}'), null);
+  assert.equal(ui.connect.readConnect(undefined), null);
+  assert.deepEqual(ui.connect.readConnect(JSON.stringify(CONNECT)), CONNECT);
+});
+
+test('the pieces list shows the same panel to every studio, with or without an uploaded keyring', async () => {
   for (const hasKeyring of [false, true]) {
-    const root = await mount(h(ui.index.PiecesIndex, { notes: session(hasKeyring), list: makeEl('ol') as unknown as ParentNode }));
+    const root = await mount(h(ui.index.PiecesIndex, { notes: session(hasKeyring), list: makeEl('ol') as unknown as ParentNode, connect: CONNECT }));
     await settle();
     const where = `keyring ${hasKeyring ? 'uploaded' : 'missing'}`;
-    assert.match(panel(root)?.textContent ?? '', /Connecting your own AI app to your studio is coming\./, where);
-    assert.doesNotMatch(root.textContent, /make music|terminal|checkout|1Password|claude mcp add/i, where);
+    assert.match(panel(root)?.textContent ?? '', /Type The Pairing Code/, where);
+    assert.doesNotMatch(root.textContent, /make music|terminal|checkout|1Password/i, where);
     await act(() => { render(null, renderTarget(root)); });
   }
 });

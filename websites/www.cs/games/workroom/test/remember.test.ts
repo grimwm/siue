@@ -26,10 +26,12 @@ function server() {
     bytes: async () => new Uint8Array(),
     remove: async () => 0,
     removeAll: async () => 0,
-    keyring: async () => { state.keyringCalls++; if (state.fail) throw state.fail; return { locked: state.keyring, session: state.session }; },
+    keyring: async () => { state.keyringCalls++; if (state.fail) throw state.fail; return { locked: state.keyring, session: state.session, ai: [] }; },
     uploadKeyring: async () => {},
     changeKeyring: async () => {},
     deleteDraft: async () => 0,
+    checkPairing: async () => 'wrong_code',
+    pairKeyring: async () => null,
   };
   return { api, state };
 }
@@ -94,7 +96,8 @@ test('only non-extractable keys, the tag and the digest are stored; an extractab
   db.close();
   assert.equal(rows.length, 1);
   const row = rows[0]!;
-  assert.deepEqual(Object.keys(row).sort(), ['current', 'id', 'keyring', 'ring', 'session']);
+  assert.deepEqual(Object.keys(row).sort(), ['ai', 'current', 'id', 'keyring', 'ring', 'session']);
+  assert.deepEqual(row['ai'], [], 'the paired AI keys\' public halves, none here');
   assert.equal(row['session'], 'tag-1');
   assert.equal(row['keyring'], await keyringDigest(fx.keyring));
   assert.ok([...(row['ring'] as Map<string, CryptoKey>).values()].every(k => k instanceof CryptoKey && !k.extractable));
@@ -104,7 +107,7 @@ test('only non-extractable keys, the tag and the digest are stored; an extractab
   const memory = indexedDbKeyMemory(factory());
   const unlocked = await unlockKeyring(fx.keyring, fx.passphrase);
   const loose = await crypto.subtle.importKey('pkcs8', b64(fx.pkcs8), { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['decrypt']);
-  await memory.keep({ session: 't', keyring: 'k', ring: new Map([[fx.fingerprint, loose]]), current: unlocked.current });
+  await memory.keep({ session: 't', keyring: 'k', ring: new Map([[fx.fingerprint, loose]]), current: unlocked.current, ai: [] });
   assert.equal(await memory.recall(), null);
 });
 
@@ -112,7 +115,7 @@ test('no IndexedDB, or one that refuses: nothing is remembered and nothing throw
   const refusing = { open: () => { throw new Error('denied'); } } as unknown as globalThis.IDBFactory;
   for (const memory of [indexedDbKeyMemory(null), indexedDbKeyMemory(refusing)]) {
     const unlocked = await unlockKeyring(fx.keyring, fx.passphrase);
-    await memory.keep({ session: 't', keyring: 'k', ring: unlocked.ring, current: unlocked.current });
+    await memory.keep({ session: 't', keyring: 'k', ring: unlocked.ring, current: unlocked.current, ai: [] });
     assert.equal(await memory.recall(), null);
     await memory.forget();
   }

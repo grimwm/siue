@@ -41,12 +41,12 @@ class ConnectTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("--scope") + 1], "user")
         self.assertIn("SIUE_MUSIC_BASE=https://music.example.org/music/", argv)
         self.assertIn("SIUE_OP=/opt/homebrew/bin/op", argv)
-        self.assertEqual(argv[argv.index("--") - 1], "siue-music")
-        self.assertEqual(argv[argv.index("--") + 1:], [str(PY), str(TOOL), "mcp"])
+        self.assertEqual(argv[argv.index("--") - 1], "siue-music-owner")
+        self.assertEqual(argv[argv.index("--") + 1:], [str(PY), str(TOOL), "owner-mcp"])
 
     def test_the_desktop_json_runs_the_same_command(self):
-        server = self.desktop_json(self.text())["mcpServers"]["siue-music"]
-        self.assertEqual((server["command"], server["args"]), (str(PY), [str(TOOL), "mcp"]))
+        server = self.desktop_json(self.text())["mcpServers"]["siue-music-owner"]
+        self.assertEqual((server["command"], server["args"]), (str(PY), [str(TOOL), "owner-mcp"]))
         self.assertEqual(server["env"], {"SIUE_MUSIC_BASE": "https://music.example.org/music/", "SIUE_OP": "/opt/homebrew/bin/op"})
 
     def test_it_says_where_the_desktop_config_lives_and_where_to_change_the_address(self):
@@ -84,7 +84,7 @@ class ConnectTest(unittest.TestCase):
             pass
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            self.assertEqual(cli.main(["mcp"], {}), 1)
+            self.assertEqual(cli.main(["owner-mcp"], {}), 1)
         self.assertIn("make music-mcp-setup", err.getvalue())
 
 

@@ -72,8 +72,15 @@ def _shape_problem(body: dict, audio: bytes) -> str | None:
     return None
 
 
-def pickup(api, keyring: Mapping[str, bytes], notes: Path, repo: Path, steps: Steps) -> Report:
-    check_outside(notes, repo)
+UNKNOWN_KEY = "could not open: sealed to a key this computer doesn't have; git pull, then make music-setup; left waiting"
+
+
+def pickup(api, keyring: Mapping[str, bytes], notes: Path, repo: Path | None, steps: Steps, mark: bool = True,
+           unknown_key: str = UNKNOWN_KEY) -> Report:
+    """Downloads, opens and saves each waiting note, then marks it picked up (only with `mark`; the studio's AI marks
+    them with its own tool). `repo` is the checkout the notes folder must stay out of, None when there is none."""
+    if repo is not None:
+        check_outside(notes, repo)
     report = Report()
     listed = api.waiting()
     for item in sorted(listed, key=_arrival):
@@ -82,7 +89,7 @@ def pickup(api, keyring: Mapping[str, bytes], notes: Path, repo: Path, steps: St
             report.left[str(note_id)[:40]] = "the server listed an id that is not a note id; left waiting"
             continue
         try:
-            _one(api, keyring, notes, steps, report, note_id, item)
+            _one(api, keyring, notes, steps, report, note_id, item, mark, unknown_key)
         except ApiError as e:
             report.left[note_id] = f"{e}; left waiting"
         except OSError as e:
@@ -90,7 +97,7 @@ def pickup(api, keyring: Mapping[str, bytes], notes: Path, repo: Path, steps: St
     return report
 
 
-def _one(api, keyring, notes: Path, steps: Steps, report: Report, note_id: str, item: dict) -> None:
+def _one(api, keyring, notes: Path, steps: Steps, report: Report, note_id: str, item: dict, mark: bool, unknown_key: str) -> None:
     arrived, size, digest = item.get("arrived_at"), item.get("size"), item.get("sha256")
     if not (isinstance(arrived, int) and not isinstance(arrived, bool) and isinstance(size, int) and isinstance(digest, str) and _SHA256.fullmatch(digest)):
         report.left[note_id] = "the server's listing of it is malformed; left waiting"
@@ -107,8 +114,7 @@ def _one(api, keyring, notes: Path, steps: Steps, report: Report, note_id: str, 
     try:
         opened = open_bundle(data, keyring)
     except NoteUnreadable as e:
-        report.left[note_id] = ("could not open: sealed to a key this computer doesn't have; git pull, then make music-setup; left waiting"
-                                if e.reason == "unknown-key" else f"could not open ({e.reason}); left waiting")
+        report.left[note_id] = unknown_key if e.reason == "unknown-key" else f"could not open ({e.reason}); left waiting"
         return
     problem = _shape_problem(opened.body, opened.audio)
     ext = _audio_extension(opened.body, opened.audio) if opened.audio else None
@@ -123,7 +129,8 @@ def _one(api, keyring, notes: Path, steps: Steps, report: Report, note_id: str, 
         shutil.rmtree(final, ignore_errors=True)
         _save(notes, final, note_id, arrived, opened, ext)
     _derive(final, opened.body["kind"], ext, steps, report, note_id)
-    api.mark_picked_up(note_id)
+    if mark:
+        api.mark_picked_up(note_id)
     report.picked.append(note_id)
     if opened.body.get("piece") == GENERAL_PIECE:
         report.general.append(note_id)

@@ -1,12 +1,12 @@
 // The unlock this browser remembers, so a reload does not ask for the passphrase again: IndexedDB database
-// "siue-music-keys", store "unlocked", one record { id, session, keyring, ring, current }. The private keys are the
+// "siue-music-keys", store "unlocked", one record { id, session, keyring, ring, current, ai }. The private keys are the
 // non-extractable CryptoKeys the unlock made, stored as they are, so no script can read their bytes; the
 // passphrase and the locked keyring are never stored. `session` is the server's tag for the sign-in the unlock was
 // made under and `keyring` the SHA-256 of the locked keyring it unlocked: a page that finds either changed (a
 // sign-out, a new sign-in, a rotated key) forgets the record. Where IndexedDB is missing or refuses, nothing is
 // remembered and every visit asks for the passphrase.
 import type { PublicKey } from './seal.ts';
-import type { LockedKeyring } from './unlock.ts';
+import type { AiRecipient, LockedKeyring } from './unlock.ts';
 
 export const KEYS_DB = 'siue-music-keys';
 export const KEYS_STORE = 'unlocked';
@@ -20,6 +20,8 @@ export interface Remembered {
   /** Every entry's non-extractable private key, by fingerprint, in keyring order. */
   ring: Map<string, CryptoKey>;
   current: PublicKey;
+  /** The paired AI keys' public keys the unlocked keyring held (public, like `current`). */
+  ai: AiRecipient[];
 }
 
 export interface KeyMemory {
@@ -46,6 +48,13 @@ const isRemembered = (x: unknown): x is Remembered => {
   return typeof r === 'object' && r !== null && typeof r.session === 'string' && r.session !== '' && typeof r.keyring === 'string'
     && r.ring instanceof Map && r.ring.size > 0 && [...r.ring.values()].every(k => k instanceof CryptoKey && !k.extractable)
     && typeof r.current === 'object' && r.current !== null && typeof r.current.fingerprint === 'string' && typeof r.current.spki === 'string';
+};
+
+/** The record's AI keys; a record kept before there were any has none. */
+const aiOf = (x: unknown): AiRecipient[] => {
+  const list = (x as { ai?: unknown }).ai;
+  return Array.isArray(list) ? list.filter((a): a is AiRecipient => typeof a === 'object' && a !== null && typeof a.fingerprint === 'string'
+    && typeof a.spki === 'string' && Number.isInteger(a.key)) : [];
 };
 
 export function indexedDbKeyMemory(idb: IDBFactory | null = typeof indexedDB === 'undefined' ? null : indexedDB): KeyMemory {
@@ -75,7 +84,7 @@ export function indexedDbKeyMemory(idb: IDBFactory | null = typeof indexedDB ===
     async recall() {
       try {
         const found: unknown = await transact('readonly', s => s.get(RECORD));
-        return isRemembered(found) ? { session: found.session, keyring: found.keyring, ring: new Map(found.ring), current: found.current } : null;
+        return isRemembered(found) ? { session: found.session, keyring: found.keyring, ring: new Map(found.ring), current: found.current, ai: aiOf(found) } : null;
       } catch {
         return null;
       }
@@ -83,7 +92,8 @@ export function indexedDbKeyMemory(idb: IDBFactory | null = typeof indexedDB ===
     async keep(r) {
       if ([...r.ring.values()].some(k => k.extractable)) return;
       try {
-        await transact('readwrite', s => s.put({ id: RECORD, session: r.session, keyring: r.keyring, ring: new Map(r.ring), current: { fingerprint: r.current.fingerprint, spki: r.current.spki } }));
+        await transact('readwrite', s => s.put({ id: RECORD, session: r.session, keyring: r.keyring, ring: new Map(r.ring), current: { fingerprint: r.current.fingerprint, spki: r.current.spki },
+          ai: r.ai.map(a => ({ fingerprint: a.fingerprint, spki: a.spki, key: a.key })) }));
       } catch {
         // The browser would not store it (a private window, a full disk): the next visit asks for the passphrase.
       }

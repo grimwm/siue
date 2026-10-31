@@ -161,7 +161,8 @@ for a class.
 ### The MCP server
 
 - **A small program on the person's computer,** started by their AI app (Claude
-  Code, Claude Desktop or another MCP client). It is configured with:
+  Code, Claude Desktop, Cursor, Codex, Gemini CLI or another MCP client). It is
+  configured with:
   - the studio's address;
   - the AI key;
   - the AI's private sealing key, kept in that computer's user config folder.
@@ -178,8 +179,21 @@ for a class.
   being sent.
 - **The www.cs server never calls out and holds no connections open.** It is a
   plain PHP host with per-request execution and sftp-only access, so
-  WebSockets are not available. Long-polling is used only if a probe of the
-  host's limits shows it is safe; plain polling is the default.
+  WebSockets are not available. Plain polling is used.
+- **How a person connects it** (the Connect Your AI panel on the front page,
+  four numbered steps):
+  1. install uv (a link to uv's installation page, the only prerequisite);
+  2. make an AI key on Your studio;
+  3. add `siue-music` to the AI app with the command the page shows for it,
+     the studio's address and the published wheel already in it (Your studio
+     shows the same commands with the new key filled in);
+  4. ask the AI for its pairing code and type it on that key's row on Your
+     studio, with the notes passphrase.
+- **Packaging:** the Python tool is a wheel, `siue_music-<version>-py3-none-any.whl`,
+  run by `uvx --from <its address> siue-music mcp`. The deploy builds it
+  reproducibly, serves it under `music/dist/`, and refuses one whose SHA-256
+  is not the one `music/dist/release.json` names; the page shows that SHA-256.
+  No package index is involved.
 
 ### The shared sample library and the browser renderer
 
@@ -240,10 +254,25 @@ comes first because a score-only studio cannot be heard without it.
     never re-wrapped.
 - **Only the person can add an AI as a recipient.** An AI's public key joins the
   person's locked keyring, and only the unlocked browser can rewrite that
-  keyring. To pair, the MCP prints a short code made from its key's
+  keyring. To pair, the MCP shows a short code made from its key's
   fingerprint; the person types the code into the page, and only then does the
   browser add the key. A server that slipped in a key of its own could not
   make the browser seal to it.
+  - **The code** is the first 80 bits of the SHA-256 of the AI key's SPKI, in
+    Crockford base32, `XXXX-XXXX-XXXX-XXXX`. The server checks a typed code first
+    (5 wrong codes per AI key an hour, 20 tries per studio an hour); the
+    browser then checks the code again against the key it was handed, and that
+    the key is RSA-4096 with exponent 65537 in canonical DER, before it adds
+    it. A server wanting a key of its own with the same code would have to
+    try about 2^80 keys.
+  - **Pairing needs the passphrase,** because the keyring is locked again with
+    the AI's key in it; the server stores it only with the current key's
+    signature and unchanged fingerprints, and then marks the AI key paired.
+  - **The browser seals** to the person's key and to each AI key that the
+    unlocked keyring holds and the server still lists as active (asked again
+    before each note). An AI key lists only the notes sealed to its own key.
+  - **Forgot your passphrase** unpairs every AI key (the new keyring holds
+    none); the same code pairs it again.
 - **AI keys** are a new per-account table. The owner's existing API keys and
   his 1Password publish and pickup flow keep working, as keys on his account.
 - **A piece** is a name that groups drafts. A piece's first draft creates it,
@@ -278,7 +307,9 @@ comes first because a score-only studio cannot be heard without it.
 - How the browser renderer reproduces the container's master chain in Web
   Audio, and how closely it must match. A listening comparison of one piece is
   part of done.
-- The MCP server's language and packaging, and how often it polls.
+- The MCP server's language and packaging, and how often it polls: Python
+  (the owner's tool, reused), a wheel run by uvx, polling every 10 seconds by
+  default and never more often than every 2.
 - Exact rate-limit numbers.
 
 ## Open (Claude's calls, marked for the owner)
@@ -287,4 +318,17 @@ comes first because a score-only studio cannot be heard without it.
 - **The named-person allowance** stays at today's draft limits: 20 drafts and
   100 MB.
 - **AI key scopes:** read notes, publish drafts, delete drafts. Never create
-  keys, never start over.
+  keys, never start over. Reading a draft's score needs publish drafts;
+  registering a sealing key needs read notes.
+- **The AI key reaches the MCP** as `SIUE_MUSIC_AI_KEY` in the app's command
+  (filled in on Your studio right after the key is made, a placeholder on the
+  front page), or from the `ai-key` file `siue-music save-key` writes for
+  several apps on one computer. Cost if wrong: the key is in plain text in the
+  app's own settings, as every MCP client's tokens are.
+- **One sealing key per computer,** shared by every app there: one pairing
+  serves them all.
+- **Picked up is one mark per note,** shared by the page and every AI: with two
+  AIs, the first to mark a note hides it from the other's new notes.
+- **The wheel's version is explicit;** a changed tool without a new version
+  fails the deploy, and the deploy removes the old wheel, so an app pointed at
+  an older one needs the new command after a release.

@@ -47,7 +47,7 @@ test('an entry that does not match its fingerprint is refused, as an unlock refu
 function server(keyring: LockedKeyring = fx.keyring) {
   const state = { keyring, changes: [] as { locked: LockedKeyring; current: string; previous: string[]; proof: ChangeProof }[], refuse: null as unknown };
   const api = {
-    keyring: async (): Promise<KeyringAnswer> => ({ locked: state.keyring, session: 'tag' }),
+    keyring: async (): Promise<KeyringAnswer> => ({ locked: state.keyring, session: 'tag', ai: [] }),
     changeKeyring: async (locked: LockedKeyring, current: string, previous: string[], proof: ChangeProof): Promise<void> => {
       if (state.refuse) throw state.refuse;
       state.changes.push({ locked, current, previous, proof });

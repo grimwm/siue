@@ -1,1 +1,3 @@
-"""The owner's tool for the music workroom: keys in 1Password, sealed notes opened locally."""
+"""The music studio's tool: the studio MCP server any studio's AI app runs (siue-music mcp), and the owner's key tool
+for the repository (1Password, make)."""
+__version__ = "1.0.0"

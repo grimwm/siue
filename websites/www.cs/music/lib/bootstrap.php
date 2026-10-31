@@ -11,6 +11,8 @@ require_once __DIR__ . '/Usage.php';
 require_once __DIR__ . '/Keyring.php';
 require_once __DIR__ . '/ScoreRules.php';
 require_once __DIR__ . '/AiKeys.php';
+require_once __DIR__ . '/Pairing.php';
+require_once __DIR__ . '/Connect.php';
 require_once __DIR__ . '/Confirmations.php';
 require_once __DIR__ . '/KeyGate.php';
 require_once __DIR__ . '/Api.php';
@@ -125,7 +127,7 @@ function music_run(string $kind, callable $route): void
         } else {
             $sessions = new Admin\Sessions($db, $clock, studio_realm());
             $confirmations = new Music\Confirmations($db, $clock, admin_mailer($r->host, null, $base), studio_realm()->baseUrl);
-            $pages = new Music\Pages($storeFor, $accounts, $people, $sessions, music_asset_version(), $base, new Music\AiKeys($db, $clock), $confirmations);
+            $pages = new Music\Pages($storeFor, $accounts, $people, $sessions, music_asset_version(), $base, new Music\AiKeys($db, $clock), $confirmations, new Music\Pairing($db, $clock));
             $res = $route($pages, $r);
         }
     } catch (Admin\StorageUnavailable | PDOException $e) {

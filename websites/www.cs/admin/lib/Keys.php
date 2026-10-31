@@ -132,6 +132,7 @@ final class Keys
         $st = $this->db->prepare('SELECT id, scopes FROM keys WHERE key_hash = ? AND revoked_at IS NULL');
         $st->execute([hash('sha256', $m[1])]);
         $row = $st->fetch(\PDO::FETCH_ASSOC);
+        $st->closeCursor(); // an open cursor would make meter's BEGIN IMMEDIATE fail at once under concurrent writes
         if ($row === false) {
             return self::error(401, 'A valid API key is required.');
         }

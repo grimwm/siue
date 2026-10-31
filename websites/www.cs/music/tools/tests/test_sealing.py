@@ -52,3 +52,36 @@ class SealingTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Siuen2Test(unittest.TestCase):
+    """SIUEN2: the note the page seals to the person and their paired AI keys (seal.ts sealTo)."""
+
+    def setUp(self):
+        self.fx = json.loads((FIXTURES / "test-key.json").read_text())
+
+    def test_opens_what_the_browser_sealed_to_two_keys_with_either(self):
+        bundle = (FIXTURES / "siuen2-note.bin").read_bytes()
+        self.assertEqual(sealing.recipients(bundle), [self.fx["fingerprint"], self.fx["other"]["fingerprint"]])
+        for key in (self.fx, self.fx["other"]):
+            opened = sealing.open_bundle(bundle, {key["fingerprint"]: base64.b64decode(key["pkcs8"])})
+            self.assertEqual((opened.fingerprint, opened.body["text"]), (key["fingerprint"], "sealed to the person and an AI"))
+        with self.assertRaises(sealing.NoteUnreadable) as e:
+            sealing.open_bundle(bundle, {})
+        self.assertEqual(e.exception.reason, "unknown-key")
+
+    def test_seal_to_round_trips_and_a_changed_header_does_not_open(self):
+        (fp_a, pkcs8_a, spki_a), (fp_b, pkcs8_b, spki_b) = pool_key(0), pool_key(1)
+        body = {"v": 1, "kind": "text", "text": "hi"}
+        bundle = sealing.seal_to(body, b"\x01\x02", [spki_a, spki_b])
+        self.assertEqual(sealing.recipients(bundle), [fp_a, fp_b])
+        self.assertEqual(sealing.open_bundle(bundle, {fp_b: pkcs8_b}).audio, b"\x01\x02")
+        edited = bytearray(bundle)
+        edited[7] ^= 1  # the first fingerprint, part of the additional data
+        with self.assertRaises(sealing.NoteUnreadable) as e:
+            sealing.open_bundle(bytes(edited), {fp_b: pkcs8_b})
+        self.assertEqual(e.exception.reason, "tampered")
+        for bad in (bundle[:60], b"SIUEN2\x00" + bundle[7:], b"SIUEN2\x11" + bundle[7:]):
+            self.assertIsNone(sealing.recipients(bad))
+        with self.assertRaises(ValueError):
+            sealing.seal_to(body, b"", [spki_a, spki_a])

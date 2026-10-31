@@ -26,9 +26,18 @@ final class DraftRejected extends \RuntimeException
     }
 }
 
+/** changeKeyring's $also refused: the transaction is rolled back and the change answers 'mismatch'. */
+final class KeyringRace extends \RuntimeException
+{
+}
+
 final class Store
 {
     public const MAGIC = 'SIUEN1';
+    /** A note sealed to several keys: the person's and each paired AI's (seal.ts sealTo). */
+    public const MAGIC2 = 'SIUEN2';
+    /** The most keys one SIUEN2 note names: the person's and ten AI keys, with room. */
+    public const MAX_RECIPIENTS = 16;
     /** The largest note for an account with the allowance (Limits). */
     public const MAX_NOTE_BYTES = 2_097_152;
     /** The most notes one account keeps. */
@@ -107,10 +116,56 @@ final class Store
         \Admin\Db::once($this->db, self::MIGRATION, fn() => $this->moveIntoAccounts(), fn() => $this->restoreDrafts());
         // The move committed but its process ended before it cleared away the old files it set aside.
         $this->removeTree("$dir/drafts.old");
+        // Every key a note names (SIUEN1: the one; SIUEN2: each), so an AI key lists only the notes sealed to it, and
+        // when each AI marked it picked up: one AI's mark never hides a note from another AI.
+        $this->db->exec('CREATE TABLE IF NOT EXISTS music_note_recipients (note_id TEXT NOT NULL, account_id INTEGER NOT NULL, fingerprint TEXT NOT NULL, picked_up_at INTEGER, PRIMARY KEY (note_id, fingerprint))');
+        $this->db->exec('CREATE INDEX IF NOT EXISTS music_note_recipients_fp ON music_note_recipients(account_id, fingerprint)');
     }
 
-    /** @return array{id: string, size: int, sha256: string, arrived_at: int} @throws NoteRejected */
-    public function addNote(string $sealed): array
+    /**
+     * The fingerprints a sealed note names, in order, or null when its header is malformed: SIUEN1 names one; SIUEN2
+     * names 1 to MAX_RECIPIENTS distinct ones, each with a wrapped key, followed by at least an IV and a tag.
+     *
+     * @return list<string>|null
+     */
+    public static function recipientsOf(string $sealed): ?array
+    {
+        if (str_starts_with($sealed, self::MAGIC)) {
+            return strlen($sealed) < self::HEADER_BYTES ? null : [bin2hex(substr($sealed, 6, 32))];
+        }
+        if (!str_starts_with($sealed, self::MAGIC2) || strlen($sealed) < 7) {
+            return null;
+        }
+        $n = ord($sealed[6]);
+        if ($n < 1 || $n > self::MAX_RECIPIENTS) {
+            return null;
+        }
+        $at = 7;
+        $end = strlen($sealed);
+        $prints = [];
+        for ($i = 0; $i < $n; $i++) {
+            if ($at + 34 > $end) {
+                return null;
+            }
+            $fp = bin2hex(substr($sealed, $at, 32));
+            $len = unpack('n', substr($sealed, $at + 32, 2))[1];
+            $at += 34 + $len;
+            if ($len === 0 || in_array($fp, $prints, true)) {
+                return null;
+            }
+            $prints[] = $fp;
+        }
+        return $at + 12 + 16 <= $end ? $prints : null;
+    }
+
+    /**
+     * Keeps one sealed note. Every key it names must be the account's current or a previous notes key, or one of
+     * $aiRecipients (the paired, active AI keys: Pairing::activeRecipients), and at least one must be the person's.
+     *
+     * @param list<string> $aiRecipients
+     * @return array{id: string, size: int, sha256: string, arrived_at: int} @throws NoteRejected
+     */
+    public function addNote(string $sealed, array $aiRecipients = []): array
     {
         $size = strlen($sealed);
         if ($size > $this->limits->maxNoteBytes) {
@@ -120,16 +175,23 @@ final class Store
         if ($prints === null) {
             throw new NoteRejected('no_key');
         }
-        if ($size < self::HEADER_BYTES || !str_starts_with($sealed, self::MAGIC)) {
+        $named = self::recipientsOf($sealed);
+        if ($named === null) {
             throw new NoteRejected('bad_header');
         }
-        if (!in_array(bin2hex(substr($sealed, 6, 32)), [$prints['current'], ...$prints['previous']], true)) {
+        $person = [$prints['current'], ...$prints['previous']];
+        foreach ($named as $fp) {
+            if (!in_array($fp, $person, true) && !in_array($fp, $aiRecipients, true)) {
+                throw new NoteRejected('unknown_key');
+            }
+        }
+        if (array_intersect($named, $person) === []) {
             throw new NoteRejected('unknown_key');
         }
         $id = bin2hex(random_bytes(16));
         $note = ['id' => $id, 'size' => $size, 'sha256' => hash('sha256', $sealed), 'arrived_at' => $this->clock->now()];
         $path = "{$this->dir}/notes/$id.sealed";
-        $this->transaction(function () use ($sealed, $note, $path, $size): void {
+        $this->transaction(function () use ($sealed, $note, $path, $size, $named): void {
             $count = $this->db->prepare('SELECT COUNT(*) FROM music_notes WHERE account_id = ?');
             $count->execute([$this->account]);
             if ((int) $count->fetchColumn() >= self::MAX_NOTES) {
@@ -143,6 +205,10 @@ final class Store
             try {
                 $this->db->prepare('INSERT INTO music_notes (id, account_id, size, sha256, arrived_at) VALUES (?, ?, ?, ?, ?)')
                     ->execute([$note['id'], $this->account, $note['size'], $note['sha256'], $note['arrived_at']]);
+                $to = $this->db->prepare('INSERT INTO music_note_recipients (note_id, account_id, fingerprint) VALUES (?, ?, ?)');
+                foreach ($named as $fp) {
+                    $to->execute([$note['id'], $this->account, $fp]);
+                }
             } catch (\Throwable $e) {
                 @unlink($path);
                 throw $e;
@@ -151,16 +217,28 @@ final class Store
         return $note;
     }
 
-    /** @param 'waiting'|'picked-up'|null $state @return list<array{id: string, size: int, sha256: string, arrived_at: int, picked_up_at: ?int}> oldest first */
-    public function notes(?string $state = null): array
+    /**
+     * @param 'waiting'|'picked-up'|null $state
+     * @param string|null $sealedTo only the notes sealed to this key (an AI key's paired key), with that key's own picked-up
+     *                              mark as their state; null for every note and the note's own mark
+     * @return list<array{id: string, size: int, sha256: string, arrived_at: int, picked_up_at: ?int}> oldest first
+     */
+    public function notes(?string $state = null, ?string $sealedTo = null): array
     {
         $where = match ($state) {
             'waiting' => 'AND picked_up_at IS NULL',
             'picked-up' => 'AND picked_up_at IS NOT NULL',
             default => '',
         };
-        $q = $this->db->prepare("SELECT id, size, sha256, arrived_at, picked_up_at FROM music_notes WHERE account_id = ? $where ORDER BY arrived_at ASC, rowid ASC");
-        $q->execute([$this->account]);
+        if ($sealedTo !== null) {
+            $where = str_replace('picked_up_at', 'r.picked_up_at', $where);
+            $q = $this->db->prepare('SELECT n.id, n.size, n.sha256, n.arrived_at, r.picked_up_at FROM music_notes n JOIN music_note_recipients r'
+                . " ON r.note_id = n.id AND r.account_id = n.account_id WHERE n.account_id = ? AND r.fingerprint = ? $where ORDER BY n.arrived_at ASC, n.rowid ASC");
+            $q->execute([$this->account, $sealedTo]);
+        } else {
+            $q = $this->db->prepare("SELECT id, size, sha256, arrived_at, picked_up_at FROM music_notes WHERE account_id = ? $where ORDER BY arrived_at ASC, rowid ASC");
+            $q->execute([$this->account]);
+        }
         $rows = $q->fetchAll(\PDO::FETCH_ASSOC);
         return array_map(static fn(array $r): array => [
             'id' => (string) $r['id'],
@@ -171,20 +249,28 @@ final class Store
         ], $rows);
     }
 
-    public function noteBytes(string $id): ?string
+    /** The sealed bytes; with $sealedTo, only of a note sealed to that key. */
+    public function noteBytes(string $id, ?string $sealedTo = null): ?string
     {
-        if (preg_match(self::ID, $id) !== 1 || !$this->noteExists($id)) {
+        if (preg_match(self::ID, $id) !== 1 || !$this->noteExists($id, $sealedTo)) {
             return null;
         }
         $bytes = @file_get_contents("{$this->dir}/notes/$id.sealed");
         return $bytes === false ? null : $bytes;
     }
 
-    /** true when the note exists (marking twice is fine). */
-    public function markPickedUp(string $id): bool
+    /**
+     * true when the note exists (marking twice is fine). With $sealedTo, only a note sealed to that key is marked, and
+     * that key's own mark is set too, so the note stops waiting for that AI alone.
+     */
+    public function markPickedUp(string $id, ?string $sealedTo = null): bool
     {
-        if (preg_match(self::ID, $id) !== 1) {
+        if (preg_match(self::ID, $id) !== 1 || !$this->noteExists($id, $sealedTo)) {
             return false;
+        }
+        if ($sealedTo !== null) {
+            $this->db->prepare('UPDATE music_note_recipients SET picked_up_at = ? WHERE note_id = ? AND account_id = ? AND fingerprint = ? AND picked_up_at IS NULL')
+                ->execute([$this->clock->now(), $id, $this->account, $sealedTo]);
         }
         $this->db->prepare('UPDATE music_notes SET picked_up_at = ? WHERE id = ? AND account_id = ? AND picked_up_at IS NULL')->execute([$this->clock->now(), $id, $this->account]);
         return $this->noteExists($id);
@@ -201,6 +287,7 @@ final class Store
             if ($gone->rowCount() === 0) {
                 return false; // another account's note keeps its file
             }
+            $this->db->prepare('DELETE FROM music_note_recipients WHERE note_id = ? AND account_id = ?')->execute([$id, $this->account]);
             @unlink("{$this->dir}/notes/$id.sealed");
             return true;
         });
@@ -414,6 +501,7 @@ final class Store
         return $this->transaction(function (): int {
             $gone = count($this->deleteNotesOfAccount());
             $this->db->prepare('DELETE FROM music_keyring WHERE account_id = ?')->execute([$this->account]);
+            (new Pairing($this->db, $this->clock))->unpairAll($this->account); // the next keyring holds no AI key
             return $gone;
         });
     }
@@ -421,14 +509,25 @@ final class Store
     /**
      * A new passphrase: replaces the locked keyring only when $current is the stored current fingerprint and
      * $previous holds exactly the stored previous ones (in any order), so the envelope can change and the keys
-     * cannot. 'changed'; 'mismatch' when the fingerprints differ; 'none' when no keyring is stored.
+     * cannot. 'changed'; 'mismatch' when the fingerprints differ, or $also (run inside the same transaction) returns
+     * false; 'none' when no keyring is stored.
      *
      * @param list<string> $previous
      * @return 'changed'|'mismatch'|'none'
      */
-    public function changeKeyring(string $lockedJson, string $current, array $previous): string
+    public function changeKeyring(string $lockedJson, string $current, array $previous, ?\Closure $also = null): string
     {
-        return $this->transaction(function () use ($lockedJson, $current, $previous): string {
+        try {
+            return $this->changeKeyringIn($lockedJson, $current, $previous, $also);
+        } catch (KeyringRace) {
+            return 'mismatch';
+        }
+    }
+
+    /** @param list<string> $previous @return 'changed'|'mismatch'|'none' */
+    private function changeKeyringIn(string $lockedJson, string $current, array $previous, ?\Closure $also): string
+    {
+        return $this->transaction(function () use ($lockedJson, $current, $previous, $also): string {
             $stored = $this->keyring();
             if ($stored === null) {
                 return 'none';
@@ -439,6 +538,10 @@ final class Store
             sort($had);
             if ($stored['current'] === '' || !hash_equals($stored['current'], $current) || $given !== $had) {
                 return 'mismatch';
+            }
+            // $also runs in the same transaction (pairing marks its AI key); false undoes the whole change.
+            if ($also !== null && !$also()) {
+                throw new KeyringRace();
             }
             $this->db->prepare('UPDATE music_keyring SET locked = ?, uploaded_at = ?, previous_fps = ? WHERE account_id = ?')
                 ->execute([$lockedJson, $this->clock->now(), json_encode(array_values($previous)), $this->account]);
@@ -567,8 +670,13 @@ final class Store
         return self::validProjectId($id) && self::validProjectName($name);
     }
 
-    private function noteExists(string $id): bool
+    private function noteExists(string $id, ?string $sealedTo = null): bool
     {
+        if ($sealedTo !== null) {
+            $q = $this->db->prepare('SELECT 1 FROM music_notes n JOIN music_note_recipients r ON r.note_id = n.id AND r.account_id = n.account_id WHERE n.id = ? AND n.account_id = ? AND r.fingerprint = ?');
+            $q->execute([$id, $this->account, $sealedTo]);
+            return $q->fetchColumn() !== false;
+        }
         $q = $this->db->prepare('SELECT 1 FROM music_notes WHERE id = ? AND account_id = ?');
         $q->execute([$id, $this->account]);
         return $q->fetchColumn() !== false;
@@ -690,6 +798,7 @@ final class Store
         $q->execute([$this->account]);
         $ids = $q->fetchAll(\PDO::FETCH_COLUMN);
         $this->db->prepare('DELETE FROM music_notes WHERE account_id = ?')->execute([$this->account]);
+        $this->db->prepare('DELETE FROM music_note_recipients WHERE account_id = ?')->execute([$this->account]);
         foreach ($ids as $id) {
             @unlink("{$this->dir}/notes/$id.sealed");
         }

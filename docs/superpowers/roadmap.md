@@ -35,17 +35,14 @@ default, or Angled) and Classic, chosen when a new game starts.
 
 Designs `specs/2026-10-17-music-workroom-design.md` (the workroom and its
 answering) and `specs/2026-10-29-music-studios-design.md` (studios for
-everyone, in four projects). Live: the workroom, its answering, the owner's MCP
-server, the browser renderer and the shared FLAC sample library (a score-only
-draft plays, draws its sound picture and downloads in the browser). The Crete
-title theme is finished and plays in Crete on every screen.
+everyone, in four projects). Live: the workroom and its answering, the browser
+renderer and the shared FLAC sample library (project 1); studios for every
+`@siue.edu` address with notes keys, AI keys, start over and the admin view
+(project 2, `plans/2026-10-29-music-studios.md`), with change passphrase,
+forgot passphrase and emailed confirmation (`plans/2026-10-30-studio-keys.md`);
+and the studio MCP server with AI sealing keys, pairing and `SIUEN2` notes, so
+any studio connects its own AI app (project 3, `plans/2026-10-31-studio-mcp.md`).
+The Crete title theme is finished and plays in Crete on every screen.
 
-1. **Studios for everyone** (project 2) — plan
-   `plans/2026-10-29-music-studios.md`: accounts for any `@siue.edu` address,
-   per-account storage and limits, the notes key made on the page, AI keys,
-   start over, and the admin view of accounts.
-2. **The MCP server for everyone and AI sealing keys** (project 3) — the live
-   connection and the `SIUEN2` note format; its plan is written when work on it
-   begins.
-3. **Composing in the editor** (project 4) — its own design first, then its
-   plan.
+1. **Composing in the editor** (project 4) — in design; its plan follows the
+   design.

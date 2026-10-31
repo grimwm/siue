@@ -106,7 +106,8 @@ admin-smoke: ## Admin sign-in check in a throwaway docker project
 # The workroom's and the studio's browser checks against their own docker project, with the
 # admin mail capture. Local only.
 music-e2e: ## Music workroom and studio browser checks (E2E_ARGS: one spec)
-	@name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml"; \
+	@python3 music/tools/build-wheel --check >/dev/null || { echo "music-e2e: see music/README.md (the wheel)" >&2; exit 1; }; \
+	name=music-e2e-$$$$; files="-f compose.yaml -f compose.admin-local.yaml"; \
 	export ADMIN_SMOKE_DIR=/tmp/$$name; \
 	trap 'docker compose $$files -p $$name down -v >/dev/null 2>&1' EXIT; \
 	docker compose $$files -p $$name up -d --build www-cs-php www-cs-nginx >/dev/null && \
@@ -144,9 +145,9 @@ music-rotate: ## Make a new notes key (earlier notes still open)
 	@$(MUSIC_TOOL) keys rotate
 music-forget: ## Delete this computer's cached keys
 	@$(MUSIC_TOOL) keys forget
-music-mcp: ## Run the MCP server on stdin and stdout (to test it by hand)
-	@$(MUSIC_TOOL) mcp
-music-mcp-setup: ## Prepare the MCP server and print how to connect your AI
+music-mcp: ## Run the owner MCP server on stdin and stdout (to test it by hand)
+	@$(MUSIC_TOOL) owner-mcp
+music-mcp-setup: ## Prepare the owner MCP server and print how to connect your AI
 	@music/tools/ensure-venv music/tools/.venv music/tools/requirements-mcp.txt mcp
 	@music/tools/.venv/bin/python music/tools/siue-music mcp-setup
 music-test: ## Run the key tool's tests

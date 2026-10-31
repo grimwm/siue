@@ -1,7 +1,8 @@
 // The notes on this page view: make the notes key when there is none yet (made
 // and locked on this page, then uploaded), unlock the keyring with the passphrase
 // (used once, kept nowhere), list and open every note, seal a new one to the
-// unlocked keyring's current key and send it through the outbox, delete. The
+// unlocked keyring's current key (and to each paired AI key the keyring holds and the server still lists as active)
+// and send it through the outbox, delete. The
 // unlocked private keys live in the vault and the current public key here; the
 // unlock is also remembered in this browser (remember.ts) for the same sign-in
 // and keyring, so a reload restores it, and a lock forgets it. Before an unlock
@@ -13,10 +14,11 @@ import type { HistoryItem, OpenOutcome } from './history.ts';
 import type { NoteBody } from './note.ts';
 import { SEND_MESSAGES } from './outbox.ts';
 import type { AddReport, FlushReport, Outbox, Pending } from './outbox.ts';
-import { NoteUnreadable, open, seal } from './seal.ts';
+import { NoteUnreadable, open, sealTo } from './seal.ts';
 import type { PublicKey } from './seal.ts';
 import { PASSPHRASE_MESSAGES, checkPassphrase, makeNotesKey } from './keymaker.ts';
 import { KeyringInvalid, NoCrypto, WrongPassphrase, unlockKeyring } from './unlock.ts';
+import type { AiRecipient } from './unlock.ts';
 import { forgetfulMemory, keyringDigest } from './remember.ts';
 import type { KeyMemory } from './remember.ts';
 import type { Vault } from './vault.ts';
@@ -93,6 +95,9 @@ export function createNotesSession(d: SessionDeps): NotesSession {
   const outcomes = new Map<string, OpenOutcome>();
   /** The unlocked keyring's current public key: what new notes are sealed to. Null while locked. */
   let current: PublicKey | null = null;
+  /** The paired AI keys the unlocked keyring holds, and the fingerprints the server last listed as active. */
+  let ai: AiRecipient[] = [];
+  let active = new Set<string>();
   /** Incremented by lock(): an operation that started before a lock drops its result. */
   let epoch = 0;
   let skipped = 0;
@@ -155,13 +160,15 @@ export function createNotesSession(d: SessionDeps): NotesSession {
     async unlock(passphrase) {
       const at = epoch;
       try {
-        const { locked, session } = await d.api.keyring();
+        const { locked, session, ai: listed } = await d.api.keyring();
         const unlocked = await unlockKeyring(locked, passphrase);
         if (at !== epoch) return null;
         d.vault.load(unlocked.ring);
         current = unlocked.current;
+        ai = unlocked.ai;
+        active = new Set(listed);
         if (session !== '') {
-          await memory.keep({ session, keyring: await keyringDigest(locked), ring: unlocked.ring, current: unlocked.current });
+          await memory.keep({ session, keyring: await keyringDigest(locked), ring: unlocked.ring, current: unlocked.current, ai: unlocked.ai });
           if (at !== epoch) await memory.forget(); // a lock while it was being stored
         }
         return null;
@@ -174,7 +181,7 @@ export function createNotesSession(d: SessionDeps): NotesSession {
       const kept = await memory.recall();
       if (kept === null) return false;
       try {
-        const { locked, session } = await d.api.keyring();
+        const { locked, session, ai: listed } = await d.api.keyring();
         const digest = await keyringDigest(locked);
         if (at !== epoch) return false;
         if (session === '' || session !== kept.session || digest !== kept.keyring || !kept.ring.has(kept.current.fingerprint)) {
@@ -183,6 +190,8 @@ export function createNotesSession(d: SessionDeps): NotesSession {
         }
         d.vault.load(kept.ring);
         current = kept.current;
+        ai = kept.ai;
+        active = new Set(listed);
         return true;
       } catch (e) {
         // A sign-in that ended, or a keyring gone or unusable, forgets it; a failed connection keeps it for the next visit.
@@ -206,9 +215,16 @@ export function createNotesSession(d: SessionDeps): NotesSession {
     async send(body, audio) {
       const key = current;
       if (key === null) throw new Error(UNLOCK_FIRST);
+      // Which AI keys are still active: a key revoked since the unlock is dropped. Offline, the last list stands.
+      try {
+        active = new Set((await d.api.keyring()).ai);
+      } catch {
+        // keep the last list
+      }
+      const to = [key, ...ai.filter(a => active.has(a.fingerprint) && a.fingerprint !== key.fingerprint)];
       let bundle: Uint8Array<ArrayBuffer>;
       try {
-        bundle = await seal(body, audio, key);
+        bundle = await sealTo(body, audio, to);
       } catch {
         throw new Error(SEND_MESSAGES.sealFailed);
       }
@@ -233,6 +249,8 @@ export function createNotesSession(d: SessionDeps): NotesSession {
       outcomes.clear();
       skipped = 0;
       current = null;
+      ai = [];
+      active = new Set();
       epoch++;
       void memory.forget();
     },

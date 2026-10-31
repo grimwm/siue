@@ -1,0 +1,17 @@
+# The studio's MCP server and the owner's key tool, as one package. The published wheel is built by build-wheel (in this
+# folder), reproducibly and with the standard library alone, from the same name, version, dependencies and console
+# script as below; the deploy ships it as music/dist/siue_music-<version>-py3-none-any.whl and refuses one whose
+# SHA-256 differs from music/dist/release.json. See music/README.md, "Your AI: the studio MCP server".
+[project]
+name = "siue-music"
+dynamic = ["version"]
+description = "The SIUE music studio's MCP server: connect your own AI app to your studio."
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+dependencies = ["cryptography==50.0.2", "mcp==2.3.0"]
+
+[project.scripts]
+siue-music = "siue_music.cli:entry"
+
+[tool.setuptools.dynamic]
+version = { attr = "siue_music.__version__" }

@@ -161,9 +161,11 @@ final class MusicAiKeysTest extends TestCase
         }
         $theirs = $this->store($this->b);
         $theirs->putDraft('their-piece', 1, $this->score('their-piece', 1));
+        $ai = str_repeat('ef', 32);
         $theirNote = $theirs->addNote(music_sealed())['id'];
-        $mine = $this->store($this->a)->addNote(music_sealed())['id'];
         $key = $this->all($this->a);
+        music_paired($this->db, $this->a, (int) $this->db->query('SELECT MAX(id) FROM studio_keys')->fetchColumn(), $ai);
+        $mine = $this->store($this->a)->addNote(music_sealed2([MUSIC_FP_CURRENT, $ai]), [$ai])['id'];
 
         self::assertSame(201, $this->publish($key, 'my-piece', 1)->status);
         self::assertSame(['my-piece'], array_column($this->body($this->api->publishDraft($this->as($key), $this->reading('')))['drafts'], 'piece'));

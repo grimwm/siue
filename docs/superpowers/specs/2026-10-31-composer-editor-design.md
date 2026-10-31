@@ -63,6 +63,13 @@ Every entry mode writes into the same piano roll. A note entered one way can be 
 - **Hum.**
   - "● Record With Mic" listens to the microphone and turns the voice into notes. "Play The Demo Hum" shows the
     same thing without a microphone.
+  - **The microphone, and where its sound goes.**
+    - The browser asks for the microphone only when the person taps Record With Mic, never before.
+    - The page stops every microphone track when recording stops, fails or is cancelled, and when the person
+      leaves the page.
+    - The voice is turned into notes in the page, by Web Audio, and is never uploaded. Only the notes it makes
+      enter the score. No audio is kept, sent to the server, or given to the AI or the MCP.
+    - If permission is denied, the page says so plainly, and every other way in still works.
   - The screen shows the three stages of a hum: **1 · Your Voice** (the pitch line), **2 · Snap To Notes** and
     **3 · Note Blocks**.
   - Hum snapping has three choices:
@@ -174,6 +181,12 @@ Continuous views stay on the piece page.
   - the sustain pedal (CC64) holds notes the way a piano does, and a held note's recorded length runs to the
     pedal's release;
   - drum pads on channel 10 become drum notes named the General MIDI way.
+- **Permissions and output.**
+  - Web MIDI is asked for only when the person turns on Your Keyboard, over HTTPS. The page asks without SysEx,
+    and never uses SysEx.
+  - A denied or missing permission leaves every on-screen way in working, and says why plainly.
+  - The page sends to a device only when the person picks that output. It sends program changes and nothing
+    else.
 - **Sound comes from Studio Sounds**, the library samples. A device's own built-in sound can be heard through its
   own speakers or headphones, but the page cannot use it or learn its voice's name.
 - **Choosing a part's instrument** sends that instrument's General MIDI program to the device, so a General MIDI
@@ -192,6 +205,15 @@ Continuous views stay on the piece page.
     any match can be changed;
   - **What Can't Come Across** lists what the score cannot keep, such as lyrics, a synth patch or ornaments;
   - three buttons: **Add As New Parts**, **Start A New Piece** and **Cancel**.
+- **Safe reading.**
+  - Import runs in the browser and never uploads the file.
+  - MusicXML is parsed with `DOMParser`, which resolves no external entities, DTDs or URLs.
+  - An `.mxl` is unzipped in memory and never to disk. The page reads only the file its `META-INF/container.xml`
+    names, and refuses absolute paths and `..` segments.
+  - Size limits: the file at most 10 MB, an `.mxl` at most 20 MB unzipped.
+  - The parsed result must fit the score's limits (16 lanes, 20,000 notes) and finish within 5 seconds.
+    Otherwise the page refuses it with a plain reason.
+  - Nothing changes until the person confirms the preview. A failed import leaves the piece exactly as it was.
 - **Export** gives MusicXML (`.musicxml`) or MIDI (`.mid`) of the piece. MIDI export carries each part's General
   MIDI program and puts drums on channel 10. Exporting is a download from the real site, and needs no studio
   space.

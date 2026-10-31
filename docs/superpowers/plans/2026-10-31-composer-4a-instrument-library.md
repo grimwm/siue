@@ -160,13 +160,15 @@ and 0.4 / 0.3 respectively for release.
   - `test_unpitched_kept`: `pitched: false` survives.
   - `test_loop_past_sample_end_refused`: a loop ending after the shortest file raises `LibraryError` naming that
     file. Get the length from `_probe` extended to return the frame count.
+  - `test_bad_loop_interval_refused`: a negative start, a start at or after the end, and a start past the sample's
+    end each raise `LibraryError`.
 - [ ] **Step 2: Run them, and check they fail.**
   Run `make music-compose-test` (or `python3 -m unittest tests.test_library` in `music/compose`).
   Expected: FAIL.
 - [ ] **Step 3: Implement it in `build()`.**
   - Resolve stand-ins after the sampled instruments are written.
   - `_probe` returns `(rate, channels, frames)`.
-  - Check the loop: `loop[1] * rate <= frames` for every file.
+  - Check the loop: `0 <= loop[0] < loop[1]` and `loop[1] * rate <= frames` for every file.
 - [ ] **Step 4: Run them again.** Expected: PASS.
 - [ ] **Step 5: Commit.** `git commit -m "Music library: catalogue fields, stand-ins and unpitched instruments"`
 

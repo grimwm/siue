@@ -389,12 +389,18 @@ test('the opening chapter card shows the kicker, name, words and quotation, with
   assert.deepEqual(seen, ['enter', 'levels']);
   assert.equal(maybeById(root, 'chapter-continue'), undefined);
   assert.equal(maybeById(root, 'chapter-next'), undefined);
+  renderChapter(root, chapterProps({ score: 'Level 10 cleared: 76 moves' }));
+  assert.equal(maybeById(root, 'chapter-score'), undefined, 'the opening card has no score line');
 });
 
-test('the closing chapter card shows the closing words and only Continue; the next chapter, released, gets no line', () => {
+test('the closing chapter card says it is the end of the chapter, with its words and only On to Chapter 2; the next chapter, released, gets no line', () => {
   const root = mount();
   let closed = 0;
   renderChapter(root, chapterProps({ closing: true, onClose: () => { closed++; } }));
+  assert.equal(byId(root, 'chapter-kicker').textContent, 'End of Chapter 1');
+  assert.equal(byId(root, 'chapter-title').textContent, 'The Outer Halls');
+  assert.ok(byId(root, 'chapter-continue').textContent.includes('On to Chapter 2'));
+  assert.equal(tabsOf(byId(root, 'chapter-continue'))[0]?.textContent, KEYS.begin.label);
   assert.equal(byId(root, 'chapter-text').textContent, CH1.lore!.closing.text);
   const quote = walk(byId(root, 'chapter-veil')).find(n => n.localName === 'blockquote');
   assert.ok(quote?.textContent.includes(CH1.lore!.closing.quote!.text));
@@ -402,18 +408,23 @@ test('the closing chapter card shows the closing words and only Continue; the ne
   assert.equal(maybeById(root, 'chapter-enter'), undefined);
   assert.equal(maybeById(root, 'chapter-levels'), undefined);
   assert.equal(globalThis.__focused?.id, 'chapter-continue');
+  assert.equal(maybeById(root, 'chapter-score'), undefined, 'no win, no score line');
+  renderChapter(root, chapterProps({ closing: true, score: 'Level 10 cleared: 80 moves · best possible 76 (4 over)', onClose: () => { closed++; } }));
+  assert.equal(byId(root, 'chapter-score').textContent, 'Level 10 cleared: 80 moves · best possible 76 (4 over)');
   click(byId(root, 'chapter-continue'));
   assert.equal(closed, 1);
 });
 
-test("Chapter 2's closing card says Chapter 3 is not yet released", () => {
+test("Chapter 2's closing card says Chapter 3 is not yet released, and its button is Continue", () => {
   const root = mount();
   const two = CHAPTERS[1]!;
   renderChapter(root, chapterProps({ chapter: two, closing: true, next: nextChapter(2) }));
-  assert.equal(byId(root, 'chapter-kicker').textContent, 'Chapter 2 of 10');
+  assert.equal(byId(root, 'chapter-kicker').textContent, 'End of Chapter 2');
   assert.equal(byId(root, 'chapter-title').textContent, 'The Winding Ways');
   assert.equal(byId(root, 'chapter-text').textContent, two.lore!.closing.text);
   assert.equal(byId(root, 'chapter-next').textContent, 'Chapter 3 is not yet released');
+  assert.ok(byId(root, 'chapter-continue').textContent.includes('Continue'));
+  assert.doesNotMatch(byId(root, 'chapter-continue').textContent, /On to/);
 });
 
 // ---- levels list ----

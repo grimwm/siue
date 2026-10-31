@@ -3,7 +3,7 @@
 import type { FullscreenToggle } from "../../_kit/app.ts";
 
 export function fullscreenNote(outcome: FullscreenToggle): string | null {
-  if (outcome === "unsupported") return "Full screen is not supported in this browser.";
-  if (outcome === "refused") return "Full screen is not available right now.";
+  if (outcome === "unsupported") return "Full Screen is not supported in this browser.";
+  if (outcome === "refused") return "Full Screen is not available right now.";
   return null;
 }

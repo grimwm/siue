@@ -14,6 +14,7 @@ import type { Game, SfxName, Stop, Tone } from "./game.ts";
 import { ENTRIES, ENTRY, backpack, locked, metId } from "./dictionary.ts";
 import type { Entry } from "./dictionary.ts";
 import type { Met } from "./met.ts";
+import { HEARTS_LINES, nextLine } from "./hearts-lines.ts";
 import type { IconSheet } from "./icons-models.ts";
 import type { Pics } from "./ui/sprite.tsx";
 import { BANNER_MS, isFirst as firstMeeting, meetNotices } from "./notices.ts";
@@ -67,7 +68,7 @@ export interface UiDeps {
   atlas: Atlas;
   board: Board;
   progress: Progress;
-  /** The story pages found in this browser, for the Lore book. */
+  /** The story pages found in this browser, for the Lore Book. */
   pages: FoundPages;
   /** The levels the game plays, for telling one from outside the campaign; without it every level is the campaign's. */
   levels?: Pick<Levels, "outside">;
@@ -80,6 +81,8 @@ export interface UiDeps {
   /** The Modern icons (fx/sprites/modern-icons.json): the Dictionary's pictures in the Modern look. Without them every
    *  picture is Classic's sprite. */
   icons?: IconSheet;
+  /** The randomness that picks the hearts line (src/hearts-lines.ts); Math.random when not given. */
+  rng?: () => number;
   /** The banner's timer; the window's when not given. */
   timers?: Pick<Timers, "setTimeout" | "clearTimeout">;
 }
@@ -193,7 +196,7 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
 export function createUi(deps: UiDeps): Ui {
   const { atlas, board, progress, pages, sfx, met } = deps;
-  const timers = deps.timers ?? { setTimeout: (fn: () => void, ms: number) => window.setTimeout(fn, ms), clearTimeout: (id: number) => window.clearTimeout(id) };
+  const timers = deps.timers ?? { setTimeout: (fn: () => void, ms: number) => globalThis.setTimeout(fn, ms) as unknown as number, clearTimeout: (id: number) => globalThis.clearTimeout(id) };
 
   /** The level in play when it is from outside the campaign, else null. */
   const outsideOf = (g: Game | null): OutsideLevel | null => (g && g.trial >= 0 ? deps.levels?.outside?.(g.trial) ?? null : null);
@@ -260,7 +263,7 @@ export function createUi(deps: UiDeps): Ui {
   let chapterTarget = 0;
   /** The chapter the level list shows. */
   let listed = 1;
-  /** The Lore book's open entry, or null for its list. */
+  /** The Lore Book's open entry, or null for its list. */
   let loreShown: LoreEntry | null = null;
   /** The Lore entry was opened by taking its page, so its Back closes the book rather than showing the list. */
   let loreFromPickup = false;
@@ -283,6 +286,15 @@ export function createUi(deps: UiDeps): Ui {
   let shownThisTurn = new Set<string>();
   /** The banner's entries (none while it is away), how many banners have shown, and the timer that takes it away. */
   let bannerEntries: Entry[] = [];
+  /** The banner's line of words, when it says one (the hearts back to three) rather than naming entries. */
+  let bannerLine: string | null = null;
+  /** The next level is being reached from inside the game (Next, or a closing card going on): its opening shows the
+   *  hearts line. Set by the way there; any other way to a level clears it. */
+  let advancing = false;
+  /** A level was opened by going on: the hearts line waits until no card is open. */
+  let heartsQueued = false;
+  /** The hearts line shown last, so the next differs. */
+  let heartsLast = -1;
   let bannerSeq = 0;
   let bannerTimer = 0;
   /** What the Dictionary's pictures are drawn from: the look the board shows now. */
@@ -316,6 +328,7 @@ export function createUi(deps: UiDeps): Ui {
         (controls?.game ?? game)?.resume();
       }
     }
+    showHeartsWhenClear();
     drawLayers();
     deps.cards?.(layers.stack());
   });
@@ -341,13 +354,15 @@ export function createUi(deps: UiDeps): Ui {
   /** Continue on a closing card: the next chapter's opening card when it is released, else back to the end card. */
   function goOn(): void {
     const next = nextChapter(chapterN);
-    if (next?.released) showChapter(next.n, false);
-    else leave("chapter");
+    if (next?.released) {
+      showChapter(next.n, false);
+      advancing = true;
+    } else leave("chapter");
   }
 
   /** Next level from the end card: a chapter's first level shows that chapter's opening card first. */
   function nextLevel(): void {
-    pick((controls?.game ?? game)!.trial + 1);
+    pick((controls?.game ?? game)!.trial + 1, true);
   }
 
   function showChapter(n: number, closing: boolean, target = firstOf(n)): void {
@@ -355,6 +370,7 @@ export function createUi(deps: UiDeps): Ui {
     chapterClosing = closing;
     chapterScore = "";
     chapterTarget = target;
+    advancing = false;
     sfx?.("chapter");
     layers.open("chapter");
   }
@@ -365,20 +381,27 @@ export function createUi(deps: UiDeps): Ui {
     if (!layers.any() && !(controls?.game ?? game)?.run) showTitle(titleHint);
   }
 
-  /** Opens level `i`. A level from inside the campaign ends the editor's visit, if a try was part of it. */
-  function open(i: number): void {
+  /** Opens level `i`. A level from inside the campaign ends the editor's visit, if a try was part of it. `advance`:
+   *  it is reached by going on from inside the game, so the hearts line shows once its cards have closed. */
+  function open(i: number, advance = false): void {
+    advancing = false;
+    heartsQueued = false;
     layers.clear();
+    // Queued once the cards are cleared, so it waits for the new level's own start card.
+    heartsQueued = advance;
     if (!deps.levels?.outside?.(i)) controls?.leftEditor?.();
     controls?.game.open(i);
   }
 
-  /** A level picked from the list or the chapter card: a chapter's first level shows the chapter card first. */
-  function pick(i: number): void {
+  /** A level picked from the list or the chapter card, or gone on to (`advance`): a chapter's first level shows the
+   *  chapter card first. */
+  function pick(i: number, advance = false): void {
     const { chapter, within } = chapterOf(i);
     if (within === 0) {
       layers.close("levels");
       showChapter(chapter.n, false, i);
-    } else open(i);
+      advancing = advance;
+    } else open(i, advance);
   }
 
   /** A look picked on the new-game card: drawn at once and remembered. */
@@ -418,7 +441,7 @@ export function createUi(deps: UiDeps): Ui {
 
   /** Enter on the opening card starts the level it was opened for. */
   function enter(): void {
-    open(chapterTarget);
+    open(chapterTarget, advancing);
   }
 
   function showEditor(draft?: Parameters<Editor["open"]>[0]): void {
@@ -568,7 +591,7 @@ export function createUi(deps: UiDeps): Ui {
       },
       onClose: () => layers.close("dictionary"),
     });
-    renderBanner($("banner-root"), { entries: bannerEntries, seq: bannerSeq, pics: pics() });
+    renderBanner($("banner-root"), { entries: bannerEntries, line: bannerLine, seq: bannerSeq, pics: pics() });
     renderMenu($("menu-root"), {
       open: layers.isOpen("menu"),
       muted,
@@ -887,15 +910,25 @@ export function createUi(deps: UiDeps): Ui {
   }
 
   /** The banner, naming `ids`, until BANNER_MS have passed; a new one replaces it. */
-  function showBanner(ids: readonly string[]): void {
-    if (ids.length === 0) return;
+  function showBanner(ids: readonly string[], line: string | null = null): void {
+    if (ids.length === 0 && line === null) return;
     bannerEntries = ids.map((id) => ENTRY[id]!);
+    bannerLine = line;
     bannerSeq++;
     timers.clearTimeout(bannerTimer);
     bannerTimer = timers.setTimeout(() => {
       bannerEntries = [];
+      bannerLine = null;
       drawLayers();
     }, BANNER_MS);
+  }
+
+  /** The hearts line, once a level gone on to has its board in view: no card open, its start card included. */
+  function showHeartsWhenClear(): void {
+    if (!heartsQueued || layers.any() || !(controls?.game ?? game)?.run) return;
+    heartsQueued = false;
+    heartsLast = nextLine(deps.rng ?? Math.random, heartsLast);
+    showBanner([], HEARTS_LINES[heartsLast]!);
   }
 
   /** The Dictionary, on Backpack while a level is open and on Entries otherwise. */

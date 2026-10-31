@@ -71,9 +71,9 @@ afterEach(() => {
 test('a won card names the pages found in this win, and shows no such line without any', () => {
   const root = mount();
   renderEndCard(root, { open: true, ...WON, pages: ["A note in Daedalus's hand"], ...calls([]) });
-  assert.equal(byId(root, 'end-pages').textContent, "You found a page: A note in Daedalus's hand. It is in the Lore book.");
+  assert.equal(byId(root, 'end-pages').textContent, "You found a page: A note in Daedalus's hand. It is in the Lore Book.");
   renderEndCard(root, { open: true, ...WON, pages: ['One', 'Two'], ...calls([]) });
-  assert.equal(byId(root, 'end-pages').textContent, 'You found pages: One, Two. They are in the Lore book.');
+  assert.equal(byId(root, 'end-pages').textContent, 'You found pages: One, Two. They are in the Lore Book.');
   renderEndCard(root, { open: true, ...WON, pages: [], ...calls([]) });
   assert.equal(maybeById(root, 'end-pages'), undefined);
 });
@@ -172,7 +172,7 @@ test('the title card leaves the look to the new-game card and the menu', () => {
   assert.equal(maybeById(root, 'title-look'), undefined);
 });
 
-test('the new-game card shows both looks as named pictures, the one drawn now picked, with Enter the halls and Back', () => {
+test('the new-game card shows both looks as named pictures, the one drawn now picked, with Enter the Halls and Back', () => {
   const root = makeEl('look-root');
   const seen: string[] = [];
   const props = { open: true, onLook: (l: Look) => seen.push(l), onEnter: () => seen.push('enter'), onBack: () => seen.push('back') };
@@ -191,6 +191,13 @@ test('the new-game card shows both looks as named pictures, the one drawn now pi
     const order = walk(tile).map(n => n.localName === 'img' ? 'img' : n.getAttribute('class') === 'look-name' ? 'name' : '').filter(Boolean);
     assert.deepEqual(order, ['img', 'name']);
   }
+  // Modern's line says what the look is now (stone and sand, no paint or torchlight), and the hint names the
+  // Map button, not the menu.
+  const blurb = walk(byId(root, 'pick-modern')).find(n => n.getAttribute('class') === 'look-blurb')!.textContent;
+  assert.equal(blurb, 'Stone-and-sand 3D you can zoom');
+  assert.doesNotMatch(root.textContent, /painted|torchlit|in the menu/i);
+  assert.match(root.textContent, /You can switch any time with the Map button\./);
+  assert.ok(byId(root, 'pick-enter').textContent.includes('Enter the Halls'));
   for (const id of ['pick-classic', 'pick-enter', 'pick-back']) click(byId(root, id));
   assert.deepEqual(seen, ['classic', 'enter', 'back']);
   renderLookPick(root, { ...props, look: 'classic' });
@@ -444,7 +451,7 @@ test('I on the title opens the story card and Q opens the menu; Q again returns 
   assert.equal(flow.top(), 'title');
 });
 
-test('F toggles full screen and L opens the Lore book while the menu is up, and neither does anything in play', () => {
+test('F toggles full screen and L opens the Lore Book while the menu is up, and neither does anything in play', () => {
   reset();
   toggled = 0;
   game.open(0);
@@ -463,7 +470,7 @@ test('F toggles full screen and L opens the Lore book while the menu is up, and 
   key('l');
   assert.equal(flow.top(), 'lore');
   key('f');
-  assert.equal(toggled, 1, 'F does nothing on the Lore book');
+  assert.equal(toggled, 1, 'F does nothing on the Lore Book');
 });
 
 test('in the menu, down and up (or j and k) move the focus through its buttons and Enter presses the focused one', () => {
@@ -1046,7 +1053,7 @@ test('taking a story page opens its Lore entry over the board; Enter closes it a
   key('Enter');
   let i = 0;
   while (flow.top() !== 'lore' && i < r.line.length) game.press(r.line[i++]!);
-  assert.equal(flow.top(), 'lore', 'taking the page opens the Lore book');
+  assert.equal(flow.top(), 'lore', 'taking the page opens the Lore Book');
   assert.equal(text('lore-entry-title'), "A Tribute's Marks");
   assert.ok(el('lore-entry-text'));
   const tabs = walk(el('lore-back')!).filter(n => n.localName === 'kbd').map(t => t.textContent);
@@ -1090,7 +1097,7 @@ test('a win that takes a page names it on the end card, and a replayed win still
     }
     assert.equal(game.run!.now.outcome, 'won');
     assert.equal(flow.top(), 'end');
-    assert.equal(text('end-pages'), "You found a page: A Tribute's Marks. It is in the Lore book.");
+    assert.equal(text('end-pages'), "You found a page: A Tribute's Marks. It is in the Lore Book.");
   }
 });
 
@@ -1234,7 +1241,7 @@ test('a chapter card opening makes the chapter sound once', () => {
   assert.equal(heard.filter(n => n === 'chapter').length, 2, 'the closing card makes it once more');
 });
 
-test('the menu opens the Lore book; Q leaves an open entry for the list, and Q again closes the book', () => {
+test('the menu opens the Lore Book; Q leaves an open entry for the list, and Q again closes the book', () => {
   reset();
   key('q');
   assert.equal(flow.top(), 'menu');
@@ -1250,7 +1257,7 @@ test('the menu opens the Lore book; Q leaves an open entry for the list, and Q a
   assert.equal(flow.top(), 'menu');
 });
 
-test('the Lore book lists the closing card once level 10 is cleared', () => {
+test('the Lore Book lists the closing card once level 10 is cleared', () => {
   reset();
   key('q');
   click(byId(rootOf('menu-lore'), 'menu-lore'));

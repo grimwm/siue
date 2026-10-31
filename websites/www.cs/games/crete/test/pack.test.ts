@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { get, layoutOf, pack, unpack } from '../src/puzzle/pack.ts';
 import { initial } from '../src/puzzle/state.ts';
+import { parse } from '../src/puzzle/level.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
@@ -213,4 +214,19 @@ test('level 10 packs into a tenth of the reference key and set entry', () => {
   const mean = states.reduce((n, s) => n + stateKey(s).length * 2 + 48, 0) / states.length;
   const bytes = layoutOf(level).words * 4;
   assert.ok(bytes * 10 <= mean, `${bytes} bytes against ${mean.toFixed(0)}`);
+});
+
+test('the hearts field holds every count a try can reach: the starting hearts plus one a honey cake', () => {
+  const lv = parse('title: t\n\n########\n#Pxxx.E#\n########\n');
+  let s = initial(lv);
+  for (let i = 0; i < 3; i++) s = step(s, { kind: 'move', dir: 'right' }).state;
+  for (let i = 0; i < 3; i++) s = step(s, { kind: 'tool', tool: 'cake' }).state;
+  assert.equal(s.hearts, 6);
+  assert.equal(layoutOf(lv).heartBits, 3, '3 + 3 cakes = 6 fits in 3 bits');
+  const l = layoutOf(lv);
+  const words = new Uint32Array(l.words);
+  pack(s, l, words, 0);
+  const back = unpack(words, 0, l, lv, s.moves);
+  assert.equal(back.hearts, 6);
+  assert.equal(stateKey(back), stateKey(s));
 });

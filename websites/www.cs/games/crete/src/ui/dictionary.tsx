@@ -1,4 +1,4 @@
-// The Island of Crete: the Dictionary, opened from the menu beside the Lore book. Two tabs: Backpack, what Theseus
+// The Island of Crete: the Dictionary, opened from the menu beside the Lore Book. Two tabs: Backpack, what Theseus
 // holds now in this level with counts, and Entries, items then hazards and tiles, each with its picture (in the
 // board's look), lore and what it does. An item not yet picked up, and a fake or invisible wall not yet found, is a
 // silhouette named "???"; every other hazard and tile is always open. src/ui.ts builds the

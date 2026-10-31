@@ -1,7 +1,7 @@
 // The modern look's camera maths: easing, clamping, panning, zooming, yaw choice and view height.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ZOOM_MIN, clampView, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, wholeZoom, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
+import { WALL_H, ZOOM_MIN, clampView, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, wholeZoom, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
 import type { Cam } from '../src/modern/camera.ts';
 
 test('easeCam closes on the goal, reports motion, and settles exactly', () => {
@@ -20,6 +20,8 @@ test('easeCam snaps at once under reduced motion', () => {
 });
 
 const ASPECT = 1.6;
+/** The walls' room on screen at `pitch` (camera.ts). */
+const walls = (pitch: number) => 2 * WALL_H * Math.cos((pitch * Math.PI) / 180);
 /** A view 7.5 rows tall. */
 const V = 7.5;
 const gap = (a: number, b: number, eps = 1e-9): void => assert.ok(Math.abs(a - b) < eps, `${a} is not ${b}`);
@@ -117,12 +119,12 @@ test('footprint grows and shrinks with the zoom', () => {
 });
 
 test('zoomLimits: in to five rows, out to the whole level turned any way, however big', () => {
-  assert.deepEqual(zoomLimits(1.6, 2, 2, 45), { min: ZOOM_MIN, max: ZOOM_MIN }, 'a tiny level stops at five rows');
+  assert.deepEqual(zoomLimits(1.6, 1, 1, 45), { min: ZOOM_MIN, max: ZOOM_MIN }, 'a tiny level stops at five rows');
   const big = zoomLimits(1.6, 60, 60, 45);
-  assert.ok(near(big.max, Math.hypot(62, 62) * Math.SQRT1_2), 'a huge level fits too');
+  assert.ok(near(big.max, Math.hypot(62, 62) * Math.SQRT1_2 + walls(45)), 'a huge level fits too');
   const mid = zoomLimits(1.6, 20, 12, 45);
   const d = Math.hypot(22, 14);
-  assert.ok(near(mid.max, d * Math.SQRT1_2), 'a middling level fits its diagonal with a cell round it, foreshortened');
+  assert.ok(near(mid.max, d * Math.SQRT1_2 + walls(45)), 'a middling level fits its diagonal with a cell round it, foreshortened');
   assert.ok(near(zoomLimits(0.46, 20, 12, 45).max, d / 0.46), 'a phone in portrait fits its width');
   assert.equal(clampZoom(2, mid), ZOOM_MIN);
   assert.equal(clampZoom(99, mid), mid.max);
@@ -132,7 +134,7 @@ test('zoomLimits: in to five rows, out to the whole level turned any way, howeve
 test('wholeZoom shows the whole level and a cell round it, centred, within the zoom limits', () => {
   // Top-down, square to the board: level 1 (6 × 5) on a wide screen is as tall as its rows and margin, foreshortened.
   const top = wholeZoom(1.6, 6, 5, 75, 0);
-  assert.ok(near(top, Math.max(ZOOM_MIN, 7 * Math.sin((75 * Math.PI) / 180), 8 / 1.6)));
+  assert.ok(near(top, Math.max(ZOOM_MIN, 7 * Math.sin((75 * Math.PI) / 180) + walls(75), 8 / 1.6)));
   // A phone in portrait fits the width: 8 columns and the margin across 0.46 of the height.
   assert.ok(near(wholeZoom(0.46, 6, 5, 75, 0), 8 / 0.46));
   for (const [aspect, cols, rows, pitch, yaw] of [[1.6, 21, 13, 45, 15], [0.46, 40, 30, 75, 0], [1, 9, 6, 45, 105]] as const) {
@@ -148,6 +150,8 @@ test('wholeZoom shows the whole level and a cell round it, centred, within the z
       const across = x * Math.cos(y) - zz * Math.sin(y), deep = -x * Math.sin(y) - zz * Math.cos(y);
       return Math.abs(across) <= (z * aspect) / 2 + 1e-9 && Math.abs(deep) <= z / 2 / Math.sin((pitch * Math.PI) / 180) + 1e-9;
     };
+    // The far wall's top, a wall's height above the far edge, shows too.
+    assert.ok(z / 2 >= ((cols + 2) * Math.abs(Math.sin((yaw * Math.PI) / 180)) + (rows + 2) * Math.abs(Math.cos((yaw * Math.PI) / 180))) * Math.sin((pitch * Math.PI) / 180) / 2 + WALL_H * Math.cos((pitch * Math.PI) / 180) - 1e-9, 'wall tops fit');
     for (const [x, zz] of [[-cols / 2 - 1, -rows / 2 - 1], [cols / 2 + 1, -rows / 2 - 1], [cols / 2 + 1, rows / 2 + 1], [-cols / 2 - 1, rows / 2 + 1]] as const) {
       assert.ok(inside(x, zz), `${cols}×${rows} corner ${x},${zz}`);
     }

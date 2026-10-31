@@ -78,14 +78,19 @@ export function nearestYaw(target: number, current: number): number {
 
 /** The closest view: about five rows. */
 export const ZOOM_MIN = 5;
+/** A wall's height, in cells. */
+export const WALL_H = 1.25;
+/** The room the walls need on screen at `pitch`, above the far edge and so, the view being centred, below the near
+ *  one too: a wall's height, foreshortened by the tilt, at each. */
+const wallClearance = (pitch: number): number => 2 * WALL_H * Math.cos((pitch * Math.PI) / 180);
 
 export interface ZoomLimits {
   min: number;
   max: number;
 }
 
-/** The whole-level view: the view's height in ground rows that shows all of a `cols` × `rows` level and a cell's
- *  margin round it, as the camera is turned (`yaw`) and tipped (`pitch`), on a screen `aspect` wide to high. It is
+/** The whole-level view: the view's height in ground rows that shows all of a `cols` × `rows` level, its walls' tops
+ *  and a cell's margin round it, as the camera is turned (`yaw`) and tipped (`pitch`), on a screen `aspect` wide to high. It is
  *  the view every level opens at, and the one Reset returns to. */
 export function wholeZoom(aspect: number, cols: number, rows: number, pitch: number, yaw: number): number {
   const y = (yaw * Math.PI) / 180;
@@ -93,14 +98,14 @@ export function wholeZoom(aspect: number, cols: number, rows: number, pitch: num
   const w = cols + 2, h = rows + 2;
   const across = w * cs + h * sn;
   const deep = (w * sn + h * cs) * sinPitch(pitch);
-  return Math.max(ZOOM_MIN, deep, across / aspect);
+  return Math.max(ZOOM_MIN, deep + wallClearance(pitch), across / aspect);
 }
 
 /** How far the view may zoom on a `cols` × `rows` level at screen `aspect` and camera `pitch`: in to about five
  *  rows, out until the whole level and a cell's margin fit whichever way the view is turned, however big it is. */
 export function zoomLimits(aspect: number, cols: number, rows: number, pitch: number): ZoomLimits {
   const d = Math.hypot(cols + 2, rows + 2);
-  return { min: ZOOM_MIN, max: Math.max(ZOOM_MIN, d * sinPitch(pitch), d / aspect) };
+  return { min: ZOOM_MIN, max: Math.max(ZOOM_MIN, d * sinPitch(pitch) + wallClearance(pitch), d / aspect) };
 }
 
 export const clampZoom = (z: number, lim: ZoomLimits): number => Math.max(lim.min, Math.min(lim.max, z));

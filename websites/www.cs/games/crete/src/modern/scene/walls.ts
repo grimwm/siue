@@ -9,10 +9,11 @@ import type { Camera, MeshStandardMaterial } from 'three';
 import { easeOpacity, ghostTarget } from '../ghost.ts';
 import type { WallMode } from '../../settings.ts';
 import type { TerrainModel } from '../model-names.ts';
+import { WALL_H } from '../camera.ts';
 import { FY, cellX, cellZ } from './floor.ts';
 import type { Kit } from './textures.ts';
 
-export const WALL_H = 1.25;
+export { WALL_H };
 export const LOW_H = 0.38;
 /** How bright an outside wall's top is beside a wall that faces the rooms. */
 const DEEP_TOP = 0.16;

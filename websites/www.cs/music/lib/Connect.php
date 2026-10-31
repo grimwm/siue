@@ -14,6 +14,8 @@ final class Connect
     public const PLACEHOLDER = 'PASTE-YOUR-AI-KEY-HERE';
     public const UV_INSTALL = 'https://docs.astral.sh/uv/getting-started/installation/';
     public const SERVER = 'siue-music';
+    /** An app opened from the dock or the Start menu may not find uv on its own. */
+    private const FULL_PATH = 'If it says uvx is not found, put uvx\'s full path in "command" (where uv\'s installer put it, such as ~/.local/bin/uvx).';
 
     /** @return array{version: string, file: string, sha256: string}|null release.json, or null when it is missing or malformed */
     public static function release(?string $path = null): ?array
@@ -46,14 +48,15 @@ final class Connect
         return [
             ['app' => 'Claude Code', 'how' => 'Run this once, in any folder.',
                 'text' => 'claude mcp add --scope user ' . self::SERVER . ' ' . $pairs('--env') . ' -- ' . implode(' ', $run)],
-            ['app' => 'Claude Desktop', 'how' => 'Settings, Developer, Edit Config: add this to claude_desktop_config.json (inside "mcpServers" if it has one), then restart the app.',
+            ['app' => 'Claude Desktop', 'how' => 'Settings, Developer, Edit Config: add this to claude_desktop_config.json (inside "mcpServers" if it has one), then restart the app. ' . self::FULL_PATH,
                 'text' => $block],
-            ['app' => 'Cursor', 'how' => 'Add this to ~/.cursor/mcp.json (inside "mcpServers" if it has one).',
+            ['app' => 'Cursor', 'how' => 'Add this to ~/.cursor/mcp.json (inside "mcpServers" if it has one). ' . self::FULL_PATH,
                 'text' => $block],
             ['app' => 'Codex', 'how' => 'Run this once.',
                 'text' => 'codex mcp add ' . self::SERVER . ' ' . $pairs('--env') . ' -- ' . implode(' ', $run)],
             ['app' => 'Gemini CLI', 'how' => 'Run this once.',
-                'text' => 'gemini mcp add --scope user ' . $pairs('-e') . ' -- ' . self::SERVER . ' ' . implode(' ', $run)],
+                // gemini's -e takes every word after it, so the name and the command come first and its arguments after --.
+                'text' => 'gemini mcp add --scope user ' . self::SERVER . ' uvx ' . $pairs('-e') . ' -- ' . implode(' ', array_slice($run, 1))],
         ];
     }
 }

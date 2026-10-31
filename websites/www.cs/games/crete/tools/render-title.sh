@@ -29,9 +29,9 @@ for frame in wide tall; do
   blend=()
   [ "$frame" = wide ] && blend=(--blend "$here/fx/blender/title.blend")
   "$blender" -b -P "$here/fx/blender/title_card.py" -- \
-    --frame "$frame" --out "$tmp/$frame.png" --samples "$samples" "${blend[@]}" >"$tmp/$frame.log" 2>&1 \
+    --frame "$frame" --out "$tmp/$frame.png" --samples "$samples" "${blend[@]+"${blend[@]}"}" >"$tmp/$frame.log" 2>&1 \
     || { tail -20 "$tmp/$frame.log" >&2; exit 1; }
   grep -q '^RENDERED' "$tmp/$frame.log" || { tail -20 "$tmp/$frame.log" >&2; exit 1; }
   magick "$tmp/$frame.png" -strip -quality "$quality" -define webp:method=6 "$here/fx/title/title-$frame.webp"
-  printf 'render-title: wrote fx/title/title-%s.webp (%s bytes)\n' "$frame" "$(stat -c %s "$here/fx/title/title-$frame.webp")"
+  printf 'render-title: wrote fx/title/title-%s.webp (%s bytes)\n' "$frame" "$(wc -c <"$here/fx/title/title-$frame.webp" | tr -d ' ')"
 done

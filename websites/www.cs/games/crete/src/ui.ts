@@ -5,11 +5,16 @@
  * (src/tsconfig.dom.json).
  */
 import { isBackKey, typesText } from "../../_kit/keys.ts";
+import type { Timers } from "../../_kit/ports.ts";
 import type { Board } from "./board.ts";
 import type { Editor } from "./editor/editor.ts";
 import { boardRows } from "./board-plan.ts";
 import type { Atlas } from "./board-plan.ts";
-import type { Game, SfxName, Tone } from "./game.ts";
+import type { Game, SfxName, Stop, Tone } from "./game.ts";
+import { ENTRIES, ENTRY, OBJECT_ENTRY, backpack } from "./dictionary.ts";
+import type { Entry } from "./dictionary.ts";
+import type { Met } from "./met.ts";
+import { BANNER_MS, isFirstTake, meetings, pickupNotices } from "./notices.ts";
 import { KEYS, actionFor, isMove, itemFor } from "./keys.ts";
 import type { MoveAction } from "./keys.ts";
 import { createLayers } from "./layers.ts";
@@ -19,7 +24,7 @@ import type { Progress } from "./progress.ts";
 import { pagesTaken } from "./puzzle/state.ts";
 import type { State } from "./puzzle/state.ts";
 import { TOOLS } from "./puzzle/tiles.ts";
-import type { Tool } from "./puzzle/tiles.ts";
+import type { ObjectKind, Tool } from "./puzzle/tiles.ts";
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter, placeWords } from "./campaign/chapters.ts";
 import { FEWEST, againstFewest } from "./campaign/fewest.ts";
 import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
@@ -34,6 +39,10 @@ import { renderChapterCard } from "./ui/chapter.tsx";
 import { renderEndCard } from "./ui/end.tsx";
 import type { EndView } from "./ui/end.tsx";
 import { renderLore } from "./ui/lore.tsx";
+import { renderMeetCard } from "./ui/meet.tsx";
+import { renderBanner } from "./ui/banner.tsx";
+import { DICTIONARY_TABS, renderDictionary } from "./ui/dictionary.tsx";
+import type { DictionaryTab } from "./ui/dictionary.tsx";
 import type { LoreEntry } from "./ui/lore.tsx";
 import { renderMenu } from "./ui/menu.tsx";
 import type { LogLine } from "./ui/menu.tsx";
@@ -64,6 +73,10 @@ export interface UiDeps {
   sfx?(name: SfxName): void;
   /** Told the cards after every change to them (the modern board hides behind the editor). */
   cards?(stack: LayerName[]): void;
+  /** The Dictionary entries met in this browser. Without it no first card or banner shows and every entry is locked. */
+  met?: Met;
+  /** The banner's timer; the window's when not given. */
+  timers?: Pick<Timers, "setTimeout" | "clearTimeout">;
 }
 
 /** What a key press or click asks of the page. */
@@ -127,6 +140,8 @@ export interface Ui {
   setMoveDir(fn: (dir: MoveAction) => MoveAction): void;
   /** True while a card other than the start card is open. */
   cardsOpen(): boolean;
+  /** Whether taking `what` now is a first, whose card the page shows (the game stops the turn's animation there). */
+  firstTake(what: ObjectKind): boolean;
   /** Closes the start card, as a move does. */
   closeStart(): void;
   /** A finger swiped the board (either look): Theseus moves that way as the screen shows it, unless a card is up. */
@@ -174,7 +189,8 @@ const ZOOM_OUT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 1
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
 export function createUi(deps: UiDeps): Ui {
-  const { atlas, board, progress, pages, sfx } = deps;
+  const { atlas, board, progress, pages, sfx, met } = deps;
+  const timers = deps.timers ?? { setTimeout: (fn: () => void, ms: number) => window.setTimeout(fn, ms), clearTimeout: (id: number) => window.clearTimeout(id) };
 
   /** The level in play when it is from outside the campaign, else null. */
   const outsideOf = (g: Game | null): OutsideLevel | null => (g && g.trial >= 0 ? deps.levels?.outside?.(g.trial) ?? null : null);
@@ -249,6 +265,23 @@ export function createUi(deps: UiDeps): Ui {
   let pending: string[] = [];
   /** The editor's layer is in the stack and the editor has been opened for it. */
   let editorShown = false;
+  /** The first card showing, by entry id, and the first cards waiting behind it. */
+  let meetShown: string | null = null;
+  let meetQueue: string[] = [];
+  /** The card showing was opened where the turn's animation stopped, which goes on once the card closes. */
+  let meetAtStop = false;
+  /** The animation stop whose card was opened, so a redraw does not open it again. */
+  let stopNoticed: Stop | null = null;
+  /** The state whose pickups and sights were last noticed. */
+  let noticedNow: State | null = null;
+  /** Entries whose first card showed at a stop of the turn animating: its landing gives them no banner. */
+  let shownThisTurn = new Set<string>();
+  /** The banner's entries (none while it is away), how many banners have shown, and the timer that takes it away. */
+  let bannerEntries: Entry[] = [];
+  let bannerSeq = 0;
+  let bannerTimer = 0;
+  /** The Dictionary's tab. */
+  let dictTab: DictionaryTab = "backpack";
   /** The modern board shows instead of the classic canvas. */
   let modernBoard = false;
   /** A move on the screen as a move on the grid. */
@@ -266,6 +299,15 @@ export function createUi(deps: UiDeps): Ui {
       loreShown = null;
       pending = [];
       (controls?.game ?? game)?.resume();
+    }
+    // A first card closed some other way (Quit, a level opened) takes the cards waiting behind it too.
+    if (meetShown !== null && !layers.has("meet")) {
+      meetShown = null;
+      meetQueue = [];
+      if (meetAtStop) {
+        meetAtStop = false;
+        (controls?.game ?? game)?.resume();
+      }
     }
     drawLayers();
     deps.cards?.(layers.stack());
@@ -489,6 +531,21 @@ export function createUi(deps: UiDeps): Ui {
       },
     });
     renderStoryCard($("story-root"), { open: layers.isOpen("story"), onClose: () => layers.close("story") });
+    renderMeetCard($("meet-root"), { open: layers.isOpen("meet"), entry: meetShown === null ? null : ENTRY[meetShown] ?? null, atlas, onClose: closeMeet });
+    renderDictionary($("dict-root"), {
+      open: layers.isOpen("dictionary"),
+      tab: dictTab,
+      inLevel: !!g?.run,
+      held: backpack(g?.run?.now ?? null),
+      rows: ENTRIES.map((entry) => ({ entry, met: met?.has(entry.id) ?? false })),
+      atlas,
+      onTab: (t) => {
+        dictTab = t;
+        drawLayers();
+      },
+      onClose: () => layers.close("dictionary"),
+    });
+    renderBanner($("banner-root"), { entries: bannerEntries, seq: bannerSeq, atlas });
     renderMenu($("menu-root"), {
       open: layers.isOpen("menu"),
       muted,
@@ -525,6 +582,7 @@ export function createUi(deps: UiDeps): Ui {
         loreFromPickup = false;
         layers.open("lore");
       },
+      onDictionary: () => showDictionary(),
       onQuit: () => {
         controls?.wake();
         controls?.quit();
@@ -733,8 +791,90 @@ export function createUi(deps: UiDeps): Ui {
       // A chapter's last level won: its closing card opens over the end card, which waits under it.
       if (at && end.won && at.within === at.chapter.levelIds.length - 1) showChapter(at.chapter.n, true);
     }
+    notice(g);
     announcePages(g);
     drawLayers();
+  }
+
+  /** First cards show, and banners, where the player is not trying out a level from the editor. */
+  const cardsOn = (g: Game | null): boolean => !!met && outsideOf(g)?.kind !== "try";
+
+  function firstTake(what: ObjectKind): boolean {
+    return !!met && cardsOn(controls?.game ?? game) && isFirstTake(what, met, true);
+  }
+
+  /** What the player meets: where the turn's animation stopped at a first pickup, its card; once a turn has landed
+   *  (or a level opened), a card for each other first pickup, one banner for the rest, and a card for each hazard or
+   *  special tile in sight for the first time (none once the try is over). */
+  function notice(g: Game): void {
+    if (!met) return;
+    const run = g.run!;
+    const on = cardsOn(g);
+    const stop = g.anim?.paused ?? null;
+    if (stop && stop.kind === "item" && stop !== stopNoticed) {
+      stopNoticed = stop;
+      const id = OBJECT_ENTRY[stop.id as ObjectKind];
+      shownThisTurn.add(id);
+      meetQueue = [id, ...meetQueue.filter((x) => x !== id)];
+      meetAtStop = true;
+      showNextMeet();
+      return;
+    }
+    if (g.anim || run.now === noticedNow) return;
+    noticedNow = run.now;
+    const plan = pickupNotices(g.took, met, on, shownThisTurn);
+    shownThisTurn = new Set();
+    const sights = run.now.outcome === "playing" ? meetings(run.now, met, on) : [];
+    for (const id of [...plan.cards, ...sights]) if (id !== meetShown && !meetQueue.includes(id)) meetQueue.push(id);
+    showBanner(plan.banners);
+    showNextMeet();
+  }
+
+  /** Opens the next first card waiting, unless one is showing or a story page taken is being read. */
+  function showNextMeet(): void {
+    if (meetShown !== null || loreFromPickup) return;
+    const id = meetQueue.shift();
+    if (id === undefined) return;
+    met?.add(id);
+    meetShown = id;
+    layers.open("meet");
+  }
+
+  /** Closes the first card: the next one waiting opens in its place; then a story page taken waits its turn, and a
+   *  turn's animation stopped at the card goes on. */
+  function closeMeet(): void {
+    const next = meetQueue.shift();
+    if (next !== undefined) {
+      met?.add(next);
+      meetShown = next;
+      drawLayers();
+      return;
+    }
+    meetShown = null;
+    layers.close("meet");
+    if (pending.length > 0) showNextPickup();
+    if (meetAtStop) {
+      meetAtStop = false;
+      (controls?.game ?? game)?.resume();
+    }
+  }
+
+  /** The banner, naming `ids`, until BANNER_MS have passed; a new one replaces it. */
+  function showBanner(ids: readonly string[]): void {
+    if (ids.length === 0) return;
+    bannerEntries = ids.map((id) => ENTRY[id]!);
+    bannerSeq++;
+    timers.clearTimeout(bannerTimer);
+    bannerTimer = timers.setTimeout(() => {
+      bannerEntries = [];
+      drawLayers();
+    }, BANNER_MS);
+  }
+
+  /** The Dictionary, on Backpack while a level is open and on Entries otherwise. */
+  function showDictionary(): void {
+    dictTab = (controls?.game ?? game)?.run ? "backpack" : "entries";
+    layers.open("dictionary");
   }
 
   /** Whether the frame is a phone's, as the phone layouts in game.css read it: portrait at most 760 px wide, or
@@ -805,7 +945,7 @@ export function createUi(deps: UiDeps): Ui {
     const fresh = taken.filter((id) => !announced.includes(id));
     if (fresh.length === 0) return;
     if (g.anim) {
-      const at = g.anim.paused?.id;
+      const at = g.anim.paused?.kind === "page" ? g.anim.paused.id : undefined;
       if (at === undefined || !fresh.includes(at)) return;
       announced.push(at);
       pending.push(at);
@@ -813,7 +953,7 @@ export function createUi(deps: UiDeps): Ui {
       announced = taken;
       pending.push(...fresh);
     }
-    if (!loreFromPickup) showNextPickup();
+    if (!loreFromPickup && meetShown === null) showNextPickup();
   }
 
   /** Opens the next page waiting to be shown on taking it. */
@@ -837,6 +977,7 @@ export function createUi(deps: UiDeps): Ui {
     loreShown = null;
     layers.close("lore");
     (controls?.game ?? game)?.resume();
+    showNextMeet();
   }
 
   function showTitle(hint: boolean, note = ""): void {
@@ -998,7 +1139,8 @@ export function createUi(deps: UiDeps): Ui {
           drawLayers();
         } else if (layers.isOpen("lore") && loreFromPickup) {
           closePickup();
-        } else if (layers.isOpen("title")) layers.open("menu");
+        } else if (layers.isOpen("meet")) closeMeet();
+        else if (layers.isOpen("title")) layers.open("menu");
         else if (layers.isOpen("shared")) {
           if (sharedFromMenu) {
             layers.clear();
@@ -1046,6 +1188,11 @@ export function createUi(deps: UiDeps): Ui {
         if (!ev.repeat) c.toggleFullscreen();
         return;
       }
+      if (action === "dictionary" && layers.isOpen("menu")) {
+        ev.preventDefault();
+        if (!ev.repeat) showDictionary();
+        return;
+      }
       if (action === "lore" && layers.isOpen("menu")) {
         ev.preventDefault();
         if (!ev.repeat) {
@@ -1062,6 +1209,23 @@ export function createUi(deps: UiDeps): Ui {
       const named = (ev.target as HTMLElement | null)?.id;
       const focused = buttons.find((b) => !!named && b.id === named) ?? buttons.find((b) => b === document.activeElement) ?? null;
       const stepKey = action === "up" || k === "k" ? -1 : action === "down" || k === "j" ? 1 : 0;
+      // The Dictionary: up and down scroll its list, left and right switch its tabs.
+      if (top === "dictionary" && stepKey !== 0) {
+        ev.preventDefault();
+        const panel = document.getElementById("dict-veil")?.querySelector(".card") as HTMLElement | null | undefined;
+        panel?.scrollBy?.({ top: stepKey * 64 });
+        return;
+      }
+      if (top === "dictionary" && (action === "left" || action === "right")) {
+        ev.preventDefault();
+        const to = DICTIONARY_TABS[action === "left" ? 0 : 1]!;
+        if (to !== dictTab) {
+          dictTab = to;
+          drawLayers();
+          document.getElementById(`dict-tab-${to}`)?.focus();
+        }
+        return;
+      }
       if (stepKey !== 0 && buttons.length > 0 && top !== "levels") {
         ev.preventDefault();
         const to = buttons[Math.min(buttons.length - 1, Math.max(0, buttons.indexOf(focused as HTMLElement) + stepKey))]!;
@@ -1141,6 +1305,12 @@ export function createUi(deps: UiDeps): Ui {
       if (layers.isOpen("end") && !end.won && (action === "undo" || action === "restart")) {
         ev.preventDefault();
         c.game.press(action);
+        return;
+      }
+      // A first card closes on Enter or Space, as a page opened on taking it does.
+      if (layers.isOpen("meet") && action === "begin" && onDefault(focused?.id, "meet-", "meet-go", "meet-close")) {
+        ev.preventDefault();
+        closeMeet();
         return;
       }
       // A Lore entry opened by taking its page closes on Enter or Space, and the game plays on.
@@ -1281,6 +1451,7 @@ export function createUi(deps: UiDeps): Ui {
       moveDir = fn;
     },
     cardsOpen: () => layers.stack().some((n) => n !== "start"),
+    firstTake,
     closeStart: () => layers.close("start"),
     swipe,
   };

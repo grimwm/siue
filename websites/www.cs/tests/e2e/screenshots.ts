@@ -132,6 +132,8 @@ const SHOTS: Record<string, Shot> = {
       // Chapter 1's level 9 from the levels list (no title or chapter card),
       // the Minotaur, relics and HUD on the board.
       await page.emulateMedia({ reducedMotion: 'reduce' });
+      // Every Dictionary entry met, so no first card stops the level.
+      await page.addInitScript(() => localStorage.setItem('crete-met', '["*"]'));
       await page.goto('games/crete/');
       await page.click('#title-play');
       await page.click('#pick-enter');

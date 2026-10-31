@@ -4,6 +4,11 @@
 // level 10's win opens Chapter 1's closing card, whose Continue goes on to Chapter 2.
 import { test, expect } from '@playwright/test';
 
+/** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
+const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
+
+test.beforeEach(async ({ context }) => { await context.addInitScript(allMet); });
+
 const PAGE = 'games/crete/';
 /* These specs walk the rules, not the look: the classic board keeps the page quick on a software-GL runner. */
 const pinClassic = (): void => localStorage.setItem('crete-look', 'classic');

@@ -4,8 +4,8 @@
  * from it). The level editor is a layer too: src/ui.ts hands it every key
  * while it is the top one. A shared level's card is one as well (src/ui.ts
  * takes its Q to the title card, or back to the menu when the menu opened
- * it). DOM-free. */
-export type LayerName = "title" | "look" | "menu" | "story" | "chapter" | "lore" | "levels" | "start" | "end" | "editor" | "shared";
+ * it). The first card (src/ui/meet.tsx) and the Dictionary are cards too. DOM-free. */
+export type LayerName = "title" | "look" | "menu" | "story" | "chapter" | "lore" | "dictionary" | "meet" | "levels" | "start" | "end" | "editor" | "shared";
 /** What a Q press did: closed the top card, opened the menu, or left the title card be. */
 export type BackResult = "closed" | "opened" | "kept";
 

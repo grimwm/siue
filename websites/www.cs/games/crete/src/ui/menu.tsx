@@ -1,7 +1,7 @@
 // The Island of Crete: the menu, in three sections under small headings. Sound and screen: switches for sound, music,
 // music in the background and full screen. Board: the two looks as pictures and, for the modern look, the view
 // (Angled or Top-down) and, while angled, the walls; then which edge of the strip the arrows stand at.
-// The story: the Lore book, the story log and how to play (folded). Then Back to the editor or Shared level (the
+// The story: the Lore book, the Dictionary, the story log and how to play (folded). Then Back to the editor or Shared level (the
 // shared level's card; each only when the page gives it), and Quit on its own. On a wide screen the sections stand
 // in two columns.
 // Q (the kit's back key) is handled by src/ui.ts, which owns every card, so the dialog is given no onDismiss;
@@ -50,6 +50,7 @@ export interface MenuProps {
   onPad: (side: PadSide) => void;
   onMinimap: () => void;
   onLore: () => void;
+  onDictionary: () => void;
   onQuit: () => void;
   onClose: () => void;
   /** The kicker: the level's place ("Chapter 1 · Level 3") or kind ("Shared level"); the game's name when not given. */
@@ -145,6 +146,11 @@ export function Menu(p: MenuProps) {
               <div data-section="lore">
                 <Button id="menu-lore" class="menu-row" keyLabel={KEYS.lore.label} onClick={p.onLore}>
                   <span class="menu-row-name">📖 Lore book</span><span class="menu-row-go" aria-hidden="true">›</span>
+                </Button>
+              </div>
+              <div data-section="dictionary">
+                <Button id="menu-dictionary" class="menu-row" keyLabel={KEYS.dictionary.label} onClick={p.onDictionary}>
+                  <span class="menu-row-name">🏺 Dictionary<small>What you carry and what you have met</small></span><span class="menu-row-go" aria-hidden="true">›</span>
                 </Button>
               </div>
               <div class="menu-fold" data-section="log">

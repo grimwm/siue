@@ -3,6 +3,11 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
+/** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
+const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
+
+test.beforeEach(async ({ context }) => { await context.addInitScript(allMet); });
+
 const PAGE = 'games/crete/';
 const KEY: Record<string, string> = { mirror: 'z', cake: 'x', cow: 'c', up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', wait: '.' };
 
@@ -133,6 +138,7 @@ test('shares a level and wins it on a phone', async ({ page, browser }) => {
   expect(name).toMatch(/^Level [A-Z2-9]{4} by WGR$/);
 
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
+  await phone.addInitScript(allMet);
   try {
     const p = await phone.newPage();
     p.on('pageerror', e => errors.push(e.message));

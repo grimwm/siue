@@ -81,8 +81,14 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
       " (or J and K) move between its buttons and Enter or Space presses the focused one; in the level list ",
       { strong: `${k("left")} ${k("right")}` }, " switch chapters. On the title card ",
       { strong: k("story") }, " opens the story, ", { strong: k("editor") }, " makes a level and ", { strong: k("menu") }, " opens the settings; in this menu ",
-      { strong: k("fullscreen") }, " toggles full screen and ", { strong: k("lore") }, " opens the Lore book. A story page you take opens in the Lore book at once; Enter, Space or ",
+      { strong: k("fullscreen") }, " toggles full screen, ", { strong: k("lore") }, " opens the Lore book and ", { strong: k("dictionary") },
+      " the Dictionary. A story page you take opens in the Lore book at once; Enter, Space or ",
       { strong: k("menu") }, " closes it and play goes on.",
+    ],
+    [
+      "The first time you pick up a kind of thing, or meet a hazard or a special tile, a card says what it is and what it does; Enter, Space or ",
+      { strong: k("menu") }, " closes it. After that a pickup shows a short banner. The ", { strong: "Dictionary" },
+      " in this menu lists what you carry now (", { strong: "Backpack" }, ") and everything you have met (", { strong: "Entries" }, ").",
     ],
     [
       { strong: "Music" }, " in this menu turns the music off, and ", { strong: "Music in the background" }, " whether it goes on while this tab is hidden; ",

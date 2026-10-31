@@ -243,7 +243,7 @@ function menuProps(over: Partial<MenuProps> = {}): MenuProps {
     open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', view: 'angled', pad: 'left', minimap: false,
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onView: noop, onPad: noop, onMinimap: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onView: noop, onPad: noop, onMinimap: noop, onLore: noop, onDictionary: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 
@@ -253,7 +253,7 @@ test('the menu holds sound and full screen, the story log, how to play and Quit,
   const veil = byId(root, 'menu-veil');
   assert.equal(veil.hidden, false);
   assert.equal(byId(root, 'menu-title').textContent, 'Menu');
-  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'look', 'view', 'walls', 'pad', 'lore', 'log', 'help', 'quit']);
+  assert.deepEqual(walk(veil).map(n => n.getAttribute('data-section')).filter(Boolean), ['audio', 'look', 'view', 'walls', 'pad', 'lore', 'dictionary', 'log', 'help', 'quit']);
   for (const gone of ['seed-form', 'seed-input', 'random-run', 'run-stats']) assert.equal(maybeById(root, gone), undefined, gone);
   assert.equal(walk(veil).some(n => n.className === 'menu-empty'), false, 'a log with lines says nothing of being empty');
   renderMenu(root, menuProps({ log: [] }));

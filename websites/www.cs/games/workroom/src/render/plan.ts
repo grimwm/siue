@@ -4,8 +4,17 @@ import type { Score } from '../score.ts';
 
 /** One sample of the shared library (music/library/library.json): its root key, path under the library and format. */
 export interface LibraryFile { pitch: number; file: string; rate: number; channels: number }
-/** `loop` is the sustained stretch in seconds that repeats so a note may outlast its sample; absent for a plucked or struck instrument. */
-export interface LibraryInstrument { files: LibraryFile[]; loop?: [number, number] }
+/** The composer's catalogue entry for an instrument (see catalogue.ts); a library.json from before the catalogue has none of it. */
+export interface CatalogueFields {
+  name?: string; category?: string; range?: [number, number] | null; expert?: [number, number] | null; home?: number | null;
+  clef?: string; written?: number; gm?: number; gm_name?: string; pieces?: [number, string][] | null; standin?: string;
+  standin_note?: string; attack?: number; release?: number;
+}
+/**
+ * `loop` is the sustained stretch in seconds that repeats so a note may outlast its sample; absent for a plucked or struck instrument.
+ * `pitched: false` (drums) plays each sample only on its own key.
+ */
+export interface LibraryInstrument extends CatalogueFields { files: LibraryFile[]; loop?: [number, number]; pitched?: false }
 export interface Library { version: 1; source: string; commit: string; licence: string; credit: string; instruments: Record<string, LibraryInstrument> }
 
 export interface Region { lo: number; hi: number; file: LibraryFile }
@@ -15,9 +24,13 @@ export interface Region { lo: number; hi: number; file: LibraryFile }
  */
 export interface Voice { lane: string; file: string; rate: number; at: number; dur: number; gain: number; attack: number; release: number; loop: [number, number] | null }
 
-/** Each sample covers the keys nearest its root: split halfway between neighbouring roots, the outer ones reaching 0 and 127. */
-export function regions(files: readonly LibraryFile[]): Region[] {
+/**
+ * Each sample covers the keys nearest its root: split halfway between neighbouring roots, the outer ones reaching 0 and 127.
+ * An unpitched instrument's sample covers its own key only and is never repitched.
+ */
+export function regions(files: readonly LibraryFile[], pitched = true): Region[] {
   const ordered = [...files].sort((a, b) => a.pitch - b.pitch);
+  if (!pitched) return ordered.map(file => ({ lo: file.pitch, hi: file.pitch, file }));
   return ordered.map((file, i) => ({
     lo: i === 0 ? 0 : Math.floor((ordered[i - 1]!.pitch + file.pitch) / 2) + 1,
     hi: i === ordered.length - 1 ? 127 : Math.floor((file.pitch + ordered[i + 1]!.pitch) / 2),
@@ -40,22 +53,26 @@ export const velocityGain = (velocity: number): number => 1 - AMP_VELTRACK * (1 
  */
 export const SFIZZ_LEVEL = 0.2654;
 
-/** One voice per note, in the score's note order. Throws on a lane without a sound or an instrument the library lacks. */
+/**
+ * One voice per note, in the score's note order; a drum note with no sample of its own makes none.
+ * Throws on a lane without a sound or an instrument the library lacks.
+ */
 export function voices(score: Score, lib: Library): Voice[] {
   const byLane = new Map(score.lanes.map(lane => {
     const sound = lane.sound;
     if (!sound) throw new Error(`lane ${lane.id} has no sound, so the score cannot be rendered`);
     const inst = lib.instruments[sound.instrument];
     if (!inst) throw new Error(`lane ${lane.id} uses instrument ${sound.instrument}, which the sample library does not have`);
-    return [lane.id, { sound, regions: regions(inst.files), loop: inst.loop ?? null }] as const;
+    return [lane.id, { sound, regions: regions(inst.files, inst.pitched !== false), loop: inst.loop ?? null }] as const;
   }));
-  return score.notes.map(n => {
+  return score.notes.flatMap(n => {
     const lane = byLane.get(n.lane);
     if (!lane) throw new Error(`a note names lane ${n.lane}, which the score does not have`);
-    const region = lane.regions.find(r => n.pitch >= r.lo && n.pitch <= r.hi)!;
-    return {
+    const region = lane.regions.find(r => n.pitch >= r.lo && n.pitch <= r.hi);
+    if (!region) return [];
+    return [{
       lane: n.lane, file: region.file.file, rate: 2 ** ((n.pitch - region.file.pitch) / 12), at: n.start, dur: n.length,
       gain: SFIZZ_LEVEL * 10 ** (lane.sound.gain_db / 20) * velocityGain(n.velocity), attack: lane.sound.attack, release: lane.sound.release, loop: lane.loop,
-    };
+    }];
   });
 }

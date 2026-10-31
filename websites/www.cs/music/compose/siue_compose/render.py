@@ -11,7 +11,7 @@ from .checks import repetition, sharpness
 from .cut import LOUDNESS, Cut, RenderError, lane_gains
 from .export import midi_files, musicxml, score_json
 from .piece import Piece
-from .sfz import write_sfz
+from .sfz import instrument, write_sfz
 
 RATE = 48000
 TAIL = 6.0  # seconds of reverb and release rendered past the end, then folded onto the start
@@ -124,7 +124,7 @@ def render(piece: Piece, draft: int, out: Path, manifest: dict, samples: Path, m
             continue
         midi = out / "midi" / f"{lane.id}.mid"
         midi_files(piece)[lane.id].save(midi)
-        sfz = write_sfz(lane, manifest["instruments"][lane.instrument], samples, work)
+        sfz = write_sfz(lane, instrument(manifest, lane.instrument), samples, work)
         stem = out / "stems" / f"{lane.id}.wav"
         _run("sfizz_render", "--sfz", str(sfz), "--midi", str(midi), "--wav", str(stem), "-s", str(RATE), "-q", "3")
         stems.append(_stem(stem, length, 10 ** (lane.gain_db / 20)))

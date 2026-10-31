@@ -90,3 +90,26 @@ test('a lane without a sound or with an instrument the library lacks is refused'
   t.lanes[0]!.sound!.instrument = 'kazoo';
   assert.throws(() => voices(t, LIBRARY), /kazoo/);
 });
+
+const KIT: Library = {
+  ...LIBRARY,
+  instruments: { kit: { pitched: false, files: [{ pitch: 36, file: 'kit/36.flac', rate: 44100, channels: 2 }, { pitch: 38, file: 'kit/38.flac', rate: 44100, channels: 2 }] } },
+};
+const kitScore = (pitches: number[]): Score => ({
+  ...harpScore(pitches),
+  lanes: [{ id: 'harp', name: 'Drums', family: 'percussion', icon: 'percussion', color: '#aabbcc', sound: { instrument: 'kit', gain_db: 0, attack: 0.005, release: 0.4 } }],
+});
+
+test('unpitched regions are one key each', () => {
+  assert.deepEqual(regions(KIT.instruments['kit']!.files, false).map(r => [r.lo, r.hi, r.file.pitch]), [[36, 36, 36], [38, 38, 38]]);
+});
+
+test('an unpitched note with no sample makes no voice', () => {
+  const vs = voices(kitScore([36, 37, 38]), KIT);
+  assert.deepEqual(vs.map(v => [v.file, v.rate]), [['kit/36.flac', 1], ['kit/38.flac', 1]]);
+});
+
+test('pitched regions unchanged', () => {
+  const files = LIBRARY.instruments['cello']!.files;
+  assert.deepEqual(regions(files, true), regions(files));
+});

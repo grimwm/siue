@@ -5,9 +5,20 @@ from pathlib import Path
 from .piece import Lane
 
 
-def regions(files: list[dict]) -> list[tuple[int, int, dict]]:
-    """(lokey, hikey, file) per sample, split halfway between neighbouring roots and reaching 0 and 127."""
+def instrument(manifest: dict, name: str) -> dict:
+    """samples.json's entry for an instrument; a stand-in plays its target's samples and loop."""
+    inst = manifest["instruments"][name]
+    if "standin" not in inst:
+        return inst
+    target = manifest["instruments"][inst["standin"]]
+    return {"files": target["files"], **({"loop": target["loop"]} if "loop" in target else {})}
+
+
+def regions(files: list[dict], pitched: bool = True) -> list[tuple[int, int, dict]]:
+    """(lokey, hikey, file) per sample, split halfway between neighbouring roots and reaching 0 and 127; an unpitched sample keeps its own key."""
     ordered = sorted(files, key=lambda f: f["pitch"])
+    if not pitched:
+        return [(f["pitch"], f["pitch"], f) for f in ordered]
     out = []
     for i, f in enumerate(ordered):
         lo = 0 if i == 0 else (ordered[i - 1]["pitch"] + f["pitch"]) // 2 + 1
@@ -26,7 +37,7 @@ def _loop(path: Path, loop: list[float]) -> str:
 def write_sfz(lane: Lane, instrument: dict, samples: Path, folder: Path) -> Path:
     """The lane's instrument (an entry of samples.json's instruments) as an SFZ file whose sample paths are under `samples`."""
     lines = [f"<global> ampeg_attack={lane.attack} ampeg_release={lane.release} amp_veltrack=80"]
-    for lo, hi, f in regions(instrument["files"]):
+    for lo, hi, f in regions(instrument["files"], instrument.get("pitched") is not False):
         path = Path(samples) / f["path"]
         loop = _loop(path, instrument["loop"]) if "loop" in instrument else " loop_mode=no_loop"
         lines.append(f'<region> sample={path} lokey={lo} hikey={hi} pitch_keycenter={f["pitch"]}{loop}')

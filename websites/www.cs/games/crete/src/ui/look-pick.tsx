@@ -1,6 +1,6 @@
 // The Island of Crete: the new-game card, between the title card's Play and the chapter card. It asks how the
 // Labyrinth should look, Modern or Classic, as two pictures; a pick takes effect at once and is remembered, and the
-// one drawn now is already picked. src/ui.ts owns the keys (Enter is Enter the halls, left and right pick, Q is
+// one drawn now is already picked. src/ui.ts owns the keys (Enter is Enter the Halls, left and right pick, Q is
 // Back), so the dialog is given no onDismiss.
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
@@ -19,10 +19,10 @@ export interface LookPickProps {
 
 export function LookPick(p: LookPickProps) {
   return (
-    <Dialog open={p.open} id="look-veil" veilClass="veil" panelClass="card look-pick" kicker="New game" kickerClass="kicker"
+    <Dialog open={p.open} id="look-veil" veilClass="veil" panelClass="card look-pick" kicker="New Game" kickerClass="kicker"
       titleId="look-title" title="How should the Labyrinth look?" focusId="pick-enter">
       <LookTiles look={p.look} idPrefix="pick" label="Look" blurbs onPick={p.onLook} />
-      <p class="runstats">If the board runs slowly, pick Classic. You can switch at any time in the menu.</p>
+      <p class="runstats">If the board runs slowly, pick Classic. You can switch any time with the Map button.</p>
       <div class="title-actions">
         <Button id="pick-enter" keyLabel={KEYS.begin.label} onClick={p.onEnter}>Enter the Halls</Button>
         <Button id="pick-back" class="quiet" keyLabel={KEYS.menu.label} onClick={p.onBack}>Back</Button>

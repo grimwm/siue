@@ -3,7 +3,7 @@
 // is the same one a piece page has (Answers), here for the general notes, which
 // are tied to no piece: the person writes one, sees the general notes already
 // written, and answers to them. The counts come from every note the panel loads. Under it, Connect your AI
-// (ConnectAi): the owner's setup steps, or for everyone else what the page offers.
+// (ConnectAi): what the page offers for AI apps, the same for every studio.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { waitingByPiece } from '../history.ts';
 import { guardLeaving, unsavedWork } from '../leave.ts';
@@ -13,8 +13,7 @@ import { ConnectAi } from './ConnectAi.tsx';
 import { MakeKeyPanel } from './MakeKeyPanel.tsx';
 import { showWaiting } from './waiting.ts';
 
-/** `owner`: the owner's studio (the body's data-owner), so Connect your AI shows the key tool's steps. */
-export function PiecesIndex(p: { notes: NotesSession; list: ParentNode; owner: boolean }) {
+export function PiecesIndex(p: { notes: NotesSession; list: ParentNode }) {
   const [keyring, setKeyring] = useState(true);
   const [text, setText] = useState('');
   /** Why the unlock is shown first, when the key was made but did not unlock. */
@@ -28,14 +27,14 @@ export function PiecesIndex(p: { notes: NotesSession; list: ParentNode; owner: b
     return (
       <div class="mx-auto grid max-w-xl gap-4">
         <MakeKeyPanel notes={p.notes} onMade={() => setKeyring(true)} onStored={m => { setWhy(m); setKeyring(true); }} />
-        <ConnectAi owner={p.owner} />
+        <ConnectAi />
       </div>
     );
   }
   return (
     <div class="mx-auto grid max-w-xl gap-4">
       <Answers notes={p.notes} score={null} version={1} refresh={0} ask={why} onUnlocked={() => {}} onItems={items => showWaiting(p.list, waitingByPiece(items))} draft={{ text, onText: setText }} />
-      <ConnectAi owner={p.owner} />
+      <ConnectAi />
     </div>
   );
 }

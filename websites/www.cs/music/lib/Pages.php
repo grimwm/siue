@@ -634,14 +634,12 @@ final class Pages
 
     /**
      * The page shell. The body tells the script this studio's largest note (data-note-max), its room in bytes
-     * (data-room), whether it is the owner's studio (data-owner), whether it stores scores only, with no MusicXML (data-score-only) and whether its keyring is stored
+     * (data-room), whether it stores scores only, with no MusicXML (data-score-only) and whether its keyring is stored
      * (data-account-has-key); each flag is "1" or "0".
      */
     private function shell(int $status, string $title, string $view, string $piece, string $version, string $body, \Admin\Request $r, Store $store, int $account): \Admin\Response
     {
-        $email = (string) $this->accounts->emailOf($account);
         $studio = ' data-note-max="' . $this->limitsOf($account)->maxNoteBytes . '" data-room="' . $store->room() . '"'
-            . ' data-owner="' . ($email === \Admin\Auth::OWNER ? '1' : '0') . '"'
             . ' data-score-only="' . ($this->limitsOf($account)->scoreOnly ? '1' : '0') . '"'
             . ' data-account-has-key="' . ($store->keyring() === null ? '0' : '1') . '"';
         $v = Html::e($this->assetVersion);

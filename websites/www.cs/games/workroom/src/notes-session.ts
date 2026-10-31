@@ -19,7 +19,6 @@ import { PASSPHRASE_MESSAGES, checkPassphrase, makeNotesKey } from './keymaker.t
 import { KeyringInvalid, NoCrypto, WrongPassphrase, unlockKeyring } from './unlock.ts';
 import { forgetfulMemory, keyringDigest } from './remember.ts';
 import type { KeyMemory } from './remember.ts';
-import { pageLimits } from './studio-limits.ts';
 import type { Vault } from './vault.ts';
 
 export const UNLOCK_MESSAGES = {
@@ -31,9 +30,6 @@ export const UNLOCK_MESSAGES = {
   signedOut: 'Your sign-in ended. Sign in again.',
   offline: 'Could not reach the server. Check the connection and try again.',
 } as const;
-
-/** What the owner is told for a damaged key: the owner's computer has the key tool, which uploads the keyring again. */
-export const OWNER_INVALID = 'The notes key on the server is damaged or does not match its fingerprints. Run make music-setup, then reload the page.';
 
 export const NO_CRYPTO = 'This browser cannot unlock or seal notes: it has no Web Crypto. Use a current browser, on the https page.';
 export const DISCARD_FAILED = 'The saved note could not be discarded from this browser. Try again.';
@@ -103,7 +99,7 @@ export function createNotesSession(d: SessionDeps): NotesSession {
   let stored = false;
   const say = (e: unknown): string => (e instanceof NoKeyring ? UNLOCK_MESSAGES.noKeyring
     : e instanceof WrongPassphrase ? UNLOCK_MESSAGES.wrong
-    : e instanceof KeyringInvalid ? (pageLimits().owner ? OWNER_INVALID : UNLOCK_MESSAGES.invalid)
+    : e instanceof KeyringInvalid ? UNLOCK_MESSAGES.invalid
     : e instanceof KeyExists ? UNLOCK_MESSAGES.keyExists
     : describeFailure(e));
   const openOne = async (id: string, ring: ReadonlyMap<string, CryptoKey>, at: number): Promise<void> => {

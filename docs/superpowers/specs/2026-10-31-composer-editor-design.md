@@ -280,10 +280,12 @@ A studio may hold recorded voice: the one thing the editor stores that is not a 
   much studio space and how many minutes each would leave. The person then chooses.
 - **Freeing space.** A saved Perfect take can be converted to Good To The Ear later. The page says this cannot be
   undone, and never claims to restore the quality.
-- **Space.** A non-named person's studio limit is 25 MB, about 8 to 10 minutes of Perfect singing. The shared total
-  for all non-named studios stays 1 GB. Both are config values, as the studios design says. The studio shows the
-  space and minutes left. A save that would pass either limit is refused, with a plain message saying how much is
-  needed.
+- **Space.** A non-named person's studio limit is 25 MB, about 8 to 10 minutes of Perfect singing. All non-named
+  studios share a total of 20 GB by default, which can be raised at any time in config with no code change. A safety
+  floor sits under both: uploads are refused while the host's free disk (`disk_free_space`) would drop below a
+  config minimum, 50 GB by default. The studio shows the space and minutes left. A save that would pass the
+  person's limit, the shared total or the floor is refused, with a plain message saying how much is needed. The
+  admin view shows the total used and the cap, and warns at 80% of the cap.
 - **The server checks every take:** its kind by magic bytes (`fLaC`, `OggS`, or WebM's EBML header), its size and
   its duration. It refuses anything else.
 - **Export** carries the vocals at the quality they were saved in.

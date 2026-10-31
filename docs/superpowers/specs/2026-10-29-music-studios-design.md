@@ -74,7 +74,7 @@ for a class.
   (`2026-10-31-composer-editor-design.md`, phase 4f), when recorded voice
   becomes the one kind of audio a studio keeps. The owner chose "Perfect
   Quality, More Space": 25 MB is about 8 to 10 minutes of lossless singing.
-  From 4f the limit is a config value, beside the 1 GB total.
+  From 4f the limit is a config value, beside the shared total below.
 - **Store the composition, not its renders** (Vocal Tracks' recorded voice is
   the one exception). A long piece's score is about
   45 KB, or about 4 KB compressed; its audio is 2.7 MB. The browser builds
@@ -285,11 +285,17 @@ comes first because a score-only studio cannot be heard without it.
 - **One account per person:**
   - addresses with `+` are refused;
   - the server caps the number of accounts, and the total disk of all accounts
-    other than named people at **about 1 GB** (owner's decision), both set in
-    its configuration (the host's disk is 1.5 TB with 1.4 TB free, checked
-    2026-10-29; an account quota, if the university sets one, is not visible
-    from sftp);
-  - when either cap is reached, new sign-ups get a plain "the studio is full"
+    other than named people, both set in its configuration. The total is
+    about 1 GB today. With Vocal Tracks (composer phase 4f) its default
+    becomes **20 GB**, raisable at any time in config with no code change
+    (owner's decision). The host's disk is 1.5 TB; an account quota, if the
+    university sets one, is not visible from sftp;
+  - a safety floor from 4f: uploads are refused while the host's free disk
+    (`disk_free_space`) would drop below a config minimum, **50 GB** by
+    default;
+  - the admin view shows the total used and the cap, and warns at 80% of the
+    cap;
+  - when a cap is reached, new sign-ups get a plain "the studio is full"
     page.
 - **Untrusted scores** get limits on top of today's validator:
   - `score.json` at most 256 KB;

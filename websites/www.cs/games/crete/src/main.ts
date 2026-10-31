@@ -323,6 +323,8 @@ async function quit(): Promise<void> {
 const thumbSheet = document.createElement('canvas');
 const thumbBoard = createBoard(thumbSheet, atlas, image);
 let thumbKey = '';
+/** The board state the face last showed. */
+let thumbState: unknown = null;
 /** When the game last changed; the modern board loads for the face only after REST_MS without a change. */
 let lastChange = 0;
 const REST_MS = 2500;
@@ -355,8 +357,9 @@ function paintThumb(): void {
   if (!run) return;
   const s = run.now;
   const classicFace = settings.look.get() === 'modern' && !modernFailed;
-  const key = `${classicFace} ${game.opens} ${s.moves} ${s.player.r},${s.player.c} ${run.past.length}`;
-  if (key === thumbKey) return;
+  // The look and the board state itself: a turn that changes the board without moving Theseus repaints too.
+  const key = `${classicFace} ${game.opens}`;
+  if (key === thumbKey && s === thumbState) return;
   const g = thumb.getContext('2d')!;
   const figures = { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) };
   const nc = s.level.cols, nr = s.level.rows;
@@ -378,6 +381,7 @@ function paintThumb(): void {
     // Without a modern board the face stays dark under its badge.
     if (modernFailed) {
       thumbKey = key;
+      thumbState = s;
       return;
     }
     if (!modern) {
@@ -405,6 +409,7 @@ function paintThumb(): void {
   const open = corners.filter(k => !(tabbed && k[0] === 'top-right'));
   thumb.dataset.corner = [...open].sort((a, b) => clear(b[1], b[2]) - clear(a[1], a[2]))[0]![0];
   thumbKey = key;
+  thumbState = s;
   thumbMs = performance.now() - t0;
 }
 let thumbOpens = -1;

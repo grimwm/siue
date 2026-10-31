@@ -592,6 +592,11 @@ test('the Map button swaps to Classic mid-level and back, keeps the moves and th
     return lit > d.length / 40;
   });
   await expect.poll(facePainted, 'the Map face shows the classic tiles').toBe(true);
+  const facePixels = () => page.evaluate(() => {
+    const c = document.querySelector('#btn-look canvas') as HTMLCanvasElement | null;
+    return c ? Array.from(c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data) : [];
+  });
+  const classicFace = await facePixels();
   await page.locator('#btn-look').click();
   await expect(page.locator('#stage')).toBeVisible();
   await expect(page.locator('#stage3d')).toBeHidden();
@@ -599,7 +604,10 @@ test('the Map button swaps to Classic mid-level and back, keeps the moves and th
   await expect(page.locator('#btn-look')).toHaveText(/^3D/);
   await expect(page.locator('#btn-look')).toHaveAttribute('aria-label', 'Switch to Modern');
   await expect(page.locator('#hud-moves')).toHaveText(moves!);
-  await expect.poll(facePainted, 'the 3D face shows the modern board').toBe(true);
+  await expect.poll(async () => {
+    const now = await facePixels();
+    return now.length === classicFace.length && now.some((v, i) => v !== classicFace[i]) && await facePainted();
+  }, 'the face changes to a painted modern board').toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('crete-look'))).toBe('classic');
   // The arrows still move Theseus after the press.
   await page.keyboard.press('ArrowLeft');

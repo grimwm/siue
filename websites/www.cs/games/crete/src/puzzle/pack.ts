@@ -10,6 +10,7 @@
 import { TERRAIN, HAZARDS, KEY_COLORS, GEAR, DIRS, DELTA } from './tiles.ts';
 import type { Gear, Hazard, HazardKind, KeyColor, ObjectKind, Terrain, Tool } from './tiles.ts';
 import type { Level } from './level.ts';
+import { maxHearts } from './state.ts';
 import type { State } from './state.ts';
 
 export interface Layout {
@@ -164,7 +165,7 @@ function build(lv: Level): Layout {
   const stoneBits = count('mirror') > 0 ? 2 : 0;
   const heartAt = cellBits * (2 + (mino ? 1 : 0) + (cow ? 1 : 0)) + stoneBits;
   // The hearts field holds every count a try can reach: the starting hearts plus one a honey cake.
-  const heartBits = bits(lv.hearts + count('cake'));
+  const heartBits = bits(maxHearts(lv));
   const pageAt = heartAt + heartBits + bits(lv.relics);
   const keyAt: number[] = [];
   let at = pageAt + lv.pageIds.length;

@@ -23,14 +23,14 @@ const STATS: { id: string; field: 'trial' | 'hearts' | 'relics' | 'keys' | 'gear
 
 export function Status(p: StatusProps) {
   const note = (field: string): string | undefined =>
-    field === 'hearts' ? p.view.heartsNote : field === 'keys' ? p.view.keysNote : undefined;
+    field === 'hearts' ? p.view.heartsNote : field === 'keys' ? p.view.keysNote : field === 'trial' ? p.view.trialNote || undefined : undefined;
   return (
     <>
       <dl class="hud">
         {STATS.map(s => (
           <div class="stat" key={s.id} title={note(s.field)}>
             <dt>{s.label}</dt>
-            <dd id={s.id}>{p.view[s.field] || '–'}</dd>
+            <dd id={s.id} aria-label={s.field === 'trial' ? p.view.trialNote || undefined : undefined}>{p.view[s.field] || '–'}</dd>
           </div>
         ))}
       </dl>

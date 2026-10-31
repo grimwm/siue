@@ -52,6 +52,10 @@ export interface MenuProps {
   onLore: () => void;
   onQuit: () => void;
   onClose: () => void;
+  /** The kicker: the level's place ("Chapter 1 · Level 3") or kind ("Shared level"); the game's name when not given. */
+  place?: string;
+  /** The open level's name, under the title, when given. */
+  levelName?: string;
   /** Back to the editor, shown only when given. */
   onBackToEditor?: () => void;
   /** The shared level's card, shown only when given. */
@@ -71,9 +75,10 @@ export function Menu(p: MenuProps) {
     if (list.current) list.current.scrollTop = list.current.scrollHeight;
   }, [p.open, p.log.length]);
   return (
-    <Dialog open={p.open} id="menu-veil" veilClass="veil" panelClass="card menu" kicker="The Island of Crete" kickerClass="kicker"
+    <Dialog open={p.open} id="menu-veil" veilClass="veil" panelClass="card menu" kicker={p.place ?? 'The Island of Crete'} kickerClass="kicker"
       titleId="menu-title" title="Menu"
       close={<Button id="menu-close" class="close" label="Close menu" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>}>
+      {p.levelName && <p id="menu-level" class="menu-level">{p.levelName}</p>}
       <div class="menu-cols">
         <div class="menu-col">
           <section class="menu-sec" data-section="audio" aria-labelledby="menu-audio-h">

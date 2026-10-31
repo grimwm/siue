@@ -51,7 +51,7 @@ test('every object but the block is an item; every entry is reached by some piec
 test('each tool has its key, and its effect says to press it', () => {
   for (const t of Object.keys(TOOLS) as Tool[]) {
     const e = ENTRY[t]!;
-    assert.equal(e.name, TOOLS[t].name);
+    assert.equal(e.name.toLowerCase(), TOOLS[t].name.toLowerCase());
     assert.equal(e.key, TOOLS[t].key);
     assert.match(e.effect, new RegExp(`Press ${TOOLS[t].key} `));
   }

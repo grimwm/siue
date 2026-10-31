@@ -101,7 +101,7 @@ test('the chapter card is closed by Q like any other card, and the levels list o
   assert.equal(layers.any(), false);
 });
 
-test('the Lore book opens over the menu; Q returns to it', () => {
+test('the Lore Book opens over the menu; Q returns to it', () => {
   const { layers } = make();
   layers.open('menu');
   layers.open('lore');

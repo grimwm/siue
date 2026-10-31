@@ -249,7 +249,7 @@ function toggleMinimap(): void {
   settings.minimap.set(on ? 'on' : 'off');
   ui.setMinimap(on);
   modern?.minimap(on);
-  ui.say(on ? 'Mini map on.' : 'Mini map off.', 'info');
+  ui.say(on ? 'Mini Map on.' : 'Mini Map off.', 'info');
 }
 
 function applyWalls(walls: WallMode): void {

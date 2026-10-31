@@ -465,7 +465,7 @@ test('the first mirror taken shows its card; the second, a banner; the Dictionar
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('#meet-veil'), 'the first mirror stops play with its card').toBeVisible();
-  await expect(page.locator('#meet-title')).toHaveText("Medusa's mirror");
+  await expect(page.locator('#meet-title')).toHaveText("Medusa's Mirror");
   await expect(page.locator('#meet-effect')).toContainText('Press Z to use it.');
   await expect(page.locator('#meet-veil .sprite-layer').first(), 'its picture is drawn from the atlas').toBeVisible();
   await page.keyboard.press('ArrowRight');
@@ -478,7 +478,7 @@ test('the first mirror taken shows its card; the second, a banner; the Dictionar
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('#meet-veil'), 'no card for the second mirror').toBeHidden();
   await expect(page.locator('#banner .banner-row[data-entry="mirror"]'), 'a banner for it').toBeVisible();
-  await expect(page.locator('#banner')).toContainText("Medusa's mirror");
+  await expect(page.locator('#banner')).toContainText("Medusa's Mirror");
   await expect(page.locator('#banner .banner-row'), 'the banner goes on its own').toHaveCount(0, { timeout: 5000 });
 
   await page.keyboard.press('q');

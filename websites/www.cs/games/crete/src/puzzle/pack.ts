@@ -163,7 +163,9 @@ function build(lv: Level): Layout {
   const mino = lv.minotaur !== null;
   const stoneBits = count('mirror') > 0 ? 2 : 0;
   const heartAt = cellBits * (2 + (mino ? 1 : 0) + (cow ? 1 : 0)) + stoneBits;
-  const pageAt = heartAt + bits(lv.hearts) + bits(lv.relics);
+  // The hearts field holds every count a try can reach: the starting hearts plus one a honey cake.
+  const heartBits = bits(lv.hearts + count('cake'));
+  const pageAt = heartAt + heartBits + bits(lv.relics);
   const keyAt: number[] = [];
   let at = pageAt + lv.pageIds.length;
   for (const b of keyBits) { keyAt.push(at); at += b; }
@@ -175,13 +177,13 @@ function build(lv: Level): Layout {
   const hazardSlots = cloning ? 0 : lv.hazards.length;
   const hazardCells = cloning ? hazardGround(lv, homeKinds) : [];
   const hazardBits = cloning ? bits(4 * homeKinds.length) : 0;
-  const total = cellBits * (2 + (mino ? 1 : 0) + (cow ? 1 : 0)) + stoneBits + bits(lv.hearts) + bits(lv.relics) + lv.pageIds.length
+  const total = cellBits * (2 + (mino ? 1 : 0) + (cow ? 1 : 0)) + stoneBits + heartBits + bits(lv.relics) + lv.pageIds.length
     + keyBits.reduce((a, b) => a + b, 0) + toolBits.reduce((a, b) => a + b, 0) + gear.length
     + changing.length + (toggles.length ? 1 : 0) + fixed.length + blockOnly.length + 2 * blockOrObject.length
     + hazardSlots * (cellBits + 2) + hazardCells.length * hazardBits;
   return {
     words: Math.max(1, Math.ceil(total / 32)), cellBits, none: cells, minotaur: mino, cow, stoneBits,
-    heartBits: bits(lv.hearts), relicBits: bits(lv.relics), pageBits: lv.pageIds.length, keyBits, toolBits, gear,
+    heartBits, relicBits: bits(lv.relics), pageBits: lv.pageIds.length, keyBits, toolBits, gear,
     heartAt, pageAt, keyAt, toolAt, gearAt: at,
     changing: Int32Array.from(changing), toggles: Int32Array.from(toggles), fixed: Int32Array.from(fixed),
     blockOnly: Int32Array.from(blockOnly), blockOrObject: Int32Array.from(blockOrObject),

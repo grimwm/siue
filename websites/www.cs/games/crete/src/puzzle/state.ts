@@ -34,6 +34,14 @@ export interface State {
   readonly outcome: Outcome;
 }
 
+/** The most hearts a try at `level` can hold: its starting hearts and one for each honey cake on its grid. Hearts
+ *  never carry from one level to the next: every try starts at `level.hearts`. */
+export function maxHearts(level: Level): number {
+  let cakes = 0;
+  for (const o of level.objects) if (o === 'cake') cakes++;
+  return level.hearts + cakes;
+}
+
 export function initial(level: Level): State {
   return {
     level,

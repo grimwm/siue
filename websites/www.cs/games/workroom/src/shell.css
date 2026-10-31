@@ -43,10 +43,12 @@
   .studio-card ol.connect-steps { @apply grid min-w-0 list-decimal gap-3 pl-5; }
   .studio-card ol.connect-steps > li { @apply min-w-0; }
   .studio-card ol.connect-steps a { @apply inline-flex min-h-11 items-center underline; }
-  .studio-card dl.connect-commands { @apply grid min-w-0 gap-2; }
-  .studio-card dl.connect-commands dt { @apply font-semibold; }
-  .studio-card dl.connect-commands dd { @apply grid min-w-0 gap-1; }
-  .studio-card dl.connect-commands pre { @apply overflow-x-auto rounded-md border border-rule bg-well p-2 font-mono text-xs; }
+  .studio-card .connect-commands { @apply mt-2 grid min-w-0 gap-2; }
+  .studio-card .connect-commands details { @apply min-w-0 rounded-md border border-rule; }
+  .studio-card .connect-commands details[open] { @apply pb-2; }
+  .studio-card .connect-commands details > :not(summary) { @apply mx-2 mt-1; }
+  .studio-card .connect-commands summary { @apply min-h-11 cursor-pointer px-2 py-2.5 font-semibold hover:text-amber focus-visible:outline-2 focus-visible:outline-amber; }
+  .studio-card .connect-commands pre { @apply overflow-x-auto rounded-md border border-rule bg-well p-2 font-mono text-xs; }
   .notice { @apply rounded-lg border border-amber bg-panel p-4 text-ink; }
   ul.confirm-gone { @apply list-disc pl-5; }
   .studio a.button { @apply inline-flex min-h-11 items-center rounded-md border border-amber px-4 font-display font-semibold tracking-wide uppercase; }

@@ -55,6 +55,11 @@ final class MusicConnectTest extends TestCase
             'post' => ['csrf' => $sessions->csrf($as), 'action' => 'make-key', 'label' => 'mine', 'scopes' => ['notes:pickup']]]))->body;
         self::assertSame(1, preg_match('#<code class="secret">([0-9a-f]{64})</code>#', $made, $k));
         self::assertStringContainsString('SIUE_MUSIC_AI_KEY=' . $k[1] . ' -- uvx --from', $made);
+        self::assertStringContainsString('<details data-connect-app="Claude Code"><summary>Claude Code</summary>', $made, 'each app in its own section');
+        self::assertStringNotContainsString('<details open', $made, 'every section starts closed');
+        self::assertStringContainsString('Your AI app makes the pairing code, so this site cannot show it. Ask your AI “What’s my siue-music pairing code?”', $made);
+        self::assertSame(1, preg_match('#<section class="studio-card newkey".*?</section>#s', $made, $card));
+        self::assertDoesNotMatchRegularExpression('/\\bmake\\b|repositor|1Password|GitHub/i', strip_tags($card[0]), 'the steps never name make, the repository or 1Password');
         self::assertStringNotContainsString($k[1], $pages->studio($as)->body, 'shown once');
     }
 }

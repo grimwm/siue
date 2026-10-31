@@ -65,6 +65,11 @@ test('every studio sees four numbered steps naming only uv, the command for each
   assert.equal(walk(p).find(e => e.localName === 'a' && e.textContent === 'Your studio')?._attrs['href'], 'studio.php');
   const codes = walk(p).filter(e => e.localName === 'code').map(e => e.textContent);
   assert.deepEqual(codes, CONNECT.commands.map(c => c.text), 'one copyable command per app');
+  const sections = walk(p).filter(e => e.localName === 'details');
+  assert.deepEqual(sections.map(e => e._attrs['data-connect-app']), CONNECT.commands.map(c => c.app), 'one section per app');
+  assert.ok(sections.every(e => e._attrs['open'] === undefined), 'every app\'s section starts closed');
+  assert.deepEqual(sections.map(e => walk(e).find(x => x.localName === 'summary')?.textContent), CONNECT.commands.map(c => c.app), 'its header is the app\'s name');
+  assert.match(p.textContent, /Your AI app makes the pairing code, so this site cannot show it\. Ask your AI “What’s my siue-music pairing code\?”/);
   assert.match(codes[0]!, /uvx --from https:\/\/www\.cs\.siue\.edu\/~wgrim\/music\/dist\/siue_music-1\.0\.0-py3-none-any\.whl siue-music mcp$/);
   assert.match(p.textContent, new RegExp(`SHA-256 ${CONNECT.sha256}`), 'the wheel\'s SHA-256 is shown');
   assert.doesNotMatch(p.textContent, FORBIDDEN);

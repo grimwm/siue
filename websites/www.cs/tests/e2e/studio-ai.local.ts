@@ -88,6 +88,8 @@ test("a student's own AI connects through the published wheel, pairs, and reads 
     const connect = page.locator('[data-connect-ai]');
     await expect(connect.locator('h3')).toHaveText(['Install uv', 'Make An AI Key', 'Add siue-music To Your AI App', 'Type The Pairing Code']);
     const release = JSON.parse(readFileSync(join(SITE, 'music', 'dist', 'release.json'), 'utf8')) as { file: string; sha256: string };
+    await expect(connect.locator('[data-connect-app="Claude Code"] code')).toBeHidden();
+    await connect.locator('[data-connect-app="Claude Code"] summary').click();
     await expect(connect.locator('[data-connect-app="Claude Code"] code')).toContainText(`uvx --from http://localhost/music/dist/${release.file} siue-music mcp`);
     await expect(connect).toContainText(`SHA-256 ${release.sha256}`);
     if (SHOTS) { mkdirSync(SHOTS, { recursive: true }); await connect.screenshot({ path: join(SHOTS, 'connect-your-ai.png') }); }
@@ -99,6 +101,14 @@ test("a student's own AI connects through the published wheel, pairs, and reads 
     await page.getByRole('button', { name: 'Make key' }).click();
     const key = (await page.locator('code.secret').textContent())!.trim();
     expect(key).toMatch(/^[0-9a-f]{64}$/);
+    // Each app's commands start closed; its header opens and closes them, by click or by keyboard.
+    const claudeCode = page.locator('.connect-commands [data-connect-app="Claude Code"]');
+    await expect(claudeCode.locator('code')).toBeHidden();
+    await claudeCode.getByText('Claude Code', { exact: true }).click();
+    await expect(claudeCode.locator('code')).toBeVisible();
+    await claudeCode.getByText('Claude Code', { exact: true }).press('Enter');
+    await expect(claudeCode.locator('code')).toBeHidden();
+    await expect(page.locator('.studio-card.newkey')).toContainText('Your AI app makes the pairing code, so this site cannot show it.');
     await expect(page.locator('.connect-commands')).toContainText(`SIUE_MUSIC_AI_KEY=${key} -- uvx --from http://localhost/music/dist/${release.file} siue-music mcp`);
     const narrow = async (where: string): Promise<void> => {
       await page.setViewportSize({ width: 390, height: 844 });

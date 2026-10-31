@@ -1,7 +1,8 @@
 // The front page's Connect Your AI panel, the same for every studio: numbered steps that name only uv, the copyable
 // command for each AI app (the studio's address and the published siue-music wheel already in it, the AI key a
-// placeholder), making an AI key on Your studio and typing the pairing code there. The commands come from the server
-// (music/lib/Connect.php) in the body's data-connect.
+// placeholder), each app's in its own section that starts closed and opens on its header, making an AI key on Your
+// studio and typing the pairing code there. The commands come from the server (music/lib/Connect.php) in the body's
+// data-connect.
 import { useState } from 'preact/hooks';
 import { Button } from './console/Button.tsx';
 import { Panel } from './console/Panel.tsx';
@@ -28,8 +29,8 @@ const STEP = 'font-display text-sm font-semibold';
 function Command(p: { c: ConnectCommand; copy?: (text: string) => Promise<void> }) {
   const [copied, setCopied] = useState<string | null>(null);
   return (
-    <div class="grid min-w-0 gap-1" data-connect-app={p.c.app}>
-      <h4 class="text-sm font-semibold">{p.c.app}</h4>
+    <details class="min-w-0 rounded-md border border-rule open:pb-2 [&>:not(summary)]:mx-2 [&>:not(summary)]:mt-1" data-connect-app={p.c.app}>
+      <summary class="min-h-11 cursor-pointer px-2 py-2.5 text-sm font-semibold hover:text-amber focus-visible:outline-2 focus-visible:outline-amber">{p.c.app}</summary>
       <p class="text-sm">{p.c.how}</p>
       <pre class="overflow-x-auto rounded-md border border-rule bg-well p-2 text-xs"><code>{p.c.text}</code></pre>
       {p.copy ? (
@@ -38,7 +39,7 @@ function Command(p: { c: ConnectCommand; copy?: (text: string) => Promise<void> 
           {copied ? <span class="text-xs" role="status">{copied}</span> : null}
         </div>
       ) : null}
-    </div>
+    </details>
   );
 }
 
@@ -60,7 +61,7 @@ export function ConnectAi(p: { connect?: ConnectData | null; copy?: (text: strin
           <h3 class={STEP}>Add siue-music To Your AI App</h3>
           {c ? (
             <>
-              <p class="text-sm break-words">Copy the one for your app, and put your AI key where it says {c.placeholder}.</p>
+              <p class="text-sm break-words">Open the one for your app, copy it, and put your AI key where it says {c.placeholder}.</p>
               {c.commands.map(cmd => <Command key={cmd.app} c={cmd} copy={p.copy} />)}
               <p class="text-xs break-all text-dim">siue-music {c.version}: {c.wheel}, SHA-256 {c.sha256}.</p>
             </>
@@ -68,7 +69,7 @@ export function ConnectAi(p: { connect?: ConnectData | null; copy?: (text: strin
         </li>
         <li class="grid min-w-0 gap-1">
           <h3 class={STEP}>Type The Pairing Code</h3>
-          <p class="text-sm">Ask your AI for its siue-music pairing code. Type it on that key's row on Your studio, with your passphrase. From then on your AI can open the notes you send.</p>
+          <p class="text-sm">Your AI app makes the pairing code, so this site cannot show it. Ask your AI “What’s my siue-music pairing code?” Type the code on that key's row on Your studio, with your passphrase. From then on your AI can open the notes you send.</p>
         </li>
       </ol>
     </Panel>

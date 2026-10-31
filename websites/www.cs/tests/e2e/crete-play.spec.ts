@@ -3,6 +3,11 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
+/** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
+const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
+/** The Dictionary's specs (tagged @firsts) start with nothing met. */
+test.beforeEach(async ({ context }, info) => { if (!info.tags.includes('@firsts')) await context.addInitScript(allMet); });
+
 /** These specs read the classic board's pixels and cells, so they pin the Look setting before the page loads. */
 const pinClassic = (): void => localStorage.setItem('crete-look', 'classic');
 
@@ -367,6 +372,7 @@ function lockRecorder() {
 test('Full screen from the menu takes the Esc lock; Esc changes nothing and the cards stay', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await ctx.addInitScript(lockRecorder);
+  await ctx.addInitScript(allMet);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -401,5 +407,69 @@ test('a finger swipe on the classic board moves Theseus that way', async ({ page
     if ((await now(page)).moves > from.moves) break;
   }
   expect((await now(page)).moves, 'one swipe, one move').toBe(from.moves + 1);
+  expect(errors).toEqual([]);
+});
+
+/* ---- the first cards, the banner and the Dictionary, from nothing met ---- */
+/** Two mirrors in a hall, played as a shared level (a try from the editor shows no first cards). */
+const MIRRORS = ['title: Two Mirrors', 'intro: Two mirrors lie on the floor.', '', '#########', '#P.z.z.E#', '#########', ''].join('\n');
+type FirstsHook = { __creteTest: { parse(text: string): unknown; playLevel(level: unknown, opts: unknown): void } };
+
+/** The mirrors' level open on the real page, its exit's first card closed and its start card begun. */
+async function openMirrors(page: Page): Promise<string[]> {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(pinClassic);
+  await page.goto(PAGE);
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await page.evaluate(text => {
+    const t = (window as unknown as FirstsHook).__creteTest;
+    t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Two Mirrors', best: null } });
+  }, MIRRORS);
+  await expect(page.locator('#meet-veil'), 'the exit is met at the start').toBeVisible();
+  await expect(page.locator('#meet-title')).toHaveText('The exit');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#meet-veil')).toBeHidden();
+  await expect(page.locator('#start-veil')).toBeVisible();
+  await page.locator('#start-begin').click();
+  return errors;
+}
+
+test('the first mirror taken shows its card; the second, a banner; the Dictionary\'s Backpack lists both', { tag: '@firsts' }, async ({ page }) => {
+  const errors = await openMirrors(page);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#meet-veil'), 'the first mirror stops play with its card').toBeVisible();
+  await expect(page.locator('#meet-title')).toHaveText("Medusa's mirror");
+  await expect(page.locator('#meet-effect')).toContainText('Press Z to use it.');
+  await expect(page.locator('#meet-veil .sprite-layer').first(), 'its picture is drawn from the atlas').toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  expect(await page.evaluate(() => (window as unknown as { __creteTest: CreteTest }).__creteTest.game.run.now.moves), 'play waits while the card is up').toBe(2);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#meet-veil')).toBeHidden();
+  await expect(page.locator('#banner .banner-row')).toHaveCount(0);
+
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#meet-veil'), 'no card for the second mirror').toBeHidden();
+  await expect(page.locator('#banner .banner-row[data-entry="mirror"]'), 'a banner for it').toBeVisible();
+  await expect(page.locator('#banner')).toContainText("Medusa's mirror");
+  await expect(page.locator('#banner .banner-row'), 'the banner goes on its own').toHaveCount(0, { timeout: 5000 });
+
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-veil')).toBeVisible();
+  await page.locator('#menu-dictionary').click();
+  await expect(page.locator('#dict-veil')).toBeVisible();
+  await expect(page.locator('#dict-tab-backpack')).toHaveAttribute('aria-pressed', 'true');
+  const held = page.locator('#dict-backpack .dict-row');
+  await expect(held).toHaveCount(1);
+  await expect(held.first()).toHaveAttribute('data-entry', 'mirror');
+  await expect(held.first()).toContainText('× 2');
+  await page.locator('#dict-tab-entries').click();
+  await expect(page.locator('#dict-entries .dict-row:not(.locked)')).toHaveCount(2);
+  await expect(page.locator('#dict-entries .dict-row.locked').first()).toHaveText('???');
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-veil'), 'Q goes back to the menu').toBeVisible();
   expect(errors).toEqual([]);
 });

@@ -2,8 +2,9 @@
  * player's presses and Ariadne's thread (a hint, the whole line, a play-out)
  * through the engine, voices each turn's events, records a win, and keeps the
  * turn that is animating. A turn's animation pauses where the player's figure
- * reaches a story page, while the page reads it, and goes on when told. The
- * page draws from it and holds no rules. DOM-free. */
+ * reaches a story page, or takes a kind of thing for the first time, while the
+ * page shows it, and goes on when told. The page draws from it and holds no
+ * rules. DOM-free. */
 import type { Clock, Timers } from '../../_kit/ports.ts';
 import { SLIDE_MS, timeline } from './board-plan.ts';
 import type { Figures, Timeline } from './board-plan.ts';
@@ -20,7 +21,7 @@ import type { Action, GameEvent } from './puzzle/step.ts';
 import { HAZARDS } from './puzzle/tiles.ts';
 import { threadPath } from './thread-path.ts';
 import type { ThreadCell } from './thread-path.ts';
-import type { HazardKind } from './puzzle/tiles.ts';
+import type { HazardKind, ObjectKind } from './puzzle/tiles.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
@@ -50,6 +51,9 @@ export interface GameDeps {
   changed(): void;
   /** The thread's search; the solver's when not given. */
   solve?: typeof solve;
+  /** Whether taking this kind of thing is a first, whose card the page shows: a turn's animation stops where the
+   *  figure takes the first of each such kind. None is, when not given. */
+  firstTake?(what: ObjectKind): boolean;
 }
 
 export interface Anim {
@@ -60,13 +64,16 @@ export interface Anim {
   before: State;
   /** The state once the player's action alone has played: it is drawn while the hazards move. */
   mid: State;
-  /** The story pages the player's figure reaches this turn, by id, at the moment it lands on each. */
-  stops: readonly PageStop[];
-  /** The page the animation waits at while it is read, or null while it plays. */
-  paused: PageStop | null;
+  /** Where the animation stops this turn, at the moment the figure lands on each: the first of each kind of thing
+   *  taken for the first time, and the story pages. */
+  stops: readonly Stop[];
+  /** The stop the animation waits at while the page shows it, or null while it plays. */
+  paused: Stop | null;
 }
 
-export interface PageStop { id: string; ms: number }
+/** A stop: a kind of thing taken for the first time (`id` is its object kind), or a story page (`id` is the page's).
+ *  A first that is also a page stops twice at the same moment, the first before the page. */
+export interface Stop { kind: 'item' | 'page'; id: string; ms: number }
 
 export interface Game {
   /** 0-based; -1 before one opens. */
@@ -86,6 +93,8 @@ export interface Game {
   resume(): void;
   /** The pages the last win recorded as new; empty after open, undo and restart. */
   readonly found: readonly string[];
+  /** What the player took in the last turn played, in the order taken; empty after open, undo and restart. */
+  readonly took: readonly ObjectKind[];
   /** Starts level `i` fresh (clears assisted). */
   open(i: number): void;
   press(a: Action | 'undo' | 'restart'): void;
@@ -125,12 +134,19 @@ function takenBy(a: Pick<Anim, 'before' | 'timeline'>, ms: number): State {
   return { ...a.before, objects };
 }
 
-/** Where the turn's animation stops for each story page the player takes. */
-function pageStops(before: State, tl: Timeline): PageStop[] {
+/** Where the turn's animation stops: the first of each kind `first` names, and, with `pages`, each story page. */
+function stopsOf(before: State, tl: Timeline, pages: boolean, first: (what: ObjectKind) => boolean): Stop[] {
   const { cols, pageIds, pageCells } = before.level;
+  const seen = new Set<ObjectKind>();
   return tl.taken.flatMap(t => {
-    const id = t.what === 'page' ? pageIds[pageCells.indexOf(t.at.r * cols + t.at.c)] : undefined;
-    return id === undefined ? [] : [{ id, ms: t.ms }];
+    const out: Stop[] = [];
+    if (!seen.has(t.what) && first(t.what)) {
+      seen.add(t.what);
+      out.push({ kind: 'item', id: t.what, ms: t.ms });
+    }
+    const id = pages && t.what === 'page' ? pageIds[pageCells.indexOf(t.at.r * cols + t.at.c)] : undefined;
+    if (id !== undefined) out.push({ kind: 'page', id, ms: t.ms });
+    return out;
   });
 }
 
@@ -150,6 +166,7 @@ export function createGame(deps: GameDeps): Game {
   let reached = 0;
   let tick: number | null = null;
   let found: readonly string[] = [];
+  let took: readonly ObjectKind[] = [];
   /** V is on: the line from the try as it stands stays drawn through every turn. */
   let threadOn = false;
   /** The actions that made the try as it stands, from the level's start. */
@@ -229,8 +246,10 @@ export function createGame(deps: GameDeps): Game {
     played.push(a);
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
+    took = r.events.flatMap(e => (e.kind === 'took' ? [e.what] : []));
     const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
-    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: deps.levels.scratch?.(trial) ? [] : pageStops(before, tl), paused: null } : null;
+    const first = deps.firstTake ?? (() => false);
+    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: stopsOf(before, tl, !deps.levels.scratch?.(trial), first), paused: null } : null;
     reached = 0;
     if (run.now.outcome === 'won') {
       if (deps.levels.scratch?.(trial)) deps.levels.won?.(trial, run.now.moves, run.assisted);
@@ -322,6 +341,7 @@ export function createGame(deps: GameDeps): Game {
     get playing() { return tick !== null; },
     get anim() { return anim; },
     get found() { return found; },
+    get took() { return took; },
     animMs,
     resume,
     open(i) {
@@ -329,6 +349,7 @@ export function createGame(deps: GameDeps): Game {
       trial = i;
       run = startRun(deps.levels.level(i));
       found = [];
+      took = [];
       played = [];
       threadOn = false;
       thread = null;
@@ -346,6 +367,7 @@ export function createGame(deps: GameDeps): Game {
         if (a === 'restart') played = [];
         else if (run !== was) played.pop();
         found = [];
+        took = [];
         redraw();
         deps.changed();
         return;

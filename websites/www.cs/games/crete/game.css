@@ -55,7 +55,8 @@ button:disabled { opacity: 0.45; cursor: default; }
   background: var(--bg);
   overflow: hidden;
 }
-#title-root, #look-root, #menu-root, #chapter-root, #levels-root, #start-root, #story-root, #end-root, #lore-root { display: contents; }
+#title-root, #look-root, #menu-root, #chapter-root, #levels-root, #start-root, #story-root, #end-root, #lore-root,
+#dict-root, #meet-root, #banner-root { display: contents; }
 
 /* ---- status bar ---- */
 .status {
@@ -352,6 +353,71 @@ button:disabled { opacity: 0.45; cursor: default; }
 .lore-where { color: var(--dim); font-size: 0.8rem; font-weight: 400; }
 .lore-soon { margin: 0.5rem 0 0; color: var(--dim); font-size: 0.85rem; }
 
+/* A picture from the Classic atlas (src/ui/sprite.tsx): each layer is one atlas cell, scaled to the picture's size. */
+.sprite { position: relative; display: inline-block; flex: none; overflow: hidden; }
+.sprite-layer { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: url(fx/sprites/tiles.png) no-repeat; }
+.sprite.locked .sprite-layer:not(.sprite-floor) { filter: brightness(0); opacity: 0.8; }
+.sprite.locked .sprite-floor { opacity: 0.35; }
+
+/* The first card: picture beside its words. */
+.card.meet { max-width: 26rem; }
+.meet-body { display: flex; gap: 0.9rem; align-items: flex-start; }
+.meet-words { min-width: 0; }
+.meet-lore { margin: 0 0 0.6rem; color: var(--dim); font-style: italic; }
+.meet-effect { margin: 0 0 0.4rem; }
+.meet-note { margin: 0.2rem 0 0.8rem; color: var(--dim); font-size: 0.85rem; }
+
+/* The Dictionary: two tabs, then rows of picture and words. */
+.card.dict { max-width: 34rem; }
+.dict-tabs { margin-bottom: 0.6rem; }
+.dict-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.dict-row { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.5rem 0.6rem; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+.dict-row.locked { align-items: center; color: var(--dim); }
+.dict-words { min-width: 0; }
+.dict-name { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0; font-weight: 700; }
+.dict-count { color: var(--accent); }
+.dict-lore { margin: 0.2rem 0 0; color: var(--dim); font-style: italic; font-size: 0.85rem; }
+.dict-effect { margin: 0.2rem 0 0; font-size: 0.88rem; }
+.dict-group h3 { margin: 0.9rem 0 0.4rem; font-size: 0.8rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
+.dict-tally, .dict-empty { margin: 0; color: var(--dim); font-size: 0.85rem; }
+
+/* The banner on a later pickup: in the board's row under the toast, over the board and under every card. It takes no
+   pointer, so play goes on beneath it. It slides in, holds and fades in BANNER_MS (src/notices.ts). */
+.banner {
+  position: absolute;
+  grid-row: 2;
+  grid-column: 1;
+  left: 50%;
+  top: 48px;
+  z-index: 5;
+  width: max-content;
+  max-width: min(92%, 26rem);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.banner-box {
+  display: grid;
+  gap: 4px;
+  padding: 0.4rem 0.7rem;
+  background: rgba(1, 4, 9, 0.92);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  animation: banner 2.5s ease-out both;
+}
+.banner-row { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 0.88rem; line-height: 1.25; }
+.banner-name { font-weight: 700; white-space: nowrap; }
+.banner-short { color: var(--dim); }
+@keyframes banner {
+  0% { opacity: 0; transform: translateY(-120%); }
+  12% { opacity: 1; transform: none; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes banner-still {
+  0%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* Quieter buttons: outlined, not filled. A danger button is outlined in red. */
 button.quiet { background: var(--bg); color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
 button.quiet:hover { border-color: var(--accent); filter: none; }
@@ -639,5 +705,6 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .toast { transition: none; }
+  .banner-box { animation-name: banner-still; }
   .check-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }

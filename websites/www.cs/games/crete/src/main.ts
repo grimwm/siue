@@ -27,6 +27,7 @@ import type { OutsideLevel } from './campaign/chapters.ts';
 import { createOutside } from './outside.ts';
 import type { Action } from './puzzle/step.ts';
 import { createFoundPages } from './pages.ts';
+import { createMet } from './met.ts';
 import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
 import { createEditor } from './editor/editor.ts';
@@ -92,6 +93,7 @@ let tilesLoaded = false;
 let editorUp = false;
 const progress = createProgress(browserStorage());
 const pages = createFoundPages(browserStorage());
+const met = createMet(browserStorage());
 /* The campaign's levels, then the level from outside it (a try from the editor, or a browser spec's). */
 const outside = createOutside(CAMPAIGN_LEVELS, {
   open: i => game.open(i),
@@ -101,7 +103,7 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   bestWon: (text, moves) => editor.tryWon(text, moves),
 });
 const levels = outside.levels;
-const ui = createUi({ atlas, board, progress, pages, levels, sfx: audio.sfx, cards: stack => behindEditor(stack.includes('editor')) });
+const ui = createUi({ atlas, board, progress, pages, met, levels, sfx: audio.sfx, cards: stack => behindEditor(stack.includes('editor')) });
 /* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
    which comes first. */
 const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
@@ -183,6 +185,7 @@ const game = createGame({
   timers: browserTimers,
   clock,
   reducedMotion: () => reduced,
+  firstTake: what => ui.firstTake(what),
   changed: () => {
     ui.render(game);
     showModern();

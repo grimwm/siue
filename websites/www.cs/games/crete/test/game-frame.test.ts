@@ -102,7 +102,7 @@ test('the animation pauses where the figure reaches each page, holds that frame 
   const { game, m, changes } = sliding();
   const pausedAt = (): string | null => game.anim?.paused?.id ?? null;
   game.press({ kind: 'move', dir: 'right' });
-  assert.deepEqual(game.anim!.stops, [{ id: 'a', ms: 2 * SLIDE_MS }, { id: 'b', ms: 4 * SLIDE_MS }]);
+  assert.deepEqual(game.anim!.stops, [{ kind: 'page', id: 'a', ms: 2 * SLIDE_MS }, { kind: 'page', id: 'b', ms: 4 * SLIDE_MS }]);
   m.advance(SLIDE_MS);
   assert.equal(game.animMs(), SLIDE_MS);
   assert.equal(pausedAt(), null, 'it plays');

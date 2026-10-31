@@ -7,6 +7,11 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
+/** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
+const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
+
+test.beforeEach(async ({ context }) => { await context.addInitScript(allMet); });
+
 const PAGE = 'games/crete/';
 
 /* A wide open hall, Theseus in its middle, so a move in any direction is free and the camera has room to look

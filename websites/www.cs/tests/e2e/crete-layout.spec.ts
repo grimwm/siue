@@ -8,6 +8,11 @@
 import { test, expect } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
 
+/** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
+const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
+
+test.beforeEach(async ({ context }) => { await context.addInitScript(allMet); });
+
 /** These specs read the classic board's pixels and cells, so they pin the Look setting before the page loads. */
 const pinClassic = (): void => localStorage.setItem('crete-look', 'classic');
 
@@ -24,6 +29,7 @@ const TABS = 15; // every control carries a key tab with a keyboard at hand
 
 async function open(browser: Browser, [, width, height, touch]: Device, pad?: 'left' | 'right') {
   const ctx = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
+  await ctx.addInitScript(allMet);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));

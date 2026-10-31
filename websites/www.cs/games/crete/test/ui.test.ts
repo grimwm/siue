@@ -172,7 +172,7 @@ test('the title card leaves the look to the new-game card and the menu', () => {
   assert.equal(maybeById(root, 'title-look'), undefined);
 });
 
-test('the new-game card shows both looks as named pictures, the one drawn now picked, with Enter the halls and Back', () => {
+test('the new-game card shows both looks as named pictures, the one drawn now picked, with Enter the Halls and Back', () => {
   const root = makeEl('look-root');
   const seen: string[] = [];
   const props = { open: true, onLook: (l: Look) => seen.push(l), onEnter: () => seen.push('enter'), onBack: () => seen.push('back') };
@@ -191,6 +191,13 @@ test('the new-game card shows both looks as named pictures, the one drawn now pi
     const order = walk(tile).map(n => n.localName === 'img' ? 'img' : n.getAttribute('class') === 'look-name' ? 'name' : '').filter(Boolean);
     assert.deepEqual(order, ['img', 'name']);
   }
+  // Modern's line says what the look is now (stone and sand, no paint or torchlight), and the hint names the
+  // Map button, not the menu.
+  const blurb = walk(byId(root, 'pick-modern')).find(n => n.getAttribute('class') === 'look-blurb')!.textContent;
+  assert.equal(blurb, 'Stone-and-sand 3D you can zoom');
+  assert.doesNotMatch(root.textContent, /painted|torchlit|in the menu/i);
+  assert.match(root.textContent, /You can switch any time with the Map button\./);
+  assert.ok(byId(root, 'pick-enter').textContent.includes('Enter the Halls'));
   for (const id of ['pick-classic', 'pick-enter', 'pick-back']) click(byId(root, id));
   assert.deepEqual(seen, ['classic', 'enter', 'back']);
   renderLookPick(root, { ...props, look: 'classic' });

@@ -405,6 +405,47 @@ final class Store
             ->execute([$this->account, $lockedJson, $this->clock->now(), $current, json_encode(array_values($previous))]);
     }
 
+    /**
+     * Forgot your passphrase: deletes every note of this account (rows, then files) and its keyring, in one
+     * transaction. Pieces, drafts and AI keys stay. @return int how many notes went
+     */
+    public function forgetNotesKey(): int
+    {
+        return $this->transaction(function (): int {
+            $gone = count($this->deleteNotesOfAccount());
+            $this->db->prepare('DELETE FROM music_keyring WHERE account_id = ?')->execute([$this->account]);
+            return $gone;
+        });
+    }
+
+    /**
+     * A new passphrase: replaces the locked keyring only when $current is the stored current fingerprint and
+     * $previous holds exactly the stored previous ones (in any order), so the envelope can change and the keys
+     * cannot. 'changed'; 'mismatch' when the fingerprints differ; 'none' when no keyring is stored.
+     *
+     * @param list<string> $previous
+     * @return 'changed'|'mismatch'|'none'
+     */
+    public function changeKeyring(string $lockedJson, string $current, array $previous): string
+    {
+        return $this->transaction(function () use ($lockedJson, $current, $previous): string {
+            $stored = $this->keyring();
+            if ($stored === null) {
+                return 'none';
+            }
+            $given = array_values($previous);
+            $had = $stored['previous'];
+            sort($given);
+            sort($had);
+            if ($stored['current'] === '' || !hash_equals($stored['current'], $current) || $given !== $had) {
+                return 'mismatch';
+            }
+            $this->db->prepare('UPDATE music_keyring SET locked = ?, uploaded_at = ?, previous_fps = ? WHERE account_id = ?')
+                ->execute([$lockedJson, $this->clock->now(), json_encode(array_values($previous)), $this->account]);
+            return 'changed';
+        });
+    }
+
     /** Stores the keyring only when this account has none, in one statement; false when it already has one. */
     public function createKeyring(string $lockedJson, string $current, array $previous): bool
     {

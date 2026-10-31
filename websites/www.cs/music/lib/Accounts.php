@@ -78,7 +78,7 @@ final class Accounts
 
     /**
      * Removes the account: everything start over deletes, its studio sessions and trusted devices, the unused sign-in
-     * links of its address and its row, all in one BEGIN IMMEDIATE, so no session can store anything in between. The
+     * links of its address, its confirmation links and its row, all in one BEGIN IMMEDIATE, so no session can store anything in between. The
      * owner's account is refused.
      */
     public function remove(int $account): void
@@ -105,6 +105,7 @@ final class Accounts
                 $this->db->prepare('DELETE FROM studio_sessions WHERE account_id = ?')->execute([$account]);
                 $this->db->prepare('DELETE FROM studio_devices WHERE account_id = ?')->execute([$account]);
                 $this->db->prepare('DELETE FROM studio_links WHERE used_at IS NULL AND email = ?')->execute([$email]);
+                $this->db->prepare('DELETE FROM studio_confirms WHERE account_id = ?')->execute([$account]);
             }
             (new AiKeys($this->db, $this->clock))->deleteAll($account);
             $store->wipe();

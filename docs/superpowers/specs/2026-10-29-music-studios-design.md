@@ -54,8 +54,21 @@ for a class.
 ## Decided by the owner
 
 - **No resets.** Notes are sealed with a key only the person's passphrase
-  unlocks. A forgotten passphrase means "start over": that person's whole
-  studio is deleted and they begin empty. Nothing is recoverable, by anyone.
+  unlocks, and nobody can open them without it.
+  - **Change passphrase** on Your studio: the person types the current
+    passphrase, then the new one twice. The browser locks the same notes key
+    again under the new passphrase and uploads it; the server takes it only
+    when the key's fingerprints match the stored ones and the upload is signed
+    with the current private key. No email is needed.
+  - **A forgotten passphrase** ("Forgot your passphrase?" on Your studio)
+    deletes only the sealed notes and the notes key. Pieces, drafts and AI
+    keys stay, and the person makes a new key. The notes are not recoverable,
+    by anyone.
+  - **Forgot and Start over are confirmed by email:** each mails a one-use
+    link to the account's own address, good for 15 minutes. The link opens a
+    page in the studio that says exactly what will be deleted, with one
+    button; the deletion happens only on that button's POST, never on a GET
+    (mail scanners fetch links).
 - **A hard limit of 4–6 MB per person** for everyone except specially named
   people, who get more. The design uses **5 MB** (my call within that range).
 - **Store the composition, not its renders.** A long piece's score is about
@@ -118,7 +131,7 @@ for a class.
     how much room is left and how to free some (delete drafts, or picked-up
     notes).
 - **Start over** deletes the account's rows and files, its keyring and its AI
-  keys, after the person types a confirmation. Their sign-in stays.
+  keys, after the person confirms through the mailed link. Their sign-in stays.
 - **The admin view** (named admins only) lists accounts with their usage and
   last sign-in, and can remove an account (the same delete as start over).
   It never shows names of pieces or any content.

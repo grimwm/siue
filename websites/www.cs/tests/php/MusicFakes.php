@@ -95,15 +95,20 @@ function music_store_for(PDO $db, string $dir, Admin\Clock $clock, string $peopl
 
 /**
  * The workroom's pages on $db and $dir, as music_run builds them, with studio sessions beside the admin folder $base.
- * @return array{Music\Pages, Admin\Sessions, Closure, Music\Accounts} pages, studio sessions, store for an account, accounts
+ * @return array{Music\Pages, Admin\Sessions, Closure, Music\Accounts, Music\Confirmations, MemoryMailer} pages, studio sessions,
+ *         store for an account, accounts, the mailed confirmation links, the mail they send
  */
 function music_pages(PDO $db, string $dir, Admin\Clock $clock, string $base, string $people = '{}'): array
 {
     $named = music_people($people);
     $accounts = new Music\Accounts($db, $clock, $named, $dir);
     $storeFor = music_store_for($db, $dir, $clock, $people);
-    $sessions = new Admin\Sessions($db, $clock, Admin\Realm::studio($base));
-    return [new Music\Pages($storeFor, $accounts, $named, $sessions, '0123456789', $base, new Music\AiKeys($db, $clock)), $sessions, $storeFor, $accounts];
+    $realm = Admin\Realm::studio($base);
+    $sessions = new Admin\Sessions($db, $clock, $realm);
+    $mailer = new MemoryMailer();
+    $confirmations = new Music\Confirmations($db, $clock, $mailer, $realm->baseUrl);
+    $pages = new Music\Pages($storeFor, $accounts, $named, $sessions, '0123456789', $base, new Music\AiKeys($db, $clock), $confirmations);
+    return [$pages, $sessions, $storeFor, $accounts, $confirmations, $mailer];
 }
 
 /** A locked keyring envelope of the pinned shape (Music\Keyring), random inside. */

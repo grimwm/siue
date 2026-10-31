@@ -5,12 +5,14 @@
 // from the status (a redirect to the sign-in, a 401, or a 403 other than the
 // CSRF refusal), never from the Content-Type. Every other failure is a ServerError naming the status.
 import type { Fetch } from './load.ts';
-import type { LockedKeyring } from './unlock.ts';
+import type { ChangeProof, LockedKeyring } from './unlock.ts';
 
 export class SignedOut extends Error {}
 export class NoKeyring extends Error {}
 /** This studio already holds a notes key: the page never replaces it. */
 export class KeyExists extends Error {}
+/** A new passphrase was refused: the server's keyring no longer has the fingerprints this page re-locked. */
+export class KeyChanged extends Error {}
 /** fetch itself failed (offline, DNS, refused): a TypeError, as fetch rejects, but known to come from the network and not from this page's own code. */
 export class NetworkError extends TypeError {}
 /** The server answered 2xx, but not with what the page needs (no list, no keyring, not JSON). */
@@ -42,6 +44,8 @@ export interface PageApi {
   keyring(): Promise<KeyringAnswer>;
   /** Stores a keyring made on this page: `current` is its one key's fingerprint, and there are no previous keys. Rejects with KeyExists when the studio holds one already. */
   uploadKeyring(locked: LockedKeyring, current: string): Promise<void>;
+  /** Stores the same keys locked under a new passphrase; the server takes it only when `current` and `previous` are the fingerprints it holds and `proof` is the current key's signature. KeyChanged when the fingerprints differ, NoKeyring when it holds none. */
+  changeKeyring(locked: LockedKeyring, current: string, previous: string[], proof: ChangeProof): Promise<void>;
   /** Deletes one draft of a piece, or every draft of it without a version; how many went. A draft that is already gone is a ServerError (404). */
   deleteDraft(piece: string, version?: number): Promise<number>;
 }
@@ -154,6 +158,12 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
     async uploadKeyring(locked, current) {
       const { reply, data } = await post('keyring.php', 'application/json', encoder.encode(JSON.stringify({ keyring: locked, current, previous: [] })));
       if (reply.status === 409 && data['error'] === 'key_exists') throw new KeyExists('This studio has a notes key already.');
+      if (!reply.ok) throw failed(reply);
+    },
+    async changeKeyring(locked, current, previous, proof) {
+      const { reply, data } = await post('keyring.php?change=1', 'application/json', encoder.encode(JSON.stringify({ keyring: locked, current, previous, proof })));
+      if (reply.status === 409 && data['error'] === 'key_changed') throw new KeyChanged('The notes key on the server changed.');
+      if (reply.status === 404 && data['error'] === 'no_keyring') throw new NoKeyring('No notes key has been uploaded yet.');
       if (!reply.ok) throw failed(reply);
     },
     async deleteDraft(piece, version) {

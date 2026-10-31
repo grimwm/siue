@@ -1,7 +1,7 @@
 <?php
 // Your studio (studio.php): usage against the account's limit, AI keys made (shown once), listed and revoked,
-// start over after the typed confirmation, and sign out. Works with no script: plain forms, a csrf field.
-// Start over takes the AI keys with everything else, and waits for a publish that holds the lock.
+// start over, and sign out. Its forms work with no script: plain forms, a csrf field. Start over takes the AI keys
+// with everything else, and waits for a publish that holds the lock. Its mailed confirmation is StudioKeysTest's.
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
@@ -62,11 +62,10 @@ final class StudioPageTest extends TestCase
         self::assertStringContainsString('<address>' . self::STUDENT . '</address>', $res->body);
         self::assertStringContainsString('<meter min="0" max="5242880" value="1258291"', $res->body);
         self::assertStringContainsString('1.2 MB of 5 MB used', $res->body);
-        self::assertStringNotContainsString('<script type="module"', $res->body, 'the page needs no script');
         foreach (['read notes', 'publish drafts', 'delete drafts'] as $words) {
             self::assertMatchesRegularExpression('/<input type="checkbox" name="scopes\[\]" value="[a-z:]+"> ' . $words . '<\/label>/', $res->body, $words);
         }
-        self::assertStringContainsString('Start over deletes every piece, draft and note in your studio, your notes key and your AI keys. Nobody can undo it, and nobody can get them back. Use it if you forgot your passphrase. Type start over to confirm.', $res->body);
+        self::assertStringContainsString('Start over deletes every piece, draft and note in your studio, your notes key and your AI keys. Nobody can undo it, and nobody can get them back.', $res->body);
         self::assertStringContainsString('action="logout.php"', $res->body);
         self::assertStringContainsString('action="logout.php?all=1"', $res->body);
         self::assertStringContainsString('>Sign out<', $res->body);
@@ -130,23 +129,6 @@ final class StudioPageTest extends TestCase
         self::assertNull($this->aiKeys->list($other)[0]['revoked_at']);
     }
 
-    public function testStartOverNeedsTheTypedConfirmation(): void
-    {
-        $this->draft($this->store);
-        $as = $this->signedIn();
-        foreach (['', 'start', 'startover', 'yes'] as $typed) {
-            $res = $this->post($as, ['action' => 'start-over', 'confirm' => $typed]);
-            self::assertSame(400, $res->status, "'$typed'");
-            self::assertStringContainsString('<p class="error" role="alert">Nothing was deleted. Type start over to confirm.</p>', $res->body);
-        }
-        self::assertCount(1, $this->store->drafts(), 'nothing was deleted');
-        self::assertSame(403, $this->post($as, ['action' => 'start-over', 'confirm' => 'start over', 'csrf' => ''])->status, 'start over needs csrf');
-        self::assertCount(1, $this->store->drafts());
-        $res = $this->post($as, ['action' => 'start-over', 'confirm' => "  Start OVER \n"]);
-        self::assertSame([303, 'studio.php'], [$res->status, $res->headers['Location']], 'trimmed and case-insensitive');
-        self::assertSame([], $this->store->drafts());
-    }
-
     public function testStartOverEmptiesTheStudioAndKeepsTheSession(): void
     {
         $this->draft($this->store);
@@ -162,7 +144,7 @@ final class StudioPageTest extends TestCase
         self::assertFileExists("{$this->dir}/notes/$note.sealed");
 
         $as = $this->signedIn();
-        self::assertSame(303, $this->post($as, ['action' => 'start-over', 'confirm' => 'start over'])->status);
+        $this->accounts->startOver($this->account);
 
         self::assertSame([], $this->store->drafts());
         self::assertSame([], $this->store->notes());
@@ -192,7 +174,7 @@ final class StudioPageTest extends TestCase
         );
         $call = fn(): Admin\Response => $api->listNotes(req(['https' => true, 'headers' => ['authorization' => "Bearer $key"]]));
         self::assertSame(200, $call()->status);
-        self::assertSame(303, $this->post($this->signedIn(), ['action' => 'start-over', 'confirm' => 'start over'])->status);
+        $this->accounts->startOver($this->account);
         $res = $call();
         self::assertSame(401, $res->status);
         self::assertArrayHasKey('WWW-Authenticate', $res->headers);

@@ -2,9 +2,9 @@
 // an address the studio configuration does not name signs in through the
 // captured mail to an empty studio, makes a notes key on the page and pins a
 // typed note; makes an AI key on Your studio, seen once; publishes a score-only
-// draft with it, whose sound the page builds; deletes the draft on the page;
-// starts over, back to an empty studio with no notes key, and the old AI key no
-// longer works. The studio's sign-in never reaches the admin hub.
+// draft with it, whose sound the page builds; deletes the draft on the page.
+// The studio's sign-in never reaches the admin hub. Changing the passphrase,
+// Forgot your passphrase and Start over are studio-keys.local.ts's.
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,7 +20,7 @@ const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
 
 test.describe.configure({ mode: 'serial' });
 
-test("a student's studio from first sign-in to start over", async ({ browser, request, baseURL }) => {
+test("a student's studio from first sign-in to a deleted draft", async ({ browser, request, baseURL }) => {
   test.setTimeout(240_000);
   const base = baseURL!;
   const context = await browser.newContext();
@@ -86,26 +86,6 @@ test("a student's studio from first sign-in to start over", async ({ browser, re
     await page.getByRole('button', { name: 'Delete this draft' }).click();
     await expect(page).toHaveURL(/music\/(index\.php)?$/);
     await expect(page.getByText(EMPTY)).toBeVisible();
-
-    // Start over: only the typed words do it. Afterwards the studio is empty and the notes key is gone.
-    await page.goto(`${base}music/studio.php`);
-    await page.getByLabel('Type start over').fill('start');
-    await page.getByRole('button', { name: 'Start over', exact: true }).click();
-    await expect(page.getByRole('alert')).toHaveText('Nothing was deleted. Type start over to confirm.');
-    await expect(page.locator('.studio-keys li strong')).toHaveText(['my assistant']);
-    await page.getByLabel('Type start over').fill('start over');
-    await page.getByRole('button', { name: 'Start over', exact: true }).click();
-    await expect(page).toHaveURL(/music\/studio\.php$/);
-    await expect(page.locator('.studio-keys')).toHaveCount(0);
-    await expect(page.getByText('No AI keys yet.')).toBeVisible();
-    await page.goto(`${base}music/`);
-    await expect(page.getByText(EMPTY)).toBeVisible();
-    await expect(page.locator('.waiting-total')).toHaveText('0 notes waiting for pickup');
-    await expect(page.locator('[data-make-key]').getByText(/^Make your notes key\./)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Make my notes key' })).toBeVisible();
-
-    // The old AI key went with everything else.
-    expect((await publish()).status()).toBe(401);
 
     // A studio session is not an admin session: the hub sends this browser to its own sign-in.
     await page.goto(`${base}admin/`);

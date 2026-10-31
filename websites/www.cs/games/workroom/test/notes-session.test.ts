@@ -31,6 +31,7 @@ function server() {
     removeAll: async () => { const k = notes.length; notes.length = 0; return k; },
     keyring: async () => { if (state.failKeyring) throw state.failKeyring; return { locked: state.keyring, session: state.session }; },
     uploadKeyring: async (locked, current) => { state.keyring = locked; state.failKeyring = null; state.uploaded.push(current); },
+    changeKeyring: async locked => { state.keyring = locked; },
     deleteDraft: async () => 0,
   };
   return { api, notes, state };
@@ -289,8 +290,8 @@ test('a lock during makeKey leaves the key stored and says so, not silence', asy
   assert.equal(notes.keyStored(), true);
 });
 
-test('the damaged-key message sends studio people to Start over, and named people to make music-setup', () => {
+test('the damaged-key message sends studio people to Forgot your passphrase, and named people to make music-setup', () => {
   assert.match(UNLOCK_MESSAGES.invalid, /make music-setup/);
-  assert.match(studioInvalid, /Start over on Your studio/);
+  assert.match(studioInvalid, /Forgot your passphrase on Your studio/);
   assert.doesNotMatch(studioInvalid, /make music/);
 });

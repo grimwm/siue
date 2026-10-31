@@ -60,6 +60,54 @@ export interface Unlocked {
  * WrongPassphrase when the passphrase does not decrypt it.
  */
 export async function unlockKeyring(locked: LockedKeyring, passphrase: string): Promise<Unlocked> {
+  const entries = await openEntries(locked, passphrase);
+  const ring = new Map<string, CryptoKey>();
+  let current: PublicKey | undefined;
+  try {
+    for (const entry of entries) {
+      const { pub, priv } = await importPaired(entry);
+      current ??= pub;
+      ring.set(entry.fingerprint, priv);
+    }
+  } finally {
+    for (const entry of entries) entry.pkcs8.fill(0);
+  }
+  return { current: current!, ring };
+}
+
+/**
+ * A new passphrase for the same keys: opens the keyring with `passphrase`, checks every entry against its fingerprint
+ * as unlockKeyring does, and locks the same entries, in the same order, with `next` (a fresh salt and IV). `current`
+ * and `previous` are the fingerprints the server must already hold; `proof` is the current key's signature over
+ * `tag` (the server's tag for this sign-in) and the new envelope. The private keys' bytes are zeroed once locked.
+ * WrongPassphrase and KeyringInvalid as unlockKeyring.
+ */
+export async function relockKeyring(locked: LockedKeyring, passphrase: string, next: string, tag: string): Promise<{ locked: LockedKeyring; current: string; previous: string[]; proof: ChangeProof }> {
+  const entries = await openEntries(locked, passphrase);
+  try {
+    const pubs: PublicKey[] = [];
+    for (const entry of entries) pubs.push((await importPaired(entry)).pub);
+    const fingerprints = entries.map(e => e.fingerprint);
+    const relocked = await lockKeyring(entries, next);
+    // The same RSA key signs (RSASSA-PKCS1-v1_5): only the holder of the current private key can change its envelope.
+    const signer = await crypto.subtle.importKey('pkcs8', entries[0]!.pkcs8, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+    const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', signer, new TextEncoder().encode(changeMessage(tag, fingerprints[0]!, relocked))));
+    return { locked: relocked, current: fingerprints[0]!, previous: fingerprints.slice(1), proof: { spki: pubs[0]!.spki, sig: toBase64(sig) } };
+  } finally {
+    for (const entry of entries) entry.pkcs8.fill(0);
+  }
+}
+
+/** The current key's proof for a new passphrase: its SPKI and its signature of changeMessage, both base64. */
+export interface ChangeProof { spki: string; sig: string }
+
+/** What a new passphrase's proof signs (music/lib/Keyring.php changeMessage): the server's tag for this sign-in, the current fingerprint and the new envelope's parts. */
+export function changeMessage(tag: string, current: string, locked: LockedKeyring): string {
+  return ['siue-music-keyring-change-v1', tag, current, String(locked.iterations), locked.salt, locked.iv, locked.ct].join('\n');
+}
+
+/** The keyring's entries, opened with the passphrase: at least one, none repeated. The caller zeroes their pkcs8 bytes. */
+async function openEntries(locked: LockedKeyring, passphrase: string): Promise<{ fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[]> {
   if (typeof crypto === 'undefined' || !crypto.subtle) throw new NoCrypto('this browser has no Web Crypto');
   const salt = fromBase64(locked.salt);
   const iv = fromBase64(locked.iv);
@@ -77,22 +125,14 @@ export async function unlockKeyring(locked: LockedKeyring, passphrase: string): 
     throw new WrongPassphrase('the passphrase does not unlock the keyring');
   }
 
-  const entries = parseEntries(plain);
-  plain.fill(0);
-  if (entries.length === 0) throw new KeyringInvalid('the keyring has no keys');
-
-  const ring = new Map<string, CryptoKey>();
-  let current: PublicKey | undefined;
+  let entries: { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[];
   try {
-    for (const entry of entries) {
-      const { pub, priv } = await importPaired(entry);
-      current ??= pub;
-      ring.set(entry.fingerprint, priv);
-    }
+    entries = parseEntries(plain);
   } finally {
-    for (const entry of entries) entry.pkcs8.fill(0);
+    plain.fill(0);
   }
-  return { current: current!, ring };
+  if (entries.length === 0) throw new KeyringInvalid('the keyring has no keys');
+  return entries;
 }
 
 function parseEntries(plain: Uint8Array): { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[] {
@@ -145,7 +185,7 @@ async function importPaired(entry: { fingerprint: string; pkcs8: Uint8Array<Arra
   }
 }
 
-/** The format Python's lock_keyring writes (current key first); the page locks a key it makes with it (keymaker.ts). */
+/** The format Python's lock_keyring writes (current key first); the page locks a key it makes with it (keymaker.ts), and the same keys again under a new passphrase (relockKeyring). */
 export async function lockKeyring(keys: readonly { fingerprint: string; pkcs8: Uint8Array<ArrayBuffer> }[], passphrase: string): Promise<LockedKeyring> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));

@@ -24,12 +24,16 @@ final class Pages
 
     /** Where a signed-out page visit goes: the studio's own sign-in. */
     private string $login;
+    private \Admin\Realm $realm;
+    /** The cookie that holds the confirmation page's mark, which its form carries back. */
+    private const MARK_COOKIE = '__Secure-studio-act';
 
     /**
      * $storeFor: fn(int $account): Store, the studio of one account; $sessions: the studio realm's sessions;
      * $assetVersion: 10 hex over games/workroom/dist's workroom.js, sheet.js, theme.js and workroom.css (the ?v= on
      * each; the script passes it on to sheet.js); $baseUrl: admin_base_url(), the studio's folder sits beside it;
-     * $aiKeys: every studio's AI keys, of which a page shows and changes only its own account's.
+     * $aiKeys: every studio's AI keys, of which a page shows and changes only its own account's; $confirmations: the
+     * mailed links that confirm Forgot your passphrase and Start over.
      */
     public function __construct(
         private \Closure $storeFor,
@@ -39,8 +43,16 @@ final class Pages
         private string $assetVersion,
         private string $baseUrl,
         private AiKeys $aiKeys,
+        private Confirmations $confirmations,
     ) {
-        $this->login = \Admin\Realm::studio($baseUrl)->baseUrl . 'login.php';
+        $this->realm = \Admin\Realm::studio($baseUrl);
+        $this->login = $this->realm->baseUrl . 'login.php';
+    }
+
+    /** Sends the mail a request queued (a confirmation link); music_run calls it once the reply is out. */
+    public function flush(): void
+    {
+        $this->confirmations->flush();
     }
 
     /** GET index.php: the pieces, grouped by project. */
@@ -109,9 +121,10 @@ final class Pages
     }
 
     /**
-     * POST studio.php: action make-key (label, scopes[]), revoke-key (id) or start-over (confirm, "start over" in any
-     * case and spacing around it), each with the session's token in the csrf field. A new key is shown on this response
-     * only; a revoke or a start over goes back to the page.
+     * POST studio.php: action make-key (label, scopes[]), revoke-key (id), forgot-passphrase or start-over, each with
+     * the session's token in the csrf field. A new key is shown on this response only; a revoke goes back to the page.
+     * Forgot your passphrase (only while the studio holds a keyring) and start over delete nothing here: each mails a
+     * confirmation link to the account's address (Confirmations), at most three an hour.
      */
     public function studioAction(\Admin\Request $r): \Admin\Response
     {
@@ -136,12 +149,18 @@ final class Pages
                         return $this->studioPage(404, $r, $account, 'No active key of yours has that id.');
                     }
                     return Http::finish(new \Admin\Response(303, ['Location' => 'studio.php'], ''));
+                case 'forgot-passphrase':
                 case 'start-over':
-                    if (strtolower(trim($field('confirm'))) !== 'start over') {
-                        return $this->studioPage(400, $r, $account, 'Nothing was deleted. Type start over to confirm.');
+                    $action = $field('action');
+                    if ($action === 'forgot-passphrase' && $store->keyring() === null) {
+                        return $this->studioPage(409, $r, $account, 'You have no notes key, so there is nothing to forget.');
                     }
-                    $this->accounts->startOver($account);
-                    return Http::finish(new \Admin\Response(303, ['Location' => 'studio.php'], ''));
+                    $email = (string) $this->accounts->emailOf($account);
+                    if (!$this->confirmations->request($account, $email, $action)) {
+                        return $this->studioPage(429, $r, $account, 'You asked for three links in the last hour. Use one of those, or try again later.');
+                    }
+                    $what = $action === 'start-over' ? 'start over' : 'delete your notes and notes key';
+                    return $this->studioPage(200, $r, $account, null, null, "We emailed a link to $email. Open it within 15 minutes to $what. Nothing is deleted until you press the button on the page it opens.");
                 default:
                     return $this->studioPage(400, $r, $account, 'Unknown action.');
             }
@@ -149,13 +168,19 @@ final class Pages
     }
 
     /**
-     * Your studio: the address, usage of the account's limit, its AI keys with the form that makes one, start over,
-     * and sign out. $error explains a refused form; $made is a key just made, shown here and never again.
+     * Your studio: the address, usage of the account's limit, while it holds a notes key the change of passphrase (a
+     * panel the page's script draws) and Forgot your passphrase, its AI keys with the form that makes one, start over,
+     * and sign out. $error explains a refused form; $made is a key just made, shown here and never again; $notice says
+     * what a form did (?changed=passphrase says the passphrase changed).
      *
      * @param array{key: string, label: string}|null $made
      */
-    private function studioPage(int $status, \Admin\Request $r, int $account, ?string $error = null, ?array $made = null): \Admin\Response
+    private function studioPage(int $status, \Admin\Request $r, int $account, ?string $error = null, ?array $made = null, ?string $notice = null): \Admin\Response
     {
+        if ($notice === null && ($r->query['changed'] ?? null) === 'passphrase') {
+            $notice = 'Your passphrase is changed. Unlock your notes with the new one.';
+        }
+        $keyed = (($this->storeFor)($account))->keyring() !== null;
         $csrf = Html::e($this->sessions->csrf($r));
         $hidden = static fn(string $action): string => '<input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="action" value="' . $action . '">';
         $usage = $this->accounts->usage($account);
@@ -164,6 +189,9 @@ final class Pages
         if ($error !== null) {
             $body .= '<p class="error" role="alert">' . Html::e($error) . '</p>';
         }
+        if ($notice !== null) {
+            $body .= '<p class="notice" role="status">' . Html::e($notice) . '</p>';
+        }
         if ($made !== null) {
             $body .= '<section class="studio-card newkey" role="status"><h2>Your new AI key: ' . Html::e($made['label']) . '</h2>'
                 . '<code class="secret">' . Html::e($made['key']) . '</code><p>Copy it now: it is not shown again.</p></section>';
@@ -171,6 +199,17 @@ final class Pages
         $body .= '<section class="studio-card"><address>' . Html::e((string) $this->accounts->emailOf($account)) . '</address>'
             . '<meter min="0" max="' . $quota . '" value="' . $usage . '">' . Usage::human($usage) . '</meter>'
             . '<p class="usage">' . Usage::human($usage) . ' of ' . Usage::human($quota) . ' used</p></section>';
+
+        if ($keyed) {
+            $body .= '<section class="studio-card" data-change-passphrase><h2>Change your passphrase</h2>'
+                . '<p>Your notes key stays the same: this page opens it with your passphrase and locks it again with the new one.</p>'
+                . '<noscript><p>Changing the passphrase needs script, because the key is opened in this browser.</p></noscript>'
+                . '<div id="change-passphrase"></div></section>';
+            $body .= '<section class="studio-card"><h2>Forgot your passphrase?</h2>'
+                . '<p>Nobody can reset it. You can delete your notes and your notes key, then make a new key with a new passphrase. Your pieces, drafts and AI keys stay.</p>'
+                . '<p>We email a link to your address first; nothing is deleted until you press the button on the page it opens.</p>'
+                . '<form method="post" action="studio.php">' . $hidden('forgot-passphrase') . '<button type="submit" class="danger">Email me a link to delete my notes</button></form></section>';
+        }
 
         $keys = '';
         foreach ($this->aiKeys->list($account) as $k) {
@@ -193,10 +232,9 @@ final class Pages
             . '<fieldset><legend>Permissions</legend>' . $checks . '</fieldset><button type="submit">Make key</button></form></section>';
 
         $body .= '<section class="studio-card"><h2>Start over</h2>'
-            . '<p>Start over deletes every piece, draft and note in your studio, your notes key and your AI keys. Nobody can undo it, and nobody can get them back. Use it if you forgot your passphrase. Type start over to confirm.</p>'
-            . '<form method="post" action="studio.php">' . $hidden('start-over')
-            . '<label for="confirm">Type start over</label><input id="confirm" type="text" name="confirm" autocomplete="off" required>'
-            . '<button type="submit" class="danger">Start over</button></form></section>';
+            . '<p>Start over deletes every piece, draft and note in your studio, your notes key and your AI keys. Nobody can undo it, and nobody can get them back.</p>'
+            . '<p>We email a link to your address first; nothing is deleted until you press the button on the page it opens.</p>'
+            . '<form method="post" action="studio.php">' . $hidden('start-over') . '<button type="submit" class="danger">Email me a link to start over</button></form></section>';
 
         $body .= '<section class="studio-card studio-signout">'
             . Html::form('logout.php', ['csrf' => $this->sessions->csrf($r)], 'Sign out', 'quiet')
@@ -206,15 +244,109 @@ final class Pages
         $html = '<!doctype html>' . "\n"
             . '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             . '<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="dark light">'
+            . '<meta name="csrf" content="' . $csrf . '">'
             . '<title>Your studio</title>' . $this->assets() . '</head>'
             . '<body data-view="studio"><header class="console-head"><p class="crumb"><a href="./">All pieces</a></p></header>'
-            . '<main class="index-body studio">' . $body . '</main></body></html>';
+            . '<main class="index-body studio">' . $body . '</main>'
+            . ($keyed ? '<script type="module" src="../games/workroom/dist/workroom.js?v=' . Html::e($this->assetVersion) . '"></script>' : '')
+            . '</body></html>';
         return Http::finish(new \Admin\Response($status, ['Content-Type' => 'text/html; charset=utf-8'], $html));
     }
 
     private static function when(int $t): string
     {
         return gmdate('Y-m-d H:i', $t) . ' UTC';
+    }
+
+    /**
+     * confirm.php, the page a mailed confirmation link opens; it needs no session, since the link proves the mailbox
+     * as a sign-in link does. GET (token) deletes nothing and spends nothing (mail scanners fetch every link): it
+     * names what the button deletes, with counts, and what stays, and sets a mark cookie the form carries back. POST
+     * (token, mark) checks the mark against its cookie, spends the link (and the account's other ones), then does its
+     * action: forgot-passphrase deletes the notes and the keyring (Store::forgetNotesKey), start-over the studio
+     * (Accounts::startOver).
+     */
+    public function confirm(\Admin\Request $r): \Admin\Response
+    {
+        $refused = admin_refuse_plain_http($r, $this->baseUrl) ?? admin_refuse_script_fetch($r);
+        if ($refused !== null) {
+            return Http::finish($refused);
+        }
+        $expired = fn(array $cookies = []): \Admin\Response => $this->plainPage(403, 'Link not valid',
+            '<p class="error" role="alert">This link has expired or was already used. Ask for a new one on Your studio.</p><p><a href="studio.php">Your studio</a></p>', $cookies);
+        try {
+            if ($r->method === 'POST') {
+                $clear = self::MARK_COOKIE . '=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; ' . \Admin\Sessions::attributes($this->realm->cookiePath);
+                $mark = $r->cookies[self::MARK_COOKIE] ?? null;
+                $given = $r->post['mark'] ?? null;
+                if (!is_string($mark) || $mark === '' || !is_string($given) || !hash_equals($mark, $given)) {
+                    return $this->plainPage(403, 'Form expired', '<p class="error" role="alert">This form expired. Open the link in your email again.</p>', [$clear]);
+                }
+                $found = $this->confirmations->consume($r->post['token'] ?? null);
+                if ($found === null) {
+                    return $expired([$clear]);
+                }
+                if ($found['action'] === 'start-over') {
+                    $this->accounts->startOver($found['account']);
+                    return $this->plainPage(200, 'Your studio is empty', '<h1>Your studio is empty</h1><p role="status">Your studio is empty. Every piece, draft and note, your notes key and your AI keys are deleted. Your account and your sign-in stay.</p>'
+                        . '<p><a class="button" href="index.php">Open your studio</a></p>', [$clear]);
+                }
+                (($this->storeFor)($found['account']))->forgetNotesKey();
+                return $this->plainPage(200, 'Your notes key is deleted', '<h1>Your notes key is deleted</h1><p role="status">Your notes and your notes key are deleted. Your pieces, drafts and AI keys are still here. Make a new notes key, with a new passphrase, on your pieces page.</p>'
+                    . '<p><a class="button" href="index.php">Make a new notes key</a></p>', [$clear]);
+            }
+            $token = $r->query['token'] ?? null;
+            $found = $this->confirmations->peek($token);
+            if ($found === null) {
+                return $expired();
+            }
+            $store = ($this->storeFor)($found['account']);
+            $drafts = $store->drafts();
+            $pieces = count(array_unique(array_column($drafts, 'piece')));
+            $notes = count($store->notes());
+            $keys = count(array_filter($this->aiKeys->list($found['account']), static fn(array $k): bool => $k['revoked_at'] === null));
+            $n = static fn(int $count, string $one, string $many): string => $count . ' ' . ($count === 1 ? $one : $many);
+            $piecesWords = $n($pieces, 'piece', 'pieces') . ', ' . $n(count($drafts), 'draft', 'drafts');
+            if ($found['action'] === 'start-over') {
+                [$title, $button] = ['Start over?', 'Delete everything in my studio'];
+                $gone = ['Every piece and draft: ' . $piecesWords, 'Every note: ' . $n($notes, 'note', 'notes'), 'Your notes key', 'Your AI keys: ' . $n($keys, 'AI key', 'AI keys')];
+                $stays = 'Your account and your sign-in stay.';
+            } else {
+                [$title, $button] = ['Delete your notes and notes key?', 'Delete my notes and notes key'];
+                $gone = ['Every note in your studio: ' . $n($notes, 'note', 'notes'), 'Your notes key'];
+                $stays = 'Your pieces (' . $piecesWords . ') and your AI keys (' . $n($keys, 'AI key', 'AI keys') . ') stay. Afterwards you make a new notes key with a new passphrase.';
+            }
+            $list = '';
+            foreach ($gone as $item) {
+                $list .= '<li>' . Html::e($item) . '</li>';
+            }
+            $mark = bin2hex(random_bytes(32));
+            $cookie = self::MARK_COOKIE . '=' . $mark . '; Max-Age=' . \Admin\Auth::LINK_TTL . '; ' . \Admin\Sessions::attributes($this->realm->cookiePath);
+            $body = '<h1>' . Html::e($title) . '</h1>'
+                . '<section class="studio-card"><p>Pressing the button deletes:</p><ul class="confirm-gone">' . $list . '</ul>'
+                . '<p>' . Html::e($stays) . '</p><p>Nobody can undo it, and nobody can get them back. Nothing is deleted until you press the button.</p>'
+                . '<form method="post" action="confirm.php"><input type="hidden" name="token" value="' . Html::e((string) $token) . '">'
+                . '<input type="hidden" name="mark" value="' . $mark . '"><button type="submit" class="danger">' . Html::e($button) . '</button></form></section>';
+            return $this->plainPage(200, $title, $body, [$cookie]);
+        } catch (\PDOException $e) {
+            return Http::finish(\Admin\Pages::fromStorageError($e));
+        }
+    }
+
+    /**
+     * A plain studio page of $body, with no script and no session.
+     *
+     * @param list<string> $cookies
+     */
+    private function plainPage(int $status, string $title, string $body, array $cookies = []): \Admin\Response
+    {
+        $html = '<!doctype html>' . "\n"
+            . '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="dark light">'
+            . '<title>' . Html::e($title) . '</title>' . $this->assets() . '</head>'
+            . '<body data-view="confirm"><header class="console-head"><p class="crumb"><a href="studio.php">Your studio</a></p></header>'
+            . '<main class="index-body studio">' . $body . '</main></body></html>';
+        return Http::finish(new \Admin\Response($status, ['Content-Type' => 'text/html; charset=utf-8'], $html, $cookies));
     }
 
     /** GET csrf.php: the session's current token. */
@@ -283,7 +415,11 @@ final class Pages
     /**
      * GET keyring.php: the locked keyring, and this session's unlock tag (the page forgets a remembered unlock when it
      * changes). POST stores the keyring the page made ($body, Keyring::parseUpload's wrapper) when this studio has none;
-     * 409 key_exists when it has one (the owner's CLI replaces keyrings through the API, the page never does).
+     * 409 key_exists when it has one. POST keyring.php?change=1 is a new passphrase: the same keys locked again, stored
+     * only when the wrapper names exactly the stored fingerprints (409 key_changed otherwise, 404 no_keyring when none is
+     * stored) and its proof is the current private key's signature over this session's tag and the new envelope
+     * (Keyring::proofHolds; 403 bad_proof otherwise): knowing the fingerprints, which every note's header names, is
+     * not enough. The page never stores a keyring of other keys over one.
      */
     public function keyring(\Admin\Request $r, string $body = ''): \Admin\Response
     {
@@ -291,6 +427,33 @@ final class Pages
             return $this->guarded($r, false, true, function (Store $store) use ($r, $body): \Admin\Response {
                 if (strlen($body) > Store::MAX_KEYRING_BYTES) {
                     return $this->refuseWithToken(413, 'too_large', $r);
+                }
+                if (($r->query['change'] ?? null) === '1') {
+                    $change = Keyring::parseChange($body);
+                    $plain = $change === null ? Keyring::parseUpload($body) : null;
+                    if ($change === null && $plain === null) {
+                        return $this->refuseWithToken(422, 'bad_keyring', $r);
+                    }
+                    $stored = $store->keyring();
+                    if ($stored === null) {
+                        return $this->refuseWithToken(404, 'no_keyring', $r);
+                    }
+                    $given = $change ?? $plain;
+                    $had = $stored['previous'];
+                    $named = $given['previous'];
+                    sort($had);
+                    sort($named);
+                    if ($stored['current'] === '' || !hash_equals($stored['current'], $given['current']) || $had !== $named) {
+                        return $this->refuseWithToken(409, 'key_changed', $r);
+                    }
+                    if ($change === null || !Keyring::proofHolds($change['spki'], $change['sig'], $stored['current'], $this->sessions->tag($r, 'music-unlock'), $change['keyring'])) {
+                        return $this->refuseWithToken(403, 'bad_proof', $r);
+                    }
+                    return match ($store->changeKeyring($change['locked'], $change['current'], $change['previous'])) {
+                        'changed' => Http::json(200, ['changed' => true, 'csrf' => $this->sessions->csrf($r)]),
+                        'none' => $this->refuseWithToken(404, 'no_keyring', $r),
+                        default => $this->refuseWithToken(409, 'key_changed', $r),
+                    };
                 }
                 $parsed = Keyring::parseUpload($body);
                 if ($parsed === null) {

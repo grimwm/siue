@@ -11,6 +11,7 @@ require_once __DIR__ . '/Usage.php';
 require_once __DIR__ . '/Keyring.php';
 require_once __DIR__ . '/ScoreRules.php';
 require_once __DIR__ . '/AiKeys.php';
+require_once __DIR__ . '/Confirmations.php';
 require_once __DIR__ . '/KeyGate.php';
 require_once __DIR__ . '/Api.php';
 require_once __DIR__ . '/Pages.php';
@@ -99,7 +100,7 @@ function music_asset_version(?string $dist = null): string
  * Music\Pages on studio sessions, which builds a store only for the account its session names; an 'api' route gets
  * Music\Api, which builds a store only for the account its key serves (Music\KeyGate: an AI key's own account, an
  * admin key the owner's). Storage that is refused becomes the admin 503 page. Session, CSRF and scope
- * checks live in Music\Pages and Music\Api, per route.
+ * checks live in Music\Pages and Music\Api, per route. Mail a page queued (a confirmation link) goes after the reply.
  *
  * @param callable(Music\Pages, Admin\Request): Admin\Response|callable(Music\Api, Admin\Request): Admin\Response $route
  */
@@ -123,13 +124,22 @@ function music_run(string $kind, callable $route): void
             $res = $route(new Music\Api($storeFor, $gate), $r);
         } else {
             $sessions = new Admin\Sessions($db, $clock, studio_realm());
-            $res = $route(new Music\Pages($storeFor, $accounts, $people, $sessions, music_asset_version(), $base, new Music\AiKeys($db, $clock)), $r);
+            $confirmations = new Music\Confirmations($db, $clock, admin_mailer($r->host, null, $base), studio_realm()->baseUrl);
+            $pages = new Music\Pages($storeFor, $accounts, $people, $sessions, music_asset_version(), $base, new Music\AiKeys($db, $clock), $confirmations);
+            $res = $route($pages, $r);
         }
     } catch (Admin\StorageUnavailable | PDOException $e) {
         error_log('music: storage unavailable: ' . $e->getMessage());
         $res = Music\Http::finish(Admin\Pages::fromStorageError($e));
     }
     admin_emit($res);
+    // A confirmation link's mail goes once the client has the reply, as a sign-in link's does.
+    if (isset($pages)) {
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+        $pages->flush();
+    }
 }
 
 /** The studios' sign-in realm, beside the admin folder named by ADMIN_BASE_URL. */

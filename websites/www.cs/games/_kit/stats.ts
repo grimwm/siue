@@ -129,6 +129,8 @@ function make(env: StatsEnv, start: StatsStart): SiteStats {
     const seconds = (): number => Math.min(MAX_SECS, Math.round((banked + (shownAt === null ? 0 : env.now() - shownAt)) / 1000));
     const report = (): void => {
       const sec = seconds();
+      // Time in view is activity: it keeps the visit going, so a later event joins the same visit.
+      ids();
       if (sec > 0) post({ t: 's', p: start.page, pv, sec });
       if (sec >= MAX_SECS && beat !== null) {
         env.timers.clearInterval(beat);

@@ -393,8 +393,10 @@ export function createLobby(deps: LobbyDeps) {
           const veil = $('lobby-veil');
           // Shown: the match starts here. Closed: the player is elsewhere (the title
           // card, a solo match); the room waits in Your games and its turn toasts.
-          if (veil && !veil.hidden) startNetMatch(room);
-          else net.stopLobbyWatch();
+          if (veil && !veil.hidden) {
+            track('match_start', 'room');
+            startNetMatch(room);
+          } else net.stopLobbyWatch();
         }
       },
     );
@@ -645,7 +647,10 @@ export function createLobby(deps: LobbyDeps) {
     try {
       const started = await net.start();
       if ('local' in started) playHere(started.local);
-      else startNetMatch(started.room);
+      else {
+        track('match_start', 'room');
+        startNetMatch(started.room);
+      }
     } catch (err) { lobbySay(prettyRoomError(err)); }
   }
   /* Nobody joined: the server closed the lobby, so the seat is forgotten (it
@@ -662,7 +667,6 @@ export function createLobby(deps: LobbyDeps) {
     say('Nobody else joined, so this match plays here on your device.', 'info');
   }
   function startNetMatch(room: RoomSnapshot): void {
-    track('match_start', 'room');
     endTutorial(false);
     closeTitle();
     G.demo = false;

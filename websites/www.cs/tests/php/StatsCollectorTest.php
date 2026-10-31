@@ -193,6 +193,16 @@ final class StatsCollectorTest extends TestCase
         self::assertSame(Stats\Collector::PER_CLIENT_MINUTE + 2, (int) $this->db->query('SELECT COUNT(*) FROM hits')->fetchColumn());
     }
 
+    public function testAnIpv6ClientIsLimitedByItsPrefix(): void
+    {
+        for ($i = 0; $i < Stats\Collector::PER_CLIENT_MINUTE + 5; $i++) {
+            stats_post($this->c, stats_event('hint'), [], '2001:db8:1:2::' . dechex($i + 1));
+        }
+        self::assertSame(Stats\Collector::PER_CLIENT_MINUTE, (int) $this->db->query('SELECT COUNT(*) FROM hits')->fetchColumn());
+        self::assertSame('20010db800010002::/64', Stats\Collector::clientOf('2001:db8:1:2:ffff::9'));
+        self::assertSame('198.51.100.7', Stats\Collector::clientOf('198.51.100.7'));
+    }
+
     public function testTheDefaultPagesAreHomeAndEveryGame(): void
     {
         $pages = Stats\Collector::sitePages();

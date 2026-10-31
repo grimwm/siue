@@ -111,6 +111,14 @@ test('the visitor ID stays; the visit ID changes after half an hour away', () =>
   assert.ok(store.data.has(STORE_KEY));
 });
 
+test('a page kept in view keeps its visit going past the idle gap', () => {
+  const w = world();
+  const s = startStats(w.env, START);
+  w.t.advance(VISIT_GAP_MS + BEAT_MS * 4);
+  s.event('crete', 'hint');
+  assert.equal(w.sent.at(-1)!['sid'], w.sent[0]!['sid']);
+});
+
 test('blocked storage still counts the view, without a visitor ID', () => {
   const throwing: StorageLike = {
     getItem: () => { throw new Error('SecurityError'); },

@@ -69,7 +69,7 @@ final class Collector
         try {
             Db::write($this->db, function () use ($msg, $now, $ip, $ua): void {
                 $salt = $this->salt(Days::of($now));
-                if (!$this->underLimit($now, hash_hmac('sha256', 'rate|' . $ip, $salt))) {
+                if (!$this->underLimit($now, hash_hmac('sha256', 'rate|' . self::clientOf($ip), $salt))) {
                     return;
                 }
                 $this->store($msg, $now, $ip, $ua, $salt);
@@ -167,6 +167,13 @@ final class Collector
         $ins->bindValue(2, $salt, \PDO::PARAM_LOB);
         $ins->execute();
         return $salt;
+    }
+
+    /** The address a client's limit is kept by: an IPv4 address whole, an IPv6 address by its /64, which one client holds. */
+    public static function clientOf(string $ip): string
+    {
+        $packed = @inet_pton($ip);
+        return is_string($packed) && strlen($packed) === 16 ? bin2hex(substr($packed, 0, 8)) . '::/64' : $ip;
     }
 
     /** Counts one write against the client's and the overall per-minute limits; false when either is spent. */

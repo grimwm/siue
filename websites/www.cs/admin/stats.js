@@ -382,6 +382,9 @@
     var series = opts.series;
     function draw() {
       el.textContent = '';
+      if (!opts.rows.length) {
+        return;
+      }
       if (series.length > 1) {
         legend(el, series, 'box', null);
       }

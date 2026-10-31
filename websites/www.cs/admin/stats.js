@@ -1,6 +1,7 @@
 // The Visitors dashboard's charts, drawn as SVG from the page's JSON block (#stats-data). Colors come from
 // stats.css classes (s1..s6, q0..q7), so the theme lives in one place. Every value a tooltip shows is also in
 // the table beneath its chart; tooltips follow the pointer, a tap, or keyboard focus (arrow keys move).
+// Long ranges come by week or by month (R.bucket); each date is then the first day of its week or month.
 (function () {
   'use strict';
   var node = document.getElementById('stats-data');
@@ -14,6 +15,9 @@
   var NS = 'http://www.w3.org/2000/svg';
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var BUCKET = R.bucket || 'day';
+  var UNIT = { day: 'day', week: 'week', month: 'month' }[BUCKET];
+  var YEARS = R.from.slice(0, 4) !== R.to.slice(0, 4);
 
   function svg(tag, attrs, parent) {
     var e = document.createElementNS(NS, tag);
@@ -55,7 +59,10 @@
     return Math.round(n * 10) / 10 + '';
   }
   function full(n) {
-    return n === null || n === undefined ? '–' : Math.round(n).toLocaleString('en-US');
+    if (n === null || n === undefined) {
+      return '–';
+    }
+    return Number.isInteger(n) ? n.toLocaleString('en-US') : n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   }
   function pct(f) {
     return f === null || f === undefined ? '–' : Math.round(f * 1000) / 10 + '%';
@@ -63,6 +70,22 @@
   function day(d) {
     var p = d.split('-');
     return MONTHS[+p[1] - 1] + ' ' + +p[2];
+  }
+  /** An axis label for a date: its day, its week's first day, or its month; the year when the range spans two. */
+  function tick(d) {
+    var p = d.split('-');
+    if (BUCKET === 'month') {
+      return MONTHS[+p[1] - 1] + (YEARS ? ' ' + p[0] : '');
+    }
+    return day(d) + (YEARS && BUCKET === 'week' ? ' ’' + p[0].slice(2) : '');
+  }
+  /** A tooltip title for a date. */
+  function when(d) {
+    var p = d.split('-');
+    if (BUCKET === 'month') {
+      return MONTHS[+p[1] - 1] + ' ' + p[0];
+    }
+    return BUCKET === 'week' ? 'Week of ' + day(d) + ', ' + p[0] : day(d);
   }
   function niceMax(max) {
     if (!(max > 0)) {
@@ -220,7 +243,7 @@
         if (i !== dates.length - 1 && dates.length - 1 - i < every * 0.6) {
           return;
         }
-        svg('text', { x: xOf(i), y: y, 'text-anchor': i === 0 ? 'start' : i === dates.length - 1 ? 'end' : 'middle' }, g).textContent = day(d);
+        svg('text', { x: xOf(i), y: y, 'text-anchor': i === 0 ? 'start' : i === dates.length - 1 ? 'end' : 'middle' }, g).textContent = tick(d);
       }
     });
   }
@@ -287,7 +310,7 @@
       }
       var cross = svg('line', { class: 'cross', y1: m.t, y2: H - m.b, x1: 0, x2: 0, visibility: 'hidden' }, g);
       var marks = svg('g', {}, g);
-      var hit = svg('rect', { class: 'hit', x: m.l, y: m.t, width: Math.max(1, W - m.l - m.r), height: H - m.t - m.b, tabindex: 0, 'aria-label': opts.title + ': use the arrow keys to read each day' }, root);
+      var hit = svg('rect', { class: 'hit', x: m.l, y: m.t, width: Math.max(1, W - m.l - m.r), height: H - m.t - m.b, tabindex: 0, 'aria-label': opts.title + ': use the arrow keys to read each ' + UNIT }, root);
       hover(hit, n, function (cx, cy, at) {
         var box = root.getBoundingClientRect();
         var i = at !== null ? at : Math.round((cx - box.left - m.l) / Math.max(1, (W - m.l - m.r)) * (n - 1));
@@ -302,7 +325,7 @@
           }
         });
         var rows = shown.map(function (s) { return { cls: s.cls, value: s.values[i] === null ? 'not yet' : fmt(s.values[i], true), label: s.label }; });
-        showTip(hit, (opts.titleOf || day)(opts.dates[i]), rows, cx !== null ? cx : box.left + xOf(i), cy !== null ? cy : box.top + m.t);
+        showTip(hit, (opts.titleOf || when)(opts.dates[i]), rows, cx !== null ? cx : box.left + xOf(i), cy !== null ? cy : box.top + m.t);
         return i;
       }, function () {
         cross.setAttribute('visibility', 'hidden');
@@ -352,7 +375,7 @@
         });
         cols.push(col);
       });
-      var hit = svg('rect', { class: 'hit', x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, tabindex: 0, 'aria-label': opts.title + ': use the arrow keys to read each day' }, root);
+      var hit = svg('rect', { class: 'hit', x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, tabindex: 0, 'aria-label': opts.title + ': use the arrow keys to read each ' + UNIT }, root);
       var lifted = null;
       hover(hit, n, function (cx, cy, at) {
         var box = root.getBoundingClientRect();
@@ -365,7 +388,7 @@
         lifted.classList.add('lift');
         var rows = opts.stacks.slice().reverse().map(function (s) { return { cls: s.cls, value: full(s.values[i]), label: s.label }; });
         rows.push({ value: full(totals[i]), label: 'in all' });
-        showTip(hit, day(opts.dates[i]), rows, cx !== null ? cx : box.left + xOf(i), cy !== null ? cy : box.top + m.t);
+        showTip(hit, when(opts.dates[i]), rows, cx !== null ? cx : box.left + xOf(i), cy !== null ? cy : box.top + m.t);
         return i;
       }, function () {
         if (lifted) {
@@ -568,15 +591,18 @@
     },
     retention: function (el) {
       var c = R.retention.cohorts;
+      // Each rate over the new visitors whose day 1 (or day 7) has passed.
       var rate = function (k) {
-        return c.map(function (x) { return x[k] === null || x.size === 0 ? null : x[k] / x.size; });
+        var of = k === 'd1' ? 'size1' : 'size7';
+        return c.map(function (x) { return x[k] === null || !x[of] ? null : x[k] / x[of]; });
       };
       lineChart(el, {
         title: 'Coming back', dates: c.map(function (x) { return x.day; }), cap: 1,
         fmt: function (v) { return pct(v); },
         titleOf: function (d) {
           var x = c.filter(function (y) { return y.day === d; })[0];
-          return 'New on ' + day(d) + ' (' + full(x.size) + ')';
+          var on = BUCKET === 'day' ? 'New on ' + day(d) : BUCKET === 'week' ? 'New in the week of ' + day(d) : 'New in ' + when(d);
+          return on + ' (' + full(x.size) + ')';
         },
         series: [{ label: 'Back next day', cls: 's1', values: rate('d1') }, { label: 'Back within 7 days', cls: 's2', values: rate('d7') }],
       });
@@ -620,6 +646,20 @@
       tipRows: function (row) { return [{ cls: 's1', value: full(row.values[0]), label: 'visits, ' + pct(row.values[0] / total) }]; },
     });
   }
+
+  // The years choice shows its range as soon as one is picked; its button is for browsers without this script.
+  Array.prototype.forEach.call(document.querySelectorAll('form.years'), function (form) {
+    var pick = form.querySelector('select');
+    var go = form.querySelector('button');
+    if (pick && go) {
+      go.hidden = true;
+      pick.addEventListener('change', function () {
+        if (pick.value) {
+          form.submit();
+        }
+      });
+    }
+  });
 
   Array.prototype.forEach.call(document.querySelectorAll('[data-chart]'), function (el) {
     var make = plots[el.getAttribute('data-chart')];

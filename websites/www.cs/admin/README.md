@@ -147,16 +147,22 @@ one public endpoint, `stats/collect.php`, takes POSTs and always answers an empt
 - **Endpoint** (`stats/lib/Collector.php`). Refuses a cross-site `Origin` or `Sec-Fetch-Site`, `DNT: 1`,
   `Sec-GPC: 1`, bot user agents, bodies over 2 KB, pages other than `home` and the game folders, and events off
   the allowlist (`Collector::EVENTS`); 600 writes a minute per client (by hashed IP) and 6000 overall.
-- **Storage.** `stats.sqlite` beside `admin.sqlite` in the admin data folder. Raw rows are kept 95 days; daily
-  aggregates (`daily`) and day-1/day-7 return cohorts (`cohorts`) forever. There is no cron: a write runs the
-  cleanup at most once an hour (`stats/lib/Rollup.php`). Days and hours are in America/Chicago.
-- **Dashboard** (`stats/lib/Report.php`, `Dashboard.php`, `admin/stats.js`, `admin/stats.css`). The report
-  goes to the page as a JSON block, which `stats.js` draws as SVG (the CSP allows no inline script or style).
-  Light and dark follow the system; tooltips follow the pointer, a tap or the arrow keys.
+- **Storage.** `stats.sqlite` beside `admin.sqlite` in the admin data folder. Everything about visitors is kept
+  forever: raw rows (`hits`), visitor IDs' first and last days (`visitors`), daily aggregates (`daily`) and
+  day-1/day-7 return cohorts (`cohorts`). There is no cron: a write runs the cleanup at most once an hour
+  (`stats/lib/Rollup.php`), which rolls finished days into `daily`, finalizes week-old cohorts, and drops past
+  days' salts and past minutes' write counts. Days and hours are in America/Chicago.
+- **Dashboard** (`stats/lib/Report.php`, `Dashboard.php`, `admin/stats.js`, `admin/stats.css`). Ranges: 7, 30
+  (default) and 90 days, 6 months, 1 year, and 2 or more years up to as far back as the numbers go
+  (`?range=7d|30d|90d|6m|1y|<n>y`). Ranges over 120 days chart by week and over 731 days by month: visits and
+  views add up, visitor counts are averages a day. The earlier period's headline numbers are counted once and
+  kept in `memo`, since past days never change. The report goes to the page as a JSON block, which `stats.js`
+  draws as SVG (the CSP allows no inline script or style). Light and dark follow the system; tooltips follow
+  the pointer, a tap or the arrow keys.
 - **Privacy note.** `privacy.html` at the site root, linked from the faculty page's foot and the Games panel.
 
 `make stats-e2e` checks it in a browser on a throwaway docker project. To look at the dashboard with made-up
-numbers, run `php tests/stats-demo-seed.php <dir>` in the PHP container against that project's admin data
+numbers, run `php tests/stats-demo-seed.php <dir> [seed] [days]` in the PHP container against that project's admin data
 folder (`ADMIN_DATA_DIR`), then sign in.
 
 ## Build a dashboard

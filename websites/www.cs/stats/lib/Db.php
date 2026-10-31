@@ -9,14 +9,17 @@ final class Db
     public const FILE = 'stats.sqlite';
 
     private const SCHEMA = [
-        // Raw rows, kept Days::KEEP days. who is the visitor ID when the browser keeps one, else 'd' + the daily hash.
+        // Raw rows, kept forever. who is the visitor ID when the browser keeps one, else 'd' + the daily hash.
         'CREATE TABLE IF NOT EXISTS hits (id INTEGER PRIMARY KEY, at INTEGER NOT NULL, day TEXT NOT NULL, hour INTEGER NOT NULL, page TEXT NOT NULL, kind TEXT NOT NULL, name TEXT, prop TEXT, pv TEXT, sid TEXT NOT NULL, vid TEXT, dhash TEXT NOT NULL, who TEXT NOT NULL, ref TEXT, device TEXT, secs INTEGER NOT NULL DEFAULT 0)',
         'CREATE UNIQUE INDEX IF NOT EXISTS hits_pv ON hits(pv) WHERE pv IS NOT NULL',
-        'CREATE INDEX IF NOT EXISTS hits_day_page ON hits(day, page)',
+        // Covers the counts of distinct visitors and visits over a range of days, so they never read the rows.
+        'DROP INDEX IF EXISTS hits_day_page',
+        'CREATE INDEX IF NOT EXISTS hits_day_page_who ON hits(day, page, who, sid)',
         'CREATE INDEX IF NOT EXISTS hits_vid_day ON hits(vid, day)',
-        // Each visitor ID's first and last day, per page and across the site ('*').
+        // Each visitor ID's first and last day, per page and across the site ('*'), kept forever.
         'CREATE TABLE IF NOT EXISTS visitors (vid TEXT NOT NULL, page TEXT NOT NULL, first_day TEXT NOT NULL, last_day TEXT NOT NULL, PRIMARY KEY (vid, page))',
-        'CREATE INDEX IF NOT EXISTS visitors_first ON visitors(page, first_day)',
+        'DROP INDEX IF EXISTS visitors_first',
+        'CREATE INDEX IF NOT EXISTS visitors_day ON visitors(first_day, page)',
         // The daily salt: only today's row exists.
         'CREATE TABLE IF NOT EXISTS salts (day TEXT PRIMARY KEY, salt BLOB NOT NULL)',
         // Writes per minute, per client (hashed) and overall.
@@ -24,9 +27,13 @@ final class Db
         'CREATE INDEX IF NOT EXISTS rate_minute ON rate(minute)',
         // Aggregates, kept forever: one value per day, page (or '*') and metric.
         'CREATE TABLE IF NOT EXISTS daily (day TEXT NOT NULL, page TEXT NOT NULL, metric TEXT NOT NULL, value REAL NOT NULL, PRIMARY KEY (day, page, metric))',
+        // The report reads one page's metrics over a run of days.
+        'CREATE INDEX IF NOT EXISTS daily_page_metric ON daily(page, metric, day, value)',
         // Return rates of each day's new visitors, kept forever once a week has passed.
         'CREATE TABLE IF NOT EXISTS cohorts (day TEXT NOT NULL, page TEXT NOT NULL, size INTEGER NOT NULL, d1 INTEGER NOT NULL, d7 INTEGER NOT NULL, PRIMARY KEY (day, page))',
         'CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)',
+        // Counts over periods that ended before today, which never change: the dashboard's earlier-period numbers.
+        'CREATE TABLE IF NOT EXISTS memo (k TEXT PRIMARY KEY, v TEXT NOT NULL)',
     ];
 
     /** Opens (creating it private when missing) the database in $dir, the admin data folder. */

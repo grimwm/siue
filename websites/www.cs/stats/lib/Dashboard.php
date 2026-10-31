@@ -28,17 +28,24 @@ final class Dashboard
         $pages ??= Collector::sitePages();
         $page = $r->query['page'] ?? '*';
         $page = is_string($page) && in_array($page, $pages, true) ? $page : '*';
-        $days = $r->query['days'] ?? '30';
-        $days = is_string($days) && in_array((int) $days, Report::RANGES, true) && ctype_digit($days) ? (int) $days : 30;
+        $range = $r->query['range'] ?? null;
+        $days = $r->query['days'] ?? null;
+        // Links from before the longer ranges said ?days=7, 30 or 90.
+        if ($range === null && is_string($days) && in_array($days, ['7', '30', '90'], true)) {
+            $range = $days . 'd';
+        }
         try {
-            $report = Report::build($open(), $now, $page, $days, $pages);
+            $db = $open();
+            $years = Report::yearsOfData($db, Days::of($now));
+            $range = is_string($range) && Report::valid($range) && (isset(Report::RANGES[$range]) || (int) $range <= max(2, $years)) ? $range : Report::DEFAULT;
+            $report = Report::build($db, $now, $page, $range, $pages);
         } catch (\Throwable $e) {
             error_log('stats: dashboard: ' . get_class($e) . ': ' . $e->getMessage());
             return Pages::storageDown();
         }
         $labels = self::labels($pages);
         $json = json_encode(['report' => $report, 'labels' => $labels], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
-        $body = self::filters($page, $days, $labels) . self::body($report, $labels)
+        $body = self::filters($page, $range, max(2, $years), $labels) . self::body($report, $labels)
             . '<script type="application/json" id="stats-data">' . $json . '</script>'
             . '<p class="back"><a href="index.php">Back to the hub</a> · <a href="../privacy.html">What is counted</a></p>';
         $head = '<link rel="stylesheet" href="stats.css"><script src="stats.js" defer></script>';
@@ -62,31 +69,57 @@ final class Dashboard
         return $out;
     }
 
-    private static function link(string $page, int $days): string
+    private static function link(string $page, string $range): string
     {
-        return 'stats.php?' . http_build_query(($page === '*' ? [] : ['page' => $page]) + ($days === 30 ? [] : ['days' => $days]));
+        $q = http_build_query(($page === '*' ? [] : ['page' => $page]) + ($range === Report::DEFAULT ? [] : ['range' => $range]));
+        return 'stats.php' . ($q === '' ? '' : '?' . $q);
     }
 
-    /** @param array<string, string> $labels */
-    private static function filters(string $page, int $days, array $labels): string
+    /**
+     * The range choices (fixed ones as links, then a choice of 2 to $years years) and the page tabs.
+     *
+     * @param array<string, string> $labels
+     */
+    private static function filters(string $page, string $range, int $years, array $labels): string
     {
         $out = '<nav class="filters" aria-label="What to show"><div class="seg" role="group" aria-label="Range">';
-        foreach (Report::RANGES as $d) {
-            $out .= '<a href="' . Html::e(self::link($page, $d)) . '"' . ($d === $days ? ' aria-current="page"' : '') . '>' . $d . ' days</a>';
+        foreach (Report::RANGES as $key => $label) {
+            $out .= '<a href="' . Html::e(self::link($page, $key)) . '"' . ($key === $range ? ' aria-current="page"' : '') . '>' . Html::e($label) . '</a>';
         }
+        $many = !isset(Report::RANGES[$range]);
+        $out .= '<form class="years' . ($many ? ' on' : '') . '" method="get" action="stats.php">'
+            . ($page === '*' ? '' : '<input type="hidden" name="page" value="' . Html::e($page) . '">')
+            . '<label>Years <select name="range"' . ($many ? ' aria-current="page"' : '') . '>'
+            . ($many ? '' : '<option value="" selected disabled>Pick</option>');
+        for ($n = 2; $n <= $years; $n++) {
+            $out .= '<option value="' . $n . 'y"' . ($range === $n . 'y' ? ' selected' : '') . '>' . $n . ' Years</option>';
+        }
+        $out .= '</select></label> <button type="submit">Show</button></form>';
         $out .= '</div><div class="seg tabs" role="group" aria-label="Page">';
         foreach (['*' => 'Overview'] + $labels as $id => $label) {
-            $out .= '<a href="' . Html::e(self::link((string) $id, $days)) . '"' . ((string) $id === $page ? ' aria-current="page"' : '') . '>' . Html::e($label) . '</a>';
+            $out .= '<a href="' . Html::e(self::link((string) $id, $range)) . '"' . ((string) $id === $page ? ' aria-current="page"' : '') . '>' . Html::e($label) . '</a>';
         }
         return $out . '</div></nav>';
+    }
+
+    /** "previous 30 days", "previous 6 months", "previous year", "previous 3 years". */
+    private static function period(string $range): string
+    {
+        $n = (int) $range;
+        $unit = ['d' => 'day', 'm' => 'month', 'y' => 'year'][substr($range, -1)];
+        return 'previous ' . ($n === 1 ? $unit : $n . ' ' . $unit . 's');
     }
 
     /** @param array<string, mixed> $r @param array<string, string> $labels */
     private static function body(array $r, array $labels): string
     {
         $one = $r['page'] !== '*';
-        $period = 'previous ' . $r['days'] . ' days';
-        $out = Html::p(self::date($r['from']) . ' to ' . self::date($r['to']) . ($one ? ' · ' . $labels[$r['page']] : ' · every page') . ' · days in Chicago time', 'range');
+        $period = self::period($r['range']);
+        $by = ['day' => '', 'week' => ', averaged over each week', 'month' => ', averaged over each month'][$r['bucket']];
+        $each = ['day' => 'day', 'week' => 'week', 'month' => 'month'][$r['bucket']];
+        $when = ['day' => 'Day', 'week' => 'Week of', 'month' => 'Month'][$r['bucket']];
+        $out = Html::p(self::date($r['from']) . ' to ' . self::date($r['to']) . ($one ? ' · ' . $labels[$r['page']] : ' · every page') . ' · days in Chicago time'
+            . ($r['bucket'] === 'day' ? '' : ' · charts by ' . $each), 'range');
         $k = $r['kpis'];
         $out .= '<section class="kpis" aria-label="Headline numbers">'
             . self::kpi('uniques', 'Unique visitors', self::num($k['uniques']['value']), $k['uniques'], $period)
@@ -97,7 +130,7 @@ final class Dashboard
         $dates = $r['dates'];
         $s = $r['series'];
         if ($one) {
-            $out .= self::viz('daily', 'Visitors and visits each day', 'Unique visitors and visits per day.', ['Day', 'Visitors', 'Visits', 'Page views'], array_map(null, $dates, $s['dau'], $s['visits'], $s['views']));
+            $out .= self::viz('daily', 'Visitors and visits each ' . $each, $r['bucket'] === 'day' ? 'Unique visitors and visits per day.' : 'Unique visitors a day, averaged over each ' . $each . ', and the ' . $each . '\'s visits.', [$when, 'Visitors', 'Visits', 'Page views'], array_map(null, $dates, $s['dau'], $s['visits'], $s['views']));
         } else {
             $rows = [];
             foreach ($dates as $i => $d) {
@@ -108,13 +141,13 @@ final class Dashboard
                 $row[] = $s['dau'][$i];
                 $rows[] = $row;
             }
-            $out .= self::viz('byPage', 'Daily visitors by page', 'Unique visitors per day on each page. Press a name to hide or show its line.', array_merge(['Day'], array_values($labels), ['Every page']), $rows);
+            $out .= self::viz('byPage', 'Daily visitors by page', 'Unique visitors per day on each page' . $by . '. Press a name to hide or show its line.', array_merge([$when], array_values($labels), ['Every page']), $rows);
         }
-        $out .= self::viz('newret', 'New and returning visitors', 'Each day\'s visitors: first time here, or back again.', ['Day', 'New', 'Returning'], array_map(null, $dates, $s['new'], $s['returning']));
-        $out .= self::viz('active', 'Active visitors', 'Distinct visitors that day (DAU), in the 7 days to it (WAU) and in the 30 days to it (MAU).', ['Day', 'DAU', 'WAU', 'MAU'], array_map(null, $dates, $s['dau'], $s['wau'], $s['mau']));
+        $out .= self::viz('newret', 'New and returning visitors', 'Each day\'s visitors: first time here, or back again' . $by . '.', [$when, 'New', 'Returning'], array_map(null, $dates, $s['new'], $s['returning']));
+        $out .= self::viz('active', 'Active visitors', 'Distinct visitors that day (DAU), in the 7 days to it (WAU) and in the 30 days to it (MAU)' . $by . '.', [$when, 'DAU', 'WAU', 'MAU'], array_map(null, $dates, $s['dau'], $s['wau'], $s['mau']));
         $ret = $r['retention'];
-        $out .= self::viz('retention', 'Coming back', 'Of each day\'s new visitors, the share back the next day and within 7 days. ' . ($ret['d1'] === null ? 'Not enough days yet.' : 'Day 1: ' . self::pct($ret['d1']) . ' of ' . $ret['size1'] . '. Day 7: ' . ($ret['d7'] === null ? 'not yet' : self::pct($ret['d7']) . ' of ' . $ret['size7']) . '.'),
-            ['First day', 'New visitors', 'Back next day', 'Back within 7 days'],
+        $out .= self::viz('retention', 'Coming back', 'Of each ' . $each . '\'s new visitors, the share back the next day and within 7 days. ' . ($ret['d1'] === null ? 'Not enough days yet.' : 'Day 1: ' . self::pct($ret['d1']) . ' of ' . $ret['size1'] . '. Day 7: ' . ($ret['d7'] === null ? 'not yet' : self::pct($ret['d7']) . ' of ' . $ret['size7']) . '.'),
+            [$r['bucket'] === 'day' ? 'First day' : $when, 'New visitors', 'Back next day', 'Back within 7 days'],
             array_map(static fn(array $c): array => [$c['day'], $c['size'], $c['d1'] ?? '…', $c['d7'] ?? '…'], $ret['cohorts']));
         if ($one && ($r['funnel'] !== [] || $r['page'] === 'crete')) {
             $out .= self::viz('funnel', 'Level funnel', 'Players who started and who won each level. Where the bars shrink, players stopped.', ['Level', 'Started', 'Won'], array_map(static fn(array $f): array => [$f['level'], $f['start'], $f['win']], $r['funnel']));
@@ -159,7 +192,7 @@ final class Dashboard
     {
         $prev = $k['prev'];
         if ($prev === null) {
-            $delta = '<p class="kpi-delta">No earlier numbers kept for the ' . Html::e($period) . '</p>';
+            $delta = '<p class="kpi-delta">No numbers yet for the ' . Html::e($period) . '</p>';
         } elseif ((float) $prev === 0.0) {
             $delta = '<p class="kpi-delta">' . ((float) $k['value'] > 0 ? 'Nothing in the ' : 'None in this or the ') . Html::e($period) . '</p>';
         } else {
@@ -190,7 +223,7 @@ final class Dashboard
         foreach ($rows as $row) {
             $table .= '<tr>';
             foreach (array_values($row) as $i => $cell) {
-                $table .= $i === 0 ? '<th scope="row">' . Html::e((string) $cell) . '</th>' : '<td>' . Html::e(is_int($cell) ? self::num($cell) : (string) $cell) . '</td>';
+                $table .= $i === 0 ? '<th scope="row">' . Html::e((string) $cell) . '</th>' : '<td>' . Html::e(is_int($cell) ? self::num($cell) : (is_float($cell) ? self::num($cell, 1) : (string) $cell)) . '</td>';
             }
             $table .= '</tr>';
         }

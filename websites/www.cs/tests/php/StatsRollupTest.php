@@ -1,5 +1,5 @@
 <?php
-// The cleanup that runs inside requests: daily aggregates, cohorts, pruning.
+// The cleanup that runs inside requests: daily aggregates and cohorts; visitor data is never deleted.
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
@@ -93,14 +93,28 @@ final class StatsRollupTest extends TestCase
         self::assertSame((string) ($this->clock->now + 3600), $this->db->query("SELECT v FROM meta WHERE k = 'cleanup_at'")->fetchColumn());
     }
 
-    public function testOldRawRowsArePrunedAndAggregatesKept(): void
+    public function testVisitorDataIsKeptForever(): void
     {
         $this->visit(str_repeat('1', 32));
-        $this->clock->now += (Days::KEEP + 1) * 86400;
+        $this->clock->now += 3 * 366 * 86400;
         $this->visit(str_repeat('2', 32));
-        self::assertSame(0, (int) $this->db->query("SELECT COUNT(*) FROM hits WHERE day = '2026-10-15'")->fetchColumn());
+        self::assertSame(1, (int) $this->db->query("SELECT COUNT(*) FROM hits WHERE day = '2026-10-15'")->fetchColumn());
+        self::assertSame(2, (int) $this->db->query('SELECT COUNT(*) FROM hits')->fetchColumn());
+        self::assertSame(2, (int) $this->db->query("SELECT COUNT(*) FROM visitors WHERE vid = '" . str_repeat('1', 32) . "'")->fetchColumn(), 'its page and the site');
         self::assertSame(1.0, $this->daily('2026-10-15', 'crete')['views']);
-        self::assertSame(1, (int) $this->db->query('SELECT COUNT(*) FROM hits')->fetchColumn());
+    }
+
+    public function testACohortFromLongAgoIsStillFinalized(): void
+    {
+        $a = str_repeat('a', 32);
+        $this->visit($a);
+        $this->clock->now += 86400;
+        $this->visit($a);
+        $this->clock->now += 200 * 86400;
+        $this->visit(str_repeat('f', 32));
+        $row = $this->db->query("SELECT size, d1, d7 FROM cohorts WHERE day = '2026-10-15' AND page = 'crete'")->fetch(PDO::FETCH_ASSOC);
+        self::assertSame(['size' => 1, 'd1' => 1, 'd7' => 1], array_map('intval', (array) $row));
+        self::assertSame(Days::add(Days::of($this->clock->now), -8), $this->db->query("SELECT v FROM meta WHERE k = 'cohorts_through'")->fetchColumn());
     }
 
     public function testCohortReturnRates(): void

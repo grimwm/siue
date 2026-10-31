@@ -34,7 +34,7 @@ test('a visit to a game is counted and the signed-in dashboard shows it', async 
   const errors: string[] = [];
   dash.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await signInAt(dash, baseURL!, 'admin', 'wgrim@siue.edu');
-  await dash.goto(`${baseURL}admin/stats.php?page=crete&days=7`);
+  await dash.goto(`${baseURL}admin/stats.php?page=crete&range=7d`);
   const tile = dash.locator('.kpi').filter({ hasText: 'Unique visitors' });
   await expect(tile.locator('.kpi-value')).toHaveText('1');
   await expect(dash.locator('.kpi').filter({ hasText: 'Visits' }).locator('.kpi-value')).toHaveText('1');
@@ -50,6 +50,16 @@ test('a visit to a game is counted and the signed-in dashboard shows it', async 
   await dash.goto(`${baseURL}admin/stats.php`);
   await expect(dash.locator('.kpi').filter({ hasText: 'Unique visitors' }).locator('.kpi-value')).toHaveText('1');
   await expect(dash.locator('[data-chart="byPage"] .legend button')).toHaveCount(4);
+  // A year charts by week; picking a number of years shows that range at once.
+  await dash.getByRole('link', { name: '1 Year', exact: true }).click();
+  await expect(dash).toHaveURL(/range=1y/);
+  await expect(dash.locator('.range')).toContainText('charts by week');
+  await expect(dash.locator('[data-chart="byPage"] svg')).toBeVisible();
+  await expect(dash.locator('.kpi').filter({ hasText: 'Unique visitors' }).locator('.kpi-value')).toHaveText('1');
+  await expect(dash.locator('form.years button')).toBeHidden();
+  await dash.locator('form.years select').selectOption('2y');
+  await expect(dash).toHaveURL(/range=2y/);
+  await expect(dash.locator('form.years.on select')).toHaveValue('2y');
   expect(errors).toEqual([]);
   await admin.close();
 });

@@ -50,8 +50,8 @@ The Crete title theme is finished and plays in Crete on every screen.
 ## Visitor statistics
 
 Design `specs/2026-10-31-site-analytics-design.md`, plan `plans/2026-10-31-site-analytics.md`. Live: the
-beacon on the faculty page and every game, the write-only endpoint, raw rows for 95 days with daily
-aggregates kept forever, the game events (Crete, Tankity, the CIC, Share and installs), the Visitors
+beacon on the faculty page and every game, the write-only endpoint, raw rows and daily aggregates kept
+forever, the game events (Crete, Tankity, the CIC, Share and installs), the Visitors
 dashboard on the admin hub, and the privacy note (`privacy.html`).
 
 1. **New games** count on their own once their `build.json` builds `stats-page.ts` and their page loads

@@ -41,13 +41,13 @@ agent's calls on the owner's behalf; everything else is the owner's.
 - **(agent)** SQLite in the admin data folder (`Admin\Db::dataDir()`), as its
   own file `stats.sqlite`, opened the way `Admin\Db` opens `admin.sqlite`
   (private modes, WAL), so ingest never contends with sign-ins.
-- Raw rows (`hits`) are kept 95 days **(agent: about 90, plus margin so a
-  90-day range is always whole)**; daily aggregates (`daily`, `cohorts`) are
-  kept forever. A cleanup inside requests, at most once an hour, rolls up
-  finished days, finalizes retention cohorts and prunes old rows and salts.
+- Nothing about visitors is ever deleted: raw rows (`hits`), daily aggregates
+  (`daily`, `cohorts`) and visitor IDs (`visitors`) are kept forever. A cleanup
+  inside requests, at most once an hour, rolls up finished days, finalizes
+  retention cohorts and drops past days' salts and past minutes' write counts.
 - **(agent)** Days and hours are counted in America/Chicago.
 - **(agent)** `visitors` keeps each visitor ID's first and last day per page
-  for new-versus-returning; an ID not seen for 400 days is pruned.
+  for new-versus-returning.
 
 ## Metrics (per page, and across all)
 
@@ -91,8 +91,11 @@ allowlist per page, each event with at most one validated property:
 - `admin/stats.php`, behind the hub's sign-in, listed on the hub. Visitors
   never see stats: no public counter, and no endpoint but the admin page
   returns any.
-- Overview and one page per game (`?page=`), ranges 7, 30 (default) and 90
-  days, visual first and numbers second:
+- Overview and one page per game (`?page=`), visual first and numbers second.
+  Ranges: 7, 30 (default) and 90 days, 6 months, 1 year, then a Years choice
+  of 2 up to as many years as there are numbers for (`?range=`). Ranges over
+  about 120 days chart by week and over about 2 years by month; visits and
+  views add up per week or month, visitor counts are averages a day.
   - KPI row: unique visitors, visits, average DAU and returning share, each
     with a sparkline and its change versus the previous period of the same
     length.

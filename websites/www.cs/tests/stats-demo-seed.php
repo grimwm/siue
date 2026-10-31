@@ -1,14 +1,14 @@
 <?php
-// Fills a stats database with 90 days of made-up visits, through the real collector, so the Visitors dashboard
-// can be looked at (and screenshotted) with numbers in it. Local only; tests/ never ships.
-//   php tests/stats-demo-seed.php <admin data dir> [seed]
+// Fills a stats database with made-up visits (90 days unless told otherwise), through the real collector, so the
+// Visitors dashboard can be looked at (and screenshotted) with numbers in it. Local only; tests/ never ships.
+//   php tests/stats-demo-seed.php <admin data dir> [seed] [days]
 declare(strict_types=1);
 
 require __DIR__ . '/../stats/lib/bootstrap.php';
 
 $dir = $argv[1] ?? '';
 if ($dir === '' || !is_dir($dir)) {
-    fwrite(STDERR, "usage: php tests/stats-demo-seed.php <admin data dir> [seed]\n");
+    fwrite(STDERR, "usage: php tests/stats-demo-seed.php <admin data dir> [seed] [days]\n");
     exit(2);
 }
 mt_srand((int) ($argv[2] ?? 7));
@@ -49,7 +49,7 @@ $post = static function (array $m, string $ip, string $ua) use ($c): void {
     $c->handle('POST', ['origin' => 'http://localhost', 'sec-fetch-site' => 'same-origin'], (string) json_encode($m), $ip, $ua);
 };
 
-$days = 90;
+$days = max(7, (int) ($argv[3] ?? 90));
 $now = time();
 $start = $now - $days * 86400;
 $pool = [];
@@ -59,8 +59,8 @@ for ($d = 0; $d <= $days; $d++) {
     $dayStart = $start + $d * 86400;
     $dayStart -= $dayStart % 86400;
     $weekday = (int) gmdate('N', $dayStart);
-    $base = 10 + $d * 0.35 + ($weekday >= 6 ? 6 : 0);
-    $spike = ['facebook' => $d === 52 ? 70 : ($d === 53 ? 25 : 0), 'discord' => $d === 74 ? 40 : 0];
+    $base = 10 + 31.5 * $d / $days + ($weekday >= 6 ? 6 : 0);
+    $spike = ['facebook' => $d === $days - 38 ? 70 : ($d === $days - 37 ? 25 : 0), 'discord' => $d === $days - 16 ? 40 : 0];
     $count = (int) round($base * (0.8 + mt_rand() / mt_getrandmax() * 0.4)) + $spike['facebook'] + $spike['discord'];
     $plans = [];
     for ($v = 0; $v < $count; $v++) {

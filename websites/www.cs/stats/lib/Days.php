@@ -8,9 +8,6 @@ final class Days
 {
     public const ZONE = 'America/Chicago';
 
-    /** Days of raw rows kept: about 90, with room so a 90-day range and its cohorts are always whole. */
-    public const KEEP = 95;
-
     private static ?\DateTimeZone $zone = null;
 
     private static function zone(): \DateTimeZone
@@ -40,6 +37,12 @@ final class Days
     public static function weekday(string $day): int
     {
         return (int) (new \DateTimeImmutable($day . ' 12:00:00', self::zone()))->format('N') - 1;
+    }
+
+    /** $day moved by $n calendar months or years ($unit 'month' or 'year'); a missing day of the month rolls on. */
+    public static function shift(string $day, int $n, string $unit): string
+    {
+        return (new \DateTimeImmutable($day . ' 12:00:00', self::zone()))->modify(($n >= 0 ? '+' : '') . $n . ' ' . $unit . 's')->format('Y-m-d');
     }
 
     /** Every day from $from to $to inclusive. @return list<string> */

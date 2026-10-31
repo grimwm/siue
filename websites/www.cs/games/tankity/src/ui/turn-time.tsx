@@ -19,10 +19,10 @@ export interface TurnTimeProps {
 
 export function TurnTime(p: TurnTimeProps) {
   const label = turnLabel(p.secs);
-  if (p.disabled) return <p class="hint turn-label" id={`${p.id}-label`}>Turn time: {label}</p>;
+  if (p.disabled) return <p class="hint turn-label" id={`${p.id}-label`}>Turn Time: {label}</p>;
   return (
     <div class="turn-row">
-      <label for={p.id}>Turn time</label>
+      <label for={p.id}>Turn Time</label>
       <input type="range" id={p.id} class="turn-range" min={0} max={TURN_STOPS.length - 1} step={1} value={turnIndex(p.secs)}
         aria-valuetext={label}
         onInput={ev => p.onChange(turnAt(Number((ev.currentTarget as HTMLInputElement).value)))} />

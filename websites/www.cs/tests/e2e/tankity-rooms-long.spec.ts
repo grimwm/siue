@@ -80,7 +80,7 @@ test('the host sets the turn time; a mid-game change reaches everyone', async ({
       await h.page.focus('#room-turn');
       await h.page.keyboard.press('ArrowRight');
       await expect(h.page.locator('#lobby-room output')).toHaveText('10 min');
-      await expect(g.page.locator('#room-turn-label')).toHaveText('Turn time: 10 min', { timeout: 10_000 });
+      await expect(g.page.locator('#room-turn-label')).toHaveText('Turn Time: 10 min', { timeout: 10_000 });
     },
   });
   await host.page.keyboard.press('q');
@@ -95,6 +95,6 @@ test('the host sets the turn time; a mid-game change reaches everyone', async ({
   await expect.poll(() => roomView(roomState.guest).turnSecs, { timeout: 10_000 }).toBe(28800);
   await host.page.keyboard.press('q');
   await guest.page.keyboard.press('q');
-  await expect(guest.page.locator('#menu-turn-label')).toHaveText('Turn time: 8 h');
+  await expect(guest.page.locator('#menu-turn-label')).toHaveText('Turn Time: 8 h');
   await host.ctx.close(); await guest.ctx.close();
 });

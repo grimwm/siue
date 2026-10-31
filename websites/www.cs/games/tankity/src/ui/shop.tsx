@@ -179,7 +179,7 @@ export function Shop(p: ShopProps) {
   return (
     <KeyHints.Provider value={p.keyHint}>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="shop-title">
-        <OverlayHead kicker="Between rounds" titleId="shop-title" title={p.title} navId="nav-shop" nav={<>
+        <OverlayHead kicker="Between Rounds" titleId="shop-title" title={p.title} navId="nav-shop" nav={<>
           <span><Key at="shop:selUp" /><Key at="shop:selDown" /> or <Key at="scroll:lineDown" /><Key at="scroll:lineUp" /> move</span>
           <span><Key at="shop:qtyDown" /><Key at="shop:qtyUp" /> packs</span>
           <span><Key at="shop:buy" /> buy · <Key at="shop:preview" /> preview</span>
@@ -224,7 +224,7 @@ export function Shop(p: ShopProps) {
           <button type="button" id="shop-next" class="btn-primary" aria-pressed={p.next.pressed}
             onClick={blurThen(p.onNext)}>{p.next.label}{p.next.keyAt && <>{' '}<Key at={p.next.keyAt} bare /></>}</button>
           <button type="button" id="shop-leave" class="btn-leave" title="Leave this game room and go back to the title card"
-            hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
+            hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave Room</button>
         </div>
       </div>
     </KeyHints.Provider>

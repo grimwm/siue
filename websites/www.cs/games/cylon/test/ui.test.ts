@@ -64,7 +64,7 @@ test('How to Play shows the mouse steps on a desktop', () => {
   assert.equal(veil.className, 'cylon-help');
   assert.equal(childEl(veil, 0).className, 'cylon-help-panel');
   assert.equal(byId(root, 'cylon-help-title').textContent, 'How to Play');
-  assert.equal(byId(root, 'cylon-help-platform').textContent, 'Desktop controls');
+  assert.equal(byId(root, 'cylon-help-platform').textContent, 'Desktop Controls');
   assert.ok(byId(root, 'cylon-help-desktop'));
   assert.equal(maybeById(root, 'cylon-help-mobile'), undefined);
   assert.equal(walk(byId(root, 'cylon-help-desktop')).filter(n => n.localName === 'li').length, 10);
@@ -74,7 +74,7 @@ test('How to Play shows the mouse steps on a desktop', () => {
 test('How to Play shows the touch steps on a phone', () => {
   const root = makeEl('cylon-help-root');
   renderHelp(root, { open: true, touch: true, onClose() {} });
-  assert.equal(byId(root, 'cylon-help-platform').textContent, 'Touch controls');
+  assert.equal(byId(root, 'cylon-help-platform').textContent, 'Touch Controls');
   assert.ok(byId(root, 'cylon-help-mobile'));
   assert.match(byId(root, 'cylon-help-mobile').textContent, /Drag the green reticle/);
 });

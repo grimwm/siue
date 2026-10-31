@@ -168,7 +168,7 @@ test('clicking Buy drops focus, and the guns toggle switches between every gun a
   expect(all).toBeGreaterThan(3);
   await expect(page.locator('#gun-stock')).toHaveText(/Show: All/);
   await page.click('#gun-stock');
-  await expect(page.locator('#gun-stock')).toHaveText(/Show: In stock/);
+  await expect(page.locator('#gun-stock')).toHaveText(/Show: In Stock/);
   const stocked = await tiles.count();
   expect(stocked).toBeLessThan(all);
   expect(await page.locator('#gun-grid .gun-choice[aria-disabled="true"]').count()).toBe(0);

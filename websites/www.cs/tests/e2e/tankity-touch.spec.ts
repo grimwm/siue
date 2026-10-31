@@ -32,7 +32,7 @@ test('touch screens get no key labels and no key bindings', async ({ page }) => 
   await noKeys();
   await page.locator('#new-game').tap();
   await page.waitForSelector('#shop-veil:not([hidden])');
-  await expect(page.locator('#shop-next')).toHaveText(/^Start round 1$/);
+  await expect(page.locator('#shop-next')).toHaveText(/^Start Round 1$/);
   await noKeys();
 
   // Help explains the touch controls instead.

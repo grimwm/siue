@@ -89,8 +89,8 @@ test('a lost match shows the end card: result, the rounds table, where it was sa
   await page.click('#scores-open');
   await expect(page.locator('#report-overlay')).toBeVisible();
   await expect(page.locator('#scores-level-normal')).toHaveAttribute('aria-pressed', 'true');
-  // The lost match sits under "This browser" on Normal, tagged solo; Easy has none.
-  await expect(page.locator('#scores-local-h')).toHaveText('This browser');
+  // The lost match sits under "This Browser" on Normal, tagged solo; Easy has none.
+  await expect(page.locator('#scores-local-h')).toHaveText('This Browser');
   await expect(page.locator('#scores-local li')).toHaveCount(1);
   await expect(page.locator('#scores-local li').first()).toHaveText(/^#1 [A-Z]{3} \u00b7 [\d,]+ pts \u00b7 \d+ rounds won \u00b7 solo( \(just saved\))?$/);
   const sw = await page.evaluate(() => {

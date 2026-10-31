@@ -88,7 +88,7 @@ test('the weapon picker greys out guns with none in stock, and I shows only the 
   await expect(page.locator('#gun-overlay')).toBeVisible();
   // I (or the button) shows only the guns in stock, and the choice is remembered.
   await page.keyboard.press('i');
-  await expect(page.locator('#gun-stock')).toHaveText(/^Show: In stock/);
+  await expect(page.locator('#gun-stock')).toHaveText(/^Show: In Stock/);
   await expect(empty).toHaveCount(0);
   const stocked = await tiles.count();
   expect(stocked).toBeLessThan(all);
@@ -99,7 +99,7 @@ test('the weapon picker greys out guns with none in stock, and I shows only the 
   await page.reload();
   await startSolo(page);
   await page.keyboard.press('g');
-  await expect(page.locator('#gun-stock')).toHaveText(/^Show: In stock/);
+  await expect(page.locator('#gun-stock')).toHaveText(/^Show: In Stock/);
   await expect(tiles).toHaveCount(stocked);
   await page.click('#gun-stock');
   await expect(page.locator('#gun-stock')).toHaveText(/^Show: All/);

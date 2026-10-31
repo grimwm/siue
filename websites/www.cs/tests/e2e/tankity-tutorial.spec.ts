@@ -230,7 +230,7 @@ for (const [name, screen] of SCREENS) {
     await press(page.locator('#title-settings'));
     await expect(page.locator('#theme-picker')).toBeVisible();
     await expect(page.locator('[data-pick-theme="custom"]')).toHaveText('Custom');
-    await expect(page.locator('.theme-custom-pick')).toContainText('Pick a colour');
+    await expect(page.locator('.theme-custom-pick')).toContainText('Pick a Colour');
     await page.locator('#theme-custom-input').fill('#3366ff');
     await expect(page.locator('[data-pick-theme="custom"]')).toHaveAttribute('aria-pressed', 'true');
     const custom = await accent();

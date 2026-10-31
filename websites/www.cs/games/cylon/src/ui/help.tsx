@@ -58,11 +58,11 @@ function TouchSteps() {
 export function Help(p: HelpProps) {
   return (
     <Dialog open={p.open} id="cylon-help" veilClass="cylon-help" panelClass="cylon-help-panel"
-      kicker="Cylon defense" kickerClass="cylon-help-kicker" titleId="cylon-help-title" titleClass="cylon-help-title"
+      kicker="Cylon Defense" kickerClass="cylon-help-kicker" titleId="cylon-help-title" titleClass="cylon-help-title"
       title="How to Play" focusId="cylon-help-close" onDismiss={p.onClose}>
-      <p class="cylon-help-platform" id="cylon-help-platform">{p.touch ? 'Touch controls' : 'Desktop controls'}</p>
+      <p class="cylon-help-platform" id="cylon-help-platform">{p.touch ? 'Touch Controls' : 'Desktop Controls'}</p>
       {p.touch ? <TouchSteps /> : <DesktopSteps />}
-      <Button class="cylon-gameover-btn" id="cylon-help-close" onClick={p.onClose}>Got it</Button>
+      <Button class="cylon-gameover-btn" id="cylon-help-close" onClick={p.onClose}>Got It</Button>
     </Dialog>
   );
 }

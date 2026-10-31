@@ -62,7 +62,7 @@ test('the menu is titled Settings and offers no other kind of game', () => {
 test('Play this seed and Enter in the seed box both report', () => {
   const { section, calls } = draw();
   const play = byId(section, 'new-game');
-  assert.equal(play.textContent, 'Play this seed N');
+  assert.equal(play.textContent, 'Play This Seed N');
   click(play);
   submit(byId(section, 'seed-form'));
   assert.deepEqual([calls.playSeed, calls.submit], [1, 1]);
@@ -147,10 +147,10 @@ test('the pickers mark the chosen tile; text sizes label and grow', () => {
 test('key labels follow the table, and no key means no cap', () => {
   const { section, props } = draw();
   render(section, { ...props, keyHint: (c, a) => (KEYS[`${c}:${a}`] ?? '').toLowerCase() });
-  assert.equal(byId(section, 'new-game').textContent, 'Play this seed n');
+  assert.equal(byId(section, 'new-game').textContent, 'Play This Seed n');
   const bare = makeEl('menu-touch');
   render(bare, { ...props, keyHint: () => '' });
-  assert.equal(byId(bare, 'new-game').textContent, 'Play this seed ');
+  assert.equal(byId(bare, 'new-game').textContent, 'Play This Seed ');
 });
 
 test('phones get Next song, Radio and Help in the menu, each saying whether its panel is open', () => {
@@ -202,7 +202,7 @@ test('in a room the host gets the turn-time slider and everyone else its label; 
   assert.ok(byId(host.section, 'menu-turn'));
   const guest = draw({ inRoom: true, turn: { secs: 600, host: false }, onTurn: () => {} });
   assert.equal(maybeById(guest.section, 'menu-turn'), undefined);
-  assert.equal(byId(guest.section, 'menu-turn-label').textContent, 'Turn time: 10 min');
+  assert.equal(byId(guest.section, 'menu-turn-label').textContent, 'Turn Time: 10 min');
   const solo = draw({ inRoom: false, turn: null, onTurn: () => {} });
   assert.equal(maybeById(solo.section, 'menu-turn'), undefined);
   assert.equal(maybeById(solo.section, 'menu-turn-label'), undefined);
@@ -221,7 +221,7 @@ test('in a room the menu has the Turn alerts button', () => {
   let n = 0;
   const { section } = draw({ inRoom: true, turn: { secs: 120, host: true }, onTurn() {}, alerts: { state: 'off', onClick: () => { n++; } } });
   const btn = byId(section, 'menu-alerts');
-  assert.equal(btn.textContent, 'Turn alerts: off');
+  assert.equal(btn.textContent, 'Turn Alerts: Off');
   click(btn);
   assert.equal(n, 1);
   assert.equal(maybeById(draw({ inRoom: false, alerts: { state: 'off', onClick() {} } }).section, 'menu-alerts'), undefined);
@@ -277,7 +277,7 @@ test('Theme: Custom shows its colour as a swatch, a Pick a colour label and a co
   const tile = nth(walk(custom).filter(n => n.getAttribute('data-pick-theme') === 'custom'), 0);
   assert.equal(tile.getAttribute('aria-pressed'), 'true');
   assert.equal(tile.textContent, 'Custom');
-  assert.match(custom.textContent, /Pick a colour/);
+  assert.match(custom.textContent, /Pick a Colour/);
   const input = byId(section, 'theme-custom-input');
   assert.equal(input.getAttribute('type'), 'color');
   assert.equal(input.getAttribute('value') ?? (input as unknown as { value: string }).value, '#3366ff');

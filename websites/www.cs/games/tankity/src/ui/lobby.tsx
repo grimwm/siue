@@ -133,7 +133,7 @@ function SeatTile({ seat, index, mySeat, isHost, onMode }: {
   const flips = isHost && !human;
   const big = human ? String(seat.name || '').toUpperCase() : (open ? 'Open' : 'AI');
   let cap: string;
-  if (human) cap = (index === mySeat ? 'You' : 'Player') + (index === 0 ? ' · host' : '');
+  if (human) cap = (index === mySeat ? 'You' : 'Player') + (index === 0 ? ' · Host' : '');
   else if (flips) cap = open ? 'Tap for AI' : 'Tap for Open';
   else cap = open ? 'Nobody' : 'Drone';
   return (
@@ -159,7 +159,7 @@ export function Lobby(p: LobbyProps) {
   return (
     <KeyHints.Provider value={p.keyHint}>
       <div class="card" role="dialog" aria-modal="true" aria-labelledby="lobby-title" ref={card}>
-        <OverlayHead kicker="Squad up, no chatter" titleId="lobby-title" title="Game rooms" closeId="lobby-close"
+        <OverlayHead kicker="Squad up, no chatter" titleId="lobby-title" title="Game Rooms" closeId="lobby-close"
           onClose={p.onClose} navId="nav-lobby" scrollOnly nav={<ScrollKeys line />} />
         <p class="hint" id="lobby-intro" hidden={p.inRoom}>
           Host a room and read the 6-character code to your friends, or join theirs.
@@ -189,14 +189,14 @@ export function Lobby(p: LobbyProps) {
               ))}
             </div>
             <TurnTime id="lobby-turn" secs={p.turnSecs} onChange={p.onTurnForm} />
-            <button type="submit" id="host-go" class="btn-primary" aria-disabled={p.working ? 'true' : undefined}>Host a room</button>
+            <button type="submit" id="host-go" class="btn-primary" aria-disabled={p.working ? 'true' : undefined}>Host a Room</button>
           </form>
           <form id="join-form" class="lobby-form" action="#"
             onSubmit={ev => { ev.preventDefault(); if (!p.working) p.onJoin(joinCode.current?.value ?? '', typedLetters(initialsField.current)); }}>
-            <label for="join-code">Room code</label>
+            <label for="join-code">Room Code</label>
             <input id="join-code" name="code" type="text" autocomplete="off" spellcheck={false} autocapitalize="characters"
               maxLength={7} placeholder="K7Q 2MX" ref={joinCode} />
-            <button type="submit" id="join-go" class="btn-primary" aria-disabled={p.working ? 'true' : undefined}>Join room</button>
+            <button type="submit" id="join-go" class="btn-primary" aria-disabled={p.working ? 'true' : undefined}>Join Room</button>
           </form>
         </div>
         <p id="lobby-status" class="hint" aria-live="polite">{p.status}</p>
@@ -215,7 +215,7 @@ export function Lobby(p: LobbyProps) {
                 <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
                 <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
               </svg>
-              <span>Copy invite</span>
+              <span>Copy Invite</span>
             </button>
           </p>
           <p class="hint" id="lobby-hills">{p.hills}</p>
@@ -239,8 +239,8 @@ export function Lobby(p: LobbyProps) {
           {p.games && <AlertsButton id="room-alerts" state={p.games.alerts} onClick={p.games.onAlerts} />}
           <div class="acts">
             <button type="button" id="lobby-start" class="btn-primary" style={p.isHost ? undefined : { display: 'none' }}
-              onClick={blurThen(p.onStart)}>Start match</button>
-            <button type="button" id="lobby-leave" onClick={blurThen(p.onLeave)}>Leave room</button>
+              onClick={blurThen(p.onStart)}>Start Match</button>
+            <button type="button" id="lobby-leave" onClick={blurThen(p.onLeave)}>Leave Room</button>
           </div>
         </div>
       </div>

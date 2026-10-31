@@ -110,8 +110,8 @@ interface ShopCalls { buy: number[]; preview: string[]; next: number; leave: num
 function shopProps(over: Partial<ShopProps> = {}) {
   const calls: ShopCalls = { buy: [], preview: [], next: 0, leave: 0, icons: [] };
   const props: ShopProps = {
-    keyHint, title: 'Field shop', cash: 'War chest: $600', entries: shelf(), board: null,
-    next: { label: 'Start round 2', keyAt: 'shop:next' }, readyLine: null, inRoom: false,
+    keyHint, title: 'Field Shop', cash: 'War chest: $600', entries: shelf(), board: null,
+    next: { label: 'Start Round 2', keyAt: 'shop:next' }, readyLine: null, inRoom: false,
     drawIcon: (canvas, icon) => { calls.icons.push([canvas.className, icon]); },
     arsenalRev: 1,
     onBuy: i => calls.buy.push(i), onPreview: w => calls.preview.push(w), onNext: () => { calls.next++; }, onLeave: () => { calls.leave++; },
@@ -127,7 +127,7 @@ function shopProps(over: Partial<ShopProps> = {}) {
   await test('shop-card', () => { assert.ok(veil.children.length === 1 && hasClass(card, 'card') && card.getAttribute('role') === 'dialog'
     && card.getAttribute('aria-modal') === 'true' && card.getAttribute('aria-labelledby') === 'shop-title'); });
   const head = kid(card, 0);
-  await test('shop-head', () => { assert.ok(text(nth(byClass(head, 'kicker'), 0)) === 'Between rounds' && text(byId(head, 'shop-title')) === 'Field shop'
+  await test('shop-head', () => { assert.ok(text(nth(byClass(head, 'kicker'), 0)) === 'Between Rounds' && text(byId(head, 'shop-title')) === 'Field Shop'
     && !maybeById(head, 'help-close') && byClass(head, 'ov-x').length === 0, 'no × on the shop'); });
   const nav = byId(head, 'nav-shop');
   await test('shop-nav', () => { assert.ok(hasClass(nav, 'nav-hint') && nav.getAttribute('data-scroll-only') === undefined
@@ -192,7 +192,7 @@ function shopProps(over: Partial<ShopProps> = {}) {
   const next = byId(card, 'shop-next');
   const readyLine = byId(card, 'shop-ready');
   const leave = byId(card, 'shop-leave');
-  await test('shop-start-button-solo', () => { assert.ok(text(next) === 'Start round 2 N' && hasClass(next, 'btn-primary') && next.getAttribute('aria-pressed') === undefined
+  await test('shop-start-button-solo', () => { assert.ok(text(next) === 'Start Round 2 N' && hasClass(next, 'btn-primary') && next.getAttribute('aria-pressed') === undefined
     && readyLine.hidden === true && leave.hidden === true && hasClass(leave, 'btn-leave')); });
   click(next);
   click(leave);
@@ -221,8 +221,8 @@ function shopProps(over: Partial<ShopProps> = {}) {
     return elementOf(btn).disabled === true;
   })()); });
   // The title changes with the round; the pre-match shop says so.
-  renderShop(veil, shopProps({ title: 'Pre-match shop' }).props);
-  await test('shop-title-follows-the-round', () => { assert.ok(text(byId(card, 'shop-title')) === 'Pre-match shop'); });
+  renderShop(veil, shopProps({ title: 'Pre-Match Shop' }).props);
+  await test('shop-title-follows-the-round', () => { assert.ok(text(byId(card, 'shop-title')) === 'Pre-Match Shop'); });
   // The highlighted row stays in view: scrolled to when the selection moves, left alone otherwise.
   // A draw into the hidden veil cannot scroll (nothing is laid out), so the
   // first draw once it shows still brings the row in: the pre-match shop
@@ -312,7 +312,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   await test('lobby-card', () => { assert.ok(veil.children.length === 1 && hasClass(card, 'card') && attr(card, 'role') === 'dialog'
     && attr(card, 'aria-modal') === 'true' && attr(card, 'aria-labelledby') === 'lobby-title'); });
   const head = kid(card, 0);
-  await test('lobby-head', () => { assert.ok(text(nth(byClass(head, 'kicker'), 0)) === 'Squad up, no chatter' && text(byId(head, 'lobby-title')) === 'Game rooms'); });
+  await test('lobby-head', () => { assert.ok(text(nth(byClass(head, 'kicker'), 0)) === 'Squad up, no chatter' && text(byId(head, 'lobby-title')) === 'Game Rooms'); });
   const x = byId(head, 'lobby-close');
   await test('lobby-close-button', () => { assert.ok(hasClass(x, 'ov-x') && attr(x, 'title') === 'Close (Q)' && text(nth(byClass(x, 'key'), 0)) === 'Q'); });
   const nav = byId(head, 'nav-lobby');
@@ -373,7 +373,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   await test('lobby-intro-initials-set-here', () => { assert.ok(/set here or on the title card/.test(text(intro)), text(intro)); });
   const hostForm = byId(card, 'host-form');
   submit(hostForm);
-  await test('lobby-host-submit', () => { assert.ok(JSON.stringify(calls.host) === '["ZED"]' && hasClass(byId(card, 'host-go'), 'btn-primary') && text(byId(card, 'host-go')) === 'Host a room', JSON.stringify(calls.host)); });
+  await test('lobby-host-submit', () => { assert.ok(JSON.stringify(calls.host) === '["ZED"]' && hasClass(byId(card, 'host-go'), 'btn-primary') && text(byId(card, 'host-go')) === 'Host a Room', JSON.stringify(calls.host)); });
   byId(card, 'join-code').value = 'tst1';
   submit(byId(card, 'join-form'));
   await test('lobby-join-submit', () => { assert.ok(JSON.stringify(calls.join) === '[["tst1","ZED"]]', JSON.stringify(calls.join)); });
@@ -430,7 +430,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   await test('lobby-seat-tiles', () => { assert.ok(seats.length === 4 && seats.every(t => hasClass(t, 'unit-choice') && hasClass(t, 'seat-tile'))
     && seats.map(t => attr(t, 'data-mode')).join() === 'human,ai,open,human' && seats.map(t => attr(t, 'data-seat')).join() === '0,1,2,3'); });
   await test('lobby-seat-labels', () => { assert.ok(seats.map(t => text(nth(byClass(t, 'seat-name'), 0))).join('|') === 'ABC|AI|Open|DEF'
-    && seats.map(t => text(nth(byClass(t, 'seat-cap'), 0))).join('|') === 'You · host|Tap for Open|Tap for AI|Player', seats.map(t => text(nth(byClass(t, 'seat-name'), 0)) + '/' + text(nth(byClass(t, 'seat-cap'), 0))).join('|')); });
+    && seats.map(t => text(nth(byClass(t, 'seat-cap'), 0))).join('|') === 'You · Host|Tap for Open|Tap for AI|Player', seats.map(t => text(nth(byClass(t, 'seat-name'), 0)) + '/' + text(nth(byClass(t, 'seat-cap'), 0))).join('|')); });
   await test('lobby-seat-classes-and-titles', () => { assert.ok(hasClass(seats[2], 'seat-open') && !hasClass(seats[1], 'seat-open')
     && hasClass(seats[0], 'seat-fixed') && !hasClass(seats[1], 'seat-fixed') && hasClass(seats[3], 'seat-fixed')
     && seats.map(t => attr(t, 'title')).join('|') === 'Seat 1|Drone battery seat|Open seat: no tank|Seat 4'); });
@@ -439,14 +439,14 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   click(seats[1]); click(seats[2]); click(seats[0]);
   await test('lobby-seat-click-asks-for-the-other-mode', () => { assert.ok(JSON.stringify(calls.seat) === '[[1,"open"],[2,"ai"]]', JSON.stringify(calls.seat)); });
   const start = byId(card, 'lobby-start');
-  await test('lobby-host-sees-start', () => { assert.ok(!start.style.display && hasClass(start, 'btn-primary') && text(start) === 'Start match'); });
+  await test('lobby-host-sees-start', () => { assert.ok(!start.style.display && hasClass(start, 'btn-primary') && text(start) === 'Start Match'); });
   click(start); click(byId(card, 'lobby-leave')); click(byId(card, 'copy-link'));
-  await test('lobby-room-buttons-report', () => { assert.ok(calls.start === 1 && calls.leave === 1 && calls.copy === 1 && text(byId(card, 'copy-link')) === 'Copy invite'); });
+  await test('lobby-room-buttons-report', () => { assert.ok(calls.start === 1 && calls.leave === 1 && calls.copy === 1 && text(byId(card, 'copy-link')) === 'Copy Invite'); });
   // A guest sees the same seats, read-only, and no Start.
   renderLobby(veil, { ...props, ...inRoom, isHost: false, mySeat: 3, seatsHint: 'The host decides.' });
   await test('lobby-guest-seats-read-only', () => { assert.ok(seats.map(t => attr(t, 'aria-disabled')).join() === 'true,true,true,true'
     && seats.map(t => listeners(t, 'click')).join() === '0,0,0,0' && seats.every(t => hasClass(t, 'seat-fixed')), seats.map(t => listeners(t, 'click')).join()); });
-  await test('lobby-guest-caps', () => { assert.ok(seats.map(t => text(nth(byClass(t, 'seat-cap'), 0))).join('|') === 'Player · host|Drone|Nobody|You'); });
+  await test('lobby-guest-caps', () => { assert.ok(seats.map(t => text(nth(byClass(t, 'seat-cap'), 0))).join('|') === 'Player · Host|Drone|Nobody|You'); });
   await test('lobby-guest-has-no-start', () => { assert.ok(start.style.display === 'none'); });
   renderLobby(veil, { ...props, ...inRoom });
   await test('lobby-host-again-sees-start', () => { assert.ok(!start.style.display && seats.map(t => listeners(t, 'click')).join() === '0,1,1,0'); });
@@ -481,7 +481,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
 
   const guestRoom = makeEl('lobby-veil');
   renderLobby(guestRoom, lobbyProps({ ...base, inRoom: true, isHost: false, code: 'AB3D', seats: SEATS, mySeat: 3 }).props);
-  await test('lobby-room-turn-guest', () => { assert.ok(!maybeById(guestRoom, 'room-turn') && text(byId(guestRoom, 'room-turn-label')) === 'Turn time: 10 min'); });
+  await test('lobby-room-turn-guest', () => { assert.ok(!maybeById(guestRoom, 'room-turn') && text(byId(guestRoom, 'room-turn-label')) === 'Turn Time: 10 min'); });
 }
 
 // Your games in the lobby when not in a room; the Turn alerts button in one.
@@ -502,7 +502,7 @@ const listeners = (el: StubNode | undefined, type: string) => { const e = elemen
   const inRoom = makeEl('lobby-veil');
   renderLobby(inRoom, lobbyProps({ turnSecs: 120, onTurnForm() {}, onTurnRoom() {}, games: g, inRoom: true, seats: SEATS }).props);
   const btn = byId(inRoom, 'room-alerts');
-  await test('lobby-room-alerts-button', () => { assert.ok(!!btn && text(btn) === 'Turn alerts: off' && !maybeById(inRoom, 'lobby-games')); });
+  await test('lobby-room-alerts-button', () => { assert.ok(!!btn && text(btn) === 'Turn Alerts: Off' && !maybeById(inRoom, 'lobby-games')); });
   click(btn);
   await test('lobby-room-alerts-click', () => { assert.ok(alerted === 1); });
 }
@@ -578,7 +578,7 @@ function gunTiles(n = 10, loaded = 0) {
   click(stock);
   await test('guns-stock-toggle-reports', () => { assert.ok(calls.toggle === 1); });
   renderGuns(section, gp({ inStockOnly: true }));
-  await test('guns-stock-toggle-in-stock', () => { assert.ok(text(stock) === 'Show: In stock I' && attr(grid, 'aria-label') === 'Weapons in stock', text(stock)); });
+  await test('guns-stock-toggle-in-stock', () => { assert.ok(text(stock) === 'Show: In Stock I' && attr(grid, 'aria-label') === 'Weapons in stock', text(stock)); });
   // None in stock: greyed (aria-disabled) but still a button, and a click still reports (the game says why not).
   renderGuns(section, gp({ tiles: gunTiles().map((t, i) => (i === 2 ? { ...t, count: '×0', empty: true } : t)) }));
   const emptyTile = kid(grid, 2);
@@ -601,8 +601,8 @@ function gunTiles(n = 10, loaded = 0) {
     && text(byId(card, 'leave-text')) === 'The battery takes your seat.'); });
   const stay = byId(card, 'leave-stay');
   const go = byId(card, 'leave-go');
-  await test('leave-buttons', () => { assert.ok(hasClass(stay, 'btn-primary') && hasClass(go, 'btn-leave') && text(go) === 'Leave room'
-    && text(stay) === 'Stay in the match Q' && byClass(stay, 'key').length === 1, text(stay)); });
+  await test('leave-buttons', () => { assert.ok(hasClass(stay, 'btn-primary') && hasClass(go, 'btn-leave') && text(go) === 'Leave Room'
+    && text(stay) === 'Stay in the Match Q' && byClass(stay, 'key').length === 1, text(stay)); });
   click(stay);
   await test('leave-stay-calls-back', () => { assert.ok(calls.stay === 1 && calls.leave === 0); });
   click(go);
@@ -620,7 +620,7 @@ function gunTiles(n = 10, loaded = 0) {
   });
   const card = kid(veil, 0);
   const step = byId(card, 'leave-step');
-  await test('leave-step-out-button', () => { assert.ok(!!step && text(step) === 'Step out' && /seat/.test(text(byId(card, 'leave-text')))); });
+  await test('leave-step-out-button', () => { assert.ok(!!step && text(step) === 'Step Out' && /seat/.test(text(byId(card, 'leave-text')))); });
   click(step);
   await test('leave-step-out-calls-back', () => { assert.ok(calls.step === 1 && calls.leave === 0 && calls.stay === 0); });
 }
@@ -635,7 +635,7 @@ function gunTiles(n = 10, loaded = 0) {
   const lp = (lines: LogLine[]): LogProps => ({ keyHint, onClose: () => { closed++; }, lines });
   renderLog(section, lp([line(1), line(2, 'info'), line(3, 'good'), line(4, 'bad')]));
   const head = kid(section, 0), ol = kid(section, 1);
-  await test('log-shape', () => { assert.ok(hasClass(head, 'ov-head') && text(byId(head, 'log-h')) === 'Radio log' && byId(head, 'log-close') && attr(byId(head, 'nav-log'), 'data-scroll-only') === ''
+  await test('log-shape', () => { assert.ok(hasClass(head, 'ov-head') && text(byId(head, 'log-h')) === 'Radio Log' && byId(head, 'log-close') && attr(byId(head, 'nav-log'), 'data-scroll-only') === ''
     && ol.id === 'log' && ol.localName === 'ol' && hasClass(ol, 'log') && hasClass(ol, 'log-transparent') && attr(ol, 'aria-live') === 'polite'); });
   click(byId(head, 'log-close'));
   await test('log-close-calls-back', () => { assert.ok(closed === 1); });

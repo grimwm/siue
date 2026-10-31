@@ -197,7 +197,7 @@ export function createLobby(deps: LobbyDeps) {
       count: LOBBY.count,
       status: LOBBY.status,
       inRoom: LOBBY.inRoom,
-      maps: [{ id: '', name: 'Random hills' }, ...net.maps],
+      maps: [{ id: '', name: 'Random Hills' }, ...net.maps],
       mapId: LOBBY.mapId,
       drawMapIcon,
       mapsRev: LOBBY.mapsRev,
@@ -692,7 +692,7 @@ export function createLobby(deps: LobbyDeps) {
     drawLeave(veil, {
       keyHint,
       title: 'Leave this room?',
-      text: 'Step out keeps your seat: a drone fires for you when your turn runs out, and Your games brings you back. '
+      text: 'Step Out keeps your seat: a drone fires for you when your turn runs out, and Your Games brings you back. '
         + 'Leave gives the seat to the drone battery for good.',
       onStay: closeLeaveVeil,
       onStepOut: () => { closeLeaveVeil(); netStepOut(); },
@@ -760,7 +760,7 @@ export function createLobby(deps: LobbyDeps) {
     net.detach();
     dropRoom();
     if (!quiet && code) {
-      say(`Stepped out of room ${code}. Your seat waits; Your games brings you back.`, 'info');
+      say(`Stepped out of room ${code}. Your seat waits; Your Games brings you back.`, 'info');
       backToTitle();
     }
   }

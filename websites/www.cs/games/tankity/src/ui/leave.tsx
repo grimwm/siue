@@ -26,15 +26,15 @@ export function Leave(p: LeaveProps) {
     <KeyHints.Provider value={p.keyHint}>
       <div class="card" role="alertdialog" aria-modal="true" aria-labelledby="leave-title" aria-describedby="leave-text">
         <header class="ov-head">
-          <div class="ov-title"><p class="kicker">Heads up</p><h2 id="leave-title">{p.title}</h2></div>
+          <div class="ov-title"><p class="kicker">Heads Up</p><h2 id="leave-title">{p.title}</h2></div>
         </header>
         <p id="leave-text">{p.text}</p>
         <div class="acts">
           <button type="button" id="leave-stay" class="btn-primary" onClick={blurThen(p.onStay)}>
-            Stay in the match <Key at="global:back" cls="kit-key-tab key" />
+            Stay in the Match <Key at="global:back" cls="kit-key-tab key" />
           </button>
-          {p.onStepOut && <button type="button" id="leave-step" onClick={blurThen(p.onStepOut)}>Step out</button>}
-          <button type="button" id="leave-go" class="btn-leave" onClick={blurThen(p.onLeave)}>Leave room</button>
+          {p.onStepOut && <button type="button" id="leave-step" onClick={blurThen(p.onStepOut)}>Step Out</button>}
+          <button type="button" id="leave-go" class="btn-leave" onClick={blurThen(p.onLeave)}>Leave Room</button>
         </div>
       </div>
     </KeyHints.Provider>

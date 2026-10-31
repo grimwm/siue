@@ -63,7 +63,7 @@ test('a guest leaves mid-match from the menu and lands on the title card; the ho
   await expect(guest.page.locator('#title-card')).toBeVisible();
   await guest.page.click('#title-play');
   await expect(guest.page.locator('#shop-veil')).toBeVisible({ timeout: 15_000 });
-  await expect(guest.page.locator('#shop-title')).toHaveText('Pre-match shop');
+  await expect(guest.page.locator('#shop-title')).toHaveText('Pre-Match Shop');
   await expect(guest.page.locator('#shop-leave')).toBeHidden();
   await guest.page.click('#shop-next');
   // The HUD shows the solo battery, not the room's players.

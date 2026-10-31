@@ -16,7 +16,7 @@ test('Play again from the end card brings both players to the same lobby, and th
   for (const pl of [host, guest]) {
     const veil = pl.page.locator('#end-veil');
     await expect(veil.locator('#end-title')).toContainText('Match over');
-    await expect(veil.locator('#again')).toHaveText('Play again (same room)');
+    await expect(veil.locator('#again')).toHaveText('Play Again (Same Room)');
     await expect(veil.locator('#end-leave')).toBeVisible();
     await pl.page.evaluate(() => { window.__exits = 0; const x = document.exitFullscreen; document.exitFullscreen = function () { window.__exits++; return x ? x.call(document) : Promise.resolve(); }; });
     await pl.page.keyboard.press('q');

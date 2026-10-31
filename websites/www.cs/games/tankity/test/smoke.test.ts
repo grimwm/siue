@@ -910,7 +910,7 @@ await (async () => {
     await test('guns-empty-pick-says-none', () => { assert.ok(E('gun-overlay').hidden === false && /None in stock: NUKE/.test(logText()), logTail()); });
     TAP('global', 'gunStock'); frames(2);
     await test('guns-in-stock-only', () => { assert.ok(tiles().length < all && !nuke() && tiles().every(t => t.getAttribute('aria-disabled') === undefined)
-      && /In stock/.test(E('gun-stock').textContent), `${tiles().length}`); });
+      && /In Stock/.test(E('gun-stock').textContent), `${tiles().length}`); });
     TAP('global', 'gunStock'); frames(2);
     await test('guns-show-all-again', () => { assert.ok(tiles().length === all && /All/.test(E('gun-stock').textContent)); });
     TAP('global', 'guns'); frames(2);
@@ -1145,7 +1145,7 @@ await (async () => {
   click(E('rooms-open')); await tick(10);
   const tiles = () => kids(E('lobby-map-picker'));
   const tileOn = () => tiles().filter(t => t.getAttribute('aria-pressed') === 'true').map(t => t.getAttribute('data-map'));
-  await test('maps-catalog', () => { assert.ok(tiles().length === 3 && tiles().map(t => t.getAttribute('title')).join('|') === 'Random hills|Canyon 3|Twin Hills', tiles().map(t => t.getAttribute('title')).join('|')); });
+  await test('maps-catalog', () => { assert.ok(tiles().length === 3 && tiles().map(t => t.getAttribute('title')).join('|') === 'Random Hills|Canyon 3|Twin Hills', tiles().map(t => t.getAttribute('title')).join('|')); });
   await test('maps-tiles-are-buttons', () => { assert.ok(tiles().every(t => t.getAttribute('type') === 'button' && t.children.length === 2
     && childEl(t, 0).getAttribute('aria-hidden') === 'true' && nodeAt(t, 1).textContent === t.getAttribute('title'))); });
   await test('maps-random-selected', () => { assert.ok(tileOn().join() === '', tileOn().join()); });

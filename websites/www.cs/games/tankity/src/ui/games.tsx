@@ -49,7 +49,7 @@ export function gameLine(r: LiveRow, age: number): string {
 }
 
 const ALERTS_TEXT: Record<Exclude<AlertsState, 'unsupported'>, string> = {
-  on: 'Turn alerts: on', off: 'Turn alerts: off', blocked: 'Turn alerts: blocked in this browser',
+  on: 'Turn Alerts: On', off: 'Turn Alerts: Off', blocked: 'Turn Alerts: Blocked in This Browser',
 };
 export function AlertsButton({ id, state, onClick }: { id: string; state: AlertsState; onClick: () => void }) {
   if (state === 'unsupported') return null;
@@ -63,7 +63,7 @@ export function AlertsButton({ id, state, onClick }: { id: string; state: Alerts
 export function YourGames(p: YourGamesProps) {
   return (
     <section class="your-games" id={p.id} aria-labelledby={`${p.id}-h`}>
-      <h3 id={`${p.id}-h`}>Your games</h3>
+      <h3 id={`${p.id}-h`}>Your Games</h3>
       <ul class="games-list">
         {p.rows.map(r => (
           <li key={r.code} class={r.yourTurn ? 'game-row your-turn' : 'game-row'}>

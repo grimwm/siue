@@ -135,7 +135,7 @@ export function Menu(p: MenuProps) {
           <label for="seed-input">Seed</label>
           <input id="seed-input" name="seed" type="text" inputMode="text" autocomplete="off" spellcheck={false}
             placeholder="e.g. bam-bam-01" />
-          <button type="button" id="new-game" class="btn-primary" onClick={blurThen(p.onPlaySeed)}>Play this seed{' '}<Key at="global:new" bare /></button>
+          <button type="button" id="new-game" class="btn-primary" onClick={blurThen(p.onPlaySeed)}>Play This Seed{' '}<Key at="global:new" bare /></button>
         </div>
         <div class="unit-row" id="unit-row" role="group" aria-labelledby="unit-label">
           <span class="unit-label" id="unit-label">Unit</span>
@@ -172,7 +172,7 @@ export function Menu(p: MenuProps) {
                 <span>Custom</span>
               </button>
               <label class="theme-custom-pick">
-                <span>Pick a colour</span>
+                <span>Pick a Colour</span>
                 <input type="color" id="theme-custom-input" value={p.customColour} aria-label="Custom theme colour"
                   onInput={ev => p.onPickCustom((ev.currentTarget as HTMLInputElement).value)} />
               </label>
@@ -233,7 +233,7 @@ export function Menu(p: MenuProps) {
         <div class="unit-row phone-extras" role="group" aria-labelledby="extras-label">
           <span class="unit-label" id="extras-label">More</span>
           <div class="unit-picker">
-            <button type="button" id="menu-track" class="m-track" onClick={blurThen(p.onNextSong)}>Next song</button>
+            <button type="button" id="menu-track" class="m-track" onClick={blurThen(p.onNextSong)}>Next Song</button>
             <button type="button" id="menu-radio" class="m-radio" aria-expanded={p.radioOpen} onClick={blurThen(p.onRadio)}>Radio</button>
             <button type="button" id="menu-help" class="m-help" aria-expanded={p.helpOpen} onClick={blurThen(p.onHelp)}>Help</button>
           </div>
@@ -250,9 +250,9 @@ export function Menu(p: MenuProps) {
         <button type="button" id="menu-standings" title="This match's scoreboard" hidden={!p.inRoom}
           onClick={blurThen(p.onStandings)}>Standings</button>
         <button type="button" id="menu-leave" class="btn-leave" title="Leave this game room and go back to the title card"
-          hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave room</button>
+          hidden={!p.inRoom} onClick={blurThen(p.onLeave)}>Leave Room</button>
         <button type="button" id="menu-quit" class="btn-leave"
-          title={p.inRoom ? 'Close the game; your room seat waits (Leave room gives it up)' : 'End this match and leave the game'}
+          title={p.inRoom ? 'Close the game; your room seat waits (Leave Room gives it up)' : 'End this match and leave the game'}
           onClick={blurThen(p.onQuit)}>Quit</button>
       </form>
     </KeyHints.Provider>

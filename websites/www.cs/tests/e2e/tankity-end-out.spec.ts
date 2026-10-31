@@ -46,7 +46,7 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
   out = true;
   await expect(gveil).toBeVisible({ timeout: 10_000 });
   await expect(gveil.locator('#end-title')).toHaveText("You're out");
-  await expect(gveil.locator('#end-watch')).toHaveText('Watch the finish');
+  await expect(gveil.locator('#end-watch')).toHaveText('Watch the Finish');
   await expect(gveil.locator('#end-leave')).toBeVisible();
   await expect(guest.page.locator('#log')).toContainText('for good this time'); // the event path, not a reload
 
@@ -69,7 +69,7 @@ test("a player out of lives sees the you're-out card once; Menu → Standings br
   await host.page.click('#btn-menu');
   await host.page.click('#menu-standings');
   await expect(hveil.locator('#end-title')).toHaveText('Standings');
-  await expect(hveil.locator('#end-watch')).toHaveText('Back to the battle');
+  await expect(hveil.locator('#end-watch')).toHaveText('Back to the Battle');
   await expect(hveil.locator('#end-leave')).toBeVisible();
   await host.page.waitForTimeout(3500);
   await expect(hveil).toBeVisible();

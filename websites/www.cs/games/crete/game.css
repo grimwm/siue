@@ -744,7 +744,8 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 
 /* The compass (src/modern/controls.ts) at the board's bottom-right shows the view: its needle, red at the north end,
    turns with the heading, its dial squashes as the view tilts (a disc seen at the view's pitch), and a gold ring fills
-   from top-down (empty) to angled (full), --tilt being 0 to 1. A drag on it turns and tilts the view; a tap resets it.
+   from straight down (empty) to 45° (full), --tilt being 0 to 1. A drag on it turns and tilts the view; a tap resets
+   it. At 48 × 48 px it is a finger-sized target.
    The view eases, so the needle follows with no transition of its own. */
 .modern-overlay .compass {
   position: absolute;

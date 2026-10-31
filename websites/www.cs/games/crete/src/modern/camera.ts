@@ -1,31 +1,27 @@
 /* The Island of Crete, modern look: the camera as pure maths. There is one camera, always free to turn and tilt:
- * it turns about the vertical axis, tilts from top-down (75°, square to the board like the classic look) back to
- * angled (45°), slides over the board and zooms within limits. Every level opens, and Reset returns, top-down and
- * north up. The board is centred at the origin, one cell is one unit, and cell (r, c) sits at x = c - (cols - 1) / 2,
- * z = r - (rows - 1) / 2. DOM-free. */
+ * it turns about the vertical axis to any heading and stays there, tilts anywhere from straight down (90°) to 45°
+ * above the ground, slides over the board and zooms within limits. Every level opens, and Reset returns, at 75° and
+ * north up, centred. The board is centred at the origin, one cell is one unit, and cell (r, c) sits at
+ * x = c - (cols - 1) / 2, z = r - (rows - 1) / 2. DOM-free. */
 
-/** Top-down looks steeply down, square to the board like the classic look: a wall hides about a quarter of the cell
- *  behind it, and the figures still show their faces. Every level opens here, and Reset comes back here. */
-export const TOP_PITCH = 75;
-/** The most the view tilts away from top-down: 45° above the ground. */
-export const ANGLED_PITCH = 45;
+/** The pitch every level opens at and Reset returns to: steeply down, square to the board like the classic look, so
+ *  a wall hides about a quarter of the cell behind it and the figures still show their faces. */
+export const START_PITCH = 75;
+/** The lowest the view tilts: 45° above the ground. */
+export const MIN_PITCH = 45;
+/** The steepest the view tilts: straight down. */
+export const MAX_PITCH = 90;
 /** The heading every view starts at and Reset returns to: square to the board, north up, as the classic look is. */
 export const DEFAULT_YAW = 0;
 
-/** The nearest quarter turn to `yaw`: where a turn settles when the player lets go, so the grid lines up with the
- *  screen and the pad. */
-export function snapYaw(yaw: number): number {
-  return Math.round(yaw / 90) * 90;
-}
-
-/** `pitch` held between angled (45°) and top-down (75°). */
+/** `pitch` held between 45° and straight down. */
 export function clampTilt(pitch: number): number {
-  return Math.max(ANGLED_PITCH, Math.min(TOP_PITCH, pitch));
+  return Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitch));
 }
 
 export interface Cam {
   yaw: number;
-  /** Degrees above the ground: 75 (top-down) down to 45 (angled). */
+  /** Degrees above the ground: 90 (straight down) to 45; 75 to start. */
   pitch: number;
   tx: number;
   tz: number;

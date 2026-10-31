@@ -1,5 +1,6 @@
-// The Island of Crete's modern look: the 3D board is the default, opens top-down and north up, draws nothing at rest, turns and tilts under a drag,
-// two fingers or a drag on the compass and squares up after, shows the view on the compass, resets on a tap of it, zooms
+// The Island of Crete's modern look: the 3D board is the default, opens at 75° and north up, draws nothing at rest, turns to any
+// heading and tilts under a drag, two fingers or a drag on the compass and stays there, shows the view on the compass, resets on a
+// tap of it (a real touch through CDP, or the mouse), zooms
 // under the wheel and its buttons, moves Theseus the way the screen shows, ignores the camera while a card is up,
 // keeps the Walls choice, opens on the whole level, follows the mini map (a setting, off by default) once zoomed, floats a marker over each
 // figure and item, and hands the board back to the classic look and takes it again with the Map button,
@@ -65,7 +66,8 @@ interface Hooked {
 }
 
 type Dir = 'up' | 'down' | 'left' | 'right';
-/** src/modern/screen-move.ts screenToGrid, as the spec expects it to behave. */
+/** src/modern/screen-move.ts screenToGrid, as the spec expects it to behave: up is the grid direction closest to away
+ *  from the camera (the specs keep clear of the hysteresis near 45° boundaries). */
 function screenToGrid(dir: Dir, yaw: number): Dir {
   const UP: Dir[] = ['up', 'left', 'down', 'right'];
   const OFFSET: Record<Dir, number> = { up: 0, left: 1, down: 2, right: 3 };
@@ -103,6 +105,22 @@ async function dragCompass(page: Page, type: 'touch' | 'pen' | 'mouse', dx: numb
     for (let i = 1; i <= 8; i++) ev('pointermove', x + (dx as number) * i / 8, y + (dy as number) * i / 8);
     ev('pointerup', x + (dx as number), y + (dy as number));
   }, [type, dx, dy] as const);
+}
+
+/** A real finger tap at the middle of `sel` through CDP Input.dispatchTouchEvent (the browser makes the pointer and
+ *  click events), wobbling `wobble` CSS px between down and up as a fingertip does. Checks first that the point is
+ *  on `sel` itself, not something over it. */
+async function touchTap(page: Page, sel: string, wobble = 0): Promise<void> {
+  const box = (await page.locator(sel).boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  expect(await page.evaluate(([sel, x, y]) => !!document.elementFromPoint(x as number, y as number)?.closest(sel as string), [sel, x, y] as const),
+    `${sel} is what a finger at its middle touches`).toBe(true);
+  const cdp = await page.context().newCDPSession(page);
+  const at = (px: number, py: number) => [{ x: px, y: py, radiusX: 8, radiusY: 8, force: 1, id: 1 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at(x, y) });
+  if (wobble) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at(x + wobble * 0.6, y + wobble * 0.8) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
 }
 
 /** Waits until the board has drawn and then held still for a moment. */
@@ -225,7 +243,7 @@ test('a drag turns the board, and Up then moves Theseus the way the screen shows
   await drag(page, 200);
   await settled(page);
   const yaw = (await modern(page))!.yaw;
-  expect(yaw - yaw0, 'a 200 px drag right turns the view about -70°, and letting go settles it on -90°').toBeCloseTo(-90, 3);
+  expect(yaw - yaw0, 'a 200 px drag right turns the view -70°, and letting go leaves it there').toBeCloseTo(-70, 3);
 
   const from = await player(page);
   await page.keyboard.press('ArrowUp');
@@ -423,7 +441,7 @@ test('the board opens on the whole level, and Theseus\'s steps leave it there un
   expect(errors).toEqual([]);
 });
 
-test('level 1 top-down: one small marker over each figure and item, the Minotaur\'s over its own cell', async ({ page }) => {
+test('level 1 at the opening 75°: one small marker over each figure and item, the Minotaur\'s over its own cell', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -457,34 +475,36 @@ test('level 1 top-down: one small marker over each figure and item, the Minotaur
 test.describe('on a touch phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test('a two-finger twist turns the view and settles on a quarter, and the compass shows it; a swipe up then goes away from the camera; a tap on the compass resets', async ({ page }) => {
+  test('a two-finger twist turns the view and leaves it there, and the compass shows it; a swipe up then goes away from the camera; a finger tap on the compass resets', async ({ page }) => {
     const errors = await openHall(page);
     expect(await cam(page)).toEqual({ pitch: 75, yaw: 0 });
     await expect(page.locator('#cam-compass')).toBeVisible();
+    const box = (await page.locator('#cam-compass').boundingBox())!;
+    expect(Math.min(box.width, box.height), 'the compass is a finger-sized target').toBeGreaterThanOrEqual(44);
     await twoFingers(page, { deg: 70 });
     await settled(page);
     const { yaw } = await cam(page);
-    expect(Math.abs(yaw) % 90, `the view settles on a quarter turn, not ${yaw}`).toBe(0);
-    expect(yaw).not.toBe(0);
-    expect(await compass(page), 'the compass turns with the view').toMatchObject({ heading: yaw, pitch: 75, tilt: 0 });
+    expect(yaw, `the view stays where the twist left it, no quarter turn: ${yaw}`).toBe(70);
+    expect(await compass(page), 'the compass turns with the view').toMatchObject({ heading: yaw, pitch: 75 });
+    expect((await compass(page)).tilt).toBeCloseTo(1 / 3, 2);
 
     const from = await player(page);
     await swipe(page, '#stage3d', 0, -80);
     const step = STEP[screenToGrid('up', yaw)];
     await expect.poll(() => player(page), 'a swipe up goes away from the camera').toEqual({ r: from.r + step.r, c: from.c + step.c });
 
-    // Two fingers sliding down together tilt toward angled, and the compass leans with the view.
+    // Two fingers sliding down together tilt toward 45°, and the compass leans with the view.
     await twoFingers(page, { dy: 120 });
     await settled(page);
     const tilted = await cam(page);
     expect(tilted.pitch, 'tilted').toBeLessThan(65);
     const face = await compass(page);
     expect(face.pitch, 'the compass shows the tilt').toBe(tilted.pitch);
-    expect(face.tilt).toBeGreaterThan(0.3);
+    expect(face.tilt).toBeGreaterThan(0.6);
 
-    await dragCompass(page, 'touch', 0, 0);
-    await expect.poll(() => cam(page), 'a tap on the compass brings the starting view back').toEqual({ pitch: 75, yaw: 0 });
-    expect((await compass(page)).tilt).toBe(0);
+    await touchTap(page, '#cam-compass', 10);
+    await expect.poll(() => cam(page), 'a real finger tap on the compass, wobbling 10 px, brings the starting view back').toEqual({ pitch: 75, yaw: 0 });
+    await expect.poll(async () => (await compass(page)).tilt, 'and the compass shows it').toBeCloseTo(1 / 3, 2);
     expect(errors).toEqual([]);
   });
 
@@ -496,20 +516,25 @@ test.describe('on a touch phone', () => {
     await twoFingers(page, { dx: 60 });
     await settled(page);
     expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.following()), 'looking away from Theseus').toBe(false);
-    await dragCompass(page, 'touch', 80, 0);
+    await dragCompass(page, 'touch', 50, 0);
     await settled(page);
     const turned = await cam(page);
-    expect(turned.yaw, 'across turns, settling on a quarter').toBe(-90);
+    expect(turned.yaw, 'across turns 0.6° a pixel, and stays there').toBe(-30);
     expect(turned.pitch, 'across alone does not tilt').toBe(75);
     await dragCompass(page, 'touch', 0, 50);
     await settled(page);
-    expect((await cam(page)).pitch, 'down tilts toward angled').toBe(55);
+    expect((await cam(page)).pitch, 'down tilts toward 45°').toBe(55);
     await dragCompass(page, 'touch', 0, 400);
     await settled(page);
-    expect((await cam(page)).pitch, 'no further than the angled limit').toBe(45);
+    expect((await cam(page)).pitch, 'no further than 45°').toBe(45);
     expect((await compass(page)).tilt, 'the ring is full').toBe(1);
-    await dragCompass(page, 'touch', 0, 0);
-    await expect.poll(() => cam(page), 'top-down, north up').toEqual({ pitch: 75, yaw: 0 });
+    await dragCompass(page, 'touch', 0, -400);
+    await settled(page);
+    expect((await cam(page)).pitch, 'up tilts as far as straight down').toBe(90);
+    expect((await compass(page)).tilt, 'the ring is empty').toBe(0);
+    expect((await cam(page)).yaw, 'and the heading stays').toBe(-30);
+    await touchTap(page, '#cam-compass');
+    await expect.poll(() => cam(page), 'a finger tap: 75°, north up').toEqual({ pitch: 75, yaw: 0 });
     expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.following()), 'following Theseus again').toBe(true);
     expect(errors).toEqual([]);
   });
@@ -525,7 +550,7 @@ test('with a mouse, a left drag turns across and tilts up and down, the wheel zo
   for (let i = 1; i <= 10; i++) await page.mouse.move(x, y + 8 * i);
   await page.mouse.up();
   await settled(page);
-  expect((await cam(page)).pitch, 'dragging down tilts toward angled').toBeLessThan(60);
+  expect((await cam(page)).pitch, 'dragging down tilts toward 45°').toBeLessThan(60);
   expect((await cam(page)).yaw).toBe(0);
   expect((await compass(page)).pitch, 'the compass shows the tilt').toBe((await cam(page)).pitch);
   const z1 = await zoom(page);
@@ -539,21 +564,23 @@ test('with a mouse, a left drag turns across and tilts up and down, the wheel zo
 
 test('with a mouse the compass turns and tilts the view, a click on it eases back to the start, its arrow keys steer, and Enter on it resets', async ({ page }) => {
   const errors = await openHall(page, HALL, 'no-preference');
-  await dragCompass(page, 'mouse', -80, 40);
-  await expect.poll(() => cam(page), 'turned a quarter the other way and tilted').toEqual({ pitch: 59, yaw: 90 });
-  expect(await compass(page)).toMatchObject({ heading: 90, pitch: 59 });
+  await dragCompass(page, 'mouse', -100, 40);
+  await expect.poll(() => cam(page), 'turned 60° the other way and tilted, and left there').toEqual({ pitch: 59, yaw: 60 });
+  expect(await compass(page)).toMatchObject({ heading: 60, pitch: 59 });
   // A click (no drag) resets, eased: the view passes through the angles between on its way back.
   const seen: number[] = [];
   await page.locator('#cam-compass').click();
   await expect.poll(async () => { const c = await cam(page); seen.push(c.yaw); return c; }, { intervals: [16] }).toEqual({ pitch: 75, yaw: 0 });
-  expect(seen.some(y => y > 0 && y < 90), `eased, not a jump: ${seen.join(' ')}`).toBe(true);
-  await dragCompass(page, 'pen', 80, 0);
-  await expect.poll(() => cam(page), 'a pen turns it too').toEqual({ pitch: 75, yaw: -90 });
+  expect(seen.some(y => y > 0 && y < 60), `eased, not a jump: ${seen.join(' ')}`).toBe(true);
+  await dragCompass(page, 'pen', 50, 0);
+  await expect.poll(() => cam(page), 'a pen turns it too').toEqual({ pitch: 75, yaw: -30 });
   await page.locator('#cam-compass').focus();
   const from = await player(page);
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowLeft');
-  await expect.poll(() => cam(page), 'the arrow keys on the compass tilt and turn').toEqual({ pitch: 65, yaw: -180 });
+  await expect.poll(() => cam(page), 'the arrow keys on the compass tilt 10° and turn 15°').toEqual({ pitch: 65, yaw: -45 });
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowUp');
+  await expect.poll(() => cam(page), 'Up tilts as far as straight down').toEqual({ pitch: 90, yaw: -45 });
   expect(await player(page), 'and do not move Theseus').toEqual(from);
   await page.keyboard.press('Enter');
   await expect.poll(() => cam(page), 'Enter on the compass resets').toEqual({ pitch: 75, yaw: 0 });
@@ -573,7 +600,7 @@ test('a finger swipe moves Theseus and leaves the camera\'s turn alone', async (
   expect(errors).toEqual([]);
 });
 
-test('every player starts top-down and north up, with the turn buttons, the compass and the Walls choice; there is no View choice', async ({ page }) => {
+test('every player starts at 75° and north up, with the turn buttons, the compass and the Walls choice; there is no View choice', async ({ page }) => {
   // A player from before the one camera kept a view and a heading: neither is read any more.
   await page.addInitScript(() => {
     localStorage.setItem('crete-view', 'angled');
@@ -594,13 +621,13 @@ test('every player starts top-down and north up, with the turn buttons, the comp
   await expect(page.locator('#view-angled')).toHaveCount(0);
   await expect(page.locator('#walls-solid')).toBeVisible();
   await page.keyboard.press('q');
-  // A turn is not kept into the next level: every level opens top-down, north up.
+  // A turn is not kept into the next level: every level opens at 75°, north up.
   await drag(page, 200);
   await settled(page);
-  expect((await cam(page)).yaw).toBe(-90);
+  expect((await cam(page)).yaw).toBe(-70);
   await page.evaluate(text => { const t = (window as unknown as Hooked).__creteTest; t.playLevel(t.parse(text)); }, HALL);
   await page.locator('#start-begin').click();
-  await expect.poll(() => cam(page), 'the next level opens top-down, north up').toEqual({ pitch: 75, yaw: 0 });
+  await expect.poll(() => cam(page), 'the next level opens at 75°, north up').toEqual({ pitch: 75, yaw: 0 });
 });
 
 test('the menu has no Look setting; the Map button shows the classic board, and back', async ({ page }) => {

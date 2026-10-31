@@ -70,7 +70,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .stat { display: flex; gap: 0.35rem; align-items: baseline; white-space: nowrap; }
 .stat dt { color: var(--dim); font-size: 0.8rem; }
 .stat dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
-/* "Ch 1 · 3" stays on one line. */
+/* "Ch. 1 • Level 3/10" stays on one line. */
 .stat #hud-trial { white-space: nowrap; }
 
 /* Buttons that carry a key tab are positioned, so the tab pins to their corner. */
@@ -528,6 +528,8 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   .hud { display: grid; grid-template-columns: repeat(3, auto); gap: 2px 8px; }
   .menu-btn { padding: 0 0.55rem; }
   .stat { flex-direction: column; align-items: flex-start; gap: 0; }
+  /* The level has no label to show, so it takes a row of its own over the other five. */
+  .stat-trial { grid-column: 1 / -1; }
   .strip {
     position: relative;
     display: grid;

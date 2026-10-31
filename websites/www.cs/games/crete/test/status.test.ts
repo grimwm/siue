@@ -34,8 +34,8 @@ test('one heart is singular and a stone Minotaur is said', () => {
 });
 
 test('the level stat is short, with its full place as the note; an outside level has neither', () => {
-  const v = statusView({ ...base, trial: 'Ch 1 · 3', trialNote: 'Chapter 1, Level 3: The Doors of Daedalus' });
-  assert.equal(v.trial, 'Ch 1 · 3');
+  const v = statusView({ ...base, trial: 'Ch. 1 • Level 3/10', trialNote: 'Chapter 1, Level 3: The Doors of Daedalus' });
+  assert.equal(v.trial, 'Ch. 1 • Level 3/10');
   assert.equal(v.trialNote, 'Chapter 1, Level 3: The Doors of Daedalus');
   const out = statusView({ ...base, trial: '' });
   assert.equal(out.trial, '');

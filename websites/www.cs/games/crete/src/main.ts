@@ -24,7 +24,7 @@ import { solve } from './puzzle/solver.ts';
 import { startSearch } from './solver-client.ts';
 import type { Report } from './solver-host.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
-import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS } from './campaign/chapters.ts';
+import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf } from './campaign/chapters.ts';
 import type { OutsideLevel } from './campaign/chapters.ts';
 import { createOutside } from './outside.ts';
 import type { Action } from './puzzle/step.ts';
@@ -285,10 +285,12 @@ document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
 /* Play on the title card opens Chapter 1's opening card: a new game starts at Chapter 1, Level 1 whatever this
-   browser has cleared, and only a level picked from the list (or a link) starts elsewhere. A click is the gesture that lets a remembered full screen return. */
-function play(): void {
+   browser has cleared, and only Continue (`at`, the first level not cleared), a level picked from the list or a
+   link starts elsewhere. A click is the gesture that lets a remembered full screen return. */
+function play(at?: number): void {
   if (settings.fullscreen.get() === 'on' && !appEnv.fullscreenElement()) toggleFullscreen();
-  ui.showChapter(1, false);
+  if (at === undefined) ui.showChapter(1, false);
+  else ui.showChapter(chapterOf(at).chapter.n, false, at);
 }
 
 /* Quit (the menu's): the cards close and the editor's visit ends; an installed app closes where it may, and

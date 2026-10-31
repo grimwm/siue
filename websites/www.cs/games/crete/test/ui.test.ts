@@ -24,7 +24,7 @@ import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
 import { DIRS } from '../src/puzzle/tiles.ts';
 import { stateKey } from './reference-solver.ts';
-import { CAMPAIGN_LEVELS, LEVEL_IDS } from '../src/campaign/chapters.ts';
+import { CAMPAIGN_LEVELS, LEVEL_IDS, chapterOf } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import type { Levels, OutsideLevel } from '../src/campaign/chapters.ts';
 import { icedPages } from './puzzle-grid.ts';
@@ -249,7 +249,7 @@ test('the title card reads its kicker from Chapter 1', () => {
 
 // ---- the title -> chapter card -> level flow, on the real page and game ----
 const cleared = new Set<string>();
-/** The status bar's level, "Ch 1 · 2". */
+/** The status bar's level, "Ch. 1 • Level 2/10". */
 const hudTrial = (): string => byId(document.getElementById('status-root')!, 'hud-trial').textContent;
 const progress: Progress = {
   get: id => ({ cleared: cleared.has(id), assisted: false, best: cleared.has(id) ? 20 : null }),
@@ -291,7 +291,7 @@ const editor = {
 };
 const looks: string[] = [];
 flow.bindControls({
-  game, toggleMute() {}, toggleMusic() { musics++; }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, setPad(side) { looks.push(`pad:${side}`); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: () => flow.showChapter(1, false), backToEditor: () => { backs++; },
+  game, toggleMute() {}, toggleMusic() { musics++; }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, setPad(side) { looks.push(`pad:${side}`); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: (at?: number) => (at === undefined ? flow.showChapter(1, false) : flow.showChapter(chapterOf(at).chapter.n, false, at)), backToEditor: () => { backs++; },
   editor, leftEditor: () => { edits.push('left'); },
 });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
@@ -318,7 +318,7 @@ test('with Chapters 1 and 2 all cleared, Next level after Chapter 1, Level 1 goe
   assert.equal(flow.top(), 'end');
   key('Enter');
   assert.equal(game.trial, 1);
-  assert.equal(hudTrial(), 'Ch 1 · 2');
+  assert.equal(hudTrial(), 'Ch. 1 • Level 2/10');
   assert.equal(flow.top(), 'start');
 });
 
@@ -331,7 +331,7 @@ test("with Chapters 1 and 2 all cleared, winning Chapter 1, Level 10 goes on to 
   assert.equal(text('chapter-title'), 'The Winding Ways');
   key('Enter');
   assert.equal(game.trial, 10);
-  assert.equal(hudTrial(), 'Ch 2 · 1');
+  assert.equal(hudTrial(), 'Ch. 2 • Level 1/10');
   assert.equal(flow.top(), 'start');
 });
 
@@ -342,7 +342,7 @@ test("with Chapter 1 and Chapter 2's first level cleared, winning Chapter 1, Lev
   key('Enter');
   assert.equal(text('chapter-title'), 'The Winding Ways');
   key('Enter');
-  assert.equal(hudTrial(), 'Ch 2 · 1');
+  assert.equal(hudTrial(), 'Ch. 2 • Level 1/10');
 });
 
 test('with only some levels cleared, Next level goes to the next level in order, never the first uncleared one', () => {
@@ -350,7 +350,7 @@ test('with only some levels cleared, Next level goes to the next level in order,
   for (const id of [...LEVEL_IDS.slice(1, 4), ...LEVEL_IDS.slice(10, 11)]) cleared.add(id);
   win(0);
   key('Enter');
-  assert.equal(hudTrial(), 'Ch 1 · 2');
+  assert.equal(hudTrial(), 'Ch. 1 • Level 2/10');
 });
 
 test("winning Chapter 1, Level 1 shows the moves taken and the best possible on the end card", () => {
@@ -367,7 +367,7 @@ test('every released level in order: Enter starts it, a win shows moves and the 
   for (let i = 0; i < LEVEL_IDS.length; i++) {
     const { chapter, within } = { chapter: i < 10 ? 1 : 2, within: (i % 10) + 1 };
     assert.equal(flow.top(), 'start', `level ${i + 1}'s start card`);
-    assert.equal(hudTrial(), `Ch ${chapter} · ${within}`);
+    assert.equal(hudTrial(), `Ch. ${chapter} • Level ${within}/10`);
     key('Enter');
     const r = solve(initial(levels.level(i)));
     assert.ok(r.solved);
@@ -420,15 +420,15 @@ test('the status bar and the menu name the chapter and the level', () => {
   key('Enter');
   const title = levels.level(2).title;
   const trial = byId(document.getElementById('status-root')!, 'hud-trial');
-  assert.equal(trial.textContent, 'Ch 1 · 3');
+  assert.equal(trial.textContent, 'Ch. 1 • Level 3/10');
   assert.equal(trial.getAttribute('aria-label'), `Chapter 1, Level 3: ${title}`);
   key('q');
   assert.equal(flow.top(), 'menu');
-  assert.equal(walk(byId(rootOf('menu-veil'), 'menu-veil')).find(n => n.className === 'kicker')?.textContent, 'Chapter 1 · Level 3');
+  assert.equal(walk(byId(rootOf('menu-veil'), 'menu-veil')).find(n => n.className === 'kicker')?.textContent, 'Ch. 1 • Level 3/10');
   assert.equal(text('menu-level'), title);
   flow.closeLayers();
   game.open(LEVEL_IDS.length - 1);
-  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, `Ch 2 · ${LEVEL_IDS.length - 10}`);
+  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, `Ch. 2 • Level ${LEVEL_IDS.length - 10}/10`);
 });
 
 test('I on the title opens the story card and Q opens the menu; Q again returns to the title', () => {
@@ -758,6 +758,46 @@ test('a held Enter after level 10 goes on from the closing card once and starts 
   assert.equal(flow.top(), 'chapter');
 });
 
+test("the title card offers no Continue while nothing is cleared, and Enter the halls opens Chapter 1's card", () => {
+  reset();
+  flow.showTitle(false);
+  assert.equal(el('title-continue'), undefined);
+  key('Enter');
+  assert.equal(flow.top(), 'title', 'Enter on the title card with no Continue starts nothing');
+});
+
+test('Continue on the title card goes to the first level not cleared, in order; Play still starts Chapter 1, Level 1', () => {
+  reset();
+  for (const id of [...LEVEL_IDS.slice(0, 12), LEVEL_IDS[14]!]) cleared.add(id);
+  flow.showTitle(false);
+  assert.ok(text('title-continue').includes('Continue · Ch. 2 • Level 3'));
+  assert.equal(document.activeElement?.id, 'title-continue');
+  key('Enter');
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Winding Ways');
+  key('Enter');
+  assert.equal(game.trial, 12);
+  assert.equal(hudTrial(), 'Ch. 2 • Level 3/10');
+  flow.showTitle(false);
+  click(byId(rootOf('title-continue'), 'title-continue'));
+  key('Enter');
+  assert.equal(game.trial, 12, 'Continue clicked');
+  flow.showTitle(false);
+  key('n');
+  assert.equal(flow.top(), 'look');
+  click(byId(document.getElementById('look-root'), 'pick-enter'));
+  assert.equal(text('chapter-title'), 'The Outer Halls');
+  key('Enter');
+  assert.equal(hudTrial(), 'Ch. 1 • Level 1/10', 'a new game starts at Chapter 1, Level 1');
+});
+
+test('with every released level cleared the title card offers no Continue', () => {
+  reset();
+  for (const id of LEVEL_IDS) cleared.add(id);
+  flow.showTitle(false);
+  assert.equal(el('title-continue'), undefined);
+});
+
 test('Play opens the chapter card, and Enter on it starts level 1 when nothing is cleared', () => {
   reset();
   flow.showTitle(false);
@@ -870,7 +910,7 @@ test('with Chapter 1 all cleared, Levels and Chapter 2, Level 3 starts there', (
   key('ArrowRight');
   pick(3);
   assert.equal(game.trial, 12);
-  assert.equal(hudTrial(), 'Ch 2 · 3');
+  assert.equal(hudTrial(), 'Ch. 2 • Level 3/10');
   assert.equal(flow.top(), 'start');
 });
 

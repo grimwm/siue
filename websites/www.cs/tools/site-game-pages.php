@@ -14,6 +14,13 @@
  * URLs carry a hash of the file, so a recaptured one (make screenshots)
  * makes the page stale until this tool runs again.
  *
+ * og:url is the page with `?v=<the game's version>`, the hash its own page
+ * loads dist/main.js with, which the Share buttons hand out too. Facebook
+ * keys its preview on og:url, so each release is a new object with a fresh
+ * preview, and a scrape of a versioned link stays on that link. The
+ * canonical link and the JSON-LD url stay bare, for search engines. The
+ * games ignore `v`, so every link shared before still plays.
+ *
  *   php tools/site-game-pages.php          write every stale page
  *   php tools/site-game-pages.php --check  list stale pages, exit 1 if any
  *
@@ -83,9 +90,10 @@ function site_pages_asset_url(string $site, string $path, string $siteRoot): str
 /** A game's link-preview tags (Open Graph, Twitter card) and its search
  *  engines' game data (JSON-LD), for the site page that shares it.
  *  $siteRoot is the site's folder, holding games/. */
-function site_pages_preview(array $card, string $site, string $siteRoot): array
+function site_pages_preview(array $card, string $site, string $siteRoot, string $version): array
 {
     $url = $site . 'play/' . $card['id'] . '/';
+    $shared = $url . '?v=' . $version;
     $title = site_pages_esc($card['title']);
     $summary = site_pages_summary($card['description']);
     $desc = site_pages_esc($summary);
@@ -96,7 +104,7 @@ function site_pages_preview(array $card, string $site, string $siteRoot): array
         '<meta property="og:site_name" content="' . site_pages_esc(SITE_PAGES_SITE_NAME) . '">',
         '<meta property="og:title" content="' . $title . '">',
         '<meta property="og:description" content="' . $desc . '">',
-        '<meta property="og:url" content="' . site_pages_esc($url) . '">',
+        '<meta property="og:url" content="' . site_pages_esc($shared) . '">',
         '<meta property="og:locale" content="en_US">',
     ];
     $kicker = trim($card['kicker'] ?? '');
@@ -188,6 +196,14 @@ function site_pages_version(string $content): string
     return substr(hash('sha256', $content), 0, 10);
 }
 
+/** A game's version: the hash of its built entry, games/<id>/dist/main.js, which its own page loads it with
+ *  (`?v=`), or null when it has not been built. $root is the games folder. */
+function site_pages_game_version(string $root, string $id): ?string
+{
+    $entry = @file_get_contents("$root/$id/dist/main.js");
+    return is_string($entry) ? site_pages_version($entry) : null;
+}
+
 /** The shared files every wrapper page loads, relative to play/. */
 const SITE_PAGES_SHARED = ['play.css', 'play.js'];
 
@@ -215,7 +231,7 @@ const SITE_PAGES_GAMES_ICON = '<svg class="play-icon" viewBox="0 0 24 24" width=
 
 /** The site's page for a play game: its navbar, in the game's colours, over
  *  a frame showing the game. ../../ is the site root from play/<id>/.
- *  $versions maps play.css, play.js and the game's install.js to their `?v=`. */
+ *  $versions maps play.css, play.js and the game's install.js to their `?v=`, and `game` to the game's version. */
 function site_pages_wrapper(array $card, string $site, array $versions, string $siteRoot): string
 {
     $id = $card['id'];
@@ -224,7 +240,7 @@ function site_pages_wrapper(array $card, string $site, array $versions, string $
     $head = array_merge(
         ['<meta charset="utf-8">', '<meta name="viewport" content="width=device-width, initial-scale=1">',
          "<title>$title · William Grim</title>"],
-        site_pages_preview($card, $site, $siteRoot),
+        site_pages_preview($card, $site, $siteRoot, $versions['game']),
         site_pages_install($card, "../../games/$id/"),
         [INSTALL_PROMPT_STASH,
          '<link rel="icon" href="../../favicon-32.png" sizes="32x32">',
@@ -245,7 +261,7 @@ function site_pages_wrapper(array $card, string $site, array $versions, string $
         . "  <span class=\"play-game\">\n"
         . "    <a class=\"play-games\" href=\"../../#games\" title=\"Games\">" . SITE_PAGES_GAMES_ICON . "<span class=\"play-txt\">Games</span></a>\n"
         . "    <span class=\"play-now\"><img src=\"../../games/$id/icon-192.png\" alt=\"\" width=\"20\" height=\"20\"><span class=\"play-now-name\">$title</span></span>\n"
-        . "    <span class=\"play-install\" id=\"play-install\" data-title=\"$title\" data-game-page=\"$game\"></span>\n"
+        . "    <span class=\"play-install\" id=\"play-install\" data-title=\"$title\" data-game-page=\"$game\" data-version=\"" . site_pages_esc($versions['game']) . "\"></span>\n"
         . "  </span>\n"
         . "</nav>\n"
         . "<iframe class=\"play-frame\" id=\"play-frame\" src=\"$game\" title=\"$title\" allow=\"fullscreen; keyboard-lock; autoplay; clipboard-write\" allowfullscreen></iframe>\n"
@@ -255,12 +271,12 @@ function site_pages_wrapper(array $card, string $site, array $versions, string $
 /** The site's page for a game mounted in the site page: its preview tags,
  *  then straight on to the site with ?game=<id>, keeping the address's query
  *  and hash (?install). */
-function site_pages_forward_page(array $card, string $site, string $siteRoot): string
+function site_pages_forward_page(array $card, string $site, string $siteRoot, string $version): string
 {
     // Relative, so the forward stays on whichever host serves the page.
     $to = site_pages_esc('../../?game=' . rawurlencode($card['id']));
     $js = json_encode('../../?game=' . rawurlencode($card['id']), JSON_UNESCAPED_SLASHES);
-    $lines = array_merge(site_pages_preview($card, $site, $siteRoot), site_pages_install($card, "../../games/{$card['id']}/"));
+    $lines = array_merge(site_pages_preview($card, $site, $siteRoot, $version), site_pages_install($card, "../../games/{$card['id']}/"));
     return "<!doctype html>\n<!-- Generated by tools/site-game-pages.php from games/{$card['id']}/metadata.yaml; do not edit. -->\n"
         . "<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
         . '<title>' . site_pages_esc($card['title']) . "</title>\n"
@@ -291,6 +307,12 @@ function site_pages_sync(string $root, string $site, bool $write): array
         return [[], array_merge($notes, $problems), true];
     }
     foreach ($hub['games'] as $card) {
+        $game = site_pages_game_version($root, $card['id']);
+        if ($game === null) {
+            $notes[] = "games/{$card['id']}/dist/main.js is not readable, but play/{$card['id']}/ shares its version; build the game";
+            $broken = true;
+            continue;
+        }
         if (isset($card['page'])) {
             $bar = @file_get_contents("$root/{$card['id']}/dist/install.js");
             if (!is_string($bar)) {
@@ -298,9 +320,9 @@ function site_pages_sync(string $root, string $site, bool $write): array
                 $broken = true;
                 continue;
             }
-            $content = site_pages_wrapper($card, $site, $versions + ['install.js' => site_pages_version($bar)], dirname($root));
+            $content = site_pages_wrapper($card, $site, $versions + ['install.js' => site_pages_version($bar), 'game' => $game], dirname($root));
         } else {
-            $content = site_pages_forward_page($card, $site, dirname($root));
+            $content = site_pages_forward_page($card, $site, dirname($root), $game);
         }
         $path = "$playRoot/{$card['id']}/index.html";
         if ((string) @file_get_contents($path) !== $content) {

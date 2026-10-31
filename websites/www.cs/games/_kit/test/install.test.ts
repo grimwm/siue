@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DeferredPrompt, InstallEnv, InstallSetup, InstallView, Platform } from '../install.ts';
-import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH, detectPlatform, createShare, browserInstallEnv } from '../install.ts';
+import { createInstall, asksInstall, withInstall, COPIED_MS, IOS_STEPS, PROMPT_STASH, detectPlatform, createShare, browserInstallEnv, versionedShareUrl, versionOf } from '../install.ts';
 import { runInNewContext } from 'node:vm';
 import { manualClock } from './clock.ts';
 
@@ -303,4 +303,15 @@ test('createShare: a copy that fails after a newer press succeeded, or after Clo
   writes[2]?.fail();
   await third;
   assert.equal(s.state(), 'idle', 'a press closed before it answered stays closed');
+});
+
+test('Share hands out the game page with the game version, keeping its own query', () => {
+  assert.equal(versionedShareUrl('https://site.test/play/crete/', 'abc123'), 'https://site.test/play/crete/?v=abc123');
+  assert.equal(versionedShareUrl('https://site.test/play/crete/?seed=7', 'abc123'), 'https://site.test/play/crete/?seed=7&v=abc123');
+  assert.equal(versionedShareUrl('https://site.test/play/crete/?v=old', 'new'), 'https://site.test/play/crete/?v=new');
+  assert.equal(versionedShareUrl('https://site.test/play/crete/', null), 'https://site.test/play/crete/');
+  assert.equal(versionedShareUrl('https://site.test/play/crete/', ''), 'https://site.test/play/crete/');
+  assert.equal(versionOf('https://site.test/games/crete/dist/main.js?v=82a6eeeb4d'), '82a6eeeb4d');
+  assert.equal(versionOf('https://site.test/games/crete/dist/main.js'), null);
+  assert.equal(versionOf(''), null);
 });

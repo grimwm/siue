@@ -55,7 +55,11 @@ test('the help explains the Look setting and the camera gestures', () => {
   assert.match(all, /Look in this menu picks the modern board or the classic tiles/);
   assert.match(all, /Walls \(modern only\)/);
   assert.match(all, /Classic or Modern \(B\) under the board swaps between them/);
-  assert.match(all, /double tap or double click/);
+  assert.match(all, /two fingers twist to turn it and slide up or down together to tilt it/);
+  assert.match(all, /drag with the left button to turn \(across\) and tilt \(up and down\)/);
+  assert.match(all, /squares up to the nearest quarter turn/);
+  assert.match(all, /compass/);
+  assert.match(all, /a double tap or a double click brings back the starting view/);
 });
 
 test('the help says what the Music switch does and credits the music and its samples', () => {

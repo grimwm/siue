@@ -1,8 +1,11 @@
 /* The Island of Crete, modern look: the camera's controls. Pointers on the modern canvas go through the gesture
- * reader (gestures.ts) to the camera: one finger or the left button turns, two fingers pan, twist and pinch, the
- * right or middle button pans, the wheel zooms toward the pointer, and a double tap or double click resets. Buttons
- * at the board's top-right turn the view 15° either way, zoom it in and out, and reset it; on a narrow touch screen
- * a View button shows and hides them. Every control is ignored while a layer covers the board. */
+ * reader (gestures.ts) to the camera: one finger swipes Theseus; two fingers pan, twist (turn) and pinch (zoom), or
+ * slide up and down together to tilt; the left button turns across and tilts up and down, the right or middle button
+ * pans, the wheel zooms toward the pointer, and a double tap or double click resets. When the player lets go the
+ * heading eases to the nearest quarter turn. Buttons at the board's top-right turn the view a quarter either way,
+ * zoom it in and out, and reset it; on a narrow touch screen a View button shows and hides them. A compass at the
+ * board's bottom-right points at the board's north and resets the view when tapped. Every control is ignored while a
+ * layer covers the board. */
 import type { MoveAction } from '../keys.ts';
 import { createGestures } from './gestures.ts';
 import type { CamOp, Ptr } from './gestures.ts';
@@ -16,7 +19,11 @@ export interface CamControl {
   /** Multiplies the view's height by `factor` about the screen point `(fx, fy)`, in fractions of the canvas from its
    *  centre (right and up are positive); at once under a finger or the wheel, eased from a button. */
   zoom(factor: number, fx: number, fy: number, eased: boolean): void;
-  /** Back to the default yaw and zoom, following Theseus. */
+  /** Tilts Angled by `deg` toward straight down (negative: back toward Angled's own pitch), at once. */
+  tilt(deg: number): void;
+  /** The player let go: the heading eases to the nearest quarter turn. */
+  settle(): void;
+  /** Back to the default heading, tilt and zoom. */
   reset(): void;
 }
 
@@ -30,12 +37,15 @@ export interface ControlHost {
 }
 
 export interface Controls {
-  /** Shows or hides the turn buttons (Top-down does not turn). */
+  /** Shows or hides the turn buttons and the compass (Top-down does not turn). */
   setTurnable(on: boolean): void;
+  /** Points the compass at the board's north for a view turned `yaw` degrees. */
+  setHeading(yaw: number): void;
   dispose(): void;
 }
 
-const STEP = 15;
+/** A turn button turns a quarter, so the grid stays square to the screen. */
+const STEP = 90;
 const ZOOM_STEP = 1.2;
 /** Wheel lines and pages as pixels. */
 const LINE_PX = 16;
@@ -43,6 +53,7 @@ const TURN_LEFT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 
 const TURN_RIGHT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg>';
 const ZOOM_IN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>';
 const ZOOM_OUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
+const COMPASS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="n" d="M12 3l3.5 9h-7z"/><path class="s" d="M12 21l-3.5-9h7z"/></svg>';
 
 function button(id: string, label: string, html: string, className: string): HTMLButtonElement {
   const b = document.createElement('button');
@@ -71,6 +82,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     for (const op of ops) {
       if (op.kind === 'swipe') host.swipe(op.dir);
       else if (op.kind === 'turn') cam.turn(op.deg, false);
+      else if (op.kind === 'tilt') cam.tilt(op.deg);
+      else if (op.kind === 'settle') cam.settle();
       else if (op.kind === 'pan') cam.pan(op.dx, op.dy);
       else if (op.kind === 'zoom') {
         const r = canvas.getBoundingClientRect();
@@ -90,7 +103,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   };
   const move = (e: PointerEvent) => apply(gestures.move(ptr(e)));
   const up = (e: PointerEvent) => apply(gestures.up(ptr(e)));
-  const cancel = (e: PointerEvent) => gestures.cancel(e.pointerId);
+  const cancel = (e: PointerEvent) => apply(gestures.cancel(e.pointerId));
   const dbl = () => {
     if (host.blocked()) return;
     host.gesture();
@@ -130,7 +143,10 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   const zoomOut = button('cam-zoom-out', 'Zoom out', ZOOM_OUT, 'cbtn');
   const reset = button('cam-reset', 'Reset view', 'Reset', 'cbtn wide');
   group.append(left, right, zoomIn, zoomOut, reset);
-  parent.append(view, group);
+  // The compass: its needle points at the board's north and turns with the view; a tap resets it.
+  const compass = button('cam-compass', 'Compass: reset the view', COMPASS, 'compass');
+  const needle = compass.querySelector('svg')!;
+  parent.append(view, group, compass);
 
   const press = (fn: () => void) => () => {
     if (host.blocked()) return;
@@ -142,6 +158,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   zoomIn.addEventListener('click', press(() => cam.zoom(1 / ZOOM_STEP, 0, 0, true)));
   zoomOut.addEventListener('click', press(() => cam.zoom(ZOOM_STEP, 0, 0, true)));
   reset.addEventListener('click', press(() => cam.reset()));
+  compass.addEventListener('click', press(() => cam.reset()));
   view.addEventListener('click', () => {
     const open = group.classList.toggle('open');
     view.setAttribute('aria-expanded', String(open));
@@ -149,7 +166,10 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
 
   return {
     setTurnable(on) {
-      left.hidden = right.hidden = !on;
+      left.hidden = right.hidden = compass.hidden = !on;
+    },
+    setHeading(yaw) {
+      needle.style.transform = `rotate(${yaw}deg)`;
     },
     dispose() {
       canvas.removeEventListener('pointerdown', down);

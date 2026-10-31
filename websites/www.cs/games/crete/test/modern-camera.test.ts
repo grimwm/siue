@@ -1,7 +1,7 @@
 // The modern look's camera maths: easing, clamping, panning, zooming, yaw choice and view height.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { WALL_H, ZOOM_MIN, clampView, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, wholeZoom, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
+import { DEFAULT_YAW, PITCHES, TILT_MAX, VIEW_YAW, WALL_H, ZOOM_MIN, clampTilt, clampView, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, snapYaw, toMini, wholeZoom, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
 import type { Cam } from '../src/modern/camera.ts';
 
 test('easeCam closes on the goal, reports motion, and settles exactly', () => {
@@ -214,4 +214,14 @@ test('the camera eases its pitch like its other values, and lands on it with red
   assert.ok(cur.pitch > 45 && cur.pitch < 90);
   easeCam(cur, goal, 1 / 60, true);
   assert.equal(cur.pitch, 90);
+});
+
+test('views start square to the board, north up; a turn settles to the nearest quarter; the tilt stays between Angled and straight down', () => {
+  assert.equal(DEFAULT_YAW, 0);
+  assert.deepEqual(VIEW_YAW, { angled: 0, top: 0 });
+  for (const [y, q] of [[0, 0], [44, 0], [46, 90], [-70, -90], [135, 180], [-200, -180], [400, 360]] as const) assert.equal(snapYaw(y) + 0, q, `${y}`);
+  assert.equal(TILT_MAX, 90);
+  assert.equal(clampTilt(30), PITCHES.angled);
+  assert.equal(clampTilt(60), 60);
+  assert.equal(clampTilt(120), 90);
 });

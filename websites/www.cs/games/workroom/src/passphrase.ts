@@ -1,6 +1,7 @@
 // Changing the notes passphrase on Your studio: the current passphrase opens the locked keyring in this browser, the
 // same keys are locked again under the new one (typed twice, the keymaker's rules), the new envelope is proven to
-// open, and the server stores it only when its fingerprints are the ones it holds. Neither passphrase is kept.
+// open, and the server stores it only when its fingerprints are the ones it holds and the current private key signed
+// the upload for this sign-in. Neither passphrase is kept.
 import { KeyChanged, NoKeyring } from './api.ts';
 import type { PageApi } from './api.ts';
 import { PASSPHRASE_MESSAGES, checkPassphrase } from './keymaker.ts';
@@ -19,11 +20,11 @@ export async function changePassphrase(api: Pick<PageApi, 'keyring' | 'changeKey
   const weak = checkPassphrase(next, again);
   if (weak !== null) return PASSPHRASE_MESSAGES[weak];
   try {
-    const { locked } = await api.keyring();
-    const relocked = await relockKeyring(locked, current, next);
+    const { locked, session } = await api.keyring();
+    const relocked = await relockKeyring(locked, current, next, session);
     // The new envelope must open with the new passphrase to the same current key before it replaces the old one.
     if ((await unlockKeyring(relocked.locked, next)).current.fingerprint !== relocked.current) throw new KeyringInvalid('the new envelope does not match');
-    await api.changeKeyring(relocked.locked, relocked.current, relocked.previous);
+    await api.changeKeyring(relocked.locked, relocked.current, relocked.previous, relocked.proof);
     return null;
   } catch (e) {
     if (e instanceof WrongPassphrase) return CHANGE_MESSAGES.wrong;

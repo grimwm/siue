@@ -13,10 +13,11 @@ Forgot your passphrase). Builds on `docs/superpowers/plans/2026-10-29-music-stud
   - the browser fetches the locked keyring, opens it with the current passphrase (`relockKeyring` in `unlock.ts`:
     every entry is checked against its fingerprint as `unlockKeyring` does), locks the same entries in the same
     order under the new passphrase, checks the new envelope unlocks, and POSTs `keyring.php?change=1` with
-    `{keyring, current, previous}`;
-  - the server (`Store::changeKeyring`, one transaction) replaces the envelope only when `current` equals the stored
-    current fingerprint and `previous` holds exactly the stored previous ones: 200, else 409 `key_changed`, 404
-    `no_keyring` when none is stored. No email;
+    `{keyring, current, previous, proof}`: `proof` is the current key's SPKI and its RSASSA-PKCS1-v1_5 SHA-256
+    signature over this session's unlock tag, the current fingerprint and the new envelope;
+  - the server replaces the envelope only when `current` equals the stored current fingerprint, `previous` holds
+    exactly the stored previous ones (else 409 `key_changed`; 404 `no_keyring` when none is stored) and the proof
+    verifies against the SPKI whose SHA-256 is the current fingerprint (else 403 `bad_proof`). No email;
   - afterwards the page goes to `studio.php?changed=passphrase`, which says so. Remembered unlocks are forgotten on
     every device (the keyring's digest changed), so the next unlock takes the new passphrase.
 - **Emailed confirmation** (`Music\Confirmations`, table `studio_confirms`):

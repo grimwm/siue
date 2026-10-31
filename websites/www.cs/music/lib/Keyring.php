@@ -45,6 +45,63 @@ final class Keyring
         return ['locked' => $locked, 'current' => $doc['current'], 'previous' => $doc['previous']];
     }
 
+    /**
+     * The upload of a new passphrase (keyring.php?change=1): parseUpload's wrapper plus `proof`, exactly {spki, sig},
+     * both canonical base64. Null when it is not that.
+     *
+     * @return array{locked: string, current: string, previous: list<string>, keyring: array<string, mixed>, spki: string, sig: string}|null
+     */
+    public static function parseChange(string $body): ?array
+    {
+        $doc = json_decode($body, true);
+        if (!is_array($doc) || !is_array($doc['proof'] ?? null)) {
+            return null;
+        }
+        $proof = $doc['proof'];
+        unset($doc['proof']);
+        $fields = array_keys($proof);
+        sort($fields);
+        $spki = is_string($proof['spki'] ?? null) ? base64_decode($proof['spki'], true) : false;
+        $sig = is_string($proof['sig'] ?? null) ? base64_decode($proof['sig'], true) : false;
+        if ($fields !== ['sig', 'spki'] || $spki === false || $sig === false || $spki === '' || $sig === ''
+            || base64_encode($spki) !== $proof['spki'] || base64_encode($sig) !== $proof['sig']) {
+            return null;
+        }
+        $parsed = self::parseUpload((string) json_encode($doc, JSON_UNESCAPED_SLASHES));
+        return $parsed === null ? null : $parsed + ['keyring' => $doc['keyring'], 'spki' => $spki, 'sig' => $sig];
+    }
+
+    /**
+     * What the page signs to prove it holds the current private key: this session's unlock tag, the current
+     * fingerprint and the new envelope's parts, so a proof serves only this session and this envelope.
+     *
+     * @param array<string, mixed> $keyring the new envelope
+     */
+    public static function changeMessage(string $tag, string $current, array $keyring): string
+    {
+        $part = static fn(string $k): string => is_scalar($keyring[$k] ?? null) ? (string) $keyring[$k] : '';
+        return implode("\n", ['siue-music-keyring-change-v1', $tag, $current, $part('iterations'), $part('salt'), $part('iv'), $part('ct')]);
+    }
+
+    /**
+     * True when $spki (DER) is the key $fingerprint names and $sig is its RSASSA-PKCS1-v1_5 SHA-256 signature of
+     * changeMessage(...): proof that the uploader holds the current private key, which only the old passphrase opens.
+     *
+     * @param array<string, mixed> $keyring
+     */
+    public static function proofHolds(string $spki, string $sig, string $fingerprint, string $tag, array $keyring): bool
+    {
+        if ($tag === '' || $fingerprint === '' || !hash_equals($fingerprint, hash('sha256', $spki))) {
+            return false;
+        }
+        $pem = "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($spki), 64, "\n") . "-----END PUBLIC KEY-----\n";
+        $key = openssl_pkey_get_public($pem);
+        if ($key === false) {
+            return false;
+        }
+        return openssl_verify(self::changeMessage($tag, $fingerprint, $keyring), $sig, $key, OPENSSL_ALGO_SHA256) === 1;
+    }
+
     /** The envelope check: exactly the six fields, the pinned KDF and strength, and correctly sized base64 parts. */
     private static function keyringIsWellFormed(string $body): bool
     {

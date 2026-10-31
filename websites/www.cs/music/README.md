@@ -25,7 +25,10 @@ keys. Nobody else's studio is ever visible to them.
   it.
 - **Change your passphrase** on Your studio: the current passphrase, then the new one twice. The page opens
   the keyring with the current one, locks the same keys, in the same order, under the new one, checks that
-  it opens, and uploads it; the server stores it only when its fingerprints are exactly the stored ones.
+  it opens, and uploads it with a proof: the current private key's signature (RSASSA-PKCS1-v1_5 SHA-256, the
+  same RSA key) over this sign-in's tag and the new envelope. The server stores it only when its fingerprints are
+  exactly the stored ones and the signature verifies against the SPKI whose SHA-256 is the current fingerprint,
+  so knowing the fingerprints (every sealed note's header names the current one) is not enough.
   Every browser's remembered unlock is forgotten (the keyring changed), so the next unlock takes the new one.
 - **Forgot your passphrase?** on Your studio deletes every note and the notes key, after the emailed
   confirmation below. Pieces, drafts and AI keys stay, and the pieces page asks for a new notes key.
@@ -131,8 +134,9 @@ the notes and keyring in one transaction; Start over is `Music\Accounts::startOv
 files and keyring in one transaction; the account and its sessions stay); `csrf.php`, `notes.php` (GET list,
 POST upload), `note.php?id=`, `delete.php` (POST `id`, or `all=1`), `keyring.php` (GET the locked keyring; POST
 stores `{keyring, current, previous}`, the rules `api/keyring.php` keeps, only while the studio has none: 409
-`key_exists` otherwise; POST `?change=1` stores the same keys under a new passphrase only when `current` and
-`previous` are exactly the stored fingerprints: 409 `key_changed` otherwise, 404 `no_keyring` when none),
+`key_exists` otherwise; POST `?change=1` with `proof` `{spki, sig}` stores the same keys under a new passphrase
+only when `current` and `previous` are exactly the stored fingerprints (409 `key_changed` otherwise, 404
+`no_keyring` when none) and the proof holds (403 `bad_proof` otherwise)),
 `delete-draft.php` (POST
 `piece` and `v` deletes one draft, `piece` alone the whole piece; 404 `not_found` when none
 went), `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data). Signed out, a page goes to

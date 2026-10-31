@@ -123,6 +123,25 @@ final class StudioKeysTest extends TestCase
 
     // --- keyring.php?change=1 ---
 
+    /** A real RSA key as the studio's current notes key: its PEM private key and its fingerprint (SHA-256 of the SPKI DER). */
+    private function realKey(): array
+    {
+        $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        openssl_pkey_export($key, $pem);
+        $pub = openssl_pkey_get_details($key)['key'];
+        $der = base64_decode(preg_replace('/-----[^-]+-----|\s/', '', $pub));
+        $this->store->putKeyring('{"v":1}', hash('sha256', $der), [MUSIC_FP_PREVIOUS]);
+        return ['pem' => $pem, 'spki' => base64_encode($der), 'fp' => hash('sha256', $der)];
+    }
+
+    /** The upload the page makes: the envelope, the fingerprints, and the proof signed with $pem over this session's tag. */
+    private function changeBody(Admin\Request $as, array $key, array $locked, ?string $pem = null, ?string $tag = null, ?string $current = null): string
+    {
+        $current ??= $key['fp'];
+        openssl_sign(Music\Keyring::changeMessage($tag ?? $this->sessions->tag($as, 'music-unlock'), $current, $locked), $sig, $pem ?? $key['pem'], OPENSSL_ALGO_SHA256);
+        return (string) json_encode(['keyring' => $locked, 'current' => $current, 'previous' => [MUSIC_FP_PREVIOUS], 'proof' => ['spki' => $key['spki'], 'sig' => base64_encode($sig)]]);
+    }
+
     private function changeKeyring(Admin\Request $as, string $body): Admin\Response
     {
         return $this->pages->keyring(req(['https' => true, 'method' => 'POST', 'cookies' => $as->cookies, 'query' => ['change' => '1'],
@@ -132,28 +151,57 @@ final class StudioKeysTest extends TestCase
     public function testThePageChangesTheKeyringOnlyWithTheSameFingerprints(): void
     {
         $as = $this->signedIn();
+        $key = $this->realKey();
         $locked = music_locked_keyring();
-        $wrong = $this->changeKeyring($as, (string) json_encode(['keyring' => $locked, 'current' => MUSIC_FP_PREVIOUS, 'previous' => []]));
+        $wrong = $this->changeKeyring($as, $this->changeBody($as, $key, $locked, null, null, MUSIC_FP_CURRENT));
         self::assertSame(409, $wrong->status);
         self::assertSame('key_changed', json_decode($wrong->body, true)['error']);
         self::assertSame('{"v":1}', $this->store->keyring()['locked']);
 
-        $bad = $this->changeKeyring($as, '{"keyring":{}}');
-        self::assertSame(422, $bad->status);
+        self::assertSame(422, $this->changeKeyring($as, '{"keyring":{}}')->status);
 
-        $ok = $this->changeKeyring($as, (string) json_encode(['keyring' => $locked, 'current' => MUSIC_FP_CURRENT, 'previous' => [MUSIC_FP_PREVIOUS]]));
+        $ok = $this->changeKeyring($as, $this->changeBody($as, $key, $locked));
         self::assertSame(200, $ok->status, $ok->body);
         self::assertTrue(json_decode($ok->body, true)['changed']);
         self::assertSame($locked, json_decode($this->store->keyring()['locked'], true));
 
         $noCsrf = $this->pages->keyring(req(['https' => true, 'method' => 'POST', 'cookies' => $as->cookies, 'query' => ['change' => '1'],
-            'headers' => ['sec-fetch-site' => 'same-origin']]), (string) json_encode(['keyring' => $locked, 'current' => MUSIC_FP_CURRENT, 'previous' => [MUSIC_FP_PREVIOUS]]));
+            'headers' => ['sec-fetch-site' => 'same-origin']]), $this->changeBody($as, $key, $locked));
         self::assertSame(403, $noCsrf->status);
 
         $this->store->forgetNotesKey();
-        $none = $this->changeKeyring($as, (string) json_encode(['keyring' => $locked, 'current' => MUSIC_FP_CURRENT, 'previous' => [MUSIC_FP_PREVIOUS]]));
+        $none = $this->changeKeyring($as, $this->changeBody($as, $key, $locked));
         self::assertSame(404, $none->status);
         self::assertSame('no_keyring', json_decode($none->body, true)['error']);
+    }
+
+    /** Knowing the fingerprints (every sealed note's header names the current one) is not enough: only the private key changes the envelope. */
+    public function testAChangeNeedsProofOfTheCurrentPrivateKey(): void
+    {
+        $as = $this->signedIn();
+        $key = $this->realKey();
+        $locked = music_locked_keyring();
+        $refused = function (string $body, string $why) use ($as): void {
+            $res = $this->changeKeyring($as, $body);
+            self::assertSame(403, $res->status, $why);
+            self::assertSame('bad_proof', json_decode($res->body, true)['error'], $why);
+            self::assertSame('{"v":1}', $this->store->keyring()['locked'], $why);
+        };
+        $plain = (string) json_encode(['keyring' => $locked, 'current' => $key['fp'], 'previous' => [MUSIC_FP_PREVIOUS]]);
+        $refused($plain, 'no proof');
+        $other = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        openssl_pkey_export($other, $otherPem);
+        $refused($this->changeBody($as, $key, $locked, $otherPem), 'signed by another key');
+        $otherDer = base64_decode(preg_replace('/-----[^-]+-----|\s/', '', openssl_pkey_get_details($other)['key']));
+        $refused($this->changeBody($as, ['spki' => base64_encode($otherDer)] + $key, $locked, $otherPem), "another key's own SPKI");
+        $refused($this->changeBody($as, $key, $locked, null, str_repeat('0', 64)), "another session's tag");
+        $body = json_decode($this->changeBody($as, $key, $locked), true);
+        $body['keyring']['ct'] = base64_encode(random_bytes(2400));
+        $refused((string) json_encode($body), 'signed over another envelope');
+        $body = json_decode($this->changeBody($as, $key, $locked), true);
+        $body['proof']['extra'] = 1;
+        self::assertSame(422, $this->changeKeyring($as, (string) json_encode($body))->status, 'a proof with more fields is malformed');
+        self::assertSame('{"v":1}', $this->store->keyring()['locked']);
     }
 
     public function testAPlainKeyringPostStillNeverReplacesOne(): void

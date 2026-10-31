@@ -416,8 +416,10 @@ final class Pages
      * GET keyring.php: the locked keyring, and this session's unlock tag (the page forgets a remembered unlock when it
      * changes). POST stores the keyring the page made ($body, Keyring::parseUpload's wrapper) when this studio has none;
      * 409 key_exists when it has one. POST keyring.php?change=1 is a new passphrase: the same keys locked again, stored
-     * only when the wrapper names exactly the stored fingerprints (Store::changeKeyring); 409 key_changed when it does
-     * not, 404 no_keyring when none is stored. The page never stores a keyring of other keys over one.
+     * only when the wrapper names exactly the stored fingerprints (409 key_changed otherwise, 404 no_keyring when none is
+     * stored) and its proof is the current private key's signature over this session's tag and the new envelope
+     * (Keyring::proofHolds; 403 bad_proof otherwise): knowing the fingerprints, which every note's header names, is
+     * not enough. The page never stores a keyring of other keys over one.
      */
     public function keyring(\Admin\Request $r, string $body = ''): \Admin\Response
     {
@@ -426,16 +428,36 @@ final class Pages
                 if (strlen($body) > Store::MAX_KEYRING_BYTES) {
                     return $this->refuseWithToken(413, 'too_large', $r);
                 }
-                $parsed = Keyring::parseUpload($body);
-                if ($parsed === null) {
-                    return $this->refuseWithToken(422, 'bad_keyring', $r);
-                }
                 if (($r->query['change'] ?? null) === '1') {
-                    return match ($store->changeKeyring($parsed['locked'], $parsed['current'], $parsed['previous'])) {
+                    $change = Keyring::parseChange($body);
+                    $plain = $change === null ? Keyring::parseUpload($body) : null;
+                    if ($change === null && $plain === null) {
+                        return $this->refuseWithToken(422, 'bad_keyring', $r);
+                    }
+                    $stored = $store->keyring();
+                    if ($stored === null) {
+                        return $this->refuseWithToken(404, 'no_keyring', $r);
+                    }
+                    $given = $change ?? $plain;
+                    $had = $stored['previous'];
+                    $named = $given['previous'];
+                    sort($had);
+                    sort($named);
+                    if ($stored['current'] === '' || !hash_equals($stored['current'], $given['current']) || $had !== $named) {
+                        return $this->refuseWithToken(409, 'key_changed', $r);
+                    }
+                    if ($change === null || !Keyring::proofHolds($change['spki'], $change['sig'], $stored['current'], $this->sessions->tag($r, 'music-unlock'), $change['keyring'])) {
+                        return $this->refuseWithToken(403, 'bad_proof', $r);
+                    }
+                    return match ($store->changeKeyring($change['locked'], $change['current'], $change['previous'])) {
                         'changed' => Http::json(200, ['changed' => true, 'csrf' => $this->sessions->csrf($r)]),
                         'none' => $this->refuseWithToken(404, 'no_keyring', $r),
                         default => $this->refuseWithToken(409, 'key_changed', $r),
                     };
+                }
+                $parsed = Keyring::parseUpload($body);
+                if ($parsed === null) {
+                    return $this->refuseWithToken(422, 'bad_keyring', $r);
                 }
                 if (!$store->createKeyring($parsed['locked'], $parsed['current'], $parsed['previous'])) {
                     return $this->refuseWithToken(409, 'key_exists', $r);

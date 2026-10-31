@@ -58,7 +58,8 @@ for a class.
   - **Change passphrase** on Your studio: the person types the current
     passphrase, then the new one twice. The browser locks the same notes key
     again under the new passphrase and uploads it; the server takes it only
-    when the key's fingerprints match the stored ones. No email is needed.
+    when the key's fingerprints match the stored ones and the upload is signed
+    with the current private key. No email is needed.
   - **A forgotten passphrase** ("Forgot your passphrase?" on Your studio)
     deletes only the sealed notes and the notes key. Pieces, drafts and AI
     keys stay, and the person makes a new key. The notes are not recoverable,

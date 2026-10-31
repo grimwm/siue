@@ -15,7 +15,7 @@ import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { DEFAULT_YAW, TOP_PITCH, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, snapYaw, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
+import { DEFAULT_YAW, START_PITCH, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
@@ -93,7 +93,7 @@ export interface ModernBoard {
   splashing(): number[];
   /** The Mini map setting: shows or hides the mini map. */
   minimap(on: boolean): void;
-  /** Draws the level as it stands, `cols` × `rows` squares round square (r, c), seen top-down and north up as every
+  /** Draws the level as it stands, `cols` × `rows` squares round square (r, c), seen at 75° and north up as every
    *  level opens, onto `out` (the Map button's face); works while the board is hidden. False before a level is
    *  built. */
   snapshot(out: HTMLCanvasElement, r: number, c: number, cols: number, rows: number): boolean;
@@ -157,8 +157,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   let shadowsDirty = true;
 
   /** The camera: where it is, where it eases to, whether its target follows Theseus, and whether the player chose
-   *  its zoom (otherwise it shows the whole level, centred, whatever Theseus does). It opens top-down, north up. */
-  const cur: Cam = { yaw: DEFAULT_YAW, pitch: TOP_PITCH, tx: 0, tz: 0, zoom: 10 };
+   *  its zoom (otherwise it shows the whole level, centred, whatever Theseus does). It opens at 75°, north up. */
+  const cur: Cam = { yaw: DEFAULT_YAW, pitch: START_PITCH, tx: 0, tz: 0, zoom: 10 };
   const goal: Cam = { ...cur };
   /** Whether the camera's target is Theseus: a pan, an off-centre zoom or the mini map look elsewhere until his next
    *  step. */
@@ -356,7 +356,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     // The crop's middle, held so the crop stays on the level where the level is larger than it.
     const mid = (at: number, n: number, size: number) => (size <= n ? (size - 1) / 2 : Math.max((n - 1) / 2, Math.min(size - 1 - (n - 1) / 2, at)));
     const x = cellX(mid(c, sc, nc), nc), z = cellZ(mid(r, sr, nr), nr);
-    const p = TOP_PITCH * RAD, D = 40;
+    const p = START_PITCH * RAD, D = 40;
     snapCam.position.set(x, FY + Math.sin(p) * D, z + Math.cos(p) * D);
     snapCam.up.set(0, 0, -1);
     snapCam.lookAt(x, FY, z);
@@ -460,11 +460,11 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     rewarm(ladder);
     lastPlayer = null;
     setFigures(s, { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) });
-    // Every level opens top-down and north up, on the whole level.
+    // Every level opens at 75° and north up, on the whole level.
     follow = true;
     zoomed = false;
     goal.yaw = DEFAULT_YAW;
-    goal.pitch = TOP_PITCH;
+    goal.pitch = START_PITCH;
     aimGoal();
     Object.assign(cur, goal);
     aimWalls = loopsDirty = shadowsDirty = true;
@@ -531,12 +531,12 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     invalidate();
   }
 
-  /** Back to the opening view: top-down, north up, the whole level round Theseus; eased unless motion is reduced. */
+  /** Back to the opening view: 75°, north up, the whole level round Theseus; eased unless motion is reduced. */
   function home(): void {
     follow = true;
     zoomed = false;
     goal.yaw = nearestYaw(DEFAULT_YAW, cur.yaw);
-    goal.pitch = TOP_PITCH;
+    goal.pitch = START_PITCH;
     if (snap()) {
       cur.yaw = goal.yaw;
       cur.pitch = goal.pitch;
@@ -575,12 +575,6 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     tilt(deg: number, eased: boolean) {
       goal.pitch = clampTilt(goal.pitch + deg);
       if (!eased || snap()) cur.pitch = goal.pitch;
-      aimWalls = true;
-      invalidate();
-    },
-    settle() {
-      goal.yaw = snapYaw(goal.yaw);
-      if (snap()) cur.yaw = goal.yaw;
       aimWalls = true;
       invalidate();
     },

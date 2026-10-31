@@ -3,13 +3,13 @@
  * swipes Theseus (src/swipe.ts) and never moves the camera. Two fingers either tilt, when they first slide up or
  * down together side by side, or else pan, twist and pinch, for the rest of that touch. The primary mouse button
  * turns (across) and tilts (up and down), the middle or right one pans, the wheel zooms, and a quick double tap
- * resets. When the last finger or button lifts after the camera moved, a `settle` lets the view square up. DOM-free. */
+ * resets. The view stays wherever a gesture leaves it. DOM-free. */
 import type { MoveAction } from '../keys.ts';
 import { swipeDir } from '../swipe.ts';
 
 /** A zoom multiplies the view's height by `factor` (under 1 is closer) about the screen point `(x, y)`. */
 export type CamOp = { kind: 'turn'; deg: number } | { kind: 'tilt'; deg: number } | { kind: 'pan'; dx: number; dy: number }
-  | { kind: 'zoom'; factor: number; x: number; y: number } | { kind: 'reset' } | { kind: 'settle' } | { kind: 'swipe'; dir: MoveAction };
+  | { kind: 'zoom'; factor: number; x: number; y: number } | { kind: 'reset' } | { kind: 'swipe'; dir: MoveAction };
 
 export interface Ptr {
   id: number;
@@ -49,7 +49,7 @@ interface Two {
 }
 
 const TURN_PER_PX = 0.35;
-/** Degrees of tilt per pixel slid: up tips toward top-down, down back toward angled. */
+/** Degrees of tilt per pixel slid: up tips toward straight down, down back toward 45°. */
 export const TILT_PER_PX = 0.3;
 /** How far two fingers move before the touch is read as a tilt or as the rest. */
 const DECIDE_PX = 10;
@@ -70,8 +70,6 @@ export function createGestures(now: () => number): Gestures {
   /** What two fingers do this touch: undecided until they have moved DECIDE_PX. */
   let mode: 'tilt' | 'free' | null = null;
   let start: Two | null = null;
-  /** Whether the camera moved since the first pointer came down. */
-  let moved = false;
 
   const twoInfo = (): Two => {
     const [a, b] = [...held.values()];
@@ -127,7 +125,6 @@ export function createGestures(now: () => number): Gestures {
           const mdy = nowInfo.my - two.my;
           if (mdy !== 0) ops.push({ kind: 'tilt', deg: -mdy * TILT_PER_PX });
           two = nowInfo;
-          if (ops.length) moved = true;
           return ops;
         }
         let da = nowInfo.ang - two.ang;
@@ -141,7 +138,6 @@ export function createGestures(now: () => number): Gestures {
         if (factor !== 1) ops.push({ kind: 'zoom', factor, x: nowInfo.mx, y: nowInfo.my });
         two = nowInfo;
       }
-      if (ops.length) moved = true;
       return ops;
     },
     up(p) {
@@ -152,10 +148,6 @@ export function createGestures(now: () => number): Gestures {
       start = null;
       const wasMulti = multi;
       if (held.size === 0) multi = false;
-      if (held.size === 0 && moved) {
-        moved = false;
-        return [{ kind: 'settle' }];
-      }
       if (h.type === 'mouse' || held.size !== 0 || wasMulti) return [];
       const t = now();
       const dir = swipeDir(p.x - h.x0, p.y - h.y0, t - h.t0);
@@ -175,13 +167,7 @@ export function createGestures(now: () => number): Gestures {
       held.delete(id);
       two = null;
       start = null;
-      if (held.size === 0) {
-        multi = false;
-        if (moved) {
-          moved = false;
-          return [{ kind: 'settle' }];
-        }
-      }
+      if (held.size === 0) multi = false;
       return [];
     },
     wheel(deltaY, x, y) {

@@ -13,7 +13,7 @@ import { createBoard } from './board.ts';
 import { loadModern } from './modern-loader.ts';
 import type { ModernBoard } from './modern/board3d.ts';
 import { DEFAULT_YAW } from './modern/camera.ts';
-import { screenToGrid } from './modern/screen-move.ts';
+import { createMoveMap } from './modern/screen-move.ts';
 import { drawList } from './board-plan.ts';
 import type { Atlas } from './board-plan.ts';
 import { createGame, frameOf } from './game.ts';
@@ -597,7 +597,8 @@ function start(): void {
   ui.setLook(settings.look.get(), settings.walls.get());
   ui.setPad(settings.pad.get());
   ui.setMinimap(settings.minimap.get() === 'on');
-  ui.setMoveDir(dir => screenToGrid(dir, modernOn && modern ? modern.yaw() : DEFAULT_YAW));
+  const moveMap = createMoveMap();
+  ui.setMoveDir(dir => moveMap(dir, modernOn && modern ? modern.yaw() : DEFAULT_YAW));
   showLook(settings.look.get());
   followMusicSwitches();
   let direct = false;

@@ -1,14 +1,14 @@
 /* The Island of Crete, modern look: the camera's controls. Pointers on the modern canvas go through the gesture
  * reader (gestures.ts) to the camera: one finger swipes Theseus; two fingers pan, twist (turn) and pinch (zoom), or
  * slide up and down together to tilt; the left button turns across and tilts up and down, the right or middle button
- * pans, the wheel zooms toward the pointer, and a double tap or double click resets. When the player lets go the
- * heading eases to the nearest quarter turn. Buttons at the board's top-right turn the view a quarter either way,
- * zoom it in and out, and reset it; on a narrow touch screen a View button shows and hides them. A compass at the
- * board's bottom-right shows the view as it is (its needle points at the board's north, and its dial squashes and its
- * ring fills as the view tilts); a finger, pen or mouse dragging it turns the view across and tilts it up and down,
- * and a tap or click on it (or Enter or Space) resets the view (compass.ts); while it has the focus, Left and Right
- * turn the view a quarter and Up and Down tilt it toward top-down and back, without moving Theseus. Every control is ignored while a layer
- * covers the board. */
+ * pans, the wheel zooms toward the pointer, and a double tap or double click resets. The view stays at whatever
+ * heading and tilt the player leaves it. Buttons at the board's top-right turn the view a quarter either way, zoom it
+ * in and out, and reset it; on a narrow touch screen a View button shows and hides them. A compass at the board's
+ * bottom-right shows the view as it is (its needle points at the board's north, and its dial squashes and its ring
+ * fills as the view tilts); a finger, pen or mouse dragging it turns the view across and tilts it up and down, and a
+ * tap or click on it (or Enter or Space) resets the view (compass.ts); while it has the focus, Left and Right turn the
+ * view 15° and Up and Down tilt it toward straight down and back, without moving Theseus. Every control is ignored
+ * while a layer covers the board. */
 import type { MoveAction } from '../keys.ts';
 import { compassFace, createCompassDrag } from './compass.ts';
 import { createGestures } from './gestures.ts';
@@ -23,10 +23,8 @@ export interface CamControl {
   /** Multiplies the view's height by `factor` about the screen point `(fx, fy)`, in fractions of the canvas from its
    *  centre (right and up are positive); at once under a finger or the wheel, eased from a button. */
   zoom(factor: number, fx: number, fy: number, eased: boolean): void;
-  /** Tilts by `deg` toward top-down (negative: back toward angled); at once under a finger, eased from the compass. */
+  /** Tilts by `deg` toward straight down (negative: back toward 45°); at once under a finger, eased from the compass. */
   tilt(deg: number, eased: boolean): void;
-  /** The player let go: the heading eases to the nearest quarter turn. */
-  settle(): void;
   /** Back to the default heading, tilt and zoom. */
   reset(): void;
 }
@@ -46,8 +44,10 @@ export interface Controls {
   dispose(): void;
 }
 
-/** A turn button turns a quarter, so the grid stays square to the screen. */
+/** A turn button turns a quarter. */
 const STEP = 90;
+/** Degrees an arrow key on the focused compass turns the view. */
+const TURN_KEY = 15;
 /** Degrees an arrow key on the focused compass tilts the view. */
 const TILT_KEY = 10;
 const ZOOM_STEP = 1.2;
@@ -89,7 +89,6 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
       if (op.kind === 'swipe') host.swipe(op.dir);
       else if (op.kind === 'turn') cam.turn(op.deg, false);
       else if (op.kind === 'tilt') cam.tilt(op.deg, false);
-      else if (op.kind === 'settle') cam.settle();
       else if (op.kind === 'pan') cam.pan(op.dx, op.dy);
       else if (op.kind === 'zoom') {
         const r = canvas.getBoundingClientRect();
@@ -163,7 +162,6 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     for (const op of ops) {
       if (op.kind === 'turn') cam.turn(op.deg, true);
       else if (op.kind === 'tilt') cam.tilt(op.deg, true);
-      else if (op.kind === 'settle') cam.settle();
       else if (op.kind === 'reset') cam.reset();
     }
   };
@@ -194,8 +192,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   compass.addEventListener('pointercancel', compassCancel);
   // The arrow keys steer from the focused compass; the page's own arrow keys (moving Theseus) never see them.
   const compassKeys: Record<string, () => void> = {
-    ArrowLeft: () => cam.turn(-STEP, true),
-    ArrowRight: () => cam.turn(STEP, true),
+    ArrowLeft: () => cam.turn(-TURN_KEY, true),
+    ArrowRight: () => cam.turn(TURN_KEY, true),
     ArrowUp: () => cam.tilt(TILT_KEY, true),
     ArrowDown: () => cam.tilt(-TILT_KEY, true),
   };
@@ -207,7 +205,6 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     if (host.blocked()) return;
     host.gesture();
     fn();
-    cam.settle();
   });
   compass.addEventListener('click', () => {
     // A pointer's tap reset the view as it lifted; Enter or Space clicks with no press before it.

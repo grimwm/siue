@@ -259,6 +259,40 @@ test('the board paints: the canvas holds drawn pixels', async ({ page }) => {
   })).toBe(true);
 });
 
+test('the Route steps one square at a time, with a bright arrow on each square pointing the way', async ({ page }) => {
+  const errors = await beginTrial1(page);
+  await page.waitForSelector('#stage[data-cell]');
+  await page.keyboard.press('v');
+  await expect.poll(() => page.evaluate(() => {
+    const t = (window.__creteTest.game as unknown as { thread: { r: number; c: number }[] | null }).thread;
+    return t ? t.length : 0;
+  })).toBeGreaterThan(1);
+  const seen = await page.evaluate(() => {
+    const g = window.__creteTest.game as unknown as { thread: { r: number; c: number; jump?: true }[]; run: { now: { level: { cols: number; rows: number } } } };
+    const t = g.thread;
+    const { cols, rows } = g.run.now.level;
+    const cv = document.getElementById('stage') as HTMLCanvasElement;
+    const cell = cv.width / cols;
+    const top = cv.height - rows * cell;
+    const px = cv.getContext('2d')!.getImageData(0, 0, cv.width, cv.height).data;
+    const bad: string[] = [];
+    let arrows = 0;
+    for (let i = 0; i + 1 < t.length; i++) {
+      const a = t[i]!, b = t[i + 1]!;
+      if (!b.jump && Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) bad.push(`${a.r},${a.c} → ${b.r},${b.c}`);
+      if (b.jump) continue;
+      // The arrow's fill covers the point a fifth of a cell from its square's centre toward the next square.
+      const y = (a.r + 0.5 + (b.r - a.r) * 0.2) * cell + top, x = (a.c + 0.5 + (b.c - a.c) * 0.2) * cell;
+      const o = (Math.floor(y) * cv.width + Math.floor(x)) * 4;
+      if (Math.abs(px[o]! - 0xff) < 12 && Math.abs(px[o + 1]! - 0x5b) < 12 && Math.abs(px[o + 2]! - 0x45) < 12) arrows++;
+    }
+    return { bad, arrows, steps: t.length - 1 };
+  });
+  expect(seen.bad, 'every step is to a neighbouring square').toEqual([]);
+  expect(seen.arrows, 'an arrow on every square that steps on').toBe(seen.steps);
+  expect(errors).toEqual([]);
+});
+
 test('a missing tiles.png says so, loudly, instead of leaving a blank board', async ({ page }) => {
   const logged: string[] = [];
   page.on('console', m => { if (m.type() === 'error') logged.push(m.text()); });

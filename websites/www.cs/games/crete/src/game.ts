@@ -15,10 +15,12 @@ import type { Run } from './puzzle/run.ts';
 import { solve } from './puzzle/solver.ts';
 import { pagesTaken } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
-import { act as actAlone, step } from './puzzle/step.ts';
+import { act as actAlone } from './puzzle/step.ts';
 import type { Action, GameEvent } from './puzzle/step.ts';
 import { HAZARDS } from './puzzle/tiles.ts';
-import type { Cell, HazardKind } from './puzzle/tiles.ts';
+import { threadPath } from './thread-path.ts';
+import type { ThreadCell } from './thread-path.ts';
+import type { HazardKind } from './puzzle/tiles.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
@@ -72,8 +74,8 @@ export interface Game {
   /** How many times a level has been opened: the page shows its start card for each. */
   readonly opens: number;
   readonly run: Run | null;
-  /** V: the line's cells while shown. */
-  readonly thread: readonly Cell[] | null;
+  /** V: the squares the line crosses while shown, one step at a time (src/thread-path.ts). */
+  readonly thread: readonly ThreadCell[] | null;
   /** T is playing the line out. */
   readonly playing: boolean;
   readonly anim: Anim | null;
@@ -142,7 +144,7 @@ export function createGame(deps: GameDeps): Game {
   let trial = -1;
   let opens = 0;
   let run: Run | null = null;
-  let thread: readonly Cell[] | null = null;
+  let thread: readonly ThreadCell[] | null = null;
   let anim: Anim | null = null;
   /** How many of the animation's page stops it has reached. */
   let reached = 0;
@@ -276,7 +278,7 @@ export function createGame(deps: GameDeps): Game {
       threadOn = false;
       return;
     }
-    thread = cells(l);
+    thread = threadPath(run!.now, l);
   }
 
   function nextOfLine(): boolean {
@@ -286,22 +288,6 @@ export function createGame(deps: GameDeps): Game {
     finishAnim();
     play(l[0]!);
     return true;
-  }
-
-  function cells(l: Action[]): Cell[] {
-    let s = run!.now;
-    const out: Cell[] = [s.player];
-    const add = (c: Cell): void => {
-      const last = out[out.length - 1]!;
-      if (last.r !== c.r || last.c !== c.c) out.push(c);
-    };
-    for (const a of l) {
-      const r = step(s, a);
-      for (const e of r.events) if ((e.kind === 'moved' || e.kind === 'slid') && e.who === 'player') add(e.to);
-      add(r.state.player);
-      s = r.state;
-    }
-    return out;
   }
 
   function animMs(): number {
@@ -387,7 +373,7 @@ export function createGame(deps: GameDeps): Game {
         helped();
         deps.sfx('hint');
         threadOn = true;
-        thread = cells(l);
+        thread = threadPath(run!.now, l);
       }
       deps.changed();
     },

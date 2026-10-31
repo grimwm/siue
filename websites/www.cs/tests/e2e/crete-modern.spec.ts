@@ -537,7 +537,7 @@ test('with a mouse, a left drag turns across and tilts up and down, the wheel zo
   expect(errors).toEqual([]);
 });
 
-test('with a mouse the compass turns and tilts the view, a click on it eases back to the start, and Enter on it resets too', async ({ page }) => {
+test('with a mouse the compass turns and tilts the view, a click on it eases back to the start, its arrow keys steer, and Enter on it resets', async ({ page }) => {
   const errors = await openHall(page, HALL, 'no-preference');
   await dragCompass(page, 'mouse', -80, 40);
   await expect.poll(() => cam(page), 'turned a quarter the other way and tilted').toEqual({ pitch: 59, yaw: 90 });
@@ -550,6 +550,11 @@ test('with a mouse the compass turns and tilts the view, a click on it eases bac
   await dragCompass(page, 'pen', 80, 0);
   await expect.poll(() => cam(page), 'a pen turns it too').toEqual({ pitch: 75, yaw: -90 });
   await page.locator('#cam-compass').focus();
+  const from = await player(page);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => cam(page), 'the arrow keys on the compass tilt and turn').toEqual({ pitch: 65, yaw: -180 });
+  expect(await player(page), 'and do not move Theseus').toEqual(from);
   await page.keyboard.press('Enter');
   await expect.poll(() => cam(page), 'Enter on the compass resets').toEqual({ pitch: 75, yaw: 0 });
   expect(errors).toEqual([]);

@@ -6,7 +6,8 @@
  * zoom it in and out, and reset it; on a narrow touch screen a View button shows and hides them. A compass at the
  * board's bottom-right shows the view as it is (its needle points at the board's north, and its dial squashes and its
  * ring fills as the view tilts); a finger, pen or mouse dragging it turns the view across and tilts it up and down,
- * and a tap or click on it (or Enter or Space) resets the view (compass.ts). Every control is ignored while a layer
+ * and a tap or click on it (or Enter or Space) resets the view (compass.ts); while it has the focus, Left and Right
+ * turn the view a quarter and Up and Down tilt it toward top-down and back, without moving Theseus. Every control is ignored while a layer
  * covers the board. */
 import type { MoveAction } from '../keys.ts';
 import { compassFace, createCompassDrag } from './compass.ts';
@@ -47,6 +48,8 @@ export interface Controls {
 
 /** A turn button turns a quarter, so the grid stays square to the screen. */
 const STEP = 90;
+/** Degrees an arrow key on the focused compass tilts the view. */
+const TILT_KEY = 10;
 const ZOOM_STEP = 1.2;
 /** Wheel lines and pages as pixels. */
 const LINE_PX = 16;
@@ -147,7 +150,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   const reset = button('cam-reset', 'Reset view', 'Reset', 'cbtn wide');
   group.append(left, right, zoomIn, zoomOut, reset);
   // The compass: it shows the view, a drag on it steers the view, and a tap resets it.
-  const compass = button('cam-compass', 'Compass: drag to turn and tilt the view, tap to reset it', COMPASS, 'compass');
+  const compass = button('cam-compass', 'Compass: drag or use the arrow keys to turn and tilt the view, tap to reset it', COMPASS, 'compass');
   compass.title = 'Compass';
   const needle = compass.querySelector('svg')!;
   parent.append(view, group, compass);
@@ -189,6 +192,23 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   compass.addEventListener('pointermove', compassMove);
   compass.addEventListener('pointerup', compassUp);
   compass.addEventListener('pointercancel', compassCancel);
+  // The arrow keys steer from the focused compass; the page's own arrow keys (moving Theseus) never see them.
+  const compassKeys: Record<string, () => void> = {
+    ArrowLeft: () => cam.turn(-STEP, true),
+    ArrowRight: () => cam.turn(STEP, true),
+    ArrowUp: () => cam.tilt(TILT_KEY, true),
+    ArrowDown: () => cam.tilt(-TILT_KEY, true),
+  };
+  compass.addEventListener('keydown', (e: KeyboardEvent) => {
+    const fn = compassKeys[e.key];
+    if (!fn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (host.blocked()) return;
+    host.gesture();
+    fn();
+    cam.settle();
+  });
   compass.addEventListener('click', () => {
     // A pointer's tap reset the view as it lifted; Enter or Space clicks with no press before it.
     if (performance.now() - pressedAt < CLICK_MS) return;

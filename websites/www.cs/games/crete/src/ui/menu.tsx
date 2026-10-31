@@ -1,7 +1,7 @@
 // The Island of Crete: the menu, in three sections under small headings. Sound and screen: switches for sound, music,
 // music in the background and full screen. Board: the two looks as pictures and, for the modern look, the view
 // (Angled or Top-down) and, while angled, the walls; then which edge of the strip the arrows stand at.
-// The story: the Lore book, the Dictionary, the story log and how to play (folded). Then Back to the editor or Shared level (the
+// The story: the Lore Book, the Dictionary, the story log and how to play (folded). Then Back to the editor or Shared level (the
 // shared level's card; each only when the page gives it), and Quit on its own. On a wide screen the sections stand
 // in two columns.
 // Q (the kit's back key) is handled by src/ui.ts, which owns every card, so the dialog is given no onDismiss;

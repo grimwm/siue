@@ -1,5 +1,5 @@
 // Crete's chapter flow: Play shows the chapter card, a win that takes a story page names it on the end card,
-// and the menu's Lore book lists it. The page-taking line is solved in the page from a copy of level 9 whose page
+// and the menu's Lore Book lists it. The page-taking line is solved in the page from a copy of level 9 whose page
 // is a relic, so the solver's win must take it; the same line then wins the real level through the strip. Then
 // level 10's win opens Chapter 1's closing card, whose On to Chapter 2 goes on to Chapter 2's opening card.
 import { test, expect } from '@playwright/test';
@@ -24,7 +24,7 @@ interface CreteTest {
   trialLevel(i: number): Lv;
 }
 
-test('New Game shows the chapter card; a page-taking win names the page, and the Lore book lists it', async ({ page }) => {
+test('New Game shows the chapter card; a page-taking win names the page, and the Lore Book lists it', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -65,9 +65,9 @@ test('New Game shows the chapter card; a page-taking win names the page, and the
 
   await expect(page.locator('#end-veil')).toBeVisible();
   await expect(page.locator('#end-kicker')).toHaveText('Level 9 cleared');
-  await expect(page.locator('#end-pages')).toHaveText("You found a page: A Tribute's Marks. It is in the Lore book.");
+  await expect(page.locator('#end-pages')).toHaveText("You found a page: A Tribute's Marks. It is in the Lore Book.");
 
-  // The menu's Lore book lists the page by title, and opening it shows its words.
+  // The menu's Lore Book lists the page by title, and opening it shows its words.
   await page.locator('#end-trials').click();
   await page.keyboard.press('q');
   await page.keyboard.press('q');

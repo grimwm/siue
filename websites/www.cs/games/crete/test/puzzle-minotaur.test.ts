@@ -85,14 +85,18 @@ test("Medusa's mirror stones it for the turn you raise it and 3 turns after", ()
   assert.equal(step(got.state, tool('cake')).state, got.state, 'no cake, a bump');
 });
 
-test('honey cake gives a heart back, up to the start, and is a bump at full hearts', () => {
-  const s = grid(['Px.....M']);
-  const got = play(s, mv('right'));
-  assert.equal(step(got.state, tool('cake')).state, got.state);
-  const hurt = { ...got.state, hearts: 1 };
-  const r = play(hurt, tool('cake'));
-  assert.equal(r.state.hearts, 2);
-  assert.equal(r.state.tools.cake, 0);
+test('each honey cake adds a heart with no limit: 3 to 4 to 5, and 1 to 2', () => {
+  const s = grid(['Pxx....#M']);
+  const got = play(s, mv('right'), mv('right'));
+  assert.equal(got.state.hearts, 3);
+  const four = play(got.state, tool('cake'));
+  assert.equal(four.state.hearts, 4, 'past the hearts the level began with');
+  const five = play(four.state, tool('cake'));
+  assert.equal(five.state.hearts, 5, 'and on with the next cake');
+  assert.equal(five.state.tools.cake, 0);
+  assert.equal(step(five.state, tool('cake')).state, five.state, 'no cake left: a bump');
+  const hurt = play({ ...got.state, hearts: 1 }, tool('cake'));
+  assert.equal(hurt.state.hearts, 2);
 });
 
 test("Daedalus's cow draws it first, and is gone when it is reached", () => {

@@ -40,7 +40,7 @@ export function EndCard(p: EndCardProps) {
       <p id="end-text">{p.text}</p>
       {p.won && p.pages.length > 0 && (
         <p id="end-pages" class="runstats">
-          {p.pages.length === 1 ? `You found a page: ${p.pages[0]}. It is in the Lore book.` : `You found pages: ${p.pages.join(', ')}. They are in the Lore book.`}
+          {p.pages.length === 1 ? `You found a page: ${p.pages[0]}. It is in the Lore Book.` : `You found pages: ${p.pages.join(', ')}. They are in the Lore Book.`}
         </p>
       )}
       <p id="end-score" class="runstats">{p.score}</p>

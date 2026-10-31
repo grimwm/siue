@@ -203,7 +203,7 @@ function playerPart(w: Work, a: Action, ev: GameEvent[]): boolean {
   } else if (a.kind === 'tool') {
     if (w.tools[a.tool] <= 0) return false;
     if (a.tool === 'cake') {
-      if (w.hearts >= w.level.hearts) return false;
+      // Each cake adds a heart, with no limit but the cakes the level holds (maxHearts).
       w.hearts++;
     } else if (a.tool === 'cow') {
       if (w.cow) return false;

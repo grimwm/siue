@@ -36,7 +36,7 @@ export const KEYS: Record<Action, KeyDef> = {
   story: { label: "I", keys: ["i"] },
   /** Toggles full screen, from the menu. */
   fullscreen: { label: "F", keys: ["f"] },
-  /** Opens the Lore book, from the menu. */
+  /** Opens the Lore Book, from the menu. */
   lore: { label: "L", keys: ["l"] },
   /** Opens the Dictionary, from the menu. */
   dictionary: { label: "G", keys: ["g"] },

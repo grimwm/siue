@@ -6,6 +6,7 @@ import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';
 import { KEYS } from '../keys.ts';
+import { placeWords } from '../campaign/chapters.ts';
 
 export interface StartProps {
   open: boolean;
@@ -24,7 +25,7 @@ export interface StartProps {
 
 export function Start(p: StartProps) {
   return (
-    <Dialog open={p.open} id="start-veil" veilClass="veil veil-start" panelClass="card start" kicker={p.kicker ?? `Chapter ${p.chapter} · Level ${p.number}`}
+    <Dialog open={p.open} id="start-veil" veilClass="veil veil-start" panelClass="card start" kicker={p.kicker ?? placeWords(p.chapter, p.number, '').kicker}
       kickerClass="kicker" titleId="start-title" title={p.title} focusId="start-begin">
       <p id="start-intro">{p.intro}</p>
       {p.best !== undefined && <p id="start-best" class="runstats">{p.best}</p>}

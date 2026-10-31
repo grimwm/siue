@@ -32,3 +32,12 @@ test('one heart is singular and a stone Minotaur is said', () => {
   assert.match(v.heartsNote, /the Minotaur is stone for 2 turns/);
   assert.match(statusView({ ...base, stone: 1 }).heartsNote, /stone for 1 turn$/);
 });
+
+test('the level stat is short, with its full place as the note; an outside level has neither', () => {
+  const v = statusView({ ...base, trial: 'Ch 1 · 3', trialNote: 'Chapter 1, Level 3: The Doors of Daedalus' });
+  assert.equal(v.trial, 'Ch 1 · 3');
+  assert.equal(v.trialNote, 'Chapter 1, Level 3: The Doors of Daedalus');
+  const out = statusView({ ...base, trial: '' });
+  assert.equal(out.trial, '');
+  assert.equal(out.trialNote, '');
+});

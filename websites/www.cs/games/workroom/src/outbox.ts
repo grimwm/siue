@@ -41,8 +41,8 @@ export const SEND_MESSAGES = {
 /** Added to a kept note's message when the browser would not store it on this device. */
 export const MEMORY_NOTICE = 'This browser would not save it on this device, so it is kept only until this page is closed or reloaded.';
 
-/** The studio people's words for a note the server cannot take: they have no make targets, and Forgot your passphrase on Your studio is how they get a new key. */
-export const STUDIO_UNKNOWN_KEY = 'The server does not take notes sealed to this key, so this note stays on this device. Use Forgot your passphrase on Your studio to make a new notes key.';
+/** The owner's words for a note the server cannot take: the owner's computer has the key tool, which compares the notes keys. */
+export const OWNER_UNKNOWN_KEY = 'The server does not take notes sealed to this key, so this note stays on this device. Run make music-status to compare the notes keys.';
 
 /** Per reason; the two that depend on the studio take its room left (over_quota) or its note max (too_large). */
 export const KEPT_MESSAGES: Readonly<Record<Exclude<KeptReason, 'over_quota' | 'too_large'>, string>> & { over_quota(room: number): string; too_large(noteMax: number): string } = {
@@ -54,13 +54,13 @@ export const KEPT_MESSAGES: Readonly<Record<Exclude<KeptReason, 'over_quota' | '
   full: `The workroom holds ${MAX_NOTES.toLocaleString('en-US')} notes. Delete some old ones; this note stays on this device until then.`,
   no_key: 'The server has no notes key yet, so this note stays on this device. Make your notes key under Your notes.',
   bad_header: 'The server did not accept this note’s key. Reload the page; the note stays on this device.',
-  unknown_key: 'The server does not take notes sealed to this key, so this note stays on this device. Run make music-status to compare the notes keys.',
+  unknown_key: 'The server does not take notes sealed to this key, so this note stays on this device. Reload the page and unlock again. If this comes back, use Forgot your passphrase? on Your studio: it deletes your notes key so you can make a new one.',
 };
 
-/** The words for a kept note: `room` is the Pending's, `named` defaults to this page's, and too_large names this page's note max. */
-export function keptMessage(reason: KeptReason, room?: number, named: boolean = pageLimits().named): string {
+/** The words for a kept note: `room` is the Pending's, `owner` defaults to this page's, and too_large names this page's note max. */
+export function keptMessage(reason: KeptReason, room?: number, owner: boolean = pageLimits().owner): string {
   if (reason === 'over_quota') return KEPT_MESSAGES.over_quota(room ?? 0);
-  if (reason === 'unknown_key' && !named) return STUDIO_UNKNOWN_KEY;
+  if (reason === 'unknown_key' && owner) return OWNER_UNKNOWN_KEY;
   if (reason === 'too_large') return KEPT_MESSAGES.too_large(pageLimits().noteMax);
   return KEPT_MESSAGES[reason];
 }

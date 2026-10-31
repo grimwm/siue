@@ -33,7 +33,8 @@ final class Pages
      * $assetVersion: 10 hex over games/workroom/dist's workroom.js, sheet.js, theme.js and workroom.css (the ?v= on
      * each; the script passes it on to sheet.js); $baseUrl: admin_base_url(), the studio's folder sits beside it;
      * $aiKeys: every studio's AI keys, of which a page shows and changes only its own account's; $confirmations: the
-     * mailed links that confirm Forgot your passphrase and Start over.
+     * mailed links that confirm Forgot your passphrase and Start over; $pairing: the AI keys' sealing keys and their
+     * pairing; $releaseFile: the wheel's release.json (Connect::release), music/dist/release.json when null.
      */
     public function __construct(
         private \Closure $storeFor,
@@ -44,6 +45,8 @@ final class Pages
         private string $baseUrl,
         private AiKeys $aiKeys,
         private Confirmations $confirmations,
+        private Pairing $pairing,
+        private ?string $releaseFile = null,
     ) {
         $this->realm = \Admin\Realm::studio($baseUrl);
         $this->login = $this->realm->baseUrl . 'login.php';
@@ -194,7 +197,8 @@ final class Pages
         }
         if ($made !== null) {
             $body .= '<section class="studio-card newkey" role="status"><h2>Your new AI key: ' . Html::e($made['label']) . '</h2>'
-                . '<code class="secret">' . Html::e($made['key']) . '</code><p>Copy it now: it is not shown again.</p></section>';
+                . '<code class="secret">' . Html::e($made['key']) . '</code><p>Copy it now: it is not shown again.</p>'
+                . $this->connectSteps($made['key']) . '</section>';
         }
         $body .= '<section class="studio-card"><address>' . Html::e((string) $this->accounts->emailOf($account)) . '</address>'
             . '<meter min="0" max="' . $quota . '" value="' . $usage . '">' . Usage::human($usage) . '</meter>'
@@ -214,8 +218,9 @@ final class Pages
         $keys = '';
         foreach ($this->aiKeys->list($account) as $k) {
             $words = implode(', ', array_map(static fn(string $s): string => AiKeys::SCOPES[$s] ?? $s, $k['scopes']));
-            $keys .= '<li><strong>' . Html::e($k['label']) . '</strong><p>Permissions: ' . Html::e($words) . '</p>'
+            $keys .= '<li data-ai-key="' . $k['id'] . '"><strong>' . Html::e($k['label']) . '</strong><p>Permissions: ' . Html::e($words) . '</p>'
                 . '<p>Last used: ' . ($k['last_used_at'] === null ? 'never' : self::when($k['last_used_at'])) . '</p>'
+                . ($k['revoked_at'] === null && in_array('notes:pickup', $k['scopes'], true) ? $this->pairingRow($account, $k['id'], $k['label'], $keyed) : '')
                 . ($k['revoked_at'] === null
                     ? '<form method="post" action="studio.php">' . $hidden('revoke-key') . '<input type="hidden" name="id" value="' . $k['id'] . '"><button type="submit">Revoke</button></form>'
                     : '<p>Revoked ' . self::when($k['revoked_at']) . '</p>')
@@ -251,6 +256,42 @@ final class Pages
             . ($keyed ? '<script type="module" src="../games/workroom/dist/workroom.js?v=' . Html::e($this->assetVersion) . '"></script>' : '')
             . '</body></html>';
         return Http::finish(new \Admin\Response($status, ['Content-Type' => 'text/html; charset=utf-8'], $html));
+    }
+
+    /**
+     * An AI key's pairing on its row: not started (its AI has not registered a sealing key), waiting for the code (the
+     * page's script draws the form: Pairing Code, Passphrase, Pair), or paired.
+     */
+    private function pairingRow(int $account, int $id, string $label, bool $keyed): string
+    {
+        $status = $this->pairing->status($account, $id);
+        if ($status === null) {
+            return '<p class="pairing" data-pairing="none">Pairing: not started. Add this key to your AI app; then ask your AI for its siue-music pairing code and type it here.</p>';
+        }
+        if ($status['paired']) {
+            return '<p class="pairing" data-pairing="paired">Pairing: paired ' . self::when((int) $status['paired_at']) . '. Your AI reads the notes you send from then on.</p>';
+        }
+        if (!$keyed) {
+            return '<p class="pairing" data-pairing="no-key">Pairing: make your notes key on All pieces first; then type your AI\'s pairing code here.</p>';
+        }
+        return '<div class="pairing" data-pairing="waiting"><p>Pairing: waiting for the code. Ask your AI for its siue-music pairing code and type it here with your passphrase.</p>'
+            . '<noscript><p>Pairing needs script, because your notes key is opened in this browser.</p></noscript>'
+            . '<div data-pair-ai="' . $id . '" data-label="' . Html::e($label) . '"></div></div>';
+    }
+
+    /** The commands that connect an AI app to this studio with $key, one per app; empty when the wheel's release is unknown. */
+    private function connectSteps(string $key): string
+    {
+        $release = Connect::release($this->releaseFile);
+        if ($release === null) {
+            return '';
+        }
+        $out = '<h3>Connect Your AI</h3><ol class="connect-steps"><li>Install uv: <a href="' . Html::e(Connect::UV_INSTALL) . '">uv\'s installation page</a>.</li>'
+            . '<li>Add the siue-music server to your AI app, with this key already in it:<dl class="connect-commands">';
+        foreach (Connect::commands($this->realm->baseUrl, $release, $key) as $c) {
+            $out .= '<dt>' . Html::e($c['app']) . '</dt><dd><p>' . Html::e($c['how']) . '</p><pre><code>' . Html::e($c['text']) . '</code></pre></dd>';
+        }
+        return $out . '</dl></li><li>Ask your AI for its siue-music pairing code, and type it on this key\'s row below with your passphrase.</li></ol>';
     }
 
     private static function when(int $t): string
@@ -361,7 +402,7 @@ final class Pages
         if ($r->method === 'POST') {
             return $this->guarded($r, false, true, function (Store $store, int $account) use ($r, $body): \Admin\Response {
                 try {
-                    $note = $store->addNote($body);
+                    $note = $store->addNote($body, $this->pairing->activeRecipients($account));
                 } catch (NoteRejected $e) {
                     $more = $e->reason === 'over_quota'
                         ? ['room' => $e->room, 'message' => Usage::refusal($e->room, $this->limitsOf($account)->quotaBytes, $e->shared)]
@@ -424,9 +465,12 @@ final class Pages
     public function keyring(\Admin\Request $r, string $body = ''): \Admin\Response
     {
         if ($r->method === 'POST') {
-            return $this->guarded($r, false, true, function (Store $store) use ($r, $body): \Admin\Response {
+            return $this->guarded($r, false, true, function (Store $store, int $account) use ($r, $body): \Admin\Response {
                 if (strlen($body) > Store::MAX_KEYRING_BYTES) {
                     return $this->refuseWithToken(413, 'too_large', $r);
+                }
+                if (($r->query['pair'] ?? null) === '1') {
+                    return $this->pairKeyring($r, $store, $account, $body);
                 }
                 if (($r->query['change'] ?? null) === '1') {
                     $change = Keyring::parseChange($body);
@@ -465,7 +509,7 @@ final class Pages
                 return Http::json(201, ['uploaded' => true, 'csrf' => $this->sessions->csrf($r)]);
             }, 'POST');
         }
-        return $this->guarded($r, false, false, function (Store $store) use ($r): \Admin\Response {
+        return $this->guarded($r, false, false, function (Store $store, int $account) use ($r): \Admin\Response {
             $row = $store->keyring();
             $keyring = $row === null ? null : json_decode($row['locked'], true);
             if ($row === null) {
@@ -475,8 +519,73 @@ final class Pages
                 error_log('music: the stored keyring is not valid JSON');
                 return Http::json(500, ['error' => 'bad_keyring']);
             }
-            return Http::json(200, ['keyring' => $keyring, 'session' => $this->sessions->tag($r, 'music-unlock')]);
+            return Http::json(200, ['keyring' => $keyring, 'session' => $this->sessions->tag($r, 'music-unlock'),
+                'ai' => $this->pairing->activeRecipients($account)]);
         }, 'GET');
+    }
+
+    /**
+     * POST pair.php {"key": <AI key id>, "code": <the typed pairing code>}: one pairing try (Pairing::check, counted and
+     * limited). 200 {spki, fingerprint, csrf} when the code is the code of the sealing key that AI key registered; 403
+     * wrong_code; 429 too_many; 404 no_key (not an active key of this studio); 409 not_registered (its AI has not started
+     * yet). The browser checks the code against the key itself before it adds the key to the keyring.
+     */
+    public function pair(\Admin\Request $r, string $body): \Admin\Response
+    {
+        return $this->guarded($r, false, true, function (Store $store, int $account) use ($r, $body): \Admin\Response {
+            $doc = json_decode($body, true);
+            if (!is_array($doc) || !is_int($doc['key'] ?? null) || !is_string($doc['code'] ?? null) || strlen($doc['code']) > 64) {
+                return $this->refuseWithToken(422, 'bad_request', $r);
+            }
+            $found = $this->pairing->check($account, $doc['key'], $doc['code']);
+            if (is_string($found)) {
+                return $this->refuseWithToken(match ($found) { 'wrong_code' => 403, 'too_many' => 429, 'no_key' => 404, default => 409 }, $found, $r);
+            }
+            return Http::json(200, $found + ['csrf' => $this->sessions->csrf($r)]);
+        }, 'POST');
+    }
+
+    /**
+     * keyring.php?pair=1 (Keyring::parsePair): the same keys locked again with the AI's public key added, as for a new
+     * passphrase (the stored fingerprints, the current key's proof), plus the pair: the typed code is checked again
+     * (Pairing::check, counted), and its key must be the fingerprint named. Then, in one transaction, the keyring is
+     * replaced and the AI key marked paired.
+     */
+    private function pairKeyring(\Admin\Request $r, Store $store, int $account, string $body): \Admin\Response
+    {
+        $pair = Keyring::parsePair($body);
+        if ($pair === null) {
+            return $this->refuseWithToken(422, 'bad_keyring', $r);
+        }
+        $stored = $store->keyring();
+        if ($stored === null) {
+            return $this->refuseWithToken(404, 'no_keyring', $r);
+        }
+        $had = $stored['previous'];
+        $named = $pair['previous'];
+        sort($had);
+        sort($named);
+        if ($stored['current'] === '' || !hash_equals($stored['current'], $pair['current']) || $had !== $named) {
+            return $this->refuseWithToken(409, 'key_changed', $r);
+        }
+        if (!Keyring::proofHolds($pair['spki'], $pair['sig'], $stored['current'], $this->sessions->tag($r, 'music-unlock'), $pair['keyring'])) {
+            return $this->refuseWithToken(403, 'bad_proof', $r);
+        }
+        $found = $this->pairing->check($account, $pair['key'], $pair['code']);
+        if (is_string($found)) {
+            return $this->refuseWithToken(match ($found) { 'wrong_code' => 403, 'too_many' => 429, 'no_key' => 404, default => 409 }, $found, $r);
+        }
+        if (!hash_equals($found['fingerprint'], $pair['fingerprint'])) {
+            return $this->refuseWithToken(409, 'key_changed', $r);
+        }
+        $db = $this->pairing;
+        $done = $store->changeKeyring($pair['locked'], $pair['current'], $pair['previous'],
+            static fn(): bool => $db->markPaired($account, $pair['key'], $pair['fingerprint']));
+        return match ($done) {
+            'changed' => Http::json(200, ['paired' => true, 'csrf' => $this->sessions->csrf($r)]),
+            'none' => $this->refuseWithToken(404, 'no_keyring', $r),
+            default => $this->refuseWithToken(409, 'key_changed', $r),
+        };
     }
 
     /** GET drafts.php?piece=: a piece's kept versions, newest first. */
@@ -632,6 +741,18 @@ final class Pages
         return Http::finish(new \Admin\Response($status, ['Content-Type' => 'text/html; charset=utf-8'], $html));
     }
 
+    /** The front page's Connect Your AI panel's data (ConnectAi.tsx), as JSON: the wheel, its SHA-256 and each app's command with the placeholder; {} without a release. */
+    private function connectData(): string
+    {
+        $release = Connect::release($this->releaseFile);
+        if ($release === null) {
+            return '{}';
+        }
+        return (string) json_encode(['uv' => Connect::UV_INSTALL, 'wheel' => $this->realm->baseUrl . 'dist/' . $release['file'],
+            'version' => $release['version'], 'sha256' => $release['sha256'], 'placeholder' => Connect::PLACEHOLDER,
+            'commands' => Connect::commands($this->realm->baseUrl, $release, Connect::PLACEHOLDER)], JSON_UNESCAPED_SLASHES);
+    }
+
     /**
      * The page shell. The body tells the script this studio's largest note (data-note-max), its room in bytes
      * (data-room), whether it stores scores only, with no MusicXML (data-score-only) and whether its keyring is stored
@@ -641,7 +762,8 @@ final class Pages
     {
         $studio = ' data-note-max="' . $this->limitsOf($account)->maxNoteBytes . '" data-room="' . $store->room() . '"'
             . ' data-score-only="' . ($this->limitsOf($account)->scoreOnly ? '1' : '0') . '"'
-            . ' data-account-has-key="' . ($store->keyring() === null ? '0' : '1') . '"';
+            . ' data-account-has-key="' . ($store->keyring() === null ? '0' : '1') . '"'
+            . ($view === 'index' ? ' data-connect="' . Html::e($this->connectData()) . '"' : '');
         $v = Html::e($this->assetVersion);
         $heading = ($view === 'piece' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>')
             . '<p class="crumb"><a href="studio.php">Your studio</a></p>';

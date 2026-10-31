@@ -1,7 +1,7 @@
 <?php
 // Each account's AI keys: 64 hex characters shown once, kept only as SHA-256, each with some of three scopes
 // (never keys:publish), at most MAX_ACTIVE active per account. KeyGate checks them. Revoking is the one way a
-// key stops working short of deleteAll (start over).
+// key stops working short of deleteAll (start over); either forgets the key's sealing key (Pairing).
 declare(strict_types=1);
 
 namespace Music;
@@ -78,12 +78,17 @@ final class AiKeys
     {
         $st = $this->db->prepare('UPDATE studio_keys SET revoked_at = ? WHERE id = ? AND account_id = ? AND revoked_at IS NULL');
         $st->execute([$this->clock->now(), $id, $account]);
-        return $st->rowCount() === 1;
+        if ($st->rowCount() !== 1) {
+            return false;
+        }
+        Pairing::forget($this->db, $account, $id); // its sealing key goes with it: new notes are no longer sealed to it
+        return true;
     }
 
     /** Deletes every key of $account and its rate-limit rows. Runs inside the caller's transaction when one is open. */
     public function deleteAll(int $account): void
     {
+        Pairing::forget($this->db, $account);
         $this->db->prepare('DELETE FROM studio_key_hits WHERE key_id IN (SELECT id FROM studio_keys WHERE account_id = ?)')->execute([$account]);
         $this->db->prepare('DELETE FROM studio_keys WHERE account_id = ?')->execute([$account]);
     }

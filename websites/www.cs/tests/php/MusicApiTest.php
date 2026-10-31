@@ -582,7 +582,7 @@ final class MusicApiTest extends TestCase
     {
         $methods = array_map(fn(ReflectionMethod $m) => $m->name, (new ReflectionClass(Music\Api::class))->getMethods(ReflectionMethod::IS_PUBLIC));
         self::assertSame(['deleteDraft', 'deletePiece'], array_values(array_filter($methods, fn(string $m) => stripos($m, 'delete') !== false || stripos($m, 'remove') !== false)));
-        self::assertSame(['delete-draft.php', 'delete-piece.php', 'drafts.php', 'keyring.php', 'note.php', 'notes.php', 'picked-up.php'],
+        self::assertSame(['delete-draft.php', 'delete-piece.php', 'draft.php', 'drafts.php', 'keyring.php', 'note.php', 'notes.php', 'picked-up.php', 'seal-key.php'],
             array_values(array_map('basename', glob(dirname(__DIR__, 2) . '/music/api/*.php'))));
     }
 

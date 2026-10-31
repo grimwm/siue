@@ -17,6 +17,23 @@ function music_sealed(string $fpHex = MUSIC_FP_CURRENT, int $body = 64): string
     return 'SIUEN1' . hex2bin($fpHex) . random_bytes($body);
 }
 
+/** A SIUEN2 note's real header naming $fps, each with a 512-byte wrapped key, then an IV, a tag and $body bytes. */
+function music_sealed2(array $fps, int $body = 64): string
+{
+    $out = 'SIUEN2' . chr(count($fps));
+    foreach ($fps as $fp) {
+        $out .= hex2bin($fp) . pack('n', 512) . random_bytes(512);
+    }
+    return $out . random_bytes(12 + 16 + $body);
+}
+
+/** Marks AI key $key of $account paired to $fp as if its MCP registered a key and the person paired it (no real key). */
+function music_paired(PDO $db, int $account, int $key, string $fp): void
+{
+    $db->prepare('INSERT INTO studio_seal_keys (key_id, account_id, spki, fingerprint, registered_at, paired_at) VALUES (?, ?, ?, ?, 1, 1)')
+        ->execute([$key, $account, base64_encode('test'), $fp]);
+}
+
 /** The SIUED1 draft bundle (Formats) for name => bytes. */
 function music_draft_bundle(array $files): string
 {
@@ -107,7 +124,7 @@ function music_pages(PDO $db, string $dir, Admin\Clock $clock, string $base, str
     $sessions = new Admin\Sessions($db, $clock, $realm);
     $mailer = new MemoryMailer();
     $confirmations = new Music\Confirmations($db, $clock, $mailer, $realm->baseUrl);
-    $pages = new Music\Pages($storeFor, $accounts, $named, $sessions, '0123456789', $base, new Music\AiKeys($db, $clock), $confirmations);
+    $pages = new Music\Pages($storeFor, $accounts, $named, $sessions, '0123456789', $base, new Music\AiKeys($db, $clock), $confirmations, new Music\Pairing($db, $clock));
     return [$pages, $sessions, $storeFor, $accounts, $confirmations, $mailer];
 }
 

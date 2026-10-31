@@ -72,6 +72,30 @@ final class Keyring
     }
 
     /**
+     * The upload that pairs an AI key (keyring.php?pair=1): parseChange's wrapper plus `pair`, exactly
+     * {key: the AI key's id, code: the typed pairing code, fingerprint: its sealing key's 64 hex}. Null when it is not that.
+     *
+     * @return array{locked: string, current: string, previous: list<string>, keyring: array<string, mixed>, spki: string, sig: string, key: int, code: string, fingerprint: string}|null
+     */
+    public static function parsePair(string $body): ?array
+    {
+        $doc = json_decode($body, true);
+        if (!is_array($doc) || !is_array($doc['pair'] ?? null)) {
+            return null;
+        }
+        $pair = $doc['pair'];
+        unset($doc['pair']);
+        $fields = array_keys($pair);
+        sort($fields);
+        if ($fields !== ['code', 'fingerprint', 'key'] || !is_int($pair['key']) || $pair['key'] < 1 || !is_string($pair['code'])
+            || strlen($pair['code']) > 64 || !is_string($pair['fingerprint']) || preg_match('/^[0-9a-f]{64}$/D', $pair['fingerprint']) !== 1) {
+            return null;
+        }
+        $change = self::parseChange((string) json_encode($doc, JSON_UNESCAPED_SLASHES));
+        return $change === null ? null : $change + ['key' => $pair['key'], 'code' => $pair['code'], 'fingerprint' => $pair['fingerprint']];
+    }
+
+    /**
      * What the page signs to prove it holds the current private key: this session's unlock tag, the current
      * fingerprint and the new envelope's parts, so a proof serves only this session and this envelope.
      *

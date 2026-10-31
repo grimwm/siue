@@ -12,9 +12,9 @@ const LIBRARY = read(join(import.meta.dirname, '..', '..', '..', 'music', 'libra
 const entries = catalogue(LIBRARY);
 const get = (id: string): Entry => entries.find(e => e.id === id)!;
 
-test('catalogue lists 26 in category order', () => {
-  assert.equal(entries.length, 26);
-  assert.deepEqual(entries.map(e => e.id), ['violin', 'viola', 'cello', 'bass', 'harp', 'flute', 'piccolo', 'oboe', 'clarinet', 'bassoon',
+test('catalogue lists 27 in category order', () => {
+  assert.equal(entries.length, 27);
+  assert.deepEqual(entries.map(e => e.id), ['violin', 'viola', 'cello', 'bass', 'harp', 'lyre', 'flute', 'piccolo', 'oboe', 'clarinet', 'bassoon',
     'trumpet', 'horn', 'trombone', 'tuba', 'piano', 'organ', 'celesta', 'timpani', 'glock', 'xylo', 'marimba', 'vibes', 'bells', 'kit', 'orch',
     'choir']);
   assert.deepEqual(CATEGORIES.map(c => c.label), ['Strings', 'Woodwinds', 'Brass', 'Keyboards', 'Pitched Percussion', 'Drums & Percussion', 'Voices']);
@@ -48,16 +48,22 @@ test('drum classes', () => {
 });
 
 test('stand-ins carry their note', () => {
-  for (const [id, target] of [['celesta', 'glock'], ['vibes', 'marimba'], ['choir', 'organ']] as const) {
+  for (const [id, target] of [['celesta', 'glock'], ['choir', 'organ']] as const) {
     assert.equal(get(id).standin, target, id);
     assert.ok(get(id).standinNote, id);
   }
+  assert.equal(get('vibes').standin, null);
+  assert.ok(get('lyre').standinNote, 'the lyre says it plays a folk harp');
   assert.equal(get('violin').standin, null);
   assert.equal(get('violin').standinNote, null);
 });
 
 test('lane families and default sounds', () => {
   assert.equal(laneFamily(get('harp')), 'harp');
+  assert.equal(laneFamily(get('lyre')), 'harp');
+  assert.equal(get('lyre').icon, 'lyre');
+  assert.equal(get('violin').icon, 'strings');
+  assert.deepEqual(defaultSound(get('lyre')), { instrument: 'lyre', gain_db: 0, attack: 0.02, release: 2.5 });
   assert.equal(laneFamily(get('cello')), 'strings');
   assert.equal(laneFamily(get('kit')), 'percussion');
   assert.equal(laneFamily(get('glock')), 'percussion');

@@ -21,12 +21,13 @@ const CLEFS: readonly Clef[] = ['treble', 'alto', 'bass', 'grand', 'percussion']
 /**
  * One instrument as the editor shows it. `range` and `expert` are inclusive MIDI pitches (null for drums), `written` is the
  * semitones added to the sounding pitch to give the written one, `gm` the General MIDI program counted from 1, and `pieces`
- * a drum part's rows as [General MIDI note, name]. `standin` names the instrument whose samples play instead.
+ * a drum part's rows as [General MIDI note, name]. `standin` names the instrument whose samples play instead, and `standinNote`
+ * says what plays when it is not the instrument itself. `icon` is the picker's icon: its own (Lyre) or its category's.
  */
 export interface Entry {
   id: string; name: string; category: Category; range: [number, number] | null; expert: [number, number] | null; home: number | null;
   clef: Clef; written: number; gm: number; gmName: string; pieces: [number, string][] | null; standin: string | null;
-  standinNote: string | null; attack: number; release: number;
+  standinNote: string | null; icon: string; attack: number; release: number;
 }
 
 const categoryOf = (c: string | undefined): Category | undefined => CATEGORIES.find(x => x.id === c)?.id;
@@ -37,7 +38,8 @@ function entry(id: string, i: LibraryInstrument): Entry | null {
   return {
     id, name: i.name, category, range: i.range ?? null, expert: i.expert ?? null, home: i.home ?? null,
     clef: CLEFS.find(c => c === i.clef) ?? 'treble', written: i.written ?? 0, gm: i.gm ?? 1, gmName: i.gm_name ?? i.name,
-    pieces: i.pieces ?? null, standin: i.standin ?? null, standinNote: i.standin_note ?? null, attack: i.attack ?? 0.05, release: i.release ?? 0.3,
+    pieces: i.pieces ?? null, standin: i.standin ?? null, standinNote: i.standin_note ?? null,
+    icon: i.icon ?? category, attack: i.attack ?? 0.05, release: i.release ?? 0.3,
   };
 }
 
@@ -61,7 +63,7 @@ export function rangeClass(e: Entry, pitch: number): 'normal' | 'expert' | 'out'
 /** The pitch as the part is notated: Double Bass an octave up, Glockenspiel two octaves down. */
 export const writtenPitch = (e: Entry, pitch: number): number => pitch + e.written;
 
-export const laneFamily = (e: Entry): Family => (e.id === 'harp' ? 'harp' : CATEGORIES.find(c => c.id === e.category)!.family);
+export const laneFamily = (e: Entry): Family => (e.id === 'harp' || e.id === 'lyre' ? 'harp' : CATEGORIES.find(c => c.id === e.category)!.family);
 
 /** A new part's sound for this instrument. */
 export const defaultSound = (e: Entry): Sound => ({ instrument: e.id, gain_db: 0, attack: e.attack, release: e.release });

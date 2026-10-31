@@ -8,7 +8,7 @@ export interface LibraryFile { pitch: number; file: string; rate: number; channe
 export interface CatalogueFields {
   name?: string; category?: string; range?: [number, number] | null; expert?: [number, number] | null; home?: number | null;
   clef?: string; written?: number; gm?: number; gm_name?: string; pieces?: [number, string][] | null; standin?: string;
-  standin_note?: string; attack?: number; release?: number;
+  standin_note?: string; icon?: string; from?: string; attack?: number; release?: number;
 }
 /**
  * `loop` is the sustained stretch in seconds that repeats so a note may outlast its sample; absent for a plucked or struck instrument.

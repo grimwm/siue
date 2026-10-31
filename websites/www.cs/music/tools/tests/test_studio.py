@@ -72,7 +72,7 @@ class StudioTest(unittest.TestCase):
 
     def test_list_instruments(self):
         instruments = self.studio(SIUE_MUSIC_AI_KEY="").list_instruments()["instruments"]
-        self.assertEqual(len(instruments), 26)
+        self.assertEqual(len(instruments), 27)
         self.assertEqual(instruments[0]["id"], "violin")
         kit = next(i for i in instruments if i["id"] == "kit")
         self.assertEqual(kit["pieces"][0], [36, "Kick"])

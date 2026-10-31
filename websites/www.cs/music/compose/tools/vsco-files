@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Candidate samples.json files for one VSCO-2 CE instrument, read from the library's own SFZ map at the pinned commit.
+"""Candidate samples.json files for one instrument of VSCO-2 CE (or a library samples.json's `sources` names), at its pinned commit.
 
   tools/vsco-files <map.sfz> [--vel 80] [--keys 36,38,...] [--every 3]
+  tools/vsco-files --from vcsl --folder <folder> --match <regex> [--every 3]
+
+With --folder (for a library with no SFZ maps, such as VCSL), the files are those directly in the folder whose names match
+--match, and each one's root is the note its name carries (A#2, C4, ...).
 
 Prints {"files": [{path, sha256, pitch}]}: one region per root, the velocity layer that holds --vel (mf by default) and the
 first round robin, thinned to about every --every semitones (never leaving a gap over 4 where the map has a root to fill it).
@@ -61,6 +65,23 @@ def parse_sfz(text: str) -> list[dict]:
     return out
 
 
+NOTE = re.compile(r"(?<![A-Za-z])([A-G])(#|b)?(-?\d)(?=[_.])")
+STEPS = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
+def note_pitch(name: str) -> int | None:
+    m = NOTE.search(name)
+    if not m:
+        return None
+    return 12 * (int(m.group(3)) + 1) + STEPS[m.group(1)] + {"#": 1, "b": -1, None: 0}[m.group(2)]
+
+
+def tree(src: dict) -> list[str]:
+    repo = src["source"].split("githubusercontent.com/", 1)[1]
+    with urlopen(f"https://api.github.com/repos/{repo}/git/trees/{src['commit']}?recursive=1", timeout=120) as r:
+        return [t["path"] for t in json.load(r)["tree"] if t["type"] == "blob"]
+
+
 def thin(roots: list[int], every: int) -> list[int]:
     kept = []
     for i, c in enumerate(roots):
@@ -72,15 +93,26 @@ def thin(roots: list[int], every: int) -> list[int]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("sfz")
+    ap.add_argument("sfz", nargs="?")
+    ap.add_argument("--from", dest="origin")
+    ap.add_argument("--folder")
+    ap.add_argument("--match", default=".")
     ap.add_argument("--vel", type=int, default=80)
     ap.add_argument("--keys")
     ap.add_argument("--every", type=int, default=3)
     a = ap.parse_args()
     manifest = json.loads(MANIFEST.read_text())
-    base = f"{manifest['source']}/{manifest['commit']}/"
-    regions = [r for r in parse_sfz(get(base + quote(a.sfz)).decode("utf-8", "replace")) if r["seq"] == 1]
-    if a.keys:
+    src = manifest["sources"][a.origin] if a.origin else manifest
+    base = f"{src['source']}/{src['commit']}/"
+    if a.folder:
+        by_key = {}
+        for path in sorted(tree(src)):
+            folder, _, name = path.rpartition("/")
+            if folder == a.folder and re.search(a.match, name) and (pitch := note_pitch(name)) is not None:
+                by_key.setdefault(pitch, {"sample": path})
+        picked = {k: by_key[k] for k in thin(sorted(by_key), a.every)}
+    elif a.keys:
+        regions = [r for r in parse_sfz(get(base + quote(a.sfz)).decode("utf-8", "replace")) if r["seq"] == 1]
         want = [int(k) for k in a.keys.split(",")]
         picked = {}
         for k in want:
@@ -90,12 +122,13 @@ def main() -> None:
                 sys.exit(f"{a.sfz}: no region plays key {k}")
             picked[k] = hits[0]
     else:
+        regions = [r for r in parse_sfz(get(base + quote(a.sfz)).decode("utf-8", "replace")) if r["seq"] == 1]
         by_key = {}
         for r in regions:
             if r["lovel"] <= a.vel <= r["hivel"]:
                 by_key.setdefault(r["key"], r)
         picked = {k: by_key[k] for k in thin(sorted(by_key), a.every)}
-    root = DEFAULT_CACHE / manifest["commit"]
+    root = DEFAULT_CACHE / src["commit"]
     files = []
     for pitch, r in sorted(picked.items()):
         path = root / r["sample"]

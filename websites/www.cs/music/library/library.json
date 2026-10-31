@@ -593,6 +593,121 @@
    "attack": 0.005,
    "release": 0.4
   },
+  "lyre": {
+   "files": [
+    {
+     "pitch": 36,
+     "file": "lyre/36.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 40,
+     "file": "lyre/40.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 44,
+     "file": "lyre/44.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 48,
+     "file": "lyre/48.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 52,
+     "file": "lyre/52.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 56,
+     "file": "lyre/56.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 60,
+     "file": "lyre/60.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 64,
+     "file": "lyre/64.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 68,
+     "file": "lyre/68.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 72,
+     "file": "lyre/72.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 76,
+     "file": "lyre/76.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 80,
+     "file": "lyre/80.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 84,
+     "file": "lyre/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 88,
+     "file": "lyre/88.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 92,
+     "file": "lyre/92.flac",
+     "rate": 44100,
+     "channels": 2
+    }
+   ],
+   "from": "vcsl",
+   "name": "Lyre",
+   "category": "strings",
+   "range": [
+    48,
+    84
+   ],
+   "expert": [
+    36,
+    92
+   ],
+   "home": 60,
+   "clef": "treble",
+   "written": 0,
+   "gm": 47,
+   "gm_name": "Orchestral Harp",
+   "pieces": null,
+   "standin_note": "Plays a folk harp's samples: no lyre has been recorded under a CC0 or public-domain licence.",
+   "icon": "lyre",
+   "attack": 0.02,
+   "release": 2.5
+  },
   "flute": {
    "files": [
     {
@@ -1974,67 +2089,73 @@
   "vibes": {
    "files": [
     {
-     "pitch": 41,
-     "file": "marimba/41.flac",
+     "pitch": 53,
+     "file": "vibes/53.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 48,
-     "file": "marimba/48.flac",
+     "pitch": 57,
+     "file": "vibes/57.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 55,
-     "file": "marimba/55.flac",
+     "pitch": 60,
+     "file": "vibes/60.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 59,
-     "file": "marimba/59.flac",
+     "pitch": 64,
+     "file": "vibes/64.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 65,
-     "file": "marimba/65.flac",
+     "pitch": 67,
+     "file": "vibes/67.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 72,
-     "file": "marimba/72.flac",
+     "pitch": 71,
+     "file": "vibes/71.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 79,
-     "file": "marimba/79.flac",
+     "pitch": 74,
+     "file": "vibes/74.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 83,
-     "file": "marimba/83.flac",
+     "pitch": 77,
+     "file": "vibes/77.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 89,
-     "file": "marimba/89.flac",
+     "pitch": 81,
+     "file": "vibes/81.flac",
      "rate": 44100,
      "channels": 2
     },
     {
-     "pitch": 96,
-     "file": "marimba/96.flac",
+     "pitch": 84,
+     "file": "vibes/84.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 88,
+     "file": "vibes/88.flac",
      "rate": 44100,
      "channels": 2
     }
    ],
-   "standin": "marimba",
+   "from": "vcsl",
    "name": "Vibraphone",
    "category": "pitched",
    "range": [
@@ -2051,7 +2172,6 @@
    "gm": 12,
    "gm_name": "Vibraphone",
    "pieces": null,
-   "standin_note": "Plays the Marimba samples with a longer ring.",
    "attack": 0.005,
    "release": 1.8
   },
@@ -2064,8 +2184,38 @@
      "channels": 2
     },
     {
+     "pitch": 62,
+     "file": "bells/62.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 64,
+     "file": "bells/64.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 65,
+     "file": "bells/65.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
      "pitch": 67,
      "file": "bells/67.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 69,
+     "file": "bells/69.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 71,
+     "file": "bells/71.flac",
      "rate": 44100,
      "channels": 2
     },
@@ -2076,12 +2226,25 @@
      "channels": 2
     },
     {
+     "pitch": 74,
+     "file": "bells/74.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
+     "pitch": 76,
+     "file": "bells/76.flac",
+     "rate": 44100,
+     "channels": 2
+    },
+    {
      "pitch": 77,
      "file": "bells/77.flac",
      "rate": 44100,
      "channels": 2
     }
    ],
+   "from": "vcsl",
    "name": "Tubular Bells",
    "category": "pitched",
    "range": [
@@ -2098,7 +2261,6 @@
    "gm": 15,
    "gm_name": "Tubular Bells",
    "pieces": null,
-   "standin_note": "Only a few bells were recorded; the rest are stretched from the nearest.",
    "attack": 0.005,
    "release": 0.4
   },
@@ -2153,6 +2315,7 @@
      "channels": 2
     }
    ],
+   "from": "vcsl",
    "pitched": false,
    "name": "Drum Kit",
    "category": "drums",
@@ -2197,7 +2360,7 @@
      "Ride"
     ]
    ],
-   "standin_note": "Hi-Hat and Ride: VSCO-2 CE's suspended cymbal, struck with a stick; Kick and Toms: its muted bass drum and tenor drums.",
+   "standin_note": "Ride: a suspended cymbal struck with a stick; VCSL has no ride cymbal of its own.",
    "attack": 0.005,
    "release": 0.4
   },
@@ -2412,6 +2575,15 @@
    "standin_note": "Plays the Organ samples with a soft start.",
    "attack": 0.25,
    "release": 0.6
+  }
+ },
+ "sources": {
+  "vcsl": {
+   "library": "Versilian Community Sample Library (VCSL)",
+   "licence": "CC0 1.0 Universal",
+   "credit": "Versilian Studios and contributors",
+   "source": "https://raw.githubusercontent.com/sgossner/VCSL",
+   "commit": "c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e"
   }
  }
 }

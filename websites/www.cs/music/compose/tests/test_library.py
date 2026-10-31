@@ -77,7 +77,7 @@ class BuildTest(unittest.TestCase):
 
     def test_catalogue_fields_copied(self):
         fields = {"name": "Harp", "category": "strings", "range": [23, 104], "expert": [23, 104], "home": 60, "clef": "grand",
-                  "written": 0, "gm": 47, "gm_name": "Orchestral Harp", "pieces": None, "standin_note": "n", "attack": 0.005,
+                  "written": 0, "gm": 47, "gm_name": "Orchestral Harp", "pieces": None, "standin_note": "n", "icon": "harp", "attack": 0.005,
                   "release": 0.4}
         self.assertEqual(set(fields), set(CATALOGUE_FIELDS))
         manifest = {**MANIFEST, "instruments": {**MANIFEST["instruments"], "harp": {**MANIFEST["instruments"]["harp"], **fields}}}
@@ -103,6 +103,19 @@ class BuildTest(unittest.TestCase):
         self.assertEqual([f["pitch"] for f in celesta], [f["pitch"] - 12 for f in harp])
         self.assertEqual([f["file"] for f in celesta], [f["file"] for f in harp])
         self.assertNotIn("standin_shift", index["instruments"]["celesta"])
+
+    def test_an_instrument_from_another_library(self):
+        other = self.samples.parent / "other"
+        write_wav(other / "Vibes/v.wav", freq=330.0)
+        manifest = {**MANIFEST, "sources": {"vcsl": {"library": "Other 1.0", "licence": "CC0 1.0 Universal", "credit": "Others",
+                                                       "source": "https://example.test/other", "commit": "def"}},
+                    "instruments": {**MANIFEST["instruments"], "vibes": {"from": "vcsl", "files": [{"path": "Vibes/v.wav", "sha256": "x", "pitch": 64}]}}}
+        roots = {"harp": self.samples, "organ": self.samples, "vibes": other}
+        index = build(manifest, roots, self.out)
+        self.assertEqual(pcm(self.out / "vibes/64.flac"), pcm(other / "Vibes/v.wav"))
+        self.assertEqual(index["instruments"]["vibes"]["from"], "vcsl")
+        self.assertEqual(index["sources"]["vcsl"]["credit"], "Others")
+        self.assertNotIn("from", index["instruments"]["harp"])
 
     def test_standin_of_standin_refused(self):
         manifest = {**MANIFEST, "instruments": {**MANIFEST["instruments"], "choir": {"standin": "organ"}, "voice": {"standin": "choir"}}}

@@ -1,6 +1,7 @@
 """Samples are fetched once per file into the cache and kept only when their sha256 matches the manifest."""
 import hashlib
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -44,9 +45,16 @@ class FetchTest(unittest.TestCase):
             fetch(manifest(), self.cache, self.get(b"truncated"))
         self.assertEqual([p for p in self.cache.rglob("*") if p.is_file()], [])
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_an_instrument_from_another_library_comes_from_there(self):
+        m = manifest()
+        m["sources"] = {"vcsl": {"source": "https://example.test/other", "commit": "def"}}
+        m["instruments"]["vibes"] = {"from": "vcsl", "files": [{"path": "Vibes/a.wav", "sha256": hashlib.sha256(GOOD).hexdigest(), "pitch": 60}]}
+        m["instruments"]["celesta"] = {"standin": "vibes"}
+        roots = fetch(m, self.cache, self.get(GOOD))
+        self.assertEqual(roots["vibes"], self.cache / "def")
+        self.assertEqual(roots["celesta"], self.cache / "def")
+        self.assertEqual(roots["harp"], self.cache / "abc")
+        self.assertIn("https://example.test/other/def/Vibes/a.wav", self.urls)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +63,7 @@ viola|Viola|strings|48-88|48-93|60|alto|0|42|Viola
 cello|Cello|strings|36-84|36-93|48|bass|0|43|Cello
 bass|Double Bass|strings|28-67|24-72|36|bass|12|44|Contrabass
 harp|Harp|strings|23-104|23-104|60|grand|0|47|Orchestral Harp
+lyre|Lyre|strings|48-84|36-92|60|treble|0|47|Orchestral Harp
 flute|Flute|woodwinds|60-96|59-101|72|treble|0|74|Flute
 piccolo|Piccolo|woodwinds|74-105|74-108|84|treble|-12|73|Piccolo
 oboe|Oboe|woodwinds|58-91|58-93|69|treble|0|69|Oboe
@@ -71,7 +80,7 @@ timpani|Timpani|pitched|38-57|36-60|45|bass|0|48|Timpani
 glock|Glockenspiel|pitched|79-108|79-108|84|treble|-24|10|Glockenspiel
 xylo|Xylophone|pitched|65-108|60-108|79|treble|-12|14|Xylophone
 marimba|Marimba|pitched|36-96|36-96|60|grand|0|13|Marimba
-vibes|Vibraphone|pitched|53-89|53-89|65|treble|0|12|Vibraphone|marimba
+vibes|Vibraphone|pitched|53-89|53-89|65|treble|0|12|Vibraphone
 bells|Tubular Bells|pitched|60-77|60-79|67|treble|0|15|Tubular Bells
 kit|Drum Kit|drums|-|-|-|percussion|0|1|Standard Kit
 orch|Orchestral Percussion|drums|-|-|-|percussion|0|49|Orchestra Kit
@@ -118,8 +127,23 @@ class ManifestTest(unittest.TestCase):
             self.assertIs(e["pitched"], False)
             self.assertEqual(sorted(f["pitch"] for f in e["files"]), sorted(p for p, _ in e["pieces"]), i)
 
+    def test_every_instrument_a_shipped_piece_names_is_in_the_library(self):
+        library = json.loads((ROOT.parent / "library" / "library.json").read_text())["instruments"]
+        named = set()
+        for score in (ROOT.parent / "pieces").glob("*/v*/score.json"):
+            named |= {lane["sound"]["instrument"] for lane in json.loads(score.read_text())["lanes"] if "sound" in lane}
+        for piece in (ROOT / "pieces").glob("*.py"):
+            # Lane(id, name, family, color, instrument, ...)
+            named |= set(re.findall(r'Lane\("[^"]*", "[^"]*", "[^"]*", "[^"]*", "([^"]*)"', piece.read_text()))
+        self.assertTrue({"harp", "organ", "cello", "bass", "horn"} <= named, named)
+        self.assertEqual(named - set(library), set())
+
     def test_published_instruments_unchanged(self):
         published = json.loads((ROOT / "tests" / "fixtures" / "published-instruments.json").read_text())
         for i, want in published.items():
             self.assertEqual({k: self.instruments[i][k] for k in want}, want, i)
             self.assertEqual("loop" in self.instruments[i], "loop" in want, i)
+
+
+if __name__ == "__main__":
+    unittest.main()

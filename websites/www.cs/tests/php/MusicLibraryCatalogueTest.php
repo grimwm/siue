@@ -8,7 +8,7 @@ require_once __DIR__ . '/MusicFakes.php';
 
 final class MusicLibraryCatalogueTest extends TestCase
 {
-    private const IDS = ['violin', 'viola', 'cello', 'bass', 'harp', 'flute', 'piccolo', 'oboe', 'clarinet', 'bassoon', 'trumpet', 'horn',
+    private const IDS = ['violin', 'viola', 'cello', 'bass', 'harp', 'lyre', 'flute', 'piccolo', 'oboe', 'clarinet', 'bassoon', 'trumpet', 'horn',
         'trombone', 'tuba', 'piano', 'organ', 'celesta', 'timpani', 'glock', 'xylo', 'marimba', 'vibes', 'bells', 'kit', 'orch', 'choir'];
 
     private function check(array $lanes): ?string

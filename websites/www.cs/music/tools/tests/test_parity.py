@@ -57,7 +57,7 @@ class RenderableScoreParityTest(unittest.TestCase):
 
     def test_the_library_ids_are_the_ones_in_library_json(self):
         self.assertEqual(self.library, frozenset({
-            "violin", "viola", "cello", "bass", "harp", "flute", "piccolo", "oboe", "clarinet", "bassoon", "trumpet", "horn", "trombone",
+            "violin", "viola", "cello", "bass", "harp", "lyre", "flute", "piccolo", "oboe", "clarinet", "bassoon", "trumpet", "horn", "trombone",
             "tuba", "piano", "organ", "celesta", "timpani", "glock", "xylo", "marimba", "vibes", "bells", "kit", "orch", "choir"}))
 
     def test_stand_ins_drums_and_new_instruments_pass(self):

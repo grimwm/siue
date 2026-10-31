@@ -3,6 +3,7 @@ import json
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from .samples import DEFAULT_CACHE, fetch
@@ -11,7 +12,7 @@ MANIFEST = Path(__file__).resolve().parent.parent / "samples.json"
 LIBRARY = Path(__file__).resolve().parents[2] / "library"
 # The composer's catalogue entry, copied from samples.json into library.json as it is.
 CATALOGUE_FIELDS = ("name", "category", "range", "expert", "home", "clef", "written", "gm", "gm_name", "pieces", "standin_note",
-                    "attack", "release")
+                    "icon", "attack", "release")
 
 
 class LibraryError(Exception):
@@ -47,9 +48,13 @@ def _encode(src: Path, dest: Path) -> None:
                    check=True)
 
 
-def build(manifest: dict, samples: Path, out: Path) -> dict:
-    """Write each sample under `out` as <instrument>/<pitch>.flac and library.json beside them; returns that index."""
+def build(manifest: dict, samples: Path | Mapping[str, Path], out: Path) -> dict:
+    """
+    Write each sample under `out` as <instrument>/<pitch>.flac and library.json beside them; returns that index. `samples` is
+    the folder the manifest's paths are under, or one folder per instrument (as fetch gives them).
+    """
     out = Path(out)
+    root = (lambda name: Path(samples[name])) if isinstance(samples, Mapping) else (lambda _name: Path(samples))
     instruments = {}
     sampled = {name: inst for name, inst in manifest["instruments"].items() if "standin" not in inst}
     for name, inst in manifest["instruments"].items():
@@ -60,7 +65,7 @@ def build(manifest: dict, samples: Path, out: Path) -> dict:
         files, probed = [], []
         for f in sorted(inst["files"], key=lambda f: f["pitch"]):
             rel = f"{name}/{f['pitch']}.flac"
-            _encode(Path(samples) / f["path"], out / rel)
+            _encode(root(name) / f["path"], out / rel)
             rate, channels, frames = _probe(out / rel)
             files.append({"pitch": f["pitch"], "file": rel, "rate": rate, "channels": channels})
             probed.append((f["pitch"], rel, rate, frames))
@@ -76,21 +81,26 @@ def build(manifest: dict, samples: Path, out: Path) -> dict:
             instruments[name] = {"files": [{**f, "pitch": f["pitch"] + shift} for f in target["files"]],
                                  **({"loop": target["loop"]} if "loop" in target else {})}
             instruments[name]["standin"] = inst["standin"]
+        if "from" in inst:
+            instruments[name]["from"] = inst["from"]
         if inst.get("pitched") is False:
             instruments[name]["pitched"] = False
         instruments[name].update({k: inst[k] for k in CATALOGUE_FIELDS if k in inst})
     instruments = {name: instruments[name] for name in manifest["instruments"]}
     index = {"version": 1, **{k: manifest[k] for k in ("source", "commit", "licence", "credit")}, "instruments": instruments}
+    if manifest.get("sources"):
+        # Each further library an instrument's `from` names, with its own licence and credit.
+        index["sources"] = manifest["sources"]
     (out / "library.json").write_text(json.dumps(index, indent=1) + "\n")
     return index
 
 
 def main() -> None:
     manifest = json.loads(MANIFEST.read_text())
-    root = fetch(manifest, DEFAULT_CACHE)[next(iter(manifest["instruments"]))]
+    roots = fetch(manifest, DEFAULT_CACHE)
     for old in LIBRARY.glob("*/"):
         shutil.rmtree(old)
-    index = build(manifest, root, LIBRARY)
+    index = build(manifest, roots, LIBRARY)
     files = {f["file"] for i in index["instruments"].values() for f in i["files"]}
     print(f"{len(files)} samples for {len(index['instruments'])} instruments in {LIBRARY}", file=sys.stderr)
 

@@ -4,8 +4,8 @@
  * and every object Theseus can take (relics, keys, gear, tools and story pages) a bright cyan one. Each colour stands
  * out from the dark stone, and the rim from the pale sand. Blocks, the cow he set down and a clone machine's template
  * carry none. A marker never draws smaller on screen than MARKER_MIN_PX across, however far the view is zoomed out.
- * It hangs point down just above its piece's head as the screen shows it, so top-down and tilted alike it sits over
- * its own piece, and top-down a figure's marker point stays inside its cell. Markers bob gently down and
+ * It hangs point down just above its piece's head as the screen shows it, so at any tilt it sits over its own
+ * piece, and at the opening 75° a figure's marker point stays inside its cell. Markers bob gently down and
  * back, and stand still when motion is reduced. A marker whose piece is on screen is never cut off by the view's
  * edge. DOM-free. */
 import { HAZARDS, OBJECTS } from '../puzzle/tiles.ts';

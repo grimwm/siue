@@ -1,20 +1,21 @@
 /* The Island of Crete, modern look: the compass as pure maths. A drag on the compass steers the camera: across turns
- * the view, up tilts it toward top-down and down tilts it back toward angled; letting go squares the heading up as
- * every camera gesture does. A press that moves less than COMPASS_TAP_PX before it lifts is a tap, which resets the
- * view. The compass's face shows the camera as it is, whatever moved it: the needle turns with the heading, and the
- * dial is squashed and a ring fills as the view tilts away from top-down. DOM-free. */
-import { ANGLED_PITCH, TOP_PITCH, clampTilt } from './camera.ts';
+ * the view, up tilts it toward straight down and down tilts it back toward 45°; the view stays wherever the drag
+ * leaves it. A press that never moves COMPASS_TAP_PX from where it came down is a tap, however long it is held, which
+ * resets the view. The compass's face shows the camera as it is, whatever moved it: the needle turns with the
+ * heading, and the dial is squashed and a ring fills as the view tilts away from straight down. DOM-free. */
+import { MAX_PITCH, MIN_PITCH, clampTilt } from './camera.ts';
 import type { CamOp } from './gestures.ts';
 
-/** A press that moves less than this, in CSS pixels, is a tap; past it, a drag. */
-export const COMPASS_TAP_PX = 6;
+/** A press that stays within this many CSS pixels of where it came down is a tap; past it, a drag. A fingertip
+ *  wobbles several pixels on a quick tap, so this is finger-sized. */
+export const COMPASS_TAP_PX = 12;
 /** Degrees turned per pixel dragged across the compass. */
 export const COMPASS_TURN_PER_PX = 0.6;
-/** Degrees tilted per pixel dragged up or down: the whole tilt takes about 75 px. */
+/** Degrees tilted per pixel dragged up or down: the whole tilt takes about 110 px. */
 export const COMPASS_TILT_PER_PX = 0.4;
 
-/** A compass press as camera operations: turns and tilts while it drags, `settle` when a drag lets go, `reset` when
- *  a tap lets go. One pointer at a time; others are ignored until it lifts. */
+/** A compass press as camera operations: turns and tilts while it drags, `reset` when a tap lets go. One pointer at
+ *  a time; others are ignored until it lifts. */
 export interface CompassDrag {
   down(id: number, x: number, y: number): CamOp[];
   move(id: number, x: number, y: number): CamOp[];
@@ -41,7 +42,7 @@ export function createCompassDrag(): CompassDrag {
       press.y = y;
       const ops: CamOp[] = [];
       // The same senses as a drag on the board: rightward turns as a left-button drag right does, up tips toward
-      // top-down.
+      // straight down.
       if (dx !== 0) ops.push({ kind: 'turn', deg: -dx * COMPASS_TURN_PER_PX });
       if (dy !== 0) ops.push({ kind: 'tilt', deg: -dy * COMPASS_TILT_PER_PX });
       return ops;
@@ -51,13 +52,11 @@ export function createCompassDrag(): CompassDrag {
       const ops = drag.move(id, x, y);
       const dragged = press.dragging;
       press = null;
-      return dragged ? [...ops, { kind: 'settle' }] : [{ kind: 'reset' }];
+      return dragged ? ops : [{ kind: 'reset' }];
     },
     cancel(id) {
-      if (!press || press.id !== id) return [];
-      const dragged = press.dragging;
-      press = null;
-      return dragged ? [{ kind: 'settle' }] : [];
+      if (press?.id === id) press = null;
+      return [];
     },
   };
   return drag;
@@ -69,8 +68,8 @@ export interface Heading {
   pitch: number;
 }
 
-/** `v` after a turn or a tilt: a turn adds to the heading; a tilt adds to the pitch, held between angled and
- *  top-down. Any other operation leaves it. */
+/** `v` after a turn or a tilt: a turn adds to the heading; a tilt adds to the pitch, held between 45° and straight
+ *  down. Any other operation leaves it. */
 export function steer(v: Heading, op: CamOp): Heading {
   if (op.kind === 'turn') return { ...v, yaw: v.yaw + op.deg };
   if (op.kind === 'tilt') return { ...v, pitch: clampTilt(v.pitch + op.deg) };
@@ -78,8 +77,8 @@ export function steer(v: Heading, op: CamOp): Heading {
 }
 
 /** What the compass shows for a view: the needle's turn in degrees (it points at the board's north), how far the
- *  dial is squashed (1 is round; a disc seen at the view's pitch), and how far the view has tilted from top-down to
- *  angled (0 to 1), which the ring fills to. */
+ *  dial is squashed (1 is round, straight down; a disc seen at the view's pitch), and how far the view has tilted
+ *  from straight down to the lowest pitch (0 to 1), which the ring fills to. */
 export interface Face {
   needle: number;
   squash: number;
@@ -90,7 +89,7 @@ export function compassFace(v: Heading): Face {
   const pitch = clampTilt(v.pitch);
   return {
     needle: v.yaw,
-    squash: Math.sin((pitch * Math.PI) / 180) / Math.sin((TOP_PITCH * Math.PI) / 180),
-    tilt: (TOP_PITCH - pitch) / (TOP_PITCH - ANGLED_PITCH),
+    squash: Math.sin((pitch * Math.PI) / 180),
+    tilt: (MAX_PITCH - pitch) / (MAX_PITCH - MIN_PITCH),
   };
 }

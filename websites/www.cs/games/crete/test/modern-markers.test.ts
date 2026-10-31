@@ -8,9 +8,9 @@ import {
 } from '../src/modern/markers.ts';
 import type { MarkerKind } from '../src/modern/markers.ts';
 import { placed } from '../src/modern/model-names.ts';
-import { ANGLED_PITCH, TOP_PITCH } from '../src/modern/camera.ts';
+import { MIN_PITCH, START_PITCH } from '../src/modern/camera.ts';
 
-const PITCHES = { top: TOP_PITCH, angled: ANGLED_PITCH };
+const PITCHES = { top: START_PITCH, angled: MIN_PITCH };
 import { createMarkers } from '../src/modern/scene/markers.ts';
 import type { MarkerInfo } from '../src/modern/scene/markers.ts';
 import { grid } from './puzzle-grid.ts';

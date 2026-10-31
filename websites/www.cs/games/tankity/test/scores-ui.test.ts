@@ -142,8 +142,8 @@ const items = (section: StubElement, id: string) => walk(byId(section, id)).filt
 test('this browser\'s list draws under the online one: rows, the run just saved, empty, and blocked', () => {
   const section = makeEl('report-overlay');
   render(section, props({ local: [{ text: '#1 WGR · 500 pts · 1 rounds won · solo', mine: false }, { text: '#2 WGR · 400 pts · 0 rounds won · room', mine: true }] }));
-  assert.match(byId(section, 'scores-online-h').textContent, /Online · room matches with 2\+ players/);
-  assert.equal(byId(section, 'scores-local-h').textContent, 'This browser');
+  assert.match(byId(section, 'scores-online-h').textContent, /Online · Room Matches with 2\+ Players/);
+  assert.equal(byId(section, 'scores-local-h').textContent, 'This Browser');
   const li = items(section, 'scores-local');
   assert.equal(li.length, 2);
   assert.ok(hasClass(nth(li, 1), 'mine') && !hasClass(nth(li, 0), 'mine'));

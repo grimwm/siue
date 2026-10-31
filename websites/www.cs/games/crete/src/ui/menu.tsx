@@ -64,7 +64,7 @@ export interface MenuProps {
 }
 
 const WALL_CHOICES: [WallMode, string][] = [['solid', 'Solid'], ['ghosted', 'Ghosted'], ['low', 'Low']];
-const VIEW_CHOICES: [View, string][] = [['angled', 'Angled'], ['top', 'Top-down']];
+const VIEW_CHOICES: [View, string][] = [['angled', 'Angled'], ['top', 'Top-Down']];
 const PAD_CHOICES: [PadSide, string][] = [['left', 'Left'], ['right', 'Right']];
 
 const segs = (line: Seg[]) => line.map(s => (typeof s === 'string' ? s : <strong>{s.strong}</strong>));
@@ -83,7 +83,7 @@ export function Menu(p: MenuProps) {
       <div class="menu-cols">
         <div class="menu-col">
           <section class="menu-sec" data-section="audio" aria-labelledby="menu-audio-h">
-            <h3 id="menu-audio-h">Sound and screen</h3>
+            <h3 id="menu-audio-h">Sound and Screen</h3>
             <div class="menu-list">
               <Button id="mute" class="menu-row" checked={!p.muted} keyLabel={KEYS.mute.label} onClick={p.onSound}>
                 <span class="menu-row-name">Sound</span><span class="switch" aria-hidden="true" />
@@ -92,11 +92,11 @@ export function Menu(p: MenuProps) {
                 <span class="menu-row-name">Music</span><span class="switch" aria-hidden="true" />
               </Button>
               <Button id="music-hidden" class="menu-row" checked={p.background} onClick={p.onBackground}>
-                <span class="menu-row-name">Music in the background<small>Keeps playing in another tab</small></span>
+                <span class="menu-row-name">Music in the Background<small>Keeps playing in another tab</small></span>
                 <span class="switch" aria-hidden="true" />
               </Button>
               <Button id="fullscreen" class="menu-row" checked={p.fullscreen} keyLabel={KEYS.fullscreen.label} onClick={p.onFullscreen}>
-                <span class="menu-row-name">Full screen</span><span class="switch" aria-hidden="true" />
+                <span class="menu-row-name">Full Screen</span><span class="switch" aria-hidden="true" />
               </Button>
             </div>
           </section>
@@ -125,7 +125,7 @@ export function Menu(p: MenuProps) {
             )}
             {p.look === 'modern' && (
               <Button id="minimap-switch" class="menu-row" checked={p.minimap} onClick={p.onMinimap}>
-                <span class="menu-row-name">Mini map<small>The whole level in a corner of the board</small></span>
+                <span class="menu-row-name">Mini Map<small>The whole level in a corner of the board</small></span>
                 <span class="switch" aria-hidden="true" />
               </Button>
             )}
@@ -141,11 +141,11 @@ export function Menu(p: MenuProps) {
         </div>
         <div class="menu-col">
           <section class="menu-sec" aria-labelledby="menu-story-h">
-            <h3 id="menu-story-h">The story</h3>
+            <h3 id="menu-story-h">The Story</h3>
             <div class="menu-list">
               <div data-section="lore">
                 <Button id="menu-lore" class="menu-row" keyLabel={KEYS.lore.label} onClick={p.onLore}>
-                  <span class="menu-row-name">📖 Lore book</span><span class="menu-row-go" aria-hidden="true">›</span>
+                  <span class="menu-row-name">📖 Lore Book</span><span class="menu-row-go" aria-hidden="true">›</span>
                 </Button>
               </div>
               <div data-section="dictionary">
@@ -154,14 +154,14 @@ export function Menu(p: MenuProps) {
                 </Button>
               </div>
               <div class="menu-fold" data-section="log">
-                <h4>Story log</h4>
+                <h4>Story Log</h4>
                 <ol id="log" class="log" aria-live="polite" ref={list}>
                   {p.log.map((l, i) => <li key={i} class={l.tone}>{l.text}</li>)}
                 </ol>
                 {p.log.length === 0 && <p class="menu-empty">Nothing yet: what happens in the Labyrinth is told here.</p>}
               </div>
               <details class="menu-fold" data-section="help">
-                <summary>How to play</summary>
+                <summary>How to Play</summary>
                 <ul class="help">
                   {p.help.map((line, i) => <li key={i}>{segs(line)}</li>)}
                 </ul>
@@ -170,12 +170,12 @@ export function Menu(p: MenuProps) {
           </section>
           {(p.onBackToEditor || p.onSharedCard) && (
             <div class="menu-sec menu-more">
-              {p.onBackToEditor && <div data-section="editor"><Button id="menu-editor" class="quiet" onClick={p.onBackToEditor}>Back to the editor</Button></div>}
-              {p.onSharedCard && <div data-section="shared"><Button id="menu-shared" class="quiet" onClick={p.onSharedCard}>Shared level</Button></div>}
+              {p.onBackToEditor && <div data-section="editor"><Button id="menu-editor" class="quiet" onClick={p.onBackToEditor}>Back to the Editor</Button></div>}
+              {p.onSharedCard && <div data-section="shared"><Button id="menu-shared" class="quiet" onClick={p.onSharedCard}>Shared Level</Button></div>}
             </div>
           )}
           <div class="menu-sec menu-quit" data-section="quit">
-            <Button id="quit" class="danger" title="End this run and leave the game" onClick={p.onQuit}>⏻ Quit this run</Button>
+            <Button id="quit" class="danger" title="End this run and leave the game" onClick={p.onQuit}>⏻ Quit This Run</Button>
           </div>
         </div>
       </div>

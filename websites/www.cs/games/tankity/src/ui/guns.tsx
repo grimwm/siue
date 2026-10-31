@@ -68,7 +68,7 @@ export function Guns(p: GunsProps) {
       <OverlayHead titleId="gun-h" title="Weapons" closeId="gun-close" onClose={p.onClose} tools={
         <button type="button" id="gun-stock" class="gun-stock" title="Show every gun, or only the ones in stock"
           onClick={blurThen(p.onToggleStock)}>
-          {p.inStockOnly ? 'Show: In stock' : 'Show: All'} <Key at="global:gunStock" bare />
+          {p.inStockOnly ? 'Show: In Stock' : 'Show: All'} <Key at="global:gunStock" bare />
         </button>
       } navId="nav-gun" nav={<>
         <span><Key at="aim:barrelLeft" /><Key at="aim:barrelRight" /><Key at="shop:selUp" /><Key at="shop:selDown" /> or <Key at="scroll:lineDown" /><Key at="scroll:lineUp" /> move</span>

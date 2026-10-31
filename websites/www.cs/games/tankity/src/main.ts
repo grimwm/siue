@@ -1177,7 +1177,7 @@ async function quitGame(): Promise<void> {
   if (room) netStepOut(true);
   endTutorial(tutorialActive());
   backToTitle();
-  say(room ? `You stepped out of room ${room}; your seat waits. Leave room gives it up.` : 'You left the match.', 'info');
+  say(room ? `You stepped out of room ${room}; your seat waits. Leave Room gives it up.` : 'You left the match.', 'info');
   const outcome = await exitApp(browserAppEnv());
   // The card may be gone already: a match started inside the close wait.
   if (outcome === 'title-with-hint') showTitleHint(`${EXIT_HINT}.`);

@@ -42,20 +42,20 @@ test('a solo run: Continue, back to the title card, and nothing else', () => {
 
 test('a finished room match: Play again (same room) and Leave room', () => {
   const { veil, calls } = draw({ buttons: 'over' });
-  assert.equal(byId(veil, 'again').textContent, 'Play again (same room)');
-  assert.equal(byId(veil, 'end-leave').textContent, 'Leave room');
+  assert.equal(byId(veil, 'again').textContent, 'Play Again (Same Room)');
+  assert.equal(byId(veil, 'end-leave').textContent, 'Leave Room');
   click(byId(veil, 'end-leave'));
   assert.deepEqual(calls, ['leave']);
 });
 
 test('out of lives: Watch the finish and Leave room; from the menu: Back to the battle', () => {
   const out = draw({ buttons: 'out' });
-  assert.equal(byId(out.veil, 'end-watch').textContent, 'Watch the finish');
+  assert.equal(byId(out.veil, 'end-watch').textContent, 'Watch the Finish');
   assert.equal(maybeById(out.veil, 'again'), undefined);
   assert.ok(byId(out.veil, 'end-leave'));
   click(byId(out.veil, 'end-watch'));
   assert.deepEqual(out.calls, ['watch']);
-  assert.equal(byId(draw({ buttons: 'peek' }).veil, 'end-watch').textContent, 'Back to the battle');
+  assert.equal(byId(draw({ buttons: 'peek' }).veil, 'end-watch').textContent, 'Back to the Battle');
 });
 
 test('the scoreboard heads the card', () => {

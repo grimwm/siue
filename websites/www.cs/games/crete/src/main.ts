@@ -282,7 +282,7 @@ function onFullscreenChange(): void {
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
-/* Play on the title card opens Chapter 1's opening card: a new game starts at Chapter 1, Level 1 whatever this
+/* New Game on the title card opens Chapter 1's opening card: a new game starts at Chapter 1, Level 1 whatever this
    browser has cleared, and only Continue (`at`, the first level not cleared), a level picked from the list or a
    link starts elsewhere. A click is the gesture that lets a remembered full screen return. */
 function play(at?: number): void {

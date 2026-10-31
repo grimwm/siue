@@ -33,7 +33,7 @@ export function MeetCard(p: MeetCardProps) {
         </div>
       )}
       <p class="meet-note">It is in the Dictionary now, under the menu.</p>
-      <Button id="meet-go" keyLabel={KEYS.begin.label} onClick={p.onClose}>Go on</Button>
+      <Button id="meet-go" keyLabel={KEYS.begin.label} onClick={p.onClose}>Go On</Button>
     </Dialog>
   );
 }

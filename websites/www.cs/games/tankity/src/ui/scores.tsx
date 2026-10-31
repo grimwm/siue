@@ -41,14 +41,14 @@ export function Scores(p: ScoresProps) {
             onClick={() => { if (p.level !== lv) p.onLevel(lv); }}>{DIFFICULTY_NAMES[lv]}</button>
         ))}
       </div>
-      <h3 id="scores-online-h" class="scores-h">Online · room matches with 2+ players</h3>
+      <h3 id="scores-online-h" class="scores-h">Online · Room Matches with 2+ Players</h3>
       <ol id="scores" class="scores" aria-labelledby="scores-online-h">
         {p.rows !== null && (p.rows.length === 0
           ? <li>No after-action reports filed yet. Be the first legend.</li>
           : p.rows.map((r, i) => <li key={i} class={r.mine ? 'mine' : undefined}>{r.text}{r.mine && <span class="sr-only"> (yours)</span>}</li>))}
       </ol>
       <p id="scores-note" class="hint">{p.note}</p>
-      <h3 id="scores-local-h" class="scores-h">This browser</h3>
+      <h3 id="scores-local-h" class="scores-h">This Browser</h3>
       <ol id="scores-local" class="scores" aria-labelledby="scores-local-h">
         {p.local === null
           ? <li>This browser can't keep scores (storage is blocked).</li>

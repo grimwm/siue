@@ -24,7 +24,7 @@ test('Q opens the settings menu over the card and closes it, and focus comes bac
   await expect(page.locator('#menu-close')).toBeFocused();
   await expect(page.locator('#btn-menu')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#menu-h')).toHaveText('Settings');
-  await expect(page.locator('#new-game')).toHaveText(/^Play this seed/);
+  await expect(page.locator('#new-game')).toHaveText(/^Play This Seed/);
   await expect(page.locator('#scores-open')).toBeVisible();
   await expect(page.locator('#difficulty-picker')).toBeVisible();
   for (const gone of ['#random-run', '#menu-overlay #rooms-open', '#menu-overlay #tutorial-open']) {

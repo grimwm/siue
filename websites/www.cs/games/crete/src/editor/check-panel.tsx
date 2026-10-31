@@ -43,7 +43,7 @@ export function CheckStrip(p: CheckPanelProps) {
           <div class="check-bar" role="progressbar" aria-label="Searching" />
           <span id="check-strip-text" class="check-strip-text">{progressText(s)}</span>
           <Button id="check-strip-stop" disabled={s.stopped} onClick={p.onStop}>Stop</Button>
-          <Button id="check-strip-keep" disabled={!s.stopped} onClick={p.onKeep}>Keep searching</Button>
+          <Button id="check-strip-keep" disabled={!s.stopped} onClick={p.onKeep}>Keep Searching</Button>
         </>
       )}
       {summary !== '' && <span id="check-strip-text" class="check-strip-text" role="status">{summary}</span>}
@@ -68,7 +68,7 @@ export function CheckPanel(p: CheckPanelProps) {
           </p>
           <div class="check-actions">
             <Button id="check-stop" disabled={s.stopped} onClick={p.onStop}>Stop</Button>
-            <Button id="check-keep" disabled={!s.stopped} onClick={p.onKeep}>Keep searching</Button>
+            <Button id="check-keep" disabled={!s.stopped} onClick={p.onKeep}>Keep Searching</Button>
           </div>
         </div>
       )}

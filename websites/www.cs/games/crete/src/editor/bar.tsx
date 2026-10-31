@@ -63,7 +63,7 @@ export function EditorPanel(p: EditorPanelProps) {
         <div class="editor-actions">
           <Button id="editor-undo" disabled={!p.canUndo} keyLabel={EDITOR_KEYS.undo.label} onClick={p.onUndo}>Undo</Button>
           <Button id="editor-redo" disabled={!p.canRedo} keyLabel={EDITOR_KEYS.redo.label} onClick={p.onRedo}>Redo</Button>
-          <Button id="editor-try" keyLabel={EDITOR_KEYS.try.label} onClick={p.onTry}>▶ Try it</Button>
+          <Button id="editor-try" keyLabel={EDITOR_KEYS.try.label} onClick={p.onTry}>▶ Try It</Button>
           <button type="button" id="editor-pieces" class="editor-pieces" aria-expanded={p.drawer} aria-controls="editor-side"
             onClick={() => p.onDrawer(!p.drawer)}>Pieces</button>
           {p.onLeave && <Button id="editor-leave" keyLabel={BACK_KEY} onClick={p.onLeave}>Leave</Button>}
@@ -89,7 +89,7 @@ export function EditorPanel(p: EditorPanelProps) {
               ev.currentTarget.value = String(hearts);
               if (hearts !== d.hearts) p.onHearts(hearts);
             }} /></label>
-          <label>Relics needed <select id="editor-relics" value={relics}
+          <label>Relics Needed <select id="editor-relics" value={relics}
             onChange={ev => { const v = ev.currentTarget.value; p.onRelics(v === 'all' ? null : Number(v)); }}>
             <option value="all">all</option>
             {Array.from({ length: relicsOnBoard + 1 }, (_, n) => <option key={n} value={String(n)}>{n}</option>)}

@@ -19,7 +19,7 @@ export interface HelpProps {
  *  Two keys in one row read as a range ("1–9"). */
 // A row's keys are a range (1–9) unless the row says they are alternatives (Space or Ctrl).
 export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly string[], string, 'or'?])[]])[] = [
-  ['Aiming and firing', [
+  ['Aiming and Firing', [
     [['aim:barrelLeft'], 'swing the barrel left'],
     [['aim:barrelRight'], 'swing the barrel right'],
     [['aim:powerUp'], 'more power'],
@@ -30,7 +30,7 @@ export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly
     [['global:guns'], 'pick a weapon (a digit, or the arrows and Enter, loads one)'],
     [['global:gunStock'], 'in the weapon picker: show every gun, or only those in stock'],
   ]],
-  ['Panels and settings', [
+  ['Panels and Settings', [
     [['global:back'], 'open the menu, or close whatever is open'],
     [['global:log'], 'the radio log'],
     [['global:help'], 'this help'],
@@ -48,7 +48,7 @@ export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly
     [['global:tutorial'], 'the tutorial'],
     [['global:battlePreview'], 'the firing range'],
   ]],
-  ['In the shop', [
+  ['In the Shop', [
     [['shop:selUp'], 'the row above'],
     [['shop:selDown'], 'the row below'],
     [['shop:qtyDown'], 'fewer packs'],
@@ -59,7 +59,7 @@ export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly
     [['shop:next'], 'start the round (Ready, in a room)'],
     [['shop:close'], 'close the firing range or a panel, else open the menu'],
   ]],
-  ['Scrolling a panel', [
+  ['Scrolling a Panel', [
     [['scroll:lineDown'], 'a line down'],
     [['scroll:lineUp'], 'a line up'],
     [['scroll:pageDown'], 'a page down'],
@@ -72,7 +72,7 @@ export const HELP_KEYS: readonly (readonly [string, readonly (readonly [readonly
 export function Help({ keyHint, onClose }: HelpProps) {
   return (
     <KeyHints.Provider value={keyHint}>
-      <OverlayHead titleId="help-h" title="How to play" closeId="help-close" onClose={onClose}
+      <OverlayHead titleId="help-h" title="How to Play" closeId="help-close" onClose={onClose}
         navId="nav-help" scrollOnly nav={<ScrollKeys line />} />
       <ul class="help">
         <li>
@@ -108,13 +108,13 @@ export function Help({ keyHint, onClose }: HelpProps) {
         <li>
           <strong>Rooms</strong> lets friends share a hillside: host a room, read out the code, and take
           turns with the battery filling empty seats. Initials only, no chat, and the server settles every
-          shot so nobody can fudge a hit. The host can pick named hills, and Play again keeps them for the
+          shot so nobody can fudge a hit. The host can pick named hills, and Play Again keeps them for the
           next match without ever revealing the seed.
         </li>
         <li>
           A room with two or more people ends when only one has lives left: that player wins a bonus of
           twice the round bonus, and everyone sees the standings. Leaving counts as giving up, so the one
-          who stays wins. <strong>Play again (same room)</strong> brings everyone back to the lobby with
+          who stays wins. <strong>Play Again (Same Room)</strong> brings everyone back to the lobby with
           fresh lives; lose your last life and you watch the finish. Every score files itself on the
           all-time board for the room's Difficulty, except the scores of players who left early.
         </li>

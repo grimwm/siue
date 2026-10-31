@@ -474,7 +474,7 @@ test('the width holds through a resize and the next match takes the new one', as
   expect(Number(await page.locator('#stage').getAttribute('data-w')), 'mid-match: rescaled, not re-dealt').toBe(1200);
   expect((await page.evaluate(battlefield)).probs).toEqual([]);
   await page.keyboard.press('q');
-  await page.getByRole('button', { name: /Play this seed/ }).click(); // a new deal (Menu, Task 14)
+  await page.getByRole('button', { name: /Play This Seed/ }).click(); // a new deal (Menu, Task 14)
   await page.clock.runFor(200);
   expect(Number(await page.locator('#stage').getAttribute('data-w'))).toBe(1344);
   await ctx.close();

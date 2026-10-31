@@ -88,7 +88,7 @@ test('the slider: seven stops, its label in an output and for readers, input rep
   assert.equal(range.getAttribute('aria-valuetext'), '10 min');
   const label = nth(byTag(box, 'label'), 0);
   assert.equal(label.getAttribute('for'), 'lobby-turn');
-  assert.equal(label.textContent, 'Turn time');
+  assert.equal(label.textContent, 'Turn Time');
   const out = nth(byTag(box, 'output'), 0);
   assert.equal(out.textContent, '10 min');
   range.value = '4';
@@ -100,7 +100,7 @@ test('without the say, the slider is only its label', () => {
   const box = makeEl('box');
   tt.renderTurnTime(asElement(box), { id: 'room-turn', secs: 600, disabled: true, onChange: () => {} });
   assert.equal(maybeById(box, 'room-turn'), undefined);
-  assert.equal(byId(box, 'room-turn-label').textContent, 'Turn time: 10 min');
+  assert.equal(byId(box, 'room-turn-label').textContent, 'Turn Time: 10 min');
 });
 
 test('a dragged slider sends only the value it settles on', () => {

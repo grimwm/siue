@@ -29,7 +29,7 @@ test('when one of the last two humans leaves, the other wins the match; a solo m
   });
   const veil = guest.page.locator('#end-veil');
   await expect(veil.locator('#end-title')).toContainText('♛ ZED wins');
-  await expect(veil.locator('#again')).toHaveText('Play again (same room)');
+  await expect(veil.locator('#again')).toHaveText('Play Again (Same Room)');
   const room = roomView(roomState.guest);
   expect(room.phase).toBe('over');
   expect(room.winner).toBe(1);

@@ -69,7 +69,7 @@ test('the lobby offers Random plus every server map as a silhouette tile, and pi
   const tiles = page.locator('#lobby-map-picker button');
   await expect(tiles).toHaveCount(maps.maps.length + 1);
   const names = await tiles.evaluateAll(els => els.map(e => e.textContent!.trim()));
-  expect(names).toEqual(['Random hills', ...maps.maps.map((m: { name: string }) => m.name)]);
+  expect(names).toEqual(['Random Hills', ...maps.maps.map((m: { name: string }) => m.name)]);
   const pics = await page.locator('#lobby-map-picker canvas').evaluateAll(els => (els as HTMLCanvasElement[]).map(el => {
     const d = el.getContext('2d')!.getImageData(0, 0, el.width, el.height).data;
     let green = 0, brown = 0;

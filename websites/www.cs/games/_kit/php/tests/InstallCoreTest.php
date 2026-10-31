@@ -164,6 +164,15 @@ final class InstallCoreTest extends TestCase
             'icon-maskable-192.png', 'icon-maskable-512.png', 'icon-monochrome-512.png', 'index.html'], $names);
     }
 
+    public function testPrecacheTakesAWebpInAPrecachedFolderButNotAPreviewAtTheTop(): void
+    {
+        file_put_contents("$this->dir/dist/icons.webp", 'x');
+        file_put_contents("$this->dir/preview.webp", 'x');
+        [$names] = install_precache($this->dir, [], 'og.png', ['dist'], []);
+        $this->assertContains('dist/icons.webp', $names);
+        $this->assertNotContains('preview.webp', $names);
+    }
+
     public function testPrecacheListsOnlyExistingFiles(): void
     {
         [$names] = install_precache($this->dir, ['manifest.webmanifest' => '{}'], 'og.png', ['dist', 'missing-dir'], []);

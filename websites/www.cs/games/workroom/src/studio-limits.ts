@@ -1,5 +1,5 @@
 // What this studio may hold, as the page shell states it on <body>
-// (data-note-max, data-room, data-owner, data-score-only), and byte sizes said the way the
+// (data-note-max, data-room, data-score-only), and byte sizes said the way the
 // server says them (music/lib/Usage.php human()).
 import { MAX_NOTE_BYTES } from './note.ts';
 
@@ -8,8 +8,6 @@ export interface Limits {
   noteMax: number;
   /** Bytes the studio may still store when the page was drawn; Infinity when the page does not say. */
   room: number;
-  /** The studio is the owner's, whose computer has the repository and the key tool (make music-setup); everyone else is told only what the page offers. */
-  owner: boolean;
   /** The studio stores scores only, so its drafts have no MusicXML (no sheet music to show or download). */
   scoreOnly: boolean;
 }
@@ -18,13 +16,13 @@ const whole = (text: string | undefined): number | null => (text !== undefined &
 
 export function readLimits(body: HTMLElement): Limits {
   const d = body.dataset;
-  return { noteMax: whole(d['noteMax']) ?? MAX_NOTE_BYTES, room: whole(d['room']) ?? Infinity, owner: d['owner'] === '1', scoreOnly: d['scoreOnly'] === '1' };
+  return { noteMax: whole(d['noteMax']) ?? MAX_NOTE_BYTES, room: whole(d['room']) ?? Infinity, scoreOnly: d['scoreOnly'] === '1' };
 }
 
 /** The limits of the page being shown; a document without them (a test, a bare page) has the defaults. */
 export function pageLimits(): Limits {
   const body = typeof document === 'undefined' ? null : document.body;
-  return body?.dataset ? readLimits(body) : { noteMax: MAX_NOTE_BYTES, room: Infinity, owner: false, scoreOnly: false };
+  return body?.dataset ? readLimits(body) : { noteMax: MAX_NOTE_BYTES, room: Infinity, scoreOnly: false };
 }
 
 const MB = 1_048_576;

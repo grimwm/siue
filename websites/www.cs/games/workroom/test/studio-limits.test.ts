@@ -8,14 +8,14 @@ import { humanBytes, readLimits } from '../src/studio-limits.ts';
 const body = (dataset: Record<string, string>): HTMLElement => ({ dataset }) as unknown as HTMLElement;
 
 test('limits come from the body', () => {
-  assert.deepEqual(readLimits(body({ noteMax: '1048576', room: '123456', owner: '1' })), { noteMax: 1_048_576, room: 123_456, owner: true, scoreOnly: false });
+  assert.deepEqual(readLimits(body({ noteMax: '1048576', room: '123456' })), { noteMax: 1_048_576, room: 123_456, scoreOnly: false });
   assert.equal(readLimits(body({ scoreOnly: '1' })).scoreOnly, true);
-  assert.deepEqual(readLimits(body({ noteMax: '2097152', room: '0', owner: '0' })), { noteMax: 2_097_152, room: 0, owner: false, scoreOnly: false });
+  assert.deepEqual(readLimits(body({ noteMax: '2097152', room: '0' })), { noteMax: 2_097_152, room: 0, scoreOnly: false });
 });
 
 test('without the attributes the note max is the constant and the room is unlimited', () => {
-  assert.deepEqual(readLimits(body({})), { noteMax: MAX_NOTE_BYTES, room: Infinity, owner: false, scoreOnly: false });
-  assert.deepEqual(readLimits(body({ noteMax: 'x', room: '-3' })), { noteMax: MAX_NOTE_BYTES, room: Infinity, owner: false, scoreOnly: false });
+  assert.deepEqual(readLimits(body({})), { noteMax: MAX_NOTE_BYTES, room: Infinity, scoreOnly: false });
+  assert.deepEqual(readLimits(body({ noteMax: 'x', room: '-3' })), { noteMax: MAX_NOTE_BYTES, room: Infinity, scoreOnly: false });
 });
 
 test('humanBytes matches the server', () => {

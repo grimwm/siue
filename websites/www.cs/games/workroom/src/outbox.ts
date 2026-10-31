@@ -41,9 +41,6 @@ export const SEND_MESSAGES = {
 /** Added to a kept note's message when the browser would not store it on this device. */
 export const MEMORY_NOTICE = 'This browser would not save it on this device, so it is kept only until this page is closed or reloaded.';
 
-/** The owner's words for a note the server cannot take: the owner's computer has the key tool, which compares the notes keys. */
-export const OWNER_UNKNOWN_KEY = 'The server does not take notes sealed to this key, so this note stays on this device. Run make music-status to compare the notes keys.';
-
 /** Per reason; the two that depend on the studio take its room left (over_quota) or its note max (too_large). */
 export const KEPT_MESSAGES: Readonly<Record<Exclude<KeptReason, 'over_quota' | 'too_large'>, string>> & { over_quota(room: number): string; too_large(noteMax: number): string } = {
   over_quota: room => `There is no room for this note: ${humanBytes(room)} left. Delete drafts or picked-up notes to make room; this note stays on this device until then.`,
@@ -57,10 +54,9 @@ export const KEPT_MESSAGES: Readonly<Record<Exclude<KeptReason, 'over_quota' | '
   unknown_key: 'The server does not take notes sealed to this key, so this note cannot be sent; it stays on this device until you discard it. Reload the page and unlock again so new notes are sealed to the server’s key. If this comes back, Forgot your passphrase? on Your studio deletes all your notes and your notes key so you can make a new one.',
 };
 
-/** The words for a kept note: `room` is the Pending's, `owner` defaults to this page's, and too_large names this page's note max. */
-export function keptMessage(reason: KeptReason, room?: number, owner: boolean = pageLimits().owner): string {
+/** The words for a kept note: `room` is the Pending's, and too_large names this page's note max. */
+export function keptMessage(reason: KeptReason, room?: number): string {
   if (reason === 'over_quota') return KEPT_MESSAGES.over_quota(room ?? 0);
-  if (reason === 'unknown_key' && owner) return OWNER_UNKNOWN_KEY;
   if (reason === 'too_large') return KEPT_MESSAGES.too_large(pageLimits().noteMax);
   return KEPT_MESSAGES[reason];
 }

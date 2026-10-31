@@ -143,7 +143,7 @@ went), `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data). Signed out, a pa
 `login.php?next=` (the page, when sign-in may return to it) and a data route answers 401
 `{"error":"signed_out"}`. Each POST's answer carries the next CSRF token. The page shells'
 `<body>` carries `data-note-max` (the largest note), `data-room` (bytes the studio may still
-store), `data-owner` (`1` on the owner's studio, the only one shown the key tool's `make` steps), `data-score-only` (`1` when drafts hold a score and no MusicXML) and `data-account-has-key` (`1` once a keyring is stored).
+store), `data-score-only` (`1` when drafts hold a score and no MusicXML) and `data-account-has-key` (`1` once a keyring is stored).
 
 API routes (Bearer key, HTTPS; `lib/KeyGate.php`): an AI key (`lib/AiKeys.php`, the
 `studio_keys` table: per account, at most 10 active, 60 requests a minute, scopes
@@ -262,9 +262,10 @@ drafts, like an undo history: its oldest rolls off, and other pieces are never t
 ## The owner's key tool
 
 Every `make music-*` step in this README is owner-only: it needs this repository, the owner's
-1Password and the owner's API keys, which studio people do not have. The page shows a `make`
-command only on the owner's studio (`data-owner`); every other studio is pointed at what the page
-offers (Forgot your passphrase? and AI keys on Your studio, or a reload).
+1Password and the owner's API keys, which studio people do not have. These steps live only in
+this README, never on the page: every studio, the owner's included, sees the same Connect your AI
+panel and messages, which point at what the page offers (Forgot your passphrase? and AI keys on
+Your studio, or a reload).
 
 `music/tools/siue-music` keeps the notes keys in 1Password (vault `SIUE`, or
 `$OP_VAULT`; the `op` CLI must be 2.25 or newer) and a working copy in
@@ -299,9 +300,9 @@ Python SDK (`mcp`, pinned in `tools/requirements-mcp.in`), installed into
   `SIUE_OP` (op's full path, since an app started from the dock has no shell PATH).
   It talks to neither the server nor 1Password. Before it, run `make music-setup` once.
 - `make music-mcp` runs the server by hand (it waits for JSON-RPC on standard input).
-- The workroom's front page has a "Connect your AI" panel with the same steps on the owner's
-  studio. Every other studio's panel says connecting your own AI app is coming and that AI keys
-  are made on Your studio, with no commands.
+- These steps live only in this README. The workroom's front page has a "Connect your AI" panel
+  that is the same on every studio, the owner's included: it says connecting your own AI app is
+  coming and that AI keys are made on Your studio, with no commands.
 
 Tools:
 

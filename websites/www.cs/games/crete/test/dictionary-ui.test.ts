@@ -58,6 +58,7 @@ const right = () => game.press({ kind: 'move', dir: 'right' });
 /** Opens `rows` as level 1 with nothing met, closing its start card. */
 function open(rows: string[], opts: { animated?: boolean; outside?: OutsideLevel; head?: string } = {}): void {
   flow.closeLayers();
+  m.advance(BANNER_MS); // a banner left by the last test goes
   for (const k of Object.keys(data)) delete data[k];
   reduced = !opts.animated;
   outside = opts.outside ?? null;

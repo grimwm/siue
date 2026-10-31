@@ -41,7 +41,7 @@ import { exitApp, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
 import { typesText } from '../../_kit/keys.ts';
 import { mountInstallBar } from '../../_kit/ui/install-bar.tsx';
-import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS } from '../../_kit/install.ts';
+import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS, versionedShareUrl, versionOf } from '../../_kit/install.ts';
 import type { Timer } from './types.ts';
 import type { EndReason } from './state.ts';
 
@@ -76,7 +76,7 @@ function mountInstall(): void {
     const inScope = location.pathname.endsWith('/index.html');
     mountInstallBar(root, {
         title: 'The CIC',
-        shareUrl: new URL('play/cylon/', location.href).href,
+        shareUrl: versionedShareUrl(new URL('play/cylon/', location.href).href, versionOf(import.meta.url)),
         installPage: inScope || !PROMPTS_IN_SCOPE ? null : new URL('index.html?game=cylon', location.href).href,
         promptsHere: PROMPTS_IN_SCOPE && (inScope || OUT_OF_SCOPE_PROMPTS),
         asked: asksInstall(location.search),

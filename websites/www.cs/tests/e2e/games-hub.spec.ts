@@ -85,7 +85,9 @@ for (const id of GAMES) {
     const og = (name: string) => (html.match(new RegExp(`<meta property="og:${name}" content="([^"]*)"`)) || [])[1];
     expect(og('title')).toBeTruthy();
     expect(og('title')).not.toMatch(/William Grim/);
-    expect(og('url')).toMatch(new RegExp(`/play/${id}/$`));
+    // og:url carries the game's version, so each release is a fresh Facebook preview; canonical stays bare.
+    expect(og('url')).toMatch(new RegExp(`/play/${id}/\\?v=[0-9a-f]{10}$`));
+    expect(html).toMatch(new RegExp(`<link rel="canonical" href="[^"]*/play/${id}/">`));
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
     expect(html).toMatch(/<meta name="description" content="[^"]{20,160}">/);
     const img = og('image');

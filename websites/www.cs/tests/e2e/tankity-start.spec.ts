@@ -205,7 +205,7 @@ test('without Web Share, Share copies the address and says "Link copied"', async
   await page.goto('games/tankity/');
   await page.locator('#title-share').click();
   await expect(page.locator('#title-share-status')).toHaveText('Link copied');
-  expect((await page.evaluate(() => window.__linksCopied))[0]).toMatch(/\/play\/tankity\/$/);
+  expect((await page.evaluate(() => window.__linksCopied))[0]).toMatch(/\/play\/tankity\/\?v=[0-9a-f]{10}$/);
   await ctx.close();
 });
 

@@ -58,11 +58,64 @@ for (const id of PAGE_GAMES) {
     await expect(bar.locator('#install-btn')).toBeVisible();
     await bar.locator('#share-btn').click();
     await expect(bar.locator('#share-status')).toHaveText('Link copied');
-    expect(await page.evaluate(() => window.__copied)).toBe(new URL(`play/${id}/`, baseURL).href);
+    // The page with the game's version: the same ?v= as og:url, so Facebook shows this release's preview.
+    const v = new URL((await page.locator('meta[property="og:url"]').getAttribute('content'))!).searchParams.get('v');
+    expect(v).toMatch(/^[0-9a-f]{10}$/);
+    expect(await page.evaluate(() => window.__copied)).toBe(new URL(`play/${id}/?v=${v}`, baseURL).href);
     expect(errors).toEqual([]);
     await context.close();
   });
 }
+
+/** The version a game's site page shares (its og:url's ?v=), read from the served page. */
+async function sharedVersion(request: import('@playwright/test').APIRequestContext, id: string): Promise<string> {
+  const html = await (await request.get(`play/${id}/`, { maxRedirects: 0 })).text();
+  const url = (html.match(/<meta property="og:url" content="([^"]*)"/) || [])[1]!;
+  return new URL(url).searchParams.get('v')!;
+}
+
+test('every Share button hands out the game page with its version', async ({ browser, baseURL, request }) => {
+  const context = await browser.newContext();
+  await noShareSheet(context);
+  const page = await context.newPage();
+  const errors = watchErrors(page);
+  // Crete's title card, on the game's own page.
+  await page.goto('games/crete/');
+  await page.locator('#title-install #share-btn').click();
+  await expect.poll(() => page.evaluate(() => window.__copied)).toBe(new URL(`play/crete/?v=${await sharedVersion(request, 'crete')}`, baseURL).href);
+  // The game page's corner bar (?install).
+  await page.evaluate(() => { window.__copied = undefined; });
+  await page.goto('games/tankity/?install');
+  await page.locator('.kit-install-corner #share-btn').click();
+  await expect.poll(() => page.evaluate(() => window.__copied)).toBe(new URL(`play/tankity/?v=${await sharedVersion(request, 'tankity')}`, baseURL).href);
+  // The CIC, mounted in the home page.
+  await page.goto('./?game=cylon');
+  await page.locator('#cylon-install-root #share-btn').click({ timeout: 10_000 });
+  await expect.poll(() => page.evaluate(() => window.__copied)).toBe(new URL(`play/cylon/?v=${await sharedVersion(request, 'cylon')}`, baseURL).href);
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test('a link shared with an old or unknown ?v= still plays', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('play/crete/?v=0ld');
+  const crete = page.frameLocator('#play-frame');
+  await expect(crete.locator('#title-veil')).toBeVisible();
+  // v is no level seed: the title card opens, not Chapter 1's card, and Play starts a run.
+  expect(await page.locator('#play-frame').getAttribute('src')).toMatch(/\?v=0ld$/);
+  await expect(crete.locator('#chapter-veil')).toBeHidden();
+  await crete.locator('#title-play').click();
+  await crete.locator('#pick-enter').click();
+  await expect(crete.locator('#chapter-veil')).toBeVisible();
+  await crete.locator('#chapter-enter').click();
+  await expect(crete.locator('#start-veil .kicker')).toHaveText('Chapter 1 · Level 1');
+  await page.goto('play/tankity/?v=0ld');
+  await expect(page.frameLocator('#play-frame').locator('#stage')).toBeVisible();
+  await page.goto('play/cylon/?v=0ld');
+  await expect(page).toHaveURL(/\?game=cylon&v=0ld$/);
+  await expect.poll(() => page.evaluate(() => document.body.classList.contains('cylon-game-live'))).toBe(true);
+  expect(errors).toEqual([]);
+});
 
 test('the game page asked to install (?install) highlights Install, and a click prompts', async ({ page }) => {
   await onlyTestOffers(page);

@@ -90,7 +90,7 @@ import { createTrackToast, trackToastText } from './track-toast.ts';
 import { fullscreenForPlay } from './play-fullscreen.ts';
 import { exitApp, toggleFullscreen as toggleKitFullscreen, browserAppEnv, EXIT_HINT, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { pref, text } from '../../_kit/prefs.ts';
-import { browserShareEnv } from '../../_kit/install.ts';
+import { browserShareEnv, versionedShareUrl, versionOf } from '../../_kit/install.ts';
 import { ROTATE_HINT_KEY, rotateHintShows } from './rotate-hint.ts';
 import { renderRotateHint } from './ui/rotate-hint.tsx';
 import type { Arsenal, Difficulty, Weapon, Gear, Personality } from './sim.ts';
@@ -643,7 +643,7 @@ const { titleOpen, openTitle, closeTitle, showHint: showTitleHint, renderTitle }
   settings: () => { const mv = $('menu-overlay'); if (mv && mv.hidden) toggleOverlay('menu-overlay', 'btn-menu'); },
   settingsOpen: () => { const mv = $('menu-overlay'); return !!mv && !mv.hidden; },
   games: () => gamesView(),
-  shareEnv: browserShareEnv(), shareUrl: new URL('../../play/tankity/', location.origin + location.pathname).href,
+  shareEnv: browserShareEnv(), shareUrl: versionedShareUrl(new URL('../../play/tankity/', location.origin + location.pathname).href, versionOf(import.meta.url)),
 });
 /* After a match or a room: the demo again, under the card, and Your games
    asked at once (a room just stepped out of joins the list). */

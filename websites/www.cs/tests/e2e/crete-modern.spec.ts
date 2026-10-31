@@ -1,6 +1,6 @@
 // The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns under a drag, zooms
 // under the wheel and its buttons, moves Theseus the way the screen shows, ignores the camera while a card is up,
-// keeps the Walls choice, opens on the whole level, follows the mini map once zoomed, floats a marker over each
+// keeps the Walls choice, opens on the whole level, follows the mini map (a setting, off by default) once zoomed, floats a marker over each
 // figure and item, and hands the board back to the classic look and takes it again,
 // from the menu or the strip's look button and its B key.
 // A block pushed into water floats there, and undo takes it out. Without WebGL the classic board shows.
@@ -295,7 +295,31 @@ test('Walls: Ghosted is kept through a reload', async ({ page }) => {
   await expect(page.locator('#walls-solid')).toHaveAttribute('aria-pressed', 'false');
 });
 
+test('the mini map is off by default; the menu\'s Mini map switch (Modern only) shows it, and Classic never does', async ({ page }) => {
+  const errors = await openHall(page);
+  await expect(page.locator('#minimap-view'), 'off by default').toBeHidden();
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-veil')).toBeVisible();
+  const sw = page.locator('#minimap-switch');
+  await expect(sw).toHaveAttribute('aria-checked', 'false');
+  await sw.click();
+  await expect(sw).toHaveAttribute('aria-checked', 'true');
+  expect(await page.evaluate(() => localStorage.getItem('crete-minimap'))).toBe('on');
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-veil')).toBeHidden();
+  await expect(page.locator('#minimap-view'), 'shown once switched on').toBeVisible();
+  // Classic hides the modern board, the mini map with it, and its menu has no switch.
+  await page.keyboard.press('b');
+  await expect(page.locator('#stage')).toBeVisible();
+  await expect(page.locator('#minimap-view')).toBeHidden();
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-veil')).toBeVisible();
+  await expect(page.locator('#minimap-switch')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('a tap on the mini map moves the camera there', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('crete-minimap', 'on'));
   const errors = await openHall(page);
   await zoomIn(page);
   const view = page.locator('#minimap-view');
@@ -311,6 +335,7 @@ test('a tap on the mini map moves the camera there', async ({ page }) => {
 });
 
 test('after a look elsewhere on the mini map, Theseus\'s next step brings the camera back to him', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('crete-minimap', 'on'));
   const errors = await openHall(page);
   const following = () => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.following());
   await zoomIn(page);

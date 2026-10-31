@@ -36,8 +36,8 @@ if (switchHost) render(h(ThemeSwitch, { handle: theme }), switchHost);
 const root = document.getElementById('workroom');
 const playDemo = demoPlayer(createAudioCore());
 const { view, piece, version } = document.body.dataset;
-/** What this studio may hold (the body's data-note-max, data-room); `owner`: the owner's studio, the only one shown the key tool's make steps. */
-const { noteMax, owner } = readLimits(document.body);
+/** What this studio may hold (the body's data-note-max, data-room). */
+const { noteMax } = readLimits(document.body);
 const fetcher = window.fetch.bind(window);
 const api: PageApi = createApi(fetcher, document.querySelector('meta[name="csrf"]')?.getAttribute('content') ?? '');
 
@@ -96,7 +96,7 @@ if (view === 'studio') {
 } else if (view === 'index') {
   root.textContent = '';
   const list = document.querySelector('.index-body');
-  if (list) render(h(ThemeRoot, { handle: theme }, h(PiecesIndex, { notes, list, owner })), root);
+  if (list) render(h(ThemeRoot, { handle: theme }, h(PiecesIndex, { notes, list })), root);
 } else {
   root.textContent = '';
 }

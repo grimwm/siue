@@ -1,11 +1,8 @@
-// The front page's Connect your AI help. For the owner: what the MCP server is,
-// what it needs, the one command that prints the connect commands, things to ask,
-// and that the AI may delete a published draft with the publish key's delete
-// permission but not notes; numbered steps, no secret. For everyone else: no
-// make, terminal, repository or 1Password, only that connecting is coming and that
-// AI keys are made on Your studio. The pieces list shows the panel to every studio
-// whether or not a keyring is uploaded. With no keyring the pieces list makes the
-// notes key.
+// The front page's Connect your AI help, the same for every studio, the owner's
+// included: no make, terminal, checkout, repository or 1Password, only that
+// connecting is coming and that AI keys are made on Your studio. The pieces list
+// shows the panel to every studio whether or not a keyring is uploaded. With no
+// keyring the pieces list makes the notes key.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { h, render } from 'preact';
@@ -24,53 +21,6 @@ const ui = await importTsx<{ connect: typeof import('../src/ui/ConnectAi.tsx'); 
 const mount = async (vnode: ComponentChild): Promise<StubElement> => { const root = makeEl('root'); await act(() => { render(vnode, renderTarget(root)); }); return root; };
 const settle = async (): Promise<void> => { for (let i = 0; i < 10; i++) await act(async () => { await new Promise(r => setImmediate(r)); }); };
 const panel = (root: StubElement) => walk(root).find(e => e._attrs['data-connect-ai'] !== undefined);
-
-test('the owner\'s panel is titled and says what the MCP server is and which apps can use it', async () => {
-  const root = await mount(h(ui.connect.ConnectAi, { owner: true }));
-  const p = panel(root)!;
-  assert.ok(p, 'the panel is there');
-  assert.equal(p._attrs['aria-label'], 'Connect your AI');
-  assert.match(p.textContent, /MCP/);
-  assert.match(p.textContent, /Claude Code/);
-  assert.match(p.textContent, /Claude Desktop/);
-});
-
-test('it lists what is needed: the repository, Python 3, the signed-in 1Password CLI, and make music-setup once', async () => {
-  const text = panel(await mount(h(ui.connect.ConnectAi, { owner: true })))!.textContent;
-  assert.match(text, /repository/);
-  assert.match(text, /Python 3/);
-  assert.match(text, /1Password CLI/);
-  assert.match(text, /signed in/);
-  assert.match(text, /make music-setup/);
-});
-
-test('the steps are numbered and the one command that prints the connect commands is code', async () => {
-  const root = await mount(h(ui.connect.ConnectAi, { owner: true }));
-  const steps = walk(root).find(e => e.localName === 'ol')!;
-  assert.ok(steps, 'a numbered list');
-  assert.ok(walk(steps).filter(e => e.localName === 'li').length >= 4, 'four steps or more');
-  const code = walk(root).filter(e => e.localName === 'code').map(e => e.textContent);
-  assert.ok(code.includes('make music-mcp-setup'));
-  assert.ok(code.includes('make music-setup'));
-  assert.match(steps.textContent, /claude mcp add/);
-});
-
-test('it gives things to ask, says deleting a draft needs the publish key\'s delete permission, and that notes cannot be deleted', async () => {
-  const text = panel(await mount(h(ui.connect.ConnectAi, { owner: true })))!.textContent;
-  assert.match(text, /wait for my notes and make the next draft/);
-  assert.match(text, /publish draft 4 of crete-title/);
-  assert.match(text, /delete draft 2 of crete-title/);
-  assert.match(text, /delete permission/);
-  assert.match(text, /publish keys have/);
-  assert.match(text, /cannot delete notes/);
-  assert.doesNotMatch(text, /cannot delete drafts/);
-});
-
-test('it shows no secret: no key, passphrase or address with one in it', async () => {
-  const text = panel(await mount(h(ui.connect.ConnectAi, { owner: true })))!.textContent;
-  assert.doesNotMatch(text, /[0-9a-f]{32}/i);
-  assert.doesNotMatch(text, /Bearer|PRIVATE KEY|passphrase:|key=/i);
-});
 
 /** A locked notes session with nothing in it; hasKeyring says whether a keyring is uploaded. */
 const session = (hasKeyring: boolean, made: string[] = [], stored = false): NotesSession => ({
@@ -92,8 +42,8 @@ const session = (hasKeyring: boolean, made: string[] = [], stored = false): Note
   unreadable: () => 0,
 });
 
-test('everyone but the owner is told only what the page offers: no make, terminal, repository, GitHub or 1Password', async () => {
-  const root = await mount(h(ui.connect.ConnectAi, { owner: false }));
+test('every studio, the owner\'s included, is told only what the page offers: no make, terminal, checkout, repository, GitHub or 1Password', async () => {
+  const root = await mount(h(ui.connect.ConnectAi, {}));
   const p = panel(root)!;
   assert.ok(p, 'the panel is there');
   assert.equal(p._attrs['aria-label'], 'Connect your AI');
@@ -104,23 +54,20 @@ test('everyone but the owner is told only what the page offers: no make, termina
   assert.equal(walk(p).filter(e => e.localName === 'code' || e.localName === 'ol').length, 0, 'no commands, no steps');
 });
 
-test('the pieces list shows the panel to every studio, with or without an uploaded keyring, and the steps only to the owner', async () => {
-  for (const owner of [true, false]) {
-    for (const hasKeyring of [false, true]) {
-      const root = await mount(h(ui.index.PiecesIndex, { notes: session(hasKeyring), list: makeEl('ol') as unknown as ParentNode, owner }));
-      await settle();
-      const where = `keyring ${hasKeyring ? 'uploaded' : 'missing'}, ${owner ? 'owner' : 'studio'}`;
-      assert.ok(panel(root), where);
-      if (owner) assert.match(panel(root)!.textContent, /make music-mcp-setup/, where);
-      else assert.doesNotMatch(root.textContent, /make music|1Password|checkout/, where);
-      await act(() => { render(null, renderTarget(root)); });
-    }
+test('the pieces list shows the same panel to every studio, with or without an uploaded keyring, and no command-line step', async () => {
+  for (const hasKeyring of [false, true]) {
+    const root = await mount(h(ui.index.PiecesIndex, { notes: session(hasKeyring), list: makeEl('ol') as unknown as ParentNode }));
+    await settle();
+    const where = `keyring ${hasKeyring ? 'uploaded' : 'missing'}`;
+    assert.match(panel(root)?.textContent ?? '', /Connecting your own AI app to your studio is coming\./, where);
+    assert.doesNotMatch(root.textContent, /make music|terminal|checkout|1Password|claude mcp add/i, where);
+    await act(() => { render(null, renderTarget(root)); });
   }
 });
 
 test('with no keyring the pieces list makes the notes key: two passphrases, checked, then made and unlocked', async () => {
   const made: string[] = [];
-  const root = await mount(h(ui.index.PiecesIndex, { notes: session(false, made), list: makeEl('ol') as unknown as ParentNode, owner: false }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes: session(false, made), list: makeEl('ol') as unknown as ParentNode }));
   await settle();
   const form = () => walk(root).find(e => e._attrs['data-make-key'] !== undefined)!;
   assert.equal(walk(form()).find(e => e.localName === 'p')!.textContent,
@@ -154,7 +101,7 @@ test('a key that was stored but did not unlock takes the panel to the unlock for
   const notes = session(false, made, true);
   notes.makeKey = async p => { made.push(p); return 'Could not reach the server. Check the connection and try again.'; };
   notes.unlocked = () => false;
-  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, owner: false }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
   await settle();
   const form = walk(root).find(e => e._attrs['data-make-key'] !== undefined)!;
   const [first, again] = walk(form).filter(e => e._attrs['autocomplete'] === 'new-password');
@@ -172,7 +119,7 @@ test('a make that returns nothing and unlocks nothing says so instead of going s
   const notes = session(false, []);
   notes.makeKey = async () => null;
   notes.unlocked = () => false;
-  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode, owner: false }));
+  const root = await mount(h(ui.index.PiecesIndex, { notes, list: makeEl('ol') as unknown as ParentNode }));
   await settle();
   const form = walk(root).find(e => e._attrs['data-make-key'] !== undefined)!;
   const [first, again] = walk(form).filter(e => e._attrs['autocomplete'] === 'new-password');

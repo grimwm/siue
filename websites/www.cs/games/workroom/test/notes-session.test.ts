@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { KeyExists, NetworkError, NoKeyring, ServerError, SignedOut, UnreadableAnswer, type PageApi } from '../src/api.ts';
-import { DISCARD_FAILED, NO_CRYPTO, UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession, describeFailure, failureReason, OWNER_INVALID } from '../src/notes-session.ts';
+import { DISCARD_FAILED, NO_CRYPTO, UNLOCK_FIRST, UNLOCK_MESSAGES, createNotesSession, describeFailure, failureReason } from '../src/notes-session.ts';
 import { SEND_MESSAGES, createOutbox, memoryOutbox } from '../src/outbox.ts';
 import { PROBLEMS, downloadProblem } from '../src/history.ts';
 import { headerFingerprint, seal } from '../src/seal.ts';
@@ -290,9 +290,8 @@ test('a lock during makeKey leaves the key stored and says so, not silence', asy
   assert.equal(notes.keyStored(), true);
 });
 
-test('the damaged-key message sends studio people to a reload and Forgot your passphrase?, and only the owner to make music-setup', () => {
-  assert.match(OWNER_INVALID, /make music-setup/);
+test('the damaged-key message sends everyone, the owner included, to a reload and Forgot your passphrase?, with no command-line step', () => {
   assert.match(UNLOCK_MESSAGES.invalid, /Reload the page/);
   assert.match(UNLOCK_MESSAGES.invalid, /Forgot your passphrase\? on Your studio/);
-  for (const words of Object.values(UNLOCK_MESSAGES)) assert.doesNotMatch(words, /make music|terminal|1Password/, 'no owner step for studio people');
+  for (const words of Object.values(UNLOCK_MESSAGES)) assert.doesNotMatch(words, /make music|terminal|checkout|repositor|1Password|\bop\b/i, 'no command-line step on the page');
 });

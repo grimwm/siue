@@ -6,16 +6,17 @@
  * the tab is visible, the board is in view and motion is not reduced. The camera looks down through an orthographic
  * lens at the whole level, a cell's margin round it, and holds still while Theseus moves; once the player zooms, it
  * follows Theseus until a pan or the mini map sends it elsewhere. The controls
- * (controls.ts) turn, pan and zoom it, and the mini map (minimap.ts) shows what it sees. A wall that hides Theseus fades
+ * (controls.ts) turn, pan and zoom it, and the mini map (minimap.ts), when the Mini map setting is on, shows what it sees. A wall that hides Theseus fades
  * in every walls mode; in Ghosted, one that hides any figure or piece fades too. The floating markers are drawn
  * over the finished picture, slid inside the view when their piece shows but they would not. */
-import { Color, Group, OrthographicCamera, PCFSoftShadowMap, Scene, Vector3, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, Color, Group, NoToneMapping, OrthographicCamera, PCFSoftShadowMap, Scene, Vector3, WebGLRenderer } from 'three';
 import type { Object3D } from 'three';
 import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { DEFAULT_YAW, PITCHES, VIEW_YAW, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
+import { DEFAULT_YAW, PITCHES, VIEW_YAW, clampView, clampZoom, easeCam, footprint, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
+import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
 import { changedCells } from './diff.ts';
@@ -93,16 +94,25 @@ export interface ModernBoard {
    *  in CSS pixels, and a cell's width there. */
   markers(): { kind: MarkerKind; at: [number, number]; foot: [number, number]; cell: number }[];
   splashing(): number[];
+  /** The Mini map setting: shows or hides the mini map. */
+  minimap(on: boolean): void;
   dispose(): void;
 }
 
 const BACKGROUND = 0x060504;
+/** Angled's tilt when it is steep (variants.ts). */
+const STEEP_PITCH = 67;
+/** The overview and the peek look straight down. */
+const OVERHEAD_PITCH = 90;
 const RAD = Math.PI / 180;
 const LOOP_FPS = 12;
 /** A zoom about a point this near the view's centre (a share of its width or height) keeps following Theseus. */
 const ZOOM_CENTRE = 0.12;
 
 export function createModernBoard(host: ModernHost): ModernBoard {
+  let override: string | null = null;
+  try { override = localStorage.getItem(VARIANT_KEY); } catch { override = null; }
+  useOverrides(override);
   const renderer = new WebGLRenderer({ canvas: host.canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
@@ -132,6 +142,13 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   let quality = ladder.q;
   let width = 1, height = 1;
   let mode: WallMode = 'solid';
+  /** The Walls setting as chosen; `mode` is what the walls draw, ghosted in Angled when they cut away (variants.ts). */
+  let chosenMode: WallMode = 'solid';
+  const V = variant();
+  /** The whole level straight down: while Peek is held, or while Map is on (variants.ts). */
+  let overhead: 'off' | 'peek' | 'map' = 'off';
+  let savedYaw = 0;
+  const pitchOf = (v: View): number => (overhead !== 'off' ? OVERHEAD_PITCH : v === 'angled' && V.steep ? STEEP_PITCH : PITCHES[v]);
   let last: State | null = null;
   let lastPlayer: Pos | null = null;
   let models: TerrainModel[] = [];
@@ -217,8 +234,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   }
 
   function aimGoal(): void {
-    goal.pitch = PITCHES[viewing];
-    if (!zoomed) {
+    goal.pitch = pitchOf(viewing);
+    if (!zoomed || overhead !== 'off') {
       goal.tx = goal.tz = 0;
       goal.zoom = wholeZoom(aspect(), cols(), rows(), goal.pitch, goal.yaw);
     } else {
@@ -297,12 +314,13 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     }
     finish.render(scene, camera, quality >= 2);
     if (markers.group.children.length) {
-      markers.place(camera, cur.pitch, loopT, snap());
-      keepMarkers();
+      const grow = markers.place(camera, cur.pitch, loopT, snap(), height / cur.zoom);
+      keepMarkers(grow);
       renderer.autoClear = false;
       renderer.render(markers.scene, camera);
       renderer.autoClear = true;
     }
+    drawInset();
     const key = `${cur.yaw} ${cur.tx} ${cur.tz} ${cur.zoom} ${width} ${height}`;
     if (key !== viewKey) {
       viewKey = key;
@@ -314,7 +332,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   }
 
   /** Slides each marker whose piece shows on screen fully inside the view, for this frame's drawing. */
-  function keepMarkers(): void {
+  function keepMarkers(grow: number): void {
     const hh = cur.zoom / 2, hw = hh * aspect();
     right.setFromMatrixColumn(camera.matrixWorld, 0);
     up.setFromMatrixColumn(camera.matrixWorld, 1);
@@ -322,7 +340,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       ndc.copy((m.userData as MarkerInfo).foot).project(camera);
       if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue;
       ndc.copy(m.position).project(camera);
-      const [dx, dy] = keepInView(ndc.x * hw, ndc.y * hh, MARKER_WIDTH, MARKER_HEIGHT, hw, hh, MARKER_MARGIN);
+      const [dx, dy] = keepInView(ndc.x * hw, ndc.y * hh, MARKER_WIDTH * grow, MARKER_HEIGHT * grow, hw, hh, MARKER_MARGIN);
       m.position.addScaledVector(right, dx).addScaledVector(up, dy);
     }
   }
@@ -473,7 +491,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     if (!loopTimer) scheduleLoops();
   }
 
-  function walls(m: WallMode): void {
+  function walls(chosen: WallMode): void {
+    chosenMode = chosen;
+    const m = V.cutaway && viewing === 'angled' && overhead === 'off' && chosen === 'solid' ? 'ghosted' : chosen;
     mode = m;
     wallSet.setMode(m);
     lights?.setMode(m);
@@ -482,19 +502,28 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     invalidate();
   }
 
+  /** Looks at the whole level straight down (`peek` while held, `map` until pressed again), or back. */
+  function setOverhead(o: 'off' | 'peek' | 'map'): void {
+    if (o === overhead) return;
+    if (overhead === 'off') savedYaw = goal.yaw;
+    overhead = o;
+    goal.yaw = o === 'off' ? savedYaw : nearestYaw(0, goal.yaw);
+    mapBtn?.setAttribute('aria-pressed', String(o === 'map'));
+    walls(chosenMode);
+  }
+
   function view(v: View): void {
     if (v === viewing) return;
     viewing = v;
     goal.yaw = nearestYaw(VIEW_YAW[v], cur.yaw);
     // Before a level is built the view is the saved one, not a change to show: no eased frames to draw.
     if (!last) {
-      goal.pitch = PITCHES[v];
+      goal.pitch = pitchOf(v);
       cur.yaw = goal.yaw;
       cur.pitch = goal.pitch;
     }
     controls.setTurnable(v !== 'top');
-    aimWalls = shadowsDirty = true;
-    invalidate();
+    walls(chosenMode);
   }
 
   /** The camera under the player's hand. */
@@ -540,6 +569,114 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   ui.className = 'modern-ui';
   host.overlay.append(ui);
   const controls = createControls(host.canvas, ui, host, cam);
+
+  // Map and Peek (variants.ts): the whole level straight down, latched or while held.
+  const extra = document.createElement('div');
+  extra.className = 'cam-extra';
+  const extraBtn = (id: string, text: string, label: string) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.id = id;
+    b.className = 'cbtn wide';
+    b.textContent = text;
+    b.setAttribute('aria-label', label);
+    extra.append(b);
+    return b;
+  };
+  const mapBtn = V.overview || V.inset ? extraBtn('cam-map', 'Map', 'Map: the whole level from above') : null;
+  if (mapBtn && !V.overview) mapBtn.hidden = true;
+  mapBtn?.setAttribute('aria-pressed', 'false');
+  mapBtn?.addEventListener('click', () => {
+    if (host.blocked()) return;
+    host.gesture();
+    setOverhead(overhead === 'map' ? 'off' : 'map');
+  });
+  const peekBtn = V.peek ? extraBtn('cam-peek', 'Peek', 'Hold to see the whole level from above') : null;
+  if (peekBtn) {
+    const off = () => { if (overhead === 'peek') setOverhead('off'); };
+    peekBtn.addEventListener('pointerdown', e => {
+      if (host.blocked()) return;
+      host.gesture();
+      peekBtn.setPointerCapture(e.pointerId);
+      setOverhead('peek');
+    });
+    peekBtn.addEventListener('pointerup', off);
+    peekBtn.addEventListener('pointercancel', off);
+    peekBtn.addEventListener('lostpointercapture', off);
+  }
+  if (extra.childElementCount) ui.append(extra);
+
+  // The inset (variants.ts): the whole level from above in the corner, drawn by the renderer into its rectangle,
+  // with Theseus's square and the camera's view outlined on a canvas over it. A tap opens the map.
+  const inset = V.inset ? document.createElement('canvas') : null;
+  const insetCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  if (inset) {
+    inset.className = 'inset';
+    inset.id = 'inset';
+    inset.setAttribute('role', 'button');
+    inset.setAttribute('aria-label', 'The whole level from above: tap for the map');
+    inset.addEventListener('click', () => {
+      if (host.blocked()) return;
+      host.gesture();
+      setOverhead('map');
+    });
+    ui.append(inset);
+  }
+  /** Draws the inset over the finished frame. */
+  function drawInset(): void {
+    if (!inset || !last) return;
+    const show = overhead === 'off';
+    inset.hidden = !show;
+    if (!show) return;
+    const nc = cols(), nr = rows();
+    const iw = Math.round(Math.min(width * 0.36, 220));
+    const ih = Math.round(Math.max(60, iw * ((nr + 1) / (nc + 1))));
+    if (inset.width !== iw * dpr() || inset.height !== ih * dpr()) {
+      inset.width = iw * dpr();
+      inset.height = ih * dpr();
+      inset.style.width = `${iw}px`;
+      inset.style.height = `${ih}px`;
+    }
+    const hx = (nc + 1) / 2, hz = (nr + 1) / 2;
+    insetCam.left = -hx; insetCam.right = hx; insetCam.top = hz; insetCam.bottom = -hz;
+    insetCam.position.set(0, FY + 40, 0);
+    insetCam.up.set(0, 0, -1);
+    insetCam.lookAt(0, FY, 0);
+    insetCam.updateProjectionMatrix();
+    insetCam.updateMatrixWorld();
+    const x = width - iw - 10, y = 10;
+    renderer.setScissorTest(true);
+    renderer.setScissor(x, y, iw, ih);
+    renderer.setViewport(x, y, iw, ih);
+    renderer.autoClear = false;
+    renderer.clear();
+    renderer.toneMapping = ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.4;
+    renderer.render(scene, insetCam);
+    renderer.toneMapping = NoToneMapping;
+    renderer.autoClear = true;
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, width, height);
+    const g = inset.getContext('2d')!;
+    const k = dpr();
+    g.setTransform(k, 0, 0, k, 0, 0);
+    g.clearRect(0, 0, iw, ih);
+    const px = (gx: number, gz: number): [number, number] => [((gx + hx) / (2 * hx)) * iw, ((gz + hz) / (2 * hz)) * ih];
+    const f = footprint(cur, aspect());
+    g.strokeStyle = 'rgba(255,255,255,0.9)';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    f.corners.forEach((c, i) => (i ? g.lineTo(...px(c.x, c.z)) : g.moveTo(...px(c.x, c.z))));
+    g.closePath();
+    g.stroke();
+    if (lastPlayer) {
+      const [sx, sy] = px(cellX(lastPlayer.c, nc) - 0.5, cellZ(lastPlayer.r, nr) - 0.5);
+      const cw = iw / (2 * hx);
+      g.strokeStyle = '#36d46c';
+      g.lineWidth = 2;
+      g.strokeRect(sx, sy, cw, cw);
+    }
+  }
   const mini = host.atlas && host.image
     ? createMinimap(ui, host.atlas, host.image, {
       blocked: () => host.blocked(),
@@ -604,6 +741,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     floating: () => floats.cells(),
     markers: markerSpots,
     splashing: () => floats.splashing(),
+    minimap(on) {
+      mini?.show(on);
+    },
     dispose() {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;

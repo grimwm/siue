@@ -138,7 +138,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 /* The modern look's layer over its canvas (src/modern/controls.ts, src/modern/minimap.ts): camera buttons at the
    top-right, shown on a fine pointer or a wide screen and behind a View button on a narrow touch screen, and the
-   mini map at the bottom-left. Only its controls take the pointer; the canvas under the rest does. */
+   mini map at the bottom-left while the Mini map setting is on. Only its controls take the pointer; the canvas under
+   the rest does. */
 .modern-overlay { position: absolute; inset: 0; pointer-events: none; }
 .modern-overlay .modern-ui[hidden] { display: none; }
 .modern-overlay button, .modern-overlay .minimap { pointer-events: auto; }
@@ -189,6 +190,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   line-height: 0;
   cursor: pointer;
 }
+.modern-overlay .minimap[hidden] { display: none; }
 .modern-overlay .minimap canvas { display: block; touch-action: none; }
 .modern-overlay #minimap-view { position: absolute; left: 0; top: 0; }
 
@@ -708,3 +710,20 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   .banner-box { animation-name: banner-still; }
   .check-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }
+
+/* Map and Peek (src/modern/variants.ts) at the board's top-left, and the inset view of the whole level at its
+   bottom-right. */
+.modern-overlay .cam-extra { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; }
+.modern-overlay .cam-extra .cbtn { width: auto; padding: 0 12px; }
+.modern-overlay .cam-extra .cbtn[aria-pressed="true"] { border-color: var(--accent); }
+.modern-overlay .inset {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.modern-overlay .inset[hidden] { display: none; }

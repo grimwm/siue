@@ -13,6 +13,7 @@ export const LOOK_KEY = "crete-look";
 export const WALLS_KEY = "crete-walls";
 export const VIEW_KEY = "crete-view";
 export const PAD_KEY = "crete-pad";
+export const MINIMAP_KEY = "crete-minimap";
 
 /** How the board is drawn: the painted 3D look, or the flat tiles. */
 export type Look = "modern" | "classic";
@@ -37,6 +38,8 @@ export interface Settings {
   /** Only the modern look has a camera to tilt. */
   view: Pref<View>;
   pad: Pref<PadSide>;
+  /** Only the modern look shows the mini map, and only when this is on. */
+  minimap: Pref<OnOff>;
 }
 
 export function createSettings(storage: StorageLike | null): Settings {
@@ -49,5 +52,6 @@ export function createSettings(storage: StorageLike | null): Settings {
     walls: pref<WallMode>(WALLS_KEY, "solid", oneOf<WallMode>(["solid", "ghosted", "low"], "solid"), storage),
     view: pref<View>(VIEW_KEY, "top", oneOf<View>(["angled", "top"], "top"), storage),
     pad: pref<PadSide>(PAD_KEY, "left", oneOf<PadSide>(["left", "right"], "left"), storage),
+    minimap: pref<OnOff>(MINIMAP_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
   };
 }

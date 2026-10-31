@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { OrthographicCamera, Vector3 } from 'three';
 import { HAZARDS, OBJECTS } from '../src/puzzle/tiles.ts';
 import {
-  MARKER_COLOURS, MARKER_GAP, MARKER_HEIGHT, MARKER_WIDTH, bob, keepInView, markerFor, markerRise,
+  MARKER_COLOURS, MARKER_GAP, MARKER_HEIGHT, MARKER_MIN_PX, MARKER_RIM, MARKER_WIDTH, bob, contrast, keepInView, markerFor, markerRise, markerScale,
 } from '../src/modern/markers.ts';
 import type { MarkerKind } from '../src/modern/markers.ts';
 import { placed } from '../src/modern/model-names.ts';
@@ -15,20 +15,26 @@ import { grid } from './puzzle-grid.ts';
 
 const rest = (s: ReturnType<typeof grid>) => ({ player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) });
 
-test('the Minotaur is red, Theseus green, every hazard violet and every object but the block gold', () => {
+test('with crystals over the items, the Minotaur is red, Theseus green, every hazard violet and every object but the block cyan', () => {
   const s = grid(['P*rbygfhkuzxcpO', 'owe..C.........', '..............M'], 'pages: a\nfacing: up up up\nmachines: ball-up');
   const kinds = new Map<string, MarkerKind | null>();
-  for (const p of placed(s, rest(s))) if (!p.id?.startsWith('machine')) kinds.set(p.model, markerFor(p));
+  for (const p of placed(s, rest(s))) if (!p.id?.startsWith('machine')) kinds.set(p.model, markerFor(p, 'cyan'));
   assert.equal(kinds.get('minotaur'), 'minotaur');
   assert.equal(kinds.get('theseus'), 'theseus');
   for (const h of Object.values(HAZARDS)) assert.equal(kinds.get(h.sprite), 'hazard', h.sprite);
   for (const o of Object.values(OBJECTS)) assert.equal(kinds.get(o.sprite), o.sprite === 'block' ? null : 'item', o.sprite);
   assert.equal(markerFor({ model: 'minotaur-stone', r: 0, c: 0, id: 'minotaur' }), 'minotaur');
+  // On plates, as ships, only Theseus and the Minotaur keep theirs.
+  for (const p of placed(s, rest(s))) {
+    const k = markerFor(p, 'plate');
+    assert.equal(k, p.model === 'theseus' ? 'theseus' : p.model === 'minotaur' ? 'minotaur' : null, p.model);
+  }
+  assert.equal(markerFor({ model: 'relic', r: 0, c: 0, id: 'o1' }), null, 'plates ship');
   assert.equal(markerFor({ model: 'cow-standing', r: 0, c: 0, id: 'cow' }), null);
   assert.equal(markerFor({ model: 'ball', r: 0, c: 0, id: 'machine5' }), null, 'a template on its machine has none');
 });
 
-test('the four colours are four different hues: red, green, violet, gold', () => {
+test('the four colours are four different hues: red, green, violet, cyan', () => {
   const hue = (c: number) => {
     const r = (c >> 16) / 255, g = ((c >> 8) & 255) / 255, b = (c & 255) / 255;
     const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
@@ -39,7 +45,25 @@ test('the four colours are four different hues: red, green, violet, gold', () =>
   assert.ok(h.minotaur < 15 || h.minotaur > 345, `red ${h.minotaur}`);
   assert.ok(h.theseus > 100 && h.theseus < 160, `green ${h.theseus}`);
   assert.ok(h.hazard > 260 && h.hazard < 300, `violet ${h.hazard}`);
-  assert.ok(h.item > 30 && h.item < 55, `gold ${h.item}`);
+  assert.ok(h.item > 180 && h.item < 200, `cyan ${h.item}`);
+});
+
+/** The board's pale sand where a torch lights it most, and its dark stone wall tops, as they draw. */
+const SAND = 0xf0e0c0, STONE = 0x30323f;
+
+test('every marker stands out at least 3:1 from the dark stone, and its rim at least 3:1 from the palest sand', () => {
+  for (const [kind, c] of Object.entries(MARKER_COLOURS)) assert.ok(contrast(c, STONE) >= 3, `${kind} on stone: ${contrast(c, STONE).toFixed(2)}`);
+  assert.ok(contrast(MARKER_RIM, SAND) >= 3);
+  assert.ok(contrast(0xffffff, 0x000000) > 20.9 && Math.abs(contrast(0x777777, 0x777777) - 1) < 1e-9, 'the WCAG ratio');
+});
+
+test('a marker never draws under 14 CSS px across: it grows where cells are small, never shrinks where they are large', () => {
+  assert.equal(MARKER_MIN_PX, 14);
+  for (const cellPx of [20, 26, 40, 54, 80, 140]) {
+    assert.ok(MARKER_WIDTH * cellPx * markerScale(cellPx) >= 14 - 1e-9, `${cellPx}`);
+    assert.ok(markerScale(cellPx) >= 1);
+  }
+  assert.equal(markerScale(140), 1);
 });
 
 test('a marker is small: a quarter to a third of a cell wide, under half a cell tall', () => {
@@ -80,7 +104,7 @@ test('a marker hangs straight over its piece on screen in both views, its point 
     set.group.clear();
     const foot = new Vector3(2, 0.05, -1);
     const m = set.make('minotaur', foot, tall);
-    set.place(cam, PITCHES[view], 0, true);
+    set.place(cam, PITCHES[view], 0, true, 100);
     const [fx, fy] = onScreen(cam, foot);
     const [mx, my] = onScreen(cam, m.position);
     const head = onScreen(cam, foot.clone().setY(foot.y + tall))[1];
@@ -92,6 +116,12 @@ test('a marker hangs straight over its piece on screen in both views, its point 
     }
   }
   set.dispose();
+});
+
+test('markerRise: a piece leaning back toward the camera lifts its marker by its lean seen from above', () => {
+  const p = (PITCHES.top * Math.PI) / 180;
+  assert.ok(Math.abs(markerRise(0.4, PITCHES.top, 0.3) - markerRise(0.4, PITCHES.top) - 0.3 * Math.sin(p)) < 1e-9);
+  assert.equal(markerRise(0.4, PITCHES.top, 0), markerRise(0.4, PITCHES.top));
 });
 
 test('markerRise: in Top-down every piece\'s marker point stays inside its own cell; in Angled it clears the head', () => {

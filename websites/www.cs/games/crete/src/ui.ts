@@ -389,10 +389,10 @@ export function createUi(deps: UiDeps): Ui {
     return i < 0 ? null : i;
   }
 
-  /** Continue's words: "Continue · Ch. 2 • Level 3". */
+  /** Where Continue goes, for its title and accessible name: "Continue at Chapter 2, Level 3". */
   function continueWords(i: number): string {
     const { chapter, within } = chapterOf(i);
-    return `Continue · Ch. ${chapter.n} • Level ${within + 1}`;
+    return `Continue at Chapter ${chapter.n}, Level ${within + 1}`;
   }
 
   /** Continue on the title card: the chapter card of the first level not cleared, whose Enter starts it. */
@@ -1179,7 +1179,7 @@ export function createUi(deps: UiDeps): Ui {
         ev.preventDefault();
         return;
       }
-      // The title's Play is worded N: there it opens the new-game card, elsewhere N opens the list (not over the
+      // The title's New Game is worded N: there it opens the new-game card, elsewhere N opens the list (not over the
       // new-game card, which has no list to show).
       if (action === "new") {
         ev.preventDefault();

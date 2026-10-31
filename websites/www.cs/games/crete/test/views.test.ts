@@ -323,7 +323,7 @@ test('the menu has a Lore book button that calls back', () => {
   const root = mount();
   let opened = 0;
   renderMenu(root, menuProps({ onLore: () => { opened++; } }));
-  assert.ok(byId(root, 'menu-lore').textContent.includes('Lore book'));
+  assert.ok(byId(root, 'menu-lore').textContent.includes('Lore Book'));
   click(byId(root, 'menu-lore'));
   assert.equal(opened, 1);
 });
@@ -366,7 +366,7 @@ function chapterProps(over: Partial<ChapterCardProps> = {}): ChapterCardProps {
   return { open: true, chapter: CH1, closing: false, next: nextChapter(1), onEnter: noop, onLevels: noop, onClose: noop, ...over };
 }
 
-test('the opening chapter card shows the kicker, name, words and quotation, with Enter the halls and Levels', () => {
+test('the opening chapter card shows the kicker, name, words and quotation, with Enter the Halls and Levels', () => {
   const root = mount();
   const seen: string[] = [];
   renderChapter(root, chapterProps({ open: false }));
@@ -384,7 +384,7 @@ test('the opening chapter card shows the kicker, name, words and quotation, with
   assert.equal(globalThis.__focused?.id, 'chapter-enter');
   assert.equal(tabsOf(byId(root, 'chapter-enter'))[0]?.textContent, KEYS.begin.label);
   assert.equal(tabsOf(byId(root, 'chapter-levels'))[0]?.textContent, KEYS.new.label);
-  assert.ok(byId(root, 'chapter-enter').textContent.includes('Enter the halls'));
+  assert.ok(byId(root, 'chapter-enter').textContent.includes('Enter the Halls'));
   assert.ok(byId(root, 'chapter-levels').textContent.includes('Levels'));
   click(byId(root, 'chapter-enter'));
   click(byId(root, 'chapter-levels'));
@@ -521,7 +521,7 @@ test('the Lore book lists Chapters 1 and 2 with their opening cards, and chapter
   renderLore(root, loreProps({ open: false }));
   assert.equal(byId(root, 'lore-veil').hidden, true);
   renderLore(root, loreProps());
-  assert.equal(byId(root, 'lore-title').textContent, 'Lore book');
+  assert.equal(byId(root, 'lore-title').textContent, 'Lore Book');
   const text = byId(root, 'lore-veil').textContent;
   assert.ok(text.includes('Chapter 1'));
   assert.ok(text.includes('The Outer Halls'));

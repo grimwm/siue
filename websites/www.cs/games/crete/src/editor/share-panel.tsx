@@ -116,7 +116,7 @@ export function SharePanel(p: ShareProps) {
   return (
     <section id="share-panel" class="share-panel" aria-label="Share">
       <h3>Share</h3>
-      <label>Your initials <input id="share-initials" type="text" maxLength={3} autocomplete="off" spellcheck={false} value={p.initials}
+      <label>Your Initials <input id="share-initials" type="text" maxLength={3} autocomplete="off" spellcheck={false} value={p.initials}
         onInput={ev => {
           const up = ev.currentTarget.value.toUpperCase();
           ev.currentTarget.value = up;

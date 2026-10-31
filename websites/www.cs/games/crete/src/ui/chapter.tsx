@@ -44,7 +44,7 @@ export function ChapterCard(p: ChapterCardProps) {
       {p.closing && p.score && <p id="chapter-score" class="runstats">{p.score}</p>}
       {p.closing && p.next && !p.next.released && <p id="chapter-next" class="runstats">{`Chapter ${p.next.n} is not yet released`}</p>}
       <div class="title-actions">
-        {!p.closing && <Button id="chapter-enter" keyLabel={KEYS.begin.label} onClick={p.onEnter}>Enter the halls</Button>}
+        {!p.closing && <Button id="chapter-enter" keyLabel={KEYS.begin.label} onClick={p.onEnter}>Enter the Halls</Button>}
         {!p.closing && <Button id="chapter-levels" keyLabel={KEYS.new.label} onClick={p.onLevels}>Levels</Button>}
         {p.closing && <Button id="chapter-continue" keyLabel={KEYS.begin.label} onClick={p.onClose}>{onward}</Button>}
       </div>

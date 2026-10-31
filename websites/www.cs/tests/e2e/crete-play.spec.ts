@@ -27,7 +27,7 @@ declare global {
   interface Window { __creteTest: CreteTest }
 }
 
-/** Title card, Play, the chapter card, Enter the halls: level 1's start card is up when this returns. */
+/** Title card, New Game, the chapter card, Enter the Halls: level 1's start card is up when this returns. */
 async function openTrial1(page: Page): Promise<string[]> {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -37,7 +37,7 @@ async function openTrial1(page: Page): Promise<string[]> {
   await expect(page.locator('#title-veil')).toBeVisible();
   await page.locator('#title-play').click();
   await page.locator('#pick-enter').click();
-  await expect(page.locator('#chapter-veil'), 'Play opens the chapter card').toBeVisible();
+  await expect(page.locator('#chapter-veil'), 'New Game opens the chapter card').toBeVisible();
   await expect(page.locator('#chapter-title')).toHaveText('The Outer Halls');
   await page.locator('#chapter-enter').click();
   await expect(page.locator('#chapter-veil')).toBeHidden();
@@ -246,7 +246,8 @@ test('Continue on the title card goes to the first level not cleared, and is not
   const ch1 = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`trial-${i + 1}`, { cleared: true, best: 30 }]));
   await page.evaluate(p => localStorage.setItem('crete-progress', JSON.stringify(p)), { ...ch1, 'ch2-1': { cleared: true, best: 12 }, 'ch2-2': { cleared: true, best: 17 } });
   await page.reload();
-  await expect(page.locator('#title-continue')).toContainText('Continue · Ch. 2 • Level 3');
+  await expect(page.locator('#title-continue')).toContainText('Continue');
+  await expect(page.locator('#title-continue')).toHaveAttribute('aria-label', 'Continue at Chapter 2, Level 3');
   await page.keyboard.press('Enter');
   await expect(page.locator('#chapter-title')).toHaveText('The Winding Ways');
   await page.keyboard.press('Enter');
@@ -257,7 +258,7 @@ test('Continue on the title card goes to the first level not cleared, and is not
   await expect(page.locator('#menu-veil .kicker')).toHaveText('Ch. 2 • Level 3/10');
 });
 
-test('a win on the shortest line is perfect; Next level shows level 2\'s start card, and the list keeps the best through a reload', async ({ page }) => {
+test('a win on the shortest line is perfect; Next Level shows level 2\'s start card, and the list keeps the best through a reload', async ({ page }) => {
   const errors = await beginTrial1(page);
   const steps = await line(page);
   for (const s of steps) await page.keyboard.press(KEY[s]!);
@@ -334,7 +335,7 @@ test('a missing tiles.png says so, loudly, instead of leaving a blank board', as
   expect(logged.some(t => /tiles\.png/.test(t))).toBe(true);
 });
 
-test('Quit in the menu ends the try and shows the title card in a browser tab; Play opens Chapter 1\'s card', async ({ page }) => {
+test('Quit in the menu ends the try and shows the title card in a browser tab; New Game opens Chapter 1\'s card', async ({ page }) => {
   const errors = await beginTrial1(page);
   await page.keyboard.press('q');
   await page.locator('#quit').click();

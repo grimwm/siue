@@ -77,7 +77,7 @@ function Entries(p: DictionaryProps) {
     <div id="dict-entries">
       <p class="dict-tally">{`${met} of ${p.rows.length} met`}</p>
       {group('item', 'Items')}
-      {group('hazard', 'Hazards and tiles')}
+      {group('hazard', 'Hazards and Tiles')}
     </div>
   );
 }

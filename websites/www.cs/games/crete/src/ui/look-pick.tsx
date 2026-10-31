@@ -24,7 +24,7 @@ export function LookPick(p: LookPickProps) {
       <LookTiles look={p.look} idPrefix="pick" label="Look" blurbs onPick={p.onLook} />
       <p class="runstats">If the board runs slowly, pick Classic. You can switch at any time in the menu.</p>
       <div class="title-actions">
-        <Button id="pick-enter" keyLabel={KEYS.begin.label} onClick={p.onEnter}>Enter the halls</Button>
+        <Button id="pick-enter" keyLabel={KEYS.begin.label} onClick={p.onEnter}>Enter the Halls</Button>
         <Button id="pick-back" class="quiet" keyLabel={KEYS.menu.label} onClick={p.onBack}>Back</Button>
       </div>
     </Dialog>

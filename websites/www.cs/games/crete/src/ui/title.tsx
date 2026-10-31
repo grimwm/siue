@@ -1,5 +1,5 @@
 // The Island of Crete: the title card. Shown when the page opens, after Quit, and with a note when a share link
-// cannot be opened (src/share/visit.ts). Play opens the new-game card, which asks for the look; Continue (shown
+// cannot be opened (src/share/visit.ts). New Game opens the new-game card, which asks for the look; Continue (shown
 // once a level is cleared and until all are) opens the chapter card of the first level not cleared, and has Enter;
 // Story, Make a level and Settings open the story card, the level editor and the menu when the page gives them;
 // the kit's install bar mounts into #title-install (src/install-slot.ts).
@@ -17,7 +17,7 @@ export interface TitleCardProps {
   /** Why a share link did not open, when one did not. */
   note?: string;
   onPlay: () => void;
-  /** Continue's words ("Continue · Ch. 2 • Level 3"); no Continue without them. */
+  /** Where Continue goes, for its title and accessible name ("Continue at Chapter 2, Level 3"); no Continue without it. */
   resume?: string;
   onContinue?: () => void;
   onStory?: () => void;
@@ -34,10 +34,10 @@ export function TitleCard(p: TitleCardProps) {
       {p.hint && <p id="title-hint" class="runstats" role="status">{EXIT_HINT}.</p>}
       {p.note && <p id="title-note" class="runstats">{p.note}</p>}
       <div class="title-actions">
-        {p.resume && p.onContinue && <Button id="title-continue" keyLabel={KEYS.begin.label} onClick={p.onContinue}>{p.resume}</Button>}
-        <Button id="title-play" keyLabel={KEYS.new.label} onClick={p.onPlay}>▶ Play</Button>
+        {p.resume && p.onContinue && <Button id="title-continue" label={p.resume} title={p.resume} keyLabel={KEYS.begin.label} onClick={p.onContinue}>Continue</Button>}
+        <Button id="title-play" keyLabel={KEYS.new.label} onClick={p.onPlay}>New Game</Button>
         {p.onStory && <Button id="title-story" keyLabel={KEYS.story.label} onClick={p.onStory}>Story</Button>}
-        {p.onEditor && <Button id="title-editor" keyLabel={KEYS.editor.label} onClick={p.onEditor}>Make a level</Button>}
+        {p.onEditor && <Button id="title-editor" keyLabel={KEYS.editor.label} onClick={p.onEditor}>Make a Level</Button>}
         {p.onSettings && <Button id="title-settings" keyLabel={KEYS.menu.label} onClick={p.onSettings}>Settings</Button>}
       </div>
       <div id="title-install" class="title-install" />

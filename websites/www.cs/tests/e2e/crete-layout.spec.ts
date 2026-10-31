@@ -56,7 +56,7 @@ async function closeOnTitleRow(page: Page, dialog: string): Promise<void> {
 /** The widest values the status bar can show. */
 function setWorst() {
   const put = (id: string, v: string) => { document.getElementById(id)!.textContent = v; };
-  put('hud-trial', '10/10'); put('hud-hearts', '♥ 99'); put('hud-relics', '99/99'); put('hud-keys', '9 9 9 9');
+  put('hud-trial', 'Ch 10 · 12'); put('hud-hearts', '♥ 99'); put('hud-relics', '99/99'); put('hud-keys', '9 9 9 9');
   put('hud-gear', 'fire ice water'); put('hud-moves', '99999');
 }
 

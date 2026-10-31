@@ -5,7 +5,10 @@ import { KEY_COLORS } from "./puzzle/tiles.ts";
 import type { Gear, KeyColor } from "./puzzle/tiles.ts";
 
 export interface StatusInput {
+  /** The level's place, short ("Ch 1 · 3"); empty for a level from outside the campaign. */
   trial: string;
+  /** The place in full, with the level's title ("Chapter 1, Level 3: The first gate"); empty when `trial` is. */
+  trialNote?: string;
   hearts: number;
   relicsLeft: number;
   keys: Record<KeyColor, number>;
@@ -17,6 +20,8 @@ export interface StatusInput {
 
 export interface StatusView {
   trial: string;
+  /** The level's place in full, for a tooltip and a screen reader; empty outside the campaign. */
+  trialNote: string;
   hearts: string;
   relics: string;
   keys: string;
@@ -35,6 +40,7 @@ export function statusView(i: StatusInput): StatusView {
   if (i.stone > 0) heartsNote += `; the Minotaur is stone for ${i.stone} turn${i.stone === 1 ? "" : "s"}`;
   return {
     trial: i.trial,
+    trialNote: i.trialNote ?? "",
     hearts: `♥ ${i.hearts}`,
     relics: String(i.relicsLeft),
     keys: held.map((c) => `${DOT[c]}${i.keys[c]}`).join(" "),

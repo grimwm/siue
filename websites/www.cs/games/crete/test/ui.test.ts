@@ -334,6 +334,23 @@ test('in the levels list, up and down (or j and k) move between levels and Enter
   assert.equal(flow.top(), 'start');
 });
 
+test('the status bar and the menu name the chapter and the level', () => {
+  reset();
+  game.open(2);
+  key('Enter');
+  const title = levels.level(2).title;
+  const trial = byId(document.getElementById('status-root')!, 'hud-trial');
+  assert.equal(trial.textContent, 'Ch 1 · 3');
+  assert.equal(trial.getAttribute('aria-label'), `Chapter 1, Level 3: ${title}`);
+  key('q');
+  assert.equal(flow.top(), 'menu');
+  assert.equal(walk(byId(rootOf('menu-veil'), 'menu-veil')).find(n => n.className === 'kicker')?.textContent, 'Chapter 1 · Level 3');
+  assert.equal(text('menu-level'), title);
+  flow.closeLayers();
+  game.open(LEVEL_IDS.length - 1);
+  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, `Ch 2 · ${LEVEL_IDS.length - 10}`);
+});
+
 test('I on the title opens the story card and Q opens the menu; Q again returns to the title', () => {
   reset();
   flow.showTitle(false);
@@ -1138,6 +1155,11 @@ test('the start and end cards name an outside level', () => {
   assert.equal(text('start-title'), 'My maze');
   assert.equal(el('start-best'), undefined);
   assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, '–', 'the status bar gives no place in a chapter');
+  key('Enter');
+  key('q');
+  assert.equal(walk(byId(rootOf('menu-veil'), 'menu-veil')).find(n => n.className === 'kicker')?.textContent, 'Your level', 'the menu names the kind of level');
+  assert.equal(text('menu-level'), 'My maze');
+  flow.closeLayers();
   win(9);
   assert.equal(flow.top(), 'end');
   assert.equal(text('end-kicker'), 'Your level');

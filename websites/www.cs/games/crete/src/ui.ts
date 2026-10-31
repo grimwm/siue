@@ -25,7 +25,7 @@ import { pagesTaken } from "./puzzle/state.ts";
 import type { State } from "./puzzle/state.ts";
 import { TOOLS } from "./puzzle/tiles.ts";
 import type { ObjectKind, Tool } from "./puzzle/tiles.ts";
-import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter } from "./campaign/chapters.ts";
+import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter, placeWords } from "./campaign/chapters.ts";
 import { FEWEST, againstFewest } from "./campaign/fewest.ts";
 import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
@@ -196,6 +196,16 @@ export function createUi(deps: UiDeps): Ui {
   const outsideOf = (g: Game | null): OutsideLevel | null => (g && g.trial >= 0 ? deps.levels?.outside?.(g.trial) ?? null : null);
   /** An outside level's kicker on its start and end cards. */
   const outsideKicker = (o: OutsideLevel): string => (o.kind === "try" ? "Your level" : "Shared level");
+  /** The menu's kicker and the line under its title: the level's chapter and number and its name, or for a level
+   *  from outside the campaign what kind it is and its name; nothing when no level is open. */
+  const menuPlace = (
+    out: OutsideLevel | null,
+    at: { chapter: { n: number }; within: number } | null,
+    title: string,
+  ): { place?: string; levelName?: string } =>
+    out ? { place: outsideKicker(out), levelName: out.name }
+      : at ? { place: placeWords(at.chapter.n, at.within + 1, title).kicker, levelName: title }
+      : {};
   /** The shared card, while a shared level is in play and the open link's card is that level's. */
   const sharedCard = (g: Game | null): (() => void) | undefined => {
     const card = controls?.shared?.card();
@@ -578,6 +588,7 @@ export function createUi(deps: UiDeps): Ui {
         controls?.quit();
       },
       onClose: () => layers.close("menu"),
+      ...menuPlace(out, playing, lv?.title ?? ""),
       onBackToEditor: backToEditor(g),
       onSharedCard: sharedCard(g),
     });
@@ -750,9 +761,12 @@ export function createUi(deps: UiDeps): Ui {
       layers.open("start");
     }
 
+    const at = out ? null : chapterOf(g.trial);
+    const place = at ? placeWords(at.chapter.n, at.within + 1, s.level.title) : null;
     renderStatus($("status-root"), {
       view: statusView({
-        trial: out ? "" : `${chapterOf(g.trial).within + 1}/${chapterOf(g.trial).chapter.levelIds.length}`,
+        trial: place?.short ?? "",
+        trialNote: place?.full ?? "",
         hearts: s.hearts,
         relicsLeft: s.relicsLeft,
         keys: s.keys,
@@ -775,8 +789,7 @@ export function createUi(deps: UiDeps): Ui {
       end = endView(g);
       layers.open("end");
       // A chapter's last level won: its closing card opens over the end card, which waits under it.
-      const place = out ? null : chapterOf(g.trial);
-      if (place && end.won && place.within === place.chapter.levelIds.length - 1) showChapter(place.chapter.n, true);
+      if (at && end.won && at.within === at.chapter.levelIds.length - 1) showChapter(at.chapter.n, true);
     }
     notice(g);
     announcePages(g);

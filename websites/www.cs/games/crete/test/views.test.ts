@@ -55,14 +55,16 @@ const noop = () => {};
 const tabsOf = (el: StubElement) => walk(el).filter(n => n.localName === 'kbd');
 
 // ---- status bar ----
-const VIEW = statusView({ trial: '3/8', hearts: 2, relicsLeft: 1, keys: { red: 1, blue: 0, yellow: 0, green: 2 }, gear: ['flippers'], moves: 12, stone: 0 });
+const VIEW = statusView({ trial: 'Ch 1 · 3', trialNote: 'Chapter 1, Level 3: The Doors of Daedalus', hearts: 2, relicsLeft: 1, keys: { red: 1, blue: 0, yellow: 0, green: 2 }, gear: ['flippers'], moves: 12, stone: 0 });
 
 test('the status bar shows Level, Hearts, Relics, Keys, Gear and Moves, and a Menu button with its Q tab', () => {
   const root = mount();
   let opened = 0;
   renderStatus(root, { view: VIEW, menuKey: KEYS.menu.label, onMenu: () => { opened++; } });
   assert.deepEqual(['hud-trial', 'hud-hearts', 'hud-relics', 'hud-keys', 'hud-gear', 'hud-moves'].map(id => byId(root, id).textContent),
-    ['3/8', '♥ 2', '1', '🔴1 🟢2', 'flippers', '12']);
+    ['Ch 1 · 3', '♥ 2', '1', '🔴1 🟢2', 'flippers', '12']);
+  assert.equal(byId(root, 'hud-trial').getAttribute('aria-label'), 'Chapter 1, Level 3: The Doors of Daedalus');
+  assert.equal((byId(root, 'hud-trial').parentNode as StubElement).getAttribute('title'), 'Chapter 1, Level 3: The Doors of Daedalus');
   const menu = byId(root, 'btn-menu');
   assert.equal((byId(root, 'hud-trial').parentNode as StubElement).textContent.startsWith('Level'), true, 'the first stat is labelled Level');
   assert.equal(menu.className, 'menu-btn');
@@ -256,6 +258,20 @@ test('the menu holds sound and full screen, the story log, how to play and Quit,
   assert.equal(walk(veil).some(n => n.className === 'menu-empty'), false, 'a log with lines says nothing of being empty');
   renderMenu(root, menuProps({ log: [] }));
   assert.equal(walk(byId(root, 'menu-veil')).some(n => n.className === 'menu-empty'), true, 'an empty log says so');
+});
+
+test('the menu\'s kicker names the level\'s place, and its name stands under the title; with neither it names the game', () => {
+  const root = mount();
+  const kicker = () => walk(byId(root, 'menu-veil')).find(n => n.className === 'kicker')?.textContent;
+  renderMenu(root, menuProps({ place: 'Chapter 1 · Level 3', levelName: 'The Doors of Daedalus' }));
+  assert.equal(kicker(), 'Chapter 1 · Level 3');
+  assert.equal(byId(root, 'menu-level').textContent, 'The Doors of Daedalus');
+  renderMenu(root, menuProps({ place: 'Shared level', levelName: 'Level K7QD by ABC' }));
+  assert.equal(kicker(), 'Shared level');
+  assert.equal(byId(root, 'menu-level').textContent, 'Level K7QD by ABC');
+  renderMenu(root, menuProps());
+  assert.equal(kicker(), 'The Island of Crete');
+  assert.equal(maybeById(byId(root, 'menu-veil'), 'menu-level'), undefined);
 });
 
 test('the menu offers Modern and Classic, and Solid, Ghosted and Low only while the look is modern', () => {

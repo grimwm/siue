@@ -215,7 +215,7 @@ test('a ?seed= link opens Chapter 1\'s card with no title card, and Enter starts
   await expect(page.locator('#chapter-veil')).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.locator('#chapter-veil')).toBeHidden();
-  await expect(page.locator('#hud-trial')).toHaveText('1/10');
+  await expect(page.locator('#hud-trial')).toHaveText('Ch 1 · 1');
   await expect(page.locator('#start-veil')).toBeVisible();
 });
 
@@ -227,7 +227,7 @@ test('Enter the halls starts the first level this browser has not cleared', asyn
   await page.locator('#title-play').click();
   await page.locator('#pick-enter').click();
   await page.locator('#chapter-enter').click();
-  await expect(page.locator('#hud-trial')).toHaveText('3/10');
+  await expect(page.locator('#hud-trial')).toHaveText('Ch 1 · 3');
   await expect(page.locator('#start-veil')).toBeVisible();
 });
 
@@ -241,7 +241,7 @@ test('a win on the shortest line is perfect; Next level shows level 2\'s start c
   await page.locator('#end-next').click();
   await expect(page.locator('#end-veil')).toBeHidden();
   await expect(page.locator('#start-veil')).toBeVisible();
-  await expect(page.locator('#hud-trial')).toHaveText('2/10');
+  await expect(page.locator('#hud-trial')).toHaveText('Ch 1 · 2');
   const cleared = `cleared · your best ${steps.length} · best possible ${steps.length} · perfect`;
   await page.keyboard.press('n');
   await expect(page.locator('#level-1')).toContainText(cleared);

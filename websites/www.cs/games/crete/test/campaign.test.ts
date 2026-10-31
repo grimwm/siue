@@ -2,7 +2,7 @@
 // placed in exactly one level, every quotation cited by author, work, section, translator and year.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CHAPTERS, LEVEL_IDS, chapterOf, pageHome, nextChapter, levelById } from '../src/campaign/chapters.ts';
+import { CHAPTERS, LEVEL_IDS, chapterOf, pageHome, nextChapter, levelById, placeWords } from '../src/campaign/chapters.ts';
 import type { Quote } from '../src/campaign/lore.ts';
 import { trialLevel } from '../src/puzzle/trials.ts';
 
@@ -113,4 +113,12 @@ test("Chapter 2's quotations are all Plutarch's Life of Theseus in Perrin's 1914
 test('trial 8 no longer ends the tribute', () => {
   assert.notEqual(trialLevel(7).title, 'The Heart of the Labyrinth');
   assert.doesNotMatch(trialLevel(7).intro, /tribute/i);
+});
+
+test('a level\'s place reads short for the status bar, as a kicker for the cards, and in full with its title', () => {
+  assert.deepEqual(placeWords(1, 3, 'The Doors of Daedalus'),
+    { short: 'Ch 1 · 3', kicker: 'Chapter 1 · Level 3', full: 'Chapter 1, Level 3: The Doors of Daedalus' });
+  assert.equal(placeWords(10, 12, '').full, 'Chapter 10, Level 12', 'no title, no colon');
+  // The widest short form the ten chapters can give stays as narrow as the status bar's other stats.
+  assert.ok(placeWords(10, 12, '').short.length <= 'fire ice water'.length);
 });

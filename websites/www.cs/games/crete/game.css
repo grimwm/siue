@@ -70,6 +70,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 .stat { display: flex; gap: 0.35rem; align-items: baseline; white-space: nowrap; }
 .stat dt { color: var(--dim); font-size: 0.8rem; }
 .stat dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* "Ch 1 · 3" stays on one line. */
+.stat #hud-trial { white-space: nowrap; }
 
 /* Buttons that carry a key tab are positioned, so the tab pins to their corner. */
 .menu-btn, .strip button {
@@ -450,6 +452,8 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 
 /* The menu: sections under small gold headings; two columns when there is room. */
 .card.menu { max-width: 30rem; }
+/* The open level's name, under the Menu title. */
+.menu-level { margin: -0.3rem 0 0.9rem; color: var(--dim); font-style: italic; }
 .menu-cols { display: grid; gap: 1.1rem 1.6rem; align-items: start; }
 .menu-col { display: grid; gap: 1.1rem; min-width: 0; }
 .menu-sec { display: grid; gap: 0.45rem; }

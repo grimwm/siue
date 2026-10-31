@@ -26,14 +26,14 @@ export const UNLOCK_MESSAGES = {
   noKeyring: 'You have no notes key yet. Make your notes key under Your notes.',
   keyExists: 'There is a notes key already. Reload the page and unlock it with its passphrase.',
   wrong: 'That passphrase did not unlock the key.',
-  invalid: 'The notes key on the server is damaged or does not match its fingerprints. Run make music-setup, then reload the page.',
+  invalid: 'The notes key on the server is damaged or does not match its fingerprints. Reload the page and unlock again. If this comes back, use Forgot your passphrase? on Your studio: it deletes your notes and this notes key so you can make a new one. Your pieces, drafts and AI keys stay.',
   lockedAgain: 'Your notes key is made, but the notes were locked again before they opened. Unlock it with your passphrase.',
   signedOut: 'Your sign-in ended. Sign in again.',
   offline: 'Could not reach the server. Check the connection and try again.',
 } as const;
 
-/** What studio people are told for a damaged key: they have no make targets, and Forgot your passphrase on Your studio is how they make a new one. */
-export const studioInvalid = 'The notes key on the server is damaged or does not match its fingerprints. Use Forgot your passphrase on Your studio to make a new one; your pieces stay.';
+/** What the owner is told for a damaged key: the owner's computer has the key tool, which uploads the keyring again. */
+export const OWNER_INVALID = 'The notes key on the server is damaged or does not match its fingerprints. Run make music-setup, then reload the page.';
 
 export const NO_CRYPTO = 'This browser cannot unlock or seal notes: it has no Web Crypto. Use a current browser, on the https page.';
 export const DISCARD_FAILED = 'The saved note could not be discarded from this browser. Try again.';
@@ -103,7 +103,7 @@ export function createNotesSession(d: SessionDeps): NotesSession {
   let stored = false;
   const say = (e: unknown): string => (e instanceof NoKeyring ? UNLOCK_MESSAGES.noKeyring
     : e instanceof WrongPassphrase ? UNLOCK_MESSAGES.wrong
-    : e instanceof KeyringInvalid ? (pageLimits().named ? UNLOCK_MESSAGES.invalid : studioInvalid)
+    : e instanceof KeyringInvalid ? (pageLimits().owner ? OWNER_INVALID : UNLOCK_MESSAGES.invalid)
     : e instanceof KeyExists ? UNLOCK_MESSAGES.keyExists
     : describeFailure(e));
   const openOne = async (id: string, ring: ReadonlyMap<string, CryptoKey>, at: number): Promise<void> => {

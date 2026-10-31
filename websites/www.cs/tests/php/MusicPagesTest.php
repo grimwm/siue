@@ -490,7 +490,7 @@ final class MusicPagesTest extends TestCase
         self::assertSame(201, $owner->status, 'the allowance takes notes up to 2 MB');
     }
 
-    public function testTheShellCarriesTheNoteMaxRoomAndNamed(): void
+    public function testTheShellCarriesTheNoteMaxRoomAndOwner(): void
     {
         $attrs = static function (Admin\Response $res): array {
             preg_match('~<body ([^>]*)>~', $res->body, $m);
@@ -498,15 +498,23 @@ final class MusicPagesTest extends TestCase
             return array_column($pairs, 2, 1);
         };
         $owner = $attrs($this->pages->index(music_signed_in($this->sessions, $this->account)));
-        self::assertSame(['2097152', (string) $this->store->room(), '1', '1'], [$owner['data-note-max'], $owner['data-room'], $owner['data-named'], $owner['data-account-has-key']]);
+        self::assertSame(['2097152', (string) $this->store->room(), '1', '1'], [$owner['data-note-max'], $owner['data-room'], $owner['data-owner'], $owner['data-account-has-key']]);
         [$id, $store] = $this->student('fresh@siue.edu', false);
         $fresh = $attrs($this->pages->piece(music_signed_in($this->sessions, $id, ['query' => ['id' => 'p']])));
-        self::assertSame(['1048576', '5242880', '0', '0'], [$fresh['data-note-max'], $fresh['data-room'], $fresh['data-named'], $fresh['data-account-has-key']]);
+        self::assertSame(['1048576', '5242880', '0', '0'], [$fresh['data-note-max'], $fresh['data-room'], $fresh['data-owner'], $fresh['data-account-has-key']]);
         self::assertSame('piece', $fresh['data-view']);
         $store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
         $store->addNote(music_sealed(MUSIC_FP_CURRENT, 1000 - 38));
         $keyed = $attrs($this->pages->index(music_signed_in($this->sessions, $id)));
         self::assertSame(['5241880', '1'], [$keyed['data-room'], $keyed['data-account-has-key']]);
+    }
+
+    public function testANamedAdminWithTheAllowanceIsNotTheOwner(): void
+    {
+        [$pages, $sessions] = music_pages($this->db, $this->dir, $this->clock, self::BASE, '{"people":[{"email":"student@siue.edu","admin":true,"allowance":true}]}');
+        [$id] = $this->student();
+        preg_match('~<body [^>]*data-owner="([01])"~', $pages->index(music_signed_in($sessions, $id))->body, $m);
+        self::assertSame('0', $m[1] ?? null, 'only the owner is shown the key tool\'s make steps');
     }
 
     public function testKeyringUploadNeedsSessionAndCsrfAndKeepsTheEnvelopeRules(): void

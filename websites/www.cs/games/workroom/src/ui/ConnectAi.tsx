@@ -1,14 +1,30 @@
-// The front page's Connect your AI help: how the owner connects an AI app to the
-// workroom's MCP server (siue-music mcp, run on their own computer), in numbered
-// steps. It names commands only; every key stays in 1Password and on that
-// computer, so nothing here is secret.
+// The front page's Connect your AI help. The owner's studio gets the steps that
+// connect an AI app to the workroom's MCP server (siue-music mcp, run on the
+// owner's computer from the repository, with keys in 1Password); they name
+// commands only, so nothing here is secret. Every other studio has no repository,
+// make or 1Password, so it is told only what the page offers: AI keys on Your
+// studio, and that connecting an AI app is coming.
 import type { ComponentChildren } from 'preact';
 import { Panel } from './console/Panel.tsx';
 
 const Code = (p: { children: ComponentChildren }) => <code class="rounded bg-well px-1 font-mono text-sm">{p.children}</code>;
 const ASK = ['wait for my notes and make the next draft', 'publish draft 4 of crete-title', 'delete draft 2 of crete-title', 'what did I say about crete-title?'];
 
-export function ConnectAi() {
+/** What every studio but the owner's is told: nothing to run, only what the page offers. */
+function ComingSoon() {
+  return (
+    <Panel title="Connect your AI" class="grid gap-3" data={{ 'data-connect-ai': '' }}>
+      <p class="text-sm">Connecting your own AI app to your studio is coming.</p>
+      <p class="text-sm">
+        You can already make AI keys on <a href="studio.php" class="underline focus-visible:outline-2 focus-visible:outline-amber">Your studio</a>. An AI key lets one AI work in your studio with the permissions you give it.
+      </p>
+    </Panel>
+  );
+}
+
+/** `owner`: the owner's studio, the only one shown the key tool's steps. */
+export function ConnectAi(p: { owner: boolean }) {
+  if (!p.owner) return <ComingSoon />;
   return (
     <Panel title="Connect your AI" class="grid gap-3" data={{ 'data-connect-ai': '' }}>
       <p class="text-sm">

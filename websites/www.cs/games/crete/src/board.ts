@@ -61,15 +61,15 @@ const ARROW_MIN_CELL = 12;
 /** An arrow's length and half-width, and how far its centre sits from the square's centre toward the next square,
  *  each in cells. */
 export const ARROW_LEN = 0.42;
-export const ARROW_HALF = 0.2;
+export const ARROW_HALF = 0.14;
 export const ARROW_SHIFT = 0.2;
 
 const ANGLE: Record<Dir, number> = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 };
 
 function drawThread(ctx: CanvasRenderingContext2D, thread: readonly ThreadCell[], cell: number, top: number): void {
   const at = (c: ThreadCell): [number, number] => [(c.c + 0.5) * cell, (c.r + 0.5) * cell + top];
-  const lw = Math.max(2, cell / 8);
-  const edge = Math.max(1, cell / 20);
+  const lw = Math.max(1.5, cell / 12);
+  const edge = Math.max(0.75, cell / 30);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   // One sub-path per stretch walked; a jump starts a new one, so no cord crosses the squares it skips.
@@ -102,7 +102,7 @@ function drawThread(ctx: CanvasRenderingContext2D, thread: readonly ThreadCell[]
     ctx.lineTo(-len / 4, 0);
     ctx.lineTo(-len / 2, half);
     ctx.closePath();
-    ctx.lineWidth = Math.max(1.5, cell / 14);
+    ctx.lineWidth = Math.max(1, cell / 21);
     ctx.strokeStyle = THREAD_EDGE;
     ctx.stroke();
     ctx.fillStyle = ARROW_RED;

@@ -33,6 +33,8 @@ final class SiteGamePagesTest extends TestCase
         // A page game's built Install and Share bar, which its site page loads.
         mkdir("$this->root/arty/dist", 0777, true);
         file_put_contents("$this->root/arty/dist/install.js", "(()=>{})();\n");
+        // Its built entry, whose hash is the game's version.
+        file_put_contents("$this->root/arty/dist/main.js", "export {};\n");
         $this->page = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Arty</title>\n</head>\n<body>hi</body>\n</html>\n";
         file_put_contents("$this->root/arty/index.html", $this->page);
         file_put_contents("$this->root/mounted/metadata.yaml", "title: Mounted\ndescription: Runs in the site page.\nstart: goGame\n");
@@ -72,7 +74,11 @@ final class SiteGamePagesTest extends TestCase
         $wrap = (string) @file_get_contents("$this->tmp/play/arty/index.html");
         self::assertTrue(str_contains($wrap, '<meta property="og:title" content="Arty &amp; Co">'), 'wrapper-title');
         self::assertTrue(str_contains($wrap, 'content="Lob &lt;shells&gt; at drones."'), 'wrapper-escaped');
-        self::assertTrue(str_contains($wrap, '<meta property="og:url" content="https://example.edu/~me/play/arty/">'), 'wrapper-url');
+        // og:url carries the game's version (the hash of its dist/main.js), so each release is a new
+        // Facebook object; the canonical link and JSON-LD url stay bare for search engines.
+        $v = substr(hash('sha256', "export {};\n"), 0, 10);
+        self::assertTrue(str_contains($wrap, '<meta property="og:url" content="https://example.edu/~me/play/arty/?v=' . $v . '">'), 'wrapper-og-url-versioned');
+        self::assertTrue(str_contains($wrap, '<link rel="canonical" href="https://example.edu/~me/play/arty/">'), 'wrapper-canonical-bare');
         $og = 'https://example.edu/~me/games/arty/og.png?v=' . substr(hash('sha256', 'png'), 0, 10);
         self::assertTrue(str_contains($wrap, '<meta property="og:image" content="' . $og . '">')
             && str_contains($wrap, '<meta property="og:image:secure_url" content="' . $og . '">')
@@ -105,7 +111,7 @@ final class SiteGamePagesTest extends TestCase
             && !str_contains($wrap, 'serviceWorker'), 'wrapper-installs-game');
         // Install and Share: the bar's mount after the game's name, the game's
         // dist/install.js with its own version, and the early-prompt stash before it.
-        self::assertTrue(str_contains($wrap, '<span class="play-install" id="play-install" data-title="Arty &amp; Co" data-game-page="../../games/arty/"></span>')
+        self::assertTrue(str_contains($wrap, '<span class="play-install" id="play-install" data-title="Arty &amp; Co" data-game-page="../../games/arty/" data-version="' . $v . '"></span>')
             && strpos($wrap, 'class="play-now"') < strpos($wrap, 'id="play-install"'), 'wrapper-install-bar');
         self::assertTrue(str_contains($wrap, '<script src="../../games/arty/dist/install.js?v='
             . substr(hash('sha256', (string) file_get_contents("$this->root/arty/dist/install.js")), 0, 10) . '" defer></script>'), 'wrapper-loads-install-js');
@@ -220,6 +226,31 @@ final class SiteGamePagesTest extends TestCase
             && in_array('games/arty/dist/install.js is not readable, but play/arty/ loads it; build the game', $notes, true), 'unbuilt-game-fails' . ' :: ' . json_encode([$notes, $broken]));
     }
 
+    /** a page game without its built entry has no version to share: a note and a failure */
+    public function testUnbuiltEntryFails(): void
+    {
+        unlink("$this->root/arty/dist/main.js");
+        [, $notes, $broken] = site_pages_sync($this->root, $this->site, false);
+        self::assertTrue($broken === true
+            && in_array('games/arty/dist/main.js is not readable, but play/arty/ shares its version; build the game', $notes, true), 'unbuilt-entry-fails' . ' :: ' . json_encode([$notes, $broken]));
+    }
+
+    /** a new release (a rebuilt dist/main.js) is a new og:url, so the page goes stale; a mounted game's page is versioned too */
+    public function testReleaseChangesOgUrl(): void
+    {
+        mkdir("$this->root/mounted/dist", 0777, true);
+        file_put_contents("$this->root/mounted/dist/main.js", "m1\n");
+        site_pages_sync($this->root, $this->site, true);
+        $fwd = (string) file_get_contents("$this->tmp/play/mounted/index.html");
+        self::assertTrue(str_contains($fwd, '<meta property="og:url" content="https://example.edu/~me/play/mounted/?v=' . substr(hash('sha256', "m1\n"), 0, 10) . '">')
+            && str_contains($fwd, '<link rel="canonical" href="https://example.edu/~me/play/mounted/">'), 'start-page-og-url-versioned');
+        file_put_contents("$this->root/arty/dist/main.js", "export const next = 1;\n");
+        [$stale] = site_pages_sync($this->root, $this->site, true);
+        $wrap = (string) file_get_contents("$this->tmp/play/arty/index.html");
+        $v = substr(hash('sha256', "export const next = 1;\n"), 0, 10);
+        self::assertTrue($stale === ['arty'] && str_contains($wrap, 'play/arty/?v=' . $v . '">') && str_contains($wrap, 'data-version="' . $v . '"'), 'release-new-og-url');
+    }
+
     /** editing metadata makes the page stale again */
     public function testMetadataChangeMakesStale(): void
     {
@@ -252,6 +283,20 @@ final class SiteGamePagesTest extends TestCase
         site_pages_sync($this->root, $this->site, true);
         self::assertTrue(!is_file("$this->root/arty/manifest.webmanifest") && !is_file("$this->root/arty/sw.js")
             && !is_file("$this->root/mounted/manifest.webmanifest") && !is_file("$this->root/mounted/index.html"), 'game-folders-untouched');
+    }
+
+    /** each generated game page's og:url is the page with its game's version */
+    public function testRepoPagesVersionedUrl(): void
+    {
+        $games = __DIR__ . '/../../games';
+        $pages = glob(__DIR__ . '/../../play/*/index.html') ?: [];
+        self::assertTrue(count($pages) >= 3, 'repo-pages-found');
+        foreach ($pages as $page) {
+            $id = basename(dirname($page));
+            $html = (string) file_get_contents($page);
+            $v = site_pages_game_version($games, $id);
+            self::assertTrue($v !== null && str_contains($html, '<meta property="og:url" content="' . SITE_PAGES_SITE . "play/$id/?v=$v\">"), "repo-og-url-versioned :: $id");
+        }
     }
 
     /** the site's own games are in sync with their metadata */

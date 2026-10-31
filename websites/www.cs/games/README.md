@@ -106,7 +106,12 @@ genre: Artillery                  # optional genre for search engines (JSON-LD)
     Both carry the game's link previews (title, description, `image`,
     `video`) and JSON-LD game data (a free browser game): the tags chat apps,
     social sites and search engines read. The picture and clip URLs carry a
-    hash of the file, so a recapture gives previews a new address to fetch. Run the tool
+    hash of the file, so a recapture gives previews a new address to fetch.
+    `og:url` is the page with `?v=<version>`, the hash the game's page loads
+    `dist/main.js` with, and every Share button hands out that same link:
+    Facebook keys a preview on `og:url`, so each release gets a fresh one.
+    The canonical link stays bare, and the games ignore `v`, so links shared
+    before keep working. Run the tool
     after editing a `metadata.yaml`; `make test` and `make deploy` refuse
     stale pages. The home page opens its Contact and Games panels for
     `#contact` and `#games`, which the navbar links to.

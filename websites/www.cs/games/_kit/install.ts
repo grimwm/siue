@@ -93,6 +93,24 @@ export function withInstall(page: string): string {
   return url.href;
 }
 
+/** The `?v=` of `url` (a game's entry module, loaded with its content hash), or null. */
+export function versionOf(url: string): string | null {
+  try {
+    return new URL(url).searchParams.get('v') || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** `page` as Share hands it out: its own query kept, with `v` set to the game's version, so a link preview
+ *  cached for an earlier release is not reused (chat apps key the preview on the link). */
+export function versionedShareUrl(page: string, version: string | null | undefined): string {
+  if (!version) return page;
+  const url = new URL(page);
+  url.searchParams.set('v', version);
+  return url.href;
+}
+
 const cancelled = (e: unknown): boolean => (e as { name?: unknown } | null)?.name === 'AbortError';
 
 /** What sharing a link needs of the browser. */

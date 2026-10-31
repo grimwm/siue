@@ -9,14 +9,30 @@ from .samples import DEFAULT_CACHE, fetch
 
 MANIFEST = Path(__file__).resolve().parent.parent / "samples.json"
 LIBRARY = Path(__file__).resolve().parents[2] / "library"
+# The composer's catalogue entry, copied from samples.json into library.json as it is.
+CATALOGUE_FIELDS = ("name", "category", "range", "expert", "home", "clef", "written", "gm", "gm_name", "pieces", "standin_note",
+                    "attack", "release")
 
 
-def _probe(path: Path) -> tuple[int, int]:
-    """(sample rate, channels) of an audio file."""
-    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate,channels",
-                        "-of", "json", str(path)], check=True, capture_output=True, text=True)
+class LibraryError(Exception):
+    pass
+
+
+def _probe(path: Path) -> tuple[int, int, int]:
+    """(sample rate, channels, frames) of an audio file."""
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-count_packets", "-show_entries",
+                        "stream=sample_rate,channels,duration_ts", "-of", "json", str(path)], check=True, capture_output=True, text=True)
     s = json.loads(r.stdout)["streams"][0]
-    return int(s["sample_rate"]), int(s["channels"])
+    return int(s["sample_rate"]), int(s["channels"]), int(s["duration_ts"])
+
+
+def _check_loop(name: str, loop: list[float], probed: list[tuple[str, int, int]]) -> None:
+    """The loop must be a forward stretch inside every one of the instrument's samples."""
+    if not 0 <= loop[0] < loop[1]:
+        raise LibraryError(f"{name}: loop {loop} must start at 0 or later and end after it starts")
+    for rel, rate, frames in probed:
+        if loop[1] * rate > frames:
+            raise LibraryError(f"{name}: loop {loop} ends after {rel}, which is {frames / rate:.3f} s long")
 
 
 def _encode(src: Path, dest: Path) -> None:
@@ -30,16 +46,31 @@ def build(manifest: dict, samples: Path, out: Path) -> dict:
     """Write each sample under `out` as <instrument>/<pitch>.flac and library.json beside them; returns that index."""
     out = Path(out)
     instruments = {}
+    sampled = {name: inst for name, inst in manifest["instruments"].items() if "standin" not in inst}
     for name, inst in manifest["instruments"].items():
-        files = []
+        target = inst.get("standin")
+        if target is not None and target not in sampled:
+            raise LibraryError(f"{name}: its stand-in {target} must be a sampled instrument, not a stand-in or missing")
+    for name, inst in sampled.items():
+        files, probed = [], []
         for f in sorted(inst["files"], key=lambda f: f["pitch"]):
             rel = f"{name}/{f['pitch']}.flac"
             _encode(Path(samples) / f["path"], out / rel)
-            rate, channels = _probe(out / rel)
+            rate, channels, frames = _probe(out / rel)
             files.append({"pitch": f["pitch"], "file": rel, "rate": rate, "channels": channels})
+            probed.append((rel, rate, frames))
         instruments[name] = {"files": files}
         if "loop" in inst:
+            _check_loop(name, inst["loop"], probed)
             instruments[name]["loop"] = inst["loop"]
+    for name, inst in manifest["instruments"].items():
+        if "standin" in inst:
+            instruments[name] = {k: v for k, v in instruments[inst["standin"]].items() if k in ("files", "loop")}
+            instruments[name]["standin"] = inst["standin"]
+        if inst.get("pitched") is False:
+            instruments[name]["pitched"] = False
+        instruments[name].update({k: inst[k] for k in CATALOGUE_FIELDS if k in inst})
+    instruments = {name: instruments[name] for name in manifest["instruments"]}
     index = {"version": 1, **{k: manifest[k] for k in ("source", "commit", "licence", "credit")}, "instruments": instruments}
     (out / "library.json").write_text(json.dumps(index, indent=1) + "\n")
     return index

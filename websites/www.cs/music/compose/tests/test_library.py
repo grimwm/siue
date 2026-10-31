@@ -8,7 +8,7 @@ import wave
 from pathlib import Path
 
 import support  # noqa: F401
-from siue_compose.library import build
+from siue_compose.library import CATALOGUE_FIELDS, LibraryError, build
 
 
 def write_wav(path: Path, rate=22050, width=2, channels=2, frames=2000, freq=440.0):
@@ -74,6 +74,55 @@ class BuildTest(unittest.TestCase):
         self.assertNotIn("loop", index["instruments"]["harp"])
         for key, want in (("source", "https://example.test/lib"), ("commit", "abc"), ("licence", "CC0 1.0 Universal"), ("credit", "Test Studios")):
             self.assertEqual(index[key], want)
+
+    def test_catalogue_fields_copied(self):
+        fields = {"name": "Harp", "category": "strings", "range": [23, 104], "expert": [23, 104], "home": 60, "clef": "grand",
+                  "written": 0, "gm": 47, "gm_name": "Orchestral Harp", "pieces": None, "standin_note": "n", "attack": 0.005,
+                  "release": 0.4}
+        self.assertEqual(set(fields), set(CATALOGUE_FIELDS))
+        manifest = {**MANIFEST, "instruments": {**MANIFEST["instruments"], "harp": {**MANIFEST["instruments"]["harp"], **fields}}}
+        index = build(manifest, self.samples, self.out)
+        for k, v in fields.items():
+            self.assertEqual(index["instruments"]["harp"][k], v, k)
+        self.assertNotIn("name", index["instruments"]["organ"])
+
+    def test_standin_shares_target_files(self):
+        manifest = {**MANIFEST, "instruments": {"choir": {"standin": "organ", "name": "Choir"}, **MANIFEST["instruments"]}}
+        index = build(manifest, self.samples, self.out)
+        choir, organ = index["instruments"]["choir"], index["instruments"]["organ"]
+        self.assertEqual(choir["files"], organ["files"])
+        self.assertEqual(choir["loop"], organ["loop"])
+        self.assertEqual(choir["standin"], "organ")
+        self.assertEqual(choir["name"], "Choir")
+        self.assertFalse((self.out / "choir").exists())
+
+    def test_standin_of_standin_refused(self):
+        manifest = {**MANIFEST, "instruments": {**MANIFEST["instruments"], "choir": {"standin": "organ"}, "voice": {"standin": "choir"}}}
+        with self.assertRaises(LibraryError) as e:
+            build(manifest, self.samples, self.out)
+        self.assertIn("voice", str(e.exception))
+        self.assertIn("choir", str(e.exception))
+
+    def test_unpitched_kept(self):
+        manifest = {**MANIFEST, "instruments": {**MANIFEST["instruments"], "harp": {**MANIFEST["instruments"]["harp"], "pitched": False}}}
+        index = build(manifest, self.samples, self.out)
+        self.assertIs(index["instruments"]["harp"]["pitched"], False)
+        self.assertNotIn("pitched", index["instruments"]["organ"])
+
+    def _organ_loop(self, loop):
+        organ = {**MANIFEST["instruments"]["organ"], "loop": loop}
+        return {**MANIFEST, "instruments": {**MANIFEST["instruments"], "organ": organ}}
+
+    def test_loop_past_sample_end_refused(self):
+        # c.wav is 2000 frames at 22050 Hz, about 0.0907 s long
+        with self.assertRaises(LibraryError) as e:
+            build(self._organ_loop([0.02, 0.2]), self.samples, self.out)
+        self.assertIn("organ/48.flac", str(e.exception))
+
+    def test_bad_loop_interval_refused(self):
+        for loop in ([-0.01, 0.05], [0.06, 0.06], [0.07, 0.03], [0.1, 0.2]):
+            with self.subTest(loop=loop), self.assertRaises(LibraryError):
+                build(self._organ_loop(loop), self.samples, self.out)
 
 
 if __name__ == "__main__":

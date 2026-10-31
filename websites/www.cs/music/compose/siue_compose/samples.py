@@ -21,7 +21,7 @@ def fetch(manifest: dict, cache: Path = DEFAULT_CACHE, get=_download) -> dict[st
     """Every instrument's files, verified, under one folder per library commit; instrument id -> that folder."""
     root = Path(cache) / manifest["commit"]
     for inst in manifest["instruments"].values():
-        for f in inst["files"]:
+        for f in inst.get("files", []):
             path = root / f["path"]
             if path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == f["sha256"]:
                 continue

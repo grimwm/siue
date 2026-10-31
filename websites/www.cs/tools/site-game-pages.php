@@ -90,10 +90,10 @@ function site_pages_asset_url(string $site, string $path, string $siteRoot): str
 /** A game's link-preview tags (Open Graph, Twitter card) and its search
  *  engines' game data (JSON-LD), for the site page that shares it.
  *  $siteRoot is the site's folder, holding games/. */
-function site_pages_preview(array $card, string $site, string $siteRoot, ?string $version): array
+function site_pages_preview(array $card, string $site, string $siteRoot, string $version): array
 {
     $url = $site . 'play/' . $card['id'] . '/';
-    $shared = $version === null ? $url : $url . '?v=' . $version;
+    $shared = $url . '?v=' . $version;
     $title = site_pages_esc($card['title']);
     $summary = site_pages_summary($card['description']);
     $desc = site_pages_esc($summary);
@@ -271,7 +271,7 @@ function site_pages_wrapper(array $card, string $site, array $versions, string $
 /** The site's page for a game mounted in the site page: its preview tags,
  *  then straight on to the site with ?game=<id>, keeping the address's query
  *  and hash (?install). */
-function site_pages_forward_page(array $card, string $site, string $siteRoot, ?string $version): string
+function site_pages_forward_page(array $card, string $site, string $siteRoot, string $version): string
 {
     // Relative, so the forward stays on whichever host serves the page.
     $to = site_pages_esc('../../?game=' . rawurlencode($card['id']));
@@ -307,6 +307,12 @@ function site_pages_sync(string $root, string $site, bool $write): array
         return [[], array_merge($notes, $problems), true];
     }
     foreach ($hub['games'] as $card) {
+        $game = site_pages_game_version($root, $card['id']);
+        if ($game === null) {
+            $notes[] = "games/{$card['id']}/dist/main.js is not readable, but play/{$card['id']}/ shares its version; build the game";
+            $broken = true;
+            continue;
+        }
         if (isset($card['page'])) {
             $bar = @file_get_contents("$root/{$card['id']}/dist/install.js");
             if (!is_string($bar)) {
@@ -314,15 +320,9 @@ function site_pages_sync(string $root, string $site, bool $write): array
                 $broken = true;
                 continue;
             }
-            $game = site_pages_game_version($root, $card['id']);
-            if ($game === null) {
-                $notes[] = "games/{$card['id']}/dist/main.js is not readable, but play/{$card['id']}/ shares its version; build the game";
-                $broken = true;
-                continue;
-            }
             $content = site_pages_wrapper($card, $site, $versions + ['install.js' => site_pages_version($bar), 'game' => $game], dirname($root));
         } else {
-            $content = site_pages_forward_page($card, $site, dirname($root), site_pages_game_version($root, $card['id']));
+            $content = site_pages_forward_page($card, $site, dirname($root), $game);
         }
         $path = "$playRoot/{$card['id']}/index.html";
         if ((string) @file_get_contents($path) !== $content) {

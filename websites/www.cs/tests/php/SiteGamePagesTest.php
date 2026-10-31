@@ -38,6 +38,8 @@ final class SiteGamePagesTest extends TestCase
         $this->page = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Arty</title>\n</head>\n<body>hi</body>\n</html>\n";
         file_put_contents("$this->root/arty/index.html", $this->page);
         file_put_contents("$this->root/mounted/metadata.yaml", "title: Mounted\ndescription: Runs in the site page.\nstart: goGame\n");
+        mkdir("$this->root/mounted/dist", 0777, true);
+        file_put_contents("$this->root/mounted/dist/main.js", "m1\n");
     }
 
     protected function tearDown(): void
@@ -235,11 +237,18 @@ final class SiteGamePagesTest extends TestCase
             && in_array('games/arty/dist/main.js is not readable, but play/arty/ shares its version; build the game', $notes, true), 'unbuilt-entry-fails' . ' :: ' . json_encode([$notes, $broken]));
     }
 
+    /** a mounted game without its built entry has no version to share either: a note and a failure */
+    public function testUnbuiltMountedEntryFails(): void
+    {
+        unlink("$this->root/mounted/dist/main.js");
+        [, $notes, $broken] = site_pages_sync($this->root, $this->site, false);
+        self::assertTrue($broken === true
+            && in_array('games/mounted/dist/main.js is not readable, but play/mounted/ shares its version; build the game', $notes, true), 'unbuilt-mounted-entry-fails' . ' :: ' . json_encode([$notes, $broken]));
+    }
+
     /** a new release (a rebuilt dist/main.js) is a new og:url, so the page goes stale; a mounted game's page is versioned too */
     public function testReleaseChangesOgUrl(): void
     {
-        mkdir("$this->root/mounted/dist", 0777, true);
-        file_put_contents("$this->root/mounted/dist/main.js", "m1\n");
         site_pages_sync($this->root, $this->site, true);
         $fwd = (string) file_get_contents("$this->tmp/play/mounted/index.html");
         self::assertTrue(str_contains($fwd, '<meta property="og:url" content="https://example.edu/~me/play/mounted/?v=' . substr(hash('sha256', "m1\n"), 0, 10) . '">')

@@ -2,7 +2,7 @@
  * player's presses and Ariadne's thread (a hint, the whole line, a play-out)
  * through the engine, voices each turn's events, records a win, and keeps the
  * turn that is animating. A turn's animation pauses where the player's figure
- * reaches a story page, or takes a kind of thing for the first time, while the
+ * reaches a story page, or meets an item or an active tile for the first time, while the
  * page shows it, and goes on when told. The page draws from it and holds no
  * rules. DOM-free. */
 import type { Clock, Timers } from '../../_kit/ports.ts';
@@ -22,6 +22,7 @@ import { HAZARDS } from './puzzle/tiles.ts';
 import { threadPath } from './thread-path.ts';
 import type { ThreadCell } from './thread-path.ts';
 import type { HazardKind, ObjectKind } from './puzzle/tiles.ts';
+import { meetingsOf } from './dictionary.ts';
 
 export type SfxName =
   | 'step' | 'push' | 'splash' | 'sizzle' | 'door' | 'key' | 'relic' | 'gate' | 'button' | 'slide'
@@ -51,9 +52,9 @@ export interface GameDeps {
   changed(): void;
   /** The thread's search; the solver's when not given. */
   solve?: typeof solve;
-  /** Whether taking this kind of thing is a first, whose card the page shows: a turn's animation stops where the
-   *  figure takes the first of each such kind. None is, when not given. */
-  firstTake?(what: ObjectKind): boolean;
+  /** Whether meeting this Dictionary entry (an item taken, an active tile touched) is a first, whose card the page
+   *  shows: a turn's animation stops where the figure first meets each such entry. None is, when not given. */
+  isFirst?(id: string): boolean;
 }
 
 export interface Anim {
@@ -64,16 +65,15 @@ export interface Anim {
   before: State;
   /** The state once the player's action alone has played: it is drawn while the hazards move. */
   mid: State;
-  /** Where the animation stops this turn, at the moment the figure lands on each: the first of each kind of thing
-   *  taken for the first time, and the story pages. */
+  /** Where the animation stops this turn, at the moment the figure reaches each: each first meeting, and the story
+   *  pages. */
   stops: readonly Stop[];
   /** The stop the animation waits at while the page shows it, or null while it plays. */
   paused: Stop | null;
 }
 
-/** A stop: a kind of thing taken for the first time (`id` is its object kind), or a story page (`id` is the page's).
- *  A first that is also a page stops twice at the same moment, the first before the page. */
-export interface Stop { kind: 'item' | 'page'; id: string; ms: number }
+/** A stop: a first meeting (`id` is the Dictionary entry's), or a story page (`id` is the page's). */
+export interface Stop { kind: 'meet' | 'page'; id: string; ms: number }
 
 export interface Game {
   /** 0-based; -1 before one opens. */
@@ -95,6 +95,9 @@ export interface Game {
   readonly found: readonly string[];
   /** What the player took in the last turn played, in the order taken; empty after open, undo and restart. */
   readonly took: readonly ObjectKind[];
+  /** The Dictionary entries the player met in the last turn played (src/dictionary.ts meetingsOf), each once, in
+   *  order; empty after open, undo and restart. */
+  readonly meets: readonly string[];
   /** Starts level `i` fresh (clears assisted). */
   open(i: number): void;
   press(a: Action | 'undo' | 'restart'): void;
@@ -134,20 +137,18 @@ function takenBy(a: Pick<Anim, 'before' | 'timeline'>, ms: number): State {
   return { ...a.before, objects };
 }
 
-/** Where the turn's animation stops: the first of each kind `first` names, and, with `pages`, each story page. */
-function stopsOf(before: State, tl: Timeline, pages: boolean, first: (what: ObjectKind) => boolean): Stop[] {
+/** Where the turn's animation stops: each first meeting `first` names, and, with `pages`, each story page; in the
+ *  order the figure reaches them. */
+function stopsOf(before: State, tl: Timeline, meetings: readonly { id: string; ms: number }[], pages: boolean, first: (id: string) => boolean): Stop[] {
   const { cols, pageIds, pageCells } = before.level;
-  const seen = new Set<ObjectKind>();
-  return tl.taken.flatMap(t => {
-    const out: Stop[] = [];
-    if (!seen.has(t.what) && first(t.what)) {
-      seen.add(t.what);
-      out.push({ kind: 'item', id: t.what, ms: t.ms });
+  const out: Stop[] = meetings.filter(m => first(m.id)).map(m => ({ kind: 'meet', id: m.id, ms: m.ms }));
+  if (pages) {
+    for (const t of tl.taken) {
+      const id = t.what === 'page' ? pageIds[pageCells.indexOf(t.at.r * cols + t.at.c)] : undefined;
+      if (id !== undefined) out.push({ kind: 'page', id, ms: t.ms });
     }
-    const id = pages && t.what === 'page' ? pageIds[pageCells.indexOf(t.at.r * cols + t.at.c)] : undefined;
-    if (id !== undefined) out.push({ kind: 'page', id, ms: t.ms });
-    return out;
-  });
+  }
+  return out.sort((a, b) => a.ms - b.ms);
 }
 
 const sameAction = (a: Action, b: Action): boolean =>
@@ -167,6 +168,7 @@ export function createGame(deps: GameDeps): Game {
   let tick: number | null = null;
   let found: readonly string[] = [];
   let took: readonly ObjectKind[] = [];
+  let meets: readonly string[] = [];
   /** V is on: the line from the try as it stands stays drawn through every turn. */
   let threadOn = false;
   /** The actions that made the try as it stands, from the level's start. */
@@ -247,9 +249,13 @@ export function createGame(deps: GameDeps): Game {
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
     took = r.events.flatMap(e => (e.kind === 'took' ? [e.what] : []));
-    const tl = timeline(before, r.events, deps.reducedMotion(), run.now);
-    const first = deps.firstTake ?? (() => false);
-    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: stopsOf(before, tl, !deps.levels.scratch?.(trial), first), paused: null } : null;
+    const reduced = deps.reducedMotion();
+    const tl = timeline(before, r.events, reduced, run.now);
+    // Each entry once a turn, where the figure first reaches it.
+    const meetings = meetingsOf(before, r.events, reduced ? 0 : SLIDE_MS).filter((m, i, all) => all.findIndex(x => x.id === m.id) === i);
+    meets = meetings.map(m => m.id);
+    const first = deps.isFirst ?? (() => false);
+    anim = tl.duration > 0 ? { timeline: tl, started: deps.clock.now(), before, mid: actAlone(before, a).state, stops: stopsOf(before, tl, meetings, !deps.levels.scratch?.(trial), first), paused: null } : null;
     reached = 0;
     if (run.now.outcome === 'won') {
       if (deps.levels.scratch?.(trial)) deps.levels.won?.(trial, run.now.moves, run.assisted);
@@ -342,6 +348,7 @@ export function createGame(deps: GameDeps): Game {
     get anim() { return anim; },
     get found() { return found; },
     get took() { return took; },
+    get meets() { return meets; },
     animMs,
     resume,
     open(i) {
@@ -350,6 +357,7 @@ export function createGame(deps: GameDeps): Game {
       run = startRun(deps.levels.level(i));
       found = [];
       took = [];
+      meets = [];
       played = [];
       threadOn = false;
       thread = null;
@@ -368,6 +376,8 @@ export function createGame(deps: GameDeps): Game {
         else if (run !== was) played.pop();
         found = [];
         took = [];
+        meets = [];
+      meets = [];
         redraw();
         deps.changed();
         return;

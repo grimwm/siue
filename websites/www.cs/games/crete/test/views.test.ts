@@ -569,6 +569,9 @@ test('an open entry shows its full text, quotation and citation, with a Back but
   assert.deepEqual(tabsOf(byId(root, 'lore-back')).map(t => t.textContent), [KEYS.menu.label]);
   click(byId(root, 'lore-back'));
   assert.deepEqual(seen, [null]);
+  renderLore(root, loreProps({ found: () => true, fromPickup: true, shown: { kind: 'page', id: PAGES[0]!.id }, onShow: () => {} }));
+  assert.deepEqual(tabsOf(byId(root, 'lore-back')).map(t => t.textContent), [KEYS.begin.label], 'a page taken mid-level goes on with Enter');
+  assert.match(byId(root, 'lore-back').textContent, /Go on/);
   renderLore(root, loreProps({ shown: { kind: 'card', which: 'closing', chapter: 1 } }));
   assert.equal(byId(root, 'lore-entry-text').textContent, CH1.lore!.closing.text);
 });

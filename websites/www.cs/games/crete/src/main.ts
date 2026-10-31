@@ -2,6 +2,8 @@
  * ?seed=, Chapter 1's card over it; with #edit, the editor; with a share link, its card), and exposes
  * window.__creteTest for the browser specs. */
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
+import iconsJson from '../fx/sprites/modern-icons.json' with { type: 'json' };
+import type { IconSheet } from './icons-models.ts';
 import { createAudio } from './audio.ts';
 import { createAudioCore } from '../../_kit/audio/core.ts';
 import { createMusic } from './music.ts';
@@ -103,7 +105,7 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   bestWon: (text, moves) => editor.tryWon(text, moves),
 });
 const levels = outside.levels;
-const ui = createUi({ atlas, board, progress, pages, met, levels, sfx: audio.sfx, cards: stack => behindEditor(stack.includes('editor')) });
+const ui = createUi({ atlas, icons: iconsJson as IconSheet, board, progress, pages, met, levels, sfx: audio.sfx, cards: stack => behindEditor(stack.includes('editor')) });
 /* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
    which comes first. */
 const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
@@ -185,7 +187,7 @@ const game = createGame({
   timers: browserTimers,
   clock,
   reducedMotion: () => reduced,
-  firstTake: what => ui.firstTake(what),
+  isFirst: id => ui.isFirst(id),
   changed: () => {
     ui.render(game);
     showModern();

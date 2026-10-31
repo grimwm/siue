@@ -115,19 +115,19 @@ final class MusicPairingTest extends TestCase
 
     public function testTheCodeIsTheFirstSixtyBitsOfTheFingerprintInCrockfordBase32(): void
     {
-        self::assertSame('BH16-EYT6-88ZR', Music\Pairing::code(hash('sha256', 'siue')));
-        self::assertSame('8ZCB-THM7-F0RW', Music\Pairing::code(hash('sha256', 'pair')));
-        self::assertSame('0000-0000-0000', Music\Pairing::code(str_repeat('0', 64)));
-        self::assertSame('ZZZZ-ZZZZ-ZZZZ', Music\Pairing::code(str_repeat('f', 64)));
+        self::assertSame('BH16-EYT6-88ZR-N5Z4', Music\Pairing::code(hash('sha256', 'siue')));
+        self::assertSame('8ZCB-THM7-F0RW-SNGW', Music\Pairing::code(hash('sha256', 'pair')));
+        self::assertSame('0000-0000-0000-0000', Music\Pairing::code(str_repeat('0', 64)));
+        self::assertSame('ZZZZ-ZZZZ-ZZZZ-ZZZZ', Music\Pairing::code(str_repeat('f', 64)));
     }
 
     public function testATypedCodeIgnoresCaseSpacesAndHyphensAndReadsLookalikes(): void
     {
-        self::assertSame('BH16-EYT6-88ZR', Music\Pairing::normalize(' bh16 eyt6-88zr '));
-        self::assertSame('BH16-EYT6-88ZR', Music\Pairing::normalize('BHI6EYT688ZR'));
-        self::assertSame('0000-1111-0000', Music\Pairing::normalize('OOOO-IlIL-oooo'));
-        self::assertNull(Music\Pairing::normalize('BH16-EYT6-88Z'));
-        self::assertNull(Music\Pairing::normalize('BH16-EYT6-88ZU'), 'U is not in the alphabet');
+        self::assertSame('BH16-EYT6-88ZR-N5Z4', Music\Pairing::normalize(' bh16 eyt6-88zr n5z4 '));
+        self::assertSame('BH16-EYT6-88ZR-N5Z4', Music\Pairing::normalize('BHI6EYT688ZRN5Z4'));
+        self::assertSame('0000-1111-0000-1111', Music\Pairing::normalize('OOOO-IlIL-oooo-iiii'));
+        self::assertNull(Music\Pairing::normalize('BH16-EYT6-88ZR-N5Z'));
+        self::assertNull(Music\Pairing::normalize('BH16-EYT6-88ZR-N5ZU'), 'U is not in the alphabet');
         self::assertNull(Music\Pairing::normalize(''));
     }
 
@@ -181,7 +181,7 @@ final class MusicPairingTest extends TestCase
         $this->register($secret, self::$ai['der']);
         $code = Music\Pairing::code(self::$ai['fp']);
         for ($i = 0; $i < Music\Pairing::WRONG_PER_KEY_HOUR; $i++) {
-            self::assertSame('wrong_code', $this->pairing->check($this->account, $id, 'AAAA-AAAA-AAAA'));
+            self::assertSame('wrong_code', $this->pairing->check($this->account, $id, 'AAAA-AAAA-AAAA-AAAA'));
         }
         self::assertSame('too_many', $this->pairing->check($this->account, $id, $code), 'the sixth try within the hour, even the right code');
         $this->clock->now += 3601;
@@ -198,7 +198,7 @@ final class MusicPairingTest extends TestCase
     public function testACodeOnlyPairsTheStudiosOwnRegisteredActiveKey(): void
     {
         [$secret, $id] = $this->key($this->account);
-        self::assertSame('not_registered', $this->pairing->check($this->account, $id, 'AAAA-AAAA-AAAA'));
+        self::assertSame('not_registered', $this->pairing->check($this->account, $id, 'AAAA-AAAA-AAAA-AAAA'));
         $other = (int) $this->accounts->signIn('someone@siue.edu');
         [$theirs, $theirId] = $this->key($other);
         $this->register($theirs, self::$ai['der']);
@@ -213,7 +213,7 @@ final class MusicPairingTest extends TestCase
         [$secret, $id] = $this->key($this->account);
         $this->register($secret, self::$ai['der']);
         $as = $this->signedIn();
-        $wrong = $this->pages->pair($this->data($as, 'POST'), (string) json_encode(['key' => $id, 'code' => 'AAAA-AAAA-AAAA']));
+        $wrong = $this->pages->pair($this->data($as, 'POST'), (string) json_encode(['key' => $id, 'code' => 'AAAA-AAAA-AAAA-AAAA']));
         self::assertSame(422, $wrong->status);
         self::assertSame('wrong_code', $this->json($wrong)['error']);
         self::assertArrayHasKey('csrf', $this->json($wrong));
@@ -225,7 +225,7 @@ final class MusicPairingTest extends TestCase
         self::assertFalse($this->pairing->status($this->account, $id)['paired'], 'checking the code pairs nothing');
 
         $before = $this->store->keyring()['locked'];
-        $badCode = $this->pages->keyring($this->data($as, 'POST', ['query' => ['pair' => '1']]), $this->pairBody($as, $id, 'AAAA-AAAA-AAAA', self::$ai['fp']));
+        $badCode = $this->pages->keyring($this->data($as, 'POST', ['query' => ['pair' => '1']]), $this->pairBody($as, $id, 'AAAA-AAAA-AAAA-AAAA', self::$ai['fp']));
         self::assertSame(422, $badCode->status);
         $otherFp = $this->pages->keyring($this->data($as, 'POST', ['query' => ['pair' => '1']]), $this->pairBody($as, $id, $code, self::$other['fp']));
         self::assertSame(409, $otherFp->status, 'the fingerprint named must be the registered key');
@@ -287,6 +287,23 @@ final class MusicPairingTest extends TestCase
         self::assertSame(200, $this->api->pickedUp($this->asKey($secret, ['method' => 'POST', 'query' => ['id' => $both['id']]]))->status);
         self::assertNull($this->store->notes('waiting')[0]['picked_up_at'] ?? null);
         self::assertSame([$older['id']], array_column($this->store->notes('waiting'), 'id'), 'the older note still waits for the person');
+    }
+
+    public function testOneAiMarkingANotePickedUpNeverHidesItFromAnother(): void
+    {
+        [$a, $idA] = $this->key($this->account);
+        [$b, $idB] = $this->key($this->account);
+        $fpB = str_repeat('ef', 32);
+        $this->register($a, self::$ai['der']);
+        $this->pairThroughThePage($idA);
+        music_paired($this->db, $this->account, $idB, $fpB);
+        $note = $this->store->addNote(music_sealed2([$this->person['fp'], self::$ai['fp'], $fpB]), $this->pairing->activeRecipients($this->account));
+        $waiting = fn(string $key): array => array_column($this->json($this->api->listNotes($this->asKey($key, ['query' => ['state' => 'waiting']])))['notes'], 'id');
+        self::assertSame([$note['id']], $waiting($a));
+        self::assertSame(200, $this->api->pickedUp($this->asKey($a, ['method' => 'POST', 'query' => ['id' => $note['id']]]))->status);
+        self::assertSame([], $waiting($a), 'picked up for A');
+        self::assertSame([$note['id']], $waiting($b), 'still waiting for B');
+        self::assertSame([], array_column($this->store->notes('waiting'), 'id'), 'the person sees it picked up');
     }
 
     public function testRevokingForgetsTheSealingKeySoNewNotesCannotNameIt(): void

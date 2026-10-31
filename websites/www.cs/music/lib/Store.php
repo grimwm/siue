@@ -116,8 +116,9 @@ final class Store
         \Admin\Db::once($this->db, self::MIGRATION, fn() => $this->moveIntoAccounts(), fn() => $this->restoreDrafts());
         // The move committed but its process ended before it cleared away the old files it set aside.
         $this->removeTree("$dir/drafts.old");
-        // Every key a note names (SIUEN1: the one; SIUEN2: each), so an AI key lists only the notes sealed to it.
-        $this->db->exec('CREATE TABLE IF NOT EXISTS music_note_recipients (note_id TEXT NOT NULL, account_id INTEGER NOT NULL, fingerprint TEXT NOT NULL, PRIMARY KEY (note_id, fingerprint))');
+        // Every key a note names (SIUEN1: the one; SIUEN2: each), so an AI key lists only the notes sealed to it, and
+        // when each AI marked it picked up: one AI's mark never hides a note from another AI.
+        $this->db->exec('CREATE TABLE IF NOT EXISTS music_note_recipients (note_id TEXT NOT NULL, account_id INTEGER NOT NULL, fingerprint TEXT NOT NULL, picked_up_at INTEGER, PRIMARY KEY (note_id, fingerprint))');
         $this->db->exec('CREATE INDEX IF NOT EXISTS music_note_recipients_fp ON music_note_recipients(account_id, fingerprint)');
     }
 
@@ -218,7 +219,8 @@ final class Store
 
     /**
      * @param 'waiting'|'picked-up'|null $state
-     * @param string|null $sealedTo only the notes sealed to this key (an AI key's paired key); null for every note
+     * @param string|null $sealedTo only the notes sealed to this key (an AI key's paired key), with that key's own picked-up
+     *                              mark as their state; null for every note and the note's own mark
      * @return list<array{id: string, size: int, sha256: string, arrived_at: int, picked_up_at: ?int}> oldest first
      */
     public function notes(?string $state = null, ?string $sealedTo = null): array
@@ -228,13 +230,15 @@ final class Store
             'picked-up' => 'AND picked_up_at IS NOT NULL',
             default => '',
         };
-        $args = [$this->account];
         if ($sealedTo !== null) {
-            $where .= ' AND id IN (SELECT note_id FROM music_note_recipients WHERE account_id = ? AND fingerprint = ?)';
-            array_push($args, $this->account, $sealedTo);
+            $where = str_replace('picked_up_at', 'r.picked_up_at', $where);
+            $q = $this->db->prepare('SELECT n.id, n.size, n.sha256, n.arrived_at, r.picked_up_at FROM music_notes n JOIN music_note_recipients r'
+                . " ON r.note_id = n.id AND r.account_id = n.account_id WHERE n.account_id = ? AND r.fingerprint = ? $where ORDER BY n.arrived_at ASC, n.rowid ASC");
+            $q->execute([$this->account, $sealedTo]);
+        } else {
+            $q = $this->db->prepare("SELECT id, size, sha256, arrived_at, picked_up_at FROM music_notes WHERE account_id = ? $where ORDER BY arrived_at ASC, rowid ASC");
+            $q->execute([$this->account]);
         }
-        $q = $this->db->prepare("SELECT id, size, sha256, arrived_at, picked_up_at FROM music_notes WHERE account_id = ? $where ORDER BY arrived_at ASC, rowid ASC");
-        $q->execute($args);
         $rows = $q->fetchAll(\PDO::FETCH_ASSOC);
         return array_map(static fn(array $r): array => [
             'id' => (string) $r['id'],
@@ -255,11 +259,18 @@ final class Store
         return $bytes === false ? null : $bytes;
     }
 
-    /** true when the note exists (marking twice is fine); with $sealedTo, only a note sealed to that key is marked. */
+    /**
+     * true when the note exists (marking twice is fine). With $sealedTo, only a note sealed to that key is marked, and
+     * that key's own mark is set too, so the note stops waiting for that AI alone.
+     */
     public function markPickedUp(string $id, ?string $sealedTo = null): bool
     {
         if (preg_match(self::ID, $id) !== 1 || !$this->noteExists($id, $sealedTo)) {
             return false;
+        }
+        if ($sealedTo !== null) {
+            $this->db->prepare('UPDATE music_note_recipients SET picked_up_at = ? WHERE note_id = ? AND account_id = ? AND fingerprint = ? AND picked_up_at IS NULL')
+                ->execute([$this->clock->now(), $id, $this->account, $sealedTo]);
         }
         $this->db->prepare('UPDATE music_notes SET picked_up_at = ? WHERE id = ? AND account_id = ? AND picked_up_at IS NULL')->execute([$this->clock->now(), $id, $this->account]);
         return $this->noteExists($id);

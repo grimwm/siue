@@ -53,10 +53,10 @@ def config_dir(platform: str, env: Mapping[str, str], home: Path) -> Path:
 
 
 def pairing_code(fingerprint: str) -> str:
-    """The first 60 bits of the fingerprint in Crockford's base32, as XXXX-XXXX-XXXX."""
-    n = int(fingerprint[:15], 16)
-    chars = "".join(ALPHABET[(n >> (55 - 5 * i)) & 31] for i in range(12))
-    return f"{chars[:4]}-{chars[4:8]}-{chars[8:]}"
+    """The first 80 bits of the fingerprint in Crockford's base32, as XXXX-XXXX-XXXX-XXXX."""
+    n = int(fingerprint[:20], 16)
+    chars = "".join(ALPHABET[(n >> (75 - 5 * i)) & 31] for i in range(16))
+    return "-".join(chars[i:i + 4] for i in range(0, 16, 4))
 
 
 def _private_dir(path: Path) -> None:

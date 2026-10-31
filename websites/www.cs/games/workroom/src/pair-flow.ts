@@ -10,7 +10,7 @@ import { normalizeCode, pairingCode } from './pairing.ts';
 import { KeyringInvalid, WrongPassphrase, relockKeyring, unlockKeyring, verifyAiKey } from './unlock.ts';
 
 export const PAIR_MESSAGES = {
-  badCode: 'A pairing code is 12 letters and digits, like ABCD-EFGH-JKMN. Type it as your AI shows it.',
+  badCode: 'A pairing code is 16 letters and digits, like ABCD-EFGH-JKMN-PQRS. Type it as your AI shows it.',
   wrong_code: 'That is not this key\'s pairing code. Check the code your AI shows and try again.',
   too_many: 'Too many pairing tries in the last hour. Try again later.',
   no_key: 'This AI key is revoked or gone. Reload the page.',

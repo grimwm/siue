@@ -258,13 +258,13 @@ comes first because a score-only studio cannot be heard without it.
   fingerprint; the person types the code into the page, and only then does the
   browser add the key. A server that slipped in a key of its own could not
   make the browser seal to it.
-  - **The code** is the first 60 bits of the SHA-256 of the AI key's SPKI, in
-    Crockford base32, `XXXX-XXXX-XXXX`. The server checks a typed code first
+  - **The code** is the first 80 bits of the SHA-256 of the AI key's SPKI, in
+    Crockford base32, `XXXX-XXXX-XXXX-XXXX`. The server checks a typed code first
     (5 wrong codes per AI key an hour, 20 tries per studio an hour); the
     browser then checks the code again against the key it was handed, and that
     the key is RSA-4096 with exponent 65537 in canonical DER, before it adds
     it. A server wanting a key of its own with the same code would have to
-    make about 2^60 RSA-4096 keys.
+    try about 2^80 keys.
   - **Pairing needs the passphrase,** because the keyring is locked again with
     the AI's key in it; the server stores it only with the current key's
     signature and unchanged fingerprints, and then marks the AI key paired.

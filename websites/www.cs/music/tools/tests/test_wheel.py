@@ -1,6 +1,7 @@
 """The published wheel: built twice it is the same bytes; its SHA-256 is the one music/dist/release.json names (a change to
 the tool or the glossary without a new version fails here, before the deploy refuses it); it holds the package, the
 glossary and the metadata with the console script, and nothing of the tests, the repository or a key."""
+import contextlib
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -57,5 +58,6 @@ class WheelTest(unittest.TestCase):
 
     def test_the_command_writes_the_wheel_where_it_is_told(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(build_wheel.main(["--out", d]), 0)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(build_wheel.main(["--out", d]), 0)
             self.assertEqual((Path(d) / f"siue_music-{self.version}-py3-none-any.whl").read_bytes(), self.data)

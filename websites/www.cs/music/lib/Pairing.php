@@ -13,8 +13,8 @@ final class Pairing
 {
     /** Crockford's base32: no I, L, O or U. */
     public const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-    /** 12 characters of 5 bits: the first 60 bits of the fingerprint. */
-    public const CODE_CHARS = 12;
+    /** 16 characters of 5 bits: the first 80 bits of the fingerprint. */
+    public const CODE_CHARS = 16;
     public const WRONG_PER_KEY_HOUR = 5;
     public const TRIES_PER_ACCOUNT_HOUR = 20;
     public const RSA_BITS = 4096;
@@ -23,11 +23,11 @@ final class Pairing
     {
     }
 
-    /** The pairing code of a 64-hex fingerprint: XXXX-XXXX-XXXX. */
+    /** The pairing code of a 64-hex fingerprint: XXXX-XXXX-XXXX-XXXX. */
     public static function code(string $fingerprint): string
     {
         $bits = '';
-        foreach (str_split(substr($fingerprint, 0, 15)) as $hex) {
+        foreach (str_split(substr($fingerprint, 0, 20)) as $hex) {
             $bits .= str_pad(base_convert($hex, 16, 2), 4, '0', STR_PAD_LEFT);
         }
         $chars = '';

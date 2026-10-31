@@ -36,7 +36,7 @@ export function PairAi(p: PairAiProps) {
     }}>
       <input type="text" name="username" autocomplete="username" value="siue-music" readOnly tabIndex={-1} aria-hidden="true" class="sr-only" />
       <label class={LABEL}>Pairing Code
-        <input type="text" name="pairing-code" autocomplete="off" spellcheck={false} autocapitalize="characters" placeholder="XXXX-XXXX-XXXX" required value={code}
+        <input type="text" name="pairing-code" autocomplete="off" spellcheck={false} autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX" required value={code}
           onInput={e => setCode(e.currentTarget.value)} class={FIELD} />
       </label>
       <label class={LABEL}>Passphrase

@@ -133,7 +133,7 @@ test("a student's own AI connects through the published wheel, pairs, and reads 
     expect(before['connected'], JSON.stringify(before)).toBe(true);
     expect(before['paired']).toBe(false);
     const code = before['pairing_code'] as string;
-    expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/);
+    expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/);
     expect(String((await mcp.call('read_new_notes'))['refused'])).toContain(code);
 
     // Your studio: a wrong code is refused and pairs nothing; the right one pairs.
@@ -142,7 +142,7 @@ test("a student's own AI connects through the published wheel, pairs, and reads 
     const form = row.locator('[data-pair-form]');
     await expect(form).toBeVisible();
     await narrow('pairing');
-    await form.getByLabel('Pairing Code').fill('AAAA-AAAA-AAAA');
+    await form.getByLabel('Pairing Code').fill('AAAA-AAAA-AAAA-AAAA');
     await form.getByLabel('Passphrase').fill(PASSPHRASE);
     await form.getByRole('button', { name: 'Pair' }).click();
     await expect(form.getByRole('alert')).toHaveText("That is not this key's pairing code. Check the code your AI shows and try again.");

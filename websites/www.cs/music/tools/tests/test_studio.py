@@ -45,10 +45,10 @@ class PlacesTest(unittest.TestCase):
 
     def test_the_pairing_code_vectors_match_the_page_and_the_server(self):
         import hashlib
-        self.assertEqual(pairing_code(hashlib.sha256(b"siue").hexdigest()), "BH16-EYT6-88ZR")
-        self.assertEqual(pairing_code(hashlib.sha256(b"pair").hexdigest()), "8ZCB-THM7-F0RW")
-        self.assertEqual(pairing_code("0" * 64), "0000-0000-0000")
-        self.assertEqual(pairing_code("f" * 64), "ZZZZ-ZZZZ-ZZZZ")
+        self.assertEqual(pairing_code(hashlib.sha256(b"siue").hexdigest()), "BH16-EYT6-88ZR-N5Z4")
+        self.assertEqual(pairing_code(hashlib.sha256(b"pair").hexdigest()), "8ZCB-THM7-F0RW-SNGW")
+        self.assertEqual(pairing_code("0" * 64), "0000-0000-0000-0000")
+        self.assertEqual(pairing_code("f" * 64), "ZZZZ-ZZZZ-ZZZZ-ZZZZ")
 
 
 class StudioTest(unittest.TestCase):
@@ -208,7 +208,7 @@ class StudioTest(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             self.assertEqual(cli.main(["pairing-code"], env), 0)
         code = out.getvalue().splitlines()[0]
-        self.assertRegex(code, r"^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$")
+        self.assertRegex(code, r"^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$")
         self.assertIn(code, out.getvalue().splitlines()[1])
 
 

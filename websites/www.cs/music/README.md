@@ -96,10 +96,10 @@ sign in at once), 3 per address, 3,000 request rows kept.
   person typed the AI's pairing code: the server cannot add a recipient. The page seals to the AI keys the
   keyring holds and the server still lists as active (`keyring.php`'s `ai`, asked again before each note);
   the server accepts a note only when every key it names is the studio's current or an earlier notes key or
-  a paired active AI key, and at least one is the person's. The code is the first 60 bits of the AI key's
+  a paired active AI key, and at least one is the person's. The code is the first 80 bits of the AI key's
   fingerprint (SHA-256 of its SPKI) in Crockford base32, and the page and the server both take only an
-  RSA-4096 key with exponent 65537 in canonical DER, so a server would need about 2^60 such keys to find one
-  of its own with the same code. Pairing tries are limited: 5 wrong codes per AI key and 20 tries per
+  RSA-4096 key with exponent 65537 in canonical DER, so a server would need about 2^80 tries to find one of
+  its own with the same code. Pairing tries are limited: 5 wrong codes per AI key and 20 tries per
   studio an hour.
 - The private keys live in one locked keyring (PBKDF2-SHA-256, 600,000 rounds,
   AES-256-GCM) that only a signed-in session can fetch; it is unlocked in the
@@ -329,7 +329,7 @@ thing to install.
   pickup, below). Moving `sealing-key.json` away makes a new key, which needs a new pairing (and, once paired,
   a new AI key).
 - **Pairing:** on start the server registers the sealing key's public half through the AI key (when it may
-  read notes) and logs `siue-music: this computer's pairing code is XXXX-XXXX-XXXX` to the app's log;
+  read notes) and logs `siue-music: this computer's pairing code is XXXX-XXXX-XXXX-XXXX` to the app's log;
   `studio_status`, `siue-music pairing-code` and every notes tool before pairing give the code. The person
   types it on that key's row on Your studio with their passphrase (see Studios).
 - Without a key, with the placeholder, or with a revoked key, the server still starts and every tool answers
@@ -358,7 +358,9 @@ names its version, file name and SHA-256; `deploy.sh` builds it into `music/dist
 that wheel, and the page shows that address and SHA-256. To release a change to the tool or the glossary,
 raise `__version__` in `music/tools/siue_music/__init__.py`, run `music/tools/build-wheel --record`, and commit
 `music/dist/release.json` (`make music-test` fails until then). The deploy removes the previous wheel, so an
-app set up with an older one needs the new command from the page.
+app set up with an older one needs the new command from the page. The wheel is served with `Cache-Control: immutable` for a year:
+uv keeps the copy it first downloaded, so a file changed on the server later never reaches a computer that has
+it (uv cannot check a hash given with `--from`; the page's SHA-256 is for people to compare).
 
 ## The owner's MCP server
 

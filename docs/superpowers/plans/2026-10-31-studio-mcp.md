@@ -33,8 +33,8 @@ the AI lists, reads, publishes and deletes drafts and reads the person's new not
 
 - The server never adds a recipient: an AI public key reaches the sealing list only from the passphrase-locked keyring,
   rewritten by the unlocked browser after the typed code matched.
-- Pairing code: the first 60 bits of the SHA-256 of the AI key's SPKI DER, as 12 Crockford base32 characters
-  (`0123456789ABCDEFGHJKMNPQRSTVWXYZ`), shown `XXXX-XXXX-XXXX`; typed codes ignore case, spaces and hyphens, and read
+- Pairing code: the first 80 bits of the SHA-256 of the AI key's SPKI DER, as 16 Crockford base32 characters
+  (`0123456789ABCDEFGHJKMNPQRSTVWXYZ`), shown `XXXX-XXXX-XXXX-XXXX`; typed codes ignore case, spaces and hyphens, and read
   `I`/`L` as `1` and `O` as `0`.
 - An AI sealing key is RSA-4096 with exponent 65537, its SPKI in canonical DER (re-exporting it gives the same bytes);
   the server and the browser both refuse any other.
@@ -75,7 +75,7 @@ the AI lists, reads, publishes and deletes drafts and reads the person's new not
 - Modify: `websites/www.cs/admin/lib/Db.php` (tables `studio_seal_keys (key_id INTEGER PRIMARY KEY, account_id, spki BLOB, fingerprint, registered_at, paired_fp, paired_at)`, `studio_pair_tries (account_id, key_id, at, ok)`), `music/lib/AiKeys.php` (revoke and deleteAll forget the sealing key), `music/lib/KeyGate.php` (`caller()`), `music/lib/bootstrap.php`
 
 **Interfaces:**
-- `Pairing::code(string $fingerprintHex): string` (`XXXX-XXXX-XXXX`), `Pairing::normalize(string $typed): ?string`.
+- `Pairing::code(string $fingerprintHex): string` (`XXXX-XXXX-XXXX-XXXX`), `Pairing::normalize(string $typed): ?string`.
 - `Pairing::validSpki(string $der): bool` (RSA-4096, e = 65537, canonical).
 - `Pairing->register(int $account, int $key, string $der): 'ok'|'paired'|'bad_key'`; `->status(int $account, int $key): ?array{fingerprint, paired}`;
   `->check(int $account, int $key, string $typed): array{spki, fingerprint}|'wrong_code'|'too_many'|'no_key'|'not_registered'`;
@@ -180,12 +180,19 @@ pieces, score, publish, delete, notes, wait, mark), `studio_mcp.py`, `sealing.py
   client passes environment to a stdio server, and the key never enters the AI's conversation. Cost: the key sits in
   plain text in the app's own configuration, as every MCP client's tokens do.
 - **Pairing asks for the passphrase,** because only it can lock the keyring again. Cost: one more field.
-- **60-bit codes** (12 characters): a server that wanted a key of its own with the same code would have to make about
-  2^60 RSA-4096 keys. Cost: 12 characters to type.
+- **80-bit codes** (16 characters): the server sees the AI's public key before the person types the code, so it
+  could search offline for a key of its own with the same code; browsers accept RSA keys with many small prime
+  factors, which makes each candidate cheap, so 60 bits was within reach of a determined attacker and 80 bits
+  is not. Cost: 16 characters to type.
 - **One sealing key per computer** (the config folder), shared by every app there. Cost: one paired key serves every app
   on that computer.
 - **Picked up is one mark per note,** shared by the person's page and every AI. Cost: with two AIs, the first to mark a
   note hides it from the other's "new notes".
+- **The wheel is cached by the AI app's uv, and its address is cached for a year** (`Cache-Control: immutable`
+  on `music/dist/`): uv has no way to check a hash given with `--from`, so after the first download a changed
+  file on the server does not reach a computer that already has it. Cost: the first download trusts the site
+  (as the page's own script does), and a wheel fixed under the same version would not reach those computers;
+  a release always takes a new version.
 - **The wheel's version is explicit** (`siue_music/__init__.py`), its SHA-256 committed in `music/dist/release.json`; a
   change to the tool without a new version fails the deploy. The deploy prunes the old wheel. Cost: a person whose app
   points at an older wheel copies the new command after a release.

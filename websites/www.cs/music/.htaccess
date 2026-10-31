@@ -17,8 +17,12 @@
     Require all denied
 </If>
 
-# The studio MCP's wheel (uvx --from <its address>): a zip, served as one.
+# The studio MCP's wheel (uvx --from <its address>): a zip, served as one. A version's file never changes, so
+# an AI app's uv keeps the copy it first downloaded instead of fetching it again.
 AddType application/zip .whl
+<If "%{REQUEST_URI} =~ m#/music/dist/.+\.whl$#">
+    Header always set Cache-Control "public, max-age=31536000, immutable"
+</If>
 
 # The sample library is public (CC0) and large: plain FLAC files that revalidate rather than reload.
 AddType audio/flac .flac

@@ -217,10 +217,10 @@ test('a pairing try answers the key, or the refusal; a stored pairing answers nu
   const sent: string[] = [];
   const fetch: Fetch = async (url, init?: Init) => { sent.push(`${url} ${String(init?.headers ? (init.headers as Record<string, string>)['X-CSRF'] : '')}`); return answers.shift()!; };
   const api = createApi(fetch, 'first');
-  assert.equal(await api.checkPairing(3, 'AAAA-AAAA-AAAA'), 'wrong_code', 'a wrong code is not a sign-in that ended');
-  assert.deepEqual(await api.checkPairing(3, 'BBBB-BBBB-BBBB'), { spki: 'S', fingerprint: 'F' });
+  assert.equal(await api.checkPairing(3, 'AAAA-AAAA-AAAA-AAAA'), 'wrong_code', 'a wrong code is not a sign-in that ended');
+  assert.deepEqual(await api.checkPairing(3, 'BBBB-BBBB-BBBB-BBBB'), { spki: 'S', fingerprint: 'F' });
   const locked = { v: 1 as const, kdf: 'PBKDF2-SHA-256' as const, iterations: 600000, salt: 's', iv: 'i', ct: 'c' };
-  assert.equal(await api.pairKeyring(locked, 'c', [], { spki: 'x', sig: 'y' }, { key: 3, code: 'BBBB-BBBB-BBBB', fingerprint: 'F' }), 'too_many');
-  assert.equal(await api.pairKeyring(locked, 'c', [], { spki: 'x', sig: 'y' }, { key: 3, code: 'BBBB-BBBB-BBBB', fingerprint: 'F' }), null);
+  assert.equal(await api.pairKeyring(locked, 'c', [], { spki: 'x', sig: 'y' }, { key: 3, code: 'BBBB-BBBB-BBBB-BBBB', fingerprint: 'F' }), 'too_many');
+  assert.equal(await api.pairKeyring(locked, 'c', [], { spki: 'x', sig: 'y' }, { key: 3, code: 'BBBB-BBBB-BBBB-BBBB', fingerprint: 'F' }), null);
   assert.deepEqual(sent, ['pair.php first', 'pair.php n1', 'keyring.php?pair=1 n2', 'keyring.php?pair=1 n3'], 'each POST carries the token the last answer gave');
 });

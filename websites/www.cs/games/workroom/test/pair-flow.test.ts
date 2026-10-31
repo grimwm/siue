@@ -44,10 +44,10 @@ test('a malformed code is refused before the server is asked; a wrong one is the
   const s = server('wrong_code');
   assert.equal(await pairAi(s.api, 9, 'ABC', fx.passphrase), PAIR_MESSAGES.badCode);
   assert.deepEqual(s.state.checks, []);
-  assert.equal(await pairAi(s.api, 9, 'AAAA-AAAA-AAAA', fx.passphrase), PAIR_MESSAGES.wrong_code);
+  assert.equal(await pairAi(s.api, 9, 'AAAA-AAAA-AAAA-AAAA', fx.passphrase), PAIR_MESSAGES.wrong_code);
   assert.equal(s.state.sent.length, 0, 'no keyring is sent');
-  assert.equal(await pairAi(server('too_many').api, 9, 'AAAA-AAAA-AAAA', fx.passphrase), PAIR_MESSAGES.too_many);
-  assert.equal(await pairAi(server('not_registered').api, 9, 'AAAA-AAAA-AAAA', fx.passphrase), PAIR_MESSAGES.not_registered);
+  assert.equal(await pairAi(server('too_many').api, 9, 'AAAA-AAAA-AAAA-AAAA', fx.passphrase), PAIR_MESSAGES.too_many);
+  assert.equal(await pairAi(server('not_registered').api, 9, 'AAAA-AAAA-AAAA-AAAA', fx.passphrase), PAIR_MESSAGES.not_registered);
 });
 
 test('a server that hands back another key for the code is refused by the page, and nothing is sent', async () => {

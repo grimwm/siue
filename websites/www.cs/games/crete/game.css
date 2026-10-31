@@ -742,28 +742,43 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   .check-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }
 
-/* The compass (src/modern/controls.ts) at the board's bottom-right: its needle, red at the north end, turns with the
-   view; a tap resets the view. */
+/* The compass (src/modern/controls.ts) at the board's bottom-right shows the view: its needle, red at the north end,
+   turns with the heading, its dial squashes as the view tilts (a disc seen at the view's pitch), and a gold ring fills
+   from top-down (empty) to angled (full), --tilt being 0 to 1. A drag on it turns and tilts the view; a tap resets it.
+   The view eases, so the needle follows with no transition of its own. */
 .modern-overlay .compass {
   position: absolute;
   right: 10px;
   bottom: 10px;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   display: grid;
   place-items: center;
   border-radius: 50%;
   background: rgba(22, 27, 34, 0.84);
   border: 1px solid var(--line);
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  --tilt: 0;
 }
-.modern-overlay .compass[hidden] { display: none; }
+.modern-overlay .compass:active { cursor: grabbing; }
 .modern-overlay .compass:hover { border-color: var(--accent); }
-.modern-overlay .compass svg { width: 28px; height: 28px; transition: transform 0.15s ease-out; }
+.modern-overlay .compass > * { grid-area: 1 / 1; }
+.modern-overlay .compass svg { width: 34px; height: 34px; pointer-events: none; }
+.modern-overlay .compass .dial { fill: rgba(255, 255, 255, 0.06); stroke: rgba(201, 205, 208, 0.45); stroke-width: 1; }
 .modern-overlay .compass .n { fill: #e8433a; }
 .modern-overlay .compass .s { fill: #c9cdd0; }
-@media (prefers-reduced-motion: reduce) {
-  .modern-overlay .compass svg { transition: none; }
+.modern-overlay .compass .tilt-ring {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, var(--accent) calc(var(--tilt) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(circle, transparent 19px, #000 19.5px);
+  mask: radial-gradient(circle, transparent 19px, #000 19.5px);
 }
 
 /* The Map button (src/ui/strip.tsx): its face is a live crop of the level round Theseus in the look it swaps to

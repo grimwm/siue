@@ -11,7 +11,6 @@ export const MUSIC_HIDDEN_KEY = "crete-music-hidden";
 export const FULLSCREEN_KEY = "crete-fullscreen";
 export const LOOK_KEY = "crete-look";
 export const WALLS_KEY = "crete-walls";
-export const VIEW_KEY = "crete-view";
 export const PAD_KEY = "crete-pad";
 export const MINIMAP_KEY = "crete-minimap";
 
@@ -19,8 +18,6 @@ export const MINIMAP_KEY = "crete-minimap";
 export type Look = "modern" | "classic";
 /** How the modern look draws the walls that stand in front of the player. */
 export type WallMode = "solid" | "ghosted" | "low";
-/** How the modern camera looks at the board: at 45° (Angled), or straight down like the classic look (Top-down). */
-export type View = "angled" | "top";
 /** The edge of the strip the arrows stand at; the other buttons take the other side. */
 export type PadSide = "left" | "right";
 
@@ -35,8 +32,6 @@ export interface Settings {
   look: Pref<Look>;
   /** Only the modern look has walls to show. */
   walls: Pref<WallMode>;
-  /** Only the modern look has a camera to tilt. */
-  view: Pref<View>;
   pad: Pref<PadSide>;
   /** Only the modern look shows the mini map, and only when this is on. */
   minimap: Pref<OnOff>;
@@ -50,7 +45,6 @@ export function createSettings(storage: StorageLike | null): Settings {
     fullscreen: pref<OnOff>(FULLSCREEN_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
     look: pref<Look>(LOOK_KEY, "modern", oneOf<Look>(["modern", "classic"], "modern"), storage),
     walls: pref<WallMode>(WALLS_KEY, "solid", oneOf<WallMode>(["solid", "ghosted", "low"], "solid"), storage),
-    view: pref<View>(VIEW_KEY, "top", oneOf<View>(["angled", "top"], "top"), storage),
     pad: pref<PadSide>(PAD_KEY, "left", oneOf<PadSide>(["left", "right"], "left"), storage),
     minimap: pref<OnOff>(MINIMAP_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
   };

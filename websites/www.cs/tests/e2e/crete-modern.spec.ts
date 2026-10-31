@@ -1,4 +1,5 @@
-// The Island of Crete's modern look: the 3D board is the default, draws nothing at rest, turns and tilts under a drag or two fingers and squares up after, zooms
+// The Island of Crete's modern look: the 3D board is the default, opens top-down and north up, draws nothing at rest, turns and tilts under a drag,
+// two fingers or a drag on the compass and squares up after, shows the view on the compass, resets on a tap of it, zooms
 // under the wheel and its buttons, moves Theseus the way the screen shows, ignores the camera while a card is up,
 // keeps the Walls choice, opens on the whole level, follows the mini map (a setting, off by default) once zoomed, floats a marker over each
 // figure and item, and hands the board back to the classic look and takes it again with the Map button,
@@ -79,6 +80,30 @@ const modern = (page: Page) => page.evaluate(() => {
 });
 const zoom = (page: Page) => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.zoom());
 const player = (page: Page) => page.evaluate(() => ({ ...(window as unknown as Hooked).__creteTest.game.run.now.player }));
+/** The camera's pitch and heading, in whole degrees. */
+const cam = (page: Page) => page.evaluate(() => {
+  const m = (window as unknown as Hooked).__creteTest.modern!;
+  return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) };
+});
+/** What the compass shows: the heading and pitch it was last given, and how full its tilt ring is (0 to 1). */
+const compass = (page: Page) => page.locator('#cam-compass').evaluate(el => {
+  const b = el as HTMLElement;
+  return { heading: Number(b.dataset.heading), pitch: Number(b.dataset.pitch), tilt: Number(b.style.getPropertyValue('--tilt')) };
+});
+/** A press on the compass by a finger, a pen or the mouse, dragged (dx, dy) CSS pixels in steps, then lifted; (0, 0)
+ *  is a tap. */
+async function dragCompass(page: Page, type: 'touch' | 'pen' | 'mouse', dx: number, dy: number): Promise<void> {
+  await page.locator('#cam-compass').evaluate((el, [type, dx, dy]) => {
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const ev = (kind: string, px: number, py: number) => el.dispatchEvent(new PointerEvent(kind, {
+      pointerId: 31, pointerType: type as string, isPrimary: true, clientX: px, clientY: py, bubbles: true, cancelable: true, button: 0,
+    }));
+    ev('pointerdown', x, y);
+    for (let i = 1; i <= 8; i++) ev('pointermove', x + (dx as number) * i / 8, y + (dy as number) * i / 8);
+    ev('pointerup', x + (dx as number), y + (dy as number));
+  }, [type, dx, dy] as const);
+}
 
 /** Waits until the board has drawn and then held still for a moment. */
 async function settled(page: Page): Promise<number> {
@@ -97,8 +122,6 @@ async function openHall(page: Page, text = HALL, reducedMotion: 'reduce' | 'no-p
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion });
-  // These specs turn the camera, so they start Angled unless a test has chosen a view.
-  await page.addInitScript(() => { if (localStorage.getItem('crete-view') === null) localStorage.setItem('crete-view', 'angled'); });
   await page.goto(PAGE);
   await page.locator('#title-play').click();
   await page.locator('#pick-enter').click();
@@ -149,9 +172,9 @@ async function swipe(page: Page, sel: string, dx: number, dy: number): Promise<v
 }
 
 /** Two fingers on the modern board, `gap` px apart side by side about its centre, turned together by `deg` (clockwise
- *  on the screen) about their midpoint, or slid `dy` px together; then lifted. */
-async function twoFingers(page: Page, how: { deg?: number; dy?: number }): Promise<void> {
-  await page.evaluate(({ deg, dy }) => {
+ *  on the screen) about their midpoint, or slid `dx` and `dy` px together; then lifted. */
+async function twoFingers(page: Page, how: { deg?: number; dx?: number; dy?: number }): Promise<void> {
+  await page.evaluate(({ deg, dx, dy }) => {
     const el = document.getElementById('stage3d')!;
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2, half = 80;
@@ -159,9 +182,9 @@ async function twoFingers(page: Page, how: { deg?: number; dy?: number }): Promi
       pointerId: id, pointerType: 'touch', isPrimary: id === 21, clientX: x, clientY: y, bubbles: true, button: 0,
     }));
     const at = (t: number): [[number, number], [number, number]] => {
-      const a = ((deg ?? 0) * Math.PI / 180) * t, y = (dy ?? 0) * t;
+      const a = ((deg ?? 0) * Math.PI / 180) * t, x = (dx ?? 0) * t, y = (dy ?? 0) * t;
       const c = Math.cos(a), s = Math.sin(a);
-      return [[cx - half * c, cy - half * s + y], [cx + half * c, cy + half * s + y]];
+      return [[cx - half * c + x, cy - half * s + y], [cx + half * c + x, cy + half * s + y]];
     };
     const [a0, b0] = at(0);
     ev('pointerdown', 21, ...a0);
@@ -174,7 +197,7 @@ async function twoFingers(page: Page, how: { deg?: number; dy?: number }): Promi
     const [a1, b1] = at(1);
     ev('pointerup', 21, ...a1);
     ev('pointerup', 22, ...b1);
-  }, { deg: how.deg ?? 0, dy: how.dy ?? 0 });
+  }, { deg: how.deg ?? 0, dx: how.dx ?? 0, dy: how.dy ?? 0 });
 }
 
 /** True when the classic canvas has drawn anything. */
@@ -400,11 +423,10 @@ test('the board opens on the whole level, and Theseus\'s steps leave it there un
   expect(errors).toEqual([]);
 });
 
-test('level 1 in Top-down: one small marker over each figure and item, the Minotaur\'s over its own cell', async ({ page }) => {
+test('level 1 top-down: one small marker over each figure and item, the Minotaur\'s over its own cell', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.addInitScript(() => localStorage.setItem('crete-view', 'top'));
   await page.goto(PAGE);
   await page.locator('#title-play').click();
   await page.locator('#pick-enter').click();
@@ -435,55 +457,101 @@ test('level 1 in Top-down: one small marker over each figure and item, the Minot
 test.describe('on a touch phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test('a two-finger twist turns the view and settles on a quarter; a swipe up then goes away from the camera; the compass resets', async ({ page }) => {
+  test('a two-finger twist turns the view and settles on a quarter, and the compass shows it; a swipe up then goes away from the camera; a tap on the compass resets', async ({ page }) => {
     const errors = await openHall(page);
-    const cam = () => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; });
-    expect(await cam()).toEqual({ pitch: 45, yaw: 0 });
+    expect(await cam(page)).toEqual({ pitch: 75, yaw: 0 });
     await expect(page.locator('#cam-compass')).toBeVisible();
     await twoFingers(page, { deg: 70 });
     await settled(page);
-    const { yaw } = await cam();
+    const { yaw } = await cam(page);
     expect(Math.abs(yaw) % 90, `the view settles on a quarter turn, not ${yaw}`).toBe(0);
     expect(yaw).not.toBe(0);
-    const needle = await page.locator('#cam-compass svg').evaluate(n => (n as SVGElement).style.transform);
-    expect(needle, 'the compass turns with the view').toBe(`rotate(${yaw}deg)`);
+    expect(await compass(page), 'the compass turns with the view').toMatchObject({ heading: yaw, pitch: 75, tilt: 0 });
 
     const from = await player(page);
     await swipe(page, '#stage3d', 0, -80);
     const step = STEP[screenToGrid('up', yaw)];
     await expect.poll(() => player(page), 'a swipe up goes away from the camera').toEqual({ r: from.r + step.r, c: from.c + step.c });
 
-    // Two fingers sliding up together tilt toward straight down.
-    await twoFingers(page, { dy: -120 });
+    // Two fingers sliding down together tilt toward angled, and the compass leans with the view.
+    await twoFingers(page, { dy: 120 });
     await settled(page);
-    expect((await cam()).pitch, 'tilted').toBeGreaterThan(55);
+    const tilted = await cam(page);
+    expect(tilted.pitch, 'tilted').toBeLessThan(65);
+    const face = await compass(page);
+    expect(face.pitch, 'the compass shows the tilt').toBe(tilted.pitch);
+    expect(face.tilt).toBeGreaterThan(0.3);
 
-    await page.locator('#cam-compass').click();
-    await expect.poll(cam, 'the compass brings the starting view back').toEqual({ pitch: 45, yaw: 0 });
+    await dragCompass(page, 'touch', 0, 0);
+    await expect.poll(() => cam(page), 'a tap on the compass brings the starting view back').toEqual({ pitch: 75, yaw: 0 });
+    expect((await compass(page)).tilt).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a finger dragging the compass across turns the view, down tilts it, and a tap resets it', async ({ page }) => {
+    const errors = await openHall(page);
+    // Zoomed in and looking elsewhere, so the tap's re-centring shows. On a phone the zoom buttons are behind View.
+    await page.locator('[aria-controls="cam-buttons"]').click();
+    await zoomIn(page);
+    await twoFingers(page, { dx: 60 });
+    await settled(page);
+    expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.following()), 'looking away from Theseus').toBe(false);
+    await dragCompass(page, 'touch', 80, 0);
+    await settled(page);
+    const turned = await cam(page);
+    expect(turned.yaw, 'across turns, settling on a quarter').toBe(-90);
+    expect(turned.pitch, 'across alone does not tilt').toBe(75);
+    await dragCompass(page, 'touch', 0, 50);
+    await settled(page);
+    expect((await cam(page)).pitch, 'down tilts toward angled').toBe(55);
+    await dragCompass(page, 'touch', 0, 400);
+    await settled(page);
+    expect((await cam(page)).pitch, 'no further than the angled limit').toBe(45);
+    expect((await compass(page)).tilt, 'the ring is full').toBe(1);
+    await dragCompass(page, 'touch', 0, 0);
+    await expect.poll(() => cam(page), 'top-down, north up').toEqual({ pitch: 75, yaw: 0 });
+    expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.following()), 'following Theseus again').toBe(true);
     expect(errors).toEqual([]);
   });
 });
 
 test('with a mouse, a left drag turns across and tilts up and down, the wheel zooms, and a double click resets', async ({ page }) => {
   const errors = await openHall(page);
-  const cam = () => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; });
   const z0 = await zoom(page);
   const box = (await page.locator('#stage3d').boundingBox())!;
   const x = box.x + box.width / 2, y = box.y + box.height / 2;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  for (let i = 1; i <= 10; i++) await page.mouse.move(x, y - 8 * i);
+  for (let i = 1; i <= 10; i++) await page.mouse.move(x, y + 8 * i);
   await page.mouse.up();
   await settled(page);
-  expect((await cam()).pitch, 'dragging up tilts toward straight down').toBeGreaterThan(60);
-  expect((await cam()).yaw).toBe(0);
+  expect((await cam(page)).pitch, 'dragging down tilts toward angled').toBeLessThan(60);
+  expect((await cam(page)).yaw).toBe(0);
+  expect((await compass(page)).pitch, 'the compass shows the tilt').toBe((await cam(page)).pitch);
   const z1 = await zoom(page);
   await page.mouse.wheel(0, -400);
   await expect.poll(() => zoom(page), 'the wheel zooms in').toBeLessThan(z1);
   await page.mouse.dblclick(x, y);
-  await expect.poll(cam, 'a double click resets the heading and tilt').toEqual({ pitch: 45, yaw: 0 });
+  await expect.poll(() => cam(page), 'a double click resets the heading and tilt').toEqual({ pitch: 75, yaw: 0 });
   await expect.poll(() => zoom(page), 'and the zoom').toBeCloseTo(z0, 3);
-  expect(await page.evaluate(() => localStorage.getItem('crete-cam')), 'nothing kept after a reset').toBeNull();
+  expect(errors).toEqual([]);
+});
+
+test('with a mouse the compass turns and tilts the view, a click on it eases back to the start, and Enter on it resets too', async ({ page }) => {
+  const errors = await openHall(page, HALL, 'no-preference');
+  await dragCompass(page, 'mouse', -80, 40);
+  await expect.poll(() => cam(page), 'turned a quarter the other way and tilted').toEqual({ pitch: 59, yaw: 90 });
+  expect(await compass(page)).toMatchObject({ heading: 90, pitch: 59 });
+  // A click (no drag) resets, eased: the view passes through the angles between on its way back.
+  const seen: number[] = [];
+  await page.locator('#cam-compass').click();
+  await expect.poll(async () => { const c = await cam(page); seen.push(c.yaw); return c; }, { intervals: [16] }).toEqual({ pitch: 75, yaw: 0 });
+  expect(seen.some(y => y > 0 && y < 90), `eased, not a jump: ${seen.join(' ')}`).toBe(true);
+  await dragCompass(page, 'pen', 80, 0);
+  await expect.poll(() => cam(page), 'a pen turns it too').toEqual({ pitch: 75, yaw: -90 });
+  await page.locator('#cam-compass').focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => cam(page), 'Enter on the compass resets').toEqual({ pitch: 75, yaw: 0 });
   expect(errors).toEqual([]);
 });
 
@@ -500,25 +568,12 @@ test('a finger swipe moves Theseus and leaves the camera\'s turn alone', async (
   expect(errors).toEqual([]);
 });
 
-test('the page opens in the saved view at once: on a slow computer Top-down draws no more frames than Angled', async ({ browser }) => {
-  // A slow CPU, where every frame drawn on load shows (an eased tilt from 45° drew several).
-  const frames: Record<string, number> = {};
-  for (const view of ['angled', 'top']) {
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-    await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: 6 });
-    await page.addInitScript(v => localStorage.setItem('crete-view', v), view);
-    await page.goto(PAGE);
-    await page.waitForFunction(() => { const m = (window as unknown as Hooked).__creteTest.modern; return !!m && m.frames() > 0; }, null, { timeout: 60_000 });
-    await page.waitForTimeout(3000);
-    frames[view] = await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.frames());
-    expect(await page.evaluate(() => Math.round((window as unknown as Hooked).__creteTest.modern!.pitch()))).toBe(view === 'top' ? 75 : 45);
-    await ctx.close();
-  }
-  expect(frames.top, `frames on load: ${JSON.stringify(frames)}`).toBeLessThanOrEqual(frames.angled!);
-});
-
-test('a new player starts in Top-down: 75°, square to the board, no turn buttons and no Walls choice', async ({ page }) => {
+test('every player starts top-down and north up, with the turn buttons, the compass and the Walls choice; there is no View choice', async ({ page }) => {
+  // A player from before the one camera kept a view and a heading: neither is read any more.
+  await page.addInitScript(() => {
+    localStorage.setItem('crete-view', 'angled');
+    localStorage.setItem('crete-cam', JSON.stringify({ heading: 90, tilt: 50 }));
+  });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(PAGE);
   await page.locator('#title-play').click();
@@ -526,35 +581,21 @@ test('a new player starts in Top-down: 75°, square to the board, no turn button
   await page.locator('#chapter-enter').click();
   await page.locator('#start-begin').click();
   await page.waitForFunction(() => (window as unknown as Hooked).__creteTest.modern?.active === true);
-  await expect.poll(() => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; })).toEqual({ pitch: 75, yaw: 0 });
-  await expect(page.locator('#cam-left')).toBeHidden();
+  await expect.poll(() => cam(page)).toEqual({ pitch: 75, yaw: 0 });
+  await expect(page.locator('#cam-left')).toBeVisible();
+  await expect(page.locator('#cam-compass')).toBeVisible();
   await page.keyboard.press('q');
-  await expect(page.locator('#view-top')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#walls-solid')).toHaveCount(0);
-});
-
-test('Top-down tips the camera to 75° and squares it to the board; Angled tips it back, and the choice is kept', async ({ page }) => {
-  const errors = await openHall(page);
-  const cam = () => page.evaluate(() => { const m = (window as unknown as Hooked).__creteTest.modern!; return { pitch: Math.round(m.pitch()), yaw: Math.round(m.yaw()) }; });
-  expect(await cam()).toEqual({ pitch: 45, yaw: 0 });
-  await page.keyboard.press('q');
-  await expect(page.locator('#view-angled')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#view-top')).toHaveCount(0);
+  await expect(page.locator('#view-angled')).toHaveCount(0);
   await expect(page.locator('#walls-solid')).toBeVisible();
-  await page.locator('#view-top').click();
-  await expect(page.locator('#view-top')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#walls-solid'), 'no Walls choice from above').toHaveCount(0);
   await page.keyboard.press('q');
-  await expect.poll(cam).toEqual({ pitch: 75, yaw: 0 });
-  // Top-down does not turn: no turn buttons, and a mouse drag leaves it square.
-  await expect(page.locator('#cam-left')).toBeHidden();
-  await drag(page, 120);
-  expect(await cam()).toEqual({ pitch: 75, yaw: 0 });
-  await page.reload();
-  await page.locator('#title-settings').click();
-  await expect(page.locator('#view-top')).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('#view-angled').click();
-  await expect(page.locator('#walls-solid')).toBeVisible();
-  expect(errors).toEqual([]);
+  // A turn is not kept into the next level: every level opens top-down, north up.
+  await drag(page, 200);
+  await settled(page);
+  expect((await cam(page)).yaw).toBe(-90);
+  await page.evaluate(text => { const t = (window as unknown as Hooked).__creteTest; t.playLevel(t.parse(text)); }, HALL);
+  await page.locator('#start-begin').click();
+  await expect.poll(() => cam(page), 'the next level opens top-down, north up').toEqual({ pitch: 75, yaw: 0 });
 });
 
 test('the menu has no Look setting; the Map button shows the classic board, and back', async ({ page }) => {

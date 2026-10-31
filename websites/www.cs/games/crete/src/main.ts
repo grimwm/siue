@@ -18,6 +18,7 @@ import { drawList } from './board-plan.ts';
 import type { Atlas } from './board-plan.ts';
 import { createGame, frameOf } from './game.ts';
 import { initial } from './puzzle/state.ts';
+import type { State } from './puzzle/state.ts';
 import { parse } from './puzzle/level.ts';
 import type { Level } from './puzzle/level.ts';
 import { solve } from './puzzle/solver.ts';
@@ -38,7 +39,7 @@ import { fromLevel } from './editor/model.ts';
 import { createRater } from './share/rating.ts';
 import { createVisit, fragmentKind } from './share/visit.ts';
 import { createSettings } from './settings.ts';
-import type { Look, PadSide, View, WallMode } from './settings.ts';
+import type { Look, PadSide, WallMode } from './settings.ts';
 import { fullscreenNote } from './notes.ts';
 import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
@@ -244,13 +245,6 @@ function applyLook(look: Look): void {
   showLook(look);
 }
 
-function applyView(view: View): void {
-  settings.view.set(view);
-  ui.setView(view);
-  modern?.view(view);
-  ui.say(view === 'top' ? 'Top-down view.' : 'Angled view.', 'info');
-}
-
 function applyPad(side: PadSide): void {
   settings.pad.set(side);
   ui.setPad(side);
@@ -365,18 +359,8 @@ function paintThumb(): void {
   const nc = s.level.cols, nr = s.level.rows;
   const mc = cropMid(s.player.c, s.minotaur?.c ?? null, THUMB_COLS), mr = cropMid(s.player.r, s.minotaur?.r ?? null, THUMB_ROWS);
   const c0 = cropStart(mc, THUMB_COLS, nc), r0 = cropStart(mr, THUMB_ROWS, nr);
-  g.fillStyle = '#0d0b0a';
-  g.fillRect(0, 0, THUMB_W, THUMB_H);
   if (classicFace) {
-    if (!tilesLoaded) return;
-    const dpr = window.devicePixelRatio || 1;
-    thumbBoard.size(nc, nr, THUMB_CELL / dpr);
-    thumbBoard.paint(drawList(s, figures, atlas, 0));
-    const cell = thumbSheet.width / nc, top = thumbSheet.height - nr * cell;
-    // A level narrower or shorter than the crop sits in its middle.
-    const ox = Math.max(0, (THUMB_COLS - nc) / 2) * THUMB_CELL, oy = Math.max(0, (THUMB_ROWS - nr) / 2) * THUMB_CELL;
-    const w = Math.min(THUMB_COLS, nc), h = Math.min(THUMB_ROWS, nr);
-    g.drawImage(thumbSheet, c0 * cell, top + r0 * cell, w * cell, h * cell, ox, oy, w * THUMB_CELL, h * THUMB_CELL);
+    if (!paintClassic(thumb, s, c0, r0, THUMB_COLS, THUMB_ROWS, THUMB_CELL)) return;
   } else {
     // Without a modern board the face stays dark under its badge.
     if (modernFailed) {
@@ -398,6 +382,8 @@ function paintThumb(): void {
       if (!modernOn) modern.level(s);
     }
     if (!modernOn) modern.show({ state: s, figures }, game.thread);
+    g.fillStyle = '#0d0b0a';
+    g.fillRect(0, 0, THUMB_W, THUMB_H);
     if (!modern.snapshot(thumb, r0 + (THUMB_ROWS - 1) / 2, c0 + (THUMB_COLS - 1) / 2, THUMB_COLS, THUMB_ROWS)) return;
   }
   // The badge takes the corner farthest from Theseus and the Minotaur (game.css), so it hides neither.
@@ -413,6 +399,41 @@ function paintThumb(): void {
   thumbMs = performance.now() - t0;
 }
 let thumbOpens = -1;
+
+/** Paints the classic look's `cols` × `rows` squares of `s` from square (r0, c0) onto `out`, `cell` pixels each, on
+ *  dark; a level narrower or shorter than the crop sits in its middle. False until the tiles have loaded. */
+function paintClassic(out: HTMLCanvasElement, s: State, c0: number, r0: number, cols: number, rows: number, cell: number): boolean {
+  if (!tilesLoaded) return false;
+  const g = out.getContext('2d')!;
+  g.fillStyle = '#0d0b0a';
+  g.fillRect(0, 0, out.width, out.height);
+  const nc = s.level.cols, nr = s.level.rows;
+  const figures = { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) };
+  const dpr = window.devicePixelRatio || 1;
+  thumbBoard.size(nc, nr, cell / dpr);
+  thumbBoard.paint(drawList(s, figures, atlas, 0));
+  const sheetCell = thumbSheet.width / nc, top = thumbSheet.height - nr * sheetCell;
+  const ox = Math.max(0, (cols - nc) / 2) * cell, oy = Math.max(0, (rows - nr) / 2) * cell;
+  const w = Math.min(cols, nc), h = Math.min(rows, nr);
+  g.drawImage(thumbSheet, c0 * sheetCell, top + r0 * sheetCell, w * sheetCell, h * sheetCell, ox, oy, w * cell, h * cell);
+  return true;
+}
+
+/** The open level in `look` as a PNG data URL, `cols` × `rows` squares of `cell` pixels round Theseus (and the
+ *  Minotaur when near), framed as the Map button frames it: the new-game card's pictures (tests/e2e/screenshots.ts)
+ *  take both looks this way, so they show the same squares. Null when that look cannot draw now. */
+function lookPicture(look: Look, cols: number, rows: number, cell: number): string | null {
+  const s = game.run?.now;
+  if (!s) return null;
+  const out = document.createElement('canvas');
+  out.width = cols * cell;
+  out.height = rows * cell;
+  const mc = cropMid(s.player.c, s.minotaur?.c ?? null, cols), mr = cropMid(s.player.r, s.minotaur?.r ?? null, rows);
+  const c0 = cropStart(mc, cols, s.level.cols), r0 = cropStart(mr, rows, s.level.rows);
+  if (look === 'classic') return paintClassic(out, s, c0, r0, cols, rows, cell) ? out.toDataURL('image/png') : null;
+  if (!modern || !modernOn) return null;
+  return modern.snapshot(out, r0 + (rows - 1) / 2, c0 + (cols - 1) / 2, cols, rows) ? out.toDataURL('image/png') : null;
+}
 
 /* The classic board repaints every frame while it shows: the sprites animate, and a turn's figures move between
    cells (holding still while a story page the figure reached is read). */
@@ -525,7 +546,6 @@ async function createModern(): Promise<void> {
     return;
   }
   modern.walls(settings.walls.get());
-  modern.view(settings.view.get());
   modern.minimap(settings.minimap.get() === 'on');
   modern.setActive(false);
   canvas.addEventListener('webglcontextlost', e => {
@@ -560,7 +580,7 @@ function noModern(why: string): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setView: applyView, setPad: applyPad, toggleMinimap, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
   });
   const background = settings.musicHidden.get() === 'on';
@@ -575,7 +595,6 @@ function start(): void {
     ui.setMusic(false);
   }
   ui.setLook(settings.look.get(), settings.walls.get());
-  ui.setView(settings.view.get());
   ui.setPad(settings.pad.get());
   ui.setMinimap(settings.minimap.get() === 'on');
   ui.setMoveDir(dir => screenToGrid(dir, modernOn && modern ? modern.yaw() : DEFAULT_YAW));
@@ -661,6 +680,7 @@ const modernHook = {
   quality: () => modern?.quality() ?? 3,
   fps: () => modern?.fps() ?? null,
   thumbMs: () => thumbMs,
+  picture: lookPicture,
   get active() { return modernOn && !editorUp; },
 };
 window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };

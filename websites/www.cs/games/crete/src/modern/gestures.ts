@@ -49,7 +49,7 @@ interface Two {
 }
 
 const TURN_PER_PX = 0.35;
-/** Degrees of tilt per pixel slid: up tips toward straight down, down back toward Angled. */
+/** Degrees of tilt per pixel slid: up tips toward top-down, down back toward angled. */
 export const TILT_PER_PX = 0.3;
 /** How far two fingers move before the touch is read as a tilt or as the rest. */
 const DECIDE_PX = 10;

@@ -107,7 +107,7 @@
         <span class="cylon-raptor-btn-label">Raptor</span>
         <span class="cylon-raptor-btn-cd" id="cylon-raptor-cd" hidden></span>
       </button>
-      <button type="button" class="cylon-raptor-btn cylon-help-btn" id="cylon-help-btn" title="How to play" aria-label="How to play" aria-haspopup="dialog" aria-controls="cylon-help">
+      <button type="button" class="cylon-raptor-btn cylon-help-btn" id="cylon-help-btn" title="How to play" aria-label="How to Play" aria-haspopup="dialog" aria-controls="cylon-help">
         <span class="cylon-raptor-btn-label cylon-help-label-full">How to Play</span>
         <span class="cylon-help-label-short" aria-hidden="true">?</span>
       </button>
@@ -207,7 +207,7 @@
   // list's ?game= link and Play button call; a game that fails to load must
   // not take the list down with it.
   try {
-    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=ad9bc1c3d6');
+    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=4e14c56a62');
     await initializeCylonEffects({ onTheme: applyCombatTheme });
   } catch (err) {
     console.error('Cylon failed to start', err);

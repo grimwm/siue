@@ -75,9 +75,9 @@ test('the clocks count down from when the rows arrived, not from any wall clock'
 
 test('the Turn alerts button says its state, hides where unsupported, and reports a click', () => {
   const alertsText = (state: AlertsState) => { const { box } = draw({ alerts: state }); const b = maybeById(box, 'your-games-alerts'); return b ? b.textContent : null; };
-  assert.equal(alertsText('off'), 'Turn alerts: off');
-  assert.equal(alertsText('on'), 'Turn alerts: on');
-  assert.equal(alertsText('blocked'), 'Turn alerts: blocked in this browser');
+  assert.equal(alertsText('off'), 'Turn Alerts: Off');
+  assert.equal(alertsText('on'), 'Turn Alerts: On');
+  assert.equal(alertsText('blocked'), 'Turn Alerts: Blocked in This Browser');
   assert.equal(alertsText('unsupported'), null);
   const { box, calls } = draw();
   const btn = byId(box, 'your-games-alerts');

@@ -35,8 +35,8 @@ export interface GameOverProps {
 }
 
 const TABS: { board: Board; id: string; label: string }[] = [
-  { board: 'week', id: 'cylon-tab-week', label: 'This week' },
-  { board: 'alltime', id: 'cylon-tab-alltime', label: 'All time' },
+  { board: 'week', id: 'cylon-tab-week', label: 'This Week' },
+  { board: 'alltime', id: 'cylon-tab-alltime', label: 'All Time' },
 ];
 
 function Initials(p: GameOverProps) {
@@ -91,7 +91,7 @@ export function GameOverPanel(p: GameOverProps) {
   const tab = p.board === 'alltime' ? 'cylon-tab-alltime' : 'cylon-tab-week';
   return (
     <Dialog open={p.open} id="cylon-gameover" veilClass="cylon-gameover" panelClass="cylon-gameover-panel"
-      kicker="Cylon defense" kickerClass="cylon-gameover-kicker" titleId="cylon-gameover-title"
+      kicker="Cylon Defense" kickerClass="cylon-gameover-kicker" titleId="cylon-gameover-title"
       titleClass="cylon-gameover-title" title="Game Over" focusId={p.mode === 'entry' ? 'cylon-initial-0' : 'cylon-play-again'}>
       <p class="cylon-gameover-reason" id="cylon-gameover-reason">{p.reason}</p>
       <p class="cylon-gameover-stats">
@@ -99,7 +99,7 @@ export function GameOverPanel(p: GameOverProps) {
         <span><em id="cylon-gameover-hits">{p.hp}</em> HP</span>
       </p>
       <div class="cylon-gameover-entry" id="cylon-gameover-entry" hidden={p.mode !== 'entry'}>
-        <p class="cylon-gameover-entry-label">Enter your initials</p>
+        <p class="cylon-gameover-entry-label">Enter Your Initials</p>
         <Initials {...p} />
         <p class="cylon-gameover-entry-hint">↑↓ change letter · ←→ next · Enter submit</p>
         <p class="cylon-gameover-entry-error" id="cylon-initials-error" role="alert" hidden={!p.error}>{p.error}</p>
@@ -109,7 +109,7 @@ export function GameOverPanel(p: GameOverProps) {
         </div>
       </div>
       <div class="cylon-gameover-board" id="cylon-gameover-board" hidden={p.mode !== 'board'}>
-        <p class="cylon-gameover-entry-label">High scores</p>
+        <p class="cylon-gameover-entry-label">High Scores</p>
         <p class="cylon-gameover-alltime" id="cylon-gameover-alltime" role="status" hidden={p.allTimeRank === null}>
           {p.allTimeRank === null ? '' : `New all-time #${p.allTimeRank}!`}
         </p>

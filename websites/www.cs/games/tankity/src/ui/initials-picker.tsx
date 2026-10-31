@@ -61,7 +61,7 @@ export function InitialsPicker({ idPrefix, initials, rev = 0, onInitials, fieldR
   }
   return (
     <fieldset class="initials" ref={fieldRef}>
-      <legend>Your initials</legend>
+      <legend>Your Initials</legend>
       {[0, 1, 2].map(i => (
         <input key={i} ref={boxes[i]} id={`${idPrefix}-initial-${i + 1}`} class="initial" type="text" inputMode="text"
           autocomplete="off" spellcheck={false} aria-label={`Initial ${i + 1} of 3`}

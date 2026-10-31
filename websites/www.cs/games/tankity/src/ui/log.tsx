@@ -35,7 +35,7 @@ export function Log(p: LogProps) {
   useScrollKeep(() => list.current?.parentElement, newest);
   return (
     <KeyHints.Provider value={p.keyHint}>
-      <OverlayHead titleId="log-h" title="Radio log" closeId="log-close" onClose={p.onClose}
+      <OverlayHead titleId="log-h" title="Radio Log" closeId="log-close" onClose={p.onClose}
         navId="nav-log" scrollOnly nav={<ScrollKeys line />} />
       <ol id="log" class="log log-transparent" aria-live="polite" ref={list}>
         {p.lines.map(l => <li key={l.id} class={l.tone}>{l.text}</li>)}

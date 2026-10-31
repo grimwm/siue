@@ -53,8 +53,8 @@ test('a scored run reaches the board', async ({ page }) => {
     await expect(page.locator('#cylon-gameover-entry')).toBeHidden();
     await expect(page.locator('#cylon-gameover-board')).toBeVisible();
     await expect(page.locator('#cylon-gameover-scores li .cylon-hs-score').first()).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'This week' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByRole('tab', { name: 'All time' })).toHaveAttribute('aria-selected', 'false');
+    await expect(page.getByRole('tab', { name: 'This Week' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'All Time' })).toHaveAttribute('aria-selected', 'false');
     expect(errors).toEqual([]);
     return;
   }
@@ -78,8 +78,8 @@ test('a scored run reaches the board', async ({ page }) => {
     .filter({ has: page.locator('.cylon-hs-score', { hasText: new RegExp(`^${final} KOs$`) }) });
   await expect(row.first()).toBeVisible({ timeout: 5_000 });
   // The run beat both cutoffs above, so it is on the all-time board too and says so.
-  await page.getByRole('tab', { name: 'All time' }).click();
-  await expect(page.getByRole('tab', { name: 'All time' })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: 'All Time' }).click();
+  await expect(page.getByRole('tab', { name: 'All Time' })).toHaveAttribute('aria-selected', 'true');
   await expect(row.first()).toBeVisible({ timeout: 5_000 });
   await expect(page.locator('#cylon-gameover-alltime')).toHaveText(/^New all-time #\d+!$/);
   expect(errors).toEqual([]);

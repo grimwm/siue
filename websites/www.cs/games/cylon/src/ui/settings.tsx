@@ -39,12 +39,12 @@ export function SettingsPanel(p: SettingsProps) {
   return (
     <>
       <p class="cylon-settings-title">Options</p>
-      {toggle('soundEnabled', p.soundEnabled, 'Sound effects')}
-      {slider('soundVolume', p.soundVolume, 'SFX volume', 'Sound effects volume')}
+      {toggle('soundEnabled', p.soundEnabled, 'Sound Effects')}
+      {slider('soundVolume', p.soundVolume, 'SFX Volume', 'Sound effects volume')}
       {toggle('musicEnabled', p.musicEnabled, 'Music')}
-      {slider('musicVolume', p.musicVolume, 'Music volume', 'Music volume')}
-      {toggle('eyeEnabled', p.eyeEnabled, 'Eye tracking')}
-      <p class="cylon-settings-title cylon-settings-scores-title">Weekly high scores</p>
+      {slider('musicVolume', p.musicVolume, 'Music Volume', 'Music volume')}
+      {toggle('eyeEnabled', p.eyeEnabled, 'Eye Tracking')}
+      <p class="cylon-settings-title cylon-settings-scores-title">Weekly High Scores</p>
       <p class="cylon-settings-hint" id="cylon-weekly-reset">{p.resetText}</p>
       <HsList id="cylon-high-scores" rows={p.rows} />
       <p class="cylon-settings-hint">Start with 30 HP — occasional nukes and small missiles (2 HP each). Last 10s without a hit to heal 1. Cyan/pink missiles chase you; orange locks where you just aimed. More drones as KOs rise. Drag the reticle to dodge · tap drones · Grenade / Raptor in the bar.</p>

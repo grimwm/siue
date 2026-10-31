@@ -47,13 +47,13 @@ export function EndVeil(p: EndVeilProps) {
           <div class="end-acts">
             {watch
               ? <button type="button" id="end-watch" class="btn-primary" onClick={blurThen(p.onWatch)}>
-                  {p.buttons === 'out' ? 'Watch the finish' : 'Back to the battle'}
+                  {p.buttons === 'out' ? 'Watch the Finish' : 'Back to the Battle'}
                 </button>
               : <button type="button" id="again" class="btn-primary" onClick={blurThen(p.onAgain)}>
-                  {p.buttons === 'over' ? 'Play again (same room)' : 'Continue'}
+                  {p.buttons === 'over' ? 'Play Again (Same Room)' : 'Continue'}
                 </button>}
             {p.buttons !== 'solo' && (
-              <button type="button" id="end-leave" class="btn-leave" onClick={blurThen(p.onLeave)}>Leave room</button>
+              <button type="button" id="end-leave" class="btn-leave" onClick={blurThen(p.onLeave)}>Leave Room</button>
             )}
           </div>
         </div>

@@ -80,7 +80,7 @@ export function Title(p: TitleProps) {
             }} />
         )}
         <div class="title-row">
-          <button type="button" id="rooms-open" onClick={blurThen(p.onFriends)}>Play with friends <Key at="global:rooms" bare /></button>
+          <button type="button" id="rooms-open" onClick={blurThen(p.onFriends)}>Play with Friends <Key at="global:rooms" bare /></button>
           <button type="button" id="tutorial-open" class="title-tutorial" onClick={blurThen(p.onTutorial)}>
             <span class="title-tutorial-icon" aria-hidden="true">🎓</span>Tutorial <Key at="global:tutorial" bare />
           </button>

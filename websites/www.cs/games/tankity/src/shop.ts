@@ -109,7 +109,7 @@ export function createShop(deps: ShopDeps) {
   function shopReadyView(): { next: { label: string; keyAt?: string; pressed?: boolean }; readyLine: string | null; sig: string } {
     const keyAt = touch() ? undefined : 'shop:next';
     if (!net.on) {
-      const label = `Start round ${G.round + 1}`;
+      const label = `Start Round ${G.round + 1}`;
       return { next: { label, keyAt }, readyLine: null, sig: label + '|' + (keyAt ?? '') };
     }
     const mine = net.readyNow();
@@ -170,7 +170,7 @@ export function createShop(deps: ShopDeps) {
     });
     drawShop(veil, {
       keyHint,
-      title: G.round === 0 ? 'Pre-match shop' : 'Field shop',
+      title: G.round === 0 ? 'Pre-Match Shop' : 'Field Shop',
       cash: G.round === 0
         ? `War chest: $${G.cash} · spend your stake before the first hill`
         : `War chest: $${G.cash} · armor ${G.armor}/${maxArmor(G.plate)} · round ${G.round} cleared`,

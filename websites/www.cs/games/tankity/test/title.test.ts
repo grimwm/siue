@@ -51,7 +51,7 @@ test('the card is the kit dialog: a veil around a panel labelled and described b
 test('Play, Play with friends, Tutorial and Settings, each with its key chip', () => {
   const { root } = draw();
   assert.match(byId(root, 'title-play').textContent, /^▶ Play/);
-  assert.match(byId(root, 'rooms-open').textContent, /^Play with friends/);
+  assert.match(byId(root, 'rooms-open').textContent, /^Play with Friends/);
   assert.match(byId(root, 'tutorial-open').textContent, /^🎓Tutorial/);
   assert.match(byId(root, 'title-settings').textContent, /^Settings/);
   const chip = walk(byId(root, 'title-play')).find(n => n.localName === 'kbd');

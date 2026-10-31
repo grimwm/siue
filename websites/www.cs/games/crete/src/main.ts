@@ -32,6 +32,7 @@ import { createFoundPages } from './pages.ts';
 import { createMet } from './met.ts';
 import { createProgress } from './progress.ts';
 import { createUi } from './ui.ts';
+import { watchPlay } from './track.ts';
 import { createEditor } from './editor/editor.ts';
 import { fromLevel } from './editor/model.ts';
 import { createRater } from './share/rating.ts';
@@ -178,6 +179,8 @@ const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-m
 let reduced = motion?.matches ?? false;
 motion?.addEventListener('change', e => { reduced = e.matches; });
 
+/* The statistics' level starts and wins (src/track.ts). */
+const seePlay = watchPlay();
 const game = createGame({
   sfx: audio.sfx,
   say: ui.say,
@@ -191,6 +194,7 @@ const game = createGame({
   changed: () => {
     ui.render(game);
     showModern();
+    seePlay(game, levels.scratch?.(game.trial) ?? false);
   },
 });
 const frame = (): HTMLElement => document.getElementById('frame') ?? document.documentElement;

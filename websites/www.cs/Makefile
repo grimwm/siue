@@ -1,4 +1,4 @@
-.PHONY: help deploy up down live-url url parity test protocol sim-vectors e2e e2e-changed screenshots admin-smoke music-e2e
+.PHONY: help deploy up down live-url url parity test protocol sim-vectors e2e e2e-changed screenshots admin-smoke music-e2e stats-e2e
 
 .DEFAULT_GOAL := help
 
@@ -119,6 +119,11 @@ music-e2e: ## Music workroom and studio browser checks (E2E_ARGS: one spec)
 	MUSIC_PY=$(MUSIC_PY_ABS) \
 	E2E_BASE_URL=http://localhost:$$port/ tests/e2e/run.sh -c local.config.ts $(E2E_ARGS) && \
 	echo MUSIC-E2E-OK
+
+# The visitor statistics' browser check (tests/e2e/stats.local.ts) on the same throwaway project as music-e2e:
+# it needs the admin mail capture to sign in to the dashboard. Local only.
+stats-e2e: ## Visitor statistics browser check in a throwaway docker project
+	@$(MAKE) --no-print-directory music-e2e E2E_ARGS=stats.local.ts
 
 # The music workroom's key and note tool (music/tools/siue-music), run in its own virtualenv.
 .PHONY: music-setup music-status music-pickup music-publish music-delete music-rotate music-forget music-mcp music-mcp-setup music-test music-image music-compose-test music-render music-library

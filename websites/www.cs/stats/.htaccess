@@ -1,0 +1,11 @@
+# The visitor beacon's endpoint answers with nothing worth caching or indexing, whatever script sends it.
+<IfModule mod_headers.c>
+    Header always set Cache-Control "no-store"
+    Header always set X-Robots-Tag "noindex, nofollow"
+    Header always set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# The library is never served.
+<If "%{REQUEST_URI} =~ m#/stats/lib/#">
+    Require all denied
+</If>

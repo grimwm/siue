@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes next for Crete and the music workroom, in order, with the document
+What comes next for Crete, the music workroom and the site's visitor statistics, in order, with the document
 each step starts from. A step with a design but no plan gets its plan written
 (`docs/superpowers/plans/`) when work on it begins.
 
@@ -46,3 +46,13 @@ The Crete title theme is finished and plays in Crete on every screen.
 
 1. **Composing in the editor** (project 4) — in design; its plan follows the
    design.
+
+## Visitor statistics
+
+Design `specs/2026-10-31-site-analytics-design.md`, plan `plans/2026-10-31-site-analytics.md`. Live: the
+beacon on the faculty page and every game, the write-only endpoint, raw rows for 95 days with daily
+aggregates kept forever, the game events (Crete, Tankity, the CIC, Share and installs), the Visitors
+dashboard on the admin hub, and the privacy note (`privacy.html`).
+
+1. **New games** count on their own once their `build.json` builds `stats-page.ts` and their page loads
+   `dist/stats.js`; a game's new events join `Collector::EVENTS`.

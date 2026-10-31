@@ -6,6 +6,7 @@
  * match, the question before leaving one, and leaving it. Every seat taken is
  * remembered in this browser (seats.ts): the room link, or Your games, resumes
  * it; Step out keeps it; only Leave gives it up. A running match is room.ts. The game's state, the room client and the rest arrive as deps. */
+import { track } from './track.ts';
 import type { sfx as SfxApi } from './audio.ts';
 import type { GameState, MatchState } from './game-types.ts';
 import { DIFFICULTY_NAMES } from './difficulty.ts';
@@ -340,6 +341,7 @@ export function createLobby(deps: LobbyDeps) {
       MATCH.initials = initials;
       await net.host(initials, mapId || '', G.body, difficulty.get(), LOBBY.turnSecs, signal);
       rememberSeat(initials);
+      track('room_host');
       lobbySay('');
       say(`Room ${net.code} hosted. Read the code to your friends.`, 'info');
       await netRefreshRoster();
@@ -391,8 +393,10 @@ export function createLobby(deps: LobbyDeps) {
           const veil = $('lobby-veil');
           // Shown: the match starts here. Closed: the player is elsewhere (the title
           // card, a solo match); the room waits in Your games and its turn toasts.
-          if (veil && !veil.hidden) startNetMatch(room);
-          else net.stopLobbyWatch();
+          if (veil && !veil.hidden) {
+            track('match_start', 'room');
+            startNetMatch(room);
+          } else net.stopLobbyWatch();
         }
       },
     );
@@ -643,7 +647,10 @@ export function createLobby(deps: LobbyDeps) {
     try {
       const started = await net.start();
       if ('local' in started) playHere(started.local);
-      else startNetMatch(started.room);
+      else {
+        track('match_start', 'room');
+        startNetMatch(started.room);
+      }
     } catch (err) { lobbySay(prettyRoomError(err)); }
   }
   /* Nobody joined: the server closed the lobby, so the seat is forgotten (it

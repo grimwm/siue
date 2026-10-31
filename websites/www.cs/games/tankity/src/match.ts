@@ -9,6 +9,7 @@
  * says it. A room match is run by the server, so nothing here runs in one
  * except the pieces a room shares (the banner, the cosmetics, the end veil).
  * The game's state, the page and the rest of the game arrive as deps. */
+import { track } from './track.ts';
 import { maxArmor } from './armor.ts';
 import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import type { DifficultySetting } from './difficulty.ts';
@@ -183,6 +184,7 @@ export function createMatch(deps: MatchDeps) {
     closePreview();
     unlock();
     music.start();
+    track('match_start', 'solo');
     newMatch(seedStr, level, fixedWalls);
   }
   function newRound(bannerText?: string, event?: FlowEvent): void {
@@ -585,6 +587,7 @@ export function createMatch(deps: MatchDeps) {
   function endMatch(won: boolean, text: string): void {
     if (G.demo) { startDemo(); return; }
     if (G.over) return;
+    track('match_end', 'solo');
     endTutorial(true);
     G.over = true;
     G.won = won;

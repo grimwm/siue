@@ -13,6 +13,7 @@ login.
 | `index.php` | The hub: dashboard links, encryption-key fingerprints (with a "Remove the notes key" control while one is stored), sign out and sign out everywhere. |
 | `keys.php` | Create and revoke scoped API keys. A new key is shown once, and its card in the list is tagged as that key. For `music-publish` and `music-pickup` the page says which active key creating replaces. |
 | `studios.php` | Every studio's address, usage and last sign-in, with the shared usage and the account count against their caps. Remove takes the typed address; the owner's studio has no Remove. Never any piece, title or note. |
+| `stats.php` | Visitors: charts of the site's visitor statistics for 7, 30 or 90 days, across every page or for one (`?page=`, `?days=`), each with its numbers in a table. See [Visitor statistics](#visitor-statistics). |
 | `logout.php` | Ends the session (POST), or every session with `?all=1`. |
 | `health.php` | `{"mail":"yes\|no","db":"yes\|no","store":"site\|fallback"}` for a deploy check; reveals nothing else. |
 
@@ -127,6 +128,36 @@ curl -s https://www.cs.siue.edu/~wgrim/admin/health.php
 It should print `{"mail":"yes","db":"yes","store":"site"}`. `"store":"fallback"` means PHP cannot use
 `admin/data/` (it is not writable by PHP) and the database sits where a php-fpm restart wipes it. The mail answer is cached between probes, so a fresh
 `no` can lag a recovery. Then request a link from the login page and sign in once.
+
+## Visitor statistics
+
+First-party counts of visits to the faculty page and the games, read only here. Visitors never see them: the
+one public endpoint, `stats/collect.php`, takes POSTs and always answers an empty 204 (405 for anything else).
+
+- **Beacon.** The kit's `games/_kit/stats.ts`, built into each game as `dist/stats.js`. The faculty page loads
+  `games/cylon/dist/stats.js` (page `home`, or the game `?game=` names); each `play/<id>/` page loads its game's
+  copy before the frame; a game page loads its own and, when framed by a page that runs one, hands its events
+  to that page instead of counting a second view. Games send named events with `track()`. Do Not Track, Global
+  Privacy Control and browser automation send nothing. No cookies.
+- **Who is who.** A random visitor ID in the visitor's `localStorage` (`wgrim-stats`), with the visit's ID
+  (renewed after 30 minutes idle); without storage, a daily hash of a server-side salt, the IP, the user
+  agent, the site and the date. The salt lives only in `stats.sqlite` and only for its day. Raw IPs and user
+  agents are never stored; only the referrer's kind (Facebook, Discord, search, this site, direct, other) and
+  the device class (phone, tablet, desktop) are.
+- **Endpoint** (`stats/lib/Collector.php`). Refuses a cross-site `Origin` or `Sec-Fetch-Site`, `DNT: 1`,
+  `Sec-GPC: 1`, bot user agents, bodies over 2 KB, pages other than `home` and the game folders, and events off
+  the allowlist (`Collector::EVENTS`); 600 writes a minute per client (by hashed IP) and 6000 overall.
+- **Storage.** `stats.sqlite` beside `admin.sqlite` in the admin data folder. Raw rows are kept 95 days; daily
+  aggregates (`daily`) and day-1/day-7 return cohorts (`cohorts`) forever. There is no cron: a write runs the
+  cleanup at most once an hour (`stats/lib/Rollup.php`). Days and hours are in America/Chicago.
+- **Dashboard** (`stats/lib/Report.php`, `Dashboard.php`, `admin/stats.js`, `admin/stats.css`). The report
+  goes to the page as a JSON block, which `stats.js` draws as SVG (the CSP allows no inline script or style).
+  Light and dark follow the system; tooltips follow the pointer, a tap or the arrow keys.
+- **Privacy note.** `privacy.html` at the site root, linked from the faculty page's foot and the Games panel.
+
+`make stats-e2e` checks it in a browser on a throwaway docker project. To look at the dashboard with made-up
+numbers, run `php tests/stats-demo-seed.php <dir>` in the PHP container against that project's admin data
+folder (`ADMIN_DATA_DIR`), then sign in.
 
 ## Build a dashboard
 

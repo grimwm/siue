@@ -87,6 +87,20 @@ localStorage key, in the raw form that key already holds (`text` or
 `oneOf(values, fallback)` is the codec for a setting that holds one of a fixed set of words: the stored form is the word itself, and any other stored word reads as `fallback`. `subscribe` tells the UI when a value changes. Blocked or missing storage
 falls back to a value that lives for the session; nothing throws.
 
+## Visitor statistics (`stats.ts`, `stats-page.ts`)
+
+`track(page, name, prop?)` (or `tracker('crete')('level_start', '1-3')`) sends a named game event through the
+page's beacon, or parks it until the beacon starts; it never throws. `stats-page.ts` is built per game as
+`dist/stats.js` (an `iife` entry in `build.json`). A game's own page loads it with a plain tag (the page stays
+ignorant of the site): the page is the folder's id and the endpoint is `../../stats/collect.php`, the same
+`games/<id>/` to site convention as `install-page.ts`; a copy elsewhere posts to a missing path, which costs it
+nothing. A site page names `data-page` and `data-endpoint` on the tag (`data-game-query`: take the page from
+`?game=`; `data-views="0"`: events only). A page view, its visible seconds
+(every 30 s and when hidden), and events go to the endpoint; Do Not Track, Global Privacy Control and
+`navigator.webdriver` send nothing. `install.ts` reports Share and an install through `InstallSetup.onEvent`.
+The server keeps the allowlist of events (`stats/lib/Collector.php`); the admin README's "Visitor statistics"
+says the rest.
+
 ## Score guard (`php/score-guard.php`)
 
 `Kit\ScoreGuard` is the gate in front of a score endpoint: the Origin (else Referer) allow-list, CSRF double-submit (the header must equal the cookie), single-use run tokens that expire, per-client rate limits keyed by an HMAC of the address (`startRun()` and `consumeRun()` count their own; `rateTake($kind, $perHour)` caps any other endpoint), and three-letter initials (`initials()`: `[A-Za-z]{3}` in, `[A-Z]{3}` out; `coerceInitials()` for rows stored before that rule). It reads only the keys in `ScoreGuard::CONFIG_KEYS`, checked by `ScoreGuard::validateConfig()`; a game's config may hold more. The blocked words are one list, `blocked-initials.json`: `ScoreGuard` uses it when a game's config has no `blockedInitials` (`ScoreGuard::OPTIONAL_KEYS`), and `initials.ts` exports it as `BLOCKED_INITIALS` with `validInitials()` (the `[A-Za-z]{3}` rule, uppercased, blocked words refused); `test/initials.test.ts` fails when PHP and TS disagree. A game lists `score-guard.php` and `blocked-initials.json` under `kit_php` in its `install-files.php` config, which keeps a copy of each in the game's `server/` (deny that folder in `.htaccess` and in `docker/nginx/default.conf`).

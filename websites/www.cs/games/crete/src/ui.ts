@@ -4,6 +4,7 @@
  * rules. Needs the DOM lib, so it is in the second program
  * (src/tsconfig.dom.json).
  */
+import { track } from "./track.ts";
 import { isBackKey, typesText } from "../../_kit/keys.ts";
 import type { Timers } from "../../_kit/ports.ts";
 import type { Board } from "./board.ts";
@@ -429,12 +430,14 @@ export function createUi(deps: UiDeps): Ui {
   function goResume(): void {
     const i = resume();
     if (i === null) return;
+    track("game_start", "continue");
     controls?.wake();
     controls?.play(i);
   }
 
   /** Enter the halls on the new-game card: the card closes and the chapter card opens over the title. */
   function enterHalls(): void {
+    track("game_start", "new");
     layers.close("look");
     controls?.play();
   }
@@ -986,9 +989,9 @@ export function createUi(deps: UiDeps): Ui {
       onWait: act(() => g.press({ kind: "wait" })),
       onUndo: act(() => g.press("undo")),
       onRestart: act(() => g.press("restart")),
-      onHint: act(() => g.hint()),
-      onRoute: act(() => g.route()),
-      onAuto: act(() => g.auto()),
+      onHint: act(() => { track("hint"); g.hint(); }),
+      onRoute: act(() => { track("route"); g.route(); }),
+      onAuto: act(() => { track("auto"); g.auto(); }),
       onTool: (tool) => act(() => g.press({ kind: "tool", tool }))(),
       onLook: (l) => act(() => controls?.setLook?.(l))(),
     });

@@ -22,6 +22,7 @@
  * settings and the nav). This file measures the page, owns the run's state and
  * timers, and wires them together.
  */
+import { track } from './track.ts';
 import * as rules from './rules.ts';
 import * as playfield from './playfield.ts';
 import { createAudio } from './audio.ts';
@@ -987,6 +988,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
             syncWorldEndedLook();
             void leaveApp();
         } else {
+            if (!wasOn) track('game_start');
             intro.cancel();
             clearAllBots();
             clearInboundSchedulers();

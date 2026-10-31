@@ -30,6 +30,7 @@ final class SiteVersionsTest extends TestCase
             'main.js' => "function f(){}\n",
             'games/cylon/dist/main.js' => "export const x = 1;\n",
             'games/cylon/dist/kit.css' => ".kit-x{}\n",
+            'games/cylon/dist/stats.js' => "(()=>{})();\n",
         ];
         foreach (self::SHEETS as $n) {
             $this->files["games/cylon/css/$n.css"] = ".$n{}\n";
@@ -39,6 +40,7 @@ final class SiteVersionsTest extends TestCase
         }
         $links = implode('', array_map(fn(string $n): string => "<link href=\"games/cylon/css/$n.css?v=old\" rel=\"stylesheet\">\n", self::SHEETS));
         $this->page = "<link href=\"site.css?v=old\" rel=\"stylesheet\">\n<link href=\"games/cylon/dist/kit.css?v=old\" rel=\"stylesheet\">\n$links"
+            . "<script src=\"games/cylon/dist/stats.js?v=old\" data-page=\"home\" defer></script>\n"
             . "<script src=\"main.js?v=old\"></script>\n"
             . "<script type=\"module\">\nconst m = await import('./games/cylon/dist/main.js?v=old');\n</script>\n";
         file_put_contents("$this->tmp/index.html", $this->page);

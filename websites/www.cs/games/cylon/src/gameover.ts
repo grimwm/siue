@@ -6,6 +6,7 @@
  * time tabs. This module holds the panel's state and draws it with
  * ui/gameover.tsx; the run's record, and starting or closing a run, stay the
  * game's. Browser-only: DOM program. */
+import { track } from './track.ts';
 import type { EndReason } from './state.ts';
 import type { Game, StateApi } from './types.ts';
 import type { ScoreConfig, ScoresClient } from './scores.ts';
@@ -129,6 +130,7 @@ export function createGameOver(d: GameOverDeps): GameOver {
     const result = await scores.submit(score, initials.join(''), hits);
     submitting = false;
     if (result.saved) {
+      track('score_submit');
       error = '';
       allTimeRank = result.allTimeRank;
       game.run = state.clearPendingScore(game.run);

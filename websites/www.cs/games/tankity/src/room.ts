@@ -8,6 +8,7 @@
  * was hidden, and shows the final standings. Joining and leaving a room is
  * lobby.ts. The game's state, the room client and the rest of the game arrive
  * as deps. */
+import { track } from './track.ts';
 import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
 import {
   FOE_DYING, FOE_FIRE, FOE_HIT, FOE_IDLE, TANK_FIRE, TANK_HIT, TANK_IDLE, TANK_OWS, pick,
@@ -331,6 +332,7 @@ export function createRoom(deps: RoomDeps) {
       renderShop();
       if (MATCH.lastPhase === 'play') talk('tank', 'Shopping! Then back to bam bam.', true);
     } else if (room.phase === 'over') {
+      if (!G.over) track('match_end', 'room');
       G.over = true;
       hideShop();
       netShowStandings(room);

@@ -106,7 +106,14 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   bestWon: (text, moves) => editor.tryWon(text, moves),
 });
 const levels = outside.levels;
-const ui = createUi({ atlas, icons: iconsJson as IconSheet, board, progress, pages, met, levels, sfx: audio.sfx, cards: stack => behindEditor(stack.includes('editor')) });
+/* The Map button's face: the level round Theseus in the other look, repainted only once a move has landed. */
+const THUMB_COLS = 7, THUMB_ROWS = 5, THUMB_CELL = 24;
+const THUMB_W = THUMB_COLS * THUMB_CELL, THUMB_H = THUMB_ROWS * THUMB_CELL;
+const thumb = document.createElement('canvas');
+thumb.className = 'map-thumb';
+thumb.width = THUMB_W;
+thumb.height = THUMB_H;
+const ui = createUi({ atlas, icons: iconsJson as IconSheet, thumb, board, progress, pages, met, levels, sfx: audio.sfx, cards: stack => behindEditor(stack.includes('editor')) });
 /* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
    which comes first. */
 const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
@@ -192,9 +199,11 @@ const game = createGame({
   reducedMotion: () => reduced,
   isFirst: id => ui.isFirst(id),
   changed: () => {
+    lastChange = performance.now();
     ui.render(game);
     showModern();
     seePlay(game, levels.scratch?.(game.trial) ?? false);
+    wantThumb();
   },
 });
 const frame = (): HTMLElement => document.getElementById('frame') ?? document.documentElement;
@@ -307,6 +316,104 @@ async function quit(): Promise<void> {
   if (outcome !== 'closed') ui.showTitle(outcome === 'title-with-hint');
 }
 
+/* The Map button's face (src/ui/strip.tsx): a crop of THUMB_COLS × THUMB_ROWS squares round Theseus (and the
+   Minotaur too when he is near enough), in the look the button swaps to. The classic face is drawn with board.ts; the
+   modern face is a snapshot from the modern board, taken only after a move lands (never per frame), which loads the
+   modern board in Classic too. */
+const thumbSheet = document.createElement('canvas');
+const thumbBoard = createBoard(thumbSheet, atlas, image);
+let thumbKey = '';
+/** The board state the face last showed. */
+let thumbState: unknown = null;
+/** When the game last changed; the modern board loads for the face only after REST_MS without a change. */
+let lastChange = 0;
+const REST_MS = 2500;
+let thumbTimer: ReturnType<typeof setTimeout> | 0 = 0;
+
+/** Paints the face once the turn in hand has landed. */
+function wantThumb(): void {
+  if (thumbTimer) return;
+  thumbTimer = setTimeout(() => {
+    thumbTimer = 0;
+    // Not while a turn animates or the thread plays out: the face waits for the board to rest.
+    if ((game.anim && !game.anim.paused) || game.playing) {
+      wantThumb();
+      return;
+    }
+    paintThumb();
+  }, 120);
+}
+
+/** The first square of a run of `n` of `size` that keeps `at` near its middle. */
+const cropStart = (at: number, n: number, size: number): number => Math.max(0, Math.min(size - n, Math.round(at - (n - 1) / 2)));
+/** The crop's middle along one axis: Theseus, or halfway to the Minotaur when both fit in `n` squares. */
+const cropMid = (hero: number, foe: number | null, n: number): number => (foe !== null && Math.abs(foe - hero) < n ? (hero + foe) / 2 : hero);
+
+/** How long the face's last repaint took, in ms, for tests. */
+let thumbMs = 0;
+function paintThumb(): void {
+  const t0 = performance.now();
+  const run = game.run;
+  if (!run) return;
+  const s = run.now;
+  const classicFace = settings.look.get() === 'modern' && !modernFailed;
+  // The look and the board state itself: a turn that changes the board without moving Theseus repaints too.
+  const key = `${classicFace} ${game.opens}`;
+  if (key === thumbKey && s === thumbState) return;
+  const g = thumb.getContext('2d')!;
+  const figures = { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) };
+  const nc = s.level.cols, nr = s.level.rows;
+  const mc = cropMid(s.player.c, s.minotaur?.c ?? null, THUMB_COLS), mr = cropMid(s.player.r, s.minotaur?.r ?? null, THUMB_ROWS);
+  const c0 = cropStart(mc, THUMB_COLS, nc), r0 = cropStart(mr, THUMB_ROWS, nr);
+  g.fillStyle = '#0d0b0a';
+  g.fillRect(0, 0, THUMB_W, THUMB_H);
+  if (classicFace) {
+    if (!tilesLoaded) return;
+    const dpr = window.devicePixelRatio || 1;
+    thumbBoard.size(nc, nr, THUMB_CELL / dpr);
+    thumbBoard.paint(drawList(s, figures, atlas, 0));
+    const cell = thumbSheet.width / nc, top = thumbSheet.height - nr * cell;
+    // A level narrower or shorter than the crop sits in its middle.
+    const ox = Math.max(0, (THUMB_COLS - nc) / 2) * THUMB_CELL, oy = Math.max(0, (THUMB_ROWS - nr) / 2) * THUMB_CELL;
+    const w = Math.min(THUMB_COLS, nc), h = Math.min(THUMB_ROWS, nr);
+    g.drawImage(thumbSheet, c0 * cell, top + r0 * cell, w * cell, h * cell, ox, oy, w * THUMB_CELL, h * THUMB_CELL);
+  } else {
+    // Without a modern board the face stays dark under its badge.
+    if (modernFailed) {
+      thumbKey = key;
+      thumbState = s;
+      return;
+    }
+    if (!modern) {
+      // The modern board loads for the face only once play has rested a while, so loading it never slows play.
+      if (performance.now() - lastChange < REST_MS || game.playing) {
+        setTimeout(wantThumb, REST_MS);
+        return;
+      }
+      void createModern();
+      return;
+    }
+    if (game.opens !== thumbOpens) {
+      thumbOpens = game.opens;
+      if (!modernOn) modern.level(s);
+    }
+    if (!modernOn) modern.show({ state: s, figures }, game.thread);
+    if (!modern.snapshot(thumb, r0 + (THUMB_ROWS - 1) / 2, c0 + (THUMB_COLS - 1) / 2, THUMB_COLS, THUMB_ROWS)) return;
+  }
+  // The badge takes the corner farthest from Theseus and the Minotaur (game.css), so it hides neither.
+  const figs = [s.player, ...(s.minotaur ? [s.minotaur] : [])].map(p => [p.c - c0 + 0.5, p.r - r0 + 0.5] as const);
+  const corners = [['top-left', 0, 0], ['top-right', THUMB_COLS, 0], ['bottom-left', 0, THUMB_ROWS], ['bottom-right', THUMB_COLS, THUMB_ROWS]] as const;
+  const clear = (x: number, y: number) => Math.min(...figs.map(([fx, fy]) => Math.hypot(fx - x, fy - y)));
+  // Where keys show (a fine pointer), the key tab holds the top-right corner.
+  const tabbed = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
+  const open = corners.filter(k => !(tabbed && k[0] === 'top-right'));
+  thumb.dataset.corner = [...open].sort((a, b) => clear(b[1], b[2]) - clear(a[1], a[2]))[0]![0];
+  thumbKey = key;
+  thumbState = s;
+  thumbMs = performance.now() - t0;
+}
+let thumbOpens = -1;
+
 /* The classic board repaints every frame while it shows: the sprites animate, and a turn's figures move between
    cells (holding still while a story page the figure reached is read). */
 function loop(now: number): void {
@@ -358,6 +465,8 @@ function showLook(look: Look): void {
 function setModernOn(on: boolean): void {
   if (on === modernOn) return;
   modernOn = on;
+  thumbKey = '';
+  wantThumb();
   const holder = document.getElementById('board');
   holder?.classList.toggle('look-modern', on);
   ui.setModernBoard(on);
@@ -431,6 +540,8 @@ async function createModern(): Promise<void> {
   });
   if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (modernOn) modern?.resize(); }).observe(canvas);
   showLook(settings.look.get());
+  thumbKey = '';
+  wantThumb();
 }
 
 const NO_WEBGL = 'The modern look needs WebGL, which this browser does not have; showing Classic.';
@@ -485,6 +596,7 @@ function start(): void {
   mountTitleInstall(window, document.getElementById('title-install'));
   image.onload = () => {
     tilesLoaded = true;
+    wantThumb();
     runClassic();
   };
   image.onerror = () => {
@@ -548,6 +660,7 @@ const modernHook = {
   markers: () => modern?.markers() ?? [],
   quality: () => modern?.quality() ?? 3,
   fps: () => modern?.fps() ?? null,
+  thumbMs: () => thumbMs,
   get active() { return modernOn && !editorUp; },
 };
 window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };

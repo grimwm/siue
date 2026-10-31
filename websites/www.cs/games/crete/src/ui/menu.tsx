@@ -1,6 +1,7 @@
 // The Island of Crete: the menu, in three sections under small headings. Sound and screen: switches for sound, music,
-// music in the background and full screen. Board: the two looks as pictures and, for the modern look, the view
-// (Angled or Top-down) and, while angled, the walls; then which edge of the strip the arrows stand at.
+// music in the background and full screen. Board: for the modern look, the view (Angled or Top-down), while angled
+// the walls, and the mini map; then which edge of the strip the arrows stand at. The look itself is picked on the
+// new-game card and swapped with the strip's Map button.
 // The story: the Lore Book, the Dictionary, the story log and how to play (folded). Then Back to the editor or Shared level (the
 // shared level's card; each only when the page gives it), and Quit on its own. On a wide screen the sections stand
 // in two columns.
@@ -14,7 +15,6 @@ import { KEYS } from '../keys.ts';
 import type { Seg } from '../help.ts';
 import type { Tone as LogTone } from '../game.ts';
 import type { Look, PadSide, View, WallMode } from '../settings.ts';
-import { LookTiles } from './look-tiles.tsx';
 
 export interface LogLine {
   text: string;
@@ -44,7 +44,6 @@ export interface MenuProps {
   onMusic: () => void;
   onBackground: () => void;
   onFullscreen: () => void;
-  onLook: (look: Look) => void;
   onWalls: (walls: WallMode) => void;
   onView: (view: View) => void;
   onPad: (side: PadSide) => void;
@@ -102,7 +101,6 @@ export function Menu(p: MenuProps) {
           </section>
           <section class="menu-sec" data-section="look" aria-labelledby="menu-board-h">
             <h3 id="menu-board-h">Board</h3>
-            <LookTiles look={p.look} idPrefix="look" label="Look" onPick={p.onLook} />
             {p.look === 'modern' && (
               <div class="menu-walls" data-section="view">
                 <span class="menu-label" id="menu-view-label">View</span>

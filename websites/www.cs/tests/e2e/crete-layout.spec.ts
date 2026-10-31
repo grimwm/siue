@@ -201,7 +201,7 @@ for (const device of DEVICES) {
     await expect(page.locator('#menu-veil')).toBeVisible();
     expect(await page.evaluate(cardFits, '#menu-veil .card'), 'menu on screen').toBe(true);
     await closeOnTitleRow(page, 'menu');
-    expect(await page.evaluate(lookTiles, '#menu-veil'), 'menu pictures').toEqual([]);
+    await expect(page.locator('#menu-veil #look-modern'), 'no Look setting in the menu').toHaveCount(0);
     expect(await page.evaluate(menuTidy), 'menu laid out').toEqual([]);
     // Two columns where there is room, one on a phone.
     const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.menu-cols')!).gridTemplateColumns.split(' ').length);

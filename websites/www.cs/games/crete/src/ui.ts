@@ -82,6 +82,8 @@ export interface UiDeps {
   /** The Modern icons (fx/sprites/modern-icons.json): the Dictionary's pictures in the Modern look. Without them every
    *  picture is Classic's sprite. */
   icons?: IconSheet;
+  /** The Map button's face, painted by the page with the level in the other look. */
+  thumb?: HTMLCanvasElement;
   /** The randomness that picks the hearts line (src/hearts-lines.ts); Math.random when not given. */
   rng?: () => number;
   /** The banner's timer; the window's when not given. */
@@ -621,7 +623,6 @@ export function createUi(deps: UiDeps): Ui {
         controls?.toggleBackground?.();
       },
       onFullscreen: () => controls?.toggleFullscreen(),
-      onLook: (l) => controls?.setLook?.(l),
       onWalls: (w) => controls?.setWalls?.(w),
       onView: (v) => controls?.setView?.(v),
       onPad: (side) => controls?.setPad?.(side),
@@ -982,6 +983,7 @@ export function createUi(deps: UiDeps): Ui {
       },
       onMenu: () => layers.open("menu"),
       look,
+      thumb: deps.thumb,
       onMove: (dir) => act(() => {
         layers.close("start");
         g.press({ kind: "move", dir: moveDir(dir) });

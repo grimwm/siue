@@ -121,15 +121,22 @@ test('every strip button wears a tab that prints what the key table says', () =>
   assert.equal(maybeById(root, 'btn-bash'), undefined);
 });
 
-test('the look button names the other look and asks for it: Classic in Modern, Modern in Classic', () => {
+test('the Map button wears Map in Modern and 3D in Classic, is named for the look it swaps to, asks for it, and holds the face it is given', () => {
   const root = mount();
   const asked: string[] = [];
-  renderStrip(root, stripProps({ look: 'modern', onLook: l => asked.push(l) }));
-  assert.match(byId(root, 'btn-look').textContent, /^Classic/);
-  click(byId(root, 'btn-look'));
-  renderStrip(root, stripProps({ look: 'classic', onLook: l => asked.push(l) }));
-  assert.match(byId(root, 'btn-look').textContent, /^Modern/);
-  click(byId(root, 'btn-look'));
+  const face = document.createElement('canvas') as unknown as HTMLCanvasElement;
+  const held = () => (face.parentNode as unknown as { parentNode: unknown } | null)?.parentNode === btn();
+  renderStrip(root, stripProps({ look: 'modern', thumb: face, onLook: l => asked.push(l) }));
+  const btn = () => byId(root, 'btn-look');
+  assert.match(btn().textContent, /^Map/);
+  assert.equal(btn().getAttribute('aria-label'), 'Switch to Classic');
+  assert.ok(held(), 'the face sits in the button');
+  click(btn());
+  renderStrip(root, stripProps({ look: 'classic', thumb: face, onLook: l => asked.push(l) }));
+  assert.match(btn().textContent, /^3D/);
+  assert.equal(btn().getAttribute('aria-label'), 'Switch to Modern');
+  assert.ok(held(), 'still there after a redraw');
+  click(btn());
   assert.deepEqual(asked, ['classic', 'modern']);
 });
 
@@ -245,7 +252,7 @@ function menuProps(over: Partial<MenuProps> = {}): MenuProps {
     open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', view: 'angled', pad: 'left', minimap: false,
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onView: noop, onPad: noop, onMinimap: noop, onLore: noop, onDictionary: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onWalls: noop, onView: noop, onPad: noop, onMinimap: noop, onLore: noop, onDictionary: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 
@@ -276,17 +283,17 @@ test('the menu\'s kicker names the level\'s place, and its name stands under the
   assert.equal(maybeById(byId(root, 'menu-veil'), 'menu-level'), undefined);
 });
 
-test('the menu offers Modern and Classic, and Solid, Ghosted and Low only while the look is modern', () => {
+test('the menu has no Look setting, and offers Solid, Ghosted and Low only while the look is modern', () => {
   const root = mount();
   const seen: string[] = [];
-  renderMenu(root, menuProps({ look: 'modern', walls: 'ghosted', onLook: l => seen.push(l), onWalls: w => seen.push(w) }));
+  renderMenu(root, menuProps({ look: 'modern', walls: 'ghosted', onWalls: w => seen.push(w) }));
   const pressed = (id: string) => byId(root, id).getAttribute('aria-pressed');
-  assert.deepEqual(['look-modern', 'look-classic'].map(pressed), ['true', 'false']);
+  assert.equal(maybeById(root, 'look-modern'), undefined);
+  assert.equal(maybeById(root, 'look-classic'), undefined);
   assert.deepEqual(['walls-solid', 'walls-ghosted', 'walls-low'].map(pressed), ['false', 'true', 'false']);
-  for (const id of ['look-classic', 'walls-low']) click(byId(root, id));
-  assert.deepEqual(seen, ['classic', 'low']);
+  click(byId(root, 'walls-low'));
+  assert.deepEqual(seen, ['low']);
   renderMenu(root, menuProps({ look: 'classic' }));
-  assert.deepEqual(['look-modern', 'look-classic'].map(pressed), ['false', 'true']);
   assert.equal(maybeById(root, 'walls-solid'), undefined);
 });
 

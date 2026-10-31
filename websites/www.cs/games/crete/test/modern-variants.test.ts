@@ -9,11 +9,11 @@ test('with no override, the choices are what ships', () => {
 });
 
 test('an override sets only the choices it names, and only to known values', () => {
-  const v = withOverrides(JSON.stringify({ items: 'plate', beacon: true, steep: 'yes', inset: false, colour: 'blue' }));
+  const v = withOverrides(JSON.stringify({ items: 'plate', beacon: true, steep: 'yes', caps: true, colour: 'blue' }));
   assert.equal(v.items, 'plate');
   assert.equal(v.beacon, true);
   assert.equal(v.steep, VARIANT.steep, 'a non-boolean is ignored');
-  assert.equal(v.inset, false);
+  assert.equal(v.caps, true, 'caps set on, unlike the default');
   assert.equal(withOverrides(JSON.stringify({ items: 'gold' })).items, VARIANT.items);
 });
 

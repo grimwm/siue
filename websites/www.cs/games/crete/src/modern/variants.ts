@@ -12,10 +12,7 @@
  * - `steep`: Angled tips to 67°, near Top-down but still showing the walls' faces.
  * - `caps`: the wall tops in pale stone and the joints between the floor's squares dark, so the plan reads from
  *   any angle.
- * - `peek`: a Peek button that shows the whole level straight down while held.
- * - `overview`: a Map button that switches to the whole level straight down until pressed again.
- * - `inset`: a corner view of the whole level from above in the modern art, Theseus's square and the camera's view
- *   outlined; a tap opens the overview. */
+ */
 
 export interface Variant {
   items: 'cyan' | 'white' | 'plate';
@@ -23,9 +20,6 @@ export interface Variant {
   cutaway: boolean;
   steep: boolean;
   caps: boolean;
-  peek: boolean;
-  overview: boolean;
-  inset: boolean;
 }
 
 export const VARIANT: Variant = {
@@ -34,9 +28,6 @@ export const VARIANT: Variant = {
   cutaway: false,
   steep: false,
   caps: false,
-  peek: false,
-  overview: false,
-  inset: false,
 };
 
 export const VARIANT_KEY = 'crete-variant';
@@ -50,7 +41,7 @@ export function withOverrides(raw: string | null): Variant {
   if (!o || typeof o !== 'object') return v;
   const r = o as Record<string, unknown>;
   if (r.items === 'cyan' || r.items === 'white' || r.items === 'plate') v.items = r.items;
-  for (const k of ['beacon', 'cutaway', 'steep', 'caps', 'peek', 'overview', 'inset'] as const) if (typeof r[k] === 'boolean') v[k] = r[k];
+  for (const k of ['beacon', 'cutaway', 'steep', 'caps'] as const) if (typeof r[k] === 'boolean') v[k] = r[k];
   return v;
 }
 

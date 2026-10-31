@@ -9,13 +9,13 @@
  * (controls.ts) turn, pan and zoom it, and the mini map (minimap.ts), when the Mini map setting is on, shows what it sees. A wall that hides Theseus fades
  * in every walls mode; in Ghosted, one that hides any figure or piece fades too. The floating markers are drawn
  * over the finished picture, slid inside the view when their piece shows but they would not. */
-import { ACESFilmicToneMapping, Color, Group, NoToneMapping, OrthographicCamera, PCFSoftShadowMap, Scene, Vector3, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, Color, Group, NoToneMapping, OrthographicCamera, PCFSoftShadowMap, SRGBColorSpace, Scene, Vector3, WebGLRenderTarget, WebGLRenderer } from 'three';
 import type { Object3D } from 'three';
 import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { DEFAULT_YAW, PITCHES, VIEW_YAW, clampTilt, clampView, clampZoom, easeCam, footprint, nearestYaw, panCam, snapYaw, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
+import { DEFAULT_YAW, PITCHES, VIEW_YAW, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, snapYaw, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
@@ -96,14 +96,15 @@ export interface ModernBoard {
   splashing(): number[];
   /** The Mini map setting: shows or hides the mini map. */
   minimap(on: boolean): void;
+  /** Draws the level as it stands, `cols` × `rows` squares round square (r, c), seen from above as Top-Down sees
+   *  it, onto `out` (the Map button's face); works while the board is hidden. False before a level is built. */
+  snapshot(out: HTMLCanvasElement, r: number, c: number, cols: number, rows: number): boolean;
   dispose(): void;
 }
 
 const BACKGROUND = 0x060504;
 /** Angled's tilt when it is steep (variants.ts). */
 const STEEP_PITCH = 67;
-/** The overview and the peek look straight down. */
-const OVERHEAD_PITCH = 90;
 const RAD = Math.PI / 180;
 const LOOP_FPS = 12;
 /** A zoom about a point this near the view's centre (a share of its width or height) keeps following Theseus. */
@@ -169,13 +170,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   /** The Walls setting as chosen; `mode` is what the walls draw, ghosted in Angled when they cut away (variants.ts). */
   let chosenMode: WallMode = 'solid';
   const V = variant();
-  /** The whole level straight down: while Peek is held, or while Map is on (variants.ts). */
-  let overhead: 'off' | 'peek' | 'map' = 'off';
-  let savedYaw = 0;
   /** Angled's heading and tilt, as the player left them; this browser keeps them (CAM_KEY) until Reset. */
   const angledDefault = (): { heading: number; tilt: number } => ({ heading: DEFAULT_YAW, tilt: V.steep ? STEEP_PITCH : PITCHES.angled });
   let { heading, tilt } = loadCam(angledDefault());
-  const pitchOf = (v: View): number => (overhead !== 'off' ? OVERHEAD_PITCH : v === 'angled' ? tilt : PITCHES[v]);
+  const pitchOf = (v: View): number => (v === 'angled' ? tilt : PITCHES[v]);
   let last: State | null = null;
   let lastPlayer: Pos | null = null;
   let models: TerrainModel[] = [];
@@ -262,7 +260,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   function aimGoal(): void {
     goal.pitch = pitchOf(viewing);
-    if (!zoomed || overhead !== 'off') {
+    if (!zoomed) {
       goal.tx = goal.tz = 0;
       goal.zoom = wholeZoom(aspect(), cols(), rows(), goal.pitch, goal.yaw);
     } else {
@@ -348,7 +346,6 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       renderer.render(markers.scene, camera);
       renderer.autoClear = true;
     }
-    drawInset();
     const key = `${cur.yaw} ${cur.tx} ${cur.tz} ${cur.zoom} ${width} ${height}`;
     if (key !== viewKey) {
       viewKey = key;
@@ -384,6 +381,44 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       const info = m.userData as MarkerInfo;
       return { kind: info.kind, at: px(m.position), foot: px(info.foot), cell: height / cur.zoom };
     });
+  }
+
+  const snapCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  let snapTarget: WebGLRenderTarget | null = null;
+  let snapPixels = new Uint8Array(0);
+  function snapshot(out: HTMLCanvasElement, r: number, c: number, sc: number, sr: number): boolean {
+    if (!last) return false;
+    const nc = cols(), nr = rows(), w = out.width, h = out.height;
+    // The crop's middle, held so the crop stays on the level where the level is larger than it.
+    const mid = (at: number, n: number, size: number) => (size <= n ? (size - 1) / 2 : Math.max((n - 1) / 2, Math.min(size - 1 - (n - 1) / 2, at)));
+    const x = cellX(mid(c, sc, nc), nc), z = cellZ(mid(r, sr, nr), nr);
+    const p = PITCHES.top * RAD, D = 40;
+    snapCam.position.set(x, FY + Math.sin(p) * D, z + Math.cos(p) * D);
+    snapCam.up.set(0, 0, -1);
+    snapCam.lookAt(x, FY, z);
+    const hw = sc / 2, hh = (sr * Math.sin(p)) / 2;
+    Object.assign(snapCam, { left: -hw, right: hw, top: hh, bottom: -hh });
+    snapCam.updateProjectionMatrix();
+    snapCam.updateMatrixWorld();
+    if (!snapTarget || snapTarget.width !== w || snapTarget.height !== h) {
+      snapTarget?.dispose();
+      snapTarget = new WebGLRenderTarget(w, h);
+      snapTarget.texture.colorSpace = SRGBColorSpace;
+      snapPixels = new Uint8Array(w * h * 4);
+    }
+    renderer.toneMapping = ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.4;
+    // The shadows stay as the board last drew them: the face is too small to miss them, and they cost most.
+    renderer.setRenderTarget(snapTarget);
+    renderer.render(scene, snapCam);
+    renderer.setRenderTarget(null);
+    renderer.toneMapping = NoToneMapping;
+    renderer.readRenderTargetPixels(snapTarget, 0, 0, w, h, snapPixels);
+    const img = new ImageData(w, h);
+    // The target's rows run bottom to top.
+    for (let y = 0; y < h; y++) img.data.set(snapPixels.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+    out.getContext('2d')!.putImageData(img, 0, 0);
+    return true;
   }
 
   function resize(): void {
@@ -521,7 +556,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   function walls(chosen: WallMode): void {
     chosenMode = chosen;
-    const m = V.cutaway && viewing === 'angled' && overhead === 'off' && chosen === 'solid' ? 'ghosted' : chosen;
+    const m = V.cutaway && viewing === 'angled' && chosen === 'solid' ? 'ghosted' : chosen;
     mode = m;
     wallSet.setMode(m);
     lights?.setMode(m);
@@ -530,15 +565,6 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     invalidate();
   }
 
-  /** Looks at the whole level straight down (`peek` while held, `map` until pressed again), or back. */
-  function setOverhead(o: 'off' | 'peek' | 'map'): void {
-    if (o === overhead) return;
-    if (overhead === 'off') savedYaw = goal.yaw;
-    overhead = o;
-    goal.yaw = o === 'off' ? savedYaw : nearestYaw(0, goal.yaw);
-    mapBtn?.setAttribute('aria-pressed', String(o === 'map'));
-    walls(chosenMode);
-  }
 
   function view(v: View): void {
     if (v === viewing) return;
@@ -586,14 +612,14 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       invalidate();
     },
     tilt(deg: number) {
-      if (viewing !== 'angled' || overhead !== 'off') return;
+      if (viewing !== 'angled') return;
       tilt = clampTilt(tilt + deg);
       cur.pitch = goal.pitch = tilt;
       aimWalls = true;
       invalidate();
     },
     settle() {
-      if (viewing !== 'angled' || overhead !== 'off') return;
+      if (viewing !== 'angled') return;
       goal.yaw = snapYaw(goal.yaw);
       if (snap()) cur.yaw = goal.yaw;
       heading = ((goal.yaw % 360) + 360) % 360;
@@ -618,113 +644,6 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   host.overlay.append(ui);
   const controls = createControls(host.canvas, ui, host, cam);
 
-  // Map and Peek (variants.ts): the whole level straight down, latched or while held.
-  const extra = document.createElement('div');
-  extra.className = 'cam-extra';
-  const extraBtn = (id: string, text: string, label: string) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.id = id;
-    b.className = 'cbtn wide';
-    b.textContent = text;
-    b.setAttribute('aria-label', label);
-    extra.append(b);
-    return b;
-  };
-  const mapBtn = V.overview || V.inset ? extraBtn('cam-map', 'Map', 'Map: the whole level from above') : null;
-  if (mapBtn && !V.overview) mapBtn.hidden = true;
-  mapBtn?.setAttribute('aria-pressed', 'false');
-  mapBtn?.addEventListener('click', () => {
-    if (host.blocked()) return;
-    host.gesture();
-    setOverhead(overhead === 'map' ? 'off' : 'map');
-  });
-  const peekBtn = V.peek ? extraBtn('cam-peek', 'Peek', 'Hold to see the whole level from above') : null;
-  if (peekBtn) {
-    const off = () => { if (overhead === 'peek') setOverhead('off'); };
-    peekBtn.addEventListener('pointerdown', e => {
-      if (host.blocked()) return;
-      host.gesture();
-      peekBtn.setPointerCapture(e.pointerId);
-      setOverhead('peek');
-    });
-    peekBtn.addEventListener('pointerup', off);
-    peekBtn.addEventListener('pointercancel', off);
-    peekBtn.addEventListener('lostpointercapture', off);
-  }
-  if (extra.childElementCount) ui.append(extra);
-
-  // The inset (variants.ts): the whole level from above in the corner, drawn by the renderer into its rectangle,
-  // with Theseus's square and the camera's view outlined on a canvas over it. A tap opens the map.
-  const inset = V.inset ? document.createElement('canvas') : null;
-  const insetCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
-  if (inset) {
-    inset.className = 'inset';
-    inset.id = 'inset';
-    inset.setAttribute('role', 'button');
-    inset.setAttribute('aria-label', 'The whole level from above: tap for the map');
-    inset.addEventListener('click', () => {
-      if (host.blocked()) return;
-      host.gesture();
-      setOverhead('map');
-    });
-    ui.append(inset);
-  }
-  /** Draws the inset over the finished frame. */
-  function drawInset(): void {
-    if (!inset || !last) return;
-    const show = overhead === 'off';
-    inset.hidden = !show;
-    if (!show) return;
-    const nc = cols(), nr = rows();
-    const iw = Math.round(Math.min(width * 0.36, 220));
-    const ih = Math.round(Math.max(60, iw * ((nr + 1) / (nc + 1))));
-    if (inset.width !== iw * dpr() || inset.height !== ih * dpr()) {
-      inset.width = iw * dpr();
-      inset.height = ih * dpr();
-      inset.style.width = `${iw}px`;
-      inset.style.height = `${ih}px`;
-    }
-    const hx = (nc + 1) / 2, hz = (nr + 1) / 2;
-    insetCam.left = -hx; insetCam.right = hx; insetCam.top = hz; insetCam.bottom = -hz;
-    insetCam.position.set(0, FY + 40, 0);
-    insetCam.up.set(0, 0, -1);
-    insetCam.lookAt(0, FY, 0);
-    insetCam.updateProjectionMatrix();
-    insetCam.updateMatrixWorld();
-    const x = width - iw - 10, y = 62;
-    renderer.setScissorTest(true);
-    renderer.setScissor(x, y, iw, ih);
-    renderer.setViewport(x, y, iw, ih);
-    renderer.autoClear = false;
-    renderer.clear();
-    renderer.toneMapping = ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.4;
-    renderer.render(scene, insetCam);
-    renderer.toneMapping = NoToneMapping;
-    renderer.autoClear = true;
-    renderer.setScissorTest(false);
-    renderer.setViewport(0, 0, width, height);
-    const g = inset.getContext('2d')!;
-    const k = dpr();
-    g.setTransform(k, 0, 0, k, 0, 0);
-    g.clearRect(0, 0, iw, ih);
-    const px = (gx: number, gz: number): [number, number] => [((gx + hx) / (2 * hx)) * iw, ((gz + hz) / (2 * hz)) * ih];
-    const f = footprint(cur, aspect());
-    g.strokeStyle = 'rgba(255,255,255,0.9)';
-    g.lineWidth = 1.5;
-    g.beginPath();
-    f.corners.forEach((c, i) => (i ? g.lineTo(...px(c.x, c.z)) : g.moveTo(...px(c.x, c.z))));
-    g.closePath();
-    g.stroke();
-    if (lastPlayer) {
-      const [sx, sy] = px(cellX(lastPlayer.c, nc) - 0.5, cellZ(lastPlayer.r, nr) - 0.5);
-      const cw = iw / (2 * hx);
-      g.strokeStyle = '#36d46c';
-      g.lineWidth = 2;
-      g.strokeRect(sx, sy, cw, cw);
-    }
-  }
   const mini = host.atlas && host.image
     ? createMinimap(ui, host.atlas, host.image, {
       blocked: () => host.blocked(),
@@ -792,6 +711,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     minimap(on) {
       mini?.show(on);
     },
+    snapshot,
     dispose() {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
@@ -810,6 +730,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       floats.dispose();
       thread.dispose();
       markers.dispose();
+      snapTarget?.dispose();
       finish.dispose();
       kit.dispose();
       renderer.dispose();

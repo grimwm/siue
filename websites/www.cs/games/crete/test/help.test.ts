@@ -52,9 +52,10 @@ test("the help names Daedalus's snare, the Bronze ball, the Harpy and Talos's fi
 
 test('the help explains the Look setting and the camera gestures', () => {
   const all = text(helpLines(KEYS, TOOLS));
-  assert.match(all, /Look in this menu picks the modern board or the classic tiles/);
+  assert.match(all, /You pick the modern board or the classic tiles when you start a new game/);
+  assert.doesNotMatch(all, /Look in this menu/);
   assert.match(all, /Walls \(modern only\)/);
-  assert.match(all, /Classic or Modern \(B\) under the board swaps between them/);
+  assert.match(all, /Map \(B\) button under the board swaps between them in one press/);
   assert.match(all, /two fingers twist to turn it and slide up or down together to tilt it/);
   assert.match(all, /drag with the left button to turn \(across\) and tilt \(up and down\)/);
   assert.match(all, /squares up to the nearest quarter turn/);

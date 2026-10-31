@@ -1,6 +1,7 @@
 /* The Island of Crete: which Dictionary entries this browser has met, on the kit's prefs beside the levels cleared
- * and the story pages found. A first meeting shows its card; after that the entry is open in the Dictionary. The
- * stored word "*" stands for every entry (the browser specs set it to keep their levels free of first cards).
+ * and the story pages found: items by id, first touches of active tiles as `touch-<id>` (src/dictionary.ts metId).
+ * A first pickup or touch shows its card; after that it shows a banner. The stored word "*" stands for every entry
+ * (the browser specs set it to keep their levels free of first cards).
  * Storage that is blocked or holds anything unexpected reads as none met. DOM-free. */
 import { pref, json } from "../../_kit/prefs.ts";
 import type { StorageLike } from "../../_kit/ports.ts";

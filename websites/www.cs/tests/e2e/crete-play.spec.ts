@@ -442,7 +442,7 @@ test('a finger swipe on the classic board moves Theseus that way', async ({ page
 const MIRRORS = ['title: Two Mirrors', 'intro: Two mirrors lie on the floor.', '', '#########', '#P.z.z.E#', '#########', ''].join('\n');
 type FirstsHook = { __creteTest: { parse(text: string): unknown; playLevel(level: unknown, opts: unknown): void } };
 
-/** The mirrors' level open on the real page, its exit's first card closed and its start card begun. */
+/** The mirrors' level open on the real page, its start card begun. */
 async function openMirrors(page: Page): Promise<string[]> {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -454,11 +454,8 @@ async function openMirrors(page: Page): Promise<string[]> {
     const t = (window as unknown as FirstsHook).__creteTest;
     t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Two Mirrors', best: null } });
   }, MIRRORS);
-  await expect(page.locator('#meet-veil'), 'the exit is met at the start').toBeVisible();
-  await expect(page.locator('#meet-title')).toHaveText('The exit');
-  await page.keyboard.press('Enter');
-  await expect(page.locator('#meet-veil')).toBeHidden();
-  await expect(page.locator('#start-veil')).toBeVisible();
+  await expect(page.locator('#start-veil'), 'the level opens on its start card').toBeVisible();
+  await expect(page.locator('#meet-veil'), 'and no card for the exit').toBeHidden();
   await page.locator('#start-begin').click();
   return errors;
 }
@@ -494,7 +491,9 @@ test('the first mirror taken shows its card; the second, a banner; the Dictionar
   await expect(held.first()).toHaveAttribute('data-entry', 'mirror');
   await expect(held.first()).toContainText('× 2');
   await page.locator('#dict-tab-entries').click();
-  await expect(page.locator('#dict-entries .dict-row:not(.locked)')).toHaveCount(2);
+  await expect(page.locator('#dict-entries .dict-row[data-entry="mirror"]:not(.locked)')).toHaveCount(1);
+  await expect(page.locator('#dict-entries .dict-row[data-entry="water"]:not(.locked)'), 'a hazard is readable unmet').toHaveCount(1);
+  await expect(page.locator('#dict-entries .dict-row[data-entry="fake-wall"].locked'), 'a hidden wall is not').toHaveCount(1);
   await expect(page.locator('#dict-entries .dict-row.locked').first()).toHaveText('???');
   await page.keyboard.press('q');
   await expect(page.locator('#menu-veil'), 'Q goes back to the menu').toBeVisible();

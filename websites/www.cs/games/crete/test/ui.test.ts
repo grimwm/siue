@@ -1050,7 +1050,8 @@ test('taking a story page opens its Lore entry over the board; Enter closes it a
   assert.equal(text('lore-entry-title'), "A Tribute's Marks");
   assert.ok(el('lore-entry-text'));
   const tabs = walk(el('lore-back')!).filter(n => n.localName === 'kbd').map(t => t.textContent);
-  assert.deepEqual(tabs, [KEYS.menu.label]);
+  assert.deepEqual(tabs, [KEYS.begin.label], 'mid-level the page goes on with Enter');
+  assert.match(el('lore-back')!.textContent, /Go On/);
   const moves = game.run!.now.moves;
   key('ArrowUp');
   assert.equal(game.run!.now.moves, moves, 'the game waits while the entry is open');

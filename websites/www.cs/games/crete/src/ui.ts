@@ -102,8 +102,8 @@ export interface Controls {
   wake(): void;
   /** Leave the game (the menu's Quit). */
   quit(): void;
-  /** Enter the halls on the new-game card (after the title card's Play): opens the card of the chapter to play on
-   *  (`Ui.playChapter`). */
+  /** Enter the halls on the new-game card (after the title card's Play): opens Chapter 1's opening card, whatever
+   *  this browser has cleared. */
   play(): void;
   /** Back to the editor from a try: offered in the menu and on the end card while a try is in play. */
   backToEditor?(): void;
@@ -151,12 +151,9 @@ export interface Ui {
   showTitle(hint: boolean, note?: string): void;
   /** The level list, over whatever is showing. */
   showLevels(): void;
-  /** Chapter `n`'s card, over whatever is showing: the opening one (Enter starts the first level this browser
-   *  has not cleared), or the closing one. */
+  /** Chapter `n`'s card, over whatever is showing: the opening one (Enter starts the chapter's first level), or
+   *  the closing one. */
   showChapter(n: number, closing: boolean): void;
-  /** The chapter to play on: the first released chapter with a level this browser has not cleared; Chapter 1 once
-   *  every level is cleared. */
-  playChapter(): number;
   /** Closes every card. */
   closeLayers(): void;
   /** The card showing now, if any. */
@@ -252,6 +249,8 @@ export function createUi(deps: UiDeps): Ui {
   /** The chapter card's chapter, whether it is the closing card, and the level Enter on it starts. */
   let chapterN = 1;
   let chapterClosing = false;
+  /** On a closing card opened by a win, that win's ending and score: "Level 10 cleared: 76 moves · best possible 76". */
+  let chapterScore = "";
   let chapterTarget = 0;
   /** The chapter the level list shows. */
   let listed = 1;
@@ -331,17 +330,6 @@ export function createUi(deps: UiDeps): Ui {
     });
   }
 
-  /** The first level of chapter `n` this browser has not cleared; the chapter's first when it has cleared all. */
-  function resumeOf(n: number): number {
-    const c = CHAPTERS[n - 1]!;
-    const i = c.levelIds.findIndex((id) => !progress.get(id).cleared);
-    return firstOf(n) + Math.max(0, i);
-  }
-
-  function playChapter(): number {
-    return CHAPTERS.find((c) => c.released && c.levelIds.some((id) => !progress.get(id).cleared))?.n ?? 1;
-  }
-
   /** Continue on a closing card: the next chapter's opening card when it is released, else back to the end card. */
   function goOn(): void {
     const next = nextChapter(chapterN);
@@ -354,9 +342,10 @@ export function createUi(deps: UiDeps): Ui {
     pick((controls?.game ?? game)!.trial + 1);
   }
 
-  function showChapter(n: number, closing: boolean, target = resumeOf(n)): void {
+  function showChapter(n: number, closing: boolean, target = firstOf(n)): void {
     chapterN = n;
     chapterClosing = closing;
+    chapterScore = "";
     chapterTarget = target;
     sfx?.("chapter");
     layers.open("chapter");
@@ -469,6 +458,7 @@ export function createUi(deps: UiDeps): Ui {
       open: layers.isOpen("chapter"),
       chapter: CHAPTERS[chapterN - 1]!,
       closing: chapterClosing,
+      score: chapterScore,
       next: nextChapter(chapterN),
       onEnter: enter,
       onLevels: () => layers.open("levels"),
@@ -789,7 +779,11 @@ export function createUi(deps: UiDeps): Ui {
       end = endView(g);
       layers.open("end");
       // A chapter's last level won: its closing card opens over the end card, which waits under it.
-      if (at && end.won && at.within === at.chapter.levelIds.length - 1) showChapter(at.chapter.n, true);
+      // It carries the win's moves and best possible, since it covers the end card that shows them.
+      if (at && end.won && at.within === at.chapter.levelIds.length - 1) {
+        showChapter(at.chapter.n, true);
+        chapterScore = `${end.kicker}: ${end.score}`;
+      }
     }
     notice(g);
     announcePages(g);
@@ -1393,7 +1387,6 @@ export function createUi(deps: UiDeps): Ui {
     showTitle,
     showLevels: () => layers.open("levels"),
     showChapter: (n, closing) => showChapter(n, closing),
-    playChapter,
     closeLayers: () => layers.clear(),
     top: () => layers.top(),
     showEditor,

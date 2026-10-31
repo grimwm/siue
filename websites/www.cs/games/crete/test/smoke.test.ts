@@ -57,7 +57,7 @@ test('the game reaches no function the site script defines', { skip: !existsSync
 
 test("Play opens the card of the chapter to play on, and a ?seed= link Chapter 1's", () => {
   const main = read('src/main.ts');
-  assert.match(main, /function play\(\)[^}]*ui\.showChapter\(ui\.playChapter\(\), false\)/);
+  assert.match(main, /function play\(\)[^}]*ui\.showChapter\(1, false\)/);
   assert.match(main, /if \(direct\) \{[^}]*ui\.showChapter\(1, false\)/);
 });
 

@@ -249,6 +249,8 @@ test('the title card reads its kicker from Chapter 1', () => {
 
 // ---- the title -> chapter card -> level flow, on the real page and game ----
 const cleared = new Set<string>();
+/** The status bar's level, "Ch 1 · 2". */
+const hudTrial = (): string => byId(document.getElementById('status-root')!, 'hud-trial').textContent;
 const progress: Progress = {
   get: id => ({ cleared: cleared.has(id), assisted: false, best: cleared.has(id) ? 20 : null }),
   record: id => { cleared.add(id); return progress.get(id); },
@@ -308,6 +310,84 @@ function win(i: number): void {
   for (const a of r.line) game.press(a);
   assert.equal(game.run!.now.outcome, 'won');
 }
+
+test('with Chapters 1 and 2 all cleared, Next level after Chapter 1, Level 1 goes to its Level 2', () => {
+  reset();
+  for (const id of LEVEL_IDS.slice(0, 20)) cleared.add(id);
+  win(0);
+  assert.equal(flow.top(), 'end');
+  key('Enter');
+  assert.equal(game.trial, 1);
+  assert.equal(hudTrial(), 'Ch 1 · 2');
+  assert.equal(flow.top(), 'start');
+});
+
+test("with Chapters 1 and 2 all cleared, winning Chapter 1, Level 10 goes on to Chapter 2's card and its Level 1", () => {
+  reset();
+  for (const id of LEVEL_IDS.slice(0, 20)) cleared.add(id);
+  win(9);
+  assert.equal(text('chapter-kicker'), 'End of Chapter 1');
+  key('Enter');
+  assert.equal(text('chapter-title'), 'The Winding Ways');
+  key('Enter');
+  assert.equal(game.trial, 10);
+  assert.equal(hudTrial(), 'Ch 2 · 1');
+  assert.equal(flow.top(), 'start');
+});
+
+test("with Chapter 1 and Chapter 2's first level cleared, winning Chapter 1, Level 10 still goes on to Chapter 2, Level 1", () => {
+  reset();
+  for (const id of LEVEL_IDS.slice(0, 11)) cleared.add(id);
+  win(9);
+  key('Enter');
+  assert.equal(text('chapter-title'), 'The Winding Ways');
+  key('Enter');
+  assert.equal(hudTrial(), 'Ch 2 · 1');
+});
+
+test('with only some levels cleared, Next level goes to the next level in order, never the first uncleared one', () => {
+  reset();
+  for (const id of [...LEVEL_IDS.slice(1, 4), ...LEVEL_IDS.slice(10, 11)]) cleared.add(id);
+  win(0);
+  key('Enter');
+  assert.equal(hudTrial(), 'Ch 1 · 2');
+});
+
+test("winning Chapter 1, Level 1 shows the moves taken and the best possible on the end card", () => {
+  reset();
+  win(0);
+  assert.equal(flow.top(), 'end');
+  assert.match(text('end-score'), /^\d+ moves · best possible 10/);
+});
+
+test('every released level in order: Enter starts it, a win shows moves and the best possible, and going on reaches the next', () => {
+  reset();
+  flow.showChapter(1, false);
+  key('Enter');
+  for (let i = 0; i < LEVEL_IDS.length; i++) {
+    const { chapter, within } = { chapter: i < 10 ? 1 : 2, within: (i % 10) + 1 };
+    assert.equal(flow.top(), 'start', `level ${i + 1}'s start card`);
+    assert.equal(hudTrial(), `Ch ${chapter} · ${within}`);
+    key('Enter');
+    const r = solve(initial(levels.level(i)));
+    assert.ok(r.solved);
+    for (const a of r.line) game.press(a);
+    assert.equal(game.run!.now.outcome, 'won');
+    if (within === 10) {
+      assert.equal(text('chapter-kicker'), `End of Chapter ${chapter}`);
+      assert.match(text('chapter-score'), new RegExp(`^Level 10 cleared: ${r.line.length} moves · best possible \\d+`));
+      key('q');
+    }
+    assert.equal(flow.top(), 'end');
+    assert.match(text('end-score'), new RegExp(`^${r.line.length} moves · best possible \\d+`), `Ch ${chapter} · ${within}'s score`);
+    if (i + 1 === LEVEL_IDS.length) break;
+    key('Enter');
+    if (within === 10) {
+      assert.equal(text('chapter-title'), 'The Winding Ways');
+      key('Enter');
+    }
+  }
+});
 
 test('in the levels list, up and down (or j and k) move between levels and Enter opens the one chosen', () => {
   reset();
@@ -688,12 +768,12 @@ test('Play opens the chapter card, and Enter on it starts level 1 when nothing i
   assert.equal(flow.top(), 'start');
 });
 
-test('Enter on the chapter card starts the first level this browser has not cleared', () => {
+test('Enter on the chapter card starts its first level, whatever this browser has cleared', () => {
   reset();
   for (const id of LEVEL_IDS.slice(0, 3)) cleared.add(id);
   flow.showChapter(1, false);
   key('Enter');
-  assert.equal(game.trial, 3);
+  assert.equal(game.trial, 0);
   assert.equal(flow.top(), 'start');
 });
 
@@ -782,16 +862,16 @@ test("Chapter 2's closing card says Chapter 3 is not yet released, and Continue 
   assert.equal(game.opens, opened);
 });
 
-test('Play opens the chapter to play on: the first with a level not yet cleared', () => {
+test('with Chapter 1 all cleared, Levels and Chapter 2, Level 3 starts there', () => {
   reset();
-  assert.equal(flow.playChapter(), 1);
   for (const id of LEVEL_IDS.slice(0, 10)) cleared.add(id);
-  assert.equal(flow.playChapter(), 2);
-  flow.showChapter(flow.playChapter(), false);
-  key('Enter');
-  assert.equal(game.trial, 10);
-  for (const id of LEVEL_IDS) cleared.add(id);
-  assert.equal(flow.playChapter(), 1, 'every level cleared: back to Chapter 1');
+  flow.showChapter(1, false);
+  key('n');
+  key('ArrowRight');
+  pick(3);
+  assert.equal(game.trial, 12);
+  assert.equal(hudTrial(), 'Ch 2 · 3');
+  assert.equal(flow.top(), 'start');
 });
 
 test("the level list opens on the chapter of the level in play", () => {
@@ -1064,6 +1144,8 @@ test('winning level 10 opens the closing card over the end card; Continue goes o
   reset();
   win(9);
   assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-kicker'), 'End of Chapter 1');
+  assert.match(text('chapter-score'), /^Level 10 cleared: \d+ moves · best possible 76/);
   assert.match(text('chapter-text'), /Labyrinth begins here/);
   assert.equal(byId(rootOf('end-veil'), 'end-veil').hidden, true);
   key('Enter');

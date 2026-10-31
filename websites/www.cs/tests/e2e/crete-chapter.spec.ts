@@ -1,7 +1,7 @@
 // Crete's chapter flow: Play shows the chapter card, a win that takes a story page names it on the end card,
 // and the menu's Lore book lists it. The page-taking line is solved in the page from a copy of level 9 whose page
 // is a relic, so the solver's win must take it; the same line then wins the real level through the strip. Then
-// level 10's win opens Chapter 1's closing card, whose Continue goes on to Chapter 2.
+// level 10's win opens Chapter 1's closing card, whose On to Chapter 2 goes on to Chapter 2's opening card.
 import { test, expect } from '@playwright/test';
 
 /** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
@@ -108,7 +108,10 @@ test("Chapter 1's closing card goes on to Chapter 2: its opening card, then its 
     for (const a of r.line) t.game.press(a);
   });
   await expect(page.locator('#chapter-veil')).toBeVisible();
-  await expect(page.locator('#chapter-kicker')).toHaveText('Chapter 1 of 10');
+  await expect(page.locator('#chapter-kicker')).toHaveText('End of Chapter 1');
+  await expect(page.locator('#chapter-title')).toHaveText('The Outer Halls');
+  await expect(page.locator('#chapter-score')).toContainText(/^Level 10 cleared: \d+ moves · best possible 76/);
+  await expect(page.locator('#chapter-continue')).toContainText('On to Chapter 2');
   await expect(page.locator('#chapter-next')).toHaveCount(0);
   await page.locator('#chapter-continue').click();
   await expect(page.locator('#chapter-kicker')).toHaveText('Chapter 2 of 10');

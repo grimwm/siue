@@ -219,15 +219,23 @@ test('a ?seed= link opens Chapter 1\'s card with no title card, and Enter starts
   await expect(page.locator('#start-veil')).toBeVisible();
 });
 
-test('Enter the halls starts the first level this browser has not cleared', async ({ page }) => {
+test('a new game starts at Chapter 1, Level 1 whatever is cleared; Levels starts Chapter 2, Level 3 there', async ({ page }) => {
   await page.addInitScript(pinClassic);
   await page.goto(PAGE);
-  await page.evaluate(() => localStorage.setItem('crete-progress', JSON.stringify({ 'trial-1': { cleared: true, best: 20 }, 'trial-2': { cleared: true, best: null } })));
+  const ch1 = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`trial-${i + 1}`, { cleared: true, best: 30 }]));
+  await page.evaluate(p => localStorage.setItem('crete-progress', JSON.stringify(p)), { ...ch1, 'ch2-1': { cleared: true, best: 12 } });
   await page.reload();
   await page.locator('#title-play').click();
   await page.locator('#pick-enter').click();
+  await expect(page.locator('#chapter-kicker')).toHaveText('Chapter 1 of 10');
+  await expect(page.locator('#chapter-title')).toHaveText('The Outer Halls');
   await page.locator('#chapter-enter').click();
-  await expect(page.locator('#hud-trial')).toHaveText('Ch 1 · 3');
+  await expect(page.locator('#hud-trial')).toHaveText('Ch 1 · 1');
+  await expect(page.locator('#start-veil')).toBeVisible();
+  await page.keyboard.press('n');
+  await page.locator('#levels-tab-2').click();
+  await page.locator('#level-3').click();
+  await expect(page.locator('#hud-trial')).toHaveText('Ch 2 · 3');
   await expect(page.locator('#start-veil')).toBeVisible();
 });
 

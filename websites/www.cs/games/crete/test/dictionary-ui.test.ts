@@ -94,7 +94,7 @@ test('the first pickup of a kind is a card, once; the next pickup of it is a ban
   closeAll();
   right();
   assert.equal(flow.top(), 'meet', 'the first mirror stops play with its card');
-  assert.equal(text('meet-root', 'meet-title'), "Medusa's mirror");
+  assert.equal(text('meet-root', 'meet-title'), "Medusa's Mirror");
   assert.match(byId(root('meet-root'), 'meet-veil').textContent, /A first find/);
   assert.match(text('meet-root', 'meet-effect'), /Press Z to use it\./);
   const go = walk(byId(root('meet-root'), 'meet-go')).filter(n => n.localName === 'kbd').map(n => n.textContent);
@@ -109,7 +109,7 @@ test('the first pickup of a kind is a card, once; the next pickup of it is a ban
   right();
   assert.equal(flow.top(), null, 'the second mirror opens no card');
   assert.deepEqual(bannerIds(), ['mirror'], 'it shows a banner');
-  assert.match(byId(root('banner-root'), 'banner').textContent, /Medusa's mirror.*stone/);
+  assert.match(byId(root('banner-root'), 'banner').textContent, /Medusa's Mirror.*stone/);
   m.advance(BANNER_MS);
   assert.deepEqual(bannerIds(), [], 'the banner goes after BANNER_MS');
 });
@@ -132,7 +132,7 @@ test('the toggle button on Chapter 1 level 6: its first press is a card, once; a
   assert.equal(flow.top(), null, 'nothing on the way stops play');
   game.press(line.at(-1)!);
   assert.equal(flow.top(), 'meet', 'the first press shows its card');
-  assert.equal(text('meet-root', 'meet-title'), 'Toggle button');
+  assert.equal(text('meet-root', 'meet-title'), 'Toggle Button');
   assert.match(byId(root('meet-root'), 'meet-veil').textContent, /A first touch/);
   key('Enter');
   assert.equal(flow.top(), null);
@@ -222,7 +222,7 @@ test('the Backpack lists only what is held now, with counts and keys; with nothi
   dictionary();
   const rows = walk(byId(root('dict-root'), 'dict-backpack')).filter(n => n.className === 'dict-row');
   assert.deepEqual(rows.map(n => n.getAttribute('data-entry')), ['key-red', 'mirror'], 'the cow lies ahead: not held');
-  assert.match(rows[1]!.textContent, /Medusa's mirror × 2Z/);
+  assert.match(rows[1]!.textContent, /Medusa's Mirror × 2Z/);
   key('ArrowRight');
   assert.ok(maybeById(root('dict-root'), 'dict-entries'), 'right shows Entries');
   key('q');
@@ -252,7 +252,7 @@ test('Entries: every hazard and tile open from the start but the hidden walls, u
   key('Enter');
   right();
   assert.equal(flow.top(), 'meet', 'finding the fake wall is a first touch');
-  assert.equal(text('meet-root', 'meet-title'), 'Fake wall');
+  assert.equal(text('meet-root', 'meet-title'), 'Fake Wall');
   key('Enter');
   locks = entries();
   assert.equal(locks.mirror, false, 'the mirror, picked up');

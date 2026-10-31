@@ -319,7 +319,7 @@ test('the menu has a Mini map switch, off by default, only while the look is mod
   assert.equal(maybeById(root, 'minimap-switch'), undefined, 'Classic never shows it');
 });
 
-test('the menu has a Lore book button that calls back', () => {
+test('the menu has a Lore Book button that calls back', () => {
   const root = mount();
   let opened = 0;
   renderMenu(root, menuProps({ onLore: () => { opened++; } }));
@@ -516,7 +516,7 @@ function loreProps(over: Partial<LoreProps> = {}): LoreProps {
 }
 const PAGES = CH1.lore!.pages;
 
-test('the Lore book lists Chapters 1 and 2 with their opening cards, and chapters 3 to 10 as not yet released', () => {
+test('the Lore Book lists Chapters 1 and 2 with their opening cards, and chapters 3 to 10 as not yet released', () => {
   const root = mount();
   renderLore(root, loreProps({ open: false }));
   assert.equal(byId(root, 'lore-veil').hidden, true);
@@ -589,7 +589,7 @@ test('an open entry shows its full text, quotation and citation, with a Back but
   assert.equal(byId(root, 'lore-entry-text').textContent, CH1.lore!.closing.text);
 });
 
-test('the Lore book closes with a button tabbed with Q', () => {
+test('the Lore Book closes with a button tabbed with Q', () => {
   const root = mount();
   let closed = 0;
   renderLore(root, loreProps({ onClose: () => { closed++; } }));

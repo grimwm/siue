@@ -1,4 +1,4 @@
-// The Island of Crete: the Lore book. One dialog with two views: the list (each released chapter's opening card,
+// The Island of Crete: the Lore Book. One dialog with two views: the list (each released chapter's opening card,
 // its story pages found or hidden, its closing card once seen; the unreleased chapters in one line each), and one
 // entry in full with a Back button (Q), or Go On (Enter) when taking its page opened it mid-level. src/ui.ts owns
 // which entry shows and Q (an open entry goes back to the list, then the book closes), so the dialog is given no
@@ -50,7 +50,7 @@ export function Lore(p: LoreProps) {
   return (
     <Dialog open={p.open} id="lore-veil" veilClass="veil" panelClass="card lore" kicker="The Island of Crete" kickerClass="kicker"
       titleId="lore-title" title="Lore Book" focusId="lore-close"
-      close={<Button id="lore-close" class="close" label="Close the Lore book" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>}>
+      close={<Button id="lore-close" class="close" label="Close the Lore Book" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>}>
       {full ? (
         <div class="lore-entry">
           <h3 id="lore-entry-title">{full.title}</h3>

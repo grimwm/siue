@@ -4,9 +4,13 @@
  * pans, the wheel zooms toward the pointer, and a double tap or double click resets. When the player lets go the
  * heading eases to the nearest quarter turn. Buttons at the board's top-right turn the view a quarter either way,
  * zoom it in and out, and reset it; on a narrow touch screen a View button shows and hides them. A compass at the
- * board's bottom-right points at the board's north and resets the view when tapped. Every control is ignored while a
- * layer covers the board. */
+ * board's bottom-right shows the view as it is (its needle points at the board's north, and its dial squashes and its
+ * ring fills as the view tilts); a finger, pen or mouse dragging it turns the view across and tilts it up and down,
+ * and a tap or click on it (or Enter or Space) resets the view (compass.ts); while it has the focus, Left and Right
+ * turn the view a quarter and Up and Down tilt it toward top-down and back, without moving Theseus. Every control is ignored while a layer
+ * covers the board. */
 import type { MoveAction } from '../keys.ts';
+import { compassFace, createCompassDrag } from './compass.ts';
 import { createGestures } from './gestures.ts';
 import type { CamOp, Ptr } from './gestures.ts';
 
@@ -19,8 +23,8 @@ export interface CamControl {
   /** Multiplies the view's height by `factor` about the screen point `(fx, fy)`, in fractions of the canvas from its
    *  centre (right and up are positive); at once under a finger or the wheel, eased from a button. */
   zoom(factor: number, fx: number, fy: number, eased: boolean): void;
-  /** Tilts Angled by `deg` toward straight down (negative: back toward Angled's own pitch), at once. */
-  tilt(deg: number): void;
+  /** Tilts by `deg` toward top-down (negative: back toward angled); at once under a finger, eased from the compass. */
+  tilt(deg: number, eased: boolean): void;
   /** The player let go: the heading eases to the nearest quarter turn. */
   settle(): void;
   /** Back to the default heading, tilt and zoom. */
@@ -37,15 +41,15 @@ export interface ControlHost {
 }
 
 export interface Controls {
-  /** Shows or hides the turn buttons and the compass (Top-down does not turn). */
-  setTurnable(on: boolean): void;
-  /** Points the compass at the board's north for a view turned `yaw` degrees. */
-  setHeading(yaw: number): void;
+  /** Shows the view on the compass: a view turned `yaw` degrees and looking down at `pitch` degrees. */
+  setView(yaw: number, pitch: number): void;
   dispose(): void;
 }
 
 /** A turn button turns a quarter, so the grid stays square to the screen. */
 const STEP = 90;
+/** Degrees an arrow key on the focused compass tilts the view. */
+const TILT_KEY = 10;
 const ZOOM_STEP = 1.2;
 /** Wheel lines and pages as pixels. */
 const LINE_PX = 16;
@@ -53,7 +57,9 @@ const TURN_LEFT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 
 const TURN_RIGHT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg>';
 const ZOOM_IN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>';
 const ZOOM_OUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
-const COMPASS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="n" d="M12 3l3.5 9h-7z"/><path class="s" d="M12 21l-3.5-9h7z"/></svg>';
+const COMPASS = '<span class="tilt-ring" aria-hidden="true"></span><svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dial" cx="12" cy="12" r="11"/><path class="n" d="M12 3l3.5 9h-7z"/><path class="s" d="M12 21l-3.5-9h7z"/></svg>';
+/** A click this soon after a compass press was that press (already handled); a later one came from the keyboard. */
+const CLICK_MS = 600;
 
 function button(id: string, label: string, html: string, className: string): HTMLButtonElement {
   const b = document.createElement('button');
@@ -82,7 +88,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     for (const op of ops) {
       if (op.kind === 'swipe') host.swipe(op.dir);
       else if (op.kind === 'turn') cam.turn(op.deg, false);
-      else if (op.kind === 'tilt') cam.tilt(op.deg);
+      else if (op.kind === 'tilt') cam.tilt(op.deg, false);
       else if (op.kind === 'settle') cam.settle();
       else if (op.kind === 'pan') cam.pan(op.dx, op.dy);
       else if (op.kind === 'zoom') {
@@ -143,10 +149,71 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   const zoomOut = button('cam-zoom-out', 'Zoom out', ZOOM_OUT, 'cbtn');
   const reset = button('cam-reset', 'Reset view', 'Reset', 'cbtn wide');
   group.append(left, right, zoomIn, zoomOut, reset);
-  // The compass: its needle points at the board's north and turns with the view; a tap resets it.
-  const compass = button('cam-compass', 'Compass: reset the view', COMPASS, 'compass');
+  // The compass: it shows the view, a drag on it steers the view, and a tap resets it.
+  const compass = button('cam-compass', 'Compass: drag or use the arrow keys to turn and tilt the view, tap to reset it', COMPASS, 'compass');
+  compass.title = 'Compass';
   const needle = compass.querySelector('svg')!;
   parent.append(view, group, compass);
+  const steer = createCompassDrag();
+  /** When a compass press last lifted, so the click that follows it is not taken twice. */
+  let pressedAt = -1e9;
+  const steerOps = (ops: CamOp[]) => {
+    if (!ops.length) return;
+    host.gesture();
+    for (const op of ops) {
+      if (op.kind === 'turn') cam.turn(op.deg, true);
+      else if (op.kind === 'tilt') cam.tilt(op.deg, true);
+      else if (op.kind === 'settle') cam.settle();
+      else if (op.kind === 'reset') cam.reset();
+    }
+  };
+  const compassDown = (e: PointerEvent) => {
+    if (host.blocked() || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    try {
+      compass.setPointerCapture(e.pointerId);
+    } catch {
+      // A synthetic pointer cannot be captured; its moves still reach the compass.
+    }
+    steerOps(steer.down(e.pointerId, e.clientX, e.clientY));
+  };
+  const compassMove = (e: PointerEvent) => {
+    if (host.blocked()) return;
+    steerOps(steer.move(e.pointerId, e.clientX, e.clientY));
+  };
+  const compassUp = (e: PointerEvent) => {
+    const ops = steer.up(e.pointerId, e.clientX, e.clientY);
+    if (ops.length) pressedAt = performance.now();
+    if (!host.blocked()) steerOps(ops);
+  };
+  const compassCancel = (e: PointerEvent) => steerOps(steer.cancel(e.pointerId));
+  compass.style.touchAction = 'none';
+  compass.addEventListener('pointerdown', compassDown);
+  compass.addEventListener('pointermove', compassMove);
+  compass.addEventListener('pointerup', compassUp);
+  compass.addEventListener('pointercancel', compassCancel);
+  // The arrow keys steer from the focused compass; the page's own arrow keys (moving Theseus) never see them.
+  const compassKeys: Record<string, () => void> = {
+    ArrowLeft: () => cam.turn(-STEP, true),
+    ArrowRight: () => cam.turn(STEP, true),
+    ArrowUp: () => cam.tilt(TILT_KEY, true),
+    ArrowDown: () => cam.tilt(-TILT_KEY, true),
+  };
+  compass.addEventListener('keydown', (e: KeyboardEvent) => {
+    const fn = compassKeys[e.key];
+    if (!fn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (host.blocked()) return;
+    host.gesture();
+    fn();
+    cam.settle();
+  });
+  compass.addEventListener('click', () => {
+    // A pointer's tap reset the view as it lifted; Enter or Space clicks with no press before it.
+    if (performance.now() - pressedAt < CLICK_MS) return;
+    press(() => cam.reset())();
+  });
 
   const press = (fn: () => void) => () => {
     if (host.blocked()) return;
@@ -158,18 +225,18 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   zoomIn.addEventListener('click', press(() => cam.zoom(1 / ZOOM_STEP, 0, 0, true)));
   zoomOut.addEventListener('click', press(() => cam.zoom(ZOOM_STEP, 0, 0, true)));
   reset.addEventListener('click', press(() => cam.reset()));
-  compass.addEventListener('click', press(() => cam.reset()));
   view.addEventListener('click', () => {
     const open = group.classList.toggle('open');
     view.setAttribute('aria-expanded', String(open));
   });
 
   return {
-    setTurnable(on) {
-      left.hidden = right.hidden = compass.hidden = !on;
-    },
-    setHeading(yaw) {
-      needle.style.transform = `rotate(${yaw}deg)`;
+    setView(yaw, pitch) {
+      const f = compassFace({ yaw, pitch });
+      needle.style.transform = `scale(1, ${f.squash.toFixed(3)}) rotate(${f.needle.toFixed(1)}deg)`;
+      compass.style.setProperty('--tilt', f.tilt.toFixed(3));
+      compass.dataset.heading = String(Math.round(yaw));
+      compass.dataset.pitch = String(Math.round(pitch));
     },
     dispose() {
       canvas.removeEventListener('pointerdown', down);
@@ -181,6 +248,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
       canvas.removeEventListener('wheel', wheel);
       view.remove();
       group.remove();
+      compass.remove();
     },
   };
 }

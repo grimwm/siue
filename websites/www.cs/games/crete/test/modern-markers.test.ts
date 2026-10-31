@@ -8,7 +8,9 @@ import {
 } from '../src/modern/markers.ts';
 import type { MarkerKind } from '../src/modern/markers.ts';
 import { placed } from '../src/modern/model-names.ts';
-import { PITCHES } from '../src/modern/camera.ts';
+import { ANGLED_PITCH, TOP_PITCH } from '../src/modern/camera.ts';
+
+const PITCHES = { top: TOP_PITCH, angled: ANGLED_PITCH };
 import { createMarkers } from '../src/modern/scene/markers.ts';
 import type { MarkerInfo } from '../src/modern/scene/markers.ts';
 import { grid } from './puzzle-grid.ts';
@@ -96,7 +98,7 @@ const onScreen = (cam: OrthographicCamera, v: Vector3): [number, number] => {
   return [n.x * 6, n.y * 4];
 };
 
-test('a marker hangs straight over its piece on screen in both views, its point inside the cell in Top-down', () => {
+test('a marker hangs straight over its piece on screen top-down and angled, its point inside the cell top-down', () => {
   const set = createMarkers();
   const tall = 1.6; // the Minotaur, the tallest
   for (const [view, yaw] of [['top', 0], ['angled', 15], ['angled', 105]] as const) {
@@ -111,7 +113,7 @@ test('a marker hangs straight over its piece on screen in both views, its point 
     assert.ok(Math.abs(mx - fx) < 1e-6, `${view} ${yaw}: straight over its foot`);
     assert.ok(Math.abs(my - head - MARKER_GAP) < 1e-6, `${view} ${yaw}: its point just over the head`);
     if (view === 'top') {
-      // A cell spans sin(pitch) of a view unit deep in Top-down, square to the board.
+      // A cell spans sin(pitch) of a view unit deep top-down, square to the board.
       assert.ok(my - fy < Math.sin((PITCHES.top * Math.PI) / 180) / 2, `its point stays inside the cell: ${my - fy}`);
     }
   }
@@ -124,7 +126,7 @@ test('markerRise: a piece leaning back toward the camera lifts its marker by its
   assert.equal(markerRise(0.4, PITCHES.top, 0), markerRise(0.4, PITCHES.top));
 });
 
-test('markerRise: in Top-down every piece\'s marker point stays inside its own cell; in Angled it clears the head', () => {
+test('markerRise: top-down every piece\'s marker point stays inside its own cell; angled it clears the head', () => {
   const half = Math.sin((PITCHES.top * Math.PI) / 180) / 2;
   for (const h of [0.14, 0.5, 0.9, 1.2, 1.6]) {
     assert.ok(markerRise(h, PITCHES.top) < half, `h ${h}`);

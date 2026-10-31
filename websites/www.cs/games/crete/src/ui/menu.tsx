@@ -1,6 +1,6 @@
 // The Island of Crete: the menu, in three sections under small headings. Sound and screen: switches for sound, music,
-// music in the background and full screen. Board: for the modern look, the view (Angled or Top-down), while angled
-// the walls, and the mini map; then which edge of the strip the arrows stand at. The look itself is picked on the
+// music in the background and full screen. Board: for the modern look, the walls and the mini map; then which edge
+// of the strip the arrows stand at. The look itself is picked on the
 // new-game card and swapped with the strip's Map button.
 // The story: the Lore Book, the Dictionary, the story log and how to play (folded). Then Back to the editor or Shared level (the
 // shared level's card; each only when the page gives it), and Quit on its own. On a wide screen the sections stand
@@ -14,7 +14,7 @@ import { Button } from '../../../_kit/ui/button.tsx';
 import { KEYS } from '../keys.ts';
 import type { Seg } from '../help.ts';
 import type { Tone as LogTone } from '../game.ts';
-import type { Look, PadSide, View, WallMode } from '../settings.ts';
+import type { Look, PadSide, WallMode } from '../settings.ts';
 
 export interface LogLine {
   text: string;
@@ -30,10 +30,8 @@ export interface MenuProps {
   background: boolean;
   fullscreen: boolean;
   look: Look;
-  /** Shown only while the look is modern and the view angled. */
-  walls: WallMode;
   /** Shown only while the look is modern. */
-  view: View;
+  walls: WallMode;
   /** The edge of the strip the arrows stand at. */
   pad: PadSide;
   /** Whether the mini map shows: a switch shown only while the look is modern. */
@@ -45,7 +43,6 @@ export interface MenuProps {
   onBackground: () => void;
   onFullscreen: () => void;
   onWalls: (walls: WallMode) => void;
-  onView: (view: View) => void;
   onPad: (side: PadSide) => void;
   onMinimap: () => void;
   onLore: () => void;
@@ -63,7 +60,6 @@ export interface MenuProps {
 }
 
 const WALL_CHOICES: [WallMode, string][] = [['solid', 'Solid'], ['ghosted', 'Ghosted'], ['low', 'Low']];
-const VIEW_CHOICES: [View, string][] = [['angled', 'Angled'], ['top', 'Top-Down']];
 const PAD_CHOICES: [PadSide, string][] = [['left', 'Left'], ['right', 'Right']];
 
 const segs = (line: Seg[]) => line.map(s => (typeof s === 'string' ? s : <strong>{s.strong}</strong>));
@@ -102,16 +98,6 @@ export function Menu(p: MenuProps) {
           <section class="menu-sec" data-section="look" aria-labelledby="menu-board-h">
             <h3 id="menu-board-h">Board</h3>
             {p.look === 'modern' && (
-              <div class="menu-walls" data-section="view">
-                <span class="menu-label" id="menu-view-label">View</span>
-                <div class="seg seg-2" role="group" aria-labelledby="menu-view-label">
-                  {VIEW_CHOICES.map(([v, name]) => (
-                    <Button key={v} id={`view-${v}`} class="seg-opt" pressed={p.view === v} onClick={() => p.onView(v)}>{name}</Button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {p.look === 'modern' && p.view === 'angled' && (
               <div class="menu-walls" data-section="walls">
                 <span class="menu-label" id="menu-walls-label">Walls</span>
                 <div class="seg" role="group" aria-labelledby="menu-walls-label">

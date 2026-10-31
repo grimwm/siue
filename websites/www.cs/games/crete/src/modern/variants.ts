@@ -8,8 +8,7 @@
  *   theirs); each object stands larger and brighter on a bright ring, as a Classic sprite stands out on its tile.
  * - `beacon`: a soft green column of light over Theseus, drawn over the walls, and his outline through a wall that
  *   hides him.
- * - `cutaway`: in Angled, the walls between the camera and Theseus or any piece are ghosted.
- * - `steep`: Angled tips to 67°, near Top-down but still showing the walls' faces.
+ * - `cutaway`: the walls between the camera and Theseus or any piece are ghosted.
  * - `caps`: the wall tops in pale stone and the joints between the floor's squares dark, so the plan reads from
  *   any angle.
  */
@@ -18,7 +17,6 @@ export interface Variant {
   items: 'cyan' | 'white' | 'plate';
   beacon: boolean;
   cutaway: boolean;
-  steep: boolean;
   caps: boolean;
 }
 
@@ -26,7 +24,6 @@ export const VARIANT: Variant = {
   items: 'plate',
   beacon: false,
   cutaway: false,
-  steep: false,
   caps: false,
 };
 
@@ -41,7 +38,7 @@ export function withOverrides(raw: string | null): Variant {
   if (!o || typeof o !== 'object') return v;
   const r = o as Record<string, unknown>;
   if (r.items === 'cyan' || r.items === 'white' || r.items === 'plate') v.items = r.items;
-  for (const k of ['beacon', 'cutaway', 'steep', 'caps'] as const) if (typeof r[k] === 'boolean') v[k] = r[k];
+  for (const k of ['beacon', 'cutaway', 'caps'] as const) if (typeof r[k] === 'boolean') v[k] = r[k];
   return v;
 }
 

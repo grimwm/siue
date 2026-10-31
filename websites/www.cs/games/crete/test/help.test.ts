@@ -59,7 +59,9 @@ test('the help explains the Look setting and the camera gestures', () => {
   assert.match(all, /two fingers twist to turn it and slide up or down together to tilt it/);
   assert.match(all, /drag with the left button to turn \(across\) and tilt \(up and down\)/);
   assert.match(all, /squares up to the nearest quarter turn/);
-  assert.match(all, /compass/);
+  assert.match(all, /The modern board opens top-down, north up/);
+  assert.match(all, /Drag it across to turn the view and up or down to tilt it/);
+  assert.doesNotMatch(all, /Angled|Top-down/);
   assert.match(all, /a double tap or a double click brings back the starting view/);
 });
 

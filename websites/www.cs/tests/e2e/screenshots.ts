@@ -5,6 +5,8 @@
 //   og.png          1200x630 link preview: the still under the game's name (`image:`)
 //   preview.mp4     5-8 s silent 1280x720 H.264 clip of the same play, the
 //                   link preview's og:video for apps that play one (`video:`)
+// and any pictures of its own a game's step takes (Crete's new-game card:
+// fx/looks/modern.jpg and classic.jpg, the same squares in each look).
 // Each game is played a little first so the pictures show it in action, the
 // way a player sees it now. Run it whenever a game's look changes:
 //   make screenshots                    every game, against local docker
@@ -44,6 +46,8 @@ interface Shot {
   act(page: Page, mark: () => Promise<void>): Promise<void>;
   /** Whether the play went wrong (the game ended mid-act), so it is played again. */
   spoiled?(page: Page): Promise<boolean>;
+  /** The game's own pictures, taken from the page after the still's play, into its folder `dir`. */
+  pictures?(page: Page, dir: string): Promise<void>;
 }
 
 /** Tries before a game whose play keeps going wrong is given up on. */
@@ -61,7 +65,7 @@ declare global {
 type CreteHook = {
   solve(s: unknown): { solved: boolean; line: { kind: string; dir?: string; tool?: string }[] };
   game: { run: { now: unknown } };
-  modern?: { frames(): number; active: boolean };
+  modern?: { frames(): number; active: boolean; picture(look: string, cols: number, rows: number, cell: number): string | null };
 };
 
 /** The CIC's nuke flies at the cursor and ends the run if it lands within
@@ -172,6 +176,20 @@ const SHOTS: Record<string, Shot> = {
         if (i === 9) await mark();
       }
       await page.waitForTimeout(300);
+    },
+    async pictures(page, dir) {
+      // The new-game card's two pictures: the same 8 x 6 squares round Theseus in each look, drawn at twice the
+      // card's 400 x 300 and scaled down.
+      for (const look of ['modern', 'classic']) {
+        const url = await page.evaluate(l => (window as unknown as { __creteTest: CreteHook }).__creteTest.modern!.picture(l, 8, 6, 100), look);
+        if (!url) throw new Error(`crete: no ${look} picture`);
+        const png = path.join(dir, `look-${look}.png`);
+        writeFileSync(png, Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
+        const jpg = path.join(dir, 'fx', 'looks', `${look}.jpg`);
+        ffmpeg(['-i', png, '-vf', 'scale=400:300:flags=lanczos', '-q:v', '3', jpg]);
+        rmSync(png);
+        console.log(`look picture: ${path.relative(games, jpg)}`);
+      }
     },
   },
   cylon: {
@@ -395,6 +413,7 @@ for (const [id, shot] of Object.entries(SHOTS)) {
   const png = path.join(dir, 'screenshot.png');
   await attempt(id, shot, async (page, clip) => {
     await shot.act(page, async () => { await page.screenshot({ path: png, ...(clip ? { clip } : {}) }); });
+    await shot.pictures?.(page, dir);
   });
   const jpg = path.join(dir, metaFile(id, 'screenshot', 'screenshot.jpg'));
   ffmpeg(['-i', png, '-vf', 'scale=800:450:flags=lanczos', '-q:v', '4', jpg]);

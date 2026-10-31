@@ -55,7 +55,7 @@ import { renderStoryCard } from "./ui/story.tsx";
 import { renderStart } from "./ui/start.tsx";
 import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
-import type { Look, PadSide, View, WallMode } from "./settings.ts";
+import type { Look, PadSide, WallMode } from "./settings.ts";
 import { renderTitleCard } from "./ui/title.tsx";
 import { renderLookPick } from "./ui/look-pick.tsx";
 import { ratingText, renderSharedCard } from "./ui/shared.tsx";
@@ -100,10 +100,8 @@ export interface Controls {
   toggleBackground?(): void;
   /** The Look choice (the new-game card and the menu). */
   setLook?(look: Look): void;
-  /** The Walls choice, shown while the look is modern and the view angled. */
+  /** The Walls choice, shown while the look is modern. */
   setWalls?(walls: WallMode): void;
-  /** The View choice, shown while the look is modern. */
-  setView?(view: View): void;
   /** The Arrows choice in the menu: the edge of the strip the move pad stands at. */
   setPad?(side: PadSide): void;
   /** The Mini map switch, shown while the look is modern. */
@@ -139,8 +137,6 @@ export interface Ui {
   setFullscreen(on: boolean): void;
   /** Shows the look and wall choices the page restored or changed. */
   setLook(look: Look, walls: WallMode): void;
-  /** Shows the view choice the page restored or changed. */
-  setView(view: View): void;
   /** Puts the move pad at this edge of the strip (the frame wears `pad-right` for the right). */
   setPad(side: PadSide): void;
   /** Shows the Mini map switch's state. */
@@ -233,7 +229,6 @@ export function createUi(deps: UiDeps): Ui {
   let full = false;
   let look: Look = "modern";
   let walls: WallMode = "solid";
-  let view: View = "top";
   let pad: PadSide = "left";
   let minimap = false;
   /** The strip as last drawn: a phone's, and whether its Thread panel is open. */
@@ -605,7 +600,6 @@ export function createUi(deps: UiDeps): Ui {
       fullscreen: full,
       look,
       walls,
-      view,
       pad,
       minimap,
       log,
@@ -624,7 +618,6 @@ export function createUi(deps: UiDeps): Ui {
       },
       onFullscreen: () => controls?.toggleFullscreen(),
       onWalls: (w) => controls?.setWalls?.(w),
-      onView: (v) => controls?.setView?.(v),
       onPad: (side) => controls?.setPad?.(side),
       onMinimap: () => controls?.toggleMinimap?.(),
       onLore: () => {
@@ -1495,10 +1488,6 @@ export function createUi(deps: UiDeps): Ui {
       look = l;
       walls = w;
       if (game?.run) drawStrip(game);
-      drawLayers();
-    },
-    setView: (v) => {
-      view = v;
       drawLayers();
     },
     setPad: (side) => {

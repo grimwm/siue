@@ -1,4 +1,5 @@
-"""The music workroom's MCP server (siue-music mcp): the Workroom's tools over stdio, for an AI app on the owner's computer.
+"""The owner's MCP server (siue-music owner-mcp): the Workroom's tools over stdio, for an AI app on the owner's computer
+working in the repository with 1Password (the studio's own MCP server for every studio is studio_mcp.py).
 Built on the official MCP Python SDK (requirements-mcp.in, locked with hashes in requirements-mcp.txt)."""
 import sys
 from pathlib import Path
@@ -32,7 +33,7 @@ def _answer(call):
 
 
 def build(room: Workroom) -> MCPServer:
-    server = MCPServer("siue-music", title="SIUE music workroom", instructions=INSTRUCTIONS)
+    server = MCPServer("siue-music-owner", title="SIUE music workroom (owner)", instructions=INSTRUCTIONS)
 
     @server.tool(structured_output=True)
     def list_pieces() -> dict[str, Any]:

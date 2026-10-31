@@ -1,10 +1,13 @@
 <?php
 // What deploy.sh ships of the workroom: its pages, API and library;
 // never its tools, committed drafts, README or the local
-// compose override. nginx denies what Apache's .htaccess denies.
+// compose override; and the studio MCP wheel music/dist/release.json names.
+// nginx denies what Apache's .htaccess denies.
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
+
+require_once __DIR__ . '/../../music/lib/bootstrap.php';
 
 final class MusicDeployTest extends TestCase
 {
@@ -74,6 +77,16 @@ final class MusicDeployTest extends TestCase
             self::assertDoesNotMatchRegularExpression('~^games/workroom/(src|test|tools|fonts)/~', $f, $f);
         }
         self::assertNotContains('music/music.css', $list, 'the workroom stylesheet ships from games/workroom/dist/');
+    }
+
+    public function testShipsTheStudioMcpWheelThatReleaseJsonNamesAndNeverTheTool(): void
+    {
+        $list = self::shipped();
+        $release = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/music/dist/release.json'), true);
+        self::assertContains('music/dist/release.json', $list);
+        self::assertContains('music/dist/' . $release['file'], $list);
+        self::assertSame([], array_values(array_filter($list, static fn(string $f): bool => str_starts_with($f, 'music/tools/'))));
+        self::assertSame($release, Music\Connect::release(), 'the page reads the same release');
     }
 
     public function testApacheForwardsTheAuthorizationHeader(): void

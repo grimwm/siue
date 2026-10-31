@@ -18,6 +18,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 MAGIC = b"SIUEN1"
+MAGIC2 = b"SIUEN2"  # one AES key wrapped once per recipient: the person's key and each paired AI key's (seal.ts sealTo)
+MAX_RECIPIENTS = 16
 ITERATIONS = 600_000
 MAX_ITERATIONS = 10_000_000
 KEYRING_AAD = b"siue-music-keyring-v1"
@@ -164,21 +166,76 @@ def seal(body: dict, audio: bytes, spki_der: bytes) -> bytes:
     return header + wrapped + iv + AESGCM(aes_key).encrypt(iv, plain, header[:AAD_LENGTH])
 
 
+def seal_to(body: dict, audio: bytes, spkis: list[bytes]) -> bytes:
+    """SIUEN2 to every key in `spkis` (the person's first), as the page seals a note for the person and their paired AIs."""
+    if not 1 <= len(spkis) <= MAX_RECIPIENTS or len({hashlib.sha256(k).digest() for k in spkis}) != len(spkis):
+        raise ValueError("a note is sealed to 1 to 16 distinct keys")
+    aes_key = AESGCM.generate_key(bit_length=256)
+    header = bytearray(MAGIC2 + bytes([len(spkis)]))
+    aad = bytearray(header)
+    for spki in spkis:
+        wrapped = serialization.load_der_public_key(spki).encrypt(aes_key, _OAEP)
+        fp = hashlib.sha256(spki).digest()
+        header += fp + struct.pack(">H", len(wrapped)) + wrapped
+        aad += fp
+    js = json.dumps(body).encode("utf-8")
+    iv = os.urandom(IV_LENGTH)
+    return bytes(header) + iv + AESGCM(aes_key).encrypt(iv, struct.pack(">I", len(js)) + js + audio, bytes(aad))
+
+
+def recipients(bundle: bytes) -> list[str] | None:
+    """The fingerprints a sealed note names, in order (SIUEN1: one), or None when its header is malformed."""
+    parsed = _header(bundle)
+    return None if parsed is None else [fp for fp, _ in parsed[0]]
+
+
+def _header(bundle: bytes) -> tuple[list[tuple[str, bytes]], bytes, int] | None:
+    """([(fingerprint, wrapped key)], additional data, where the IV starts), or None for a malformed header."""
+    if bundle[:len(MAGIC)] == MAGIC:
+        if len(bundle) < HEADER_LENGTH:
+            return None
+        (wrapped_len,) = struct.unpack(">H", bundle[AAD_LENGTH:HEADER_LENGTH])
+        iv_at = HEADER_LENGTH + wrapped_len
+        if wrapped_len == 0 or len(bundle) < iv_at + IV_LENGTH + TAG_LENGTH:
+            return None
+        return [(bundle[len(MAGIC):AAD_LENGTH].hex(), bundle[HEADER_LENGTH:iv_at])], bundle[:AAD_LENGTH], iv_at
+    if bundle[:len(MAGIC2)] != MAGIC2 or len(bundle) < len(MAGIC2) + 1:
+        return None
+    n = bundle[len(MAGIC2)]
+    if not 1 <= n <= MAX_RECIPIENTS:
+        return None
+    at, wraps = len(MAGIC2) + 1, []
+    for _ in range(n):
+        if at + FP_LENGTH + 2 > len(bundle):
+            return None
+        fp = bundle[at:at + FP_LENGTH].hex()
+        (length,) = struct.unpack(">H", bundle[at + FP_LENGTH:at + FP_LENGTH + 2])
+        at += FP_LENGTH + 2
+        if length == 0 or at + length > len(bundle) or any(fp == w for w, _ in wraps):
+            return None
+        wraps.append((fp, bundle[at:at + length]))
+        at += length
+    if at + IV_LENGTH + TAG_LENGTH > len(bundle):
+        return None
+    aad = MAGIC2 + bytes([n]) + b"".join(bytes.fromhex(fp) for fp, _ in wraps)
+    return wraps, aad, at
+
+
 def open_bundle(bundle: bytes, keyring: Mapping[str, bytes]) -> Opened:
-    if len(bundle) < HEADER_LENGTH or bundle[:len(MAGIC)] != MAGIC:
+    """Opens a SIUEN1 note with the key its header names, or a SIUEN2 note with the first recipient the keyring holds."""
+    parsed = _header(bundle)
+    if parsed is None:
         raise NoteUnreadable("format")
-    fp = bundle[len(MAGIC):AAD_LENGTH].hex()
-    (wrapped_len,) = struct.unpack(">H", bundle[AAD_LENGTH:HEADER_LENGTH])
-    iv_at = HEADER_LENGTH + wrapped_len
-    if wrapped_len == 0 or len(bundle) < iv_at + IV_LENGTH + TAG_LENGTH:
-        raise NoteUnreadable("format")
-    pkcs8 = keyring.get(fp)
-    if pkcs8 is None:
+    wraps, aad, iv_at = parsed
+    mine = next(((fp, w) for fp, w in wraps if fp in keyring), None)
+    if mine is None:
         raise NoteUnreadable("unknown-key")
+    fp, wrapped = mine
+    pkcs8 = keyring[fp]
     try:
         priv = serialization.load_der_private_key(pkcs8, password=None)
-        aes_key = priv.decrypt(bundle[HEADER_LENGTH:iv_at], _OAEP)
-        plain = AESGCM(aes_key).decrypt(bundle[iv_at:iv_at + IV_LENGTH], bundle[iv_at + IV_LENGTH:], bundle[:AAD_LENGTH])
+        aes_key = priv.decrypt(wrapped, _OAEP)
+        plain = AESGCM(aes_key).decrypt(bundle[iv_at:iv_at + IV_LENGTH], bundle[iv_at + IV_LENGTH:], aad)
         (js_len,) = struct.unpack(">I", plain[:4])
         if len(plain) < 4 + js_len:
             raise NoteUnreadable("tampered")

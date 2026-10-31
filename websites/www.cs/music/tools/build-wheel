@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""Builds the siue-music wheel reproducibly, with the standard library alone: the siue_music package, the page's
+glossary (siue_music/data/glossary.json, which publish_draft checks scores against) and the metadata pyproject.toml
+names. Entries are stored uncompressed, sorted, with fixed times and modes, so the same files always give the same
+bytes and the same SHA-256.
+
+    build-wheel [--out DIR]   writes DIR/siue_music-<version>-py3-none-any.whl (DIR: music/dist) and prints its name and SHA-256
+    build-wheel --check       also fails unless the wheel is the one music/dist/release.json names (the deploy runs this)
+    build-wheel --record      writes music/dist/release.json for the wheel it built (after raising __version__)
+"""
+import base64
+import hashlib
+import io
+import json
+import re
+import sys
+import zipfile
+from pathlib import Path
+
+TOOLS = Path(__file__).resolve().parent
+SITE = TOOLS.parents[1]
+PACKAGE = TOOLS / "siue_music"
+GLOSSARY = SITE / "games" / "workroom" / "src" / "glossary.json"
+RELEASE = SITE / "music" / "dist" / "release.json"
+REQUIRES = ("cryptography==50.0.2", "mcp==2.3.0")  # as pyproject.toml's dependencies
+SUMMARY = "The SIUE music studio's MCP server: connect your own AI app to your studio."
+WHEN = (1980, 1, 1, 0, 0, 0)
+
+
+def version() -> str:
+    found = re.search(r'^__version__ = "([0-9]+\.[0-9]+\.[0-9]+)"$', (PACKAGE / "__init__.py").read_text(), re.M)
+    if not found:
+        raise SystemExit("build-wheel: siue_music/__init__.py has no __version__ = \"X.Y.Z\"")
+    return found.group(1)
+
+
+def files(ver: str) -> dict[str, bytes]:
+    """Archive path -> bytes, metadata included, RECORD last."""
+    out: dict[str, bytes] = {}
+    for path in sorted(PACKAGE.rglob("*.py")):
+        if "__pycache__" not in path.parts:
+            out["siue_music/" + path.relative_to(PACKAGE).as_posix()] = path.read_bytes()
+    out["siue_music/data/glossary.json"] = GLOSSARY.read_bytes()
+    info = f"siue_music-{ver}.dist-info"
+    out[f"{info}/METADATA"] = ("Metadata-Version: 2.1\nName: siue-music\nVersion: " + ver + "\nSummary: " + SUMMARY
+                               + "\nLicense: GPL-3.0-or-later\nRequires-Python: >=3.10\n"
+                               + "".join(f"Requires-Dist: {r}\n" for r in REQUIRES)).encode()
+    out[f"{info}/WHEEL"] = b"Wheel-Version: 1.0\nGenerator: siue-music build-wheel\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+    out[f"{info}/entry_points.txt"] = b"[console_scripts]\nsiue-music = siue_music.cli:entry\n"
+    out[f"{info}/LICENSE"] = (SITE / "music" / "LICENSE").read_bytes()
+    record = "".join(f"{name},sha256={base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b'=').decode()},{len(data)}\n"
+                     for name, data in out.items())
+    out[f"{info}/RECORD"] = (record + f"{info}/RECORD,,\n").encode()
+    return out
+
+
+def build(ver: str) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+        for name, data in files(ver).items():
+            entry = zipfile.ZipInfo(name, WHEN)
+            entry.create_system = 3
+            entry.external_attr = 0o100644 << 16
+            entry.compress_type = zipfile.ZIP_STORED
+            z.writestr(entry, data)
+    return buf.getvalue()
+
+
+def main(argv: list[str]) -> int:
+    out_dir = RELEASE.parent
+    if "--out" in argv:
+        out_dir = Path(argv[argv.index("--out") + 1])
+    ver = version()
+    data = build(ver)
+    name = f"siue_music-{ver}-py3-none-any.whl"
+    digest = hashlib.sha256(data).hexdigest()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / name).write_bytes(data)
+    print(f"{name} {digest}")
+    release = {"version": ver, "file": name, "sha256": digest}
+    if "--record" in argv:
+        RELEASE.write_text(json.dumps(release, indent=2) + "\n")
+        return 0
+    if "--check" in argv:
+        try:
+            recorded = json.loads(RELEASE.read_text())
+        except (OSError, ValueError):
+            recorded = None
+        if recorded != release:
+            print("build-wheel: the siue-music wheel is not the one music/dist/release.json names. When the tool or the glossary "
+                  "changed, raise __version__ in music/tools/siue_music/__init__.py, run music/tools/build-wheel --record, "
+                  "and commit music/dist/release.json.", file=sys.stderr)
+            return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

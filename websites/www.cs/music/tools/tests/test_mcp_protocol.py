@@ -1,4 +1,4 @@
-"""`siue-music mcp` over stdio as an MCP client sees it: it starts, initializes, lists its tools (delete_draft is the one
+"""`siue-music owner-mcp` over stdio as an MCP client sees it: it starts, initializes, lists its tools (delete_draft is the one
 delete), and its list, wait, pickup and delete tools answer from a fake API on 127.0.0.1, with every line on stdout a JSON-RPC message and no key
 in anything it says. It needs the MCP SDK: this Python's, or the tool's virtualenv (make music-mcp-setup)."""
 import json
@@ -44,7 +44,7 @@ class McpProtocolTest(unittest.TestCase):
         env = {**os.environ, "SIUE_CONFIG_DIR": str(self.w.root / "config" / "siue"), "SIUE_MUSIC_BASE": self.server.base,
                "SIUE_MUSIC_NOTES_DIR": str(self.w.root / "notes"), "OP_VAULT": "SIUE",
                "SIUE_OP": f"{sys.executable} {TOOLS / 'tests' / 'fake_op.py'}"}
-        self.proc = subprocess.Popen([PYTHON, str(TOOLS / "siue-music"), "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        self.proc = subprocess.Popen([PYTHON, str(TOOLS / "siue-music"), "owner-mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, env=env, text=True, encoding="utf-8")
         self.addCleanup(self.stop)
         self.lines: queue.Queue[str] = queue.Queue()
@@ -102,7 +102,7 @@ class McpProtocolTest(unittest.TestCase):
 
     def test_initialize_and_list_the_tools(self):
         result = self.initialize()
-        self.assertEqual(result["serverInfo"]["name"], "siue-music")
+        self.assertEqual(result["serverInfo"]["name"], "siue-music-owner")
         self.assertIn("delete_draft", result["instructions"])
         self.assertIn("cannot delete notes", result["instructions"])
         tools = self.request("tools/list")["tools"]

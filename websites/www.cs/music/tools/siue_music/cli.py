@@ -21,14 +21,19 @@ from .publish import GENERAL_PIECE, PublishError, publish
 from .score import ID_RE, glossary_ids, library_ids
 from .setup import Setup
 
-USAGE = """usage: siue-music setup
+USAGE = """usage: siue-music mcp         (the studio MCP server, on standard input and output, for any studio's AI app)
+       siue-music pairing-code   (this computer's pairing code, to type on Your studio)
+       siue-music save-key    (keeps an AI key for every app on this computer; read from the terminal, or one line of stdin)
+       siue-music version
+     the owner's tool, in the repository:
+       siue-music setup
        siue-music keys status|pull|forget|rotate
        siue-music pickup
        siue-music publish PIECE [--version N]
        siue-music delete PIECE VERSION   (deletes that one published draft from the server)
        siue-music api-key-set NAME   (the key is read from the terminal, or one line of stdin)
-       siue-music mcp         (the MCP server, on standard input and output)
-       siue-music mcp-setup   (prints how to connect an AI app to it)"""
+       siue-music owner-mcp   (the owner's MCP server for the repository, on standard input and output)
+       siue-music mcp-setup   (prints how to connect an AI app to the owner's MCP server)"""
 
 
 def base(env: Mapping[str, str]) -> str:
@@ -72,15 +77,60 @@ def read_secret(prompt: str) -> str:
     return line.strip()
 
 
-def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
-    args = list(argv)
+def entry() -> None:
+    """The wheel's console script."""
+    sys.exit(main(sys.argv[1:]))
+
+
+def _studio_command(args: list[str], env: Mapping[str, str]) -> int | None:
+    """The studio commands, which need no repository: None when `args` is not one of them."""
+    if args == ["version"]:
+        from . import __version__
+        print(__version__)
+        return 0
+    if args not in (["mcp"], ["pairing-code"], ["save-key"]):
+        return None
+    from .studio import Studio, StudioError
+    studio = Studio(env, Path.home())
     try:
         if args == ["mcp"]:
+            try:
+                from . import studio_mcp
+            except ModuleNotFoundError as e:
+                if e.name and e.name.split(".")[0] == "mcp":
+                    print("siue-music mcp needs the MCP SDK: run it with uvx as Connect Your AI shows", file=sys.stderr)
+                    return 1
+                raise
+            return studio_mcp.run(env)
+        if args == ["pairing-code"]:
+            print(studio.pairing_code())
+            print(studio.status()["next"])
+            return 0
+        try:
+            secret = read_secret("AI key (shown once on Your studio): ")
+        except EOFError:
+            print("No key was given on standard input.", file=sys.stderr)
+            return 1
+        print(f"Saved the AI key in {studio.save_key(secret)}. Every app on this computer that runs siue-music without SIUE_MUSIC_AI_KEY uses it.")
+        print(studio.status()["next"])
+        return 0
+    except StudioError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+
+
+def main(argv: Sequence[str], env: Mapping[str, str] = os.environ) -> int:
+    args = list(argv)
+    done = _studio_command(args, env)
+    if done is not None:
+        return done
+    try:
+        if args == ["owner-mcp"]:
             try:
                 from . import mcp_server
             except ModuleNotFoundError as e:
                 if e.name and e.name.split(".")[0] == "mcp":
-                    print("siue-music mcp needs the MCP SDK: make music-mcp-setup", file=sys.stderr)
+                    print("siue-music owner-mcp needs the MCP SDK: make music-mcp-setup", file=sys.stderr)
                     return 1
                 raise
             return mcp_server.run(env)

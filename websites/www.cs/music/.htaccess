@@ -17,6 +17,9 @@
     Require all denied
 </If>
 
+# The studio MCP's wheel (uvx --from <its address>): a zip, served as one.
+AddType application/zip .whl
+
 # The sample library is public (CC0) and large: plain FLAC files that revalidate rather than reload.
 AddType audio/flac .flac
 <If "%{REQUEST_URI} =~ m#/music/library/#">

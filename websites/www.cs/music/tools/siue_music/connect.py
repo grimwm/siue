@@ -1,9 +1,11 @@
-"""What `make music-mcp-setup` prints: the commands that connect an AI app to this checkout's MCP server."""
+"""What `make music-mcp-setup` prints: the commands that connect an AI app to the owner's MCP server in this checkout
+(siue-music-owner, `siue-music owner-mcp`). Any studio's own AI connects to `siue-music mcp` as the page shows."""
 import json
 import shlex
 from pathlib import Path
 
 DEFAULT_VAULT = "SIUE"
+OWNER_SERVER = "siue-music-owner"  # beside the studio's siue-music, which the same app may also run
 _DESKTOP_CONFIG = {
     "darwin": "~/Library/Application Support/Claude/claude_desktop_config.json",
     "win32": "%APPDATA%\\Claude\\claude_desktop_config.json",
@@ -26,11 +28,11 @@ def connect_text(python: Path, tool: Path, base: str, op: str | None, vault: str
     claude = ["claude", "mcp", "add", "--scope", "user"]
     for name, value in env.items():
         claude += ["--env", f"{name}={value}"]
-    claude += ["siue-music", "--", str(python), str(tool), "mcp"]
-    desktop = {"mcpServers": {"siue-music": {"command": str(python), "args": [str(tool), "mcp"], "env": env}}}
+    claude += [OWNER_SERVER, "--", str(python), str(tool), "owner-mcp"]
+    desktop = {"mcpServers": {OWNER_SERVER: {"command": str(python), "args": [str(tool), "owner-mcp"], "env": env}}}
     desktop_file = _DESKTOP_CONFIG.get(platform, _DESKTOP_CONFIG["darwin"] + " (macOS) or " + _DESKTOP_CONFIG["win32"] + " (Windows)")
     lines = [
-        "The music workroom's MCP server is ready. Connect your AI app with one of these.",
+        "The owner's MCP server (siue-music-owner) is ready. Connect your AI app with one of these.",
         "",
         "Claude Code (run once, in any folder):",
         "",

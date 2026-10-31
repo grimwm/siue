@@ -5,6 +5,7 @@ import json
 import os
 import hmac
 import re
+from pathlib import Path
 from typing import Callable
 from urllib.parse import urljoin
 

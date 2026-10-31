@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryStorage, throwingStorage } from '../../_kit/test/record.ts';
-import { createSettings, FULLSCREEN_KEY, LOOK_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, PAD_KEY, SOUND_KEY, WALLS_KEY } from '../src/settings.ts';
+import { createSettings, FULLSCREEN_KEY, LOOK_KEY, MINIMAP_KEY, MUSIC_HIDDEN_KEY, MUSIC_KEY, PAD_KEY, SOUND_KEY, WALLS_KEY } from '../src/settings.ts';
 
 test('defaults: sound on, music on, music in the background on, fullscreen off', () => {
   const s = createSettings(memoryStorage());
@@ -73,4 +73,14 @@ test('the arrows stand on the left until chosen; Right is kept under crete-pad a
   assert.equal(storage.data.get(PAD_KEY), 'right');
   assert.equal(createSettings(storage).pad.get(), 'right');
   assert.equal(createSettings(memoryStorage({ [PAD_KEY]: 'middle' })).pad.get(), 'left');
+});
+
+test('the mini map is off until chosen; On is kept under crete-minimap and reads back; an unknown word reads Off', () => {
+  assert.equal(MINIMAP_KEY, 'crete-minimap');
+  assert.equal(createSettings(null).minimap.get(), 'off');
+  const storage = memoryStorage();
+  createSettings(storage).minimap.set('on');
+  assert.equal(storage.data.get(MINIMAP_KEY), 'on');
+  assert.equal(createSettings(storage).minimap.get(), 'on');
+  assert.equal(createSettings(memoryStorage({ [MINIMAP_KEY]: 'maybe' })).minimap.get(), 'off');
 });

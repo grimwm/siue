@@ -4,16 +4,17 @@
  * easing round unless motion is reduced. A thing keeps its model from frame to frame by its id, or, when it has
  * none (a hazard, a sliding block), by its model and the nearest place it stood. Theseus, the Minotaur, the items
  * and the hazards carry a floating marker (src/modern/markers.ts) over them. */
-import { CatmullRomCurve3, ConeGeometry, CylinderGeometry, Group, Mesh, RingGeometry, SphereGeometry, TorusGeometry, TubeGeometry, Vector3 } from 'three';
+import { CatmullRomCurve3, ConeGeometry, CylinderGeometry, Group, Mesh, ReplaceStencilOp, RingGeometry, SphereGeometry, TorusGeometry, TubeGeometry, Vector3 } from 'three';
 import type { Material, Object3D } from 'three';
 import type { Dir } from '../../puzzle/tiles.ts';
 import type { FigureModel, PieceModel, Placed } from '../model-names.ts';
 import { FIGURE_MODEL_NAMES } from '../model-names.ts';
 import { markerFor } from '../markers.ts';
+import { variant } from '../variants.ts';
 import { FY, cellX, cellZ } from './floor.ts';
 import type { MarkerSet } from './markers.ts';
 import { PIECE_MODELS } from './pieces.ts';
-import { at, box, cyl, disposeModel, piece } from './terrain.ts';
+import { at, box, cyl, disposeModel, outlined, piece } from './terrain.ts';
 import type { PieceInfo } from './terrain.ts';
 import type { Kit } from './textures.ts';
 import type { Seen } from './walls.ts';
@@ -29,12 +30,28 @@ function stand(kit: Kit, g: Group, info: PieceInfo, scale = 1.3, live: Object3D[
   return outlined(kit, piece(out, info, live));
 }
 
-/** Adds a dark rim round every baked surface of `obj`: the same geometry, drawn from behind and pushed out. */
-function outlined(kit: Kit, obj: Group): Group {
-  const shells: Mesh[] = [];
-  for (const c of obj.children) if (c instanceof Mesh && !c.userData.live) shells.push(new Mesh(c.geometry, kit.m.outline));
-  obj.add(...shells);
-  return obj;
+/** The beacon (variants.ts): a column of green light over Theseus, over the walls, and his shape in green where
+ *  something stands in front of him. */
+function beacon(kit: Kit, hero: Group, top: number): void {
+  const ghosts: Mesh[] = [];
+  for (const c of hero.children) {
+    if (!(c instanceof Mesh) || c.userData.live || c.material === kit.m.outline) continue;
+    // He marks the stencil where he shows, so his outline draws only where something else hides him.
+    const mat = c.material as Material;
+    mat.stencilWrite = true;
+    mat.stencilRef = 1;
+    mat.stencilZPass = ReplaceStencilOp;
+    const ghost = new Mesh(c.geometry, kit.m.heroXray);
+    ghost.renderOrder = 20;
+    ghost.userData.live = true;
+    ghosts.push(ghost);
+  }
+  // The beam rises from just over his head, so it never tints him.
+  const beam = new Mesh(new CylinderGeometry(0.16, 0.24, 2.2, 24, 1, true), kit.m.heroBeam);
+  beam.position.y = FY + top + 0.25 + 1.1;
+  beam.renderOrder = 21;
+  beam.userData.live = true;
+  hero.add(...ghosts, beam);
 }
 
 /** Theseus's size against the other figures: a little larger, so the eye finds him first. */
@@ -80,7 +97,9 @@ function theseus(kit: Kit): Group {
     return r;
   };
   const ring = [flat(0.33, 0.47, m.heroRingEdge, 0.01), flat(0.36, 0.44, m.heroRing, 0.012)];
-  return stand(kit, g, { half: 0.26 * HERO_SCALE / 1.3, h: 1.2 * HERO_SCALE / 1.3 }, HERO_SCALE, ring);
+  const hero = stand(kit, g, { half: 0.26 * HERO_SCALE / 1.3, h: 1.2 * HERO_SCALE / 1.3 }, HERO_SCALE, ring);
+  if (variant().beacon) beacon(kit, hero, (hero.userData as PieceInfo).h);
+  return hero;
 }
 
 /** The Minotaur with his labrys: fur, a red kilt and ivory horns, or all grey stone while the mirror holds him. */
@@ -190,7 +209,8 @@ export function createActors(kit: Kit, markers: MarkerSet): Actors {
 
   const markerOf = (p: Placed, foot: Vector3, obj: Object3D) => {
     const kind = markerFor(p);
-    return kind ? markers.make(kind, foot, (obj.userData as PieceInfo).h) : null;
+    const info = obj.userData as PieceInfo;
+    return kind ? markers.make(kind, foot, info.h, info.back ?? 0) : null;
   };
   /** Where its marker hangs from: the floor under it. */
   function lift(a: Actor): void {

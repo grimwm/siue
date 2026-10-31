@@ -239,6 +239,14 @@ function applyPad(side: PadSide): void {
   ui.say(side === 'right' ? 'Arrows on the right.' : 'Arrows on the left.', 'info');
 }
 
+function toggleMinimap(): void {
+  const on = settings.minimap.get() !== 'on';
+  settings.minimap.set(on ? 'on' : 'off');
+  ui.setMinimap(on);
+  modern?.minimap(on);
+  ui.say(on ? 'Mini map on.' : 'Mini map off.', 'info');
+}
+
 function applyWalls(walls: WallMode): void {
   settings.walls.set(walls);
   ui.setLook(settings.look.get(), walls);
@@ -397,6 +405,7 @@ async function createModern(): Promise<void> {
   }
   modern.walls(settings.walls.get());
   modern.view(settings.view.get());
+  modern.minimap(settings.minimap.get() === 'on');
   modern.setActive(false);
   canvas.addEventListener('webglcontextlost', e => {
     // Kept so the browser may give it back; until it does, the classic board shows.
@@ -428,7 +437,7 @@ function noModern(why: string): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setView: applyView, setPad: applyPad, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setView: applyView, setPad: applyPad, toggleMinimap, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
   });
   const background = settings.musicHidden.get() === 'on';
@@ -445,6 +454,7 @@ function start(): void {
   ui.setLook(settings.look.get(), settings.walls.get());
   ui.setView(settings.view.get());
   ui.setPad(settings.pad.get());
+  ui.setMinimap(settings.minimap.get() === 'on');
   ui.setMoveDir(dir => screenToGrid(dir, modernOn && modern ? modern.yaw() : DEFAULT_YAW));
   showLook(settings.look.get());
   followMusicSwitches();

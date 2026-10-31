@@ -238,10 +238,10 @@ test('a tool names itself, its count and what it does to a screen reader', () =>
 // ---- menu ----
 function menuProps(over: Partial<MenuProps> = {}): MenuProps {
   return {
-    open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', view: 'angled', pad: 'left',
+    open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', view: 'angled', pad: 'left', minimap: false,
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onView: noop, onPad: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onLook: noop, onWalls: noop, onView: noop, onPad: noop, onMinimap: noop, onLore: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 
@@ -286,6 +286,19 @@ test('the menu offers Angled and Top-down while the look is modern, and Walls on
   assert.equal(maybeById(root, 'walls-solid'), undefined, 'straight down no wall stands in front, so Walls goes');
   renderMenu(root, menuProps({ look: 'classic', view: 'top' }));
   assert.equal(maybeById(root, 'view-top'), undefined, 'Classic has no camera');
+});
+
+test('the menu has a Mini map switch, off by default, only while the look is modern', () => {
+  const root = mount();
+  let flips = 0;
+  renderMenu(root, menuProps({ onMinimap: () => flips++ }));
+  assert.equal(byId(root, 'minimap-switch').getAttribute('aria-checked'), 'false');
+  click(byId(root, 'minimap-switch'));
+  assert.equal(flips, 1);
+  renderMenu(root, menuProps({ minimap: true }));
+  assert.equal(byId(root, 'minimap-switch').getAttribute('aria-checked'), 'true');
+  renderMenu(root, menuProps({ look: 'classic', minimap: true }));
+  assert.equal(maybeById(root, 'minimap-switch'), undefined, 'Classic never shows it');
 });
 
 test('the menu has a Lore book button that calls back', () => {

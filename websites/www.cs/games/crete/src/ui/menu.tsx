@@ -36,6 +36,8 @@ export interface MenuProps {
   view: View;
   /** The edge of the strip the arrows stand at. */
   pad: PadSide;
+  /** Whether the mini map shows: a switch shown only while the look is modern. */
+  minimap: boolean;
   log: LogLine[];
   help: Seg[][];
   onSound: () => void;
@@ -46,6 +48,7 @@ export interface MenuProps {
   onWalls: (walls: WallMode) => void;
   onView: (view: View) => void;
   onPad: (side: PadSide) => void;
+  onMinimap: () => void;
   onLore: () => void;
   onQuit: () => void;
   onClose: () => void;
@@ -113,6 +116,12 @@ export function Menu(p: MenuProps) {
                   ))}
                 </div>
               </div>
+            )}
+            {p.look === 'modern' && (
+              <Button id="minimap-switch" class="menu-row" checked={p.minimap} onClick={p.onMinimap}>
+                <span class="menu-row-name">Mini map<small>The whole level in a corner of the board</small></span>
+                <span class="switch" aria-hidden="true" />
+              </Button>
             )}
             <div class="menu-walls" data-section="pad">
               <span class="menu-label" id="menu-pad-label">Arrows</span>

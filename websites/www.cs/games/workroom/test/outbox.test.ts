@@ -207,6 +207,8 @@ test('the unknown-key message points studio people to a reload and Forgot your p
   assert.match(keptMessage('unknown_key', undefined, true), /make music-status/);
   assert.doesNotMatch(keptMessage('unknown_key', undefined, false), /make music/);
   assert.match(keptMessage('unknown_key', undefined, false), /Reload the page/);
+  assert.match(keptMessage('unknown_key', undefined, false), /cannot be sent/);
+  assert.match(keptMessage('unknown_key', undefined, false), /deletes all your notes and your notes key/);
   assert.match(keptMessage('unknown_key', undefined, false), /Forgot your passphrase\? on Your studio/);
   assert.match(keptMessage('unknown_key'), /Forgot your passphrase\?/, 'a page that does not say it is the owner\'s gets the page-only words');
   for (const words of Object.values(KEPT_MESSAGES)) if (typeof words === 'string') assert.doesNotMatch(words, /make music|terminal|1Password/, 'no owner step in the table');

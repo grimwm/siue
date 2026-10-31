@@ -54,7 +54,7 @@ export const KEPT_MESSAGES: Readonly<Record<Exclude<KeptReason, 'over_quota' | '
   full: `The workroom holds ${MAX_NOTES.toLocaleString('en-US')} notes. Delete some old ones; this note stays on this device until then.`,
   no_key: 'The server has no notes key yet, so this note stays on this device. Make your notes key under Your notes.',
   bad_header: 'The server did not accept this note’s key. Reload the page; the note stays on this device.',
-  unknown_key: 'The server does not take notes sealed to this key, so this note stays on this device. Reload the page and unlock again. If this comes back, use Forgot your passphrase? on Your studio: it deletes your notes key so you can make a new one.',
+  unknown_key: 'The server does not take notes sealed to this key, so this note cannot be sent; it stays on this device until you discard it. Reload the page and unlock again so new notes are sealed to the server’s key. If this comes back, Forgot your passphrase? on Your studio deletes all your notes and your notes key so you can make a new one.',
 };
 
 /** The words for a kept note: `room` is the Pending's, `owner` defaults to this page's, and too_large names this page's note max. */

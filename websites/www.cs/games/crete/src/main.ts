@@ -199,6 +199,7 @@ const game = createGame({
   reducedMotion: () => reduced,
   isFirst: id => ui.isFirst(id),
   changed: () => {
+    lastChange = performance.now();
     ui.render(game);
     showModern();
     seePlay(game, levels.scratch?.(game.trial) ?? false);
@@ -322,6 +323,9 @@ async function quit(): Promise<void> {
 const thumbSheet = document.createElement('canvas');
 const thumbBoard = createBoard(thumbSheet, atlas, image);
 let thumbKey = '';
+/** When the game last changed; the modern board loads for the face only after REST_MS without a change. */
+let lastChange = 0;
+const REST_MS = 2500;
 let thumbTimer: ReturnType<typeof setTimeout> | 0 = 0;
 
 /** Paints the face once the turn in hand has landed. */
@@ -329,7 +333,8 @@ function wantThumb(): void {
   if (thumbTimer) return;
   thumbTimer = setTimeout(() => {
     thumbTimer = 0;
-    if (game.anim && !game.anim.paused) {
+    // Not while a turn animates or the thread plays out: the face waits for the board to rest.
+    if ((game.anim && !game.anim.paused) || game.playing) {
       wantThumb();
       return;
     }
@@ -376,6 +381,11 @@ function paintThumb(): void {
       return;
     }
     if (!modern) {
+      // The modern board loads for the face only once play has rested a while, so loading it never slows play.
+      if (performance.now() - lastChange < REST_MS || game.playing) {
+        setTimeout(wantThumb, REST_MS);
+        return;
+      }
       void createModern();
       return;
     }

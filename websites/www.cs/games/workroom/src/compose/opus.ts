@@ -23,9 +23,9 @@ export interface RecorderPorts {
 }
 
 /** The pre-skip an encoder's OpusHead description says, else libopus's own. */
-export function preSkipOf(description: ArrayBuffer | ArrayBufferView | undefined): number {
+export function preSkipOf(description: AllowSharedBufferSource | undefined): number {
   if (!description) return DEFAULT_PRE_SKIP;
-  const b = description instanceof ArrayBuffer ? new Uint8Array(description) : new Uint8Array(description.buffer, description.byteOffset, description.byteLength);
+  const b = ArrayBuffer.isView(description) ? new Uint8Array(description.buffer, description.byteOffset, description.byteLength) : new Uint8Array(description);
   const isHead = b.length >= 12 && new TextDecoder().decode(b.subarray(0, 8)) === 'OpusHead';
   return isHead ? b[10]! | (b[11]! << 8) : DEFAULT_PRE_SKIP;
 }

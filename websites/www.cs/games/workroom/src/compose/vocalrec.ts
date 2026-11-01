@@ -85,7 +85,7 @@ export async function recordVocal(ports: RecPorts, o: RecOptions): Promise<Recor
       b.start(pieceStart);
       b.onended = () => o.onEnd?.();
     } else for (const t of o.clicks) click(pieceStart + t, false);
-    const latency = (ctx.baseLatency ?? 0) + (ctx.outputLatency ?? 0) + (stream.getAudioTracks()[0]?.getSettings().latency ?? 0);
+    const latency = (ctx.baseLatency ?? 0) + (ctx.outputLatency ?? 0) + ((stream.getAudioTracks()[0]?.getSettings() as { latency?: number } | undefined)?.latency ?? 0);
     let seq = 0, samples = 0, first: number | null = null, levelAt = 0;
     node.onaudioprocess = e => {
       const x = e.inputBuffer.getChannelData(0);

@@ -14,6 +14,8 @@ export interface LocalTake {
   made: string;
   rate: number;
   samples: number;
+  /** Where it was sung in the piece, in seconds, to put it back after a reload. */
+  at?: number;
   /** The studio file once saved (vocal-<sha256>.<ext>). */
   saved?: string;
 }
@@ -25,6 +27,8 @@ export interface TakeStore {
   /** Sets what is known of a take (its final length, its saved name). */
   update(t: LocalTake): Promise<void>;
   list(piece: string): Promise<LocalTake[]>;
+  /** Every take on this device, of every piece. */
+  listAll(): Promise<LocalTake[]>;
   /** A take's sound, every chunk in order. */
   pcm(id: string): Promise<Int16Array | null>;
   remove(id: string): Promise<void>;
@@ -40,6 +44,7 @@ export function memoryTakes(): TakeStore {
     async append(id, seq, pcm) { (chunks.get(id) ?? chunks.set(id, []).get(id)!)[seq] = Int16Array.from(pcm); },
     async update(t) { takes.set(t.id, { ...t }); },
     async list(piece) { return [...takes.values()].filter(t => t.piece === piece).map(t => ({ ...t })); },
+    async listAll() { return [...takes.values()].map(t => ({ ...t })); },
     async pcm(id) { return chunks.has(id) ? joinChunks(chunks.get(id)!) : null; },
     async remove(id) { takes.delete(id); chunks.delete(id); },
     memoryOnly: () => true,
@@ -101,20 +106,22 @@ export function indexedDbTakes(idb: IDBFactory | null = typeof indexedDB === 'un
       return inMemory();
     }
   };
+  const listAll = async (): Promise<LocalTake[]> => {
+    const mine = await memory.listAll();
+    if (refused) return mine;
+    try {
+      const all = ((await run([TAKES], 'readonly', tx => tx.objectStore(TAKES).getAll())) ?? []).filter(isTake);
+      return [...all, ...mine].sort((a, b) => a.made.localeCompare(b.made));
+    } catch {
+      return mine;
+    }
+  };
   return {
     begin: t => either(async () => { await run([TAKES], 'readwrite', tx => tx.objectStore(TAKES).put({ ...t })); }, () => memory.begin(t)),
     append: (id, seq, pcm) => either(async () => { await run([CHUNKS], 'readwrite', tx => tx.objectStore(CHUNKS).put({ id, seq, pcm: Int16Array.from(pcm) })); }, () => memory.append(id, seq, pcm)),
     update: t => either(async () => { await run([TAKES], 'readwrite', tx => tx.objectStore(TAKES).put({ ...t })); }, () => memory.update(t)),
-    async list(piece) {
-      const mine = await memory.list(piece);
-      if (refused) return mine;
-      try {
-        const all = ((await run([TAKES], 'readonly', tx => tx.objectStore(TAKES).getAll())) ?? []).filter(isTake);
-        return [...all.filter(t => t.piece === piece), ...mine].sort((a, b) => a.made.localeCompare(b.made));
-      } catch {
-        return mine;
-      }
-    },
+    list: async piece => (await listAll()).filter(t => t.piece === piece),
+    listAll,
     async pcm(id) {
       const held = await memory.pcm(id);
       if (held || refused) return held;

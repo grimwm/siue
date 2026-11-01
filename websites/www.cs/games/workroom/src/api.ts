@@ -56,8 +56,12 @@ export interface PageApi {
   pairKeyring(locked: LockedKeyring, current: string, previous: string[], proof: ChangeProof, pair: { key: number; code: string; fingerprint: string }): Promise<PairRefusal | null>;
   /** Deletes one draft of a piece, or every draft of it without a version; how many went. A draft that is already gone is a ServerError (404). */
   deleteDraft(piece: string, version?: number): Promise<number>;
-  /** Saves the editor's draft (a SIUED1 bundle of score.json) as `version` of `piece`: the server's status and answer, whatever it is. */
+  /** Saves the editor's draft (a SIUED1 bundle of score.json and the new vocal takes it names) as `version` of `piece`: the server's status and answer, whatever it is. */
   saveDraft(piece: string, version: number, bundle: Uint8Array<ArrayBuffer>): Promise<{ status: number; data: Record<string, unknown> }>;
+  /** One of this studio's vocal takes, as stored. */
+  takeBytes(file: string): Promise<Uint8Array<ArrayBuffer>>;
+  /** Replaces the held take `from` with `to` (Good To The Ear, made in the page) in every draft: the server's status and answer. */
+  convertTake(from: string, to: string, bytes: Uint8Array<ArrayBuffer>): Promise<{ status: number; data: Record<string, unknown> }>;
 }
 
 type Reply = Awaited<ReturnType<Fetch>>;
@@ -195,6 +199,16 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
     },
     async saveDraft(piece, version, bundle) {
       const { reply, data } = await post(`save-draft.php?piece=${encodeURIComponent(piece)}&version=${version}`, 'application/octet-stream', bundle);
+      return { status: reply.status, data };
+    },
+    async takeBytes(file) {
+      const reply = await fetch(`take.php?file=${encodeURIComponent(file)}`);
+      if (reply.redirected || reply.status === 401 || reply.status === 403) throw new SignedOut('Your sign-in ended.');
+      if (!reply.ok) throw failed(reply);
+      return new Uint8Array(await reply.arrayBuffer());
+    },
+    async convertTake(from, to, bytes) {
+      const { reply, data } = await post(`convert-take.php?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, 'application/octet-stream', bytes);
       return { status: reply.status, data };
     },
     async deleteDraft(piece, version) {

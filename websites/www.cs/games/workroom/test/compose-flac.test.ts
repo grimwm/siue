@@ -46,7 +46,7 @@ test('frame numbers past 127 use the long code, and 44.1 kHz is written as such'
 
 test('a flipped byte is caught by a CRC', () => {
   const flac = encodeFlac(make(FLAC_BLOCK, i => 3000 * Math.sin(i / 9)), RATE);
-  flac[flac.length - 40] ^= 0x10;
+  flac[flac.length - 40] = flac[flac.length - 40]! ^ 0x10;
   assert.throws(() => decodeFlac(flac), /CRC|sync|ends/);
 });
 

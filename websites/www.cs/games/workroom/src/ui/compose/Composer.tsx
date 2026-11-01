@@ -49,6 +49,10 @@ import type { HumPorts } from './HumPanel.tsx';
 import { Keyboard } from './Keyboard.tsx';
 import { YourKeyboard } from './YourKeyboard.tsx';
 import { SpeedPanel } from './SpeedPanel.tsx';
+import { SoundPanel } from './SoundPanel.tsx';
+import { mixOf, setLaneFx, setMix, setVoice } from '../../compose/sound.ts';
+import type { LiveVoice } from '../../compose/livemic.ts';
+import type { VoiceFx } from '../../score.ts';
 import { setDynamics } from '../../compose/loudness.ts';
 import { setPartSpeed, setPieceSpeed, setTempoLine } from '../../compose/speed.ts';
 
@@ -98,6 +102,8 @@ export interface ComposerProps {
   midi?: () => Promise<MIDIAccess>;
   /** Hum's microphone, file decoding and playback; without it there is no Hum. */
   hum?: HumPorts;
+  /** Voice Effects on the live microphone (asked for when started), in the piece's key; absent where there is none. */
+  live?: (chain: readonly VoiceFx[], key: readonly number[]) => Promise<LiveVoice>;
 }
 
 const isTyping = (t: EventTarget | null): boolean =>
@@ -649,6 +655,11 @@ export function Composer(p: ComposerProps) {
             <SpeedPanel doc={doc} part={part} bars={barsNeeded(doc)} help={help}
               onPieceSpeed={bpm => apply(setPieceSpeed(doc, bpm))} onLine={marks => apply(setTempoLine(doc, marks))}
               onPartSpeed={speed => apply(setPartSpeed(doc, part.id, speed))} onLoudness={marks => apply(setDynamics(doc, part.id, marks))} />
+          ) : null}
+          {part && entry ? (
+            <SoundPanel part={part} others={doc.parts.filter(x => x.id !== part.id).map(x => ({ id: x.id, name: x.name }))} mix={mixOf(doc)} help={help}
+              onFx={change => apply(setLaneFx(doc, part.id, change))} onVoice={chain => apply(setVoice(doc, part.id, chain))}
+              onMix={change => apply(setMix(doc, change))} live={p.live ? chain => p.live!(chain, key.classes) : undefined} />
           ) : null}
           {part && entry ? (
             <YourKeyboard request={p.midi} program={entry.pieces ? null : entry.gm} drums={entry.pieces ? new Map(entry.pieces) : null} help={help}

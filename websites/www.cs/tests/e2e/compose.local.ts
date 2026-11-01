@@ -9,7 +9,9 @@
 // sent), Hum (the demo, the microphone, the three snaps and Replace The Part with Undo) and Play Along; and on a phone
 // a note held by the pedal never moves the page. Then Speed And Loudness: the piece's speed, a gradual speed change, a
 // part at its own BPM, a loudness line, and Hum's Exact Pitch bends, saved as a schema 2 draft; on a phone a held key
-// still never moves the page with the panel open. SHOTS_DIR keeps screenshots.
+// still never moves the page with the panel open. Then Sound: a part's settings, Mute and Solo, Voice Effects (a
+// Vocoder on another part, Auto-Tune) tried on the fake microphone and let go, the Room and the limiter, heard with the
+// piece and saved as score settings. SHOTS_DIR keeps screenshots.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -19,6 +21,7 @@ const STUDENT = 'composer1@siue.edu';
 // A second student: sign-in links are limited to three an hour for each address.
 const STUDENT2 = 'composer2@siue.edu';
 const STUDENT3 = 'composer3@siue.edu';
+const STUDENT4 = 'composer4@siue.edu';
 const QUARTET = join(import.meta.dirname, '..', '..', 'games', 'workroom', 'test', 'fixtures', 'import', 'musescore-quartet.musicxml');
 const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
 const shots = process.env.SHOTS_DIR;
@@ -557,6 +560,98 @@ test('on a phone, a held key never moves the page with Speed And Loudness open',
     expect(await page.evaluate(() => window.scrollY), 'held: the page has not moved').toBe(y);
     await page.mouse.up();
     await page.getByRole('button', { name: 'Stop Recording' }).click();
+  } finally {
+    await context.close();
+  }
+});
+
+test('Sound, Voice Effects, the Room and the limiter are heard and saved as score settings', async ({ browser, baseURL }) => {
+  test.setTimeout(240_000);
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await context.addInitScript(fakeDevices);
+  try {
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) errors.push(m.text()); });
+    await signInAt(page, base, 'music', STUDENT4);
+    await page.goto(`${base}music/compose.php`);
+    await page.getByLabel('Title').fill('Sound Test');
+    await page.getByRole('button', { name: 'Start Composing' }).click();
+    await page.locator('[data-instrument="cello"]').click();
+    await hold(page, ['KeyA', 'KeyD'], 400);
+    await page.getByRole('button', { name: 'Stop Recording' }).click();
+    await page.getByRole('button', { name: 'Add Part' }).click();
+    await page.getByRole('button', { name: 'Brass' }).click();
+    await page.locator('[data-instrument="horn"]').click();
+    await hold(page, ['KeyG'], 400);
+    await page.getByRole('button', { name: 'Stop Recording' }).click();
+
+    const sound = page.locator('[data-sound-panel]');
+    const slide = async (name: string, value: number) => sound.locator(`[data-fx="${name}"]`).first().evaluate((el, v) => {
+      const input = el as HTMLInputElement;
+      input.value = String(v);
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+    await page.locator('[data-part="cello"]').click();
+    await slide('pan', -0.5);
+    await slide('bass', 6);
+    await slide('echo', 0.4);
+    await slide('warmth', 0.3);
+
+    // Voice Effects on the horn: a Vocoder with the cello as its carrier, then Auto-Tune.
+    await page.locator('[data-part]').nth(1).click();
+    await sound.locator('[data-voice-pick]').selectOption('vocoder');
+    await sound.locator('[data-voice-add]').click();
+    await expect(sound.locator('[data-carrier]')).toHaveValue('cello');
+    await sound.locator('[data-voice-pick]').selectOption('autotune');
+    await sound.locator('[data-voice-add]').click();
+    await expect(sound.locator('[data-voice-fx]')).toHaveCount(2);
+
+    // Try It With The Mic: the microphone is asked for only now, and let go on Stop The Mic.
+    expect(await page.evaluate(() => (window as unknown as { __mic: { asked: number } }).__mic.asked)).toBe(0);
+    await sound.locator('[data-live-try]').click();
+    await expect(sound.locator('[data-live-stop]')).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __mic: { asked: number } }).__mic.asked)).toBe(1);
+    await page.waitForTimeout(500);
+    await sound.locator('[data-live-stop]').click();
+    expect(await page.evaluate(() => (window as unknown as { __mic: { tracks: MediaStreamTrack[] } }).__mic.tracks.map(t => t.readyState))).toEqual(['ended']);
+
+    // The Whole Piece: a Cathedral and the limiter.
+    await sound.locator('[data-room-preset="cathedral"]').click();
+    await sound.locator('[data-limiter]').click();
+    await expect(sound.locator('[data-limiter]')).toHaveText('Limiter: On');
+    await sound.locator('summary', { hasText: 'What The Score Saves' }).click();
+    await expect(sound.locator('[data-score-saves]')).toContainText('"cathedral"');
+    await shot(page, 'desktop-sound');
+
+    // Mute and Solo, and Undo.
+    await sound.locator('[data-mute]').click();
+    await expect(sound.locator('[data-mute]')).toHaveText('Muted');
+    await page.getByRole('button', { name: /^↶ Undo/ }).click();
+    await expect(sound.locator('[data-mute]')).toHaveText('Mute');
+
+    // Heard with the piece: the longer road through the parts, the Room and the limiter builds and plays.
+    await page.getByRole('button', { name: 'Hear With The Piece' }).click();
+    await expect(page.locator('[data-listening]')).toContainText(/playing|Playing/, { timeout: 60_000 });
+    await page.getByRole('button', { name: 'Stop', exact: true }).click();
+
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+    await expect(page.locator('[data-status]')).toHaveText('Saved as draft 1.');
+    const score = await page.evaluate(async () => (await fetch('draft.php?piece=sound-test&v=1&file=score.json')).json()) as {
+      schema: number; mix: { room?: { preset: string }; limiter?: { on: boolean } };
+      lanes: { id: string; fx?: { pan?: number; eq?: { bass?: number }; echo?: { amount: number }; warmth?: number }; voice?: { effect: string; carrier?: string }[] }[];
+    };
+    expect(score.schema).toBe(2);
+    expect(score.mix.room?.preset).toBe('cathedral');
+    expect(score.mix.limiter?.on).toBe(true);
+    const cello = score.lanes.find(l => l.id === 'cello')!;
+    expect(cello.fx).toMatchObject({ pan: -0.5, eq: { bass: 6 }, echo: { amount: 0.4 }, warmth: 0.3 });
+    const horn = score.lanes[1]!;
+    expect(horn.voice!.map(v => v.effect)).toEqual(['vocoder', 'autotune']);
+    expect(horn.voice![0]!.carrier).toBe('cello');
+    expect(errors).toEqual([]);
   } finally {
     await context.close();
   }

@@ -9,6 +9,7 @@
 import type { Lane, Score } from '../score.ts';
 import { applyLaneFx, audible, DEFAULT_ROOM_SEND, limit, roomReverb } from './fx.ts';
 import { applyVoice } from './voice.ts';
+import { keyScale } from '../compose/hum.ts';
 import { bendRate, voices } from './plan.ts';
 import type { Library, Voice } from './plan.ts';
 import { fold, hissSource, levelGain } from './master.ts';
@@ -167,7 +168,7 @@ const mono = (ch: readonly Float32Array[]): Float32Array => Float32Array.from(ch
  * The parts with their Sound settings and Voice Effects, summed, with the Room: each part that has settings, or that a
  * Vocoder or Talk Box uses as its carrier, is rendered on its own, the rest together. Returns the stereo bus.
  */
-async function soundBus(score: Score, vs: readonly Voice[], samples: Map<string, AudioBuffer>, length: number, deps: RenderDeps): Promise<Float32Array[]> {
+async function soundBus(score: Score, lib: Library, vs: readonly Voice[], samples: Map<string, AudioBuffer>, length: number, deps: RenderDeps): Promise<Float32Array<ArrayBuffer>[]> {
   const anySolo = score.lanes.some(l => l.fx?.solo);
   const heard = score.lanes.filter(l => audible(l.fx, anySolo));
   const carriers = new Set(score.lanes.flatMap(l => (l.voice ?? []).flatMap(v => ('carrier' in v ? [v.carrier] : []))));
@@ -178,7 +179,7 @@ async function soundBus(score: Score, vs: readonly Voice[], samples: Map<string,
     const out = await ctx.startRendering();
     return [Float32Array.from(out.getChannelData(0)), Float32Array.from(out.getChannelData(out.numberOfChannels > 1 ? 1 : 0))];
   };
-  const bus = [new Float32Array(length), new Float32Array(length)];
+  const bus: Float32Array<ArrayBuffer>[] = [new Float32Array(length), new Float32Array(length)];
   const room = score.mix?.room && score.mix.room.preset !== 'dry' ? score.mix.room : null;
   const send = room ? [new Float32Array(length), new Float32Array(length)] : null;
   const add = (ch: readonly Float32Array[], sendLevel: number) => {
@@ -192,11 +193,14 @@ async function soundBus(score: Score, vs: readonly Voice[], samples: Map<string,
   const dry = new Map<string, Float32Array[]>();
   for (const l of score.lanes.filter(own)) dry.set(l.id, await render(new Set([l.id])));
   const bpm = score.tempo?.[0]?.bpm ?? 120;
+  // Auto-Tune and the Harmonizer follow the piece's key, worked out from its pitched parts' notes.
+  const pitchedLanes = new Set(score.lanes.filter(l => lib.instruments[l.sound!.instrument]?.pitched !== false).map(l => l.id));
+  const key = keyScale(score.notes.filter(n => pitchedLanes.has(n.lane)).map(n => n.pitch)).classes;
   for (const l of heard.filter(own)) {
     let ch = dry.get(l.id)!.map(c => Float32Array.from(c));
     if (l.voice?.length) {
-      const voiced = applyVoice(mono(ch), l.voice, RATE, new Map([...dry].map(([id, c]) => [id, mono(c)])));
-      ch = [voiced, Float32Array.from(voiced)];
+      const voiced = applyVoice(mono(ch), l.voice, RATE, new Map([...dry].map(([id, c]) => [id, mono(c)])), key);
+      ch = [Float32Array.from(voiced), Float32Array.from(voiced)];
     }
     if (l.fx) applyLaneFx(ch, l.fx, bpm, RATE);
     add(ch, l.fx?.room ?? DEFAULT_ROOM_SEND);
@@ -217,7 +221,7 @@ export async function renderScore(score: Score, lib: Library, deps: RenderDeps =
   const samples = await loadInstruments(lib, instruments, deps.fetchBytes, deps.decode, deps.cache ?? pageCache, new Set(vs.map(v => v.file)));
   const length = Math.round(score.duration * RATE);
   // The parts are made before the master's context exists, so only one full-length context is held at a time.
-  const bus = usesSound(score) ? await soundBus(score, vs, samples, length + TAIL * RATE, deps) : null;
+  const bus = usesSound(score) ? await soundBus(score, lib, vs, samples, length + TAIL * RATE, deps) : null;
   const ctx = deps.context(2, length + TAIL * RATE, RATE);
   const input = masterChain(ctx);
   if (bus) {

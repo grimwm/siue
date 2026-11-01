@@ -502,3 +502,38 @@ test('the first mirror taken shows its card; the second, a banner; the Dictionar
   await expect(page.locator('#menu-veil'), 'Q goes back to the menu').toBeVisible();
   expect(errors).toEqual([]);
 });
+
+/* ---- the false walls: a fake wall is walked through on one move, an invisible wall's bump costs no turn ---- */
+const FALSE_WALLS = ['title: Two False Walls', 'intro: One painted, one unseen.', '', '########', '#PW.I.E#', '#......#', '########', ''].join('\n');
+
+test('walking into a fake wall opens it and steps through on one move; bumping an invisible wall shows it and costs no move', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(pinClassic);
+  await page.goto(PAGE);
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await page.evaluate(text => {
+    const t = (window as unknown as FirstsHook).__creteTest;
+    t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Two False Walls', best: null } });
+  }, FALSE_WALLS);
+  await page.locator('#start-begin').click();
+  const board = () => page.evaluate(() => {
+    type Now = { moves: number; player: { c: number }; terrain: string[]; level: { cols: number } };
+    const s = (window as unknown as { __creteTest: { game: { run: { now: Now } } } }).__creteTest.game.run.now;
+    return { moves: s.moves, c: s.player.c, wall: s.terrain[s.level.cols + 2], unseen: s.terrain[s.level.cols + 4] };
+  });
+  /** A move, then the card a first meeting shows, if any, put away. */
+  const press = async (key: string) => {
+    await page.keyboard.press(key);
+    if (await page.locator('#meet-veil').isVisible()) await page.keyboard.press('Enter');
+  };
+  await press('ArrowRight');
+  await expect.poll(board).toEqual({ moves: 1, c: 2, wall: 'floor', unseen: 'invisible-wall' });
+  await press('ArrowRight');
+  await expect.poll(board).toEqual({ moves: 2, c: 3, wall: 'floor', unseen: 'invisible-wall' });
+  await press('ArrowRight');
+  await expect.poll(board, 'the bump shows the wall and is no move').toEqual({ moves: 2, c: 3, wall: 'floor', unseen: 'wall' });
+  await expect(page.locator('#hud-moves')).toHaveText('2');
+  expect(errors).toEqual([]);
+});

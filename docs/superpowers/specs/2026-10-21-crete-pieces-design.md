@@ -22,9 +22,10 @@ dodge the Minotaur. The owner asked for all nine classics below.
    only. Only Theseus raises it; the Minotaur, blocks and moving hazards cannot
    enter it.
 3. **Fake wall and invisible wall.** A fake wall looks like wall but is floor:
-   bumping it opens it. An invisible wall looks like floor but is wall:
-   bumping it shows it. Unlike a normal bump, discovering either one costs a
-   move. To the Minotaur and to moving hazards a fake wall is wall until
+   walking into it opens it, and Theseus steps through on that same move, an
+   ordinary turn. An invisible wall looks like floor but is wall: bumping it
+   shows it and, like any bump, costs no turn (the move count stays, and the
+   hazards and the Minotaur do not move). To the Minotaur and to moving hazards a fake wall is wall until
    opened and an invisible wall is always wall.
 4. **Gravel.** Theseus crosses it; blocks, the Minotaur and moving hazards
    cannot.
@@ -102,8 +103,8 @@ that the Minotaur never dies.
   beyond (items, bombs, thieves, buttons, safe zones, exit, ice and force
   floors all act). A level with a single teleport has no exit for it: it is
   wall.
-- **Fake and invisible walls.** Only Theseus's own bump discovers them (one
-  move). A pushed block, a slide or carry, and a teleport exit treat a fake
+- **Fake and invisible walls.** Only Theseus's own step discovers them (a fake
+  wall on the move that walks through it, an invisible wall at no cost). A pushed block, a slide or carry, and a teleport exit treat a fake
   wall as wall and an invisible wall as wall, and reveal nothing.
 - **Medusa's mirror and hazards.** Hazards keep moving while the Minotaur is
   stone, and treat the stone Minotaur as a wall, as everyone does.

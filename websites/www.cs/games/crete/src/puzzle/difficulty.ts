@@ -10,7 +10,7 @@ import type { Level } from './level.ts';
 import { initial } from './state.ts';
 import { solving, caught, SOLVER_CAP } from './solver.ts';
 import type { SearchRoom, SolveResult } from './solver.ts';
-import { step } from './step.ts';
+import { step, noTurn } from './step.ts';
 import { DIRS, DELTA, TERRAIN, HAZARDS } from './tiles.ts';
 import type { Dir, Terrain } from './tiles.ts';
 import { lineText } from './cache.ts';
@@ -202,7 +202,7 @@ export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {})
         const x = step(s, ACTIONS[c]!);
         if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur')) return true;
         const n = x.state;
-        if (n === s || n.outcome !== 'playing') continue;
+        if (noTurn(s, n) || n.outcome !== 'playing') continue;
         pack(n, layout, buf, 0);
         store.add(buf, 0, id, c, 0);
         if (store.size >= cap) return null;
@@ -400,6 +400,27 @@ export function rampProblems(previous: Difficulty, d: Difficulty, ramp = RAMP): 
   if (times < ramp.least) return [`stored ${d.explored} situations, ${times.toFixed(2)} × the challenge level before it (${previous.explored}); the ramp asks at least ${ramp.least} ×`];
   if (times > ramp.most) return [`stored ${d.explored} situations, ${times.toFixed(2)} × the challenge level before it (${previous.explored}); the ramp allows at most ${ramp.most} ×`];
   return [];
+}
+
+/** A fake or an invisible wall hides part of a level from the player, and the solver sees through it: `measure`
+ *  counts the level as if every wall were known, while a player has to find them. So a level that hides a wall is
+ *  held to a lower band than a plain level at the same spot: a gentler ramp, and a ceiling on its search. */
+export const HIDDEN = { ramp: { least: 1.1, most: 1.5 }, most: 20_000 };
+
+/** The level has a fake or an invisible wall. */
+export function hidesWalls(level: Level): boolean {
+  return level.terrain.some(t => t === 'fake-wall' || t === 'invisible-wall');
+}
+
+/** The ramp a challenge level climbs by: HIDDEN's when it hides a wall, RAMP's otherwise. */
+export function rampOf(level: Level): { least: number; most: number } {
+  return hidesWalls(level) ? HIDDEN.ramp : RAMP;
+}
+
+/** What keeps a challenge level that hides a wall inside its band; empty for a plain level. */
+export function hiddenProblems(level: Level, d: Difficulty): string[] {
+  if (!hidesWalls(level) || d.explored <= HIDDEN.most) return [];
+  return [`the level hides walls: stored ${d.explored} situations, the ceiling for a level that hides walls is ${HIDDEN.most}`];
 }
 
 /** The bar for shared levels, set against a chapter's challenge levels. It never needs a Minotaur: the quickest

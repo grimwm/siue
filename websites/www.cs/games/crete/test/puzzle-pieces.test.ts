@@ -2,7 +2,7 @@
 // The trap and trick pieces, one `describe` per piece: what Theseus, a pushed block and the Minotaur do on each.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { step } from '../src/puzzle/step.ts';
+import { step, noTurn } from '../src/puzzle/step.ts';
 import { terrainAt } from '../src/puzzle/state.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { heldAt, released } from '../src/puzzle/pieces.ts';
@@ -57,26 +57,31 @@ describe('gravel', () => {
 });
 
 describe('fake and invisible walls', () => {
-  test('bumping a fake wall opens it and costs a move', () => {
+  test('walking into a fake wall opens it and steps through, on that one move', () => {
     const r = step(grid(['PW...M']), mv('right'));
     assert.equal(terrainAt(r.state, at(0, 1)), 'floor');
-    assert.deepEqual(r.state.player, at(0, 0), 'Theseus stays');
+    assert.deepEqual(r.state.player, at(0, 1), 'Theseus steps through');
     assert.equal(r.state.moves, 1);
-    assert.deepEqual(r.state.minotaur, at(0, 3), 'the Minotaur takes his two steps');
-    assert.deepEqual(r.events[0], { kind: 'revealed', at: at(0, 1), what: 'fake-wall' });
-    assert.deepEqual(step(r.state, mv('right')).events[0], { kind: 'moved', who: 'player', from: at(0, 0), to: at(0, 1) },
-      'then it is floor');
+    assert.deepEqual(r.state.minotaur, at(0, 3), 'the Minotaur takes his two steps, as on any move');
+    assert.deepEqual(r.events.slice(0, 2), [
+      { kind: 'revealed', at: at(0, 1), what: 'fake-wall' },
+      { kind: 'moved', who: 'player', from: at(0, 0), to: at(0, 1) },
+    ]);
   });
 
-  test('bumping an invisible wall shows it and costs a move', () => {
-    const r = step(grid(['PI...M']), mv('right'));
-    assert.equal(terrainAt(r.state, at(0, 1)), 'wall');
-    assert.deepEqual(r.state.player, at(0, 0));
-    assert.equal(r.state.moves, 1);
-    assert.deepEqual(r.state.minotaur, at(0, 3));
-    assert.deepEqual(r.events[0], { kind: 'revealed', at: at(0, 1), what: 'invisible-wall' });
-    const again = step(r.state, mv('right'));
-    assert.equal(again.state, r.state, 'once shown it is a plain bump');
+  test('bumping an invisible wall shows it and costs no turn: the move count stays and nothing else moves', () => {
+    const s = grid(['P.I..M', '......']);
+    const r = step(s, mv('right'));
+    const one = r.state;
+    const shown = step(one, mv('right'));
+    assert.deepEqual(shown.events, [{ kind: 'revealed', at: at(0, 2), what: 'invisible-wall' }]);
+    assert.equal(terrainAt(shown.state, at(0, 2)), 'wall');
+    assert.deepEqual(shown.state.player, one.player);
+    assert.deepEqual(shown.state.minotaur, one.minotaur, 'the Minotaur does not move');
+    assert.equal(shown.state.moves, one.moves, 'no move is counted');
+    assert.ok(noTurn(one, shown.state), 'the searches skip it');
+    assert.deepEqual(shown.state.terrain.map((t, i) => (i === 2 ? 'invisible-wall' : t)), one.terrain, 'only that cell changed');
+    assert.equal(step(shown.state, mv('right')).state, shown.state, 'once shown it is a plain bump');
   });
 
   test('a slide, a pushed block and a teleport exit treat both as wall and reveal nothing', () => {

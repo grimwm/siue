@@ -29,7 +29,9 @@ tips) and Classic, chosen when a new game starts.
    "The editor" section describes it.
 3. **Chapters 5 to 10**, one pull request each, built in the editor and
    exported to the repo. Every level passes the difficulty gate
-   (`src/puzzle/difficulty.ts`); a level that is winnable but easy is refused.
+   (`src/puzzle/difficulty.ts`); a level that is winnable but easy is refused. A level
+   with a fake or invisible wall is held to a lower band (`HIDDEN`): a gentler
+   ramp and a ceiling, since the measure sees walls a player has to find.
    Each chapter gets its music once the first piece is done.
 4. **Endless**: the seeded generator on the same engine, checked by the solver.
 

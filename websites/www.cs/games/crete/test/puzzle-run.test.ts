@@ -49,7 +49,7 @@ test('after a win or a loss only undo and restart act', () => {
 test('undo restores the board after a reveal, a bomb and a clone', () => {
   let run = startRun(lv(['PW!+C', '.....'], 'machines: block-down'));
   const seen = [JSON.stringify(run.now)];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 5; i++) {
     run = act(run, mv('right')).run;
     seen.push(JSON.stringify(run.now));
   }

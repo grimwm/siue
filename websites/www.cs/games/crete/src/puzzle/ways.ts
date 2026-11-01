@@ -46,13 +46,13 @@ intro: Daedalus set currents running through these ways, and they carry the beas
 
 ############
 #P...>..>.##
-#>#.:.#...##
+#>..:.#...##
 #.##.^*:#*.#
-#^....#....#
+#^....##...#
 #.<:#^:Mu.##
-#...:...#..#
+#...:...#.##
 ##....#:.#.#
-#*#......#.#
+#*#.....##.#
 #.<.v.#.:..E
 ############
 ` },
@@ -63,10 +63,10 @@ intro: The floors are polished to ice, and the beast skids on them as you do. Lo
 #P..#k.#..*#
 #=...:.#=..#
 #.:=....:.##
-#..=##.=M#.#
-#.==.*#=...#
+#..=##.=.#.#
+#.==.*#=M..#
 #.:....=...#
-#...#..===.#
+#.#.#..===.#
 #:..:.#..###
 #.=*#..#.=.E
 ############
@@ -75,30 +75,30 @@ intro: The floors are polished to ice, and the beast skids on them as you do. Lo
 intro: A river and a fire cross these ways, with loose stone between them. Flippers and fire boots both lie here, and you will need both; the beast will not wait while you find them.
 
 ############
-#P:..~..#.*#
+#P:.#~.##.*#
 #...~.O.F:##
-#.......F#:#
-#f...##:...#
+#..#....F#:#
+#f...##:..##
 ####.####M.#
-#*##.....#.#
+#*##...#.#.#
 #.F..~h:~#.#
 ###.#.#:...#
-#*.~#..F:.|E
+#*.~#.#F:.|E
 ############
 ` },
   { id: 'ch2-7', text: `title: The Three Locks
 intro: Three doors and three keys, and not every key is worth its door. Each door you open is another road for the beast. Loose stone is a road for you alone.
 
 ############
-#P..#....#*#
-##..Rr#..#.#
-#.#.#:.:...#
-#r..#.:...##
-#.....:M.#.#
+#P..#..#.#*#
+##..Rr##.#.#
+#.#.#:.:#..#
+#r..##:M..##
+#.....:..###
 #*#:#b#....#
-##R:B...#..#
+##R:B...##.#
 #..#..####.#
-#:..#..*##.E
+#:#.#..*##.E
 ############
 ` },
   { id: 'ch2-8', text: `title: The Shifting Walls
@@ -110,8 +110,8 @@ intro: A plate here moves the walls, and the only road over the water is a block
 #.....~.##.#
 ##.....##:.#
 #*.#._#:M..#
-###..#:.:O.#
-#:O....#~.T#
+#.#..#:.:O.#
+#:O...##~.T#
 #::...#.T..#
 #*.........E
 ############
@@ -121,15 +121,15 @@ intro: A bronze mirror lies past the beast, and Daedalus's cow beside him. Marke
 pages: ch2-lots
 
 ############
-#:..#.p#z.*#
-#P....#.:..#
-#.#..#..:.##
-##.#.#:#.#.#
-#*#..S.M.c.#
-#....#.###.#
-#.x.:..S#:.#
-##S#.####..#
-#*...#....|E
+#:.##.p#z.*#
+#P....#.:#.#
+###..#..:.##
+##.#.#:#.###
+#*...S.M.c.#
+##..##.###.#
+##x#:..S#:.#
+#.S#.####..#
+#*..##....|E
 ############
 ` },
   { id: 'ch2-10', text: `title: The Inner Gate
@@ -137,16 +137,16 @@ intro: The winding ways end at the inner gate. Water guards it on one side and f
 pages: ch2-black-sail
 
 ####################
-#P...#.:.......p..x#
+#P..##.:.......p..x#
 #.##::.##....##.:..#
 #..r.:...#...#..:.##
 #..##.:#...#..:##:.#
-#*:##......#......##
+#*:###.#...#......##
 #....#.#.#####.#.#.#
 #....:.h.#.*M#.....#
 ###.#..#####.###~###
 ##..R#.......###~###
-#.####.#..##.#..~.*#
+#.####....##.#..~.*#
 #*..:..##.f...FF..|E
 ####################
 ` },

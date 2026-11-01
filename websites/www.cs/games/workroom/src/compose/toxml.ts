@@ -6,7 +6,7 @@
 // says how they sound, unless `concert`. The key is the major key that holds the most notes. DOM-free.
 import { rangeClass } from '../catalogue.ts';
 import type { Clef, Entry } from '../catalogue.ts';
-import { beatClock } from './beats.ts';
+import { beatClock, quarterClock } from './beats.ts';
 import { channels, DRUM_CHANNEL } from './channels.ts';
 import { barsNeeded } from './doc.ts';
 import type { EditDoc, Part } from './doc.ts';
@@ -118,19 +118,11 @@ export function toMusicXml(doc: EditDoc, entries: readonly Entry[], opts: XmlOpt
   const entryOf = (p: Part): Entry => entries.find(e => e.id === p.instrument) ?? FALLBACK;
   const chan = channels(doc, entries);
 
-  // Each bar's start in divisions and its tempo; one past the last, for notes ending on the final bar line.
-  const barStart: number[] = [0, 0];
-  const quartersAt: number[] = [0, 0];
-  for (let b = 1; b <= bars + 1; b++) {
-    const t = clock.tempoAt(b);
-    quartersAt[b + 1] = quartersAt[b]! + (t.beats * 4) / t.unit;
-    barStart[b + 1] = Math.round(quartersAt[b + 1]! * DIVISIONS);
-  }
-  const at = (beat: number): number => {
-    const bar = Math.min(bars + 1, Math.max(1, clock.barOfBeat(beat)));
-    const q = quartersAt[bar]! + ((beat - clock.barStartBeat(bar)) * 4) / clock.tempoAt(bar).unit;
-    return Math.round(q * DIVISIONS);
-  };
+  // Each bar's start in divisions; one past the last, for notes ending on the final bar line.
+  const q = quarterClock(doc.tempo);
+  const barStart: number[] = [0];
+  for (let b = 1; b <= bars + 1; b++) barStart[b] = Math.round(q.quarters(clock.barStartBeat(b)) * DIVISIONS);
+  const at = (beat: number): number => Math.round(q.quarters(beat) * DIVISIONS);
 
   const concertFifths = inferFifths(doc.parts.filter(p => !entryOf(p).pieces).flatMap(p => p.notes.map(n => n.pitch)));
   const out: string[] = [

@@ -3,34 +3,10 @@
 // the key the notes suggest.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { DOMParser } from '@xmldom/xmldom';
 import type { Element as XElement } from '@xmldom/xmldom';
-import { catalogue } from '../src/catalogue.ts';
-import type { Entry } from '../src/catalogue.ts';
-import { newDoc } from '../src/compose/doc.ts';
-import type { EditDoc, EditNote, Part } from '../src/compose/doc.ts';
-import { addPart } from '../src/compose/edit.ts';
 import { AMBER, inferFifths, RED, toMusicXml } from '../src/compose/toxml.ts';
-import type { Library } from '../src/render/plan.ts';
-import type { Tempo } from '../src/score.ts';
-
-const ENTRIES = catalogue(JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', '..', 'music', 'library', 'library.json'), 'utf8')) as Library);
-const entry = (id: string): Entry => ENTRIES.find(e => e.id === id)!;
-
-type N = [start: number, length: number, pitch: number];
-/** A document with one part per [instrument, notes]. */
-export function docWith(parts: [string, N[]][], tempo?: Tempo[]): EditDoc {
-  let doc = newDoc('Test Tune');
-  if (tempo) doc = { ...doc, tempo };
-  let id = 1;
-  for (const [inst, notes] of parts) {
-    const made = addPart(doc, entry(inst))!;
-    doc = { ...made.doc, parts: made.doc.parts.map((p): Part => (p.id === made.id ? { ...p, notes: notes.map(([start, length, pitch]): EditNote => ({ id: id++, start, length, pitch, velocity: 90, motif: null })) } : p)) };
-  }
-  return { ...doc, nextId: id };
-}
+import { docWith, ENTRIES } from './compose-fixture.ts';
 
 const parse = (xml: string) => new DOMParser().parseFromString(xml, 'text/xml');
 const kids = (el: XElement, tag: string): XElement[] => Array.from(el.childNodes).filter((n): n is XElement => n.nodeType === 1 && (n as XElement).tagName === tag);

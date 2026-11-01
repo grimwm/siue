@@ -57,6 +57,7 @@ import { setDynamics } from '../../compose/loudness.ts';
 import { setPartSpeed, setPieceSpeed, setTempoLine } from '../../compose/speed.ts';
 import { newVocalPart, renameTake, takesOf } from '../../compose/vocal.ts';
 import { withSavedTakes } from '../../compose/vocalsave.ts';
+import { exportWithVocals, notesOnly } from '../../compose/vocalexport.ts';
 import type { Encoded } from '../../compose/vocalsave.ts';
 import { LOCAL_TAKE_RE } from '../../score.ts';
 import { VocalPanel } from './VocalPanel.tsx';
@@ -582,12 +583,29 @@ export function Composer(p: ComposerProps) {
     p.onNewPiece(newDocFrom(preview, choice, p.entries, title), title);
   };
   const exportAs = (kind: 'musicxml' | 'mid'): void => {
-    if (!p.files || doc.parts.length === 0) return;
+    const notes = notesOnly(doc);
+    if (!p.files || notes.parts.length === 0) return;
     const data = kind === 'musicxml'
-      ? new Blob([toMusicXml(doc, p.entries, { colours: false })], { type: 'application/vnd.recordare.musicxml+xml' })
-      : new Blob([writeMidi(doc, p.entries) as Uint8Array<ArrayBuffer>], { type: 'audio/midi' });
+      ? new Blob([toMusicXml(notes, p.entries, { colours: false })], { type: 'application/vnd.recordare.musicxml+xml' })
+      : new Blob([writeMidi(notes, p.entries) as Uint8Array<ArrayBuffer>], { type: 'audio/midi' });
     p.files.save(`${p.start.piece.id}.${kind}`, data);
     setStatus(`Exported ${p.start.piece.id}.${kind}.`);
+  };
+  const exportVocals = async (): Promise<void> => {
+    const v = p.vocal;
+    if (!p.files || !v) return;
+    setStatus('Putting the vocals together…');
+    try {
+      const meta = await v.takes.list(p.start.piece.id);
+      const zip = await exportWithVocals(doc, p.entries, p.start.piece.id, {
+        saved: file => v.takeBytes(file),
+        local: async id => { const pcm = await v.takes.pcm(id); const m = meta.find(t => t.id === id); return pcm && m ? { pcm, rate: m.rate } : null; },
+      });
+      p.files.save(`${p.start.piece.id}-with-vocals.zip`, new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' }));
+      setStatus(`Exported ${p.start.piece.id}-with-vocals.zip: the notes as MusicXML, each take as it is kept, and where each clip plays.`);
+    } catch (e) {
+      setStatus(`The vocals could not be exported: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
   // Both: the grid and the sheet scroll across together, by the same share of their width.
   const follow = (from: HTMLElement | null, to: HTMLElement | null): void => {
@@ -640,8 +658,9 @@ export function Composer(p: ComposerProps) {
               <Button onClick={() => fileInput.current?.click()}>Import Music File</Button>
               <input ref={fileInput} type="file" accept={ACCEPT} class="hidden" data-import-file="" aria-label="Import Music File"
                 onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; (e.target as HTMLInputElement).value = ''; if (f) void importFile(f); }} />
-              <Button onClick={() => exportAs('musicxml')} disabled={doc.parts.length === 0}>Export MusicXML</Button>
-              <Button onClick={() => exportAs('mid')} disabled={doc.parts.length === 0}>Export MIDI</Button>
+              <Button onClick={() => exportAs('musicxml')} disabled={notesOnly(doc).parts.length === 0}>Export MusicXML</Button>
+              <Button onClick={() => exportAs('mid')} disabled={notesOnly(doc).parts.length === 0}>Export MIDI</Button>
+              {p.vocal && doc.parts.some(x => x.vocal) ? <Button onClick={() => void exportVocals()}>Export With Vocals</Button> : null}
             </>
           ) : null}
           <Button variant="primary" onClick={() => void save()} disabled={saving || doc.parts.length === 0}>{saving ? 'Saving…' : 'Save Draft'}</Button>

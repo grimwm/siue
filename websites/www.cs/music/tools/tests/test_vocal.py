@@ -28,5 +28,22 @@ class VocalTest(unittest.TestCase):
             self.assertEqual(problems[0].split(": ")[0], case["error"], f"{case['name']}: {problems[0]}")
 
 
+
+class ListVocalTakesTest(unittest.TestCase):
+    def test_the_ai_sees_each_vocal_lanes_takes_and_clips_but_not_the_voice(self):
+        from siue_music.studio import Studio
+        studio = Studio.__new__(Studio)
+        score = copy.deepcopy(VECTORS["score"])
+        studio.read_score = lambda piece, version=None: {"piece": piece, "version": 3, "score": score, "page": "p"}
+        out = studio.list_vocal_takes("song")
+        self.assertEqual(out["version"], 3)
+        [track] = out["tracks"]
+        self.assertEqual(track["lane"], "voice")
+        self.assertEqual([(t["seconds"], t["quality"]) for t in track["takes"]], [(6.5, "perfect"), (3, "good_to_the_ear")])
+        self.assertEqual(track["clips"][0]["at"], 1)
+        self.assertEqual(track["voice"][0]["effect"], "autotune")
+        self.assertNotIn("bytes", json.dumps(out))
+
+
 if __name__ == "__main__":
     unittest.main()

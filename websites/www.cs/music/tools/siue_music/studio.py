@@ -398,6 +398,22 @@ class Studio:
         if isinstance(version, bool) or not isinstance(version, int) or not 1 <= version <= MAX_VERSION:
             raise StudioError(f"{version!r} is not a draft version (1 to {MAX_VERSION}).")
 
+    def list_vocal_takes(self, piece: str, version: int | None = None) -> dict:
+        """A draft's Vocal Tracks, read from its score: each vocal lane's takes (file, seconds, quality) and clips (which
+        take, where it starts in the piece, the stretch of the take heard, its volume and fades). The recorded voice
+        itself stays in the studio: the AI never needs it, and changes a vocal lane only by its clips and settings."""
+        read = self.read_score(piece, version)
+        tracks = []
+        for lane in read["score"].get("lanes", []):
+            vocal = lane.get("vocal")
+            if not isinstance(vocal, dict):
+                continue
+            takes = [{"file": t["file"], "seconds": t["seconds"], "quality": "perfect" if t["file"].endswith(".flac") else "good_to_the_ear"}
+                     for t in vocal.get("takes", [])]
+            tracks.append({"lane": lane.get("id"), "name": lane.get("name"), "takes": takes, "clips": vocal.get("clips", []),
+                           "voice": lane.get("voice", []), "fx": lane.get("fx", {})})
+        return {"piece": read["piece"], "version": read["version"], "tracks": tracks, "page": read["page"]}
+
     def list_instruments(self) -> dict:
         """The studio's instruments as the composer's catalogue lists them (music/library/library.json), in picker order."""
         try:

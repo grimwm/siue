@@ -565,29 +565,27 @@ test('with a mouse, a left drag turns across and tilts up and down, the wheel zo
 test('with a mouse the compass turns and tilts the view, a click on it eases back to the start, its arrow keys steer, and Enter on it resets', async ({ page }) => {
   const errors = await openHall(page, HALL, 'no-preference');
   await dragCompass(page, 'mouse', -100, -40);
-  // The turn eases in, so it is allowed the last degree of its approach.
-  await expect.poll(async () => { const c = await cam(page); return c.pitch === 59 && Math.abs(c.yaw - 60) <= 1; },
-    'turned 60° the other way and leaned toward 45°, and left there').toBe(true);
-  const face = await compass(page);
-  expect(face.pitch).toBe(59);
-  expect(Math.abs(face.heading - 60)).toBeLessThanOrEqual(1);
+  // Every move here eases, a step a frame, and a headless browser without a GPU can draw only a few frames a second.
+  const eased = { timeout: 20_000 };
+  await expect.poll(() => cam(page), { ...eased, message: 'turned 60° the other way and leaned toward 45°, and left there' }).toEqual({ pitch: 59, yaw: 60 });
+  expect(await compass(page)).toMatchObject({ heading: 60, pitch: 59 });
   // A click (no drag) resets, eased: the view passes through the angles between on its way back.
   const seen: number[] = [];
   await page.locator('#cam-compass').click();
-  await expect.poll(async () => { const c = await cam(page); seen.push(c.yaw); return c; }, { intervals: [16] }).toEqual({ pitch: 75, yaw: 0 });
+  await expect.poll(async () => { const c = await cam(page); seen.push(c.yaw); return c; }, { ...eased, intervals: [16] }).toEqual({ pitch: 75, yaw: 0 });
   expect(seen.some(y => y > 0 && y < 60), `eased, not a jump: ${seen.join(' ')}`).toBe(true);
   await dragCompass(page, 'pen', 50, 0);
-  await expect.poll(() => cam(page), 'a pen turns it too').toEqual({ pitch: 75, yaw: -30 });
+  await expect.poll(() => cam(page), { ...eased, message: 'a pen turns it too' }).toEqual({ pitch: 75, yaw: -30 });
   await page.locator('#cam-compass').focus();
   const from = await player(page);
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('ArrowLeft');
-  await expect.poll(() => cam(page), 'the arrow keys on the compass tilt 10° and turn 15°').toEqual({ pitch: 65, yaw: -45 });
+  await expect.poll(() => cam(page), { ...eased, message: 'the arrow keys on the compass tilt 10° and turn 15°' }).toEqual({ pitch: 65, yaw: -45 });
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
-  await expect.poll(() => cam(page), 'Down tilts as far as straight down').toEqual({ pitch: 90, yaw: -45 });
+  await expect.poll(() => cam(page), { ...eased, message: 'Down tilts as far as straight down' }).toEqual({ pitch: 90, yaw: -45 });
   expect(await player(page), 'and do not move Theseus').toEqual(from);
   await page.keyboard.press('Enter');
-  await expect.poll(() => cam(page), 'Enter on the compass resets').toEqual({ pitch: 75, yaw: 0 });
+  await expect.poll(() => cam(page), { ...eased, message: 'Enter on the compass resets' }).toEqual({ pitch: 75, yaw: 0 });
   expect(errors).toEqual([]);
 });
 

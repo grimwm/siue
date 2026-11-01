@@ -390,7 +390,7 @@ test('every released level in order: Enter starts it, a win shows moves and the 
     if (i + 1 === LEVEL_IDS.length) break;
     key('Enter');
     if (within === 10) {
-      assert.equal(text('chapter-title'), ['The Winding Ways', 'The Closing Ways'][chapter - 1]);
+      assert.equal(text('chapter-title'), ['The Winding Ways', 'The Closing Ways', 'The False Walls'][chapter - 1]);
       key('Enter');
     }
   }
@@ -435,7 +435,7 @@ test('the status bar and the menu name the chapter and the level', () => {
   assert.equal(text('menu-level'), title);
   flow.closeLayers();
   game.open(LEVEL_IDS.length - 1);
-  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, 'Ch. 3 • Level 10/10');
+  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, 'Ch. 4 • Level 10/10');
 });
 
 test('I on the title opens the story card and Q opens the menu; Q again returns to the title', () => {
@@ -703,7 +703,10 @@ test('left and right in the levels list switch between the released chapters, cl
   key('d');
   assert.equal(pressed(3), 'true');
   key('d');
-  assert.equal(pressed(3), 'true', 'clamped at the last released chapter');
+  assert.equal(pressed(4), 'true');
+  key('d');
+  assert.equal(pressed(4), 'true', 'clamped at the last released chapter');
+  key('ArrowLeft');
   key('ArrowLeft');
   key('ArrowLeft');
   assert.equal(pressed(1), 'true');
@@ -911,11 +914,20 @@ test("Chapter 2's closing card goes on to Chapter 3's opening card", () => {
   assert.ok(el('chapter-enter'));
 });
 
-test("Chapter 3's closing card says Chapter 4 is not yet released, and Continue puts it away", () => {
+test("Chapter 3's closing card goes on to Chapter 4's opening card", () => {
+  reset();
+  flow.showChapter(3, true);
+  click(byId(rootOf('chapter-continue'), 'chapter-continue'));
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The False Walls');
+  assert.ok(el('chapter-enter'));
+});
+
+test("Chapter 4's closing card says Chapter 5 is not yet released, and Continue puts it away", () => {
   reset();
   const opened = game.opens;
-  flow.showChapter(3, true);
-  assert.match(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /Chapter 4 is not yet released/);
+  flow.showChapter(4, true);
+  assert.match(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /Chapter 5 is not yet released/);
   key('Enter');
   assert.equal(flow.top(), null);
   assert.equal(game.opens, opened);
@@ -1222,11 +1234,11 @@ test('winning level 10 opens the closing card over the end card; Continue goes o
   assert.equal(game.trial, 10);
 });
 
-test("winning Chapter 3's last level opens its closing card, and no Next level follows it", () => {
+test("winning Chapter 4's last level opens its closing card, and no Next level follows it", () => {
   reset();
-  win(29);
+  win(39);
   assert.equal(flow.top(), 'chapter');
-  assert.match(text('chapter-veil'), /Chapter 4 is not yet released/);
+  assert.match(text('chapter-veil'), /Chapter 5 is not yet released/);
   key('Enter');
   assert.equal(flow.top(), 'end');
   assert.equal(el('end-next'), undefined);

@@ -63,21 +63,23 @@ export function createStepCursor(start: number): StepCursor {
  */
 export function createChordGather(bpm: () => number) {
   let down: number[] = [];
-  let pitches: number[] = [];
+  /** Each key of the chord and how hard it was played. */
+  let pitches = new Map<number, number>();
   let since = 0;
   return {
-    down(pitch: number, t: number): void {
-      if (down.length === 0) { pitches = []; since = t; }
+    down(pitch: number, t: number, velocity = 90): void {
+      if (down.length === 0) { pitches = new Map(); since = t; }
       if (!down.includes(pitch)) down.push(pitch);
-      if (!pitches.includes(pitch)) pitches.push(pitch);
+      if (!pitches.has(pitch)) pitches.set(pitch, velocity);
     },
-    /** null while keys are still down; then the chord, with `held` beats when it was held, else null. */
-    up(pitch: number, t: number): { pitches: number[]; held: number | null } | null {
+    /** null while keys are still down; then the chord, low to high with each key's velocity, and `held` beats when it was held, else null. */
+    up(pitch: number, t: number): { pitches: number[]; velocities: number[]; held: number | null } | null {
       if (!down.includes(pitch)) return null;
       down = down.filter(p => p !== pitch);
       if (down.length > 0) return null;
       const seconds = t - since;
-      return { pitches: [...pitches].sort((a, b) => a - b), held: seconds > TAP_SECONDS ? snapHeld((seconds * bpm()) / 60) : null };
+      const order = [...pitches.keys()].sort((a, b) => a - b);
+      return { pitches: order, velocities: order.map(p => pitches.get(p)!), held: seconds > TAP_SECONDS ? snapHeld((seconds * bpm()) / 60) : null };
     },
     held: (): number[] => [...down],
   };

@@ -92,9 +92,13 @@ test('step: keys down together are one chord; a tap keeps the picked length, a h
   gather.down(67, 0.02);
   assert.equal(gather.up(64, 0.1), null, 'keys still down');
   assert.equal(gather.up(60, 0.15), null);
-  assert.deepEqual(gather.up(67, 0.2), { pitches: [60, 64, 67], held: null });
+  assert.deepEqual(gather.up(67, 0.2), { pitches: [60, 64, 67], velocities: [90, 90, 90], held: null });
   gather.down(62, 1);
-  assert.deepEqual(gather.up(62, 2.6), { pitches: [62], held: 1.5 }, 'held 1.6 s at 60 BPM');
+  assert.deepEqual(gather.up(62, 2.6), { pitches: [62], velocities: [90], held: 1.5 }, 'held 1.6 s at 60 BPM');
+  gather.down(67, 3, 40);
+  gather.down(60, 3.01, 110);
+  assert.deepEqual(gather.up(60, 3.1), null);
+  assert.deepEqual(gather.up(67, 3.1), { pitches: [60, 67], velocities: [110, 40], held: null }, 'each key keeps how hard it was played');
 });
 
 test('after a count-in the take starts on the downbeat, so a late first note lands late', () => {
@@ -104,4 +108,20 @@ test('after a count-in the take starts on the downbeat, so a late first note lan
   take.up(60, 12);
   assert.deepEqual(take.notes('1/4', 1, 12).map(n => [n.start, n.length]), [[1, 1]]);
   assert.equal(take.quietEnough(15.9), false);
+});
+
+test('Play Along: times are the piece\'s own seconds, laid on its beats through a tempo change', async () => {
+  const { beatClock } = await import('../src/compose/beats.ts');
+  // Bar 1 at 60 BPM (4 seconds), then 120 BPM.
+  const clock = beatClock([{ bar: 1, bpm: 60, beats: 4, unit: 4 }, { bar: 2, bpm: 120, beats: 4, unit: 4 }]);
+  const take = createLiveTake({ startBeat: 99, bpm: 60, beatsPerBar: 4, beatOf: t => clock.beat(t) });
+  take.begin(0);
+  take.down(64, 1);
+  take.up(64, 2);
+  take.down(60, 4.25);
+  take.up(60, 4.75);
+  const notes = take.notes('1/8', 1, 5);
+  assert.deepEqual(notes.map(n => [n.start, n.length, n.pitch]).sort((a, b) => a[0]! - b[0]!), [[1, 1, 64], [4.5, 1, 60]]);
+  const exact = take.notes('off', 1, 5);
+  assert.deepEqual(exact.map(n => [n.start, n.length]).sort((a, b) => a[0]! - b[0]!), [[1, 1], [4.5, 1]]);
 });

@@ -4,13 +4,18 @@
 // note below a Violin's range (red) and moves it into range, saves draft 1, hears it on the piece page, and saves
 // draft 2 from Compose. Then it shows a part as sheet music and both, imports a MuseScore file (preview, Add As New
 // Parts, Undo), exports MIDI and MusicXML, and reads the saved draft's engraved sheet music on the piece page. On a
-// phone, holding an on-screen key never moves the page, in the Both view too. SHOTS_DIR keeps screenshots.
+// phone, holding an on-screen key never moves the page, in the Both view too. Then, with a fake Web MIDI keyboard and a
+// fake microphone: Your Keyboard (asked for only when turned on, velocity, the sustain pedal, drum pads, the GM program
+// sent), Hum (the demo, the microphone, the three snaps and Replace The Part with Undo) and Play Along; and on a phone
+// a note held by the pedal never moves the page. SHOTS_DIR keeps screenshots.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { signInAt } from './music-mail.ts';
 
 const STUDENT = 'composer1@siue.edu';
+// A second student: sign-in links are limited to three an hour for each address.
+const STUDENT2 = 'composer2@siue.edu';
 const QUARTET = join(import.meta.dirname, '..', '..', 'games', 'workroom', 'test', 'fixtures', 'import', 'musescore-quartet.musicxml');
 const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
 const shots = process.env.SHOTS_DIR;
@@ -261,6 +266,186 @@ test('on a phone, holding a key never moves the page', async ({ browser, baseURL
     await page.waitForTimeout(700); // the sheet is engraved again while the key is held
     expect(await page.evaluate(() => window.scrollY)).toBe(y2);
     await page.mouse.up();
+  } finally {
+    await context.close();
+  }
+});
+
+/** A fake Web MIDI keyboard ("Yamaha P-125") and a fake microphone humming D, E and F♯, both counting when they are asked for. */
+function fakeDevices(): void {
+  const w = window as unknown as Record<string, unknown>;
+  const input = { id: 'in1', name: 'P-125', manufacturer: 'Yamaha', state: 'connected', onmidimessage: null as null | ((e: { data: Uint8Array }) => void) };
+  const sent: number[][] = [];
+  const output = { id: 'out1', name: 'P-125', manufacturer: 'Yamaha', state: 'connected', send: (d: number[]) => { sent.push([...d]); } };
+  const access = { inputs: new Map([['in1', input]]), outputs: new Map([['out1', output]]), onstatechange: null, sysexEnabled: false };
+  const asked: unknown[] = [];
+  w['__midi'] = { asked, sent, play: (bytes: number[]) => input.onmidimessage?.({ data: new Uint8Array(bytes) }) };
+  (navigator as unknown as Record<string, unknown>)['requestMIDIAccess'] = async (o: unknown) => { asked.push(o); return access; };
+  const mic = { asked: 0, tracks: [] as MediaStreamTrack[] };
+  w['__mic'] = mic;
+  navigator.mediaDevices.getUserMedia = async () => {
+    mic.asked++;
+    const ctx = new AudioContext();
+    await ctx.resume();
+    const dest = ctx.createMediaStreamDestination();
+    const osc = ctx.createOscillator();
+    const amp = ctx.createGain();
+    amp.gain.value = 0;
+    osc.connect(amp).connect(dest);
+    const t = ctx.currentTime + 0.3;
+    for (const [hz, at] of [[293.66, 0], [329.63, 0.6], [369.99, 1.2]] as const) {
+      osc.frequency.setValueAtTime(hz, t + at);
+      amp.gain.setValueAtTime(0.5, t + at);
+      amp.gain.setValueAtTime(0, t + at + 0.45);
+    }
+    osc.start();
+    mic.tracks = dest.stream.getTracks();
+    return dest.stream;
+  };
+}
+const midi = (page: Page, bytes: number[]) => page.evaluate(b => (window as unknown as { __midi: { play(b: number[]): void } }).__midi.play(b), bytes);
+
+test('a plugged-in keyboard, drum pads, Hum and Play Along', async ({ browser, baseURL }) => {
+  test.setTimeout(240_000);
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await context.addInitScript(fakeDevices);
+  try {
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) errors.push(m.text()); });
+    await signInAt(page, base, 'music', STUDENT2);
+    await page.goto(`${base}music/compose.php`);
+    await page.getByLabel('Title').fill('Keys And Hum');
+    await page.getByRole('button', { name: 'Start Composing' }).click();
+    await page.locator('[data-instrument="cello"]').click();
+    const cello = page.locator('[data-note-id]');
+
+    // Your Keyboard: Web MIDI is asked for only now, without SysEx, and the device is named as the browser reports it.
+    expect(await page.evaluate(() => (window as unknown as { __midi: { asked: unknown[] } }).__midi.asked)).toEqual([]);
+    await page.getByRole('button', { name: 'Your Keyboard: Off' }).click();
+    await expect(page.locator('[data-midi-devices]')).toHaveText('Plugged In: Yamaha P-125');
+    expect(await page.evaluate(() => (window as unknown as { __midi: { asked: unknown[] } }).__midi.asked)).toEqual([{ sysex: false }]);
+    await page.locator('[data-midi-output]').selectOption('out1');
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __midi: { sent: number[][] } }).__midi.sent)).toEqual([[0xc0, 42]]);
+
+    // Play Live from the keyboard: a soft note, a loud one, and one held by the pedal after its key comes up.
+    await page.getByRole('tab', { name: 'Play Live' }).click();
+    await midi(page, [0x90, 48, 40]);
+    await expect(page.locator('[data-midi-last]')).toHaveText('C3 · Velocity 40');
+    await page.waitForTimeout(350);
+    await midi(page, [0x80, 48, 0]);
+    await midi(page, [0x90, 50, 120]);
+    await page.waitForTimeout(350);
+    await midi(page, [0x90, 50, 0]);
+    await midi(page, [0xb0, 64, 127]);
+    await expect(page.locator('[data-pedal]')).toHaveText('Sustain Pedal: Down');
+    await midi(page, [0x90, 52, 90]);
+    await page.waitForTimeout(100);
+    await midi(page, [0x80, 52, 0]);
+    await page.waitForTimeout(600);
+    await midi(page, [0xb0, 64, 0]);
+    await expect(page.locator('[data-pedal]')).toHaveText('Sustain Pedal: Up');
+    await page.getByRole('button', { name: 'Stop Recording' }).click();
+    await expect(cello).toHaveCount(3);
+    expect(await cello.evaluateAll(els => els.map(e => [e.getAttribute('data-note'), e.getAttribute('data-velocity')]))).toEqual([['C3', '40'], ['D3', '120'], ['E3', '90']]);
+    const held = (await page.locator('[data-note="E3"]').boundingBox())!.width;
+    expect(held).toBeGreaterThan(30); // a beat, not the tenth of a second the key was down
+
+    // Drum pads: into a melody part they are not recorded; a Drum Kit part takes them, named the General MIDI way.
+    await midi(page, [0x99, 38, 100]);
+    await expect(page.locator('[data-status]')).toHaveText('Drum pads play a drum part: Add Part, then Drums & Percussion.');
+    await midi(page, [0x89, 38, 0]);
+    await page.getByRole('button', { name: 'Add Part' }).click();
+    await page.getByRole('button', { name: 'Drums & Percussion' }).click();
+    await page.locator('[data-instrument="kit"]').click();
+    await midi(page, [0x99, 38, 100]);
+    await expect(page.locator('[data-midi-last]')).toHaveText('Snare · Pad 38 · Velocity 100');
+    await midi(page, [0x89, 38, 0]);
+    await page.getByRole('button', { name: 'Stop Recording' }).click();
+    await expect(page.locator('[data-note-id]')).toHaveCount(1);
+    await expect(page.locator('[data-note-id]')).toHaveAttribute('data-velocity', '100');
+
+    // Play Live shows the other melody parts as outlines (a drum part's are not on a melody's rows).
+    await expect(page.locator('[data-ghost]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Add Part' }).click();
+    await page.locator('[data-instrument="viola"]').click();
+    await expect(page.locator('[data-ghost]')).toHaveCount(3);
+    await shot(page, 'desktop-keyboard');
+    await page.locator('[data-part="cello"]').click();
+    await expect(page.locator('[data-ghost]')).toHaveCount(0);
+
+    // Hum: the demo, snapped to all twelve notes, after the part.
+    await page.getByRole('tab', { name: 'Hum' }).click();
+    await page.locator('[data-hum-snap="all12"]').click();
+    await page.getByRole('button', { name: 'Play The Demo Hum' }).click();
+    await expect(page.locator('[data-hum-notes]')).toHaveText('D4 E4 F#4 A4', { timeout: 15_000 });
+    await shot(page, 'desktop-hum-demo');
+    await page.getByRole('button', { name: 'Add To The Part' }).click();
+    await expect(cello).toHaveCount(7);
+    await expect(page.locator('[data-status]')).toHaveText('Added 4 hummed notes at bar 2. Undo takes them back.');
+
+    // The microphone: asked for only on Record With Mic, let go when the recording stops.
+    expect(await page.evaluate(() => (window as unknown as { __mic: { asked: number } }).__mic.asked)).toBe(0);
+    await page.getByRole('button', { name: '● Record With Mic' }).click();
+    // The fake microphone hums for about 1.75 s after a 0.3 s pause: stop once the recording's clock has passed 2 s.
+    await expect(page.locator('[data-hum-stop]')).toContainText(/· [2-9] s/, { timeout: 10_000 });
+    await page.locator('[data-hum-stop]').click();
+    await expect(page.locator('[data-hum-notes]')).toHaveText('D4 E4 F#4', { timeout: 15_000 });
+    expect(await page.evaluate(() => (window as unknown as { __mic: { asked: number; tracks: MediaStreamTrack[] } }).__mic.tracks.map(t => t.readyState))).toEqual(['ended']);
+    await page.locator('[data-hum-place="replace"]').click();
+    await page.getByRole('button', { name: 'Add To The Part' }).click();
+    await expect(cello).toHaveCount(3);
+    await page.getByRole('button', { name: /^↶ Undo/ }).click();
+    await expect(cello).toHaveCount(7);
+    await page.locator('[data-hum-place="line"]').click();
+    await expect(page.locator('[data-line-handle]')).toBeVisible();
+    await shot(page, 'desktop-hum-line');
+
+    // Play Along with the other parts off: one bar of count-in, then a key lands in time with the clicks.
+    await page.getByRole('tab', { name: 'Play Live' }).click();
+    await page.getByRole('button', { name: 'Hear The Other Parts: On' }).click();
+    await page.getByRole('button', { name: '▶ Play Along' }).click();
+    await expect(page.locator('[data-live-state]')).toContainText('● Playing Along', { timeout: 10_000 });
+    await shot(page, 'desktop-play-along');
+    await hold(page, ['KeyA'], 400);
+    await page.locator('[data-along-stop]').click();
+    await expect(page.locator('[data-status]')).toHaveText('Recorded 1 note. Undo takes it back.');
+    await expect(cello).toHaveCount(8);
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+    await expect(page.locator('[data-status]')).toHaveText('Saved as draft 1.');
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('on a phone, a note held by the sustain pedal never moves the page', async ({ browser, baseURL }) => {
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 400, height: 780 }, hasTouch: true, isMobile: true });
+  await context.addInitScript(fakeDevices);
+  try {
+    const page = await context.newPage();
+    await signInAt(page, base, 'music', STUDENT2);
+    await page.goto(`${base}music/compose.php`);
+    await page.getByLabel('Title').fill('Pedal On A Phone');
+    await page.getByRole('button', { name: 'Start Composing' }).click();
+    await page.locator('[data-instrument="cello"]').click();
+    await page.getByRole('button', { name: 'Your Keyboard: Off' }).click();
+    await expect(page.locator('[data-midi-devices]')).toHaveText('Plugged In: Yamaha P-125');
+    await page.locator('[data-key="60"]').scrollIntoViewIfNeeded();
+    const y = await page.evaluate(() => window.scrollY);
+    await midi(page, [0xb0, 64, 127]);
+    await midi(page, [0x90, 60, 90]);
+    await midi(page, [0x80, 60, 0]);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(200);
+    expect(await page.evaluate(() => window.scrollY)).toBe(y);
+    await shot(page, 'phone-pedal');
+    await midi(page, [0xb0, 64, 0]);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
   } finally {
     await context.close();
   }

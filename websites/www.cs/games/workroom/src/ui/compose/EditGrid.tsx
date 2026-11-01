@@ -1,8 +1,9 @@
 // The editing grid: the selected part's notes as blocks on rows of pitch (a drum part's rows are its drums), bars across.
 // Tap a note to select it and tap it again to delete it; drag a note to move it, or its right end to stretch it; in
 // Grid mode tap an empty cell to add a note of the current length; drag across empty space (mouse or pen) to select
-// several. Notes beyond the instrument are red, notes only experts play are amber. The grid scrolls inside its own box,
-// never the page.
+// several. Notes beyond the instrument are red, notes only experts play are amber. Play Live shows the other parts as
+// outlines; Hum's dashed line is dragged by its handle in the bar row to the bar where hummed notes go. The grid
+// scrolls inside its own box, never the page.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Entry } from '../../catalogue.ts';
 import type { BeatClock } from '../../compose/beats.ts';
@@ -43,6 +44,11 @@ export interface EditGridProps {
   onResize(id: number, length: number): void;
   onAdd(start: number, pitch: number): void;
   onSelect(ids: number[]): void;
+  /** The other parts' notes, drawn as outlines behind this part's. */
+  ghosts?: readonly { start: number; length: number; pitch: number; color: string }[];
+  /** Hum's dashed line, at a bar's first beat; dragged to another bar with onLine. */
+  line?: number | null;
+  onLine?(beat: number): void;
 }
 
 type Drag =
@@ -59,6 +65,7 @@ export function EditGrid(p: EditGridProps) {
   const box = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [lineDrag, setLineDrag] = useState(false);
   const rows = gridRows(p.entry, p.notes);
   const totalBeats = p.clock.barStartBeat(p.bars + 2);
   const layout: GridLayout = { rows, rowH: ROW_H, beatW: BEAT_W, beats: totalBeats };
@@ -157,6 +164,14 @@ export function EditGrid(p: EditGridProps) {
     return () => window.removeEventListener('blur', cancel);
   }, [drag]);
 
+  // The dashed line goes to the bar nearest the pointer.
+  const lineTo = (e: PointerEvent): void => {
+    const r = area.current!.getBoundingClientRect();
+    const beat = (e.clientX - r.left) / BEAT_W;
+    let best = 1;
+    for (let bar = 1; bar <= p.bars + 1; bar++) if (Math.abs(p.clock.barStartBeat(bar) - beat) < Math.abs(p.clock.barStartBeat(best) - beat)) best = bar;
+    p.onLine?.(p.clock.barStartBeat(best));
+  };
   const width = totalBeats * BEAT_W;
   const height = rows.length * ROW_H;
   const barLines: { x: number; bar: number }[] = [];
@@ -173,6 +188,20 @@ export function EditGrid(p: EditGridProps) {
           <div class="sticky left-0 z-30 w-[76px] shrink-0 bg-panel px-2 font-mono text-[11px] leading-[22px] text-dim">Bar</div>
           <div class="relative" style={{ width: `${width}px` }}>
             {barLines.slice(0, -1).map(b => <span class="absolute top-0 border-l border-rule pl-1 font-mono text-[11px] leading-[22px] text-dim" style={{ left: `${b.x}px` }}>{b.bar}</span>)}
+            {p.line != null && p.onLine ? (
+              <span role="slider" aria-label="The Dashed Line: Bar" aria-valuemin={1} aria-valuemax={p.bars + 1} aria-valuenow={p.clock.barOfBeat(p.line)} tabIndex={0} data-line-handle=""
+                class={cx('absolute top-0 z-10 h-[22px] w-5 -translate-x-1/2 cursor-ew-resize touch-none rounded-sm bg-amber text-center font-mono text-[11px] leading-[22px] text-on-accent', lineDrag && 'outline-2 outline-ink')}
+                style={{ left: `${p.line * BEAT_W}px` }}
+                onPointerDown={e => { e.preventDefault(); (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); setLineDrag(true); }}
+                onPointerMove={e => { if (lineDrag) lineTo(e); }}
+                onPointerUp={e => { if (lineDrag) lineTo(e); setLineDrag(false); }}
+                onPointerCancel={() => setLineDrag(false)}
+                onKeyDown={e => {
+                  const bar = p.clock.barOfBeat(p.line!);
+                  if (e.key === 'ArrowLeft' && bar > 1) { e.preventDefault(); p.onLine!(p.clock.barStartBeat(bar - 1)); }
+                  if (e.key === 'ArrowRight' && bar <= p.bars) { e.preventDefault(); p.onLine!(p.clock.barStartBeat(bar + 1)); }
+                }}>⇔</span>
+            ) : null}
           </div>
         </div>
         <div class="absolute left-0 z-10" style={{ top: `${HEAD_H}px`, width: `${LABEL_W}px` }}>
@@ -188,6 +217,11 @@ export function EditGrid(p: EditGridProps) {
             style={{ top: `${i * ROW_H}px`, height: `${ROW_H}px`, width: `${width}px` }} />)}
           {beatLines.map(x => <div class="pointer-events-none absolute top-0 border-l border-rule/30" style={{ left: `${x}px`, height: `${height}px` }} />)}
           {barLines.map(b => <div class="pointer-events-none absolute top-0 border-l border-dim/60" style={{ left: `${b.x}px`, height: `${height}px` }} />)}
+          {(p.ghosts ?? []).map(g => {
+            const r = noteRect(layout, g);
+            return r ? <div data-ghost="" class="pointer-events-none absolute rounded-sm border-2 border-dashed opacity-70" style={{ left: `${r.x}px`, top: `${r.y + 2}px`, width: `${r.w}px`, height: `${r.h - 4}px`, borderColor: g.color }} /> : null;
+          })}
+          {p.line != null ? <div data-hum-line="" class="pointer-events-none absolute top-0 border-l-2 border-dashed border-amber" style={{ left: `${p.line * BEAT_W}px`, height: `${height}px` }} /> : null}
           {p.cursor !== null ? <div data-step-cursor="" class="pointer-events-none absolute top-0 border-l-2 border-dashed border-amber" style={{ left: `${p.cursor * BEAT_W}px`, height: `${height}px` }} /> : null}
           {p.notes.map(n => {
             const shown = live && live.id === n.id ? { ...n, ...live } : n;
@@ -196,7 +230,7 @@ export function EditGrid(p: EditGridProps) {
             const range = rows[rowIndex(layout, shown.pitch)]?.range ?? 'normal';
             const on = p.selected.has(n.id);
             return (
-              <button type="button" data-note-id={n.id} data-note={pitchName(n.pitch)} data-range={range} aria-pressed={on}
+              <button type="button" data-note-id={n.id} data-note={pitchName(n.pitch)} data-velocity={n.velocity} data-range={range} aria-pressed={on}
                 aria-label={`${words(n, p.clock)}${range === 'out' ? ', out of this instrument\'s range' : range === 'expert' ? ', for experts' : ''}${on ? ', selected: tap again to delete' : ''}`}
                 class={cx('absolute touch-none rounded-sm border text-left font-mono text-[10px] leading-none text-on-accent',
                   range === 'out' ? 'border-record bg-record' : range === 'expert' ? 'border-amber bg-amber' : 'border-ground/40',

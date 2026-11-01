@@ -1,6 +1,8 @@
 // The compose page (compose.php): the catalogue from the shared library, then the editor on the piece's newest draft, or
 // New Piece first. Notes sound through one AudioContext made on the first key (a browser starts sound only after a
-// gesture), from the samples the renderer decodes, so each file is fetched and decoded once for both.
+// gesture), from the samples the renderer decodes, so each file is fetched and decoded once for both. Web MIDI is asked
+// for only when Your Keyboard is turned on, and the microphone only when Record With Mic is tapped; its sound is read
+// in the page and never sent anywhere.
 import { h, render } from 'preact';
 import type { PageApi } from '../../api.ts';
 import { catalogue } from '../../catalogue.ts';
@@ -21,6 +23,7 @@ import { ThemeRoot } from '../ThemeSwitch.tsx';
 import type { ComposerFiles } from './Composer.tsx';
 import { Composer } from './Composer.tsx';
 import type { ComposerStart } from './Composer.tsx';
+import type { Heard, HumPorts, MicTake } from './HumPanel.tsx';
 import { NewPiece } from './NewPiece.tsx';
 
 export interface MountArgs {
@@ -62,6 +65,81 @@ const FILES: ComposerFiles = {
   },
 };
 
+/** A decoded sound as one channel: every channel averaged. */
+function mono(buffer: AudioBuffer): Heard {
+  const samples = new Float32Array(buffer.length);
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const ch = buffer.getChannelData(c);
+    for (let i = 0; i < ch.length; i++) samples[i]! += ch[i]! / buffer.numberOfChannels;
+  }
+  return { samples, rate: buffer.sampleRate };
+}
+
+/** Hum's microphone (MediaRecorder, decoded in the page when it stops), file decoding and playback. */
+function humPorts(context: () => AudioContext): HumPorts {
+  const decode = async (bytes: ArrayBuffer): Promise<Heard> => mono(await context().decodeAudioData(bytes.slice(0)));
+  const canRecord = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
+  return {
+    decode,
+    play(h) {
+      const ctx = context();
+      const buffer = ctx.createBuffer(1, h.samples.length, h.rate);
+      buffer.copyToChannel(h.samples as Float32Array<ArrayBuffer>, 0);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start();
+    },
+    record: canRecord ? async (level): Promise<MicTake> => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+      const ctx = context();
+      let source: MediaStreamAudioSourceNode | null = null;
+      let frame = 0;
+      const release = (): void => {
+        cancelAnimationFrame(frame);
+        source?.disconnect();
+        for (const t of stream.getTracks()) t.stop();
+      };
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream);
+      } catch (e) {
+        release();
+        throw e;
+      }
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      source = ctx.createMediaStreamSource(stream);
+      const meter = ctx.createAnalyser();
+      meter.fftSize = 1024;
+      source.connect(meter);
+      const buf = new Float32Array(meter.fftSize);
+      const listen = (): void => {
+        meter.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (const x of buf) sum += x * x;
+        level(Math.sqrt(sum / buf.length));
+        frame = requestAnimationFrame(listen);
+      };
+      frame = requestAnimationFrame(listen);
+      recorder.start(250);
+      return {
+        stop: () => new Promise<Heard>((resolve, reject) => {
+          recorder.onstop = () => {
+            release();
+            new Blob(chunks, { type: recorder.mimeType }).arrayBuffer().then(decode).then(resolve, reject);
+          };
+          recorder.stop();
+        }),
+        cancel: () => {
+          if (recorder.state !== 'inactive') { recorder.onstop = null; recorder.stop(); }
+          release();
+        },
+      };
+    } : undefined,
+  };
+}
+
 export async function mountComposer(a: MountArgs): Promise<void> {
   a.root.textContent = 'Loading…';
   let lib: Library;
@@ -97,6 +175,10 @@ export async function mountComposer(a: MountArgs): Promise<void> {
     osc.start();
     osc.stop(c.currentTime + 0.1);
   };
+  const hum = humPorts(context);
+  // Web MIDI, without SysEx, only when asked for.
+  const midi = typeof navigator !== 'undefined' && typeof navigator.requestMIDIAccess === 'function'
+    ? () => navigator.requestMIDIAccess({ sysex: false }) : undefined;
   const body = document.body.dataset;
   const taken = (): string[] => readJson<string[]>(body['pieces'], []);
   const projects = (): { id: string; name: string }[] => readJson<{ id: string; name: string }[]>(body['projects'], []);
@@ -115,7 +197,7 @@ export async function mountComposer(a: MountArgs): Promise<void> {
   const open = (start: ComposerStart): void => {
     a.root.textContent = '';
     render(h(ThemeRoot, { handle: a.theme }, h(Composer, {
-      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES,
+      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES, hum, midi,
       now: () => performance.now() / 1000,
       onSaved: piece => { history.replaceState(null, '', `compose.php?id=${encodeURIComponent(piece)}`); },
       onNewPiece: (doc, title) => {

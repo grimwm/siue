@@ -22,7 +22,11 @@ const sorted = (notes: EditNote[]): EditNote[] => [...notes].sort((a, b) => a.st
 /** Adds notes to a part (a chord is several at one start); returns the document and the new notes' ids. */
 export function addNotes(doc: EditDoc, part: string, notes: readonly NewNote[]): { doc: EditDoc; ids: number[] } {
   let next = doc.nextId;
-  const made = notes.map(n => ({ id: next++, start: n.start, length: n.length, pitch: n.pitch, velocity: n.velocity ?? NEW_VELOCITY, motif: n.motif ?? null }));
+  const made = notes.map((n): EditNote => {
+    const note: EditNote = { id: next++, start: n.start, length: n.length, pitch: n.pitch, velocity: n.velocity ?? NEW_VELOCITY, motif: n.motif ?? null };
+    if (n.bend) note.bend = n.bend.map(([f, c]): [number, number] => [f, c]);
+    return note;
+  });
   if (made.length === 0) return { doc, ids: [] };
   return { doc: { ...withPart(doc, part, p => ({ ...p, notes: sorted([...p.notes, ...made]) })), nextId: next }, ids: made.map(n => n.id) };
 }

@@ -26,8 +26,6 @@ export interface VocalPorts {
   convert(from: string, to: string, bytes: Uint8Array<ArrayBuffer>): Promise<{ status: number; data: Record<string, unknown> }>;
   /** The quality Save To Studio picks first, from Your studio. */
   quality: Quality;
-  /** The built sound at a blob address, as audio for singing over. */
-  decodeUrl(url: string): Promise<AudioBuffer>;
   /** The studio's room left, in bytes, when the page was drawn. */
   room: number;
 }

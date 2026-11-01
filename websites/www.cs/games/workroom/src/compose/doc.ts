@@ -114,8 +114,10 @@ export function scoreFromDoc(doc: EditDoc, at: SaveAs): Score {
   const notesEnd = Math.max(0, ...notes.map(n => n.start + n.length), ...doc.parts.flatMap(p => (p.vocal?.clips ?? []).map(c => round(c.at + c.to - c.from))));
   const duration = base && base.bars === bars ? round(Math.max(base.duration, notesEnd)) : fullEnd;
 
-  const laneIds = new Set(doc.parts.map(p => p.id));
-  const lanes: Lane[] = doc.parts.map(p => {
+  // A vocal part with no takes yet holds nothing to keep.
+  const parts = doc.parts.filter(p => !p.vocal || p.vocal.takes.length > 0);
+  const laneIds = new Set(parts.map(p => p.id));
+  const lanes: Lane[] = parts.map(p => {
     const lane: Lane = { id: p.id, name: p.name, family: p.family, icon: p.icon, color: p.color,
       sound: { instrument: p.instrument, gain_db: p.gain_db, attack: p.attack, release: p.release } };
     if (p.speed !== 'follow') lane.speed = clone(p.speed);

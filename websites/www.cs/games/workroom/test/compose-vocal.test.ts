@@ -89,3 +89,9 @@ test('Undo and Redo go through vocal edits', () => {
   assert.equal(clips(h.undo())[0]!.at, 1.5);
   assert.equal(clips(h.redo())[0]!.at, 5);
 });
+
+test('a vocal part with no takes yet is left out of the saved score', () => {
+  const d = { ...newDoc('Song'), parts: [newVocalPart('voice', 'My Voice', '#c0392b')] };
+  assert.equal(scoreFromDoc(withVoice(), at).lanes.length, 1);
+  assert.equal(scoreFromDoc({ ...withVoice(), parts: [...withVoice().parts, d.parts[0]!].map((p, i) => ({ ...p, id: `v${i}` })) }, at).lanes.length, 1);
+});

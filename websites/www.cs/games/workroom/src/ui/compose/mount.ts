@@ -275,6 +275,5 @@ function vocalPorts(a: MountArgs, takes: TakeStore, quality: 'perfect' | 'ear'):
     sha256: async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>))].map(b => b.toString(16).padStart(2, '0')).join(''),
     takeBytes: file => a.api.takeBytes(file),
     convert: (from, to, bytes) => a.api.convertTake(from, to, bytes),
-    decodeUrl: async url => new OfflineAudioContext(2, 1, 48000).decodeAudioData(await (await fetch(url)).arrayBuffer()),
   };
 }

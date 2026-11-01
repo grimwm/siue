@@ -493,7 +493,10 @@ export function Composer(p: ComposerProps) {
     const others: Score = { ...full, lanes: full.lanes.filter(l => l.id !== partIdNow), notes: full.notes.filter(n => n.lane !== partIdNow), motifs: [] };
     if (others.lanes.length === 0 || (others.notes.length === 0 && !others.lanes.some(l => l.vocal?.clips.length))) return null;
     const built = await p.buildSound(`vocal-${editKey(state.current.doc)}-${partIdNow}`, others, () => {});
-    return p.vocal!.decodeUrl(built.url);
+    // The built channels themselves: the page's rules let no script fetch a blob address.
+    const b = new AudioBuffer({ length: built.channels[0]!.length, numberOfChannels: built.channels.length, sampleRate: built.rate });
+    built.channels.forEach((c, i) => b.copyToChannel(c as Float32Array<ArrayBuffer>, i));
+    return b;
   };
 
   // ---- Saving ----

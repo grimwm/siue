@@ -1,5 +1,5 @@
 // The modern board's first-time hint: it waits for a quiet moment, shows once a visit on at most two visits, and goes
-// for good the first time the player moves the camera.
+// for good the first time the player moves the camera; asked for (the menu, the ? key) it shows any time, uncounted.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HINT_DELAY_MS, HINT_MAX_SHOWS, HINT_SHOW_MS, createHint, hintText, readHint } from '../src/modern/hint.ts';
@@ -67,4 +67,28 @@ test('the line speaks to fingers or to a mouse', () => {
   assert.match(hintText(true), /two fingers/);
   assert.match(hintText(true), /Tap the compass to reset/);
   assert.match(hintText(false), /^Drag to turn and tilt · Right-drag to pan/);
+});
+
+test('asked for, the hint shows at once even after the camera moved and both visits are used, and is not counted', () => {
+  const h = createHint({ shows: HINT_MAX_SHOWS, moved: true }, 0);
+  assert.equal(h.over(), true, 'it would not show by itself');
+  assert.equal(h.show(100), 'show');
+  assert.equal(h.show(200), null, 'already up');
+  assert.deepEqual(h.record(), { shows: HINT_MAX_SHOWS, moved: true }, 'not counted');
+  assert.equal(h.tick(200 + HINT_SHOW_MS - 1, false), null, 'still up, timed from the latest ask');
+  assert.equal(h.tick(200 + HINT_SHOW_MS, false), 'hide', 'goes after a while');
+  assert.equal(h.show(50_000), 'show', 'and can be asked for again');
+  assert.equal(h.moved(), 'hide', 'a camera gesture takes it away');
+  assert.equal(h.show(60_000), 'show');
+  assert.equal(h.dismiss(), 'hide', 'so does a tap on it');
+  assert.equal(h.show(70_000), 'show');
+  assert.equal(h.tick(70_001, true), 'hide', 'and a layer over the board');
+});
+
+test('asked for before it showed by itself, it shows uncounted, and does not then show by itself as well', () => {
+  const h = createHint(fresh(), 0);
+  assert.equal(h.show(10), 'show');
+  assert.equal(h.record().shows, 0);
+  assert.equal(h.tick(10 + HINT_SHOW_MS, false), 'hide');
+  assert.equal(h.tick(10 + HINT_SHOW_MS + HINT_DELAY_MS * 2, false), null);
 });

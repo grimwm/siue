@@ -7,7 +7,7 @@ import { BACK_KEY } from "../../_kit/keys.ts";
 export type MoveAction = "up" | "down" | "left" | "right";
 export type Action =
   | MoveAction
-  | "begin" | "wait" | "undo" | "restart" | "hint" | "route" | "auto" | "mute" | "new" | "menu" | "story" | "fullscreen" | "lore" | "dictionary" | "editor" | "look";
+  | "begin" | "wait" | "undo" | "restart" | "hint" | "route" | "auto" | "mute" | "new" | "menu" | "story" | "fullscreen" | "lore" | "dictionary" | "editor" | "look" | "tips";
 
 export interface KeyDef {
   /** What a button's key tab and the help text print. */
@@ -44,6 +44,8 @@ export const KEYS: Record<Action, KeyDef> = {
   editor: { label: "E", keys: ["e"] },
   /** Swaps the board between the modern and the classic look, from the strip. */
   look: { label: "B", keys: ["b"] },
+  /** Shows the view tips again, on the modern board. */
+  tips: { label: "?", keys: ["?"] },
   // Q is read with isBackKey; this row only names it.
   menu: { label: BACK_KEY, keys: [] },
 };

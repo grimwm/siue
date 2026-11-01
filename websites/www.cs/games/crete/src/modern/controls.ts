@@ -45,6 +45,8 @@ export interface ControlHost {
 export interface Controls {
   /** Shows the view on the compass: a view turned `yaw` degrees and looking down at `pitch` degrees. */
   setView(yaw: number, pitch: number): void;
+  /** Shows the view tips now, asked for (the menu's Show View Tips, the ? key). */
+  showTips(): void;
   dispose(): void;
 }
 
@@ -80,14 +82,15 @@ function button(id: string, label: string, html: string, className: string): HTM
 
 /** Wires `canvas` and puts the camera buttons in `parent`. */
 export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, host: ControlHost, camera: CamControl): Controls {
-  // The first time the camera moves, the first-time hint (hint.ts) goes for good: every control reaches the camera
-  // through here.
+  // A camera move takes the view tips (hint.ts) away, and the first one means they never show by themselves again:
+  // every control reaches the camera through here.
   let used = false;
   const touched = () => {
-    if (used) return;
-    used = true;
     const c = hint.moved();
-    saveHint();
+    if (!used) {
+      used = true;
+      saveHint();
+    }
     hintChange(c);
   };
   const cam: CamControl = {
@@ -270,6 +273,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   pill.setAttribute('role', 'status');
   parent.append(pill);
   let ticker = 0;
+  let hideTimer = 0;
+  const tick = () => hintChange(hint.tick(performance.now(), covered()));
   function saveHint(): void {
     try {
       localStorage.setItem(HINT_KEY, JSON.stringify(hint.record()));
@@ -283,18 +288,22 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     if (c === 'show') {
       const touch = lastPointer ? lastPointer !== 'mouse' : matchMedia('(pointer: coarse)').matches;
       pill.textContent = hintText(touch);
+      clearTimeout(hideTimer);
       pill.hidden = false;
       requestAnimationFrame(() => pill.classList.add('on'));
+      // Again from the start, when the tips are asked for a second time.
+      compass.classList.remove('wiggle');
+      void compass.offsetWidth;
       compass.classList.add('wiggle');
       return;
     }
     clearInterval(ticker);
     pill.classList.remove('on');
     compass.classList.remove('wiggle');
-    setTimeout(() => { pill.hidden = true; }, 300);
+    hideTimer = window.setTimeout(() => { pill.hidden = true; }, 300);
   }
   const covered = (): boolean => host.covered() || document.hidden || parent.closest('[hidden]') !== null;
-  if (!hint.over()) ticker = window.setInterval(() => hintChange(hint.tick(performance.now(), covered())), HINT_TICK_MS);
+  if (!hint.over()) ticker = window.setInterval(tick, HINT_TICK_MS);
   pill.addEventListener('click', () => hintChange(hint.dismiss()));
 
   return {
@@ -305,8 +314,17 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
       compass.dataset.heading = String(Math.round(yaw));
       compass.dataset.pitch = String(Math.round(pitch));
     },
+    showTips() {
+      const c = hint.show(performance.now());
+      if (c) {
+        clearInterval(ticker);
+        ticker = window.setInterval(tick, HINT_TICK_MS);
+      }
+      hintChange(c);
+    },
     dispose() {
       clearInterval(ticker);
+      clearTimeout(hideTimer);
       pill.remove();
       canvas.removeEventListener('pointerdown', down);
       canvas.removeEventListener('pointermove', move);

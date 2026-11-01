@@ -97,6 +97,8 @@ export interface ModernBoard {
   splashing(): number[];
   /** The Mini map setting: shows or hides the mini map. */
   minimap(on: boolean): void;
+  /** Shows the view tips by the compass now (the menu's Show View Tips, the ? key). */
+  showTips(): void;
   /** Draws the level as it stands, `cols` × `rows` squares round square (r, c), seen at 75° and north up as every
    *  level opens, onto `out` (the Map button's face); works while the board is hidden. False before a level is
    *  built. */
@@ -704,6 +706,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     minimap(on) {
       mini?.show(on);
     },
+    showTips: () => controls.showTips(),
     snapshot,
     portrait,
     dispose() {

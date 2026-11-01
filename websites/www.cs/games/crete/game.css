@@ -249,6 +249,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .pad button:focus-visible { outline-offset: -3px; z-index: 2; }
 .pad button:active:not(:disabled) { background: var(--line); }
 .pad-hub { grid-area: hub; background: var(--bg) url(fx/sprites/theseus-face.png) center / 78% no-repeat; image-rendering: pixelated; border: 1px solid var(--line); }
+#frame.look-modern .pad-hub { background-image: url(fx/sprites/theseus-face-modern.png); background-size: 92%; image-rendering: auto; }
 .mv-up { grid-area: up; border-radius: 10px 10px 0 0; }
 .mv-left { grid-area: left; border-radius: 10px 0 0 10px; }
 .mv-right { grid-area: right; border-radius: 0 10px 10px 0; }

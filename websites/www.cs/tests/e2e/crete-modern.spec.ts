@@ -379,6 +379,29 @@ test('a block sunk while the modern look is hidden floats at once when it return
   expect(errors).toEqual([]);
 });
 
+test('the movement pad\'s middle shows Theseus in the look that shows, and swaps with the Map button', async ({ page }) => {
+  const errors = await openHall(page);
+  const hub = () => page.locator('.pad-hub').evaluate(el => {
+    const cs = getComputedStyle(el);
+    return { image: cs.backgroundImage, rendering: cs.imageRendering };
+  });
+  await expect.poll(async () => (await hub()).image, 'the modern face on the modern board').toContain('theseus-face-modern.png');
+  expect((await hub()).rendering, 'drawn smooth').not.toBe('pixelated');
+  const loaded = await page.evaluate(async () => {
+    const img = new Image();
+    img.src = 'fx/sprites/theseus-face-modern.png';
+    await img.decode();
+    return img.naturalWidth;
+  });
+  expect(loaded, 'the modern face loads').toBeGreaterThan(0);
+  await page.locator('#btn-look').click();
+  await expect.poll(async () => (await hub()).image, 'the classic sprite on the classic board').toMatch(/theseus-face\.png/);
+  expect((await hub()).rendering).toBe('pixelated');
+  await page.locator('#btn-look').click();
+  await expect.poll(async () => (await hub()).image, 'and back').toContain('theseus-face-modern.png');
+  expect(errors).toEqual([]);
+});
+
 test('Walls: Ghosted is kept through a reload', async ({ page }) => {
   await openHall(page);
   await page.keyboard.press('q');

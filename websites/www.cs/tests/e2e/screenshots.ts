@@ -65,7 +65,7 @@ declare global {
 type CreteHook = {
   solve(s: unknown): { solved: boolean; line: { kind: string; dir?: string; tool?: string }[] };
   game: { run: { now: unknown } };
-  modern?: { frames(): number; active: boolean; picture(look: string, cols: number, rows: number, cell: number): string | null };
+  modern?: { frames(): number; active: boolean; picture(look: string, cols: number, rows: number, cell: number): string | null; portrait(size: number): string | null };
 };
 
 /** The CIC's nuke flies at the cursor and ends the run if it lands within
@@ -192,6 +192,12 @@ const SHOTS: Record<string, Shot> = {
         rmSync(png);
         console.log(`look picture: ${path.relative(games, jpg)}`);
       }
+      // The movement pad's middle in the modern look: the modern Theseus's face, as the classic sprite frames it.
+      const face = await page.evaluate(() => (window as unknown as { __creteTest: CreteHook }).__creteTest.modern!.portrait(160));
+      if (!face) throw new Error('crete: no modern portrait');
+      const out = path.join(dir, 'fx', 'sprites', 'theseus-face-modern.png');
+      writeFileSync(out, Buffer.from(face.slice(face.indexOf(',') + 1), 'base64'));
+      console.log(`pad face: ${path.relative(games, out)}`);
     },
   },
   cylon: {

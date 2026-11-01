@@ -490,6 +490,8 @@ function setModernOn(on: boolean): void {
   wantThumb();
   const holder = document.getElementById('board');
   holder?.classList.toggle('look-modern', on);
+  // The movement pad sits outside the board; its middle shows Theseus in the look that shows.
+  document.getElementById('frame')?.classList.toggle('look-modern', on);
   ui.setModernBoard(on);
   if (on) {
     // What happened while it was hidden shows as it is now: the board rebuilds, so nothing splashes late.
@@ -684,6 +686,14 @@ const modernHook = {
   fps: () => modern?.fps() ?? null,
   thumbMs: () => thumbMs,
   picture: lookPicture,
+  /** Theseus's modern face as a PNG data URL, `size` pixels square; null before the modern board loads. */
+  portrait(size: number): string | null {
+    if (!modern) return null;
+    const out = document.createElement('canvas');
+    out.width = out.height = size;
+    modern.portrait(out);
+    return out.toDataURL('image/png');
+  },
   get active() { return modernOn && !editorUp; },
 };
 window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };

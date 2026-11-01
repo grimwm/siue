@@ -12,7 +12,7 @@ import type { Editor } from "./editor/editor.ts";
 import { boardRows } from "./board-plan.ts";
 import type { Atlas } from "./board-plan.ts";
 import type { Game, SfxName, Stop, Tone } from "./game.ts";
-import { ENTRIES, ENTRY, backpack, locked, metId } from "./dictionary.ts";
+import { ENTRY, LISTED, backpack, cardOf, locked, metId } from "./dictionary.ts";
 import type { Entry } from "./dictionary.ts";
 import type { Met } from "./met.ts";
 import { HEARTS_LINES, nextLine } from "./hearts-lines.ts";
@@ -587,7 +587,7 @@ export function createUi(deps: UiDeps): Ui {
       tab: dictTab,
       inLevel: !!g?.run,
       held: backpack(g?.run?.now ?? null),
-      rows: ENTRIES.map((entry) => ({ entry, met: !locked(entry.id, (k) => met?.has(k) ?? false) })),
+      rows: LISTED.map((entry) => ({ entry, met: !locked(entry.id, (k) => met?.has(k) ?? false) })),
       pics: pics(),
       onTab: (t) => {
         dictTab = t;
@@ -868,8 +868,8 @@ export function createUi(deps: UiDeps): Ui {
     const stop = g.anim?.paused ?? null;
     if (stop && stop.kind === "meet" && stop !== stopNoticed) {
       stopNoticed = stop;
-      const id = stop.id;
-      shownThisTurn.add(id);
+      const id = cardOf(stop.id);
+      shownThisTurn.add(stop.id);
       meetQueue = [id, ...meetQueue.filter((x) => x !== id)];
       meetAtStop = true;
       showNextMeet();

@@ -503,6 +503,43 @@ test('the first mirror taken shows its card; the second, a banner; the Dictionar
   expect(errors).toEqual([]);
 });
 
+/** A blue key, then a red one, in a hall: one family, one first card. */
+const KEYS_HALL = ['title: Two Keys', 'intro: Two keys lie on the floor.', '', '#########', '#P.b.r.E#', '#########', ''].join('\n');
+
+test('the first key of any colour shows one Keys card naming all four colours; a key of another colour, only its banner', { tag: '@firsts' }, async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(pinClassic);
+  await page.goto(PAGE);
+  await expect(page.locator('#title-veil')).toBeVisible();
+  await page.evaluate(text => {
+    const t = (window as unknown as FirstsHook).__creteTest;
+    t.playLevel(t.parse(text), { outside: { kind: 'shared', name: 'Two Keys', best: null } });
+  }, KEYS_HALL);
+  await page.locator('#start-begin').click();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#meet-veil'), 'the blue key stops play with a card').toBeVisible();
+  await expect(page.locator('#meet-title')).toHaveText('Keys');
+  await expect(page.locator('#meet-effect')).toContainText('red, blue, yellow and green');
+  await expect(page.locator('#meet-veil .sprite-family .sprite'), 'all four keys are drawn').toHaveCount(4);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#meet-veil')).toBeHidden();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#meet-veil'), 'no card for the red key').toBeHidden();
+  await expect(page.locator('#banner .banner-row[data-entry="key-red"]'), 'its banner').toBeVisible();
+  await expect(page.locator('#banner')).toContainText('Red Key');
+  await page.keyboard.press('q');
+  await page.locator('#menu-dictionary').click();
+  await expect(page.locator('#dict-backpack .dict-row'), 'the Backpack counts each colour').toHaveCount(2);
+  await page.locator('#dict-tab-entries').click();
+  await expect(page.locator('#dict-entries .dict-row[data-entry="keys"]:not(.locked)'), 'Entries lists Keys once, open').toHaveCount(1);
+  await expect(page.locator('#dict-entries .dict-row[data-entry^="key-"]'), 'and no colour on its own').toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 /* ---- the false walls: a fake wall is walked through on one move, an invisible wall's bump costs no turn ---- */
 const FALSE_WALLS = ['title: Two False Walls', 'intro: One painted, one unseen.', '', '########', '#PW.I.E#', '#......#', '########', ''].join('\n');
 

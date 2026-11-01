@@ -20,7 +20,7 @@ import { SLIDE_MS } from '../src/board-plan.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import type { Board } from '../src/board.ts';
 import type { Progress } from '../src/progress.ts';
-import { ENTRIES, HIDDEN } from '../src/dictionary.ts';
+import { ENTRIES, HIDDEN, LISTED } from '../src/dictionary.ts';
 import { solve } from '../src/puzzle/solver.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { trialLevel } from '../src/puzzle/trials.ts';
@@ -148,6 +148,26 @@ test('the toggle button on Chapter 1 level 6: its first press is a card, once; a
   assert.equal(flow.top(), null, 'met in this browser: never a card again');
 });
 
+test('the keys are one first card: the first of any colour shows Keys with all four colours; the next colour is a banner', () => {
+  open(['#########', '#Pbr.ygE#', '#########']);
+  closeAll();
+  right();
+  assert.equal(flow.top(), 'meet', 'the first key, blue, stops play with a card');
+  assert.equal(text('meet-root', 'meet-title'), 'Keys');
+  assert.match(text('meet-root', 'meet-effect'), /red, blue, yellow and green/);
+  const pictures = walk(byId(root('meet-root'), 'meet-veil')).filter(n => n.className.split(' ').includes('sprite'));
+  assert.equal(pictures.length, 4, 'the card draws all four keys');
+  key('Enter');
+  right();
+  assert.equal(flow.top(), null, 'a red key after it shows no card');
+  assert.deepEqual(bannerIds(), ['key-red'], 'but its own banner');
+  assert.match(byId(root('banner-root'), 'banner').textContent, /Opens one red door/);
+  game.press({ kind: 'move', dir: 'right' });
+  right();
+  assert.equal(flow.top(), null, 'nor a yellow');
+  assert.deepEqual(bannerIds(), ['key-yellow']);
+});
+
 test('an animated turn stops where the figure takes a first, and goes on when its card closes', () => {
   open(['#########', '#P==z=.E#', '#########'], { animated: true });
   closeAll();
@@ -234,7 +254,7 @@ function entries(): Record<string, boolean> {
   dictionary();
   click(byId(root('dict-root'), 'dict-tab-entries'));
   const rows = walk(byId(root('dict-root'), 'dict-entries')).filter(n => n.className.startsWith('dict-row'));
-  assert.equal(rows.length, ENTRIES.length);
+  assert.equal(rows.length, LISTED.length);
   for (const n of rows.filter(r => r.getAttribute('data-locked') === 'true')) assert.equal(n.textContent, '???', 'a locked row gives nothing away');
   const out = Object.fromEntries(rows.map(n => [n.getAttribute('data-entry')!, n.getAttribute('data-locked') === 'true']));
   key('q');
@@ -246,7 +266,7 @@ test('Entries: every hazard and tile open from the start but the hidden walls, u
   open(['########', '#PzWI.E#', '########']);
   closeAll();
   let locks = entries();
-  for (const e of ENTRIES) assert.equal(locks[e.id], e.kind === 'item' || HIDDEN.has(e.id), `${e.id} at the start`);
+  for (const e of LISTED) assert.equal(locks[e.id], e.kind === 'item' || HIDDEN.has(e.id), `${e.id} at the start`);
   for (const id of ['block', 'water', 'ice', 'glider', 'minotaur', 'teleport', 'button']) assert.equal(locks[id], false, `${id} is readable unmet`);
   right();
   key('Enter');
@@ -276,6 +296,6 @@ test('pictures follow the look: Classic draws the atlas sprite, Modern the pre-r
   dictionary();
   click(byId(root('dict-root'), 'dict-tab-entries'));
   const pics = walk(byId(root('dict-root'), 'dict-entries')).filter(n => n.className.split(' ').includes('sprite')).map(n => n.getAttribute('data-look'));
-  assert.equal(pics.length, ENTRIES.length);
+  assert.equal(pics.length, LISTED.reduce((n, e) => n + (e.members?.length ?? 1), 0), 'a family draws each member');
   assert.ok(pics.every(l => l === 'modern'), 'every Entries picture is Modern');
 });

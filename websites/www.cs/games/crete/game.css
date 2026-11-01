@@ -385,6 +385,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .sprite-layer { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: url(fx/sprites/tiles.png) no-repeat; }
 .sprite.locked .sprite-layer:not(.sprite-floor) { filter: brightness(0); opacity: 0.8; }
 .sprite.locked .sprite-floor { opacity: 0.35; }
+.sprite-family { display: inline-flex; flex: none; flex-wrap: wrap; align-content: flex-start; }
 /* A Modern icon (fx/sprites/modern-icons.webp): one cell of the sheet, sized to the picture. */
 .modern-layer { background-image: url(fx/sprites/modern-icons.webp); transform: none; }
 

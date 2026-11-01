@@ -13,7 +13,14 @@ from .studio import Studio, StudioError
 
 INSTRUCTIONS = """siue-music: the person's private SIUE music studio. The person listens to drafts of their pieces in the studio's
 web page and sends notes (typed text, spoken notes, hums, reactions, drawn energy curves); you make the drafts.
-A draft is one score.json (schema 1): the page builds its sound, sheet music and sound picture from it.
+A draft is one score.json (schema 1, or schema 2 when it uses any of the fields below): the page builds its sound,
+sheet music and sound picture from it. Notes are always in seconds. Schema 2 adds, all optional:
+piece_tempo (the tempo line: marks of bar, bpm and shape steady/speed_up/slow_down; `tempo` must then give the line's
+BPM in every bar, a ramp moving by bar), lane.speed ("follow", {"ratio": 0.5|0.666667|1|1.5|2} or {"bpm": n}),
+lane.dynamics (loudness marks of bar, level 32/48/64/80/100/120 and shape steady/louder/softer; a note's velocity is
+scaled by level/80), note.bend ([seconds from the note's start, cents] pairs, 2 to 64), lane.fx (volume_db, pan, eq,
+echo, shimmer, warmth, brightness, even_out, room, mute, solo), lane.voice (up to 4 of vocoder, autotune, harmonizer,
+pitch, talkbox, robot, whisper), mix.room ({preset, amount}) and mix.limiter ({on, ceiling_db}).
 
 First call studio_status. When it says "Not paired yet", tell the person the pairing code it gives and where to type it.
 When the person asks for their siue-music pairing code, call studio_status and give them the code.
@@ -62,7 +69,7 @@ def build(studio: Studio) -> MCPServer:
 
     @server.tool(structured_output=True)
     def publish_draft(score: dict[str, Any]) -> dict[str, Any]:
-        """Publishes a score.json (schema 1) as draft score.draft of piece score.piece.id. It is checked first as the page
+        """Publishes a score.json (schema 1 or 2) as draft score.draft of piece score.piece.id. It is checked first as the page
         checks it (every lane needs a sound whose instrument list_instruments gives, and a mix); a published version is never
         replaced, so publish the next number. The draft appears in the studio at once; the answer gives its page."""
         return _answer(lambda: studio.publish_draft(score))

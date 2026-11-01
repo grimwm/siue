@@ -343,7 +343,7 @@ class Studio:
         """Checks the score as the page does (the page's glossary, the site's instrument library), then publishes it as
         draft score.draft of piece score.piece.id. A studio stores the score alone: the page builds its sound."""
         if not isinstance(score, dict):
-            raise StudioError("score must be a score.json object (schema 1).")
+            raise StudioError("score must be a score.json object (schema 1 or 2).")
         problems = validate(score, _glossary(), self._instruments())
         if problems:
             raise StudioError(f"The score is not valid: {problems[0]}. Nothing was published.")

@@ -17,6 +17,15 @@ FAMILIES = ("strings", "brass", "woodwinds", "percussion", "choir", "keys", "syn
 UNITS = (1, 2, 4, 8, 16)
 AUDIO_TYPES = {"audio.webm": "audio/webm; codecs=opus", "audio.m4a": "audio/mp4; codecs=mp4a.40.2"}
 EPS = 1e-9
+SCHEMAS = (1, 2)
+SPEED_RATIOS = (0.5, 0.666667, 1, 1.5, 2)
+LEVELS = (32, 48, 64, 80, 100, 120)
+SWEEPS = ("off", "slow", "fast")
+ROOMS = ("dry", "small_room", "concert_hall", "cathedral", "cave")
+HARMONY_VOICES = ("third", "fifth", "octave_up", "octave_down")
+VOICE_EFFECTS = ("vocoder", "autotune", "harmonizer", "pitch", "talkbox", "robot", "whisper")
+MAX_VOICE_FX = 4
+MAX_BEND_POINTS = 64
 
 
 class _Fail(Exception):
@@ -112,7 +121,7 @@ def validate(obj: object, glossary_ids: frozenset[str], instrument_ids: frozense
     as parseScore does before the page has the library."""
     if not isinstance(obj, dict):
         return ["score: must be an object"]
-    if obj.get("schema") != 1 or isinstance(obj.get("schema"), bool):
+    if obj.get("schema") not in SCHEMAS or isinstance(obj.get("schema"), bool):
         return [f"schema: this draft uses score schema {obj.get('schema')}, which this tool does not know"]
     try:
         _build(obj, glossary_ids, instrument_ids)
@@ -122,6 +131,16 @@ def validate(obj: object, glossary_ids: frozenset[str], instrument_ids: frozense
 
 
 def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None) -> None:
+    schema = r["schema"]
+
+    def v2(o, key, path):
+        """A schema 2 field on a schema 1 score is refused, so a writer that uses one says schema 2."""
+        if key not in o:
+            return False
+        if schema != 2:
+            _fail(key if path == "" else f"{path}.{key}", "needs schema 2")
+        return True
+
     kind = _one_of(r.get("kind"), "kind", KINDS)
     music = kind == "music"
     pr = _obj(r.get("project"), "project")
@@ -156,6 +175,7 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
             if isinstance(unit, bool) or not _is_num(unit) or unit not in UNITS:
                 _fail(f"{p}.unit", "must be one of 1, 2, 4, 8, 16")
             tempo.append((bar, bpm, beats))
+        steps = tempo
         for i, (bar, _, _) in enumerate(tempo):
             if (bar != 1) if i == 0 else (bar <= tempo[i - 1][0]):
                 _fail(f"tempo[{i}].bar", "the first tempo must start at bar 1" if i == 0 else "bars must increase")
@@ -168,6 +188,9 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
     else:
         _absent(r, "bars", "", "a sound piece has no bars")
         _absent(r, "tempo", "", "a sound piece has no tempo")
+        _absent(r, "piece_tempo", "", "a sound piece has no tempo")
+    if music and v2(r, "piece_tempo", ""):
+        _tempo_line(r["piece_tempo"], bars, steps)
 
     _sections(r.get("sections"), music, bars, duration)
     lanes = []
@@ -183,12 +206,33 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
         if o.get("sound") is not None:
             _sound(o["sound"], f"{p}.sound", instruments)
         has_sound.append(o.get("sound") is not None)
+        if v2(o, "speed", p):
+            _speed(o["speed"], f"{p}.speed")
+        if v2(o, "dynamics", p):
+            if not music:
+                _fail(f"{p}.dynamics", "a sound piece has no bars for a loudness line")
+            _dynamics(o["dynamics"], f"{p}.dynamics", bars)
+        if v2(o, "fx", p):
+            _fx(o["fx"], f"{p}.fx")
+        lanes[-1]["voice"] = _voice(o["voice"], f"{p}.voice") if v2(o, "voice", p) else []
     _unique(lanes, "lanes")
+    for i, lane in enumerate(lanes):
+        for j, v in enumerate(lane["voice"]):
+            if v["effect"] in ("vocoder", "talkbox") and (v["carrier"] == lane["id"] or not any(x["id"] == v["carrier"] for x in lanes)):
+                _fail(f"lanes[{i}].voice[{j}].carrier", "must be the id of another lane")
     mix = r.get("mix")
     if mix is not None:
         mo = _obj(mix, "mix")
         _one_of(mo.get("style"), "mix.style", MIX_STYLES)
         _range(mo.get("loudness"), "mix.loudness", -30, -10)
+        if v2(mo, "room", "mix"):
+            ro = _obj(mo["room"], "mix.room")
+            _one_of(ro.get("preset"), "mix.room.preset", ROOMS)
+            _range(ro.get("amount"), "mix.room.amount", 0, 1)
+        if v2(mo, "limiter", "mix"):
+            lo = _obj(mo["limiter"], "mix.limiter")
+            _bool(lo.get("on"), "mix.limiter.on")
+            _range(lo.get("ceiling_db"), "mix.limiter.ceiling_db", -12, 0)
     renderable = mix is not None and all(has_sound)
     lane_ids = {l["id"] for l in lanes}
 
@@ -235,6 +279,8 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
         mo = o.get("motif")
         if not (mo is None or (isinstance(mo, str) and mo in motif_ids)):
             _fail(f"{p}.motif", "must be a motif id or null")
+        if v2(o, "bend", p):
+            _bend(o["bend"], f"{p}.bend", length)
 
     energy = []
     for i, pt in enumerate(_arr(r.get("energy"), "energy", 2)):
@@ -310,6 +356,217 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
         for j, x in enumerate(_arr(o.get("answers"), f"{p}.answers")):
             if not (isinstance(x, str) and ANSWER_RE.fullmatch(x)):
                 _fail(f"{p}.answers[{j}]", "must be a note id (32 hex digits)")
+
+
+def _bool(v, path):
+    return v if isinstance(v, bool) else _fail(path, "must be true or false")
+
+
+def tempo_line_bpm(marks, bar):
+    """The tempo line's BPM in bar `bar`: a ramp moves linearly by bar toward the next mark, rounded to 0.01 BPM."""
+    i = 0
+    while i + 1 < len(marks) and marks[i + 1]["bar"] <= bar:
+        i += 1
+    m = marks[i]
+    if m["shape"] == "steady" or i + 1 == len(marks):
+        return m["bpm"]
+    n = marks[i + 1]
+    return math.floor((m["bpm"] + (n["bpm"] - m["bpm"]) * (bar - m["bar"]) / (n["bar"] - m["bar"])) * 100 + 0.5) / 100
+
+
+def _marks(v, path, bars, value, key, shapes, up, down):
+    """Marks in bar order from bar 1, each with a value and a shape; a moving shape needs the next mark to move that way, the last holds."""
+    out = []
+    for i, m in enumerate(_arr(v, path, 1)):
+        p = f"{path}[{i}]"
+        o = _obj(m, p)
+        out.append({"bar": _int(o.get("bar"), f"{p}.bar", 1, bars), key: value(o.get(key), f"{p}.{key}"),
+                    "shape": _one_of(o.get("shape"), f"{p}.shape", shapes)})
+    for i, m in enumerate(out):
+        nxt = out[i + 1] if i + 1 < len(out) else None
+        if (m["bar"] != 1) if i == 0 else (m["bar"] <= out[i - 1]["bar"]):
+            _fail(f"{path}[{i}].bar", "the first mark must be at bar 1" if i == 0 else "bars must increase")
+        if nxt is None and m["shape"] != shapes[0]:
+            _fail(f"{path}[{i}].shape", f"the last mark must be {shapes[0]}")
+        if nxt is not None and m["shape"] == up and not nxt[key] > m[key]:
+            _fail(f"{path}[{i}].shape", f"{up} needs the next mark above it")
+        if nxt is not None and m["shape"] == down and not nxt[key] < m[key]:
+            _fail(f"{path}[{i}].shape", f"{down} needs the next mark below it")
+    return out
+
+
+def _tempo_line(v, bars, steps) -> None:
+    marks = _marks(v, "piece_tempo", bars, lambda x, p: _range(x, p, 20, 400), "bpm", ("steady", "speed_up", "slow_down"), "speed_up", "slow_down")
+    for bar in range(1, bars + 1):
+        want = tempo_line_bpm(marks, bar)
+        bpm = steps[0][1]
+        for b, x, _ in steps:
+            if b <= bar:
+                bpm = x
+        if abs(bpm - want) > 0.005:
+            _fail("tempo", f"must be {want} BPM in bar {bar}, as piece_tempo says")
+
+
+def _level(x, p):
+    return x if _is_num(x) and x in LEVELS else _fail(p, f"must be one of {', '.join(str(l) for l in LEVELS)}")
+
+
+def _dynamics(v, path, bars) -> None:
+    _marks(v, path, bars, _level, "level", ("steady", "louder", "softer"), "louder", "softer")
+
+
+def _speed(v, path) -> None:
+    if v == "follow":
+        return
+    if not isinstance(v, dict):
+        _fail(path, 'must be "follow", {ratio} or {bpm}')
+    if "ratio" in v and "bpm" not in v:
+        r = _num(v["ratio"], f"{path}.ratio")
+        if not any(abs(x - r) < 1e-6 for x in SPEED_RATIOS):
+            _fail(f"{path}.ratio", f"must be one of {', '.join(str(x) for x in SPEED_RATIOS)}")
+    elif "bpm" in v and "ratio" not in v:
+        _range(v["bpm"], f"{path}.bpm", 20, 400)
+    else:
+        _fail(path, 'must be "follow", {ratio} or {bpm}')
+
+
+def _bend(v, path, length) -> None:
+    pts = _arr(v, path, 2)
+    if len(pts) > MAX_BEND_POINTS:
+        _fail(path, f"must have at most {MAX_BEND_POINTS} points")
+    times = []
+    for i, pt in enumerate(pts):
+        p = f"{path}[{i}]"
+        if not isinstance(pt, list) or len(pt) != 2:
+            _fail(p, "must be a [seconds, cents] pair")
+        times.append(_num(pt[0], f"{p}[0]"))
+        _range(pt[1], f"{p}[1]", -1200, 1200)
+    for i, t in enumerate(times):
+        if (t != 0) if i == 0 else (t <= times[i - 1]):
+            _fail(f"{path}[{i}][0]", "the first time must be 0" if i == 0 else "times must increase")
+        if t > length + EPS:
+            _fail(f"{path}[{i}][0]", f"must be within the note ({length} seconds)")
+
+
+def _settings(v, path, rules):
+    """An object of only the keys listed; each present one checked by its own rule."""
+    o = _obj(v, path)
+    out = {}
+    for k in o:
+        if k not in rules:
+            _fail(f"{path}.{k}", f"is not a setting ({', '.join(rules)})")
+        out[k] = rules[k](o[k], f"{path}.{k}")
+    return out
+
+
+def _span(lo, hi):
+    return lambda x, p: _range(x, p, lo, hi)
+
+
+def _whole(lo, hi):
+    return lambda x, p: _int(x, p, lo, hi)
+
+
+def _fx(v, path) -> None:
+    _settings(v, path, {
+        "volume_db": _span(-60, 12), "pan": _span(-1, 1),
+        "eq": lambda x, p: _settings(x, p, {"bass": _span(-12, 12), "middle": _span(-12, 12), "treble": _span(-12, 12)}),
+        "echo": lambda x, p: _settings(x, p, {"amount": _span(0, 1), "repeats": _whole(1, 8), "beats": _span(0.25, 2)}),
+        "shimmer": _span(0, 1), "warmth": _span(0, 1),
+        "brightness": lambda x, p: _settings(x, p, {"cutoff": _span(0, 1), "sweep": lambda y, q: _one_of(y, q, SWEEPS)}),
+        "even_out": _span(0, 1), "room": _span(0, 1), "mute": _bool, "solo": _bool,
+    })
+
+
+def _harmony(x, q):
+    vs = [_one_of(y, f"{q}[{j}]", HARMONY_VOICES) for j, y in enumerate(_arr(x, q, 1))]
+    if len(vs) > 3 or len(set(vs)) != len(vs):
+        _fail(q, "must be 1 to 3 different voices")
+    return vs
+
+
+VOICE_RULES = {
+    "vocoder": {"carrier": _id, "bands": _whole(8, 32)},
+    "autotune": {"strength": _span(0, 1), "retune_ms": _span(0, 400)},
+    "harmonizer": {"voices": _harmony, "mix": _span(0, 1)},
+    "pitch": {"semitones": _span(-12, 12), "formant": _span(-12, 12)},
+    "talkbox": {"carrier": _id, "mix": _span(0, 1)},
+    "robot": {"mix": _span(0, 1)},
+    "whisper": {"mix": _span(0, 1)},
+}
+
+
+def _voice(v, path):
+    items = _arr(v, path)
+    if len(items) > MAX_VOICE_FX:
+        _fail(path, f"must have at most {MAX_VOICE_FX} effects")
+    out = []
+    for i, e in enumerate(items):
+        p = f"{path}[{i}]"
+        o = _obj(e, p)
+        effect = _one_of(o.get("effect"), f"{p}.effect", VOICE_EFFECTS)
+        rest = {k: x for k, x in o.items() if k != "effect"}
+        got = _settings(rest, p, VOICE_RULES[effect])
+        for k in VOICE_RULES[effect]:
+            if k not in got:
+                _fail(f"{p}.{k}", f"is needed for {effect}")
+        out.append({"effect": effect, **got})
+    return out
+
+
+def _bar_starts(tempo, bars):
+    """Seconds at which each bar (1 to bars + 1) starts, by the step tempo list."""
+    starts, t, at = {1: 0.0}, 0.0, tempo[0]
+    for b in range(1, bars + 1):
+        for x in tempo:
+            if x["bar"] <= b:
+                at = x
+        t += at["beats"] * 60 / at["bpm"]
+        starts[b + 1] = t
+    return starts
+
+
+def level_at(score, lane, seconds):
+    """A lane's loudness level at `seconds`: a steady mark holds; Get Louder and Get Softer move linearly in seconds
+    from the mark's bar start to the next mark's. None when the lane has no line. Matches levelAt in render/plan.ts."""
+    marks = lane.get("dynamics")
+    if not marks:
+        return None
+    last = max(m["bar"] for m in marks)
+    starts = _bar_starts(score["tempo"], max(score["bars"], last))
+    i = 0
+    while i + 1 < len(marks) and starts[marks[i + 1]["bar"]] <= seconds + 1e-9:
+        i += 1
+    m = marks[i]
+    if m["shape"] == "steady" or i + 1 == len(marks):
+        return m["level"]
+    n = marks[i + 1]
+    a, b = starts[m["bar"]], starts[n["bar"]]
+    return m["level"] + (n["level"] - m["level"]) * (seconds - a) / (b - a)
+
+
+def effective_velocity(velocity, level):
+    """A note's velocity scaled by its lane's loudness level (Fairly Loud, 80, leaves it as it is), held to 1..127."""
+    if level is None:
+        return velocity
+    return max(1, min(127, math.floor(velocity * level / 80 + 0.5)))
+
+
+def bend_rate(bend, t):
+    """The playback-rate multiplier a bend gives `t` seconds into its note: linear in cents between points, held past the ends."""
+    if not bend:
+        return 1.0
+    if t <= bend[0][0]:
+        c = bend[0][1]
+    elif t >= bend[-1][0]:
+        c = bend[-1][1]
+    else:
+        c = bend[-1][1]
+        for (t0, c0), (t1, c1) in zip(bend, bend[1:]):
+            if t0 <= t <= t1:
+                c = c0 + (c1 - c0) * (t - t0) / (t1 - t0)
+                break
+    return 2 ** (c / 1200)
 
 
 def _sound(v, path, instruments) -> None:

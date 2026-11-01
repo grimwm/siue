@@ -7,6 +7,9 @@ namespace Music;
 
 final class DraftCheck
 {
+    /** The score schemas the page reads (games/workroom/src/score.ts SCHEMAS). */
+    public const SCHEMAS = [1, 2];
+
     /** @return array<string, string>|null name => bytes, or null for a malformed bundle */
     public static function parseBundle(string $body): ?array
     {
@@ -70,7 +73,7 @@ final class DraftCheck
             return 'missing_file';
         }
         $score = json_decode($files['score.json'], true);
-        if (!is_array($score) || ($score['schema'] ?? null) !== 1
+        if (!is_array($score) || !in_array($score['schema'] ?? null, self::SCHEMAS, true)
             || !is_array($score['piece'] ?? null) || ($score['piece']['id'] ?? null) !== $piece
             || ($score['draft'] ?? null) !== $version
             || !in_array($score['kind'] ?? null, Store::KINDS, true)

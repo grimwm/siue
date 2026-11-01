@@ -9,7 +9,7 @@
  * (controls.ts) turn, pan and zoom it, and the mini map (minimap.ts), when the Mini map setting is on, shows what it sees. A wall that hides Theseus fades
  * in every walls mode; in Ghosted, one that hides any figure or piece fades too. The floating markers are drawn
  * over the finished picture, slid inside the view when their piece shows but they would not. */
-import { ACESFilmicToneMapping, Color, Group, NoToneMapping, OrthographicCamera, PCFSoftShadowMap, SRGBColorSpace, Scene, Vector3, WebGLRenderTarget, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, Box3, Color, DirectionalLight, Group, HemisphereLight, NoToneMapping, OrthographicCamera, PCFSoftShadowMap, SRGBColorSpace, Scene, Vector3, WebGLRenderTarget, WebGLRenderer } from 'three';
 import type { Object3D } from 'three';
 import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
@@ -28,7 +28,7 @@ import { createMinimap } from './minimap.ts';
 import { SURFACES, placed, terrainModel } from './model-names.ts';
 import type { TerrainModel } from './model-names.ts';
 import { DOWN_MS, createLadder, frameSample, measure, rate, rewarm } from './quality.ts';
-import { createActors } from './scene/figures.ts';
+import { FIGURE_MODELS, createActors } from './scene/figures.ts';
 import { createFloats } from './scene/float.ts';
 import { FY, cellX, cellZ, createFloor } from './scene/floor.ts';
 import { createMarkers } from './scene/markers.ts';
@@ -101,6 +101,9 @@ export interface ModernBoard {
    *  level opens, onto `out` (the Map button's face); works while the board is hidden. False before a level is
    *  built. */
   snapshot(out: HTMLCanvasElement, r: number, c: number, cols: number, rows: number): boolean;
+  /** Draws Theseus's head and shoulders, facing the viewer, on a clear background onto `out`: the movement pad's
+   *  middle in this look (fx/sprites/theseus-face-modern.png, made by tests/e2e/screenshots.ts). */
+  portrait(out: HTMLCanvasElement): void;
   dispose(): void;
 }
 
@@ -391,6 +394,44 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     return true;
   }
 
+  function portrait(out: HTMLCanvasElement): void {
+    const w = out.width, h = out.height;
+    const stage = new Scene();
+    const hero = FIGURE_MODELS.theseus(kit);
+    stage.add(hero, new HemisphereLight(0xfff1dc, 0x2a1d12, 1.6));
+    const key = new DirectionalLight(0xffe2b8, 2.4);
+    key.position.set(1.5, 3, 4);
+    stage.add(key);
+    const box = new Box3().setFromObject(hero);
+    // Head to waist, arms and axe in, with a little room over his head, seen a little from his right and from
+    // above, as the board sees him.
+    const top = box.max.y, span = Math.max(box.max.y - box.min.y, box.max.x - box.min.x) * 0.8, cx = (box.min.x + box.max.x) / 2;
+    const cz = (box.min.z + box.max.z) / 2, cy = top - span * 0.46;
+    const cam = new OrthographicCamera(-span / 2, span / 2, span / 2, -span / 2, 0.1, 50);
+    cam.position.set(cx + 3, cy + 3, cz + 9);
+    cam.lookAt(cx, cy, cz);
+    cam.updateMatrixWorld();
+    const target = new WebGLRenderTarget(w, h);
+    target.texture.colorSpace = SRGBColorSpace;
+    const pixels = new Uint8Array(w * h * 4);
+    const clear = renderer.getClearAlpha();
+    renderer.setClearColor(0x000000, 0);
+    renderer.toneMapping = ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.4;
+    renderer.setRenderTarget(target);
+    renderer.clear();
+    renderer.render(stage, cam);
+    renderer.setRenderTarget(null);
+    renderer.toneMapping = NoToneMapping;
+    renderer.setClearColor(BACKGROUND, clear);
+    renderer.readRenderTargetPixels(target, 0, 0, w, h, pixels);
+    target.dispose();
+    disposeModel(hero, kit);
+    const img = new ImageData(w, h);
+    for (let y = 0; y < h; y++) img.data.set(pixels.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+    out.getContext('2d')!.putImageData(img, 0, 0);
+  }
+
   function resize(): void {
     const w = host.canvas.clientWidth, h = host.canvas.clientHeight;
     if (w <= 0 || h <= 0) return;
@@ -664,6 +705,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       mini?.show(on);
     },
     snapshot,
+    portrait,
     dispose() {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;

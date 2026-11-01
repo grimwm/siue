@@ -1,7 +1,9 @@
 // Play Live: keys pressed and released as they are played, in seconds from any clock, turned into notes. The first key
 // down is the take's start beat; a key held down sets its note's length, the way a piano does. Keys that go down within
 // CHORD_SECONDS of one another are one chord and share a start. When recording stops the starts snap to "Tidy To" and
-// the held lengths to the nearest musical length, or stay exactly as played with Off. DOM-free.
+// the held lengths to the nearest musical length, or stay exactly as played with Off. Play Along hands in `beatOf`: its
+// times are then the piece's own seconds (the playback's clock), laid on the piece's beats through every tempo change.
+// DOM-free.
 import { snapHeld, snapStart } from './snap.ts';
 import type { Grid } from './snap.ts';
 import type { NewNote } from './edit.ts';
@@ -25,7 +27,7 @@ export interface LiveTake {
 
 interface Played { pitch: number; velocity: number; down: number; up: number | null; chordAt: number }
 
-export function createLiveTake(o: { startBeat: number; bpm: number; beatsPerBar: number }): LiveTake {
+export function createLiveTake(o: { startBeat: number; bpm: number; beatsPerBar: number; beatOf?: (seconds: number) => number }): LiveTake {
   const played: Played[] = [];
   let first: number | null = null;
   let chordAt = -Infinity;
@@ -50,6 +52,13 @@ export function createLiveTake(o: { startBeat: number; bpm: number; beatsPerBar:
     started: () => first !== null,
     quietEnough: t => first !== null && played.every(p => p.up !== null) && beats(t - lastUp) >= o.beatsPerBar - 1e-9,
     notes: (tidy, quarter, t) => played.map(p => {
+      if (o.beatOf) {
+        const at = o.beatOf(p.chordAt);
+        const held = o.beatOf(p.up ?? Math.max(t, p.down)) - o.beatOf(p.down);
+        return tidy === 'off'
+          ? { start: at, length: Math.max(held, 1e-3), pitch: p.pitch, velocity: p.velocity }
+          : { start: snapStart(at, tidy, quarter), length: snapHeld(held), pitch: p.pitch, velocity: p.velocity };
+      }
       const start = o.startBeat + Math.max(0, beats(p.chordAt - first!));
       const length = beats((p.up ?? Math.max(t, p.down)) - p.down);
       return tidy === 'off'

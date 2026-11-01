@@ -112,6 +112,15 @@ let rafCb: FrameRequestCallback | undefined;
 let acState: AudioContextState | undefined;
 Object.defineProperty(globalThis, 'navigator',
   { value: { clipboard: { writeText: async (t: string) => { copied = t; } } }, configurable: true });
+// The room puzzle's WebCrypto, answered at once. Node's real PBKDF2 settles on its thread pool, after however many
+// ticks a busy runner takes, so a host or join could land after the checks that wait for it with tick(). A key
+// derived as all zero bits solves any puzzle; test/pow.test.ts checks the real solve.
+const realCrypto = globalThis.crypto;
+Object.defineProperty(globalThis, 'crypto', { value: {
+  getRandomValues: realCrypto.getRandomValues.bind(realCrypto),
+  randomUUID: realCrypto.randomUUID.bind(realCrypto),
+  subtle: { importKey: async () => ({}), deriveBits: async () => new ArrayBuffer(32) },
+}, configurable: true });
 global.requestAnimationFrame = cb => { rafCb = cb; return 1; };
 // Fake WebAudio: proves the synth + scheduler run without a browser, and lets
 // the test jump the clock forward like a background tab would.

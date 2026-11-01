@@ -165,6 +165,7 @@ export function VocalPanel(p: VocalPanelProps) {
             <span data-level="" class="block h-full bg-amber" style={{ width: `${Math.round(Math.min(1, level) * 100)}%` }} />
           </span>
         </div>
+        {p.ports.takes.memoryOnly() ? <p data-memory-only="" class="text-sm text-record">This browser is not keeping takes on this device, so they are lost if you leave or reload. Save them to your studio first.</p> : null}
         <Help>The piece plays after a one-bar count-in and you sing over it. Wear headphones if you can. Each take stays on this device until you save, and your voice is kept exactly as sung: Voice Effects and Sound change only how it plays.</Help>
 
         <h3 class="font-display text-sm font-semibold uppercase tracking-wide">Takes</h3>

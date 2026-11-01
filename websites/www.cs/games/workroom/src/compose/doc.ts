@@ -5,7 +5,7 @@
 import { beatClock } from './beats.ts';
 import type { Entry } from '../catalogue.ts';
 import { MAX_BEND_POINTS, needsSchema2 } from '../score.ts';
-import type { DynMark, Family, Lane, LaneFx, Mix, Score, ScoreNote, Section, Speed, Tempo, TempoMark, VoiceFx } from '../score.ts';
+import type { DynMark, Family, Lane, LaneFx, Mix, Score, ScoreNote, Section, Speed, Tempo, TempoMark, VocalTrack, VoiceFx } from '../score.ts';
 
 /**
  * A note in beats from the start of the piece. `id` is the document's own, for selection; it is never saved. `bend` is
@@ -20,6 +20,8 @@ export interface Part {
   id: string; name: string; color: string; family: Family; icon: Family;
   instrument: string; gain_db: number; attack: number; release: number; notes: EditNote[];
   speed: Speed; dynamics: DynMark[] | null; fx?: LaneFx; voice?: VoiceFx[];
+  /** A Vocal Track's takes and clips, in seconds (vocal.ts); its instrument is `vocal` and it has no notes. */
+  vocal?: VocalTrack;
 }
 /**
  * `tempoLine` is the piece's tempo line, or null for the step tempo alone; `tempo` is always written from it when it is
@@ -66,6 +68,7 @@ export function docFromScore(score: Score, entries: readonly Entry[]): EditDoc {
     };
     if (lane.fx) part.fx = clone(lane.fx);
     if (lane.voice) part.voice = clone(lane.voice);
+    if (lane.vocal) part.vocal = clone(lane.vocal);
     return part;
   });
   const doc: EditDoc = {
@@ -87,7 +90,8 @@ export function newDoc(title: string): EditDoc {
  */
 export function barsNeeded(doc: EditDoc): number {
   const clock = beatClock(doc.tempo);
-  const end = Math.max(0, ...doc.parts.flatMap(p => p.notes.map(n => n.start + n.length)));
+  const end = Math.max(0, ...doc.parts.flatMap(p => p.notes.map(n => n.start + n.length)),
+    ...doc.parts.flatMap(p => (p.vocal?.clips ?? []).map(c => clock.beat(c.at + c.to - c.from))));
   const marks = [...(doc.tempoLine ?? []), ...doc.parts.flatMap(p => p.dynamics ?? [])].map(m => m.bar);
   let bars = Math.max(doc.bars, doc.base?.bars ?? 1, ...marks);
   while (clock.barStartBeat(bars + 1) < end - 1e-9) bars++;
@@ -107,7 +111,7 @@ export function scoreFromDoc(doc: EditDoc, at: SaveAs): Score {
     if (n.bend) note.bend = bendSeconds(n.bend, length);
     return note;
   }));
-  const notesEnd = Math.max(0, ...notes.map(n => n.start + n.length));
+  const notesEnd = Math.max(0, ...notes.map(n => n.start + n.length), ...doc.parts.flatMap(p => (p.vocal?.clips ?? []).map(c => round(c.at + c.to - c.from))));
   const duration = base && base.bars === bars ? round(Math.max(base.duration, notesEnd)) : fullEnd;
 
   const laneIds = new Set(doc.parts.map(p => p.id));
@@ -119,6 +123,7 @@ export function scoreFromDoc(doc: EditDoc, at: SaveAs): Score {
     if (p.fx && Object.keys(p.fx).length) lane.fx = clone(p.fx);
     if (p.voice?.length) lane.voice = p.voice.filter(v => !('carrier' in v) || laneIds.has(v.carrier)).map(v => clone(v));
     if (lane.voice?.length === 0) delete lane.voice;
+    if (p.vocal) lane.vocal = clone(p.vocal);
     return lane;
   });
   const motifs = (base?.motifs ?? []).map(m => ({ ...m, spans: m.spans.filter(s => laneIds.has(s.lane)) }));

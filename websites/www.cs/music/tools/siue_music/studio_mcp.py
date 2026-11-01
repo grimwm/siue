@@ -21,7 +21,14 @@ lane.dynamics (loudness marks of bar, level 32/48/64/80/100/120 and shape steady
 scaled by level/80), note.bend ([seconds from the note's start, cents] pairs, 2 to 64), lane.fx (volume_db, pan, eq,
 echo, shimmer, warmth, brightness, even_out, room, mute, solo), lane.voice (up to 4 of vocoder, autotune, harmonizer,
 pitch, talkbox, robot, whisper), mix.room ({preset, amount}), mix.limiter ({on, ceiling_db}) and lane.vocal (a Vocal
-Track: takes the person recorded, and clips of them; list_vocal_takes shows them).
+Track: takes the person recorded, and clips of them; list_vocal_takes shows them) and fx_clips (DJ & Effects: each
+{effect, lane (a lane id, or null for the whole piece), from_bar, to_bar (bar positions, 12.5 is halfway through bar
+12, to 1/1000 of a bar), settings (optional, the effect's own keys), points (an XY, scratch or crossfader move:
+[bar, value...] lists)}; effects: scratch, spinback, tape_stop, tape_start, vinyl, riser, snare_roll, filter_sweep,
+impact, sidechain, stutter, trance_gate, wobble, tremolo, auto_pan, bitcrusher, ring_mod, phaser, flanger, auto_wah,
+rotary, echo_out, ping_pong, reverse, reverse_reverb, granular_freeze, wide_8d, doppler, filter, pitch_shift,
+harmonizer, vocoder (settings.carrier, another lane, is needed), autotune, crossfader (settings.a and .b: lane ids;
+whole piece only), hot_cue (settings.cue_bar), looper (settings.bars: 1 to 4 bars to loop; whole piece only)).
 
 First call studio_status. When it says "Not paired yet", tell the person the pairing code it gives and where to type it.
 When the person asks for their siue-music pairing code, call studio_status and give them the code.

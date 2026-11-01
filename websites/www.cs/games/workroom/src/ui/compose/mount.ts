@@ -215,7 +215,7 @@ export async function mountComposer(a: MountArgs): Promise<void> {
   const open = (start: ComposerStart): void => {
     a.root.textContent = '';
     render(h(ThemeRoot, { handle: a.theme }, h(Composer, {
-      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES, hum, midi, live, vocal,
+      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES, hum, midi, live, vocal, dj: { context },
       now: () => performance.now() / 1000,
       onSaved: piece => { history.replaceState(null, '', `compose.php?id=${encodeURIComponent(piece)}`); },
       onNewPiece: (doc, title) => {

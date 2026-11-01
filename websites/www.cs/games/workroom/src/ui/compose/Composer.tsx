@@ -61,6 +61,10 @@ import { exportWithVocals, notesOnly } from '../../compose/vocalexport.ts';
 import type { Encoded } from '../../compose/vocalsave.ts';
 import { LOCAL_TAKE_RE } from '../../score.ts';
 import { VocalPanel } from './VocalPanel.tsx';
+import { EffectsPanel } from './EffectsPanel.tsx';
+import { DjMode } from './DjMode.tsx';
+import type { DjPorts } from './DjMode.tsx';
+import { barSeconds } from '../../score.ts';
 import type { VocalPorts } from './VocalPanel.tsx';
 import { SaveTakes } from './SaveTakes.tsx';
 import type { TakeToSave } from './SaveTakes.tsx';
@@ -115,6 +119,8 @@ export interface ComposerProps {
   live?: (chain: readonly VoiceFx[], key: readonly number[]) => Promise<LiveVoice>;
   /** Vocal Tracks: takes on this device, the microphone, the encoders and the studio; absent where there are none. */
   vocal?: VocalPorts;
+  /** DJ Mode's live deck; absent where the page has no sound. */
+  dj?: DjPorts;
 }
 
 const isTyping = (t: EventTarget | null): boolean =>
@@ -368,6 +374,8 @@ export function Composer(p: ComposerProps) {
       apply(added.doc);
     }
   };
+  /** While DJ Mode's deck plays, the letter and number keys are its pads, not notes. */
+  const djLive = useRef(false);
   const keyRef = useRef({ keyDown, keyUp, undo, redo });
   keyRef.current = { keyDown, keyUp, undo, redo };
   useEffect(() => {
@@ -376,7 +384,7 @@ export function Composer(p: ComposerProps) {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) keyRef.current.redo(); else keyRef.current.undo(); return; }
       if (mod && e.code === 'KeyY') { e.preventDefault(); keyRef.current.redo(); return; }
-      if (mod || e.altKey) return;
+      if (mod || e.altKey || djLive.current) return;
       if (e.code === 'Delete' || e.code === 'Backspace') {
         const s = state.current;
         if (s.part && s.selected.size > 0) { e.preventDefault(); apply(removeNotes(s.doc, s.part.id, s.selected)); setSelected(new Set()); setArmed(null); }
@@ -450,11 +458,15 @@ export function Composer(p: ComposerProps) {
     setPlayhead(null);
   };
   useEffect(() => () => stopListening(), []);
-  const hear = async (what: 'piece' | 'part'): Promise<void> => {
+  /** Plays the piece (or this part alone), from `fromBar` when given (Hear From Here). */
+  const hear = async (what: 'piece' | 'part', fromBar?: number): Promise<void> => {
     stopListening();
     if (what === 'part' && !part) return;
     const full = scoreFromDoc(doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
-    const score: Score = what === 'piece' ? full : { ...full, lanes: full.lanes.filter(l => l.id === part!.id), notes: full.notes.filter(n => n.lane === part!.id), motifs: [] };
+    // A part alone keeps its own clips, except a vocoder's, whose carrier is not playing.
+    const alone = (full.fx_clips ?? []).filter(c => c.lane === part?.id && c.effect !== 'vocoder');
+    const score: Score = what === 'piece' ? full : { ...full, lanes: full.lanes.filter(l => l.id === part!.id), notes: full.notes.filter(n => n.lane === part!.id), motifs: [], ...(alone.length ? { fx_clips: alone } : {}) };
+    if (what === 'part' && !alone.length) delete score.fx_clips;
     if (score.notes.length === 0) { setStatus(what === 'part' ? 'This part has no notes yet.' : 'The piece has no notes yet.'); return; }
     setListening({ what, state: 'Getting the instruments ready…' });
     try {
@@ -463,6 +475,7 @@ export function Composer(p: ComposerProps) {
       });
       const el = new Audio(built.url);
       audio.current = el;
+      if (fromBar !== undefined) el.currentTime = barSeconds(doc.tempo, fromBar);
       setListening({ what, state: 'Playing' });
       el.addEventListener('ended', stopListening);
       const tick = (): void => {
@@ -873,6 +886,20 @@ export function Composer(p: ComposerProps) {
           )}
         </div>
       </div>
+      {doc.parts.length ? <EffectsPanel doc={doc} help={help} apply={apply} hearFrom={bar => void hear('piece', bar)} status={setStatus} /> : null}
+      {doc.parts.length && p.dj ? (
+        <DjMode doc={doc} ports={p.dj} pin={pin} help={help} apply={apply} status={setStatus} onLive={on => { djLive.current = on; }}
+          score={only => {
+            const full = scoreFromDoc(doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
+            if (!only) return full;
+            const keep = new Set(only);
+            const clips = (full.fx_clips ?? []).filter(c => c.lane !== null && keep.has(c.lane) && c.effect !== 'vocoder');
+            const part: Score = { ...full, lanes: full.lanes.filter(l => keep.has(l.id)), notes: full.notes.filter(n => keep.has(n.lane)), motifs: [] };
+            if (clips.length) part.fx_clips = clips; else delete part.fx_clips;
+            return part;
+          }}
+          build={(k, score) => p.buildSound(`${k}-${editKey(doc)}`, score, () => {})} />
+      ) : null}
     </div>
   );
 }

@@ -72,7 +72,7 @@ export function convolve(x: Float32Array, ir: Float32Array): Float32Array {
   return out;
 }
 
-export type BiquadType = 'lowpass' | 'bandpass' | 'lowshelf' | 'highshelf' | 'peaking';
+export type BiquadType = 'lowpass' | 'highpass' | 'bandpass' | 'lowshelf' | 'highshelf' | 'peaking';
 
 /** An RBJ cookbook biquad, its state kept between calls so it can run block by block. */
 export class Biquad {
@@ -88,6 +88,7 @@ export class Biquad {
     const A = 10 ** (gainDb / 40);
     let b0: number, b1: number, b2: number, a0: number, a1: number, a2: number;
     if (type === 'lowpass') { b0 = (1 - cos) / 2; b1 = 1 - cos; b2 = b0; a0 = 1 + alpha; a1 = -2 * cos; a2 = 1 - alpha; }
+    else if (type === 'highpass') { b0 = (1 + cos) / 2; b1 = -(1 + cos); b2 = b0; a0 = 1 + alpha; a1 = -2 * cos; a2 = 1 - alpha; }
     else if (type === 'bandpass') { b0 = alpha; b1 = 0; b2 = -alpha; a0 = 1 + alpha; a1 = -2 * cos; a2 = 1 - alpha; }
     else if (type === 'peaking') { b0 = 1 + alpha * A; b1 = -2 * cos; b2 = 1 - alpha * A; a0 = 1 + alpha / A; a1 = -2 * cos; a2 = 1 - alpha / A; }
     else {

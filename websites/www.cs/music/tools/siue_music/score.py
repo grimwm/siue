@@ -242,6 +242,10 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
             _range(lo.get("ceiling_db"), "mix.limiter.ceiling_db", -12, 0)
     renderable = mix is not None and all(has_sound)
     lane_ids = {l["id"] for l in lanes}
+    if v2(r, "fx_clips", ""):
+        if not music:
+            _fail("fx_clips", "a sound piece has no bars for effects")
+        _fx_clips(r["fx_clips"], bars, lane_ids)
     vocal_lanes = {l["id"] for l in lanes if l["vocal"]}
 
     characters = []
@@ -522,6 +526,175 @@ def _voice(v, path):
                 _fail(f"{p}.{k}", f"is needed for {effect}")
         out.append({"effect": effect, **got})
     return out
+
+
+FX_CLIP_EFFECTS = (
+    "scratch", "spinback", "tape_stop", "tape_start", "vinyl",
+    "riser", "snare_roll", "filter_sweep", "impact", "sidechain",
+    "stutter", "trance_gate", "wobble", "tremolo", "auto_pan",
+    "bitcrusher", "ring_mod", "phaser", "flanger", "auto_wah", "rotary",
+    "echo_out", "ping_pong", "reverse", "reverse_reverb", "granular_freeze", "wide_8d", "doppler",
+    "filter", "pitch_shift", "harmonizer", "vocoder", "autotune",
+    "crossfader", "hot_cue", "looper",
+)
+MAX_FX_CLIPS = 256
+MAX_FX_POINTS = 512
+MIN_CLIP_BARS = 1 / 64
+# How many values each recorded move's point carries after its bar, and their range, by effect.
+FX_POINT_VALUES = {
+    "scratch": (1, -8, 8), "crossfader": (1, 0, 1),
+    "wobble": (2, 0, 1), "bitcrusher": (2, 0, 1), "flanger": (2, 0, 1), "ping_pong": (2, 0, 1), "filter": (2, 0, 1),
+}
+WHOLE_PIECE_EFFECTS = ("crossfader", "looper")
+
+
+def _choice(allowed):
+    return lambda x, p: _one_of(x, p, allowed)
+
+
+def _number_of(allowed):
+    def rule(x, p):
+        if _is_num(x) and x in allowed:
+            return x
+        return _fail(p, f"must be one of {', '.join(str(a) for a in allowed)}")
+    return rule
+
+
+def _lane_list(x, p):
+    ids = [_id(y, f"{p}[{j}]") for j, y in enumerate(_arr(x, p, 1))]
+    if len(set(ids)) != len(ids):
+        _fail(p, "must name each lane once")
+    return ids
+
+
+def _looper_bars(x, p):
+    bs = [_int(y, f"{p}[{j}]", 1) for j, y in enumerate(_arr(x, p, 1))]
+    if len(bs) > 4:
+        _fail(p, "must be 1 to 4 bars")
+    return bs
+
+
+_TIME3 = ("fast", "medium", "slow")
+# Each effect's settings and their rules, and the settings a clip of it must give (score.ts FX_CLIP_RULES).
+FX_CLIP_RULES = {
+    "scratch": ({"style": _choice(("baby", "chirp", "transformer"))}, ()),
+    "spinback": ({"throw": _choice(("gentle", "hard"))}, ()),
+    "tape_stop": ({"time": _choice(_TIME3)}, ()),
+    "tape_start": ({"time": _choice(_TIME3)}, ()),
+    "vinyl": ({"age": _span(0.2, 1)}, ()),
+    "riser": ({"climb": _whole(1, 3)}, ()),
+    "snare_roll": ({"level": _span(0.3, 1)}, ()),
+    "filter_sweep": ({"mode": _choice(("highpass_up", "lowpass_down"))}, ()),
+    "impact": ({"kind": _choice(("impact", "downlifter"))}, ()),
+    "sidechain": ({"depth": _span(0, 1)}, ()),
+    "stutter": ({"slice": _number_of((0, 4, 8, 16, 32))}, ()),
+    "trance_gate": ({"pattern": _choice(("classic", "offbeat", "choppy"))}, ()),
+    "wobble": ({"rate": _whole(1, 8), "depth": _span(0, 1)}, ()),
+    "tremolo": ({"rate": _number_of((4, 8, 12))}, ()),
+    "auto_pan": ({"speed": _choice(("bar", "half_bar", "beat"))}, ()),
+    "bitcrusher": ({"crunch": _span(0.1, 1)}, ()),
+    "ring_mod": ({"tone": _span(60, 1500)}, ()),
+    "phaser": ({"speed": _choice(("slow", "medium", "fast"))}, ()),
+    "flanger": ({"speed": _choice(("slow", "jet", "fast"))}, ()),
+    "auto_wah": ({"sensitivity": _span(0, 1)}, ()),
+    "rotary": ({"speed": _choice(("slow", "fast"))}, ()),
+    "echo_out": ({"time": _choice(("dotted_eighth", "quarter", "half"))}, ()),
+    "ping_pong": ({"time": _choice(("eighth", "dotted_eighth", "quarter"))}, ()),
+    "reverse": ({"length": _choice(("beat", "two_beats", "bar"))}, ()),
+    "reverse_reverb": ({"swell": _choice(("short", "long"))}, ()),
+    "granular_freeze": ({"mode": _choice(("freeze", "stretch"))}, ()),
+    "wide_8d": ({"circle": _choice(("four_bars", "two_bars", "bar"))}, ()),
+    "doppler": ({}, ()),
+    "filter": ({"cutoff": _span(0, 1), "resonance": _span(0, 1)}, ()),
+    "pitch_shift": ({"semitones": _span(-12, 12), "formant": _span(-12, 12)}, ()),
+    "harmonizer": ({"voices": _harmony, "mix": _span(0, 1)}, ()),
+    "vocoder": ({"carrier": _id, "bands": _whole(8, 32)}, ("carrier",)),
+    "autotune": ({"strength": _span(0, 1), "retune_ms": _span(0, 400)}, ()),
+    "crossfader": ({"a": _lane_list, "b": _lane_list}, ("a", "b")),
+    "hot_cue": ({"cue_bar": _span(1, 100000)}, ("cue_bar",)),
+    "looper": ({"bars": _looper_bars, "mute_deck": _bool}, ("bars",)),
+}
+CLIP_KEYS = ("effect", "lane", "from_bar", "to_bar", "settings", "points")
+
+
+def _bar_pos(x):
+    return round(x * 1000) / 1000
+
+
+def _fx_clips(v, bars, lane_ids) -> None:
+    """DJ & Effects' clips: each over bars inside the piece, on a lane or the whole piece, with its own settings and moves."""
+    items = _arr(v, "fx_clips")
+    if len(items) > MAX_FX_CLIPS:
+        _fail("fx_clips", f"must have at most {MAX_FX_CLIPS} clips")
+    for i, c in enumerate(items):
+        p = f"fx_clips[{i}]"
+        o = _obj(c, p)
+        for k in o:
+            if k not in CLIP_KEYS:
+                _fail(f"{p}.{k}", "is not part of an effect clip (effect, lane, from_bar, to_bar, settings, points)")
+        effect = _one_of(o.get("effect"), f"{p}.effect", FX_CLIP_EFFECTS)
+        lane = o.get("lane", "__missing__")
+        if lane is not None and not (isinstance(lane, str) and lane in lane_ids):
+            _fail(f"{p}.lane", "must be a lane id or null")
+        if lane is not None and effect in WHOLE_PIECE_EFFECTS:
+            _fail(f"{p}.lane", f"{effect} works on the whole piece: lane must be null")
+        start = _range(o.get("from_bar"), f"{p}.from_bar", 1, bars + 1)
+        end = _range(o.get("to_bar"), f"{p}.to_bar", 1, bars + 1)
+        if _bar_pos(start) != start:
+            _fail(f"{p}.from_bar", "must be a bar position to 1/1000 of a bar")
+        if _bar_pos(end) != end:
+            _fail(f"{p}.to_bar", "must be a bar position to 1/1000 of a bar")
+        if end - start < MIN_CLIP_BARS - 1e-9:
+            _fail(f"{p}.to_bar", "must be at least 1/64 of a bar after from_bar")
+        rules, needed = FX_CLIP_RULES[effect]
+        st = _settings(o["settings"], f"{p}.settings", rules) if "settings" in o else {}
+        for k in needed:
+            if k not in st:
+                _fail(f"{p}.settings.{k}", f"is needed for {effect}")
+        if effect == "vocoder" and (st["carrier"] == lane or st["carrier"] not in lane_ids):
+            _fail(f"{p}.settings.carrier", "must be the id of another lane")
+        if effect == "crossfader":
+            for x in st["a"] + st["b"]:
+                if x not in lane_ids:
+                    _fail(f"{p}.settings.{'a' if x in st['a'] else 'b'}", "must name lanes of the piece")
+            if set(st["a"]) & set(st["b"]):
+                _fail(f"{p}.settings.b", "must not share a lane with a")
+        if effect == "hot_cue" and st["cue_bar"] >= bars + 1:
+            _fail(f"{p}.settings.cue_bar", f"must be before the end (bar {bars + 1})")
+        if effect == "looper":
+            for j, b in enumerate(st["bars"]):
+                if b > bars:
+                    _fail(f"{p}.settings.bars[{j}]", f"must be a bar of the piece (1 to {bars})")
+        if "points" in o:
+            if effect not in FX_POINT_VALUES:
+                _fail(f"{p}.points", f"{effect} records no moves")
+            n, lo, hi = FX_POINT_VALUES[effect]
+            pts = _arr(o["points"], f"{p}.points", 2)
+            if len(pts) > MAX_FX_POINTS:
+                _fail(f"{p}.points", f"must have at most {MAX_FX_POINTS} points")
+            prev = None
+            for j, pt in enumerate(pts):
+                q = f"{p}.points[{j}]"
+                if not isinstance(pt, list) or len(pt) != n + 1:
+                    _fail(q, "must be [bar, value]" if n == 1 else "must be [bar, x, y]")
+                b = _range(pt[0], f"{q}[0]", start, end)
+                for k, x in enumerate(pt[1:]):
+                    _range(x, f"{q}[{k + 1}]", lo, hi)
+                if prev is not None and b < prev:
+                    _fail(f"{q}[0]", "bars must not go back")
+                prev = b
+
+
+def bar_seconds(tempo, bar):
+    """Seconds from the start of the piece at bar position `bar` (12.5 is halfway through bar 12), through every tempo change."""
+    sec = 0.0
+    for i, t in enumerate(tempo):
+        nxt = tempo[i + 1]["bar"] if i + 1 < len(tempo) else math.inf
+        if bar <= t["bar"]:
+            break
+        sec += (min(bar, nxt) - t["bar"]) * t["beats"] * 60 / t["bpm"]
+    # Halves round up, as JavaScript's Math.round does, so the page and the tool agree.
+    return math.floor(sec * 1e6 + 0.5) / 1e6
 
 
 def _bar_starts(tempo, bars):

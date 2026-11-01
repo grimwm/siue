@@ -5,7 +5,8 @@
 import { beatClock } from './beats.ts';
 import type { Entry } from '../catalogue.ts';
 import { MAX_BEND_POINTS, needsSchema2 } from '../score.ts';
-import type { DynMark, Family, Lane, LaneFx, Mix, Score, ScoreNote, Section, Speed, Tempo, TempoMark, VocalTrack, VoiceFx } from '../score.ts';
+import type { DynMark, Family, FxClip, Lane, LaneFx, Mix, Score, ScoreNote, Section, Speed, Tempo, TempoMark, VocalTrack, VoiceFx } from '../score.ts';
+import { savedClips } from './djclips.ts';
 
 /**
  * A note in beats from the start of the piece. `id` is the document's own, for selection; it is never saved. `bend` is
@@ -26,8 +27,9 @@ export interface Part {
 /**
  * `tempoLine` is the piece's tempo line, or null for the step tempo alone; `tempo` is always written from it when it is
  * set. `mix` is The Whole Piece's sound (loudness, Room, limiter) once the Sound panel sets it; until then the score's own.
+ * `fxClips` are DJ & Effects' clips, in bar positions (djclips.ts).
  */
-export interface EditDoc { title: string; tempo: Tempo[]; tempoLine: TempoMark[] | null; bars: number; parts: Part[]; base: Score | null; nextId: number; mix?: Mix }
+export interface EditDoc { title: string; tempo: Tempo[]; tempoLine: TempoMark[] | null; bars: number; parts: Part[]; base: Score | null; nextId: number; mix?: Mix; fxClips?: FxClip[] }
 
 /** Where and as what a document is saved. */
 export interface SaveAs { piece: { id: string; title: string }; project: { id: string; name: string }; draft: number; made: string }
@@ -76,6 +78,7 @@ export function docFromScore(score: Score, entries: readonly Entry[]): EditDoc {
     bars: score.bars, parts, base: score, nextId,
   };
   if (score.mix) doc.mix = clone(score.mix);
+  if (score.fx_clips) doc.fxClips = clone(score.fx_clips);
   return doc;
 }
 
@@ -92,7 +95,8 @@ export function barsNeeded(doc: EditDoc): number {
   const clock = beatClock(doc.tempo);
   const end = Math.max(0, ...doc.parts.flatMap(p => p.notes.map(n => n.start + n.length)),
     ...doc.parts.flatMap(p => (p.vocal?.clips ?? []).map(c => clock.beat(c.at + c.to - c.from))));
-  const marks = [...(doc.tempoLine ?? []), ...doc.parts.flatMap(p => p.dynamics ?? [])].map(m => m.bar);
+  const marks = [...(doc.tempoLine ?? []), ...doc.parts.flatMap(p => p.dynamics ?? [])].map(m => m.bar)
+    .concat((doc.fxClips ?? []).map(c => Math.ceil(c.to_bar - 1e-9) - 1));
   let bars = Math.max(doc.bars, doc.base?.bars ?? 1, ...marks);
   while (clock.barStartBeat(bars + 1) < end - 1e-9) bars++;
   return bars;
@@ -149,6 +153,8 @@ export function scoreFromDoc(doc: EditDoc, at: SaveAs): Score {
     changes: (base?.changes ?? []).map(c => ({ ...c, lane: c.lane !== null && laneIds.has(c.lane) ? c.lane : null, answers: [...c.answers] })),
   };
   if (doc.tempoLine?.length) score.piece_tempo = doc.tempoLine.map(m => ({ ...m }));
+  const clips = savedClips(doc.fxClips ?? [], laneIds, bars);
+  if (clips.length) score.fx_clips = clips;
   if (needsSchema2(score)) score.schema = 2;
   return score;
 }

@@ -74,6 +74,36 @@ export interface Room { preset: (typeof ROOMS)[number]; amount: number }
 export interface Limiter { on: boolean; ceiling_db: number }
 export interface Mix { style: (typeof MIX_STYLES)[number]; loudness: number; room?: Room; limiter?: Limiter }
 /** A character belongs to the score: the page has none built in. */
+/**
+ * DJ & Effects (schema 2, music only): an effect over bars of one lane, or of the whole piece when `lane` is null.
+ * Bars are positions (12.5 is halfway through bar 12); `settings` holds only the effect's own keys, a key left out
+ * being its default; `points` are a recorded move's [bar, value…] lists (a scratch's rate, the crossfader's position,
+ * an XY effect's x and y).
+ */
+export interface FxClip { effect: FxClipEffect; lane: string | null; from_bar: number; to_bar: number; settings?: Record<string, unknown>; points?: number[][] }
+export const FX_CLIP_EFFECTS = [
+  'scratch', 'spinback', 'tape_stop', 'tape_start', 'vinyl',
+  'riser', 'snare_roll', 'filter_sweep', 'impact', 'sidechain',
+  'stutter', 'trance_gate', 'wobble', 'tremolo', 'auto_pan',
+  'bitcrusher', 'ring_mod', 'phaser', 'flanger', 'auto_wah', 'rotary',
+  'echo_out', 'ping_pong', 'reverse', 'reverse_reverb', 'granular_freeze', 'wide_8d', 'doppler',
+  'filter', 'pitch_shift', 'harmonizer', 'vocoder', 'autotune',
+  'crossfader', 'hot_cue', 'looper',
+] as const;
+export type FxClipEffect = (typeof FX_CLIP_EFFECTS)[number];
+export const MAX_FX_CLIPS = 256;
+export const MAX_FX_POINTS = 512;
+/** The shortest clip, in bars. */
+export const MIN_CLIP_BARS = 1 / 64;
+/** How many values each of a recorded move's points carries after its bar, by effect; an effect not here records none. */
+export const FX_POINT_VALUES: Partial<Record<FxClipEffect, { n: number; min: number; max: number }>> = {
+  scratch: { n: 1, min: -8, max: 8 }, crossfader: { n: 1, min: 0, max: 1 },
+  wobble: { n: 2, min: 0, max: 1 }, bitcrusher: { n: 2, min: 0, max: 1 }, flanger: { n: 2, min: 0, max: 1 },
+  ping_pong: { n: 2, min: 0, max: 1 }, filter: { n: 2, min: 0, max: 1 },
+};
+/** Effects that work on the whole piece only (lane null). */
+export const WHOLE_PIECE_EFFECTS: readonly FxClipEffect[] = ['crossfader', 'looper'];
+
 export interface Character { id: string; name: string; color: string }
 export interface MotifSpan { lane: string; from: number; to: number }
 /** `character` is the id of an entry of the score's characters; the motif is drawn in that character's colour. */
@@ -95,6 +125,7 @@ export interface Score {
   audio: AudioSource[];                                    // empty only when the score is renderable
   spectrogram?: Spectrogram;                               // required unless the score is renderable
   mix?: Mix;                                               // with a sound on every lane, the score is renderable
+  fx_clips?: FxClip[];                                     // schema 2, music only: DJ & Effects on the timeline
   musicxml?: 'score.musicxml';                             // required for music, optional for sound
   changes: Change[];
 }
@@ -114,9 +145,22 @@ export function tempoLineBpm(marks: readonly TempoMark[], bar: number): number {
 
 /** Whether a score uses anything schema 1 does not have, and so must be saved as schema 2. */
 export function needsSchema2(s: Score): boolean {
-  return s.piece_tempo !== undefined || s.mix?.room !== undefined || s.mix?.limiter !== undefined
+  return s.piece_tempo !== undefined || s.fx_clips !== undefined || s.mix?.room !== undefined || s.mix?.limiter !== undefined
     || s.lanes.some(l => l.speed !== undefined || l.dynamics !== undefined || l.fx !== undefined || l.voice !== undefined || l.vocal !== undefined)
     || s.notes.some(n => n.bend !== undefined);
+}
+
+/** Seconds from the start of the piece at bar position `bar` (12.5 is halfway through bar 12), through every tempo change. */
+export function barSeconds(tempo: readonly Tempo[], bar: number): number {
+  let sec = 0;
+  for (let i = 0; i < tempo.length; i++) {
+    const t = tempo[i]!;
+    const next = tempo[i + 1]?.bar ?? Infinity;
+    if (bar <= t.bar) break;
+    const span = Math.min(bar, next) - t.bar;
+    sec += (span * t.beats * 60) / t.bpm;
+  }
+  return Math.round(sec * 1e6) / 1e6;
 }
 
 export function unknownSchemaMessage(n: unknown): string {
@@ -268,6 +312,11 @@ function build(r: Obj, instruments: ReadonlySet<string> | undefined): Score {
   }
   const renderable = isRenderable({ lanes, mix });
   const laneIds = new Set(lanes.map(l => l.id));
+  let fxClips: FxClip[] | undefined;
+  if (v2(r, 'fx_clips', '')) {
+    if (!music) fail('fx_clips', 'a sound piece has no bars for effects');
+    fxClips = fxClipsOf(r['fx_clips'], bars!, laneIds);
+  }
 
   const characters = arr(r['characters'], 'characters').map((c, i): Character => {
     const p = `characters[${i}]`;
@@ -384,6 +433,7 @@ function build(r: Obj, instruments: ReadonlySet<string> | undefined): Score {
   if (pieceTempo !== undefined) score.piece_tempo = pieceTempo;
   if (spectrogram !== undefined) score.spectrogram = spectrogram;
   if (mix !== undefined) score.mix = mix;
+  if (fxClips !== undefined) score.fx_clips = fxClips;
   if (bars !== undefined) score.bars = bars;
   if (tempo !== undefined) score.tempo = tempo;
   if (musicxml !== undefined) score.musicxml = musicxml;
@@ -479,6 +529,12 @@ function fxOf(v: unknown, path: string): LaneFx {
   });
 }
 
+function harmonyVoices(x: unknown, q: string): string[] {
+  const vs = arr(x, q, 1).map((y, j) => oneOf(y, `${q}[${j}]`, HARMONY_VOICES));
+  if (vs.length > 3 || new Set(vs).size !== vs.length) fail(q, 'must be 1 to 3 different voices');
+  return vs;
+}
+
 function voiceOf(v: unknown, path: string): VoiceFx[] {
   const list = arr(v, path);
   if (list.length > MAX_VOICE_FX) fail(path, `must have at most ${MAX_VOICE_FX} effects`);
@@ -487,11 +543,7 @@ function voiceOf(v: unknown, path: string): VoiceFx[] {
     const o = obj(e, p);
     const effect = oneOf(o['effect'], `${p}.effect`, VOICE_EFFECTS);
     const carrier = (x: unknown, q: string): string => id(x, q);
-    const voices = (x: unknown, q: string): string[] => {
-      const vs = arr(x, q, 1).map((y, j) => oneOf(y, `${q}[${j}]`, HARMONY_VOICES));
-      if (vs.length > 3 || new Set(vs).size !== vs.length) fail(q, 'must be 1 to 3 different voices');
-      return vs;
-    };
+    const voices = harmonyVoices;
     const rules: Record<string, Record<string, (x: unknown, q: string) => unknown>> = {
       vocoder: { carrier, bands: whole(8, 32) },
       autotune: { strength: span(0, 1), retune_ms: span(0, 400) },
@@ -505,6 +557,114 @@ function voiceOf(v: unknown, path: string): VoiceFx[] {
     const got = settings<Record<string, unknown>>(rest, p, rules[effect]!);
     for (const k of Object.keys(rules[effect]!)) if (got[k] === undefined) fail(`${p}.${k}`, `is needed for ${effect}`);
     return { effect, ...got } as VoiceFx;
+  });
+}
+
+const FX_CHOICES = {
+  speed3: ['slow', 'medium', 'fast'], time3: ['fast', 'medium', 'slow'],
+} as const;
+const choice = (list: readonly string[]) => (x: unknown, p: string): string => oneOf(x, p, list);
+const laneList = (x: unknown, p: string): string[] => {
+  const ids = arr(x, p, 1).map((y, j) => id(y, `${p}[${j}]`));
+  if (new Set(ids).size !== ids.length) fail(p, 'must name each lane once');
+  return ids;
+};
+/** Each effect's settings and their rules; `needed` lists the settings a clip of it must give. */
+const FX_CLIP_RULES: Record<FxClipEffect, { rules: Record<string, (x: unknown, q: string) => unknown>; needed?: string[] }> = {
+  scratch: { rules: { style: choice(['baby', 'chirp', 'transformer']) } },
+  spinback: { rules: { throw: choice(['gentle', 'hard']) } },
+  tape_stop: { rules: { time: choice(FX_CHOICES.time3) } },
+  tape_start: { rules: { time: choice(FX_CHOICES.time3) } },
+  vinyl: { rules: { age: span(0.2, 1) } },
+  riser: { rules: { climb: whole(1, 3) } },
+  snare_roll: { rules: { level: span(0.3, 1) } },
+  filter_sweep: { rules: { mode: choice(['highpass_up', 'lowpass_down']) } },
+  impact: { rules: { kind: choice(['impact', 'downlifter']) } },
+  sidechain: { rules: { depth: span(0, 1) } },
+  stutter: { rules: { slice: (x, q) => (typeof x === 'number' && [0, 4, 8, 16, 32].includes(x) ? x : fail(q, 'must be one of 0, 4, 8, 16, 32')) } },
+  trance_gate: { rules: { pattern: choice(['classic', 'offbeat', 'choppy']) } },
+  wobble: { rules: { rate: whole(1, 8), depth: span(0, 1) } },
+  tremolo: { rules: { rate: (x, q) => (typeof x === 'number' && [4, 8, 12].includes(x) ? x : fail(q, 'must be one of 4, 8, 12')) } },
+  auto_pan: { rules: { speed: choice(['bar', 'half_bar', 'beat']) } },
+  bitcrusher: { rules: { crunch: span(0.1, 1) } },
+  ring_mod: { rules: { tone: span(60, 1500) } },
+  phaser: { rules: { speed: choice(FX_CHOICES.speed3) } },
+  flanger: { rules: { speed: choice(['slow', 'jet', 'fast']) } },
+  auto_wah: { rules: { sensitivity: span(0, 1) } },
+  rotary: { rules: { speed: choice(['slow', 'fast']) } },
+  echo_out: { rules: { time: choice(['dotted_eighth', 'quarter', 'half']) } },
+  ping_pong: { rules: { time: choice(['eighth', 'dotted_eighth', 'quarter']) } },
+  reverse: { rules: { length: choice(['beat', 'two_beats', 'bar']) } },
+  reverse_reverb: { rules: { swell: choice(['short', 'long']) } },
+  granular_freeze: { rules: { mode: choice(['freeze', 'stretch']) } },
+  wide_8d: { rules: { circle: choice(['four_bars', 'two_bars', 'bar']) } },
+  doppler: { rules: {} },
+  filter: { rules: { cutoff: span(0, 1), resonance: span(0, 1) } },
+  pitch_shift: { rules: { semitones: span(-12, 12), formant: span(-12, 12) } },
+  harmonizer: { rules: { voices: harmonyVoices, mix: span(0, 1) } },
+  vocoder: { rules: { carrier: (x, q) => id(x, q), bands: whole(8, 32) }, needed: ['carrier'] },
+  autotune: { rules: { strength: span(0, 1), retune_ms: span(0, 400) } },
+  crossfader: { rules: { a: laneList, b: laneList }, needed: ['a', 'b'] },
+  hot_cue: { rules: { cue_bar: (x, q) => inRange(x, q, 1, 100000) }, needed: ['cue_bar'] },
+  looper: {
+    rules: {
+      bars: (x, q) => {
+        const bs = arr(x, q, 1).map((y, j) => int(y, `${q}[${j}]`, 1));
+        if (bs.length > 4) fail(q, 'must be 1 to 4 bars');
+        return bs;
+      },
+      mute_deck: bool,
+    },
+    needed: ['bars'],
+  },
+};
+
+/** A bar position rounded to 1/1000 of a bar. */
+const barPos = (x: number): number => Math.round(x * 1000) / 1000;
+
+/** DJ & Effects' clips: each over bars inside the piece, on a lane or the whole piece, with its own settings and moves. */
+function fxClipsOf(v: unknown, bars: number, laneIds: ReadonlySet<string>): FxClip[] {
+  const list = arr(v, 'fx_clips');
+  if (list.length > MAX_FX_CLIPS) fail('fx_clips', `must have at most ${MAX_FX_CLIPS} clips`);
+  return list.map((c, i): FxClip => {
+    const p = `fx_clips[${i}]`;
+    const o = obj(c, p);
+    for (const k of Object.keys(o)) if (!['effect', 'lane', 'from_bar', 'to_bar', 'settings', 'points'].includes(k)) fail(`${p}.${k}`, 'is not part of an effect clip (effect, lane, from_bar, to_bar, settings, points)');
+    const effect = oneOf(o['effect'], `${p}.effect`, FX_CLIP_EFFECTS);
+    const lane = o['lane'] === null ? null : typeof o['lane'] === 'string' && laneIds.has(o['lane']) ? o['lane'] : fail(`${p}.lane`, 'must be a lane id or null');
+    if (lane !== null && WHOLE_PIECE_EFFECTS.includes(effect)) fail(`${p}.lane`, `${effect} works on the whole piece: lane must be null`);
+    const from = inRange(o['from_bar'], `${p}.from_bar`, 1, bars + 1);
+    const to = inRange(o['to_bar'], `${p}.to_bar`, 1, bars + 1);
+    if (barPos(from) !== from) fail(`${p}.from_bar`, 'must be a bar position to 1/1000 of a bar');
+    if (barPos(to) !== to) fail(`${p}.to_bar`, 'must be a bar position to 1/1000 of a bar');
+    if (to - from < MIN_CLIP_BARS - 1e-9) fail(`${p}.to_bar`, 'must be at least 1/64 of a bar after from_bar');
+    const clip: FxClip = { effect, lane, from_bar: from, to_bar: to };
+    const spec = FX_CLIP_RULES[effect];
+    if (o['settings'] !== undefined) clip.settings = settings<Record<string, unknown>>(o['settings'], `${p}.settings`, spec.rules);
+    for (const k of spec.needed ?? []) if (clip.settings?.[k] === undefined) fail(`${p}.settings.${k}`, `is needed for ${effect}`);
+    const st = clip.settings ?? {};
+    if (effect === 'vocoder' && (st['carrier'] === lane || !laneIds.has(st['carrier'] as string))) fail(`${p}.settings.carrier`, 'must be the id of another lane');
+    if (effect === 'crossfader') {
+      const a = st['a'] as string[];
+      const b = st['b'] as string[];
+      [...a, ...b].forEach(x => { if (!laneIds.has(x)) fail(`${p}.settings.${a.includes(x) ? 'a' : 'b'}`, 'must name lanes of the piece'); });
+      if (a.some(x => b.includes(x))) fail(`${p}.settings.b`, 'must not share a lane with a');
+    }
+    if (effect === 'hot_cue' && (st['cue_bar'] as number) >= bars + 1) fail(`${p}.settings.cue_bar`, `must be before the end (bar ${bars + 1})`);
+    if (effect === 'looper') (st['bars'] as number[]).forEach((b, j) => { if (b > bars) fail(`${p}.settings.bars[${j}]`, `must be a bar of the piece (1 to ${bars})`); });
+    if (o['points'] !== undefined) {
+      const shape = FX_POINT_VALUES[effect] ?? fail(`${p}.points`, `${effect} records no moves`);
+      const pts = arr(o['points'], `${p}.points`, 2);
+      if (pts.length > MAX_FX_POINTS) fail(`${p}.points`, `must have at most ${MAX_FX_POINTS} points`);
+      clip.points = pts.map((pt, j): number[] => {
+        const q = `${p}.points[${j}]`;
+        if (!Array.isArray(pt) || pt.length !== shape.n + 1) return fail(q, `must be [bar, ${shape.n === 1 ? 'value' : 'x, y'}]`);
+        const b = inRange(pt[0], `${q}[0]`, from, to);
+        return [b, ...pt.slice(1).map((x, k) => inRange(x, `${q}[${k + 1}]`, shape.min, shape.max))];
+      });
+      clip.points.forEach((pt, j) => { if (j > 0 && pt[0]! < clip.points![j - 1]![0]!) fail(`${p}.points[${j}][0]`, 'bars must not go back'); });
+    }
+    return clip;
   });
 }
 

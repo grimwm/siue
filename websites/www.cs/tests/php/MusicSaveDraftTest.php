@@ -98,6 +98,20 @@ final class MusicSaveDraftTest extends TestCase
         self::assertSame('bad_score', $this->save('my-tune', 2, music_draft_bundle(['score.json' => json_encode($score)]))[1]['error']);
     }
 
+    public function testDjAndEffectsClipsAreKeptAsTheyWereSaved(): void
+    {
+        $score = json_decode(self::score('my-tune', 1), true);
+        $score['schema'] = 2;
+        $clips = [
+            ['effect' => 'tape_stop', 'lane' => null, 'from_bar' => 1.5, 'to_bar' => 2, 'settings' => ['time' => 'fast']],
+            ['effect' => 'filter', 'lane' => $score['lanes'][0]['id'], 'from_bar' => 1, 'to_bar' => 1.25, 'points' => [[1, 0, 0.5], [1.25, 1, 0.5]]],
+        ];
+        $score['fx_clips'] = $clips;
+        [$status] = $this->save('my-tune', 1, music_draft_bundle(['score.json' => json_encode($score)]));
+        self::assertSame(201, $status);
+        self::assertSame($clips, json_decode((string) $this->store->draftBytes('my-tune', 1, 'score.json'), true)['fx_clips']);
+    }
+
     public function testASaveNeedsTheTokenAndASession(): void
     {
         [$status] = $this->save('my-tune', 1, music_draft_bundle(['score.json' => self::score('my-tune', 1)]), false);

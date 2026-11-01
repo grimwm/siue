@@ -49,7 +49,7 @@ test('after a win or a loss only undo and restart act', () => {
 test('undo restores the board after a reveal, a bomb and a clone', () => {
   let run = startRun(lv(['PW!+C', '.....'], 'machines: block-down'));
   const seen = [JSON.stringify(run.now)];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 5; i++) {
     run = act(run, mv('right')).run;
     seen.push(JSON.stringify(run.now));
   }
@@ -63,4 +63,16 @@ test('undo restores the board after a reveal, a bomb and a clone', () => {
   assert.equal(run.now.terrain[1], 'fake-wall');
   assert.equal(run.now.terrain[2], 'bomb');
   assert.equal(run.now.objects[9], null);
+});
+
+test('showing an invisible wall is no entry in undo: Undo goes back the last whole turn', () => {
+  let run = startRun(lv(['P.I.E', '.....']));
+  run = act(run, mv('right')).run;
+  const shown = act(run, mv('right'));
+  assert.ok(shown.events.some(e => e.kind === 'revealed'));
+  assert.equal(shown.run.past.length, 1, 'the bump added no entry');
+  assert.equal(shown.run.now.moves, 1);
+  const back = undo(shown.run);
+  assert.equal(back.now.moves, 0, 'Undo takes back the step before it');
+  assert.equal(back.past.length, 0);
 });

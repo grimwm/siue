@@ -17,7 +17,7 @@ const ANSWERS: Record<string, readonly [number | null, number | null]> = {
   trap: [7, 7],
   popup: [5, 5],
   gravel: [11, 11],
-  'fake-wall': [5, null],
+  'fake-wall': [4, 4],
   'invisible-wall': [11, 11],
   teleport: [14, null],
   thief: [5, 5],

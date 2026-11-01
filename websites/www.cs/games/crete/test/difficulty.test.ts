@@ -2,7 +2,7 @@
 // and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, measuring, hardPieces, challengeProblems, rampProblems, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, hardPieces, challengeProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
@@ -299,6 +299,24 @@ test('plainWalk: the shortest plain path through the relics the gate needs, then
   assert.equal(measure(row).naiveWins, true);
 });
 
+test('a level that hides walls is held to a lower band: a gentler ramp and a ceiling on its search', () => {
+  assert.deepEqual(HIDDEN, { ramp: { least: 1.1, most: 1.5 }, most: 20_000 });
+  const plain = level(['#####', '#P.E#', '#####']);
+  const fake = level(['#####', '#PWE#', '#####']);
+  const unseen = level(['######', '#P.IE#', '######']);
+  assert.equal(hidesWalls(plain), false);
+  assert.ok(hidesWalls(fake) && hidesWalls(unseen));
+  assert.equal(rampOf(plain), RAMP);
+  assert.equal(rampOf(fake), HIDDEN.ramp);
+  assert.ok(HIDDEN.ramp.most < RAMP.most, 'a smaller step up than a plain level may take');
+  const at = (explored: number) => ({ ...measure(plain), explored });
+  assert.deepEqual(rampProblems(at(10_000), at(16_000), rampOf(plain)), [], 'a plain level may climb 1.6 ×');
+  assert.match(rampProblems(at(10_000), at(16_000), rampOf(fake)).join(), /at most 1\.5 ×/, 'one that hides walls may not');
+  assert.deepEqual(hiddenProblems(plain, at(40_000)), [], 'no ceiling on a plain level');
+  assert.deepEqual(hiddenProblems(fake, at(HIDDEN.most)), []);
+  assert.match(hiddenProblems(unseen, at(HIDDEN.most + 1)).join(), /hides walls: stored 20001 situations, the ceiling .* is 20000/);
+});
+
 test('the shared bar: never needs a Minotaur; a chase level may trade puzzle numbers for the chase checks', () => {
   const solo: Difficulty = {
     solved: true, shortest: SHARED_BAR.shortest, explored: SHARED_BAR.explored, withoutMinotaur: null, minotaurDelta: 0,
@@ -350,7 +368,8 @@ for (const chapter of CHAPTERS.filter(c => c.released)) {
     test(`${id} is a challenge level: a real fight, a steady step up from the one before`, () => {
       const problems = [
         ...challengeProblems(of(id), BAR, { teaching: teaching.map(of) }),
-        ...(k > 0 ? rampProblems(of(challenges[k - 1]!), of(id)) : []),
+        ...(k > 0 ? rampProblems(of(challenges[k - 1]!), of(id), rampOf(levelById(id))) : []),
+        ...hiddenProblems(levelById(id), of(id)),
       ];
       assert.deepEqual(problems, [], id);
     });

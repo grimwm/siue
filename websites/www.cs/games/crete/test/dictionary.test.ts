@@ -86,7 +86,7 @@ test('a turn\'s meetings: items taken (never a story page) and the active tiles 
   };
   assert.deepEqual(walk(['#######', '#Pz_$E#', '#######'], ['right', 'right', 'right']), [['mirror@100'], ['button@100'], ['thief@100']]);
   assert.deepEqual(walk(['#######', '#P;..E#', '#######'], ['right', 'right']), [[], ['popup@100']], 'the pop-up wall, as it rises behind him');
-  assert.deepEqual(walk(['#######', '#PWI.E#', '#######'], ['right', 'right', 'right']), [['fake-wall@0'], [], ['invisible-wall@0']], 'a wall found by a bump');
+  assert.deepEqual(walk(['#######', '#PWI.E#', '#######'], ['right', 'right', 'right']), [['fake-wall@0'], ['invisible-wall@0'], []], 'a wall found by a step');
   assert.deepEqual(walk(['#######', '#P=p=E#', '#######'], ['right'], 'pages: a'), [[]], 'a story page is no meeting');
   assert.deepEqual(walk(['#######', '#P==_E#', '#######'], ['right']), [['button@300']], 'at the end of a slide, where he reaches it');
   assert.deepEqual(walk(['#######', '#P|..E#', '#######'], ['right']), [['gate@100']], 'the open gate');

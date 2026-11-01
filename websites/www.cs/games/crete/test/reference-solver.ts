@@ -4,7 +4,7 @@
 import { DIRS, TERRAIN, OBJECTS, KEY_COLORS } from '../src/puzzle/tiles.ts';
 import type { Terrain, Tool } from '../src/puzzle/tiles.ts';
 import type { Level } from '../src/puzzle/level.ts';
-import { step } from '../src/puzzle/step.ts';
+import { step, noTurn } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { SOLVER_CAP } from '../src/puzzle/solver.ts';
@@ -86,7 +86,7 @@ function search(start: State, cap: number, refuse: Refuse | null): SolveResult {
     for (const code of actionCodes(s)) {
       const r = step(s, decode(code));
       const n = r.state;
-      if (n === s || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
+      if (noTurn(s, n) || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
       const k = stateKey(n);
       if (seen.has(k)) continue;
       seen.add(k);

@@ -86,8 +86,8 @@ Links are never written. As in Chip's Challenge, each brown button controls the 
 - **Daedalus's snare**: whoever stands on it (Theseus, a block, a hazard, the Minotaur) is held while no linked brown button is held down by Theseus, a block or a hazard (never the Minotaur or the cow). Theseus's move while held is a bump; waiting and tools are turns. A block in a held snare cannot be pushed. The snare keeps no state of its own: it holds or not by what stands on its buttons now.
 - **Pop-up wall**: floor until Theseus leaves it by any means (a step, a slide, a throw, a teleport), then wall. Nothing else enters it.
 - **Gravel**: Theseus crosses it; blocks, the Minotaur and hazards do not.
-- **Fake wall**: wall to everyone until Theseus bumps it, which opens it and costs a turn.
-- **Invisible wall**: looks like floor and is wall; Theseus's bump shows it and costs a turn. Slides, pushed blocks and teleport exits reveal neither kind.
+- **Fake wall**: wall to everyone until Theseus bumps it, which opens it, and he steps through on that same move.
+- **Invisible wall**: looks like floor and is wall; Theseus's bump shows it and costs no turn. Slides, pushed blocks and teleport exits reveal neither kind.
 - **Teleport**: Theseus or a block comes out of the next teleport in reading order (wrapping), onto the cell beyond it in the same direction, and arrives there in full; a blocked exit is skipped for the next. Wall to the Minotaur and hazards; a lone teleport is wall.
 - **Thief**: takes all of Theseus's gear; keys and tools stay.
 - **Bomb**: a block or a hazard arriving on it is destroyed with it; Theseus arriving on it loses a heart and is thrown back as in a catch, and the bomb is gone. Wall to the Minotaur.

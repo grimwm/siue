@@ -1,6 +1,6 @@
 /* The Island of Crete: the false walls, Chapter 4's levels, in the level text (src/puzzle/level.ts).
- * Ten levels that bring in the fake wall and the invisible wall: the first three teach them (a painted wall opens
- * at a bump, an unseen wall stops you and the beast alike, and the two together), the rest mix them with the pieces
+ * Ten levels that bring in the fake wall and the invisible wall: the first three teach them (a painted wall gives
+ * way as you walk in, an unseen wall stops you and the beast alike, and the two together), the rest mix them with the pieces
  * of Chapters 1 to 3 and clear the challenge bar, and the tenth, larger than the screen, has more than one way
  * through. The solver proves each winnable (test/chapter-4.test.ts). DOM-free. */
 import { parse } from './level.ts';
@@ -8,7 +8,7 @@ import type { Level } from './level.ts';
 
 export const FALSE_WALLS: readonly { id: string; text: string }[] = [
   { id: 'ch4-1', text: `title: The Wall That Gives
-intro: The high way runs past the beast. The low way ends in a wall, and one of its stones is only painted: bump it and it opens, though the bump costs you a move.
+intro: The high way runs past the beast. The low way ends in a wall, and one of its stones is only painted: walk into it and it gives way, and you are through.
 
 ###########
 #P...#...E#
@@ -38,79 +38,79 @@ intro: Here what looks open is shut, and what looks shut is open. Bump what bloc
 #...#######
 ###########
 ` },
-  { id: 'ch4-4', text: `title: The Painted Stone
-intro: Two relics, a red key and its door. The beast keeps the middle hall; two of these walls are only painted, and they are your way round him.
-
-############
-#P......#..#
-#..####.#..#
-#.#*.#W.#.##
-#.##......##
-#......M...#
-#.#..##....#
-#.#r.#...###
-#...###.R..#
-#...W..*#|E#
-############
-` },
-  { id: 'ch4-5', text: `title: The Unseen Shore
+  { id: 'ch4-4', text: `title: The Unseen Shore
 intro: Flippers lie in the pool and three relics about it. Two stretches of floor here are wall you cannot see; the beast knows where they are, and he will not wade after you.
 
 ############
 #P.#######*#
 #...#M.~~~.#
 #..*.I.~f~.#
-#..###.~~~.#
-#..#.#.....#
-##.###..#.##
-#*..O...#.##
+#..#.#.~~~.#
+#....#.....#
+#..###..#.##
+#*..O......#
 ###....##..#
-######I..|E#
+###.##I..|E#
 ############
 ` },
-  { id: 'ch4-6', text: `title: The Glass Floor
+  { id: 'ch4-5', text: `title: The Painted Stone
+intro: Two relics, a red key and its door. The beast keeps the middle hall; two of these walls are only painted, and they are your way round him.
+
+############
+#P......#..#
+#..##.#.#..#
+#.#*..W.#.##
+#.##.......#
+#......M...#
+#.#..##....#
+#.#r.#...#.#
+#...###.R..#
+#...W..*#|E#
+############
+` },
+  { id: 'ch4-6', text: `title: Lying Ground
+intro: Loose stone and closing stone keep the beast off, and here the walls lie both ways: one painted, two unseen. Mind where the stones close behind you.
+
+############
+#P..::.#..##
+#...#.#..;.#
+##.#I....#.#
+#.:..#W..#M#
+#*##.##.:#.#
+###..#...#.#
+#...:....;.#
+#..##.#.I..#
+#*.#;.#...|E
+############
+` },
+  { id: 'ch4-7', text: `title: The Glass Floor
 intro: Ice runs through these halls and skates lie in the west. Two walls here are only painted, one of them across the ice; the beast skids as you do.
 
 ############
-#P...#####*#
+#P...#.##.*#
 #.#....#...#
 #.#==W==.###
 #..##..=.#.#
 #k.#M##=...#
-#....#.=...#
+#....##=...#
 ##......W..#
-#...#.....##
+#...##....##
 #*..#....|E#
 ############
 ` },
-  { id: 'ch4-7', text: `title: The Waiting Wall
+  { id: 'ch4-8', text: `title: The Waiting Wall
 intro: A block, a button and a wall that waits on it. A painted stone stands near the block, and two unseen walls guard the low ways.
 
 ############
-#P##..##...#
+#P##..##.###
 #.#...#..#.#
 #.#O.W..*#.#
 #.......T###
-#...#._#...#
+#...#._#..##
 ###.##.#..M#
 #*#.#......#
-#...#...I..#
+#...#...I#.#
 ###.I..###|E
-############
-` },
-  { id: 'ch4-8', text: `title: Lying Ground
-intro: Loose stone and closing stone keep the beast off, and here the walls lie both ways: one painted, two unseen. Mind where the stones close behind you.
-
-############
-#P..::##..##
-#..##.#..;.#
-##.#I....#.#
-#.:..#W.##M#
-#*##.#..:#.#
-###..#...#.#
-##..:....;.#
-#..##.#.I..#
-#*.#;.#...|E
 ############
 ` },
   { id: 'ch4-9', text: `title: The General
@@ -119,14 +119,14 @@ pages: ch4-taurus
 
 ############
 ##..FF::..P#
-#.;##..##..#
-#.#h...I#.##
+#.;###.##..#
+#.#h...I..##
 #M##.W#..:.#
-#.#:..#.##*#
+#.#:..#.#.*#
 #.#.FF#..###
 #.;....:...#
-#.pI....#..#
-E|...#.;#.*#
+#.pI.##.#..#
+E|.....;..*#
 ############
 ` },
   { id: 'ch4-10', text: `title: The Painted Labyrinth
@@ -136,14 +136,14 @@ pages: ch4-queen
 ####################
 #P....#......####.p#
 ####....##...###..##
-##.*..:...##..:..###
+###*..:...##..:..###
 #.......#..I##.....#
 #..##...#.......#W.#
-##....##..###.#.#.##
+##.....#..###.#.#.##
 #r###.:..M#...:.#.##
 #.......###..#.#...#
 #..*.###..##.#.R...#
-#.#..#....:..####.##
+#.#..#.#..:.#####.##
 #*##...W##...####|E#
 ####################
 ` },

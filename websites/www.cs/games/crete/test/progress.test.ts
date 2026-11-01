@@ -1,7 +1,7 @@
 // Trial progress in this browser: cleared, assisted, best moves; blocked or corrupt storage is an empty record.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createProgress, PROGRESS_KEY } from '../src/progress.ts';
+import { createProgress, PROGRESS_KEY, CH4_ORDER_KEY } from '../src/progress.ts';
 import type { StorageLike } from '../../_kit/ports.ts';
 
 const memory = (init: Record<string, string> = {}): StorageLike & { data: Record<string, string> } => {
@@ -42,4 +42,20 @@ test('a table stored for trial-1 to trial-8 in today\'s shape reads back the sam
     assert.deepEqual(p.get(`trial-${i}`), want);
   }
   assert.deepEqual(p.get('trial-9'), { cleared: false, assisted: false, best: null });
+});
+
+test("Chapter 4's levels 4 to 8 keep their clears through the new order, once", () => {
+  const old = { 'ch4-3': { cleared: true, best: 14 }, 'ch4-4': { cleared: true, best: 58 }, 'ch4-8': { cleared: true, best: 56 } };
+  const st = memory({ [PROGRESS_KEY]: JSON.stringify(old) });
+  const p = createProgress(st);
+  assert.deepEqual(p.get('ch4-3'), { cleared: true, assisted: false, best: 14 }, 'a level that kept its place keeps its clear');
+  assert.deepEqual(p.get('ch4-5'), { cleared: true, assisted: false, best: 58 }, 'the old level 4 is level 5 now');
+  assert.deepEqual(p.get('ch4-6'), { cleared: true, assisted: false, best: 56 }, 'the old level 8 is level 6 now');
+  assert.deepEqual(p.get('ch4-4'), { cleared: false, assisted: false, best: null }, 'the old level 5 was not cleared');
+  assert.equal(st.data[CH4_ORDER_KEY], '1');
+  p.record('ch4-4', 60, false);
+  assert.deepEqual(createProgress(st).get('ch4-4'), { cleared: true, assisted: false, best: 60 }, 'a clear made since stays where it is');
+  const fresh = memory();
+  createProgress(fresh).record('ch4-4', 53, false);
+  assert.deepEqual(createProgress(fresh).get('ch4-4'), { cleared: true, assisted: false, best: 53 }, 'a new browser is never reordered');
 });

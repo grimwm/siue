@@ -92,9 +92,13 @@ test('step: keys down together are one chord; a tap keeps the picked length, a h
   gather.down(67, 0.02);
   assert.equal(gather.up(64, 0.1), null, 'keys still down');
   assert.equal(gather.up(60, 0.15), null);
-  assert.deepEqual(gather.up(67, 0.2), { pitches: [60, 64, 67], held: null });
+  assert.deepEqual(gather.up(67, 0.2), { pitches: [60, 64, 67], velocities: [90, 90, 90], held: null });
   gather.down(62, 1);
-  assert.deepEqual(gather.up(62, 2.6), { pitches: [62], held: 1.5 }, 'held 1.6 s at 60 BPM');
+  assert.deepEqual(gather.up(62, 2.6), { pitches: [62], velocities: [90], held: 1.5 }, 'held 1.6 s at 60 BPM');
+  gather.down(67, 3, 40);
+  gather.down(60, 3.01, 110);
+  assert.deepEqual(gather.up(60, 3.1), null);
+  assert.deepEqual(gather.up(67, 3.1), { pitches: [60, 67], velocities: [110, 40], held: null }, 'each key keeps how hard it was played');
 });
 
 test('after a count-in the take starts on the downbeat, so a late first note lands late', () => {

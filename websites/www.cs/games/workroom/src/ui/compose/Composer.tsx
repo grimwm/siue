@@ -1,6 +1,6 @@
-// The composer: one piece's parts, the selected part's notes on the editing grid, as sheet music or both, three ways to
-// put notes in (Play Live, Step, Grid), Undo and Redo over every edit, hearing the part alone or with the piece, Import
-// Music File and Export, and Save Draft. It holds
+// The composer: one piece's parts, the selected part's notes on the editing grid, as sheet music or both, four ways to
+// put notes in (Play Live with Play Along, Step, Grid, Hum), a plugged-in keyboard or drum pads (Your Keyboard), Undo
+// and Redo over every edit, hearing the part alone or with the piece, Import Music File and Export, and Save Draft. It holds
 // the page's state and wires the DOM-free modules (compose/) to the keys, the grid and the sound. While any key is
 // held the page is pinned where it is (compose/scrollpin.ts), and every readout keeps a fixed height, so nothing
 // moves under the player.
@@ -18,6 +18,8 @@ import { toMusicXml } from '../../compose/toxml.ts';
 import { addNotes, addPart, clearPart, moveIntoRange, moveNote, recolourPart, removeNotes, removePart, renamePart, resizeNote, setInstrument } from '../../compose/edit.ts';
 import { createHistory } from '../../compose/history.ts';
 import { keyboardStart, OCTAVE_DOWN, OCTAVE_UP, pitchForKey } from '../../compose/keys.ts';
+import { humNotes, keyScale } from '../../compose/hum.ts';
+import type { HumPlace, HumSegment, HumSnap } from '../../compose/hum.ts';
 import { createLiveTake } from '../../compose/live.ts';
 import type { LiveTake } from '../../compose/live.ts';
 import { saveScore } from '../../compose/save.ts';
@@ -42,13 +44,17 @@ import { ImportPreview } from './ImportPreview.tsx';
 import { PartSheet } from './PartSheet.tsx';
 import { RangePicture } from './RangePicture.tsx';
 import { Icon, InstrumentPicker, rangeWords } from './InstrumentPicker.tsx';
+import { HumPanel } from './HumPanel.tsx';
+import type { HumPorts } from './HumPanel.tsx';
 import { Keyboard } from './Keyboard.tsx';
+import { YourKeyboard } from './YourKeyboard.tsx';
 
-export type Mode = 'live' | 'step' | 'grid';
+export type Mode = 'live' | 'step' | 'grid' | 'hum';
 export const MODES: readonly { id: Mode; label: string; icon: string; help: string }[] = [
-  { id: 'live', label: 'Play Live', icon: 'keys', help: 'Play the keys: a key held down sets the note\'s length, as on a piano. Recording starts on your first note and stops after a bar of quiet.' },
+  { id: 'live', label: 'Play Live', icon: 'keys', help: 'Play the keys: a key held down sets the note\'s length, as on a piano. Recording starts on your first note and stops after a bar of quiet. Play Along plays the piece while you record over it, the other parts shown as outlines.' },
   { id: 'step', label: 'Step', icon: 'pitched', help: 'Pick a length, then press a key (or several together for a chord). The note goes in at the dashed line, which moves on.' },
   { id: 'grid', label: 'Grid', icon: 'keys', help: 'Tap an empty square to add a note of the length picked. Drag a note to move it; drag its right end to make it longer or shorter.' },
+  { id: 'hum', label: 'Hum', icon: 'voices', help: 'Hum or sing, and your voice becomes notes in this part. Record With Mic, try the demo, or upload a recording.' },
 ];
 
 export type Show = 'grid' | 'sheet' | 'both';
@@ -85,6 +91,10 @@ export interface ComposerProps {
   files?: ComposerFiles;
   /** Start A New Piece from an imported file: the page asks for the new piece's title and project, then opens it. */
   onNewPiece?(doc: EditDoc, title: string): void;
+  /** Asks the browser for Web MIDI ({ sysex: false }); absent where there is none. */
+  midi?: () => Promise<MIDIAccess>;
+  /** Hum's microphone, file decoding and playback; without it there is no Hum. */
+  hum?: HumPorts;
 }
 
 const isTyping = (t: EventTarget | null): boolean =>
@@ -119,6 +129,11 @@ export function Composer(p: ComposerProps) {
   const [concert, setConcert] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [choice, setChoice] = useState<string[]>([]);
+  const [humSnap, setHumSnap] = useState<HumSnap>('friendly');
+  const [humPlace, setHumPlace] = useState<HumPlace>('after');
+  const [humLine, setHumLine] = useState<number | null>(null);
+  const [along, setAlong] = useState<'off' | 'ready' | 'counting' | 'on'>('off');
+  const [alongParts, setAlongParts] = useState(true);
   const fileInput = useRef<HTMLInputElement>(null);
   const gridWrap = useRef<HTMLDivElement>(null);
   const sheetBox = useRef<HTMLDivElement | null>(null);
@@ -164,23 +179,31 @@ export function Composer(p: ComposerProps) {
   useEffect(() => { if (entry) void p.sampler.ready(entry.id); }, [entry?.id]);
 
   // ---- Play Live ----
+  /** Play Along's clock while it plays: the piece's own seconds. Otherwise keys are timed by `now`. */
+  const alongClock = useRef<(() => number) | null>(null);
+  const liveNow = (): number => alongClock.current?.() ?? p.now();
   const commitTake = (): void => {
     const take = live.current.take;
+    const t = liveNow();
     live.current.take = null;
     setRecording('idle');
     const s = state.current;
     if (!take || !take.started() || !s.part) return;
-    const notes = take.notes(s.tidy, s.quarter, p.now());
+    const notes = take.notes(s.tidy, s.quarter, t);
+    if (notes.length === 0) return;
     const added = addNotes(s.doc, s.part.id, notes);
     apply(added.doc);
     setStatus(`Recorded ${notes.length} ${notes.length === 1 ? 'note' : 'notes'}. Undo takes them back.`);
   };
+  /** The first beat of the bar after a part's last note: where a new take, or hummed notes, go. */
+  const afterPart = (x: Part | null): number => {
+    const end = x ? Math.max(0, ...x.notes.map(n => n.start + n.length)) : 0;
+    return clock.barStartBeat(end === 0 ? 1 : clock.barOfBeat(end - 1e-9) + 1);
+  };
   const newTake = (at: number | null): LiveTake => {
-    const s = state.current;
-    const end = s.part ? Math.max(0, ...s.part.notes.map(n => n.start + n.length)) : 0;
-    const bar = end === 0 ? 1 : clock.barOfBeat(end - 1e-9) + 1;
-    const tempo = clock.tempoAt(bar);
-    const take = createLiveTake({ startBeat: clock.barStartBeat(bar), bpm: tempo.bpm, beatsPerBar: tempo.beats });
+    const startBeat = afterPart(state.current.part);
+    const tempo = clock.tempoAt(clock.barOfBeat(startBeat));
+    const take = createLiveTake({ startBeat, bpm: tempo.bpm, beatsPerBar: tempo.beats });
     if (at !== null) take.begin(at);
     live.current.take = take;
     return take;
@@ -189,10 +212,83 @@ export function Composer(p: ComposerProps) {
     if (recording !== 'on') return;
     const timer = setInterval(() => {
       const take = live.current.take;
-      if (take && take.quietEnough(p.now())) commitTake();
+      if (take && !alongClock.current && take.quietEnough(p.now())) commitTake();
     }, 100);
     return () => clearInterval(timer);
   }, [recording]);
+
+  // ---- Play Along ----
+  // The piece plays (the other parts, or a click on every beat when they are off) after a one-bar count-in, and the keys
+  // record against its own clock, so the notes land in time with it. It ends with the piece, or on Stop.
+  const alongRun = useRef(0);
+  const alongAudio = useRef<HTMLAudioElement | null>(null);
+  const finishAlong = (): void => {
+    alongRun.current++;
+    if (live.current.take) commitTake();
+    alongClock.current = null;
+    alongAudio.current?.pause();
+    alongAudio.current = null;
+    setAlong('off');
+    setPlayhead(null);
+  };
+  const playAlong = async (): Promise<void> => {
+    const s = state.current;
+    if (!s.part) return;
+    if (live.current.take) commitTake();
+    stopListening();
+    const run = ++alongRun.current;
+    const full = scoreFromDoc(s.doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
+    const others: Score = { ...full, lanes: full.lanes.filter(l => l.id !== s.part!.id), notes: full.notes.filter(n => n.lane !== s.part!.id), motifs: [] };
+    let el: HTMLAudioElement | null = null;
+    if (alongParts && others.notes.length > 0) {
+      setAlong('ready');
+      setStatus('Getting the other parts ready…');
+      try {
+        const built = await p.buildSound(`along-${editKey(s.doc)}-${s.part.id}`, others, () => {});
+        el = new Audio(built.url);
+      } catch (e) {
+        setAlong('off');
+        setStatus(`The other parts could not be built: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+      if (run !== alongRun.current) return;
+    }
+    setStatus('');
+    setAlong('counting');
+    const first = clock.tempoAt(1);
+    const gap = 60 / first.bpm;
+    for (let i = 0; i < first.beats; i++) setTimeout(() => { if (run === alongRun.current) p.click?.(i === 0); }, i * gap * 1000);
+    await new Promise(r => setTimeout(r, first.beats * gap * 1000));
+    if (run !== alongRun.current) return;
+    const end = clock.seconds(clock.barStartBeat(barsNeeded(s.doc) + 1));
+    const take = createLiveTake({ startBeat: 0, bpm: first.bpm, beatsPerBar: first.beats, beatOf: t => clock.beat(t) });
+    take.begin(0);
+    live.current.take = take;
+    const t0 = p.now();
+    alongClock.current = el ? () => el.currentTime : () => p.now() - t0;
+    if (el) {
+      alongAudio.current = el;
+      el.addEventListener('ended', () => { if (run === alongRun.current) finishAlong(); });
+      try { await el.play(); } catch { /* the page's sound was refused: the clock still runs */ }
+    }
+    setAlong('on');
+    setRecording('on');
+    let lastBeat = -1;
+    const tick = (): void => {
+      if (run !== alongRun.current || !alongClock.current) return;
+      const t = alongClock.current();
+      if (t >= end) { finishAlong(); return; }
+      const beat = clock.beat(t);
+      setPlayhead(beat);
+      if (!el && Math.floor(beat + 1e-6) !== lastBeat) {
+        lastBeat = Math.floor(beat + 1e-6);
+        p.click?.(Math.abs(clock.barStartBeat(clock.barOfBeat(lastBeat)) - lastBeat) < 1e-6);
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  useEffect(() => () => { alongRun.current++; alongAudio.current?.pause(); }, []);
   const startCountIn = (): void => {
     if (!part) return;
     setRecording('counting');
@@ -203,20 +299,25 @@ export function Composer(p: ComposerProps) {
   };
 
   // ---- Keys ----
-  const keyDown = (pitch: number, key: string): void => {
+  /** A key went down: on screen, on the computer keyboard (velocity 90) or on a plugged-in keyboard or drum pad. */
+  const keyDown = (pitch: number, key: string, velocity = 90, drum = false): void => {
     const s = state.current;
     if (!s.part || live.current.pressed.has(key)) return;
+    if (drum && !s.entry?.pieces) {
+      const kit = s.doc.parts.find(x => p.entries.find(e => e.id === x.instrument)?.pieces);
+      setStatus(kit ? `Drum pads play the drum part: choose ${kit.name} in Parts In This Piece.` : 'Drum pads play a drum part: Add Part, then Drums & Percussion.');
+      return;
+    }
     live.current.pressed.set(key, pitch);
     pin.hold(key);
     if (live.current.handles.has(pitch)) return;
-    live.current.handles.set(pitch, p.sampler.start({ instrument: s.part.instrument, gain_db: s.part.gain_db, attack: s.part.attack, release: s.part.release }, pitch, 90));
+    live.current.handles.set(pitch, p.sampler.start({ instrument: s.part.instrument, gain_db: s.part.gain_db, attack: s.part.attack, release: s.part.release }, pitch, velocity));
     setHeld(h => new Set(h).add(pitch));
-    const t = p.now();
-    if (s.mode === 'live') {
+    if (s.mode === 'live' && (alongClock.current || along === 'off')) {
       const take = live.current.take ?? newTake(null);
-      take.down(pitch, t);
+      take.down(pitch, liveNow(), velocity);
       setRecording('on');
-    } else if (s.mode === 'step') gather.down(pitch, t);
+    } else if (s.mode === 'step') gather.down(pitch, p.now(), velocity);
     pin.keep();
   };
   const keyUp = (key: string): void => {
@@ -232,13 +333,12 @@ export function Composer(p: ComposerProps) {
     p.sampler.stop(handle);
     setHeld(h => { const n = new Set(h); n.delete(pitch); return n; });
     const s = state.current;
-    const t = p.now();
-    if (s.mode === 'live') live.current.take?.up(pitch, t);
+    if (s.mode === 'live') live.current.take?.up(pitch, liveNow());
     else if (s.mode === 'step' && s.part) {
-      const chord = gather.up(pitch, t);
+      const chord = gather.up(pitch, p.now());
       if (!chord) return;
       const beats = chord.held ?? stepBeats(s.length, s.dotted, s.quarter);
-      const added = addNotes(s.doc, s.part.id, chord.pitches.map(pp => ({ start: step.cursor(), length: beats, pitch: pp })));
+      const added = addNotes(s.doc, s.part.id, chord.pitches.map((pp, i) => ({ start: step.cursor(), length: beats, pitch: pp, velocity: chord.velocities[i] })));
       step.add(beats, added.ids);
       setStepAt(step.cursor());
       apply(added.doc);
@@ -277,6 +377,24 @@ export function Composer(p: ComposerProps) {
   }, []);
   // A key changed the page (a readout, a note on the grid): put it back where it was pinned.
   useEffect(() => { pin.keep(); });
+
+  // ---- Hum ----
+  const key = useMemo(() => keyScale(doc.parts.filter(x => !p.entries.find(e => e.id === x.instrument)?.pieces).flatMap(x => x.notes.map(n => n.pitch))), [doc.parts]);
+  useEffect(() => { if (humPlace === 'line' && humLine === null) setHumLine(afterPart(part)); }, [humPlace]);
+  const addHum = (segs: HumSegment[]): void => {
+    if (!part || segs.length === 0) return;
+    const base = humPlace === 'replace' ? clearPart(doc, part.id) : doc;
+    const startBeat = humPlace === 'replace' ? 0 : humPlace === 'line' && humLine !== null ? humLine : afterPart(part);
+    const bar = clock.barOfBeat(startBeat);
+    const made = humNotes(segs, { snap: humSnap, classes: key.classes, startBeat, bpm: clock.tempoAt(bar).bpm, tidy, quarter: clock.quarter(bar) });
+    const added = addNotes(base, part.id, made.map(m => m.note));
+    apply(added.doc);
+    setSelected(new Set(added.ids));
+    setArmed(null);
+    setStatus(`Added ${made.length} hummed ${made.length === 1 ? 'note' : 'notes'} at bar ${bar}${humPlace === 'replace' ? ', in place of the part\'s notes' : ''}. Undo takes ${made.length === 1 ? 'it' : 'them'} back.`);
+  };
+  const ghosts = mode === 'live' && part
+    ? doc.parts.filter(x => x.id !== part.id).flatMap(x => x.notes.map(n => ({ start: n.start, length: n.length, pitch: n.pitch, color: x.color }))) : undefined;
 
   // ---- Notes on the grid ----
   const tapNote = (id: number): void => {
@@ -519,14 +637,18 @@ export function Composer(p: ComposerProps) {
               </div>
             </Panel>
           ) : null}
+          {part && entry ? (
+            <YourKeyboard request={p.midi} program={entry.pieces ? null : entry.gm} drums={entry.pieces ? new Map(entry.pieces) : null} help={help}
+              onDown={(k, pitch, velocity, drum) => keyRef.current.keyDown(pitch, k, velocity, drum)} onUp={k => keyRef.current.keyUp(k)} />
+          ) : null}
         </div>
 
         <div class="grid min-w-0 content-start gap-4">
           {part && entry ? (
             <>
-              <div role="tablist" aria-label="Ways To Put Notes In" class="grid grid-cols-3 gap-1 rounded-lg border border-rule bg-panel p-1">
+              <div role="tablist" aria-label="Ways To Put Notes In" class="grid grid-cols-4 gap-1 rounded-lg border border-rule bg-panel p-1">
                 {MODES.map(m => (
-                  <button type="button" role="tab" aria-selected={m.id === mode} onClick={() => { if (live.current.take) commitTake(); setMode(m.id); }}
+                  <button type="button" role="tab" aria-selected={m.id === mode} onClick={() => { if (along !== 'off') finishAlong(); else if (live.current.take) commitTake(); setMode(m.id); }}
                     class={cx('flex min-h-14 flex-col items-center justify-center gap-1 rounded-md font-display text-sm font-semibold tracking-wide uppercase', m.id === mode ? 'bg-amber text-on-accent' : 'text-ink hover:bg-lane')}>
                     <Icon name={m.icon} />{m.label}
                   </button>
@@ -538,9 +660,17 @@ export function Composer(p: ComposerProps) {
                   <span class="text-sm">Tidy To</span>
                   {GRIDS.map(g => <Button pressed={tidy === g} onClick={() => setTidy(g)}>{GRID_LABELS[g]}</Button>)}
                   <Button pressed={countIn} onClick={() => setCountIn(!countIn)}>Count-In: {countIn ? 'On' : 'Off'}</Button>
-                  {recording !== 'idle' ? <Button variant="record" onClick={commitTake}>Stop Recording</Button>
+                  {along !== 'off' ? <Button variant="record" onClick={finishAlong} data={{ 'data-along-stop': '' }}>■ Stop Playing Along</Button>
+                    : recording !== 'idle' ? <Button variant="record" onClick={commitTake}>Stop Recording</Button>
                     : countIn ? <Button variant="record" onClick={startCountIn}>● Record</Button> : null}
+                  {along === 'off' && recording === 'idle' ? <Button onClick={() => void playAlong()}>▶ Play Along</Button> : null}
+                  <Button pressed={alongParts} onClick={() => setAlongParts(!alongParts)} disabled={along !== 'off'}>Hear The Other Parts: {alongParts ? 'On' : 'Off'}</Button>
                 </div>
+              ) : mode === 'hum' && p.hum ? (
+                <HumPanel ports={p.hum} snap={humSnap} onSnap={setHumSnap} place={humPlace} onPlace={setHumPlace} tidy={tidy} onTidy={setTidy}
+                  keyName={key.name} classes={key.classes} onAdd={addHum} help={help} />
+              ) : mode === 'hum' ? (
+                <p class="text-sm text-dim">Hum is not available on this page.</p>
               ) : mode === 'step' ? (
                 <div class="flex flex-wrap items-center gap-1">
                   {STEP_LENGTHS.map(l => <Button pressed={length === l.id} onClick={() => setLength(l.id)} data={{ 'data-length': l.id }}>{l.label}</Button>)}
@@ -572,12 +702,18 @@ export function Composer(p: ComposerProps) {
               ) : null}
               {p.files && show !== 'grid' ? <Help>{`Sheet Music is the same notes written the way musicians read them, in the instrument's clef.${entry.written !== 0 && !entry.pieces ? ` The ${entry.name} is written ${intervalWords(entry.written)} how it sounds; Concert Pitch shows how it sounds.` : ''} Both shows one above the other, scrolling together.`}</Help> : null}
               <div data-readout="" class="h-11 overflow-hidden rounded-lg border border-rule bg-panel px-3 [overflow-anchor:none]">
-                {mode === 'live' ? (
+                {mode === 'live' && along !== 'off' ? (
+                  <p data-live-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">{along === 'ready' ? 'Getting the other parts ready…' : along === 'counting' ? 'Counting in: one bar…'
+                    : `● Playing Along · bar ${playhead === null ? 1 : clock.barOfBeat(playhead)}${held.size ? ` · ${[...held].map(pitchName).join(' ')}` : ''}`}</p>
+                ) : mode === 'live' ? (
                   <p data-live-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">{recording === 'counting' ? 'Counting in…' : recording === 'on'
                     ? `● Recording · ${[...held].map(pitchName).join(' ') || 'waiting for a bar of quiet'}`
                     : `Press a key to start recording at bar ${part.notes.length ? clock.barOfBeat(Math.max(...part.notes.map(n => n.start + n.length)) - 1e-9) + 1 : 1}, beat 1.`}</p>
                 ) : mode === 'step' ? (
                   <p data-step-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">Next note at bar {clock.barOfBeat(stepNow)}, beat {Math.round((stepNow - clock.barStartBeat(clock.barOfBeat(stepNow)) + 1) * 100) / 100}{held.size ? ` · ${[...held].map(pitchName).join(' ')}` : ''}</p>
+                ) : mode === 'hum' ? (
+                  <p data-hum-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">{humPlace === 'replace' ? 'Hummed notes replace this part, from bar 1.'
+                    : `Hummed notes go at bar ${clock.barOfBeat(humPlace === 'line' && humLine !== null ? humLine : afterPart(part))}${humPlace === 'line' ? ' (drag the dashed line)' : ''}.`}</p>
                 ) : (
                   <p class="truncate font-mono text-sm leading-[2.6rem] text-dim">{selected.size ? `${selected.size} selected` : 'Tap a square to add a note.'}</p>
                 )}
@@ -591,7 +727,8 @@ export function Composer(p: ComposerProps) {
                   onResize={(id, l) => apply(resizeNote(doc, part.id, id, l, quarter / 4))}
                   onAdd={(s, pitch) => { const made = addNotes(doc, part.id, [{ start: s, length: stepBeats(length, dotted, quarter), pitch }]); apply(made.doc); setSelected(new Set(made.ids)); setArmed(null);
                     const h = p.sampler.start({ instrument: part.instrument, gain_db: part.gain_db, attack: part.attack, release: part.release }, pitch, 90); setTimeout(() => p.sampler.stop(h), 300); }}
-                  onSelect={ids => { setSelected(new Set(ids)); setArmed(null); }} />
+                  onSelect={ids => { setSelected(new Set(ids)); setArmed(null); }}
+                  ghosts={ghosts} line={mode === 'hum' && humPlace === 'line' ? humLine : null} onLine={setHumLine} />
                 <Help>Tap a note to hear and select it; tap it again to delete it. Drag across empty space to select several, then press Delete. Rows in red are beyond the instrument; amber rows are for experts.</Help>
                 </div>
               ) : null}

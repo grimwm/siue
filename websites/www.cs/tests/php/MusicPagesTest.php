@@ -615,7 +615,7 @@ final class MusicPagesTest extends TestCase
         $index = $this->pages->index(music_signed_in($this->sessions, $this->account));
         self::assertConsoleShell($index->body);
         self::assertStringContainsString('<header class="console-head"><h1>Music workroom</h1><p class="crumb"><a href="studio.php">Your studio</a></p><div id="theme-switch"></div></header>', $index->body);
-        self::assertStringContainsString('<div class="index-body"><p class="waiting-total">', $index->body);
+        self::assertStringContainsString('<div class="index-body"><p class="new-piece"><a class="new-piece" href="compose.php">New Piece</a></p><p class="waiting-total">', $index->body);
     }
 
     public function testTheErrorPageWearsTheConsoleToo(): void

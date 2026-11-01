@@ -36,7 +36,8 @@ final class Pages
      * each; the script passes it on to sheet.js); $baseUrl: admin_base_url(), the studio's folder sits beside it;
      * $aiKeys: every studio's AI keys, of which a page shows and changes only its own account's; $confirmations: the
      * mailed links that confirm Forgot your passphrase and Start over; $pairing: the AI keys' sealing keys and their
-     * pairing; $releaseFile: the wheel's release.json (Connect::release), music/dist/release.json when null.
+     * pairing; $releaseFile: the wheel's release.json (Connect::release), music/dist/release.json when null; $instruments: the library's
+     * instrument names, read from the library when null.
      */
     public function __construct(
         private \Closure $storeFor,
@@ -49,6 +50,7 @@ final class Pages
         private Confirmations $confirmations,
         private Pairing $pairing,
         private ?string $releaseFile = null,
+        private ?array $instruments = null,
     ) {
         $this->realm = \Admin\Realm::studio($baseUrl);
         $this->login = $this->realm->baseUrl . 'login.php';
@@ -80,7 +82,8 @@ final class Pages
                 unset($groups['']);
                 $groups[''] = ['name' => 'No project'] + $none;
             }
-            $body = '<p class="waiting-total">' . $store->waitingCount() . ' notes waiting for pickup</p>';
+            $body = '<p class="new-piece"><a class="new-piece" href="compose.php">New Piece</a></p>'
+                . '<p class="waiting-total">' . $store->waitingCount() . ' notes waiting for pickup</p>';
             foreach ($groups as $group) {
                 $body .= '<section class="project"><h2 class="project">' . Html::e($group['name']) . '</h2><ul class="pieces">';
                 foreach ($group['rows'] as $row) {
@@ -117,6 +120,84 @@ final class Pages
             }
             return $this->shell(200, 'Music workroom', 'piece', $id, $v, '', $r, $store, $account);
         }, null, self::pieceBack($r));
+    }
+
+    /** Where a signed-out visit to compose.php returns after sign-in: the piece and draft it asked for, or a new piece. */
+    private static function composeBack(\Admin\Request $r): string
+    {
+        $id = $r->query['id'] ?? null;
+        if ($id === null) {
+            return 'compose.php';
+        }
+        $back = self::pieceBack($r);
+        return $back === '' ? '' : 'compose.php' . substr($back, strlen('piece.php'));
+    }
+
+    /**
+     * GET compose.php?id=<piece>[&v=<n>]: the editor's shell on that piece's draft (the newest when v is absent); GET
+     * compose.php: the editor on a new piece, its body carrying the studio's piece ids (data-pieces) and projects
+     * (data-projects, [{id, name}]) so the new piece's id and project are its own.
+     */
+    public function compose(\Admin\Request $r): \Admin\Response
+    {
+        return $this->guarded($r, true, false, function (Store $store, int $account) use ($r): \Admin\Response {
+            $id = $r->query['id'] ?? null;
+            $v = $r->query['v'] ?? '';
+            if ($id !== null && (!Store::validPieceId($id) || ($v !== '' && !Store::validVersion($v)))) {
+                return $this->errorPage(400, 'No such piece.');
+            }
+            return $this->shell(200, 'Compose', 'compose', $id ?? '', $v, '', $r, $store, $account);
+        }, null, self::composeBack($r));
+    }
+
+    /**
+     * POST save-draft.php?piece=&version= (X-CSRF): the editor's save. The body is a SIUED1 bundle of score.json alone,
+     * from any account, checked as the AI's publish is (DraftCheck: ScoreRules, the library's instruments) and kept as
+     * the piece's next draft only: 409 stale (with latest) for any other version, 409 exists when that draft is taken,
+     * 413 over_quota with the room left and its words past the studio limit. Every answer carries the next token.
+     */
+    public function saveDraft(\Admin\Request $r, string $body): \Admin\Response
+    {
+        return $this->guarded($r, false, true, function (Store $store) use ($r, $body): \Admin\Response {
+            $limits = $store->limits();
+            if (strlen($body) > min($limits->maxRequestBytes, ScoreRules::MAX_SCORE_BYTES + 64)) {
+                return $this->refuseWithToken(413, 'too_large', $r);
+            }
+            $files = DraftCheck::parseBundle($body);
+            if ($files === null) {
+                return $this->refuseWithToken(422, 'bad_bundle', $r);
+            }
+            if (array_keys($files) !== ['score.json']) {
+                return $this->refuseWithToken(422, 'score_only', $r);
+            }
+            $piece = $r->query['piece'] ?? null;
+            $version = $r->query['version'] ?? null;
+            if (!Store::validPieceId($piece)) {
+                return $this->refuseWithToken(422, 'bad_piece', $r);
+            }
+            if (!Store::validVersion($version)) {
+                return $this->refuseWithToken(422, 'bad_version', $r);
+            }
+            $versions = array_column($store->drafts($piece), 'version');
+            $latest = $versions === [] ? 0 : max($versions);
+            if ((int) $version !== $latest + 1) {
+                return $this->refuseWithToken(409, in_array((int) $version, $versions, true) ? 'exists' : 'stale', $r, ['latest' => $latest]);
+            }
+            $about = null;
+            $error = DraftCheck::checkFiles($files, $piece, (int) $version, $limits, $this->instruments ??= \music_library_instruments(), $about, true);
+            if ($error !== null) {
+                return $this->refuseWithToken(422, $error, $r);
+            }
+            try {
+                $store->putDraft($piece, (int) $version, $files, $about);
+            } catch (DraftRejected $e) {
+                if ($e->reason === 'over_quota') {
+                    return $this->refuseWithToken(413, 'over_quota', $r, ['room' => $e->room, 'message' => Usage::refusal($e->room, $limits->quotaBytes, $e->shared)]);
+                }
+                return $this->refuseWithToken(match ($e->reason) { 'exists' => 409, 'too_large' => 413, default => 422 }, $e->reason, $r);
+            }
+            return Http::json(201, ['piece' => $piece, 'version' => (int) $version, 'csrf' => $this->sessions->csrf($r)]);
+        }, 'POST');
     }
 
     /** GET studio.php: Your studio, a plain page that needs no script. */
@@ -193,7 +274,7 @@ final class Pages
         $hidden = static fn(string $action): string => '<input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="action" value="' . $action . '">';
         $usage = $this->accounts->usage($account);
         $quota = $this->limitsOf($account)->quotaBytes;
-        $body = '<h1>Your studio</h1>';
+        $body = '<h1>Your studio</h1><p class="new-piece"><a class="new-piece" href="compose.php">New Piece</a></p>';
         if ($error !== null) {
             $body .= '<p class="error" role="alert">' . Html::e($error) . '</p>';
         }
@@ -602,7 +683,8 @@ final class Pages
                 return Http::json(400, ['error' => 'bad_piece']);
             }
             $drafts = array_map(
-                static fn(array $d): array => ['version' => $d['version'], 'published_at' => $d['published_at']],
+                static fn(array $d): array => ['version' => $d['version'], 'published_at' => $d['published_at'],
+                    'sheet' => $store->hasDraftFile($piece, $d['version'], 'score.musicxml')],
                 $store->drafts($piece),
             );
             return Http::json(200, ['drafts' => $drafts]);
@@ -758,6 +840,28 @@ final class Pages
             'commands' => Connect::commands($this->realm->baseUrl, $release, Connect::PLACEHOLDER)], JSON_UNESCAPED_SLASHES);
     }
 
+    /** Whether $piece's newest draft is a music piece (a sound piece has no bars to compose in). */
+    private function isMusic(Store $store, string $piece): bool
+    {
+        $drafts = $piece === '' ? [] : $store->drafts($piece);
+        return $drafts !== [] && $drafts[0]['kind'] === 'music';
+    }
+
+    /** The New Piece editor's data: the studio's piece ids (data-pieces) and its projects (data-projects, [{id, name}]). */
+    private function newPieceData(Store $store): string
+    {
+        $pieces = [];
+        $projects = [];
+        foreach ($store->drafts() as $row) {
+            $pieces[$row['piece']] = true;
+            if ($row['project_id'] !== '') {
+                $projects[$row['project_id']] ??= ['id' => $row['project_id'], 'name' => $row['project_name']];
+            }
+        }
+        return ' data-pieces="' . Html::e((string) json_encode(array_keys($pieces))) . '"'
+            . ' data-projects="' . Html::e((string) json_encode(array_values($projects))) . '"';
+    }
+
     /**
      * The page shell. The body tells the script this studio's largest note (data-note-max), its room in bytes
      * (data-room), whether it stores scores only, with no MusicXML (data-score-only) and whether its keyring is stored
@@ -768,9 +872,11 @@ final class Pages
         $studio = ' data-note-max="' . $this->limitsOf($account)->maxNoteBytes . '" data-room="' . $store->room() . '"'
             . ' data-score-only="' . ($this->limitsOf($account)->scoreOnly ? '1' : '0') . '"'
             . ' data-account-has-key="' . ($store->keyring() === null ? '0' : '1') . '"'
-            . ($view === 'index' ? ' data-connect="' . Html::e($this->connectData()) . '"' : '');
+            . ($view === 'index' ? ' data-connect="' . Html::e($this->connectData()) . '"' : '')
+            . ($view === 'compose' && $piece === '' ? $this->newPieceData($store) : '');
         $v = Html::e($this->assetVersion);
-        $heading = ($view === 'piece' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>')
+        $heading = ($view === 'piece' || $view === 'compose' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>')
+            . ($view === 'piece' && $this->isMusic($store, $piece) ? '<p class="crumb"><a class="compose-link" href="compose.php?id=' . Html::e($piece) . '">Compose</a></p>' : '')
             . '<p class="crumb"><a href="studio.php">Your studio</a></p>';
         $html = '<!doctype html>' . "\n"
             . '<html lang="en"><head><meta charset="utf-8">'

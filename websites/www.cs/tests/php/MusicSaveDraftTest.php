@@ -128,6 +128,9 @@ final class MusicSaveDraftTest extends TestCase
         self::assertSame(200, $page->status);
         self::assertStringContainsString('data-view="compose"', $page->body);
         self::assertStringContainsString('data-piece="my-tune"', $page->body);
+        // Start A New Piece from an imported file needs the studio's pieces on an existing piece's editor too.
+        preg_match('/data-pieces="([^"]*)"/', $page->body, $m);
+        self::assertSame(['my-tune'], json_decode(html_entity_decode($m[1] ?? ''), true));
         $new = $this->pages->compose(music_signed_in($this->sessions, $this->account));
         self::assertSame(200, $new->status);
         self::assertStringContainsString('data-piece=""', $new->body);

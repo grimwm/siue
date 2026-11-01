@@ -1,5 +1,6 @@
-// The composer: one piece's parts, the selected part's notes on the editing grid, three ways to put notes in (Play
-// Live, Step, Grid), Undo and Redo over every edit, hearing the part alone or with the piece, and Save Draft. It holds
+// The composer: one piece's parts, the selected part's notes on the editing grid, as sheet music or both, three ways to
+// put notes in (Play Live, Step, Grid), Undo and Redo over every edit, hearing the part alone or with the piece, Import
+// Music File and Export, and Save Draft. It holds
 // the page's state and wires the DOM-free modules (compose/) to the keys, the grid and the sound. While any key is
 // held the page is pinned where it is (compose/scrollpin.ts), and every readout keeps a fixed height, so nothing
 // moves under the player.
@@ -9,6 +10,11 @@ import { intervalWords, rangeClass, writtenPitch } from '../../catalogue.ts';
 import { beatClock } from '../../compose/beats.ts';
 import { barsNeeded, scoreFromDoc } from '../../compose/doc.ts';
 import type { EditDoc, Part } from '../../compose/doc.ts';
+import { addAsNewParts, ACCEPT, newDocFrom, previewOf, readMusicFile } from '../../compose/importing.ts';
+import type { ImportPorts, ImportPreview as Preview } from '../../compose/importing.ts';
+import { writeMidi } from '../../compose/midi.ts';
+import { ImportError } from '../../compose/music-file.ts';
+import { toMusicXml } from '../../compose/toxml.ts';
 import { addNotes, addPart, clearPart, moveIntoRange, moveNote, recolourPart, removeNotes, removePart, renamePart, resizeNote, setInstrument } from '../../compose/edit.ts';
 import { createHistory } from '../../compose/history.ts';
 import { keyboardStart, OCTAVE_DOWN, OCTAVE_UP, pitchForKey } from '../../compose/keys.ts';
@@ -30,7 +36,11 @@ import type { Score } from '../../score.ts';
 import { Button } from '../console/Button.tsx';
 import { cx } from '../console/cx.ts';
 import { Panel } from '../console/Panel.tsx';
+import type { SheetModule } from '../SheetMusic.tsx';
 import { EditGrid } from './EditGrid.tsx';
+import { ImportPreview } from './ImportPreview.tsx';
+import { PartSheet } from './PartSheet.tsx';
+import { RangePicture } from './RangePicture.tsx';
 import { Icon, InstrumentPicker, rangeWords } from './InstrumentPicker.tsx';
 import { Keyboard } from './Keyboard.tsx';
 
@@ -40,6 +50,16 @@ export const MODES: readonly { id: Mode; label: string; icon: string; help: stri
   { id: 'step', label: 'Step', icon: 'pitched', help: 'Pick a length, then press a key (or several together for a chord). The note goes in at the dashed line, which moves on.' },
   { id: 'grid', label: 'Grid', icon: 'keys', help: 'Tap an empty square to add a note of the length picked. Drag a note to move it; drag its right end to make it longer or shorter.' },
 ];
+
+export type Show = 'grid' | 'sheet' | 'both';
+export const SHOWS: readonly { id: Show; label: string }[] = [{ id: 'grid', label: 'Grid' }, { id: 'sheet', label: 'Sheet Music' }, { id: 'both', label: 'Both' }];
+
+/** What the editor needs for sheet music and for files: the sheet bundle, the import's readers, and handing the person a file. */
+export interface ComposerFiles {
+  loadSheet(): Promise<SheetModule>;
+  importPorts: ImportPorts;
+  save(name: string, data: Blob): void;
+}
 
 export interface ComposerStart {
   doc: EditDoc;
@@ -61,6 +81,10 @@ export interface ComposerProps {
   /** A metronome click (count-in); absent where the page has no sound. */
   click?(accent: boolean): void;
   onSaved?(piece: string, version: number): void;
+  /** Sheet music, import and export; without it the editor shows the grid only. */
+  files?: ComposerFiles;
+  /** Start A New Piece from an imported file: the page asks for the new piece's title and project, then opens it. */
+  onNewPiece?(doc: EditDoc, title: string): void;
 }
 
 const isTyping = (t: EventTarget | null): boolean =>
@@ -91,6 +115,14 @@ export function Composer(p: ComposerProps) {
   const [listening, setListening] = useState<{ what: 'piece' | 'part'; state: string } | null>(null);
   const [playhead, setPlayhead] = useState<number | null>(null);
   const [stepAt, setStepAt] = useState(0);
+  const [show, setShow] = useState<Show>('grid');
+  const [concert, setConcert] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [choice, setChoice] = useState<string[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const gridWrap = useRef<HTMLDivElement>(null);
+  const sheetBox = useRef<HTMLDivElement | null>(null);
+  const syncing = useRef(false);
 
   const part: Part | null = doc.parts.find(x => x.id === partId) ?? null;
   const entry: Entry | null = part ? p.entries.find(e => e.id === part.instrument) ?? null : null;
@@ -324,6 +356,64 @@ export function Composer(p: ComposerProps) {
     }
   };
 
+  // ---- Files ----
+  const importFile = async (file: File): Promise<void> => {
+    if (!p.files) return;
+    setStatus(`Reading ${file.name}…`);
+    try {
+      const read = await readMusicFile(file.name, new Uint8Array(await file.arrayBuffer()), p.files.importPorts);
+      const v = previewOf(read, file.name, p.entries);
+      setPreview(v);
+      setChoice(v.parts.map(x => x.match));
+      setStatus('');
+    } catch (e) {
+      setPreview(null);
+      setStatus(e instanceof ImportError ? e.message : `${file.name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  const addImported = (): void => {
+    if (!preview) return;
+    try {
+      const next = addAsNewParts(doc, preview, choice, p.entries);
+      apply(next);
+      setPartId(next.parts[doc.parts.length]?.id ?? partId);
+      setPreview(null);
+      setStatus(`Added ${preview.parts.length} ${preview.parts.length === 1 ? 'part' : 'parts'} from ${preview.file}. Undo takes them back.`);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const newFromImport = (): void => {
+    if (!preview || !p.onNewPiece) return;
+    if (dirty) { setStatus('Save Draft first, or Undo your changes: Start A New Piece leaves this piece.'); return; }
+    const title = (preview.title ?? preview.file.replace(/\.[a-z]+$/i, '')).slice(0, 120);
+    p.onNewPiece(newDocFrom(preview, choice, p.entries, title), title);
+  };
+  const exportAs = (kind: 'musicxml' | 'mid'): void => {
+    if (!p.files || doc.parts.length === 0) return;
+    const data = kind === 'musicxml'
+      ? new Blob([toMusicXml(doc, p.entries, { colours: false })], { type: 'application/vnd.recordare.musicxml+xml' })
+      : new Blob([writeMidi(doc, p.entries) as Uint8Array<ArrayBuffer>], { type: 'audio/midi' });
+    p.files.save(`${p.start.piece.id}.${kind}`, data);
+    setStatus(`Exported ${p.start.piece.id}.${kind}.`);
+  };
+  // Both: the grid and the sheet scroll across together, by the same share of their width.
+  const follow = (from: HTMLElement | null, to: HTMLElement | null): void => {
+    if (!from || !to || syncing.current) return;
+    const span = from.scrollWidth - from.clientWidth;
+    syncing.current = true;
+    to.scrollLeft = span > 0 ? (from.scrollLeft / span) * (to.scrollWidth - to.clientWidth) : 0;
+    requestAnimationFrame(() => { syncing.current = false; });
+  };
+  const gridBox = (): HTMLElement | null => gridWrap.current?.querySelector('[data-edit-grid]') ?? null;
+  useEffect(() => {
+    const g = show === 'both' ? gridBox() : null;
+    if (!g) return;
+    const onScroll = (): void => follow(g, sheetBox.current);
+    g.addEventListener('scroll', onScroll, { passive: true });
+    return () => g.removeEventListener('scroll', onScroll);
+  }, [show, partId]);
+
   // ---- Parts ----
   const pick = (e: Entry): void => {
     if (picking === 'change' && part) apply(setInstrument(doc, part.id, e));
@@ -353,13 +443,28 @@ export function Composer(p: ComposerProps) {
           <Button onClick={undo} disabled={history.undoCount() === 0} data={{ 'data-undo': String(history.undoCount()) }}>↶ Undo {history.undoCount()}</Button>
           <Button onClick={redo} disabled={history.redoCount() === 0} data={{ 'data-redo': String(history.redoCount()) }}>↷ Redo {history.redoCount()}</Button>
           <Button onClick={() => part && apply(clearPart(doc, part.id))} disabled={!part || part.notes.length === 0}>Clear</Button>
+          {p.files ? (
+            <>
+              <Button onClick={() => fileInput.current?.click()}>Import Music File</Button>
+              <input ref={fileInput} type="file" accept={ACCEPT} class="hidden" data-import-file="" aria-label="Import Music File"
+                onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; (e.target as HTMLInputElement).value = ''; if (f) void importFile(f); }} />
+              <Button onClick={() => exportAs('musicxml')} disabled={doc.parts.length === 0}>Export MusicXML</Button>
+              <Button onClick={() => exportAs('mid')} disabled={doc.parts.length === 0}>Export MIDI</Button>
+            </>
+          ) : null}
           <Button variant="primary" onClick={() => void save()} disabled={saving || doc.parts.length === 0}>{saving ? 'Saving…' : 'Save Draft'}</Button>
           <Button pressed={help} onClick={() => setHelp(!help)}>Notes On Controls: {help ? 'On' : 'Off'}</Button>
           <Button pressed={fill} onClick={() => setFill(!fill)}>{fill ? 'Leave Full Screen' : 'Fill My Screen'}</Button>
         </div>
-        <Help>Undo and Redo step back and forward through every change; the number says how many steps there are. Ctrl+Z (⌘Z on a Mac) and Shift+Ctrl+Z work too. Clear empties this part. Save Draft keeps a new draft of the piece; older drafts stay.</Help>
+        <Help>Undo and Redo step back and forward through every change; the number says how many steps there are. Ctrl+Z (⌘Z on a Mac) and Shift+Ctrl+Z work too. Clear empties this part. Import Music File brings in MusicXML or MIDI from MuseScore, Logic and other apps, after a preview; Export saves the piece for them. Save Draft keeps a new draft of the piece; older drafts stay.</Help>
         <p data-status="" role="status" class="min-h-[1.5rem] text-sm">{status}</p>
       </header>
+
+      {preview ? (
+        <ImportPreview preview={preview} choice={choice} entries={p.entries} piece={p.start.piece.title}
+          onChoice={(i, id) => setChoice(c => c.map((x, j) => (j === i ? id : x)))}
+          onAdd={addImported} onNew={newFromImport} onCancel={() => { setPreview(null); setStatus('Nothing was imported.'); }} />
+      ) : null}
 
       <div class="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div class="grid content-start gap-4">
@@ -401,6 +506,7 @@ export function Composer(p: ComposerProps) {
                   <span data-instrument-name="" class="font-semibold">{entry.name}</span>
                   <Button onClick={() => setPicking(picking === 'change' ? null : 'change')} pressed={picking === 'change'}>Change Instrument</Button></div>
                 <p data-range-words="" class="font-mono text-xs text-dim">{rangeWords(entry)}</p>
+                <RangePicture entry={entry} pitches={part.notes.map(n => n.pitch)} />
                 {entry.written !== 0 && entry.range ? <p data-written="" class="text-xs text-dim">Written {intervalWords(entry.written)} how it sounds: {pitchName(entry.home ?? 60)} is written {pitchName(writtenPitch(entry, entry.home ?? 60))}.</p> : null}
                 {outOfRange > 0 ? (
                   <div class="grid gap-1">
@@ -454,6 +560,17 @@ export function Composer(p: ComposerProps) {
                   </div>
                 </div>
               )}
+              {p.files ? (
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm">Show As</span>
+                  <div role="group" aria-label="Show As" class="flex gap-1">
+                    {SHOWS.map(s => <Button pressed={show === s.id} onClick={() => setShow(s.id)} data={{ 'data-show': s.id }}>{s.label}</Button>)}
+                  </div>
+                  {show !== 'grid' && entry.written !== 0 && !entry.pieces
+                    ? <Button pressed={concert} onClick={() => setConcert(!concert)}>Concert Pitch: {concert ? 'On' : 'Off'}</Button> : null}
+                </div>
+              ) : null}
+              {p.files && show !== 'grid' ? <Help>{`Sheet Music is the same notes written the way musicians read them, in the instrument's clef.${entry.written !== 0 && !entry.pieces ? ` The ${entry.name} is written ${intervalWords(entry.written)} how it sounds; Concert Pitch shows how it sounds.` : ''} Both shows one above the other, scrolling together.`}</Help> : null}
               <div data-readout="" class="h-11 overflow-hidden rounded-lg border border-rule bg-panel px-3 [overflow-anchor:none]">
                 {mode === 'live' ? (
                   <p data-live-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">{recording === 'counting' ? 'Counting in…' : recording === 'on'
@@ -465,15 +582,23 @@ export function Composer(p: ComposerProps) {
                   <p class="truncate font-mono text-sm leading-[2.6rem] text-dim">{selected.size ? `${selected.size} selected` : 'Tap a square to add a note.'}</p>
                 )}
               </div>
-              <EditGrid entry={entry} color={part.color} notes={part.notes} clock={clock} bars={bars} lineUp={mode === 'grid' ? lineUp : tidy === 'off' ? 'off' : '1/16'}
-                adding={mode === 'grid'} length={stepBeats(length, dotted, quarter)} selected={selected} armed={armed} playhead={playhead}
-                cursor={mode === 'step' ? stepNow : null} onTapNote={tapNote}
-                onMove={(id, s, pitch) => apply(moveNote(doc, part.id, id, s, pitch))}
-                onResize={(id, l) => apply(resizeNote(doc, part.id, id, l, quarter / 4))}
-                onAdd={(s, pitch) => { const made = addNotes(doc, part.id, [{ start: s, length: stepBeats(length, dotted, quarter), pitch }]); apply(made.doc); setSelected(new Set(made.ids)); setArmed(null);
-                  const h = p.sampler.start({ instrument: part.instrument, gain_db: part.gain_db, attack: part.attack, release: part.release }, pitch, 90); setTimeout(() => p.sampler.stop(h), 300); }}
-                onSelect={ids => { setSelected(new Set(ids)); setArmed(null); }} />
-              <Help>Tap a note to hear and select it; tap it again to delete it. Drag across empty space to select several, then press Delete. Rows in red are beyond the instrument; amber rows are for experts.</Help>
+              {show !== 'sheet' || !p.files ? (
+                <div ref={gridWrap} class="grid gap-2">
+                <EditGrid entry={entry} color={part.color} notes={part.notes} clock={clock} bars={bars} lineUp={mode === 'grid' ? lineUp : tidy === 'off' ? 'off' : '1/16'}
+                  adding={mode === 'grid'} length={stepBeats(length, dotted, quarter)} selected={selected} armed={armed} playhead={playhead}
+                  cursor={mode === 'step' ? stepNow : null} onTapNote={tapNote}
+                  onMove={(id, s, pitch) => apply(moveNote(doc, part.id, id, s, pitch))}
+                  onResize={(id, l) => apply(resizeNote(doc, part.id, id, l, quarter / 4))}
+                  onAdd={(s, pitch) => { const made = addNotes(doc, part.id, [{ start: s, length: stepBeats(length, dotted, quarter), pitch }]); apply(made.doc); setSelected(new Set(made.ids)); setArmed(null);
+                    const h = p.sampler.start({ instrument: part.instrument, gain_db: part.gain_db, attack: part.attack, release: part.release }, pitch, 90); setTimeout(() => p.sampler.stop(h), 300); }}
+                  onSelect={ids => { setSelected(new Set(ids)); setArmed(null); }} />
+                <Help>Tap a note to hear and select it; tap it again to delete it. Drag across empty space to select several, then press Delete. Rows in red are beyond the instrument; amber rows are for experts.</Help>
+                </div>
+              ) : null}
+              {p.files && show !== 'grid' ? (
+                <PartSheet doc={doc} part={part.id} entries={p.entries} concert={concert} bar={playhead === null || held.size > 0 ? null : clock.barOfBeat(playhead)}
+                  loadSheet={p.files.loadSheet} boxRef={sheetBox} onScroll={show === 'both' ? () => follow(sheetBox.current, gridBox()) : undefined} />
+              ) : null}
               <Keyboard entry={entry} start={start} held={held} onStart={setKeysFrom} onDown={pitch => keyDown(pitch, `screen:${pitch}`)} onUp={pitch => keyUp(`screen:${pitch}`)} />
               <Help>On a computer keyboard, A S D F G H J K play the white keys and W E T Y U the black ones; Z and X move down and up an octave.</Help>
             </>

@@ -60,6 +60,15 @@ const PRINT_ID = 'sheet-print';
 /** A ctrl or cmd wheel's zoom settles (and the music is laid out again) this long after the wheel stops. */
 const WHEEL_SETTLE_MS = 180;
 
+/** The sheet bundle (OpenSheetMusicDisplay), fetched beside the page's own script the first time it is needed. */
+export async function loadSheetModule(): Promise<SheetModule> {
+  try {
+    return (await import(siblingUrl(import.meta.url, 'sheet.js'))) as SheetModule;
+  } catch {
+    throw new Error('The sheet music renderer did not load. Check the connection and reload the page.');
+  }
+}
+
 const realPorts: SheetPorts = {
   async fetchText(url) {
     const reply = await fetch(url);
@@ -67,13 +76,7 @@ const realPorts: SheetPorts = {
     if (!reply.ok) throw new Error(`The sheet music file did not load (${reply.status}).`);
     return reply.text();
   },
-  async loadModule() {
-    try {
-      return (await import(siblingUrl(import.meta.url, 'sheet.js'))) as SheetModule;
-    } catch {
-      throw new Error('The sheet music renderer did not load. Check the connection and reload the page.');
-    }
-  },
+  loadModule: loadSheetModule,
 };
 
 /** What a view that was left before its file arrived mounts: nothing to draw into, nothing to dispose. */

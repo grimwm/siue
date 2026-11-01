@@ -147,6 +147,7 @@ test("Chapter 2's closing card goes on to Chapter 3: its opening card, then its 
   await page.evaluate(() => {
     const t = (window as unknown as { __creteTest: CreteTest & { game: { press(a: Act): void } } }).__creteTest;
     const r = t.solve(t.initial(t.levelById('ch2-10')));
+    if (!r.solved) throw new Error('ch2-10: the solver found no winning line');
     for (const a of r.line) t.game.press(a);
   });
   await expect(page.locator('#chapter-kicker')).toHaveText('End of Chapter 2');

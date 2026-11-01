@@ -19,6 +19,8 @@ export interface KeyboardProps {
 }
 
 const OCTAVES = 2;
+/** A black key is dark in both themes, a little see-through so the rows behind show, as on the approved mockup. */
+const BLACK_KEY = 'rgba(30, 24, 18, 0.82)';
 
 export function Keyboard(p: KeyboardProps) {
   const pointers = useRef(new Map<number, number>());
@@ -87,7 +89,7 @@ export function Keyboard(p: KeyboardProps) {
           return (
             <button type="button" tabIndex={-1} data-key={k.pitch} aria-label={pitchName(k.pitch)} aria-pressed={p.held.has(k.pitch)} {...handlers(k.pitch)}
               class={cx('absolute top-0 h-full rounded-b-md border border-rule pb-1 font-mono text-[10px] flex items-end justify-center',
-                p.held.has(k.pitch) ? 'bg-amber text-on-accent' : range === 'out' ? 'bg-record/20 text-ink' : range === 'expert' ? 'bg-amber/20 text-ink' : 'bg-paper text-ground')}
+                p.held.has(k.pitch) ? 'bg-amber text-on-accent' : range === 'out' ? 'bg-record/20 text-ink' : range === 'expert' ? 'bg-amber/20 text-ink' : 'bg-paper text-dim')}
               style={{ left: `${i * w}%`, width: `${w}%` }}>{k.pitch % 12 === 0 ? pitchName(k.pitch) : ''}</button>
           );
         })}
@@ -95,8 +97,8 @@ export function Keyboard(p: KeyboardProps) {
           const before = whites.filter(x => x.pitch < k.pitch).length;
           return (
             <button type="button" tabIndex={-1} data-key={k.pitch} aria-label={pitchName(k.pitch)} aria-pressed={p.held.has(k.pitch)} {...handlers(k.pitch)}
-              class={cx('absolute top-0 z-10 h-[60%] rounded-b-md border-[1.5px] border-paper/75', p.held.has(k.pitch) ? 'bg-amber' : 'bg-ground/70')}
-              style={{ left: `${(before - 0.3) * w}%`, width: `${w * 0.6}%` }} />
+              class={cx('absolute top-0 z-10 h-[60%] rounded-b-md border-[1.5px] border-paper/75', p.held.has(k.pitch) && 'bg-amber')}
+              style={{ left: `${(before - 0.3) * w}%`, width: `${w * 0.6}%`, ...(p.held.has(k.pitch) ? {} : { background: BLACK_KEY }) }} />
           );
         })}
       </div>

@@ -414,41 +414,42 @@ export function Composer(p: ComposerProps) {
                 ))}
               </div>
               <Help>{modeHelp}</Help>
-              <div data-readout="" class="h-[5.5rem] overflow-hidden rounded-lg border border-rule bg-panel p-3 [overflow-anchor:none]">
+              {mode === 'live' ? (
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm">Tidy To</span>
+                  {GRIDS.map(g => <Button pressed={tidy === g} onClick={() => setTidy(g)}>{GRID_LABELS[g]}</Button>)}
+                  <Button pressed={countIn} onClick={() => setCountIn(!countIn)}>Count-In: {countIn ? 'On' : 'Off'}</Button>
+                  {recording !== 'idle' ? <Button variant="record" onClick={commitTake}>Stop Recording</Button>
+                    : countIn ? <Button variant="record" onClick={startCountIn}>● Record</Button> : null}
+                </div>
+              ) : mode === 'step' ? (
+                <div class="flex flex-wrap items-center gap-1">
+                  {STEP_LENGTHS.map(l => <Button pressed={length === l.id} onClick={() => setLength(l.id)} data={{ 'data-length': l.id }}>{l.label}</Button>)}
+                  <Button pressed={dotted} onClick={() => setDotted(!dotted)}>Dotted</Button>
+                  <Button onClick={() => { step.rest(stepBeats(length, dotted, quarter)); setStepAt(step.cursor()); }}>+ Rest</Button>
+                  <Button onClick={() => { const s = step.back(); if (s) { if (s.ids.length) apply(removeNotes(doc, part.id, new Set(s.ids))); setStepAt(step.cursor()); } }}>‹ Back One</Button>
+                </div>
+              ) : (
+                <div class="grid gap-2">
+                  <div class="flex flex-wrap items-center gap-1">
+                    <span class="text-sm">Line Up To</span>
+                    {GRIDS.map(g => <Button pressed={lineUp === g} onClick={() => setLineUp(g)}>{GRID_LABELS[g]}</Button>)}
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1">
+                    <span class="text-sm">New Notes</span>
+                    {STEP_LENGTHS.map(l => <Button pressed={length === l.id} onClick={() => setLength(l.id)}>{l.label}</Button>)}
+                  </div>
+                </div>
+              )}
+              <div data-readout="" class="h-11 overflow-hidden rounded-lg border border-rule bg-panel px-3 [overflow-anchor:none]">
                 {mode === 'live' ? (
-                  <div class="grid gap-2">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class="text-sm">Tidy To</span>
-                      {GRIDS.map(g => <Button pressed={tidy === g} onClick={() => setTidy(g)}>{GRID_LABELS[g]}</Button>)}
-                      <Button pressed={countIn} onClick={() => setCountIn(!countIn)}>Count-In: {countIn ? 'On' : 'Off'}</Button>
-                      {recording !== 'idle' ? <Button variant="record" onClick={commitTake}>Stop Recording</Button>
-                        : countIn ? <Button variant="record" onClick={startCountIn}>● Record</Button> : null}
-                    </div>
-                    <p data-live-state="" class="truncate font-mono text-sm text-dim">{recording === 'counting' ? 'Counting in…' : recording === 'on'
-                      ? `● Recording · ${[...held].map(pitchName).join(' ') || 'waiting for a bar of quiet'}`
-                      : `Press a key to start recording at bar ${part.notes.length ? clock.barOfBeat(Math.max(...part.notes.map(n => n.start + n.length)) - 1e-9) + 1 : 1}, beat 1.`}</p>
-                  </div>
+                  <p data-live-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">{recording === 'counting' ? 'Counting in…' : recording === 'on'
+                    ? `● Recording · ${[...held].map(pitchName).join(' ') || 'waiting for a bar of quiet'}`
+                    : `Press a key to start recording at bar ${part.notes.length ? clock.barOfBeat(Math.max(...part.notes.map(n => n.start + n.length)) - 1e-9) + 1 : 1}, beat 1.`}</p>
                 ) : mode === 'step' ? (
-                  <div class="grid gap-2">
-                    <div class="flex flex-wrap items-center gap-1">
-                      {STEP_LENGTHS.map(l => <Button pressed={length === l.id} onClick={() => setLength(l.id)} data={{ 'data-length': l.id }}>{l.label}</Button>)}
-                      <Button pressed={dotted} onClick={() => setDotted(!dotted)}>Dotted</Button>
-                      <Button onClick={() => { step.rest(stepBeats(length, dotted, quarter)); setStepAt(step.cursor()); }}>+ Rest</Button>
-                      <Button onClick={() => { const s = step.back(); if (s) { if (s.ids.length) apply(removeNotes(doc, part.id, new Set(s.ids))); setStepAt(step.cursor()); } }}>‹ Back One</Button>
-                    </div>
-                    <p data-step-state="" class="truncate font-mono text-sm text-dim">Next note at bar {clock.barOfBeat(stepNow)}, beat {Math.round((stepNow - clock.barStartBeat(clock.barOfBeat(stepNow)) + 1) * 100) / 100}</p>
-                  </div>
+                  <p data-step-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">Next note at bar {clock.barOfBeat(stepNow)}, beat {Math.round((stepNow - clock.barStartBeat(clock.barOfBeat(stepNow)) + 1) * 100) / 100}{held.size ? ` · ${[...held].map(pitchName).join(' ')}` : ''}</p>
                 ) : (
-                  <div class="grid gap-2">
-                    <div class="flex flex-wrap items-center gap-1">
-                      <span class="text-sm">Line Up To</span>
-                      {GRIDS.map(g => <Button pressed={lineUp === g} onClick={() => setLineUp(g)}>{GRID_LABELS[g]}</Button>)}
-                    </div>
-                    <div class="flex flex-wrap items-center gap-1">
-                      <span class="text-sm">New Notes</span>
-                      {STEP_LENGTHS.map(l => <Button pressed={length === l.id} onClick={() => setLength(l.id)}>{l.label}</Button>)}
-                    </div>
-                  </div>
+                  <p class="truncate font-mono text-sm leading-[2.6rem] text-dim">{selected.size ? `${selected.size} selected` : 'Tap a square to add a note.'}</p>
                 )}
               </div>
               <EditGrid entry={entry} color={part.color} notes={part.notes} clock={clock} bars={bars} lineUp={mode === 'grid' ? lineUp : tidy === 'off' ? 'off' : '1/16'}

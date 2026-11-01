@@ -141,7 +141,14 @@ export function createDeck(sound: DeckSound, bars: BarMap, sides: { a: string[];
     rate,
     playing: () => on,
     bar: barNow,
-    play(fromBar = 1) { t = Math.max(0, Math.round(bars.sample(fromBar))); on = true; events.changed?.(); },
+    play(fromBar = 1) {
+      t = Math.max(0, Math.round(bars.sample(fromBar)));
+      // Nothing let go before rings on into the new start, and moves are kept from here.
+      tails.length = 0;
+      lastMove = -Infinity;
+      on = true;
+      events.changed?.();
+    },
     stop() {
       for (const id of [...running.keys()]) close(id);
       on = false;
@@ -156,6 +163,7 @@ export function createDeck(sound: DeckSound, bars: BarMap, sides: { a: string[];
           for (const id of [...running.keys()]) close(id, n);
           tails.length = 0;
           if (faderPos !== null) { const keep = faderPos; deck.fader(null); deck.fader(keep); }
+          lastMove = -Infinity;
           t = 0;
         }
         if (loop.pending && t >= loop.pendingBar) {
@@ -251,6 +259,7 @@ export function createDeck(sound: DeckSound, bars: BarMap, sides: { a: string[];
     record(want) {
       if (want) {
         rec = [];
+        lastMove = -Infinity;
         // Whatever is already held is recorded from now.
         for (const r of running.values()) r.proc.start = t;
         if (faderPos !== null) { faderFrom = barNow(); faderPts = [[faderFrom, Math.round(faderPos * 1000) / 1000]]; }

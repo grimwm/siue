@@ -99,3 +99,10 @@ test('removing a part takes its clips, a vocoder it carried, and its place on a 
   assert.deepEqual(after.map(c => c.effect), ['crossfader', 'riser']);
   assert.deepEqual(after[0]!.settings, { a: ['keys'], b: ['drums'] });
 });
+
+test('Shorter and Longer step by a beat of the time signature in force at the clip', () => {
+  let d: EditDoc = { ...doc(), tempo: [{ bar: 1, bpm: 120, beats: 4, unit: 4 }, { bar: 5, bpm: 120, beats: 3, unit: 4 }] };
+  d = placeClip(d, 'trance_gate', null, 6);
+  d = stepClip(d, 0, 1);
+  assert.equal(clipsOf(d)[0]!.to_bar, 7.333);
+});

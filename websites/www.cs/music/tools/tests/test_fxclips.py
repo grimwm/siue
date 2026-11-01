@@ -42,10 +42,13 @@ class FxClipsTest(unittest.TestCase):
                 self.assertEqual(len(errors), 1, errors)
                 self.assertTrue(errors[0].startswith(case["error"] + ":"), errors[0])
 
-    def test_schema_1_refuses_clips(self):
-        score = copy.deepcopy(VECTORS["score"])
-        score["schema"] = 1
-        self.assertNotEqual(validate(score, self.glossary, self.instruments), [])
+    def test_schema_1_refuses_clips_naming_them(self):
+        score = json.loads((FIXTURES / "score-renderable-v1.json").read_text())
+        self.assertEqual(validate(copy.deepcopy(score), self.glossary, self.instruments), [])
+        score["fx_clips"] = [{"effect": "riser", "lane": None, "from_bar": 1, "to_bar": 2}]
+        errors = validate(score, self.glossary, self.instruments)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertTrue(errors[0].startswith("fx_clips:"), errors[0])
 
     def test_bar_positions_are_the_pages_seconds(self):
         tempo = VECTORS["score"]["tempo"]

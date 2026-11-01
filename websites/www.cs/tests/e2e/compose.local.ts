@@ -927,6 +927,19 @@ test('DJ & Effects: placed on the timeline, performed live under Record To Timel
     await expect(clips).toHaveCount(1);
     await page.getByRole('button', { name: /^↶ Undo/ }).click();
     await expect(clips).toHaveCount(2);
+    // From the keyboard: Place At Bar, then Enter on a row.
+    await fx.locator('[data-family="rhythm"]').click();
+    await fx.locator('[data-effect="tremolo"]').click();
+    await fx.locator('[data-place-at]').fill('3');
+    await fx.locator('[data-place-at]').dispatchEvent('change');
+    await fx.locator('[data-track]').nth(2).focus();
+    await page.keyboard.press('Enter');
+    await expect(fx.locator('[data-clip-effect="tremolo"]')).toHaveAttribute('aria-label', 'Tremolo, bar 3 to bar 4');
+    await fx.getByRole('button', { name: 'Earlier' }).click();
+    await expect(fx.locator('[data-clip-effect="tremolo"]')).toHaveAttribute('aria-label', 'Tremolo, bar 2 + 0.75 to bar 3 + 0.75');
+    await page.getByRole('button', { name: /^↶ Undo/ }).click();
+    await page.getByRole('button', { name: /^↶ Undo/ }).click();
+    await expect(clips).toHaveCount(2);
     await fx.locator('summary', { hasText: 'What Gets Saved' }).click();
     await expect(fx.locator('[data-saved-json]')).toContainText('"tape_stop"');
     await shot(page, 'desktop-effects');
@@ -939,13 +952,17 @@ test('DJ & Effects: placed on the timeline, performed live under Record To Timel
     await expect(dj.locator('[data-deck-bar]')).toHaveText(/^Bar \d+$/);
     const at = async () => Number(await dj.locator('[data-deck-bar]').getAttribute('data-deck-pos'));
     const p0 = await at();
-    await page.waitForTimeout(600);
-    expect(await at(), 'the deck moves on').toBeGreaterThan(p0);
+    await expect.poll(at, { message: 'the deck moves on' }).toBeGreaterThan(p0);
+    /** Holds until the deck has played on a fifth of a bar, wherever it goes round. */
+    const playOn = async () => { const from = await at(); await expect.poll(async () => { const now = await at(); return now >= from ? now - from : now; }).toBeGreaterThan(0.2); };
     await dj.locator('[data-record-timeline]').click();
     await expect(dj.locator('[data-recording]')).toHaveText('Recording.');
     const notesBefore = await notes(page).count();
-    await hold(page, ['3'], 300);
-    await hold(page, ['KeyZ'], 300);
+    for (const k of ['3', 'KeyZ']) {
+      await page.keyboard.down(k);
+      await playOn();
+      await page.keyboard.up(k);
+    }
     expect(await notes(page).count(), 'the pad keys play pads, not notes').toBe(notesBefore);
     const pad = dj.locator('[data-pad="q"]');
     await pad.scrollIntoViewIfNeeded();
@@ -953,7 +970,7 @@ test('DJ & Effects: placed on the timeline, performed live under Record To Timel
     await page.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2);
     await page.mouse.down();
     await expect(pad).toHaveAttribute('aria-pressed', 'true');
-    await page.waitForTimeout(300);
+    await playOn();
     await page.mouse.up();
     await dj.locator('[data-platter]').scrollIntoViewIfNeeded();
     const pl = (await dj.locator('[data-platter]').boundingBox())!;
@@ -968,7 +985,7 @@ test('DJ & Effects: placed on the timeline, performed live under Record To Timel
     await page.mouse.move(xy.x + 10, xy.y + xy.height - 10);
     await page.mouse.down();
     await page.mouse.move(xy.x + xy.width - 10, xy.y + 10, { steps: 10 });
-    await page.waitForTimeout(200);
+    await playOn();
     await page.mouse.up();
     await dj.locator('[data-record-timeline]').click();
     await expect(page.locator('[data-status]')).toContainText(/Recorded \d+ effects onto the timeline/);
@@ -1006,7 +1023,7 @@ test('on a phone, a held DJ pad never moves the page', async ({ browser, baseURL
   try {
     const page = await context.newPage();
     await signInAt(page, base, 'music', STUDENT5);
-    await page.goto(`${base}music/compose.php?id=dj-test`);
+    await twoParts(page, base, 'Dj Phone Test');
     const dj = page.locator('[data-dj]');
     await dj.getByRole('button', { name: 'Get The Deck Ready' }).click();
     await expect(dj.getByRole('button', { name: '▶ Play' })).toBeVisible({ timeout: 90_000 });
@@ -1021,6 +1038,7 @@ test('on a phone, a held DJ pad never moves the page', async ({ browser, baseURL
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
     await expect(pad).toHaveAttribute('aria-pressed', 'true');
     await page.evaluate(() => window.scrollTo(0, 0));
+    // The pin puts the page back on the scroll event; a short wait lets any later scroll land before the check.
     await page.waitForTimeout(300);
     expect(await page.evaluate(() => window.scrollY)).toBe(y);
     await shot(page, 'phone-dj');

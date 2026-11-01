@@ -52,7 +52,9 @@ function resample(input: readonly Float32Array[], from: number, to: number): Flo
 
 export function DjMode(p: DjModeProps) {
   const deck = useRef<Deck | null>(null);
-  const node = useRef<ScriptProcessorNode | null>(null);
+  const node = useRef<{ sp: ScriptProcessorNode; quiet: ConstantSourceNode } | null>(null);
+  /** The document the deck was made from: when the piece changes, the deck is stale until it is made again. */
+  const builtFrom = useRef<EditDoc | null>(null);
   const [ready, setReady] = useState<'no' | 'building' | 'yes'>('no');
   const [, setTick] = useState(0);
   const [recording, setRecording] = useState(false);
@@ -70,10 +72,25 @@ export function DjMode(p: DjModeProps) {
   const nameOf = (ids: readonly string[]) => ids.map(id => p.doc.parts.find(x => x.id === id)?.name ?? id).join(' + ');
   const refresh = () => setTick(k => k + 1);
 
-  useEffect(() => () => { node.current?.disconnect(); deck.current?.stop(); p.onLive?.(false); }, []);
+  /** Lets go of the deck's audio graph. */
+  const release = () => {
+    const n = node.current;
+    if (n) {
+      n.sp.onaudioprocess = null;
+      try { n.quiet.stop(); } catch { /* never started */ }
+      n.quiet.disconnect();
+      n.sp.disconnect();
+    }
+    node.current = null;
+    deck.current?.stop();
+    deck.current = null;
+  };
+  useEffect(() => () => { release(); p.onLive?.(false); }, []);
   useEffect(() => { p.onLive?.(deck.current?.playing() ?? false); });
 
   const getReady = async () => {
+    finishRecording();
+    release();
     setReady('building');
     p.status('Getting the deck ready: building the piece…');
     try {
@@ -92,13 +109,15 @@ export function DjMode(p: DjModeProps) {
       const quiet = ctx.createConstantSource();
       quiet.offset.value = 0;
       quiet.connect(sp);
+      node.current = { sp, quiet };
       quiet.start();
       sp.connect(ctx.destination);
-      node.current = sp;
       if (ctx.state !== 'running') await ctx.resume();
+      builtFrom.current = p.doc;
       setReady('yes');
       p.status('The deck is ready. Press Play, then hold the pads.');
     } catch (e) {
+      release();
       setReady('no');
       p.status(`The deck could not be made: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -172,6 +191,12 @@ export function DjMode(p: DjModeProps) {
             </>
           )}
         </div>
+        {ready === 'yes' && builtFrom.current !== p.doc ? (
+          <div class="flex flex-wrap items-center gap-2 text-sm" data-deck-stale="">
+            <span>The piece has changed since the deck was made.</span>
+            <Button onClick={() => void getReady()}>Get The Deck Ready Again</Button>
+          </div>
+        ) : null}
         <p data-recording="" class="text-sm">{recording ? 'Recording.' : 'Not recording.'}</p>
 
         <div class={cx('grid gap-4 md:grid-cols-2', ready !== 'yes' && 'pointer-events-none opacity-50')}>
@@ -217,7 +242,7 @@ export function DjMode(p: DjModeProps) {
                 const c = d?.cues()[k] ?? null;
                 return (
                   <button type="button" data-cue={String(k + 1)} class={cx('min-h-11 min-w-11 touch-none rounded-md border px-3 font-mono text-sm', c === null ? 'border-rule bg-panel text-dim' : 'border-amber bg-lane')}
-                    onPointerDown={() => { if (setCues) d?.setCue(k); else { p.pin.hold(`dj:cue${k}`); d?.cueDown(k); } refresh(); }}
+                    onPointerDown={e => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); if (setCues) d?.setCue(k); else { p.pin.hold(`dj:cue${k}`); d?.cueDown(k); } refresh(); }}
                     onPointerUp={() => { if (!setCues) { d?.cueUp(k); p.pin.release(`dj:cue${k}`); } }}
                     onPointerCancel={() => { d?.cueUp(k); p.pin.release(`dj:cue${k}`); }}>{c === null ? `Cue ${k + 1}` : `${k + 1} · Bar ${c}`}</button>
                 );
@@ -268,7 +293,7 @@ export function DjMode(p: DjModeProps) {
           <h3 class="font-display text-sm font-semibold tracking-wide uppercase">What A Browser Does Less Well</h3>
           <ul class="mt-1 list-disc pl-5 text-sm text-dim">{BROWSER_LIMITS.map(t => <li>{t}</li>)}</ul>
         </div>
-        {p.help ? <p class="border-l-2 border-amber pl-2 text-sm text-dim">The deck plays the piece as it is now; get it ready again after changing notes. Several fingers work at once. With Record To Timeline on, each pad, cue, loop and move lands on the timeline above as a clip.</p> : null}
+        {p.help ? <p class="border-l-2 border-amber pl-2 text-sm text-dim">The deck plays the piece as it was when it was made; after changing the piece, Get The Deck Ready Again. Several fingers work at once. With Record To Timeline on, each pad, cue, loop and move lands on the timeline above as a clip.</p> : null}
       </div>
     </Panel>
   );

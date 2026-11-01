@@ -1,6 +1,7 @@
 // DJ & Effects, Way One, Place On The Timeline: pick an effect from its family, then tap a bar on The Whole Piece or a
 // part (or drag the effect onto the bars); drag a clip to move it and its right edge to lengthen it; tap a clip for its
-// sheet (its bars, Hear From Here, Shorter, Longer, Remove, where it plays and its setting). What Gets Saved shows the
+// sheet (its bars, Hear From Here, Earlier, Later, Shorter, Longer, Remove, where it plays and its setting). From the
+// keyboard, Place At Bar and Enter on a row place the armed effect. What Gets Saved shows the
 // clips in the score's shape, and What A Browser Does Less Well stays in view. Each change is one Undo step; the DJ
 // Mode panel beside it lands a live performance here too.
 import { useRef, useState } from 'preact/hooks';
@@ -34,6 +35,8 @@ export function EffectsPanel(p: EffectsPanelProps) {
   const [family, setFamily] = useState<Family>('turntable');
   const [armed, setArmed] = useState<FxClipEffect | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
+  /** Where Enter or Space on a track places the armed effect (the keyboard's way to tap a bar). */
+  const [placeAt, setPlaceAt] = useState(1);
   const drag = useRef<{ i: number; kind: 'move' | 'end'; x0: number; bar0: number; moved: boolean; width: number } | null>(null);
   const [ghost, setGhostState] = useState<{ i: number; from: number; to: number } | null>(null);
   // The latest drag position, read when the pointer lifts (before the last move has drawn).
@@ -108,6 +111,11 @@ export function EffectsPanel(p: EffectsPanelProps) {
           ))}
         </div>
         <p data-armed="" class="min-h-5 text-sm">{armed ? `${fxInfo(armed).name}: ${fxInfo(armed).does} Tap a bar to place it.` : 'Pick an effect, then tap a bar.'}</p>
+        <label class="flex flex-wrap items-center gap-2 text-sm">Place At Bar
+          <input type="number" min={1} max={bars} step={0.25} value={placeAt} data-place-at="" class="min-h-11 w-24 rounded-md border border-rule bg-well px-2 text-ink"
+            onChange={e => setPlaceAt(Math.min(bars, Math.max(1, Number((e.target as HTMLInputElement).value) || 1)))} />
+          <span class="text-dim">then press Enter on a row to place it there.</span>
+        </label>
 
         <div class="overflow-x-auto">
           <div class="grid min-w-[36rem] gap-1" data-timeline="">
@@ -121,6 +129,7 @@ export function EffectsPanel(p: EffectsPanelProps) {
                   class="relative h-11 flex-1 rounded-md border border-rule bg-well"
                   style={{ backgroundImage: `repeating-linear-gradient(to right, transparent 0, transparent calc(${100 / bars}% - 1px), var(--color-rule) calc(${100 / bars}% - 1px), var(--color-rule) ${100 / bars}%)` }}
                   onClick={e => { if (armed) place(armed, row.id, barAt(e, e.currentTarget as HTMLElement)); }}
+                  onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); if (armed) place(armed, row.id, placeAt); else p.status('Pick an effect first.'); } }}
                   onDragOver={e => e.preventDefault()}
                   onDrop={e => { e.preventDefault(); const id = e.dataTransfer?.getData('text/plain') as FxClipEffect; if (id && EFFECTS.some(x => x.id === id)) place(id, row.id, barAt(e, e.currentTarget as HTMLElement)); }}>
                   {clips.map((c, i) => {
@@ -166,6 +175,13 @@ export function EffectsPanel(p: EffectsPanelProps) {
   );
 }
 
+/** Beats in the bar holding a bar position. */
+function beatsAt(doc: EditDoc, bar: number): number {
+  let beats = doc.tempo[0]?.beats ?? 4;
+  for (const t of doc.tempo) if (t.bar <= bar) beats = t.beats;
+  return beats;
+}
+
 function ClipSheet(q: { clip: FxClip; i: number; p: EffectsPanelProps; bars: number; onDone(): void }) {
   const { clip, i, p } = q;
   const x = fxInfo(clip.effect);
@@ -178,6 +194,8 @@ function ClipSheet(q: { clip: FxClip; i: number; p: EffectsPanelProps; bars: num
       <p class="text-sm text-dim">{x.does}</p>
       <div class="flex flex-wrap gap-2">
         <Button onClick={() => p.hearFrom(clip.from_bar)}>Hear From Here</Button>
+        <Button onClick={() => p.apply(moveClip(p.doc, i, clip.from_bar - 1 / beatsAt(p.doc, clip.from_bar)))}>Earlier</Button>
+        <Button onClick={() => p.apply(moveClip(p.doc, i, clip.from_bar + 1 / beatsAt(p.doc, clip.from_bar)))}>Later</Button>
         <Button onClick={() => p.apply(stepClip(p.doc, i, -1))}>Shorter</Button>
         <Button onClick={() => p.apply(stepClip(p.doc, i, 1))}>Longer</Button>
         <Button variant="ghost" onClick={() => { p.apply(removeClip(p.doc, i)); q.onDone(); }}>Remove</Button>

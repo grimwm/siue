@@ -11,7 +11,7 @@ import type { Lane, Score } from '../score.ts';
 import { vocalBuffer } from './vocal.ts';
 import { applyLaneFx, audible, DEFAULT_ROOM_SEND, limit, roomReverb } from './fx.ts';
 import { applyVoice } from './voice.ts';
-import { applyClips, barMap, crossfadeGain } from './djfx.ts';
+import { applyClips, barMap, crossfadeGains } from './djfx.ts';
 import { keyScale } from '../compose/hum.ts';
 import { bendRate, voices } from './plan.ts';
 import type { Library, Voice } from './plan.ts';
@@ -209,11 +209,11 @@ async function soundBus(score: Score, lib: Library, vs: readonly Voice[], sample
   const send = room ? [new Float32Array(length), new Float32Array(length)] : null;
   const bars = barMap(score.tempo ?? [{ bar: 1, bpm: 120, beats: 4, unit: 4 }], RATE);
   const add = (ch: readonly Float32Array[], sendLevel: number, lane?: string) => {
-    // A lane on a side of a crossfader comes and goes with the fader's position.
-    const fades = lane ? faders.filter(c => (c.settings?.['a'] as string[]).includes(lane) || (c.settings?.['b'] as string[]).includes(lane)) : [];
+    // A lane on a side of a crossfader comes and goes with the fader's position (each fader's gains made once).
+    const fades = lane ? faders.flatMap(f => { const g = crossfadeGains(f, lane, length, bars); return g ? [g] : []; }) : [];
     for (let c = 0; c < 2; c++) for (let i = 0; i < length; i++) {
       let v = ch[c]![i]!;
-      for (const f of fades) v *= crossfadeGain(f, lane!, i, bars);
+      for (const g of fades) v *= g[i]!;
       bus[c]![i] = bus[c]![i]! + v;
       if (send) send[c]![i] = send[c]![i]! + v * sendLevel;
     }

@@ -156,3 +156,33 @@ test('a riser held past the end of the next bar stops there by itself', () => {
   assert.equal(clips.length, 1);
   assert.equal(clips[0]!.to_bar, 3);
 });
+
+test('after Stop and Play, an effect let go before does not play again', () => {
+  const d = createDeck({ rate: RATE, full: ramp() }, bars, null);
+  d.play(1);
+  run(d, 1000);
+  d.padDown('e', 'echo_out', { time: 'quarter' });
+  run(d, BEAT);
+  d.stop();
+  d.play(1);
+  const out = run(d, 2 * BEAT);
+  assert.ok(out.every((v, i) => Math.abs(v - i) < 1), 'the clean deck from bar 1');
+});
+
+test('a move recorded after the deck goes back to the start keeps its points', () => {
+  const d = createDeck({ rate: RATE, full: half() }, bars, null);
+  d.play(4);
+  d.record(true);
+  d.xy('filter', 0.2, 0.2);
+  run(d, 2000);
+  d.xyUp();
+  d.record(false);
+  d.play(1);
+  d.record(true);
+  d.xy('filter', 0.8, 0.8);
+  run(d, 2000);
+  d.xyUp();
+  const clips = d.record(false);
+  assert.equal(clips.length, 1);
+  assert.ok(clips[0]!.points!.length >= 2, `points: ${clips[0]!.points?.length}`);
+});

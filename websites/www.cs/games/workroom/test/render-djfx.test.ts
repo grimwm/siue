@@ -4,7 +4,7 @@
 // filter sweep closes, a gate follows its pattern, Wide / 8D moves between the sides). Outside a clip nothing changes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyClips, barMap, crossfadeGain, makeClip } from '../src/render/djfx.ts';
+import { applyClips, barMap, crossfadeGain, crossfadeGains, makeClip } from '../src/render/djfx.ts';
 import { seeded } from '../src/render/dsp.ts';
 import type { FxClip } from '../src/score.ts';
 
@@ -287,6 +287,9 @@ test('the Crossfader moves the A side out and the B side in; other parts play on
   assert.equal(crossfadeGain(c, 'bass', at(3.9), bars), 1);
   assert.equal(crossfadeGain(c, 'keys', at(3), bars), 1);
   assert.equal(crossfadeGain(c, 'bass', at(1), bars), 1, 'before the clip, every lane');
+  const g = crossfadeGains(c, 'drums', N, bars)!;
+  for (const i of [at(1), at(2) + 10, at(2.7), at(3.9), at(5)]) assert.ok(Math.abs(g[i]! - crossfadeGain(c, 'drums', i, bars)) < 1e-6, `the same gain made once, at ${i}`);
+  assert.equal(crossfadeGains(c, 'keys', N, bars), null);
 });
 
 test('a live pad with no end yet keeps going until it is let go', () => {

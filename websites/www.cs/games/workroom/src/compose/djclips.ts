@@ -85,7 +85,9 @@ export function resizeClip(doc: EditDoc, i: number, to: number): EditDoc {
 export function stepClip(doc: EditDoc, i: number, by: 1 | -1): EditDoc {
   const c = clipsOf(doc)[i];
   if (!c) return doc;
-  const beat = 1 / (doc.tempo.find(t => t.bar <= c.from_bar)?.beats ?? 4);
+  let meter = doc.tempo[0]!;
+  for (const t of doc.tempo) if (t.bar <= c.from_bar) meter = t;
+  const beat = 1 / meter.beats;
   const to = by > 0 ? c.to_bar + beat : Math.max(c.from_bar + Math.min(beat, c.to_bar - c.from_bar), c.to_bar - beat);
   return resizeClip(doc, i, to);
 }

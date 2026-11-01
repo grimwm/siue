@@ -1,6 +1,6 @@
 // DJ & Effects' clips in the score: the shared vectors' score parses with a clip of every effect (the Python
-// validator reads the same file), each broken case is refused naming its path, schema 1 refuses them, a sound piece
-// has none, and a bar position is the seconds the tempo says.
+// validator reads the same file), each broken case is refused naming its path, schema 1 refuses them, and a bar
+// position is the seconds the tempo says.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -39,15 +39,12 @@ test('each broken clip is refused, naming the path it breaks', () => {
   }
 });
 
-test('schema 1 refuses clips, and a sound piece has none', () => {
-  const v = vectors();
-  const one = parseScore({ ...v.score, schema: 1 });
-  assert.equal(one.ok, false);
-  const clipsOnly = vectors().score;
-  const r = parseScore(clipsOnly);
-  assert.ok(r.ok);
-  const { fx_clips: _, ...without } = r.score;
-  assert.equal(needsSchema2({ ...without, schema: 2 } as Score), true, 'the rest of the vectors score is schema 2 too');
+test('schema 1 refuses clips, naming them', () => {
+  const one = JSON.parse(readFileSync(new URL('./fixtures/score-renderable-v1.json', import.meta.url), 'utf8')) as Record<string, unknown>;
+  assert.ok(parseScore(one).ok, 'the schema 1 score parses without clips');
+  const r = parseScore({ ...one, fx_clips: [{ effect: 'riser', lane: null, from_bar: 1, to_bar: 2 }] });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.ok(r.error.startsWith('fx_clips:'), r.error);
 });
 
 test('a bar position is its seconds through every tempo change', () => {

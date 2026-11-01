@@ -635,3 +635,29 @@ export function crossfadeGain(clip: FxClip, lane: string, i: number, bars: BarMa
   const pos = mv ? mv(i, 0) : 0.5;
   return side === 'a' ? clamp01(2 - 2 * pos) : clamp01(2 * pos);
 }
+
+/**
+ * A crossfader clip's gains for a lane over `length` samples, made once (crossfadeGain sample by sample); null when
+ * the lane is on neither side.
+ */
+export function crossfadeGains(clip: FxClip, lane: string, length: number, bars: BarMap): Float32Array | null {
+  const s = settingsOf(clip);
+  const side = (s['a'] as string[] | undefined)?.includes(lane) ? 'a' : (s['b'] as string[] | undefined)?.includes(lane) ? 'b' : null;
+  if (!side) return null;
+  const g = new Float32Array(length).fill(1);
+  const start = Math.max(0, Math.round(bars.sample(clip.from_bar)));
+  const end = Math.min(length, Math.round(bars.sample(clip.to_bar)));
+  const pts = (clip.points ?? []).map(p => [bars.sample(p[0]!), p[1]!] as const);
+  let j = 0;
+  for (let i = start; i < end; i++) {
+    let pos = 0.5;
+    if (pts.length) {
+      while (j + 1 < pts.length && pts[j + 1]![0] <= i) j++;
+      const a = pts[j]!;
+      const b = pts[j + 1];
+      pos = i <= a[0] || !b ? a[1] : b[0] === a[0] ? b[1] : a[1] + ((b[1] - a[1]) * (i - a[0])) / (b[0] - a[0]);
+    }
+    g[i] = side === 'a' ? clamp01(2 - 2 * pos) : clamp01(2 * pos);
+  }
+  return g;
+}

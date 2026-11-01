@@ -693,7 +693,8 @@ def bar_seconds(tempo, bar):
         if bar <= t["bar"]:
             break
         sec += (min(bar, nxt) - t["bar"]) * t["beats"] * 60 / t["bpm"]
-    return round(sec * 1e6) / 1e6
+    # Halves round up, as JavaScript's Math.round does, so the page and the tool agree.
+    return math.floor(sec * 1e6 + 0.5) / 1e6
 
 
 def _bar_starts(tempo, bars):

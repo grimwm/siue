@@ -36,6 +36,7 @@ import type { Clip } from '../player.ts';
 import type { MediaPorts } from '../recorder.ts';
 import type { BuildSound, DraftSound } from '../render/sound.ts';
 import type { Change, Score } from '../score.ts';
+import { engraveScore, sheetSource } from '../compose/engrave.ts';
 import { pageLimits } from '../studio-limits.ts';
 import { energyLegend, legendFor, pickTab, tabsFor } from '../tabs.ts';
 import type { Tab } from '../tabs.ts';
@@ -90,8 +91,11 @@ const SMALL_CAPS = 'font-display text-xs font-semibold tracking-widest uppercase
 export function Workroom(p: WorkroomProps) {
   const { score } = p;
   const scoreOnly = pageLimits().scoreOnly || p.sheet === false;
+  // A draft that stores no sheet music still shows it, engraved from its notes.
+  const sheetFrom = sheetSource(score, !scoreOnly);
+  const engraved = useMemo(() => (sheetFrom === 'engraved' ? () => engraveScore(score) : undefined), [score, sheetFrom]);
   const tempo = useMemo(() => tempoMap(score), [score]);
-  const tabs = useMemo(() => tabsFor(score, { sheet: !scoreOnly }), [score, scoreOnly]);
+  const tabs = useMemo(() => tabsFor(score, { sheet: sheetFrom !== null }), [score, sheetFrom]);
   const uses = useMemo(() => termsIn(score), [score]);
   const stage = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(FALLBACK_WIDTH);
@@ -349,7 +353,7 @@ export function Workroom(p: WorkroomProps) {
                   select={mode === 'pin' ? { span: preview ?? span, onPick: pick } : undefined} marks={marks} /> : null}
                 {tab === 'roll' ? <PianoRoll score={score} tempo={tempo} view={view} time={time} lanes={lanes} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
                 {tab === 'sound' ? <SoundPicture score={score} view={view} time={time} imageSrc={p.audioSrc(score.spectrogram?.file ?? 'spectrogram.png')} rendered={rendered} onSeek={seek} onView={setView} onHold={setHolding} /> : null}
-                {tab === 'sheet' ? <SheetMusic musicxmlSrc={p.audioSrc('score.musicxml')} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane} look={sheetLook} onLook={setSheetLook}
+                {tab === 'sheet' ? <SheetMusic musicxmlSrc={engraved ? `engraved:${score.piece.id}:${p.version}` : p.audioSrc('score.musicxml')} musicxml={engraved} laneId={sheetLane} lanes={score.lanes} onLane={setSheetLane} look={sheetLook} onLook={setSheetLook}
                   title={score.piece.title} opening={score.tempo?.[0] ? { bpm: score.tempo[0].bpm, unit: score.tempo[0].unit } : null}
                   tempo={tempo} duration={score.duration} time={time} onHear={hear} onTerm={openCard} /> : null}
               </>

@@ -361,3 +361,21 @@ test('a sound that could not be built says why, and Play is disabled', async () 
   assert.doesNotMatch(root.textContent, /Building the sound|cannot play/);
   render(null, renderTarget(root));
 });
+
+test('sheet music made in the page is drawn without fetching a file', async () => {
+  const fetched: string[] = [];
+  const loaded: string[] = [];
+  const win = { addEventListener() {}, removeEventListener() {} };
+  const ports = {
+    fetchText: async (url: string) => { fetched.push(url); return '<xml/>'; },
+    loadModule: async () => ({
+      mountSheet: (el: HTMLElement) => createSheet(el as unknown as StubElement as never, () => ({ load: async (x: string) => { loaded.push(x); }, render: () => {}, clear: () => {} }), win, x => x),
+    }),
+  };
+  const root = makeEl('root');
+  await act(() => { render(h(ui.sheet.SheetMusic, { musicxmlSrc: 'engraved:tune:1', musicxml: async () => '<score-partwise/>', laneId: 'a', lanes, onLane: () => {}, ports }), renderTarget(root)); });
+  await settle();
+  assert.deepEqual(fetched, []);
+  assert.deepEqual(loaded, ['<score-partwise/>']);
+  await act(() => { render(null, renderTarget(root)); });
+});

@@ -32,6 +32,8 @@ export interface SheetPorts { fetchText(url: string): Promise<string>; loadModul
 export interface SheetMusicProps {
   /** The lane shown; null shows the Full Score. */
   musicxmlSrc: string; laneId: string | null; lanes: Lane[]; onLane(id: string | null): void; ports?: SheetPorts;
+  /** The MusicXML made in the page (a draft that stores none, engraved from its notes) in place of fetching musicxmlSrc, which then only names it. */
+  musicxml?(): Promise<string>;
   /** Pages or one long line, and the zoom; kept by the page across views when given. */
   look?: SheetLayout; onLook?(l: SheetLayout): void;
   /** The printed copy's title and opening tempo. */
@@ -136,7 +138,7 @@ export function SheetMusic(p: SheetMusicProps) {
   useEffect(() => {
     let current = true;
     setStatus('loading');
-    mounted.current ??= Promise.all([ports.fetchText(p.musicxmlSrc), ports.loadModule()]).then(([xml, mod]) => {
+    mounted.current ??= Promise.all([p.musicxml ? p.musicxml() : ports.fetchText(p.musicxmlSrc), ports.loadModule()]).then(([xml, mod]) => {
       const sheet = host.current ? mod.mountSheet(host.current, prepare) : NO_SHEET;
       return { xml, sheet, mod };
     });

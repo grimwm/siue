@@ -5,14 +5,22 @@
 // keeps the Walls choice, opens on the whole level, follows the mini map (a setting, off by default) once zoomed, floats a marker over each
 // figure and item, and hands the board back to the classic look and takes it again with the Map button,
 // from the menu or the strip's look button and its B key.
-// A block pushed into water floats there, and undo takes it out. Without WebGL the classic board shows.
+// A block pushed into water floats there, and undo takes it out. Without WebGL the classic board shows. A new player
+// who leaves the camera alone sees a short hint by the compass, on at most two visits, until they first move the camera.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 /** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
 const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
 
-test.beforeEach(async ({ context }) => { await context.addInitScript(allMet); });
+/** The first-time view hint (src/modern/hint.ts) already done, so it never covers what these specs look at; only its
+ *  own specs, named "the first-time hint", start fresh. */
+const hintDone = (): void => localStorage.setItem('crete-view-hint', '{"shows":0,"moved":true}');
+
+test.beforeEach(async ({ context }, info) => {
+  await context.addInitScript(allMet);
+  if (!info.title.startsWith('the first-time hint')) await context.addInitScript(hintDone);
+});
 
 const PAGE = 'games/crete/';
 
@@ -734,5 +742,47 @@ test('a lost WebGL context warns only when the player chose the modern look', as
   await expect(page.locator('#toast')).not.toContainText('stopped working');
   await page.locator('#btn-look').click();
   await expect(page.locator('#toast')).toContainText('stopped working');
+  expect(errors).toEqual([]);
+});
+
+test('the first-time hint shows by the compass after a quiet moment, and a drag on the board takes it away for good', async ({ page }) => {
+  const errors = await openHall(page);
+  const pill = page.locator('#view-hint');
+  await expect(pill, 'a new player sees the hint once the board is quiet').toBeVisible({ timeout: 10_000 });
+  await expect(pill).toHaveText('Drag to turn and tilt · Right-drag to pan · Tap the compass to reset');
+  await drag(page, 120);
+  await expect(pill, 'the first turn takes it away').toBeHidden();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('crete-view-hint')!))).toEqual({ shows: 1, moved: true });
+  // The next visit: the player has moved the camera, so it never shows again.
+  await openHall(page);
+  await page.waitForTimeout(4000);
+  await expect(pill).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('the first-time hint waits while a card covers the board, closes on a tap, shows on a second visit, and not a third', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(PAGE);
+  await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
+  await page.locator('#chapter-enter').click();
+  await expect(page.locator('#start-veil')).toBeVisible();
+  await page.waitForTimeout(3000);
+  const pill = page.locator('#view-hint');
+  await expect(pill, 'not while the start card covers the board').toBeHidden();
+  await page.locator('#start-begin').click();
+  await expect(pill, 'the first visit').toBeVisible({ timeout: 10_000 });
+  await pill.click();
+  await expect(pill, 'a tap on it closes it').toBeHidden();
+  await openHall(page);
+  await expect(pill, 'the second visit').toBeVisible({ timeout: 10_000 });
+  await pill.click();
+  await expect(pill).toBeHidden();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('crete-view-hint')!))).toEqual({ shows: 2, moved: false });
+  await openHall(page);
+  await page.waitForTimeout(4000);
+  await expect(pill, 'no third visit').toBeHidden();
   expect(errors).toEqual([]);
 });

@@ -12,6 +12,8 @@
 import type { MoveAction } from '../keys.ts';
 import { compassFace, createCompassDrag } from './compass.ts';
 import { createGestures } from './gestures.ts';
+import { HINT_KEY, createHint, hintText, readHint } from './hint.ts';
+import type { HintChange } from './hint.ts';
 import type { CamOp, Ptr } from './gestures.ts';
 
 /** What the controls do to the camera. */
@@ -32,6 +34,8 @@ export interface CamControl {
 export interface ControlHost {
   /** True while a layer other than `start` is open. */
   blocked(): boolean;
+  /** True while any layer, the start card too, covers the board. */
+  covered(): boolean;
   /** A camera gesture happened (closes the start card). */
   gesture(): void;
   /** A finger swiped the board: move Theseus that way as the screen shows it. */
@@ -60,6 +64,8 @@ const ZOOM_OUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"
 const COMPASS = '<span class="tilt-ring" aria-hidden="true"></span><svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dial" cx="12" cy="12" r="11"/><path class="n" d="M12 3l3.5 9h-7z"/><path class="s" d="M12 21l-3.5-9h7z"/></svg>';
 /** A click this soon after a compass press was that press (already handled); a later one came from the keyboard. */
 const CLICK_MS = 600;
+/** How often, in ms, the first-time hint checks whether it is time to show or go. */
+const HINT_TICK_MS = 250;
 
 function button(id: string, label: string, html: string, className: string): HTMLButtonElement {
   const b = document.createElement('button');
@@ -73,7 +79,26 @@ function button(id: string, label: string, html: string, className: string): HTM
 }
 
 /** Wires `canvas` and puts the camera buttons in `parent`. */
-export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, host: ControlHost, cam: CamControl): Controls {
+export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, host: ControlHost, camera: CamControl): Controls {
+  // The first time the camera moves, the first-time hint (hint.ts) goes for good: every control reaches the camera
+  // through here.
+  let used = false;
+  const touched = () => {
+    if (used) return;
+    used = true;
+    const c = hint.moved();
+    saveHint();
+    hintChange(c);
+  };
+  const cam: CamControl = {
+    turn: (deg, eased) => { touched(); camera.turn(deg, eased); },
+    pan: (dx, dy) => { touched(); camera.pan(dx, dy); },
+    zoom: (factor, fx, fy, eased) => { touched(); camera.zoom(factor, fx, fy, eased); },
+    tilt: (deg, eased) => { touched(); camera.tilt(deg, eased); },
+    reset: () => { touched(); camera.reset(); },
+  };
+  /** The last kind of pointer on the board or the compass, for the hint's wording. */
+  let lastPointer = '';
   const gestures = createGestures(() => performance.now());
   const ptr = (e: PointerEvent): Ptr => ({
     id: e.pointerId,
@@ -98,6 +123,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   };
 
   const down = (e: PointerEvent) => {
+    lastPointer = e.pointerType;
     if (host.blocked()) return;
     try {
       canvas.setPointerCapture(e.pointerId);
@@ -166,6 +192,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     }
   };
   const compassDown = (e: PointerEvent) => {
+    lastPointer = e.pointerType;
     if (host.blocked() || (e.pointerType === 'mouse' && e.button !== 0)) return;
     e.preventDefault();
     try {
@@ -227,6 +254,49 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     view.setAttribute('aria-expanded', String(open));
   });
 
+  // The first-time hint: one line by the compass after a quiet moment, and one wiggle of the compass. It never takes
+  // a press meant for the board; a tap on the line itself closes it.
+  let rec = readHint(null);
+  try {
+    rec = readHint(localStorage.getItem(HINT_KEY));
+  } catch {
+    // No storage: a fresh record, kept for this visit only.
+  }
+  const hint = createHint(rec, performance.now());
+  const pill = document.createElement('p');
+  pill.className = 'view-hint';
+  pill.id = 'view-hint';
+  pill.hidden = true;
+  pill.setAttribute('role', 'status');
+  parent.append(pill);
+  let ticker = 0;
+  function saveHint(): void {
+    try {
+      localStorage.setItem(HINT_KEY, JSON.stringify(hint.record()));
+    } catch {
+      // Not kept: the hint may show again next visit.
+    }
+  }
+  function hintChange(c: HintChange): void {
+    if (!c) return;
+    saveHint();
+    if (c === 'show') {
+      const touch = lastPointer ? lastPointer !== 'mouse' : matchMedia('(pointer: coarse)').matches;
+      pill.textContent = hintText(touch);
+      pill.hidden = false;
+      requestAnimationFrame(() => pill.classList.add('on'));
+      compass.classList.add('wiggle');
+      return;
+    }
+    clearInterval(ticker);
+    pill.classList.remove('on');
+    compass.classList.remove('wiggle');
+    setTimeout(() => { pill.hidden = true; }, 300);
+  }
+  const covered = (): boolean => host.covered() || document.hidden || parent.closest('[hidden]') !== null;
+  if (!hint.over()) ticker = window.setInterval(() => hintChange(hint.tick(performance.now(), covered())), HINT_TICK_MS);
+  pill.addEventListener('click', () => hintChange(hint.dismiss()));
+
   return {
     setView(yaw, pitch) {
       const f = compassFace({ yaw, pitch });
@@ -236,6 +306,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
       compass.dataset.pitch = String(Math.round(pitch));
     },
     dispose() {
+      clearInterval(ticker);
+      pill.remove();
       canvas.removeEventListener('pointerdown', down);
       canvas.removeEventListener('pointermove', move);
       canvas.removeEventListener('pointerup', up);

@@ -138,6 +138,8 @@ const SHOTS: Record<string, Shot> = {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       // Every Dictionary entry met, so no first card stops the level.
       await page.addInitScript(() => localStorage.setItem('crete-met', '["*"]'));
+      // The first-time view hint (src/modern/hint.ts) would show over a long capture; it is done here.
+      await page.addInitScript(() => localStorage.setItem('crete-view-hint', '{"shows":0,"moved":true}'));
       await page.goto('games/crete/');
       await page.click('#title-play');
       await page.click('#pick-enter');

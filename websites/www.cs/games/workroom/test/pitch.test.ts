@@ -68,6 +68,7 @@ test('the streaming tracker gives the frames the batch one does, in any chunk si
   const tracker = createPitchTracker(rate);
   const streamed = [];
   for (let i = 0; i < audio.length; i += 777) streamed.push(...tracker.push(audio.subarray(i, i + 777)));
+  streamed.push(...tracker.end());
   assert.equal(streamed.length, batch.length);
   streamed.forEach((f, i) => {
     assert.equal(f.t, batch[i]!.t);
@@ -83,9 +84,9 @@ test('a 5.5 Hz vibrato of ±40 cents on A4 is followed within 10 cents', () => {
   let phase = 0;
   const truth = (t: number): number => 440 * 2 ** ((40 * Math.sin(2 * Math.PI * 5.5 * t)) / 1200);
   for (let i = 0; i < n; i++) { phase += (2 * Math.PI * truth(i / rate)) / rate; out[i] = 0.5 * Math.sin(phase); }
-  const frames = trackPitch(out, rate).filter(f => f.hz !== null);
+  // A frame's time is its window's middle; the last few frames' windows run past the sudden end, which is not a voice.
+  const frames = trackPitch(out, rate).filter(f => f.hz !== null && f.t < 0.95);
   assert.ok(frames.length > 150);
-  // A frame's time is its window's middle.
   const worst = Math.max(...frames.map(f => Math.abs(cents(f.hz!, truth(f.t)))));
   assert.ok(worst < 10, `worst ${worst} cents`);
 });

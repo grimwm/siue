@@ -123,6 +123,8 @@ const rmsOf = (x: Float32Array): number => {
 export interface PitchTracker {
   /** More samples; answers every frame they complete, in order. */
   push(samples: Float32Array): PitchFrame[];
+  /** The samples have ended: the frames still waiting on them, with silence after the last sample. */
+  end(): PitchFrame[];
 }
 
 /** A tracker fed samples as they come (a microphone, a decoded file), a frame every `hop` samples. */
@@ -134,8 +136,10 @@ export function createPitchTracker(rate: number, o: PitchOptions & { frame?: num
   let filled = 0;
   /** The sample index of buf[0]. */
   let base = 0;
-  return {
+  let total = 0;
+  const tracker: PitchTracker = {
     push(samples) {
+      total += samples.length;
       if (filled + samples.length > buf.length) {
         const grown = new Float32Array(Math.max(buf.length * 2, filled + samples.length));
         grown.set(buf.subarray(0, filled));
@@ -159,10 +163,18 @@ export function createPitchTracker(rate: number, o: PitchOptions & { frame?: num
       }
       return out;
     },
+    end() {
+      // Frames whose window's middle is still within the samples.
+      const frames = tracker.push(new Float32Array(size));
+      total -= size;
+      return frames.filter(f => f.t * rate < total);
+    },
   };
+  return tracker;
 }
 
 /** Every frame of a whole recording. */
 export function trackPitch(samples: Float32Array, rate: number, o: PitchOptions & { frame?: number; hop?: number; quiet?: number } = {}): PitchFrame[] {
-  return createPitchTracker(rate, o).push(samples);
+  const tracker = createPitchTracker(rate, o);
+  return [...tracker.push(samples), ...tracker.end()];
 }

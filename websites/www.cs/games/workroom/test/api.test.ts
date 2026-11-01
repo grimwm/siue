@@ -224,3 +224,15 @@ test('a pairing try answers the key, or the refusal; a stored pairing answers nu
   assert.equal(await api.pairKeyring(locked, 'c', [], { spki: 'x', sig: 'y' }, { key: 3, code: 'BBBB-BBBB-BBBB-BBBB', fingerprint: 'F' }), null);
   assert.deepEqual(sent, ['pair.php first', 'pair.php n1', 'keyring.php?pair=1 n2', 'keyring.php?pair=1 n3'], 'each POST carries the token the last answer gave');
 });
+
+test('saveDraft posts the bundle to save-draft.php with CSRF and hands back any answer with its status', async () => {
+  const sent: { url: string; init: Init }[] = [];
+  const fetch: Fetch = async (url, init?: Init) => { sent.push({ url, init }); return reply(409, { error: 'stale', latest: 2, csrf: 'next' }); };
+  const api = createApi(fetch, 't0');
+  assert.deepEqual(await api.saveDraft('my-tune', 3, new Uint8Array([9])), { status: 409, data: { error: 'stale', latest: 2, csrf: 'next' } });
+  assert.equal(sent[0]!.url, 'save-draft.php?piece=my-tune&version=3');
+  assert.equal(sent[0]!.init?.headers?.['X-CSRF'], 't0');
+  assert.equal(sent[0]!.init?.headers?.['Content-Type'], 'application/octet-stream');
+  await api.saveDraft('my-tune', 3, new Uint8Array([9]));
+  assert.equal(sent[1]!.init?.headers?.['X-CSRF'], 'next', 'the answer\'s token is the next one');
+});

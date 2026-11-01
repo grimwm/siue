@@ -71,6 +71,20 @@ keys. Nobody else's studio is ever visible to them.
 - **Studios on the admin hub:** `admin/studios.php` lists every studio's address, usage and last sign-in,
   never a piece, title or note.
 
+### The composer
+
+`compose.php` is the editor (`games/workroom/src/ui/compose/`, its DOM-free parts in `src/compose/`): a music piece's
+parts, each a lane with an instrument from the library's catalogue, and three ways to put notes in, all writing to one
+grid: **Play Live** (a held key sets the note's length; Tidy To snaps the starts to 1/4, 1/8, 1/16 or Off; recording
+stops after a bar of quiet; an optional count-in), **Step** (a length, Dotted, + Rest, ‹ Back One) and **Grid** (tap
+to add, drag to move, drag the right end to stretch, Line Up To). Keys pressed together are a chord in every mode.
+Tap a note to select it and again to delete it; Undo and Redo cover every edit. A note outside its instrument's range
+is drawn amber (experts only) or red (beyond the instrument) and never moved, except by Move Them Into Range. While a
+key is held the page is pinned where it is. Hear With The Piece and Hear My Part Alone build the sound with the same
+renderer the piece page uses. Save Draft keeps the piece's next draft through `save-draft.php`; the edit stays in the
+page when a save is refused. The piece page links Compose on a music piece; the pieces page and Your studio link New
+Piece. The design is `docs/superpowers/specs/2026-10-31-composer-editor-design.md`.
+
 ### Limits
 
 | Limit | Studio | With the allowance |
@@ -166,7 +180,11 @@ only when `current` and `previous` are exactly the stored fingerprints (409 `key
 transaction),
 `delete-draft.php` (POST
 `piece` and `v` deletes one draft, `piece` alone the whole piece; 404 `not_found` when none
-went), `drafts.php?piece=`, `draft.php?piece=&v=&file=` (data). Signed out, a page goes to
+went), `drafts.php?piece=` (each draft's `version`, `published_at` and `sheet`, whether it stores MusicXML),
+`draft.php?piece=&v=&file=` (data), `compose.php?id=&v=` (the editor's page on that piece; with no `id`, New Piece,
+its body carrying `data-pieces` and `data-projects`) and `save-draft.php?piece=&version=` (POST, the editor's save: a
+SIUED1 bundle of `score.json` alone from any account, checked as an AI's publish is, kept only as the piece's next
+draft; 409 `stale` with `latest` otherwise, 409 `exists`, 413 `over_quota` with `room` and `message`). Signed out, a page goes to
 `login.php?next=` (the page, when sign-in may return to it) and a data route answers 401
 `{"error":"signed_out"}`. Each POST's answer carries the next CSRF token. The page shells'
 `<body>` carries `data-note-max` (the largest note), `data-room` (bytes the studio may still

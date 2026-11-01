@@ -454,6 +454,13 @@ final class Store
         return $bytes === false ? null : $bytes;
     }
 
+    /** Whether draft $version of $piece stores the file $name (one of DRAFT_FILES). */
+    public function hasDraftFile(string $piece, int $version, string $name): bool
+    {
+        return self::validPieceId($piece) && $version >= 1 && $version <= 9999 && in_array($name, self::DRAFT_FILES, true)
+            && is_file($this->draftDir($piece, $version) . '/' . self::storedName($name));
+    }
+
     /** What this account may store: the limits its address has. */
     public function limits(): Limits
     {

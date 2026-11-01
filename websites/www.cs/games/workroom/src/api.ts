@@ -56,6 +56,8 @@ export interface PageApi {
   pairKeyring(locked: LockedKeyring, current: string, previous: string[], proof: ChangeProof, pair: { key: number; code: string; fingerprint: string }): Promise<PairRefusal | null>;
   /** Deletes one draft of a piece, or every draft of it without a version; how many went. A draft that is already gone is a ServerError (404). */
   deleteDraft(piece: string, version?: number): Promise<number>;
+  /** Saves the editor's draft (a SIUED1 bundle of score.json) as `version` of `piece`: the server's status and answer, whatever it is. */
+  saveDraft(piece: string, version: number, bundle: Uint8Array<ArrayBuffer>): Promise<{ status: number; data: Record<string, unknown> }>;
 }
 
 type Reply = Awaited<ReturnType<Fetch>>;
@@ -190,6 +192,10 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
       if (!reply.ok && refused !== undefined) return refused;
       if (!reply.ok) throw failed(reply);
       return null;
+    },
+    async saveDraft(piece, version, bundle) {
+      const { reply, data } = await post(`save-draft.php?piece=${encodeURIComponent(piece)}&version=${version}`, 'application/octet-stream', bundle);
+      return { status: reply.status, data };
     },
     async deleteDraft(piece, version) {
       const form = `piece=${encodeURIComponent(piece)}${version === undefined ? '' : `&v=${version}`}`;

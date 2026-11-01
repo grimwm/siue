@@ -30,6 +30,7 @@ function server() {
     uploadKeyring: async () => {},
     changeKeyring: async () => {},
     deleteDraft: async () => 0,
+    saveDraft: async () => ({ status: 201, data: {} }),
     checkPairing: async () => 'wrong_code',
     pairKeyring: async () => null,
   };

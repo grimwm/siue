@@ -15,7 +15,8 @@ export function siblingUrl(moduleUrl: string, file: string): string {
   return `${path.slice(0, path.lastIndexOf('/') + 1)}${file}${query.length ? `?${query.join('?')}` : ''}`;
 }
 
-export type Loaded = { ok: true; score: Score; version: number; versions: number[] } | { ok: false; error: string };
+/** `sheet`: whether the loaded draft stores its MusicXML (drafts.php's sheet; true when the server does not say). */
+export type Loaded = { ok: true; score: Score; version: number; versions: number[]; sheet: boolean } | { ok: false; error: string };
 
 const SIGNED_OUT = 'Your sign-in ended. Sign in again.';
 const bad = (error: string): { ok: false; error: string } => ({ ok: false, error });
@@ -47,5 +48,6 @@ export async function loadDraft(fetch: Fetch, piece: string, version: number | n
   const raw = await getJson(fetch, draftUrl(piece, want, 'score.json'));
   if (!raw.ok) return raw;
   const parsed = parseScore(raw.body);
-  return parsed.ok ? { ok: true, score: parsed.score, version: want, versions } : bad(parsed.error);
+  const row = Array.isArray(drafts) ? drafts.find(d => (d as { version?: unknown })?.version === want) as { sheet?: unknown } | undefined : undefined;
+  return parsed.ok ? { ok: true, score: parsed.score, version: want, versions, sheet: row?.sheet !== false } : bad(parsed.error);
 }

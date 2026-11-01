@@ -119,6 +119,7 @@ test('a new piece gets an id of its own from its title, and a project by name', 
   assert.equal(pieceIdFor('My First Tune', new Set(['my-first-tune', 'my-first-tune-2'])), 'my-first-tune-3');
   assert.equal(pieceIdFor('Café Ünïcode', new Set()), 'cafe-unicode');
   assert.equal(pieceIdFor('***', new Set()), 'piece');
+  assert.equal(pieceIdFor('General', new Set()), 'general-2', 'the general notes\' id is never a piece\'s');
   assert.match(pieceIdFor('x'.repeat(100), new Set()), /^x{40}$/);
   const projects = [{ id: 'crete', name: 'Crete' }];
   assert.deepEqual(projectFor('crete', projects), { id: 'crete', name: 'Crete' });

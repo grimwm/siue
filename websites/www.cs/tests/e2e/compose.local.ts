@@ -56,9 +56,15 @@ test('a student composes a piece, saves two drafts and hears it', async ({ brows
     await expect(page.locator('[data-live-state]')).toContainText('● Recording');
     await page.waitForTimeout(300);
     await hold(page, ['KeyA', 'KeyD'], 700);
+    // A key held while the keyboard moves an octave still stops the note it started.
+    await page.keyboard.down('KeyA');
+    await page.keyboard.press('KeyX');
+    await page.keyboard.up('KeyA');
+    await expect(page.locator('[data-live-state]')).toHaveText('● Recording · waiting for a bar of quiet');
+    await page.keyboard.press('KeyZ');
     await page.getByRole('button', { name: 'Stop Recording' }).click();
-    await expect(page.locator('[data-status]')).toHaveText('Recorded 3 notes. Undo takes them back.');
-    await expect(notes(page)).toHaveCount(3);
+    await expect(page.locator('[data-status]')).toHaveText('Recorded 4 notes. Undo takes them back.');
+    await expect(notes(page)).toHaveCount(4);
     const lefts = await notes(page).evaluateAll(els => els.map(e => (e as HTMLElement).style.left));
     expect(lefts[0]).toBe('0px');
     expect(lefts[1]).toBe(lefts[2]);
@@ -69,12 +75,12 @@ test('a student composes a piece, saves two drafts and hears it', async ({ brows
     await page.getByRole('tab', { name: 'Step' }).click();
     await page.locator('[data-length="quarter"]').click();
     await hold(page, ['KeyA', 'KeyD', 'KeyG'], 100);
-    await expect(notes(page)).toHaveCount(6);
+    await expect(notes(page)).toHaveCount(7);
     await page.getByRole('button', { name: '+ Rest' }).click();
     await hold(page, ['KeyF'], 100);
-    await expect(notes(page)).toHaveCount(7);
+    await expect(notes(page)).toHaveCount(8);
     await page.getByRole('button', { name: '‹ Back One' }).click();
-    await expect(notes(page)).toHaveCount(6);
+    await expect(notes(page)).toHaveCount(7);
     await expect(page.locator('[data-step-state]')).toContainText('Next note at bar');
 
     // Grid: tap an empty square near the end of bar 2 to add a note, then drag it one row up.

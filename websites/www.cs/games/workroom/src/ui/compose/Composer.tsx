@@ -15,6 +15,7 @@ import { keyboardStart, OCTAVE_DOWN, OCTAVE_UP, pitchForKey } from '../../compos
 import { createLiveTake } from '../../compose/live.ts';
 import type { LiveTake } from '../../compose/live.ts';
 import { saveScore } from '../../compose/save.ts';
+import type { Saved } from '../../compose/save.ts';
 import type { Sampler } from '../../compose/sampler.ts';
 import { pinScroll } from '../../compose/scrollpin.ts';
 import { GRID_LABELS, GRIDS } from '../../compose/snap.ts';
@@ -101,7 +102,9 @@ export function Composer(p: ComposerProps) {
   const dirty = doc !== savedDoc;
 
   // Mutable state the key and timer handlers read without re-subscribing.
-  const live = useRef<{ take: LiveTake | null; handles: Map<number, number> }>({ take: null, handles: new Map() });
+  // `pressed` is each key held (a computer key's code, or "screen:<pitch>") and the pitch it started, so letting it go
+  // stops that pitch even after the keyboard moved an octave; `handles` is each sounding pitch's sampler note.
+  const live = useRef<{ take: LiveTake | null; handles: Map<number, number>; pressed: Map<string, number> }>({ take: null, handles: new Map(), pressed: new Map() });
   const step = useMemo(() => createStepCursor(0), []);
   const gather = useMemo(() => createChordGather(() => bpm), [bpm]);
   const pin = useMemo(() => pinScroll(window), []);
@@ -144,7 +147,8 @@ export function Composer(p: ComposerProps) {
     const s = state.current;
     const end = s.part ? Math.max(0, ...s.part.notes.map(n => n.start + n.length)) : 0;
     const bar = end === 0 ? 1 : clock.barOfBeat(end - 1e-9) + 1;
-    const take = createLiveTake({ startBeat: clock.barStartBeat(bar), bpm: s.bpm, beatsPerBar: clock.tempoAt(bar).beats });
+    const tempo = clock.tempoAt(bar);
+    const take = createLiveTake({ startBeat: clock.barStartBeat(bar), bpm: tempo.bpm, beatsPerBar: tempo.beats });
     if (at !== null) take.begin(at);
     live.current.take = take;
     return take;
@@ -167,10 +171,11 @@ export function Composer(p: ComposerProps) {
   };
 
   // ---- Keys ----
-  const keyDown = (pitch: number, source: string): void => {
+  const keyDown = (pitch: number, key: string): void => {
     const s = state.current;
-    if (!s.part) return;
-    pin.hold(`${source}:${pitch}`);
+    if (!s.part || live.current.pressed.has(key)) return;
+    live.current.pressed.set(key, pitch);
+    pin.hold(key);
     if (live.current.handles.has(pitch)) return;
     live.current.handles.set(pitch, p.sampler.start({ instrument: s.part.instrument, gain_db: s.part.gain_db, attack: s.part.attack, release: s.part.release }, pitch, 90));
     setHeld(h => new Set(h).add(pitch));
@@ -182,8 +187,13 @@ export function Composer(p: ComposerProps) {
     } else if (s.mode === 'step') gather.down(pitch, t);
     pin.keep();
   };
-  const keyUp = (pitch: number, source: string): void => {
-    pin.release(`${source}:${pitch}`);
+  const keyUp = (key: string): void => {
+    const pitch = live.current.pressed.get(key);
+    if (pitch === undefined) return;
+    live.current.pressed.delete(key);
+    pin.release(key);
+    // Another key (the same note on screen and on the computer keyboard) still holds it.
+    if ([...live.current.pressed.values()].includes(pitch)) return;
     const handle = live.current.handles.get(pitch);
     if (handle === undefined) return;
     live.current.handles.delete(pitch);
@@ -226,11 +236,8 @@ export function Composer(p: ComposerProps) {
       e.preventDefault();
       if (!e.repeat) keyRef.current.keyDown(pitch, e.code);
     };
-    const up = (e: KeyboardEvent): void => {
-      const pitch = pitchForKey(e.code, state.current.start);
-      if (pitch !== null) keyRef.current.keyUp(pitch, e.code);
-    };
-    const blur = (): void => { for (const pitch of [...live.current.handles.keys()]) keyRef.current.keyUp(pitch, 'blur'); };
+    const up = (e: KeyboardEvent): void => keyRef.current.keyUp(e.code);
+    const blur = (): void => { for (const key of [...live.current.pressed.keys()]) keyRef.current.keyUp(key); };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     window.addEventListener('blur', blur);
@@ -298,8 +305,14 @@ export function Composer(p: ComposerProps) {
   const save = async (): Promise<void> => {
     setSaving(true);
     const score = scoreFromDoc(doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
-    const result = await saveScore(p.api, score);
-    setSaving(false);
+    let result: Saved;
+    try {
+      result = await saveScore(p.api, score);
+    } catch (e) {
+      result = { ok: false, message: `The draft could not be saved: ${e instanceof Error ? e.message : String(e)} Your edit is still here.` };
+    } finally {
+      setSaving(false);
+    }
     if (result.ok) {
       setVersion(result.version);
       setSavedDoc(doc);
@@ -461,7 +474,7 @@ export function Composer(p: ComposerProps) {
                   const h = p.sampler.start({ instrument: part.instrument, gain_db: part.gain_db, attack: part.attack, release: part.release }, pitch, 90); setTimeout(() => p.sampler.stop(h), 300); }}
                 onSelect={ids => { setSelected(new Set(ids)); setArmed(null); }} />
               <Help>Tap a note to hear and select it; tap it again to delete it. Drag across empty space to select several, then press Delete. Rows in red are beyond the instrument; amber rows are for experts.</Help>
-              <Keyboard entry={entry} start={start} held={held} onStart={setKeysFrom} onDown={pitch => keyDown(pitch, 'screen')} onUp={pitch => keyUp(pitch, 'screen')} />
+              <Keyboard entry={entry} start={start} held={held} onStart={setKeysFrom} onDown={pitch => keyDown(pitch, `screen:${pitch}`)} onUp={pitch => keyUp(`screen:${pitch}`)} />
               <Help>On a computer keyboard, A S D F G H J K play the white keys and W E T Y U the black ones; Z and X move down and up an octave.</Help>
             </>
           ) : (

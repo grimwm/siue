@@ -830,3 +830,32 @@ test('the first-time hint waits while a card covers the board, closes on a tap, 
   await expect(pill, 'no third visit').toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('Show View Tips in the menu, and the ? key, bring the view tips back after the camera has moved; a drag takes them away', async ({ page }) => {
+  const errors = await openHall(page);
+  const pill = page.locator('#view-hint');
+  await page.waitForTimeout(2500);
+  await expect(pill, 'the camera has moved before, so they do not show by themselves').toBeHidden();
+  await page.keyboard.press('q');
+  const item = page.locator('#menu-view-tips');
+  await expect(item).toHaveText(/Show View Tips/);
+  await item.click();
+  await expect(page.locator('#menu-veil'), 'the menu closes').toBeHidden();
+  await expect(pill, 'the tips show by the compass').toBeVisible();
+  await expect(pill).toHaveText('Drag to turn and tilt · Right-drag to pan · Tap the compass to reset');
+  await expect(page.locator('#cam-compass')).toHaveClass(/\bwiggle\b/);
+  await drag(page, 120);
+  await expect(pill, 'a drag takes them away').toBeHidden();
+  await page.keyboard.press('?');
+  await expect(pill, 'the ? key shows them again').toBeVisible();
+  await pill.click();
+  await expect(pill, 'and a tap on them closes them').toBeHidden();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('crete-view-hint')!)), 'asked for, they are not counted').toEqual({ shows: 0, moved: true });
+  // The classic board has no view tips: no menu item, and the key says so.
+  await page.locator('#btn-look').click();
+  await page.keyboard.press('?');
+  await expect(page.locator('#toast')).toContainText('View tips are for the modern board.');
+  await page.keyboard.press('q');
+  await expect(page.locator('#menu-view-tips')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

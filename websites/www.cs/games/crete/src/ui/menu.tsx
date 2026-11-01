@@ -45,6 +45,8 @@ export interface MenuProps {
   onWalls: (walls: WallMode) => void;
   onPad: (side: PadSide) => void;
   onMinimap: () => void;
+  /** Show View Tips: shown only while the look is modern. */
+  onViewTips: () => void;
   onLore: () => void;
   onDictionary: () => void;
   onQuit: () => void;
@@ -111,6 +113,12 @@ export function Menu(p: MenuProps) {
               <Button id="minimap-switch" class="menu-row" checked={p.minimap} onClick={p.onMinimap}>
                 <span class="menu-row-name">Mini Map<small>The whole level in a corner of the board</small></span>
                 <span class="switch" aria-hidden="true" />
+              </Button>
+            )}
+            {p.look === 'modern' && (
+              <Button id="menu-view-tips" class="menu-row" keyLabel={KEYS.tips.label} onClick={p.onViewTips}>
+                <span class="menu-row-name">Show View Tips<small>How to turn, tilt and reset the board</small></span>
+                <span class="menu-row-go" aria-hidden="true">›</span>
               </Button>
             )}
             <div class="menu-walls" data-section="pad">

@@ -106,6 +106,8 @@ export interface Controls {
   setPad?(side: PadSide): void;
   /** The Mini map switch, shown while the look is modern. */
   toggleMinimap?(): void;
+  /** Show View Tips: the modern board's tips by the compass again (the menu, the ? key). */
+  showViewTips?(): void;
   toggleFullscreen(): void;
   /** Wake the speakers: any gesture does. */
   wake(): void;
@@ -622,6 +624,10 @@ export function createUi(deps: UiDeps): Ui {
       onWalls: (w) => controls?.setWalls?.(w),
       onPad: (side) => controls?.setPad?.(side),
       onMinimap: () => controls?.toggleMinimap?.(),
+      onViewTips: () => {
+        layers.close("menu");
+        controls?.showViewTips?.();
+      },
       onLore: () => {
         loreShown = null;
         loreFromPickup = false;
@@ -1418,6 +1424,9 @@ export function createUi(deps: UiDeps): Ui {
       } else if (action === "auto") {
         ev.preventDefault();
         g.auto();
+      } else if (action === "tips") {
+        ev.preventDefault();
+        c.showViewTips?.();
       } else if (action === "look") {
         ev.preventDefault();
         if (!ev.repeat) c.setLook?.(look === "modern" ? "classic" : "modern");

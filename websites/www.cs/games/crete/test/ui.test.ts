@@ -478,7 +478,7 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   toggled = 0;
   key('q');
   const at = () => document.activeElement?.id;
-  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'walls-solid', 'walls-ghosted', 'walls-low', 'minimap-switch', 'pad-left', 'pad-right', 'menu-lore', 'quit'];
+  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'walls-solid', 'walls-ghosted', 'walls-low', 'minimap-switch', 'menu-view-tips', 'pad-left', 'pad-right', 'menu-lore', 'quit'];
   const first = order.indexOf(at() ?? '');
   assert.ok(first >= 0, `focus is on a menu button, not ${at()}`);
   for (let i = 0; i < 8; i++) key('ArrowUp');
@@ -493,9 +493,9 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   assert.equal(at(), 'fullscreen');
   key('j');
   assert.equal(at(), 'walls-solid');
-  for (let i = 0; i < 6; i++) key('j');
+  for (let i = 0; i < 7; i++) key('j');
   assert.equal(at(), 'menu-lore');
-  for (let i = 0; i < 7; i++) key('k');
+  for (let i = 0; i < 8; i++) key('k');
   assert.equal(at(), 'fullscreen');
   key('Enter');
   assert.equal(toggled, 1);

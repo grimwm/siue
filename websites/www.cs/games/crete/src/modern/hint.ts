@@ -1,8 +1,9 @@
 /* The Island of Crete, modern look: the first-time hint that the 3D board can be turned and tilted, as pure logic.
  * A player new to the modern board who leaves the camera alone for HINT_DELAY_MS sees one small line by the compass
  * (and the compass gives one small wiggle); it goes on the first camera gesture, a tap on it, a layer covering the
- * board, or after HINT_SHOW_MS. It shows on at most HINT_MAX_SHOWS visits, and never again once the player has moved
- * the camera. DOM-free; controls.ts draws it and keeps its record in localStorage. */
+ * board, or after HINT_SHOW_MS. It shows by itself on at most HINT_MAX_SHOWS visits, and never again once the player
+ * has moved the camera; the menu's Show View Tips and the ? key bring it back any time, without counting as a visit.
+ * DOM-free; controls.ts draws it and keeps its record in localStorage. */
 
 /** Quiet time on the board, in ms, before the hint shows. */
 export const HINT_DELAY_MS = 1500;
@@ -49,6 +50,8 @@ export interface Hint {
   moved(): HintChange;
   /** A tap on the hint itself. */
   dismiss(): HintChange;
+  /** Shows it now, asked for: whatever the record says, and without counting it as one of the visits it shows on. */
+  show(now: number): HintChange;
   /** True once it has nothing more to do this visit: shown and gone, or not wanted at all. */
   over(): boolean;
 }
@@ -87,6 +90,12 @@ export function createHint(rec: HintRecord, now: number): Hint {
     },
     dismiss() {
       return phase === 'shown' ? end() : null;
+    },
+    show(t) {
+      shownAt = t;
+      if (phase === 'shown') return null;
+      phase = 'shown';
+      return 'show';
     },
     over: () => phase === 'done',
   };

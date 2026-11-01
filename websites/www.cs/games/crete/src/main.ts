@@ -259,6 +259,12 @@ function toggleMinimap(): void {
   ui.say(on ? 'Mini Map on.' : 'Mini Map off.', 'info');
 }
 
+/* Show View Tips (the menu, the ? key): the modern board's tips by the compass again; the classic board has none. */
+function showViewTips(): void {
+  if (modernOn && modern) modern.showTips();
+  else ui.say('View tips are for the modern board.', 'info');
+}
+
 function applyWalls(walls: WallMode): void {
   settings.walls.set(walls);
   ui.setLook(settings.look.get(), walls);
@@ -583,7 +589,7 @@ function noModern(why: string): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, showViewTips, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
   });
   const background = settings.musicHidden.get() === 'on';

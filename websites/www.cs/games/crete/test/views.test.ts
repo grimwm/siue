@@ -252,7 +252,7 @@ function menuProps(over: Partial<MenuProps> = {}): MenuProps {
     open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', pad: 'left', minimap: false,
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onWalls: noop, onPad: noop, onMinimap: noop, onLore: noop, onDictionary: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onWalls: noop, onPad: noop, onMinimap: noop, onViewTips: noop, onLore: noop, onDictionary: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 
@@ -318,6 +318,19 @@ test('the menu has a Mini map switch, off by default, only while the look is mod
   assert.equal(byId(root, 'minimap-switch').getAttribute('aria-checked'), 'true');
   renderMenu(root, menuProps({ look: 'classic', minimap: true }));
   assert.equal(maybeById(root, 'minimap-switch'), undefined, 'Classic never shows it');
+});
+
+test('the menu has Show View Tips, with its key, only while the look is modern', () => {
+  const root = mount();
+  let asked = 0;
+  renderMenu(root, menuProps({ onViewTips: () => asked++ }));
+  const b = byId(root, 'menu-view-tips');
+  assert.match(b.textContent ?? '', /Show View Tips/);
+  assert.equal(tabsOf(b)[0]?.textContent, KEYS.tips.label);
+  click(b);
+  assert.equal(asked, 1);
+  renderMenu(root, menuProps({ look: 'classic' }));
+  assert.equal(maybeById(root, 'menu-view-tips'), undefined, 'Classic has no view tips');
 });
 
 test('the menu has a Lore Book button that calls back', () => {

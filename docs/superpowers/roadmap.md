@@ -7,10 +7,11 @@ each step starts from. A step with a design but no plan gets its plan written
 ## Crete
 
 The vision and its parts are in `specs/2026-10-16-crete-redesign-vision.md`.
-Live: the shell, the engine, Chapters 1 and 2 (ten levels each, story pages, the
-Lore book), full keyboard play and swipes, the fast solver, the level editor,
-the title theme on every screen, and two looks: Modern (painted 3D, Top-down by
-default, or Angled) and Classic, chosen when a new game starts.
+Live: the shell, the engine, Chapters 1 to 3 (ten levels each, story pages, the
+Lore book; Chapter 3 is `plans/2026-11-01-crete-chapter-3.md`), full keyboard play
+and swipes, the fast solver, the level editor, the title theme on every screen, and
+two looks: Modern (painted 3D, one free camera steered from the compass, with view
+tips) and Classic, chosen when a new game starts.
 
 1. **Nine new pieces** — design `specs/2026-10-21-crete-pieces-design.md`,
    plan `plans/2026-10-27-crete-pieces.md`. Live in the engine, both solvers,
@@ -25,7 +26,7 @@ default, or Angled) and Classic, chosen when a new game starts.
    Check with Stop and a progress bar, Try it on the full game screen, Share as
    a link and opening a link, with the OPFS solve cache trimmed. The README's
    "The editor" section describes it.
-3. **Chapters 3 to 10**, one pull request each, built in the editor and
+3. **Chapters 4 to 10**, one pull request each, built in the editor and
    exported to the repo. Every level passes the difficulty gate
    (`src/puzzle/difficulty.ts`); a level that is winnable but easy is refused.
    Each chapter gets its music once the first piece is done.
@@ -44,16 +45,15 @@ and the studio MCP server with AI sealing keys, pairing and `SIUEN2` notes, so
 any studio connects its own AI app (project 3, `plans/2026-10-31-studio-mcp.md`).
 The Crete title theme is finished and plays in Crete on every screen.
 
-1. **Composing in the editor** (project 4) — design `specs/2026-10-31-composer-editor-design.md`, in seven
-   phases, each shipped on its own. Live: 4a, the instrument library and catalogue
-   (`plans/2026-10-31-composer-4a-instrument-library.md`): 27 instruments from VSCO-2 CE and VCSL (both CC0),
-   with the catalogue in `library.json` and the AI's `list_instruments`. Next:
-   1. 4b, the core editor;
-   2. 4c, sheet music, import and export;
-   3. 4d, keyboards, Hum and Play Along;
-   4. 4e, speed, loudness, Sound and Voice Effects;
-   5. 4f, Vocal Tracks (recorded voice, the studio limit rising to 25 MB);
-   6. 4g, DJ & Effects.
+Composing in the editor (project 4, `specs/2026-10-31-composer-editor-design.md`) is live in all seven
+phases, each with its plan in `plans/`:
+- 4a, the instrument library and catalogue (27 instruments, VSCO-2 CE and VCSL);
+- 4b, the core editor;
+- 4c, sheet music, import and export;
+- 4d, keyboards, Hum and Play Along;
+- 4e, speed, loudness, Sound and Voice Effects;
+- 4f, Vocal Tracks (25 MB a studio);
+- 4g, DJ & Effects.
 
 ## Visitor statistics
 

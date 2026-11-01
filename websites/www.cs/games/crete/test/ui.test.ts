@@ -372,7 +372,7 @@ test('every released level in order: Enter starts it, a win shows moves and the 
   flow.showChapter(1, false);
   key('Enter');
   for (let i = 0; i < LEVEL_IDS.length; i++) {
-    const { chapter, within } = { chapter: i < 10 ? 1 : 2, within: (i % 10) + 1 };
+    const { chapter, within } = { chapter: Math.floor(i / 10) + 1, within: (i % 10) + 1 };
     assert.equal(flow.top(), 'start', `level ${i + 1}'s start card`);
     assert.equal(hudTrial(), `Ch. ${chapter} • Level ${within}/10`);
     key('Enter');
@@ -390,7 +390,7 @@ test('every released level in order: Enter starts it, a win shows moves and the 
     if (i + 1 === LEVEL_IDS.length) break;
     key('Enter');
     if (within === 10) {
-      assert.equal(text('chapter-title'), 'The Winding Ways');
+      assert.equal(text('chapter-title'), ['The Winding Ways', 'The Closing Ways'][chapter - 1]);
       key('Enter');
     }
   }
@@ -435,7 +435,7 @@ test('the status bar and the menu name the chapter and the level', () => {
   assert.equal(text('menu-level'), title);
   flow.closeLayers();
   game.open(LEVEL_IDS.length - 1);
-  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, `Ch. 2 • Level ${LEVEL_IDS.length - 10}/10`);
+  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, 'Ch. 3 • Level 10/10');
 });
 
 test('I on the title opens the story card and Q opens the menu; Q again returns to the title', () => {
@@ -701,7 +701,10 @@ test('left and right in the levels list switch between the released chapters, cl
   assert.equal(pressed(2), 'true');
   assert.ok(byId(document.getElementById('levels-root'), 'level-1').textContent.includes(levels.level(10).title), "Chapter 2's levels are listed");
   key('d');
-  assert.equal(pressed(2), 'true', 'clamped at the last released chapter');
+  assert.equal(pressed(3), 'true');
+  key('d');
+  assert.equal(pressed(3), 'true', 'clamped at the last released chapter');
+  key('ArrowLeft');
   key('ArrowLeft');
   assert.equal(pressed(1), 'true');
   key('a');
@@ -899,11 +902,20 @@ test("Continue on Chapter 1's closing card, clicked, opens Chapter 2's opening c
   assert.ok(el('chapter-enter'));
 });
 
-test("Chapter 2's closing card says Chapter 3 is not yet released, and Continue puts it away", () => {
+test("Chapter 2's closing card goes on to Chapter 3's opening card", () => {
+  reset();
+  flow.showChapter(2, true);
+  click(byId(rootOf('chapter-continue'), 'chapter-continue'));
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Closing Ways');
+  assert.ok(el('chapter-enter'));
+});
+
+test("Chapter 3's closing card says Chapter 4 is not yet released, and Continue puts it away", () => {
   reset();
   const opened = game.opens;
-  flow.showChapter(2, true);
-  assert.match(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /Chapter 3 is not yet released/);
+  flow.showChapter(3, true);
+  assert.match(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /Chapter 4 is not yet released/);
   key('Enter');
   assert.equal(flow.top(), null);
   assert.equal(game.opens, opened);
@@ -914,7 +926,6 @@ test('with Chapter 1 all cleared, Levels and Chapter 2, Level 3 starts there', (
   for (const id of LEVEL_IDS.slice(0, 10)) cleared.add(id);
   flow.showChapter(1, false);
   key('n');
-  key('ArrowRight');
   pick(3);
   assert.equal(game.trial, 12);
   assert.equal(hudTrial(), 'Ch. 2 • Level 3/10');
@@ -1211,11 +1222,11 @@ test('winning level 10 opens the closing card over the end card; Continue goes o
   assert.equal(game.trial, 10);
 });
 
-test("winning Chapter 2's last level opens its closing card, and no Next level follows it", () => {
+test("winning Chapter 3's last level opens its closing card, and no Next level follows it", () => {
   reset();
-  win(19);
+  win(29);
   assert.equal(flow.top(), 'chapter');
-  assert.match(text('chapter-veil'), /Chapter 3 is not yet released/);
+  assert.match(text('chapter-veil'), /Chapter 4 is not yet released/);
   key('Enter');
   assert.equal(flow.top(), 'end');
   assert.equal(el('end-next'), undefined);

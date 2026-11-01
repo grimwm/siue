@@ -431,14 +431,14 @@ test('the closing chapter card says it is the end of the chapter, with its words
   assert.equal(closed, 1);
 });
 
-test("Chapter 2's closing card says Chapter 3 is not yet released, and its button is Continue", () => {
+test("Chapter 3's closing card says Chapter 4 is not yet released, and its button is Continue", () => {
   const root = mount();
-  const two = CHAPTERS[1]!;
-  renderChapter(root, chapterProps({ chapter: two, closing: true, next: nextChapter(2) }));
-  assert.equal(byId(root, 'chapter-kicker').textContent, 'End of Chapter 2');
-  assert.equal(byId(root, 'chapter-title').textContent, 'The Winding Ways');
-  assert.equal(byId(root, 'chapter-text').textContent, two.lore!.closing.text);
-  assert.equal(byId(root, 'chapter-next').textContent, 'Chapter 3 is not yet released');
+  const three = CHAPTERS[2]!;
+  renderChapter(root, chapterProps({ chapter: three, closing: true, next: nextChapter(3) }));
+  assert.equal(byId(root, 'chapter-kicker').textContent, 'End of Chapter 3');
+  assert.equal(byId(root, 'chapter-title').textContent, 'The Closing Ways');
+  assert.equal(byId(root, 'chapter-text').textContent, three.lore!.closing.text);
+  assert.equal(byId(root, 'chapter-next').textContent, 'Chapter 4 is not yet released');
   assert.ok(byId(root, 'chapter-continue').textContent.includes('Continue'));
   assert.doesNotMatch(byId(root, 'chapter-continue').textContent, /On to/);
 });
@@ -469,15 +469,15 @@ test('the levels list has a button per level with its title and standing, and pi
   assert.deepEqual(seen, [0, 1, 2]);
 });
 
-test('the levels list has ten chapter tabs: chapter 1 pressed, chapter 2 open, the rest disabled and marked soon', () => {
+test('the levels list has ten chapter tabs: chapter 1 pressed, chapters 2 and 3 open, the rest disabled and marked soon', () => {
   const root = mount();
   const seen: number[] = [];
   renderLevels(root, levelsProps({ onTab: n => seen.push(n) }));
   for (let n = 1; n <= 10; n++) {
     const tab = byId(root, `levels-tab-${n}`);
     assert.equal(tab.getAttribute('aria-pressed'), n === 1 ? 'true' : 'false', `tab ${n}`);
-    assert.equal(tab.disabled, n > 2, `tab ${n}`);
-    assert.equal(tab.textContent, n <= 2 ? `Ch ${n}` : `Ch ${n} · soon`, `tab ${n}`);
+    assert.equal(tab.disabled, n > 3, `tab ${n}`);
+    assert.equal(tab.textContent, n <= 3 ? `Ch ${n}` : `Ch ${n} · soon`, `tab ${n}`);
   }
   click(byId(root, 'levels-tab-1'));
   click(byId(root, 'levels-tab-2'));
@@ -530,7 +530,7 @@ function loreProps(over: Partial<LoreProps> = {}): LoreProps {
 }
 const PAGES = CH1.lore!.pages;
 
-test('the Lore Book lists Chapters 1 and 2 with their opening cards, and chapters 3 to 10 as not yet released', () => {
+test('the Lore Book lists Chapters 1 to 3 with their opening cards, and chapters 4 to 10 as not yet released', () => {
   const root = mount();
   renderLore(root, loreProps({ open: false }));
   assert.equal(byId(root, 'lore-veil').hidden, true);
@@ -545,8 +545,12 @@ test('the Lore Book lists Chapters 1 and 2 with their opening cards, and chapter
   assert.ok(byId(root, 'lore-opening-2').textContent.includes('Opening'));
   assert.ok(byId(root, 'lore-page-ch2-lots').textContent.includes('hides in level 9'));
   assert.ok(byId(root, 'lore-page-ch2-black-sail').textContent.includes('hides in level 10'));
+  assert.ok(text.includes('Chapter 3 · The Closing Ways'));
+  assert.ok(byId(root, 'lore-opening-3').textContent.includes('Opening'));
+  assert.ok(byId(root, 'lore-page-ch3-games').textContent.includes('hides in level 9'));
+  assert.ok(byId(root, 'lore-page-ch3-thread').textContent.includes('hides in level 10'));
   const soon = walk(byId(root, 'lore-veil')).filter(n => n.className === 'lore-soon');
-  assert.equal(soon.length, 8);
+  assert.equal(soon.length, 7);
   assert.ok(soon.every(n => n.textContent.includes('Not yet released')));
 });
 

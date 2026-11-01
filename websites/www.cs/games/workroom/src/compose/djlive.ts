@@ -2,7 +2,8 @@
 // (render/djfx.ts), so a held pad sounds as its clip will. The deck's clock always runs on in the piece's time: a
 // scratch, a hot cue or a stutter reads elsewhere while it lasts and lets go back in time ("carry on in time"). The
 // Crossfader moves between two stems (side A's parts and side B's); the Looper loops bars of the piece. With Record
-// To Timeline on, everything played lands as clips in bar positions, ready for the timeline in one Undo step.
+// To Timeline on, everything played lands as clips in bar positions, ready for the timeline in one Undo step. The deck
+// goes round: at the end of the piece it plays on from bar 1, letting go of what is held there.
 // DOM-free: the audio callback calls `process`.
 import { makeClip } from '../render/djfx.ts';
 import type { BarMap, ClipProc } from '../render/djfx.ts';
@@ -149,7 +150,14 @@ export function createDeck(sound: DeckSound, bars: BarMap, sides: { a: string[];
     process(l, r) {
       const x = [0, 0];
       for (let k = 0; k < l.length; k++) {
-        if (!on || t >= n) { l[k] = 0; r[k] = 0; if (on && t >= n) { deck.stop(); } continue; }
+        if (!on) { l[k] = 0; r[k] = 0; continue; }
+        // The deck goes round: at the end of the piece what is held lets go there, and it plays on from bar 1.
+        if (t >= n) {
+          for (const id of [...running.keys()]) close(id, n);
+          tails.length = 0;
+          if (faderPos !== null) { const keep = faderPos; deck.fader(null); deck.fader(keep); }
+          t = 0;
+        }
         if (loop.pending && t >= loop.pendingBar) {
           // The bar starting now is the one recorded; it loops from the bar after it.
           const b = Math.floor(bars.bar(loop.pendingBar) + 1e-9);

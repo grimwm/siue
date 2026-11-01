@@ -374,6 +374,8 @@ export function Composer(p: ComposerProps) {
       apply(added.doc);
     }
   };
+  /** While DJ Mode's deck plays, the letter and number keys are its pads, not notes. */
+  const djLive = useRef(false);
   const keyRef = useRef({ keyDown, keyUp, undo, redo });
   keyRef.current = { keyDown, keyUp, undo, redo };
   useEffect(() => {
@@ -382,7 +384,7 @@ export function Composer(p: ComposerProps) {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) keyRef.current.redo(); else keyRef.current.undo(); return; }
       if (mod && e.code === 'KeyY') { e.preventDefault(); keyRef.current.redo(); return; }
-      if (mod || e.altKey) return;
+      if (mod || e.altKey || djLive.current) return;
       if (e.code === 'Delete' || e.code === 'Backspace') {
         const s = state.current;
         if (s.part && s.selected.size > 0) { e.preventDefault(); apply(removeNotes(s.doc, s.part.id, s.selected)); setSelected(new Set()); setArmed(null); }
@@ -886,7 +888,7 @@ export function Composer(p: ComposerProps) {
       </div>
       {doc.parts.length ? <EffectsPanel doc={doc} help={help} apply={apply} hearFrom={bar => void hear('piece', bar)} status={setStatus} /> : null}
       {doc.parts.length && p.dj ? (
-        <DjMode doc={doc} ports={p.dj} pin={pin} help={help} apply={apply} status={setStatus}
+        <DjMode doc={doc} ports={p.dj} pin={pin} help={help} apply={apply} status={setStatus} onLive={on => { djLive.current = on; }}
           score={only => {
             const full = scoreFromDoc(doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
             if (!only) return full;

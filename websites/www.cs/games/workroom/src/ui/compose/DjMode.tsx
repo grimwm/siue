@@ -31,13 +31,16 @@ export interface DjModeProps {
   build(key: string, score: Score): Promise<{ channels: Float32Array[]; rate: number }>;
   apply(next: EditDoc): void;
   status(text: string): void;
+  /** Told whether the deck is playing: while it plays, the pad keys are the deck's. */
+  onLive?(playing: boolean): void;
 }
 
 /** 33⅓ turns a minute, in radians a second: the platter's normal speed. */
 const PLATTER = (33.333 / 60) * 2 * Math.PI;
 
-/** `ch` at `to` samples a second, by straight lines between samples. */
-function resample(ch: readonly Float32Array[], from: number, to: number): Float32Array[] {
+/** `ch` as stereo (a mono render on both sides) at `to` samples a second, by straight lines between samples. */
+function resample(input: readonly Float32Array[], from: number, to: number): Float32Array[] {
+  const ch = input.length > 1 ? input.slice(0, 2) : [input[0]!, input[0]!];
   if (from === to) return ch.map(c => c);
   const n = Math.floor((ch[0]!.length * to) / from);
   return ch.map(c => Float32Array.from({ length: n }, (_, i) => {
@@ -67,7 +70,8 @@ export function DjMode(p: DjModeProps) {
   const nameOf = (ids: readonly string[]) => ids.map(id => p.doc.parts.find(x => x.id === id)?.name ?? id).join(' + ');
   const refresh = () => setTick(k => k + 1);
 
-  useEffect(() => () => { node.current?.disconnect(); deck.current?.stop(); }, []);
+  useEffect(() => () => { node.current?.disconnect(); deck.current?.stop(); p.onLive?.(false); }, []);
+  useEffect(() => { p.onLive?.(deck.current?.playing() ?? false); });
 
   const getReady = async () => {
     setReady('building');
@@ -82,10 +86,16 @@ export function DjMode(p: DjModeProps) {
         rate, full: resample(full.channels, full.rate, rate),
         ...(a && b ? { a: resample(a.channels, a.rate, rate), b: resample(b.channels, b.rate, rate) } : {}),
       }, barMap(p.doc.tempo, rate), sides, { changed: refresh });
-      const sp = ctx.createScriptProcessor(1024, 0, 2);
+      // The deck's callback, fed a silent input: a script processor with nothing coming in may never be called.
+      const sp = ctx.createScriptProcessor(1024, 1, 2);
       sp.onaudioprocess = e => deck.current?.process(e.outputBuffer.getChannelData(0), e.outputBuffer.getChannelData(1));
+      const quiet = ctx.createConstantSource();
+      quiet.offset.value = 0;
+      quiet.connect(sp);
+      quiet.start();
       sp.connect(ctx.destination);
       node.current = sp;
+      if (ctx.state !== 'running') await ctx.resume();
       setReady('yes');
       p.status('The deck is ready. Press Play, then hold the pads.');
     } catch (e) {
@@ -158,7 +168,7 @@ export function DjMode(p: DjModeProps) {
                 if (recording) finishRecording();
                 else { d?.record(true); setRecording(true); p.status('Recording to the timeline: what you play now lands as clips.'); }
               }} data={{ 'data-record-timeline': '' }}>● Record To Timeline: {recording ? 'On' : 'Off'}</Button>
-              <span data-deck-bar="" class="font-mono text-xs text-dim">{d?.playing() ? `Bar ${Math.floor(d.bar())}` : 'Stopped'}</span>
+              <DeckBar deck={d} />
             </>
           )}
         </div>
@@ -262,4 +272,11 @@ export function DjMode(p: DjModeProps) {
       </div>
     </Panel>
   );
+}
+
+/** The bar the deck is playing, read a few times a second. */
+function DeckBar(q: { deck: Deck | null }) {
+  const [, setTick] = useState(0);
+  useEffect(() => { const id = setInterval(() => setTick(k => k + 1), 250); return () => clearInterval(id); }, []);
+  return <span data-deck-bar="" data-deck-pos={String(q.deck?.bar() ?? 0)} class="font-mono text-xs text-dim">{q.deck?.playing() ? `Bar ${Math.floor(q.deck.bar())}` : 'Stopped'}</span>;
 }

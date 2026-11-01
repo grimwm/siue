@@ -35,7 +35,10 @@ export function EffectsPanel(p: EffectsPanelProps) {
   const [armed, setArmed] = useState<FxClipEffect | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
   const drag = useRef<{ i: number; kind: 'move' | 'end'; x0: number; bar0: number; moved: boolean; width: number } | null>(null);
-  const [ghost, setGhost] = useState<{ i: number; from: number; to: number } | null>(null);
+  const [ghost, setGhostState] = useState<{ i: number; from: number; to: number } | null>(null);
+  // The latest drag position, read when the pointer lifts (before the last move has drawn).
+  const ghostNow = useRef<{ i: number; from: number; to: number } | null>(null);
+  const setGhost = (g: { i: number; from: number; to: number } | null) => { ghostNow.current = g; setGhostState(g); };
   const bars = barsNeeded(p.doc);
   const clips = clipsOf(p.doc);
   const rows: { id: string | null; name: string }[] = [{ id: null, name: 'The Whole Piece' }, ...p.doc.parts.map(x => ({ id: x.id, name: x.name }))];
@@ -77,7 +80,8 @@ export function EffectsPanel(p: EffectsPanelProps) {
   const up = (i: number) => {
     const d = drag.current;
     drag.current = null;
-    if (d?.moved && ghost) p.apply(d.kind === 'move' ? moveClip(p.doc, i, ghost.from) : resizeClip(p.doc, i, ghost.to));
+    const g = ghostNow.current;
+    if (d?.moved && g) p.apply(d.kind === 'move' ? moveClip(p.doc, i, g.from) : resizeClip(p.doc, i, g.to));
     else setPicked(picked === i ? null : i);
     setGhost(null);
   };

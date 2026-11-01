@@ -14,7 +14,11 @@
 // piece and saved as score settings. Then Vocal Tracks with a fake singer: Record A Vocal (the microphone asked for only
 // then), the take Only On This Device and kept through a reload, Save To Studio showing both sizes, saved as Perfect,
 // heard, converted to Good To The Ear, a second take saved as Good To The Ear, Export With Vocals, and Your studio's
-// count; and Save To Studio refusing takes that need more room than the studio has. SHOTS_DIR keeps screenshots.
+// count; and Save To Studio refusing takes that need more room than the studio has. Then DJ & Effects: effects placed
+// on the timeline by tap and by drag, a clip moved, lengthened, stepped Longer, given a setting and removed with Undo;
+// DJ Mode's deck played with held keys and a held pad, the platter and the XY Pad under Record To Timeline, landing as
+// clips Undo takes back in one step; saved as fx_clips; and on a phone a held pad never moves the page. SHOTS_DIR
+// keeps screenshots.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,6 +29,7 @@ const STUDENT = 'composer1@siue.edu';
 const STUDENT2 = 'composer2@siue.edu';
 const STUDENT3 = 'composer3@siue.edu';
 const STUDENT4 = 'composer4@siue.edu';
+const STUDENT5 = 'composer5@siue.edu';
 const QUARTET = join(import.meta.dirname, '..', '..', 'games', 'workroom', 'test', 'fixtures', 'import', 'musescore-quartet.musicxml');
 const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
 const shots = process.env.SHOTS_DIR;
@@ -843,6 +848,186 @@ test('Save To Studio says when the takes need more room than the studio has, and
     await panel.scrollIntoViewIfNeeded();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await shot(page, 'vocal-phone');
+  } finally {
+    await context.close();
+  }
+});
+
+/** Starts a New Piece with a cello part and a horn part, each with a note or two. */
+async function twoParts(page: Page, base: string, title: string): Promise<void> {
+  await page.goto(`${base}music/compose.php`);
+  await page.getByLabel('Title').fill(title);
+  await page.getByRole('button', { name: 'Start Composing' }).click();
+  await page.locator('[data-instrument="cello"]').click();
+  await hold(page, ['KeyA', 'KeyD'], 400);
+  await page.getByRole('button', { name: 'Stop Recording' }).click();
+  await page.getByRole('button', { name: 'Add Part' }).click();
+  await page.getByRole('button', { name: 'Brass' }).click();
+  await page.locator('[data-instrument="horn"]').click();
+  await hold(page, ['KeyG'], 400);
+  await page.getByRole('button', { name: 'Stop Recording' }).click();
+}
+
+/** Taps a timeline track at bar position `bar` of `bars`. */
+async function tapBar(page: Page, track: string, bar: number, bars: number): Promise<void> {
+  const t = page.locator(`[data-track="${track}"]`);
+  const box = (await t.boundingBox())!;
+  await t.click({ position: { x: ((bar - 1 + 0.05) / bars) * box.width, y: box.height / 2 } });
+}
+
+test('DJ & Effects: placed on the timeline, performed live under Record To Timeline, and saved as fx_clips', async ({ browser, baseURL }) => {
+  test.setTimeout(300_000);
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  try {
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) errors.push(m.text()); });
+    await signInAt(page, base, 'music', STUDENT5);
+    await twoParts(page, base, 'Dj Test');
+    const fx = page.locator('[data-effects]');
+    const clips = fx.locator('[data-clip]');
+    const bars = await fx.locator('[data-timeline] > div').first().locator('span').count();
+    await expect(fx.getByText('What A Browser Does Less Well')).toBeVisible();
+
+    // Way One: tap Riser, then bar 2 of The Whole Piece; Tape Stop dragged onto the cello.
+    await fx.locator('[data-family="build"]').click();
+    await fx.locator('[data-effect="riser"]').click();
+    await tapBar(page, 'whole', 2, bars);
+    await expect(clips).toHaveCount(1);
+    await expect(fx.locator('[data-clip-sheet] [data-clip-bars]')).toHaveText('bar 2 to bar 4');
+    await fx.getByRole('button', { name: 'Longer' }).click();
+    await expect(fx.locator('[data-clip-bars]')).toHaveText('bar 2 to bar 4 + 0.25');
+    await fx.locator('[data-family="turntable"]').click();
+    await fx.locator('[data-effect="tape_stop"]').dragTo(fx.locator('[data-track="cello"]'), { targetPosition: { x: 5, y: 10 } });
+    await expect(clips).toHaveCount(2);
+    await fx.locator('[data-clip-control="time"]').getByRole('button', { name: 'Slow' }).click();
+
+    // Drag the riser a bar earlier (the piece is four bars: a clip stays inside it) and pull its end in a bar.
+    const riser = fx.locator('[data-clip-effect="riser"]');
+    const rb = (await riser.boundingBox())!;
+    const barWidth = rb.width / 2.25; // the riser is two bars and a beat long
+    await page.mouse.move(rb.x + 10, rb.y + rb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(rb.x + 10 - barWidth, rb.y + rb.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await expect(riser).toHaveAttribute('aria-label', 'Riser, bar 1 to bar 3 + 0.25');
+    const end = riser.locator('[data-clip-end]');
+    const eb = (await end.boundingBox())!;
+    await page.mouse.move(eb.x + 2, eb.y + eb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(eb.x + 2 - barWidth, eb.y + eb.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await expect(riser).toHaveAttribute('aria-label', 'Riser, bar 1 to bar 2 + 0.25');
+
+    // Remove, and Undo puts it back.
+    await riser.click();
+    await fx.getByRole('button', { name: 'Remove' }).click();
+    await expect(clips).toHaveCount(1);
+    await page.getByRole('button', { name: /^↶ Undo/ }).click();
+    await expect(clips).toHaveCount(2);
+    await fx.locator('summary', { hasText: 'What Gets Saved' }).click();
+    await expect(fx.locator('[data-saved-json]')).toContainText('"tape_stop"');
+    await shot(page, 'desktop-effects');
+
+    // Way Two: DJ Mode, recorded to the timeline.
+    const dj = page.locator('[data-dj]');
+    await dj.getByRole('button', { name: 'Get The Deck Ready' }).click();
+    await expect(dj.getByRole('button', { name: '▶ Play' })).toBeVisible({ timeout: 90_000 });
+    await dj.getByRole('button', { name: '▶ Play' }).click();
+    await expect(dj.locator('[data-deck-bar]')).toHaveText(/^Bar \d+$/);
+    const at = async () => Number(await dj.locator('[data-deck-bar]').getAttribute('data-deck-pos'));
+    const p0 = await at();
+    await page.waitForTimeout(600);
+    expect(await at(), 'the deck moves on').toBeGreaterThan(p0);
+    await dj.locator('[data-record-timeline]').click();
+    await expect(dj.locator('[data-recording]')).toHaveText('Recording.');
+    const notesBefore = await notes(page).count();
+    await hold(page, ['3'], 300);
+    await hold(page, ['KeyZ'], 300);
+    expect(await notes(page).count(), 'the pad keys play pads, not notes').toBe(notesBefore);
+    const pad = dj.locator('[data-pad="q"]');
+    await pad.scrollIntoViewIfNeeded();
+    const pb = (await pad.boundingBox())!;
+    await page.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2);
+    await page.mouse.down();
+    await expect(pad).toHaveAttribute('aria-pressed', 'true');
+    await page.waitForTimeout(300);
+    await page.mouse.up();
+    await dj.locator('[data-platter]').scrollIntoViewIfNeeded();
+    const pl = (await dj.locator('[data-platter]').boundingBox())!;
+    const cx = pl.x + pl.width / 2;
+    const cy = pl.y + pl.height / 2;
+    await page.mouse.move(cx + pl.width / 3, cy);
+    await page.mouse.down();
+    for (let k = 1; k <= 10; k++) await page.mouse.move(cx + (pl.width / 3) * Math.cos(-k * 0.3), cy + (pl.width / 3) * Math.sin(-k * 0.3));
+    await page.mouse.up();
+    await dj.locator('[data-xy]').scrollIntoViewIfNeeded();
+    const xy = (await dj.locator('[data-xy]').boundingBox())!;
+    await page.mouse.move(xy.x + 10, xy.y + xy.height - 10);
+    await page.mouse.down();
+    await page.mouse.move(xy.x + xy.width - 10, xy.y + 10, { steps: 10 });
+    await page.waitForTimeout(200);
+    await page.mouse.up();
+    await dj.locator('[data-record-timeline]').click();
+    await expect(page.locator('[data-status]')).toContainText(/Recorded \d+ effects onto the timeline/);
+    const after = await clips.count();
+    expect(after).toBeGreaterThanOrEqual(2 + 4);
+    await shot(page, 'desktop-dj');
+    await page.getByRole('button', { name: /^↶ Undo/ }).click();
+    await expect(clips).toHaveCount(2);
+    await page.getByRole('button', { name: /^↷ Redo/ }).click();
+    await expect(clips).toHaveCount(after);
+    await dj.getByRole('button', { name: '■ Stop' }).click();
+
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+    await expect(page.locator('[data-status]')).toHaveText('Saved as draft 1.');
+    const score = await page.evaluate(async () => (await fetch('draft.php?piece=dj-test&v=1&file=score.json')).json()) as { schema: number; fx_clips: { effect: string; lane: string | null; settings?: Record<string, unknown>; points?: number[][] }[] };
+    expect(score.schema).toBe(2);
+    const effects = score.fx_clips.map(c => c.effect);
+    for (const e of ['riser', 'tape_stop', 'stutter', 'bitcrusher', 'scratch', 'filter']) expect(effects).toContain(e);
+    expect(score.fx_clips.find(c => c.effect === 'tape_stop')).toMatchObject({ lane: 'cello', settings: { time: 'slow' } });
+    expect(score.fx_clips.find(c => c.effect === 'scratch')!.points!.length).toBeGreaterThanOrEqual(2);
+    // Heard with the piece: the clips are built into its sound.
+    await page.getByRole('button', { name: 'Hear With The Piece' }).click();
+    await expect(page.locator('[data-listening]')).toContainText(/playing|Playing/, { timeout: 90_000 });
+    await page.getByRole('button', { name: 'Stop', exact: true }).click();
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('on a phone, a held DJ pad never moves the page', async ({ browser, baseURL }) => {
+  test.setTimeout(240_000);
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 400, height: 780 }, hasTouch: true, isMobile: true });
+  try {
+    const page = await context.newPage();
+    await signInAt(page, base, 'music', STUDENT5);
+    await page.goto(`${base}music/compose.php?id=dj-test`);
+    const dj = page.locator('[data-dj]');
+    await dj.getByRole('button', { name: 'Get The Deck Ready' }).click();
+    await expect(dj.getByRole('button', { name: '▶ Play' })).toBeVisible({ timeout: 90_000 });
+    await dj.getByRole('button', { name: '▶ Play' }).click();
+    const pad = dj.locator('[data-pad="a"]');
+    await pad.scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy(0, -40));
+    const y = await page.evaluate(() => window.scrollY);
+    const b = (await pad.boundingBox())!;
+    const cdp = await context.newCDPSession(page);
+    const point = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+    await expect(pad).toHaveAttribute('aria-pressed', 'true');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => window.scrollY)).toBe(y);
+    await shot(page, 'phone-dj');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect(pad).toHaveAttribute('aria-pressed', 'false');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
   } finally {
     await context.close();
   }

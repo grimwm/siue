@@ -27,14 +27,19 @@ function run(deck: ReturnType<typeof createDeck>, samples: number): number[] {
   return out;
 }
 
-test('the deck plays the piece from its bar and stops at the end', () => {
+test('the deck plays the piece from its bar and goes round at the end, letting go of what is held', () => {
   const d = createDeck({ rate: RATE, full: ramp() }, bars, null);
   d.play(3);
   const out = run(d, 1000);
   assert.ok(Math.abs(out[500]! - (2 * BAR + 500)) < 1);
   d.play(8.9);
-  run(d, 0.2 * BAR + 256);
-  assert.equal(d.playing(), false);
+  d.record(true);
+  d.padDown('3', 'stutter', { slice: 16 });
+  const wrap = run(d, 0.1 * BAR + 500);
+  assert.equal(d.playing(), true);
+  assert.ok(Math.abs(wrap[0.1 * BAR + 300]! - 300) < 1, 'bar 1 again, the stutter let go');
+  const clips = d.record(false);
+  assert.deepEqual(clips.map(c => [c.effect, c.to_bar]), [['stutter', 9]], 'kept up to the end of the piece');
 });
 
 test('a held pad plays its effect and, let go, the deck is back in time', () => {

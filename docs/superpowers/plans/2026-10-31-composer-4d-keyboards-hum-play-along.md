@@ -62,7 +62,7 @@
 **Interfaces (Produces):**
 - `PitchFrame = { t: number; hz: number | null; clarity: number; rms: number }`.
 - `detectPitch(frame: Float32Array, rate: number, o?: { minHz?: number; maxHz?: number; threshold?: number }): { hz: number; clarity: number } | null` (YIN with parabolic interpolation; defaults 65–1100 Hz, threshold 0.15).
-- `createPitchTracker(rate: number, o?: { frame?: number; hop?: number; quiet?: number }): { push(samples: Float32Array): PitchFrame[]; }` (frame 2048, hop 256, frames below `quiet` rms (default 0.01) are unvoiced).
+- `createPitchTracker(rate: number, o?: { frame?: number; hop?: number; quiet?: number }): { push(samples: Float32Array): PitchFrame[]; }` (frame 2048, hop 256, frames below `quiet` rms (default 0.005) are unvoiced; `end()` reads the last samples).
 - `trackPitch(samples: Float32Array, rate: number): PitchFrame[]`.
 - `midiOf(hz: number): number` (fractional; 440 Hz is 69).
 
@@ -129,7 +129,7 @@ Create `src/ui/compose/YourKeyboard.tsx`, `src/ui/compose/HumPanel.tsx`.
   - Sustain Pedal: Up/Down.
   - Last note readout ("D4 · Velocity 96", or "Acoustic Snare · Pad 38").
   - The Studio Sounds note.
-  - Channel 10 notes play into the selected part when it is a drum part; otherwise into the piece's first drum part.
+  - Channel 10 notes play into the selected part when it is a drum part; otherwise they are not recorded, and the status names the drum part to choose (or says to add one).
 - **Velocity** reaches Play Live, Step (the gather) and the sampler.
 - **Hum tab:**
   - ● Record With Mic / Stop, Play The Demo Hum, Upload A Recording (`accept="audio/*"`, 30 MB, decoded in the page).

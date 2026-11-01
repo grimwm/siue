@@ -271,6 +271,8 @@ export function Composer(p: ComposerProps) {
       el.addEventListener('ended', () => { if (run === alongRun.current) finishAlong(); });
       try { await el.play(); } catch { /* the page's sound was refused: the clock still runs */ }
     }
+    // Stopped while the playback was starting.
+    if (run !== alongRun.current) return;
     setAlong('on');
     setRecording('on');
     let lastBeat = -1;

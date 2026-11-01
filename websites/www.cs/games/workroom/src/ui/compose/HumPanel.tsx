@@ -53,11 +53,13 @@ export function HumPanel(p: HumPanelProps) {
   const [seconds, setSeconds] = useState(0);
   const [message, setMessage] = useState('');
   const take = useRef<MicTake | null>(null);
+  /** Counts requests for the microphone; leaving the panel moves it on, so a request still pending is let go when it arrives. */
+  const asking = useRef(0);
   const file = useRef<HTMLInputElement>(null);
 
   // Leaving the page (or this panel) lets the microphone go.
   useEffect(() => {
-    const leave = (): void => { take.current?.cancel(); take.current = null; };
+    const leave = (): void => { asking.current++; take.current?.cancel(); take.current = null; };
     window.addEventListener('pagehide', leave);
     return () => { window.removeEventListener('pagehide', leave); leave(); };
   }, []);
@@ -81,13 +83,16 @@ export function HumPanel(p: HumPanelProps) {
     if (!p.ports.record) return;
     setStage('asking');
     setMessage('Asking the browser for the microphone…');
+    const request = ++asking.current;
     try {
       const t = await p.ports.record(setLevel);
+      if (request !== asking.current) { t.cancel(); return; }
       take.current = t;
       setStage('recording');
       setSeconds(0);
       setMessage('');
     } catch (e) {
+      if (request !== asking.current) return;
       setStage('idle');
       setMessage(e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
         ? 'The microphone was not allowed, so nothing was recorded. Play The Demo Hum, Upload A Recording and the keys all still work.'

@@ -389,8 +389,8 @@ test('a plugged-in keyboard, drum pads, Hum and Play Along', async ({ browser, b
     // The microphone: asked for only on Record With Mic, let go when the recording stops.
     expect(await page.evaluate(() => (window as unknown as { __mic: { asked: number } }).__mic.asked)).toBe(0);
     await page.getByRole('button', { name: '● Record With Mic' }).click();
-    await expect(page.locator('[data-hum-stop]')).toBeVisible();
-    await page.waitForTimeout(2300);
+    // The fake microphone hums for about 1.75 s after a 0.3 s pause: stop once the recording's clock has passed 2 s.
+    await expect(page.locator('[data-hum-stop]')).toContainText(/· [2-9] s/, { timeout: 10_000 });
     await page.locator('[data-hum-stop]').click();
     await expect(page.locator('[data-hum-notes]')).toHaveText('D4 E4 F#4', { timeout: 15_000 });
     expect(await page.evaluate(() => (window as unknown as { __mic: { asked: number; tracks: MediaStreamTrack[] } }).__mic.tracks.map(t => t.readyState))).toEqual(['ended']);
@@ -428,7 +428,10 @@ test('on a phone, a note held by the sustain pedal never moves the page', async 
   try {
     const page = await context.newPage();
     await signInAt(page, base, 'music', STUDENT2);
-    await page.goto(`${base}music/compose.php?id=keys-and-hum`);
+    await page.goto(`${base}music/compose.php`);
+    await page.getByLabel('Title').fill('Pedal On A Phone');
+    await page.getByRole('button', { name: 'Start Composing' }).click();
+    await page.locator('[data-instrument="cello"]').click();
     await page.getByRole('button', { name: 'Your Keyboard: Off' }).click();
     await expect(page.locator('[data-midi-devices]')).toHaveText('Plugged In: Yamaha P-125');
     await page.locator('[data-key="60"]').scrollIntoViewIfNeeded();

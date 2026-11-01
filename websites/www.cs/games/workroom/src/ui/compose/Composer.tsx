@@ -5,7 +5,7 @@
 // moves under the player.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Entry } from '../../catalogue.ts';
-import { rangeClass, writtenPitch } from '../../catalogue.ts';
+import { intervalWords, rangeClass, writtenPitch } from '../../catalogue.ts';
 import { beatClock } from '../../compose/beats.ts';
 import { barsNeeded, scoreFromDoc } from '../../compose/doc.ts';
 import type { EditDoc, Part } from '../../compose/doc.ts';
@@ -401,7 +401,7 @@ export function Composer(p: ComposerProps) {
                   <span data-instrument-name="" class="font-semibold">{entry.name}</span>
                   <Button onClick={() => setPicking(picking === 'change' ? null : 'change')} pressed={picking === 'change'}>Change Instrument</Button></div>
                 <p data-range-words="" class="font-mono text-xs text-dim">{rangeWords(entry)}</p>
-                {entry.written !== 0 && entry.range ? <p data-written="" class="text-xs text-dim">Written {Math.abs(entry.written / 12) === 1 ? 'an octave' : `${Math.abs(entry.written / 12)} octaves`} {entry.written > 0 ? 'above' : 'below'} how it sounds: {pitchName(entry.home ?? 60)} is written {pitchName(writtenPitch(entry, entry.home ?? 60))}.</p> : null}
+                {entry.written !== 0 && entry.range ? <p data-written="" class="text-xs text-dim">Written {intervalWords(entry.written)} how it sounds: {pitchName(entry.home ?? 60)} is written {pitchName(writtenPitch(entry, entry.home ?? 60))}.</p> : null}
                 {outOfRange > 0 ? (
                   <div class="grid gap-1">
                     <p data-out-of-range="" class="text-sm text-record">{outOfRange} {outOfRange === 1 ? 'note is' : 'notes are'} out of this instrument's range (red).</p>

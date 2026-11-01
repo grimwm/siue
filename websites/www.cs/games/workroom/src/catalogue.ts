@@ -63,6 +63,20 @@ export function rangeClass(e: Entry, pitch: number): 'normal' | 'expert' | 'out'
 /** The pitch as the part is notated: Double Bass an octave up, Glockenspiel two octaves down. */
 export const writtenPitch = (e: Entry, pitch: number): number => pitch + e.written;
 
+const INTERVALS: Readonly<Record<number, string>> = {
+  1: 'a minor second', 2: 'a major second', 3: 'a minor third', 4: 'a major third', 5: 'a perfect fourth', 6: 'a tritone', 7: 'a perfect fifth',
+  8: 'a minor sixth', 9: 'a major sixth', 10: 'a minor seventh', 11: 'a major seventh', 13: 'a minor ninth', 14: 'a major ninth',
+};
+
+/** How far the written part is from how it sounds, in words: "an octave above", "two octaves below", "a perfect fifth above". */
+export function intervalWords(semitones: number): string {
+  const n = Math.abs(semitones);
+  const dir = semitones > 0 ? 'above' : 'below';
+  const octaves = ['', 'an octave', 'two octaves', 'three octaves'];
+  if (n % 12 === 0 && octaves[n / 12]) return `${octaves[n / 12]} ${dir}`;
+  return `${INTERVALS[n] ?? `${n} semitones`} ${dir}`;
+}
+
 export const laneFamily = (e: Entry): Family => (e.id === 'harp' || e.id === 'lyre' ? 'harp' : CATEGORIES.find(c => c.id === e.category)!.family);
 
 /** A new part's sound for this instrument. */

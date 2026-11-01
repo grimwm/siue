@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { catalogue, CATEGORIES, defaultSound, laneFamily, rangeClass, writtenPitch } from '../src/catalogue.ts';
+import { catalogue, CATEGORIES, defaultSound, intervalWords, laneFamily, rangeClass, writtenPitch } from '../src/catalogue.ts';
 import type { Entry } from '../src/catalogue.ts';
 import type { Library } from '../src/render/plan.ts';
 
@@ -28,6 +28,22 @@ test('double bass writes an octave up', () => {
 
 test('glock writes two octaves down', () => {
   assert.equal(writtenPitch(get('glock'), 96), 72);
+});
+
+test('B-flat clarinet and trumpet write a major second up, the horn in F a perfect fifth up', () => {
+  assert.equal(get('clarinet').written, 2);
+  assert.equal(get('trumpet').written, 2);
+  assert.equal(get('horn').written, 7);
+  assert.equal(writtenPitch(get('horn'), 53), 60); // sounding F3 is written C4
+});
+
+test('the written interval in words', () => {
+  assert.equal(intervalWords(12), 'an octave above');
+  assert.equal(intervalWords(-12), 'an octave below');
+  assert.equal(intervalWords(-24), 'two octaves below');
+  assert.equal(intervalWords(7), 'a perfect fifth above');
+  assert.equal(intervalWords(2), 'a major second above');
+  assert.equal(intervalWords(14), 'a major ninth above');
 });
 
 test('range classes', () => {

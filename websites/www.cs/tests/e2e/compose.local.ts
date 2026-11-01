@@ -2,13 +2,16 @@
 // New Piece, adds a Cello, plays notes in live (a held key sets the length; two keys together are a chord), steps a
 // chord, a rest and Back One, adds and drags a note on the grid, selects and deletes one with Undo and Redo, puts a
 // note below a Violin's range (red) and moves it into range, saves draft 1, hears it on the piece page, and saves
-// draft 2 from Compose. On a phone, holding an on-screen key never moves the page. SHOTS_DIR keeps screenshots.
+// draft 2 from Compose. Then it shows a part as sheet music and both, imports a MuseScore file (preview, Add As New
+// Parts, Undo), exports MIDI and MusicXML, and reads the saved draft's engraved sheet music on the piece page. On a
+// phone, holding an on-screen key never moves the page, in the Both view too. SHOTS_DIR keeps screenshots.
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { signInAt } from './music-mail.ts';
 
 const STUDENT = 'composer1@siue.edu';
+const QUARTET = join(import.meta.dirname, '..', '..', 'games', 'workroom', 'test', 'fixtures', 'import', 'musescore-quartet.musicxml');
 const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
 const shots = process.env.SHOTS_DIR;
 const shot = async (page: Page, name: string): Promise<void> => {
@@ -158,6 +161,65 @@ test('a student composes a piece, saves two drafts and hears it', async ({ brows
   }
 });
 
+test('sheet music, import and export, and the piece page\'s engraved sheet', async ({ browser, baseURL }) => {
+  test.setTimeout(180_000);
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  await context.addInitScript((views: readonly string[]) => { for (const v of views) { localStorage.setItem(`workroom-guide-${v}`, 'seen'); localStorage.setItem(`workroom-guide-sound-${v}`, 'seen'); } }, GUIDE_VIEWS);
+  try {
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) errors.push(m.text()); });
+    await signInAt(page, base, 'music', STUDENT);
+    await page.goto(`${base}music/compose.php?id=my-first-tune`);
+    await expect(page.locator('[data-part]')).toHaveCount(2);
+    await page.locator('[data-part="cello"]').click();
+    await expect(page.locator('[data-range-picture]')).toBeVisible();
+
+    await page.locator('[data-show="sheet"]').click();
+    await expect(page.locator('[data-part-sheet] svg').first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[data-edit-grid]')).toHaveCount(0);
+    await shot(page, 'desktop-sheet');
+    await page.locator('[data-show="both"]').click();
+    await expect(page.locator('[data-edit-grid]')).toBeVisible();
+    await expect(page.locator('[data-part-sheet] svg').first()).toBeVisible({ timeout: 30_000 });
+    await shot(page, 'desktop-both');
+
+    await page.locator('[data-import-file]').setInputFiles(QUARTET);
+    await expect(page.locator('[data-import-preview]')).toBeVisible();
+    await expect(page.locator('[data-import-part]')).toHaveCount(4);
+    await expect(page.locator('[data-import-preview]')).toContainText('From MuseScore 4.4.2 (MusicXML)');
+    await expect(page.locator('[data-import-lost]')).toContainText('Lyrics (3 words)');
+    await expect(page.getByLabel('Instrument for Drumset')).toHaveValue('kit');
+    await shot(page, 'desktop-import');
+    await page.getByRole('button', { name: 'Add As New Parts' }).click();
+    await expect(page.locator('[data-part]')).toHaveCount(6);
+    await expect(page.locator('[data-status]')).toHaveText('Added 4 parts from musescore-quartet.musicxml. Undo takes them back.');
+    await page.getByRole('button', { name: /^↶ Undo/ }).click();
+    await expect(page.locator('[data-part]')).toHaveCount(2);
+    await page.getByRole('button', { name: /^↷ Redo/ }).click();
+    await expect(page.locator('[data-part]')).toHaveCount(6);
+
+    const [mid] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export MIDI' }).click()]);
+    expect(mid.suggestedFilename()).toBe('my-first-tune.mid');
+    expect(readFileSync((await mid.path())!).subarray(0, 4).toString('latin1')).toBe('MThd');
+    const [xml] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export MusicXML' }).click()]);
+    expect(xml.suggestedFilename()).toBe('my-first-tune.musicxml');
+    expect(readFileSync((await xml.path())!, 'utf8')).toContain('<part-name>Clarinet in B♭</part-name>');
+
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+    await expect(page.locator('[data-status]')).toHaveText('Saved as draft 3.');
+    await page.goto(`${base}music/piece.php?id=my-first-tune`);
+    await page.getByRole('tab', { name: 'Sheet music' }).click();
+    await expect(page.locator('#sheet svg').first()).toBeVisible({ timeout: 30_000 });
+    await shot(page, 'desktop-piece-sheet');
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
 test('on a phone, holding a key never moves the page', async ({ browser, baseURL }) => {
   const base = baseURL!;
   const context = await browser.newContext({ viewport: { width: 400, height: 780 }, hasTouch: true, isMobile: true });
@@ -185,6 +247,20 @@ test('on a phone, holding a key never moves the page', async ({ browser, baseURL
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     await page.getByRole('button', { name: 'Stop Recording' }).click();
     await shot(page, 'phone-recorded');
+
+    // Both: the grid and the sheet stacked, each tall enough to use, and a held key still never moves the page.
+    await page.locator('[data-show="both"]').click();
+    await expect(page.locator('[data-part-sheet] svg').first()).toBeVisible({ timeout: 30_000 });
+    for (const sel of ['[data-edit-grid]', '[data-part-sheet]']) expect((await page.locator(sel).boundingBox())!.height).toBeGreaterThanOrEqual(200);
+    await shot(page, 'phone-both');
+    await key.scrollIntoViewIfNeeded();
+    const y2 = await page.evaluate(() => window.scrollY);
+    const kb2 = (await key.boundingBox())!;
+    await page.mouse.move(kb2.x + kb2.width / 2, kb2.y + kb2.height - 10);
+    await page.mouse.down();
+    await page.waitForTimeout(700); // the sheet is engraved again while the key is held
+    expect(await page.evaluate(() => window.scrollY)).toBe(y2);
+    await page.mouse.up();
   } finally {
     await context.close();
   }

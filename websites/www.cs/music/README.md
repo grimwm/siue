@@ -85,6 +85,19 @@ renderer the piece page uses. Save Draft keeps the piece's next draft through `s
 page when a save is refused. The piece page links Compose on a music piece; the pieces page and Your studio link New
 Piece. The design is `docs/superpowers/specs/2026-10-31-composer-editor-design.md`.
 
+**Show As** puts the selected part on the Grid, as Sheet Music (engraved in the page by `src/compose/toxml.ts`
+through the sheet bundle, in the instrument's clef, written as its players read it: Double Bass an octave up, B♭
+clarinet and trumpet a tone up, the horn in F a fifth up, piccolo, celesta and xylophone an octave down, glockenspiel two;
+Concert Pitch shows how it sounds) or Both, scrolling together. The range picture in Part Settings shows where the
+instrument plays. A piece page whose draft stores no MusicXML engraves its Sheet music view the same way.
+
+**Import Music File** reads MusicXML (`.musicxml`, `.xml`, `.mxl`) or MIDI (`.mid`, `.midi`) in the browser only, and
+shows a preview (each part matched to the nearest instrument, which can be changed; What Can't Come Across) before
+anything changes: Add As New Parts (at the piece's speed, one Undo step) or Start A New Piece (at the file's speed).
+It refuses a file over 10 MB, an `.mxl` that would unzip past 20 MB or points outside itself, XML entities, more than
+16 parts or 20,000 notes, and a read taking over 5 seconds. **Export MusicXML** and **Export MIDI** save the piece
+(MIDI format 1, each part's General MIDI program, drums on channel 10) as a download, using no studio space.
+
 ### Limits
 
 | Limit | Studio | With the allowance |

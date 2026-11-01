@@ -291,7 +291,7 @@ test('the board paints: the canvas holds drawn pixels', async ({ page }) => {
   })).toBe(true);
 });
 
-test('the Route steps one square at a time, with a bright arrow on each square pointing the way', async ({ page }) => {
+test('the Route steps one square at a time, with an arrow on each square pointing the way and the next step\'s in gold', async ({ page }) => {
   const errors = await beginTrial1(page);
   await page.waitForSelector('#stage[data-cell]');
   await page.keyboard.press('v');
@@ -308,20 +308,23 @@ test('the Route steps one square at a time, with a bright arrow on each square p
     const top = cv.height - rows * cell;
     const px = cv.getContext('2d')!.getImageData(0, 0, cv.width, cv.height).data;
     const bad: string[] = [];
-    let arrows = 0;
+    let arrows = 0, gold = 0;
+    const near = (o: number, rgb: number[]) => rgb.every((v, k) => Math.abs(px[o + k]! - v) < 12);
     for (let i = 0; i + 1 < t.length; i++) {
       const a = t[i]!, b = t[i + 1]!;
       if (!b.jump && Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) bad.push(`${a.r},${a.c} → ${b.r},${b.c}`);
       if (b.jump) continue;
-      // The arrow's fill covers the point a fifth of a cell from its square's centre toward the next square.
+      // The arrow's fill covers the point a fifth of a cell from its square's centre toward the next square: gold
+      // over Theseus for the next step, the held-back red on every square after it.
       const y = (a.r + 0.5 + (b.r - a.r) * 0.2) * cell + top, x = (a.c + 0.5 + (b.c - a.c) * 0.2) * cell;
       const o = (Math.floor(y) * cv.width + Math.floor(x)) * 4;
-      if (Math.abs(px[o]! - 0xff) < 12 && Math.abs(px[o + 1]! - 0x5b) < 12 && Math.abs(px[o + 2]! - 0x45) < 12) arrows++;
+      if (i === 0 ? near(o, [0xff, 0xd2, 0x3f]) : near(o, [0xbb, 0x41, 0x31])) i === 0 ? gold++ : arrows++;
     }
-    return { bad, arrows, steps: t.length - 1 };
+    return { bad, arrows, gold, steps: t.length - 1 };
   });
   expect(seen.bad, 'every step is to a neighbouring square').toEqual([]);
-  expect(seen.arrows, 'an arrow on every square that steps on').toBe(seen.steps);
+  expect(seen.gold, 'the next step\'s arrow is gold, over Theseus').toBe(1);
+  expect(seen.arrows, 'an arrow on every square after it that steps on').toBe(seen.steps - 1);
   expect(errors).toEqual([]);
 });
 

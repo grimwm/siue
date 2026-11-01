@@ -63,12 +63,13 @@ const POOL_CELL = 2 * 7 + 4;
 
 interface Hooked {
   __creteTest: {
-    game: { run: { now: { player: { r: number; c: number } } } };
+    game: { run: { now: { player: { r: number; c: number } } }; thread: { r: number; c: number; jump?: true }[] | null };
     parse(text: string): unknown;
     playLevel(level: unknown): void;
     modern?: {
       frames(): number; yaw(): number; zoom(): number; pitch(): number; following(): boolean; floating(): number[]; splashing(): number[]; active: boolean;
       markers(): { kind: string; at: [number, number]; foot: [number, number]; cell: number }[];
+      routeNext(): { dir: string; scale: number } | null;
     };
   };
 }
@@ -242,6 +243,26 @@ test('the modern board is the default and draws nothing at rest', async ({ page 
   const before = (await modern(page))!.frames;
   await page.waitForTimeout(1500);
   expect((await modern(page))!.frames, 'no frame is drawn at rest').toBe(before);
+  expect(errors).toEqual([]);
+});
+
+test('the Route\'s next step is a bigger gold arrow on Theseus\'s square, drawn over him, and it breathes', async ({ page }) => {
+  const errors = await openHall(page, HALL, 'no-preference');
+  await page.keyboard.press('v');
+  const next = () => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern!.routeNext());
+  await expect.poll(next, 'a next step').not.toBeNull();
+  const way = await page.evaluate(() => {
+    const t = (window as unknown as Hooked).__creteTest.game.thread!;
+    const a = t[0]!, b = t[1]!;
+    return b.r < a.r ? 'up' : b.r > a.r ? 'down' : b.c < a.c ? 'left' : 'right';
+  });
+  expect((await next())!.dir, 'it points along the thread').toBe(way);
+  const sizes = new Set<number>();
+  await expect.poll(async () => { sizes.add(Math.round((await next())!.scale * 100)); return sizes.size; },
+    { message: 'it breathes between 1.4× and a tenth more', intervals: [100], timeout: 5000 }).toBeGreaterThan(2);
+  for (const s of sizes) expect(s).toBeGreaterThanOrEqual(140), expect(s).toBeLessThanOrEqual(154);
+  await page.keyboard.press('v');
+  await expect.poll(next, 'Route off: no next step').toBeNull();
   expect(errors).toEqual([]);
 });
 

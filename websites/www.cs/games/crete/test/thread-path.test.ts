@@ -8,12 +8,12 @@ import { createFoundPages } from '../src/pages.ts';
 import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createProgress } from '../src/progress.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
-import { arrowAt, threadPath } from '../src/thread-path.ts';
+import { NEXT_SCALE, PULSE_S, arrowAt, nextArrow, pulseScale, threadPath } from '../src/thread-path.ts';
 import type { ThreadCell } from '../src/thread-path.ts';
 import { DIRS } from '../src/puzzle/tiles.ts';
 import { grid, mv, WAIT } from './puzzle-grid.ts';
 import { createThread } from '../src/modern/scene/thread.ts';
-import type { Mesh } from 'three';
+import type { Group, Mesh } from 'three';
 
 function harness() {
   const m = manualClock();
@@ -109,17 +109,22 @@ test('a play-out walks exactly the thread, a throw-back included', () => {
   }
 });
 
-test('Modern lays an arrow on each square that has a next step, and no cord across a jump', () => {
+test('Modern lays an arrow on each square that has a next step, the next one apart and gold, and no cord across a jump', () => {
   const th = createThread();
   // Two steps right, a jump down two rows, one step left.
   const t: ThreadCell[] = [{ r: 0, c: 0 }, { r: 0, c: 1 }, { r: 0, c: 2 }, { r: 2, c: 2, jump: true }, { r: 2, c: 1 }];
   assert.equal(th.set(t, 3, 3), true);
-  const meshes = th.group.children as Mesh[];
-  assert.equal(meshes.length, 3, 'the cord, the arrows\' dark edges and their fills');
-  const [cord, edges, fills] = meshes.map(m => m.geometry.getAttribute('position'));
-  // An arrowhead is two triangles, six corners unindexed: one per square that steps on.
-  assert.equal(fills!.count, 3 * 6);
-  assert.equal(edges!.count, 3 * 6);
+  const kids = th.group.children;
+  assert.equal(kids.length, 4, 'the cord, the arrows\' dark edges, their fills, and the next step\'s arrow');
+  const [cord, edges, fills] = (kids.slice(0, 3) as Mesh[]).map(m => m.geometry.getAttribute('position'));
+  // An arrowhead is two triangles, six corners unindexed: one per square that steps on, past Theseus's own.
+  assert.equal(fills!.count, 2 * 6);
+  assert.equal(edges!.count, 2 * 6);
+  const next = kids[3] as Group;
+  assert.deepEqual(th.next(), { dir: 'right', scale: NEXT_SCALE });
+  for (const m of next.children as Mesh[]) assert.equal((m.material as { depthTest: boolean }).depthTest, false, 'drawn through Theseus');
+  assert.equal(th.pulse(PULSE_S / 2), true);
+  assert.ok(Math.abs(th.next()!.scale - NEXT_SCALE * 1.1) < 1e-9, 'it swells by a tenth at the top of its breath');
   // No cord vertex lies between the rows the jump skips.
   for (let i = 0; i < cord!.count; i++) {
     const z = cord!.getZ(i);
@@ -127,4 +132,37 @@ test('Modern lays an arrow on each square that has a next step, and no cord acro
   }
   assert.equal(th.set(t, 3, 3), false, 'the same thread again changes nothing');
   th.dispose();
+});
+
+test('the next step is the arrow on Theseus\'s square, or the way his first step goes when it lands on a jump', () => {
+  assert.equal(nextArrow([{ r: 1, c: 1 }, { r: 0, c: 1 }, { r: 0, c: 2 }]), 'up');
+  assert.equal(nextArrow([{ r: 1, c: 1 }]), null, 'no thread, no next step');
+  assert.equal(nextArrow([{ r: 1, c: 1 }, { r: 3, c: 3, jump: true }]), null, 'a jump with no way recorded');
+  assert.equal(nextArrow([{ r: 1, c: 1, way: 'left' }, { r: 3, c: 3, jump: true }]), 'left');
+});
+
+test('the next step breathes once a PULSE_S, from rest to a tenth bigger and back', () => {
+  assert.equal(pulseScale(0), 1);
+  assert.ok(Math.abs(pulseScale(PULSE_S / 2) - 1.1) < 1e-9);
+  assert.ok(Math.abs(pulseScale(PULSE_S) - 1) < 1e-9);
+  assert.equal(PULSE_S, 1.2);
+  assert.equal(NEXT_SCALE, 1.4);
+});
+
+test('the next step moves on as Theseus walks the Route: the thread is drawn again from where he stands', () => {
+  const h = harness();
+  h.game.open(0);
+  h.game.route();
+  const first = h.game.thread!;
+  const way = nextArrow(first);
+  assert.ok(way, 'a next step from the start');
+  const from = h.game.run!.now.player;
+  h.game.press(mv(way!));
+  h.game.finishAnim();
+  const now = h.game.thread!;
+  const at = h.game.run!.now.player;
+  assert.notDeepEqual(at, from, 'he took the step');
+  assert.equal(now[0]!.r, at.r);
+  assert.equal(now[0]!.c, at.c, 'the thread starts again under him');
+  assert.ok(nextArrow(now), 'and its next step is the arrow on his new square');
 });

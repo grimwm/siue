@@ -112,3 +112,17 @@ test('the orchestra fixture with drums round-trips its notes', () => {
   assert.equal(saved.notes.length, score.notes.length);
   assert.ok(parseScore(saved, new Set(ENTRIES.map(e => e.id))).ok);
 });
+
+test('a new piece gets an id of its own from its title, and a project by name', async () => {
+  const { pieceIdFor, projectFor } = await import('../src/compose/newpiece.ts');
+  assert.equal(pieceIdFor('My First Tune!', new Set()), 'my-first-tune');
+  assert.equal(pieceIdFor('My First Tune', new Set(['my-first-tune', 'my-first-tune-2'])), 'my-first-tune-3');
+  assert.equal(pieceIdFor('Café Ünïcode', new Set()), 'cafe-unicode');
+  assert.equal(pieceIdFor('***', new Set()), 'piece');
+  assert.match(pieceIdFor('x'.repeat(100), new Set()), /^x{40}$/);
+  const projects = [{ id: 'crete', name: 'Crete' }];
+  assert.deepEqual(projectFor('crete', projects), { id: 'crete', name: 'Crete' });
+  assert.deepEqual(projectFor('  ', projects), { id: 'my-pieces', name: 'My Pieces' });
+  assert.deepEqual(projectFor('Game Jam', projects), { id: 'game-jam', name: 'Game Jam' });
+  assert.deepEqual(projectFor('Crete!', projects), { id: 'crete-2', name: 'Crete!' });
+});

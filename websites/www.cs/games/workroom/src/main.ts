@@ -31,6 +31,7 @@ import { pairAi } from './pair-flow.ts';
 import { changePassphrase } from './passphrase.ts';
 import { ThemeRoot, ThemeSwitch } from './ui/ThemeSwitch.tsx';
 import { Workroom } from './ui/Workroom.tsx';
+import { mountComposer } from './ui/compose/mount.ts';
 
 const theme = startTheme(browserThemePorts());
 const switchHost = document.getElementById('theme-switch');
@@ -49,6 +50,7 @@ function notesSession(): NotesSession {
   return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock(), noteMax), memory: indexedDbKeyMemory() });
 }
 const notes = notesSession();
+const sound = browserSound();
 /** How long the page waits to restore a remembered unlock before drawing locked: a stalled request must not keep it blank. */
 const RESTORE_WAIT_MS = 5000;
 if (root) await Promise.race([notes.restore(), new Promise(resolve => setTimeout(resolve, RESTORE_WAIT_MS))]);
@@ -102,9 +104,12 @@ if (view === 'studio') {
       }),
       notes,
       media: browserMedia(),
-      buildSound: browserSound(),
+      buildSound: sound,
+      sheet: loaded.sheet,
     })), root);
   }
+} else if (view === 'compose') {
+  await mountComposer({ root, theme, piece: piece ?? '', version, fetcher, api, buildSound: sound, say });
 } else if (view === 'index') {
   root.textContent = '';
   const list = document.querySelector('.index-body');

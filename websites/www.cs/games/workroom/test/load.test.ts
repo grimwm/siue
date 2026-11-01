@@ -50,3 +50,13 @@ test('a sibling script is loaded with the page script\'s own query, so one versi
   assert.equal(siblingUrl('https://www.cs.siue.edu/~wgrim/games/workroom/dist/workroom.js?v=abc1234567', 'sheet.js'), 'https://www.cs.siue.edu/~wgrim/games/workroom/dist/sheet.js?v=abc1234567');
   assert.equal(siblingUrl('https://x.test/dist/workroom.js', 'sheet.js'), 'https://x.test/dist/sheet.js');
 });
+
+test('a draft says whether it stores sheet music: drafts.php\'s sheet, true when the server does not say', async () => {
+  const score = { ...JSON.parse(scoreText), draft: 2 };
+  const rows = [{ version: 2, published_at: 2, sheet: false }, { version: 1, published_at: 1, sheet: true }];
+  const fetch: Fetch = async url => reply(url.startsWith('drafts.php') ? { drafts: rows } : score);
+  const r = await loadDraft(fetch, 'test-piece', null);
+  assert.equal(r.ok && r.sheet, false);
+  const old = await loadDraft(fakeFetch(score).fetch, 'test-piece', null);
+  assert.equal(old.ok && old.sheet, true);
+});

@@ -96,3 +96,12 @@ test('step: keys down together are one chord; a tap keeps the picked length, a h
   gather.down(62, 1);
   assert.deepEqual(gather.up(62, 2.6), { pitches: [62], held: 1.5 }, 'held 1.6 s at 60 BPM');
 });
+
+test('after a count-in the take starts on the downbeat, so a late first note lands late', () => {
+  const take = createLiveTake({ startBeat: 0, bpm: 60, beatsPerBar: 4 });
+  take.begin(10);
+  take.down(60, 11);
+  take.up(60, 12);
+  assert.deepEqual(take.notes('1/4', 1, 12).map(n => [n.start, n.length]), [[1, 1]]);
+  assert.equal(take.quietEnough(15.9), false);
+});

@@ -10,6 +10,8 @@ import type { NewNote } from './edit.ts';
 export const CHORD_SECONDS = 0.05;
 
 export interface LiveTake {
+  /** Starts the take's clock at `t` (the downbeat after a count-in), before any key; a take without it starts on its first key. */
+  begin(t: number): void;
   down(pitch: number, t: number, velocity?: number): void;
   up(pitch: number, t: number): void;
   /** The keys held now. */
@@ -31,6 +33,7 @@ export function createLiveTake(o: { startBeat: number; bpm: number; beatsPerBar:
   const beats = (seconds: number): number => (seconds * o.bpm) / 60;
   const open = (pitch: number) => played.find(p => p.pitch === pitch && p.up === null);
   return {
+    begin: t => { if (first === null) first = t; },
     down: (pitch, t, velocity = 90) => {
       if (open(pitch)) return;
       if (first === null) first = t;
@@ -47,7 +50,7 @@ export function createLiveTake(o: { startBeat: number; bpm: number; beatsPerBar:
     started: () => first !== null,
     quietEnough: t => first !== null && played.every(p => p.up !== null) && beats(t - lastUp) >= o.beatsPerBar - 1e-9,
     notes: (tidy, quarter, t) => played.map(p => {
-      const start = o.startBeat + beats(p.chordAt - first!);
+      const start = o.startBeat + Math.max(0, beats(p.chordAt - first!));
       const length = beats((p.up ?? Math.max(t, p.down)) - p.down);
       return tidy === 'off'
         ? { start, length: Math.max(length, 1e-3), pitch: p.pitch, velocity: p.velocity }

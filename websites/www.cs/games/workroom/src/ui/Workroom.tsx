@@ -73,6 +73,8 @@ export interface WorkroomProps { score: Score; version: number; versions: number
   /** Builds the sound of a draft with no audio file. */
   buildSound?: BuildSound;
   now?(): Date;
+  /** false when this draft stores no MusicXML (a score-only draft, or one the editor saved): no Sheet music view. */
+  sheet?: boolean;
 }
 
 const FALLBACK_WIDTH = 720;
@@ -87,7 +89,7 @@ const SMALL_CAPS = 'font-display text-xs font-semibold tracking-widest uppercase
 
 export function Workroom(p: WorkroomProps) {
   const { score } = p;
-  const { scoreOnly } = pageLimits();
+  const scoreOnly = pageLimits().scoreOnly || p.sheet === false;
   const tempo = useMemo(() => tempoMap(score), [score]);
   const tabs = useMemo(() => tabsFor(score, { sheet: !scoreOnly }), [score, scoreOnly]);
   const uses = useMemo(() => termsIn(score), [score]);

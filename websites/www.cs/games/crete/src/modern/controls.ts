@@ -7,7 +7,7 @@
  * bottom-right shows the view as it is (its needle points at the board's north, and its dial squashes and its ring
  * fills as the view tilts); a finger, pen or mouse dragging it turns the view across and tilts it up and down, and a
  * tap or click on it (or Enter or Space) resets the view (compass.ts); while it has the focus, Left and Right turn the
- * view 15° and Up and Down tilt it toward straight down and back, without moving Theseus. Every control is ignored
+ * view 15° and Up and Down lean it toward 45° and back toward straight down, without moving Theseus. Every control is ignored
  * while a layer covers the board. */
 import type { MoveAction } from '../keys.ts';
 import { compassFace, createCompassDrag } from './compass.ts';
@@ -194,8 +194,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   const compassKeys: Record<string, () => void> = {
     ArrowLeft: () => cam.turn(-TURN_KEY, true),
     ArrowRight: () => cam.turn(TURN_KEY, true),
-    ArrowUp: () => cam.tilt(TILT_KEY, true),
-    ArrowDown: () => cam.tilt(-TILT_KEY, true),
+    ArrowUp: () => cam.tilt(-TILT_KEY, true),
+    ArrowDown: () => cam.tilt(TILT_KEY, true),
   };
   compass.addEventListener('keydown', (e: KeyboardEvent) => {
     const fn = compassKeys[e.key];

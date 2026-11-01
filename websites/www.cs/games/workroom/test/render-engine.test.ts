@@ -302,3 +302,55 @@ test('a bent note moves its rate from point to point, linear in cents, from the 
   const plain = contexts[0]!.nodes.filter(n => n.kind === 'source')[1]!;
   assert.deepEqual(param(plain, 'playbackRate').events, [], 'an unbent note keeps its one rate');
 });
+
+test('a score with no Sound settings is played in one pass, as it always was', async () => {
+  const { deps: d, contexts } = deps();
+  await renderScore(score(), LIBRARY, d);
+  assert.equal(contexts.length, 1);
+});
+
+test('with Sound settings each part with settings is made on its own, the rest together, then played through the master chain', async () => {
+  const s = score();
+  s.schema = 2;
+  s.lanes[0] = { ...s.lanes[0]!, fx: { volume_db: -6, pan: 0.5 } };
+  const { deps: d, contexts } = deps(undefined, () => 0.1);
+  await renderScore(s, LIBRARY, d);
+  const others = s.lanes.length - 1;
+  assert.equal(contexts.length, (others > 0 ? 1 : 0) + 1 + 1, 'the rest, the part with settings, and the master');
+  const master = contexts[contexts.length - 1]!;
+  const src = master.nodes.filter(n => n.kind === 'source');
+  assert.equal(src.length, 1, 'the master plays the made parts as one buffer');
+  assert.equal(src[0]!.started, 0);
+  assert.equal((src[0]!['buffer'] as Buf).length, master.length);
+  assert.ok(src[0]!.out.some(n => (n as Node).kind === 'gain'), 'into the master chain');
+});
+
+test('a soloed part is the only one made; a muted one is not heard', async () => {
+  const s = score();
+  s.schema = 2;
+  s.lanes[0] = { ...s.lanes[0]!, fx: { solo: true } };
+  const { deps: d, contexts } = deps();
+  await renderScore(s, LIBRARY, d);
+  assert.equal(contexts.length, 2, 'the soloed part and the master: no render of the rest');
+  const sources = contexts[0]!.nodes.filter(n => n.kind === 'source');
+  const v = voices(s, LIBRARY).filter(x => x.lane === s.lanes[0]!.id);
+  assert.equal(sources.length, v.length);
+
+  const m = score();
+  m.schema = 2;
+  m.lanes[0] = { ...m.lanes[0]!, fx: { mute: true } };
+  const muted = deps();
+  await renderScore(m, LIBRARY, muted.deps);
+  const made = muted.contexts.slice(0, -1).flatMap(c => c.nodes.filter(n => n.kind === 'source'));
+  assert.equal(made.length, voices(m, LIBRARY).filter(x => x.lane !== m.lanes[0]!.id).length, 'the muted part is never made');
+});
+
+test('the limiter keeps the finished piece under its ceiling', async () => {
+  const s = score();
+  s.schema = 2;
+  s.mix = { style: 'lofi', loudness: -10, limiter: { on: true, ceiling_db: -2 } };
+  const { deps: d } = deps(undefined, (_c, i) => (i % 4800 < 10 ? 0.9 : 0.01 * Math.sin(i / 7)));
+  const { channels } = await renderScore(s, LIBRARY, d);
+  const ceiling = 10 ** (-2 / 20);
+  assert.ok(channels.every(c => c.every(v => Math.abs(v) <= ceiling + 1e-6)));
+});

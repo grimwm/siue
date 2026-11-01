@@ -3,7 +3,7 @@
 // the piece's beats.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { humDemo, humNotes, keyScale, segmentHum, snapSegment } from '../src/compose/hum.ts';
+import { analyseHum, humDemo, humNotes, keyScale, segmentHum, snapSegment } from '../src/compose/hum.ts';
 import { trackPitch } from '../src/compose/pitch.ts';
 
 const RATE = 44100;
@@ -99,4 +99,19 @@ test('the demo hum is D, E, F♯ and A, the A scooped up to and sung with vibrat
   assert.ok(snapSegment(segs[3]!, 'exact', []).bend, 'the A has a bend to keep');
   const rate48 = segmentHum(trackPitch(humDemo(48000), 48000));
   assert.equal(rate48.length, 4);
+});
+
+test('a recording is read at about 22 kHz, with the same notes and times, and a minute in a few seconds at most', () => {
+  for (const rate of [44100, 48000]) {
+    const segs = analyseHum(humDemo(rate), rate);
+    assert.deepEqual(segs.map(s => snapSegment(s, 'all12', []).pitch), [62, 64, 66, 69], `at ${rate}`);
+    assert.ok(Math.abs(segs[0]!.start - 0.25) < 0.03 && Math.abs(segs[3]!.end - 2.8) < 0.04, `times at ${rate}`);
+  }
+  const minute = new Float32Array(44100 * 60);
+  const demo = humDemo(44100);
+  for (let i = 0; i < minute.length; i++) minute[i] = demo[i % demo.length]!;
+  const t = performance.now();
+  // 19 whole demos (3.1 s each), then the first 1.1 s of another: its D and the start of its E.
+  assert.equal(analyseHum(minute, 44100).length, 4 * 19 + 2);
+  assert.ok(performance.now() - t < 4000, `${Math.round(performance.now() - t)} ms`);
 });

@@ -4,7 +4,7 @@
 // the piece's beats from where they go, tidied like Play Live. DOM-free.
 import { inferFifths } from './toxml.ts';
 import type { NewNote } from './edit.ts';
-import { midiOf } from './pitch.ts';
+import { midiOf, trackPitch } from './pitch.ts';
 import type { PitchFrame } from './pitch.ts';
 import { gridBeats, snapStart } from './snap.ts';
 import type { Grid } from './snap.ts';
@@ -33,6 +33,8 @@ const STEADY = 0.6;
 const MOVE = 0.03;
 /** Settled stretches this far apart are two notes. */
 const JUMP = 0.8;
+/** A piece cut off by a change of pitch shorter than this is the voice getting there (a scoop), part of the next note. */
+const PIECE = 0.12;
 /** A bend smaller than this, in cents, is no bend. */
 const NO_BEND = 15;
 
@@ -83,6 +85,12 @@ export function segmentHum(frames: readonly PitchFrame[]): HumSegment[] {
       }
     }
     cuts.push(m.length);
+    // A scoop up to a note is part of it: a piece too short to be a note joins the next one (the last, the one before).
+    for (let c = 1; c < cuts.length; c++) {
+      if ((cuts[c]! - cuts[c - 1]!) * hop >= PIECE || cuts.length === 2) continue;
+      cuts.splice(c === cuts.length - 1 ? c - 1 : c, 1);
+      c = 0;
+    }
     for (let c = 0; c + 1 < cuts.length; c++) {
       const a = cuts[c]!;
       const b = cuts[c + 1]!;
@@ -167,4 +175,20 @@ export function humDemo(rate: number): Float32Array {
     }
   }
   return out;
+}
+
+/** A voice is read at about this rate: high enough for any sung pitch, low enough to read a minute in a second or so. */
+const READ_RATE = 22050;
+
+/** The notes in a recording (mono samples at `rate`): halved (averaging pairs) until near READ_RATE, then tracked. */
+export function analyseHum(samples: Float32Array, rate: number): HumSegment[] {
+  const by = Math.max(1, Math.floor(rate / READ_RATE));
+  if (by === 1) return segmentHum(trackPitch(samples, rate));
+  const out = new Float32Array(Math.floor(samples.length / by));
+  for (let i = 0; i < out.length; i++) {
+    let s = 0;
+    for (let k = 0; k < by; k++) s += samples[i * by + k]!;
+    out[i] = s / by;
+  }
+  return segmentHum(trackPitch(out, rate / by, { frame: 1024, hop: 128 }));
 }

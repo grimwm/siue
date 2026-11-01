@@ -178,69 +178,9 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   const reset = button('cam-reset', 'Reset view', 'Reset', 'cbtn wide');
   group.append(left, right, zoomIn, zoomOut, reset);
   // The compass: it shows the view, a drag on it steers the view, and a tap resets it.
-  const compass = button('cam-compass', 'Compass: drag or use the arrow keys to turn and tilt the view, tap to reset it', COMPASS, 'compass');
-  compass.title = 'Compass';
-  const needle = compass.querySelector('svg')!;
+  const dial = createCompassButton('cam-compass', host, cam, (t) => { lastPointer = t; });
+  const compass = dial.button;
   parent.append(view, group, compass);
-  const steer = createCompassDrag();
-  /** When a compass press last lifted, so the click that follows it is not taken twice. */
-  let pressedAt = -1e9;
-  const steerOps = (ops: CamOp[]) => {
-    if (!ops.length) return;
-    host.gesture();
-    for (const op of ops) {
-      if (op.kind === 'turn') cam.turn(op.deg, true);
-      else if (op.kind === 'tilt') cam.tilt(op.deg, true);
-      else if (op.kind === 'reset') cam.reset();
-    }
-  };
-  const compassDown = (e: PointerEvent) => {
-    lastPointer = e.pointerType;
-    if (host.blocked() || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    e.preventDefault();
-    try {
-      compass.setPointerCapture(e.pointerId);
-    } catch {
-      // A synthetic pointer cannot be captured; its moves still reach the compass.
-    }
-    steerOps(steer.down(e.pointerId, e.clientX, e.clientY));
-  };
-  const compassMove = (e: PointerEvent) => {
-    if (host.blocked()) return;
-    steerOps(steer.move(e.pointerId, e.clientX, e.clientY));
-  };
-  const compassUp = (e: PointerEvent) => {
-    const ops = steer.up(e.pointerId, e.clientX, e.clientY);
-    if (ops.length) pressedAt = performance.now();
-    if (!host.blocked()) steerOps(ops);
-  };
-  const compassCancel = (e: PointerEvent) => steerOps(steer.cancel(e.pointerId));
-  compass.style.touchAction = 'none';
-  compass.addEventListener('pointerdown', compassDown);
-  compass.addEventListener('pointermove', compassMove);
-  compass.addEventListener('pointerup', compassUp);
-  compass.addEventListener('pointercancel', compassCancel);
-  // The arrow keys steer from the focused compass; the page's own arrow keys (moving Theseus) never see them.
-  const compassKeys: Record<string, () => void> = {
-    ArrowLeft: () => cam.turn(-TURN_KEY, true),
-    ArrowRight: () => cam.turn(TURN_KEY, true),
-    ArrowUp: () => cam.tilt(-TILT_KEY, true),
-    ArrowDown: () => cam.tilt(TILT_KEY, true),
-  };
-  compass.addEventListener('keydown', (e: KeyboardEvent) => {
-    const fn = compassKeys[e.key];
-    if (!fn) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (host.blocked()) return;
-    host.gesture();
-    fn();
-  });
-  compass.addEventListener('click', () => {
-    // A pointer's tap reset the view as it lifted; Enter or Space clicks with no press before it.
-    if (performance.now() - pressedAt < CLICK_MS) return;
-    press(() => cam.reset())();
-  });
 
   const press = (fn: () => void) => () => {
     if (host.blocked()) return;
@@ -307,13 +247,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   pill.addEventListener('click', () => hintChange(hint.dismiss()));
 
   return {
-    setView(yaw, pitch) {
-      const f = compassFace({ yaw, pitch });
-      needle.style.transform = `scale(1, ${f.squash.toFixed(3)}) rotate(${f.needle.toFixed(1)}deg)`;
-      compass.style.setProperty('--tilt', f.tilt.toFixed(3));
-      compass.dataset.heading = String(Math.round(yaw));
-      compass.dataset.pitch = String(Math.round(pitch));
-    },
+    setView: dial.setView,
     showTips() {
       const c = hint.show(performance.now());
       if (c) {
@@ -336,6 +270,95 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
       view.remove();
       group.remove();
       compass.remove();
+    },
+  };
+}
+
+/** What the compass steers. */
+export interface CompassCam {
+  turn(deg: number, eased: boolean): void;
+  tilt(deg: number, eased: boolean): void;
+  reset(): void;
+}
+
+export interface CompassButton {
+  readonly button: HTMLButtonElement;
+  /** Shows a view turned `yaw` degrees and looking down at `pitch` degrees. */
+  setView(yaw: number, pitch: number): void;
+}
+
+/** The compass, for either look's board: it shows the view, a finger, pen or mouse dragging it turns the view across
+ *  and tilts it up and down, and a tap or click on it (or Enter or Space) resets the view (compass.ts); while it has
+ *  the focus, Left and Right turn the view and Up and Down tilt it, without moving Theseus. `pointer` hears the kind of
+ *  each pointer that presses it. */
+export function createCompassButton(id: string, host: Pick<ControlHost, 'blocked' | 'gesture'>, cam: CompassCam, pointer: (type: string) => void = () => {}): CompassButton {
+  const compass = button(id, 'Compass: drag or use the arrow keys to turn and tilt the view, tap to reset it', COMPASS, 'compass');
+  compass.title = 'Compass';
+  const needle = compass.querySelector('svg');
+  const steer = createCompassDrag();
+  /** When a compass press last lifted, so the click that follows it is not taken twice. */
+  let pressedAt = -1e9;
+  const steerOps = (ops: CamOp[]) => {
+    if (!ops.length) return;
+    host.gesture();
+    for (const op of ops) {
+      if (op.kind === 'turn') cam.turn(op.deg, true);
+      else if (op.kind === 'tilt') cam.tilt(op.deg, true);
+      else if (op.kind === 'reset') cam.reset();
+    }
+  };
+  compass.style.touchAction = 'none';
+  compass.addEventListener('pointerdown', (e: PointerEvent) => {
+    pointer(e.pointerType);
+    if (host.blocked() || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    try {
+      compass.setPointerCapture(e.pointerId);
+    } catch {
+      // A synthetic pointer cannot be captured; its moves still reach the compass.
+    }
+    steerOps(steer.down(e.pointerId, e.clientX, e.clientY));
+  });
+  compass.addEventListener('pointermove', (e: PointerEvent) => {
+    if (host.blocked()) return;
+    steerOps(steer.move(e.pointerId, e.clientX, e.clientY));
+  });
+  compass.addEventListener('pointerup', (e: PointerEvent) => {
+    const ops = steer.up(e.pointerId, e.clientX, e.clientY);
+    if (ops.length) pressedAt = performance.now();
+    if (!host.blocked()) steerOps(ops);
+  });
+  compass.addEventListener('pointercancel', (e: PointerEvent) => steerOps(steer.cancel(e.pointerId)));
+  // The arrow keys steer from the focused compass; the page's own arrow keys (moving Theseus) never see them.
+  const compassKeys: Record<string, () => void> = {
+    ArrowLeft: () => cam.turn(-TURN_KEY, true),
+    ArrowRight: () => cam.turn(TURN_KEY, true),
+    ArrowUp: () => cam.tilt(-TILT_KEY, true),
+    ArrowDown: () => cam.tilt(TILT_KEY, true),
+  };
+  compass.addEventListener('keydown', (e: KeyboardEvent) => {
+    const fn = compassKeys[e.key];
+    if (!fn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (host.blocked()) return;
+    host.gesture();
+    fn();
+  });
+  compass.addEventListener('click', () => {
+    // A pointer's tap reset the view as it lifted; Enter or Space clicks with no press before it.
+    if (performance.now() - pressedAt < CLICK_MS || host.blocked()) return;
+    host.gesture();
+    cam.reset();
+  });
+  return {
+    button: compass,
+    setView(yaw, pitch) {
+      const f = compassFace({ yaw, pitch });
+      if (needle) needle.style.transform = `scale(1, ${f.squash.toFixed(3)}) rotate(${f.needle.toFixed(1)}deg)`;
+      compass.style.setProperty('--tilt', f.tilt.toFixed(3));
+      compass.dataset.heading = String(Math.round(yaw));
+      compass.dataset.pitch = String(Math.round(pitch));
     },
   };
 }

@@ -18,7 +18,7 @@ import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import type { Levels, OutsideLevel } from '../src/campaign/chapters.ts';
 import { SLIDE_MS } from '../src/board-plan.ts';
 import type { Atlas } from '../src/board-plan.ts';
-import type { Board } from '../src/board.ts';
+import type { SheetBoard } from '../src/sheet-board.ts';
 import type { Progress } from '../src/progress.ts';
 import { ENTRIES, HIDDEN, LISTED } from '../src/dictionary.ts';
 import { solve } from '../src/puzzle/solver.ts';
@@ -49,7 +49,7 @@ const levels: Levels = {
 const icons: IconSheet = { cell: 128, width: 1024, height: 768, icons: Object.fromEntries(ENTRIES.map((e, i) => [e.id, { x: (i % 8) * 128, y: Math.floor(i / 8) * 128 }])) };
 const flow = ui.page.createUi({
   icons,
-  atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: createFoundPages(null), levels, met,
+  atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, frame() {}, paint() {} } as SheetBoard, progress, pages: createFoundPages(null), levels, met,
   timers: { setTimeout: (fn, ms) => m.timers.setTimeout(fn, ms), clearTimeout: id => m.timers.clearTimeout(id) },
 });
 const game: Game = createGame({

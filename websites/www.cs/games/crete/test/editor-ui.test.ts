@@ -12,7 +12,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import { HAZARDS, OBJECTS, TERRAIN } from '../src/puzzle/tiles.ts';
 import type { HazardKind, Terrain } from '../src/puzzle/tiles.ts';
 import type { Atlas } from '../src/board-plan.ts';
-import type { Board } from '../src/board.ts';
+import type { SheetBoard } from '../src/sheet-board.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { createGame } from '../src/game.ts';
 import type { Game } from '../src/game.ts';
@@ -354,7 +354,7 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   showEditor: () => flow.showEditor(),
   bestWon: (text, moves) => tryEditor.tryWon(text, moves),
 });
-const flow = ed.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: createFoundPages(null), levels: outside.levels });
+const flow = ed.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, frame() {}, paint() {} } as SheetBoard, progress, pages: createFoundPages(null), levels: outside.levels });
 const tryGame: Game = createGame({
   sfx() {}, say() {}, progress, pages: createFoundPages(null), timers: m.timers, clock: m.clock, levels: outside.levels,
   reducedMotion: () => true, changed: () => flow.render(tryGame),

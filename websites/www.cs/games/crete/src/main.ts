@@ -10,6 +10,9 @@ import { createMusic } from './music.ts';
 import { mediaDeck, pickSource } from './music-decks.ts';
 import type { AudioSource } from './music-decks.ts';
 import { createBoard } from './board.ts';
+import { createSheetBoard } from './sheet-board.ts';
+import { extent, project, unproject } from './sheet.ts';
+import type { Frame } from './sheet.ts';
 import { loadModern } from './modern-loader.ts';
 import type { ModernBoard } from './modern/board3d.ts';
 import { DEFAULT_YAW } from './modern/camera.ts';
@@ -79,7 +82,7 @@ const followMusicSwitches = (): void => music.setEnabled(canStream && audio.musi
 const settings = createSettings(browserStorage());
 const appEnv = browserAppEnv();
 const image = new Image();
-const board = createBoard(document.getElementById('stage') as HTMLCanvasElement, atlas, image);
+const board = createSheetBoard(document.getElementById('stage') as HTMLCanvasElement, atlas, image);
 /* Which board shows. The classic board's loop and the modern board's frames each run only while their board does. */
 let modern: ModernBoard | null = null;
 let modernOn = false;
@@ -91,6 +94,8 @@ let modernFailure = '';
 let modernWarned = false;
 /** The game's level opening the modern board last built. */
 let modernOpens = -1;
+/** The classic board's view, for the modern board to take up once it has built the level it shows. */
+let pendingView: { yaw: number; pitch: number } | null = null;
 let modernRaf = 0;
 let classicRaf = 0;
 let tilesLoaded = false;
@@ -200,7 +205,6 @@ const game = createGame({
   reducedMotion: () => reduced,
   isFirst: id => ui.isFirst(id),
   changed: () => {
-    lastChange = performance.now();
     ui.render(game);
     showModern();
     seePlay(game, levels.scratch?.(game.trial) ?? false);
@@ -316,18 +320,28 @@ async function quit(): Promise<void> {
   if (outcome !== 'closed') ui.showTitle(outcome === 'title-with-hint');
 }
 
-/* The Map button's face (src/ui/strip.tsx): a crop of THUMB_COLS × THUMB_ROWS squares round Theseus (and the
-   Minotaur too when he is near enough), in the look the button swaps to. The classic face is drawn with board.ts; the
-   modern face is a snapshot from the modern board, taken only after a move lands (never per frame), which loads the
-   modern board in Classic too. */
+/* The Map button's face (src/ui/strip.tsx), in the look the button swaps to. In Modern it is a crop of THUMB_COLS ×
+   THUMB_ROWS squares round Theseus (and the Minotaur too when he is near enough), drawn north up with board.ts,
+   repainted only after a move lands (never per frame). In Classic it is the Modern look's picture from the new-game
+   card, so Classic never loads the 3D board for it. */
+const modernLook = new Image();
+modernLook.src = 'fx/looks/modern.jpg';
+
+/** Paints the Modern look's picture over `out`, cropped to fill it; false until it has loaded. */
+function paintModernLook(out: HTMLCanvasElement): boolean {
+  if (!modernLook.complete || !modernLook.naturalWidth) return false;
+  const g = out.getContext('2d')!;
+  const iw = modernLook.naturalWidth, ih = modernLook.naturalHeight;
+  const k = Math.max(out.width / iw, out.height / ih);
+  const sw = out.width / k, sh = out.height / k;
+  g.drawImage(modernLook, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, out.width, out.height);
+  return true;
+}
 const thumbSheet = document.createElement('canvas');
 const thumbBoard = createBoard(thumbSheet, atlas, image);
 let thumbKey = '';
 /** The board state the face last showed. */
 let thumbState: unknown = null;
-/** When the game last changed; the modern board loads for the face only after REST_MS without a change. */
-let lastChange = 0;
-const REST_MS = 2500;
 let thumbTimer: ReturnType<typeof setTimeout> | 0 = 0;
 
 /** Paints the face once the turn in hand has landed. */
@@ -360,37 +374,19 @@ function paintThumb(): void {
   // The look and the board state itself: a turn that changes the board without moving Theseus repaints too.
   const key = `${classicFace} ${game.opens}`;
   if (key === thumbKey && s === thumbState) return;
-  const g = thumb.getContext('2d')!;
-  const figures = { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) };
   const nc = s.level.cols, nr = s.level.rows;
   const mc = cropMid(s.player.c, s.minotaur?.c ?? null, THUMB_COLS), mr = cropMid(s.player.r, s.minotaur?.r ?? null, THUMB_ROWS);
   const c0 = cropStart(mc, THUMB_COLS, nc), r0 = cropStart(mr, THUMB_ROWS, nr);
   if (classicFace) {
     if (!paintClassic(thumb, s, c0, r0, THUMB_COLS, THUMB_ROWS, THUMB_CELL)) return;
-  } else {
+  } else if (modernFailed) {
     // Without a modern board the face stays dark under its badge.
-    if (modernFailed) {
-      thumbKey = key;
-      thumbState = s;
-      return;
-    }
-    if (!modern) {
-      // The modern board loads for the face only once play has rested a while, so loading it never slows play.
-      if (performance.now() - lastChange < REST_MS || game.playing) {
-        setTimeout(wantThumb, REST_MS);
-        return;
-      }
-      void createModern();
-      return;
-    }
-    if (game.opens !== thumbOpens) {
-      thumbOpens = game.opens;
-      if (!modernOn) modern.level(s);
-    }
-    if (!modernOn) modern.show({ state: s, figures }, game.thread);
+    const g = thumb.getContext('2d')!;
     g.fillStyle = '#0d0b0a';
     g.fillRect(0, 0, THUMB_W, THUMB_H);
-    if (!modern.snapshot(thumb, r0 + (THUMB_ROWS - 1) / 2, c0 + (THUMB_COLS - 1) / 2, THUMB_COLS, THUMB_ROWS)) return;
+  } else if (!paintModernLook(thumb)) {
+    modernLook.addEventListener('load', wantThumb, { once: true });
+    return;
   }
   // The badge takes the corner farthest from Theseus and the Minotaur (game.css), so it hides neither.
   const figs = [s.player, ...(s.minotaur ? [s.minotaur] : [])].map(p => [p.c - c0 + 0.5, p.r - r0 + 0.5] as const);
@@ -404,7 +400,6 @@ function paintThumb(): void {
   thumbState = s;
   thumbMs = performance.now() - t0;
 }
-let thumbOpens = -1;
 
 /** Paints the classic look's `cols` × `rows` squares of `s` from square (r0, c0) onto `out`, `cell` pixels each, on
  *  dark; a level narrower or shorter than the crop sits in its middle. False until the tiles have loaded. */
@@ -448,11 +443,18 @@ function loop(now: number): void {
   if (modernOn) return;
   const f = frameOf(game, game.animMs());
   if (f) {
+    const t0 = performance.now();
     board.paint(drawList(f.state, f.figures, atlas, now), game.thread ?? undefined, reduced ? undefined : now / 1000);
+    paintMs.push(performance.now() - t0);
+    if (paintMs.length > PAINT_KEEP) paintMs.shift();
     if (game.anim && f.done) game.finishAnim();
   }
   classicRaf = requestAnimationFrame(loop);
 }
+
+/* The classic board's last paints' cost in ms, for the browser specs' frame measures. */
+const PAINT_KEEP = 600;
+const paintMs: number[] = [];
 
 /* The classic loop runs once the tiles have loaded, while the modern board does not show. */
 function runClassic(): void {
@@ -470,6 +472,9 @@ function modernFrame(): void {
   if (game.opens !== modernOpens) {
     modernOpens = game.opens;
     modern.level(f.state);
+    // A rebuilt board opens at its own view; the classic board's, when the player came from it, goes on.
+    if (pendingView) modern.setView(pendingView.yaw, pendingView.pitch);
+    pendingView = null;
   }
   modern.show(f, game.thread);
   if (game.anim && f.done) game.finishAnim();
@@ -498,6 +503,9 @@ function setModernOn(on: boolean): void {
   holder?.classList.toggle('look-modern', on);
   // The movement pad sits outside the board; its middle shows Theseus in the look that shows.
   document.getElementById('frame')?.classList.toggle('look-modern', on);
+  // One view for both looks: the heading and tilt go across with the switch.
+  if (on) pendingView = ui.classicView();
+  else if (modern) ui.setClassicView(modern.yaw(), modern.pitch());
   ui.setModernBoard(on);
   if (on) {
     // What happened while it was hidden shows as it is now: the board rebuilds, so nothing splashes late.
@@ -607,7 +615,7 @@ function start(): void {
   ui.setPad(settings.pad.get());
   ui.setMinimap(settings.minimap.get() === 'on');
   const moveMap = createMoveMap();
-  ui.setMoveDir(dir => moveMap(dir, modernOn && modern ? modern.yaw() : DEFAULT_YAW));
+  ui.setMoveDir(dir => moveMap(dir, modernOn && modern ? modern.yaw() : ui.classicView().yaw));
   showLook(settings.look.get());
   followMusicSwitches();
   let direct = false;
@@ -677,6 +685,37 @@ const editorHook = {
     ui.showEditor(fromLevel(parse(text)));
   },
 };
+/* The classic board, as far as the browser specs read it, in CSS px in the page: its view, where a square's centre
+   shows, the square (fractional) under a point, the board's box with the figures' headroom, and its paints' cost. */
+function classicSheet(): { f: Frame; cell: number; left: number; top: number } | null {
+  const f = ui.classicFrame();
+  const view = document.getElementById('stage-view');
+  if (!f || !view) return null;
+  const b = view.getBoundingClientRect();
+  return { f, cell: Number(document.getElementById('stage')?.dataset.cell), left: b.left, top: b.top };
+}
+const classicHook = {
+  view: () => ui.classicView(),
+  at(c: number, r: number): { x: number; y: number } | null {
+    const s = classicSheet();
+    if (!s) return null;
+    const p = project(s.f, (c + 0.5) * s.cell, (r + 0.5) * s.cell);
+    return { x: s.left + p.x, y: s.top + p.y };
+  },
+  under(x: number, y: number): { c: number; r: number } | null {
+    const s = classicSheet();
+    const g = s && unproject(s.f, x - s.left, y - s.top);
+    return s && g ? { c: g.x / s.cell, r: g.y / s.cell } : null;
+  },
+  box(): { left: number; top: number; right: number; bottom: number } | null {
+    const s = classicSheet();
+    const level = game.run?.now.level;
+    if (!s || !level) return null;
+    const e = extent(s.f, level.cols, level.rows, s.cell, atlas.rise / atlas.cell);
+    return { left: s.left + e.left, top: s.top + e.top, right: s.left + e.right, bottom: s.top + e.bottom };
+  },
+  paintMs: () => paintMs.slice(),
+};
 /* The modern board, as far as the browser specs read it. */
 const modernHook = {
   frames: () => modern?.frames() ?? 0,
@@ -702,4 +741,4 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };
+window.__creteTest = { game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };

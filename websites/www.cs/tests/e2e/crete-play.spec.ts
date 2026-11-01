@@ -303,9 +303,11 @@ test('the Route steps one square at a time, with an arrow on each square pointin
     const g = window.__creteTest.game as unknown as { thread: { r: number; c: number; jump?: true }[]; run: { now: { level: { cols: number; rows: number } } } };
     const t = g.thread;
     const { cols, rows } = g.run.now.level;
+    // The sheet (src/sheet-board.ts) has a margin of the walls' rise all round the board.
     const cv = document.getElementById('stage') as HTMLCanvasElement;
-    const cell = cv.width / cols;
-    const top = cv.height - rows * cell;
+    const cell = Math.round(Number(cv.dataset.cell) * devicePixelRatio);
+    const margin = (cv.width - cols * cell) / 2;
+    if (cv.height !== rows * cell + 2 * margin) return { bad: ['the sheet is not the board and its margin'], arrows: 0, gold: 0, steps: 0 };
     const px = cv.getContext('2d')!.getImageData(0, 0, cv.width, cv.height).data;
     const bad: string[] = [];
     let arrows = 0, gold = 0;
@@ -316,7 +318,7 @@ test('the Route steps one square at a time, with an arrow on each square pointin
       if (b.jump) continue;
       // The arrow's fill covers the point a fifth of a cell from its square's centre toward the next square: gold
       // over Theseus for the next step, the held-back red on every square after it.
-      const y = (a.r + 0.5 + (b.r - a.r) * 0.2) * cell + top, x = (a.c + 0.5 + (b.c - a.c) * 0.2) * cell;
+      const y = (a.r + 0.5 + (b.r - a.r) * 0.2) * cell + margin, x = (a.c + 0.5 + (b.c - a.c) * 0.2) * cell + margin;
       const o = (Math.floor(y) * cv.width + Math.floor(x)) * 4;
       if (i === 0 ? near(o, [0xff, 0xd2, 0x3f]) : near(o, [0xbb, 0x41, 0x31])) i === 0 ? gold++ : arrows++;
     }

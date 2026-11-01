@@ -11,7 +11,7 @@ import { createFoundPages } from '../src/pages.ts';
 import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import type { Progress } from '../src/progress.ts';
 import type { Atlas } from '../src/board-plan.ts';
-import type { Board } from '../src/board.ts';
+import type { SheetBoard } from '../src/sheet-board.ts';
 
 installDocument();
 const ui = await importTsx<{ page: typeof import('../src/ui.ts') }>(import.meta.dirname, { page: '../src/ui.ts' });
@@ -20,7 +20,7 @@ const ui = await importTsx<{ page: typeof import('../src/ui.ts') }>(import.meta.
 const progress: Progress = { get: () => ({ cleared: false, assisted: false, best: null }), record: () => ({ cleared: true, assisted: false, best: 20 }) };
 const m = manualClock();
 const found = createFoundPages(null);
-const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, sfx() {} });
+const flow = ui.page.createUi({ atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, frame() {}, paint() {} } as SheetBoard, progress, pages: found, sfx() {} });
 const game: Game = createGame({
   sfx() {}, say() {}, progress, pages: found, levels: CAMPAIGN_LEVELS, timers: m.timers, clock: m.clock,
   reducedMotion: () => true, changed: () => flow.render(game),

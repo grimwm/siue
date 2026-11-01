@@ -734,7 +734,7 @@ test('the Map button swaps to Classic mid-level and back, keeps the moves and th
   await expect.poll(async () => {
     const now = await facePixels();
     return now.length === classicFace.length && now.some((v, i) => v !== classicFace[i]) && await facePainted();
-  }, 'the face changes to a painted modern board').toBe(true);
+  }, 'the face changes to the Modern look\'s picture').toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('crete-look'))).toBe('classic');
   // The arrows still move Theseus after the press.
   await page.keyboard.press('ArrowLeft');

@@ -29,7 +29,7 @@ test('the rules never name the page', () => {
 });
 
 test('the entry hands the browser specs their test hook, and the bundle ships it', () => {
-  assert.match(read('src/main.ts'), /window\.__creteTest = \{ game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook \};/);
+  assert.match(read('src/main.ts'), /window\.__creteTest = \{ game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook \};/);
   assert.match(read('dist/main.js'), /__creteTest/);
   assert.doesNotMatch(read('dist/main.js'), /__mazeTest/);
 });

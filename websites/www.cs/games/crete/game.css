@@ -95,23 +95,20 @@ button:disabled { opacity: 0.45; cursor: default; }
   padding: 6px;
   overflow: hidden;
 }
-/* The classic board's view fills the board's space and centres the canvas, which src/ui.ts fits to show the whole
-   level. Zoomed in (src/zoom.ts) the canvas is bigger than the view, which scrolls, without bars, to follow the player
-   and under a two-finger or right-button drag. */
+/* The classic board's view fills the board's space. Its sheet (src/sheet-board.ts) lies at the view's top-left and a
+   CSS transform from src/sheet.ts turns, tilts, scales and places it; the figures stand on a canvas over the whole
+   view. Nothing scrolls: a zoomed view pans by moving the sheet. */
 .stage-view {
   grid-area: 1 / 1;
   position: relative;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  place-items: center;
   overflow: hidden;
   touch-action: none;
 }
-.stage-view.scrolls { display: flex; overflow: auto; scrollbar-width: none; overscroll-behavior: contain; }
-.stage-view.scrolls::-webkit-scrollbar { display: none; }
-.stage-view.scrolls .stage { flex: none; margin: auto; }
-/* The classic board's zoom buttons wear the modern camera buttons' look, over the view and not scrolling with it. */
+.stage-view .stage.sheet { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.stage-view .stage-figures { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* The classic board's camera buttons and compass wear the modern board's look, over the view. */
 .board > .classic-overlay { grid-area: 1 / 1; position: relative; inset: auto; }
 .board.look-modern .stage-view, .board.look-modern .classic-overlay { display: none; }
 /* The board is a canvas: src/ui.ts has it sized in whole device pixels (src/board.ts) to the largest cell that

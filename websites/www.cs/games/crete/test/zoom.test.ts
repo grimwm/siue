@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ZOOM_MAX, ZOOM_MAX_CELL, afterStep, clampZoom, restarted, zoomMax, zoomScroll, zoomedCell } from '../src/zoom.ts';
+import { ZOOM_MAX, ZOOM_MAX_CELL, clampZoom, restarted, zoomMax, zoomedCell } from '../src/zoom.ts';
 import { act, restart, startRun, undo } from '../src/puzzle/run.ts';
 import { levelById } from '../src/campaign/chapters.ts';
 
@@ -26,25 +26,6 @@ test('the zoomed cell is the whole-level cell at zoom 1, and a whole number of d
   assert.equal(zoomedCell(17, 1.5, 3), 77 / 3); // 25.5 x 3 = 76.5 device px, so 77 / 3 css px
   assert.equal(zoomedCell(17, 100, 1), 64);
   assert.equal(zoomedCell(17, 0.2, 1), 17);
-});
-
-test('a zoom about a point keeps the content under it in place', () => {
-  // The canvas starts at 0 and scrolls by 100; the point 50 px in is canvas x 150. Doubled, that is canvas x 300,
-  // which sits 50 px in at a scroll of 250.
-  assert.equal(zoomScroll(100, 50, 0, 0, 2), 250);
-  // A canvas that was centred 40 px in (smaller than the view) and now starts at 0.
-  assert.equal(zoomScroll(0, 100, 40, 0, 2), 20);
-  // Zooming back out to the same canvas lands on the same scroll.
-  assert.equal(zoomScroll(zoomScroll(100, 50, 0, 0, 2), 50, 0, 0, 0.5), 100);
-});
-
-test('a step pans to keep Theseus two cells inside the view and never changes the zoom', () => {
-  const v = { zoom: 2.5, x: 0, y: 0 };
-  const next = afterStep(v, { w: 300, h: 400 }, { w: 1000, h: 800 }, { left: 280, top: 100, size: 40 });
-  assert.equal(next.zoom, 2.5);
-  assert.deepEqual({ x: next.x, y: next.y }, { x: 280 + 40 + 80 - 300, y: 0 });
-  // Inside the margins: nothing moves.
-  assert.deepEqual(afterStep(next, { w: 300, h: 400 }, { w: 1000, h: 800 }, { left: 200, top: 200, size: 40 }), next);
 });
 
 test('a restart or a new run is told from an undo, which keeps the zoom', () => {

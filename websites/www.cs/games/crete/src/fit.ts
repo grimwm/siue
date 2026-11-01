@@ -1,16 +1,10 @@
 /* The Island of Crete: the largest whole-pixel cell for a maze of `cols` x
- * `rows` with `gap` px between cells, in a space of `width` x `height`. 0 when
+ * `rows` with `gap` px between cells, in a space of `width` x `height` (the level editor's board). 0 when
  * not even the gaps fit. DOM-free. */
 export function fitCell(width: number, height: number, cols: number, rows: number, gap: number): number {
   const byWidth = (width - (cols - 1) * gap) / cols;
   const byHeight = (height - (rows - 1) * gap) / rows;
   return Math.max(0, Math.floor(Math.min(byWidth, byHeight)));
-}
-
-/** The game board's cell at its whole-level fit: the largest whole-pixel cell that shows all `cols` x `drawnRows` (the
- *  rows plus the rise of the walls' tops, fractional) in `width` x `height`, however small; at least 1. */
-export function wholeCell(width: number, height: number, cols: number, drawnRows: number): number {
-  return Math.max(1, fitCell(width, height, cols, drawnRows, 0));
 }
 
 /** In the level editor, more than this in either dimension is a big level: it may scroll rather than shrink. */

@@ -34,7 +34,7 @@ import type { Progress } from '../src/progress.ts';
 import type { Look } from '../src/settings.ts';
 import { FEWEST } from '../src/campaign/fewest.ts';
 import type { Atlas } from '../src/board-plan.ts';
-import type { Board } from '../src/board.ts';
+import type { SheetBoard } from '../src/sheet-board.ts';
 
 installDocument();
 const ui = await importTsx<{
@@ -278,7 +278,7 @@ const levels: Levels = {
   scratch: i => i === outsideAt, outside: i => (i === outsideAt ? ownOutside : null),
 };
 const flow = ui.page.createUi({
-  atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: found, levels, sfx: n => heard.push(n),
+  atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, frame() {}, paint() {} } as SheetBoard, progress, pages: found, levels, sfx: n => heard.push(n),
 });
 const game: Game = createGame({
   sfx() {}, say() {}, progress, pages: found, timers: m.timers, clock: m.clock, levels,

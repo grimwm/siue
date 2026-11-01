@@ -11,6 +11,7 @@ import type { Lane, Score } from '../score.ts';
 import { vocalBuffer } from './vocal.ts';
 import { applyLaneFx, audible, DEFAULT_ROOM_SEND, limit, roomReverb } from './fx.ts';
 import { applyVoice } from './voice.ts';
+import { applyClips, barMap, crossfadeGain } from './djfx.ts';
 import { keyScale } from '../compose/hum.ts';
 import { bendRate, voices } from './plan.ts';
 import type { Library, Voice } from './plan.ts';
@@ -158,9 +159,9 @@ function schedule(ctx: OfflineAudioContext, score: Score, vs: readonly Voice[], 
   }
 }
 
-/** Whether a score uses the Sound panel, the Room, the limiter, Voice Effects or a Vocal Track, and so takes the renderer's longer road. */
+/** Whether a score uses the Sound panel, the Room, the limiter, Voice Effects, a Vocal Track or DJ & Effects, and so takes the renderer's longer road. */
 export function usesSound(score: Score): boolean {
-  return score.lanes.some(l => isVocal(l) || (l.fx && Object.keys(l.fx).length > 0) || (l.voice && l.voice.length > 0))
+  return (score.fx_clips?.length ?? 0) > 0 || score.lanes.some(l => isVocal(l) || (l.fx && Object.keys(l.fx).length > 0) || (l.voice && l.voice.length > 0))
     || (!!score.mix?.room && score.mix.room.preset !== 'dry' && score.mix.room.amount > 0) || !!score.mix?.limiter?.on;
 }
 
@@ -174,8 +175,16 @@ const mono = (ch: readonly Float32Array[]): Float32Array => Float32Array.from(ch
 async function soundBus(score: Score, lib: Library, vs: readonly Voice[], samples: Map<string, AudioBuffer>, length: number, deps: RenderDeps): Promise<Float32Array<ArrayBuffer>[]> {
   const anySolo = score.lanes.some(l => l.fx?.solo);
   const heard = score.lanes.filter(l => audible(l.fx, anySolo));
-  const carriers = new Set(score.lanes.flatMap(l => (l.voice ?? []).flatMap(v => ('carrier' in v ? [v.carrier] : []))));
-  const own = (l: Lane) => isVocal(l) || (l.fx && Object.keys(l.fx).length > 0) || (l.voice?.length ?? 0) > 0 || carriers.has(l.id);
+  const clips = score.fx_clips ?? [];
+  const faders = clips.filter(c => c.effect === 'crossfader');
+  const faded = new Set(faders.flatMap(c => [...((c.settings?.['a'] as string[]) ?? []), ...((c.settings?.['b'] as string[]) ?? [])]));
+  const carriers = new Set([
+    ...score.lanes.flatMap(l => (l.voice ?? []).flatMap(v => ('carrier' in v ? [v.carrier] : []))),
+    ...clips.flatMap(c => (c.effect === 'vocoder' && typeof c.settings?.['carrier'] === 'string' ? [c.settings['carrier'] as string] : [])),
+  ]);
+  const laneClips = (l: Lane) => clips.filter(c => c.lane === l.id);
+  const own = (l: Lane) => isVocal(l) || (l.fx && Object.keys(l.fx).length > 0) || (l.voice?.length ?? 0) > 0 || carriers.has(l.id)
+    || laneClips(l).length > 0 || faded.has(l.id);
   // A Vocal Track's takes, decoded once each.
   const takes = new Map<string, Float32Array>();
   for (const l of score.lanes) for (const c of l.vocal?.clips ?? []) {
@@ -198,10 +207,15 @@ async function soundBus(score: Score, lib: Library, vs: readonly Voice[], sample
   const bus: Float32Array<ArrayBuffer>[] = [new Float32Array(length), new Float32Array(length)];
   const room = score.mix?.room && score.mix.room.preset !== 'dry' ? score.mix.room : null;
   const send = room ? [new Float32Array(length), new Float32Array(length)] : null;
-  const add = (ch: readonly Float32Array[], sendLevel: number) => {
+  const bars = barMap(score.tempo ?? [{ bar: 1, bpm: 120, beats: 4, unit: 4 }], RATE);
+  const add = (ch: readonly Float32Array[], sendLevel: number, lane?: string) => {
+    // A lane on a side of a crossfader comes and goes with the fader's position.
+    const fades = lane ? faders.filter(c => (c.settings?.['a'] as string[]).includes(lane) || (c.settings?.['b'] as string[]).includes(lane)) : [];
     for (let c = 0; c < 2; c++) for (let i = 0; i < length; i++) {
-      bus[c]![i] = bus[c]![i]! + ch[c]![i]!;
-      if (send) send[c]![i] = send[c]![i]! + ch[c]![i]! * sendLevel;
+      let v = ch[c]![i]!;
+      for (const f of fades) v *= crossfadeGain(f, lane!, i, bars);
+      bus[c]![i] = bus[c]![i]! + v;
+      if (send) send[c]![i] = send[c]![i]! + v * sendLevel;
     }
   };
   const rest = new Set(heard.filter(l => !own(l)).map(l => l.id));
@@ -220,9 +234,13 @@ async function soundBus(score: Score, lib: Library, vs: readonly Voice[], sample
       ch = [Float32Array.from(voiced), Float32Array.from(voiced)];
     }
     if (l.fx) applyLaneFx(ch, l.fx, bpm, RATE);
-    add(ch, l.fx?.room ?? DEFAULT_ROOM_SEND);
+    // DJ & Effects on the part play on top of its Sound settings.
+    applyClips(ch, laneClips(l), { rate: RATE, bars, carriers: carrierMono, key });
+    add(ch, l.fx?.room ?? DEFAULT_ROOM_SEND, l.id);
   }
   if (room && send) roomReverb(send, room, RATE).forEach((wet, c) => { for (let i = 0; i < length; i++) bus[c]![i] = bus[c]![i]! + wet[i]!; });
+  // The whole piece's clips play on the finished mix, the Room's reverb and all.
+  applyClips(bus, clips.filter(c => c.lane === null && c.effect !== 'crossfader'), { rate: RATE, bars, carriers: carrierMono, key });
   return bus;
 }
 

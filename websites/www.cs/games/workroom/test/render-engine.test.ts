@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadInstruments, renderScore, RATE, TAIL } from '../src/render/engine.ts';
+import { loadInstruments, renderScore, RATE, TAIL, usesSound } from '../src/render/engine.ts';
 import { levelGain, pinkHiss } from '../src/render/master.ts';
 import type { RenderDeps } from '../src/render/engine.ts';
 import { voices } from '../src/render/plan.ts';
@@ -353,4 +353,54 @@ test('the limiter keeps the finished piece under its ceiling', async () => {
   const { channels } = await renderScore(s, LIBRARY, d);
   const ceiling = 10 ** (-2 / 20);
   assert.ok(channels.every(c => c.every(v => Math.abs(v) <= ceiling + 1e-6)));
+});
+
+/** The bus the master played: the one buffer its source holds. */
+const bus = (contexts: FakeContext[]): Buf => contexts[contexts.length - 1]!.nodes.filter(n => n.kind === 'source')[0]!['buffer'] as Buf;
+const BAR_S = 2; // the fixture is 120 BPM in 4/4
+
+test('a part\'s DJ & Effects clip makes it on its own and changes it only over its bars', async () => {
+  const s = score();
+  s.schema = 2;
+  s.fx_clips = [{ effect: 'tape_stop', lane: 'strings-low', from_bar: 2, to_bar: 3, settings: { time: 'fast' } }];
+  const { deps: d, contexts } = deps(undefined, () => 0.1);
+  await renderScore(s, LIBRARY, d);
+  assert.equal(contexts.length, 3, 'the rest, the part with the clip, and the master');
+  const b = bus(contexts).data[0]!;
+  assert.ok(Math.abs(b[Math.round(0.5 * BAR_S * RATE)]! - 0.2) < 1e-6, 'both parts before the clip');
+  assert.ok(Math.abs(b[Math.round(1.9 * BAR_S * RATE)]! - 0.1) < 1e-6, 'only the other part once the tape has stopped');
+  assert.ok(Math.abs(b[Math.round(3.5 * BAR_S * RATE)]! - 0.2) < 1e-6, 'both again after it');
+});
+
+test('a whole-piece clip plays on the finished mix', async () => {
+  const s = score();
+  s.schema = 2;
+  s.fx_clips = [{ effect: 'trance_gate', lane: null, from_bar: 2, to_bar: 3, settings: { pattern: 'offbeat' } }];
+  const { deps: d, contexts } = deps(undefined, () => 0.1);
+  await renderScore(s, LIBRARY, d);
+  const b = bus(contexts).data[0]!;
+  const step = (BAR_S * RATE) / 16;
+  const at = (k: number) => b[Math.round(BAR_S * RATE + k * step + step / 2)]!;
+  assert.ok(at(0) < 0.01 && at(1) > 0.07, `the offbeat pattern starts shut, then open: ${at(0)}, ${at(1)}`);
+});
+
+test('the Crossfader moves the A side out and the B side in', async () => {
+  const s = score();
+  s.schema = 2;
+  s.fx_clips = [{ effect: 'crossfader', lane: null, from_bar: 2, to_bar: 4, settings: { a: ['strings-low'], b: ['brass'] }, points: [[2, 0], [4, 1]] }];
+  const { deps: d, contexts } = deps(undefined, () => 0.1);
+  await renderScore(s, LIBRARY, d);
+  const b = bus(contexts).data[0]!;
+  // The fixture's third part (harp) is on neither side and plays on throughout.
+  const at = (bars: number) => b[Math.round(bars * BAR_S * RATE)]!;
+  assert.ok(Math.abs(at(1.01) - 0.2) < 0.01, `at the start only A: ${at(1.01)}`);
+  assert.ok(Math.abs(at(2) - 0.3) < 0.01, 'both in the middle');
+  assert.ok(Math.abs(at(2.99) - 0.2) < 0.01, 'only B at the end');
+  assert.ok(Math.abs(at(5) - 0.3) < 1e-6, 'both after the clip');
+});
+
+test('a score whose only schema 2 use is DJ & Effects takes the longer road', () => {
+  const s = score();
+  s.fx_clips = [{ effect: 'doppler', lane: null, from_bar: 1, to_bar: 2 }];
+  assert.equal(usesSound(s), true);
 });

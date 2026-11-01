@@ -21,8 +21,11 @@ export interface Part {
   instrument: string; gain_db: number; attack: number; release: number; notes: EditNote[];
   speed: Speed; dynamics: DynMark[] | null; fx?: LaneFx; voice?: VoiceFx[];
 }
-/** `tempoLine` is the piece's tempo line, or null for the step tempo alone; `tempo` is always written from it when it is set. */
-export interface EditDoc { title: string; tempo: Tempo[]; tempoLine: TempoMark[] | null; bars: number; parts: Part[]; base: Score | null; nextId: number }
+/**
+ * `tempoLine` is the piece's tempo line, or null for the step tempo alone; `tempo` is always written from it when it is
+ * set. `mix` is The Whole Piece's sound (loudness, Room, limiter) once the Sound panel sets it; until then the score's own.
+ */
+export interface EditDoc { title: string; tempo: Tempo[]; tempoLine: TempoMark[] | null; bars: number; parts: Part[]; base: Score | null; nextId: number; mix?: Mix }
 
 /** Where and as what a document is saved. */
 export interface SaveAs { piece: { id: string; title: string }; project: { id: string; name: string }; draft: number; made: string }
@@ -30,7 +33,7 @@ export interface SaveAs { piece: { id: string; title: string }; project: { id: s
 export const NEW_TEMPO: Tempo = { bar: 1, bpm: 92, beats: 4, unit: 4 };
 export const NEW_BARS = 4;
 export const NEW_VELOCITY = 90;
-const DEFAULT_MIX: Mix = { style: 'lofi', loudness: -20 };
+export const DEFAULT_MIX: Mix = { style: 'lofi', loudness: -20 };
 const WHOLE: Section = { id: 'whole', name: 'The Whole Piece', color: '#5a6b7a' };
 const NEW_ENERGY = 0.5;
 /** The instrument a lane without a sound (a draft from before renderable scores) opens with, by its family. */
@@ -65,10 +68,12 @@ export function docFromScore(score: Score, entries: readonly Entry[]): EditDoc {
     if (lane.voice) part.voice = clone(lane.voice);
     return part;
   });
-  return {
+  const doc: EditDoc = {
     title: score.piece.title, tempo: score.tempo.map(t => ({ ...t })), tempoLine: score.piece_tempo ? score.piece_tempo.map(m => ({ ...m })) : null,
     bars: score.bars, parts, base: score, nextId,
   };
+  if (score.mix) doc.mix = clone(score.mix);
+  return doc;
 }
 
 /** A new piece: 92 BPM in 4/4, four bars, no parts yet. */
@@ -133,7 +138,7 @@ export function scoreFromDoc(doc: EditDoc, at: SaveAs): Score {
     notes: notes.map(n => ({ ...n, motif: n.motif !== null && motifIds.has(n.motif) ? n.motif : null }))
       .sort((a, b) => a.start - b.start || a.pitch - b.pitch),
     energy, glossary: base ? base.glossary.map(g => ({ ...g })) : [], audio: [],
-    mix: base?.mix ? { ...base.mix } : { ...DEFAULT_MIX }, musicxml: 'score.musicxml',
+    mix: clone(doc.mix ?? base?.mix ?? DEFAULT_MIX), musicxml: 'score.musicxml',
     changes: (base?.changes ?? []).map(c => ({ ...c, lane: c.lane !== null && laneIds.has(c.lane) ? c.lane : null, answers: [...c.answers] })),
   };
   if (doc.tempoLine?.length) score.piece_tempo = doc.tempoLine.map(m => ({ ...m }));

@@ -24,6 +24,8 @@ import type { ComposerFiles } from './Composer.tsx';
 import { Composer } from './Composer.tsx';
 import type { ComposerStart } from './Composer.tsx';
 import type { Heard, HumPorts, MicTake } from './HumPanel.tsx';
+import { startLiveVoice } from '../../compose/livemic.ts';
+import type { VoiceFx } from '../../score.ts';
 import { NewPiece } from './NewPiece.tsx';
 
 export interface MountArgs {
@@ -176,6 +178,12 @@ export async function mountComposer(a: MountArgs): Promise<void> {
     osc.stop(c.currentTime + 0.1);
   };
   const hum = humPorts(context);
+  // Voice Effects on the live microphone: asked for only when Try It With The Mic is tapped, with its own context.
+  const live = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+    ? (chain: readonly VoiceFx[], key: readonly number[]) => startLiveVoice({
+      microphone: () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false } }),
+      context: () => new AudioContext({ latencyHint: 'interactive' }),
+    }, chain, key) : undefined;
   // Web MIDI, without SysEx, only when asked for.
   const midi = typeof navigator !== 'undefined' && typeof navigator.requestMIDIAccess === 'function'
     ? () => navigator.requestMIDIAccess({ sysex: false }) : undefined;
@@ -197,7 +205,7 @@ export async function mountComposer(a: MountArgs): Promise<void> {
   const open = (start: ComposerStart): void => {
     a.root.textContent = '';
     render(h(ThemeRoot, { handle: a.theme }, h(Composer, {
-      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES, hum, midi,
+      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES, hum, midi, live,
       now: () => performance.now() / 1000,
       onSaved: piece => { history.replaceState(null, '', `compose.php?id=${encodeURIComponent(piece)}`); },
       onNewPiece: (doc, title) => {

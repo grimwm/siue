@@ -329,9 +329,9 @@ final class MusicApiTest extends TestCase
         [$status, $message] = $try('{"max_shared_bytes": 100}', null);
         self::assertSame(413, $status);
         self::assertSame('The studios\' shared space has 0 KB left. Delete drafts or picked-up notes to make room.', $message);
-        [$status, $message] = $try('{}', 5_242_880 - 10);
+        [$status, $message] = $try('{}', 26_214_400 - 10);
         self::assertSame(413, $status);
-        self::assertSame('Your studio has 0 KB of 5 MB left. Delete drafts or picked-up notes to make room.', $message);
+        self::assertSame('Your studio has 0 KB of 25 MB left. Delete drafts or picked-up notes to make room.', $message);
     }
 
     public function testADraftWithoutAProjectOrKindTheServerCanRecordIsRefused(): void

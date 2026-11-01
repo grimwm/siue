@@ -190,12 +190,13 @@ final class Api
             return Http::json(422, ['error' => 'bad_version']);
         }
         $about = null;
-        $error = DraftCheck::checkFiles($files, $piece, (int) $version, $limits, $this->instruments, $about);
+        $vocal = null;
+        $error = DraftCheck::checkFiles($files, $piece, (int) $version, $limits, $this->instruments, $about, false, $vocal);
         if ($error !== null) {
             return Http::json(422, ['error' => $error]);
         }
         try {
-            $store->putDraft($piece, (int) $version, $files, $about);
+            $store->putDraft($piece, (int) $version, array_diff_key($files, $vocal['takes'] ?? []), $about, $vocal['takes'] ?? [], $vocal['named'] ?? []);
         } catch (DraftRejected $e) {
             if ($e->reason === 'over_quota') {
                 return Http::json(413, ['error' => 'over_quota', 'room' => $e->room, 'message' => Usage::refusal($e->room, $limits->quotaBytes, $e->shared)]);

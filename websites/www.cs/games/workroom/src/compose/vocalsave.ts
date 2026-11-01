@@ -33,15 +33,7 @@ export function leaves(room: number, enc: Encoded, seconds: number): { bytes: nu
   return { bytes: left, minutes: left > 0 && Number.isFinite(perMinute) ? Math.floor((left / perMinute) * 10) / 10 : 0 };
 }
 
-/** A size as the studio says it ("1.2 MB", "926 KB"): music/lib/Usage.php's human(). */
-export function humanBytes(bytes: number): string {
-  const b = Math.max(0, bytes);
-  if (b >= 1_048_576) {
-    const mb = (b / 1_048_576).toFixed(1);
-    return `${mb.endsWith('.0') ? mb.slice(0, -2) : mb} MB`;
-  }
-  return `${Math.round(b / 1024)} KB`;
-}
+export { humanBytes } from '../studio-limits.ts';
 
 export const takeFile = (hash: string, ext: Encoded['ext']): string => `vocal-${hash}.${ext}`;
 

@@ -9,7 +9,7 @@ import { muxOggOpus, oggCrc, opusHead, opusPacketSamples, readOggPackets, OPUS_R
 import { preSkipOf, recorderMime, webCodecsOpus } from '../src/compose/opus.ts';
 import type { CodecPorts } from '../src/compose/opus.ts';
 
-const fixture = (name: string) => new Uint8Array(readFileSync(join(import.meta.dirname, 'fixtures', name)));
+const fixture = (name: string) => new Uint8Array(readFileSync(join(import.meta.dirname, 'fixtures', 'takes', name)));
 
 test('Ogg\'s CRC-32 of "123456789" is 0x89A1897F', () => {
   assert.equal(oggCrc(new TextEncoder().encode('123456789')), 0x89a1897f);

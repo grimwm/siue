@@ -82,19 +82,19 @@ function residual(x: Int32Array, order: number): Int32Array {
   return out;
 }
 
-/** The best Rice parameter for `sum` of zigzagged values over `count` values, and the bits it costs. */
+/** The best Rice parameter for values[from..to), tried around the one their mean suggests, and the bits it costs. */
 function riceFor(values: Int32Array, from: number, to: number): { k: number; bits: number } {
   let sum = 0;
   for (let i = from; i < to; i++) sum += zigzag(values[i]!);
   const count = to - from;
+  if (count === 0) return { k: 0, bits: 0 };
+  const guess = sum > count ? Math.min(MAX_RICE, Math.floor(Math.log2(sum / count))) : 0;
   let best = { k: 0, bits: Infinity };
-  for (let k = 0; k <= MAX_RICE; k++) {
-    // Each value costs k + 1 bits plus its quotient; the quotients sum to about sum / 2^k.
+  for (let k = Math.max(0, guess - 1); k <= Math.min(MAX_RICE, guess + 1); k++) {
     let q = 0;
     for (let i = from; i < to; i++) q += zigzag(values[i]!) >>> k;
     const bits = count * (k + 1) + q;
     if (bits < best.bits) best = { k, bits };
-    if (Math.floor(sum / 2 ** k) === 0) break;
   }
   return best;
 }
@@ -157,12 +157,15 @@ function frame(w: BitWriter, x: Int32Array, index: number, rate: number): void {
     w.write(0, 1); w.write(0b000000, 6); w.write(0, 1);
     w.writeSigned(x[0]!, 16);
   } else {
-    let best = { order: 0, res: residual(x, 0), part: partitions(residual(x, 0), size, 0) };
-    for (let order = 1; order <= Math.min(MAX_ORDER, size - 1); order++) {
-      const res = residual(x, order);
-      const part = partitions(res, size, order);
-      if (part.bits + order * 16 < best.part.bits + best.order * 16) best = { order, res, part };
+    // The order whose residual is smallest in size, then the best partitioning of that residual alone.
+    let order = 0, res = residual(x, 0), least = Infinity;
+    for (let o = 0; o <= Math.min(MAX_ORDER, size - 1); o++) {
+      const r = o === 0 ? res : residual(x, o);
+      let sum = 0;
+      for (const v of r) sum += Math.abs(v);
+      if (sum < least) { least = sum; order = o; res = r; }
     }
+    const best = { order, res, part: partitions(res, size, order) };
     if (best.part.bits + best.order * 16 >= size * 16) {
       w.write(0, 1); w.write(0b000001, 6); w.write(0, 1);
       for (let i = 0; i < size; i++) w.writeSigned(x[i]!, 16);

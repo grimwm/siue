@@ -44,14 +44,16 @@ final class AdminPeopleTest extends TestCase
         self::assertSame(2_097_152, $p->maxSharedBytes(), 'max_shared_mb is in MiB');
     }
 
-    public function testDefaultsAre500AccountsAndOneGigabyte(): void
+    public function testDefaultsAre500AccountsTwentyGigabytesAndAFiftyGigabyteFloor(): void
     {
         $p = Admin\People::fromJson('{"people":[]}');
         self::assertSame(500, $p->maxAccounts());
-        self::assertSame(1_073_741_824, $p->maxSharedBytes());
+        self::assertSame(21_474_836_480, $p->maxSharedBytes());
+        self::assertSame(53_687_091_200, $p->minFreeDiskBytes());
+        self::assertSame(209_715_200, $p->maxTakeDecodedBytes());
         $d = Admin\People::load('/nonexistent/studio.json');
         self::assertSame(500, $d->maxAccounts());
-        self::assertSame(1_073_741_824, $d->maxSharedBytes());
+        self::assertSame(21_474_836_480, $d->maxSharedBytes());
     }
 
     public function testAMalformedFileGivesTheDefaults(): void
@@ -98,5 +100,14 @@ final class AdminPeopleTest extends TestCase
         }
         self::assertNull(Admin\Address::normalize("a@b.c\r"));
         self::assertSame('a@b.c', Admin\Address::normalize(' A@B.c '));
+    }
+
+    public function testTheDiskFloorAndTheDecodedTakeLimitAreSetInMiB(): void
+    {
+        $p = Admin\People::fromJson('{"people":[],"min_free_disk_mb":10,"max_take_decoded_mb":3}');
+        self::assertSame(10_485_760, $p->minFreeDiskBytes());
+        self::assertSame(3_145_728, $p->maxTakeDecodedBytes());
+        self::assertNull(Admin\People::fromJson('{"people":[],"min_free_disk_mb":0}'));
+        self::assertNull(Admin\People::fromJson('{"people":[],"max_take_decoded_mb":"200"}'));
     }
 }

@@ -49,3 +49,16 @@ test('a flipped byte is caught by a CRC', () => {
   flac[flac.length - 40] ^= 0x10;
   assert.throws(() => decodeFlac(flac), /CRC|sync|ends/);
 });
+
+test('ffmpeg decodes the page\'s FLAC to the same samples (skipped where there is no ffmpeg)', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const pcm = make(RATE + 333, i => 9000 * Math.sin(2 * Math.PI * 233 * i / RATE) + 300 * rand());
+  const dir = mkdtempSync(join(tmpdir(), 'flac-'));
+  writeFileSync(join(dir, 'a.flac'), encodeFlac(pcm, RATE));
+  try { execFileSync('ffmpeg', ['-v', 'error', '-i', join(dir, 'a.flac'), '-f', 's16le', '-ac', '1', join(dir, 'a.raw')]); } catch { return; }
+  const back = new Int16Array(new Uint8Array(readFileSync(join(dir, 'a.raw'))).buffer);
+  assert.deepEqual([...back], [...pcm]);
+});

@@ -10,7 +10,7 @@ final class DraftCheck
     /** The score schemas the page reads (games/workroom/src/score.ts SCHEMAS). */
     public const SCHEMAS = [1, 2];
 
-    /** @return array<string, string>|null name => bytes, or null for a malformed bundle */
+    /** @return array<string, string>|null name => bytes (the draft's files and any vocal takes), or null for a malformed bundle */
     public static function parseBundle(string $body): ?array
     {
         $magic = strlen(Api::DRAFT_MAGIC);
@@ -19,7 +19,7 @@ final class DraftCheck
             return null;
         }
         $count = ord($body[$magic]);
-        if ($count < 1 || $count > 5) {
+        if ($count < 1 || $count > count(Store::DRAFT_FILES) + ScoreRules::MAX_TAKES) {
             return null;
         }
         $at = $magic + 1;
@@ -37,7 +37,8 @@ final class DraftCheck
             $at += $nameLength;
             $size = unpack('N', substr($body, $at, 4))[1];
             $at += 4;
-            if (!in_array($name, Store::DRAFT_FILES, true) || isset($files[$name]) || $at + $size > $end) {
+            $known = in_array($name, Store::DRAFT_FILES, true) || preg_match(TakeCheck::NAME, $name) === 1;
+            if (!$known || isset($files[$name]) || $at + $size > $end) {
                 return null;
             }
             $files[$name] = substr($body, $at, $size);
@@ -66,8 +67,11 @@ final class DraftCheck
      * @param list<string> $instruments the library's instrument names
      * @param array{project_id: string, project_name: string, kind: string}|null $about
      * $scoreAlone takes a music score without MusicXML from any account (the editor's drafts), not only a score-only one.
+     * $vocal is then the vocal takes: `takes` the checked new ones (file => bytes and seconds), `named` every take the
+     * score names, for Store::putDraft to find in the bundle or in the account.
+     * @param array{takes: array<string, array{bytes: string, seconds: float}>, named: list<string>}|null $vocal
      */
-    public static function checkFiles(array $files, string $piece, int $version, Limits $limits, array $instruments, ?array &$about, bool $scoreAlone = false): ?string
+    public static function checkFiles(array $files, string $piece, int $version, Limits $limits, array $instruments, ?array &$about, bool $scoreAlone = false, ?array &$vocal = null): ?string
     {
         if (!isset($files['score.json'])) {
             return 'missing_file';
@@ -107,7 +111,47 @@ final class DraftCheck
         } elseif (!str_contains($files['score.musicxml'], '<score-partwise')) {
             return 'bad_file';
         }
+        $refusal = self::checkTakes($files, $score, $limits, $vocal);
+        if ($refusal !== null) {
+            return $refusal;
+        }
         $about = ['project_id' => $id, 'project_name' => $name, 'kind' => $score['kind']];
+        return null;
+    }
+
+    /**
+     * The vocal takes in the bundle: each one the score names, read whole (TakeCheck), and as long as the score says
+     * (to within 0.05 s); a take the score does not name is refused.
+     * @param array<string, string> $files
+     */
+    private static function checkTakes(array $files, array $score, Limits $limits, ?array &$vocal): ?string
+    {
+        $seconds = [];
+        foreach ($score['lanes'] ?? [] as $lane) {
+            foreach (is_array($lane) && is_array($lane['vocal'] ?? null) ? ($lane['vocal']['takes'] ?? []) : [] as $t) {
+                if (!is_array($t) || !is_string($t['file'] ?? null) || !preg_match(TakeCheck::NAME, $t['file']) || !is_numeric($t['seconds'] ?? null)) {
+                    return 'bad_score';
+                }
+                $seconds[$t['file']] = (float) $t['seconds'];
+            }
+        }
+        $vocal = ['takes' => [], 'named' => array_keys($seconds)];
+        foreach ($files as $name => $bytes) {
+            if (!preg_match(TakeCheck::NAME, $name)) {
+                continue;
+            }
+            if (!isset($seconds[$name])) {
+                return 'bad_take';
+            }
+            $read = TakeCheck::check($name, $bytes, $limits->maxTakeDecodedBytes);
+            if (is_string($read)) {
+                return $read;
+            }
+            if (abs($read - $seconds[$name]) > 0.05) {
+                return 'bad_take';
+            }
+            $vocal['takes'][$name] = ['bytes' => $bytes, 'seconds' => $read];
+        }
         return null;
     }
 }

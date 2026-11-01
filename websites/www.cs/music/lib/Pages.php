@@ -160,14 +160,15 @@ final class Pages
     {
         return $this->guarded($r, false, true, function (Store $store) use ($r, $body): \Admin\Response {
             $limits = $store->limits();
-            if (strlen($body) > min($limits->maxRequestBytes, ScoreRules::MAX_SCORE_BYTES + 64)) {
+            if (strlen($body) > Limits::SAVE_REQUEST_BYTES) {
                 return $this->refuseWithToken(413, 'too_large', $r);
             }
             $files = DraftCheck::parseBundle($body);
             if ($files === null) {
                 return $this->refuseWithToken(422, 'bad_bundle', $r);
             }
-            if (array_keys($files) !== ['score.json']) {
+            // score.json first, then only the vocal takes it names.
+            if (array_key_first($files) !== 'score.json' || array_values(array_diff(array_keys($files), ['score.json'])) !== array_values(array_filter(array_keys($files), static fn(string $n): bool => preg_match(TakeCheck::NAME, $n) === 1))) {
                 return $this->refuseWithToken(422, 'score_only', $r);
             }
             $piece = $r->query['piece'] ?? null;
@@ -184,19 +185,20 @@ final class Pages
                 return $this->refuseWithToken(409, in_array((int) $version, $versions, true) ? 'exists' : 'stale', $r, ['latest' => $latest]);
             }
             $about = null;
-            $error = DraftCheck::checkFiles($files, $piece, (int) $version, $limits, $this->instruments ??= \music_library_instruments(), $about, true);
+            $vocal = null;
+            $error = DraftCheck::checkFiles($files, $piece, (int) $version, $limits, $this->instruments ??= \music_library_instruments(), $about, true, $vocal);
             if ($error !== null) {
-                return $this->refuseWithToken(422, $error, $r);
+                return $this->refuseWithToken($error === 'take_too_long' ? 413 : 422, $error, $r);
             }
             try {
-                $store->putDraft($piece, (int) $version, $files, $about);
+                $store->putDraft($piece, (int) $version, ['score.json' => $files['score.json']], $about, $vocal['takes'] ?? [], $vocal['named'] ?? []);
             } catch (DraftRejected $e) {
                 if ($e->reason === 'over_quota') {
                     return $this->refuseWithToken(413, 'over_quota', $r, ['room' => $e->room, 'message' => Usage::refusal($e->room, $limits->quotaBytes, $e->shared)]);
                 }
-                return $this->refuseWithToken(match ($e->reason) { 'exists' => 409, 'too_large' => 413, default => 422 }, $e->reason, $r);
+                return $this->refuseWithToken(match ($e->reason) { 'exists' => 409, 'too_large' => 413, 'low_disk' => 507, default => 422 }, $e->reason, $r);
             }
-            return Http::json(201, ['piece' => $piece, 'version' => (int) $version, 'csrf' => $this->sessions->csrf($r)]);
+            return Http::json(201, ['piece' => $piece, 'version' => (int) $version, 'room' => $store->room(), 'csrf' => $this->sessions->csrf($r)]);
         }, 'POST');
     }
 

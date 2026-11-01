@@ -10,14 +10,22 @@ require_once __DIR__ . '/Auth.php';
 final class People
 {
     public const DEFAULT_MAX_ACCOUNTS = 500;
-    public const DEFAULT_MAX_SHARED_MB = 1024;
+    public const DEFAULT_MAX_SHARED_MB = 20480;
     public const DEFAULT_MAX_SHARED_BYTES = self::DEFAULT_MAX_SHARED_MB * 1_048_576;
+    /** Uploads are refused while the host's free disk would drop below this many MiB. */
+    public const DEFAULT_MIN_FREE_DISK_MB = 51200;
+    /** A vocal take may decode to at most this many MiB of 16-bit samples. */
+    public const DEFAULT_MAX_TAKE_DECODED_MB = 200;
+    private const CAPS = ['max_accounts' => self::DEFAULT_MAX_ACCOUNTS, 'max_shared_mb' => self::DEFAULT_MAX_SHARED_MB,
+        'min_free_disk_mb' => self::DEFAULT_MIN_FREE_DISK_MB, 'max_take_decoded_mb' => self::DEFAULT_MAX_TAKE_DECODED_MB];
 
     /** @param array<string, array{admin: bool, allowance: bool}> $named keyed by normalized address */
     private function __construct(
         private readonly array $named,
         private readonly int $maxAccounts,
         private readonly int $maxSharedBytes,
+        private readonly int $minFreeDiskBytes = self::DEFAULT_MIN_FREE_DISK_MB * 1_048_576,
+        private readonly int $maxTakeDecodedBytes = self::DEFAULT_MAX_TAKE_DECODED_MB * 1_048_576,
     ) {
     }
 
@@ -41,7 +49,8 @@ final class People
     }
 
     /** Null when the JSON is malformed: bad shape, an address that is not a studio address, a cap that is not a positive integer, a key that is not part of the shape (so
-     *  a stale `max_shared_bytes` is caught rather than ignored). The shared-space cap is `max_shared_mb`, in MiB. */
+     *  a stale `max_shared_bytes` is caught rather than ignored). The shared-space cap is `max_shared_mb`, the free-disk
+     *  floor `min_free_disk_mb` and a vocal take's decoded limit `max_take_decoded_mb`, each in MiB. */
     public static function fromJson(string $json): ?self
     {
         $d = json_decode($json, true);
@@ -61,18 +70,18 @@ final class People
             }
             $named[$email] = ['admin' => $admin, 'allowance' => $allowance];
         }
-        if (array_diff(array_keys($d), ['people', 'max_accounts', 'max_shared_mb']) !== []) {
+        if (array_diff(array_keys($d), ['people', ...array_keys(self::CAPS)]) !== []) {
             return null;
         }
         $caps = [];
-        foreach (['max_accounts' => self::DEFAULT_MAX_ACCOUNTS, 'max_shared_mb' => self::DEFAULT_MAX_SHARED_MB] as $key => $default) {
+        foreach (self::CAPS as $key => $default) {
             $v = $d[$key] ?? $default;
             if (!is_int($v) || $v < 1) {
                 return null;
             }
             $caps[] = $v;
         }
-        return new self($named, $caps[0], $caps[1] * 1_048_576);
+        return new self($named, $caps[0], $caps[1] * 1_048_576, $caps[2] * 1_048_576, $caps[3] * 1_048_576);
     }
 
     public function isAdmin(string $email): bool
@@ -99,7 +108,23 @@ final class People
     /** A copy with the shared-space cap set in bytes, for tests that need a pool smaller than a MiB. */
     public function withMaxSharedBytes(int $bytes): self
     {
-        return new self($this->named, $this->maxAccounts, $bytes);
+        return new self($this->named, $this->maxAccounts, $bytes, $this->minFreeDiskBytes, $this->maxTakeDecodedBytes);
+    }
+
+    /** A copy with the free-disk floor set in bytes, for tests. */
+    public function withMinFreeDiskBytes(int $bytes): self
+    {
+        return new self($this->named, $this->maxAccounts, $this->maxSharedBytes, $bytes, $this->maxTakeDecodedBytes);
+    }
+
+    public function minFreeDiskBytes(): int
+    {
+        return $this->minFreeDiskBytes;
+    }
+
+    public function maxTakeDecodedBytes(): int
+    {
+        return $this->maxTakeDecodedBytes;
     }
 
     public function maxSharedBytes(): int

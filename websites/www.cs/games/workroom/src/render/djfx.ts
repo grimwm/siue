@@ -119,8 +119,11 @@ class Line {
 /** What an effect's own code gives back: the wet pair at sample i (dry in, wet out) and, for a ringing effect, its tail. */
 type Wet = { wet(i: number, t: number, x: number[]): void; tailSeconds?: number; after?(i: number, x: number[]): void };
 
-/** The processor for one clip; `end` may be Infinity (a live pad not yet let go). */
-export function makeClip(clip: FxClip, env: ClipEnv, live?: { start: number; end: number }): ClipProc {
+/**
+ * The processor for one clip. Live (DJ Mode), `start` is now, `end` is where the pad would stop by itself (Infinity:
+ * when it is let go) and `mv` reads the platter's or the XY Pad's moves as they happen.
+ */
+export function makeClip(clip: FxClip, env: ClipEnv, live?: { start: number; end: number; mv?: (i: number, k: number) => number }): ClipProc {
   const { rate, bars } = env;
   const start = live ? live.start : Math.round(bars.sample(clip.from_bar));
   const end = live ? live.end : Math.round(bars.sample(clip.to_bar));
@@ -129,7 +132,7 @@ export function makeClip(clip: FxClip, env: ClipEnv, live?: { start: number; end
   const bar0 = clip.from_bar;
   const beat = bars.beatSeconds(bar0) * rate;
   const barLen = beat * bars.beats(bar0);
-  const mv = moves(clip.points, bars);
+  const mv = live?.mv ?? moves(clip.points, bars);
   const fade = FADE_SECONDS * rate;
   const fx = effect(clip, s, { ...env, start, end, beat, barLen, read, mv });
   const proc: ClipProc = {
@@ -310,15 +313,14 @@ function effect(clip: FxClip, s: Record<string, unknown>, c: Ctx): Wet {
     }
     case 'stutter': {
       const slice = num('slice');
-      let seg = c.start;
-      let segLen = 0;
       return {
         wet(i, _t, x) {
-          const beatsIn = (i - c.start) / beat;
-          const want = slice === 0 ? beat / 2 ** Math.min(3, Math.floor(beatsIn)) : (4 / slice) * beat;
-          if (want !== segLen) { segLen = want; seg = i; }
-          const off = (i - seg) % segLen;
-          const g = Math.min(1, off / (0.002 * rate), (segLen - off) / (0.002 * rate));
+          // Roll Down halves the slice each beat (a beat, a half, a quarter, an eighth), each new size from its beat.
+          const k = slice === 0 ? Math.min(3, Math.floor((i - c.start) / beat)) : 0;
+          const seg = c.start + k * beat;
+          const len = slice === 0 ? beat / 2 ** k : (4 / slice) * beat;
+          const off = (i - seg) % len;
+          const g = Math.min(1, off / (0.002 * rate), (len - off) / (0.002 * rate));
           x[0] = c.read(0, seg + off) * g;
           x[1] = c.read(1, seg + off) * g;
         },

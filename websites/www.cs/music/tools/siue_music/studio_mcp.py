@@ -20,7 +20,8 @@ BPM in every bar, a ramp moving by bar), lane.speed ("follow", {"ratio": 0.5|0.6
 lane.dynamics (loudness marks of bar, level 32/48/64/80/100/120 and shape steady/louder/softer; a note's velocity is
 scaled by level/80), note.bend ([seconds from the note's start, cents] pairs, 2 to 64), lane.fx (volume_db, pan, eq,
 echo, shimmer, warmth, brightness, even_out, room, mute, solo), lane.voice (up to 4 of vocoder, autotune, harmonizer,
-pitch, talkbox, robot, whisper), mix.room ({preset, amount}) and mix.limiter ({on, ceiling_db}).
+pitch, talkbox, robot, whisper), mix.room ({preset, amount}), mix.limiter ({on, ceiling_db}) and lane.vocal (a Vocal
+Track: takes the person recorded, and clips of them; list_vocal_takes shows them).
 
 First call studio_status. When it says "Not paired yet", tell the person the pairing code it gives and where to type it.
 When the person asks for their siue-music pairing code, call studio_status and give them the code.
@@ -66,6 +67,15 @@ def build(studio: Studio) -> MCPServer:
         between how the part sounds and how it is notated (Double Bass is written an octave up); scores hold sounding pitch.
         A standin_note says another instrument's samples play for now; name the real instrument anyway."""
         return _answer(studio.list_instruments)
+
+    @server.tool(structured_output=True)
+    def list_vocal_takes(piece: str, version: int | None = None) -> dict[str, Any]:
+        """A draft's Vocal Tracks (the newest draft when no version is given): each vocal lane's takes (file, seconds,
+        perfect or good_to_the_ear) and clips (take, at, from, to, gain_db, fade_in, fade_out, all in seconds), with its
+        voice effects and sound. The recorded voice stays in the studio; a new draft may move, trim, split or re-level
+        clips and change effects, naming only takes the lane already has. A vocal lane's sound.instrument is "vocal"
+        and it holds no notes."""
+        return _answer(lambda: studio.list_vocal_takes(piece, version))
 
     @server.tool(structured_output=True)
     def publish_draft(score: dict[str, Any]) -> dict[str, Any]:

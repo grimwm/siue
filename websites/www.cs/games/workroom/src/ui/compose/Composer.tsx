@@ -15,7 +15,7 @@ import type { ImportPorts, ImportPreview as Preview } from '../../compose/import
 import { writeMidi } from '../../compose/midi.ts';
 import { ImportError } from '../../compose/music-file.ts';
 import { toMusicXml } from '../../compose/toxml.ts';
-import { addNotes, addPart, clearPart, moveIntoRange, moveNote, recolourPart, removeNotes, removePart, renamePart, resizeNote, setInstrument } from '../../compose/edit.ts';
+import { addNotes, addPart, clearPart, moveIntoRange, moveNote, PART_COLOURS, recolourPart, removeNotes, removePart, renamePart, resizeNote, setInstrument } from '../../compose/edit.ts';
 import { createHistory } from '../../compose/history.ts';
 import { keyboardStart, OCTAVE_DOWN, OCTAVE_UP, pitchForKey } from '../../compose/keys.ts';
 import { bendFractions, humNotes, keyScale } from '../../compose/hum.ts';
@@ -55,6 +55,15 @@ import type { LiveVoice } from '../../compose/livemic.ts';
 import type { VoiceFx } from '../../score.ts';
 import { setDynamics } from '../../compose/loudness.ts';
 import { setPartSpeed, setPieceSpeed, setTempoLine } from '../../compose/speed.ts';
+import { newVocalPart, renameTake, takesOf } from '../../compose/vocal.ts';
+import { withSavedTakes } from '../../compose/vocalsave.ts';
+import { exportWithVocals, notesOnly } from '../../compose/vocalexport.ts';
+import type { Encoded } from '../../compose/vocalsave.ts';
+import { LOCAL_TAKE_RE } from '../../score.ts';
+import { VocalPanel } from './VocalPanel.tsx';
+import type { VocalPorts } from './VocalPanel.tsx';
+import { SaveTakes } from './SaveTakes.tsx';
+import type { TakeToSave } from './SaveTakes.tsx';
 
 export type Mode = 'live' | 'step' | 'grid' | 'hum';
 export const MODES: readonly { id: Mode; label: string; icon: string; help: string }[] = [
@@ -104,6 +113,8 @@ export interface ComposerProps {
   hum?: HumPorts;
   /** Voice Effects on the live microphone (asked for when started), in the piece's key; absent where there is none. */
   live?: (chain: readonly VoiceFx[], key: readonly number[]) => Promise<LiveVoice>;
+  /** Vocal Tracks: takes on this device, the microphone, the encoders and the studio; absent where there are none. */
+  vocal?: VocalPorts;
 }
 
 const isTyping = (t: EventTarget | null): boolean =>
@@ -143,6 +154,8 @@ export function Composer(p: ComposerProps) {
   const [humLine, setHumLine] = useState<number | null>(null);
   const [along, setAlong] = useState<'off' | 'ready' | 'counting' | 'on'>('off');
   const [alongParts, setAlongParts] = useState(true);
+  const [choosing, setChoosing] = useState<TakeToSave[] | null>(null);
+  const [room, setRoom] = useState(p.vocal?.room ?? Infinity);
   const fileInput = useRef<HTMLInputElement>(null);
   const gridWrap = useRef<HTMLDivElement>(null);
   const sheetBox = useRef<HTMLDivElement | null>(null);
@@ -465,13 +478,35 @@ export function Composer(p: ComposerProps) {
     }
   };
 
+  // ---- Vocal Tracks ----
+  const addVocal = (): void => {
+    let n = 1;
+    while (doc.parts.some(x => x.id === (n === 1 ? 'voice' : `voice-${n}`))) n++;
+    const id = n === 1 ? 'voice' : `voice-${n}`;
+    apply({ ...doc, parts: [...doc.parts, newVocalPart(id, n === 1 ? 'Vocal Track' : `Vocal Track ${n}`, PART_COLOURS[doc.parts.length % PART_COLOURS.length]!)] });
+    setPartId(id);
+    setPicking(null);
+  };
+  /** The other parts as sound from the start, for singing over; null when they have no notes. */
+  const vocalBacking = async (partIdNow: string): Promise<AudioBuffer | null> => {
+    const full = scoreFromDoc(state.current.doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
+    const others: Score = { ...full, lanes: full.lanes.filter(l => l.id !== partIdNow), notes: full.notes.filter(n => n.lane !== partIdNow), motifs: [] };
+    if (others.lanes.length === 0 || (others.notes.length === 0 && !others.lanes.some(l => l.vocal?.clips.length))) return null;
+    const built = await p.buildSound(`vocal-${editKey(state.current.doc)}-${partIdNow}`, others, () => {});
+    // The built channels themselves: the page's rules let no script fetch a blob address.
+    const b = new AudioBuffer({ length: built.channels[0]!.length, numberOfChannels: built.channels.length, sampleRate: built.rate });
+    built.channels.forEach((c, i) => b.copyToChannel(c as Float32Array<ArrayBuffer>, i));
+    return b;
+  };
+
   // ---- Saving ----
-  const save = async (): Promise<void> => {
+  /** Saves `d` as the next draft with the new vocal `files` it names; true when it was kept. */
+  const saveDoc = async (d: EditDoc, files: Record<string, Uint8Array> = {}): Promise<boolean> => {
     setSaving(true);
-    const score = scoreFromDoc(doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
+    const score = scoreFromDoc(d, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
     let result: Saved;
     try {
-      result = await saveScore(p.api, score);
+      result = await saveScore(p.api, score, files);
     } catch (e) {
       result = { ok: false, message: `The draft could not be saved: ${e instanceof Error ? e.message : String(e)} Your edit is still here.` };
     } finally {
@@ -479,13 +514,42 @@ export function Composer(p: ComposerProps) {
     }
     if (result.ok) {
       setVersion(result.version);
-      setSavedDoc(doc);
+      setSavedDoc(d);
       setStatus(`Saved as draft ${result.version}.`);
       p.onSaved?.(p.start.piece.id, result.version);
-    } else {
-      if (result.latest !== undefined) setVersion(result.latest);
-      setStatus(result.message);
+      return true;
     }
+    if (result.latest !== undefined) setVersion(result.latest);
+    setStatus(result.message);
+    return false;
+  };
+  const save = async (): Promise<void> => {
+    const local = takesOf(doc).filter(f => LOCAL_TAKE_RE.test(f));
+    if (local.length === 0 || !p.vocal) { await saveDoc(doc); return; }
+    // Takes only on this device: their sizes both ways first, then the person chooses.
+    const meta = await p.vocal.takes.list(p.start.piece.id);
+    const list: TakeToSave[] = [];
+    for (const id of local) {
+      const pcm = await p.vocal.takes.pcm(id);
+      const m = meta.find(t => t.id === id);
+      if (!pcm || !m) { setStatus('A take of this piece is no longer on this device, so it cannot be saved. Remove its clips, then save again.'); return; }
+      list.push({ id, name: m.name, pcm, rate: m.rate });
+    }
+    setChoosing(list);
+  };
+  const saveWithTakes = async (chosen: Map<string, { enc: Encoded; seconds: number }>): Promise<void> => {
+    const v = p.vocal!;
+    setChoosing(null);
+    const { doc: renamed, files, names } = await withSavedTakes(doc, chosen, { sha256: v.sha256 });
+    if (!(await saveDoc(renamed, files))) return;
+    const meta = await v.takes.list(p.start.piece.id);
+    for (const [id, name] of names) {
+      const m = meta.find(t => t.id === id);
+      if (m) await v.takes.update({ ...m, saved: name });
+    }
+    apply(renamed);
+    setSavedDoc(renamed);
+    setRoom(r => r - Object.values(files).reduce((n, b) => n + b.length, 0));
   };
 
   // ---- Files ----
@@ -522,12 +586,29 @@ export function Composer(p: ComposerProps) {
     p.onNewPiece(newDocFrom(preview, choice, p.entries, title), title);
   };
   const exportAs = (kind: 'musicxml' | 'mid'): void => {
-    if (!p.files || doc.parts.length === 0) return;
+    const notes = notesOnly(doc);
+    if (!p.files || notes.parts.length === 0) return;
     const data = kind === 'musicxml'
-      ? new Blob([toMusicXml(doc, p.entries, { colours: false })], { type: 'application/vnd.recordare.musicxml+xml' })
-      : new Blob([writeMidi(doc, p.entries) as Uint8Array<ArrayBuffer>], { type: 'audio/midi' });
+      ? new Blob([toMusicXml(notes, p.entries, { colours: false })], { type: 'application/vnd.recordare.musicxml+xml' })
+      : new Blob([writeMidi(notes, p.entries) as Uint8Array<ArrayBuffer>], { type: 'audio/midi' });
     p.files.save(`${p.start.piece.id}.${kind}`, data);
     setStatus(`Exported ${p.start.piece.id}.${kind}.`);
+  };
+  const exportVocals = async (): Promise<void> => {
+    const v = p.vocal;
+    if (!p.files || !v) return;
+    setStatus('Putting the vocals together…');
+    try {
+      const meta = await v.takes.list(p.start.piece.id);
+      const zip = await exportWithVocals(doc, p.entries, p.start.piece.id, {
+        saved: file => v.takeBytes(file),
+        local: async id => { const pcm = await v.takes.pcm(id); const m = meta.find(t => t.id === id); return pcm && m ? { pcm, rate: m.rate } : null; },
+      });
+      p.files.save(`${p.start.piece.id}-with-vocals.zip`, new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' }));
+      setStatus(`Exported ${p.start.piece.id}-with-vocals.zip: the notes as MusicXML, each take as it is kept, and where each clip plays.`);
+    } catch (e) {
+      setStatus(`The vocals could not be exported: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
   // Both: the grid and the sheet scroll across together, by the same share of their width.
   const follow = (from: HTMLElement | null, to: HTMLElement | null): void => {
@@ -580,8 +661,9 @@ export function Composer(p: ComposerProps) {
               <Button onClick={() => fileInput.current?.click()}>Import Music File</Button>
               <input ref={fileInput} type="file" accept={ACCEPT} class="hidden" data-import-file="" aria-label="Import Music File"
                 onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; (e.target as HTMLInputElement).value = ''; if (f) void importFile(f); }} />
-              <Button onClick={() => exportAs('musicxml')} disabled={doc.parts.length === 0}>Export MusicXML</Button>
-              <Button onClick={() => exportAs('mid')} disabled={doc.parts.length === 0}>Export MIDI</Button>
+              <Button onClick={() => exportAs('musicxml')} disabled={notesOnly(doc).parts.length === 0}>Export MusicXML</Button>
+              <Button onClick={() => exportAs('mid')} disabled={notesOnly(doc).parts.length === 0}>Export MIDI</Button>
+              {p.vocal && doc.parts.some(x => x.vocal) ? <Button onClick={() => void exportVocals()}>Export With Vocals</Button> : null}
             </>
           ) : null}
           <Button variant="primary" onClick={() => void save()} disabled={saving || doc.parts.length === 0}>{saving ? 'Saving…' : 'Save Draft'}</Button>
@@ -607,12 +689,13 @@ export function Composer(p: ComposerProps) {
                   class={cx('flex min-h-11 w-full items-center gap-2 rounded-md border px-3 text-left', x.id === partId ? 'border-amber bg-lane' : 'border-rule bg-panel hover:border-dim')}>
                   <span class="size-3 shrink-0 rounded-sm" style={{ background: x.color }} />
                   <span class="min-w-0 flex-1 truncate">{x.name}</span>
-                  <span class="font-mono text-xs text-dim">{p.entries.find(e => e.id === x.instrument)?.name ?? x.instrument}</span>
+                  <span class="font-mono text-xs text-dim">{x.vocal ? 'Vocal Track' : p.entries.find(e => e.id === x.instrument)?.name ?? x.instrument}</span>
                 </button></li>
               ))}
             </ul>
             <div class="mt-2 flex flex-wrap gap-2">
               <Button onClick={() => setPicking(picking === 'add' ? null : 'add')} pressed={picking === 'add'} disabled={doc.parts.length >= 16}>Add Part</Button>
+              {p.vocal ? <Button onClick={addVocal} disabled={doc.parts.length >= 16}>Add Vocal Track</Button> : null}
               <Button onClick={() => void hear('piece')}>Hear With The Piece</Button>
               <Button onClick={() => void hear('part')} disabled={!part}>Hear My Part Alone</Button>
               {listening ? <Button variant="record" onClick={stopListening}>Stop</Button> : null}
@@ -651,12 +734,25 @@ export function Composer(p: ComposerProps) {
               </div>
             </Panel>
           ) : null}
+          {part?.vocal ? (
+            <Panel title="Part Settings">
+              <div class="grid gap-3">
+                <label class="grid gap-1 text-sm">Name
+                  <input type="text" value={part.name} maxLength={60} class="min-h-11 rounded-md border border-rule bg-well px-3 text-ink"
+                    onChange={e => apply(renamePart(doc, part.id, (e.target as HTMLInputElement).value))} /></label>
+                <label class="flex items-center gap-2 text-sm">Colour
+                  <input type="color" value={part.color} class="h-11 w-16 rounded-md border border-rule bg-well"
+                    onChange={e => apply(recolourPart(doc, part.id, (e.target as HTMLInputElement).value))} /></label>
+                <Button variant="ghost" onClick={() => { apply(removePart(doc, part.id)); setPartId(doc.parts.find(x => x.id !== part.id)?.id ?? null); }}>Remove Part</Button>
+              </div>
+            </Panel>
+          ) : null}
           {part && entry ? (
             <SpeedPanel doc={doc} part={part} bars={barsNeeded(doc)} help={help}
               onPieceSpeed={bpm => apply(setPieceSpeed(doc, bpm))} onLine={marks => apply(setTempoLine(doc, marks))}
               onPartSpeed={speed => apply(setPartSpeed(doc, part.id, speed))} onLoudness={marks => apply(setDynamics(doc, part.id, marks))} />
           ) : null}
-          {part && entry ? (
+          {part && (entry || part.vocal) ? (
             <SoundPanel part={part} others={doc.parts.filter(x => x.id !== part.id).map(x => ({ id: x.id, name: x.name }))} mix={mixOf(doc)} help={help}
               onFx={change => apply(setLaneFx(doc, part.id, change))} onVoice={chain => apply(setVoice(doc, part.id, chain))}
               onMix={change => apply(setMix(doc, change))} live={p.live ? chain => p.live!(chain, key.classes) : undefined} />
@@ -668,7 +764,16 @@ export function Composer(p: ComposerProps) {
         </div>
 
         <div class="grid min-w-0 content-start gap-4">
-          {part && entry ? (
+          {choosing && p.vocal ? (
+            <SaveTakes takes={choosing} room={room} quality={p.vocal.quality} opus={p.vocal.opus}
+              onCancel={() => { setChoosing(null); setStatus('Not saved. Your takes are still on this device.'); }} onSave={chosen => void saveWithTakes(chosen)} />
+          ) : null}
+          {part?.vocal && p.vocal ? (
+            <VocalPanel doc={doc} part={part} piece={p.start.piece.id} ports={p.vocal} help={help} apply={apply} status={setStatus}
+              backing={() => vocalBacking(part.id)} beat={60 / clock.tempoAt(1).bpm} beats={clock.tempoAt(1).beats}
+              clicks={Array.from({ length: Math.ceil(clock.barStartBeat(bars + 1)) }, (_, i) => clock.seconds(i))}
+              renamed={(from, to, seconds) => setSavedDoc(d => renameTake(d, from, to, seconds))} />
+          ) : part && entry ? (
             <>
               <div role="tablist" aria-label="Ways To Put Notes In" class="grid grid-cols-4 gap-1 rounded-lg border border-rule bg-panel p-1">
                 {MODES.map(m => (

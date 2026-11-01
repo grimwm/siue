@@ -35,11 +35,15 @@ const REFUSALS: Readonly<Record<string, string>> = {
   too_many_notes: `A piece holds at most 20,000 notes. Remove some, then save again. ${KEPT}`,
   too_many_lanes: `A piece holds at most 16 parts. Remove one, then save again. ${KEPT}`,
   unknown_instrument: `A part plays an instrument this studio's sounds do not have. Choose another instrument for it, then save again. ${KEPT}`,
+  bad_take: `A vocal take could not be read as FLAC or Opus, so nothing was saved. Record it again, then save. ${KEPT}`,
+  take_too_long: `A vocal take is longer than 15 minutes or longer than it says. Trim it or record it again, then save. ${KEPT}`,
+  missing_take: `The score names a vocal take that is not in your studio or in this save. Reload the page, then save again. ${KEPT}`,
+  low_disk: `The server is running short of space for recordings, so nothing was saved. Try again later. ${KEPT}`,
 };
 
-/** Saves `score` as draft `score.draft` of its piece, and says how it went. */
-export async function saveScore(api: Pick<PageApi, 'saveDraft'>, score: Score): Promise<Saved> {
-  const bundle = encodeBundle({ 'score.json': encoder.encode(JSON.stringify(score)) });
+/** Saves `score` as draft `score.draft` of its piece, with the new vocal `takes` it names, and says how it went. */
+export async function saveScore(api: Pick<PageApi, 'saveDraft'>, score: Score, takes: Readonly<Record<string, Uint8Array>> = {}): Promise<Saved> {
+  const bundle = encodeBundle({ 'score.json': encoder.encode(JSON.stringify(score)), ...takes });
   let answer: { status: number; data: Record<string, unknown> };
   try {
     answer = await api.saveDraft(score.piece.id, score.draft, bundle);

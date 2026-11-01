@@ -18,6 +18,8 @@ import type { NotesSession } from './notes-session.ts';
 import { createOutbox } from './outbox.ts';
 import { readLimits } from './studio-limits.ts';
 import { browserSound } from './render/browser-sound.ts';
+import { indexedDbTakes } from './compose/takes.ts';
+import { takeAudio } from './compose/takesource.ts';
 import { indexedDbKeyMemory } from './remember.ts';
 import { startTheme } from './theme.ts';
 import { createVault } from './vault.ts';
@@ -50,7 +52,9 @@ function notesSession(): NotesSession {
   return createNotesSession({ api, vault: createVault(), outbox: createOutbox(indexedDbOutbox(), api, () => crypto.randomUUID(), browserLock(), noteMax), memory: indexedDbKeyMemory() });
 }
 const notes = notesSession();
-const sound = browserSound();
+/** Vocal takes: on this device until saved, then from the studio. */
+const takes = indexedDbTakes();
+const sound = browserSound(takeAudio(api, takes));
 /** How long the page waits to restore a remembered unlock before drawing locked: a stalled request must not keep it blank. */
 const RESTORE_WAIT_MS = 5000;
 if (root) await Promise.race([notes.restore(), new Promise(resolve => setTimeout(resolve, RESTORE_WAIT_MS))]);
@@ -109,7 +113,7 @@ if (view === 'studio') {
     })), root);
   }
 } else if (view === 'compose') {
-  await mountComposer({ root, theme, piece: piece ?? '', version, fetcher, api, buildSound: sound, say });
+  await mountComposer({ root, theme, piece: piece ?? '', version, fetcher, api, buildSound: sound, say, takes });
 } else if (view === 'index') {
   root.textContent = '';
   const list = document.querySelector('.index-body');

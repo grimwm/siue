@@ -66,6 +66,22 @@ final class AdminStudiosTest extends TestCase
         self::assertStringNotContainsString('secret-title', $res->body);
     }
 
+    public function testTheListWarnsWhenTheSharedSpaceIsFourFifthsFull(): void
+    {
+        $file = admin_tmp_dir() . '/studio.json';
+        file_put_contents($file, '{"people":[],"max_shared_mb":1}');
+        putenv("STUDIO_CONFIG_FILE=$file");
+        try {
+            $this->draft();
+            $this->db->prepare('UPDATE music_drafts SET size = 800000 WHERE account_id = ?')->execute([$this->account]);
+            self::assertStringNotContainsString('% full', $this->pages->studios($this->adminIn())->body, 'not yet at 80%');
+            $this->db->prepare('UPDATE music_drafts SET size = 900000 WHERE account_id = ?')->execute([$this->account]);
+            self::assertStringContainsString('shared space is 85% full', $this->pages->studios($this->adminIn())->body);
+        } finally {
+            putenv('STUDIO_CONFIG_FILE');
+        }
+    }
+
     public function testRemoveNeedsTheTypedAddressAndCsrf(): void
     {
         $as = $this->adminIn();

@@ -239,10 +239,10 @@ final class MusicAiKeysTest extends TestCase
     {
         $key = $this->all($this->a);
         $this->db->prepare('INSERT INTO music_drafts (account_id, piece, version, published_at, size) VALUES (?, ?, ?, ?, ?)')
-            ->execute([$this->a, 'seed', 1, 1, 5_242_880 - 10]);
+            ->execute([$this->a, 'seed', 1, 1, 26_214_400 - 10]);
         $res = $this->publish($key, 'p1', 1);
         self::assertSame(413, $res->status);
-        self::assertSame(['error' => 'over_quota', 'room' => 10, 'message' => Music\Usage::refusal(10, 5_242_880)], $this->body($res));
+        self::assertSame(['error' => 'over_quota', 'room' => 10, 'message' => Music\Usage::refusal(10, 26_214_400)], $this->body($res));
         self::assertSame(['seed'], array_column($this->store($this->a)->drafts(), 'piece'), 'nothing was written or deleted');
     }
 

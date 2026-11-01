@@ -25,6 +25,8 @@ function server() {
   let n = 0;
   const state = { failKeyring: null as unknown, keyring: fx.keyring as LockedKeyring, session: 'tag-1', broken: new Set<string>(), downloads: 0, unreadable: 0, uploaded: [] as string[], ai: [] as string[] };
   const api: PageApi = {
+    takeBytes: async () => new Uint8Array(0),
+    convertTake: async () => ({ status: 200, data: {} }),
     upload: async b => { const id = (++n).toString(16).padStart(32, '0'); notes.push({ id, bytes: b, arrived: n, picked: null }); return { kind: 'sent', id }; },
     list: async () => ({ notes: notes.map(x => ({ id: x.id, size: x.bytes.length, arrived_at: x.arrived, picked_up_at: x.picked })), unreadable: state.unreadable }),
     bytes: async id => { state.downloads++; if (state.broken.has(id)) throw new ServerError(500); return notes.find(x => x.id === id)!.bytes; },

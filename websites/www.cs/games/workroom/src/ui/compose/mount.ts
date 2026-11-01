@@ -27,8 +27,17 @@ import type { Heard, HumPorts, MicTake } from './HumPanel.tsx';
 import { startLiveVoice } from '../../compose/livemic.ts';
 import type { VoiceFx } from '../../score.ts';
 import { NewPiece } from './NewPiece.tsx';
+import type { TakeStore } from '../../compose/takes.ts';
+import { recordVocal } from '../../compose/vocalrec.ts';
+import { codecsCanOpus, recorderOpus, webCodecsOpus } from '../../compose/opus.ts';
+import type { OpusFile } from '../../compose/opus.ts';
+import { OPUS_RATE } from '../../compose/ogg.ts';
+import { readLimits } from '../../studio-limits.ts';
+import type { VocalPorts } from './VocalPanel.tsx';
 
 export interface MountArgs {
+  /** Vocal takes on this device; the page's sound reads them too. */
+  takes?: TakeStore;
   root: HTMLElement;
   theme: ThemeHandle;
   piece: string;
@@ -188,6 +197,7 @@ export async function mountComposer(a: MountArgs): Promise<void> {
   const midi = typeof navigator !== 'undefined' && typeof navigator.requestMIDIAccess === 'function'
     ? () => navigator.requestMIDIAccess({ sysex: false }) : undefined;
   const body = document.body.dataset;
+  const vocal = a.takes && live ? vocalPorts(a, a.takes, body['vocalQuality'] === 'ear' ? 'ear' : 'perfect') : undefined;
   const taken = (): string[] => readJson<string[]>(body['pieces'], []);
   const projects = (): { id: string; name: string }[] => readJson<{ id: string; name: string }[]>(body['projects'], []);
   /** New Piece: its title and project, then the editor on `doc` (an empty piece, or one made from an imported file). */
@@ -205,7 +215,7 @@ export async function mountComposer(a: MountArgs): Promise<void> {
   const open = (start: ComposerStart): void => {
     a.root.textContent = '';
     render(h(ThemeRoot, { handle: a.theme }, h(Composer, {
-      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES, hum, midi, live,
+      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES, hum, midi, live, vocal,
       now: () => performance.now() / 1000,
       onSaved: piece => { history.replaceState(null, '', `compose.php?id=${encodeURIComponent(piece)}`); },
       onNewPiece: (doc, title) => {
@@ -224,4 +234,46 @@ export async function mountComposer(a: MountArgs): Promise<void> {
   if (!loaded.ok) { a.say(a.root, loaded.error); return; }
   if (loaded.score.kind !== 'music') { a.say(a.root, 'Only a music piece can be composed here: a sound piece has no bars to write in.'); return; }
   open({ doc: docFromScore(loaded.score, entries), piece: loaded.score.piece, project: loaded.score.project, version: Math.max(...loaded.versions) });
+}
+
+/** Good To The Ear in this browser: WebCodecs where it makes Opus, else MediaRecorder in real time, else none. */
+async function makeOpus(pcm: Int16Array, rate: number): Promise<OpusFile | null> {
+  const codecs = typeof AudioEncoder === 'undefined' ? null : { AudioEncoder, AudioData };
+  const floats = new Float32Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) floats[i] = pcm[i]! / 32768;
+  if (await codecsCanOpus(codecs)) {
+    let at48 = floats;
+    if (rate !== OPUS_RATE) {
+      const ctx = new OfflineAudioContext(1, Math.round((floats.length * OPUS_RATE) / rate), OPUS_RATE);
+      const b = ctx.createBuffer(1, floats.length, rate);
+      b.copyToChannel(floats, 0);
+      const src = ctx.createBufferSource();
+      src.buffer = b;
+      src.connect(ctx.destination);
+      src.start();
+      at48 = (await ctx.startRendering()).getChannelData(0);
+    }
+    return webCodecsOpus(at48, codecs!);
+  }
+  if (typeof MediaRecorder === 'undefined') return null;
+  try {
+    return await recorderOpus(floats, rate, { context: () => new AudioContext(), isTypeSupported: m => MediaRecorder.isTypeSupported(m), record: (s, mime) => new MediaRecorder(s, { mimeType: mime, audioBitsPerSecond: 96_000 }) });
+  } catch {
+    return null;
+  }
+}
+
+function vocalPorts(a: MountArgs, takes: TakeStore, quality: 'perfect' | 'ear'): VocalPorts {
+  return {
+    takes, quality, room: readLimits(document.body).room,
+    // The voice as sung: the browser's echo cancelling, noise suppression and gain riding are off.
+    record: o => recordVocal({
+      microphone: () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }),
+      context: () => new AudioContext({ latencyHint: 'interactive' }),
+    }, o),
+    opus: makeOpus,
+    sha256: async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>))].map(b => b.toString(16).padStart(2, '0')).join(''),
+    takeBytes: file => a.api.takeBytes(file),
+    convert: (from, to, bytes) => a.api.convertTake(from, to, bytes),
+  };
 }

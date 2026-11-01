@@ -15,6 +15,7 @@ require_once __DIR__ . '/Pairing.php';
 require_once __DIR__ . '/Connect.php';
 require_once __DIR__ . '/Confirmations.php';
 require_once __DIR__ . '/KeyGate.php';
+require_once __DIR__ . '/TakeCheck.php';
 require_once __DIR__ . '/DraftCheck.php';
 require_once __DIR__ . '/Api.php';
 require_once __DIR__ . '/Pages.php';

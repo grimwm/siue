@@ -98,21 +98,38 @@ It refuses a file over 10 MB, an `.mxl` that would unzip past 20 MB or points ou
 16 parts or 20,000 notes, and a read taking over 5 seconds. **Export MusicXML** and **Export MIDI** save the piece
 (MIDI format 1, each part's General MIDI program, drums on channel 10) as a download, using no studio space.
 
+### Vocal Tracks
+
+A vocal part's takes are recorded in the page and kept in IndexedDB (`siue-music-takes`, 16-bit chunks written as
+they record) until Save To Studio sends them, as Perfect (FLAC, encoded in the page by `compose/flac.ts`) or Good To
+The Ear (Opus in Ogg from WebCodecs, or Opus from MediaRecorder). The editor's save sends one SIUED1 bundle: `score.json`
+first, then each new take the score names, as `vocal-<sha256>.<flac|ogg|webm>`. The server reads each take whole
+(`TakeCheck`: FLAC frames with their CRC-8 and CRC-16, Ogg pages with their CRC-32, WebM blocks; the codec must be
+FLAC or Opus, the name the bytes' own SHA-256, and the length is counted from the frames and must match the score to
+0.05 s), keeps it once per account under `takes/<account>/`, and deletes it in the same transaction as the change
+that leaves no draft naming it. `take.php?file=` serves a take to its own account only; `convert-take.php?from=&to=`
+takes a Good To The Ear copy of a saved Perfect take, moves every draft onto it and deletes the Perfect one. Your
+studio shows the takes, the minutes of singing left each way, and the quality Save To Studio picks first.
+
 ### Limits
 
 | Limit | Studio | With the allowance |
 | --- | --- | --- |
-| Stored (drafts as stored plus sealed notes, hums included) | 5 MB (5,242,880 bytes) | 100 MB (104,857,600 bytes) |
-| One draft request | 262,208 bytes | 8 MB |
+| Stored (drafts as stored, sealed notes with hums, and vocal takes) | 25 MB (26,214,400 bytes) | 100 MB (104,857,600 bytes) |
+| One draft request (the AI's publish) | 262,208 bytes | 8 MB |
+| One editor save (`save-draft.php`: the score and its new vocal takes) | 26,542,080 bytes | the same |
+| One vocal take | 15 minutes, decoding to at most `max_take_decoded_mb` (200 MiB) | the same |
 | `score.json` | 262,144 bytes, 20,000 notes, 16 lanes | the same |
 | One sealed note | 1,048,576 bytes | 2,097,152 bytes |
 | Notes kept | 2,000 | 2,000 |
 | Drafts kept per piece | the newest 20 | the newest 20 |
 | Active AI keys | 10, each 60 requests a minute | the same |
 
-Every studio without the allowance also shares one pool: 1,073,741,824 bytes (about 1 GB) in all, and at
-most 500 accounts (`max_shared_mb` and `max_accounts` in the configuration). When either is reached, a
-new sign-up gets "The studio is full". An upload past a limit is refused, and nothing is deleted to make
+Every studio without the allowance also shares one pool: 20 GiB (21,474,836,480 bytes) in all by default, and
+at most 500 accounts (`max_shared_mb` and `max_accounts` in the configuration; raise either at any time, with no
+code change). When either is reached, a new sign-up gets "The studio is full", and the admin's Studios page warns
+once the pool is 80% full. A vocal take is refused while the host's free disk (`disk_free_space`) would drop below
+`min_free_disk_mb` (50 GiB by default), with "low_disk". An upload past a limit is refused, and nothing is deleted to make
 room; the refusal says how much room is left (the smaller of the studio's own room and the shared room)
 and to delete drafts or picked-up notes. `score.json` and `score.musicxml` are stored gzip-compressed and
 count at their stored size.
@@ -196,12 +213,15 @@ transaction),
 went), `drafts.php?piece=` (each draft's `version`, `published_at` and `sheet`, whether it stores MusicXML),
 `draft.php?piece=&v=&file=` (data), `compose.php?id=&v=` (the editor's page on that piece; with no `id`, New Piece,
 its body carrying `data-pieces` and `data-projects`) and `save-draft.php?piece=&version=` (POST, the editor's save: a
-SIUED1 bundle of `score.json` alone from any account, checked as an AI's publish is, kept only as the piece's next
-draft; 409 `stale` with `latest` otherwise, 409 `exists`, 413 `over_quota` with `room` and `message`). Signed out, a page goes to
+SIUED1 bundle of `score.json` and the new vocal takes it names, from any account, checked as an AI's publish is, kept
+only as the piece's next draft; 409 `stale` with `latest` otherwise, 409 `exists`, 413 `over_quota` with `room` and
+`message`, 422 `bad_take` or `missing_take`, 413 `take_too_long`, 507 `low_disk`; a 201 carries `room`),
+`take.php?file=` (one of the account's vocal takes) and `convert-take.php?from=&to=` (POST, a Good To The Ear copy of a
+saved Perfect take, as long as it to 0.1 s: every draft moves onto it). Signed out, a page goes to
 `login.php?next=` (the page, when sign-in may return to it) and a data route answers 401
 `{"error":"signed_out"}`. Each POST's answer carries the next CSRF token. The page shells'
 `<body>` carries `data-note-max` (the largest note), `data-room` (bytes the studio may still
-store), `data-score-only` (`1` when drafts hold a score and no MusicXML) and `data-account-has-key` (`1` once a keyring is stored).
+store), `data-score-only` (`1` when drafts hold a score and no MusicXML), `data-account-has-key` (`1` once a keyring is stored) and `data-vocal-quality` (`perfect` or `ear`, the quality Save To Studio picks first).
 
 API routes (Bearer key, HTTPS; `lib/KeyGate.php`): an AI key (`lib/AiKeys.php`, the
 `studio_keys` table: per account, at most 10 active, 60 requests a minute, scopes

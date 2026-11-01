@@ -21,6 +21,8 @@ const note = { v: 1 as const, kind: 'text' as const, piece: 'p', draft: 1, from:
 function server() {
   const state = { keyring: fx.keyring as LockedKeyring, session: 'tag-1', fail: null as unknown, keyringCalls: 0, uploads: 0 };
   const api: PageApi = {
+    takeBytes: async () => new Uint8Array(0),
+    convertTake: async () => ({ status: 200, data: {} }),
     upload: async () => { state.uploads++; return { kind: 'sent', id: '0'.repeat(32) }; },
     list: async () => ({ notes: [], unreadable: 0 }),
     bytes: async () => new Uint8Array(),

@@ -124,11 +124,18 @@ final class Accounts
     /** The account's stored bytes: its drafts as stored plus its sealed notes. */
     public function usage(int $id): int
     {
-        return self::untilStored(function () use ($id): int {
+        $base = self::untilStored(function () use ($id): int {
             $q = $this->db->prepare('SELECT (SELECT COALESCE(SUM(size), 0) FROM music_drafts WHERE account_id = :id) + (SELECT COALESCE(SUM(size), 0) FROM music_notes WHERE account_id = :id)');
             $q->execute([':id' => $id]);
             return (int) $q->fetchColumn();
         }, 0);
+        return $base + ($this->takeUsages()[$id] ?? 0);
+    }
+
+    /** The bytes of each account's vocal takes, by account id; none while no take has been stored. @return array<int, int> */
+    private function takeUsages(): array
+    {
+        return self::untilStored(fn(): array => array_map('intval', $this->db->query('SELECT account_id, SUM(size) FROM music_takes GROUP BY account_id')->fetchAll(\PDO::FETCH_KEY_PAIR)), []);
     }
 
     /** The stored bytes of every account without the allowance: what max_shared_bytes caps. */
@@ -169,10 +176,11 @@ final class Accounts
             fn(): array => $this->db->query('SELECT a.id, a.email, a.last_sign_in_at, ' . $sum('music_drafts', 'd') . ' + ' . $sum('music_notes', 'n') . ' AS usage FROM accounts a ORDER BY a.id')->fetchAll(\PDO::FETCH_ASSOC),
             null,
         ) ?? $this->db->query('SELECT id, email, last_sign_in_at, 0 AS usage FROM accounts ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC);
+        $takes = $this->takeUsages();
         return array_map(static fn(array $r): array => [
             'id' => (int) $r['id'],
             'email' => (string) $r['email'],
-            'usage' => (int) $r['usage'],
+            'usage' => (int) $r['usage'] + ($takes[(int) $r['id']] ?? 0),
             'last_sign_in_at' => $r['last_sign_in_at'] === null ? null : (int) $r['last_sign_in_at'],
         ], $rows);
     }

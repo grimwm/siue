@@ -19,7 +19,7 @@ from test_mcp_protocol import PYTHON
 from test_studio import KEY, body
 
 TOOL_NAMES = {"studio_status", "list_pieces", "read_score", "publish_draft", "delete_draft", "delete_piece",
-              "read_new_notes", "mark_notes_picked_up", "wait_for_notes", "list_instruments"}
+              "read_new_notes", "mark_notes_picked_up", "wait_for_notes", "list_instruments", "list_vocal_takes"}
 
 
 @unittest.skipUnless(PYTHON, "the MCP SDK is not installed here: make music-mcp-setup")

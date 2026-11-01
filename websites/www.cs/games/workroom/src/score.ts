@@ -48,10 +48,26 @@ export type VoiceFx =
   | { effect: 'whisper'; mix: number };
 export const VOICE_EFFECTS = ['vocoder', 'autotune', 'harmonizer', 'pitch', 'talkbox', 'robot', 'whisper'] as const;
 export const MAX_VOICE_FX = 4;
+/**
+ * A Vocal Track's recorded voice (schema 2): its takes, each a file the studio holds (`vocal-<sha256>.<ext>`, or in the
+ * page a `local-<uuid>` take not yet saved), and its clips, each a stretch of a take placed in the piece. All in seconds.
+ */
+export interface VocalTake { file: string; seconds: number }
+export interface VocalClip { take: string; at: number; from: number; to: number; gain_db: number; fade_in: number; fade_out: number }
+export interface VocalTrack { takes: VocalTake[]; clips: VocalClip[] }
+/** The reserved instrument of a vocal lane: it plays its takes, not the sample library. */
+export const VOCAL_INSTRUMENT = 'vocal';
+export const TAKE_RE = /^vocal-[0-9a-f]{64}\.(flac|ogg|webm)$/;
+export const LOCAL_TAKE_RE = /^local-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const MAX_TAKES = 32;
+export const MAX_CLIPS = 64;
+/** A take is at most 15 minutes. */
+export const MAX_TAKE_SECONDS = 900;
 export interface Lane {
   id: string; name: string; family: Family; icon: Family; color: string; sound?: Sound;
-  speed?: Speed; dynamics?: DynMark[]; fx?: LaneFx; voice?: VoiceFx[];
+  speed?: Speed; dynamics?: DynMark[]; fx?: LaneFx; voice?: VoiceFx[]; vocal?: VocalTrack;
 }
+export const isVocal = (l: Pick<Lane, 'vocal'>): boolean => l.vocal !== undefined;
 export const MIX_STYLES = ['lofi'] as const;
 export const ROOMS = ['dry', 'small_room', 'concert_hall', 'cathedral', 'cave'] as const;
 export interface Room { preset: (typeof ROOMS)[number]; amount: number }
@@ -99,7 +115,7 @@ export function tempoLineBpm(marks: readonly TempoMark[], bar: number): number {
 /** Whether a score uses anything schema 1 does not have, and so must be saved as schema 2. */
 export function needsSchema2(s: Score): boolean {
   return s.piece_tempo !== undefined || s.mix?.room !== undefined || s.mix?.limiter !== undefined
-    || s.lanes.some(l => l.speed !== undefined || l.dynamics !== undefined || l.fx !== undefined || l.voice !== undefined)
+    || s.lanes.some(l => l.speed !== undefined || l.dynamics !== undefined || l.fx !== undefined || l.voice !== undefined || l.vocal !== undefined)
     || s.notes.some(n => n.bend !== undefined);
 }
 
@@ -225,6 +241,10 @@ function build(r: Obj, instruments: ReadonlySet<string> | undefined): Score {
     }
     if (v2(o, 'fx', p)) lane.fx = fxOf(o['fx'], `${p}.fx`);
     if (v2(o, 'voice', p)) lane.voice = voiceOf(o['voice'], `${p}.voice`);
+    if (v2(o, 'vocal', p)) lane.vocal = vocalOf(o['vocal'], `${p}.vocal`, duration);
+    if ((lane.sound?.instrument === VOCAL_INSTRUMENT) !== (lane.vocal !== undefined)) {
+      fail(lane.vocal ? `${p}.sound` : `${p}.sound.instrument`, lane.vocal ? `a vocal track's sound is the instrument ${VOCAL_INSTRUMENT}` : `${VOCAL_INSTRUMENT} is only for a lane with a vocal track`);
+    }
     return lane;
   });
   uniqueIds(lanes, 'lanes');
@@ -283,6 +303,7 @@ function build(r: Obj, instruments: ReadonlySet<string> | undefined): Score {
     const p = `notes[${i}]`;
     const o = obj(n, p);
     const lane = typeof o['lane'] === 'string' && laneIds.has(o['lane']) ? o['lane'] : fail(`${p}.lane`, 'must be the id of a lane');
+    if (lanes.find(l => l.id === lane)?.vocal) fail(`${p}.lane`, 'a vocal track holds takes, not notes');
     const start = num(o['start'], `${p}.start`);
     const length = num(o['length'], `${p}.length`);
     if (start < 0 || length <= 0 || start + length > duration + EPS) fail(p, `must start at 0 or later, have a length above 0 and end by ${duration} seconds`);
@@ -487,6 +508,36 @@ function voiceOf(v: unknown, path: string): VoiceFx[] {
   });
 }
 
+/** A Vocal Track: 1 to 32 takes the studio holds, and up to 64 clips of them, each inside its take and the piece. */
+function vocalOf(v: unknown, path: string, duration: number): VocalTrack {
+  const o = obj(v, path);
+  for (const k of Object.keys(o)) if (k !== 'takes' && k !== 'clips') fail(`${path}.${k}`, 'is not part of a vocal track (takes, clips)');
+  const takes = arr(o['takes'], `${path}.takes`, 1).map((t, i): VocalTake => {
+    const p = `${path}.takes[${i}]`;
+    const to = obj(t, p);
+    const file = typeof to['file'] === 'string' && TAKE_RE.test(to['file']) ? to['file'] : fail(`${p}.file`, 'must be a saved take, vocal-<sha256>.flac, .ogg or .webm');
+    return { file, seconds: inRange(to['seconds'], `${p}.seconds`, 0.01, MAX_TAKE_SECONDS) };
+  });
+  if (takes.length > MAX_TAKES) fail(`${path}.takes`, `must have at most ${MAX_TAKES} takes`);
+  if (new Set(takes.map(t => t.file)).size !== takes.length) fail(`${path}.takes`, 'must name each take once');
+  const clips = arr(o['clips'], `${path}.clips`).map((c, i): VocalClip => {
+    const p = `${path}.clips[${i}]`;
+    const co = obj(c, p);
+    const take = takes.find(t => t.file === co['take']) ?? fail(`${p}.take`, 'must be one of the track\'s takes');
+    const clip: VocalClip = {
+      take: take.file, at: inRange(co['at'], `${p}.at`, 0, duration), from: inRange(co['from'], `${p}.from`, 0, take.seconds),
+      to: inRange(co['to'], `${p}.to`, 0, take.seconds), gain_db: inRange(co['gain_db'], `${p}.gain_db`, -24, 12),
+      fade_in: inRange(co['fade_in'], `${p}.fade_in`, 0, 10), fade_out: inRange(co['fade_out'], `${p}.fade_out`, 0, 10),
+    };
+    if (clip.to - clip.from < 0.01) fail(`${p}.to`, 'must be after from');
+    if (clip.at + clip.to - clip.from > duration + EPS) fail(p, `must end by the end of the piece (${duration} seconds)`);
+    if (clip.fade_in + clip.fade_out > clip.to - clip.from + EPS) fail(p, 'its fades must fit in the clip');
+    return clip;
+  });
+  if (clips.length > MAX_CLIPS) fail(`${path}.clips`, `must have at most ${MAX_CLIPS} clips`);
+  return { takes, clips };
+}
+
 function inRange(v: unknown, path: string, min: number, max: number): number {
   const n = num(v, path);
   return n >= min && n <= max ? n : fail(path, `must be from ${min} to ${max}`);
@@ -495,7 +546,7 @@ function inRange(v: unknown, path: string, min: number, max: number): number {
 function soundOf(v: unknown, path: string, instruments: ReadonlySet<string> | undefined): Sound {
   const o = obj(v, path);
   const instrument = id(o['instrument'], `${path}.instrument`);
-  if (instruments && !instruments.has(instrument)) fail(`${path}.instrument`, 'must be an instrument id in the sample library');
+  if (instruments && instrument !== VOCAL_INSTRUMENT && !instruments.has(instrument)) fail(`${path}.instrument`, 'must be an instrument id in the sample library');
   return { instrument, gain_db: inRange(o['gain_db'], `${path}.gain_db`, -40, 20), attack: inRange(o['attack'], `${path}.attack`, 0, 10), release: inRange(o['release'], `${path}.release`, 0, 20) };
 }
 

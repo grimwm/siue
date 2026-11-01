@@ -3,7 +3,8 @@
 // drafts kept per piece within the account's room, and one locked keyring. Rows
 // live in the admin database, each naming its account; the bytes live in private
 // files beside it, drafts under drafts/<account>/<piece>/<version>/ with their
-// scores gzipped.
+// scores gzipped, and vocal takes once per account under takes/<account>/, each
+// kept while any draft of the account names it.
 declare(strict_types=1);
 
 namespace Music;
@@ -19,7 +20,7 @@ final class NoteRejected extends \RuntimeException
 
 final class DraftRejected extends \RuntimeException
 {
-    /** @param string $reason bad_piece | bad_version | missing_file | bad_file | too_large | over_quota | exists | bad_score; $room is the bytes left and $shared whether the studios' shared space (not this account's own room) is what ran short, for over_quota */
+    /** @param string $reason bad_piece | bad_version | missing_file | bad_file | too_large | over_quota | exists | bad_score | missing_take | low_disk; $room is the bytes left and $shared whether the studios' shared space (not this account's own room) is what ran short, for over_quota */
     public function __construct(public readonly string $reason, public readonly int $room = 0, public readonly bool $shared = false)
     {
         parent::__construct($reason);
@@ -81,6 +82,7 @@ final class Store
         $this->files->claim($dir, true);
         $this->files->claim("$dir/notes", true);
         $this->files->claim("$dir/drafts", true);
+        $this->files->claim("$dir/takes", true);
         // The tables in the single studio's shape, for a database that has none yet; MIGRATION then rebuilds them keyed by account.
         $this->db->exec('CREATE TABLE IF NOT EXISTS music_notes (id TEXT PRIMARY KEY, size INTEGER NOT NULL, sha256 TEXT NOT NULL, arrived_at INTEGER NOT NULL, picked_up_at INTEGER)');
         $this->db->exec("CREATE TABLE IF NOT EXISTS music_drafts (piece TEXT NOT NULL, version INTEGER NOT NULL, published_at INTEGER NOT NULL, size INTEGER NOT NULL, project_id TEXT NOT NULL DEFAULT '', project_name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'music', PRIMARY KEY (piece, version))");
@@ -120,6 +122,31 @@ final class Store
         // when each AI marked it picked up: one AI's mark never hides a note from another AI.
         $this->db->exec('CREATE TABLE IF NOT EXISTS music_note_recipients (note_id TEXT NOT NULL, account_id INTEGER NOT NULL, fingerprint TEXT NOT NULL, picked_up_at INTEGER, PRIMARY KEY (note_id, fingerprint))');
         $this->db->exec('CREATE INDEX IF NOT EXISTS music_note_recipients_fp ON music_note_recipients(account_id, fingerprint)');
+        // Vocal takes, once per account, and which drafts name them: a take goes when the last draft naming it goes.
+        $this->db->exec('CREATE TABLE IF NOT EXISTS music_takes (account_id INTEGER NOT NULL, file TEXT NOT NULL, size INTEGER NOT NULL, seconds REAL NOT NULL, added_at INTEGER NOT NULL, PRIMARY KEY (account_id, file))');
+        $this->db->exec('CREATE TABLE IF NOT EXISTS music_draft_takes (account_id INTEGER NOT NULL, piece TEXT NOT NULL, version INTEGER NOT NULL, file TEXT NOT NULL, PRIMARY KEY (account_id, piece, version, file))');
+        $this->db->exec('CREATE INDEX IF NOT EXISTS music_draft_takes_file ON music_draft_takes(account_id, file)');
+        $this->db->exec("CREATE TABLE IF NOT EXISTS music_settings (account_id INTEGER PRIMARY KEY, vocal_quality TEXT NOT NULL DEFAULT 'perfect')");
+    }
+
+    public const VOCAL_QUALITIES = ['perfect', 'ear'];
+
+    /** The quality Save To Studio picks first for a new take: perfect (FLAC) unless the person chose ear (Opus). */
+    public function vocalQuality(): string
+    {
+        $q = $this->db->prepare('SELECT vocal_quality FROM music_settings WHERE account_id = ?');
+        $q->execute([$this->account]);
+        $v = $q->fetchColumn();
+        return in_array($v, self::VOCAL_QUALITIES, true) ? $v : 'perfect';
+    }
+
+    public function setVocalQuality(string $quality): bool
+    {
+        if (!in_array($quality, self::VOCAL_QUALITIES, true)) {
+            return false;
+        }
+        $this->db->prepare('INSERT INTO music_settings (account_id, vocal_quality) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET vocal_quality = excluded.vocal_quality')->execute([$this->account, $quality]);
+        return true;
     }
 
     /**
@@ -317,9 +344,11 @@ final class Store
      * project: '' and '' and 'music' (a published draft always has one).
      * @param array<string, string> $files published name => the file's bytes
      * @param array{project_id: string, project_name: string, kind: string}|null $about
+     * @param array<string, array{bytes: string, seconds: float}> $takes new vocal takes, checked (TakeCheck), by file name
+     * @param list<string> $named every take the score names: each in $takes or already held, else missing_take
      * @throws DraftRejected
      */
-    public function putDraft(string $piece, int $version, array $files, ?array $about = null): void
+    public function putDraft(string $piece, int $version, array $files, ?array $about = null, array $takes = [], array $named = []): void
     {
         if (!self::validPieceId($piece)) {
             throw new DraftRejected('bad_piece');
@@ -346,8 +375,19 @@ final class Store
         foreach ($files as $name => $bytes) {
             $stored[self::storedName($name)] = self::storedBytes($name, $bytes);
         }
-        $this->transaction(function () use ($piece, $version, $stored, $about): void {
+        foreach (array_keys($takes) as $file) {
+            if (!preg_match(TakeCheck::NAME, $file) || !in_array($file, $named, true)) {
+                throw new DraftRejected('bad_file');
+            }
+        }
+        $this->transaction(function () use ($piece, $version, $stored, $about, $takes, $named): void {
             $size = array_sum(array_map('strlen', $stored));
+            $held = $this->heldTakes($named);
+            if (array_diff($named, $held, array_keys($takes)) !== []) {
+                throw new DraftRejected('missing_take');
+            }
+            $new = array_diff_key($takes, array_flip($held));
+            $newBytes = array_sum(array_map(static fn(array $t): int => strlen($t['bytes']), $new));
             $exists = $this->db->prepare('SELECT 1 FROM music_drafts WHERE account_id = ? AND piece = ? AND version = ?');
             $exists->execute([$this->account, $piece, $version]);
             if ($exists->fetchColumn() !== false) {
@@ -356,11 +396,24 @@ final class Store
             $rollsOff = $this->db->prepare('SELECT COALESCE(SUM(size), 0) FROM (SELECT size FROM music_drafts WHERE account_id = ? AND piece = ? ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . (self::KEEP_DRAFTS - 1) . ')');
             $rollsOff->execute([$this->account, $piece]);
             [$room, $shared] = $this->roomBinding();
-            if ($size - (int) $rollsOff->fetchColumn() > $room) {
+            if ($size + $newBytes - (int) $rollsOff->fetchColumn() > $room) {
                 throw new DraftRejected('over_quota', max(0, $room), $shared);
             }
+            // The floor guards the large uploads: a score alone is never refused for it.
+            $this->checkDisk($newBytes);
             $this->writeDraftFiles($piece, $version, $stored);
+            $written = [];
             try {
+                foreach ($new as $file => $t) {
+                    $this->writeTake($file, $t['bytes']);
+                    $written[] = $file;
+                    $this->db->prepare('INSERT INTO music_takes (account_id, file, size, seconds, added_at) VALUES (?, ?, ?, ?, ?)')
+                        ->execute([$this->account, $file, strlen($t['bytes']), $t['seconds'], $this->clock->now()]);
+                }
+                $link = $this->db->prepare('INSERT OR IGNORE INTO music_draft_takes (account_id, piece, version, file) VALUES (?, ?, ?, ?)');
+                foreach (array_unique($named) as $file) {
+                    $link->execute([$this->account, $piece, $version, $file]);
+                }
                 $this->db->prepare('INSERT INTO music_drafts (account_id, piece, version, published_at, size, project_id, project_name, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
                     ->execute([$this->account, $piece, $version, $this->clock->now(), $size, $about['project_id'], $about['project_name'], $about['kind']]);
                 $history = $this->db->prepare('SELECT version FROM music_drafts WHERE account_id = ? AND piece = ? ORDER BY published_at DESC, rowid DESC LIMIT -1 OFFSET ' . self::KEEP_DRAFTS);
@@ -369,14 +422,20 @@ final class Store
                 $drop = $this->db->prepare('DELETE FROM music_drafts WHERE account_id = ? AND piece = ? AND version = ?');
                 foreach ($old as $v) {
                     $drop->execute([$this->account, $piece, $v]);
+                    $this->unlinkTakes($piece, $v);
                 }
+                $freed = $this->unusedTakes();
             } catch (\Throwable $e) {
                 $this->removeDraftFiles($piece, $version);
+                foreach ($written as $file) {
+                    @unlink($this->takePath($file));
+                }
                 throw $e;
             }
             foreach ($old as $v) {
                 $this->removeDraftFiles($piece, $v);
             }
+            $this->removeTakeFiles($freed);
         });
     }
 
@@ -396,7 +455,10 @@ final class Store
             if ($drop->rowCount() === 0) {
                 return false;
             }
+            $this->unlinkTakes($piece, $version);
+            $freed = $this->unusedTakes();
             $this->removeDraftFiles($piece, $version);
+            $this->removeTakeFiles($freed);
             return true;
         });
     }
@@ -412,9 +474,12 @@ final class Store
             $versions->execute([$this->account, $piece]);
             $gone = array_map('intval', $versions->fetchAll(\PDO::FETCH_COLUMN));
             $this->db->prepare('DELETE FROM music_drafts WHERE account_id = ? AND piece = ?')->execute([$this->account, $piece]);
+            $this->db->prepare('DELETE FROM music_draft_takes WHERE account_id = ? AND piece = ?')->execute([$this->account, $piece]);
+            $freed = $this->unusedTakes();
             foreach ($gone as $v) {
                 $this->removeDraftFiles($piece, $v);
             }
+            $this->removeTakeFiles($freed);
             $this->removeTree("{$this->dir}/drafts/{$this->account}/$piece");
             return count($gone);
         });
@@ -483,7 +548,11 @@ final class Store
             $this->deleteNotesOfAccount();
             $this->db->prepare('DELETE FROM music_drafts WHERE account_id = ?')->execute([$this->account]);
             $this->db->prepare('DELETE FROM music_keyring WHERE account_id = ?')->execute([$this->account]);
+            $this->db->prepare('DELETE FROM music_draft_takes WHERE account_id = ?')->execute([$this->account]);
+            $this->db->prepare('DELETE FROM music_takes WHERE account_id = ?')->execute([$this->account]);
+            $this->db->prepare('DELETE FROM music_settings WHERE account_id = ?')->execute([$this->account]);
             $this->removeTree("{$this->dir}/drafts/{$this->account}");
+            $this->removeTree("{$this->dir}/takes/{$this->account}");
         });
     }
 
@@ -693,6 +762,150 @@ final class Store
      * Runs $work between BEGIN IMMEDIATE and COMMIT; any throw rolls back and is rethrown. Inside a transaction the
      * caller already holds, $work runs in it, and the caller commits or rolls back.
      */
+    /** @return list<array{file: string, size: int, seconds: float, drafts: int}> this account's vocal takes, oldest first */
+    public function takes(): array
+    {
+        $q = $this->db->prepare('SELECT t.file, t.size, t.seconds, (SELECT COUNT(*) FROM music_draft_takes d WHERE d.account_id = t.account_id AND d.file = t.file) AS drafts FROM music_takes t WHERE t.account_id = ? ORDER BY t.added_at, t.file');
+        $q->execute([$this->account]);
+        return array_map(static fn(array $r): array => ['file' => (string) $r['file'], 'size' => (int) $r['size'], 'seconds' => (float) $r['seconds'], 'drafts' => (int) $r['drafts']], $q->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
+    /** A take's bytes, or null for a name that is not a take or one this account does not hold. */
+    public function takeBytes(string $file): ?string
+    {
+        if (!preg_match(TakeCheck::NAME, $file) || $this->heldTakes([$file]) === []) {
+            return null;
+        }
+        $bytes = @file_get_contents($this->takePath($file));
+        return $bytes === false ? null : $bytes;
+    }
+
+    /**
+     * Converts a held take to $newFile (checked by the caller, its $seconds from its frames): every draft naming the old
+     * take names the new one instead, in its score and its links, then the old take goes, all in one transaction.
+     * False when this account does not hold $oldFile.
+     * @throws DraftRejected over_quota or low_disk
+     */
+    public function convertTake(string $oldFile, string $newFile, string $bytes, float $seconds): bool
+    {
+        if (!preg_match(TakeCheck::NAME, $oldFile) || !preg_match(TakeCheck::NAME, $newFile) || $oldFile === $newFile) {
+            return false;
+        }
+        return $this->transaction(function () use ($oldFile, $newFile, $bytes, $seconds): bool {
+            if ($this->heldTakes([$oldFile]) === []) {
+                return false;
+            }
+            $have = $this->heldTakes([$newFile]) !== [];
+            $add = $have ? 0 : strlen($bytes);
+            [$room, $shared] = $this->roomBinding();
+            if ($add > $room) {
+                throw new DraftRejected('over_quota', max(0, $room), $shared);
+            }
+            $this->checkDisk($add);
+            if (!$have) {
+                $this->writeTake($newFile, $bytes);
+                $this->db->prepare('INSERT INTO music_takes (account_id, file, size, seconds, added_at) VALUES (?, ?, ?, ?, ?)')
+                    ->execute([$this->account, $newFile, $add, $seconds, $this->clock->now()]);
+            }
+            $uses = $this->db->prepare('SELECT piece, version FROM music_draft_takes WHERE account_id = ? AND file = ?');
+            $uses->execute([$this->account, $oldFile]);
+            foreach ($uses->fetchAll(\PDO::FETCH_ASSOC) as $u) {
+                $piece = (string) $u['piece'];
+                $version = (int) $u['version'];
+                $path = $this->draftDir($piece, $version) . '/' . self::storedName('score.json');
+                $json = @gzdecode((string) @file_get_contents($path));
+                $score = $json === false ? null : json_decode($json, true);
+                if (!is_array($score)) {
+                    continue;
+                }
+                foreach ($score['lanes'] ?? [] as $i => $lane) {
+                    if (!is_array($lane['vocal'] ?? null)) {
+                        continue;
+                    }
+                    foreach ($lane['vocal']['takes'] ?? [] as $j => $t) {
+                        if (($t['file'] ?? null) === $oldFile) {
+                            $score['lanes'][$i]['vocal']['takes'][$j] = ['file' => $newFile, 'seconds' => $seconds];
+                        }
+                    }
+                    foreach ($lane['vocal']['clips'] ?? [] as $j => $c) {
+                        if (($c['take'] ?? null) === $oldFile) {
+                            $score['lanes'][$i]['vocal']['clips'][$j]['take'] = $newFile;
+                            $score['lanes'][$i]['vocal']['clips'][$j]['to'] = min((float) $c['to'], $seconds);
+                        }
+                    }
+                }
+                $stored = self::storedBytes('score.json', (string) json_encode($score, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+                $before = is_file($path) ? (int) filesize($path) : 0;
+                $this->writeFile($path, $stored);
+                $this->db->prepare('UPDATE music_drafts SET size = size + ? WHERE account_id = ? AND piece = ? AND version = ?')
+                    ->execute([strlen($stored) - $before, $this->account, $piece, $version]);
+                $this->db->prepare('INSERT OR IGNORE INTO music_draft_takes (account_id, piece, version, file) VALUES (?, ?, ?, ?)')
+                    ->execute([$this->account, $piece, $version, $newFile]);
+            }
+            $this->db->prepare('DELETE FROM music_draft_takes WHERE account_id = ? AND file = ?')->execute([$this->account, $oldFile]);
+            $this->removeTakeFiles($this->unusedTakes());
+            return true;
+        });
+    }
+
+    /** @param list<string> $files @return list<string> those of $files this account holds */
+    private function heldTakes(array $files): array
+    {
+        if ($files === []) {
+            return [];
+        }
+        $q = $this->db->prepare('SELECT file FROM music_takes WHERE account_id = ? AND file IN (' . implode(',', array_fill(0, count($files), '?')) . ')');
+        $q->execute([$this->account, ...array_values($files)]);
+        return array_map('strval', $q->fetchAll(\PDO::FETCH_COLUMN));
+    }
+
+    private function unlinkTakes(string $piece, int $version): void
+    {
+        $this->db->prepare('DELETE FROM music_draft_takes WHERE account_id = ? AND piece = ? AND version = ?')->execute([$this->account, $piece, $version]);
+    }
+
+    /** Deletes the rows of the takes no draft names any more; their files go with removeTakeFiles. @return list<string> */
+    private function unusedTakes(): array
+    {
+        $q = $this->db->prepare('SELECT file FROM music_takes t WHERE t.account_id = ? AND NOT EXISTS (SELECT 1 FROM music_draft_takes d WHERE d.account_id = t.account_id AND d.file = t.file)');
+        $q->execute([$this->account]);
+        $gone = array_map('strval', $q->fetchAll(\PDO::FETCH_COLUMN));
+        $drop = $this->db->prepare('DELETE FROM music_takes WHERE account_id = ? AND file = ?');
+        foreach ($gone as $file) {
+            $drop->execute([$this->account, $file]);
+        }
+        return $gone;
+    }
+
+    /** @param list<string> $files */
+    private function removeTakeFiles(array $files): void
+    {
+        foreach ($files as $file) {
+            @unlink($this->takePath($file));
+        }
+        @rmdir("{$this->dir}/takes/{$this->account}");
+    }
+
+    private function takePath(string $file): string
+    {
+        return "{$this->dir}/takes/{$this->account}/$file";
+    }
+
+    private function writeTake(string $file, string $bytes): void
+    {
+        $this->files->claim("{$this->dir}/takes/{$this->account}", true);
+        $this->writeFile($this->takePath($file), $bytes);
+    }
+
+    /** Refuses ($bytes more to store) while the host's free disk would drop below the configured floor. @throws DraftRejected */
+    private function checkDisk(int $bytes): void
+    {
+        $free = @disk_free_space($this->dir);
+        if ($bytes > 0 && $free !== false && $free - $bytes < $this->limits->minFreeDiskBytes) {
+            throw new DraftRejected('low_disk');
+        }
+    }
+
     private function transaction(\Closure $work): mixed
     {
         if ($this->db->inTransaction()) {

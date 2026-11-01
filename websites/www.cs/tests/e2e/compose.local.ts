@@ -11,7 +11,10 @@
 // part at its own BPM, a loudness line, and Hum's Exact Pitch bends, saved as a schema 2 draft; on a phone a held key
 // still never moves the page with the panel open. Then Sound: a part's settings, Mute and Solo, Voice Effects (a
 // Vocoder on another part, Auto-Tune) tried on the fake microphone and let go, the Room and the limiter, heard with the
-// piece and saved as score settings. SHOTS_DIR keeps screenshots.
+// piece and saved as score settings. Then Vocal Tracks with a fake singer: Record A Vocal (the microphone asked for only
+// then), the take Only On This Device and kept through a reload, Save To Studio showing both sizes, saved as Perfect,
+// heard, converted to Good To The Ear, a second take saved as Good To The Ear, Export With Vocals, and Your studio's
+// count; and Save To Studio refusing takes that need more room than the studio has. SHOTS_DIR keeps screenshots.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -305,6 +308,39 @@ function fakeDevices(): void {
       amp.gain.setValueAtTime(0, t + at + 0.45);
     }
     osc.start();
+    mic.tracks = dest.stream.getTracks();
+    return dest.stream;
+  };
+}
+/** A fake microphone that sings on and on (a tone with vibrato and a little breath), counting when it is asked for. */
+function fakeSinger(): void {
+  const mic = { asked: 0, tracks: [] as MediaStreamTrack[] };
+  (window as unknown as Record<string, unknown>)['__mic'] = mic;
+  navigator.mediaDevices.getUserMedia = async () => {
+    mic.asked++;
+    const ctx = new AudioContext();
+    await ctx.resume();
+    const dest = ctx.createMediaStreamDestination();
+    const osc = ctx.createOscillator();
+    osc.frequency.value = 220;
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 5;
+    const depth = ctx.createGain();
+    depth.gain.value = 6;
+    vib.connect(depth).connect(osc.frequency);
+    const amp = ctx.createGain();
+    amp.gain.value = 0.4;
+    osc.connect(amp).connect(dest);
+    const noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const n = noise.getChannelData(0);
+    for (let i = 0; i < n.length; i++) n[i] = (Math.random() - 0.5) * 0.05;
+    const breath = ctx.createBufferSource();
+    breath.buffer = noise;
+    breath.loop = true;
+    breath.connect(dest);
+    osc.start();
+    vib.start();
+    breath.start();
     mic.tracks = dest.stream.getTracks();
     return dest.stream;
   };
@@ -652,6 +688,161 @@ test('Sound, Voice Effects, the Room and the limiter are heard and saved as scor
     expect(horn.voice!.map(v => v.effect)).toEqual(['vocoder', 'autotune']);
     expect(horn.voice![0]!.carrier).toBe('cello');
     expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('Vocal Tracks: recorded on this device, kept through a reload, saved both ways, refused for room, converted and exported', async ({ browser, baseURL }) => {
+  test.setTimeout(300_000);
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  await context.addInitScript(fakeSinger);
+  try {
+    const page = await context.newPage();
+    page.on('dialog', d => void d.accept());
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) errors.push(m.text()); });
+    await signInAt(page, base, 'music', 'composer5@siue.edu');
+    await page.goto(`${base}music/compose.php`);
+    await page.getByLabel('Title').fill('Vocal Test');
+    await page.getByRole('button', { name: 'Start Composing' }).click();
+    await page.locator('[data-instrument="cello"]').click();
+    await hold(page, ['KeyA', 'KeyD'], 400);
+    await page.getByRole('button', { name: 'Stop Recording' }).click();
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+    await expect(page.locator('[data-status]')).toHaveText('Saved as draft 1.');
+
+    const status = page.locator('[data-status]');
+    const panel = page.locator('[data-vocal-panel]');
+    const mic = () => page.evaluate(() => (window as unknown as { __mic: { asked: number } }).__mic.asked);
+    const record = async () => {
+      await panel.getByRole('button', { name: '● Record A Vocal' }).click();
+      await expect(status).toContainText('Counting in', { timeout: 60_000 });
+      await page.waitForTimeout(4500); // the one-bar count-in at 92 BPM, then about two seconds of singing
+      await panel.getByRole('button', { name: '■ Stop' }).click();
+      await expect(status).toContainText('is kept on this device');
+    };
+
+    // Record A Vocal: the microphone is asked for only now, and the take is Only On This Device.
+    await page.getByRole('button', { name: 'Add Vocal Track' }).click();
+    await expect(panel).toBeVisible();
+    expect(await mic()).toBe(0);
+    await record();
+    expect(await mic()).toBe(1);
+    await expect(panel.locator('[data-take] [data-where]')).toHaveText(['Only On This Device']);
+    await expect(panel.locator('[data-clip]')).toHaveCount(1);
+    // The count-in is recorded but not heard: the clip starts where the piece starts, past the count-in in its take.
+    const placed = async () => ({ at: Number(await panel.locator('[data-clip-at]').inputValue()), from: Number(await panel.locator('[data-clip-from]').inputValue()) });
+    const first = await placed();
+    expect(first.at).toBeLessThan(0.5);
+    expect(first.from).toBeGreaterThan(2);
+    await shot(page, 'vocal-recorded');
+
+    // A reload before saving: the take is still on this device, and goes back where it was sung.
+    await page.reload();
+    await expect(page.locator('[data-part="cello"]')).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('button', { name: 'Add Vocal Track' }).click();
+    await expect(panel.locator('[data-device-take]')).toHaveCount(1);
+    await panel.getByRole('button', { name: 'Add To The Track' }).click();
+    await expect(panel.locator('[data-take] [data-where]')).toHaveText(['Only On This Device']);
+    expect(await placed()).toEqual(first);
+
+    // Save To Studio: both sizes, made for real, and what each leaves; Perfect is the studio's first choice.
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+    const save = page.locator('[data-save-takes]');
+    await expect(save.locator('[data-choice="perfect"] [data-size]')).toBeVisible({ timeout: 60_000 });
+    await expect(save.locator('[data-choice="ear"] [data-size]')).toBeVisible();
+    const bytes = async (q: string) => {
+      const t = (await save.locator(`[data-choice="${q}"] [data-size]`).textContent())!;
+      return Number.parseFloat(t) * (t.endsWith('MB') ? 1024 : 1);
+    };
+    expect(await bytes('ear')).toBeLessThan(await bytes('perfect'));
+    await expect(save.locator('[data-choice="perfect"] input')).toBeChecked();
+    await expect(save.locator('[data-choice="perfect"]')).toContainText(/leaves .* about [\d.]+ more minutes/);
+    await shot(page, 'vocal-save-choice');
+    await save.getByRole('button', { name: 'Save To Studio' }).click();
+    await expect(status).toHaveText('Saved as draft 2.', { timeout: 60_000 });
+    await expect(panel.locator('[data-take] [data-where]')).toHaveText(['In Your Studio · Perfect']);
+    const draft = await page.evaluate(async () => (await fetch('draft.php?piece=vocal-test&v=2&file=score.json')).json()) as { schema: number; lanes: { id: string; vocal?: { takes: { file: string }[] } }[] };
+    expect(draft.schema).toBe(2);
+    const take = draft.lanes.find(l => l.vocal)!.vocal!.takes[0]!.file;
+    expect(take).toMatch(/^vocal-[0-9a-f]{64}\.flac$/);
+    expect((await page.evaluate(async f => (await fetch(`take.php?file=${f}`)).status, take))).toBe(200);
+
+    // Heard with the piece: the take plays from the studio through the renderer.
+    await page.getByRole('button', { name: 'Hear With The Piece' }).click();
+    await expect(page.locator('[data-listening]')).toContainText(/playing|Playing/, { timeout: 60_000 });
+    await page.getByRole('button', { name: 'Stop', exact: true }).click();
+
+    // Convert To Good To The Ear: a warning first, then every draft moves onto the smaller copy.
+    await panel.getByRole('button', { name: 'Convert To Good To The Ear' }).click();
+    await expect(panel.locator('[data-convert-warning]')).toContainText('cannot be undone');
+    await panel.getByRole('button', { name: 'Convert', exact: true }).click();
+    await expect(status).toContainText('Converted', { timeout: 60_000 });
+    await expect(panel.locator('[data-take] [data-where]')).toHaveText(['In Your Studio · Good To The Ear']);
+    expect((await page.evaluate(async f => (await fetch(`take.php?file=${f}`)).status, take))).toBe(404);
+    const moved = await page.evaluate(async () => (await fetch('draft.php?piece=vocal-test&v=2&file=score.json')).json()) as { lanes: { vocal?: { takes: { file: string }[] } }[] };
+    expect(moved.lanes.find(l => l.vocal)!.vocal!.takes[0]!.file).toMatch(/^vocal-[0-9a-f]{64}\.(ogg|webm)$/);
+
+    // A second take saved as Good To The Ear.
+    await record();
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+    await expect(save.locator('[data-choice="ear"] [data-size]')).toBeVisible({ timeout: 60_000 });
+    await save.locator('[data-choice="ear"] input').check();
+    await save.getByRole('button', { name: 'Save To Studio' }).click();
+    await expect(status).toHaveText('Saved as draft 3.', { timeout: 60_000 });
+    await expect(panel.locator('[data-take] [data-where]')).toHaveText(['In Your Studio · Good To The Ear', 'In Your Studio · Good To The Ear']);
+
+    // Export With Vocals: one zip.
+    const [zip] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export With Vocals' }).click()]);
+    expect(zip.suggestedFilename()).toBe('vocal-test-with-vocals.zip');
+
+    // Your studio shows the takes and the minutes left.
+    await page.goto(`${base}music/studio.php`);
+    await expect(page.locator('[data-vocal-takes]')).toContainText('2 saved');
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('Save To Studio says when the takes need more room than the studio has, and keeps them on this device', async ({ browser, baseURL }) => {
+  test.setTimeout(240_000);
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await context.addInitScript(fakeSinger);
+  try {
+    const page = await context.newPage();
+    page.on('dialog', d => void d.accept());
+    await signInAt(page, base, 'music', 'composer6@siue.edu');
+    // The studio says it has 1 KB left, as a nearly full studio would.
+    await page.route(/compose\.php/, async route => {
+      const r = await route.fetch();
+      await route.fulfill({ response: r, body: (await r.text()).replace(/data-room="\d+"/, 'data-room="1024"') });
+    });
+    await page.goto(`${base}music/compose.php`);
+    await page.getByLabel('Title').fill('Full Studio');
+    await page.getByRole('button', { name: 'Start Composing' }).click();
+    await page.getByRole('button', { name: 'Add Vocal Track' }).click();
+    const panel = page.locator('[data-vocal-panel]');
+    await panel.getByRole('button', { name: '● Record A Vocal' }).click();
+    await expect(page.locator('[data-status]')).toContainText('Counting in', { timeout: 60_000 });
+    await page.waitForTimeout(4500);
+    await panel.getByRole('button', { name: '■ Stop' }).click();
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+    const save = page.locator('[data-save-takes]');
+    await expect(save.locator('[data-save-total]')).toContainText('but your studio has 1 KB left', { timeout: 60_000 });
+    await expect(save.getByRole('button', { name: 'Save To Studio' })).toBeDisabled();
+    await save.getByRole('button', { name: 'Not Now' }).click();
+    await expect(page.locator('[data-status]')).toHaveText('Not saved. Your takes are still on this device.');
+    await expect(panel.locator('[data-take] [data-where]')).toHaveText(['Only On This Device']);
+    // On a phone, the Vocal Track panel fits the screen with no sideways scroll.
+    await page.setViewportSize({ width: 400, height: 860 });
+    await panel.scrollIntoViewIfNeeded();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await shot(page, 'vocal-phone');
   } finally {
     await context.close();
   }

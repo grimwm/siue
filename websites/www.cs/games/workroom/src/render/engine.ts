@@ -6,7 +6,9 @@
 // Then, in JS and in the rendered buffer itself, the tail is folded onto the start, the hiss added and the whole
 // piece given one leveling gain.
 // The context, the fetch and the decoder are injected, so the tests hand in fakes.
+import { isVocal } from '../score.ts';
 import type { Lane, Score } from '../score.ts';
+import { vocalBuffer } from './vocal.ts';
 import { applyLaneFx, audible, DEFAULT_ROOM_SEND, limit, roomReverb } from './fx.ts';
 import { applyVoice } from './voice.ts';
 import { keyScale } from '../compose/hum.ts';
@@ -25,7 +27,8 @@ export const LIBRARY_BASE = 'library/';
 export type FetchBytes = (file: string) => Promise<ArrayBuffer>;
 export type Decode = (bytes: ArrayBuffer) => Promise<AudioBuffer>;
 export type ContextFactory = (channels: number, length: number, rate: number) => OfflineAudioContext;
-export interface RenderDeps { context: ContextFactory; fetchBytes: FetchBytes; decode: Decode; cache?: Map<string, Promise<AudioBuffer>> }
+/** `take` gives a Vocal Track's take, decoded at RATE: a take on this device, or one the studio holds. */
+export interface RenderDeps { context: ContextFactory; fetchBytes: FetchBytes; decode: Decode; cache?: Map<string, Promise<AudioBuffer>>; take?: (file: string) => Promise<AudioBuffer> }
 
 /** Decoded samples by library path, kept for the page's life so each file is fetched and decoded once. */
 const pageCache = new Map<string, Promise<AudioBuffer>>();
@@ -155,9 +158,9 @@ function schedule(ctx: OfflineAudioContext, score: Score, vs: readonly Voice[], 
   }
 }
 
-/** Whether a score uses the Sound panel, the Room, the limiter or Voice Effects, and so takes the renderer's longer road. */
+/** Whether a score uses the Sound panel, the Room, the limiter, Voice Effects or a Vocal Track, and so takes the renderer's longer road. */
 export function usesSound(score: Score): boolean {
-  return score.lanes.some(l => (l.fx && Object.keys(l.fx).length > 0) || (l.voice && l.voice.length > 0))
+  return score.lanes.some(l => isVocal(l) || (l.fx && Object.keys(l.fx).length > 0) || (l.voice && l.voice.length > 0))
     || (!!score.mix?.room && score.mix.room.preset !== 'dry' && score.mix.room.amount > 0) || !!score.mix?.limiter?.on;
 }
 
@@ -172,8 +175,21 @@ async function soundBus(score: Score, lib: Library, vs: readonly Voice[], sample
   const anySolo = score.lanes.some(l => l.fx?.solo);
   const heard = score.lanes.filter(l => audible(l.fx, anySolo));
   const carriers = new Set(score.lanes.flatMap(l => (l.voice ?? []).flatMap(v => ('carrier' in v ? [v.carrier] : []))));
-  const own = (l: Lane) => (l.fx && Object.keys(l.fx).length > 0) || (l.voice?.length ?? 0) > 0 || carriers.has(l.id);
+  const own = (l: Lane) => isVocal(l) || (l.fx && Object.keys(l.fx).length > 0) || (l.voice?.length ?? 0) > 0 || carriers.has(l.id);
+  // A Vocal Track's takes, decoded once each.
+  const takes = new Map<string, Float32Array>();
+  for (const l of score.lanes) for (const c of l.vocal?.clips ?? []) {
+    if (takes.has(c.take)) continue;
+    if (!deps.take) throw new Error(`${l.name}'s takes cannot be played here`);
+    const b = await deps.take(c.take);
+    takes.set(c.take, b.numberOfChannels > 1 ? mono([b.getChannelData(0), b.getChannelData(1)]) : Float32Array.from(b.getChannelData(0)));
+  }
   const render = async (ids: ReadonlySet<string>): Promise<Float32Array[]> => {
+    const vocal = score.lanes.find(l => ids.has(l.id) && isVocal(l));
+    if (vocal) {
+      const v = vocalBuffer(vocal, takes, length, RATE);
+      return [v, Float32Array.from(v)];
+    }
     const ctx = deps.context(2, length, RATE);
     schedule(ctx, score, vs.filter(v => ids.has(v.lane)), samples, ctx.destination);
     const out = await ctx.startRendering();
@@ -217,8 +233,8 @@ async function soundBus(score: Score, lib: Library, vs: readonly Voice[], sample
  * the same master chain; one that uses none of them is played in a single pass, as it always was.
  */
 export async function renderScore(score: Score, lib: Library, deps: RenderDeps = defaultDeps()): Promise<{ channels: Float32Array[]; rate: number }> {
-  const vs = voices(score, lib);
-  const instruments = [...new Set(score.lanes.map(l => l.sound!.instrument))];
+  const vs = voices({ ...score, lanes: score.lanes.filter(l => !isVocal(l)) }, lib);
+  const instruments = [...new Set(score.lanes.filter(l => !isVocal(l)).map(l => l.sound!.instrument))];
   const samples = await loadInstruments(lib, instruments, deps.fetchBytes, deps.decode, deps.cache ?? pageCache, new Set(vs.map(v => v.file)));
   const length = Math.round(score.duration * RATE);
   // The parts are made before the master's context exists, so only one full-length context is held at a time.

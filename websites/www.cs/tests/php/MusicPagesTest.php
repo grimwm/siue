@@ -417,7 +417,7 @@ final class MusicPagesTest extends TestCase
         self::assertSame(['Crete', 'No project'], $h[1], 'the unprojected group is last whatever its recency');
     }
 
-    /** A studio account (5 MB, 1 MB notes) on this database, with a keyring naming the fixed fingerprints; [its id, its store]. */
+    /** A studio account (25 MB, 1 MB notes) on this database, with a keyring naming the fixed fingerprints; [its id, its store]. */
     private function student(string $email = 'student@siue.edu', bool $keyed = true): array
     {
         $id = (int) (new Music\Accounts($this->db, $this->clock, Admin\People::fromJson('{}')))->signIn($email);
@@ -438,20 +438,20 @@ final class MusicPagesTest extends TestCase
     public function testANoteOverTheStudioLimitIsRefusedWithTheRoom(): void
     {
         [$id, $store] = $this->student();
-        for ($i = 0; $i < 4; $i++) {
+        for ($i = 0; $i < 24; $i++) {
             $store->addNote(music_sealed(MUSIC_FP_CURRENT, 1_048_576 - 38));
         }
         $store->addNote(music_sealed(MUSIC_FP_CURRENT, 100_000 - 38));
-        $room = 5_242_880 - 4 * 1_048_576 - 100_000;
+        $room = 26_214_400 - 24 * 1_048_576 - 100_000;
         self::assertSame($room, $store->room());
         $res = $this->pages->notes($this->postWithToken($id), music_sealed(MUSIC_FP_CURRENT, $room + 1 - 38));
         self::assertSame(413, $res->status);
         $body = json_decode($res->body, true);
         self::assertSame('over_quota', $body['error']);
         self::assertSame($room, $body['room']);
-        self::assertSame('Your studio has 926 KB of 5 MB left. Delete drafts or picked-up notes to make room.', $body['message']);
+        self::assertSame('Your studio has 926 KB of 25 MB left. Delete drafts or picked-up notes to make room.', $body['message']);
         self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $body['csrf'], 'the next token, as for every refusal after CSRF');
-        self::assertCount(5, $store->notes(), 'nothing is stored and nothing deleted to make room');
+        self::assertCount(25, $store->notes(), 'nothing is stored and nothing deleted to make room');
         self::assertSame(201, $this->pages->notes($this->postWithToken($id), music_sealed(MUSIC_FP_CURRENT, $room - 38))->status, 'exactly the room fits');
     }
 
@@ -502,12 +502,12 @@ final class MusicPagesTest extends TestCase
         self::assertArrayNotHasKey('data-owner', $owner, 'the owner\'s studio is shown the same page as every other');
         [$id, $store] = $this->student('fresh@siue.edu', false);
         $fresh = $attrs($this->pages->piece(music_signed_in($this->sessions, $id, ['query' => ['id' => 'p']])));
-        self::assertSame(['1048576', '5242880', '0'], [$fresh['data-note-max'], $fresh['data-room'], $fresh['data-account-has-key']]);
+        self::assertSame(['1048576', '26214400', '0'], [$fresh['data-note-max'], $fresh['data-room'], $fresh['data-account-has-key']]);
         self::assertSame('piece', $fresh['data-view']);
         $store->putKeyring('{"v":1}', MUSIC_FP_CURRENT, []);
         $store->addNote(music_sealed(MUSIC_FP_CURRENT, 1000 - 38));
         $keyed = $attrs($this->pages->index(music_signed_in($this->sessions, $id)));
-        self::assertSame(['5241880', '1'], [$keyed['data-room'], $keyed['data-account-has-key']]);
+        self::assertSame(['26213400', '1'], [$keyed['data-room'], $keyed['data-account-has-key']]);
     }
 
     public function testKeyringUploadNeedsSessionAndCsrfAndKeepsTheEnvelopeRules(): void

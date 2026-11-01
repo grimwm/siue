@@ -60,8 +60,8 @@ final class StudioPageTest extends TestCase
         self::assertSame(200, $res->status);
         self::assertStringContainsString('<h1>Your studio</h1>', $res->body);
         self::assertStringContainsString('<address>' . self::STUDENT . '</address>', $res->body);
-        self::assertStringContainsString('<meter min="0" max="5242880" value="1258291"', $res->body);
-        self::assertStringContainsString('1.2 MB of 5 MB used', $res->body);
+        self::assertStringContainsString('<meter min="0" max="26214400" value="1258291"', $res->body);
+        self::assertStringContainsString('1.2 MB of 25 MB used', $res->body);
         foreach (['read notes', 'publish drafts', 'delete drafts'] as $words) {
             self::assertMatchesRegularExpression('/<input type="checkbox" name="scopes\[\]" value="[a-z:]+"> ' . $words . '<\/label>/', $res->body, $words);
         }
@@ -157,7 +157,7 @@ final class StudioPageTest extends TestCase
         self::assertSame($this->account, $this->sessions->account($as), 'the session stays');
         $page = $this->pages->studio($as);
         self::assertSame(200, $page->status);
-        self::assertStringContainsString('0 KB of 5 MB used', $page->body);
+        self::assertStringContainsString('0 KB of 25 MB used', $page->body);
 
         self::assertCount(1, $theirs->drafts(), "another studio is untouched");
         self::assertNotNull($theirs->noteBytes($theirNote));

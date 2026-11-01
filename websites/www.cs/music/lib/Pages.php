@@ -160,14 +160,15 @@ final class Pages
     {
         return $this->guarded($r, false, true, function (Store $store) use ($r, $body): \Admin\Response {
             $limits = $store->limits();
-            if (strlen($body) > min($limits->maxRequestBytes, ScoreRules::MAX_SCORE_BYTES + 64)) {
+            if (strlen($body) > Limits::SAVE_REQUEST_BYTES) {
                 return $this->refuseWithToken(413, 'too_large', $r);
             }
             $files = DraftCheck::parseBundle($body);
             if ($files === null) {
                 return $this->refuseWithToken(422, 'bad_bundle', $r);
             }
-            if (array_keys($files) !== ['score.json']) {
+            // score.json first, then only the vocal takes it names.
+            if (array_key_first($files) !== 'score.json' || array_values(array_diff(array_keys($files), ['score.json'])) !== array_values(array_filter(array_keys($files), static fn(string $n): bool => preg_match(TakeCheck::NAME, $n) === 1))) {
                 return $this->refuseWithToken(422, 'score_only', $r);
             }
             $piece = $r->query['piece'] ?? null;
@@ -184,19 +185,20 @@ final class Pages
                 return $this->refuseWithToken(409, in_array((int) $version, $versions, true) ? 'exists' : 'stale', $r, ['latest' => $latest]);
             }
             $about = null;
-            $error = DraftCheck::checkFiles($files, $piece, (int) $version, $limits, $this->instruments ??= \music_library_instruments(), $about, true);
+            $vocal = null;
+            $error = DraftCheck::checkFiles($files, $piece, (int) $version, $limits, $this->instruments ??= \music_library_instruments(), $about, true, $vocal);
             if ($error !== null) {
-                return $this->refuseWithToken(422, $error, $r);
+                return $this->refuseWithToken($error === 'take_too_long' ? 413 : 422, $error, $r);
             }
             try {
-                $store->putDraft($piece, (int) $version, $files, $about);
+                $store->putDraft($piece, (int) $version, ['score.json' => $files['score.json']], $about, $vocal['takes'] ?? [], $vocal['named'] ?? []);
             } catch (DraftRejected $e) {
                 if ($e->reason === 'over_quota') {
                     return $this->refuseWithToken(413, 'over_quota', $r, ['room' => $e->room, 'message' => Usage::refusal($e->room, $limits->quotaBytes, $e->shared)]);
                 }
-                return $this->refuseWithToken(match ($e->reason) { 'exists' => 409, 'too_large' => 413, default => 422 }, $e->reason, $r);
+                return $this->refuseWithToken(match ($e->reason) { 'exists' => 409, 'too_large' => 413, 'low_disk' => 507, default => 422 }, $e->reason, $r);
             }
-            return Http::json(201, ['piece' => $piece, 'version' => (int) $version, 'csrf' => $this->sessions->csrf($r)]);
+            return Http::json(201, ['piece' => $piece, 'version' => (int) $version, 'room' => $store->room(), 'csrf' => $this->sessions->csrf($r)]);
         }, 'POST');
     }
 
@@ -229,6 +231,11 @@ final class Pages
                         return $this->studioPage(400, $r, $account, $e->getMessage());
                     }
                     return $this->studioPage(200, $r, $account, null, ['key' => $key, 'label' => trim($field('label'))]);
+                case 'vocal-quality':
+                    if (!$store->setVocalQuality($field('quality'))) {
+                        return $this->studioPage(400, $r, $account, 'Choose Perfect or Good To The Ear.');
+                    }
+                    return Http::finish(new \Admin\Response(303, ['Location' => 'studio.php'], ''));
                 case 'revoke-key':
                     $id = $field('id');
                     if (!ctype_digit($id) || !$this->aiKeys->revoke($account, (int) $id)) {
@@ -269,7 +276,8 @@ final class Pages
         if ($notice === null && ($r->query['paired'] ?? null) === '1') {
             $notice = 'Your AI is paired. The notes you send from now on are sealed to it too. Reload the pieces page if it is open, so it seals to your AI.';
         }
-        $keyed = (($this->storeFor)($account))->keyring() !== null;
+        $store = ($this->storeFor)($account);
+        $keyed = $store->keyring() !== null;
         $csrf = Html::e($this->sessions->csrf($r));
         $hidden = static fn(string $action): string => '<input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="action" value="' . $action . '">';
         $usage = $this->accounts->usage($account);
@@ -289,6 +297,7 @@ final class Pages
         $body .= '<section class="studio-card"><address>' . Html::e((string) $this->accounts->emailOf($account)) . '</address>'
             . '<meter min="0" max="' . $quota . '" value="' . $usage . '">' . Usage::human($usage) . '</meter>'
             . '<p class="usage">' . Usage::human($usage) . ' of ' . Usage::human($quota) . ' used</p></section>';
+        $body .= $this->vocalCard($store, $hidden);
 
         if ($keyed) {
             $body .= '<section class="studio-card" data-change-passphrase><h2>Change your passphrase</h2>'
@@ -729,6 +738,82 @@ final class Pages
         }, 'GET');
     }
 
+    /** About how many bytes a minute of singing takes: Perfect (FLAC, about half of 48 kHz 16-bit PCM) and Good To The Ear (Opus at 96 kbps). */
+    public const PERFECT_BYTES_PER_MINUTE = 2_900_000;
+    public const EAR_BYTES_PER_MINUTE = 720_000;
+
+    /** Your studio's Vocal Takes card: what the takes hold, the minutes of singing left each way, and the quality Save To Studio picks first. */
+    private function vocalCard(Store $store, \Closure $hidden): string
+    {
+        $takes = $store->takes();
+        $room = $store->room();
+        $minutes = static fn(int $perMinute): string => (string) floor($room / $perMinute);
+        $quality = $store->vocalQuality();
+        $option = static fn(string $v, string $label): string => '<label><input type="radio" name="quality" value="' . $v . '"' . ($quality === $v ? ' checked' : '') . '> ' . $label . '</label>';
+        return '<section class="studio-card" data-vocal-takes><h2>Vocal Takes</h2>'
+            . '<p>' . (count($takes) === 0 ? 'No vocal takes saved yet.' : count($takes) . ' saved, ' . Usage::human(array_sum(array_column($takes, 'size'))) . ' in all.') . '</p>'
+            . '<p>Room for about ' . $minutes(self::PERFECT_BYTES_PER_MINUTE) . ' more minutes of singing at Perfect, or about ' . $minutes(self::EAR_BYTES_PER_MINUTE) . ' at Good To The Ear.</p>'
+            . '<form method="post" action="studio.php">' . $hidden('vocal-quality')
+            . '<fieldset><legend>Save new takes as</legend>' . $option('perfect', 'Perfect (lossless)') . $option('ear', 'Good To The Ear (smaller)') . '</fieldset>'
+            . '<button type="submit">Save Setting</button></form></section>';
+    }
+
+    /** GET take.php?file=: one of this account's vocal takes, as stored; 404 for anyone else's or one that is gone. */
+    public function takeFile(\Admin\Request $r): \Admin\Response
+    {
+        return $this->guarded($r, false, false, function (Store $store) use ($r): \Admin\Response {
+            $file = $r->query['file'] ?? null;
+            if (!is_string($file) || !preg_match(TakeCheck::NAME, $file, $m)) {
+                return Http::json(400, ['error' => 'bad_request']);
+            }
+            $bytes = $store->takeBytes($file);
+            if ($bytes === null) {
+                return Http::json(404, ['error' => 'not_found']);
+            }
+            $type = ['flac' => 'audio/flac', 'ogg' => 'audio/ogg', 'webm' => 'audio/webm'][$m[2]];
+            return Http::serveBytes($bytes, $type, Http::header($r, 'Range'));
+        }, 'GET');
+    }
+
+    /**
+     * POST convert-take.php?from=&to= with the new take's bytes (Good To The Ear, made in the page) and the session's
+     * token: every draft naming `from` names `to` instead and `from` is deleted. The new take must be Opus, read whole,
+     * and as long as the old one to within 0.1 s.
+     */
+    public function convertTake(\Admin\Request $r, string $body): \Admin\Response
+    {
+        return $this->guarded($r, false, true, function (Store $store) use ($r, $body): \Admin\Response {
+            $limits = $store->limits();
+            $from = $r->query['from'] ?? null;
+            $to = $r->query['to'] ?? null;
+            if (!is_string($from) || !is_string($to) || !preg_match(TakeCheck::NAME, $from) || !preg_match(TakeCheck::NAME, $to) || str_ends_with($to, '.flac')) {
+                return $this->refuseWithToken(400, 'bad_request', $r);
+            }
+            $old = array_values(array_filter($store->takes(), static fn(array $t): bool => $t['file'] === $from))[0] ?? null;
+            if ($old === null) {
+                return $this->refuseWithToken(404, 'not_found', $r);
+            }
+            $seconds = TakeCheck::check($to, $body, $limits->maxTakeDecodedBytes);
+            if (is_string($seconds)) {
+                return $this->refuseWithToken(422, $seconds, $r);
+            }
+            if (abs($seconds - $old['seconds']) > 0.1) {
+                return $this->refuseWithToken(422, 'bad_take', $r);
+            }
+            try {
+                if (!$store->convertTake($from, $to, $body, $seconds)) {
+                    return $this->refuseWithToken(404, 'not_found', $r);
+                }
+            } catch (DraftRejected $e) {
+                if ($e->reason === 'over_quota') {
+                    return $this->refuseWithToken(413, 'over_quota', $r, ['room' => $e->room, 'message' => Usage::refusal($e->room, $limits->quotaBytes, $e->shared)]);
+                }
+                return $this->refuseWithToken($e->reason === 'low_disk' ? 507 : 422, $e->reason, $r);
+            }
+            return Http::json(200, ['take' => $to, 'seconds' => $seconds, 'room' => $store->room(), 'csrf' => $this->sessions->csrf($r)]);
+        }, 'POST');
+    }
+
     /**
      * Runs the gates in order, then $work with the studio of the session's account. $page: a browser navigation only
      * (Fetch Metadata), else the route refuses cross-site requests. $post: CSRF is checked. $method: the one method the
@@ -872,6 +957,7 @@ final class Pages
         $studio = ' data-note-max="' . $this->limitsOf($account)->maxNoteBytes . '" data-room="' . $store->room() . '"'
             . ' data-score-only="' . ($this->limitsOf($account)->scoreOnly ? '1' : '0') . '"'
             . ' data-account-has-key="' . ($store->keyring() === null ? '0' : '1') . '"'
+            . ' data-vocal-quality="' . $store->vocalQuality() . '"'
             . ($view === 'index' ? ' data-connect="' . Html::e($this->connectData()) . '"' : '')
             . ($view === 'compose' ? $this->newPieceData($store) : '');
         $v = Html::e($this->assetVersion);

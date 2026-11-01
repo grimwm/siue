@@ -13,7 +13,7 @@ import { ACESFilmicToneMapping, Color, Group, NoToneMapping, OrthographicCamera,
 import type { Object3D } from 'three';
 import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
-import type { Cell } from '../puzzle/tiles.ts';
+import type { Cell, Dir } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
 import { DEFAULT_YAW, START_PITCH, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
@@ -89,6 +89,8 @@ export interface ModernBoard {
   fps(): number | null;
   /** The cells a block floats in, for tests. */
   floating(): number[];
+  /** The Route's next-step arrow as laid, for tests: its way and its size as a scale of the other arrows. */
+  routeNext(): { dir: Dir; scale: number } | null;
   /** The floating markers as last drawn, for tests: each one's kind, its point and its piece's foot on the canvas
    *  in CSS pixels, and a cell's width there. */
   markers(): { kind: MarkerKind; at: [number, number]; foot: [number, number]; cell: number }[];
@@ -194,7 +196,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     loopTimer = setTimeout(() => {
       loopTimer = 0;
       if (!loopsMay()) return;
-      if (last && loopOnScreen()) loopAt(loopT + 1 / LOOP_FPS);
+      // The next step's arrow breathes with the loops; it lies under Theseus, so it is on screen with him.
+      if (last && (loopOnScreen() || thread.next())) loopAt(loopT + 1 / LOOP_FPS);
       else loopT += 1 / LOOP_FPS;
       scheduleLoops();
     }, 1000 / LOOP_FPS);
@@ -297,6 +300,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       lights?.loop(loopT);
       actors.loop(loopT);
       floats.loop(loopT, snap());
+      thread.pulse(loopT);
       for (const p of pieces) (p?.userData as PieceInfo | undefined)?.loop?.(loopT);
       loopsDirty = false;
     }
@@ -653,6 +657,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     quality: () => quality,
     fps: () => rate(ladder.gaps, DOWN_MS),
     floating: () => floats.cells(),
+    routeNext: () => thread.next(),
     markers: markerSpots,
     splashing: () => floats.splashing(),
     minimap(on) {

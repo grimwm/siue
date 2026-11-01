@@ -65,7 +65,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     [
       "Stuck? ",
       { strong: `Hint (${k("hint")})` }, " plays one step of the thread. ",
-      { strong: `Route (${k("route")})` }, " draws the whole thread. ",
+      { strong: `Route (${k("route")})` }, " draws the whole thread; its next step is the big gold arrow. ",
       { strong: `Auto (${k("auto")})` }, " plays it for you. ",
       { strong: k("mute") }, " toggles sound, ",
       { strong: k("new") }, " opens the level list, and ",

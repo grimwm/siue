@@ -2,19 +2,21 @@
 /* The Island of Crete: paints a draw list (src/board-plan.ts) on the board's
  * canvas from the sprite atlas, and draws Ariadne's thread as a red line
  * through cell centres, edged dark, broken at a jump, with an arrow on each
- * square pointing the way to step next. The canvas is drawn in whole device pixels: a cell is
+ * square pointing the way to step next; the next step's arrow, on Theseus's
+ * square, is drawn last, bigger and gold, over the rest. The canvas is drawn in whole device pixels: a cell is
  * `round(cellPx × dpr)` of them, the backing store is that many per cell, and
  * the CSS size is the backing size over the ratio, so the browser never
  * rescales it and neighbouring tiles meet without a seam. */
 import type { Atlas, Draw } from './board-plan.ts';
-import { arrowAt } from './thread-path.ts';
+import { NEXT_SCALE, arrowAt, nextArrow, pulseScale } from './thread-path.ts';
 import type { ThreadCell } from './thread-path.ts';
 import type { Dir } from './puzzle/tiles.ts';
 
 export interface Board {
   /** Sets the canvas to `cols × rows` cells of `cellPx` CSS pixels (plus the top row's rise). */
   size(cols: number, rows: number, cellPx: number): void;
-  paint(list: Draw[], thread?: readonly ThreadCell[]): void;
+  /** Paints `list`, and `thread` over it; `t` (seconds) breathes the next step's arrow, which holds still without it. */
+  paint(list: Draw[], thread?: readonly ThreadCell[], t?: number): void;
 }
 
 export function createBoard(canvas: HTMLCanvasElement, atlas: Atlas, image: HTMLImageElement): Board {
@@ -36,7 +38,7 @@ export function createBoard(canvas: HTMLCanvasElement, atlas: Atlas, image: HTML
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
     },
-    paint(list, thread) {
+    paint(list, thread, t) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const fw = atlas.cell;
       const fh = atlas.cell + atlas.rise;
@@ -46,14 +48,18 @@ export function createBoard(canvas: HTMLCanvasElement, atlas: Atlas, image: HTML
         // The canvas starts `rise` above row 0, so a sprite's frame top (its cell's top minus the rise) is y × cell.
         ctx.drawImage(image, s.x + d.frame * fw, s.y, fw, fh, Math.round(d.x * cell), Math.round(d.y * cell), cell, cell + top);
       }
-      if (thread && thread.length > 1) drawThread(ctx, thread, cell, top);
+      if (thread && thread.length > 1) drawThread(ctx, thread, cell, top, t === undefined ? 1 : pulseScale(t));
     },
   };
 }
 
-export const THREAD_RED = '#c0392b';
+/** The cord and the arrows past the next step, held back (about 70% of their full red) so the eye goes to the next
+ *  step's gold arrow. */
+export const THREAD_RED = '#8f291f';
 /** The arrows' fill: a brighter red than the cord, so an arrow stands out on it. */
-export const ARROW_RED = '#ff5b45';
+export const ARROW_RED = '#bb4131';
+/** The next step's arrow's fill. */
+export const NEXT_GOLD = '#ffd23f';
 /** The dark edge round the cord and each arrow, so both read on any floor. */
 export const THREAD_EDGE = '#1c0402';
 /** Below this many device pixels a cell (the mini map) shows the cord alone. */
@@ -66,7 +72,7 @@ export const ARROW_SHIFT = 0.2;
 
 const ANGLE: Record<Dir, number> = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 };
 
-function drawThread(ctx: CanvasRenderingContext2D, thread: readonly ThreadCell[], cell: number, top: number): void {
+function drawThread(ctx: CanvasRenderingContext2D, thread: readonly ThreadCell[], cell: number, top: number, pulse: number): void {
   const at = (c: ThreadCell): [number, number] => [(c.c + 0.5) * cell, (c.r + 0.5) * cell + top];
   const lw = Math.max(1.5, cell / 12);
   const edge = Math.max(0.75, cell / 30);
@@ -86,11 +92,8 @@ function drawThread(ctx: CanvasRenderingContext2D, thread: readonly ThreadCell[]
   ctx.stroke();
   if (cell < ARROW_MIN_CELL) return;
   // An arrowhead in the half of the square it points into: a square walked one way and back shows both arrows apart.
-  const len = cell * ARROW_LEN, half = cell * ARROW_HALF;
-  ctx.lineJoin = 'miter';
-  for (let i = 0; i < thread.length; i++) {
-    const d = arrowAt(thread, i);
-    if (!d) continue;
+  const arrow = (i: number, d: Dir, scale: number, fill: string) => {
+    const len = cell * ARROW_LEN * scale, half = cell * ARROW_HALF * scale;
     const [x, y] = at(thread[i]!);
     ctx.save();
     ctx.translate(x, y);
@@ -102,11 +105,19 @@ function drawThread(ctx: CanvasRenderingContext2D, thread: readonly ThreadCell[]
     ctx.lineTo(-len / 4, 0);
     ctx.lineTo(-len / 2, half);
     ctx.closePath();
-    ctx.lineWidth = Math.max(1, cell / 21);
+    ctx.lineWidth = Math.max(1, (cell / 21) * scale);
     ctx.strokeStyle = THREAD_EDGE;
     ctx.stroke();
-    ctx.fillStyle = ARROW_RED;
+    ctx.fillStyle = fill;
     ctx.fill();
     ctx.restore();
+  };
+  ctx.lineJoin = 'miter';
+  for (let i = 1; i < thread.length; i++) {
+    const d = arrowAt(thread, i);
+    if (d) arrow(i, d, 1, ARROW_RED);
   }
+  // The next step last, so nothing covers it.
+  const next = nextArrow(thread);
+  if (next) arrow(0, next, NEXT_SCALE * pulse, NEXT_GOLD);
 }

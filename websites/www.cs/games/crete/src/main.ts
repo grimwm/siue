@@ -442,7 +442,7 @@ function loop(now: number): void {
   if (modernOn) return;
   const f = frameOf(game, game.animMs());
   if (f) {
-    board.paint(drawList(f.state, f.figures, atlas, now), game.thread ?? undefined);
+    board.paint(drawList(f.state, f.figures, atlas, now), game.thread ?? undefined, reduced ? undefined : now / 1000);
     if (game.anim && f.done) game.finishAnim();
   }
   classicRaf = requestAnimationFrame(loop);
@@ -677,6 +677,7 @@ const modernHook = {
   pitch: () => modern?.pitch() ?? 0,
   following: () => modern?.following() ?? true,
   floating: () => modern?.floating() ?? [],
+  routeNext: () => modern?.routeNext() ?? null,
   splashing: () => modern?.splashing() ?? [],
   markers: () => modern?.markers() ?? [],
   quality: () => modern?.quality() ?? 3,

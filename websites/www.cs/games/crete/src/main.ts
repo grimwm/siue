@@ -94,8 +94,9 @@ let modernFailure = '';
 let modernWarned = false;
 /** The game's level opening the modern board last built. */
 let modernOpens = -1;
-/** The classic board's view, for the modern board to take up once it has built the level it shows. */
-let pendingView: { yaw: number; pitch: number } | null = null;
+/** The classic board's view, for the modern board to take up once it has built the level it shows: only that
+ *  opening's, so a level opened in between still opens north up. */
+let pendingView: { yaw: number; pitch: number; opens: number } | null = null;
 let modernRaf = 0;
 let classicRaf = 0;
 let tilesLoaded = false;
@@ -473,7 +474,7 @@ function modernFrame(): void {
     modernOpens = game.opens;
     modern.level(f.state);
     // A rebuilt board opens at its own view; the classic board's, when the player came from it, goes on.
-    if (pendingView) modern.setView(pendingView.yaw, pendingView.pitch);
+    if (pendingView?.opens === game.opens) modern.setView(pendingView.yaw, pendingView.pitch);
     pendingView = null;
   }
   modern.show(f, game.thread);
@@ -504,7 +505,7 @@ function setModernOn(on: boolean): void {
   // The movement pad sits outside the board; its middle shows Theseus in the look that shows.
   document.getElementById('frame')?.classList.toggle('look-modern', on);
   // One view for both looks: the heading and tilt go across with the switch.
-  if (on) pendingView = ui.classicView();
+  if (on) pendingView = { ...ui.classicView(), opens: game.opens };
   else if (modern) ui.setClassicView(modern.yaw(), modern.pitch());
   ui.setModernBoard(on);
   if (on) {

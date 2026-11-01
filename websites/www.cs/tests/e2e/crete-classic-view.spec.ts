@@ -123,10 +123,10 @@ test('the classic sheet opens at 75° and north up, turns and tilts on the compa
 
 test('turned, the arrows move Theseus the way the screen shows and the figures stand on their squares', async ({ page }) => {
   const { errors } = await openHall(page);
-  for (const turn of [-100, -150, -150]) {
+  // Drags of 100, 150 and 150 px leftward turn the view by 60°, 90° and 90°.
+  for (const [turn, yaw] of [[-100, 60], [-150, 150], [-150, 240]] as const) {
     await dragCompass(page, turn, 0);
-    await page.waitForTimeout(100);
-    const { yaw } = await view(page);
+    await expect.poll(() => view(page)).toEqual({ yaw, pitch: 75 });
     for (const dir of ['up', 'right', 'down', 'left'] as const) {
       const from = await player(page);
       await page.keyboard.press(KEY[dir]);
@@ -170,12 +170,12 @@ test('a new level opens the classic sheet north up again', async ({ page }) => {
 test('Classic never loads the 3D board, however long it is played', async ({ page }) => {
   const { errors, modernJs } = await openHall(page);
   for (const k of ['ArrowRight', 'ArrowUp', 'ArrowLeft']) {
+    const before = (await player(page)).r * 100 + (await player(page)).c;
     await page.keyboard.press(k);
-    await page.waitForTimeout(150);
+    await expect.poll(async () => { const p = await player(page); return p.r * 100 + p.c; }, `${k} moves`).not.toBe(before);
   }
   // The Map button's face shows the Modern look without it.
-  await page.waitForTimeout(3500);
-  const facePainted = await page.evaluate(() => {
+  const facePainted = () => page.evaluate(() => {
     const c = document.querySelector('#btn-look canvas') as HTMLCanvasElement | null;
     if (!c) return false;
     const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
@@ -183,7 +183,9 @@ test('Classic never loads the 3D board, however long it is played', async ({ pag
     for (let i = 0; i < d.length; i += 4) if (d[i]! + d[i + 1]! + d[i + 2]! > 120) lit++;
     return lit > d.length / 40;
   });
-  expect(facePainted, 'the Map face shows the Modern look').toBe(true);
+  await expect.poll(facePainted, 'the Map face shows the Modern look').toBe(true);
+  // A negative check needs a span to watch: the face once loaded the 3D board after 2.5 s at rest, so rest past it.
+  await page.waitForTimeout(3000);
   expect(modernJs, 'no request for the 3D board').toEqual([]);
   expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.modern === undefined || !(window as unknown as Hooked).__creteTest.modern!.active)).toBe(true);
   expect(errors).toEqual([]);

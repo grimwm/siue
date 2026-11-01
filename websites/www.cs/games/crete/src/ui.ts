@@ -703,6 +703,8 @@ export function createUi(deps: UiDeps): Ui {
     if (!run || modernBoard || !wholePx) return;
     const { cols, rows } = run.now.level;
     const view = $("stage-view");
+    // A board with no room (hidden, or collapsed by the layout) is framed once it has some.
+    if (view.clientWidth <= 0 || view.clientHeight <= 0) return;
     const before = frame;
     const was = cellCss;
     zoom = clampZoom(zoom, wholePx);
@@ -736,6 +738,7 @@ export function createUi(deps: UiDeps): Ui {
     const { cols, rows } = run.now.level;
     const view = $("stage-view");
     const vw = view.clientWidth, vh = view.clientHeight;
+    if (vw <= 0 || vh <= 0) return;
     const v = sheetView.cur;
     frame = zoom === 1
       ? wholeFrame(v, cols, rows, cellCss, atlas.rise / atlas.cell, vw, vh)

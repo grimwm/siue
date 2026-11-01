@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
-import { ACTIVE, ENTRIES, ENTRY, HAZARD_ENTRY, HIDDEN, OBJECT_ENTRY, PLAIN, TERRAIN_ENTRY, backpack, locked, meetingsOf, metId } from '../src/dictionary.ts';
+import { ACTIVE, ENTRIES, ENTRY, FAMILIES, HAZARD_ENTRY, HIDDEN, LISTED, OBJECT_ENTRY, PLAIN, TERRAIN_ENTRY, backpack, cardOf, locked, meetingsOf, metId } from '../src/dictionary.ts';
 import iconsJson from '../fx/sprites/modern-icons.json' with { type: 'json' };
 import { ICON_MODELS } from '../src/icons-models.ts';
 import { ALL_MET, MET_KEY, createMet } from '../src/met.ts';
@@ -119,6 +119,43 @@ test('a first meeting is a card once; once met it is a banner; with cards off no
   assert.deepEqual(meetNotices(['cake', 'button'], createMet(null), false), { cards: [], banners: ['cake', 'button'] });
 });
 
+test('the keys are one family: one first card for any colour, naming every colour; a later colour is a banner', () => {
+  const keys = ['key-red', 'key-blue', 'key-yellow', 'key-green'];
+  assert.deepEqual(ENTRY.keys!.members, keys);
+  for (const k of keys) {
+    assert.equal(cardOf(k), 'keys', `${k}'s first card is the Keys card`);
+    assert.equal(metId(k), 'keys', `${k} is kept as the family`);
+    assert.match(ENTRY.keys!.effect, new RegExp(k.slice(4)), `the Keys card names ${k.slice(4)}`);
+  }
+  for (const k of keys) {
+    const met = createMet(memory());
+    assert.deepEqual(meetNotices([k], met, true), { cards: ['keys'], banners: [] }, `the first ${k} shows the Keys card`);
+    met.add(metId(k));
+    for (const other of keys) {
+      assert.deepEqual(meetNotices([other], met, true), { cards: [], banners: [other] }, `after ${k}, ${other} is its own banner`);
+    }
+  }
+  assert.deepEqual(meetNotices(['key-red', 'key-blue'], createMet(memory()), true), { cards: ['keys'], banners: [] }, 'two new colours in a turn: one card');
+  const stopped = createMet(memory());
+  stopped.add(metId('key-red'));
+  assert.deepEqual(meetNotices(['key-red', 'key-blue'], stopped, true, new Set(['key-red'])), { cards: [], banners: ['key-blue'] },
+    'red shown at a stop: blue, taken later that turn, is its banner');
+});
+
+test('the Dictionary lists each family once, in its first member\'s place, and never its members; the backpack counts each colour', () => {
+  const ids = LISTED.map(e => e.id);
+  assert.equal(ids.filter(id => id === 'keys').length, 1);
+  for (const f of FAMILIES) {
+    for (const m of f.members!) assert.ok(!ids.includes(m), `${m} is listed only as ${f.id}`);
+    assert.ok(f.name && f.lore && f.effect && f.short, `${f.id} has its words`);
+    for (const m of f.members!) assert.ok(ENTRY[m], `${m} is an entry`);
+  }
+  assert.equal(LISTED.length, ENTRIES.length - 3, 'four keys become one row');
+  assert.equal(ids.indexOf('keys'), ENTRIES.findIndex(e => e.id === 'key-red'), 'Keys stands where the red key stood');
+  assert.equal(locked('keys', () => false), true, 'Keys is locked until a key is taken');
+  assert.equal(locked('keys', k => k === 'keys'), false);
+});
+
 test('every entry has a Modern icon in the rendered sheet, and a model to render it from', () => {
   const sheet = iconsJson as { cell: number; width: number; height: number; icons: Record<string, { x: number; y: number }> };
   for (const e of ENTRIES) {
@@ -138,6 +175,10 @@ test('the met store keeps what was met across loads; "*" is every entry; blocked
   assert.equal(createMet(st).has('mirror'), true);
   assert.equal(createMet(st).has('cake'), false);
   assert.equal(createMet(memory({ [MET_KEY]: JSON.stringify([ALL_MET]) })).has('cake'), true);
+  for (const old of ['key-red', 'key-blue', 'key-yellow', 'key-green']) {
+    assert.equal(createMet(memory({ [MET_KEY]: JSON.stringify([old]) })).has('keys'), true, `a store that met ${old} has met the Keys`);
+  }
+  assert.equal(createMet(memory({ [MET_KEY]: JSON.stringify(['mirror']) })).has('keys'), false);
   const throwing: StorageLike = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() {} };
   for (const bad of [null, throwing, memory({ [MET_KEY]: '{}' }), memory({ [MET_KEY]: '["Bad Id"]' }), memory({ [MET_KEY]: 'nope' })]) {
     const m = createMet(bad);

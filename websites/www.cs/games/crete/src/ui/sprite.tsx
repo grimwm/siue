@@ -1,9 +1,10 @@
 // The Island of Crete: an entry's picture in the look the board shows. In Classic, a sprite from the Classic atlas: a
 // piece that stands on the board on a floor tile, a terrain tile alone. In Modern, the entry's icon pre-rendered from
-// its Modern model (fx/sprites/modern-icons.{webp,json}, made by tools/modern-icons.mjs). `locked` draws either as a
-// silhouette.
+// its Modern model (fx/sprites/modern-icons.{webp,json}, made by tools/modern-icons.mjs). A family (the four keys)
+// draws its members two by two in the same square. `locked` draws either as a silhouette.
 import { TERRAIN } from '../puzzle/tiles.ts';
 import type { Atlas } from '../board-plan.ts';
+import { ENTRY } from '../dictionary.ts';
 import type { Entry } from '../dictionary.ts';
 import type { IconSheet } from '../icons-models.ts';
 import type { Look } from '../settings.ts';
@@ -23,6 +24,14 @@ export interface PictureProps {
 }
 
 export function Picture(p: PictureProps) {
+  if (p.entry.members) {
+    const half = Math.floor(p.size / 2);
+    return (
+      <span class="sprite-family" style={{ width: `${p.size}px` }} aria-hidden="true">
+        {p.entry.members.map(id => <Picture key={id} pics={p.pics} entry={ENTRY[id]!} size={half} locked={p.locked} />)}
+      </span>
+    );
+  }
   const icon = p.pics.look === 'modern' ? p.pics.icons?.icons[p.entry.id] : undefined;
   if (icon && p.pics.icons) {
     const k = p.size / p.pics.icons.cell;

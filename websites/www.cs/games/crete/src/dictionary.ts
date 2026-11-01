@@ -25,6 +25,8 @@ export interface Entry {
   readonly key?: string;
   /** Its picture: a sprite of the Classic atlas. */
   readonly sprite: string;
+  /** A family's members, drawn together as its picture (FAMILIES). */
+  readonly members?: readonly string[];
 }
 
 /** A tool's key; its name, in the Title Case of the Dictionary's names, is the entry's own. */
@@ -186,7 +188,33 @@ export const ENTRIES: readonly Entry[] = [
     short: 'Costs a heart, and is gone' },
 ];
 
-export const ENTRY: Readonly<Record<string, Entry>> = Object.fromEntries(ENTRIES.map(e => [e.id, e]));
+/** Entries that are one thing in several variants, met once as a family: the first variant taken shows the
+ *  family's card, which names every variant, and marks the family met, so a later variant shows only its banner.
+ *  The Dictionary lists the family as one row in place of its members; the backpack still counts each member.
+ *  Doors, force floors and toggle walls are already one entry each. */
+export const FAMILIES: readonly Entry[] = [
+  { id: 'keys', kind: 'item', name: 'Keys', sprite: 'key-red', members: ['key-red', 'key-blue', 'key-yellow', 'key-green'],
+    lore: 'Daedalus cut a key for every door he hung: red, blue and yellow ones that turn once in a lock, and a green one he kept for himself, that never stuck.',
+    effect: 'Keys come in four colours, red, blue, yellow and green, and each opens doors of its own colour: walk into the door while you hold its key. A red, blue or yellow key stays in the lock, so each opens one door. The green key is never used up: it opens every green door.',
+    short: 'Each opens doors of its colour' },
+];
+
+/** The family each member belongs to. */
+export const FAMILY_OF: Readonly<Record<string, string>> =
+  Object.fromEntries(FAMILIES.flatMap(f => (f.members ?? []).map(m => [m, f.id])));
+
+/** The entry whose first card a meeting shows: its family's, or its own. */
+export const cardOf = (id: string): string => FAMILY_OF[id] ?? id;
+
+/** The Dictionary's Entries rows, in order: every entry, with each family in its first member's place. */
+export const LISTED: readonly Entry[] = ENTRIES.flatMap(e => {
+  const f = FAMILY_OF[e.id];
+  if (f === undefined) return [e];
+  const family = FAMILIES.find(x => x.id === f)!;
+  return family.members![0] === e.id ? [family] : [];
+});
+
+export const ENTRY: Readonly<Record<string, Entry>> = Object.fromEntries([...ENTRIES, ...FAMILIES].map(e => [e.id, e]));
 
 /** Terrain that needs no entry: everyone knows a floor and a wall. */
 export const PLAIN: readonly Terrain[] = ['floor', 'wall'];
@@ -217,9 +245,9 @@ export const ACTIVE: ReadonlySet<string> = new Set([
 /** Tiles that look like something else: locked in the Dictionary until first touched, so the trick is not spoiled. */
 export const HIDDEN: ReadonlySet<string> = new Set(['fake-wall', 'invisible-wall']);
 
-/** The id an entry is kept under in the met store (src/met.ts): an item's own id; a tile's first touch as
- *  `touch-<id>`, so a bare tile id in the store means nothing. */
-export const metId = (id: string): string => (ENTRY[id]?.kind === 'item' ? id : `touch-${id}`);
+/** The id an entry is kept under in the met store (src/met.ts): an item's own id, or its family's (a key of any
+ *  colour is kept as `keys`); a tile's first touch as `touch-<id>`, so a bare tile id in the store means nothing. */
+export const metId = (id: string): string => (ENTRY[id]?.kind === 'item' ? cardOf(id) : `touch-${id}`);
 
 /** Whether the Dictionary shows the entry as a locked "???": an item until picked up, a hidden tile until touched;
  *  every other hazard and tile is always open. */

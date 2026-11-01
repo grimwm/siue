@@ -215,6 +215,13 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
         if v2(o, "fx", p):
             _fx(o["fx"], f"{p}.fx")
         lanes[-1]["voice"] = _voice(o["voice"], f"{p}.voice") if v2(o, "voice", p) else []
+        lanes[-1]["vocal"] = v2(o, "vocal", p) and _vocal(o["vocal"], f"{p}.vocal", duration)
+        sound = o.get("sound")
+        is_vocal_sound = isinstance(sound, dict) and sound.get("instrument") == VOCAL_INSTRUMENT
+        if is_vocal_sound != bool(lanes[-1]["vocal"]):
+            if lanes[-1]["vocal"]:
+                _fail(f"{p}.sound", f"a vocal track's sound is the instrument {VOCAL_INSTRUMENT}")
+            _fail(f"{p}.sound.instrument", f"{VOCAL_INSTRUMENT} is only for a lane with a vocal track")
     _unique(lanes, "lanes")
     for i, lane in enumerate(lanes):
         for j, v in enumerate(lane["voice"]):
@@ -235,6 +242,7 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
             _range(lo.get("ceiling_db"), "mix.limiter.ceiling_db", -12, 0)
     renderable = mix is not None and all(has_sound)
     lane_ids = {l["id"] for l in lanes}
+    vocal_lanes = {l["id"] for l in lanes if l["vocal"]}
 
     characters = []
     for i, c in enumerate(_arr(r.get("characters"), "characters")):
@@ -271,6 +279,8 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
         o = _obj(n, p)
         if not (isinstance(o.get("lane"), str) and o["lane"] in lane_ids):
             _fail(f"{p}.lane", "must be the id of a lane")
+        if o["lane"] in vocal_lanes:
+            _fail(f"{p}.lane", "a vocal track holds takes, not notes")
         start, length = _num(o.get("start"), f"{p}.start"), _num(o.get("length"), f"{p}.length")
         if start < 0 or length <= 0 or start + length > duration + EPS:
             _fail(p, f"must start at 0 or later, have a length above 0 and end by {duration} seconds")
@@ -569,10 +579,60 @@ def bend_rate(bend, t):
     return 2 ** (c / 1200)
 
 
+VOCAL_INSTRUMENT = "vocal"
+TAKE_RE = re.compile(r"vocal-[0-9a-f]{64}\.(flac|ogg|webm)")
+MAX_TAKES = 32
+MAX_CLIPS = 64
+MAX_TAKE_SECONDS = 900
+
+
+def _vocal(v, path, duration) -> bool:
+    """A Vocal Track: 1 to 32 saved takes and up to 64 clips, each inside its take and the piece (the page's vocalOf)."""
+    o = _obj(v, path)
+    for k in o:
+        if k not in ("takes", "clips"):
+            _fail(f"{path}.{k}", "is not part of a vocal track (takes, clips)")
+    takes = {}
+    for i, t in enumerate(_arr(o.get("takes"), f"{path}.takes", 1)):
+        p = f"{path}.takes[{i}]"
+        to = _obj(t, p)
+        f = to.get("file")
+        if not (isinstance(f, str) and TAKE_RE.fullmatch(f)):
+            _fail(f"{p}.file", "must be a saved take, vocal-<sha256>.flac, .ogg or .webm")
+        seconds = _range(to.get("seconds"), f"{p}.seconds", 0.01, MAX_TAKE_SECONDS)
+        if f in takes:
+            _fail(f"{path}.takes", "must name each take once")
+        takes[f] = seconds
+    if len(takes) > MAX_TAKES:
+        _fail(f"{path}.takes", f"must have at most {MAX_TAKES} takes")
+    clips = _arr(o.get("clips"), f"{path}.clips")
+    for i, c in enumerate(clips):
+        p = f"{path}.clips[{i}]"
+        co = _obj(c, p)
+        if co.get("take") not in takes:
+            _fail(f"{p}.take", "must be one of the track's takes")
+        seconds = takes[co["take"]]
+        at = _range(co.get("at"), f"{p}.at", 0, duration)
+        start = _range(co.get("from"), f"{p}.from", 0, seconds)
+        end = _range(co.get("to"), f"{p}.to", 0, seconds)
+        _range(co.get("gain_db"), f"{p}.gain_db", -24, 12)
+        fade_in = _range(co.get("fade_in"), f"{p}.fade_in", 0, 10)
+        fade_out = _range(co.get("fade_out"), f"{p}.fade_out", 0, 10)
+        if end - start < 0.01:
+            _fail(f"{p}.to", "must be after from")
+        if at + end - start > duration + EPS:
+            _fail(p, f"must end by the end of the piece ({duration} seconds)")
+        if fade_in + fade_out > end - start + EPS:
+            _fail(p, "its fades must fit in the clip")
+    if len(clips) > MAX_CLIPS:
+        _fail(f"{path}.clips", f"must have at most {MAX_CLIPS} clips")
+    return True
+
+
 def _sound(v, path, instruments) -> None:
     o = _obj(v, path)
     instrument = _id(o.get("instrument"), f"{path}.instrument")
-    if instruments is not None and instrument not in instruments:
+    if instruments is not None and instrument != VOCAL_INSTRUMENT and instrument not in instruments:
         _fail(f"{path}.instrument", "must be an instrument id in the sample library")
     _range(o.get("gain_db"), f"{path}.gain_db", -40, 20)
     _range(o.get("attack"), f"{path}.attack", 0, 10)

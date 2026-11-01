@@ -2,6 +2,7 @@
 // it settles on a new pitch; a vibrato or a slide never settles, so it stays one note. Each note is snapped Friendly
 // (to the piece's key), to All 12 notes, or kept Exact, with its curve in cents as a bend. The notes are then laid on
 // the piece's beats from where they go, tidied like Play Live. DOM-free.
+import { thinBend } from './doc.ts';
 import { inferFifths } from './toxml.ts';
 import type { NewNote } from './edit.ts';
 import { midiOf, trackPitch } from './pitch.ts';
@@ -136,6 +137,12 @@ export function snapSegment(seg: HumSegment, snap: HumSnap, classes: readonly nu
 const clampPitch = (p: number): number => Math.min(127, Math.max(0, p));
 
 export interface HumOptions { snap: HumSnap; classes: readonly number[]; startBeat: number; bpm: number; tidy: Grid; quarter: number }
+
+/** An Exact Pitch bend (seconds from the sung note's start) as fractions of the sung note, for the editor's note to stretch. */
+export function bendFractions(bend: readonly [number, number][], seg: HumSegment): [number, number][] {
+  const dur = Math.max(1e-6, seg.end - seg.start);
+  return thinBend(bend.map(([t, c]): [number, number] => [Math.round(Math.min(1, t / dur) * 1e6) / 1e6, c]));
+}
 
 /** The sung notes on the piece's beats: the first at `startBeat`, the rest as far after it as they were sung, tidied unless Off. */
 export function humNotes(segs: readonly HumSegment[], o: HumOptions): { note: NewNote; bend: [number, number][] | null }[] {

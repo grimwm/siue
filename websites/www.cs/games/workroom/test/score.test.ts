@@ -37,9 +37,9 @@ test('the fixtures are valid schema 1 scores, one of each kind', () => {
 });
 
 test('an unknown schema is refused with the reload message', () => {
-  const r = parseScore({ ...fixture(), schema: 2 });
-  assert.deepEqual(r, { ok: false, error: unknownSchemaMessage(2) });
-  assert.match(unknownSchemaMessage(2), /score schema 2, which this page does not know\. Reload the page/);
+  const r = parseScore({ ...fixture(), schema: 3 });
+  assert.deepEqual(r, { ok: false, error: unknownSchemaMessage(3) });
+  assert.match(unknownSchemaMessage(3), /score schema 3, which this page does not know\. Reload the page/);
   assert.equal(parseScore('nope').ok, false);
   assert.equal(parseScore(null).ok, false);
 });

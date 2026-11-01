@@ -7,7 +7,9 @@
 // phone, holding an on-screen key never moves the page, in the Both view too. Then, with a fake Web MIDI keyboard and a
 // fake microphone: Your Keyboard (asked for only when turned on, velocity, the sustain pedal, drum pads, the GM program
 // sent), Hum (the demo, the microphone, the three snaps and Replace The Part with Undo) and Play Along; and on a phone
-// a note held by the pedal never moves the page. SHOTS_DIR keeps screenshots.
+// a note held by the pedal never moves the page. Then Speed And Loudness: the piece's speed, a gradual speed change, a
+// part at its own BPM, a loudness line, and Hum's Exact Pitch bends, saved as a schema 2 draft; on a phone a held key
+// still never moves the page with the panel open. SHOTS_DIR keeps screenshots.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,6 +18,7 @@ import { signInAt } from './music-mail.ts';
 const STUDENT = 'composer1@siue.edu';
 // A second student: sign-in links are limited to three an hour for each address.
 const STUDENT2 = 'composer2@siue.edu';
+const STUDENT3 = 'composer3@siue.edu';
 const QUARTET = join(import.meta.dirname, '..', '..', 'games', 'workroom', 'test', 'fixtures', 'import', 'musescore-quartet.musicxml');
 const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
 const shots = process.env.SHOTS_DIR;
@@ -446,6 +449,114 @@ test('on a phone, a note held by the sustain pedal never moves the page', async 
     await midi(page, [0xb0, 64, 0]);
     await page.evaluate(() => window.scrollTo(0, 0));
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('speed, loudness and Exact Pitch bends are saved as a schema 2 draft', async ({ browser, baseURL }) => {
+  test.setTimeout(180_000);
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await context.addInitScript(fakeDevices);
+  try {
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) errors.push(m.text()); });
+    await signInAt(page, base, 'music', STUDENT3);
+    await page.goto(`${base}music/compose.php`);
+    await page.getByLabel('Title').fill('Speed Test');
+    await page.getByRole('button', { name: 'Start Composing' }).click();
+    await page.locator('[data-instrument="cello"]').click();
+    const cello = page.locator('[data-note-id]');
+
+    // Hum the demo with Exact Pitch: the scooped, wavering A keeps its bend.
+    await page.getByRole('tab', { name: 'Hum' }).click();
+    await page.locator('[data-hum-snap="exact"]').click();
+    await page.getByRole('button', { name: 'Play The Demo Hum' }).click();
+    await expect(page.locator('[data-hum-notes]')).toHaveText('D4 E4 F#4 A4', { timeout: 15_000 });
+    await page.getByRole('button', { name: 'Add To The Part' }).click();
+    await expect(cello).toHaveCount(4);
+
+    // The piece's speed: Quick 128, then a gradual slow-down to 66 at a later bar.
+    const panel = page.locator('[data-speed-panel]');
+    await panel.locator('[data-piece-speed="128"]').click();
+    await expect(page.locator('[data-draft-line]')).toContainText('128 BPM');
+    await panel.locator('[data-add-tempo]').click();
+    const mark = panel.locator('[data-tempo-mark]').first();
+    const bar = Number(await mark.getAttribute('data-tempo-mark'));
+    await mark.getByRole('spinbutton').fill('66');
+    await mark.getByRole('spinbutton').press('Enter');
+    await mark.locator(`[data-gradual="${bar}"]`).click();
+    await expect(mark.locator(`[data-gradual="${bar}"]`)).toHaveText('Slow Down');
+    await expect(mark.locator(`[data-gradual="${bar}"]`)).toHaveAttribute('aria-pressed', 'true');
+
+    // This part's own speed, and a loudness line from Soft getting louder to Loud.
+    await panel.locator('[data-part-speed="bpm"]').click();
+    await expect(panel.locator('[data-speed-words]')).toHaveText('Its own 128 BPM');
+    await panel.locator('[data-add-loudness]').click();
+    await panel.locator('[data-level="1"]').selectOption('48');
+    await panel.locator('[data-add-loudness]').click();
+    const second = panel.locator('[data-loudness-mark]').nth(1);
+    const loudBar = Number(await second.getAttribute('data-loudness-mark'));
+    await second.locator('select').selectOption('100');
+    await panel.locator('[data-dyn-gradual="1"]').click();
+    await expect(panel.locator('[data-dyn-gradual="1"]')).toHaveText('Get Louder');
+    await shot(page, 'desktop-speed-loudness');
+
+    // Undo takes the last change back, Redo puts it back.
+    await page.getByRole('button', { name: /^↶ Undo/ }).click();
+    await expect(panel.locator('[data-dyn-gradual="1"]')).toHaveAttribute('aria-pressed', 'false');
+    await page.getByRole('button', { name: /^↷ Redo/ }).click();
+    await expect(panel.locator('[data-dyn-gradual="1"]')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+    await expect(page.locator('[data-status]')).toHaveText('Saved as draft 1.');
+    const score = await page.evaluate(async () => (await fetch('draft.php?piece=speed-test&v=1&file=score.json')).json()) as {
+      schema: number; piece_tempo: { bar: number; bpm: number; shape: string }[]; tempo: { bar: number; bpm: number }[];
+      lanes: { speed?: unknown; dynamics?: { bar: number; level: number; shape: string }[] }[]; notes: { bend?: [number, number][] }[];
+    };
+    expect(score.schema).toBe(2);
+    expect(score.piece_tempo).toEqual([{ bar: 1, bpm: 128, shape: 'slow_down' }, { bar, bpm: 66, shape: 'steady' }]);
+    expect(score.tempo[0]!.bpm).toBe(128);
+    expect(score.tempo[score.tempo.length - 1]!.bpm).toBe(66);
+    expect(score.lanes[0]!.speed).toEqual({ bpm: 128 });
+    expect(score.lanes[0]!.dynamics).toEqual([{ bar: 1, level: 48, shape: 'louder' }, { bar: loudBar, level: 100, shape: 'steady' }]);
+    const bent = score.notes.filter(n => n.bend);
+    expect(bent.length).toBeGreaterThan(0);
+    expect(bent.every(n => n.bend!.length >= 2 && n.bend!.length <= 64 && n.bend![0]![0] === 0)).toBe(true);
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+test('on a phone, a held key never moves the page with Speed And Loudness open', async ({ browser, baseURL }) => {
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 400, height: 780 }, hasTouch: true, isMobile: true });
+  try {
+    const page = await context.newPage();
+    await signInAt(page, base, 'music', STUDENT3);
+    await page.goto(`${base}music/compose.php?id=speed-test`);
+    await expect(page.locator('[data-speed-panel]')).toBeVisible();
+    await shot(page, 'phone-speed-loudness');
+    const width = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(width, 'no sideways scroll').toBeLessThanOrEqual(400);
+    const key = page.locator('[data-key="60"]');
+    await key.scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy(0, -40));
+    const y = await page.evaluate(() => window.scrollY);
+    const kb = (await key.boundingBox())!;
+    await page.mouse.move(kb.x + kb.width / 2, kb.y + kb.height - 10);
+    await page.mouse.down();
+    await expect(page.locator('[data-live-state]')).toContainText('● Recording');
+    // Something tries to move the page while the key is held: it is put straight back.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(200);
+    expect(await page.evaluate(() => window.scrollY), 'held: the page has not moved').toBe(y);
+    await page.mouse.up();
+    await page.getByRole('button', { name: 'Stop Recording' }).click();
   } finally {
     await context.close();
   }

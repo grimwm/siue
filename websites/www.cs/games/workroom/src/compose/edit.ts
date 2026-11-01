@@ -22,7 +22,11 @@ const sorted = (notes: EditNote[]): EditNote[] => [...notes].sort((a, b) => a.st
 /** Adds notes to a part (a chord is several at one start); returns the document and the new notes' ids. */
 export function addNotes(doc: EditDoc, part: string, notes: readonly NewNote[]): { doc: EditDoc; ids: number[] } {
   let next = doc.nextId;
-  const made = notes.map(n => ({ id: next++, start: n.start, length: n.length, pitch: n.pitch, velocity: n.velocity ?? NEW_VELOCITY, motif: n.motif ?? null }));
+  const made = notes.map((n): EditNote => {
+    const note: EditNote = { id: next++, start: n.start, length: n.length, pitch: n.pitch, velocity: n.velocity ?? NEW_VELOCITY, motif: n.motif ?? null };
+    if (n.bend) note.bend = n.bend.map(([f, c]): [number, number] => [f, c]);
+    return note;
+  });
   if (made.length === 0) return { doc, ids: [] };
   return { doc: { ...withPart(doc, part, p => ({ ...p, notes: sorted([...p.notes, ...made]) })), nextId: next }, ids: made.map(n => n.id) };
 }
@@ -59,7 +63,7 @@ export function addPart(doc: EditDoc, entry: Entry): { doc: EditDoc; id: string 
   for (let k = 2; ids.has(id); k++) id = `${slug(entry.name)}-${k}`;
   const family = laneFamily(entry);
   const part: Part = { id, name: name(n), color: PART_COLOURS[doc.parts.length % PART_COLOURS.length]!, family, icon: family,
-    instrument: entry.id, gain_db: 0, attack: entry.attack, release: entry.release, notes: [] };
+    instrument: entry.id, gain_db: 0, attack: entry.attack, release: entry.release, notes: [], speed: 'follow', dynamics: null };
   return { doc: { ...doc, parts: [...doc.parts, part] }, id };
 }
 

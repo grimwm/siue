@@ -85,6 +85,19 @@ final class MusicSaveDraftTest extends TestCase
         self::assertSame('bad_version', $this->save('my-tune', 'x', music_draft_bundle(['score.json' => self::score('my-tune', 1)]))[1]['error']);
     }
 
+    public function testASchemaTwoScoreIsKeptAndAnUnknownSchemaIsRefused(): void
+    {
+        $score = json_decode(self::score('my-tune', 1), true);
+        $score['schema'] = 2;
+        $score['lanes'][0]['speed'] = ['ratio' => 2];
+        [$status] = $this->save('my-tune', 1, music_draft_bundle(['score.json' => json_encode($score)]));
+        self::assertSame(201, $status);
+        self::assertSame(['ratio' => 2], json_decode((string) $this->store->draftBytes('my-tune', 1, 'score.json'), true)['lanes'][0]['speed']);
+        $score['schema'] = 3;
+        $score['draft'] = 2;
+        self::assertSame('bad_score', $this->save('my-tune', 2, music_draft_bundle(['score.json' => json_encode($score)]))[1]['error']);
+    }
+
     public function testASaveNeedsTheTokenAndASession(): void
     {
         [$status] = $this->save('my-tune', 1, music_draft_bundle(['score.json' => self::score('my-tune', 1)]), false);

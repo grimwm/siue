@@ -33,6 +33,7 @@ class Param {
   constructor(value: number) { this.value = value; }
   setValueAtTime(v: number, t: number): this { this.events.push(['set', v, t]); return this; }
   linearRampToValueAtTime(v: number, t: number): this { this.events.push(['ramp', v, t]); return this; }
+  exponentialRampToValueAtTime(v: number, t: number): this { this.events.push(['exp', v, t]); return this; }
 }
 
 class Node {
@@ -284,4 +285,20 @@ test('an instrument the library lacks is refused by name', async () => {
   const bad = { ...s, lanes: s.lanes.map(l => l.id === 'harp' ? { ...l, sound: { ...l.sound!, instrument: 'kazoo' } } : l) };
   const { deps: d } = deps();
   await assert.rejects(renderScore(bad, LIBRARY, d), /kazoo/);
+});
+
+test('a bent note moves its rate from point to point, linear in cents, from the note\'s start', async () => {
+  const s = score();
+  s.schema = 2;
+  s.notes[0] = { ...s.notes[0]!, bend: [[0, -100], [0.5, 0], [1, 200]] };
+  const { deps: d, contexts } = deps();
+  await renderScore(s, LIBRARY, d);
+  const v = voices(s, LIBRARY)[0]!;
+  const src = contexts[0]!.nodes.filter(n => n.kind === 'source')[0]!;
+  const ev = param(src, 'playbackRate').events;
+  assert.deepEqual(ev.map(e => [e[0], e[2]]), [['set', v.at], ['exp', v.at + 0.5], ['exp', v.at + 1]]);
+  assert.ok(Math.abs(ev[0]![1] - v.rate * 2 ** (-100 / 1200)) < 1e-9);
+  assert.ok(Math.abs(ev[2]![1] - v.rate * 2 ** (200 / 1200)) < 1e-9);
+  const plain = contexts[0]!.nodes.filter(n => n.kind === 'source')[1]!;
+  assert.deepEqual(param(plain, 'playbackRate').events, [], 'an unbent note keeps its one rate');
 });

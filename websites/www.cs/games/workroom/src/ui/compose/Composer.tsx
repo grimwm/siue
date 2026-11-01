@@ -18,7 +18,7 @@ import { toMusicXml } from '../../compose/toxml.ts';
 import { addNotes, addPart, clearPart, moveIntoRange, moveNote, recolourPart, removeNotes, removePart, renamePart, resizeNote, setInstrument } from '../../compose/edit.ts';
 import { createHistory } from '../../compose/history.ts';
 import { keyboardStart, OCTAVE_DOWN, OCTAVE_UP, pitchForKey } from '../../compose/keys.ts';
-import { humNotes, keyScale } from '../../compose/hum.ts';
+import { bendFractions, humNotes, keyScale } from '../../compose/hum.ts';
 import type { HumPlace, HumSegment, HumSnap } from '../../compose/hum.ts';
 import { createLiveTake } from '../../compose/live.ts';
 import type { LiveTake } from '../../compose/live.ts';
@@ -48,6 +48,9 @@ import { HumPanel } from './HumPanel.tsx';
 import type { HumPorts } from './HumPanel.tsx';
 import { Keyboard } from './Keyboard.tsx';
 import { YourKeyboard } from './YourKeyboard.tsx';
+import { SpeedPanel } from './SpeedPanel.tsx';
+import { setDynamics } from '../../compose/loudness.ts';
+import { setPartSpeed, setPieceSpeed, setTempoLine } from '../../compose/speed.ts';
 
 export type Mode = 'live' | 'step' | 'grid' | 'hum';
 export const MODES: readonly { id: Mode; label: string; icon: string; help: string }[] = [
@@ -389,7 +392,8 @@ export function Composer(p: ComposerProps) {
     const startBeat = humPlace === 'replace' ? 0 : humPlace === 'line' && humLine !== null ? humLine : afterPart(part);
     const bar = clock.barOfBeat(startBeat);
     const made = humNotes(segs, { snap: humSnap, classes: key.classes, startBeat, bpm: clock.tempoAt(bar).bpm, tidy, quarter: clock.quarter(bar) });
-    const added = addNotes(base, part.id, made.map(m => m.note));
+    // Exact Pitch keeps each sung note's bend, stretched with the note.
+    const added = addNotes(base, part.id, made.map((m, i) => (m.bend ? { ...m.note, bend: bendFractions(m.bend, segs[i]!) } : m.note)));
     apply(added.doc);
     setSelected(new Set(added.ids));
     setArmed(null);
@@ -640,6 +644,11 @@ export function Composer(p: ComposerProps) {
                 <Button variant="ghost" onClick={() => { apply(removePart(doc, part.id)); setPartId(doc.parts.find(x => x.id !== part.id)?.id ?? null); }}>Remove Part</Button>
               </div>
             </Panel>
+          ) : null}
+          {part && entry ? (
+            <SpeedPanel doc={doc} part={part} bars={barsNeeded(doc)} help={help}
+              onPieceSpeed={bpm => apply(setPieceSpeed(doc, bpm))} onLine={marks => apply(setTempoLine(doc, marks))}
+              onPartSpeed={speed => apply(setPartSpeed(doc, part.id, speed))} onLoudness={marks => apply(setDynamics(doc, part.id, marks))} />
           ) : null}
           {part && entry ? (
             <YourKeyboard request={p.midi} program={entry.pieces ? null : entry.gm} drums={entry.pieces ? new Map(entry.pieces) : null} help={help}

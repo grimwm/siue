@@ -7,7 +7,7 @@
 // piece given one leveling gain.
 // The context, the fetch and the decoder are injected, so the tests hand in fakes.
 import type { Score } from '../score.ts';
-import { voices } from './plan.ts';
+import { bendRate, voices } from './plan.ts';
 import type { Library } from './plan.ts';
 import { fold, hissSource, levelGain } from './master.ts';
 
@@ -137,6 +137,11 @@ export async function renderScore(score: Score, lib: Library, deps: RenderDeps =
     const src = ctx.createBufferSource();
     src.buffer = samples.get(v.file)!;
     src.playbackRate.value = v.rate;
+    // A bend is linear in cents, so the rate moves exponentially between its points, then holds at the last.
+    if (v.bend) {
+      src.playbackRate.setValueAtTime(v.rate * bendRate(v.bend, 0), v.at);
+      for (const [t] of v.bend.slice(1)) src.playbackRate.exponentialRampToValueAtTime(v.rate * bendRate(v.bend, t), v.at + t);
+    }
     if (v.loop) {
       src.loop = true;
       [src.loopStart, src.loopEnd] = v.loop;

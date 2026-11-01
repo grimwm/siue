@@ -1,0 +1,644 @@
+{
+ "comment": "Shared by score2.test.ts and test_score2.py: the schema 2 score, its broken cases, and the renderer's loudness and bend results.",
+ "score": {
+  "schema": 2,
+  "kind": "music",
+  "project": {
+   "id": "crete",
+   "name": "Crete"
+  },
+  "piece": {
+   "id": "test-piece",
+   "title": "Test piece: the Labyrinth wakes"
+  },
+  "draft": 1,
+  "made": "2026-10-17T12:00:00Z",
+  "duration": 16.5,
+  "bars": 8,
+  "tempo": [
+   {
+    "bar": 1,
+    "bpm": 92,
+    "beats": 4,
+    "unit": 4
+   },
+   {
+    "bar": 2,
+    "bpm": 101,
+    "beats": 4,
+    "unit": 4
+   },
+   {
+    "bar": 3,
+    "bpm": 110,
+    "beats": 4,
+    "unit": 4
+   },
+   {
+    "bar": 4,
+    "bpm": 119,
+    "beats": 4,
+    "unit": 4
+   },
+   {
+    "bar": 5,
+    "bpm": 128,
+    "beats": 4,
+    "unit": 4
+   }
+  ],
+  "sections": [
+   {
+    "id": "stirs",
+    "name": "The Labyrinth stirs",
+    "from_bar": 1,
+    "to_bar": 4,
+    "color": "#2e4057"
+   },
+   {
+    "id": "thread",
+    "name": "Ariadne's thread",
+    "from_bar": 5,
+    "to_bar": 8,
+    "color": "#6b4e16"
+   }
+  ],
+  "lanes": [
+   {
+    "id": "strings-low",
+    "name": "Low strings",
+    "family": "strings",
+    "icon": "strings",
+    "color": "#7a9cc6",
+    "sound": {
+     "instrument": "cello",
+     "gain_db": 0,
+     "attack": 0.1,
+     "release": 0.5
+    },
+    "speed": "follow",
+    "dynamics": [
+     {
+      "bar": 1,
+      "level": 48,
+      "shape": "louder"
+     },
+     {
+      "bar": 3,
+      "level": 100,
+      "shape": "steady"
+     }
+    ],
+    "fx": {
+     "volume_db": -3,
+     "pan": -0.4,
+     "eq": {
+      "bass": 3,
+      "treble": -2
+     },
+     "echo": {
+      "amount": 0.3,
+      "repeats": 3,
+      "beats": 0.5
+     },
+     "shimmer": 0.2,
+     "warmth": 0.1,
+     "brightness": {
+      "cutoff": 0.7,
+      "sweep": "slow"
+     },
+     "even_out": 0.5,
+     "room": 0.6,
+     "mute": false,
+     "solo": false
+    },
+    "voice": [
+     {
+      "effect": "talkbox",
+      "carrier": "brass",
+      "mix": 0.8
+     },
+     {
+      "effect": "robot",
+      "mix": 0.5
+     },
+     {
+      "effect": "whisper",
+      "mix": 0.3
+     }
+    ]
+   },
+   {
+    "id": "brass",
+    "name": "Horns",
+    "family": "brass",
+    "icon": "brass",
+    "color": "#c98b3a",
+    "sound": {
+     "instrument": "horn",
+     "gain_db": 2,
+     "attack": 0.2,
+     "release": 0.6
+    },
+    "speed": {
+     "ratio": 0.666667
+    },
+    "dynamics": [
+     {
+      "bar": 1,
+      "level": 80,
+      "shape": "steady"
+     },
+     {
+      "bar": 5,
+      "level": 120,
+      "shape": "softer"
+     },
+     {
+      "bar": 7,
+      "level": 64,
+      "shape": "steady"
+     }
+    ],
+    "voice": [
+     {
+      "effect": "vocoder",
+      "carrier": "strings-low",
+      "bands": 16
+     },
+     {
+      "effect": "autotune",
+      "strength": 1,
+      "retune_ms": 20
+     },
+     {
+      "effect": "harmonizer",
+      "voices": [
+       "third",
+       "fifth"
+      ],
+      "mix": 0.5
+     },
+     {
+      "effect": "pitch",
+      "semitones": -3,
+      "formant": 2
+     }
+    ]
+   }
+  ],
+  "characters": [
+   {
+    "id": "ariadne",
+    "name": "Ariadne",
+    "color": "#d4a017"
+   },
+   {
+    "id": "minotaur",
+    "name": "Minotaur",
+    "color": "#c0392b"
+   },
+   {
+    "id": "daedalus",
+    "name": "Daedalus",
+    "color": "#b08d57"
+   },
+   {
+    "id": "athens",
+    "name": "Athens",
+    "color": "#3b6fb6"
+   }
+  ],
+  "motifs": [
+   {
+    "id": "ariadne",
+    "character": "ariadne",
+    "spans": [
+     {
+      "lane": "brass",
+      "from": 8,
+      "to": 16
+     }
+    ]
+   }
+  ],
+  "notes": [
+   {
+    "lane": "strings-low",
+    "start": 0,
+    "length": 2,
+    "pitch": 38,
+    "velocity": 70,
+    "motif": null
+   },
+   {
+    "lane": "strings-low",
+    "start": 2,
+    "length": 2,
+    "pitch": 41,
+    "velocity": 70,
+    "motif": null
+   },
+   {
+    "lane": "strings-low",
+    "start": 4,
+    "length": 4,
+    "pitch": 36,
+    "velocity": 80,
+    "motif": null
+   },
+   {
+    "lane": "brass",
+    "start": 8,
+    "length": 2,
+    "pitch": 62,
+    "velocity": 90,
+    "motif": "ariadne",
+    "bend": [
+     [
+      0,
+      -50
+     ],
+     [
+      0.5,
+      0
+     ],
+     [
+      1.2,
+      30
+     ],
+     [
+      2,
+      0
+     ]
+    ]
+   },
+   {
+    "lane": "brass",
+    "start": 10,
+    "length": 2,
+    "pitch": 65,
+    "velocity": 95,
+    "motif": "ariadne"
+   },
+   {
+    "lane": "brass",
+    "start": 12,
+    "length": 4,
+    "pitch": 69,
+    "velocity": 100,
+    "motif": "ariadne"
+   }
+  ],
+  "energy": [
+   [
+    0,
+    0.2
+   ],
+   [
+    8,
+    0.5
+   ],
+   [
+    16.5,
+    0.9
+   ]
+  ],
+  "glossary": [
+   {
+    "term": "ostinato",
+    "from": 0,
+    "to": 4
+   },
+   {
+    "term": "motif",
+    "from": 8,
+    "to": 12
+   }
+  ],
+  "audio": [],
+  "musicxml": "score.musicxml",
+  "changes": [
+   {
+    "from_bar": 5,
+    "to_bar": 8,
+    "lane": "brass",
+    "text": "Horns carry Ariadne's theme an octave higher.",
+    "answers": []
+   }
+  ],
+  "piece_tempo": [
+   {
+    "bar": 1,
+    "bpm": 92,
+    "shape": "speed_up"
+   },
+   {
+    "bar": 5,
+    "bpm": 128,
+    "shape": "steady"
+   }
+  ],
+  "mix": {
+   "style": "lofi",
+   "loudness": -20,
+   "room": {
+    "preset": "concert_hall",
+    "amount": 0.4
+   },
+   "limiter": {
+    "on": true,
+    "ceiling_db": -1
+   }
+  }
+ },
+ "invalid": [
+  {
+   "name": "schema 1 refuses a tempo line",
+   "set": "schema",
+   "value": 1,
+   "error": "piece_tempo"
+  },
+  {
+   "name": "a tempo line that disagrees with tempo",
+   "set": "tempo.1.bpm",
+   "value": 100,
+   "error": "tempo"
+  },
+  {
+   "name": "a tempo line not starting at bar 1",
+   "set": "piece_tempo.0.bar",
+   "value": 2,
+   "error": "piece_tempo[0].bar"
+  },
+  {
+   "name": "speed up to a slower mark",
+   "set": "piece_tempo.1.bpm",
+   "value": 80,
+   "error": "piece_tempo[0].shape"
+  },
+  {
+   "name": "the last tempo mark moving",
+   "set": "piece_tempo.1.shape",
+   "value": "slow_down",
+   "error": "piece_tempo[1].shape"
+  },
+  {
+   "name": "a tempo out of range",
+   "set": "piece_tempo.0.bpm",
+   "value": 500,
+   "error": "piece_tempo[0].bpm"
+  },
+  {
+   "name": "an unknown ratio",
+   "set": "lanes.1.speed",
+   "value": {
+    "ratio": 3
+   },
+   "error": "lanes[1].speed.ratio"
+  },
+  {
+   "name": "a speed that is neither",
+   "set": "lanes.1.speed",
+   "value": "fast",
+   "error": "lanes[1].speed"
+  },
+  {
+   "name": "an own BPM out of range",
+   "set": "lanes.1.speed",
+   "value": {
+    "bpm": 10
+   },
+   "error": "lanes[1].speed.bpm"
+  },
+  {
+   "name": "a loudness level not on the list",
+   "set": "lanes.0.dynamics.1.level",
+   "value": 90,
+   "error": "lanes[0].dynamics[1].level"
+  },
+  {
+   "name": "get louder to a softer mark",
+   "set": "lanes.0.dynamics.1.level",
+   "value": 32,
+   "error": "lanes[0].dynamics[0].shape"
+  },
+  {
+   "name": "loudness bars out of order",
+   "set": "lanes.1.dynamics.2.bar",
+   "value": 4,
+   "error": "lanes[1].dynamics[2].bar"
+  },
+  {
+   "name": "a bend starting late",
+   "set": "notes.3.bend.0.0",
+   "value": 0.1,
+   "error": "notes[3].bend[0][0]"
+  },
+  {
+   "name": "a bend past the note",
+   "set": "notes.3.bend.3.0",
+   "value": 2.5,
+   "error": "notes[3].bend[3][0]"
+  },
+  {
+   "name": "a bend too far",
+   "set": "notes.3.bend.2.1",
+   "value": 1300,
+   "error": "notes[3].bend[2][1]"
+  },
+  {
+   "name": "a bend of one point",
+   "set": "notes.3.bend",
+   "value": [
+    [
+     0,
+     10
+    ]
+   ],
+   "error": "notes[3].bend"
+  },
+  {
+   "name": "a pan too far",
+   "set": "lanes.0.fx.pan",
+   "value": 2,
+   "error": "lanes[0].fx.pan"
+  },
+  {
+   "name": "an unknown sound setting",
+   "set": "lanes.0.fx.reverse",
+   "value": true,
+   "error": "lanes[0].fx.reverse"
+  },
+  {
+   "name": "an EQ band too far",
+   "set": "lanes.0.fx.eq.middle",
+   "value": 20,
+   "error": "lanes[0].fx.eq.middle"
+  },
+  {
+   "name": "too many echo repeats",
+   "set": "lanes.0.fx.echo.repeats",
+   "value": 9,
+   "error": "lanes[0].fx.echo.repeats"
+  },
+  {
+   "name": "an unknown sweep",
+   "set": "lanes.0.fx.brightness.sweep",
+   "value": "wild",
+   "error": "lanes[0].fx.brightness.sweep"
+  },
+  {
+   "name": "mute that is not true or false",
+   "set": "lanes.0.fx.mute",
+   "value": "yes",
+   "error": "lanes[0].fx.mute"
+  },
+  {
+   "name": "an unknown room",
+   "set": "mix.room.preset",
+   "value": "garage",
+   "error": "mix.room.preset"
+  },
+  {
+   "name": "a limiter ceiling above 0",
+   "set": "mix.limiter.ceiling_db",
+   "value": 1,
+   "error": "mix.limiter.ceiling_db"
+  },
+  {
+   "name": "five voice effects",
+   "set": "lanes.1.voice.4",
+   "value": {
+    "effect": "robot",
+    "mix": 1
+   },
+   "error": "lanes[1].voice"
+  },
+  {
+   "name": "an unknown voice effect",
+   "set": "lanes.0.voice.1.effect",
+   "value": "chipmunk",
+   "error": "lanes[0].voice[1].effect"
+  },
+  {
+   "name": "a vocoder on its own lane",
+   "set": "lanes.1.voice.0.carrier",
+   "value": "brass",
+   "error": "lanes[1].voice[0].carrier"
+  },
+  {
+   "name": "a vocoder with no bands",
+   "set": "lanes.1.voice.0.bands",
+   "value": "__delete__",
+   "error": "lanes[1].voice[0].bands"
+  },
+  {
+   "name": "too few vocoder bands",
+   "set": "lanes.1.voice.0.bands",
+   "value": 4,
+   "error": "lanes[1].voice[0].bands"
+  },
+  {
+   "name": "a harmonizer voice twice",
+   "set": "lanes.1.voice.2.voices",
+   "value": [
+    "third",
+    "third"
+   ],
+   "error": "lanes[1].voice[2].voices"
+  },
+  {
+   "name": "a pitch shift too far",
+   "set": "lanes.1.voice.3.semitones",
+   "value": 13,
+   "error": "lanes[1].voice[3].semitones"
+  },
+  {
+   "name": "a talk box on a missing lane",
+   "set": "lanes.0.voice.0.carrier",
+   "value": "piano",
+   "error": "lanes[0].voice[0].carrier"
+  },
+  {
+   "name": "schema 3",
+   "set": "schema",
+   "value": 3,
+   "error": "schema"
+  }
+ ],
+ "velocities": [
+  {
+   "note": 0,
+   "level": 48.0,
+   "velocity": 42
+  },
+  {
+   "note": 1,
+   "level": 68.862867,
+   "velocity": 60
+  },
+  {
+   "note": 2,
+   "level": 89.725734,
+   "velocity": 90
+  },
+  {
+   "note": 3,
+   "level": 80,
+   "velocity": 90
+  },
+  {
+   "note": 4,
+   "level": 107.807802,
+   "velocity": 127
+  },
+  {
+   "note": 5,
+   "level": 77.941135,
+   "velocity": 97
+  }
+ ],
+ "bends": [
+  {
+   "note": 3,
+   "t": 0,
+   "rate": 0.971531941
+  },
+  {
+   "note": 3,
+   "t": 0.25,
+   "rate": 0.985663199
+  },
+  {
+   "note": 3,
+   "t": 0.5,
+   "rate": 1.0
+  },
+  {
+   "note": 3,
+   "t": 0.85,
+   "rate": 1.008701984
+  },
+  {
+   "note": 3,
+   "t": 1.2,
+   "rate": 1.017479692
+  },
+  {
+   "note": 3,
+   "t": 1.6,
+   "rate": 1.008701984
+  },
+  {
+   "note": 3,
+   "t": 2,
+   "rate": 1.0
+  },
+  {
+   "note": 3,
+   "t": 3,
+   "rate": 1.0
+  }
+ ]
+}

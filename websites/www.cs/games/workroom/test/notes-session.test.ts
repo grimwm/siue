@@ -34,6 +34,7 @@ function server() {
     uploadKeyring: async (locked, current) => { state.keyring = locked; state.failKeyring = null; state.uploaded.push(current); },
     changeKeyring: async locked => { state.keyring = locked; },
     deleteDraft: async () => 0,
+    saveDraft: async () => ({ status: 201, data: {} }),
     checkPairing: async () => 'wrong_code',
     pairKeyring: async () => null,
   };

@@ -389,11 +389,17 @@ export function challengeProblems(d: Difficulty, bar: Bar = BAR, context?: Chall
   return out;
 }
 
-/** Within a chapter no challenge level is easier (fewer situations stored) than the one before it. */
-export function rampProblems(previous: Difficulty, d: Difficulty): string[] {
-  return d.explored < previous.explored
-    ? [`stored ${d.explored} situations, fewer than the challenge level before it (${previous.explored})`]
-    : [];
+/** How much harder each challenge level is than the one before it, in situations stored: a steady climb, never a
+ *  cliff. The first challenge level is held to the challenge bar instead. */
+export const RAMP = { least: 1.2, most: 2.2 };
+
+/** Within a chapter each challenge level stores between RAMP.least and RAMP.most times the situations of the one
+ *  before it. */
+export function rampProblems(previous: Difficulty, d: Difficulty, ramp = RAMP): string[] {
+  const times = d.explored / Math.max(1, previous.explored);
+  if (times < ramp.least) return [`stored ${d.explored} situations, ${times.toFixed(2)} × the challenge level before it (${previous.explored}); the ramp asks at least ${ramp.least} ×`];
+  if (times > ramp.most) return [`stored ${d.explored} situations, ${times.toFixed(2)} × the challenge level before it (${previous.explored}); the ramp allows at most ${ramp.most} ×`];
+  return [];
 }
 
 /** The bar for shared levels, set against a chapter's challenge levels. It never needs a Minotaur: the quickest

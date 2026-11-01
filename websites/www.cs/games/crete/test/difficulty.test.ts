@@ -2,7 +2,7 @@
 // and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, measuring, hardPieces, challengeProblems, rampProblems, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, hardPieces, challengeProblems, rampProblems, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
@@ -75,8 +75,17 @@ test('the challenge rules: against the teaching levels and the bar', () => {
   assert.match(p[0]!, /stored \d+ situations/);
   assert.match(p[1]!, /shorter than the longest teaching level's 7/);
   assert.match(challengeProblems(measure(WALLED), { minotaurDelta: 0, exploredTimes: 0 }, { teaching: [] }).join(), /must lose/);
-  assert.deepEqual(rampProblems(easy, d), []);
-  assert.match(rampProblems(d, easy).join(), /fewer than the challenge level before it/);
+});
+
+test('the ramp: each challenge level stores 1.2 to 2.2 times the situations of the one before it', () => {
+  const d = measure(CHASED);
+  const at = (explored: number) => ({ ...d, explored });
+  assert.deepEqual(RAMP, { least: 1.2, most: 2.2 });
+  assert.deepEqual(rampProblems(at(1000), at(1200)), []);
+  assert.deepEqual(rampProblems(at(1000), at(2200)), []);
+  assert.match(rampProblems(at(1000), at(1100)).join(), /1\.10 × the challenge level before it \(1000\); the ramp asks at least 1\.2 ×/);
+  assert.match(rampProblems(at(1000), at(900)).join(), /at least 1\.2 ×/, 'easier than the one before');
+  assert.match(rampProblems(at(1000), at(2300)).join(), /2\.30 × .*the ramp allows at most 2\.2 ×/, 'a cliff');
 });
 
 test('a capped search is unknown, never none; an exhausted one is none', () => {
@@ -338,7 +347,7 @@ for (const chapter of CHAPTERS.filter(c => c.released)) {
     });
   }
   challenges.forEach((id, k) => {
-    test(`${id} is a challenge level: a real fight, no easier than the one before`, () => {
+    test(`${id} is a challenge level: a real fight, a steady step up from the one before`, () => {
       const problems = [
         ...challengeProblems(of(id), BAR, { teaching: teaching.map(of) }),
         ...(k > 0 ? rampProblems(of(challenges[k - 1]!), of(id)) : []),

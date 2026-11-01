@@ -4,7 +4,7 @@
  * opening the level again clears it. DOM-free. */
 import { initial } from './state.ts';
 import type { State } from './state.ts';
-import { step } from './step.ts';
+import { step, noTurn } from './step.ts';
 import type { Action, GameEvent } from './step.ts';
 import type { Level } from './level.ts';
 
@@ -19,6 +19,8 @@ export const startRun = (level: Level): Run => ({ past: [], now: initial(level),
 export function act(run: Run, a: Action): { run: Run; events: GameEvent[] } {
   const r = step(run.now, a);
   if (r.state === run.now) return { run, events: [] };
+  // A step that took no turn (an invisible wall shown) is no entry of its own: Undo goes back a whole turn.
+  if (noTurn(run.now, r.state)) return { run: { ...run, now: r.state }, events: r.events };
   return { run: { ...run, past: [...run.past, run.now], now: r.state }, events: r.events };
 }
 

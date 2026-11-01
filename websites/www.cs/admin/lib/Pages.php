@@ -408,7 +408,11 @@ final class Pages
             $body .= Html::p($note, $status >= 400 ? 'error' : '');
         }
         $list = $accounts->list();
-        $body .= Html::p('Shared usage: ' . \Music\Usage::human($accounts->sharedUsage()) . ' of ' . \Music\Usage::human($people->maxSharedBytes()))
+        $shared = $accounts->sharedUsage();
+        if ($shared >= 0.8 * $people->maxSharedBytes()) {
+            $body .= Html::p('The studios\' shared space is ' . (int) floor(100 * $shared / $people->maxSharedBytes()) . '% full. Raise max_shared_mb in the studio configuration before it fills.', 'error');
+        }
+        $body .= Html::p('Shared usage: ' . \Music\Usage::human($shared) . ' of ' . \Music\Usage::human($people->maxSharedBytes()))
             . Html::p('Accounts: ' . count($list) . ' of ' . $people->maxAccounts());
         if ($list === []) {
             $body .= Html::p('No studios yet.');

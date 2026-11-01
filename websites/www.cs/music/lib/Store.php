@@ -126,6 +126,27 @@ final class Store
         $this->db->exec('CREATE TABLE IF NOT EXISTS music_takes (account_id INTEGER NOT NULL, file TEXT NOT NULL, size INTEGER NOT NULL, seconds REAL NOT NULL, added_at INTEGER NOT NULL, PRIMARY KEY (account_id, file))');
         $this->db->exec('CREATE TABLE IF NOT EXISTS music_draft_takes (account_id INTEGER NOT NULL, piece TEXT NOT NULL, version INTEGER NOT NULL, file TEXT NOT NULL, PRIMARY KEY (account_id, piece, version, file))');
         $this->db->exec('CREATE INDEX IF NOT EXISTS music_draft_takes_file ON music_draft_takes(account_id, file)');
+        $this->db->exec("CREATE TABLE IF NOT EXISTS music_settings (account_id INTEGER PRIMARY KEY, vocal_quality TEXT NOT NULL DEFAULT 'perfect')");
+    }
+
+    public const VOCAL_QUALITIES = ['perfect', 'ear'];
+
+    /** The quality Save To Studio picks first for a new take: perfect (FLAC) unless the person chose ear (Opus). */
+    public function vocalQuality(): string
+    {
+        $q = $this->db->prepare('SELECT vocal_quality FROM music_settings WHERE account_id = ?');
+        $q->execute([$this->account]);
+        $v = $q->fetchColumn();
+        return in_array($v, self::VOCAL_QUALITIES, true) ? $v : 'perfect';
+    }
+
+    public function setVocalQuality(string $quality): bool
+    {
+        if (!in_array($quality, self::VOCAL_QUALITIES, true)) {
+            return false;
+        }
+        $this->db->prepare('INSERT INTO music_settings (account_id, vocal_quality) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET vocal_quality = excluded.vocal_quality')->execute([$this->account, $quality]);
+        return true;
     }
 
     /**
@@ -529,6 +550,7 @@ final class Store
             $this->db->prepare('DELETE FROM music_keyring WHERE account_id = ?')->execute([$this->account]);
             $this->db->prepare('DELETE FROM music_draft_takes WHERE account_id = ?')->execute([$this->account]);
             $this->db->prepare('DELETE FROM music_takes WHERE account_id = ?')->execute([$this->account]);
+            $this->db->prepare('DELETE FROM music_settings WHERE account_id = ?')->execute([$this->account]);
             $this->removeTree("{$this->dir}/drafts/{$this->account}");
             $this->removeTree("{$this->dir}/takes/{$this->account}");
         });

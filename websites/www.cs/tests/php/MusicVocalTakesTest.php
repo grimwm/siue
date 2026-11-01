@@ -211,4 +211,47 @@ final class MusicVocalTakesTest extends TestCase
         self::assertSame(2, $store->takes()[0]['drafts']);
         self::assertFalse($store->convertTake($take, $new, $ogg, 1.5), 'the old take is gone');
     }
+
+    public function testTakePhpServesOnlyTheAccountsOwnTakes(): void
+    {
+        $flac = self::fixture('voice-2s.flac');
+        $take = self::takeName($flac, 'flac');
+        $this->save($this->student, 'song', 1, ['score.json' => self::score('song', 1, [$take => round((48000 * 2 + 777) / 48000, 3)]), $take => $flac]);
+        $get = fn(int $account, string $file) => $this->pages->takeFile(music_signed_in($this->sessions, $account, ['method' => 'GET', 'query' => ['file' => $file]]));
+        $mine = $get($this->student, $take);
+        self::assertSame(200, $mine->status);
+        self::assertSame($flac, $mine->body);
+        self::assertSame(404, $get((int) $this->accounts->idFor(Admin\Auth::OWNER), $take)->status, 'another account\'s take is not there');
+        self::assertSame(400, $get($this->student, '../secret.flac')->status);
+    }
+
+    public function testConvertTakePhpChecksTheNewTakeAgainstTheOld(): void
+    {
+        $flac = self::fixture('voice-2s.flac');
+        $take = self::takeName($flac, 'flac');
+        $this->save($this->student, 'song', 1, ['score.json' => self::score('song', 1, [$take => round((48000 * 2 + 777) / 48000, 3)]), $take => $flac]);
+        $ogg = self::fixture('sine-1.5s.opus');
+        $new = self::takeName($ogg, 'ogg');
+        $in = music_signed_in($this->sessions, $this->student);
+        $csrf = json_decode($this->pages->csrf($in)->body, true)['csrf'];
+        $res = $this->pages->convertTake(req(['https' => true, 'method' => 'POST', 'cookies' => $in->cookies, 'query' => ['from' => $take, 'to' => $new], 'headers' => ['x-csrf' => $csrf]]), $ogg);
+        self::assertSame([422, 'bad_take'], [$res->status, json_decode($res->body, true)['error']], 'a 1.5 s take cannot stand for a 2 s one');
+        self::assertSame([$take], array_column($this->store($this->student)->takes(), 'file'), 'nothing changed');
+    }
+
+    public function testYourStudioShowsTheTakesTheMinutesLeftAndKeepsTheQualityChoice(): void
+    {
+        $in = music_signed_in($this->sessions, $this->student);
+        $page = $this->pages->studio($in)->body;
+        self::assertStringContainsString('No vocal takes saved yet.', $page);
+        self::assertStringContainsString('Room for about 9 more minutes of singing at Perfect, or about 36 at Good To The Ear.', $page);
+        self::assertStringContainsString('value="perfect" checked', $page);
+        $post = req(['https' => true, 'method' => 'POST', 'cookies' => $in->cookies, 'post' => ['csrf' => $this->sessions->csrf($in), 'action' => 'vocal-quality', 'quality' => 'ear']]);
+        self::assertSame(303, $this->pages->studioAction($post)->status);
+        self::assertSame('ear', $this->store($this->student)->vocalQuality());
+        self::assertStringContainsString('value="ear" checked', $this->pages->studio($in)->body);
+        $bad = req(['https' => true, 'method' => 'POST', 'cookies' => $in->cookies, 'post' => ['csrf' => $this->sessions->csrf($in), 'action' => 'vocal-quality', 'quality' => 'mp3']]);
+        self::assertSame(400, $this->pages->studioAction($bad)->status);
+        self::assertStringContainsString('data-vocal-quality="ear"', $this->pages->index($in)->body);
+    }
 }

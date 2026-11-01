@@ -6,9 +6,11 @@
 // Then, in JS and in the rendered buffer itself, the tail is folded onto the start, the hiss added and the whole
 // piece given one leveling gain.
 // The context, the fetch and the decoder are injected, so the tests hand in fakes.
-import type { Score } from '../score.ts';
+import type { Lane, Score } from '../score.ts';
+import { applyLaneFx, audible, DEFAULT_ROOM_SEND, limit, roomReverb } from './fx.ts';
+import { applyVoice } from './voice.ts';
 import { bendRate, voices } from './plan.ts';
-import type { Library } from './plan.ts';
+import type { Library, Voice } from './plan.ts';
 import { fold, hissSource, levelGain } from './master.ts';
 
 export const RATE = 48000;
@@ -115,21 +117,12 @@ function masterChain(ctx: OfflineAudioContext): AudioNode {
   return drive;
 }
 
-/**
- * The score as stereo audio at RATE, `duration` long, its tail folded onto the start so it loops. Rejects with a
- * message naming the lane or instrument when a lane has no sound, the library lacks an instrument or a sample fails.
- */
-export async function renderScore(score: Score, lib: Library, deps: RenderDeps = defaultDeps()): Promise<{ channels: Float32Array[]; rate: number }> {
-  const vs = voices(score, lib);
-  const instruments = [...new Set(score.lanes.map(l => l.sound!.instrument))];
-  const samples = await loadInstruments(lib, instruments, deps.fetchBytes, deps.decode, deps.cache ?? pageCache, new Set(vs.map(v => v.file)));
-  const length = Math.round(score.duration * RATE);
-  const ctx = deps.context(2, length + TAIL * RATE, RATE);
-  const input = masterChain(ctx);
+/** Plays voices `vs` into `ctx` through one gain node per lane, each going to `out`. */
+function schedule(ctx: OfflineAudioContext, score: Score, vs: readonly Voice[], samples: Map<string, AudioBuffer>, out: AudioNode): void {
   const lanes = new Map(score.lanes.map(l => {
     const g = ctx.createGain();
     g.gain.value = 10 ** (l.sound!.gain_db / 20);
-    g.connect(input);
+    g.connect(out);
     return [l.id, g] as const;
   }));
   for (const v of vs) {
@@ -159,6 +152,82 @@ export async function renderScore(score: Score, lib: Library, deps: RenderDeps =
     src.start(v.at);
     src.stop(end);
   }
+}
+
+/** Whether a score uses the Sound panel, the Room, the limiter or Voice Effects, and so takes the renderer's longer road. */
+export function usesSound(score: Score): boolean {
+  return score.lanes.some(l => (l.fx && Object.keys(l.fx).length > 0) || (l.voice && l.voice.length > 0))
+    || (!!score.mix?.room && score.mix.room.preset !== 'dry' && score.mix.room.amount > 0) || !!score.mix?.limiter?.on;
+}
+
+/** The mono mix of stereo channels. */
+const mono = (ch: readonly Float32Array[]): Float32Array => Float32Array.from(ch[0]!, (v, i) => (v + (ch[1]?.[i] ?? v)) / 2);
+
+/**
+ * The parts with their Sound settings and Voice Effects, summed, with the Room: each part that has settings, or that a
+ * Vocoder or Talk Box uses as its carrier, is rendered on its own, the rest together. Returns the stereo bus.
+ */
+async function soundBus(score: Score, vs: readonly Voice[], samples: Map<string, AudioBuffer>, length: number, deps: RenderDeps): Promise<Float32Array[]> {
+  const anySolo = score.lanes.some(l => l.fx?.solo);
+  const heard = score.lanes.filter(l => audible(l.fx, anySolo));
+  const carriers = new Set(score.lanes.flatMap(l => (l.voice ?? []).flatMap(v => ('carrier' in v ? [v.carrier] : []))));
+  const own = (l: Lane) => (l.fx && Object.keys(l.fx).length > 0) || (l.voice?.length ?? 0) > 0 || carriers.has(l.id);
+  const render = async (ids: ReadonlySet<string>): Promise<Float32Array[]> => {
+    const ctx = deps.context(2, length, RATE);
+    schedule(ctx, score, vs.filter(v => ids.has(v.lane)), samples, ctx.destination);
+    const out = await ctx.startRendering();
+    return [Float32Array.from(out.getChannelData(0)), Float32Array.from(out.getChannelData(out.numberOfChannels > 1 ? 1 : 0))];
+  };
+  const bus = [new Float32Array(length), new Float32Array(length)];
+  const room = score.mix?.room && score.mix.room.preset !== 'dry' ? score.mix.room : null;
+  const send = room ? [new Float32Array(length), new Float32Array(length)] : null;
+  const add = (ch: readonly Float32Array[], sendLevel: number) => {
+    for (let c = 0; c < 2; c++) for (let i = 0; i < length; i++) {
+      bus[c]![i] = bus[c]![i]! + ch[c]![i]!;
+      if (send) send[c]![i] = send[c]![i]! + ch[c]![i]! * sendLevel;
+    }
+  };
+  const rest = new Set(heard.filter(l => !own(l)).map(l => l.id));
+  if (rest.size) add(await render(rest), DEFAULT_ROOM_SEND);
+  const dry = new Map<string, Float32Array[]>();
+  for (const l of score.lanes.filter(own)) dry.set(l.id, await render(new Set([l.id])));
+  const bpm = score.tempo?.[0]?.bpm ?? 120;
+  for (const l of heard.filter(own)) {
+    let ch = dry.get(l.id)!.map(c => Float32Array.from(c));
+    if (l.voice?.length) {
+      const voiced = applyVoice(mono(ch), l.voice, RATE, new Map([...dry].map(([id, c]) => [id, mono(c)])));
+      ch = [voiced, Float32Array.from(voiced)];
+    }
+    if (l.fx) applyLaneFx(ch, l.fx, bpm, RATE);
+    add(ch, l.fx?.room ?? DEFAULT_ROOM_SEND);
+  }
+  if (room && send) roomReverb(send, room, RATE).forEach((wet, c) => { for (let i = 0; i < length; i++) bus[c]![i] = bus[c]![i]! + wet[i]!; });
+  return bus;
+}
+
+/**
+ * The score as stereo audio at RATE, `duration` long, its tail folded onto the start so it loops. Rejects with a
+ * message naming the lane or instrument when a lane has no sound, the library lacks an instrument or a sample fails.
+ * A score that uses Sound, the Room, the limiter or Voice Effects has its parts made first and then played through
+ * the same master chain; one that uses none of them is played in a single pass, as it always was.
+ */
+export async function renderScore(score: Score, lib: Library, deps: RenderDeps = defaultDeps()): Promise<{ channels: Float32Array[]; rate: number }> {
+  const vs = voices(score, lib);
+  const instruments = [...new Set(score.lanes.map(l => l.sound!.instrument))];
+  const samples = await loadInstruments(lib, instruments, deps.fetchBytes, deps.decode, deps.cache ?? pageCache, new Set(vs.map(v => v.file)));
+  const length = Math.round(score.duration * RATE);
+  // The parts are made before the master's context exists, so only one full-length context is held at a time.
+  const bus = usesSound(score) ? await soundBus(score, vs, samples, length + TAIL * RATE, deps) : null;
+  const ctx = deps.context(2, length + TAIL * RATE, RATE);
+  const input = masterChain(ctx);
+  if (bus) {
+    const buf = ctx.createBuffer(2, bus[0]!.length, RATE);
+    bus.forEach((c, i) => buf.copyToChannel(c, i));
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(input);
+    src.start(0);
+  } else schedule(ctx, score, vs, samples, input);
   const rendered = await ctx.startRendering();
   // From here on the work is in the rendered buffer's own memory: no full-length copy of the piece is made.
   const folded = fold(Array.from({ length: rendered.numberOfChannels }, (_, c) => rendered.getChannelData(c)), length);
@@ -167,7 +236,10 @@ export async function renderScore(score: Score, lib: Library, deps: RenderDeps =
     const h = hiss();
     for (const c of folded) c[j]! += h;
   }
-  const gain = levelGain(folded, RATE, score.mix?.loudness ?? DEFAULT_LOUDNESS, PEAK_DB);
+  const limiter = score.mix?.limiter;
+  // With the limiter on, the piece may be levelled up to full scale and the limiter catches what passes its ceiling.
+  const gain = levelGain(folded, RATE, score.mix?.loudness ?? DEFAULT_LOUDNESS, limiter?.on ? 0 : PEAK_DB);
   for (const c of folded) for (let j = 0; j < length; j++) c[j]! *= gain;
+  if (limiter?.on) limit(folded, limiter, RATE);
   return { channels: folded, rate: RATE };
 }

@@ -3,7 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { regions, SFIZZ_LEVEL, velocityGain, voices } from '../src/render/plan.ts';
+import { bendRate, regions, SFIZZ_LEVEL, velocityGain, voices } from '../src/render/plan.ts';
+import { effectiveVelocity, levelAt } from '../src/compose/loudness.ts';
+import { tempoMap } from '../src/tempo.ts';
 import type { Library } from '../src/render/plan.ts';
 import { parseScore } from '../src/score.ts';
 import type { Score } from '../src/score.ts';
@@ -112,4 +114,41 @@ test('an unpitched note with no sample makes no voice', () => {
 test('pitched regions unchanged', () => {
   const files = LIBRARY.instruments['cello']!.files;
   assert.deepEqual(regions(files, true), regions(files));
+});
+
+interface Vectors { score: Score; velocities: { note: number; level: number; velocity: number }[]; bends: { note: number; t: number; rate: number }[] }
+const vectors = (): Vectors => JSON.parse(readFileSync(new URL('./fixtures/schema2-vectors.json', import.meta.url), 'utf8')) as Vectors;
+const vectorLibrary = (): Library => JSON.parse(readFileSync(new URL('../../../music/library/library.json', import.meta.url), 'utf8')) as Library;
+
+test('a loudness line scales each note as the shared vectors say (the Python side reads the same vectors)', () => {
+  const v = vectors();
+  const got = voices(v.score, vectorLibrary());
+  for (const want of v.velocities) {
+    const n = v.score.notes[want.note]!;
+    const lane = v.score.lanes.find(l => l.id === n.lane)!;
+    assert.ok(Math.abs(levelAt(lane.dynamics!, n.start, b => tempoMap(v.score).barStart(b)) - want.level) < 1e-5, `note ${want.note} level`);
+    const g = SFIZZ_LEVEL * 10 ** (lane.sound!.gain_db / 20) * velocityGain(want.velocity);
+    assert.ok(Math.abs(got[want.note]!.gain - g) < 1e-12, `note ${want.note} plays at velocity ${want.velocity}`);
+  }
+});
+
+test('a lane with no loudness line plays each note at its own velocity', () => {
+  const v = vectors();
+  for (const l of v.score.lanes) delete l.dynamics;
+  const got = voices(v.score, vectorLibrary());
+  v.score.notes.forEach((n, i) => {
+    const lane = v.score.lanes.find(l => l.id === n.lane)!;
+    assert.ok(Math.abs(got[i]!.gain - SFIZZ_LEVEL * 10 ** (lane.sound!.gain_db / 20) * velocityGain(n.velocity)) < 1e-12);
+  });
+  assert.equal(effectiveVelocity(77, null), 77);
+});
+
+test('a bend gives the shared vectors\' rates, and the voice carries it', () => {
+  const v = vectors();
+  for (const want of v.bends) {
+    const bend = v.score.notes[want.note]!.bend!;
+    assert.ok(Math.abs(bendRate(bend, want.t) - want.rate) < 1e-8, `t ${want.t}`);
+  }
+  assert.deepEqual(voices(v.score, vectorLibrary())[3]!.bend, v.score.notes[3]!.bend);
+  assert.equal(bendRate(null, 1), 1);
 });

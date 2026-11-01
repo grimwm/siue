@@ -190,7 +190,7 @@ class PublishTest(unittest.TestCase):
             (lambda s: s["notes"][0].__setitem__("lane", "violas"), "notes[0].lane"),
             (lambda s: s["energy"][1].__setitem__(1, 1.5), "energy[1]"),
             (lambda s: s["glossary"][0].__setitem__("term", "flibbertigibbet"), "glossary[0].term"),
-            (lambda s: s.__setitem__("schema", 2), "schema"),
+            (lambda s: s.__setitem__("schema", 3), "schema"),
         ]
         for change, path in cases:
             s = json.loads(json.dumps(base))

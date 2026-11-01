@@ -59,7 +59,7 @@ export function addPart(doc: EditDoc, entry: Entry): { doc: EditDoc; id: string 
   for (let k = 2; ids.has(id); k++) id = `${slug(entry.name)}-${k}`;
   const family = laneFamily(entry);
   const part: Part = { id, name: name(n), color: PART_COLOURS[doc.parts.length % PART_COLOURS.length]!, family, icon: family,
-    instrument: entry.id, gain_db: 0, attack: entry.attack, release: entry.release, notes: [] };
+    instrument: entry.id, gain_db: 0, attack: entry.attack, release: entry.release, notes: [], speed: 'follow', dynamics: null };
   return { doc: { ...doc, parts: [...doc.parts, part] }, id };
 }
 

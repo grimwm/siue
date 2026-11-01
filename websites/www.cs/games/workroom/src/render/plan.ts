@@ -1,6 +1,8 @@
 // The render plan: each note of a renderable score as a voice, the sample it plays and how, the way the
 // composing pipeline's SFZ instrument (music/compose/siue_compose/sfz.py) plays it under sfizz. DOM-free.
 import type { Score } from '../score.ts';
+import { tempoMap } from '../tempo.ts';
+import { effectiveVelocity, levelAt } from '../compose/loudness.ts';
 
 /** One sample of the shared library (music/library/library.json): its root key, path under the library and format. */
 export interface LibraryFile { pitch: number; file: string; rate: number; channels: number }
@@ -20,9 +22,28 @@ export interface Library { version: 1; source: string; commit: string; licence: 
 export interface Region { lo: number; hi: number; file: LibraryFile }
 /**
  * A note as played: `file` at `rate` (1 is the sample's own pitch) from `at` for `dur` seconds, then released;
- * `gain` is linear (sfizz's level times the lane level times the velocity's); `loop` is the sample's sustained stretch in seconds, or null.
+ * `gain` is linear (sfizz's level times the lane level times the velocity's, after the lane's loudness line); `loop`
+ * is the sample's sustained stretch in seconds, or null; `bend` is the note's [seconds from `at`, cents] curve, or null.
  */
-export interface Voice { lane: string; file: string; rate: number; at: number; dur: number; gain: number; attack: number; release: number; loop: [number, number] | null }
+export interface Voice {
+  lane: string; file: string; rate: number; at: number; dur: number; gain: number; attack: number; release: number;
+  loop: [number, number] | null; bend: [number, number][] | null;
+}
+
+/** The playback-rate multiplier a bend gives `t` seconds into its note: linear in cents between points, held past the ends. */
+export function bendRate(bend: readonly [number, number][] | null, t: number): number {
+  if (!bend || bend.length === 0) return 1;
+  let c = bend[bend.length - 1]![1];
+  if (t <= bend[0]![0]) c = bend[0]![1];
+  else {
+    for (let i = 0; i + 1 < bend.length; i++) {
+      const [t0, c0] = bend[i]!;
+      const [t1, c1] = bend[i + 1]!;
+      if (t >= t0 && t <= t1) { c = c0 + ((c1 - c0) * (t - t0)) / (t1 - t0); break; }
+    }
+  }
+  return 2 ** (c / 1200);
+}
 
 /**
  * Each sample covers the keys nearest its root: split halfway between neighbouring roots, the outer ones reaching 0 and 127.
@@ -63,8 +84,9 @@ export function voices(score: Score, lib: Library): Voice[] {
     if (!sound) throw new Error(`lane ${lane.id} has no sound, so the score cannot be rendered`);
     const inst = lib.instruments[sound.instrument];
     if (!inst) throw new Error(`lane ${lane.id} uses instrument ${sound.instrument}, which the sample library does not have`);
-    return [lane.id, { sound, regions: regions(inst.files, inst.pitched !== false), loop: inst.loop ?? null }] as const;
+    return [lane.id, { sound, regions: regions(inst.files, inst.pitched !== false), loop: inst.loop ?? null, dynamics: lane.dynamics ?? null }] as const;
   }));
+  const bars = tempoMap(score);
   return score.notes.flatMap(n => {
     const lane = byLane.get(n.lane);
     if (!lane) throw new Error(`a note names lane ${n.lane}, which the score does not have`);
@@ -72,7 +94,8 @@ export function voices(score: Score, lib: Library): Voice[] {
     if (!region) return [];
     return [{
       lane: n.lane, file: region.file.file, rate: 2 ** ((n.pitch - region.file.pitch) / 12), at: n.start, dur: n.length,
-      gain: SFIZZ_LEVEL * 10 ** (lane.sound.gain_db / 20) * velocityGain(n.velocity), attack: lane.sound.attack, release: lane.sound.release, loop: lane.loop,
+      gain: SFIZZ_LEVEL * 10 ** (lane.sound.gain_db / 20) * velocityGain(effectiveVelocity(n.velocity, lane.dynamics ? levelAt(lane.dynamics, n.start, b => bars.barStart(b)) : null)),
+      attack: lane.sound.attack, release: lane.sound.release, loop: lane.loop, bend: n.bend ?? null,
     }];
   });
 }

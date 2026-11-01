@@ -96,7 +96,7 @@ test('a new piece is 92 BPM in 4/4, four bars, one section; with a part it saves
   assert.equal(doc.bars, 4);
   const cello = ENTRIES.find(e => e.id === 'cello')!;
   doc.parts.push({ id: 'cello', name: 'Cello', color: '#7a9cc6', family: 'strings', icon: 'strings', instrument: 'cello', gain_db: 0, attack: cello.attack, release: cello.release,
-    notes: [{ id: 1, start: 0, length: 1, pitch: 48, velocity: 90, motif: null }, { id: 2, start: 0, length: 1, pitch: 55, velocity: 90, motif: null }] });
+    notes: [{ id: 1, start: 0, length: 1, pitch: 48, velocity: 90, motif: null }, { id: 2, start: 0, length: 1, pitch: 55, velocity: 90, motif: null }], speed: 'follow', dynamics: null });
   const saved = scoreFromDoc(doc, { ...AT, piece: { id: 'my-first-tune', title: 'My First Tune' }, project: { id: 'my-pieces', name: 'My Pieces' }, draft: 1 });
   const parsed = parseScore(saved, new Set(ENTRIES.map(e => e.id)));
   assert.ok(parsed.ok, parsed.ok ? '' : parsed.error);

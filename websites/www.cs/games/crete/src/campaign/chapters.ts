@@ -4,10 +4,12 @@
 import type { ChapterLore } from './lore.ts';
 import { CHAPTER_1 } from './chapter-1.ts';
 import { CHAPTER_2 } from './chapter-2.ts';
+import { CHAPTER_3 } from './chapter-3.ts';
 import type { Level } from '../puzzle/level.ts';
 import type { Action } from '../puzzle/step.ts';
 import { TRIALS, trialLevel } from '../puzzle/trials.ts';
 import { WAYS, wayLevel } from '../puzzle/ways.ts';
+import { CLOSING, closingLevel } from '../puzzle/closing.ts';
 
 export interface Chapter {
   n: number; name: string; released: boolean; levelIds: readonly string[];
@@ -32,17 +34,26 @@ export const CHAPTERS: readonly Chapter[] = [
     teaching: 3,
     lore: CHAPTER_2,
   },
-  ...Array.from({ length: 8 }, (_, i) => unreleased(i + 3)),
+  {
+    n: 3, name: 'The Closing Ways', released: true,
+    levelIds: CLOSING.map(w => w.id),
+    teaching: 3,
+    lore: CHAPTER_3,
+  },
+  ...Array.from({ length: 7 }, (_, i) => unreleased(i + 4)),
 ];
 
 export const LEVEL_IDS: readonly string[] = CHAPTERS.filter(c => c.released).flatMap(c => c.levelIds);
 
-/** A released level's level, by id: a trial (Chapter 1) or one of the winding ways (Chapter 2). */
+/** A released level's level, by id: a trial (Chapter 1), one of the winding ways (Chapter 2) or one of the closing
+ *  ways (Chapter 3). */
 export function levelById(id: string): Level {
   const t = TRIALS.findIndex(x => x.id === id);
   if (t >= 0) return trialLevel(t);
   const w = WAYS.findIndex(x => x.id === id);
   if (w >= 0) return wayLevel(w);
+  const c = CLOSING.findIndex(x => x.id === id);
+  if (c >= 0) return closingLevel(c);
   throw new RangeError(`no level ${id}`);
 }
 

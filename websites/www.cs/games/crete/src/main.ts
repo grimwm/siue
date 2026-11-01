@@ -25,7 +25,7 @@ import { solve } from './puzzle/solver.ts';
 import { startSearch } from './solver-client.ts';
 import type { Report } from './solver-host.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
-import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf } from './campaign/chapters.ts';
+import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, levelById } from './campaign/chapters.ts';
 import type { OutsideLevel } from './campaign/chapters.ts';
 import { createOutside } from './outside.ts';
 import type { Action } from './puzzle/step.ts';
@@ -702,4 +702,4 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };
+window.__creteTest = { game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook };

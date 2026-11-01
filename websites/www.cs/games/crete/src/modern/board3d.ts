@@ -54,6 +54,8 @@ export interface ModernHost {
   image: HTMLImageElement;
   /** True while a layer other than `start` is open. */
   blocked(): boolean;
+  /** True while any layer, the start card too, covers the board. */
+  covered(): boolean;
   /** A camera gesture happened (closes the start card). */
   gesture(): void;
   /** A finger swiped the board (src/swipe.ts): move Theseus that way as the screen shows it. */

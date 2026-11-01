@@ -148,6 +148,8 @@ export interface Ui {
   setMoveDir(fn: (dir: MoveAction) => MoveAction): void;
   /** True while a card other than the start card is open. */
   cardsOpen(): boolean;
+  /** True while any card, the start card too, is open. */
+  layersOpen(): boolean;
   /** Whether taking `what` now is a first, whose card the page shows (the game stops the turn's animation there). */
   isFirst(id: string): boolean;
   /** Closes the start card, as a move does. */
@@ -1510,6 +1512,7 @@ export function createUi(deps: UiDeps): Ui {
       moveDir = fn;
     },
     cardsOpen: () => layers.stack().some((n) => n !== "start"),
+    layersOpen: () => layers.stack().length > 0,
     isFirst,
     closeStart: () => layers.close("start"),
     swipe,

@@ -49,7 +49,7 @@ interface Two {
 }
 
 const TURN_PER_PX = 0.35;
-/** Degrees of tilt per pixel slid: up tips toward straight down, down back toward 45°. */
+/** Degrees of tilt per pixel slid, as on a map app: up leans the view toward the horizon (45°), down back toward straight down. */
 export const TILT_PER_PX = 0.3;
 /** How far two fingers move before the touch is read as a tilt or as the rest. */
 const DECIDE_PX = 10;
@@ -101,7 +101,7 @@ export function createGestures(now: () => number): Gestures {
           if (dx !== 0 || dy !== 0) ops.push({ kind: 'pan', dx, dy });
         } else {
           if (dx !== 0) ops.push({ kind: 'turn', deg: -dx * TURN_PER_PX });
-          if (dy !== 0) ops.push({ kind: 'tilt', deg: -dy * TILT_PER_PX });
+          if (dy !== 0) ops.push({ kind: 'tilt', deg: dy * TILT_PER_PX });
         }
       } else if (held.size === 2 && two && start) {
         const nowInfo = twoInfo();
@@ -123,7 +123,7 @@ export function createGestures(now: () => number): Gestures {
         }
         if (mode === 'tilt') {
           const mdy = nowInfo.my - two.my;
-          if (mdy !== 0) ops.push({ kind: 'tilt', deg: -mdy * TILT_PER_PX });
+          if (mdy !== 0) ops.push({ kind: 'tilt', deg: mdy * TILT_PER_PX });
           two = nowInfo;
           return ops;
         }

@@ -14,15 +14,15 @@ const sum = (ops: CamOp[], kind: 'turn' | 'pan'): [number, number] => {
   return [a, b];
 };
 
-test('the mouse dragging +100 px across turns -35 degrees; dragging up tilts toward straight down; letting go leaves the view where it is', () => {
+test('the mouse dragging +100 px across turns -35 degrees; dragging up leans toward 45° as on a map app; letting go leaves the view where it is', () => {
   const g = createGestures(() => 0);
   g.down(p(1, 50, 50, 'mouse'));
   const ops: CamOp[] = [];
   for (let x = 60; x <= 150; x += 10) ops.push(...g.move(p(1, x, 50, 'mouse')));
   assert.ok(Math.abs(sum(ops, 'turn')[0] + 35) < 1e-9);
   assert.ok(ops.every(o => o.kind === 'turn'));
-  assert.deepEqual(g.move(p(1, 150, 10, 'mouse')), [{ kind: 'tilt', deg: 40 * TILT_PER_PX }], 'up 40 px');
-  assert.deepEqual(g.move(p(1, 150, 30, 'mouse')), [{ kind: 'tilt', deg: -20 * TILT_PER_PX }], 'and back down');
+  assert.deepEqual(g.move(p(1, 150, 10, 'mouse')), [{ kind: 'tilt', deg: -40 * TILT_PER_PX }], 'up 40 px');
+  assert.deepEqual(g.move(p(1, 150, 30, 'mouse')), [{ kind: 'tilt', deg: 20 * TILT_PER_PX }], 'and back down');
   assert.deepEqual(g.up(p(1, 150, 30, 'mouse')), [], 'no squaring up');
 });
 
@@ -34,7 +34,7 @@ test('two fingers side by side sliding up together tilt, and nothing else; lifti
   for (let y = 296; y >= 240; y -= 4) ops.push(...g.move(p(1, 100, y)), ...g.move(p(2, 200, y)));
   assert.ok(ops.length > 0 && ops.every(o => o.kind === 'tilt'), JSON.stringify(ops.slice(0, 3)));
   const tilt = ops.reduce((a, o) => a + (o.kind === 'tilt' ? o.deg : 0), 0);
-  assert.ok(tilt > 0 && tilt <= 60 * TILT_PER_PX + 1e-9, `up tips toward straight down: ${tilt}`);
+  assert.ok(tilt < 0 && tilt >= -60 * TILT_PER_PX - 1e-9, `up leans toward 45°: ${tilt}`);
   assert.deepEqual(g.up(p(1, 100, 240)), []);
   assert.deepEqual(g.up(p(2, 200, 240)), [], 'no squaring up');
 });

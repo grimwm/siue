@@ -1,5 +1,5 @@
 /* The Island of Crete, modern look: the compass as pure maths. A drag on the compass steers the camera: across turns
- * the view, up tilts it toward straight down and down tilts it back toward 45°; the view stays wherever the drag
+ * the view, up leans it toward 45° and down tilts it back toward straight down; the view stays wherever the drag
  * leaves it. A press that never moves COMPASS_TAP_PX from where it came down is a tap, however long it is held, which
  * resets the view. The compass's face shows the camera as it is, whatever moved it: the needle turns with the
  * heading, and the dial is squashed and a ring fills as the view tilts away from straight down. DOM-free. */
@@ -41,10 +41,10 @@ export function createCompassDrag(): CompassDrag {
       press.x = x;
       press.y = y;
       const ops: CamOp[] = [];
-      // The same senses as a drag on the board: rightward turns as a left-button drag right does, up tips toward
-      // straight down.
+      // The same senses as a drag on the board: rightward turns as a left-button drag right does, up leans toward
+      // 45°, as on a map app.
       if (dx !== 0) ops.push({ kind: 'turn', deg: -dx * COMPASS_TURN_PER_PX });
-      if (dy !== 0) ops.push({ kind: 'tilt', deg: -dy * COMPASS_TILT_PER_PX });
+      if (dy !== 0) ops.push({ kind: 'tilt', deg: dy * COMPASS_TILT_PER_PX });
       return ops;
     },
     up(id, x, y) {

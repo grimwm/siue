@@ -29,16 +29,16 @@ test('a drag across the compass turns the view, the way a left-button drag on th
   assert.equal(v.pitch, START_PITCH, 'across only turns');
 });
 
-test('a drag down the compass tilts the view toward 45°, and up toward straight down, and no further either way', () => {
+test('a drag up the compass leans the view toward 45°, and down toward straight down, and no further either way', () => {
   const d = createCompassDrag();
   d.down(1, 50, 50);
-  const some = play(d.move(1, 50, 70));
+  const some = play(d.move(1, 50, 30));
   near(some.pitch, START_PITCH - 20 * COMPASS_TILT_PER_PX);
   assert.equal(some.yaw, 0, 'up and down only tilt');
-  const all = play([...d.move(1, 50, 70), ...d.move(1, 50, 400)]);
+  const all = play([...d.move(1, 50, 30), ...d.move(1, 50, -400)]);
   assert.equal(all.pitch, MIN_PITCH, 'held at 45°');
-  const back = play(d.move(1, 50, -400), all);
-  assert.equal(back.pitch, MAX_PITCH, 'and dragging up goes no further than straight down');
+  const back = play(d.move(1, 50, 400), all);
+  assert.equal(back.pitch, MAX_PITCH, 'and dragging down goes no further than straight down');
 });
 
 test('a drag that lets go leaves the view at whatever heading it reached: no squaring up, no reset', () => {
@@ -100,13 +100,13 @@ test('the compass shows a view moved by the board\'s gestures too: two fingers t
   let t = 0;
   const g = createGestures(() => t);
   const ops: CamOp[] = [];
-  // Two fingers side by side slide down together: a tilt toward angled.
+  // Two fingers side by side slide up together: a tilt toward angled.
   ops.push(...g.down({ id: 1, x: 100, y: 300, type: 'touch', button: 0 }), ...g.down({ id: 2, x: 200, y: 300, type: 'touch', button: 0 }));
-  for (let y = 300; y <= 360; y += 10) {
+  for (let y = 300; y >= 240; y -= 10) {
     t += 16;
     ops.push(...g.move({ id: 1, x: 100, y, type: 'touch', button: 0 }), ...g.move({ id: 2, x: 200, y, type: 'touch', button: 0 }));
   }
-  ops.push(...g.up({ id: 1, x: 100, y: 360, type: 'touch', button: 0 }), ...g.up({ id: 2, x: 200, y: 360, type: 'touch', button: 0 }));
+  ops.push(...g.up({ id: 1, x: 100, y: 240, type: 'touch', button: 0 }), ...g.up({ id: 2, x: 200, y: 240, type: 'touch', button: 0 }));
   const tilted = play(ops);
   assert.ok(tilted.pitch < START_PITCH, `two fingers tilted the view: ${tilted.pitch}`);
   const face = compassFace(tilted);

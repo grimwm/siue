@@ -14,8 +14,9 @@ export interface LocalTake {
   made: string;
   rate: number;
   samples: number;
-  /** Where it was sung in the piece, in seconds, to put it back after a reload. */
+  /** Where it was sung in the piece, and the seconds of count-in at its start that are not heard, to put it back after a reload. */
   at?: number;
+  from?: number;
   /** The studio file once saved (vocal-<sha256>.<ext>). */
   saved?: string;
 }

@@ -733,6 +733,11 @@ test('Vocal Tracks: recorded on this device, kept through a reload, saved both w
     expect(await mic()).toBe(1);
     await expect(panel.locator('[data-take] [data-where]')).toHaveText(['Only On This Device']);
     await expect(panel.locator('[data-clip]')).toHaveCount(1);
+    // The count-in is recorded but not heard: the clip starts where the piece starts, past the count-in in its take.
+    const placed = async () => ({ at: Number(await panel.locator('[data-clip-at]').inputValue()), from: Number(await panel.locator('[data-clip-from]').inputValue()) });
+    const first = await placed();
+    expect(first.at).toBeLessThan(0.5);
+    expect(first.from).toBeGreaterThan(2);
     await shot(page, 'vocal-recorded');
 
     // A reload before saving: the take is still on this device, and goes back where it was sung.
@@ -742,6 +747,7 @@ test('Vocal Tracks: recorded on this device, kept through a reload, saved both w
     await expect(panel.locator('[data-device-take]')).toHaveCount(1);
     await panel.getByRole('button', { name: 'Add To The Track' }).click();
     await expect(panel.locator('[data-take] [data-where]')).toHaveText(['Only On This Device']);
+    expect(await placed()).toEqual(first);
 
     // Save To Studio: both sizes, made for real, and what each leaves; Perfect is the studio's first choice.
     await page.getByRole('button', { name: 'Save Draft' }).click();

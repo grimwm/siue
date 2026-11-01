@@ -48,6 +48,13 @@ export interface VocalPanelProps {
   status(text: string): void;
 }
 
+/** Clip `i` of `take` trimmed to start `from` seconds into it, and placed `at` seconds into the piece (a trim alone moves it). */
+function placeTrimmed(doc: EditDoc, partId: string, i: number, take: string, from: number, to: number, at: number): EditDoc {
+  const trimmed = trimClip(doc, partId, i, from, to);
+  const j = trimmed.parts.find(x => x.id === partId)!.vocal!.clips.findIndex(c => c.take === take);
+  return moveClip(trimmed, partId, j, at);
+}
+
 const sec = (x: number): string => `${Math.round(x * 100) / 100} s`;
 const num = (e: Event): number => Number((e.target as HTMLInputElement).value);
 
@@ -107,11 +114,11 @@ export function VocalPanel(p: VocalPanelProps) {
       p.status('Nothing was recorded.');
       return;
     }
-    const kept: LocalTake = { ...run.take, samples: where.samples, at: where.at };
+    const kept: LocalTake = { ...run.take, samples: where.samples, at: where.at, from: where.from / run.r.rate };
     await p.ports.takes.update(kept);
     let next = addTake(p.doc, p.part.id, { file: run.take.id, seconds }, where.at);
     const i = next.parts.find(x => x.id === p.part.id)!.vocal!.clips.findIndex(c => c.take === run.take.id);
-    if (where.from > 0) next = trimClip(next, p.part.id, i, where.from / run.r.rate, seconds);
+    if (where.from > 0) next = placeTrimmed(next, p.part.id, i, run.take.id, where.from / run.r.rate, seconds, where.at);
     p.apply(next);
     await refresh();
     p.status(`${run.take.name} is kept on this device (${sec(seconds)}). Save To Studio sends it; Undo takes it out of the track.`);
@@ -119,8 +126,12 @@ export function VocalPanel(p: VocalPanelProps) {
 
   /** A take on this device that the track does not have (after a reload): put it back where it was sung. */
   const putBack = (t: LocalTake): void => {
-    const at = t.at ?? 0;
-    p.apply(addTake(p.doc, p.part.id, { file: t.saved ?? t.id, seconds: Math.round((t.samples / t.rate) * 1000) / 1000 }, at));
+    const file = t.saved ?? t.id;
+    const seconds = Math.round((t.samples / t.rate) * 1000) / 1000;
+    let next = addTake(p.doc, p.part.id, { file, seconds }, t.at ?? 0);
+    const i = next.parts.find(x => x.id === p.part.id)!.vocal!.clips.findIndex(c => c.take === file);
+    if (t.from && i >= 0) next = placeTrimmed(next, p.part.id, i, file, t.from, seconds, t.at ?? 0);
+    p.apply(next);
   };
 
   const convert = async (file: string): Promise<void> => {

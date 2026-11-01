@@ -193,7 +193,7 @@ export function Composer(p: ComposerProps) {
     if (notes.length === 0) return;
     const added = addNotes(s.doc, s.part.id, notes);
     apply(added.doc);
-    setStatus(`Recorded ${notes.length} ${notes.length === 1 ? 'note' : 'notes'}. Undo takes them back.`);
+    setStatus(`Recorded ${notes.length} ${notes.length === 1 ? 'note. Undo takes it back.' : 'notes. Undo takes them back.'}`);
   };
   /** The first beat of the bar after a part's last note: where a new take, or hummed notes, go. */
   const afterPart = (x: Part | null): number => {
@@ -393,8 +393,10 @@ export function Composer(p: ComposerProps) {
     setArmed(null);
     setStatus(`Added ${made.length} hummed ${made.length === 1 ? 'note' : 'notes'} at bar ${bar}${humPlace === 'replace' ? ', in place of the part\'s notes' : ''}. Undo takes ${made.length === 1 ? 'it' : 'them'} back.`);
   };
+  // Outlines come from parts of the same kind: drum keys mean nothing on a melody's rows, nor pitches on a drum part's.
+  const isDrums = (x: Part): boolean => !!p.entries.find(e => e.id === x.instrument)?.pieces;
   const ghosts = mode === 'live' && part
-    ? doc.parts.filter(x => x.id !== part.id).flatMap(x => x.notes.map(n => ({ start: n.start, length: n.length, pitch: n.pitch, color: x.color }))) : undefined;
+    ? doc.parts.filter(x => x.id !== part.id && isDrums(x) === isDrums(part)).flatMap(x => x.notes.map(n => ({ start: n.start, length: n.length, pitch: n.pitch, color: x.color }))) : undefined;
 
   // ---- Notes on the grid ----
   const tapNote = (id: number): void => {

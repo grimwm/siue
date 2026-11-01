@@ -230,7 +230,7 @@ export function EditGrid(p: EditGridProps) {
             const range = rows[rowIndex(layout, shown.pitch)]?.range ?? 'normal';
             const on = p.selected.has(n.id);
             return (
-              <button type="button" data-note-id={n.id} data-note={pitchName(n.pitch)} data-range={range} aria-pressed={on}
+              <button type="button" data-note-id={n.id} data-note={pitchName(n.pitch)} data-velocity={n.velocity} data-range={range} aria-pressed={on}
                 aria-label={`${words(n, p.clock)}${range === 'out' ? ', out of this instrument\'s range' : range === 'expert' ? ', for experts' : ''}${on ? ', selected: tap again to delete' : ''}`}
                 class={cx('absolute touch-none rounded-sm border text-left font-mono text-[10px] leading-none text-on-accent',
                   range === 'out' ? 'border-record bg-record' : range === 'expert' ? 'border-amber bg-amber' : 'border-ground/40',

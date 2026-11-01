@@ -12,8 +12,9 @@ import { docWith } from './compose-fixture.ts';
 const AT = { piece: { id: 'test-piece', title: 'Test' }, project: { id: 'crete', name: 'Crete' }, draft: 2, made: '2026-10-31T12:00:00Z' };
 
 test('settings at their defaults are left out', () => {
-  assert.equal(tidyFx({ volume_db: 0, pan: 0, eq: { bass: 0 }, echo: { amount: 0, repeats: 5 }, brightness: { cutoff: 1, sweep: 'off' }, room: 0.3, mute: false }), undefined);
+  assert.equal(tidyFx({ volume_db: 0, pan: 0, eq: { bass: 0 }, echo: { amount: 0, repeats: 3 }, brightness: { cutoff: 1, sweep: 'off' }, room: 0.3, mute: false }), undefined);
   assert.deepEqual(tidyFx({ pan: -0.5, echo: { amount: 0.4 } }), { pan: -0.5, echo: { amount: 0.4, repeats: 3, beats: 1 } });
+  assert.deepEqual(tidyFx({ echo: { repeats: 5 } }), { echo: { amount: 0, repeats: 5, beats: 1 } }, 'Repeats set before Amount is kept');
 });
 
 test('Sound settings, the Room, the limiter and a voice chain save as a valid schema 2 score; put back, it is schema 1 again', () => {

@@ -46,13 +46,23 @@ export function chainProcessor(chain: readonly VoiceFx[], rate: number, key?: Ke
 /** Starts the live voice: asks for the microphone now, and plays it through `chain` until stopped. */
 export async function startLiveVoice(ports: LivePorts, chain: readonly VoiceFx[], key?: KeyClasses): Promise<LiveVoice> {
   const stream = await ports.microphone();
-  const ctx = ports.context();
-  const source = ctx.createMediaStreamSource(stream);
-  // A ScriptProcessor runs the chain on the page's thread: the site's rules leave no room for an audio worklet module.
-  const node = ctx.createScriptProcessor(LIVE_BLOCK, 1, 1);
-  const run = chainProcessor(chain, ctx.sampleRate, key);
-  node.onaudioprocess = e => run(e.inputBuffer.getChannelData(0), e.outputBuffer.getChannelData(0));
-  source.connect(node).connect(ctx.destination);
+  let ctx: AudioContext | null = null;
+  let source: MediaStreamAudioSourceNode;
+  let node: ScriptProcessorNode;
+  try {
+    ctx = ports.context();
+    source = ctx.createMediaStreamSource(stream);
+    // A ScriptProcessor runs the chain on the page's thread: the site's rules leave no room for an audio worklet module.
+    node = ctx.createScriptProcessor(LIVE_BLOCK, 1, 1);
+    const run = chainProcessor(chain, ctx.sampleRate, key);
+    node.onaudioprocess = e => run(e.inputBuffer.getChannelData(0), e.outputBuffer.getChannelData(0));
+    source.connect(node).connect(ctx.destination);
+  } catch (e) {
+    // Whatever failed after the microphone was granted, it is let go.
+    for (const t of stream.getTracks()) t.stop();
+    void ctx?.close();
+    throw e;
+  }
   let running = true;
   return {
     get running() { return running; },
@@ -63,7 +73,7 @@ export async function startLiveVoice(ports: LivePorts, chain: readonly VoiceFx[]
       source.disconnect();
       node.disconnect();
       for (const t of stream.getTracks()) t.stop();
-      void ctx.close();
+      void ctx!.close();
     },
   };
 }

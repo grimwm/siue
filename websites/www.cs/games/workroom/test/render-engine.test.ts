@@ -335,6 +335,14 @@ test('a soloed part is the only one made; a muted one is not heard', async () =>
   const sources = contexts[0]!.nodes.filter(n => n.kind === 'source');
   const v = voices(s, LIBRARY).filter(x => x.lane === s.lanes[0]!.id);
   assert.equal(sources.length, v.length);
+
+  const m = score();
+  m.schema = 2;
+  m.lanes[0] = { ...m.lanes[0]!, fx: { mute: true } };
+  const muted = deps();
+  await renderScore(m, LIBRARY, muted.deps);
+  const made = muted.contexts.slice(0, -1).flatMap(c => c.nodes.filter(n => n.kind === 'source'));
+  assert.equal(made.length, voices(m, LIBRARY).filter(x => x.lane !== m.lanes[0]!.id).length, 'the muted part is never made');
 });
 
 test('the limiter keeps the finished piece under its ceiling', async () => {

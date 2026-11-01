@@ -18,7 +18,9 @@ export function tidyFx(fx: LaneFx): LaneFx | undefined {
   if (fx.pan) out.pan = fx.pan;
   const eq = { ...(fx.eq?.bass ? { bass: fx.eq.bass } : {}), ...(fx.eq?.middle ? { middle: fx.eq.middle } : {}), ...(fx.eq?.treble ? { treble: fx.eq.treble } : {}) };
   if (Object.keys(eq).length) out.eq = eq;
-  if (fx.echo?.amount) out.echo = { amount: fx.echo.amount, repeats: fx.echo.repeats ?? FX_DEFAULTS.repeats, beats: fx.echo.beats ?? FX_DEFAULTS.beats };
+  // Echo Repeats or its beat may be set before Echo Amount: the group is kept while any of them is off its default.
+  const echo = { amount: fx.echo?.amount ?? FX_DEFAULTS.echo, repeats: fx.echo?.repeats ?? FX_DEFAULTS.repeats, beats: fx.echo?.beats ?? FX_DEFAULTS.beats };
+  if (echo.amount !== FX_DEFAULTS.echo || echo.repeats !== FX_DEFAULTS.repeats || echo.beats !== FX_DEFAULTS.beats) out.echo = echo;
   if (fx.shimmer) out.shimmer = fx.shimmer;
   if (fx.warmth) out.warmth = fx.warmth;
   const cutoff = fx.brightness?.cutoff ?? 1;

@@ -41,24 +41,35 @@ export function fft(re: Float64Array, im: Float64Array, inverse = false): void {
 
 export const nextPow2 = (n: number): number => 2 ** Math.ceil(Math.log2(Math.max(1, n)));
 
-/** `x` convolved with `ir`, cut to x's length plus the IR's (one FFT of the whole length). */
+/**
+ * `x` convolved with `ir`, cut to x's length plus the IR's: overlap-add in blocks, the FFT twice the IR's size, so a
+ * long piece needs no FFT of its whole length.
+ */
 export function convolve(x: Float32Array, ir: Float32Array): Float32Array {
-  const n = nextPow2(x.length + ir.length);
-  const ar = new Float64Array(n);
-  const ai = new Float64Array(n);
-  const br = new Float64Array(n);
-  const bi = new Float64Array(n);
-  ar.set(x);
-  br.set(ir);
-  fft(ar, ai);
-  fft(br, bi);
-  for (let i = 0; i < n; i++) {
-    const r = ar[i]! * br[i]! - ai[i]! * bi[i]!;
-    ai[i] = ar[i]! * bi[i]! + ai[i]! * br[i]!;
-    ar[i] = r;
+  const n = nextPow2(2 * Math.max(1, ir.length));
+  const block = n - ir.length + 1;
+  const hr = new Float64Array(n);
+  const hi = new Float64Array(n);
+  hr.set(ir);
+  fft(hr, hi);
+  const out = new Float32Array(x.length + ir.length);
+  const re = new Float64Array(n);
+  const im = new Float64Array(n);
+  for (let at = 0; at < x.length; at += block) {
+    re.fill(0);
+    im.fill(0);
+    re.set(x.subarray(at, Math.min(x.length, at + block)));
+    fft(re, im);
+    for (let i = 0; i < n; i++) {
+      const r = re[i]! * hr[i]! - im[i]! * hi[i]!;
+      im[i] = re[i]! * hi[i]! + im[i]! * hr[i]!;
+      re[i] = r;
+    }
+    fft(re, im, true);
+    const end = Math.min(out.length, at + n);
+    for (let i = at; i < end; i++) out[i] = out[i]! + re[i - at]!;
   }
-  fft(ar, ai, true);
-  return Float32Array.from(ar.subarray(0, x.length + ir.length));
+  return out;
 }
 
 export type BiquadType = 'lowpass' | 'bandpass' | 'lowshelf' | 'highshelf' | 'peaking';

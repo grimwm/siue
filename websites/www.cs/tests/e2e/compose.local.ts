@@ -614,7 +614,7 @@ test('Sound, Voice Effects, the Room and the limiter are heard and saved as scor
     await sound.locator('[data-live-try]').click();
     await expect(sound.locator('[data-live-stop]')).toBeVisible();
     expect(await page.evaluate(() => (window as unknown as { __mic: { asked: number } }).__mic.asked)).toBe(1);
-    await page.waitForTimeout(500);
+    await expect(sound.locator('[data-live-note]')).toContainText('Listening');
     await sound.locator('[data-live-stop]').click();
     expect(await page.evaluate(() => (window as unknown as { __mic: { tracks: MediaStreamTrack[] } }).__mic.tracks.map(t => t.readyState))).toEqual(['ended']);
 

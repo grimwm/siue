@@ -2,7 +2,7 @@
 // out changes nothing.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rms } from '../src/render/dsp.ts';
+import { convolve, rms } from '../src/render/dsp.ts';
 import { applyLaneFx, audible, limit, roomReverb } from '../src/render/fx.ts';
 import type { LaneFx } from '../src/score.ts';
 
@@ -92,4 +92,16 @@ test('the limiter keeps every sample under its ceiling and leaves quiet music al
   const off = stereo(x);
   limit(off, { on: false, ceiling_db: -1 }, RATE);
   assert.deepEqual([...off[0]!], [...x]);
+});
+
+test('convolution in blocks matches the direct sum', () => {
+  const x = Float32Array.from({ length: 5000 }, (_, i) => Math.sin(i / 3) * Math.exp(-i / 2000));
+  const ir = Float32Array.from({ length: 700 }, (_, i) => Math.cos(i / 5) / (1 + i / 50));
+  const got = convolve(x, ir);
+  assert.equal(got.length, x.length + ir.length);
+  for (const n of [0, 1, 699, 700, 1400, 4999, 5600]) {
+    let want = 0;
+    for (let k = 0; k < ir.length; k++) if (n - k >= 0 && n - k < x.length) want += x[n - k]! * ir[k]!;
+    assert.ok(Math.abs(got[n]! - want) < 1e-4, `sample ${n}: ${got[n]} vs ${want}`);
+  }
 });

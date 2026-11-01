@@ -190,16 +190,17 @@ async function soundBus(score: Score, lib: Library, vs: readonly Voice[], sample
   };
   const rest = new Set(heard.filter(l => !own(l)).map(l => l.id));
   if (rest.size) add(await render(rest), DEFAULT_ROOM_SEND);
-  const dry = new Map<string, Float32Array[]>();
-  for (const l of score.lanes.filter(own)) dry.set(l.id, await render(new Set([l.id])));
+  // Carriers are kept as one mono buffer each, made once; every other part is made, shaped, added and let go.
+  const carrierMono = new Map<string, Float32Array>();
+  for (const id of carriers) if (score.lanes.some(l => l.id === id)) carrierMono.set(id, mono(await render(new Set([id]))));
   const bpm = score.tempo?.[0]?.bpm ?? 120;
   // Auto-Tune and the Harmonizer follow the piece's key, worked out from its pitched parts' notes.
   const pitchedLanes = new Set(score.lanes.filter(l => lib.instruments[l.sound!.instrument]?.pitched !== false).map(l => l.id));
   const key = keyScale(score.notes.filter(n => pitchedLanes.has(n.lane)).map(n => n.pitch)).classes;
   for (const l of heard.filter(own)) {
-    let ch = dry.get(l.id)!.map(c => Float32Array.from(c));
+    let ch = await render(new Set([l.id]));
     if (l.voice?.length) {
-      const voiced = applyVoice(mono(ch), l.voice, RATE, new Map([...dry].map(([id, c]) => [id, mono(c)])), key);
+      const voiced = applyVoice(mono(ch), l.voice, RATE, carrierMono, key);
       ch = [Float32Array.from(voiced), Float32Array.from(voiced)];
     }
     if (l.fx) applyLaneFx(ch, l.fx, bpm, RATE);

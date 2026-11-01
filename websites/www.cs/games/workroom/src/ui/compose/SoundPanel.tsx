@@ -106,7 +106,9 @@ export function SoundPanel(p: SoundPanelProps) {
   const [liveNote, setLiveNote] = useState('');
   const liveRef = useRef<LiveVoice | null>(null);
   liveRef.current = live;
-  const stopLive = () => { liveRef.current?.stop(); setLive(null); setLiveNote(''); };
+  /** Bumped by every start and stop, so a microphone that opens after it was stopped or replaced is let go at once. */
+  const session = useRef(0);
+  const stopLive = () => { session.current++; liveRef.current?.stop(); liveRef.current = null; setLive(null); setLiveNote(''); };
   // The microphone is let go when the part changes, the panel goes, or the page is hidden.
   useEffect(() => stopLive, [p.part.id]);
   useEffect(() => {
@@ -117,11 +119,15 @@ export function SoundPanel(p: SoundPanelProps) {
   const tryLive = async () => {
     if (!p.live) return;
     stopLive();
+    const mine = session.current;
     try {
-      setLive(await p.live(chain));
+      const started = await p.live(chain);
+      if (mine !== session.current) { started.stop(); return; }
+      liveRef.current = started;
+      setLive(started);
       setLiveNote('Listening: sing, and hear it through the chain. Use headphones so the speakers do not feed back.');
     } catch {
-      setLiveNote('The microphone could not be opened. Allow it in the browser to try the chain live.');
+      if (mine === session.current) setLiveNote('The microphone could not be opened. Allow it in the browser to try the chain live.');
     }
   };
   const mix = p.mix;

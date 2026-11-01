@@ -46,3 +46,27 @@ export function beatClock(tempo: readonly Tempo[]): BeatClock {
     quarter: bar => byBar(bar).t.unit / 4,
   };
 }
+
+/** Beats (each bar's own) to quarter notes from the start of the piece and back, through every time change. */
+export interface QuarterClock { quarters(beat: number): number; beat(quarters: number): number }
+
+export function quarterClock(tempo: readonly Tempo[]): QuarterClock {
+  const segs: { beat: number; q: number; per: number }[] = [];
+  for (const t of tempo) {
+    const prev = segs[segs.length - 1];
+    const prevT = tempo[segs.length - 1];
+    const per = 4 / t.unit;
+    if (!prev || !prevT) { segs.push({ beat: 0, q: 0, per }); continue; }
+    const beats = (t.bar - prevT.bar) * prevT.beats;
+    segs.push({ beat: prev.beat + beats, q: prev.q + beats * prev.per, per });
+  }
+  const find = (ok: (s: { beat: number; q: number; per: number }) => boolean) => {
+    let at = segs[0]!;
+    for (const s of segs) if (ok(s)) at = s;
+    return at;
+  };
+  return {
+    quarters: beat => { const s = find(x => x.beat <= beat + 1e-9); return s.q + (beat - s.beat) * s.per; },
+    beat: q => { const s = find(x => x.q <= q + 1e-9); return s.beat + (q - s.q) / s.per; },
+  };
+}

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { catalogue, CATEGORIES, defaultSound, laneFamily, rangeClass, writtenPitch } from '../src/catalogue.ts';
+import { catalogue, CATEGORIES, defaultSound, intervalWords, rangeBands, laneFamily, rangeClass, writtenPitch } from '../src/catalogue.ts';
 import type { Entry } from '../src/catalogue.ts';
 import type { Library } from '../src/render/plan.ts';
 
@@ -28,6 +28,22 @@ test('double bass writes an octave up', () => {
 
 test('glock writes two octaves down', () => {
   assert.equal(writtenPitch(get('glock'), 96), 72);
+});
+
+test('B-flat clarinet and trumpet write a major second up, the horn in F a perfect fifth up', () => {
+  assert.equal(get('clarinet').written, 2);
+  assert.equal(get('trumpet').written, 2);
+  assert.equal(get('horn').written, 7);
+  assert.equal(writtenPitch(get('horn'), 53), 60); // sounding F3 is written C4
+});
+
+test('the written interval in words', () => {
+  assert.equal(intervalWords(12), 'an octave above');
+  assert.equal(intervalWords(-12), 'an octave below');
+  assert.equal(intervalWords(-24), 'two octaves below');
+  assert.equal(intervalWords(7), 'a perfect fifth above');
+  assert.equal(intervalWords(2), 'a major second above');
+  assert.equal(intervalWords(14), 'a major ninth above');
 });
 
 test('range classes', () => {
@@ -79,4 +95,14 @@ test('an old library.json without catalogue fields gives an empty catalogue and 
 test('an entry with a category the page does not know is left out', () => {
   const lib: Library = { ...LIBRARY, instruments: { theremin: { files: [], name: 'Theremin', category: 'electronic' } } };
   assert.deepEqual(catalogue(lib), []);
+});
+
+test('the range picture: green where players play, amber for experts, red beyond, reaching every note', () => {
+  const violin = get('violin');
+  const ex = violin.expert!;
+  assert.deepEqual(rangeBands(violin, []), { lo: ex[0] - 2, hi: ex[1] + 2, bands: [
+    { from: ex[0] - 2, to: ex[0] - 1, cls: 'out' }, ...(ex[0] < violin.range![0] ? [{ from: ex[0], to: violin.range![0] - 1, cls: 'expert' as const }] : []),
+    { from: violin.range![0], to: violin.range![1], cls: 'normal' }, { from: violin.range![1] + 1, to: ex[1], cls: 'expert' }, { from: ex[1] + 1, to: ex[1] + 2, cls: 'out' }] });
+  assert.equal(rangeBands(violin, [30])!.lo, 28, 'a low note widens the picture');
+  assert.equal(rangeBands(get('kit'), [36]), null, 'drums have no range');
 });

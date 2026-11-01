@@ -135,8 +135,8 @@ final class Pages
 
     /**
      * GET compose.php?id=<piece>[&v=<n>]: the editor's shell on that piece's draft (the newest when v is absent); GET
-     * compose.php: the editor on a new piece, its body carrying the studio's piece ids (data-pieces) and projects
-     * (data-projects, [{id, name}]) so the new piece's id and project are its own.
+     * compose.php: the editor on a new piece. Either body carries the studio's piece ids (data-pieces) and projects
+     * (data-projects, [{id, name}]) so a new piece (also one started from an imported file) gets an id and project of its own.
      */
     public function compose(\Admin\Request $r): \Admin\Response
     {
@@ -873,7 +873,7 @@ final class Pages
             . ' data-score-only="' . ($this->limitsOf($account)->scoreOnly ? '1' : '0') . '"'
             . ' data-account-has-key="' . ($store->keyring() === null ? '0' : '1') . '"'
             . ($view === 'index' ? ' data-connect="' . Html::e($this->connectData()) . '"' : '')
-            . ($view === 'compose' && $piece === '' ? $this->newPieceData($store) : '');
+            . ($view === 'compose' ? $this->newPieceData($store) : '');
         $v = Html::e($this->assetVersion);
         $heading = ($view === 'piece' || $view === 'compose' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>')
             . ($view === 'piece' && $this->isMusic($store, $piece) ? '<p class="crumb"><a class="compose-link" href="compose.php?id=' . Html::e($piece) . '">Compose</a></p>' : '')

@@ -119,8 +119,11 @@ The instrument picker is grouped by category, each category with its own icon:
 - **What each entry carries:** its normal range and its expert range (as MIDI pitches and in words, such as
   "G3–E7"), its home note, its clef, its written transposition, its General MIDI program and name, and its sample
   source.
-- **Written transposition.** Double Bass is written an octave above how it sounds. Piccolo, Celesta and
-  Xylophone are written an octave below, and Glockenspiel two octaves below.
+- **Written transposition.** Double Bass is written an octave above how it sounds. Clarinet and Trumpet (in B♭)
+  are written a major second above, and French Horn (in F) a perfect fifth above. Piccolo, Celesta and Xylophone
+  are written an octave below, and Glockenspiel two octaves below. Sheet music shows the written part, and a
+  Concert Pitch switch shows how it sounds; exported MusicXML says the transposition so other programs read it
+  right.
 - **Drums have no high or low notes.** Each row of a drum part's grid is one drum or cymbal, named the General
   MIDI way:
   - Drum Kit: Kick (36), Snare (38), Closed Hi-Hat (42), Open Hi-Hat (46), Low Tom (45), High Tom (50),

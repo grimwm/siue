@@ -60,8 +60,45 @@ export function rangeClass(e: Entry, pitch: number): 'normal' | 'expert' | 'out'
   return inside(e.range) ? 'normal' : inside(e.expert) ? 'expert' : 'out';
 }
 
+export interface RangeBand { from: number; to: number; cls: 'normal' | 'expert' | 'out' }
+
+/**
+ * The range picture of an instrument: from two below its lowest (or the lowest note given) to two above its highest,
+ * in bands of normal, expert-only and beyond, each inclusive of its MIDI pitches. Null for drums, which have no range.
+ */
+export function rangeBands(e: Entry, pitches: readonly number[]): { lo: number; hi: number; bands: RangeBand[] } | null {
+  if (e.pieces || !e.range) return null;
+  const ex = e.expert ?? e.range;
+  const lo = Math.max(0, Math.min(ex[0], e.range[0], ...pitches) - 2);
+  const hi = Math.min(127, Math.max(ex[1], e.range[1], ...pitches) + 2);
+  const bands: RangeBand[] = [];
+  const add = (from: number, to: number, cls: RangeBand['cls']): void => { if (to >= from) bands.push({ from, to, cls }); };
+  const exLo = Math.min(ex[0], e.range[0]);
+  const exHi = Math.max(ex[1], e.range[1]);
+  add(lo, exLo - 1, 'out');
+  add(exLo, e.range[0] - 1, 'expert');
+  add(e.range[0], e.range[1], 'normal');
+  add(e.range[1] + 1, exHi, 'expert');
+  add(exHi + 1, hi, 'out');
+  return { lo, hi, bands };
+}
+
 /** The pitch as the part is notated: Double Bass an octave up, Glockenspiel two octaves down. */
 export const writtenPitch = (e: Entry, pitch: number): number => pitch + e.written;
+
+const INTERVALS: Readonly<Record<number, string>> = {
+  1: 'a minor second', 2: 'a major second', 3: 'a minor third', 4: 'a major third', 5: 'a perfect fourth', 6: 'a tritone', 7: 'a perfect fifth',
+  8: 'a minor sixth', 9: 'a major sixth', 10: 'a minor seventh', 11: 'a major seventh', 13: 'a minor ninth', 14: 'a major ninth',
+};
+
+/** How far the written part is from how it sounds, in words: "an octave above", "two octaves below", "a perfect fifth above". */
+export function intervalWords(semitones: number): string {
+  const n = Math.abs(semitones);
+  const dir = semitones > 0 ? 'above' : 'below';
+  const octaves = ['', 'an octave', 'two octaves', 'three octaves'];
+  if (n % 12 === 0 && octaves[n / 12]) return `${octaves[n / 12]} ${dir}`;
+  return `${INTERVALS[n] ?? `${n} semitones`} ${dir}`;
+}
 
 export const laneFamily = (e: Entry): Family => (e.id === 'harp' || e.id === 'lyre' ? 'harp' : CATEGORIES.find(c => c.id === e.category)!.family);
 

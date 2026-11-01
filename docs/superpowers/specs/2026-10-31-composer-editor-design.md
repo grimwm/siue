@@ -332,6 +332,8 @@ as score settings, never audio.
   With **Record To Timeline** on, a performance lands on the timeline as clips with their settings, editable like
   placed clips.
 - **What Gets Saved** shows the clips in the score's shape: effect, bars and settings.
+- **The deck** plays the piece as it is when DJ Mode gets it ready, and goes round at the end. While it plays, the
+  letter and number keys are its pads, not notes.
 - **What A Browser Does Less Well** stays visible:
   - a scratch is made from the rendered mix, not a real record;
   - the vocoder works best on a held part;
@@ -349,7 +351,9 @@ as score settings, never audio.
   - `note.bend`: the Exact Pitch curve, as time and cents pairs;
   - `lane.fx`: the part's Sound settings;
   - `mix.room`, `mix.limiter`;
-  - `fx_clips`: effect, lane or the whole piece, from bar, to bar, and settings;
+  - `fx_clips`: effect, lane or the whole piece, from bar, to bar, and settings; bars are positions to 1/1000 of a
+    bar (12.5 is halfway through bar 12), and a recorded move (the platter, the Crossfader, the XY Pad) keeps its
+    `points` as [bar, value…] lists. The effects, their settings and defaults are in the 4g plan;
   - `lane.voice`: a Voice Effects chain for a lane that is a voice, at most 4 effects, applied in the order listed.
     Each is one of these, with its settings:
     - `vocoder`: `carrier` (a lane id), `bands` 8–32;

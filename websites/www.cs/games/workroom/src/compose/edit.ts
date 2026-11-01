@@ -2,6 +2,7 @@
 // edit replaces only the part it touches, so documents share the rest. No edit ever refuses or moves a note on its
 // own: a note outside its instrument's range stays where it was put, coloured; moveIntoRange is the person's choice.
 // DOM-free.
+import { forgetPart } from './djclips.ts';
 import { laneFamily, rangeClass } from '../catalogue.ts';
 import type { Entry } from '../catalogue.ts';
 import type { EditDoc, EditNote, Part } from './doc.ts';
@@ -67,8 +68,11 @@ export function addPart(doc: EditDoc, entry: Entry): { doc: EditDoc; id: string 
   return { doc: { ...doc, parts: [...doc.parts, part] }, id };
 }
 
+/** The part gone, and with it its DJ & Effects clips and any it carried (a vocoder's carrier, a crossfader side). */
 export function removePart(doc: EditDoc, part: string): EditDoc {
-  return { ...doc, parts: doc.parts.filter(p => p.id !== part) };
+  const next: EditDoc = { ...doc, parts: doc.parts.filter(p => p.id !== part) };
+  if (doc.fxClips) next.fxClips = forgetPart(doc.fxClips, part);
+  return next;
 }
 
 export function renamePart(doc: EditDoc, part: string, name: string): EditDoc {

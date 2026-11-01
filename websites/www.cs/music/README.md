@@ -98,6 +98,17 @@ It refuses a file over 10 MB, an `.mxl` that would unzip past 20 MB or points ou
 16 parts or 20,000 notes, and a read taking over 5 seconds. **Export MusicXML** and **Export MIDI** save the piece
 (MIDI format 1, each part's General MIDI program, drums on channel 10) as a download, using no studio space.
 
+### DJ & Effects
+
+Below the editor, **Place On The Timeline** puts an effect (Turntable, Build-Up and Drop, Rhythm, Colour, Time and
+Space, Pitch and Voice, Live DJ Tools) over bars of The Whole Piece or one part: tap the effect and then a bar, or drag
+it on; drag a clip to move it and its right edge to lengthen it; its sheet has Hear From Here, Shorter, Longer,
+Remove, where it plays and its setting. **DJ Mode** plays the piece on a live deck (Platter, Crossfader, Hot Cues,
+sixteen held Performance Pads on keys 1–4, Q–R, A–F and Z–V, the XY Pad, the Looper); with Record To Timeline on, what
+is played lands on the timeline in one Undo step. Both are saved as the score's `fx_clips` and rebuilt by the renderer
+(`src/render/djfx.ts`, the same processors live and offline): a part's clips after its Sound settings, the whole
+piece's on the finished mix with the Room.
+
 ### Vocal Tracks
 
 A vocal part's takes are recorded in the page and kept in IndexedDB (`siue-music-takes`, 16-bit chunks written as
@@ -579,6 +590,12 @@ The page refuses any other `schema` value with: "This draft uses score schema N,
 | `spectrogram` | required unless the score is renderable; `{ file: "spectrogram.png", low_hz, high_hz, scale }`; 0 < `low_hz` < `high_hz`; `scale` `log` or `linear` |
 | `musicxml` | `music`: `"score.musicxml"`, required; each lane is the MusicXML part whose `id` equals the lane id. `sound`: absent, or `"score.musicxml"` (a sound piece never shows Sheet music) |
 | `changes` | `music`: `{ from_bar, to_bar, lane, text, answers }` with `1 ≤ from_bar ≤ to_bar ≤ bars`. `sound`: `{ from, to, lane, text, answers }` with `0 ≤ from < to ≤ duration` seconds. Both: `lane` a lane id or `null`; `text` 1–500 chars; `answers` a list of note ids (32 hex) |
+
+Schema 2 adds, all optional, the fields `games/workroom/src/score.ts` and `music/tools/siue_music/score.py` check alike
+(the shared vectors in `games/workroom/test/fixtures/schema2-vectors.json` and `fxclips-vectors.json`): `piece_tempo`,
+`lane.speed`, `lane.dynamics`, `note.bend`, `lane.fx`, `lane.voice`, `lane.vocal`, `mix.room`, `mix.limiter` and
+`fx_clips` (DJ & Effects: `{ effect, lane, from_bar, to_bar, settings?, points? }`, up to 256; bar positions to
+1/1000 of a bar inside the piece; the crossfader and looper on the whole piece only).
 
 Colours everywhere match `^#[0-9a-f]{6}$`. Ids everywhere match `^[a-z0-9][a-z0-9-]{0,47}$`. The server checks only what it records or must refuse (`schema`, `kind`, `project`, `piece`, `draft`, the file set, the file signatures and whether a draft without audio is renderable); the page and the tool check every rule in the table.
 

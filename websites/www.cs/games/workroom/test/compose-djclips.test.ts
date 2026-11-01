@@ -3,6 +3,7 @@
 // can keep are saved (a removed part's clips go; a crossfader side left empty drops it).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { removePart } from '../src/compose/edit.ts';
 import { addClips, moveClip, placeClip, removeClip, resizeClip, savedClips, setClipLane, setClipSetting, stepClip, clipsOf } from '../src/compose/djclips.ts';
 import { docFromScore, newDoc, scoreFromDoc } from '../src/compose/doc.ts';
 import type { EditDoc, Part } from '../src/compose/doc.ts';
@@ -84,4 +85,17 @@ test('clips round-trip through the score, and a piece without them stays as it w
   assert.ok(parsed.ok, parsed.ok ? '' : parsed.error);
   const back = docFromScore(parsed.ok ? parsed.score : s, []);
   assert.deepEqual(clipsOf(back), clipsOf(d));
+});
+
+test('removing a part takes its clips, a vocoder it carried, and its place on a crossfader', () => {
+  let d: EditDoc = { ...doc(), parts: [part('keys'), part('bass'), part('drums')] };
+  d = placeClip(d, 'stutter', 'bass', 1);
+  d = placeClip(d, 'vocoder', 'keys', 2);
+  d = setClipSetting(d, 1, 'carrier', 'bass');
+  d = placeClip(d, 'crossfader', null, 3);
+  d = setClipSetting(setClipSetting(d, 2, 'a', ['keys']), 2, 'b', ['bass', 'drums']);
+  d = placeClip(d, 'riser', null, 4);
+  const after = clipsOf(removePart(d, 'bass'));
+  assert.deepEqual(after.map(c => c.effect), ['crossfader', 'riser']);
+  assert.deepEqual(after[0]!.settings, { a: ['keys'], b: ['drums'] });
 });

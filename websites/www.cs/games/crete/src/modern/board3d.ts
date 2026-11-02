@@ -4,7 +4,7 @@
  * the floor, and a block that filled water floating in it. A frame is drawn when the board is told of a change, and more follow only while the camera eases,
  * a wall fades, a figure turns, a block splashes into water, the gate's bars slide, a door sinks (src/openings.ts) or the tile loops tick. The tile loops tick at 12 fps, only while one is on screen,
  * the tab is visible, the board is in view and motion is not reduced. The camera looks down through an orthographic
- * lens at the whole level, a cell's margin round it, and holds still while Theseus moves; once the player zooms, it
+ * lens at the whole level, edge to edge as the classic look shows it, and holds still while Theseus moves; once the player zooms, it
  * follows Theseus until a pan or the mini map sends it elsewhere. The controls
  * (controls.ts) turn, pan and zoom it, and the mini map (minimap.ts), when the Mini map setting is on, shows what it sees. A wall that hides Theseus fades
  * in every walls mode; in Ghosted, one that hides any figure or piece fades too. The floating markers are drawn
@@ -100,6 +100,8 @@ export interface ModernBoard {
   /** The floating markers as last drawn, for tests: each one's kind, its point and its piece's foot on the canvas
    *  in CSS pixels, and a cell's width there. */
   markers(): { kind: MarkerKind; at: [number, number]; foot: [number, number]; cell: number }[];
+  /** Where cell (c, r)'s centre on the floor shows on the canvas, in CSS pixels, for tests. */
+  cellAt(c: number, r: number): [number, number];
   splashing(): number[];
   /** The Mini map setting: shows or hides the mini map. */
   minimap(on: boolean): void;
@@ -390,6 +392,11 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       const info = m.userData as MarkerInfo;
       return { kind: info.kind, at: px(m.position), foot: px(info.foot), cell: height / cur.zoom };
     });
+  }
+
+  function cellAt(c: number, r: number): [number, number] {
+    ndc.set(cellX(c, cols()), FY, cellZ(r, rows())).project(camera);
+    return [((ndc.x + 1) / 2) * width, ((1 - ndc.y) / 2) * height];
   }
 
   const snapCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
@@ -745,6 +752,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     floating: () => floats.cells(),
     routeNext: () => thread.next(),
     markers: markerSpots,
+    cellAt,
     splashing: () => floats.splashing(),
     minimap(on) {
       mini?.show(on);

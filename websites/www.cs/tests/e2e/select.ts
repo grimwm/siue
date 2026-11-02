@@ -78,7 +78,7 @@ const RULES: [RegExp, Selection | ((m: RegExpMatchArray) => string[])][] = [
   [new RegExp(`^${SITE}games/tankity/`), [...tankity, 'games-pwa.spec.ts', 'games-hub.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts']],
   // Cylon's folder (src/, the dist/ bundle the kit builds, build.json, tests): the home page and the games hub load it.
   [new RegExp(`^${SITE}games/cylon/`), shell],
-  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.ts', 'games-pwa.spec.ts', 'crete-play.spec.ts', 'crete-pieces.spec.ts', 'crete-layout.spec.ts', 'crete-chapter.spec.ts', 'crete-editor.spec.ts', 'crete-solver.spec.ts', 'crete-music.spec.ts', 'crete-modern.spec.ts', 'crete-classic-view.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts']],
+  [new RegExp(`^${SITE}games/crete/`), ['games-hub.spec.ts', 'games-pwa.spec.ts', 'crete-play.spec.ts', 'crete-pieces.spec.ts', 'crete-layout.spec.ts', 'crete-chapter.spec.ts', 'crete-editor.spec.ts', 'crete-solver.spec.ts', 'crete-music.spec.ts', 'crete-modern.spec.ts', 'crete-classic-view.spec.ts', 'crete-gate.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts']],
   // The site's own TypeScript (src/ compiles to main.js and play/play.js) and the
   // settings that decide how: the lockfile only pins the compiler.
   [new RegExp(`^${SITE}package-lock\\.json$`), 'NONE'],

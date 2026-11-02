@@ -307,6 +307,8 @@ export function createCompassButton(id: string, host: Pick<ControlHost, 'blocked
     '_': () => cam.zoomStep(-1),
   };
   compass.addEventListener('keydown', (e: KeyboardEvent) => {
+    // Ctrl, Meta or Alt with a key is the browser's (Ctrl + zooms the page): the compass leaves it alone.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const fn = compassKeys[e.key];
     if (!fn) return;
     e.preventDefault();

@@ -1,5 +1,5 @@
 /* The Island of Crete, modern look: the compass as pure maths. A drag on the compass steers the camera: across turns
- * the view, up leans it toward 45° and down tilts it back toward straight down; the view stays wherever the drag
+ * the view, up leans it toward the lowest tilt and down tilts it back toward straight down; the view stays wherever the drag
  * leaves it. A press that never moves COMPASS_TAP_PX from where it came down is a tap, however long it is held, which
  * resets the view. The compass's face shows the camera as it is, whatever moved it: the needle turns with the
  * heading, and the dial is squashed and a ring fills as the view tilts away from straight down. DOM-free. */
@@ -11,8 +11,10 @@ import type { CamOp } from './gestures.ts';
 export const COMPASS_TAP_PX = 12;
 /** Degrees turned per pixel dragged across the compass. */
 export const COMPASS_TURN_PER_PX = 0.6;
-/** Degrees tilted per pixel dragged up or down: the whole tilt takes about 110 px. */
+/** Degrees tilted per pixel dragged up or down: the whole tilt takes about 200 px. */
 export const COMPASS_TILT_PER_PX = 0.4;
+/** The flattest the dial is drawn, so its needle still reads with the view near edge-on. */
+export const DIAL_SQUASH_MIN = 0.4;
 
 /** A compass press as camera operations: turns and tilts while it drags, `reset` when a tap lets go. One pointer at
  *  a time; others are ignored until it lifts. */
@@ -42,7 +44,7 @@ export function createCompassDrag(): CompassDrag {
       press.y = y;
       const ops: CamOp[] = [];
       // The same senses as a drag on the board: rightward turns as a left-button drag right does, up leans toward
-      // 45°, as on a map app.
+      // the lowest tilt, as on a map app.
       if (dx !== 0) ops.push({ kind: 'turn', deg: -dx * COMPASS_TURN_PER_PX });
       if (dy !== 0) ops.push({ kind: 'tilt', deg: dy * COMPASS_TILT_PER_PX });
       return ops;
@@ -68,8 +70,8 @@ export interface Heading {
   pitch: number;
 }
 
-/** `v` after a turn or a tilt: a turn adds to the heading; a tilt adds to the pitch, held between 45° and straight
- *  down. Any other operation leaves it. */
+/** `v` after a turn or a tilt: a turn adds to the heading; a tilt adds to the pitch, held between the lowest tilt
+ *  (10°) and straight down. Any other operation leaves it. */
 export function steer(v: Heading, op: CamOp): Heading {
   if (op.kind === 'turn') return { ...v, yaw: v.yaw + op.deg };
   if (op.kind === 'tilt') return { ...v, pitch: clampTilt(v.pitch + op.deg) };
@@ -89,7 +91,7 @@ export function compassFace(v: Heading): Face {
   const pitch = clampTilt(v.pitch);
   return {
     needle: v.yaw,
-    squash: Math.sin((pitch * Math.PI) / 180),
+    squash: Math.max(DIAL_SQUASH_MIN, Math.sin((pitch * Math.PI) / 180)),
     tilt: (MAX_PITCH - pitch) / (MAX_PITCH - MIN_PITCH),
   };
 }

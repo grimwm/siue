@@ -49,7 +49,7 @@ interface Two {
 }
 
 const TURN_PER_PX = 0.35;
-/** Degrees of tilt per pixel slid, as on a map app: up leans the view toward the horizon (45°), down back toward straight down. */
+/** Degrees of tilt per pixel slid, as on a map app: up leans the view toward the horizon (as low as 10°), down back toward straight down. */
 export const TILT_PER_PX = 0.3;
 /** How far two fingers move before the touch is read as a tilt or as the rest. */
 const DECIDE_PX = 10;

@@ -217,8 +217,11 @@ export function createWalls(kit: Kit): Walls {
       const top = mode === 'low' ? LOW_H : WALL_H;
       camera.getWorldDirection(camDir);
       const d: V3 = [camDir.x, camDir.y, camDir.z], L = 30;
+      // A wall hides what stands up to its height over the tilt's tangent behind it: about one cell at 75°, seven
+      // at 10°.
+      const reach = Math.max(3.2, top / Math.max(0.05, -d[1] / Math.hypot(d[0], d[2])) + 1.2);
       for (const th of seen) {
-        const near = walls.filter(w => Math.abs(w.x - th.x) < 3.2 && Math.abs(w.z - th.z) < 3.2);
+        const near = walls.filter(w => Math.abs(w.x - th.x) < reach && Math.abs(w.z - th.z) < reach);
         if (near.length === 0) continue;
         const hits = new Map<Wall, number>();
         for (const [a, b, c] of SAMPLES) {

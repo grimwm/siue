@@ -17,7 +17,7 @@ import type { Cell, Dir } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
 import { REST, createOpenings } from '../openings.ts';
 import type { Motion } from '../openings.ts';
-import { DEFAULT_YAW, START_PITCH, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
+import { DEFAULT_YAW, START_PITCH, cameraDistance, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
@@ -232,11 +232,12 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   }
 
   function applyCamera(): void {
-    const y = cur.yaw * RAD, p = cur.pitch * RAD, D = 40;
+    const y = cur.yaw * RAD, p = cur.pitch * RAD, hh = cur.zoom / 2, a = aspect();
+    const D = cameraDistance(cur.pitch, cur.zoom);
     camera.position.set(cur.tx + Math.sin(y) * Math.cos(p) * D, FY + Math.sin(p) * D, cur.tz + Math.cos(y) * Math.cos(p) * D);
     camera.up.set(-Math.sin(y), 0, -Math.cos(y)); // screen-up is the board's forward
     camera.lookAt(cur.tx, FY, cur.tz);
-    const hh = cur.zoom / 2, a = aspect();
+    camera.far = D + 160;
     camera.left = -hh * a;
     camera.right = hh * a;
     camera.top = hh;

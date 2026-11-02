@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_YAW, MAX_PITCH, MIN_PITCH, START_PITCH, WALL_H, ZOOM_MIN, cameraDistance, clampTilt, clampView, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, wholeZoom, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
+import { project, wholeFrame } from '../src/sheet.ts';
 import type { Cam } from '../src/modern/camera.ts';
 
 test('easeCam closes on the goal, reports motion, and settles exactly', () => {
@@ -131,19 +132,19 @@ test('zoomLimits: in to five rows, out to the whole level turned any way, howeve
   assert.equal(clampZoom(9, mid), 9);
 });
 
-test('wholeZoom shows the whole level and a cell round it, centred, within the zoom limits', () => {
-  // Top-down, square to the board: level 1 (6 × 5) on a wide screen is as tall as its rows and margin, foreshortened.
+test('wholeZoom shows the whole level and its walls\' tops edge to edge, centred, within the zoom limits', () => {
+  // Square to the board at 75°: level 1 (6 × 5) on a wide screen is as tall as its rows, foreshortened, and its walls.
   const top = wholeZoom(1.6, 6, 5, 75, 0);
-  assert.ok(near(top, Math.max(ZOOM_MIN, 7 * Math.sin((75 * Math.PI) / 180) + walls(75), 8 / 1.6)));
-  // A phone in portrait fits the width: 8 columns and the margin across 0.46 of the height.
-  assert.ok(near(wholeZoom(0.46, 6, 5, 75, 0), 8 / 0.46));
+  assert.ok(near(top, Math.max(ZOOM_MIN, 5 * Math.sin((75 * Math.PI) / 180) + walls(75), 6 / 1.6)));
+  // A phone in portrait fits the width: 6 columns across 0.46 of the height.
+  assert.ok(near(wholeZoom(0.46, 6, 5, 75, 0), 6 / 0.46));
   for (const [aspect, cols, rows, pitch, yaw] of [[1.6, 21, 13, 45, 15], [0.46, 40, 30, 75, 0], [1, 9, 6, 45, 105]] as const) {
     const z = wholeZoom(aspect, cols, rows, pitch, yaw);
     assert.ok(z <= zoomLimits(aspect, cols, rows, pitch).max + 1e-9, 'never past the zoom-out limit');
-    const c = clampView({ yaw, pitch, tx: 5, tz: -4, zoom: z }, cols, rows, aspect);
+    // Centred on the level, the view holds still, and every corner of the level is inside it.
+    const c = clampView({ yaw, pitch, tx: 0, tz: 0, zoom: z }, cols, rows, aspect);
     gap(c.tx, 0);
     gap(c.tz, 0);
-    // Every corner of the level, and a cell beyond, is inside the view.
     const inside = (x: number, zz: number) => {
       // On the screen's own axes: across, and deep along the ground, foreshortened by sin(pitch).
       const y = (yaw * Math.PI) / 180;
@@ -151,9 +152,26 @@ test('wholeZoom shows the whole level and a cell round it, centred, within the z
       return Math.abs(across) <= (z * aspect) / 2 + 1e-9 && Math.abs(deep) <= z / 2 / Math.sin((pitch * Math.PI) / 180) + 1e-9;
     };
     // The far wall's top, a wall's height above the far edge, shows too.
-    assert.ok(z / 2 >= ((cols + 2) * Math.abs(Math.sin((yaw * Math.PI) / 180)) + (rows + 2) * Math.abs(Math.cos((yaw * Math.PI) / 180))) * Math.sin((pitch * Math.PI) / 180) / 2 + WALL_H * Math.cos((pitch * Math.PI) / 180) - 1e-9, 'wall tops fit');
-    for (const [x, zz] of [[-cols / 2 - 1, -rows / 2 - 1], [cols / 2 + 1, -rows / 2 - 1], [cols / 2 + 1, rows / 2 + 1], [-cols / 2 - 1, rows / 2 + 1]] as const) {
+    assert.ok(z / 2 >= (cols * Math.abs(Math.sin((yaw * Math.PI) / 180)) + rows * Math.abs(Math.cos((yaw * Math.PI) / 180))) * Math.sin((pitch * Math.PI) / 180) / 2 + WALL_H * Math.cos((pitch * Math.PI) / 180) - 1e-9, 'wall tops fit');
+    for (const [x, zz] of [[-cols / 2, -rows / 2], [cols / 2, -rows / 2], [cols / 2, rows / 2], [-cols / 2, rows / 2]] as const) {
       assert.ok(inside(x, zz), `${cols}×${rows} corner ${x},${zz}`);
+    }
+  }
+});
+
+test('the whole-level view shows a level at the size the classic look does, at the opening tilt and straight down', () => {
+  // Classic's cell on screen across the board's middle row (src/sheet.ts wholeFrame), against modern's view height
+  // over its rows (wholeZoom): within 8% (straight down, classic still keeps a figure's headroom above the top row), on a desktop and a portrait phone, for small, wide and big levels.
+  const RISE = 0.5, CELL = 16;
+  for (const [vw, vh] of [[1266, 500], [376, 520]] as const) {
+    for (const [cols, rows] of [[12, 11], [20, 13], [9, 7], [32, 32]] as const) {
+      for (const pitch of [START_PITCH, 90]) {
+        const modern = vh / wholeZoom(vw / vh, cols, rows, pitch, DEFAULT_YAW);
+        const f = wholeFrame({ yaw: DEFAULT_YAW, pitch }, cols, rows, CELL, RISE, vw, vh);
+        const a = project(f, 0, (rows * CELL) / 2), b = project(f, cols * CELL, (rows * CELL) / 2);
+        const classic = (b.x - a.x) / cols;
+        assert.ok(Math.abs(classic / modern - 1) <= 0.08, `${vw}×${vh}, ${cols}×${rows} at ${pitch}°: modern ${modern.toFixed(1)} px, classic ${classic.toFixed(1)} px`);
+      }
     }
   }
 });

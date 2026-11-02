@@ -731,6 +731,14 @@ const modernHook = {
   floating: () => modern?.floating() ?? [],
   routeNext: () => modern?.routeNext() ?? null,
   splashing: () => modern?.splashing() ?? [],
+  /** Where cell (c, r)'s centre shows on the page, in CSS px, as the classic hook's `at`; null before the board loads. */
+  at(c: number, r: number): { x: number; y: number } | null {
+    const canvas = document.getElementById('stage3d');
+    if (!modern || !canvas) return null;
+    const b = canvas.getBoundingClientRect();
+    const [x, y] = modern.cellAt(c, r);
+    return { x: b.left + x, y: b.top + y };
+  },
   markers: () => modern?.markers() ?? [],
   quality: () => modern?.quality() ?? 3,
   fps: () => modern?.fps() ?? null,

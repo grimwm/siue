@@ -83,12 +83,12 @@ intro: Roll a stone into the deep and the water becomes a road. Tread the plate 
 intro: Ariadne left you gifts: Medusa's mirror, Daedalus's cow and a honey cake. Stone the beast to pass him, set the cow where the walls will pin him, and keep the cake as a spare heart.
 
 #########
-#..E..M.#
-##.....##
-#P#..##c#
-#x.#....#
-##S.z#..#
-####..S.#
+#M.E#.###
+##....###
+#P#..#.c#
+#x.#.#.##
+##S.z...#
+#####.S.#
 #########
 ` },
   { id: 'trial-8', text: `title: The Riddle of Minos
@@ -111,14 +111,14 @@ pages: ch1-tribute-marks
 
 ############
 #.*#.....|E#
-#..#..O#.###
-##S#~..#.#.#
-##......S..#
-#.....###..#
-##.S...~...#
-###~M##....#
+#..#.#O#.###
+##S#~..#.###
+##......S.##
+#.......##.#
+##MS.#.~...#
+##.~.#.....#
 ##..##..p.##
-#.....PS...#
+#...##PS...#
 ############
 ` },
   { id: 'trial-10', text: `title: The Great Hall

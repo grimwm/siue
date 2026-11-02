@@ -60,8 +60,8 @@ intro: Daedalus set currents running through these ways, and they carry the beas
 intro: The floors are polished to ice, and the beast skids on them as you do. Loose stone does not slide: stop on it, where he cannot follow. Skates lie somewhere in the cold.
 
 ############
-#P..#k.#..*#
-#=...:.#=..#
+#P#.#k.#..*#
+#=#..:.#=..#
 #.:=....:.##
 #..=##.=.#.#
 #.==.*#=M..#
@@ -93,7 +93,7 @@ intro: Three doors and three keys, and not every key is worth its door. Each doo
 #P..#..#.#*#
 ##..Rr##.#.#
 #.#.#:.:#..#
-#r..##:M..##
+#r#.##:M..##
 #.....:..###
 #*#:#b#....#
 ##R:B...##.#
@@ -105,15 +105,15 @@ intro: Three doors and three keys, and not every key is worth its door. Each doo
 intro: A plate here moves the walls, and the only road over the water is a block you sink yourself. Loose stone turns the blocks aside, and the beast with them.
 
 ############
-#P..##...*##
-#.....#....#
+#P...#...*##
+#...#.#....#
 #.....~.##.#
-##.....##:.#
+###....##:.#
 #*.#._#:M..#
 #.#..#:.:O.#
 #:O...##~.T#
 #::...#.T..#
-#*.........E
+#*......#..E
 ############
 ` },
   { id: 'ch2-9', text: `title: The Bronze Mirror
@@ -123,13 +123,13 @@ pages: ch2-lots
 ############
 #:.##.p#z.*#
 #P....#.:#.#
-###..#..:.##
-##.#.#:#.###
-#*...S.M.c.#
+###..#..:#.#
+####.#:#.###
+#*...S...c.#
 ##..##.###.#
-##x#:..S#:.#
-#.S#.####..#
-#*..##....|E
+##x#:..M#..#
+#.S#S####..#
+#*..##S.#:|E
 ############
 ` },
   { id: 'ch2-10', text: `title: The Inner Gate
@@ -138,15 +138,15 @@ pages: ch2-black-sail
 
 ####################
 #P..##.:.......p..x#
-#.##::.##....##.:..#
+#.##::..#....##.:..#
 #..r.:...#...#..:.##
-#..##.:#...#..:##:.#
-#*:###.#...#......##
-#....#.#.#####.#.#.#
-#....:.h.#.*M#.....#
-###.#..#####.###~###
+#..##.:#.#.#..:##:.#
+#*:##..#...#......##
+#....#.#.###.#.#.#.#
+#...#:.h.#.*M#.....#
+###.#...####.###~###
 ##..R#.......###~###
-#.####....##.#..~.*#
+#.####.....#.#..~.*#
 #*..:..##.f...FF..|E
 ####################
 ` },

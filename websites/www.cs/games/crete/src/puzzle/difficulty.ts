@@ -352,9 +352,9 @@ export interface Bar {
   exploredTimes: number;
 }
 
-/** Chapter 1's numbers set it: its teaching Minotaurs add 3 to 13 moves (level 9's adds 22, level 10's 31), and
- *  its hardest teaching search is level 3's 614 situations (level 9 stores 39 times that, level 10 47 times); the
- *  bar is about half of level 9's. */
+/** Chapter 1's numbers set it: its teaching Minotaurs add 3 to 14 moves (level 9's adds 14, level 10's 31), and
+ *  its hardest teaching search is level 3's 614 situations (level 9 stores 24 times that, level 10 47 times); the
+ *  bar sits a little under level 9's. */
 export const BAR: Bar = { minotaurDelta: 8, exploredTimes: 20 };
 
 /** Where a challenge level sits: the chapter's teaching levels, measured. */
@@ -371,6 +371,7 @@ export function challengeProblems(d: Difficulty, bar: Bar = BAR, context?: Chall
     if (d.minotaurDelta === null || d.greedyWins === null) out.push('the Minotaur-free search hit its cap');
     else if (d.minotaurDelta <= 0 && d.greedyWins) out.push('the Minotaur does not matter: the line that ignores him wins, no longer');
   }
+  out.push(...catchProblems(d));
   if (!context) return out;
   if (!hasMinotaur) return [...out, 'a challenge level has a Minotaur'];
   if (d.greedyWins !== false) out.push('a challenge level: the line that ignores the Minotaur must lose');
@@ -387,6 +388,18 @@ export function challengeProblems(d: Difficulty, bar: Bar = BAR, context?: Chall
     out.push(`a challenge level: ${d.shortest} moves, shorter than the longest teaching level's ${longest}`);
   }
   return out;
+}
+
+/** No level needs a catch: a player cannot know to walk into the beast. The solver's shortest line takes none, and
+ *  no line that takes one is shorter than the best line that never does. */
+export function catchProblems(d: Difficulty): string[] {
+  if (d.catchFree === 'unknown') return ['the catch-free search hit its cap'];
+  if (d.catchFree === 'none') return ['no win without a catch: no level may need one'];
+  if (typeof d.shortest === 'number' && d.catchFree > d.shortest) {
+    return [`the fewest moves take a catch (${d.shortest}, against ${d.catchFree} without one): no level may need one`];
+  }
+  if (d.catches > 0) return ['the shortest line takes a catch, though a line as short takes none: no level may need one'];
+  return [];
 }
 
 /** How much harder each challenge level is than the one before it, in situations stored: a steady climb, never a
@@ -437,19 +450,20 @@ export interface SharedBar {
   chaseExplored: number;
 }
 
-/** Chapter 1 sets it: its challenge levels win in 54 and 76 moves from 24,086 and 28,990 situations, its teaching
- *  levels in at most 36 moves from at most 614. The bar is about half of level 9's situations and a few moves
- *  past the longest teaching level; a chase level that clears the chase checks needs half of that again. The
+/** Chapter 1 sets it: its challenge levels win in 40 and 76 moves from 14,519 and 28,990 situations, its teaching
+ *  levels in at most 36 moves from at most 614. The bar sits a little under level 9's situations and at its moves,
+ *  a few past the longest teaching level; a chase level that clears the chase checks needs half of that again. The
  *  situation counts are this solver's (its estimate and pruning): a change to either moves them, and the bar is
  *  set again from Chapter 1's new counts. */
 export const SHARED_BAR: SharedBar = { shortest: 40, explored: 12_000, chaseShortest: 30, chaseExplored: 6_000 };
 
-/** What keeps a level from being shared; empty when it clears the bar. */
+/** What keeps a level from being shared; empty when it clears the bar. A shared level needs no catch either. */
 export function sharedProblems(d: Difficulty, bar: SharedBar = SHARED_BAR): string[] {
   if (d.shortest === 'unknown') return ['the solver hit its cap: the level is not proved winnable'];
   if (!d.solved || typeof d.shortest !== 'number') return ['the level cannot be won'];
   const out: string[] = [];
   if (d.naiveWins) out.push('the plain walk to the exit wins');
+  out.push(...catchProblems(d));
   const chase = d.label === 'chase' && d.greedyWins === false && d.minotaurDelta !== null && d.minotaurDelta >= BAR.minotaurDelta;
   const shortest = chase ? bar.chaseShortest : bar.shortest;
   const explored = chase ? bar.chaseExplored : bar.explored;

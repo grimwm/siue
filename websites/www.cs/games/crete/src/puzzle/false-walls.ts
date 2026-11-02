@@ -22,7 +22,7 @@ intro: The high way runs past the beast. The low way ends in a wall, and one of 
 intro: The gap under the beast is no gap. It is wall you cannot see, to him as much as to you. Walk the low hall beneath him; he will watch you through it and stay where he is.
 
 ###########
-#P.....M.E#
+#P......ME#
 #.###I###.#
 #.........#
 ###########
@@ -57,30 +57,30 @@ intro: Flippers lie in the pool and three relics about it. Two stretches of floo
 intro: Two relics, a red key and its door. The beast keeps the middle hall; two of these walls are only painted, and they are your way round him.
 
 ############
-#P......#..#
-#..##.#.#..#
-#.#*..W.#.##
-#.##.......#
-#......M...#
-#.#..##....#
-#.#r.#...#.#
-#...###.R..#
-#...W..*#|E#
+#P....S.##.#
+#.##....#..#
+#.#*S.WM#.##
+#.#........#
+#..........#
+#.##S.#..#.#
+#S#rS#...#.#
+#..S###.R#.#
+###.W..*#|E#
 ############
 ` },
   { id: 'ch4-6', text: `title: Lying Ground
 intro: Loose stone and closing stone keep the beast off, and here the walls lie both ways: one painted, two unseen. Mind where the stones close behind you.
 
 ############
-#P..::.#..##
+#P..::##..##
 #...#.#..;.#
 ##.#I....#.#
 #.:..#W..#M#
-#*##.##.:#.#
-###..#...#.#
+#*##.#..:#.#
+###..##..#.#
 #...:....;.#
-#..##.#.I..#
-#*.#;.#...|E
+#...#.#.I..#
+#*..;.....|E
 ############
 ` },
   { id: 'ch4-7', text: `title: The Glass Floor
@@ -89,10 +89,10 @@ intro: Ice runs through these halls and skates lie in the west. Two walls here a
 ############
 #P...#.##.*#
 #.#....#...#
-#.#==W==.###
-#..##..=.#.#
+#..==W==.###
+#...#..=.#.#
 #k.#M##=...#
-#....##=...#
+#.....#=...#
 ##......W..#
 #...##....##
 #*..#....|E#
@@ -119,12 +119,12 @@ pages: ch4-taurus
 
 ############
 ##..FF::..P#
-#.;###.##..#
+#.;###..#..#
 #.#h...I..##
-#M##.W#..:.#
+#M#..W#..:.#
 #.#:..#.#.*#
 #.#.FF#..###
-#.;....:...#
+#.;...#:...#
 #.pI.##.#..#
 E|.....;..*#
 ############
@@ -135,16 +135,16 @@ pages: ch4-queen
 
 ####################
 #P....#......####.p#
-####....##...###..##
+##.#....###..###..##
 ###*..:...##..:..###
 #.......#..I##.....#
 #..##...#.......#W.#
-##.....#..###.#.#.##
+##..#.##..###.#.#.##
 #r###.:..M#...:.#.##
-#.......###..#.#...#
-#..*.###..##.#.R...#
+#........##..#.#...#
+#..*.###..#..#.R...#
 #.#..#.#..:.#####.##
-#*##...W##...####|E#
+#*##...W##...##.#|E#
 ####################
 ` },
 ];

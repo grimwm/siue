@@ -4,8 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TRIALS, trialLevel } from '../src/puzzle/trials.ts';
 import { initial } from '../src/puzzle/state.ts';
-import type { State } from '../src/puzzle/state.ts';
-import { solve, solveRefusing, caught, SOLVER_CAP } from '../src/puzzle/solver.ts';
+import { solve } from '../src/puzzle/solver.ts';
 import { measure } from '../src/puzzle/difficulty.ts';
 import type { SolveResult } from '../src/puzzle/solver.ts';
 import { step } from '../src/puzzle/step.ts';
@@ -14,7 +13,7 @@ import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
-const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 23, 29, 54, 76];
+const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 24, 29, 40, 76];
 /** Level 10 is larger than the screen; its proof may search further than the in-game cap. */
 const GREAT_HALL_CAP = 6_000_000;
 
@@ -130,7 +129,7 @@ test('trials 2 to 8 each need their idea', () => {
   assert.ok(others.filter(Boolean).length >= 3, 'the finale combines three more ideas');
 });
 
-test("level 9, The Bull's Horns: the quickest way through takes one catch, and a sunk block makes the dirt", () => {
+test("level 9, The Bull's Horns: the quickest way through takes no catch, and the marked stones shape it", () => {
   const lv = trialLevel(8);
   assert.equal(lv.hearts, 3);
   assert.ok(lv.terrain.includes('safe'), 'safe zones line the hall');
@@ -138,32 +137,13 @@ test("level 9, The Bull's Horns: the quickest way through takes one catch, and a
   assert.ok(!lv.terrain.includes('dirt'), 'no dirt until a block sinks');
   assert.equal(lv.pageIds.length, 1);
   const t9 = solvedOnce(8);
-  assert.equal(t9.events.filter(e => e.kind === 'caught').length, 1, 'the shortest line loses exactly one heart');
-  assert.ok(t9.kinds.has('sank'), 'the shortest line sinks a block to make dirt');
+  assert.equal(t9.events.filter(e => e.kind === 'caught').length, 0, 'the shortest line loses no heart');
+  assert.equal(measure(lv).catchFree, t9.line.length, 'no line that spends a heart is shorter');
   assert.ok(!t9.took.has('page'), 'the page lies off the shortest line');
-  const noBlock = solve(initial(withoutObjects(lv, ['block'])));
-  assert.ok(noBlock.solved ? noBlock.line.length > t9.line.length : !noBlock.capped, 'the dirt opens the path');
   const noMarks = solve(initial(retile(lv, ['safe'], 'floor')));
   assert.ok(worse(noMarks, t9.line.length), 'the safe zones matter');
   const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
   assert.ok(solve(initial(copy)).solved, 'the page lies on a winning line');
-});
-
-// Long, searched wide and shaped by the beast is the challenge bar (test/difficulty.test.ts); these are level 9's own.
-test("level 9, The Bull's Horns: one catch to spend, and only where the shortest line spends it", () => {
-  const lv = trialLevel(8);
-  const t9 = solvedOnce(8);
-  const L = t9.line.length;
-  const d = measure(lv);
-  assert.equal(d.catchFree, 'none', 'no line wins without a catch');
-  assert.ok(worse(solve(initial({ ...lv, hearts: 1 })), L), 'with one heart there is no catch to spend');
-  // Where the catch lands matters: no catch that wakes on the shortest line's mark, and the level is longer or lost.
-  let wake: State['throwBack'] | null = null;
-  let s = initial(lv);
-  for (const a of t9.line) { const x = step(s, a); if (caught(x.events, s)) wake = x.state.throwBack; s = x.state; }
-  assert.ok(wake && lv.terrain[wake.r * lv.cols + wake.c] === 'safe', 'the shortest line wakes on a mark');
-  const elsewhere = solveRefusing(initial(lv), (ev, before) => caught(ev, before) && before.throwBack.r === wake!.r && before.throwBack.c === wake!.c, SOLVER_CAP);
-  assert.ok(worse(elsewhere, L), 'a catch that wakes on any other mark does worse');
 });
 
 test('level 10, The Great Hall: keys, gear, a block and a button, a tool and the Minotaur, two routes to the gate', () => {

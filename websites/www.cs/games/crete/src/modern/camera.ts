@@ -103,13 +103,14 @@ export interface ZoomLimits {
   max: number;
 }
 
-/** The whole-level view: the view's height in ground rows that shows all of a `cols` × `rows` level, its walls' tops
- *  and a cell's margin round it, as the camera is turned (`yaw`) and tipped (`pitch`), on a screen `aspect` wide to high. It is
- *  the view every level opens at, and the one Reset returns to. */
+/** The whole-level view: the view's height in ground rows that shows all of a `cols` × `rows` level and its walls'
+ *  tops, as the camera is turned (`yaw`) and tipped (`pitch`), on a screen `aspect` wide to high, with no margin round
+ *  them: the size the classic look shows the level at (src/sheet.ts wholeFrame), so the two looks match. It is the
+ *  view every level opens at, and the one Reset returns to. */
 export function wholeZoom(aspect: number, cols: number, rows: number, pitch: number, yaw: number): number {
   const y = (yaw * Math.PI) / 180;
   const cs = Math.abs(Math.cos(y)), sn = Math.abs(Math.sin(y));
-  const w = cols + 2, h = rows + 2;
+  const w = cols, h = rows;
   const across = w * cs + h * sn;
   const deep = (w * sn + h * cs) * sinPitch(pitch);
   return Math.max(ZOOM_MIN, deep + wallClearance(pitch), across / aspect);

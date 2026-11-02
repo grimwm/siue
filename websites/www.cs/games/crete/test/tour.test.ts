@@ -1,7 +1,7 @@
 // The touch tour: when it shows by itself, and what each step shows.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TOUR_STEPS, tourDue } from '../src/tour.ts';
+import { TOUR_STEPS, tourDue, tourEndsOn } from '../src/tour.ts';
 
 test('the tour shows by itself only on a touch screen, once, while a level is in play with no card over it', () => {
   const due = { touch: true, seen: false, playing: true, covered: false };
@@ -25,4 +25,19 @@ test('the tour walks through a tap, a hold, a slide, one finger and two, each wi
   assert.deepEqual(plans.map(p => p.dots.length), [1, 1, 1, 1, 2]);
   for (const p of plans) for (const d of p.dots) assert.equal(d.points.length, d.press.length);
   assert.deepEqual(plans.map(p => p.board !== undefined), [false, false, false, true, true], 'only the view steps move the board');
+});
+
+test('any play ends the tour: a press anywhere but its banner, the wheel, any key but a browser chord', () => {
+  assert.equal(tourEndsOn({ type: 'pointerdown' }), true, 'the pad or the board');
+  assert.equal(tourEndsOn({ type: 'pointerdown', inBanner: true }), false, 'Skip Tour and Next are the banner\'s own');
+  assert.equal(tourEndsOn({ type: 'wheel' }), true);
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'ArrowLeft' }), true);
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'w' }), true);
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'r', ctrlKey: true }), false, 'a browser chord');
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'Shift' }), false, 'a modifier alone');
+  assert.equal(tourEndsOn({ type: 'pointermove' }), false);
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'Tab' }), false, 'Tab goes to the banner\'s buttons');
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'Enter', inBanner: true }), false, 'Enter on Next or Skip Tour is the banner\'s');
+  assert.equal(tourEndsOn({ type: 'keydown', key: ' ', inBanner: true }), false);
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'Enter' }), true, 'Enter elsewhere is play');
 });

@@ -3,9 +3,12 @@
  * arrow, a held arrow, a slide from one arrow to another, one finger turning and tilting the view, and two fingers
  * panning, twisting and pinching it. The board itself turns, tilts, slides and grows a little with them (a passing
  * CSS animation on top of whatever view it has, gone when the step ends), and Theseus never moves. The steps loop
- * until the tour is closed: by Skip (Got It once every step has shown), a tap anywhere, or any key but a browser
- * chord. With reduced
- * motion nothing moves: each step shows its fingertips where they end, an arrow for the way they went, and Next.
+ * in a bold banner low on the board, where a thumb is, until the tour is closed: by Skip Tour (Got It once every step
+ * has shown), or by play itself. The tour never stands in the way: a press anywhere but the banner (the pad, the
+ * board, a button), the wheel or any key but Tab, a browser chord, or Enter or Space on the banner's own buttons
+ * closes it and goes on to do what it would have done.
+ * With reduced motion nothing moves: each step shows its fingertips where they end, an arrow for the way they went,
+ * and Next.
  *
  * It shows by itself once, the first time a level is in play on a touch screen with no card over it; Show View Tips
  * (the menu, the ? key) shows it again on a touch screen, and Reset Tips shows it by itself once more. Whether it has
@@ -85,6 +88,17 @@ export function tourDue(o: { touch: boolean; seen: boolean; playing: boolean; co
   return o.touch && !o.seen && o.playing && !o.covered;
 }
 
+/** What ends the tour by itself: any press but one on its banner, the wheel, and any key but Tab (the way to the
+ *  banner's buttons), Enter or Space on a banner button, a browser chord (Ctrl, Alt or Meta held) or a modifier
+ *  alone. The press or key then does what it would have done. */
+export function tourEndsOn(e: { type: string; inBanner?: boolean; key?: string; ctrlKey?: boolean; altKey?: boolean; metaKey?: boolean }): boolean {
+  if (e.type === "pointerdown") return !e.inBanner;
+  if (e.type === "wheel") return true;
+  if (e.type !== "keydown") return false;
+  if (e.key === "Tab" || (e.inBanner && (e.key === "Enter" || e.key === " "))) return false;
+  return !(e.ctrlKey || e.altKey || e.metaKey || ["Shift", "Control", "Alt", "Meta"].includes(e.key ?? ""));
+}
+
 export interface TourHost {
   /** The surface the board draws on in the look showing, which the tour turns and tilts for a moment. */
   surface(): HTMLElement | null;
@@ -104,6 +118,9 @@ export function showTour(frame: HTMLElement, host: TourHost): Tour {
   veil.className = "tour";
   veil.setAttribute("role", "dialog");
   veil.setAttribute("aria-label", "How to play on a touch screen");
+  const card = document.createElement("div");
+  card.className = "tour-card";
+  veil.append(card);
   const dots = [0, 1].map(() => {
     const d = document.createElement("span");
     d.className = "tour-dot";
@@ -115,8 +132,6 @@ export function showTour(frame: HTMLElement, host: TourHost): Tour {
   trace.setAttribute("class", "tour-trace");
   trace.setAttribute("aria-hidden", "true");
   veil.append(trace);
-  const card = document.createElement("div");
-  card.className = "tour-card";
   const caption = document.createElement("p");
   caption.id = "tour-caption";
   caption.className = "tour-caption";
@@ -124,6 +139,9 @@ export function showTour(frame: HTMLElement, host: TourHost): Tour {
   const pips = document.createElement("p");
   pips.className = "tour-pips";
   pips.setAttribute("aria-hidden", "true");
+  const play = document.createElement("p");
+  play.className = "tour-play";
+  play.textContent = "Or just start playing: the tour steps aside.";
   const buttons = document.createElement("div");
   buttons.className = "tour-buttons";
   const btn = (id: string, label: string): HTMLButtonElement => {
@@ -136,10 +154,15 @@ export function showTour(frame: HTMLElement, host: TourHost): Tour {
   };
   const still = host.reducedMotion();
   const next = still ? btn("tour-next", "Next") : null;
-  const done = btn("tour-done", "Skip");
-  card.append(caption, pips, buttons);
-  veil.append(card);
+  const done = btn("tour-done", "Skip Tour");
+  card.append(caption, pips, buttons, play);
   frame.append(veil);
+  // Low on the board, just above the strip, where a thumb is; at the top when the strip is not below the board.
+  const strip = document.getElementById("strip-root")?.getBoundingClientRect();
+  if (strip && strip.width > 0 && strip.top > window.innerHeight / 2) {
+    card.classList.add("tour-low");
+    card.style.bottom = `${Math.round(window.innerHeight - strip.top + 10)}px`;
+  }
 
   let step = -1;
   let shownAll = false;
@@ -170,7 +193,7 @@ export function showTour(frame: HTMLElement, host: TourHost): Tour {
     clearTimeout(timer);
     step = i % TOUR_STEPS.length;
     if (step === TOUR_STEPS.length - 1) shownAll = true;
-    done.textContent = shownAll ? "Got It" : "Skip";
+    done.textContent = shownAll ? "Got It" : "Skip Tour";
     const s = TOUR_STEPS[step]!;
     caption.textContent = s.caption;
     pips.textContent = TOUR_STEPS.map((_, j) => (j === step ? "●" : "○")).join(" ");
@@ -206,26 +229,23 @@ export function showTour(frame: HTMLElement, host: TourHost): Tour {
     closed = true;
     stopAnims();
     clearTimeout(timer);
-    document.removeEventListener("keydown", onKey, true);
+    for (const t of ["keydown", "pointerdown", "wheel"]) document.removeEventListener(t, onPlay, true);
     veil.remove();
     host.closed();
   }
-  const onKey = (e: KeyboardEvent): void => {
-    // A browser chord (Ctrl, Alt, Meta) or a modifier alone is the browser's, not a key to close the tour.
-    if (e.ctrlKey || e.altKey || e.metaKey || ["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    close();
+  // Play ends the tour for good, as Skip Tour does, and goes on through: the press reaches the pad or the board under
+  // it (the veil takes no pointer but on its banner), and the key reaches the game.
+  const onPlay = (e: Event): void => {
+    const k = e as KeyboardEvent;
+    const inBanner = e.target instanceof Node && card.contains(e.target);
+    if (tourEndsOn({ type: e.type, inBanner, key: k.key, ctrlKey: k.ctrlKey, altKey: k.altKey, metaKey: k.metaKey })) close();
+    // Enter or Space on a banner button presses it, and only it: the game never sees that key.
+    else if (e.type === "keydown" && inBanner && (k.key === "Enter" || k.key === " ")) e.stopPropagation();
   };
-  document.addEventListener("keydown", onKey, true);
-  veil.addEventListener("pointerdown", e => {
-    // The tour takes every press: nothing under it moves Theseus or the view.
-    e.preventDefault();
-    e.stopPropagation();
-  });
-  veil.addEventListener("click", e => {
+  for (const t of ["keydown", "pointerdown", "wheel"]) document.addEventListener(t, onPlay, { capture: true, passive: true });
+  card.addEventListener("click", e => {
     if (e.target === next) show(step + 1);
-    else close();
+    else if (e.target === done) close();
   });
   show(0);
   return { close };

@@ -23,6 +23,8 @@ import type { MoveAction } from "./keys.ts";
 import { PadPress, padDir } from "./pad.ts";
 import { TOUR_ID, showTour, tourDue } from "./tour.ts";
 import type { Tour } from "./tour.ts";
+import { createRuleTips } from "./rule-tips.ts";
+import type { TipEvent } from "./rule-tips.ts";
 import { HINT_KEY } from "./modern/hint.ts";
 import { createLayers } from "./layers.ts";
 import type { LayerName } from "./layers.ts";
@@ -355,6 +357,7 @@ export function createUi(deps: UiDeps): Ui {
     drawLayers();
     deps.cards?.(layers.stack());
     tourWhenClear();
+    tipsWhenClear();
   });
 
   /** The campaign index of chapter `n`'s first level. */
@@ -617,7 +620,7 @@ export function createUi(deps: UiDeps): Ui {
       },
       onClose: () => layers.close("dictionary"),
     });
-    renderBanner($("banner-root"), { entries: bannerEntries, line: bannerLine, seq: bannerSeq, pics: pics() });
+    renderBanner($("banner-root"), { entries: bannerEntries, line: bannerLine, seq: bannerSeq, pics: pics(), tip: tipShowing(), onTip: closeTip });
     renderMenu($("menu-root"), {
       open: layers.isOpen("menu"),
       muted,
@@ -869,6 +872,7 @@ export function createUi(deps: UiDeps): Ui {
       const name = out ? out.name : s.level.title;
       log.push({ text: s.level.intro ? `${name}: ${s.level.intro}` : name, tone: "info" });
       if (!out) listed = chapterOf(g.trial).chapter.n;
+      tips?.clear();
       layers.open("start");
     }
 
@@ -937,6 +941,7 @@ export function createUi(deps: UiDeps): Ui {
     }
     if (g.anim || run.now === noticedNow) return;
     noticedNow = run.now;
+    tipsAfter(g);
     if (on && g.took.includes("page")) met.add(metId("page"));
     const plan = meetNotices(g.meets, met, on, shownThisTurn);
     shownThisTurn = new Set();
@@ -1028,8 +1033,52 @@ export function createUi(deps: UiDeps): Ui {
     tour = showTour($("frame"), {
       surface: () => document.getElementById(modernBoard ? "stage3d" : "stage-view"),
       reducedMotion,
-      closed: () => { tour = null; },
+      closed: () => {
+        tour = null;
+        tipsWhenClear();
+      },
     });
+  }
+
+  /** The rule tips (src/rule-tips.ts), where first cards show. */
+  const tips = met ? createRuleTips(met) : null;
+
+  /** The rule tip standing, while the board is in view: none under a card or the touch tour, which go first. */
+  const tipShowing = () => (tips && !tour && !layers.any() ? tips.shown() : null);
+
+  function closeTip(): void {
+    tips?.close();
+    drawLayers();
+  }
+
+  /** What the try in play shows the tips: with `turned`, the turn that just landed (if it was one, not an undo or a
+   *  restart); else the board as it stands. None once the try is over, so no tip is spent under the ending card. */
+  function tipEvent(g: Game, turned: boolean): TipEvent | null {
+    const s = g.run?.now;
+    if (!s || s.outcome !== "playing") return null;
+    const sight = { beast: s.minotaur !== null, relics: s.relicsLeft > 0 };
+    return turned && g.turn ? { kind: "turn", ...sight, moves: s.moves, steps: g.turn.beast, caught: g.turn.caught } : { kind: "view", ...sight };
+  }
+
+  /** A turn landed, or an undo or a restart did: the tip it calls for. Not while the touch tour shows or waits to;
+   *  an undo's only under no card. */
+  function tipsAfter(g: Game): void {
+    if (!tips || !cardsOn(g) || tour || tourWaits || (!g.turn && layers.any())) return;
+    const ev = tipEvent(g, true);
+    if (ev && tips.on(ev)) drawLayers();
+  }
+
+  /** The board came into view with play under way (a level begun, a card or the touch tour closed): the tip that
+   *  calls for, once the touch tour has had its moment to open first. A turn already under way (a move closed the
+   *  start card or the tour) tells its own tip when it lands, so nothing shows over it in passing. */
+  function tipsWhenClear(): void {
+    if (!tips) return;
+    timers.setTimeout(() => {
+      const g = controls?.game ?? game;
+      if (!g || g.anim || !cardsOn(g) || tour || tourWaits || layers.any()) return;
+      const ev = tipEvent(g, false);
+      if (ev && tips.on(ev)) drawLayers();
+    }, 0);
   }
 
   /** Show View Tips (the menu, the ? key): the touch tour on a touch screen, else the modern board's tips. */

@@ -2,7 +2,7 @@
  * and the story pages found: items by id, first touches of active tiles as `touch-<id>` (src/dictionary.ts metId).
  * Met opens an entry in the Dictionary. Which entries have shown their first card is kept apart, as `crete-met-cards`:
  * a first pickup or touch shows its card, after that a banner, and the menu's Reset Tips empties that list (the cards
- * show again) without locking any entry; the touch tour (src/tour.ts) is kept there too. Until it is first stored, the
+ * show again) without locking any entry; the touch tour (src/tour.ts) and the rule tips (src/rule-tips.ts) are kept there too. Until it is first stored, the
  * cards shown are the entries met. The stored
  * word "*" stands for every entry (the browser specs set it to keep their levels free of first cards). A key was once kept by its colour
  * (`key-red`); any of those reads as the Keys family (`keys`), met with whichever colour came first.
@@ -26,7 +26,7 @@ export interface Met {
   add(id: string): boolean;
   /** Whether `id`'s first card has shown. */
   carded(id: string): boolean;
-  /** Notes a first-time help that is no Dictionary entry (the touch tour, src/tour.ts) as shown, opening nothing. */
+  /** Notes a first-time help that is no Dictionary entry (the touch tour, a rule tip) as shown, opening nothing. */
   noteCard(id: string): void;
   /** Every first card shows again; every met entry stays open. */
   resetCards(): void;

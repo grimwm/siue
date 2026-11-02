@@ -21,7 +21,7 @@ import type { Action, GameEvent } from './puzzle/step.ts';
 import { HAZARDS } from './puzzle/tiles.ts';
 import { threadPath } from './thread-path.ts';
 import type { ThreadCell } from './thread-path.ts';
-import type { HazardKind, ObjectKind } from './puzzle/tiles.ts';
+import type { Cell, Dir, HazardKind, ObjectKind } from './puzzle/tiles.ts';
 import { meetingsOf } from './dictionary.ts';
 
 export type SfxName =
@@ -75,6 +75,13 @@ export interface Anim {
 /** A stop: a first meeting (`id` is the Dictionary entry's), or a story page (`id` is the page's). */
 export interface Stop { kind: 'meet' | 'page'; id: string; ms: number }
 
+/** What a turn did that the rule tips (src/rule-tips.ts) tell of: the ways the Minotaur stepped, in order, and
+ *  whether it ended in a catch. */
+export interface TurnNote {
+  beast: readonly Dir[];
+  caught: boolean;
+}
+
 export interface Game {
   /** 0-based; -1 before one opens. */
   readonly trial: number;
@@ -98,6 +105,8 @@ export interface Game {
   /** The Dictionary entries the player met in the last turn played (src/dictionary.ts meetingsOf), each once, in
    *  order; empty after open, undo and restart. */
   readonly meets: readonly string[];
+  /** The last turn played; null after open, undo and restart. */
+  readonly turn: TurnNote | null;
   /** Starts level `i` fresh (clears assisted). */
   open(i: number): void;
   press(a: Action | 'undo' | 'restart'): void;
@@ -151,6 +160,10 @@ function stopsOf(before: State, tl: Timeline, meetings: readonly { id: string; m
   return out.sort((a, b) => a.ms - b.ms);
 }
 
+/** The way from a cell to its neighbour `to`. */
+const wayOf = (from: Cell, to: Cell): Dir =>
+  to.c > from.c ? 'right' : to.c < from.c ? 'left' : to.r > from.r ? 'down' : 'up';
+
 const sameAction = (a: Action, b: Action): boolean =>
   a.kind === b.kind && (a.kind !== 'move' || a.dir === (b as typeof a).dir) && (a.kind !== 'tool' || a.tool === (b as typeof a).tool);
 
@@ -169,6 +182,7 @@ export function createGame(deps: GameDeps): Game {
   let found: readonly string[] = [];
   let took: readonly ObjectKind[] = [];
   let meets: readonly string[] = [];
+  let turn: TurnNote | null = null;
   /** V is on: the line from the try as it stands stays drawn through every turn. */
   let threadOn = false;
   /** The actions that made the try as it stands, from the level's start. */
@@ -249,6 +263,10 @@ export function createGame(deps: GameDeps): Game {
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
     took = r.events.flatMap(e => (e.kind === 'took' ? [e.what] : []));
+    turn = {
+      beast: r.events.flatMap(e => (e.kind === 'moved' && e.who === 'minotaur' ? [wayOf(e.from, e.to)] : [])),
+      caught: r.events.some(e => e.kind === 'caught'),
+    };
     const reduced = deps.reducedMotion();
     const tl = timeline(before, r.events, reduced, run.now);
     // Each entry once a turn, where the figure first reaches it.
@@ -349,6 +367,7 @@ export function createGame(deps: GameDeps): Game {
     get found() { return found; },
     get took() { return took; },
     get meets() { return meets; },
+    get turn() { return turn; },
     animMs,
     resume,
     open(i) {
@@ -358,6 +377,7 @@ export function createGame(deps: GameDeps): Game {
       found = [];
       took = [];
       meets = [];
+      turn = null;
       played = [];
       threadOn = false;
       thread = null;
@@ -377,7 +397,7 @@ export function createGame(deps: GameDeps): Game {
         found = [];
         took = [];
         meets = [];
-      meets = [];
+        turn = null;
         redraw();
         deps.changed();
         return;

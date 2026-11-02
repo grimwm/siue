@@ -2,7 +2,7 @@
 // and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, measuring, hardPieces, challengeProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
@@ -59,18 +59,31 @@ test('a Minotaur in the way: ignoring him loses, he adds moves, and the only win
   assert.equal(d.greedyWins, false);
   assert.equal(d.catches, 1);
   assert.equal(d.catchFree, 'none', 'proved: no win without a catch');
-  assert.deepEqual(challengeProblems(d), []);
+  assert.deepEqual(challengeProblems(d), ['no win without a catch: no level may need one']);
   const free = measure(WALLED);
   assert.equal(free.catchFree, free.shortest, 'a catch-free win is the shortest when nothing chases');
+});
+
+test('no level needs a catch: not to win, and not for the fewest moves', () => {
+  const d = measure(CHASED);
+  assert.deepEqual(catchProblems(d), ['no win without a catch: no level may need one']);
+  assert.deepEqual(catchProblems({ ...d, catchFree: 9 }), ['the fewest moves take a catch (6, against 9 without one): no level may need one']);
+  assert.deepEqual(catchProblems({ ...d, catchFree: 6 }), ['the shortest line takes a catch, though a line as short takes none: no level may need one']);
+  assert.deepEqual(catchProblems({ ...d, catchFree: 6, catches: 0 }), []);
+  assert.deepEqual(catchProblems({ ...d, catchFree: 'unknown' }), ['the catch-free search hit its cap']);
+  assert.deepEqual(catchProblems(measure(WALLED)), []);
+  assert.match(challengeProblems(d, BAR, { teaching: [] }).join(), /no level may need one/, 'a challenge level too');
 });
 
 test('the challenge rules: against the teaching levels and the bar', () => {
   const d = measure(CHASED);
   const easy = { ...d, explored: 1, shortest: 2 };
   assert.match(challengeProblems(d, BAR, { teaching: [easy] }).join(), /adds 3 moves, the bar is 8/);
-  assert.deepEqual(challengeProblems(d, { minotaurDelta: 3, exploredTimes: 1 }, { teaching: [easy] }), []);
+  // CHASED's only win takes a catch; these checks look past that rule (catchProblems has its own test).
+  const free = { ...d, catches: 0, catchFree: d.shortest };
+  assert.deepEqual(challengeProblems(free, { minotaurDelta: 3, exploredTimes: 1 }, { teaching: [easy] }), []);
   const hard = { ...d, explored: d.explored, shortest: 7 };
-  const p = challengeProblems(d, { minotaurDelta: 3, exploredTimes: 2 }, { teaching: [easy, hard] });
+  const p = challengeProblems(free, { minotaurDelta: 3, exploredTimes: 2 }, { teaching: [easy, hard] });
   assert.equal(p.length, 2, p.join('; '));
   assert.match(p[0]!, /stored \d+ situations/);
   assert.match(p[1]!, /shorter than the longest teaching level's 7/);
@@ -329,7 +342,7 @@ test('the shared bar: never needs a Minotaur; a chase level may trade puzzle num
   assert.match(sharedProblems({ ...solo, solved: false, shortest: 'none' }).join(), /cannot be won/);
   assert.match(sharedProblems({ ...solo, solved: false, shortest: 'unknown' }).join(), /cap/);
   const chase: Difficulty = {
-    ...solo, shortest: SHARED_BAR.chaseShortest, explored: SHARED_BAR.chaseExplored, withoutMinotaur: SHARED_BAR.chaseShortest - BAR.minotaurDelta,
+    ...solo, shortest: SHARED_BAR.chaseShortest, catchFree: SHARED_BAR.chaseShortest, explored: SHARED_BAR.chaseExplored, withoutMinotaur: SHARED_BAR.chaseShortest - BAR.minotaurDelta,
     minotaurDelta: BAR.minotaurDelta, greedyWins: false, label: 'chase',
   };
   assert.deepEqual(sharedProblems(chase), [], 'the chase checks lower the puzzle bar');
@@ -337,7 +350,7 @@ test('the shared bar: never needs a Minotaur; a chase level may trade puzzle num
   assert.ok(sharedProblems({ ...chase, minotaurDelta: BAR.minotaurDelta - 1 }).length > 0, 'not when he adds too little');
   assert.ok(sharedProblems({ ...chase, label: 'solo' }).length > 0, 'not without a chase');
   assert.ok(sharedProblems({ ...chase, explored: SHARED_BAR.chaseExplored - 1 }).length > 0);
-  assert.deepEqual(sharedProblems({ ...chase, shortest: SHARED_BAR.shortest, explored: SHARED_BAR.explored, greedyWins: true, minotaurDelta: 0 }), [],
+  assert.deepEqual(sharedProblems({ ...chase, shortest: SHARED_BAR.shortest, catchFree: SHARED_BAR.shortest, explored: SHARED_BAR.explored, greedyWins: true, minotaurDelta: 0 }), [],
     'a chase level clears it on puzzle numbers alone too');
 });
 

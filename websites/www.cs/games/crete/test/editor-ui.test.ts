@@ -676,7 +676,7 @@ test('the check strip in the bar, outside the drawer, shows the run, the answer 
   assert.equal(byId(e.root, 'check-strip-keep').disabled, false);
   click(byId(e.root, 'check-strip-run'));
   assert.deepEqual(e.searches[0]!.calls, ['stop', 'resume']);
-  e.searches[0]!.answer({ ...ANSWER, shortest: 60, explored: 900000 });
+  e.searches[0]!.answer({ ...ANSWER, shortest: 60, catchFree: 60, explored: 900000 });
   await settle();
   assert.equal(maybeById(e.root, 'check-strip-stop'), undefined);
   assert.equal(byId(e.root, 'check-strip-text').textContent, 'Winnable in 60 · Shareable');

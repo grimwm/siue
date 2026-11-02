@@ -143,11 +143,11 @@ test('a winnable chase level reads out its numbers and is shareable', () => {
   const d = measure(L9);
   const r = checkLines(done(d), 'T', L9);
   assert.deepEqual(r.lines.slice(0, 3), [
-    'Winnable: quickest win 54 moves',
+    'Winnable: quickest win 40 moves',
     `Situations searched: ${d.explored.toLocaleString('en-US')}`,
     `Chase: the Minotaur adds ${d.minotaurDelta} moves; ignoring him ${d.greedyWins ? 'wins' : 'loses'}`,
   ]);
-  assert.equal(r.lines[0], 'Winnable: quickest win 54 moves');
+  assert.equal(r.lines[0], 'Winnable: quickest win 40 moves');
 });
 
 test('the lines of a hand-made chase answer are exact, down to the thousands separator', () => {
@@ -163,7 +163,7 @@ test('the lines of a hand-made chase answer are exact, down to the thousands sep
 });
 
 test('a level that clears the shared bar ends with Shareable', () => {
-  const d: Difficulty = { ...DIFF, shortest: 60, explored: 900000 };
+  const d: Difficulty = { ...DIFF, shortest: 60, catchFree: 60, explored: 900000 };
   assert.deepEqual(sharedProblems(d), []);
   const r = checkLines(done(d), 'T', L9);
   assert.equal(r.lines.at(-1), 'Shareable');
@@ -202,7 +202,7 @@ test('a capped search names what makes the level hard, and blocks lead only when
 });
 
 test('a winnable but easy level lists what keeps it from being shared', () => {
-  const easy: Difficulty = { ...DIFF, shortest: 5, explored: 20, naiveWins: true, label: 'solo', minotaurDelta: 0, greedyWins: true };
+  const easy: Difficulty = { ...DIFF, shortest: 5, catchFree: 5, explored: 20, naiveWins: true, label: 'solo', minotaurDelta: 0, greedyWins: true };
   const r = checkLines(done(easy), 'T', L9);
   const at = r.lines.indexOf('Not shareable yet:');
   assert.ok(at > 0);
@@ -233,9 +233,9 @@ test('checking a stopped search again resumes it', async () => {
 test('the one-line summary', () => {
   assert.equal(checkSummary({ kind: 'none' }, 'T'), '');
   assert.equal(checkSummary({ kind: 'running', text: 'T', report: null, stopped: false }, 'T'), '');
-  const shareable: Difficulty = { ...DIFF, shortest: 60, explored: 900000 };
+  const shareable: Difficulty = { ...DIFF, shortest: 60, catchFree: 60, explored: 900000 };
   assert.equal(checkSummary(done(shareable), 'T'), 'Winnable in 60 · Shareable');
-  assert.equal(checkSummary(done({ ...DIFF, shortest: 5, explored: 20, naiveWins: true }), 'T'), 'Winnable in 5 · Not shareable yet');
+  assert.equal(checkSummary(done({ ...DIFF, shortest: 5, catchFree: 5, explored: 20, naiveWins: true }), 'T'), 'Winnable in 5 · Not shareable yet');
   assert.equal(checkSummary(done({ ...DIFF, solved: false, shortest: 'none', line: '' }), 'T'), 'Cannot be won');
   assert.equal(checkSummary(done({ ...DIFF, solved: false, shortest: 'unknown', line: '' }), 'T'), 'The solver could not finish');
   assert.equal(checkSummary(done(DIFF), 'other'), 'Out of date: press Check.');

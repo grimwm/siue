@@ -131,12 +131,13 @@ It also labels the level and plays the plain walk:
 `challengeProblems` checks a measure against `BAR`, the campaign's bar, and lists what falls short:
 
 - Every level with a Minotaur: he shapes the route. He adds moves, or the line that ignores him loses.
+- Every level: no catch is needed (`catchProblems`). The shortest line takes no catch, and the shortest line that never takes one is as short.
 - A chapter's challenge levels (those after its teaching stretch, `teaching` in `src/campaign/chapters.ts`; Chapter 1 teaches in levels 1 to 8, Chapter 2 in levels 1 to 3) are a real fight: the line that ignores the Minotaur loses, he adds at least 8 moves, the search stores at least 20 times the situations of the chapter's hardest teaching level, and the line is no shorter than its longest teaching level's. `rampProblems` holds each challenge level after the first to between `RAMP.least` and `RAMP.most` (1.2 and 2.2) times the situations of the one before it, a steady climb with no cliff; `rampOf(level)` gives a level that hides walls the gentler `HIDDEN.ramp` instead.
 - A challenge level that hides walls (a fake or an invisible wall) stays at or under `HIDDEN.most`, 20,000 situations (`hiddenProblems`). `measure` sees through hidden walls and a player has to find them, so such a level gets an easier maze than a plain level at the same spot.
 
 `sharedProblems` checks a measure against `SHARED_BAR`, the bar every shared level must clear. It never needs a Minotaur, so a solo level clears it on puzzle difficulty alone:
 
-- The level is proved winnable, and the plain walk does not win.
+- The level is proved winnable, the plain walk does not win, and no catch is needed (`catchProblems`).
 - The quickest win takes at least 40 moves, and the solver stores at least 12,000 situations to find it.
 - A chase level whose Minotaur adds at least 8 moves (`BAR.minotaurDelta`), and whose line that ignores him loses, needs only 30 moves and 6,000 situations.
 
@@ -150,12 +151,12 @@ Chapter 1 sets both bars. Every level is chase and no plain walk wins:
 | 4 | 28 | 120 | 12 | no | 0 |
 | 5 | 23 | 55 | 8 | no | 0 |
 | 6 | 24 | 447 | 8 | no | 0 |
-| 7 | 23 | 311 | 13 | no | 1 |
+| 7 | 24 | 443 | 14 | no | 0 |
 | 8 | 29 | 120 | 11 | no | 0 |
-| 9 | 54 | 24,086 | 22 | no | 1 |
+| 9 | 40 | 14,519 | 14 | no | 0 |
 | 10 | 76 | 28,990 | 31 | no | 0 |
 
-Its hardest teaching search is level 3's 614 situations; level 9 stores 39 times that and level 10 47 times, so the campaign bar of 20 times is about half of level 9's. The shared bar is about half of level 9's situations and a few moves past the longest teaching level (36), so levels 9 and 10 clear it and levels 1 to 8 fall far short. `test/difficulty.test.ts` gates every released level on both bars (`test/chapter-2.test.ts` checks Chapter 2's own rules: gravel and nothing later, the teaching levels' gravel, the pages, level 10's routes); new campaign levels must pass `BAR` and every shared level `SHARED_BAR`.
+Its hardest teaching search is level 3's 614 situations; level 9 stores 24 times that and level 10 47 times, so the campaign bar of 20 times sits a little under level 9's. The shared bar sits a little under level 9's situations (12,000 against 14,519) and at its 40 moves, a few past the longest teaching level (36), so levels 9 and 10 clear it and levels 1 to 8 fall far short. `test/difficulty.test.ts` gates every released level on both bars (`test/chapter-2.test.ts` checks Chapter 2's own rules: gravel and nothing later, the teaching levels' gravel, the pages, level 10's routes); new campaign levels must pass `BAR` and every shared level `SHARED_BAR`.
 
 Chapter 2 teaches gravel in three small levels and then mixes it with Chapter 1's pieces: force floors and suction boots (4), ice and skates (5), water, fire and their gear (6), keys and doors (7), blocks, the plate and toggle walls (8), the tools and safe zones (9), and both gear routes to the inner gate (10). Every shortest line crosses gravel. The later chapters follow the same shape, each with its own `test/chapter-N.test.ts`. The numbers for every released level are not copied here. `test/difficulty.test.ts` measures each one and fails when it breaks the gate, the ramp or the hidden-wall band; each chapter's own test checks its teaching levels and pages, `test/campaign.test.ts` checks the quotations and their citations, and `test/fewest.test.ts` checks `src/campaign/fewest.ts`.
 
@@ -164,6 +165,7 @@ Chapter 2 teaches gravel in three small levels and then mixes it with Chapter 1'
 Any session or agent that makes or changes campaign levels keeps to these:
 
 - **The gate.** Every teaching level passes the base `challengeProblems` check, with no context: its Minotaur shapes the route (he adds moves, or the line that ignores him loses). Every challenge level passes `challengeProblems` against `BAR` with the chapter's teaching levels as context: the line that ignores the Minotaur loses, he adds at least 8 moves, the search stores at least 20 times the situations of the chapter's hardest teaching level, and the line is no shorter than the longest teaching level's. Every challenge level also clears `SHARED_BAR`.
+- **No catch is ever needed.** A player cannot know to walk into the beast, so no level, teaching or challenge, campaign or shared, needs a catch: not to win, and not for its fewest moves. The solver's shortest line takes no catch and no line that takes one is shorter than the best catch-free line (`catchProblems`, part of both `challengeProblems` and `sharedProblems`). A catch still costs a heart and wakes Theseus on his last safe mark; it is a setback, never a route.
 - **The ramp.** Each challenge level stores 1.2 to 2.2 times the situations of the one before it (`RAMP`); aim near 1.3 times, so that no level is a wall that makes players quit.
 - **Hidden walls ease the level.** A level with a fake or an invisible wall climbs by `HIDDEN.ramp` (1.1 to 1.5 times) and stays at or under `HIDDEN.most` (20,000 situations). A step into a fake wall opens it and walks Theseus through as one move; bumping an invisible wall shows it and costs no turn.
 - **The finale.** A chapter's last level sits a little above the previous chapter's last level, unless it hides walls and so is held under `HIDDEN.most`.
@@ -171,7 +173,7 @@ Any session or agent that makes or changes campaign levels keeps to these:
 - **Tidy layouts.** Levels read as rooms and halls, never as scattered noise; a tuning search that moves walls keeps the rooms.
 - **Real quotes.** Chapter cards, intros and story pages quote the public-domain translations the vision spec lists, word for word with a citation; the chapters so far quote Plutarch's *Life of Theseus* in Bernadotte Perrin's 1914 translation.
 - **Fewest moves.** Every level change regenerates its entry in `src/campaign/fewest.ts` from the solver; `test/fewest.test.ts` checks every entry.
-- **One gate for every tool.** Anything that makes or tunes levels (a tuning script, the Endless generator) accepts a level only through the checks the tests use: `challengeProblems`, `rampProblems` with `rampOf`, `hiddenProblems`, and `sharedProblems` against `SHARED_BAR` for a challenge level, all in `src/puzzle/difficulty.ts`. The rules live in those checks, not in each tool.
+- **One gate for every tool.** Anything that makes or tunes levels (a tuning script, the Endless generator) accepts a level only through the checks the tests use: `challengeProblems` (which carries `catchProblems`), `rampProblems` with `rampOf`, `hiddenProblems`, and `sharedProblems` against `SHARED_BAR` for a challenge level, all in `src/puzzle/difficulty.ts`. The rules live in those checks, not in each tool.
 
 ## The looks
 

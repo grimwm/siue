@@ -51,7 +51,7 @@ const BASE = 'https://example.test/play/crete/';
 
 test('share refuses until the level is shareable, giving the problems', async () => {
   // Level 9 is a chase level, so it is held to the chase bar (30 moves, 6000 situations); a solo level to 40 and 12000.
-  const easy: Difficulty = { ...D, shortest: 10, explored: 50, naiveWins: true };
+  const easy: Difficulty = { ...D, shortest: 10, catchFree: 10, explored: 50, naiveWins: true };
   assert.equal(D.label, 'chase');
   const r = await ed.panel.shareLink(BASE, TEXT, easy, 'WGR', null);
   assert.deepEqual(r, {
@@ -235,7 +235,7 @@ test('an unshareable answer shows its problems and no link', async () => {
   e.editor.open(DRAFT);
   typeInitials(e.root, 'WGR');
   click(byId(e.root, 'share-run'));
-  e.searches[0]!.answer({ ...D, shortest: 10, explored: 50 });
+  e.searches[0]!.answer({ ...D, shortest: 10, catchFree: 10, explored: 50 });
   await later(() => maybeById(e.root, 'share-message') !== undefined);
   assert.match(byId(e.root, 'share-message').textContent, /^Not shareable yet: /);
   assert.equal(maybeById(e.root, 'share-link'), undefined);

@@ -194,7 +194,8 @@ for (const device of DEVICES) {
 
     await page.waitForSelector('#stage[data-cell]');
     await page.evaluate(setWorst);
-    expect(await page.evaluate(measure)).toEqual([]);
+    // The longest status text can reflow the bars; the board is framed again for the room it leaves on the next frame.
+    await expect.poll(() => page.evaluate(measure)).toEqual([]);
     const tabs = await page.evaluate(tabsShown);
     if (touch || width < 760) expect(tabs, 'no key tabs without a keyboard or under 760 px').toBe(0);
     else expect(tabs).toBe(TABS);
@@ -441,7 +442,7 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE'))) {
     await expect(page.locator('#start-veil')).toBeHidden();
     await page.waitForSelector('#stage[data-cell]');
     await page.evaluate(setWorst);
-    expect(await page.evaluate(measure)).toEqual([]);
+    await expect.poll(() => page.evaluate(measure)).toEqual([]);
     expect(Number(await page.locator('#stage').getAttribute('data-cell'))).toBeGreaterThanOrEqual(8);
     expect(errors).toEqual([]);
     await ctx.close();

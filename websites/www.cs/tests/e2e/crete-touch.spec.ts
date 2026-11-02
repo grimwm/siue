@@ -111,6 +111,7 @@ test.describe('with every tip seen', () => {
     await page.addInitScript(pinClassic);
     const errors = await open(page, ROOM);
     await page.waitForSelector('#stage[data-cell]');
+    await expect(page.locator('#classic-cam button'), 'on a phone too, no camera buttons and no View toggle: the compass alone').toHaveCount(1);
     const cdp = await page.context().newCDPSession(page);
     const c = await centre(page, '#stage-view');
     const before = await now(page);
@@ -209,9 +210,9 @@ test.describe('a finger tap on the compass', () => {
     await page.addInitScript(pinClassic);
     const errors = await open(page, ROOM);
     const cdp = await page.context().newCDPSession(page);
-    const left = page.locator('#classic-left');
-    if (!(await left.isVisible())) await page.locator('#classic-cam .modern-viewbtn').tap();
-    await left.tap();
+    // An eased turn from the compass's own keys: a quarter, 15° a press.
+    await page.locator('#classic-compass').focus();
+    for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowLeft');
     await wobblyTap(page, cdp, '#classic-compass', 10);
     await expect.poll(() => view(page), 'the tap mid-turn reset the view').toEqual({ yaw: 0, pitch: 75 });
     expect(errors).toEqual([]);

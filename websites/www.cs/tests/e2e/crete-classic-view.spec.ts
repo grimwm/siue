@@ -110,10 +110,10 @@ test('the classic sheet opens at 75° and north up, turns and tilts on the compa
   await dragCompass(page, 0, -200);
   await expect.poll(() => view(page), 'held at 10°').toEqual({ yaw: 60, pitch: 10 });
   expect(await compass(page)).toEqual({ heading: 60, pitch: 10 });
-  // The turn buttons turn a quarter.
-  const turnRight = page.locator('#classic-right');
-  if (!(await turnRight.isVisible())) await page.locator('#classic-cam .modern-viewbtn').click();
-  await turnRight.click();
+  // There are no camera buttons; Right on the focused compass turns 15°, so six turn a quarter.
+  await expect(page.locator('#classic-cam button'), 'the compass alone').toHaveCount(1);
+  await page.locator('#classic-compass').focus();
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowRight');
   await expect.poll(() => view(page)).toEqual({ yaw: 150, pitch: 10 });
   // A tap on the compass goes back to the opening view, by the nearest way round.
   await dragCompass(page, 0, 0);

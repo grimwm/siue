@@ -167,9 +167,15 @@ async function openHall(page: Page, text = HALL, reducedMotion: 'reduce' | 'no-p
   return errors;
 }
 
-/** Zooms in with the button `n` times, past the whole-level view the board opens at, and waits for the board to rest. */
+/** Presses `key` on the focused compass: + zooms in, - out, Enter resets the view. */
+async function compassKey(page: Page, key: string): Promise<void> {
+  await page.locator('#cam-compass').focus();
+  await page.keyboard.press(key);
+}
+
+/** Zooms in with + on the compass `n` times, past the whole-level view the board opens at, and waits for the board to rest. */
 async function zoomIn(page: Page, n = 4): Promise<void> {
-  for (let i = 0; i < n; i++) await page.locator('#cam-zoom-in').click();
+  for (let i = 0; i < n; i++) await compassKey(page, '+');
   await settled(page);
 }
 
@@ -342,12 +348,12 @@ test('the wheel zooms toward the pointer and the buttons zoom too; with the menu
   await page.keyboard.press('q');
   await expect(page.locator('#menu-veil')).toBeHidden();
 
-  await page.locator('#cam-zoom-out').click();
-  await expect.poll(() => zoom(page), 'Zoom out').toBeGreaterThan(held);
-  await page.locator('#cam-reset').click();
-  await expect.poll(() => zoom(page), 'Reset view brings the default back').toBeCloseTo(z0, 3);
-  await page.locator('#cam-zoom-in').click();
-  await expect.poll(() => zoom(page), 'Zoom in').toBeLessThan(z0);
+  await compassKey(page, '-');
+  await expect.poll(() => zoom(page), '- on the compass zooms out').toBeGreaterThan(held);
+  await compassKey(page, 'Enter');
+  await expect.poll(() => zoom(page), 'Enter on the compass brings the default back').toBeCloseTo(z0, 3);
+  await compassKey(page, '+');
+  await expect.poll(() => zoom(page), '+ on the compass zooms in').toBeLessThan(z0);
   expect(errors).toEqual([]);
 });
 
@@ -486,10 +492,10 @@ test('the board opens on the whole level, and Theseus\'s steps leave it there un
   const box = (await page.locator('#stage3d').boundingBox())!;
   const cellPx = box.height / z0;
   expect(21 * cellPx, 'the hall\'s width fits the board').toBeLessThanOrEqual(box.width);
-  await page.locator('#cam-zoom-in').click();
+  await compassKey(page, '+');
   await expect.poll(() => zoom(page)).toBeLessThan(z0);
-  await page.locator('#cam-reset').click();
-  await expect.poll(() => zoom(page), 'Reset returns to the whole level').toBeCloseTo(z0, 3);
+  await compassKey(page, 'Enter');
+  await expect.poll(() => zoom(page), 'a reset returns to the whole level').toBeCloseTo(z0, 3);
   expect(errors).toEqual([]);
 });
 
@@ -562,8 +568,7 @@ test.describe('on a touch phone', () => {
 
   test('a finger dragging the compass across turns the view, up leans it toward 10°, and a tap resets it', async ({ page }) => {
     const errors = await openHall(page);
-    // Zoomed in and looking elsewhere, so the tap's re-centring shows. On a phone the zoom buttons are behind View.
-    await page.locator('[aria-controls="cam-buttons"]').click();
+    // Zoomed in and looking elsewhere, so the tap's re-centring shows.
     await zoomIn(page);
     await twoFingers(page, { dx: 60 });
     await settled(page);
@@ -654,7 +659,7 @@ test('one finger on the board turns and tilts the view and never moves Theseus',
   expect(errors).toEqual([]);
 });
 
-test('every player starts at 75° and north up, with the turn buttons, the compass and the Walls choice; there is no View choice', async ({ page }) => {
+test('every player starts at 75° and north up, with the compass and the Walls choice; there are no camera buttons and no View choice', async ({ page }) => {
   // A player from before the one camera kept a view and a heading: neither is read any more.
   await page.addInitScript(() => {
     localStorage.setItem('crete-view', 'angled');
@@ -668,7 +673,7 @@ test('every player starts at 75° and north up, with the turn buttons, the compa
   await page.locator('#start-begin').click();
   await page.waitForFunction(() => (window as unknown as Hooked).__creteTest.modern?.active === true);
   await expect.poll(() => cam(page)).toEqual({ pitch: 75, yaw: 0 });
-  await expect(page.locator('#cam-left')).toBeVisible();
+  await expect(page.locator('#modern .modern-overlay button'), 'no camera buttons, no View toggle: the compass alone').toHaveCount(1);
   await expect(page.locator('#cam-compass')).toBeVisible();
   await page.keyboard.press('q');
   await expect(page.locator('#view-top')).toHaveCount(0);

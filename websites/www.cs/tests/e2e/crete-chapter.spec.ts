@@ -2,7 +2,7 @@
 // and the menu's Lore Book lists it. The page-taking line is solved in the page from a copy of level 9 whose page
 // is a relic, so the solver's win must take it; the same line then wins the real level through the strip. Then
 // level 10's win opens Chapter 1's closing card, whose On to Chapter 2 goes on to Chapter 2's opening card, and
-// Chapter 2's level 10 goes on the same way to Chapter 3's, and Chapter 3's to Chapter 4's.
+// Chapter 2's level 10 goes on the same way to Chapter 3's, Chapter 3's to Chapter 4's, and Chapter 4's to Chapter 5's.
 import { test, expect } from '@playwright/test';
 
 /** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
@@ -197,5 +197,39 @@ test("Chapter 3's closing card goes on to Chapter 4: its opening card, then its 
   await expect(page.locator('#start-title')).toHaveText('The Wall That Gives');
   await page.keyboard.press('n');
   await expect(page.locator('#levels-tab-4')).toHaveAttribute('aria-pressed', 'true');
+  expect(errors).toEqual([]);
+});
+
+test("Chapter 4's closing card goes on to Chapter 5: its opening card, then its first level", async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(PAGE);
+  await page.locator('#title-play').click();
+  await page.locator('#pick-enter').click();
+  await expect(page.locator('#chapter-veil')).toBeVisible();
+  await page.keyboard.press('n');
+  await page.locator('#levels-tab-4').click();
+  await page.locator('#level-10').click();
+  await expect(page.locator('#start-veil .kicker')).toHaveText('Chapter 4 · Level 10');
+  await page.locator('#start-begin').click();
+  await page.evaluate(() => {
+    const t = (window as unknown as { __creteTest: CreteTest & { game: { press(a: Act): void } } }).__creteTest;
+    const r = t.solve(t.initial(t.levelById('ch4-10')));
+    for (const a of r.line) t.game.press(a);
+  });
+  await expect(page.locator('#chapter-kicker')).toHaveText('End of Chapter 4');
+  await expect(page.locator('#chapter-title')).toHaveText('The False Walls');
+  await expect(page.locator('#chapter-continue')).toContainText('On to Chapter 5');
+  await expect(page.locator('#chapter-next')).toHaveCount(0);
+  await page.locator('#chapter-continue').click();
+  await expect(page.locator('#chapter-kicker')).toHaveText('Chapter 5 of 10');
+  await expect(page.locator('#chapter-title')).toHaveText('The Snares of Daedalus');
+  await expect(page.locator('#chapter-text')).toContainText('brown button');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#start-veil .kicker')).toHaveText('Chapter 5 · Level 1');
+  await expect(page.locator('#start-title')).toHaveText('The Snare');
+  await page.keyboard.press('n');
+  await expect(page.locator('#levels-tab-5')).toHaveAttribute('aria-pressed', 'true');
   expect(errors).toEqual([]);
 });

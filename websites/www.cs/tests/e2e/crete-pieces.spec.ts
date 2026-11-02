@@ -19,7 +19,6 @@ interface PiecesTest {
   game: { run: { now: { player: Cell; moves: number; hazards: { kind: string; at: Cell }[] } } };
   parse(text: string): unknown;
   playLevel(level: unknown): void;
-  classic: { at(c: number, r: number): { x: number; y: number } | null };
 }
 /** The hook's shape as this spec uses it; crete-play.spec.ts declares the global `__creteTest` itself. */
 type Hooked = { __creteTest: PiecesTest };
@@ -72,33 +71,36 @@ const now = (page: Page) => page.evaluate(() => {
   const s = (window as unknown as Hooked).__creteTest.game.run.now;
   return { moves: s.moves, player: s.player, harpy: s.hazards[0]!.at };
 });
-/** How many dark pixels the figure standing on board cell (r, c) shows. The figures stand upright on the
- *  `.stage-figures` canvas over the tilted sheet, so the box read is a cell wide and a cell high above the square's
- *  projected centre. Figures carry a dark outline and an empty square shows none, so the cell a figure stands on holds
- *  far more than its neighbour, whatever frame of its loop is showing. */
-const darkIn = (page: Page, r: number, c: number) => page.evaluate(([r, c]) => {
-  const at = (window as unknown as Hooked).__creteTest.classic.at(c, r)!;
-  const o = document.querySelector('.stage-figures') as HTMLCanvasElement;
-  const box = o.getBoundingClientRect();
-  const k = o.width / box.width;
-  const cell = Number((document.getElementById('stage') as HTMLElement).dataset.cell) * k;
-  const d = o.getContext('2d')!.getImageData(Math.round((at.x - box.left) * k - cell / 2), Math.round((at.y - box.top) * k - cell), Math.round(cell), Math.round(cell)).data;
-  let n = 0;
-  for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 200 && d[i]! + d[i + 1]! + d[i + 2]! < 180) n++;
-  return n;
-}, [r, c] as const);
+/** The figures canvas (src/sheet-board.ts) draws the figures upright over the tilted sheet. `keepFigures` keeps what it
+ *  shows now; `figuresMoved` gives the mean x of the pixels drawn now and not then, less that of the pixels drawn then
+ *  and not now: above zero when the one figure that moved is drawn further right. */
+const keepFigures = (page: Page) => page.evaluate(() => {
+  const o = document.querySelector('canvas.stage-figures') as HTMLCanvasElement;
+  (window as unknown as { kept: Uint8ClampedArray }).kept = o.getContext('2d')!.getImageData(0, 0, o.width, o.height).data;
+});
+const figuresMoved = (page: Page) => page.evaluate(() => {
+  const o = document.querySelector('canvas.stage-figures') as HTMLCanvasElement;
+  const now = o.getContext('2d')!.getImageData(0, 0, o.width, o.height).data;
+  const then = (window as unknown as { kept: Uint8ClampedArray }).kept;
+  let took = 0, tn = 0, left = 0, ln = 0;
+  for (let i = 3; i < now.length; i += 4) {
+    const x = ((i - 3) / 4) % o.width, a = now[i]! > 128, b = then[i]! > 128;
+    if (a && !b) { took += x; tn++; } else if (b && !a) { left += x; ln++; }
+  }
+  return tn && ln ? took / tn - left / ln : 0;
+});
 
 test('Wait moves the Harpy, and the board shows it', async ({ page }) => {
   const errors = await open(page);
   const before = await now(page);
   expect(before.harpy).toEqual({ r: 3, c: 3 });
-  expect(await darkIn(page, 3, 3), 'the Harpy is drawn at its start').toBeGreaterThan(await darkIn(page, 3, 4));
+  await keepFigures(page);
   await page.locator('#btn-wait').click();
   const after = await now(page);
   expect(after.moves).toBe(1);
   expect(after.harpy, 'the Harpy flew one cell right').toEqual({ r: 3, c: 4 });
-  await expect.poll(async () => (await darkIn(page, 3, 4)) - (await darkIn(page, 3, 3)), { message: 'the board draws it in its new cell' })
-    .toBeGreaterThan(0);
+  // Only the Harpy moved, so the pixels it left and the pixels it took show it drawn one cell further right.
+  await expect.poll(() => figuresMoved(page), { message: 'the board draws it further right' }).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
 

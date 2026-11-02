@@ -732,24 +732,45 @@ def ring(h_out, h_in, z_top, top, side, depth=0.5):
 
 
 def build_exit(f):
-    """A stair going down into light: nested square steps falling away, each darker
-    than the one above, round a bright doorway at the bottom."""
-    P = 0.36                                                        # the top step's outer half width
-    holed_floor(P, floor_mat())
-    light = MB('exit-light')
-    light.emission('#fff6cc', 2.2)
-    tops = ['#4a3d2a', '#5c4a30', '#b8803a', '#ffd070']
-    sides = ['#2a2218', '#33291b', '#8a5c24', '#e0a040']
-    hs = [P, P - 0.07, P - 0.14, P - 0.2]
-    ring(P + 0.035, P, 0.012, paint('exit-lip', '#2a2218', rough=0.9), paint('exit-lip2', '#2a2218', rough=0.9))
-    for i in range(4):
-        h_in = hs[i + 1] if i < 3 else 0.12
-        m = MB('step%d' % i)
-        m.pbr(tops[i], 0.9, 0.0, emit=tops[i] if i > 1 else None, estr=0.6 + 0.5 * i)
-        ms = MB('riser%d' % i)
-        ms.pbr(sides[i], 0.9, 0.0, emit=sides[i] if i > 1 else None, estr=0.6 + 0.5 * i)
-        ring(hs[i], h_in, -0.07 - i * 0.08, m.mat, ms.mat)
-    box(-0.12, 0.12, -0.12, 0.12, -0.5, -0.36, light.mat, light.mat, 0.0, outline=False)
+    """The Aegean Portal, as the modern look draws it: a white marble arch with gold
+    capitals and a gold keystone at the back of the cell, facing the viewer, filled
+    with a sheet of Aegean-blue light, over a blue pool in a marble ring on a flagstone."""
+    slab(floor_mat())
+    marble = paint('exit-marble', '#f2ece0', rough=0.5, var=0.08, bump=0.05, scale=12)
+    au = gold('exit-gold')
+    # The pool of light in its marble ring: nearly white at the middle, Aegean blue at the edge.
+    pool = MB('exit-pool')
+    s = pool.sep()
+    r = pool.vmath('LENGTH', pool.comb(s.outputs['X'], s.outputs['Y']))
+    pc = pool.ramp(r, [(0.0, '#d8f2ff'), (0.14, '#7cc8f4'), (0.3, '#1e78d2')])
+    pool.emission(pc, 1.6)
+    cyl((0, -0.1, 0.0), 0.3, length=0.02, mat=pool.mat, seg=48, outline=False)
+    torus((0, -0.1, 0.012), 0.31, 0.022, marble, outline=False)
+    # The arch: two columns on bases under gold capitals, and a round arch over them.
+    Y, W, H = 0.18, 0.23, 0.2                                       # its depth, half span and column height
+    for sx in (-1, 1):
+        box(sx * W - 0.06, sx * W + 0.06, Y - 0.06, Y + 0.06, 0.0, 0.035, marble, marble, 0.006, outline=False)
+        cyl((sx * W, Y, 0.035 + H / 2), 0.042, 0.036, H, mat=marble, seg=20, outline=False)
+        box(sx * W - 0.06, sx * W + 0.06, Y - 0.06, Y + 0.06, 0.035 + H, 0.075 + H, au, au, 0.006, outline=False)
+    spring = 0.075 + H
+    R0, R1, n = W - 0.045, W + 0.045, 20
+    band = [(math.cos(math.pi * i / n) * R1, spring + math.sin(math.pi * i / n) * R1) for i in range(n + 1)]
+    band += [(math.cos(math.pi * i / n) * R0, spring + math.sin(math.pi * i / n) * R0) for i in range(n, -1, -1)]
+    prism(band, 0.1, marble, 'XZ', Y, bevel=0.0, outline=False)
+    box(-0.05, 0.05, Y - 0.06, Y + 0.06, spring + R1 - 0.05, spring + R1 + 0.02, au, au, 0.006, outline=False)
+    # The sheet of light filling the arch: pale in the middle, Aegean blue at the sides, with soft ripples.
+    veil = MB('exit-veil')
+    v = veil.sep()
+    ax = veil.math('ABSOLUTE', v.outputs['X'])
+    vc = veil.ramp(ax, [(0.0, '#bfe9ff'), (0.2, '#0b5fa8')])
+    wave = veil.math('FRACT', veil.math('ADD', veil.math('MULTIPLY', v.outputs['Z'], 14.0),
+                                        veil.math('MULTIPLY', veil.math('SINE', veil.math('MULTIPLY', v.outputs['X'], 30.0)), 0.25)))
+    vc = veil.mix(vc, '#ffffff', veil.ramp(wave, [(0.0, '#000000'), (0.1, '#5a5a5a'), (0.2, '#000000')]), 'MIX')
+    veil.emission(vc, 1.8)
+    R = R0
+    hole = [(-R, 0.035)] + [(math.cos(math.pi * i / n) * R * -1, spring + math.sin(math.pi * i / n) * R)
+                            for i in range(n + 1)] + [(R, 0.035)]
+    prism(hole, 0.01, veil.mat, 'XZ', Y, bevel=0.0, outline=False)
 
 
 def build_safe(f):

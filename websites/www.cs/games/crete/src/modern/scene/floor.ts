@@ -1,7 +1,7 @@
 /* The Island of Crete, modern look: the ground. One flagstone per cell, so the seams between stones are the only
  * grid; each stone takes one of three faces, a quarter turn and a tint chosen by its cell, so a rebuild after a
  * turn changes only the cells whose ground changed. Fire, ice, force floors, dirt and gravel are stones of their
- * own; water lies in a basin below the stones, and the exit's stair goes down through the ground. Each surface is one instanced mesh. */
+ * own; water lies in a basin below the stones. Each surface is one instanced mesh. */
 import { Color, Group, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, Path, PlaneGeometry, Shape, ShapeGeometry, Vector2 } from 'three';
 import type { BufferGeometry, Material } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
@@ -41,7 +41,7 @@ export function createFloor(kit: Kit): Floor {
   waterGeo.rotateX(-Math.PI / 2);
   waterGeo.translate(0, WATER_Y, 0);
   const pebbleGeo = new IcosahedronGeometry(0.045, 0);
-  // The dark ground round the board, open over the board itself so the exit's pit can go down.
+  // The dark ground round the board, open over the board itself, where the stones lie.
   const under = new Mesh<BufferGeometry, Material>(new PlaneGeometry(1, 1), m.under);
   under.rotation.x = -Math.PI / 2;
   under.position.y = -0.02;
@@ -77,8 +77,8 @@ export function createFloor(kit: Kit): Floor {
       const by: Record<string, number[]> = { ember: [], ice: [], force: [], dirt: [], gravel: [], water: [], mortar: [] };
       models.forEach((model, i) => {
         const s = SURFACES[model];
-        // The mortar between the stones; the exit's pit has none.
-        if (model !== 'exit') by.mortar!.push(i);
+        // The mortar between the stones.
+        by.mortar!.push(i);
         if (s === 'flag') flags[(rng(i * 2654435761 + 7)() * 3) | 0]!.push(i);
         else if (s !== 'none') by[s]!.push(i);
       });

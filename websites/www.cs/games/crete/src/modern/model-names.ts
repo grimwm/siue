@@ -19,11 +19,11 @@ export const TERRAIN_MODEL_NAMES = [
 ] as const;
 export type TerrainModel = (typeof TERRAIN_MODEL_NAMES)[number];
 
-/** The ground under a cell's model: a flagstone, a surface of its own, or none (a wall, the exit's stair). */
+/** The ground under a cell's model: a flagstone, a surface of its own, or none (a wall). */
 export type Surface = 'flag' | 'ember' | 'ice' | 'force' | 'dirt' | 'gravel' | 'water' | 'none';
 
 export const SURFACES: Record<TerrainModel, Surface> = {
-  floor: 'flag', wall: 'none', exit: 'none', 'gate-closed': 'flag', 'gate-open': 'flag', water: 'water', fire: 'ember',
+  floor: 'flag', wall: 'none', exit: 'flag', 'gate-closed': 'flag', 'gate-open': 'flag', water: 'water', fire: 'ember',
   ice: 'ice', 'force-up': 'force', 'force-down': 'force', 'force-left': 'force', 'force-right': 'force', dirt: 'dirt',
   safe: 'flag', button: 'flag', 'toggle-open': 'flag', 'toggle-closed': 'flag', 'door-red': 'flag', 'door-blue': 'flag',
   'door-yellow': 'flag', 'door-green': 'flag', 'door-red-sill': 'flag', 'door-blue-sill': 'flag',
@@ -44,6 +44,13 @@ export function terrainModel(s: Pick<State, 'level' | 'terrain' | 'relicsLeft'>,
   const opened = openedDoor(s, i);
   if (opened) return `door-${opened}-sill`;
   return (t === 'gate' && s.relicsLeft === 0 ? sprites[1] : sprites[0]) as TerrainModel;
+}
+
+/** The way the exit's portal faces, as a row and column step: away from a wall beside it, north first (so its
+ *  front faces the opening camera whenever it can), then west, east and south; with no wall beside it, south. */
+export function exitFacing(wall: (r: number, c: number) => boolean, r: number, c: number): readonly [number, number] {
+  const back = ([[-1, 0], [0, -1], [0, 1], [1, 0]] as const).find(([dr, dc]) => wall(r + dr, c + dc));
+  return back ? [0 - back[0], 0 - back[1]] : [1, 0];
 }
 
 /** The objects, the hazards and the cow Theseus set down: things that stand on a cell. */

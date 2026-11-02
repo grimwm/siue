@@ -27,7 +27,7 @@ export type Selection = 'NONE' | 'ALL' | string[];
 
 const SPECS = readdirSync(HERE).filter(f => f.endsWith('.spec.ts')).sort();
 const tankity = SPECS.filter(f => f.startsWith('tankity-'));
-const shell = ['games-hub.spec.ts', 'games-pwa.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts', 'home-eye.spec.ts', 'cylon-help.spec.ts', 'cylon-play.spec.ts'];
+const shell = ['games-hub.spec.ts', 'games-pwa.spec.ts', 'games-install.spec.ts', 'play-nav.spec.ts', 'home-eye.spec.ts', 'home-nav.spec.ts', 'cylon-help.spec.ts', 'cylon-play.spec.ts'];
 
 /* [pattern, what to run]: 'NONE', 'ALL', a list of specs, or a function of
    the regex match returning a list. */

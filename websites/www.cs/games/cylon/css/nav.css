@@ -229,6 +229,35 @@ body:not(.cylon-nav-combat) .site-nav-power {
   }
 }
 
+/*
+ * Phones: one combat row overlaps its own buttons, so the nav takes two rows —
+ * The CIC · power · gear, then the game bar across the full width.
+ */
+@media (max-width: 679px) {
+  body.cylon-nav-combat .site-nav-inner {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  body.cylon-nav-combat .site-brand {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    margin-right: auto;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+    transform: translateY(-0.05em);
+  }
+
+  body.cylon-nav-combat .site-nav-game {
+    order: 5;
+    flex: 1 0 100%;
+    justify-content: space-between;
+  }
+}
+
 /* Install and Share (games/_kit/ui/install-bar.tsx) when the address opens The CIC. The game bar has no room
    for two more buttons on a phone, so they sit in the bottom corner, which no control uses. */
 .cylon-install {

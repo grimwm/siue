@@ -72,7 +72,7 @@ export const ARROW_SHIFT = 0.2;
 
 const ANGLE: Record<Dir, number> = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 };
 
-function drawThread(ctx: CanvasRenderingContext2D, thread: readonly ThreadCell[], cell: number, top: number, pulse: number): void {
+export function drawThread(ctx: CanvasRenderingContext2D, thread: readonly ThreadCell[], cell: number, top: number, pulse: number): void {
   const at = (c: ThreadCell): [number, number] => [(c.c + 0.5) * cell, (c.r + 0.5) * cell + top];
   const lw = Math.max(1.5, cell / 12);
   const edge = Math.max(0.75, cell / 30);

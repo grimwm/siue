@@ -252,13 +252,14 @@ function install_precache(string $dir, array $override, string $image, array $di
             $found[] = $sub . '/' . str_replace('\\', '/', substr($file->getPathname(), strlen("$dir/$sub/")));
         }
     }
-    // A WebP in a precached folder is a game asset (Crete's Modern icons); at the top it is a page preview, which stays out.
+    // A WebP or JPEG in a precached folder is a game asset (Crete's Modern icons, its look pictures); at the top it is a
+    // page preview or screenshot, which stays out.
     $skip = array_merge(['sw.js', '*-test.*', '*.test.*', '*.map', 'package*.json', 'tsconfig*.json', 'build.json'], $exclude);
     $names = [];
     foreach ($found as $f) {
         $base = basename($f);
         if (in_array($f, $names, true) || !(is_file("$dir/$f") || isset($override[$f]))
-            || !(preg_match('/\.(html|js|css|json|png|webmanifest)$/', $f) || (str_contains($f, '/') && str_ends_with($f, '.webp')))
+            || !(preg_match('/\.(html|js|css|json|png|webmanifest)$/', $f) || (str_contains($f, '/') && preg_match('/\.(webp|jpg)$/', $f)))
             || $f === $image) {
             continue;
         }

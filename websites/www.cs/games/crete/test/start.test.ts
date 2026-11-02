@@ -14,7 +14,7 @@ import { solve } from '../src/puzzle/solver.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { trialLevel } from '../src/puzzle/trials.ts';
 import type { Atlas } from '../src/board-plan.ts';
-import type { Board } from '../src/board.ts';
+import type { SheetBoard } from '../src/sheet-board.ts';
 
 installDocument();
 (globalThis as { getComputedStyle?: unknown }).getComputedStyle = () => ({ paddingLeft: '0', paddingRight: '0', paddingTop: '0', paddingBottom: '0', display: 'block' });
@@ -25,7 +25,7 @@ const said: string[] = [];
 let game: Game;
 const page = ui.createUi({
   atlas: { cell: 16, rise: 8, sprites: {} } as Atlas,
-  board: { size() {}, paint() {} } as Board,
+  board: { size() {}, frame() {}, paint() {} } as SheetBoard,
   progress: createProgress(null),
   pages: createFoundPages(null),
 });

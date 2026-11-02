@@ -58,12 +58,12 @@ test('the help explains the Look setting and the camera gestures', () => {
   assert.match(all, /Map \(B\) button under the board swaps between them in one press/);
   assert.match(all, /Two fingers twist to turn it and slide up or down together to tilt it/);
   assert.match(all, /drag with the left button to turn \(across\) and tilt \(up and down\)/);
-  assert.match(all, /The modern board opens looking steeply down, north up/);
-  assert.match(all, /turn it to any angle and tilt it from straight down to low any time; it stays where you leave it/);
+  assert.match(all, /Both boards open looking steeply down, north up/);
+  assert.match(all, /turn either to any angle and tilt it from straight down to low any time; it stays where you leave it/);
   assert.doesNotMatch(all, /squares up|quarter turn/);
   assert.match(all, /up goes along the grid the way that is most nearly away from you/);
   assert.match(all, /Drag it across to turn the view and up or down to tilt it/);
-  assert.match(all, /Forgot how\? Show View Tips \(\?\) in this menu, or its key on the board, shows the tips by the compass again/);
+  assert.match(all, /Forgot how\? Show View Tips \(\?\) in this menu, or its key on the board, shows the tips by the modern board's compass again/);
   assert.doesNotMatch(all, /Angled|Top-down/);
   assert.match(all, /a double tap or a double click brings back the starting view/);
 });

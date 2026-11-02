@@ -55,7 +55,7 @@ export interface StubElement {
   innerHTML: string;
   disabled: boolean;
   checked: boolean;
-  style: Record<string, string>;
+  style: StubStyle;
   className: string;
   scrollTop: number;
   scrollHeight: number;
@@ -134,12 +134,20 @@ export function makeText(data: unknown): StubText {
     remove() { detach(this); },
   } as StubText, ['parentNode', 'nextSibling']);
 }
+/** An element's inline style: plain properties, and setProperty for custom properties (`--name`), kept the same way.
+ *  setProperty is not enumerable, so the style still reads as its properties alone. */
+export type StubStyle = Record<string, string> & { setProperty(name: string, value: string): void };
+function stubStyle(): StubStyle {
+  const style = {} as StubStyle;
+  Object.defineProperty(style, 'setProperty', { value(name: string, value: string) { style[name] = value; } });
+  return style;
+}
 // `children` holds every child node, text included (the stub's long-standing
 // reading); a plain `textContent = ...` is one text child, as in a browser.
 export function makeEl(id: string): StubElement {
   const el: StubElement = {
     id, nodeType: 1, parentNode: null as StubElement | null, hidden: true, value: '', innerHTML: '',
-    disabled: false, checked: false, style: {}, className: '', scrollTop: 0, scrollHeight: 0,
+    disabled: false, checked: false, style: stubStyle(), className: '', scrollTop: 0, scrollHeight: 0,
     children: [], _text: '', _attrs: {}, dataset: {}, _id: id,
     get textContent() { return this.children.length ? this.children.map(c => c.textContent).join('') : this._text; },
     set textContent(v: string) { for (const c of this.children) c.parentNode = null; this.children = []; this._text = String(v); },

@@ -11,7 +11,7 @@ import type { Game } from '../src/game.ts';
 import { createOutside } from '../src/outside.ts';
 import { createFoundPages } from '../src/pages.ts';
 import type { Progress } from '../src/progress.ts';
-import type { Board } from '../src/board.ts';
+import type { SheetBoard } from '../src/sheet-board.ts';
 import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import { createRater } from '../src/share/rating.ts';
 import { createVisit, fragmentKind } from '../src/share/visit.ts';
@@ -62,7 +62,7 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   showEditor: () => ui.showEditor(),
   bestWon: (text, moves) => editor.tryWon(text, moves),
 });
-const ui = mods.page.createUi({ atlas, board: { size() {}, paint() {} } as unknown as Board, progress, pages: found, levels: outside.levels });
+const ui = mods.page.createUi({ atlas, board: { size() {}, frame() {}, paint() {} } as SheetBoard, progress, pages: found, levels: outside.levels });
 const game: Game = createGame({
   sfx() {}, say: ui.say, progress, pages: found, levels: outside.levels, timers: m.timers, clock: m.clock,
   reducedMotion: () => true, changed: () => ui.render(game),

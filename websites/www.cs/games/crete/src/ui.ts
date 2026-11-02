@@ -7,9 +7,8 @@
 import { track } from "./track.ts";
 import { isBackKey, typesText } from "../../_kit/keys.ts";
 import type { Timers } from "../../_kit/ports.ts";
-import type { Board } from "./board.ts";
+import type { SheetBoard } from "./sheet-board.ts";
 import type { Editor } from "./editor/editor.ts";
-import { boardRows } from "./board-plan.ts";
 import type { Atlas } from "./board-plan.ts";
 import type { Game, SfxName, Stop, Tone } from "./game.ts";
 import { ENTRY, LISTED, backpack, cardOf, locked, metId } from "./dictionary.ts";
@@ -33,8 +32,12 @@ import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, nextChapter, placeWord
 import { FEWEST, againstFewest } from "./campaign/fewest.ts";
 import type { Levels, OutsideLevel } from "./campaign/chapters.ts";
 import { statusView } from "./status.ts";
-import { wholeCell } from "./fit.ts";
-import { ZOOM_STEP, afterStep, clampZoom, restarted, zoomScroll, zoomedCell } from "./zoom.ts";
+import { centredOn, createSheetView, eye, holdTarget, keepInView, panned, project, sheetCell, unproject, wholeFrame } from "./sheet.ts";
+import type { Frame } from "./sheet.ts";
+import { createCompassButton } from "./modern/controls.ts";
+import type { CompassButton } from "./modern/controls.ts";
+import type { Heading } from "./modern/compass.ts";
+import { ZOOM_STEP, clampZoom, restarted, zoomedCell } from "./zoom.ts";
 import type { Run } from "./puzzle/run.ts";
 import { createGestures } from "./modern/gestures.ts";
 import type { CamOp, Ptr } from "./modern/gestures.ts";
@@ -67,7 +70,7 @@ import type { LevelRow } from "./ui/levels.tsx";
 /** What the page borrows at run time. */
 export interface UiDeps {
   atlas: Atlas;
-  board: Board;
+  board: SheetBoard;
   progress: Progress;
   /** The story pages found in this browser, for the Lore Book. */
   pages: FoundPages;
@@ -148,6 +151,12 @@ export interface Ui {
   setModernBoard(on: boolean): void;
   /** Turns a move key or pad press, a direction on the screen, into the direction on the grid it moves. */
   setMoveDir(fn: (dir: MoveAction) => MoveAction): void;
+  /** The classic board's heading and tilt as it shows them now. */
+  classicView(): Heading;
+  /** Puts the classic board at this heading and tilt at once: the modern board's view, on switching looks. */
+  setClassicView(yaw: number, pitch: number): void;
+  /** How the classic sheet is framed now (src/sheet.ts); null before it is. */
+  classicFrame(): Frame | null;
   /** True while a card other than the start card is open. */
   cardsOpen(): boolean;
   /** True while any card, the start card too, is open. */
@@ -191,7 +200,13 @@ const LOG_LIMIT = 80;
 const TOAST_MS = 3000;
 /** A wheel line, in pixels. */
 const WHEEL_LINE_PX = 16;
-/** The classic board's zoom buttons, drawn as the modern board's camera buttons are. */
+/** How long the classic view rests before the sheet is drawn again at the cell that fits it. */
+const SETTLE_MS = 200;
+/** Whether the player asked for less motion: the view jumps rather than eases. */
+const reducedMotion = (): boolean => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+/** The classic board's camera buttons, drawn as the modern board's are. */
+const TURN_LEFT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg>';
+const TURN_RIGHT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg>';
 const ZOOM_IN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>';
 const ZOOM_OUT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
 
@@ -252,6 +267,14 @@ export function createUi(deps: UiDeps): Ui {
   /** The classic board's zoom over its whole-level cell, and that cell in CSS px (src/zoom.ts). */
   let zoom = 1;
   let wholePx = 0;
+  /** The classic sheet's heading and tilt (src/sheet.ts), its cell in CSS px, and how it frames the board now. */
+  const sheetView = createSheetView();
+  let cellCss = 0;
+  let frame: Frame | null = null;
+  /** The classic board's compass, the easing display frame while the view eases, and the wait for it to rest. */
+  let compass: CompassButton | null = null;
+  let easing = 0;
+  let settleTimer = 0;
   /** The opening and the try the zoom was kept for: a new level or a restart goes back to the whole level. */
   let zoomOpen = -1;
   let zoomRun: Run | null = null;
@@ -656,80 +679,99 @@ export function createUi(deps: UiDeps): Ui {
     if (layers.isOpen("menu")) drawLayers();
   }
 
-  /** The cell size at the whole-level fit: the largest whole pixel count whose canvas, as the board actually sizes it
-   *  (whole device pixels), shows every cell of the level in the space the board has, however small; then the zoom,
-   *  if any (src/zoom.ts), on top of it. */
+  /** The classic board's cell at its whole-level fit (src/sheet.ts sheetCell), for the view as it now is: the largest
+   *  whole CSS px cell at which the turned, tilted level fits the board's space unscaled; then the zoom, if any
+   *  (src/zoom.ts), on top of it. */
   function fit(): void {
     const run = game?.run;
     if (!run) return;
-    const { cols, rows } = run.now.level;
-    const view = $("stage-view");
     if (modernBoard) {
-      setScrolls(view, false);
       sized = "";
       return;
     }
-    const canvas = $("stage");
-    setScrolls(view, false); // measured as if it did not scroll: a scroll bar must not change the answer
-    const w = view.clientWidth;
-    const h = view.clientHeight;
-    let cell = wholeCell(w, h, cols, boardRows(run.now.level, atlas));
-    board.size(cols, rows, cell);
-    // The board snaps a cell to whole device pixels, which can round it up: read what it made.
-    while (cell > 1 && (parseFloat(canvas.style.width) > w || parseFloat(canvas.style.height) > h)) {
-      cell--;
-      board.size(cols, rows, cell);
-    }
-    wholePx = cell;
+    const { cols, rows } = run.now.level;
+    const view = $("stage-view");
+    wholePx = sheetCell(sheetView.cur, cols, rows, atlas.rise / atlas.cell, view.clientWidth, view.clientHeight);
     sized = `${cols}x${rows}`;
-    if (zoom > 1) applyZoom();
-    else followPlayer(run.now);
+    resize();
   }
 
-  /** Draws the classic board at the zoom, scrolling inside its space while zoomed in. About the screen point `at`, the
-   *  same spot of the board stays under it; otherwise the view follows Theseus. */
-  function applyZoom(at?: { x: number; y: number }): void {
+  /** Sizes the sheet for the zoom and frames it: the whole level at zoom 1; zoomed, the view keeps its centre (or,
+   *  about the screen point `at`, the spot of the board under it) and Theseus inside it. */
+  function resize(at?: { x: number; y: number }): void {
     const run = game?.run;
     if (!run || modernBoard || !wholePx) return;
     const { cols, rows } = run.now.level;
     const view = $("stage-view");
-    const canvas = $("stage");
+    // A board with no room (hidden, or collapsed by the layout) is framed once it has some.
+    if (view.clientWidth <= 0 || view.clientHeight <= 0) return;
+    const before = frame;
+    const was = cellCss;
     zoom = clampZoom(zoom, wholePx);
-    const before = { w: parseFloat(canvas.style.width), left: canvas.offsetLeft, top: canvas.offsetTop, x: view.scrollLeft, y: view.scrollTop };
-    board.size(cols, rows, zoomedCell(wholePx, zoom, window.devicePixelRatio || 1));
-    setScrolls(view, zoom > 1);
-    if (at && zoom > 1 && before.w > 0) {
+    cellCss = zoomedCell(wholePx, zoom, window.devicePixelRatio || 1);
+    board.size(cols, rows, cellCss);
+    const vw = view.clientWidth, vh = view.clientHeight;
+    if (zoom === 1 || !before || !was) {
+      frame = wholeFrame(sheetView.cur, cols, rows, cellCss, atlas.rise / atlas.cell, vw, vh);
+      if (zoom > 1) frame = keepInView({ ...frame, k: 1, ox: 0, oy: 0 }, (run.now.player.c + 0.5) * cellCss, (run.now.player.r + 0.5) * cellCss, cols, rows, cellCss);
+    } else {
+      const ratio = cellCss / was;
       const r = view.getBoundingClientRect();
-      const ratio = parseFloat(canvas.style.width) / before.w;
-      view.scrollLeft = zoomScroll(before.x, at.x - r.left, before.left, canvas.offsetLeft, ratio);
-      view.scrollTop = zoomScroll(before.y, at.y - r.top, before.top, canvas.offsetTop, ratio);
-    } else followPlayer(run.now);
+      const p = at ? { x: at.x - r.left, y: at.y - r.top } : { x: vw / 2, y: vh / 2 };
+      const g = unproject(before, p.x, p.y);
+      const mid = unproject(before, vw / 2, vh / 2) ?? { x: before.tx, y: before.ty };
+      let f: Frame = { ...before, tx: mid.x * ratio, ty: mid.y * ratio, ox: 0, oy: 0, k: 1, d: eye(cols, rows, cellCss), vw, vh };
+      if (g) {
+        const q = project(f, g.x * ratio, g.y * ratio);
+        f = centredOn(f, vw / 2 + q.x - p.x, vh / 2 + q.y - p.y);
+      }
+      frame = holdTarget(f, cols, rows, cellCss);
+      if (!at) frame = keepInView(frame, (run.now.player.c + 0.5) * cellCss, (run.now.player.r + 0.5) * cellCss, cols, rows, cellCss);
+    }
+    board.frame(frame);
   }
 
-  function setScrolls(view: HTMLElement, on: boolean): void {
-    const rest = view.className.split(" ").filter((c) => c && c !== "scrolls");
-    view.className = (on ? [...rest, "scrolls"] : rest).join(" ");
+  /** Frames the sheet again for the view as it now is (a turn, a tilt), keeping the zoom and where it looks. */
+  function reframe(): void {
+    const run = game?.run;
+    if (!run || modernBoard || !frame || !cellCss) return;
+    const { cols, rows } = run.now.level;
+    const view = $("stage-view");
+    const vw = view.clientWidth, vh = view.clientHeight;
+    if (vw <= 0 || vh <= 0) return;
+    const v = sheetView.cur;
+    frame = zoom === 1
+      ? wholeFrame(v, cols, rows, cellCss, atlas.rise / atlas.cell, vw, vh)
+      : { ...frame, yaw: v.yaw, pitch: v.pitch, vw, vh };
+    board.frame(frame);
+    compass?.setView(v.yaw, v.pitch);
+    // Once the view rests, the whole level is drawn again at the cell that fits it unscaled, crisp.
+    clearTimeout(settleTimer);
+    settleTimer = window.setTimeout(() => {
+      if (zoom === 1 && !easing) fit();
+    }, SETTLE_MS);
+  }
+
+  /** Eases the view toward where a button, a key or the compass sent it, a display frame at a time. */
+  function ease(): void {
+    if (easing) return;
+    let last = performance.now();
+    const tick = (now: number): void => {
+      const moving = sheetView.step((now - last) / 1000, reducedMotion());
+      last = now;
+      reframe();
+      easing = moving ? requestAnimationFrame(tick) : 0;
+      if (!moving && zoom === 1) fit();
+    };
+    easing = requestAnimationFrame(tick);
   }
 
   /** Pans a zoomed board, instantly, to keep the player two cells inside the view; the zoom stays as it is. */
   function followPlayer(s: State): void {
-    const view = $("stage-view");
-    if (!view.className.split(" ").includes("scrolls")) {
-      view.scrollLeft = 0;
-      view.scrollTop = 0;
-      return;
-    }
-    const canvas = $("stage");
-    const cell = parseFloat(canvas.style.width) / s.level.cols;
-    const rise = parseFloat(canvas.style.height) - s.level.rows * cell;
-    const to = afterStep(
-      { zoom, x: view.scrollLeft, y: view.scrollTop },
-      { w: view.clientWidth, h: view.clientHeight },
-      { w: view.scrollWidth, h: view.scrollHeight },
-      { left: canvas.offsetLeft + s.player.c * cell, top: canvas.offsetTop + rise + s.player.r * cell, size: cell },
-    );
-    view.scrollLeft = to.x;
-    view.scrollTop = to.y;
+    if (zoom === 1 || !frame || modernBoard) return;
+    const { cols, rows } = s.level;
+    frame = keepInView(frame, (s.player.c + 0.5) * cellCss, (s.player.r + 0.5) * cellCss, cols, rows, cellCss);
+    board.frame(frame);
   }
 
   function toolRows(g: Game): ToolRow[] {
@@ -790,7 +832,13 @@ export function createUi(deps: UiDeps): Ui {
     }
     const s = run.now;
     const out = outsideOf(g);
-    // A new level or a restart shows the whole level again; a step or an undo keeps the zoom.
+    // A new level opens at 75° and north up; it and a restart show the whole level again; a step or an undo keeps
+    // the zoom and the view.
+    if (g.opens !== zoomOpen) {
+      sheetView.home(false);
+      compass?.setView(sheetView.cur.yaw, sheetView.cur.pitch);
+      sized = "";
+    }
     if (g.opens !== zoomOpen || restarted(zoomRun, run)) {
       zoomOpen = g.opens;
       if (zoom !== 1) {
@@ -1073,10 +1121,11 @@ export function createUi(deps: UiDeps): Ui {
     g.press({ kind: "move", dir: moveDir(dir) });
   }
 
-  /** The classic board's own pointer controls and zoom buttons, as the modern board's camera has them (without the
-   *  turn): one finger swipes Theseus a cell; two fingers pinch to zoom and drag to pan; the wheel zooms toward the
-   *  pointer; the right or middle button drags to pan; a double tap or double click goes back to the whole level. The
-   *  + / − / Reset buttons stand at the board's top-right, behind a View button on a narrow touch screen. Every
+  /** The classic board's own pointer controls and camera buttons, as the modern board's camera has them: one finger
+   *  swipes Theseus a cell; two fingers twist to turn, slide up and down together to tilt, pinch to zoom and drag to
+   *  pan; the left button drags to turn and tilt, the right or middle button to pan; the wheel zooms toward the
+   *  pointer; a double tap or double click goes back to the opening view. The turn, zoom and Reset buttons stand at
+   *  the board's top-right, behind a View button on a narrow touch screen, and the compass at its bottom-right. Every
    *  control is ignored while a card other than the start card is open. */
   function bindClassicView(): void {
     const view = $("stage-view");
@@ -1086,11 +1135,26 @@ export function createUi(deps: UiDeps): Ui {
     const blocked = (): boolean => modernBoard || layers.stack().some((n) => n !== "start");
     const zoomBy = (k: number, at?: { x: number; y: number }): void => {
       zoom = clampZoom(zoom * k, wholePx);
-      applyZoom(at);
+      resize(at);
     };
+    /** Back to the opening view: 75°, north up, the whole level. */
     const reset = (): void => {
-      zoom = 1;
-      applyZoom();
+      sheetView.home(true);
+      if (zoom !== 1) {
+        zoom = 1;
+        resize();
+      }
+      ease();
+    };
+    const turn = (deg: number, eased: boolean): void => {
+      sheetView.turn(deg, eased);
+      if (eased) ease();
+      else reframe();
+    };
+    const tilt = (deg: number, eased: boolean): void => {
+      sheetView.tilt(deg, eased);
+      if (eased) ease();
+      else reframe();
     };
     const apply = (ops: CamOp[]): void => {
       if (!ops.length || blocked()) return;
@@ -1098,10 +1162,13 @@ export function createUi(deps: UiDeps): Ui {
         if (op.kind === "swipe") swipe(op.dir);
         else if (op.kind === "zoom") zoomBy(1 / op.factor, { x: op.x, y: op.y });
         else if (op.kind === "pan") {
-          view.scrollLeft -= op.dx;
-          view.scrollTop -= op.dy;
-        } else if (op.kind === "reset") reset();
-        // A turn does nothing: the classic board is always square to the grid.
+          const run = game?.run;
+          if (zoom === 1 || !frame || !run) continue;
+          frame = panned(frame, op.dx, op.dy, run.now.level.cols, run.now.level.rows, cellCss);
+          board.frame(frame);
+        } else if (op.kind === "turn") turn(op.deg, false);
+        else if (op.kind === "tilt") tilt(op.deg, false);
+        else if (op.kind === "reset") reset();
       }
     };
     const ptr = (e: PointerEvent): Ptr => ({
@@ -1147,7 +1214,7 @@ export function createUi(deps: UiDeps): Ui {
     group.id = "classic-cam-buttons";
     group.className = "cam";
     group.setAttribute("role", "group");
-    group.setAttribute("aria-label", "Zoom");
+    group.setAttribute("aria-label", "Camera");
     const button = (id: string, label: string, html: string, className: string, fn: () => void): HTMLButtonElement => {
       const b = document.createElement("button");
       b.type = "button";
@@ -1162,16 +1229,20 @@ export function createUi(deps: UiDeps): Ui {
       return b;
     };
     group.append(
+      button("classic-left", "Turn left", TURN_LEFT_ICON, "cbtn", () => turn(-90, true)),
+      button("classic-right", "Turn right", TURN_RIGHT_ICON, "cbtn", () => turn(90, true)),
       button("classic-zoom-in", "Zoom in", ZOOM_IN_ICON, "cbtn", () => zoomBy(ZOOM_STEP)),
       button("classic-zoom-out", "Zoom out", ZOOM_OUT_ICON, "cbtn", () => zoomBy(1 / ZOOM_STEP)),
-      button("classic-reset", "Show the whole level", "Reset", "cbtn wide", reset),
+      button("classic-reset", "Reset view", "Reset", "cbtn wide", reset),
     );
     toggle.addEventListener("click", () => {
       const open = !group.className.split(" ").includes("open");
       group.className = open ? "cam open" : "cam";
       toggle.setAttribute("aria-expanded", String(open));
     });
-    cam.append(toggle, group);
+    compass = createCompassButton("classic-compass", { blocked, gesture: () => layers.close("start") }, { turn, tilt, reset });
+    compass.setView(sheetView.cur.yaw, sheetView.cur.pitch);
+    cam.append(toggle, group, compass.button);
   }
 
   /* ---------- input: moves, tools and guides never share a key ---------- */
@@ -1519,6 +1590,14 @@ export function createUi(deps: UiDeps): Ui {
     },
     setMoveDir: (fn) => {
       moveDir = fn;
+    },
+    classicView: () => ({ ...sheetView.cur }),
+    classicFrame: () => frame,
+    setClassicView: (yaw, pitch) => {
+      sheetView.set(yaw, pitch);
+      compass?.setView(sheetView.cur.yaw, sheetView.cur.pitch);
+      sized = "";
+      fit();
     },
     cardsOpen: () => layers.stack().some((n) => n !== "start"),
     layersOpen: () => layers.stack().length > 0,

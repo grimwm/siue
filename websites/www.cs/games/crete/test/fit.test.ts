@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { BIG, BIG_MIN_CELL, cellFor, fitCell, wholeCell } from '../src/fit.ts';
+import { BIG, BIG_MIN_CELL, cellFor, fitCell } from '../src/fit.ts';
 import { boardRows } from '../src/board-plan.ts';
 import type { Atlas } from '../src/board-plan.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
@@ -45,30 +45,4 @@ test('the editor: a big level with room fits whole, without scrolling', () => {
 test('the editor: a 12-row level never scrolls although the rise above it makes it 12.375 rows tall', () => {
   assert.deepEqual(cellFor(300, 300, 12, 12, 0, 12.375), { cell: 24, scrolls: false });
   assert.deepEqual(cellFor(385, 500, 14, 12, 0, 12.375), { cell: BIG_MIN_CELL, scrolls: true });
-});
-
-test('the game board: the whole level, at the largest whole cell, however small', () => {
-  assert.equal(wholeCell(348, 493, 20, 13.375), 17); // the width binds: 348 / 20 = 17.4
-  assert.equal(wholeCell(1268, 501, 20, 13.375), 37); // the height binds: 501 / 13.375 = 37.4
-  assert.equal(wholeCell(120, 120, 20, 13.375), 6); // smaller than any floor, and still whole
-  assert.equal(wholeCell(10, 10, 20, 13.375), 1); // never 0: a board too small for one pixel a cell still draws
-});
-
-/** The board's free space (its content box) on portrait phones, as the layout gives it with a level open. */
-const PHONES: [name: string, w: number, h: number][] = [['360 x 740', 348, 493], ['390 x 844', 378, 597], ['320 x 568', 308, 321]];
-
-test('every Chapter 1 and 2 level shows whole on a portrait phone, at 15 px a cell or more', () => {
-  const ids = CHAPTERS.filter((c) => c.n <= 2).flatMap((c) => c.levelIds);
-  assert.equal(ids.length, 20);
-  for (const [name, w, h] of PHONES) {
-    for (const id of ids) {
-      const level = levelById(id);
-      const drawn = boardRows(level, atlas);
-      const cell = wholeCell(w, h, level.cols, drawn);
-      assert.ok(cell * level.cols <= w && cell * drawn <= h, `${id} on ${name}: ${cell} px cells overflow`);
-      assert.ok(cell >= 15, `${id} on ${name}: ${cell} px cells`);
-    }
-  }
-  // The biggest of them (20 x 13, Chapter 1 and 2's last levels) on 360 x 740.
-  assert.equal(wholeCell(348, 493, 20, boardRows(levelById('trial-10'), atlas)), 17);
 });

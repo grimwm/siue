@@ -173,6 +173,16 @@ final class InstallCoreTest extends TestCase
         $this->assertNotContains('preview.webp', $names);
     }
 
+    public function testPrecacheTakesAJpegInAPrecachedFolderButNotAScreenshotAtTheTop(): void
+    {
+        mkdir("$this->dir/fx/looks", 0777, true);
+        file_put_contents("$this->dir/fx/looks/modern.jpg", 'x');
+        file_put_contents("$this->dir/screenshot.jpg", 'x');
+        [$names] = install_precache($this->dir, [], 'og.png', ['fx/looks'], []);
+        $this->assertContains('fx/looks/modern.jpg', $names);
+        $this->assertNotContains('screenshot.jpg', $names);
+    }
+
     public function testPrecacheListsOnlyExistingFiles(): void
     {
         [$names] = install_precache($this->dir, ['manifest.webmanifest' => '{}'], 'og.png', ['dist', 'missing-dir'], []);

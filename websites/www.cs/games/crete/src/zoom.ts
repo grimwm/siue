@@ -1,8 +1,7 @@
-/* The Island of Crete: the classic board's zoom. At zoom 1 the board shows the whole level (src/fit.ts); a pinch, the
- * wheel or the + button zooms in, up to ZOOM_MAX times or a ZOOM_MAX_CELL px cell, whichever is less, and the board
- * then scrolls inside its space. A step never changes the zoom: the view pans to keep Theseus two cells inside it
- * (src/follow.ts). A new level, Restart and Reset go back to the whole level; Undo keeps the zoom. DOM-free. */
-import { follow } from './follow.ts';
+/* The Island of Crete: the classic board's zoom. At zoom 1 the board shows the whole level (src/sheet.ts); a pinch,
+ * the wheel or the + button zooms in, up to ZOOM_MAX times or a ZOOM_MAX_CELL px cell, whichever is less, and the view
+ * then pans over the board. A step never changes the zoom: the view pans to keep Theseus two cells inside it. A new
+ * level, Restart and Reset go back to the whole level; Undo keeps the zoom. DOM-free. */
 
 export const ZOOM_MAX = 4;
 export const ZOOM_MAX_CELL = 64;
@@ -24,22 +23,6 @@ export function zoomedCell(fit: number, zoom: number, dpr: number): number {
   const z = clampZoom(zoom, fit);
   if (z === 1) return fit;
   return Math.max(fit, Math.min(Math.round(fit * zoomMax(fit) * dpr), Math.round(fit * z * dpr)) / dpr);
-}
-
-/** One axis of a zoom about a point `at` px into the view: the scroll offset that keeps the same spot of the board
- *  under it, given the canvas's offset in the scrolled content before and after and how many times bigger it got. */
-export function zoomScroll(scroll: number, at: number, before: number, after: number, ratio: number): number {
-  return (scroll + at - before) * ratio + after - at;
-}
-
-/** A zoomed board's view: its zoom and scroll offset. */
-export interface ZoomView { zoom: number; x: number; y: number }
-
-/** The view after a step: the same zoom, panned as little as keeps Theseus's cell `box` (in the scrolled content)
- *  two cells inside a view of `view` over `content`. */
-export function afterStep(v: ZoomView, view: { w: number; h: number }, content: { w: number; h: number }, box: { left: number; top: number; size: number }): ZoomView {
-  const to = follow({ x: v.x, y: v.y, w: view.w, h: view.h }, content, box, 2 * box.size);
-  return { zoom: v.zoom, x: to.x, y: to.y };
 }
 
 interface RunLike { readonly past: readonly unknown[]; readonly now: unknown }

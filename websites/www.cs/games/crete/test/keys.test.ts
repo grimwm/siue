@@ -8,7 +8,7 @@ import { TOOLS } from '../src/puzzle/tiles.ts';
 import { createFoundPages } from '../src/pages.ts';
 import { createProgress } from '../src/progress.ts';
 import type { Atlas } from '../src/board-plan.ts';
-import type { Board } from '../src/board.ts';
+import type { SheetBoard } from '../src/sheet-board.ts';
 import type { Game } from '../src/game.ts';
 import type { Controls } from '../src/ui.ts';
 import { EDITOR_KEYS, editorActionFor } from '../src/editor/keys.ts';
@@ -30,7 +30,7 @@ const controls: Controls = {
   game, toggleMute: note('mute'), toggleFullscreen: note('fullscreen'), wake: note('wake'), quit: note('quit'), play: note('play'),
 };
 // createUi keeps these for drawing; the key handler reads none of them.
-const page = ui.createUi({ atlas: {} as Atlas, board: {} as Board, progress: createProgress(null), pages: createFoundPages(null) });
+const page = ui.createUi({ atlas: {} as Atlas, board: {} as SheetBoard, progress: createProgress(null), pages: createFoundPages(null) });
 page.bindControls(controls);
 
 beforeEach(() => { page.closeLayers(); });

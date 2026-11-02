@@ -75,6 +75,8 @@ export interface ModernBoard {
   zoom(): number;
   /** The camera's pitch in degrees, for tests. */
   pitch(): number;
+  /** Puts the camera at this heading and tilt at once: the classic board's view, on switching looks. */
+  setView(yaw: number, pitch: number): void;
   /** Whether the camera follows Theseus, for tests. */
   following(): boolean;
   reset(): void;
@@ -682,6 +684,12 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     yaw: () => cur.yaw,
     zoom: () => cur.zoom,
     pitch: () => cur.pitch,
+    setView(yaw: number, pitch: number) {
+      cam.turn(yaw - goal.yaw, false);
+      cam.tilt(pitch - goal.pitch, false);
+      aimGoal();
+      Object.assign(cur, goal);
+    },
     following: () => follow,
     reset: cam.reset,
     resize() { resize(); invalidate(); },

@@ -68,7 +68,10 @@ function measure() {
   if (doc.scrollWidth > innerWidth + 0.5) probs.push(`page wider than the screen by ${doc.scrollWidth - innerWidth}px`);
   const inside = (r: DOMRect) => r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5;
   const shown = (el: Element) => el.getClientRects().length > 0;
-  const stage = document.getElementById('stage')!.getBoundingClientRect();
+  // The board's own box on the screen (the turned, tilted level and its figures' headroom), not its canvas's margin.
+  const box = (window as unknown as { __creteTest: { classic: { box(): { left: number; top: number; right: number; bottom: number } | null } } }).__creteTest.classic.box();
+  if (!box) return ['no board'];
+  const stage = new DOMRect(box.left, box.top, box.right - box.left, box.bottom - box.top);
   if (!inside(stage)) probs.push('the board is off screen');
   const cell = Number(document.getElementById('stage')!.dataset.cell);
   if (!(cell >= 8)) probs.push(`cells are ${cell}px`);
@@ -445,19 +448,29 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE'))) {
   });
 }
 
-/** Problems with the classic board at its default: the view does not scroll and the whole canvas is inside it. */
+/** The classic board as the test hook reads it (src/main.ts). */
+type ClassicHook = {
+  at(c: number, r: number): { x: number; y: number } | null;
+  under(x: number, y: number): { c: number; r: number } | null;
+  box(): { left: number; top: number; right: number; bottom: number } | null;
+};
+
+/** Problems with the classic board at its default: the view does not scroll and the whole level, with the figures'
+ *  headroom above it, is inside it. */
 const wholeShown = () => {
   const out: string[] = [];
   const v = document.getElementById('stage-view')!;
-  if (v.classList.contains('scrolls')) out.push('the view scrolls');
-  if (v.scrollWidth > v.clientWidth || v.scrollHeight > v.clientHeight) out.push('the view overflows');
-  const r = document.getElementById('stage')!.getBoundingClientRect();
+  if (v.scrollLeft !== 0 || v.scrollTop !== 0) out.push('the view scrolls');
+  const r = (window as unknown as { __creteTest: { classic: ClassicHook } }).__creteTest.classic.box();
   const b = v.getBoundingClientRect();
-  if (r.left < b.left - 0.5 || r.top < b.top - 0.5 || r.right > b.right + 0.5 || r.bottom > b.bottom + 0.5) out.push('the level is cut off');
+  if (!r) out.push('no board');
+  else if (r.left < b.left - 0.5 || r.top < b.top - 0.5 || r.right > b.right + 0.5 || r.bottom > b.bottom + 0.5) out.push('the level is cut off');
   return out;
 };
 
-// Every level of Chapter 1, level 10 (20 x 13) included, shows whole at the start, with nothing scrolling, on every device.
+// Every level of Chapter 1, level 10 (20 x 13) included, shows whole at the start, with nothing scrolling, on every device,
+// at 9 px a cell or more (the opening 75° view's lens widens the near edge a little: level 10 takes 9 px cells on an
+// iPhone SE held sideways).
 for (const device of DEVICES) {
   test(`${device[0]}: levels 1 to 10 show whole, unscrolled`, async ({ browser }) => {
     const { ctx, page, errors } = await open(browser, device);
@@ -469,7 +482,7 @@ for (const device of DEVICES) {
       await expect(page.locator('#start-veil')).toBeHidden();
       await page.waitForSelector('#stage[data-cell]');
       expect(await page.evaluate(wholeShown), `level ${i}`).toEqual([]);
-      expect(Number(await page.locator('#stage').getAttribute('data-cell')), `level ${i} cells`).toBeGreaterThanOrEqual(10);
+      expect(Number(await page.locator('#stage').getAttribute('data-cell')), `level ${i} cells`).toBeGreaterThanOrEqual(9);
     }
     expect(errors).toEqual([]);
     await ctx.close();
@@ -482,19 +495,14 @@ const runState = () => {
   return { moves: t.game.run.now.moves, outcome: t.game.run.now.outcome };
 };
 
-/** The player's cell is inside the board's visible rect. */
+/** The player's square is inside the board's visible rect: its centre, half a cell in from every edge. */
 const playerVisible = () => {
-  const t = (window as unknown as { __creteTest: { game: { run: { now: { player: { r: number; c: number } } } } } }).__creteTest;
+  const t = (window as unknown as { __creteTest: { game: { run: { now: { player: { r: number; c: number } } } }; classic: ClassicHook } }).__creteTest;
   const p = t.game.run.now.player;
-  const stage = document.getElementById('stage')!;
-  const sr = stage.getBoundingClientRect();
-  const cell = Number(stage.dataset.cell);
-  const rows = (window as unknown as { __creteTest: { game: { run: { now: { level: { rows: number } } } } } }).__creteTest.game.run.now.level.rows;
-  const rise = sr.height - rows * cell;
-  const left = sr.left + p.c * cell;
-  const top = sr.top + rise + p.r * cell;
+  const at = t.classic.at(p.c, p.r);
+  const half = Number(document.getElementById('stage')!.dataset.cell) / 2;
   const b = document.getElementById('stage-view')!.getBoundingClientRect();
-  return left >= b.left - 0.5 && top >= b.top - 0.5 && left + cell <= b.right + 0.5 && top + cell <= b.bottom + 0.5;
+  return !!at && at.x - half >= b.left - 0.5 && at.y - half >= b.top - 0.5 && at.x + half <= b.right + 0.5 && at.y + half <= b.bottom + 0.5;
 };
 
 const cellOf = (page: Page) => page.locator('#stage').getAttribute('data-cell').then(Number);
@@ -524,7 +532,7 @@ const pinchOut = () => {
   fire('pointerup', 2, cx + 60);
 };
 
-// Level 10 (20 x 13) is wider than a phone: it shows whole at the start; zoomed in, its board scrolls inside the view,
+// Level 10 (20 x 13) is wider than a phone: it shows whole at the start; zoomed in, its board pans inside the view,
 // never the page, keeps the zoom at every step and follows Theseus; Reset shows the whole level again.
 const MOVE: Record<string, string> = { up: '.mv-up', down: '.mv-down', left: '.mv-left', right: '.mv-right', wait: '#btn-wait' };
 for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') || d[0].startsWith('iPhone 15, portrait'))) {
@@ -545,7 +553,7 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
     await expect.poll(() => cellOf(page), 'Reset').toBe(whole);
     expect(await page.evaluate(wholeShown), 'the whole level after Reset').toEqual([]);
 
-    // + zooms in twice; the view then scrolls, and the page never does.
+    // + zooms in twice; the board is then wider than the view, and the page never scrolls.
     await zoomButton(page, 'classic-zoom-in');
     await zoomButton(page, 'classic-zoom-in');
     const zoomed = await cellOf(page);
@@ -556,7 +564,9 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
       if (doc.scrollHeight > innerHeight + 0.5) out.push('page taller than the screen');
       if (doc.scrollWidth > innerWidth + 0.5) out.push('page wider than the screen');
       const v = document.getElementById('stage-view')!;
-      if (!(v.scrollWidth > v.clientWidth)) out.push('the zoomed board does not scroll sideways');
+      const r = (window as unknown as { __creteTest: { classic: ClassicHook } }).__creteTest.classic.box()!;
+      if (!(r.right - r.left > v.clientWidth)) out.push('the zoomed board is not wider than the view');
+      if (v.scrollLeft !== 0 || v.scrollTop !== 0) out.push('the view scrolls');
       return out;
     });
     expect(probs).toEqual([]);
@@ -584,8 +594,8 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
         await page.locator(MOVE[s] ?? `#${s}`).click();
         await expect.poll(() => page.evaluate(runState), 'step 1 again').toMatchObject({ moves: before.moves + 1 });
       }
-      // Once the board has scrolled, a toast is still inside the board's visible rect (it does not scroll away).
-      if (!toasted && device[0].startsWith('iPhone 15') && await page.evaluate(() => document.getElementById('stage-view')!.scrollLeft > 0)) {
+      // Once the board has panned, a toast is still inside the board's visible rect (it does not move with it).
+      if (!toasted && device[0].startsWith('iPhone 15') && i > 0) {
         toasted = true;
         const inside = await page.evaluate(() => {
           const t = document.getElementById('toast')!;
@@ -608,7 +618,7 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
       }
     }
     await expect.poll(() => page.evaluate(runState), 'the route ends in a win').toMatchObject({ outcome: 'won' });
-    if (device[0].startsWith('iPhone 15')) expect(toasted, 'the board scrolled, so the toast was checked').toBe(true);
+    if (device[0].startsWith('iPhone 15')) expect(toasted, 'the board panned, so the toast was checked').toBe(true);
     expect(errors).toEqual([]);
     await ctx.close();
   });
@@ -625,12 +635,16 @@ test('Desktop: the wheel zooms the classic board; a double click and Restart sho
   const whole = await cellOf(page);
   await expect(page.locator('#classic-zoom-in')).toBeVisible();
   await expect(page.locator('#classic-cam .modern-viewbtn')).toBeHidden();
-  const box = (await page.locator('#stage').boundingBox())!;
-  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.8);
+  const box = (await page.locator('#stage-view').boundingBox())!;
+  const px = box.x + box.width * 0.7, py = box.y + box.height * 0.6;
+  const under = () => page.evaluate(([x, y]) => (window as unknown as { __creteTest: { classic: ClassicHook } }).__creteTest.classic.under(x!, y!)!, [px, py]);
+  const before = await under();
+  await page.mouse.move(px, py);
   await page.mouse.wheel(0, -400);
   await expect.poll(() => cellOf(page), 'the wheel zooms in').toBeGreaterThan(whole);
   expect(await cellOf(page)).toBeLessThanOrEqual(64);
-  expect(await page.evaluate(() => document.getElementById('stage-view')!.scrollLeft), 'toward the pointer, right of centre').toBeGreaterThan(0);
+  const after = await under();
+  expect(Math.hypot(after.c - before.c, after.r - before.r), 'toward the pointer: the same square stays under it').toBeLessThan(0.5);
   await page.locator('#stage-view').dblclick();
   await expect.poll(() => cellOf(page), 'a double click').toBe(whole);
   expect(await page.evaluate(wholeShown)).toEqual([]);

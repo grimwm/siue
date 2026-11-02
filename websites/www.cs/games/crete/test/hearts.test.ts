@@ -16,7 +16,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import { CAMPAIGN_LEVELS } from '../src/campaign/chapters.ts';
 import type { Levels } from '../src/campaign/chapters.ts';
 import type { Atlas } from '../src/board-plan.ts';
-import type { Board } from '../src/board.ts';
+import type { SheetBoard } from '../src/sheet-board.ts';
 import type { Progress } from '../src/progress.ts';
 import { BANNER_MS } from '../src/notices.ts';
 import { HEARTS_LINES, nextLine } from '../src/hearts-lines.ts';
@@ -40,7 +40,7 @@ const levels: Levels = {
 /** The randomness the hearts line is picked with: the values it hands out, in turn. */
 let draws: number[] = [];
 const flow = ui.page.createUi({
-  atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, paint() {} } as Board, progress, pages: createFoundPages(null), levels,
+  atlas: { cell: 16, rise: 8, sprites: {} } as Atlas, board: { size() {}, frame() {}, paint() {} } as SheetBoard, progress, pages: createFoundPages(null), levels,
   met: createMet(storage), rng: () => draws.shift() ?? 0,
   timers: { setTimeout: (fn, ms) => m.timers.setTimeout(fn, ms), clearTimeout: id => m.timers.clearTimeout(id) },
 });

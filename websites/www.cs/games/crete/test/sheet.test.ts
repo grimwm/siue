@@ -170,11 +170,10 @@ test('home from the lowest tilt eases toward 75° and north up, never past them,
     v.turn(yaw, false);
     v.tilt(-100, false);
     v.home(true);
-    const goal = { ...v.goal };
     // A display frame stamped before the tap that started the ease: its time is negative.
+    const before = { ...v.cur };
     v.step(-0.04, false);
-    assert.ok(v.cur.pitch >= 10 && v.cur.pitch <= 90, `pitch ${v.cur.pitch} from ${yaw}°`);
-    assert.ok(Math.abs(v.cur.yaw - goal.yaw) <= Math.abs(yaw - goal.yaw), `yaw ${v.cur.yaw} from ${yaw}°`);
+    assert.deepEqual(v.cur, before, `a backward frame leaves the view as it was, from ${yaw}°`);
     for (let i = 0; i < 300 && v.step(1 / 60, false); i++) assert.ok(v.cur.pitch >= 10 && v.cur.pitch <= 90);
     assert.equal(v.cur.pitch, START_PITCH);
     assert.equal(((v.cur.yaw % 360) + 360) % 360, 0);

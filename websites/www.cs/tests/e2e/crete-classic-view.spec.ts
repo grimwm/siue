@@ -130,9 +130,11 @@ test('a tap on the compass eases back to 75° and north up from the lowest tilt,
   });
   const { errors } = await openHall(page, 'no-preference');
   for (const across of [-150, 150, -300, 75, -500, 400]) {
+    // 0.6° a pixel: -150 px turns a quarter one way, 150 px the other.
+    const yaw = (await view(page)).yaw - across * 0.6;
     await dragCompass(page, across, 0);
     await dragCompass(page, 0, -250);
-    await expect.poll(() => view(page), `turned ${across} px and held at 10°`).toMatchObject({ pitch: 10 });
+    await expect.poll(() => view(page), `turned ${across} px and held at 10°`).toEqual({ yaw, pitch: 10 });
     await dragCompass(page, 0, 0);
     await expect.poll(async () => {
       const v = await view(page);
@@ -167,9 +169,10 @@ test('in Modern too, a tap on the compass eases back to 75° and north up from t
     ev('pointerup', x + dx!, y + dy!);
   }, [dx, dy] as const);
   for (const across of [-150, 150, -300, 400]) {
+    const yaw = (await modernView()).yaw - across * 0.6;
     await drag(across, 0);
     await drag(0, -250);
-    await expect.poll(modernView, `turned ${across} px and held at 10°`).toMatchObject({ pitch: 10 });
+    await expect.poll(modernView, `turned ${across} px and held at 10°`).toEqual({ yaw, pitch: 10 });
     await drag(0, 0);
     await expect.poll(async () => {
       const v = await modernView();

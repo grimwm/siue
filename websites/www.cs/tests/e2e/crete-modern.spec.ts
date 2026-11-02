@@ -402,15 +402,15 @@ test('the movement pad\'s middle shows Theseus in the look that shows, and swaps
   expect(errors).toEqual([]);
 });
 
-test('Walls: Ghosted is kept through a reload', async ({ page }) => {
+test('Walls: Solid is kept through a reload', async ({ page }) => {
   await openHall(page);
   await page.keyboard.press('q');
-  await page.locator('#walls-ghosted').click();
-  await expect(page.locator('#walls-ghosted')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#walls-solid').click();
+  await expect(page.locator('#walls-solid')).toHaveAttribute('aria-pressed', 'true');
   await page.reload();
   await page.locator('#title-settings').click();
-  await expect(page.locator('#walls-ghosted')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#walls-solid')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#walls-solid')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#walls-ghosted')).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('the mini map is off by default; the menu\'s Mini map switch (Modern only) shows it, and Classic never does', async ({ page }) => {

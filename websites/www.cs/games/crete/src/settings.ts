@@ -44,7 +44,7 @@ export function createSettings(storage: StorageLike | null): Settings {
     musicHidden: pref<OnOff>(MUSIC_HIDDEN_KEY, "on", oneOf<OnOff>(["on", "off"], "on"), storage),
     fullscreen: pref<OnOff>(FULLSCREEN_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
     look: pref<Look>(LOOK_KEY, "modern", oneOf<Look>(["modern", "classic"], "modern"), storage),
-    walls: pref<WallMode>(WALLS_KEY, "solid", oneOf<WallMode>(["solid", "ghosted", "low"], "solid"), storage),
+    walls: pref<WallMode>(WALLS_KEY, "ghosted", oneOf<WallMode>(["solid", "ghosted", "low"], "ghosted"), storage),
     pad: pref<PadSide>(PAD_KEY, "left", oneOf<PadSide>(["left", "right"], "left"), storage),
     minimap: pref<OnOff>(MINIMAP_KEY, "off", oneOf<OnOff>(["on", "off"], "off"), storage),
   };

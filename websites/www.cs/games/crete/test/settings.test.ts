@@ -53,16 +53,16 @@ test('music in the background is its own setting and defaults to on', () => {
   assert.equal(createSettings(memoryStorage({ [MUSIC_HIDDEN_KEY]: 'sometimes' })).musicHidden.get(), 'on');
 });
 
-test('the look is modern and the walls solid until chosen; a stored choice reads back, an unknown word reads the default', () => {
-  assert.deepEqual([createSettings(null).look.get(), createSettings(null).walls.get()], ['modern', 'solid']);
+test('the look is modern and the walls ghosted until chosen; a stored choice reads back, an unknown word reads the default', () => {
+  assert.deepEqual([createSettings(null).look.get(), createSettings(null).walls.get()], ['modern', 'ghosted']);
   const storage = memoryStorage();
   const s = createSettings(storage);
   s.look.set('classic');
-  s.walls.set('ghosted');
-  assert.deepEqual([storage.data.get(LOOK_KEY), storage.data.get(WALLS_KEY)], ['classic', 'ghosted']);
-  assert.deepEqual([createSettings(storage).look.get(), createSettings(storage).walls.get()], ['classic', 'ghosted']);
+  s.walls.set('low');
+  assert.deepEqual([storage.data.get(LOOK_KEY), storage.data.get(WALLS_KEY)], ['classic', 'low']);
+  assert.deepEqual([createSettings(storage).look.get(), createSettings(storage).walls.get()], ['classic', 'low']);
   const odd = createSettings(memoryStorage({ [LOOK_KEY]: 'flat', [WALLS_KEY]: 'glass' }));
-  assert.deepEqual([odd.look.get(), odd.walls.get()], ['modern', 'solid']);
+  assert.deepEqual([odd.look.get(), odd.walls.get()], ['modern', 'ghosted']);
 });
 
 test('the arrows stand on the left until chosen; Right is kept under crete-pad and reads back; an unknown word reads Left', () => {

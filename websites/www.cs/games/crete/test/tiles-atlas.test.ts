@@ -25,10 +25,12 @@ test('every frame lies inside tiles.png', () => {
   }
 });
 
-test('water, fire, the force floors, the teleport, the Minotaur and the hazards loop; everything else is still', () => {
+test('water, fire, the force floors, the teleport, the Minotaur and the hazards loop; the gate\'s bars step across; everything else is still', () => {
   const loops = ['water', 'fire', 'force-up', 'force-down', 'force-left', 'force-right', 'teleport', 'minotaur', 'ball', 'glider', 'fireball'];
+  const steps = ['gate-slide', 'gate-slide-v'];
   for (const [name, s] of Object.entries(atlas.sprites)) {
     if (loops.includes(name)) assert.ok(s.frames >= 6 && s.fps > 0, name);
+    else if (steps.includes(name)) assert.ok(s.frames >= 4 && s.fps === 0, name);
     else assert.equal(s.frames, 1, name);
   }
 });

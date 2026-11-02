@@ -12,12 +12,16 @@
  * teleport a figure jumps to the exit and steps on. A hazard destroyed or sent
  * home plays its move, then is gone or home when the turn lands; anything a
  * clone machine makes has no path and shows when the turn lands. Reduced motion snaps. It also says when the
- * player's figure reaches each thing taken. DOM-free. */
+ * player's figure reaches each thing taken. The gate and the doors draw as they slide and sink, and the Minotaur
+ * where he stands at a gate (src/openings.ts): the gate as a pit, its bars part way over it, or the grid; a door
+ * sinking through its sill, or the sill it left. DOM-free. */
 import { DIRS, TERRAIN, OBJECTS, HAZARDS } from './puzzle/tiles.ts';
 import type { Cell, HazardKind, ObjectKind } from './puzzle/tiles.ts';
 import { same } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
 import type { GameEvent } from './puzzle/step.ts';
+import { REST, axisAt, beastDrawnAt, openedDoor } from './openings.ts';
+import type { Motion } from './openings.ts';
 
 export interface Atlas {
   cell: number;
@@ -30,7 +34,9 @@ export interface MovingBlock { origin: Cell; at: Pos }
 /** A moving hazard where it is drawn: the board draws these, not the state's own. */
 export interface HazardFigure { kind: HazardKind; at: Pos }
 export interface Figures { player: Pos; minotaur: Pos | null; hazards: HazardFigure[]; blocks?: MovingBlock[] }
-export interface Draw { sprite: string; frame: number; x: number; y: number }
+/** A sprite to draw at (x, y). `sink`, from 0 to 1, is how far it has sunk into its cell: it draws that far down its
+ *  frame, cut off at the frame's foot. */
+export interface Draw { sprite: string; frame: number; x: number; y: number; sink?: number }
 /** A thing the player took this turn, and when their figure reaches its cell. */
 export interface Taken { what: ObjectKind; at: Cell; ms: number }
 export interface Timeline {
@@ -54,18 +60,44 @@ export function frameAt(atlas: Atlas, sprite: string, ms: number): number {
   return Math.floor((ms * s.fps) / 1000) % s.frames;
 }
 
-export function drawList(s: State, fig: Figures, atlas: Atlas, ms: number): Draw[] {
+/** Of the gate's slide frames, the one `p` of the way across shows, or -1 for the bare pit and the frame count for
+ *  the grid. */
+export function slideFrame(atlas: Atlas, p: number): number {
+  const n = atlas.sprites['gate-slide']?.frames ?? 1;
+  return Math.max(-1, Math.min(n, Math.round(p * (n + 1)) - 1));
+}
+
+export function drawList(s: State, fig: Figures, atlas: Atlas, ms: number, motion: Motion = REST): Draw[] {
   const out: Draw[] = [];
   const put = (sprite: string, x: number, y: number) => out.push({ sprite, frame: frameAt(atlas, sprite, ms), x, y });
+  /** The gate at (c, r), `p` of the way open. */
+  const gate = (c: number, r: number, p: number) => {
+    const v = axisAt(s, r, c) === 'v' ? '-v' : '';
+    const f = slideFrame(atlas, p);
+    const n = atlas.sprites['gate-slide']?.frames ?? 1;
+    if (f < 0) put('gate-closed' + v, c, r);
+    else if (f >= n) put('gate-open' + v, c, r);
+    else out.push({ sprite: 'gate-slide' + v, frame: f, x: c, y: r });
+  };
+  /** A door's sill at (c, r), and over it the door `sink` of the way down, unless it is gone. */
+  const sill = (color: string, c: number, r: number, sink: number) => {
+    put(`door-${color}-sill${axisAt(s, r, c) === 'v' ? '-v' : ''}`, c, r);
+    if (sink < 1) out.push({ sprite: `door-${color}`, frame: 0, x: c, y: r, sink });
+  };
   const { rows, cols } = s.level;
   const onRow = (p: Pos | null, r: number) => !!p && Math.ceil(p.r - 1e-9) === r;
+  const beast = fig.minotaur && beastDrawnAt(s, fig.minotaur, motion.hoof);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const t = s.terrain[r * cols + c]!;
       const sprites = TERRAIN[t].sprites;
       const machine = t === 'clone' ? s.level.machines.find(m => m.at.r === r && m.at.c === c) : undefined;
+      const i = r * cols + c;
+      const door = TERRAIN[t].door ?? openedDoor(s, i);
       if (machine) put(sprites[DIRS.indexOf(machine.dir)]!, c, r);
-      else put(t === 'gate' && s.relicsLeft === 0 ? sprites[1]! : sprites[0]!, c, r);
+      else if (t === 'gate') gate(c, r, motion.bars.get(i) ?? (s.relicsLeft === 0 ? 1 : 0));
+      else if (door && (t !== 'floor' ? motion.doors.has(i) : true)) sill(door, c, r, motion.doors.get(i) ?? 1);
+      else put(sprites[0]!, c, r);
     }
     for (let c = 0; c < cols; c++) {
       const o = s.objects[r * cols + c];
@@ -78,7 +110,7 @@ export function drawList(s: State, fig: Figures, atlas: Atlas, ms: number): Draw
     for (const b of fig.blocks ?? []) if (onRow(b.at, r)) put(OBJECTS.block.sprite, b.at.c, b.at.r);
     for (const h of fig.hazards) if (onRow(h.at, r)) put(HAZARDS[h.kind].sprite, h.at.c, h.at.r);
     if (s.cow && s.cow.r === r) put('cow-standing', s.cow.c, r);
-    if (onRow(fig.minotaur, r)) put(s.stone > 0 ? 'minotaur-stone' : 'minotaur', fig.minotaur!.c, fig.minotaur!.r);
+    if (beast && onRow(beast, r)) put(s.stone > 0 ? 'minotaur-stone' : 'minotaur', beast.c, beast.r);
     if (onRow(fig.player, r)) put('theseus', fig.player.c, fig.player.r);
   }
   return out;

@@ -18,6 +18,7 @@ import type { ModernBoard } from './modern/board3d.ts';
 import { DEFAULT_YAW } from './modern/camera.ts';
 import { createMoveMap } from './modern/screen-move.ts';
 import { drawList } from './board-plan.ts';
+import { createOpenings } from './openings.ts';
 import type { Atlas } from './board-plan.ts';
 import { createGame, frameOf } from './game.ts';
 import { initial } from './puzzle/state.ts';
@@ -437,15 +438,17 @@ function lookPicture(look: Look, cols: number, rows: number, cell: number): stri
   return modern.snapshot(out, r0 + (rows - 1) / 2, c0 + (cols - 1) / 2, cols, rows) ? out.toDataURL('image/png') : null;
 }
 
-/* The classic board repaints every frame while it shows: the sprites animate, and a turn's figures move between
-   cells (holding still while a story page the figure reached is read). */
+/* The classic board repaints every frame while it shows: the sprites animate, a turn's figures move between
+   cells (holding still while a story page the figure reached is read), and the gate and the doors slide and sink. */
+const classicOpenings = createOpenings();
 function loop(now: number): void {
   classicRaf = 0;
   if (modernOn) return;
   const f = frameOf(game, game.animMs());
   if (f) {
     const t0 = performance.now();
-    board.paint(drawList(f.state, f.figures, atlas, now), game.thread ?? undefined, reduced ? undefined : now / 1000);
+    const moving = classicOpenings.at(f.state, f.figures, now, reduced, f.done);
+    board.paint(drawList(f.state, f.figures, atlas, now, moving), game.thread ?? undefined, reduced ? undefined : now / 1000);
     paintMs.push(performance.now() - t0);
     if (paintMs.length > PAINT_KEEP) paintMs.shift();
     if (game.anim && f.done) game.finishAnim();
@@ -720,6 +723,7 @@ const classicHook = {
 /* The modern board, as far as the browser specs read it. */
 const modernHook = {
   frames: () => modern?.frames() ?? 0,
+  opening: () => modern?.opening() ?? { bars: [], doors: [], hoof: 0 },
   yaw: () => modern?.yaw() ?? DEFAULT_YAW,
   zoom: () => modern?.zoom() ?? 0,
   pitch: () => modern?.pitch() ?? 0,

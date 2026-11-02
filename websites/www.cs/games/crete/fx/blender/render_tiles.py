@@ -651,29 +651,77 @@ def build_door(f, color):
 DOOR_COLORS = {'red': '#d11f16', 'blue': '#1f55e0', 'yellow': '#f2c40c', 'green': '#1d9a2c'}
 
 
-def build_gate(f, closed):
-    """Closed: bronze bars from floor to lintel over a dark opening. Open: the bars
-    are lifted into the lintel, leaving short teeth and the floor showing through."""
-    slab(floor_mat())
-    bz = bronze('gate-bronze', '#b97b3a')
-    dark = paint('gate-dark', '#17110a', rough=1.0)
-    lintel = 0.5
-    if closed:
-        box(-0.45, 0.45, 0.06, 0.12, 0.0, lintel, dark, dark, 0.0, outline=False)
-        for i in range(6):
-            x = -0.375 + i * 0.15
-            cyl((x, 0, lintel / 2), 0.04, length=lintel, mat=bz, seg=10, outline=False)
-        cyl((0, 0, 0.14), 0.025, length=1.0, axis='X', mat=bz, seg=8, outline=False)
-        for x in (-0.48, 0.48):
-            box(x - 0.05, x + 0.05, -0.08, 0.1, 0.0, lintel + 0.03, bz, bz, 0.01, outline=False)
+GATE_BARS = 4                 # src/openings.ts GATE_BARS
+GATE_SLIDE = 8                # the frames of the bars sliding across, between the bare pit and the grid
+
+
+def build_gate(f, across, v=False):
+    """The Daedalus Gate: a pit across the way between two pale stone kerbs, its far wall
+    lit and rubble on its floor, and GATE_BARS bronze bars that slide out of the walls
+    on both sides and meet over it, a grid a man crosses and hooves cannot. `across`
+    lists, frame by frame, how far across the bars are (0 a bare pit, 1 the grid). Plain,
+    the way runs left and right, its walls above and below; `v`, up and down."""
+    # Built in the way's own terms: a along the way, b across it; xy() turns them onto the cell.
+    xy = (lambda a, b: (b, a)) if v else (lambda a, b: (a, b))
+
+    def rect(a0, a1, b0, b1, z0, z1, top, side=None, bevel=0.0):
+        (x0, y0), (x1, y1) = xy(a0, b0), xy(a1, b1)
+        return box(min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1), z0, z1, top, side, bevel, outline=False)
+
+    P = 0.35                                                        # the pit's half length along the way
+    D = -0.42                                                       # its floor
+    kerb = paint('gate-kerb', '#d8c7a4', rough=0.85, var=0.12)
+    lip = paint('gate-lip', '#3a2a18', rough=1.0)
+    for sa in (-1, 1):
+        rect(sa * P, sa * 0.62, -0.62, 0.62, -0.4, 0.0, floor_mat(), floor_mat())
+        rect(sa * P, sa * (P + 0.13), -0.5, 0.5, -0.05, 0.035, kerb, kerb, 0.006)
+        rect(sa * P, sa * (P + 0.012), -0.5, 0.5, -0.05, 0.04, lip, lip)
+    # The pit's walls: the one away from the camera lit, the floor dark rubble.
+    wall_lit = paint('gate-pit-wall', '#6a5236', rough=0.95, var=0.3, bump=0.3, scale=12)
+    wall_dark = paint('gate-pit-shade', '#2a1e14', rough=1.0, var=0.3, bump=0.3, scale=12)
+    if v:
+        box(-0.5, 0.5, P, 0.62, D, -0.05, wall_lit, wall_lit, outline=False)
     else:
-        for x in (-0.48, 0.48):
-            box(x - 0.035, x + 0.035, -0.06, 0.06, 0.0, lintel + 0.03, bz, bz, 0.01, outline=False)
-    box(-0.5, 0.5, -0.07, 0.07, lintel - 0.02, lintel + 0.06, bz, bz, 0.01, outline=False)
-    if not closed:
-        for i in range(6):
-            x = -0.375 + i * 0.15
-            cyl((x, 0, lintel - 0.07), 0.03, 0.012, 0.1, mat=bz, seg=8, outline=False)
+        box(-0.62, 0.62, 0.5, 0.62, D, 0.0, wall_lit, wall_lit, outline=False)
+        for sx in (-1, 1):
+            box(sx * P, sx * (P + 0.01), -0.5, 0.5, D, 0.0, wall_dark, wall_dark, outline=False)
+    floor = paint('gate-pit-floor', '#33261a', rough=1.0, var=0.4, bump=0.4, scale=10)
+    rect(-P, P, -0.62, 0.62, D - 0.1, D, floor, floor)
+    rng = random.Random(ARGS['seed'])
+    rubble = [paint('gate-rubble-%d' % i, c, rough=1.0) for i, c in enumerate(('#5a4630', '#43341f', '#6b5538'))]
+    for i in range(12):
+        a, b = rng.uniform(-P + 0.05, P - 0.05), rng.uniform(-0.45, 0.45)
+        ball((*xy(a, b), D), rng.uniform(0.03, 0.06), rubble[i % 3], (1, 1, 0.55), 8, 6, outline=False)
+    # The bars: each two halves, one from each wall, grown that far out of it; a frame shows only its own.
+    bz = bronze('gate-bronze', '#c08a44')
+    R = 0.05
+    for fr, p in enumerate(across):
+        if p <= 0.0:
+            continue
+        L = 0.5 * p
+        for i in range(GATE_BARS):
+            a = -P + 2 * P * (i + 0.5) / GATE_BARS
+            for sb in (-1, 1):
+                b = sb * (0.5 - L / 2)
+                o = cyl((*xy(a, b), 0.03), R, length=L, axis='X' if v else 'Y', mat=bz, seg=12, outline=False)
+                if len(across) > 1:
+                    for k in range(len(across)):
+                        key_obj(o, k, hide_render=(k != fr))
+
+
+def build_sill(f, color, v=False):
+    """An opened door's sill: the dark slot it sank through, across the way, and a strip
+    of its key's colour flush in the floor. Plain, the way runs left and right; `v`, up
+    and down."""
+    slab(floor_mat())
+    dark = paint('sill-slot', '#140a06', rough=1.0)
+    en = enamel('sill-' + color, DOOR_COLORS[color])
+    if v:
+        box(-0.5, 0.5, -0.16, 0.16, -0.05, 0.002, dark, dark, outline=False)
+        box(-0.47, 0.47, -0.11, 0.11, -0.05, 0.006, en, en, 0.004, outline=False)
+    else:
+        box(-0.16, 0.16, -0.5, 0.5, -0.05, 0.002, dark, dark, outline=False)
+        box(-0.11, 0.11, -0.47, 0.47, -0.05, 0.006, en, en, 0.004, outline=False)
 
 
 def ring(h_out, h_in, z_top, top, side, depth=0.5):
@@ -1479,8 +1527,12 @@ SPRITES = [
     ('floor', build_floor, 1, 0, 'terrain'),
     ('wall', build_wall, 1, 0, 'terrain'),
     ('exit', build_exit, 1, 0, 'terrain'),
-    ('gate-closed', lambda f: build_gate(f, True), 1, 0, 'terrain'),
-    ('gate-open', lambda f: build_gate(f, False), 1, 0, 'terrain'),
+    ('gate-closed', lambda f: build_gate(f, [0.0]), 1, 0, 'terrain'),
+    ('gate-open', lambda f: build_gate(f, [1.0]), 1, 0, 'terrain'),
+    ('gate-closed-v', lambda f: build_gate(f, [0.0], True), 1, 0, 'terrain'),
+    ('gate-open-v', lambda f: build_gate(f, [1.0], True), 1, 0, 'terrain'),
+    ('gate-slide', lambda f: build_gate(f, [(i + 1) / (GATE_SLIDE + 1) for i in range(GATE_SLIDE)]), GATE_SLIDE, 0, 'terrain'),
+    ('gate-slide-v', lambda f: build_gate(f, [(i + 1) / (GATE_SLIDE + 1) for i in range(GATE_SLIDE)], True), GATE_SLIDE, 0, 'terrain'),
     ('water', build_water, 8, 8, 'terrain'),
     ('fire', build_fire, 8, 10, 'terrain'),
     ('ice', build_ice, 1, 0, 'terrain'),
@@ -1494,9 +1546,17 @@ SPRITES = [
     ('toggle-open', lambda f: build_toggle(f, False), 1, 0, 'terrain'),
     ('toggle-closed', lambda f: build_toggle(f, True), 1, 0, 'terrain'),
     ('door-red', lambda f: build_door(f, 'red'), 1, 0, 'terrain'),
+    ('door-red-sill', lambda f: build_sill(f, 'red'), 1, 0, 'terrain'),
+    ('door-red-sill-v', lambda f: build_sill(f, 'red', True), 1, 0, 'terrain'),
     ('door-blue', lambda f: build_door(f, 'blue'), 1, 0, 'terrain'),
+    ('door-blue-sill', lambda f: build_sill(f, 'blue'), 1, 0, 'terrain'),
+    ('door-blue-sill-v', lambda f: build_sill(f, 'blue', True), 1, 0, 'terrain'),
     ('door-yellow', lambda f: build_door(f, 'yellow'), 1, 0, 'terrain'),
+    ('door-yellow-sill', lambda f: build_sill(f, 'yellow'), 1, 0, 'terrain'),
+    ('door-yellow-sill-v', lambda f: build_sill(f, 'yellow', True), 1, 0, 'terrain'),
     ('door-green', lambda f: build_door(f, 'green'), 1, 0, 'terrain'),
+    ('door-green-sill', lambda f: build_sill(f, 'green'), 1, 0, 'terrain'),
+    ('door-green-sill-v', lambda f: build_sill(f, 'green', True), 1, 0, 'terrain'),
     ('trap', build_trap, 1, 0, 'terrain'),
     ('button-brown', lambda f: build_inlay_button(f, 'brown'), 1, 0, 'terrain'),
     ('button-red', lambda f: build_inlay_button(f, 'red'), 1, 0, 'terrain'),

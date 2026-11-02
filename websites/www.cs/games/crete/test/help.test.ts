@@ -31,7 +31,7 @@ test('the help states the rules\' key facts', () => {
   const all = text(helpLines(KEYS, TOOLS));
   assert.ok(all.indexOf('horizontal') >= 0 && all.indexOf('horizontal') < all.indexOf('vertical'), 'horizontal before vertical');
   assert.doesNotMatch(all, /longer way/);
-  assert.match(all, /gate opens when you take the last/);
+  assert.match(all, /Daedalus Gate opens when you take the last/);
   assert.match(all, /green key is kept/);
   assert.match(all, /Red, blue and yellow keys are used up/);
   assert.match(all, /flips every toggle wall/);

@@ -30,7 +30,7 @@ export function TitleCard(p: TitleCardProps) {
   return (
     <Dialog open={p.open} id="title-veil" veilClass="veil" panelClass="card" kicker={`Chapter 1 · ${CHAPTERS[0]!.name}`} kickerClass="kicker"
       titleId="title-name" title="The Island of Crete" focusId={p.resume ? 'title-continue' : 'title-play'}>
-      <p>Tile puzzles in the Labyrinth. Gather the relics, open the gate and reach the exit. The Minotaur takes two steps to your one.</p>
+      <p>Tile puzzles in the Labyrinth. Gather the relics, open the Daedalus Gate and reach the exit. The Minotaur takes two steps to your one.</p>
       {p.hint && <p id="title-hint" class="runstats" role="status">{EXIT_HINT}.</p>}
       {p.note && <p id="title-note" class="runstats">{p.note}</p>}
       <div class="title-actions">

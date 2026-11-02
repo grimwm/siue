@@ -39,7 +39,7 @@ const LAMPS: Partial<Record<TerrainModel, (x: number, z: number) => PointLight>>
 function door(x: number, z: number): PointLight { return at(new PointLight(0xffb070, 1.6, 2.6, 1.8), x, 0.9, z + 0.6); }
 function gate(x: number, z: number): PointLight { return at(new PointLight(0xffc070, 1.2, 2.5, 1.8), x, 1, z); }
 function at<T extends { position: Vector3 }>(o: T, x: number, y: number, z: number): T { o.position.set(x, y, z); return o; }
-const kindOf = (m: TerrainModel) => (m.startsWith('door') ? 'door' : m.startsWith('gate') ? 'gate' : m);
+const kindOf = (m: TerrainModel) => (m.endsWith('-sill') ? 'sill' : m.startsWith('door') ? 'door' : m.startsWith('gate') ? 'gate' : m);
 
 /** Builds the lights for one level: its cells' models and its walls. */
 export function createLights(kit: Kit, models: readonly TerrainModel[], rows: number, cols: number, walls: readonly Wall[]): Lights {

@@ -102,13 +102,17 @@ function theseus(kit: Kit): Group {
   return hero;
 }
 
+/** How much bigger than built the Minotaur stands. */
+export const MINOTAUR_SCALE = 1.08;
+
 /** How far the Minotaur's body leans in over his hips toward whoever he faces, in radians. */
 const MINOTAUR_LEAN = 0.24;
 
 /** The Minotaur with his labrys: fur, a red kilt and ivory horns, or all grey stone while the mirror holds him.
  *  He stands tall on long legs, broad in the chest and shoulders over a narrow waist, leaning in with his head
- *  low and thrust forward under wide horns, so he fills a doorway's height and a cell's width and reads from
- *  above as shoulders and horns. Built 1.25 tall from hoof to horn tip, stood at 1.3 times that. */
+ *  low and thrust forward under wide horns, so he reads from above as shoulders and horns. Built 1.25 tall from
+ *  hoof to horn tip, stood at MINOTAUR_SCALE times that: under a doorway's height, so a cell beside him still shows
+ *  its floor and he never seems to stand over the Daedalus Gate's grid. */
 function minotaur(kit: Kit, stone: boolean): Group {
   const { m } = kit;
   const s = (mat: Material) => (stone ? m.statue : mat);
@@ -190,7 +194,7 @@ function minotaur(kit: Kit, stone: boolean): Group {
   ax.rotation.set(-0.12, Math.PI / 2, 0);
   ax.position.set(0.33, 0.1, 0.13);
   up.add(ax);
-  return stand(kit, g, { half: 0.42, h: 1.6 });
+  return stand(kit, g, { half: 0.42 * MINOTAUR_SCALE / 1.3, h: 1.6 * MINOTAUR_SCALE / 1.3 }, MINOTAUR_SCALE);
 }
 
 export const FIGURE_MODELS: Record<FigureModel, (kit: Kit) => Object3D> = {

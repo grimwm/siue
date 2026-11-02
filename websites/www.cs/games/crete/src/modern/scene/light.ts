@@ -34,7 +34,7 @@ export interface Lights {
 const LAMPS: Partial<Record<TerrainModel, (x: number, z: number) => PointLight>> = {
   'door-red': door, 'door-blue': door, 'door-yellow': door, 'door-green': door,
   'gate-closed': gate, 'gate-open': gate,
-  exit: (x, z) => at(new PointLight(0xff9a40, 4, 4, 1.6), x, 0.4, z),
+  exit: (x, z) => at(new PointLight(0x5ab8ff, 4, 4, 1.6), x, 0.4, z),
 };
 function door(x: number, z: number): PointLight { return at(new PointLight(0xffb070, 1.6, 2.6, 1.8), x, 0.9, z + 0.6); }
 function gate(x: number, z: number): PointLight { return at(new PointLight(0xffc070, 1.2, 2.5, 1.8), x, 1, z); }

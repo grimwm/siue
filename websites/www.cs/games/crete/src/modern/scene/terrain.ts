@@ -9,12 +9,14 @@ import {
 import type { BufferGeometry, Material, Object3D } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { exitFacing } from '../model-names.ts';
 import type { TerrainModel } from '../model-names.ts';
 import { FY } from './floor.ts';
 import { WALL_H } from './walls.ts';
 import { flameMat, rng } from './textures.ts';
 import type { Kit } from './textures.ts';
 import { GATE_BARS } from '../../openings.ts';
+import { portal } from './portal.ts';
 
 export interface ModelCtx {
   kit: Kit;
@@ -204,23 +206,16 @@ function turned(x: ModelCtx, live: Object3D[]): Object3D[] {
   return [lg];
 }
 
-/** The exit: a stair going down from its open side into a lit pit, under a lintel. */
+/** The exit: the Aegean Portal (portal.ts), set into a wall beside it, north first, so its front faces the opening
+ *  camera whenever it can; with no wall beside it, it faces south. */
 function exit(x: ModelCtx): Group {
-  const { m } = x.kit;
-  const g = new Group();
-  for (let i = 0; i < 3; i++) g.add(at(box(0.25, 0.08, 0.9, m.stone), -0.375 + i * 0.25, FY - 0.04 - i * 0.12, 0));
-  for (const sz of [-1, 1]) g.add(at(box(1, 0.7, 0.05, m.stone), 0, FY - 0.35, sz * 0.475));
-  g.add(at(box(0.05, 0.7, 0.9, m.stone), 0.475, FY - 0.35, 0));
-  const glow = at(new Mesh(new PlaneGeometry(0.25, 0.9), m.glow), 0.375, -0.32, 0);
-  glow.rotation.x = -Math.PI / 2;
-  g.add(glow);
-  g.add(at(box(0.3, 0.16, 1.1, m.top), 0, WALL_H - 0.08, 0));
-  for (const sz of [-1, 1]) g.add(at(box(0.16, WALL_H - 0.16, 0.12, m.darkWood), 0, (WALL_H - 0.16) / 2, sz * 0.5));
-  // The stair goes down away from the first open neighbour.
-  const open = ([[0, -1], [-1, 0], [1, 0], [0, 1]] as const).find(([dr, dc]) => !x.wall(x.r + dr, x.c + dc));
-  const [dr, dc] = open ?? [0, -1];
-  g.rotation.y = Math.atan2(dr, -dc);
-  return piece(g, { half: 0.4, h: 0.3, tall: true });
+  const p = portal(x.kit, box, cyl);
+  const [dr, dc] = exitFacing(x.wall, x.r, x.c);
+  p.g.rotation.y = Math.atan2(dr, -dc);
+  const live = new Group();
+  live.add(...p.live);
+  live.rotation.y = p.g.rotation.y;
+  return piece(p.g, { half: 0.45, h: p.h, tall: true, loop: p.loop }, [live]);
 }
 
 function toggle(x: ModelCtx, closed: boolean): Group {

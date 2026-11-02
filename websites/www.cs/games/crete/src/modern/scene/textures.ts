@@ -429,7 +429,6 @@ export function createKit(renderer: WebGLRenderer) {
     stone: std(0x8a7c6a),
     paleStone: std(0xcab89a, { roughness: 0.85 }),
     dark: std(0x0a0807),
-    glow: new MeshBasicMaterial({ color: 0xff9a40 }),
     keyColor: {
       red: std(0xe0301e, { roughness: 0.45, emissive: 0x5a0c04 }),
       blue: std(0x2f6ee0, { roughness: 0.45, emissive: 0x0c1e5a }),

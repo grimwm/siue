@@ -11,7 +11,7 @@ import { drawList, timeline } from '../src/board-plan.ts';
 import type { Atlas, Figures } from '../src/board-plan.ts';
 import { TILES_LEVEL } from '../src/tiles-level.ts';
 import {
-  FIGURE_MODEL_NAMES, PIECE_MODEL_NAMES, TERRAIN_MODEL_NAMES, SURFACES, placed, terrainModel,
+  FIGURE_MODEL_NAMES, PIECE_MODEL_NAMES, TERRAIN_MODEL_NAMES, SURFACES, exitFacing, placed, terrainModel,
 } from '../src/modern/model-names.ts';
 import { grid, mv } from './puzzle-grid.ts';
 
@@ -22,6 +22,28 @@ test('every terrain sprite in tiles.json has a modern model, and every model is 
   for (const name of terrainSprites) assert.ok(name in atlas.sprites, `${name} is in the atlas`);
   assert.deepEqual([...TERRAIN_MODEL_NAMES].sort(), terrainSprites.sort());
   for (const name of TERRAIN_MODEL_NAMES) assert.ok(SURFACES[name], `${name} has a surface`);
+});
+
+test('the exit, the Aegean Portal, stands on a flagstone', () => {
+  assert.equal(SURFACES.exit, 'flag');
+});
+
+test("the exit's portal is set into a wall beside it, north first, and faces south with none", () => {
+  const facing = (rows: string[]) => {
+    const r = rows.findIndex(l => l.includes('E')), c = rows[r]!.indexOf('E');
+    const wall = (rr: number, cc: number) => (rows[rr]?.[cc] ?? '#') === '#';
+    return exitFacing(wall, r, c);
+  };
+  // A wall behind it to the north: it faces south, toward the opening camera, whatever else is beside it.
+  assert.deepEqual(facing(['.#.', '#E#', '...']), [1, 0]);
+  // Then west, then east, then south.
+  assert.deepEqual(facing(['...', '#E#', '...']), [0, 1]);
+  assert.deepEqual(facing(['...', '.E#', '.#.']), [0, -1]);
+  assert.deepEqual(facing(['...', '.E.', '.#.']), [-1, 0]);
+  // Open on every side: it faces south.
+  assert.deepEqual(facing(['...', '.E.', '...']), [1, 0]);
+  // The board's edge counts as wall: on the top row it faces south.
+  assert.deepEqual(facing(['.E.', '...']), [1, 0]);
 });
 
 test('fake and invisible walls show the sprite Classic draws for them', () => {

@@ -36,4 +36,8 @@ test('any play ends the tour: a press anywhere but its banner, the wheel, any ke
   assert.equal(tourEndsOn({ type: 'keydown', key: 'r', ctrlKey: true }), false, 'a browser chord');
   assert.equal(tourEndsOn({ type: 'keydown', key: 'Shift' }), false, 'a modifier alone');
   assert.equal(tourEndsOn({ type: 'pointermove' }), false);
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'Tab' }), false, 'Tab goes to the banner\'s buttons');
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'Enter', inBanner: true }), false, 'Enter on Next or Skip Tour is the banner\'s');
+  assert.equal(tourEndsOn({ type: 'keydown', key: ' ', inBanner: true }), false);
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'Enter' }), true, 'Enter elsewhere is play');
 });

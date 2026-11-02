@@ -508,11 +508,10 @@ const playerVisible = () => {
 
 const cellOf = (page: Page) => page.locator('#stage').getAttribute('data-cell').then(Number);
 
-/** Clicks a zoom button, opening the View button first where it stands for them (a narrow touch screen). */
-async function zoomButton(page: Page, id: string): Promise<void> {
-  const view = page.locator('#classic-cam .modern-viewbtn');
-  if (await view.isVisible() && await view.getAttribute('aria-expanded') === 'false') await view.click();
-  await page.locator(`#${id}`).click();
+/** Presses `key` on the focused classic compass: + zooms in, - out, Enter resets the view. */
+async function compassKey(page: Page, key: string): Promise<void> {
+  await page.locator('#classic-compass').focus();
+  await page.keyboard.press(key);
 }
 
 /** Two fingers spread apart over the middle of the board, as pointer events. */
@@ -550,13 +549,13 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
     // A pinch zooms in; Reset shows the whole level again.
     await page.evaluate(pinchOut);
     await expect.poll(() => cellOf(page), 'a pinch zooms in').toBeGreaterThan(whole);
-    await zoomButton(page, 'classic-reset');
+    await compassKey(page, 'Enter');
     await expect.poll(() => cellOf(page), 'Reset').toBe(whole);
     expect(await page.evaluate(wholeShown), 'the whole level after Reset').toEqual([]);
 
     // + zooms in twice; the board is then wider than the view, and the page never scrolls.
-    await zoomButton(page, 'classic-zoom-in');
-    await zoomButton(page, 'classic-zoom-in');
+    await compassKey(page, '+');
+    await compassKey(page, '+');
     const zoomed = await cellOf(page);
     expect(zoomed).toBeGreaterThan(whole * 1.3);
     const probs = await page.evaluate(() => {
@@ -625,7 +624,7 @@ for (const device of DEVICES.filter(d => d[0].startsWith('iPhone SE, portrait') 
   });
 }
 
-// With a mouse: the wheel zooms toward the pointer, the zoom buttons stand at the board's top-right, and a double
+// With a mouse: the wheel zooms toward the pointer, the board has no camera buttons (only the compass), and a double
 // click and Restart show the whole level again.
 test('Desktop: the wheel zooms the classic board; a double click and Restart show the whole level', async ({ browser }) => {
   const { ctx, page, errors } = await open(browser, DEVICES[0]!);
@@ -634,8 +633,8 @@ test('Desktop: the wheel zooms the classic board; a double click and Restart sho
   await expect(page.locator('#start-veil')).toBeHidden();
   await page.waitForSelector('#stage[data-cell]');
   const whole = await cellOf(page);
-  await expect(page.locator('#classic-zoom-in')).toBeVisible();
-  await expect(page.locator('#classic-cam .modern-viewbtn')).toBeHidden();
+  await expect(page.locator('#classic-cam button'), 'no camera buttons, no View toggle: the compass alone').toHaveCount(1);
+  await expect(page.locator('#classic-compass')).toBeVisible();
   const box = (await page.locator('#stage-view').boundingBox())!;
   const px = box.x + box.width * 0.7, py = box.y + box.height * 0.6;
   const under = () => page.evaluate(([x, y]) => (window as unknown as { __creteTest: { classic: ClassicHook } }).__creteTest.classic.under(x!, y!)!, [px, py]);
@@ -650,7 +649,7 @@ test('Desktop: the wheel zooms the classic board; a double click and Restart sho
   await expect.poll(() => cellOf(page), 'a double click').toBe(whole);
   expect(await page.evaluate(wholeShown)).toEqual([]);
   // Restart begins the level again at the whole level.
-  await page.locator('#classic-zoom-in').click();
+  await compassKey(page, '+');
   await expect.poll(() => cellOf(page), '+').toBeGreaterThan(whole);
   await page.locator('#btn-wait').click();
   await expect.poll(() => page.evaluate(runState)).toMatchObject({ moves: 1 });

@@ -206,11 +206,6 @@ const WHEEL_LINE_PX = 16;
 const SETTLE_MS = 200;
 /** Whether the player asked for less motion: the view jumps rather than eases. */
 const reducedMotion = (): boolean => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-/** The classic board's camera buttons, drawn as the modern board's are. */
-const TURN_LEFT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg>';
-const TURN_RIGHT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg>';
-const ZOOM_IN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>';
-const ZOOM_OUT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
@@ -1284,11 +1279,11 @@ export function createUi(deps: UiDeps): Ui {
     });
   }
 
-  /** The classic board's own pointer controls and camera buttons, as the modern board's camera has them: one finger
-   *  turns and tilts, as the left button does; two fingers twist to turn, pinch to zoom and drag to pan; the left button drags to turn and tilt, the right or middle button to pan; the wheel zooms toward the
-   *  pointer; a double tap or double click goes back to the opening view. The turn, zoom and Reset buttons stand at
-   *  the board's top-right, behind a View button on a narrow touch screen, and the compass at its bottom-right. Every
-   *  control is ignored while a card other than the start card is open. */
+  /** The classic board's own pointer controls and compass, as the modern board's camera has them: one finger turns
+   *  and tilts, as the left button does; two fingers twist to turn, pinch to zoom and drag to pan; the right or middle
+   *  button pans; the wheel zooms toward the pointer; a double tap or double click goes back to the opening view. The
+   *  compass stands at the board's bottom-right, with no camera buttons. Every control is ignored while a card other
+   *  than the start card is open. */
   function bindClassicView(): void {
     const view = $("stage-view");
     $("stage").style.touchAction = "none";
@@ -1371,45 +1366,10 @@ export function createUi(deps: UiDeps): Ui {
     }, { passive: false });
 
     const cam = $("classic-cam");
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "modern-viewbtn";
-    toggle.textContent = "View";
-    toggle.setAttribute("aria-expanded", "false");
-    toggle.setAttribute("aria-controls", "classic-cam-buttons");
-    const group = document.createElement("div");
-    group.id = "classic-cam-buttons";
-    group.className = "cam";
-    group.setAttribute("role", "group");
-    group.setAttribute("aria-label", "Camera");
-    const button = (id: string, label: string, html: string, className: string, fn: () => void): HTMLButtonElement => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.id = id;
-      b.className = className;
-      b.setAttribute("aria-label", label);
-      b.title = label;
-      b.innerHTML = html;
-      b.addEventListener("click", () => {
-        if (!blocked()) fn();
-      });
-      return b;
-    };
-    group.append(
-      button("classic-left", "Turn left", TURN_LEFT_ICON, "cbtn", () => turn(-90, true)),
-      button("classic-right", "Turn right", TURN_RIGHT_ICON, "cbtn", () => turn(90, true)),
-      button("classic-zoom-in", "Zoom in", ZOOM_IN_ICON, "cbtn", () => zoomBy(ZOOM_STEP)),
-      button("classic-zoom-out", "Zoom out", ZOOM_OUT_ICON, "cbtn", () => zoomBy(1 / ZOOM_STEP)),
-      button("classic-reset", "Reset view", "Reset", "cbtn wide", reset),
-    );
-    toggle.addEventListener("click", () => {
-      const open = !group.className.split(" ").includes("open");
-      group.className = open ? "cam open" : "cam";
-      toggle.setAttribute("aria-expanded", String(open));
-    });
-    compass = createCompassButton("classic-compass", { blocked, gesture: () => layers.close("start") }, { turn, tilt, reset });
+    compass = createCompassButton("classic-compass", { blocked, gesture: () => layers.close("start") },
+      { turn, tilt, reset, zoomStep: (d) => zoomBy(d > 0 ? ZOOM_STEP : 1 / ZOOM_STEP) });
     compass.setView(sheetView.cur.yaw, sheetView.cur.pitch);
-    cam.append(toggle, group, compass.button);
+    cam.append(compass.button);
   }
 
   /* ---------- input: moves, tools and guides never share a key ---------- */

@@ -1,14 +1,12 @@
 /* The Island of Crete, modern look: the camera's controls. Pointers on the modern canvas go through the gesture
  * reader (gestures.ts) to the camera: one finger, or the left button, turns across and tilts up and down; two fingers
- * pan, twist (turn) and pinch (zoom); the right or middle button
- * pans, the wheel zooms toward the pointer, and a double tap or double click resets. The view stays at whatever
- * heading and tilt the player leaves it. Buttons at the board's top-right turn the view a quarter either way, zoom it
- * in and out, and reset it; on a narrow touch screen a View button shows and hides them. A compass at the board's
- * bottom-right shows the view as it is (its needle points at the board's north, and its dial squashes and its ring
- * fills as the view tilts); a finger, pen or mouse dragging it turns the view across and tilts it up and down, and a
- * tap or click on it (or Enter or Space) resets the view (compass.ts); while it has the focus, Left and Right turn the
- * view 15° and Up and Down lean it toward the lowest tilt (10°) and back toward straight down, without moving Theseus. Every control is ignored
- * while a layer covers the board. */
+ * pan, twist (turn) and pinch (zoom); the right or middle button pans, the wheel zooms toward the pointer, and a
+ * double tap or double click resets. The view stays at whatever heading and tilt the player leaves it. The board has
+ * no camera buttons: a compass at its bottom-right shows the view as it is (its needle points at the board's north,
+ * and its dial squashes and its ring fills as the view tilts); a finger, pen or mouse dragging it turns the view across
+ * and tilts it up and down, and a tap or click on it (or Enter or Space) resets the view (compass.ts); while it has the
+ * focus, Left and Right turn the view 15°, Up and Down lean it toward the lowest tilt (10°) and back toward straight
+ * down, and + and − zoom it, without moving Theseus. Every control is ignored while a layer covers the board. */
 import { compassFace, createCompassDrag } from './compass.ts';
 import { createGestures } from './gestures.ts';
 import { HINT_KEY, createHint, hintText, readHint } from './hint.ts';
@@ -47,19 +45,14 @@ export interface Controls {
   dispose(): void;
 }
 
-/** A turn button turns a quarter. */
-const STEP = 90;
 /** Degrees an arrow key on the focused compass turns the view. */
 const TURN_KEY = 15;
 /** Degrees an arrow key on the focused compass tilts the view. */
 const TILT_KEY = 10;
+/** How much + and − on the focused compass zoom the view. */
 const ZOOM_STEP = 1.2;
 /** Wheel lines and pages as pixels. */
 const LINE_PX = 16;
-const TURN_LEFT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg>';
-const TURN_RIGHT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg>';
-const ZOOM_IN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>';
-const ZOOM_OUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
 const COMPASS = '<span class="tilt-ring" aria-hidden="true"></span><svg viewBox="0 0 24 24" aria-hidden="true"><circle class="dial" cx="12" cy="12" r="11"/><path class="n" d="M12 3l3.5 9h-7z"/><path class="s" d="M12 21l-3.5-9h7z"/></svg>';
 /** A click this soon after a compass press was that press (already handled); a later one came from the keyboard. */
 const CLICK_MS = 600;
@@ -160,42 +153,10 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   canvas.addEventListener('contextmenu', noMenu);
   canvas.addEventListener('wheel', wheel, { passive: false });
 
-  const view = document.createElement('button');
-  view.type = 'button';
-  view.className = 'modern-viewbtn';
-  view.textContent = 'View';
-  view.setAttribute('aria-expanded', 'false');
-  view.setAttribute('aria-controls', 'cam-buttons');
-  const group = document.createElement('div');
-  group.id = 'cam-buttons';
-  group.className = 'cam';
-  group.setAttribute('role', 'group');
-  group.setAttribute('aria-label', 'Camera');
-  const left = button('cam-left', 'Turn left', TURN_LEFT, 'cbtn');
-  const right = button('cam-right', 'Turn right', TURN_RIGHT, 'cbtn');
-  const zoomIn = button('cam-zoom-in', 'Zoom in', ZOOM_IN, 'cbtn');
-  const zoomOut = button('cam-zoom-out', 'Zoom out', ZOOM_OUT, 'cbtn');
-  const reset = button('cam-reset', 'Reset view', 'Reset', 'cbtn wide');
-  group.append(left, right, zoomIn, zoomOut, reset);
-  // The compass: it shows the view, a drag on it steers the view, and a tap resets it.
-  const dial = createCompassButton('cam-compass', host, cam, (t) => { lastPointer = t; });
+  // The compass: it shows the view, a drag on it steers the view, a tap resets it, and its keys turn, tilt and zoom.
+  const dial = createCompassButton('cam-compass', host, { ...cam, zoomStep: (d) => cam.zoom(d > 0 ? 1 / ZOOM_STEP : ZOOM_STEP, 0, 0, true) }, (t) => { lastPointer = t; });
   const compass = dial.button;
-  parent.append(view, group, compass);
-
-  const press = (fn: () => void) => () => {
-    if (host.blocked()) return;
-    host.gesture();
-    fn();
-  };
-  left.addEventListener('click', press(() => cam.turn(-STEP, true)));
-  right.addEventListener('click', press(() => cam.turn(STEP, true)));
-  zoomIn.addEventListener('click', press(() => cam.zoom(1 / ZOOM_STEP, 0, 0, true)));
-  zoomOut.addEventListener('click', press(() => cam.zoom(ZOOM_STEP, 0, 0, true)));
-  reset.addEventListener('click', press(() => cam.reset()));
-  view.addEventListener('click', () => {
-    const open = group.classList.toggle('open');
-    view.setAttribute('aria-expanded', String(open));
-  });
+  parent.append(compass);
 
   // The first-time hint: one line by the compass after a quiet moment, and one wiggle of the compass. It never takes
   // a press meant for the board; a tap on the line itself closes it.
@@ -270,8 +231,6 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
       canvas.removeEventListener('dblclick', dbl);
       canvas.removeEventListener('contextmenu', noMenu);
       canvas.removeEventListener('wheel', wheel);
-      view.remove();
-      group.remove();
       compass.remove();
     },
   };
@@ -282,6 +241,8 @@ export interface CompassCam {
   turn(deg: number, eased: boolean): void;
   tilt(deg: number, eased: boolean): void;
   reset(): void;
+  /** One zoom step: in (1) or out (-1). */
+  zoomStep(dir: 1 | -1): void;
 }
 
 export interface CompassButton {
@@ -292,10 +253,10 @@ export interface CompassButton {
 
 /** The compass, for either look's board: it shows the view, a finger, pen or mouse dragging it turns the view across
  *  and tilts it up and down, and a tap or click on it (or Enter or Space) resets the view (compass.ts); while it has
- *  the focus, Left and Right turn the view and Up and Down tilt it, without moving Theseus. `pointer` hears the kind of
+ *  the focus, Left and Right turn the view, Up and Down tilt it and + and − zoom it, without moving Theseus. `pointer` hears the kind of
  *  each pointer that presses it. */
 export function createCompassButton(id: string, host: Pick<ControlHost, 'blocked' | 'gesture'>, cam: CompassCam, pointer: (type: string) => void = () => {}): CompassButton {
-  const compass = button(id, 'Compass: drag or use the arrow keys to turn and tilt the view, tap to reset it', COMPASS, 'compass');
+  const compass = button(id, 'Compass: drag or use the arrow keys to turn and tilt the view, plus and minus to zoom, tap to reset it', COMPASS, 'compass');
   compass.title = 'Compass';
   const needle = compass.querySelector('svg');
   const steer = createCompassDrag();
@@ -340,6 +301,10 @@ export function createCompassButton(id: string, host: Pick<ControlHost, 'blocked
     ArrowRight: () => cam.turn(TURN_KEY, true),
     ArrowUp: () => cam.tilt(-TILT_KEY, true),
     ArrowDown: () => cam.tilt(TILT_KEY, true),
+    '+': () => cam.zoomStep(1),
+    '=': () => cam.zoomStep(1),
+    '-': () => cam.zoomStep(-1),
+    '_': () => cam.zoomStep(-1),
   };
   compass.addEventListener('keydown', (e: KeyboardEvent) => {
     const fn = compassKeys[e.key];

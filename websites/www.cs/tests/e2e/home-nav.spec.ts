@@ -39,7 +39,8 @@ const gameOn = async (page: Page) => {
   await expect.poll(() => page.evaluate(() => document.body.classList.contains('cylon-intro-hero')), { timeout: 15_000 }).toBe(false);
   // The nav fades between its civil and combat looks.
   await expect.poll(() => page.evaluate(() => document.querySelector('.site-nav-inner')!.classList.contains('is-nav-fading'))).toBe(false);
-  await page.waitForTimeout(800);
+  await expect(page.locator('#site-nav-game')).toHaveCSS('opacity', '1');
+  await expect(page.locator('#site-brand')).toHaveCSS('opacity', '1');
 };
 
 for (const width of [320, 360, 390, 412]) {
@@ -50,6 +51,7 @@ for (const width of [320, 360, 390, 412]) {
       await page.goto('./');
       await page.waitForLoadState('load');
       const nav = await checkNav(page);
+      expect(nav.rows, 'civil nav rows').toBe(width === 320 ? 3 : 2);
       expect(nav.offScreen, 'controls past the edge').toEqual([]);
       expect(nav.overlaps, 'controls on top of each other').toEqual([]);
       expect(nav.small, 'controls under 40px tall').toEqual([]);
@@ -60,6 +62,7 @@ for (const width of [320, 360, 390, 412]) {
     test('with the game on, every nav control is on screen and tappable', async ({ page }) => {
       await gameOn(page);
       const nav = await checkNav(page);
+      expect(nav.rows, 'combat nav rows').toBe(2);
       expect(nav.offScreen, 'controls past the edge').toEqual([]);
       expect(nav.overlaps, 'controls on top of each other').toEqual([]);
       expect(nav.small, 'controls under 40px tall').toEqual([]);

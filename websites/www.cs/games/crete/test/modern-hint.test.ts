@@ -64,7 +64,7 @@ test('a missing or broken record reads as fresh', () => {
 });
 
 test('the line speaks to fingers or to a mouse', () => {
-  assert.match(hintText(true), /two fingers/);
+  assert.match(hintText(true), /^Drag to turn and tilt · Two fingers pan, twist and pinch/);
   assert.match(hintText(true), /Tap the compass to reset/);
   assert.match(hintText(false), /^Drag to turn and tilt · Right-drag to pan/);
 });

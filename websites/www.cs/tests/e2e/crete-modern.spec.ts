@@ -183,7 +183,7 @@ async function drag(page: Page, dx: number): Promise<void> {
   await page.mouse.up();
 }
 
-/** A one-finger touch swipe of (dx, dy) CSS pixels across the middle of `sel`, as pointer events. */
+/** One finger dragged (dx, dy) CSS pixels across the middle of `sel`, as touch pointer events. */
 async function swipe(page: Page, sel: string, dx: number, dy: number): Promise<void> {
   await page.evaluate(([sel, dx, dy]) => {
     const el = document.querySelector(sel as string)!;
@@ -527,7 +527,7 @@ test('level 1 at the opening 75°: one small marker over each figure and item, t
 test.describe('on a touch phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test('a two-finger twist turns the view and leaves it there, and the compass shows it; a swipe up then goes away from the camera; a finger tap on the compass resets', async ({ page }) => {
+  test('a two-finger twist turns the view and leaves it there, and the compass shows it; the pad\'s up then goes away from the camera; one finger tilts; a finger tap on the compass resets', async ({ page }) => {
     const errors = await openHall(page);
     expect(await cam(page)).toEqual({ pitch: 75, yaw: 0 });
     await expect(page.locator('#cam-compass')).toBeVisible();
@@ -541,12 +541,12 @@ test.describe('on a touch phone', () => {
     expect((await compass(page)).tilt).toBeCloseTo(15 / 80, 2);
 
     const from = await player(page);
-    await swipe(page, '#stage3d', 0, -80);
+    await page.locator('.pad .mv-up').tap();
     const step = STEP[screenToGrid('up', yaw)];
-    await expect.poll(() => player(page), 'a swipe up goes away from the camera').toEqual({ r: from.r + step.r, c: from.c + step.c });
+    await expect.poll(() => player(page), 'the pad\'s up goes away from the camera').toEqual({ r: from.r + step.r, c: from.c + step.c });
 
-    // Two fingers sliding up together lean the view toward the lowest tilt, as on a map app, and the compass leans with it.
-    await twoFingers(page, { dy: -120 });
+    // One finger sliding up leans the view toward the lowest tilt, as on a map app, and the compass leans with it.
+    await swipe(page, '#stage3d', 0, -40);
     await settled(page);
     const tilted = await cam(page);
     expect(tilted.pitch, 'tilted').toBeLessThan(65);
@@ -641,16 +641,16 @@ test('with a mouse the compass turns and tilts the view, a click on it eases bac
   expect(errors).toEqual([]);
 });
 
-test('a finger swipe moves Theseus and leaves the camera\'s turn alone', async ({ page }) => {
+test('one finger on the board turns and tilts the view and never moves Theseus', async ({ page }) => {
   const errors = await openHall(page);
-  const yaw0 = (await modern(page))!.yaw;
   const from = await player(page);
-  for (const [dx, dy] of [[80, 0], [-80, 0], [0, 80], [0, -80]]) {
-    await swipe(page, '#stage3d', dx!, dy!);
-    if (JSON.stringify(await player(page)) !== JSON.stringify(from)) break;
-  }
-  expect(await player(page), 'Theseus moved').not.toEqual(from);
-  expect((await modern(page))!.yaw, 'one finger never turns').toBe(yaw0);
+  await swipe(page, '#stage3d', 80, 0);
+  await settled(page);
+  expect((await cam(page)).yaw, 'across turns').not.toBe(0);
+  await swipe(page, '#stage3d', 0, -40);
+  await settled(page);
+  expect((await cam(page)).pitch, 'up tilts toward the lowest').toBeLessThan(75);
+  expect(await player(page), 'Theseus stayed').toEqual(from);
   expect(errors).toEqual([]);
 });
 

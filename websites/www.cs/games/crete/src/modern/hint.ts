@@ -3,6 +3,7 @@
  * (and the compass gives one small wiggle); it goes on the first camera gesture, a tap on it, a layer covering the
  * board, or after HINT_SHOW_MS. It shows by itself on at most HINT_MAX_SHOWS visits, and never again once the player
  * has moved the camera; the menu's Show View Tips and the ? key bring it back any time, without counting as a visit.
+ * On a touch screen the touch tour (src/tour.ts) shows instead, and the hint never shows by itself.
  * DOM-free; controls.ts draws it and keeps its record in localStorage. */
 
 /** Quiet time on the board, in ms, before the hint shows. */
@@ -34,7 +35,7 @@ export function readHint(raw: string | null): HintRecord {
 /** The hint's line: for a finger, or for a mouse. */
 export function hintText(touch: boolean): string {
   return touch
-    ? 'Drag two fingers to tilt and twist · Tap the compass to reset'
+    ? 'Drag to turn and tilt · Two fingers pan, twist and pinch · Tap the compass to reset'
     : 'Drag to turn and tilt · Right-drag to pan · Tap the compass to reset';
 }
 

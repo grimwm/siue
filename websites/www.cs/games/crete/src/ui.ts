@@ -1273,10 +1273,10 @@ export function createUi(deps: UiDeps): Ui {
     });
     const end = (ev: Event): void => {
       const e = ev as PointerEvent;
-      if (!held || e.pointerId !== held.id) return;
-      stop();
-      // The click this lift makes comes before the timer: it is the press already made, not a second move.
-      setTimeout(() => { padPointer = false; }, 0);
+      if (held && e.pointerId === held.id) stop();
+      // The click this lift makes comes before the timer: it is the press already made, not a second move. Cleared
+      // whether or not the hold had already stopped on its own (a card, a catch), so Enter and Space move again.
+      if (padPointer) setTimeout(() => { padPointer = false; }, 0);
     };
     for (const t of ["pointerup", "pointercancel", "lostpointercapture"]) root.addEventListener(t, end);
     root.addEventListener("contextmenu", (e) => {

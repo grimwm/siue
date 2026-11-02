@@ -867,7 +867,7 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 .tour-caption { margin: 0; font-size: 1.05rem; text-align: center; }
 .tour-pips { margin: 0; color: var(--dim); letter-spacing: 0.2em; font-size: 0.8rem; }
 .tour-buttons { display: flex; gap: 8px; }
-.tour-buttons button { min-height: 40px; padding: 0 16px; }
+.tour-buttons button { min-height: 44px; padding: 0 16px; }
 @media (prefers-reduced-motion: reduce) {
   .tour-dot.press::after { animation: none; transform: scale(1.3); }
 }

@@ -3,7 +3,8 @@
  * arrow, a held arrow, a slide from one arrow to another, one finger turning and tilting the view, and two fingers
  * panning, twisting and pinching it. The board itself turns, tilts, slides and grows a little with them (a passing
  * CSS animation on top of whatever view it has, gone when the step ends), and Theseus never moves. The steps loop
- * until the tour is closed: by Skip (Got It once every step has shown), a tap anywhere, or any key. With reduced
+ * until the tour is closed: by Skip (Got It once every step has shown), a tap anywhere, or any key but a browser
+ * chord. With reduced
  * motion nothing moves: each step shows its fingertips where they end, an arrow for the way they went, and Next.
  *
  * It shows by itself once, the first time a level is in play on a touch screen with no card over it; Show View Tips
@@ -210,6 +211,8 @@ export function showTour(frame: HTMLElement, host: TourHost): Tour {
     host.closed();
   }
   const onKey = (e: KeyboardEvent): void => {
+    // A browser chord (Ctrl, Alt, Meta) or a modifier alone is the browser's, not a key to close the tour.
+    if (e.ctrlKey || e.altKey || e.metaKey || ["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
     e.preventDefault();
     e.stopPropagation();
     close();

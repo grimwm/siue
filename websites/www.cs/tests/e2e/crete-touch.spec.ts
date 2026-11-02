@@ -79,6 +79,7 @@ test.describe('with every tip seen', () => {
     const walked = (await now(page)).moves;
     expect(walked, `a press and ${walked - 1} repeats`).toBeGreaterThanOrEqual(3);
     expect(walked, 'never ahead of the moves it played').toBeLessThanOrEqual(8);
+    // That nothing more happens can only be seen by waiting: longer than a repeat, then the count is unchanged.
     await page.waitForTimeout(400);
     expect((await now(page)).moves, 'lifting stops it').toBe(walked);
     expect((await now(page)).player).toEqual({ r: 1, c: 1 + walked });
@@ -99,8 +100,10 @@ test.describe('with every tip seen', () => {
     expect(after.moves, 'and no other way').toBe(east + north);
     const tap = await centre(page, '.pad .mv-left');
     await touch(cdp, [[tap]]);
-    await page.waitForTimeout(100);
-    expect((await now(page)).moves, 'a tap is one move, its click no second').toBe(after.moves + 1);
+    await expect.poll(async () => (await now(page)).moves, 'a tap is one move').toBe(after.moves + 1);
+    // Nothing should follow (its click is no second move): a fixed wait is the only way to see that nothing happens.
+    await page.waitForTimeout(150);
+    expect((await now(page)).moves, 'its click no second').toBe(after.moves + 1);
     expect(errors).toEqual([]);
   });
 
@@ -139,6 +142,7 @@ test('the touch tour shows once when play starts on a touch screen, and Show Vie
   expect(await now(page), 'and moves nothing').toEqual(before);
   await page.reload();
   await open(page, ROOM);
+  // The tour would open a moment after the start card closes: wait past that moment, then see it did not.
   await page.waitForTimeout(300);
   await expect(page.locator('#tour'), 'once only').toHaveCount(0);
   await page.locator('#btn-menu-strip:visible, #btn-menu:visible').first().tap();

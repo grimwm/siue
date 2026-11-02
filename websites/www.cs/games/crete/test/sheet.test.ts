@@ -164,6 +164,33 @@ test('the view opens at 75° and north up, eases where it is sent, and home find
   assert.deepEqual(v.cur, { yaw: 360, pitch: START_PITCH });
 });
 
+test('home from the lowest tilt eases toward 75° and north up, never past them, even when a frame\'s time runs back', () => {
+  for (const yaw of [90, -90, 200, -45, 300]) {
+    const v = createSheetView();
+    v.turn(yaw, false);
+    v.tilt(-100, false);
+    v.home(true);
+    // A display frame stamped before the tap that started the ease: its time is negative.
+    const before = { ...v.cur };
+    v.step(-0.04, false);
+    assert.deepEqual(v.cur, before, `a backward frame leaves the view as it was, from ${yaw}°`);
+    for (let i = 0; i < 300 && v.step(1 / 60, false); i++) assert.ok(v.cur.pitch >= 10 && v.cur.pitch <= 90);
+    assert.equal(v.cur.pitch, START_PITCH);
+    assert.equal(((v.cur.yaw % 360) + 360) % 360, 0);
+  }
+});
+
+test('the view\'s tilt is held between 10° and straight down however it is set', () => {
+  const v = createSheetView();
+  v.set(0, -20);
+  assert.equal(v.cur.pitch, 10);
+  v.set(0, 120);
+  assert.equal(v.cur.pitch, 90);
+  v.tilt(-500, true);
+  for (let i = 0; i < 300 && v.step(1 / 60, false); i++) assert.ok(v.cur.pitch >= 10);
+  assert.equal(v.cur.pitch, 10);
+});
+
 test('a wall faces the viewer: the quarter nearest the heading', () => {
   assert.equal(faceQuarter(0), 0);
   assert.equal(faceQuarter(44), 0);

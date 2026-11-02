@@ -767,15 +767,18 @@ export function createUi(deps: UiDeps): Ui {
     }, SETTLE_MS);
   }
 
-  /** Eases the view toward where a button, a key or the compass sent it, a display frame at a time. */
+  /** Eases the view toward where a button, a key or the compass sent it, a display frame at a time. A frame's time
+   *  can come before the input that started the ease (a phone stamps the frame as it begins, then reads the tap), so
+   *  the time between frames is measured on the frames' own clock, the first counting as a sixtieth of a second; and
+   *  the next frame is asked for before this one is drawn, so the ease always finishes. */
   function ease(): void {
     if (easing) return;
-    let last = performance.now();
+    let last: number | null = null;
     const tick = (now: number): void => {
-      const moving = sheetView.step((now - last) / 1000, reducedMotion());
+      const moving = sheetView.step(last === null ? 1 / 60 : (now - last) / 1000, reducedMotion());
       last = now;
-      reframe();
       easing = moving ? requestAnimationFrame(tick) : 0;
+      reframe();
       if (!moving && zoom === 1) fit();
     };
     easing = requestAnimationFrame(tick);

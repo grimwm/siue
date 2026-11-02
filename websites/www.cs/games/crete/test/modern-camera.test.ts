@@ -20,6 +20,17 @@ test('easeCam snaps at once under reduced motion', () => {
   assert.deepEqual(cur, { yaw: 45, pitch: 45, tx: 2, tz: 2, zoom: 6 });
 });
 
+test('easeCam never moves away from the goal, nor past the tilt\'s limits, on a frame whose time runs back', () => {
+  const cur: Cam = { yaw: 90, pitch: MIN_PITCH, tx: 0, tz: 0, zoom: 8 };
+  const goal: Cam = { yaw: 0, pitch: START_PITCH, tx: 0, tz: 0, zoom: 8 };
+  const before = { ...cur };
+  easeCam(cur, goal, -0.04, false);
+  assert.deepEqual(cur, before, 'a backward frame leaves the camera as it was');
+  const low: Cam = { ...cur, pitch: 0 };
+  easeCam(low, { ...goal, pitch: MIN_PITCH }, 1 / 60, false);
+  assert.ok(low.pitch >= MIN_PITCH, `held at ${MIN_PITCH}°, not ${low.pitch}`);
+});
+
 const ASPECT = 1.6;
 /** The walls' room on screen at `pitch` (camera.ts). */
 const walls = (pitch: number) => 2 * WALL_H * Math.cos((pitch * Math.PI) / 180);

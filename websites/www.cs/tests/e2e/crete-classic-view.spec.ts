@@ -143,16 +143,20 @@ test('turned, the arrows move Theseus the way the screen shows and the figures s
     const box = (await page.locator('#stage-view').boundingBox())!;
     expect(at!.x).toBeGreaterThan(box.x);
     expect(at!.x).toBeLessThan(box.x + box.width);
-    const lit = await page.evaluate(([x, y]) => {
+    // The figures canvas repaints on the frame after the step, and the sheet is framed again once a turn rests, so
+    // the read finds his square afresh each time it looks.
+    await expect.poll(() => page.evaluate(() => {
+      const t = (window as unknown as Hooked).__creteTest;
+      const p = t.game.run.now.player;
+      const { x, y } = t.classic.at(p.c, p.r)!;
       const o = document.querySelector('.stage-figures') as HTMLCanvasElement;
       const r = o.getBoundingClientRect();
       const k = o.width / r.width;
-      const d = o.getContext('2d')!.getImageData(Math.round((x! - r.left) * k) - 4, Math.round((y! - r.top) * k) - 30, 8, 30).data;
+      const d = o.getContext('2d')!.getImageData(Math.round((x - r.left) * k) - 4, Math.round((y - r.top) * k) - 30, 8, 30).data;
       let n = 0;
       for (let i = 3; i < d.length; i += 4) if (d[i]! > 200) n++;
       return n;
-    }, [at!.x, at!.y]);
-    expect(lit, `Theseus stands on his square at ${yaw}°`).toBeGreaterThan(20);
+    }), `Theseus stands on his square at ${yaw}°`).toBeGreaterThan(20);
   }
   expect(errors).toEqual([]);
 });

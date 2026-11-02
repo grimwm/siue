@@ -54,6 +54,7 @@ export const WEIGHTS: Record<string, number> = {
   'tankity-a11y.spec.ts': 10,
   'games-hub.spec.ts': 8,
   'home-eye.spec.ts': 8,
+  'home-nav.spec.ts': 40,
   'cylon-help.spec.ts': 6,
   'cylon-play.spec.ts': 25,
   'tankity-touch.spec.ts': 3,

@@ -299,3 +299,18 @@ test('pictures follow the look: Classic draws the atlas sprite, Modern the pre-r
   assert.equal(pics.length, LISTED.reduce((n, e) => n + (e.members?.length ?? 1), 0), 'a family draws each member');
   assert.ok(pics.every(l => l === 'modern'), 'every Entries picture is Modern');
 });
+
+test('after Reset Tips a pickup met before shows its first card again, and its Dictionary entry stays open', () => {
+  open(['########', '#Pz.zE.#', '########']);
+  data['crete-met'] = JSON.stringify(['mirror']);
+  closeAll();
+  key('q');
+  click(byId(root('menu-root'), 'menu-reset-tips'));
+  click(byId(root('menu-root'), 'menu-reset-yes'));
+  key('q');
+  assert.equal(flow.top(), null);
+  right();
+  assert.equal(flow.top(), 'meet', 'the mirror\'s card shows again');
+  key('Enter');
+  assert.equal(met.has('mirror'), true, 'its entry stays open');
+});

@@ -22,6 +22,7 @@ export const WEIGHTS: Record<string, number> = {
   'crete-pieces.spec.ts': 3,
   'crete-play.spec.ts': 15,
   'crete-solver.spec.ts': 8,
+  'crete-touch.spec.ts': 4,
   'tankity-start.spec.ts': 12,
   'tankity-layout.spec.ts': 15,
   'tankity-sky-camera.spec.ts': 70,

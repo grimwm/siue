@@ -7,7 +7,7 @@ import atlasJson from '../fx/sprites/tiles.json' with { type: 'json' };
 import { ACTIVE, ENTRIES, ENTRY, FAMILIES, HAZARD_ENTRY, HIDDEN, LISTED, OBJECT_ENTRY, PLAIN, TERRAIN_ENTRY, backpack, cardOf, locked, meetingsOf, metId } from '../src/dictionary.ts';
 import iconsJson from '../fx/sprites/modern-icons.json' with { type: 'json' };
 import { ICON_MODELS } from '../src/icons-models.ts';
-import { ALL_MET, MET_KEY, createMet } from '../src/met.ts';
+import { ALL_MET, CARDS_KEY, MET_KEY, createMet } from '../src/met.ts';
 import { meetNotices } from '../src/notices.ts';
 import { parse } from '../src/puzzle/level.ts';
 import { initial } from '../src/puzzle/state.ts';
@@ -165,6 +165,32 @@ test('every entry has a Modern icon in the rendered sheet, and a model to render
     assert.ok(at.x + sheet.cell <= sheet.width && at.y + sheet.cell <= sheet.height, `${e.id}'s icon lies in the sheet`);
   }
   assert.deepEqual(Object.keys(ICON_MODELS).sort(), ENTRIES.map(e => e.id).sort(), 'no icon for an entry that is gone');
+});
+
+test('Reset Tips shows every first card again and keeps every entry open; an old store reads its cards as its met', () => {
+  const st = memory({ [MET_KEY]: JSON.stringify(['mirror', 'key-red']) });
+  const met = createMet(st);
+  assert.equal(met.carded('mirror'), true, 'before any reset the cards shown are the entries met');
+  assert.equal(met.carded('keys'), true, 'a key kept by its colour has shown the Keys card');
+  assert.deepEqual(meetNotices(['mirror'], met, true), { cards: [], banners: ['mirror'] });
+  met.resetCards();
+  const after = createMet(st);
+  assert.equal(after.has('mirror'), true, 'the Dictionary entry stays open');
+  assert.equal(after.carded('mirror'), false);
+  assert.deepEqual(meetNotices(['mirror'], after, true), { cards: ['mirror'], banners: [] }, 'its card shows again');
+  assert.equal(after.add('mirror'), true, 'showing it again notes the card');
+  assert.equal(createMet(st).carded('mirror'), true);
+  assert.equal(createMet(st).carded('keys'), false, 'only that card');
+  assert.deepEqual(JSON.parse(st.data[MET_KEY]!), ['mirror', 'key-red'], 'met is untouched');
+  assert.deepEqual(JSON.parse(st.data[CARDS_KEY]!), ['mirror']);
+  assert.equal(createMet(memory({ [MET_KEY]: JSON.stringify([ALL_MET]) })).carded('cake'), true, 'the specs\' "*" still means no cards');
+  const fresh = memory({ [MET_KEY]: JSON.stringify(['mirror']) });
+  createMet(fresh).noteCard('tour');
+  assert.equal(createMet(fresh).carded('tour'), true, 'the tour, noted once, is seen');
+  assert.equal(createMet(fresh).carded('mirror'), true, 'noting it keeps the cards met before');
+  assert.equal(createMet(fresh).has('tour'), false, 'and opens no entry');
+  createMet(fresh).resetCards();
+  assert.equal(createMet(fresh).carded('tour'), false, 'Reset Tips shows the tour again');
 });
 
 test('the met store keeps what was met across loads; "*" is every entry; blocked or corrupt storage reads as none', () => {

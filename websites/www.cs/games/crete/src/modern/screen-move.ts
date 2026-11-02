@@ -1,4 +1,4 @@
-/* The Island of Crete, modern look: a key, pad or swipe press is a direction on the screen; the board moves along the
+/* The Island of Crete, modern look: a key or pad press is a direction on the screen; the board moves along the
  * grid. The view may face any heading, so screen-up is the grid direction closest to "away from the camera": the
  * nearest quarter turn to the heading. Near a 45° boundary the quarter last used holds for a few degrees more, so a
  * view left on the boundary does not flip the mapping back and forth. DOM-free. */

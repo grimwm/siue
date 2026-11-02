@@ -43,7 +43,6 @@ import type { PieceInfo } from './scene/terrain.ts';
 import { createKit } from './scene/textures.ts';
 import { createThread } from './scene/thread.ts';
 import { LOW_H, WALL_H, createWalls } from './scene/walls.ts';
-import type { MoveAction } from '../keys.ts';
 import type { Seen } from './scene/walls.ts';
 
 export interface ModernHost {
@@ -60,8 +59,6 @@ export interface ModernHost {
   covered(): boolean;
   /** A camera gesture happened (closes the start card). */
   gesture(): void;
-  /** A finger swiped the board (src/swipe.ts): move Theseus that way as the screen shows it. */
-  swipe(dir: MoveAction): void;
   reducedMotion(): boolean;
 }
 

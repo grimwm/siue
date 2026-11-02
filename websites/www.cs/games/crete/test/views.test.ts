@@ -252,7 +252,7 @@ function menuProps(over: Partial<MenuProps> = {}): MenuProps {
     open: true, muted: false, music: true, background: true, fullscreen: false, look: 'modern', walls: 'solid', pad: 'left', minimap: false,
     log: [{ text: 'The Mouth of the Labyrinth', tone: 'info' }, { text: 'Taken: a relic.', tone: 'good' }],
     help: helpLines(KEYS, TOOLS),
-    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onWalls: noop, onPad: noop, onMinimap: noop, onViewTips: noop, onLore: noop, onDictionary: noop, onQuit: noop, onClose: noop, ...over,
+    onSound: noop, onMusic: noop, onBackground: noop, onFullscreen: noop, onWalls: noop, onPad: noop, onMinimap: noop, viewTips: true, onViewTips: noop, resetAsking: false, onResetAsk: noop, onResetTips: noop, onLore: noop, onDictionary: noop, onQuit: noop, onClose: noop, ...over,
   };
 }
 
@@ -307,6 +307,28 @@ test('the menu has no View choice: the modern camera is one free camera, and Wal
   assert.equal(maybeById(root, 'walls-solid'), undefined, 'Classic has no walls to choose');
 });
 
+test('Reset Tips asks first, in the menu itself: the row asks, Cancel takes it back, Reset resets', () => {
+  const root = mount();
+  const said: string[] = [];
+  renderMenu(root, menuProps({ onResetAsk: a => said.push(a ? 'ask' : 'cancel'), onResetTips: () => said.push('reset') }));
+  assert.equal(maybeById(root, 'menu-reset-ask'), undefined);
+  click(byId(root, 'menu-reset-tips'));
+  renderMenu(root, menuProps({ resetAsking: true, onResetAsk: a => said.push(a ? 'ask' : 'cancel'), onResetTips: () => said.push('reset') }));
+  assert.equal(maybeById(root, 'menu-reset-tips'), undefined);
+  assert.ok(byId(root, 'menu-reset-ask').textContent!.includes('Dictionary keeps'));
+  click(byId(root, 'menu-reset-no'));
+  click(byId(root, 'menu-reset-yes'));
+  assert.deepEqual(said, ['ask', 'cancel', 'reset']);
+});
+
+test('Show View Tips shows when the page says so: in the modern look, or on a touch screen in either', () => {
+  const root = mount();
+  renderMenu(root, menuProps({ viewTips: false }));
+  assert.equal(maybeById(root, 'menu-view-tips'), undefined);
+  renderMenu(root, menuProps({ look: 'classic', viewTips: true }));
+  assert.ok(maybeById(root, 'menu-view-tips'));
+});
+
 test('the menu has a Mini map switch, off by default, only while the look is modern', () => {
   const root = mount();
   let flips = 0;
@@ -320,7 +342,7 @@ test('the menu has a Mini map switch, off by default, only while the look is mod
   assert.equal(maybeById(root, 'minimap-switch'), undefined, 'Classic never shows it');
 });
 
-test('the menu has Show View Tips, with its key, only while the look is modern', () => {
+test('the menu has Show View Tips, with its key, when the page offers it', () => {
   const root = mount();
   let asked = 0;
   renderMenu(root, menuProps({ onViewTips: () => asked++ }));
@@ -329,8 +351,8 @@ test('the menu has Show View Tips, with its key, only while the look is modern',
   assert.equal(tabsOf(b)[0]?.textContent, KEYS.tips.label);
   click(b);
   assert.equal(asked, 1);
-  renderMenu(root, menuProps({ look: 'classic' }));
-  assert.equal(maybeById(root, 'menu-view-tips'), undefined, 'Classic has no view tips');
+  renderMenu(root, menuProps({ look: 'classic', viewTips: false }));
+  assert.equal(maybeById(root, 'menu-view-tips'), undefined, 'Classic with a mouse has no view tips');
 });
 
 test('the menu has a Lore Book button that calls back', () => {

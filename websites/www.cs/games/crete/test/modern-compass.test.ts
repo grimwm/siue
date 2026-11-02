@@ -97,24 +97,25 @@ test('the face shows the view: the needle turns with the heading, the dial squas
   assert.ok(free.squash < start.squash && free.squash > low.squash, 'the squash grows as the view tilts');
 });
 
-test('the compass shows a view moved by the board\'s gestures too: two fingers twisting and sliding, a left-button drag', () => {
+test('the compass shows a view moved by the board\'s gestures too: one finger sliding up, a left-button drag', () => {
   let t = 0;
   const g = createGestures(() => t);
   const ops: CamOp[] = [];
-  // Two fingers side by side slide up together: a tilt toward angled.
-  ops.push(...g.down({ id: 1, x: 100, y: 300, type: 'touch', button: 0 }), ...g.down({ id: 2, x: 200, y: 300, type: 'touch', button: 0 }));
+  // One finger slides up: a tilt toward the lowest.
+  ops.push(...g.down({ id: 1, x: 100, y: 300, type: 'touch', button: 0 }));
   for (let y = 300; y >= 240; y -= 10) {
     t += 16;
-    ops.push(...g.move({ id: 1, x: 100, y, type: 'touch', button: 0 }), ...g.move({ id: 2, x: 200, y, type: 'touch', button: 0 }));
+    ops.push(...g.move({ id: 1, x: 100, y, type: 'touch', button: 0 }));
   }
-  ops.push(...g.up({ id: 1, x: 100, y: 240, type: 'touch', button: 0 }), ...g.up({ id: 2, x: 200, y: 240, type: 'touch', button: 0 }));
+  ops.push(...g.up({ id: 1, x: 100, y: 240, type: 'touch', button: 0 }));
   const tilted = play(ops);
-  assert.ok(tilted.pitch < START_PITCH, `two fingers tilted the view: ${tilted.pitch}`);
+  assert.ok(tilted.pitch < START_PITCH, `one finger tilted the view: ${tilted.pitch}`);
   const face = compassFace(tilted);
   assert.ok(face.tilt > 1 / 3 && face.squash < Math.sin((75 * Math.PI) / 180), 'and the compass leans with it');
   // A left-button drag across turns the view; the needle follows it.
-  const turn = [...g.down({ id: 9, x: 0, y: 0, type: 'mouse', button: 0 }), ...g.move({ id: 9, x: -100, y: 0, type: 'mouse', button: 0 }),
-    ...g.up({ id: 9, x: -100, y: 0, type: 'mouse', button: 0 })];
+  const turn = [...g.down({ id: 9, x: 0, y: 0, type: 'mouse', button: 0 })];
+  for (let x = -10; x >= -100; x -= 10) turn.push(...g.move({ id: 9, x, y: 0, type: 'mouse', button: 0 }));
+  turn.push(...g.up({ id: 9, x: -100, y: 0, type: 'mouse', button: 0 }));
   const turned = play(turn, tilted);
   near(turned.yaw, 35);
   assert.equal(compassFace(turned).needle, turned.yaw, 'left at 35°, and the needle shows it');

@@ -20,6 +20,10 @@ import type { Pics } from "./ui/sprite.tsx";
 import { BANNER_MS, isFirst as firstMeeting, meetNotices } from "./notices.ts";
 import { KEYS, actionFor, isMove, itemFor } from "./keys.ts";
 import type { MoveAction } from "./keys.ts";
+import { padDir, repeatDue } from "./pad.ts";
+import { TOUR_ID, showTour, tourDue } from "./tour.ts";
+import type { Tour } from "./tour.ts";
+import { HINT_KEY } from "./modern/hint.ts";
 import { createLayers } from "./layers.ts";
 import type { LayerName } from "./layers.ts";
 import type { FoundPages } from "./pages.ts";
@@ -165,8 +169,6 @@ export interface Ui {
   isFirst(id: string): boolean;
   /** Closes the start card, as a move does. */
   closeStart(): void;
-  /** A finger swiped the board (either look): Theseus moves that way as the screen shows it, unless a card is up. */
-  swipe(dir: MoveAction): void;
   bindControls(controls: Controls): void;
   /** The title card, alone; `hint` adds how to close an installed app, and `note` why a share link did not open. */
   showTitle(hint: boolean, note?: string): void;
@@ -333,6 +335,7 @@ export function createUi(deps: UiDeps): Ui {
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
+    if (!layers.isOpen("menu")) resetAsking = false;
     if (editorShown && !layers.has("editor")) {
       editorShown = false;
       controls?.editor?.close();
@@ -356,6 +359,7 @@ export function createUi(deps: UiDeps): Ui {
     showHeartsWhenClear();
     drawLayers();
     deps.cards?.(layers.stack());
+    tourWhenClear();
   });
 
   /** The campaign index of chapter `n`'s first level. */
@@ -647,9 +651,22 @@ export function createUi(deps: UiDeps): Ui {
       onWalls: (w) => controls?.setWalls?.(w),
       onPad: (side) => controls?.setPad?.(side),
       onMinimap: () => controls?.toggleMinimap?.(),
+      viewTips: look === "modern" || touchScreen(),
       onViewTips: () => {
         layers.close("menu");
-        controls?.showViewTips?.();
+        viewTips();
+      },
+      resetAsking,
+      onResetAsk: (asking) => {
+        resetAsking = asking;
+        drawLayers();
+        document.getElementById(asking ? "menu-reset-no" : "menu-reset-tips")?.focus();
+      },
+      onResetTips: () => {
+        resetAsking = false;
+        resetTips();
+        drawLayers();
+        document.getElementById("menu-reset-tips")?.focus();
       },
       onLore: () => {
         loreShown = null;
@@ -674,8 +691,8 @@ export function createUi(deps: UiDeps): Ui {
     const toast = $("toast");
     toast.textContent = text;
     toast.className = tone ? `toast show ${tone}` : "toast show";
-    window.clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => toast.classList.remove("show"), TOAST_MS);
+    timers.clearTimeout(toastTimer);
+    toastTimer = timers.setTimeout(() => { toast.className = toast.className.split(" ").filter((c) => c !== "show").join(" "); }, TOAST_MS);
     if (layers.isOpen("menu")) drawLayers();
   }
 
@@ -977,6 +994,69 @@ export function createUi(deps: UiDeps): Ui {
   }
 
   /** The hearts line, once a level gone on to has its board in view: no card open, its start card included. */
+  /** Reset Tips in the menu is asking whether to go ahead. */
+  let resetAsking = false;
+  /** The touch tour showing, if it is. */
+  let tour: Tour | null = null;
+  const touchScreen = (): boolean => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+
+  /** A level's start card was up at the last change of cards: its closing is the moment play starts. */
+  let startWasUp = false;
+  /** Play has started since the touch tour last could show, and it waits for the cards to clear. */
+  let tourWaits = false;
+
+  /** The touch tour, by itself, the first time play starts on a touch screen, once no card is over the board. It
+   *  waits a moment so a card opening in the same breath (a first card, the next level's start card) goes first. */
+  function tourWhenClear(): void {
+    const startUp = layers.isOpen("start");
+    if (startWasUp && !startUp) tourWaits = true;
+    startWasUp = startUp;
+    if (!tourWaits || tour || !met) return;
+    timers.setTimeout(() => {
+      const run = (controls?.game ?? game)?.run;
+      if (!tourWaits || tour || !met) return;
+      const seen = met.carded(TOUR_ID);
+      if (seen || !touchScreen()) {
+        tourWaits = false;
+        return;
+      }
+      if (tourDue({ touch: true, seen, playing: run?.now.outcome === "playing", covered: layers.any() })) {
+        tourWaits = false;
+        openTour();
+      }
+    }, 0);
+  }
+
+  function openTour(): void {
+    if (tour) return;
+    met?.noteCard(TOUR_ID);
+    tour = showTour($("frame"), {
+      surface: () => document.getElementById(modernBoard ? "stage3d" : "stage-view"),
+      reducedMotion,
+      closed: () => { tour = null; },
+    });
+  }
+
+  /** Show View Tips (the menu, the ? key): the touch tour on a touch screen, else the modern board's tips. */
+  function viewTips(): void {
+    if (touchScreen() && (controls?.game ?? game)?.run) openTour();
+    else controls?.showViewTips?.();
+  }
+
+  /** Reset Tips: every first card, the touch tour and the modern board's view tips show again; the Dictionary keeps
+   *  every entry met. The view tips come back from the next visit on. */
+  function resetTips(): void {
+    met?.resetCards();
+    // Play is under way: once the menu closes, the touch tour shows as it did the first time.
+    tourWaits = true;
+    try {
+      localStorage.removeItem(HINT_KEY);
+    } catch {
+      // No storage: the view tips keep their record for this visit.
+    }
+    say("Tips reset: first-time tips and cards will show again.", "info");
+  }
+
   function showHeartsWhenClear(): void {
     if (!heartsQueued || layers.any() || !(controls?.game ?? game)?.run) return;
     heartsQueued = false;
@@ -1033,10 +1113,15 @@ export function createUi(deps: UiDeps): Ui {
       onMenu: () => layers.open("menu"),
       look,
       thumb: deps.thumb,
-      onMove: (dir) => act(() => {
-        layers.close("start");
-        g.press({ kind: "move", dir: moveDir(dir) });
-      })(),
+      // A pointer on the pad moves as it comes down (bindPad); its click is not a second move. Enter or Space on a
+      // focused arrow still clicks it.
+      onMove: (dir) => {
+        if (padPointer) return;
+        act(() => {
+          layers.close("start");
+          g.press({ kind: "move", dir: moveDir(dir) });
+        })();
+      },
       onWait: act(() => g.press({ kind: "wait" })),
       onUndo: act(() => g.press("undo")),
       onRestart: act(() => g.press("restart")),
@@ -1112,18 +1197,95 @@ export function createUi(deps: UiDeps): Ui {
     return id === undefined || !id.startsWith(prefix) || defaults.includes(id);
   }
 
-  /** A swipe on either board: a move as the screen shows it, closing the start card as a move key does. */
-  function swipe(dir: MoveAction): void {
-    const g = controls?.game;
-    if (!g || layers.stack().some((n) => n !== "start")) return;
-    controls?.wake();
-    layers.close("start");
-    g.press({ kind: "move", dir: moveDir(dir) });
+  /** True from a pointer coming down on the move pad until the click that follows it has passed. */
+  let padPointer = false;
+
+  /** The move pad under a finger, pen or mouse (src/pad.ts): an arrow moves as it is pressed, again and again while
+   *  it is held, and a slide across the pad moves the way of each arrow it enters and stops over the centre. Holding
+   *  stops when the finger lifts, when a card covers the board, when the try ends or Theseus is caught, when a move
+   *  goes nowhere (a wall, a snare), and when another level opens. */
+  function bindPad(): void {
+    const root = $("strip-root");
+    let held: { id: number; pad: HTMLElement; dir: MoveAction | null; at: number; repeats: number; stalled: boolean; hearts: number; opens: number } | null = null;
+    let ticker = 0;
+    const blocked = (): boolean => layers.stack().some((n) => n !== "start");
+    const stop = (): void => {
+      held = null;
+      clearInterval(ticker);
+      ticker = 0;
+    };
+    /** One move the way the screen shows `dir`; false when it could not be made. */
+    const step = (dir: MoveAction): boolean => {
+      const g = controls?.game;
+      const run = g?.run;
+      if (!g || !run || run.now.outcome !== "playing" || blocked()) return false;
+      controls?.wake();
+      layers.close("start");
+      const moves = run.now.moves;
+      g.press({ kind: "move", dir: moveDir(dir) });
+      return (g.run?.now.moves ?? moves) !== moves;
+    };
+    const press = (dir: MoveAction | null): void => {
+      if (!held) return;
+      held.dir = dir;
+      held.repeats = 0;
+      held.at = performance.now();
+      held.stalled = dir ? !step(dir) : false;
+    };
+    const tick = (): void => {
+      const g = controls?.game;
+      const h = held;
+      if (!h || !g?.run) return stop();
+      const now = g.run.now;
+      if (g.opens !== h.opens || now.outcome !== "playing" || now.hearts < h.hearts || blocked()) return stop();
+      if (!h.dir || h.stalled || !repeatDue(performance.now() - h.at, h.repeats, g.anim !== null)) return;
+      h.repeats++;
+      h.at = performance.now();
+      h.stalled = !step(h.dir);
+    };
+    const dirAt = (pad: HTMLElement, e: PointerEvent): MoveAction | null => {
+      const hub = pad.querySelector(".pad-hub")?.getBoundingClientRect() ?? pad.getBoundingClientRect();
+      return padDir(e.clientX - (hub.left + hub.width / 2), e.clientY - (hub.top + hub.height / 2), hub.width / 2);
+    };
+    root.addEventListener("pointerdown", (ev) => {
+      const e = ev as PointerEvent;
+      const pad = (e.target as Element | null)?.closest?.(".pad") as HTMLElement | null;
+      if (!pad || (e.pointerType === "mouse" && e.button !== 0) || held) return;
+      // No focus ring, text selection or page scroll from a press on the pad.
+      e.preventDefault();
+      padPointer = true;
+      try {
+        pad.setPointerCapture(e.pointerId);
+      } catch {
+        // A synthetic pointer cannot be captured; it still reaches the pad.
+      }
+      const run = controls?.game?.run;
+      held = { id: e.pointerId, pad, dir: null, at: 0, repeats: 0, stalled: false, hearts: run?.now.hearts ?? 0, opens: controls?.game?.opens ?? 0 };
+      press(dirAt(pad, e));
+      ticker = window.setInterval(tick, 30);
+    });
+    root.addEventListener("pointermove", (ev) => {
+      const e = ev as PointerEvent;
+      if (!held || e.pointerId !== held.id) return;
+      e.preventDefault();
+      const dir = dirAt(held.pad, e);
+      if (dir !== held.dir) press(dir);
+    });
+    const end = (ev: Event): void => {
+      const e = ev as PointerEvent;
+      if (held && e.pointerId === held.id) stop();
+      // The click this lift makes comes before the timer: it is the press already made, not a second move. Cleared
+      // whether or not the hold had already stopped on its own (a card, a catch), so Enter and Space move again.
+      if (padPointer) setTimeout(() => { padPointer = false; }, 0);
+    };
+    for (const t of ["pointerup", "pointercancel", "lostpointercapture"]) root.addEventListener(t, end);
+    root.addEventListener("contextmenu", (e) => {
+      if ((e.target as Element | null)?.closest?.(".pad")) e.preventDefault();
+    });
   }
 
   /** The classic board's own pointer controls and camera buttons, as the modern board's camera has them: one finger
-   *  swipes Theseus a cell; two fingers twist to turn, slide up and down together to tilt, pinch to zoom and drag to
-   *  pan; the left button drags to turn and tilt, the right or middle button to pan; the wheel zooms toward the
+   *  turns and tilts, as the left button does; two fingers twist to turn, pinch to zoom and drag to pan; the left button drags to turn and tilt, the right or middle button to pan; the wheel zooms toward the
    *  pointer; a double tap or double click goes back to the opening view. The turn, zoom and Reset buttons stand at
    *  the board's top-right, behind a View button on a narrow touch screen, and the compass at its bottom-right. Every
    *  control is ignored while a card other than the start card is open. */
@@ -1159,8 +1321,7 @@ export function createUi(deps: UiDeps): Ui {
     const apply = (ops: CamOp[]): void => {
       if (!ops.length || blocked()) return;
       for (const op of ops) {
-        if (op.kind === "swipe") swipe(op.dir);
-        else if (op.kind === "zoom") zoomBy(1 / op.factor, { x: op.x, y: op.y });
+        if (op.kind === "zoom") zoomBy(1 / op.factor, { x: op.x, y: op.y });
         else if (op.kind === "pan") {
           const run = game?.run;
           if (zoom === 1 || !frame || !run) continue;
@@ -1191,6 +1352,12 @@ export function createUi(deps: UiDeps): Ui {
     view.addEventListener("pointermove", (e) => apply(gestures.move(ptr(e as PointerEvent))));
     view.addEventListener("pointerup", (e) => apply(gestures.up(ptr(e as PointerEvent))));
     view.addEventListener("pointercancel", (e) => gestures.cancel((e as PointerEvent).pointerId));
+    // A finger that lost its capture, or left the board without one, is gone: it never pairs with the next touch.
+    view.addEventListener("lostpointercapture", (e) => gestures.cancel((e as PointerEvent).pointerId));
+    view.addEventListener("pointerleave", (e) => {
+      const p = e as PointerEvent;
+      if (p.pointerType !== "mouse" && !view.hasPointerCapture?.(p.pointerId)) gestures.cancel(p.pointerId);
+    });
     view.addEventListener("dblclick", () => {
       if (!blocked()) reset();
     });
@@ -1497,7 +1664,7 @@ export function createUi(deps: UiDeps): Ui {
         g.auto();
       } else if (action === "tips") {
         ev.preventDefault();
-        c.showViewTips?.();
+        viewTips();
       } else if (action === "look") {
         ev.preventDefault();
         if (!ev.repeat) c.setLook?.(look === "modern" ? "classic" : "modern");
@@ -1512,6 +1679,7 @@ export function createUi(deps: UiDeps): Ui {
 
     document.addEventListener("pointerdown", c.wake);
     bindClassicView();
+    bindPad();
     // A tap on the toast puts it away.
     $("toast").addEventListener("click", () => $("toast").classList.remove("show"));
 
@@ -1603,6 +1771,5 @@ export function createUi(deps: UiDeps): Ui {
     layersOpen: () => layers.stack().length > 0,
     isFirst,
     closeStart: () => layers.close("start"),
-    swipe,
   };
 }

@@ -19,7 +19,7 @@ export interface MeetPlan {
 /** What a turn's meetings show. `shown` are entries whose first card already showed this turn (the animation stopped
  *  for them), so they get neither a card nor a banner. A card is a family's (src/dictionary.ts FAMILIES) when the
  *  entry has one: two keys of new colours in one turn show the one Keys card. */
-export function meetNotices(meets: readonly string[], met: Pick<Met, 'has'>, cards: boolean, shown: ReadonlySet<string> = new Set()): MeetPlan {
+export function meetNotices(meets: readonly string[], met: Pick<Met, 'carded'>, cards: boolean, shown: ReadonlySet<string> = new Set()): MeetPlan {
   const plan: MeetPlan = { cards: [], banners: [] };
   for (const id of meets) {
     if (shown.has(id) || plan.cards.includes(cardOf(id)) || plan.banners.includes(id)) continue;
@@ -30,4 +30,4 @@ export function meetNotices(meets: readonly string[], met: Pick<Met, 'has'>, car
 }
 
 /** Whether meeting entry `id` now is a first, whose card stops the animation. */
-export const isFirst = (id: string, met: Pick<Met, 'has'>, cards: boolean): boolean => cards && !met.has(metId(id));
+export const isFirst = (id: string, met: Pick<Met, 'carded'>, cards: boolean): boolean => cards && !met.carded(metId(id));

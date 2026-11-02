@@ -69,7 +69,7 @@ const line = (page: Page) => page.evaluate(() => {
   const r = t.solve(t.game.run.now);
   return r.solved ? r.line.map(a => (a.kind === 'move' ? a.dir! : a.kind)) : [];
 });
-/** A one-finger touch swipe of (dx, dy) CSS pixels across the middle of `sel`, as pointer events. */
+/** One finger dragged (dx, dy) CSS pixels across the middle of `sel`, as touch pointer events. */
 async function swipe(page: Page, sel: string, dx: number, dy: number): Promise<void> {
   await page.evaluate(([sel, dx, dy]) => {
     const el = document.querySelector(sel as string)!;
@@ -431,14 +431,11 @@ test('Full screen from the menu takes the Esc lock; Esc changes nothing and the 
   await ctx.close();
 });
 
-test('a finger swipe on the classic board moves Theseus that way', async ({ page }) => {
+test('a finger stroke on the classic board never moves Theseus', async ({ page }) => {
   const errors = await beginTrial1(page);
   const from = await now(page);
-  for (const [dx, dy] of [[60, 0], [-60, 0], [0, 60], [0, -60]]) {
-    await swipe(page, '#stage', dx!, dy!);
-    if ((await now(page)).moves > from.moves) break;
-  }
-  expect((await now(page)).moves, 'one swipe, one move').toBe(from.moves + 1);
+  for (const [dx, dy] of [[60, 0], [-60, 0], [0, 60], [0, -60]]) await swipe(page, '#stage', dx!, dy!);
+  expect((await now(page)).moves, 'no stroke is a move').toBe(from.moves);
   expect(errors).toEqual([]);
 });
 

@@ -1,6 +1,6 @@
 /* The Island of Crete, modern look: the camera's controls. Pointers on the modern canvas go through the gesture
- * reader (gestures.ts) to the camera: one finger swipes Theseus; two fingers pan, twist (turn) and pinch (zoom), or
- * slide up and down together to tilt; the left button turns across and tilts up and down, the right or middle button
+ * reader (gestures.ts) to the camera: one finger, or the left button, turns across and tilts up and down; two fingers
+ * pan, twist (turn) and pinch (zoom); the right or middle button
  * pans, the wheel zooms toward the pointer, and a double tap or double click resets. The view stays at whatever
  * heading and tilt the player leaves it. Buttons at the board's top-right turn the view a quarter either way, zoom it
  * in and out, and reset it; on a narrow touch screen a View button shows and hides them. A compass at the board's
@@ -9,7 +9,6 @@
  * tap or click on it (or Enter or Space) resets the view (compass.ts); while it has the focus, Left and Right turn the
  * view 15° and Up and Down lean it toward the lowest tilt (10°) and back toward straight down, without moving Theseus. Every control is ignored
  * while a layer covers the board. */
-import type { MoveAction } from '../keys.ts';
 import { compassFace, createCompassDrag } from './compass.ts';
 import { createGestures } from './gestures.ts';
 import { HINT_KEY, createHint, hintText, readHint } from './hint.ts';
@@ -38,8 +37,6 @@ export interface ControlHost {
   covered(): boolean;
   /** A camera gesture happened (closes the start card). */
   gesture(): void;
-  /** A finger swiped the board: move Theseus that way as the screen shows it. */
-  swipe(dir: MoveAction): void;
 }
 
 export interface Controls {
@@ -114,8 +111,7 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     if (!ops.length || host.blocked()) return;
     host.gesture();
     for (const op of ops) {
-      if (op.kind === 'swipe') host.swipe(op.dir);
-      else if (op.kind === 'turn') cam.turn(op.deg, false);
+      if (op.kind === 'turn') cam.turn(op.deg, false);
       else if (op.kind === 'tilt') cam.tilt(op.deg, false);
       else if (op.kind === 'pan') cam.pan(op.dx, op.dy);
       else if (op.kind === 'zoom') {
@@ -138,6 +134,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   const move = (e: PointerEvent) => apply(gestures.move(ptr(e)));
   const up = (e: PointerEvent) => apply(gestures.up(ptr(e)));
   const cancel = (e: PointerEvent) => apply(gestures.cancel(e.pointerId));
+  /** A finger that left the board without its capture, or lost it, is gone: it never pairs with the next touch. */
+  const leave = (e: PointerEvent) => { if (e.pointerType !== 'mouse' && !canvas.hasPointerCapture?.(e.pointerId)) cancel(e); };
   const dbl = () => {
     if (host.blocked()) return;
     host.gesture();
@@ -156,6 +154,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', cancel);
+  canvas.addEventListener('lostpointercapture', cancel);
+  canvas.addEventListener('pointerleave', leave);
   canvas.addEventListener('dblclick', dbl);
   canvas.addEventListener('contextmenu', noMenu);
   canvas.addEventListener('wheel', wheel, { passive: false });
@@ -243,7 +243,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     hideTimer = window.setTimeout(() => { pill.hidden = true; }, 300);
   }
   const covered = (): boolean => host.covered() || document.hidden || parent.closest('[hidden]') !== null;
-  if (!hint.over()) ticker = window.setInterval(tick, HINT_TICK_MS);
+  // On a touch screen the touch tour (src/tour.ts) teaches the view instead: the hint shows only when asked for.
+  if (!hint.over() && !matchMedia('(pointer: coarse)').matches) ticker = window.setInterval(tick, HINT_TICK_MS);
   pill.addEventListener('click', () => hintChange(hint.dismiss()));
 
   return {
@@ -264,6 +265,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
       canvas.removeEventListener('pointermove', move);
       canvas.removeEventListener('pointerup', up);
       canvas.removeEventListener('pointercancel', cancel);
+      canvas.removeEventListener('lostpointercapture', cancel);
+      canvas.removeEventListener('pointerleave', leave);
       canvas.removeEventListener('dblclick', dbl);
       canvas.removeEventListener('contextmenu', noMenu);
       canvas.removeEventListener('wheel', wheel);
@@ -308,6 +311,8 @@ export function createCompassButton(id: string, host: Pick<ControlHost, 'blocked
     }
   };
   compass.style.touchAction = 'none';
+  // A press on the compass is the compass's alone: nothing under or round it (the board's own gestures) reads it.
+  for (const t of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) compass.addEventListener(t, e => e.stopPropagation());
   compass.addEventListener('pointerdown', (e: PointerEvent) => {
     pointer(e.pointerType);
     if (host.blocked() || (e.pointerType === 'mouse' && e.button !== 0)) return;

@@ -45,8 +45,15 @@ export interface MenuProps {
   onWalls: (walls: WallMode) => void;
   onPad: (side: PadSide) => void;
   onMinimap: () => void;
-  /** Show View Tips: shown only while the look is modern. */
+  /** Whether Show View Tips shows: in the modern look, and on a touch screen in either look (the touch tour). */
+  viewTips: boolean;
   onViewTips: () => void;
+  /** Reset Tips is asking whether to go ahead. */
+  resetAsking: boolean;
+  /** Reset Tips pressed (true), or its Cancel (false). */
+  onResetAsk: (asking: boolean) => void;
+  /** Reset Tips' Reset: every first-time help shows again. */
+  onResetTips: () => void;
   onLore: () => void;
   onDictionary: () => void;
   onQuit: () => void;
@@ -109,18 +116,21 @@ export function Menu(p: MenuProps) {
                 </div>
               </div>
             )}
-            {p.look === 'modern' && (
-              <Button id="minimap-switch" class="menu-row" checked={p.minimap} onClick={p.onMinimap}>
-                <span class="menu-row-name">Mini Map<small>The whole level in a corner of the board</small></span>
-                <span class="switch" aria-hidden="true" />
-              </Button>
-            )}
-            {p.look === 'modern' && (
-              <Button id="menu-view-tips" class="menu-row" keyLabel={KEYS.tips.label} onClick={p.onViewTips}>
-                <span class="menu-row-name">Show View Tips<small>How to turn, tilt and reset the board</small></span>
-                <span class="menu-row-go" aria-hidden="true">›</span>
-              </Button>
-            )}
+            <div class="menu-list">
+              {p.look === 'modern' && (
+                <Button id="minimap-switch" class="menu-row" checked={p.minimap} onClick={p.onMinimap}>
+                  <span class="menu-row-name">Mini Map<small>The whole level in a corner of the board</small></span>
+                  <span class="switch" aria-hidden="true" />
+                </Button>
+              )}
+              {p.viewTips && (
+                <Button id="menu-view-tips" class="menu-row" keyLabel={KEYS.tips.label} onClick={p.onViewTips}>
+                  <span class="menu-row-name">Show View Tips<small>How to move and how to turn, tilt and reset the board</small></span>
+                  <span class="menu-row-go" aria-hidden="true">›</span>
+                </Button>
+              )}
+              <ResetTips asking={p.resetAsking} onAsk={p.onResetAsk} onReset={p.onResetTips} />
+            </div>
             <div class="menu-walls" data-section="pad">
               <span class="menu-label" id="menu-pad-label">Arrows</span>
               <div class="seg seg-2" role="group" aria-labelledby="menu-pad-label">
@@ -172,6 +182,27 @@ export function Menu(p: MenuProps) {
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** Reset Tips, asked twice: the row, then a line saying what it does with Reset and Cancel. */
+function ResetTips(p: { asking: boolean; onAsk: (asking: boolean) => void; onReset: () => void }) {
+  if (!p.asking) {
+    return (
+      <Button id="menu-reset-tips" class="menu-row" onClick={() => p.onAsk(true)}>
+        <span class="menu-row-name">Reset Tips<small>Show the first-time tips and cards again</small></span>
+        <span class="menu-row-go" aria-hidden="true">›</span>
+      </Button>
+    );
+  }
+  return (
+    <div class="menu-confirm" role="group" aria-labelledby="menu-reset-ask">
+      <p id="menu-reset-ask">Show every first-time tip and card again? The Dictionary keeps what you have met.</p>
+      <div class="menu-confirm-buttons">
+        <Button id="menu-reset-yes" class="danger" onClick={p.onReset}>Reset</Button>
+        <Button id="menu-reset-no" onClick={() => p.onAsk(false)}>Cancel</Button>
+      </div>
+    </div>
   );
 }
 

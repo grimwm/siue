@@ -25,7 +25,7 @@ export const MARKER_COLOURS: Record<MarkerKind, number> = {
 /** The rim round every marker: near black. */
 export const MARKER_RIM = 0x0a0806;
 /** A marker's least width on screen, in CSS pixels. */
-export const MARKER_MIN_PX = 14;
+export const MARKER_MIN_PX = 10;
 
 /** How much to grow a marker so it is at least MARKER_MIN_PX wide where a cell is `cellPx` CSS pixels: 1 when it
  *  already is. */
@@ -49,8 +49,8 @@ export function contrast(a: number, b: number): number {
 }
 
 /** A marker's width and height, in cells. */
-export const MARKER_WIDTH = 0.26;
-export const MARKER_HEIGHT = 0.44;
+export const MARKER_WIDTH = 0.18;
+export const MARKER_HEIGHT = 0.3;
 /** The room between the top of a piece's head and its marker's point, on screen, in cells. */
 export const MARKER_GAP = 0.06;
 const BOB_AMP = 0.02;

@@ -59,18 +59,18 @@ test('every marker stands out at least 3:1 from the dark stone, and its rim at l
   assert.ok(contrast(0xffffff, 0x000000) > 20.9 && Math.abs(contrast(0x777777, 0x777777) - 1) < 1e-9, 'the WCAG ratio');
 });
 
-test('a marker never draws under 14 CSS px across: it grows where cells are small, never shrinks where they are large', () => {
-  assert.equal(MARKER_MIN_PX, 14);
+test('a marker never draws under 10 CSS px across: it grows where cells are small, never shrinks where they are large', () => {
+  assert.equal(MARKER_MIN_PX, 10);
   for (const cellPx of [20, 26, 40, 54, 80, 140]) {
-    assert.ok(MARKER_WIDTH * cellPx * markerScale(cellPx) >= 14 - 1e-9, `${cellPx}`);
+    assert.ok(MARKER_WIDTH * cellPx * markerScale(cellPx) >= 10 - 1e-9, `${cellPx}`);
     assert.ok(markerScale(cellPx) >= 1);
   }
   assert.equal(markerScale(140), 1);
 });
 
-test('a marker is small: a quarter to a third of a cell wide, under half a cell tall', () => {
-  assert.ok(MARKER_WIDTH >= 0.25 && MARKER_WIDTH <= 1 / 3);
-  assert.ok(MARKER_HEIGHT < 0.5);
+test('a marker is small: about a sixth to a fifth of a cell wide, under a third of a cell tall', () => {
+  assert.ok(MARKER_WIDTH >= 1 / 6 && MARKER_WIDTH <= 0.2);
+  assert.ok(MARKER_HEIGHT <= 1 / 3);
 });
 
 test('the bob goes a few hundredths of a cell down and back over a few seconds, and nothing under reduced motion', () => {

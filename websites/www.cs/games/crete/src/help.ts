@@ -16,8 +16,8 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
   for (const t of Object.values(tools)) toolSegs.push({ strong: `${t.name} (${t.key})` }, ` ${t.desc} `);
   return [
     [
-      "Gather every ", { strong: "relic ✦" }, ": the ", { strong: "gate" },
-      " opens when you take the last one. Then walk out through the ", { strong: "exit 🚪" }, ".",
+      "Gather every ", { strong: "relic ✦" }, ": the ", { strong: "Daedalus Gate" },
+      " opens when you take the last one: bars slide over its pit, and you can cross where the Minotaur cannot. Then walk out through the ", { strong: "exit 🚪" }, ".",
     ],
     [
       "The ", { strong: "Minotaur 👹" }, " takes ", { strong: "two steps" },

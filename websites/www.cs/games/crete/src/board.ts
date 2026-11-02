@@ -46,7 +46,18 @@ export function createBoard(canvas: HTMLCanvasElement, atlas: Atlas, image: HTML
         const s = atlas.sprites[d.sprite];
         if (!s) continue;
         // The canvas starts `rise` above row 0, so a sprite's frame top (its cell's top minus the rise) is y × cell.
-        ctx.drawImage(image, s.x + d.frame * fw, s.y, fw, fh, Math.round(d.x * cell), Math.round(d.y * cell), cell, cell + top);
+        const x = Math.round(d.x * cell), y = Math.round(d.y * cell);
+        if (d.sink) {
+          // Sinking, it draws down its frame, cut off at the frame's foot.
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(x, y, cell, cell + top);
+          ctx.clip();
+          ctx.drawImage(image, s.x + d.frame * fw, s.y, fw, fh, x, y + Math.round(d.sink * (cell + top)), cell, cell + top);
+          ctx.restore();
+          continue;
+        }
+        ctx.drawImage(image, s.x + d.frame * fw, s.y, fw, fh, x, y, cell, cell + top);
       }
       if (thread && thread.length > 1) drawThread(ctx, thread, cell, top, t === undefined ? 1 : pulseScale(t));
     },

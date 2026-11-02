@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { FIGURE_SPRITES, HAZARDS, OBJECTS, TERRAIN } from '../src/puzzle/tiles.ts';
+import { FIGURE_SPRITES, HAZARDS, OBJECTS, TERRAIN, TURNED_SPRITES } from '../src/puzzle/tiles.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { parse } from '../src/puzzle/level.ts';
@@ -42,20 +42,20 @@ test('a clone machine shows its facing', () => {
   assert.equal(terrainModel(s, 2), 'clone-down');
 });
 
-test('every object, hazard and figure sprite has a modern model, and every sprite in tiles.json has one', () => {
+test('every object, hazard and figure sprite has a modern model, and every sprite in tiles.json has one but Classic\'s turned forms', () => {
   const pieces = [...Object.values(OBJECTS).map(o => o.sprite), ...Object.values(HAZARDS).map(h => h.sprite), 'cow-standing'];
   const figures = FIGURE_SPRITES.filter(f => f !== 'cow-standing');
   assert.deepEqual([...PIECE_MODEL_NAMES].sort(), [...new Set(pieces)].sort());
   assert.deepEqual([...FIGURE_MODEL_NAMES].sort(), [...figures].sort());
   const all = [...TERRAIN_MODEL_NAMES, ...PIECE_MODEL_NAMES, ...FIGURE_MODEL_NAMES];
   assert.equal(new Set(all).size, all.length, 'no name is in two tables');
-  assert.deepEqual(all.sort(), Object.keys(atlas.sprites).sort());
+  assert.deepEqual([...all, ...TURNED_SPRITES].sort(), Object.keys(atlas.sprites).sort());
 });
 
 const rest = (s: State): Figures => ({ player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) });
 /** What drawList draws over the terrain, and what `placed` places, as sorted `sprite@row,col` words. */
 const classic = (s: State, f: Figures) => {
-  const terrain = new Set<string>(TERRAIN_MODEL_NAMES);
+  const terrain = new Set<string>([...TERRAIN_MODEL_NAMES, ...TURNED_SPRITES]);
   return drawList(s, f, atlas, 0).filter(d => !terrain.has(d.sprite)).map(d => `${d.sprite}@${d.y},${d.x}`).sort();
 };
 const modern = (s: State, f: Figures) => placed(s, f).map(p => `${p.model}@${p.r},${p.c}`).sort();

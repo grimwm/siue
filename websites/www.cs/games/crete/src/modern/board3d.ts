@@ -2,7 +2,7 @@
  * ground, the walls, one model per cell and the light; a shown state rebuilds only the cells whose model
  * changed, and stands the pieces and figures where the state and the turn put them, with Ariadne's thread on
  * the floor, and a block that filled water floating in it. A frame is drawn when the board is told of a change, and more follow only while the camera eases,
- * a wall fades, a figure turns, a block splashes into water or the tile loops tick. The tile loops tick at 12 fps, only while one is on screen,
+ * a wall fades, a figure turns, a block splashes into water, the gate's bars slide, a door sinks (src/openings.ts) or the tile loops tick. The tile loops tick at 12 fps, only while one is on screen,
  * the tab is visible, the board is in view and motion is not reduced. The camera looks down through an orthographic
  * lens at the whole level, a cell's margin round it, and holds still while Theseus moves; once the player zooms, it
  * follows Theseus until a pan or the mini map sends it elsewhere. The controls
@@ -15,6 +15,8 @@ import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell, Dir } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
+import { REST, createOpenings } from '../openings.ts';
+import type { Motion } from '../openings.ts';
 import { DEFAULT_YAW, START_PITCH, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
 import type { Cam } from './camera.ts';
@@ -66,8 +68,8 @@ export interface ModernHost {
 export interface ModernBoard {
   /** Builds the scene for a new level; the camera resets to follow. */
   level(s: State): void;
-  /** Applies the state and figures locally and draws once. */
-  show(f: { state: State; figures: Figures }, thread: readonly Cell[] | null): void;
+  /** Applies the state and figures locally and draws once; `done` tells it the turn's animation has ended. */
+  show(f: { state: State; figures: Figures; done?: boolean }, thread: readonly Cell[] | null): void;
   walls(m: WallMode): void;
   /** The camera's yaw in degrees, for screenToGrid. */
   yaw(): number;
@@ -85,6 +87,8 @@ export interface ModernBoard {
   setActive(on: boolean): void;
   /** Frames drawn, for tests. */
   frames(): number;
+  /** What the gate and the doors were doing when the last frame was drawn (src/openings.ts), for tests. */
+  opening(): { bars: number[]; doors: number[]; hoof: number };
   /** The render quality step (quality.ts), for tests. */
   quality(): number;
   /** The frame rate measured over the last two seconds of animation, or null before there is that much. */
@@ -152,6 +156,12 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   let mode: WallMode = 'solid';
   const V = variant();
   let last: State | null = null;
+  /** The figures last shown, whether the turn had ended, what the gate and doors are doing and the hoof's lean. */
+  let lastFigures: Figures | null = null;
+  let lastDone = true;
+  const openings = createOpenings();
+  let hoof = 0;
+  let lastMotion: Motion = REST;
   let lastPlayer: Pos | null = null;
   let models: TerrainModel[] = [];
   /** The cells that were water when the level began and are filled now: they show water, with the block in it. */
@@ -302,6 +312,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       busy = true;
       shadowsDirty = true;
     }
+    if (open(now)) {
+      busy = true;
+      shadowsDirty = true;
+    }
     if (loopsDirty) {
       floor.loop(loopT);
       lights?.loop(loopT);
@@ -331,6 +345,23 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     drawn++;
     chained = busy;
     if (busy) invalidate();
+  }
+
+  /** Moves the gate's bars, the doors and the Minotaur at the gate as they are at `now`; true while any moves. */
+  function open(now: number): boolean {
+    if (!last || !lastFigures) return false;
+    const m = (lastMotion = openings.at(last, lastFigures, now, snap(), lastDone));
+    last.terrain.forEach((t, i) => {
+      const p = pieces[i]?.userData as PieceInfo | undefined;
+      if (!p?.open) return;
+      if (t === 'gate') p.open(m.bars.get(i) ?? (last!.relicsLeft === 0 ? 1 : 0));
+      else p.open(m.doors.get(i) ?? (t === 'floor' ? 1 : 0));
+    });
+    if (m.hoof !== hoof) {
+      hoof = m.hoof;
+      setFigures(last, lastFigures);
+    }
+    return m.busy;
   }
 
   /** Slides each marker whose piece shows on screen fully inside the view, for this frame's drawing. */
@@ -478,7 +509,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     // A step by Theseus brings the camera back to him, wherever the player had looked.
     if (lastPlayer && (lastPlayer.r !== f.player.r || lastPlayer.c !== f.player.c)) follow = true;
     lastPlayer = { r: f.player.r, c: f.player.c };
-    const changed = actors.set(placed(s, f), cols(), rows(), snap());
+    const changed = actors.set(placed(s, f, hoof), cols(), rows(), snap());
     const hero = actors.hero();
     if (hero) lights?.hero(hero.position.x, hero.position.z);
     return changed;
@@ -524,8 +555,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     if (!loopTimer) scheduleLoops();
   }
 
-  function show(f: { state: State; figures: Figures }, threadCells: readonly Cell[] | null): void {
+  function show(f: { state: State; figures: Figures; done?: boolean }, threadCells: readonly Cell[] | null): void {
     const s = f.state;
+    lastFigures = f.figures;
+    lastDone = f.done ?? true;
     if (!last || s.level !== last.level) {
       level(s);
     }
@@ -705,6 +738,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       scheduleLoops();
     },
     frames: () => drawn,
+    opening: () => ({ bars: [...lastMotion.bars.values()], doors: [...lastMotion.doors.values()], hoof: lastMotion.hoof }),
     quality: () => quality,
     fps: () => rate(ladder.gaps, DOWN_MS),
     floating: () => floats.cells(),

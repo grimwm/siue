@@ -5,13 +5,15 @@
  *
  * A raised tile (a wall, a door, a closed toggle wall) shows its top leaning away from the viewer and its face toward
  * them, so the sheet draws every tile turned to the quarter of the view (src/sheet.ts faceQuarter), farthest row
- * first; a tile whose picture points along the grid (a force floor, a clone machine) keeps its own way round. Each
- * canvas repaints only when what it shows has changed. */
+ * first; a tile whose picture points along the grid (a force floor, a clone machine) keeps its own way round, and the
+ * gate and a door's sill, which lie across the way through them, swap to their twin drawn the other way round when
+ * the turn is a quarter or three. A door sinking draws down its frame, cut off at the frame's foot. Each canvas
+ * repaints only when what it shows has changed. */
 import type { Atlas, Draw } from './board-plan.ts';
 import { drawThread } from './board.ts';
 import { pulseScale } from './thread-path.ts';
 import type { ThreadCell } from './thread-path.ts';
-import { TERRAIN } from './puzzle/tiles.ts';
+import { TERRAIN, TURNED_SPRITES } from './puzzle/tiles.ts';
 import { AWAY, LEAN_FEET, faceQuarter, project, sheetTransform } from './sheet.ts';
 import type { Frame } from './sheet.ts';
 
@@ -25,7 +27,9 @@ export interface SheetBoard {
   paint(list: Draw[], thread?: readonly ThreadCell[], t?: number): void;
 }
 
-const TERRAIN_SPRITES = new Set(Object.values(TERRAIN).flatMap(t => t.sprites));
+const TERRAIN_SPRITES = new Set([...Object.values(TERRAIN).flatMap(t => t.sprites), ...TURNED_SPRITES]);
+/** Each sprite that lies across the way through its cell, and its twin drawn the other way round. */
+const TWIN = new Map(TURNED_SPRITES.filter(v => v.endsWith('-v')).flatMap(v => [[v, v.slice(0, -2)], [v.slice(0, -2), v]] as const));
 /** Tiles whose picture points along the grid: they never turn with the view. */
 const GRID_WAY = new Set(Object.values(TERRAIN).filter(t => t.carries || t === TERRAIN.clone).flatMap(t => t.sprites));
 /** A shadow's radius, in cells. */
@@ -60,18 +64,20 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
     // Farthest first, so a raised tile's top leaning away covers the tile behind it.
     const order = terrain.slice().sort((a, b) => (b.x * away.x + b.y * away.y) - (a.x * away.x + a.y * away.y));
     for (const d of order) {
-      const s = atlas.sprites[d.sprite];
+      const s = atlas.sprites[(q % 2 && TWIN.get(d.sprite)) || d.sprite];
       if (!s) continue;
       const x = top + d.x * cell, y = top + d.y * cell;
-      if (GRID_WAY.has(d.sprite) || q === 0) {
-        ctx.drawImage(image, s.x + d.frame * fw, s.y, fw, fh, x, y - top, cell, cell + top);
-        continue;
-      }
-      // Turned a quarter at a time about its square's centre, so its rise (the top of a wall) leans away.
       ctx.save();
       ctx.translate(x + cell / 2, y + cell / 2);
-      ctx.rotate((-q * Math.PI) / 2);
-      ctx.drawImage(image, s.x + d.frame * fw, s.y, fw, fh, -cell / 2, -cell / 2 - top, cell, cell + top);
+      // Turned a quarter at a time about its square's centre, so its rise (the top of a wall) leans away.
+      if (!GRID_WAY.has(d.sprite)) ctx.rotate((-q * Math.PI) / 2);
+      const down = (d.sink ?? 0) * (cell + top);
+      if (down) {
+        ctx.beginPath();
+        ctx.rect(-cell / 2, -cell / 2 - top, cell, cell + top);
+        ctx.clip();
+      }
+      ctx.drawImage(image, s.x + d.frame * fw, s.y, fw, fh, -cell / 2, -cell / 2 - top + down, cell, cell + top);
       ctx.restore();
     }
     if (thread && thread.length > 1) {
@@ -142,7 +148,7 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
       const q = faceQuarter(f.yaw);
       const pulse = t === undefined ? 1 : pulseScale(t);
       const showsThread = !!thread && thread.length > 1;
-      const sk = `${q}|${showsThread ? pulse.toFixed(3) : '-'}|${terrain.map(d => `${d.sprite}${d.frame}`).join(',')}`;
+      const sk = `${q}|${showsThread ? pulse.toFixed(3) : '-'}|${terrain.map(d => `${d.sprite}${d.frame}${d.sink ?? ''}`).join(',')}`;
       if (sk !== sheetKey || (showsThread && thread !== lastThread)) {
         sheetKey = sk;
         lastThread = thread;

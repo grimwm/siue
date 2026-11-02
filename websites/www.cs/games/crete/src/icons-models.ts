@@ -17,7 +17,7 @@ export const ICON_MODELS: Readonly<Record<string, IconModel>> = {
   'key-green': piece('key-green'), flippers: piece('flippers'), 'fire-boots': piece('fire-boots'), skates: piece('skates'),
   suction: piece('suction'), mirror: piece('mirror'), cake: piece('cake'), cow: piece('cow'), page: piece('page'),
   minotaur: piece('minotaur'), ball: piece('ball'), glider: piece('glider'), fireball: piece('fireball'), block: piece('block'),
-  exit: tile('exit'), gate: tile('gate-closed'), water: tile('water'), fire: tile('fire'), ice: tile('ice'),
+  exit: tile('exit'), gate: tile('gate-open'), water: tile('water'), fire: tile('fire'), ice: tile('ice'),
   force: tile('force-right'), dirt: tile('dirt'), safe: tile('safe'), door: tile('door-red'), button: tile('button'),
   toggle: tile('toggle-closed'), trap: tile('trap'), 'button-brown': tile('button-brown'), 'button-red': tile('button-red'),
   clone: tile('clone-down'), popup: tile('popup'), gravel: tile('gravel'), teleport: tile('teleport'), thief: tile('thief'),

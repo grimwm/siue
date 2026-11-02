@@ -30,7 +30,8 @@ export type Terrain =
 
 export interface TerrainDef {
   char: string;
-  /** The sprites it can show: the gate's first is closed, its second open; the clone machine's, one per facing in DIRS order. */
+  /** The sprites it can show: the gate's first is closed, its second open; a door's first is shut, its second the sill
+   *  it leaves once open; the clone machine's, one per facing in DIRS order. */
   sprites: readonly string[];
   /** The Minotaur may stand on it. */
   minotaur: boolean;
@@ -68,10 +69,10 @@ export const TERRAIN: Record<Terrain, TerrainDef> = {
   button: t('_', true, true, {}, ['button']),
   'toggle-open': t('t', true, false, {}, ['toggle-open']),
   'toggle-closed': t('T', false, false, {}, ['toggle-closed']),
-  'door-red': t('R', false, false, { door: 'red' }, ['door-red']),
-  'door-blue': t('B', false, false, { door: 'blue' }, ['door-blue']),
-  'door-yellow': t('Y', false, false, { door: 'yellow' }, ['door-yellow']),
-  'door-green': t('G', false, false, { door: 'green' }, ['door-green']),
+  'door-red': t('R', false, false, { door: 'red' }, ['door-red', 'door-red-sill']),
+  'door-blue': t('B', false, false, { door: 'blue' }, ['door-blue', 'door-blue-sill']),
+  'door-yellow': t('Y', false, false, { door: 'yellow' }, ['door-yellow', 'door-yellow-sill']),
+  'door-green': t('G', false, false, { door: 'green' }, ['door-green', 'door-green-sill']),
   trap: t('&', true, true, {}, ['trap']),
   'button-brown': t('-', true, true, {}, ['button-brown']),
   'button-red': t('+', true, true, {}, ['button-red']),
@@ -137,10 +138,19 @@ export const OBJECTS: Record<ObjectKind, { char: string; sprite: string; name: s
 /** The figures: drawn over the grid, never part of it. */
 export const FIGURE_SPRITES = ['theseus', 'minotaur', 'minotaur-stone', 'cow-standing'] as const;
 
+/** Classic's own forms of the gate and door sprites, which no cell shows at rest the right way round: each with the
+ *  way through running up and down (`-v`; the plain ones run left and right), and the gate's bars sliding across,
+ *  one frame a step of the way (src/openings.ts). */
+export const TURNED_SPRITES = [
+  'gate-closed-v', 'gate-open-v', 'gate-slide', 'gate-slide-v',
+  'door-red-sill-v', 'door-blue-sill-v', 'door-yellow-sill-v', 'door-green-sill-v',
+] as const;
+
 /** Every sprite the board can ask the atlas for. */
 export const SPRITE_NAMES: readonly string[] = [
   ...new Set([
     ...Object.values(TERRAIN).flatMap(d => d.sprites),
+    ...TURNED_SPRITES,
     ...Object.values(OBJECTS).map(o => o.sprite),
     ...FIGURE_SPRITES,
     ...Object.values(HAZARDS).map(h => h.sprite),

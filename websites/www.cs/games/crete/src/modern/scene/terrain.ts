@@ -3,8 +3,8 @@
  * force floors, dirt and gravel are all ground (or walls.ts) and add nothing here. A model's static parts are
  * merged into one mesh per material; flames and discs that loop stay apart, moved by `userData.loop(t)`. */
 import {
-  BoxGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Group, LatheGeometry, Mesh, PlaneGeometry, Shape,
-  SphereGeometry, TorusGeometry, Vector2,
+  BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Group, LatheGeometry, Mesh,
+  MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, Shape, SphereGeometry, TorusGeometry, Vector2,
 } from 'three';
 import type { BufferGeometry, Material, Object3D } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -14,6 +14,7 @@ import { FY } from './floor.ts';
 import { WALL_H } from './walls.ts';
 import { flameMat, rng } from './textures.ts';
 import type { Kit } from './textures.ts';
+import { GATE_BARS } from '../../openings.ts';
 
 export interface ModelCtx {
   kit: Kit;
@@ -34,6 +35,9 @@ export interface PieceInfo {
   tall?: boolean;
   /** Its flames or discs at loop time `t` seconds. */
   loop?: (t: number) => void;
+  /** How far it has opened, 0 shut to 1 open (src/openings.ts): the Daedalus Gate's bars across its pit, a door
+   *  sunk into its floor. */
+  open?: (p: number) => void;
 }
 
 export const at = <T extends Object3D>(o: T, x: number, y: number, z: number): T => (o.position.set(x, y, z), o);
@@ -88,37 +92,116 @@ const empty = (): Group => Object.assign(new Group(), { userData: { half: 0, h: 
 const spansZ = (x: ModelCtx) =>
   (x.wall(x.r - 1, x.c) || x.wall(x.r + 1, x.c)) && !(x.wall(x.r, x.c - 1) && x.wall(x.r, x.c + 1));
 
-function door(x: ModelCtx, color: 'red' | 'blue' | 'yellow' | 'green'): Group {
+/** A door: a thick oak slab banded in its key's colour, its top edge painted too, so it reads from any side,
+ *  standing in a dark slot across the way with a sill of its colour at its foot. Opening, it sinks straight down
+ *  through the slot and leaves the sill; `open` sets how far down it is. Built with the way through along x. */
+function door(x: ModelCtx, color: 'red' | 'blue' | 'yellow' | 'green', open: boolean): Group {
   const { m } = x.kit;
   const accent = m.keyColor[color];
   const g = new Group();
-  // A thick oak door banded in its key's colour, its top edge painted too, so it reads from any side.
   const H = 1.1, T = 0.26;
-  g.add(at(box(1, H, T, m.wood), 0, H / 2, 0));
-  g.add(at(box(1, 0.06, T + 0.02, m.iron), 0, 0.34, 0));
-  g.add(at(box(1, 0.16, T + 0.02, accent), 0, 0.8, 0));
-  g.add(at(box(1, 0.1, T + 0.02, accent), 0, 0.06, 0));
-  g.add(at(box(1, 0.04, T + 0.02, accent), 0, H + 0.02, 0));
-  g.add(at(box(0.16, 0.18, T + 0.04, m.iron), 0.24, 0.55, 0));
-  g.add(flat(at(cyl(0.05, 0.05, T + 0.08, accent, 12), 0.24, 0.55, 0)));
+  g.add(at(box(1, 0.008, T + 0.08, m.dark), 0, FY + 0.003, 0));
+  g.add(at(box(0.98, 0.012, T, accent), 0, FY + 0.007, 0));
+  const d = new Group();
+  d.add(at(box(1, H, T, m.wood), 0, H / 2, 0));
+  d.add(at(box(1, 0.06, T + 0.02, m.iron), 0, 0.34, 0));
+  d.add(at(box(1, 0.16, T + 0.02, accent), 0, 0.8, 0));
+  d.add(at(box(1, 0.1, T + 0.02, accent), 0, 0.06, 0));
+  d.add(at(box(1, 0.04, T + 0.02, accent), 0, H + 0.02, 0));
+  d.add(at(box(0.16, 0.18, T + 0.04, m.iron), 0.24, 0.55, 0));
+  d.add(flat(at(cyl(0.05, 0.05, T + 0.08, accent, 12), 0.24, 0.55, 0)));
+  d.traverse(o => { if (o instanceof Mesh) o.castShadow = o.receiveShadow = true; });
+  const sink = (p: number) => {
+    // Below the floor the flagstones hide it.
+    d.position.y = -(H + 0.14) * p;
+    d.visible = p < 1;
+  };
+  sink(open ? 1 : 0);
+  const turn = turned(x, [d]);
   if (spansZ(x)) g.rotation.y = Math.PI / 2;
-  return piece(g, { half: 0.4, h: H, tall: true });
+  return piece(g, { half: 0.4, h: open ? 0.02 : H, tall: !open, open: sink }, turn);
 }
 
+/** The pit's picture: its far wall lit, the near ones in shade, a floor of rubble at the bottom. */
+let pitTex: CanvasTexture | null = null;
+function pitTexture(): CanvasTexture {
+  if (pitTex) return pitTex;
+  const n = 128, cv = document.createElement('canvas');
+  cv.width = cv.height = n;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#050302';
+  g.fillRect(0, 0, n, n);
+  const wall = (x0: number, y0: number, x1: number, y1: number, gx0: number, gy0: number, gx1: number, gy1: number, top: string) => {
+    const gr = g.createLinearGradient(gx0, gy0, gx1, gy1);
+    gr.addColorStop(0, top);
+    gr.addColorStop(1, '#0a0604');
+    g.fillStyle = gr;
+    g.fillRect(x0, y0, x1 - x0, y1 - y0);
+  };
+  const w = n * 0.2;
+  wall(0, 0, n, w, 0, 0, 0, w, '#6a5236');
+  wall(0, n - w, n, n, 0, n, 0, n - w, '#2a1e14');
+  wall(0, 0, w, n, 0, 0, w, 0, '#4a3826');
+  wall(n - w, 0, n, n, n, 0, n - w, 0, '#4a3826');
+  g.fillStyle = '#1e160f';
+  g.fillRect(w, w, n - 2 * w, n - 2 * w);
+  const r = rng(7);
+  for (let i = 0; i < 14; i++) {
+    g.fillStyle = ['#3a2c1e', '#2c2116', '#4a3a28'][i % 3]!;
+    g.beginPath();
+    g.ellipse(w + r() * (n - 2 * w), w + r() * (n - 2 * w), 3 + r() * 5, 2 + r() * 4, r() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  pitTex = new CanvasTexture(cv);
+  pitTex.colorSpace = SRGBColorSpace;
+  return pitTex;
+}
+
+/** The Daedalus Gate (src/openings.ts): a pit across the way between two stone kerbs, under GATE_BARS bronze bars
+ *  that slide out of the walls on both sides and meet over it, a grid a man crosses and hooves cannot. Shut, the
+ *  bars are in the walls and the pit is bare; `open` sets how far across they are. Built with the way through
+ *  along z. */
 function gate(x: ModelCtx, open: boolean): Group {
   const { m } = x.kit;
   const g = new Group();
-  // Open, the bars have risen into the lintel and only their tips show.
-  for (let i = 0; i < 6; i++) {
-    if (open) g.add(at(cyl(0.025, 0.012, 0.12, m.bronze, 8), -0.42 + i * 0.168, 1.0, 0));
-    else g.add(at(cyl(0.025, 0.025, 1.05, m.bronze, 8), -0.42 + i * 0.168, 0.55, 0));
+  const span = 0.7, rad = 0.06;
+  const pit = new Mesh(new PlaneGeometry(1, span), new MeshBasicMaterial({ map: pitTexture() }));
+  pit.rotation.x = -Math.PI / 2;
+  g.add(at(pit, 0, FY + 0.004, 0));
+  for (const sz of [-1, 1]) {
+    g.add(at(box(1, 0.07, 0.15, m.paleStone), 0, FY + 0.035, sz * (span / 2 + 0.075)));
+    g.add(at(box(1, 0.012, 0.02, m.dark), 0, FY + 0.072, sz * (span / 2 + 0.005)));
   }
-  if (!open) for (const y of [0.3, 0.8]) g.add(at(box(1, 0.05, 0.05, m.bronze), 0, y, 0));
-  for (const sx of [-1, 1]) g.add(at(box(0.08, 1.06, 0.12, m.darkWood), sx * 0.47, 0.53, 0));
-  g.add(at(box(1, 0.16, 0.3, m.darkWood), 0, 1.1, 0));
-  g.add(at(box(1, 0.04, 0.32, m.bronze), 0, 1.2, 0));
+  // Each bar is two halves, one from each wall, that grow out of it to meet in the middle.
+  const bars: Mesh[] = [];
+  for (let i = 0; i < GATE_BARS; i++) {
+    const z = -span / 2 + (span * (i + 0.5)) / GATE_BARS;
+    for (const side of [-1, 1]) {
+      const bar = at(cyl(rad, rad, 0.5, m.bronze, 12), 0, FY + 0.06, z);
+      bar.rotation.z = Math.PI / 2;
+      bar.castShadow = bar.receiveShadow = true;
+      bar.userData.side = side;
+      bars.push(bar);
+    }
+  }
+  const across = (p: number) => {
+    for (const bar of bars) {
+      bar.visible = p > 0.01;
+      bar.scale.y = Math.max(0.01, p);
+      bar.position.x = (bar.userData.side as number) * (0.5 - 0.25 * p);
+    }
+  };
+  across(open ? 1 : 0);
   if (spansZ(x)) g.rotation.y = Math.PI / 2;
-  return piece(g, { half: 0.4, h: open ? 0.3 : 1.05, tall: true });
+  return piece(g, { half: 0.5, h: 0.15, open: across }, turned(x, bars));
+}
+
+/** Live parts, turned as the baked model is. */
+function turned(x: ModelCtx, live: Object3D[]): Object3D[] {
+  const lg = new Group();
+  lg.add(...live);
+  if (spansZ(x)) lg.rotation.y = Math.PI / 2;
+  return [lg];
 }
 
 /** The exit: a stair going down from its open side into a lit pit, under a lintel. */
@@ -323,10 +406,14 @@ export const TERRAIN_MODELS: Record<TerrainModel, (x: ModelCtx) => Object3D> = {
   safe, button, trap, popup, teleport, thief, bomb,
   'toggle-open': x => toggle(x, false),
   'toggle-closed': x => toggle(x, true),
-  'door-red': x => door(x, 'red'),
-  'door-blue': x => door(x, 'blue'),
-  'door-yellow': x => door(x, 'yellow'),
-  'door-green': x => door(x, 'green'),
+  'door-red': x => door(x, 'red', false),
+  'door-blue': x => door(x, 'blue', false),
+  'door-yellow': x => door(x, 'yellow', false),
+  'door-green': x => door(x, 'green', false),
+  'door-red-sill': x => door(x, 'red', true),
+  'door-blue-sill': x => door(x, 'blue', true),
+  'door-yellow-sill': x => door(x, 'yellow', true),
+  'door-green-sill': x => door(x, 'green', true),
   'button-brown': x => ringButton(x, x.kit.m.brownButton),
   'button-red': x => ringButton(x, x.kit.m.redButton),
   'clone-up': x => clone(x, 0),

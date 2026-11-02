@@ -437,7 +437,7 @@ intro: Flippers lie in the pool and three relics about it. Two stretches of floo
 ###.##I..|E#
 ############
 `},{id:"ch4-5",text:`title: The Painted Stone
-intro: Two relics, a red key and its door. The beast keeps the middle hall; two of these walls are only painted, and they are your way round him.
+intro: Two relics, a red key and its door. The beast waits in the upper hall; two of these walls are only painted, and they are your way round him.
 
 ############
 #P....S.##.#

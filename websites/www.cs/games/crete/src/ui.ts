@@ -20,7 +20,7 @@ import type { Pics } from "./ui/sprite.tsx";
 import { BANNER_MS, isFirst as firstMeeting, meetNotices } from "./notices.ts";
 import { KEYS, actionFor, isMove, itemFor } from "./keys.ts";
 import type { MoveAction } from "./keys.ts";
-import { padDir, repeatDue } from "./pad.ts";
+import { PadPress, padDir } from "./pad.ts";
 import { TOUR_ID, showTour, tourDue } from "./tour.ts";
 import type { Tour } from "./tour.ts";
 import { HINT_KEY } from "./modern/hint.ts";
@@ -1108,10 +1108,9 @@ export function createUi(deps: UiDeps): Ui {
       onMenu: () => layers.open("menu"),
       look,
       thumb: deps.thumb,
-      // A pointer on the pad moves as it comes down (bindPad); its click is not a second move. Enter or Space on a
-      // focused arrow still clicks it.
+      // A pointer on the pad moves by itself (bindPad), which keeps its click from reaching here; Enter or Space on a
+      // focused arrow clicks it.
       onMove: (dir) => {
-        if (padPointer) return;
         act(() => {
           layers.close("start");
           g.press({ kind: "move", dir: moveDir(dir) });
@@ -1192,16 +1191,14 @@ export function createUi(deps: UiDeps): Ui {
     return id === undefined || !id.startsWith(prefix) || defaults.includes(id);
   }
 
-  /** True from a pointer coming down on the move pad until the click that follows it has passed. */
-  let padPointer = false;
-
-  /** The move pad under a finger, pen or mouse (src/pad.ts): an arrow moves as it is pressed, again and again while
-   *  it is held, and a slide across the pad moves the way of each arrow it enters and stops over the centre. Holding
-   *  stops when the finger lifts, when a card covers the board, when the try ends or Theseus is caught, when a move
-   *  goes nowhere (a wall, a snare), and when another level opens. */
+  /** The move pad under a finger, pen or mouse (src/pad.ts): a press arms the arrow it lands on, a lift there is one
+   *  move, a hold walks on, and a slide into another arrow moves that way and walks on while held there. Holding
+   *  stops when the finger lifts (wherever it lifts: the lift is heard on the document), when a card covers the board,
+   *  when the try ends or Theseus is caught, when a move goes nowhere (a wall, a snare), and when another level opens.
+   *  The click a press makes is never a move: the press has moved already. */
   function bindPad(): void {
     const root = $("strip-root");
-    let held: { id: number; pad: HTMLElement; dir: MoveAction | null; at: number; repeats: number; stalled: boolean; hearts: number; opens: number } | null = null;
+    let held: { id: number; pad: HTMLElement; press: PadPress; hearts: number; opens: number } | null = null;
     let ticker = 0;
     const blocked = (): boolean => layers.stack().some((n) => n !== "start");
     const stop = (): void => {
@@ -1220,12 +1217,8 @@ export function createUi(deps: UiDeps): Ui {
       g.press({ kind: "move", dir: moveDir(dir) });
       return (g.run?.now.moves ?? moves) !== moves;
     };
-    const press = (dir: MoveAction | null): void => {
-      if (!held) return;
-      held.dir = dir;
-      held.repeats = 0;
-      held.at = performance.now();
-      held.stalled = dir ? !step(dir) : false;
+    const make = (press: PadPress, dir: MoveAction | null): void => {
+      if (dir) press.stalled = !step(dir);
     };
     const tick = (): void => {
       const g = controls?.game;
@@ -1233,47 +1226,58 @@ export function createUi(deps: UiDeps): Ui {
       if (!h || !g?.run) return stop();
       const now = g.run.now;
       if (g.opens !== h.opens || now.outcome !== "playing" || now.hearts < h.hearts || blocked()) return stop();
-      if (!h.dir || h.stalled || !repeatDue(performance.now() - h.at, h.repeats, g.anim !== null)) return;
-      h.repeats++;
-      h.at = performance.now();
-      h.stalled = !step(h.dir);
+      make(h.press, h.press.tick(performance.now(), g.anim !== null));
     };
     const dirAt = (pad: HTMLElement, e: PointerEvent): MoveAction | null => {
       const hub = pad.querySelector(".pad-hub")?.getBoundingClientRect() ?? pad.getBoundingClientRect();
       return padDir(e.clientX - (hub.left + hub.width / 2), e.clientY - (hub.top + hub.height / 2), hub.width / 2);
     };
+    /** The press ends: lifted (`tap`), a tap on the arrow it came down on moves once; cancelled, nothing moves. */
+    const end = (tap: boolean): void => {
+      const h = held;
+      if (!h) return;
+      stop();
+      const dir = h.press.up();
+      if (tap && dir) step(dir);
+    };
     root.addEventListener("pointerdown", (ev) => {
       const e = ev as PointerEvent;
       const pad = (e.target as Element | null)?.closest?.(".pad") as HTMLElement | null;
-      if (!pad || (e.pointerType === "mouse" && e.button !== 0) || held) return;
+      if (!pad || (e.pointerType === "mouse" && e.button !== 0)) return;
       // No focus ring, text selection or page scroll from a press on the pad.
       e.preventDefault();
-      padPointer = true;
+      // A second finger down before the first has lifted: the first one's tap still counts, once.
+      end(true);
       try {
         pad.setPointerCapture(e.pointerId);
       } catch {
         // A synthetic pointer cannot be captured; it still reaches the pad.
       }
       const run = controls?.game?.run;
-      held = { id: e.pointerId, pad, dir: null, at: 0, repeats: 0, stalled: false, hearts: run?.now.hearts ?? 0, opens: controls?.game?.opens ?? 0 };
-      press(dirAt(pad, e));
+      held = { id: e.pointerId, pad, press: new PadPress(dirAt(pad, e), performance.now()), hearts: run?.now.hearts ?? 0, opens: controls?.game?.opens ?? 0 };
       ticker = window.setInterval(tick, 30);
     });
     root.addEventListener("pointermove", (ev) => {
       const e = ev as PointerEvent;
-      if (!held || e.pointerId !== held.id) return;
+      const h = held;
+      if (!h || e.pointerId !== h.id) return;
       e.preventDefault();
-      const dir = dirAt(held.pad, e);
-      if (dir !== held.dir) press(dir);
+      make(h.press, h.press.over(dirAt(h.pad, e), performance.now()));
     });
-    const end = (ev: Event): void => {
-      const e = ev as PointerEvent;
-      if (held && e.pointerId === held.id) stop();
-      // The click this lift makes comes before the timer: it is the press already made, not a second move. Cleared
-      // whether or not the hold had already stopped on its own (a card, a catch), so Enter and Space move again.
-      if (padPointer) setTimeout(() => { padPointer = false; }, 0);
-    };
-    for (const t of ["pointerup", "pointercancel", "lostpointercapture"]) root.addEventListener(t, end);
+    // Heard on the document, so a finger that lifts off the pad, or whose capture is lost, still ends the press.
+    document.addEventListener("pointerup", (ev) => {
+      if (held && (ev as PointerEvent).pointerId === held.id) end(true);
+    }, true);
+    for (const t of ["pointercancel", "lostpointercapture"]) {
+      document.addEventListener(t, (ev) => {
+        if (held && (ev as PointerEvent).pointerId === held.id) end(false);
+      }, true);
+    }
+    // A pointer's click on an arrow, which can come long after the lift, is never a move: the press made its own.
+    // Enter or Space on a focused arrow clicks it with no pointer (detail 0), and that still moves.
+    root.addEventListener("click", (e) => {
+      if ((e as MouseEvent).detail > 0 && (e.target as Element | null)?.closest?.(".pad")) e.stopPropagation();
+    }, true);
     root.addEventListener("contextmenu", (e) => {
       if ((e.target as Element | null)?.closest?.(".pad")) e.preventDefault();
     });

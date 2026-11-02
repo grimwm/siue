@@ -107,6 +107,44 @@ test.describe('with every tip seen', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a finger that lands on left and slides to right moves only right', async ({ page }) => {
+    const errors = await open(page, ROOM);
+    const cdp = await page.context().newCDPSession(page);
+    const from = (await now(page)).player;
+    const [left, hub, right] = [await centre(page, '.pad .mv-left'), await centre(page, '.pad .pad-hub'), await centre(page, '.pad .mv-right')];
+    await touch(cdp, [[left], [hub], [right]]);
+    const after = await now(page);
+    expect(after.player.c - from.c, 'it went right').toBeGreaterThanOrEqual(1);
+    expect(after.player.r, 'and nowhere else').toBe(from.r);
+    expect(after.moves, 'never left first').toBe(after.player.c - from.c);
+    expect(errors).toEqual([]);
+  });
+
+  test('rapid taps are one move each, even when a tap\'s click comes long after its lift', async ({ page }) => {
+    const errors = await open(page, HALL);
+    const cdp = await page.context().newCDPSession(page);
+    const right = await centre(page, '.pad .mv-right');
+    for (let i = 0; i < 4; i++) await touch(cdp, [[right]]);
+    await expect.poll(async () => (await now(page)).moves, 'four taps, four moves').toBe(4);
+    // A phone's browser may send a tap's click well after the finger lifts: it is still no second move.
+    await page.evaluate(() => new Promise<void>(done => {
+      const b = document.querySelector('.pad .mv-right') as HTMLElement;
+      const r = b.getBoundingClientRect();
+      const o = { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'touch', isPrimary: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+      b.dispatchEvent(new PointerEvent('pointerdown', o));
+      b.dispatchEvent(new PointerEvent('pointerup', o));
+      setTimeout(() => {
+        b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+        done();
+      }, 40);
+    }));
+    await page.waitForTimeout(150);
+    expect((await now(page)).moves, 'the late click is no fifth move').toBe(5);
+    await page.waitForTimeout(400);
+    expect((await now(page)).moves, 'and nothing walks on').toBe(5);
+    expect(errors).toEqual([]);
+  });
+
   test('on the classic board one finger turns and tilts and two fingers twist, and no finger moves Theseus', async ({ page }) => {
     await page.addInitScript(pinClassic);
     const errors = await open(page, ROOM);
@@ -137,10 +175,11 @@ test('the touch tour shows once when play starts on a touch screen, and Show Vie
   await expect(page.locator('#tour'), 'it shows by itself once the start card has gone').toBeVisible();
   await expect(page.locator('#tour-caption')).toHaveText('Tap an arrow to take a step');
   await expect(page.locator('#tour .tour-dot').first()).toBeVisible();
+  await expect(page.locator('#tour-done'), 'a big Skip Tour button').toHaveText('Skip Tour');
   const before = await now(page);
-  await page.locator('.pad .mv-right').tap({ force: true });
-  await expect(page.locator('#tour'), 'a tap anywhere closes it').toBeHidden();
-  expect(await now(page), 'and moves nothing').toEqual(before);
+  await page.locator('.pad .mv-right').tap();
+  await expect(page.locator('#tour'), 'play closes it').toHaveCount(0);
+  await expect.poll(async () => (await now(page)).moves, 'and the tap moves, as it would have').toBe(before.moves + 1);
   await page.reload();
   await open(page, ROOM);
   // The tour would open a moment after the start card closes: wait past that moment, then see it did not.
@@ -153,6 +192,13 @@ test('the touch tour shows once when play starts on a touch screen, and Show Vie
   await expect(page.locator('#tour-caption'), 'with reduced motion it steps on Next').toHaveText('Hold an arrow to keep walking');
   await page.locator('#tour-done').tap();
   await expect(page.locator('#tour')).toHaveCount(0);
+  await page.locator('#btn-menu-strip:visible, #btn-menu:visible').first().tap();
+  await page.locator('#menu-view-tips').tap();
+  await expect(page.locator('#tour')).toBeVisible();
+  const was = (await now(page)).moves;
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#tour'), 'a key closes it too').toHaveCount(0);
+  await expect.poll(async () => (await now(page)).moves, 'and moves').toBe(was + 1);
   expect(errors).toEqual([]);
 });
 

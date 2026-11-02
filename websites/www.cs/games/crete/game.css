@@ -808,9 +808,10 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 .strip .map-btn:has(.map-thumb[data-corner$="right"]) .map-badge { left: auto; right: 4px; }
 .strip .map-btn:hover, .strip .map-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-/* The touch tour (src/tour.ts): ghost fingertips over the real pad and board, a caption card at the top, and the
- * way each fingertip went drawn as a dashed arrow when motion is reduced. */
-.tour { position: fixed; inset: 0; z-index: 60; background: rgb(13 17 23 / 0.28); touch-action: none; user-select: none; -webkit-user-select: none; }
+/* The touch tour (src/tour.ts): ghost fingertips over the real pad and board, a bold banner low on the board (at the
+ * top when the strip is not below it), and the way each fingertip went drawn as a dashed arrow when motion is
+ * reduced. Only the banner takes a pointer: a press anywhere else reaches the game and ends the tour. */
+.tour { position: fixed; inset: 0; z-index: 60; background: rgb(13 17 23 / 0.18); pointer-events: none; user-select: none; -webkit-user-select: none; }
 .tour-dot {
   position: fixed; left: 0; top: 0; width: 38px; height: 38px; border-radius: 50%; opacity: 0;
   background: rgb(255 255 255 / 0.55); border: 2px solid rgb(255 255 255 / 0.95);
@@ -824,16 +825,27 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 .tour-trace { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .tour-trace path { fill: none; stroke: var(--accent); stroke-width: 4; stroke-dasharray: 8 6; stroke-linecap: round; }
 .tour-card {
-  position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); left: 50%; translate: -50% 0; width: min(92vw, 420px);
-  display: grid; gap: 6px; justify-items: center; padding: 12px 14px; border-radius: 12px;
-  background: var(--panel); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 6px 24px rgb(0 0 0 / 0.5);
+  position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); left: 50%; translate: -50% 0; width: min(calc(100vw - 24px), 440px);
+  display: grid; gap: 8px; justify-items: center; padding: 14px 16px 12px; border-radius: 14px;
+  background: var(--accent); color: #1a1a1a; border: 3px solid #1a1a1a; pointer-events: auto; touch-action: manipulation;
+  box-shadow: 0 0 0 3px var(--accent), 0 10px 32px rgb(0 0 0 / 0.65);
+  animation: tour-in 0.35s ease-out, tour-glow 2.4s ease-in-out 0.35s infinite;
 }
-.tour-caption { margin: 0; font-size: 1.05rem; text-align: center; }
-.tour-pips { margin: 0; color: var(--dim); letter-spacing: 0.2em; font-size: 0.8rem; }
-.tour-buttons { display: flex; gap: 8px; }
-.tour-buttons button { min-height: 44px; padding: 0 16px; }
+.tour-card.tour-low { top: auto; }
+@keyframes tour-in { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
+@keyframes tour-glow { 50% { box-shadow: 0 0 0 7px rgb(240 180 41 / 0.45), 0 10px 32px rgb(0 0 0 / 0.65); } }
+.tour-caption { margin: 0; font-size: 1.25rem; font-weight: 800; line-height: 1.25; text-align: center; }
+.tour-pips { margin: 0; color: #1a1a1a; letter-spacing: 0.3em; font-size: 1rem; }
+.tour-play { margin: 0; font-size: 0.85rem; font-weight: 600; text-align: center; }
+.tour-buttons { display: flex; gap: 10px; width: 100%; justify-content: center; }
+.tour-buttons button {
+  min-height: 52px; min-width: 9rem; padding: 0 22px; font-size: 1.1rem; font-weight: 800; border-radius: 10px;
+  background: #1a1a1a; color: #fff; border: 2px solid #1a1a1a;
+}
+.tour-buttons button:focus-visible { outline: 3px solid #fff; outline-offset: -6px; }
 @media (prefers-reduced-motion: reduce) {
   .tour-dot.press::after { animation: none; transform: scale(1.3); }
+  .tour-card { animation: none; }
 }
 .menu-confirm { display: grid; gap: 8px; padding: 10px 12px; }
 .menu-confirm p { margin: 0; }

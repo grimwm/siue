@@ -1,7 +1,7 @@
 // The modern look's camera maths: easing, clamping, panning, zooming, yaw choice and view height.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_YAW, MAX_PITCH, MIN_PITCH, START_PITCH, WALL_H, ZOOM_MIN, clampTilt, clampView, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, wholeZoom, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
+import { DEFAULT_YAW, MAX_PITCH, MIN_PITCH, START_PITCH, WALL_H, ZOOM_MIN, cameraDistance, clampTilt, clampView, clampZoom, easeCam, footprint, fromMini, groundAt, miniCell, nearestYaw, panCam, toMini, wholeZoom, zoomAbout, zoomLimits } from '../src/modern/camera.ts';
 import type { Cam } from '../src/modern/camera.ts';
 
 test('easeCam closes on the goal, reports motion, and settles exactly', () => {
@@ -216,13 +216,25 @@ test('the camera eases its pitch like its other values, and lands on it with red
   assert.equal(cur.pitch, 90);
 });
 
-test('the view starts at 75° and north up; the tilt stays between 45° and straight down', () => {
+test('the view starts at 75° and north up; the tilt stays between 10° and straight down', () => {
   assert.equal(DEFAULT_YAW, 0);
   assert.equal(START_PITCH, 75);
-  assert.equal(MIN_PITCH, 45);
+  assert.equal(MIN_PITCH, 10);
   assert.equal(MAX_PITCH, 90);
-  assert.equal(clampTilt(30), 45);
+  assert.equal(clampTilt(30), 30);
+  assert.equal(clampTilt(5), 10);
   assert.equal(clampTilt(60), 60);
   assert.equal(clampTilt(85), 85);
   assert.equal(clampTilt(120), 90);
+});
+
+test('tilted low, the camera stands back far enough that the bottom of the view still starts above the ground', () => {
+  for (const pitch of [75, 45, 20, 10]) {
+    for (const zoom of [5, 12, 40]) {
+      const p = (pitch * Math.PI) / 180, D = cameraDistance(pitch, zoom);
+      assert.ok(D * Math.sin(p) - (zoom / 2) * Math.cos(p) > 0, `${pitch}° at zoom ${zoom}`);
+      assert.ok(D >= 40);
+    }
+  }
+  assert.equal(cameraDistance(75, 10), 40, 'steep, it keeps its usual distance');
 });

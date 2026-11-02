@@ -1,27 +1,35 @@
 /* The Island of Crete, modern look: the camera as pure maths. There is one camera, always free to turn and tilt:
- * it turns about the vertical axis to any heading and stays there, tilts anywhere from straight down (90°) to 45°
- * above the ground, slides over the board and zooms within limits. Every level opens, and Reset returns, at 75° and
+ * it turns about the vertical axis to any heading and stays there, tilts anywhere from straight down (90°) to 10°
+ * above the ground, nearly edge-on, slides over the board and zooms within limits. Every level opens, and Reset returns, at 75° and
  * north up, centred. The board is centred at the origin, one cell is one unit, and cell (r, c) sits at
  * x = c - (cols - 1) / 2, z = r - (rows - 1) / 2. DOM-free. */
 
 /** The pitch every level opens at and Reset returns to: steeply down, square to the board like the classic look, so
  *  a wall hides about a quarter of the cell behind it and the figures still show their faces. */
 export const START_PITCH = 75;
-/** The lowest the view tilts: 45° above the ground. */
-export const MIN_PITCH = 45;
+/** The lowest the view tilts: 10° above the ground, nearly edge-on. */
+export const MIN_PITCH = 10;
 /** The steepest the view tilts: straight down. */
 export const MAX_PITCH = 90;
 /** The heading every view starts at and Reset returns to: square to the board, north up, as the classic look is. */
 export const DEFAULT_YAW = 0;
 
-/** `pitch` held between 45° and straight down. */
+/** `pitch` held between MIN_PITCH and straight down. */
 export function clampTilt(pitch: number): number {
   return Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitch));
 }
 
+/** How far the camera stands back from the point it looks at, in cells, for a view `zoom` rows high at `pitch`: 40,
+ *  or, tilted low, far enough that the bottom of the view still starts above the ground, so the near ground is never
+ *  cut off. */
+export function cameraDistance(pitch: number, zoom: number): number {
+  const p = (pitch * Math.PI) / 180;
+  return Math.max(40, (zoom / 2) * Math.cos(p) / Math.max(0.05, Math.sin(p)) + 4);
+}
+
 export interface Cam {
   yaw: number;
-  /** Degrees above the ground: 90 (straight down) to 45; 75 to start. */
+  /** Degrees above the ground: 90 (straight down) to 10; 75 to start. */
   pitch: number;
   tx: number;
   tz: number;

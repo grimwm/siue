@@ -7,7 +7,7 @@
  * bottom-right shows the view as it is (its needle points at the board's north, and its dial squashes and its ring
  * fills as the view tilts); a finger, pen or mouse dragging it turns the view across and tilts it up and down, and a
  * tap or click on it (or Enter or Space) resets the view (compass.ts); while it has the focus, Left and Right turn the
- * view 15° and Up and Down lean it toward 45° and back toward straight down, without moving Theseus. Every control is ignored
+ * view 15° and Up and Down lean it toward the lowest tilt (10°) and back toward straight down, without moving Theseus. Every control is ignored
  * while a layer covers the board. */
 import type { MoveAction } from '../keys.ts';
 import { compassFace, createCompassDrag } from './compass.ts';
@@ -25,7 +25,7 @@ export interface CamControl {
   /** Multiplies the view's height by `factor` about the screen point `(fx, fy)`, in fractions of the canvas from its
    *  centre (right and up are positive); at once under a finger or the wheel, eased from a button. */
   zoom(factor: number, fx: number, fy: number, eased: boolean): void;
-  /** Tilts by `deg` toward straight down (negative: back toward 45°); at once under a finger, eased from the compass. */
+  /** Tilts by `deg` toward straight down (negative: back toward the lowest tilt); at once under a finger, eased from the compass. */
   tilt(deg: number, eased: boolean): void;
   /** Back to the default heading, tilt and zoom. */
   reset(): void;

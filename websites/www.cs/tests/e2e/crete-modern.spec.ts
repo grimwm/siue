@@ -538,29 +538,29 @@ test.describe('on a touch phone', () => {
     const { yaw } = await cam(page);
     expect(yaw, `the view stays where the twist left it, no quarter turn: ${yaw}`).toBe(70);
     expect(await compass(page), 'the compass turns with the view').toMatchObject({ heading: yaw, pitch: 75 });
-    expect((await compass(page)).tilt).toBeCloseTo(1 / 3, 2);
+    expect((await compass(page)).tilt).toBeCloseTo(15 / 80, 2);
 
     const from = await player(page);
     await swipe(page, '#stage3d', 0, -80);
     const step = STEP[screenToGrid('up', yaw)];
     await expect.poll(() => player(page), 'a swipe up goes away from the camera').toEqual({ r: from.r + step.r, c: from.c + step.c });
 
-    // Two fingers sliding up together lean the view toward 45°, as on a map app, and the compass leans with it.
+    // Two fingers sliding up together lean the view toward the lowest tilt, as on a map app, and the compass leans with it.
     await twoFingers(page, { dy: -120 });
     await settled(page);
     const tilted = await cam(page);
     expect(tilted.pitch, 'tilted').toBeLessThan(65);
     const face = await compass(page);
     expect(face.pitch, 'the compass shows the tilt').toBe(tilted.pitch);
-    expect(face.tilt).toBeGreaterThan(0.6);
+    expect(face.tilt).toBeGreaterThan(0.3);
 
     await touchTap(page, '#cam-compass', 10);
     await expect.poll(() => cam(page), 'a real finger tap on the compass, wobbling 10 px, brings the starting view back').toEqual({ pitch: 75, yaw: 0 });
-    await expect.poll(async () => (await compass(page)).tilt, 'and the compass shows it').toBeCloseTo(1 / 3, 2);
+    await expect.poll(async () => (await compass(page)).tilt, 'and the compass shows it').toBeCloseTo(15 / 80, 2);
     expect(errors).toEqual([]);
   });
 
-  test('a finger dragging the compass across turns the view, up leans it toward 45°, and a tap resets it', async ({ page }) => {
+  test('a finger dragging the compass across turns the view, up leans it toward 10°, and a tap resets it', async ({ page }) => {
     const errors = await openHall(page);
     // Zoomed in and looking elsewhere, so the tap's re-centring shows. On a phone the zoom buttons are behind View.
     await page.locator('[aria-controls="cam-buttons"]').click();
@@ -575,10 +575,10 @@ test.describe('on a touch phone', () => {
     expect(turned.pitch, 'across alone does not tilt').toBe(75);
     await dragCompass(page, 'touch', 0, -50);
     await settled(page);
-    expect((await cam(page)).pitch, 'up leans toward 45°').toBe(55);
+    expect((await cam(page)).pitch, 'up leans toward the lowest tilt').toBe(55);
     await dragCompass(page, 'touch', 0, -400);
     await settled(page);
-    expect((await cam(page)).pitch, 'no further than 45°').toBe(45);
+    expect((await cam(page)).pitch, 'no further than 10°').toBe(10);
     expect((await compass(page)).tilt, 'the ring is full').toBe(1);
     await dragCompass(page, 'touch', 0, 400);
     await settled(page);
@@ -602,7 +602,7 @@ test('with a mouse, a left drag turns across and tilts up and down, the wheel zo
   for (let i = 1; i <= 10; i++) await page.mouse.move(x, y - 8 * i);
   await page.mouse.up();
   await settled(page);
-  expect((await cam(page)).pitch, 'dragging up leans toward 45°, as on a map app').toBeLessThan(60);
+  expect((await cam(page)).pitch, 'dragging up leans toward the lowest tilt, as on a map app').toBeLessThan(60);
   expect((await cam(page)).yaw).toBe(0);
   expect((await compass(page)).pitch, 'the compass shows the tilt').toBe((await cam(page)).pitch);
   const z1 = await zoom(page);
@@ -619,7 +619,7 @@ test('with a mouse the compass turns and tilts the view, a click on it eases bac
   await dragCompass(page, 'mouse', -100, -40);
   // Every move here eases, a step a frame, and a headless browser without a GPU can draw only a few frames a second.
   const eased = { timeout: 20_000 };
-  await expect.poll(() => cam(page), { ...eased, message: 'turned 60° the other way and leaned toward 45°, and left there' }).toEqual({ pitch: 59, yaw: 60 });
+  await expect.poll(() => cam(page), { ...eased, message: 'turned 60° the other way and leaned toward the lowest tilt, and left there' }).toEqual({ pitch: 59, yaw: 60 });
   expect(await compass(page)).toMatchObject({ heading: 60, pitch: 59 });
   // A click (no drag) resets, eased: the view passes through the angles between on its way back.
   const seen: number[] = [];

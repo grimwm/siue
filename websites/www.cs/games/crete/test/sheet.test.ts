@@ -41,7 +41,7 @@ test('tilted, the far side shrinks toward the horizon and the near side grows', 
 
 test('unproject undoes project at every heading and tilt', () => {
   for (const yaw of [0, 33, 90, 180, 271, -45]) {
-    for (const pitch of [90, 75, 60, 45]) {
+    for (const pitch of [90, 75, 60, 45, 20, 10]) {
       const f = frame({ yaw, pitch, ox: 7, oy: -3, k: 1.2 });
       for (const [x, y] of [[0, 0], [100, 50], [220, 10], [37, 140]] as const) {
         const p = project(f, x, y);
@@ -60,7 +60,7 @@ test('the CSS transform names the same lens, tilt, turn and offsets', () => {
 
 test('the whole-level frame fills the view and centres the board, figures\' headroom included', () => {
   for (const yaw of [0, 45, 90, 200]) {
-    for (const pitch of [90, 75, 45]) {
+    for (const pitch of [90, 75, 45, 20, 10]) {
       const f = wholeFrame({ yaw, pitch }, 20, 13, 16, RISE, 390, 600);
       const e = extent(f, 20, 13, 16, RISE);
       const w = e.right - e.left, h = e.bottom - e.top;
@@ -86,6 +86,19 @@ test('the figures\' headroom: the walls\' rise looking straight down, more as th
   near(headroom(90, RISE), RISE);
   assert.ok(headroom(75, RISE) > RISE && headroom(75, RISE) < headroom(45, RISE));
   assert.ok(headroom(45, RISE) < 1);
+  assert.ok(headroom(10, RISE) >= headroom(45, RISE) && headroom(10, RISE) < 1.25, 'and no more than a cell or so at the lowest tilt');
+});
+
+test('at the lowest tilt the whole board stays in front of the eye and every row keeps some height on the screen', () => {
+  for (const yaw of [0, 45, 90, 200]) {
+    const f = wholeFrame({ yaw, pitch: 10 }, 32, 32, 16, RISE, 390, 600);
+    for (let r = 0; r < 32; r++) {
+      const a = project(f, 16 * 16, r * 16), b = project(f, 16 * 16, (r + 1) * 16);
+      assert.ok(Number.isFinite(a.y) && Number.isFinite(b.y), `row ${r} at ${yaw}°`);
+    }
+    // North up, the far row is the thinnest; it still shows.
+    if (yaw === 0) assert.ok(project(f, 256, 16).y - project(f, 256, 0).y > 0.5, 'the far row is more than half a pixel');
+  }
 });
 
 /** The board's free space (its content box) on portrait phones, as the layout gives it with a level open. */
@@ -145,7 +158,7 @@ test('the view opens at 75° and north up, eases where it is sent, and home find
   for (let i = 0; i < 200 && moving; i++) moving = v.step(1 / 60, false);
   assert.equal(v.cur.yaw, 90);
   v.tilt(-100, false);
-  assert.equal(v.cur.pitch, 45, 'held at 45°');
+  assert.equal(v.cur.pitch, 10, 'held at 10°');
   v.set(350, 80);
   v.home(false);
   assert.deepEqual(v.cur, { yaw: 360, pitch: START_PITCH });

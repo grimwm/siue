@@ -1,5 +1,5 @@
 /* The Island of Crete, classic look: the board as a tilted sheet. The classic board turns to any heading and tilts
- * from straight down to 45°, like the modern one, without 3D graphics: the board sheet (the terrain, drawn by
+ * from straight down to 10°, like the modern one, without 3D graphics: the board sheet (the terrain, drawn by
  * src/board.ts) is a 2D canvas under a CSS transform (a lens, a tilt about the screen's across axis, a turn about the
  * sheet's own), and the figures, items and hazards stand upright over it, at their exact pixels, on their squares'
  * projected centres. Both looks share one heading and tilt, and every level opens, and a tap on the compass returns,
@@ -13,7 +13,7 @@ import type { Heading } from './modern/compass.ts';
 
 /** The eye's distance from the sheet, in board sizes (its longer side): a gentle lens. */
 export const EYE = 3.5;
-/** How far down its square a standing figure's feet come as the view leans to 45°, in cells. */
+/** How far down its square a standing figure's feet come as the view leans to 45°, and held lower, in cells. */
 export const LEAN_FEET = 0.42;
 /** When zoomed in, the view pans to keep Theseus this many cells inside it. */
 export const FOLLOW_CELLS = 2;
@@ -142,7 +142,7 @@ export interface SheetView {
   readonly goal: Heading;
   /** Turns by `deg`; at once under a finger, eased from a button. */
   turn(deg: number, eased: boolean): void;
-  /** Tilts by `deg` toward straight down (negative: toward 45°), held between them. */
+  /** Tilts by `deg` toward straight down (negative: toward the lowest tilt), held between them. */
   tilt(deg: number, eased: boolean): void;
   /** Puts the view at this heading and tilt at once (the other look's, on switching). */
   set(yaw: number, pitch: number): void;

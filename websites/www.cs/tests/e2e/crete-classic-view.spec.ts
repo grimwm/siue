@@ -108,13 +108,13 @@ test('the classic sheet opens at 75° and north up, turns and tilts on the compa
   await dragCompass(page, 0, -50);
   await expect.poll(() => view(page)).toEqual({ yaw: 60, pitch: 55 });
   await dragCompass(page, 0, -200);
-  await expect.poll(() => view(page), 'held at 45°').toEqual({ yaw: 60, pitch: 45 });
-  expect(await compass(page)).toEqual({ heading: 60, pitch: 45 });
+  await expect.poll(() => view(page), 'held at 10°').toEqual({ yaw: 60, pitch: 10 });
+  expect(await compass(page)).toEqual({ heading: 60, pitch: 10 });
   // The turn buttons turn a quarter.
   const turnRight = page.locator('#classic-right');
   if (!(await turnRight.isVisible())) await page.locator('#classic-cam .modern-viewbtn').click();
   await turnRight.click();
-  await expect.poll(() => view(page)).toEqual({ yaw: 150, pitch: 45 });
+  await expect.poll(() => view(page)).toEqual({ yaw: 150, pitch: 10 });
   // A tap on the compass goes back to the opening view, by the nearest way round.
   await dragCompass(page, 0, 0);
   await expect.poll(() => view(page)).toEqual({ yaw: 0, pitch: 75 });
@@ -224,5 +224,46 @@ test('the heading and tilt go across to the modern look and back with the Map bu
   await page.keyboard.press('ArrowUp');
   const step = STEP[screenToGrid('up', 150)];
   await expect.poll(() => player(page)).toEqual({ r: from.r + step.r, c: from.c + step.c });
+  expect(errors).toEqual([]);
+});
+
+test('at the lowest tilt, 10°, the moves still follow the screen and Theseus stands on his square, in both looks and across a switch', async ({ page }) => {
+  const { errors } = await openHall(page);
+  await dragCompass(page, -100, -200);
+  await expect.poll(() => view(page), 'turned 60° and held at 10°').toEqual({ yaw: 60, pitch: 10 });
+  for (const dir of ['up', 'right', 'down', 'left'] as const) {
+    const from = await player(page);
+    await page.keyboard.press(KEY[dir]);
+    const step = STEP[screenToGrid(dir, 60)];
+    await expect.poll(() => player(page), `${dir} at 10° in Classic`).toEqual({ r: from.r + step.r, c: from.c + step.c });
+  }
+  const at = await page.evaluate(() => {
+    const t = (window as unknown as Hooked).__creteTest;
+    const p = t.game.run.now.player;
+    return t.classic.at(p.c, p.r);
+  });
+  const box = (await page.locator('#stage-view').boundingBox())!;
+  expect(at!.x).toBeGreaterThan(box.x);
+  expect(at!.x).toBeLessThan(box.x + box.width);
+  expect(at!.y).toBeGreaterThan(box.y);
+  expect(at!.y).toBeLessThan(box.y + box.height);
+
+  await page.keyboard.press('b');
+  await expect(page.locator('#stage3d')).toBeVisible();
+  await page.waitForFunction(() => (window as unknown as Hooked).__creteTest.modern?.active === true);
+  const modernView = () => page.evaluate(() => {
+    const m = (window as unknown as Hooked).__creteTest.modern!;
+    return { yaw: Math.round(m.yaw()), pitch: Math.round(m.pitch()) };
+  });
+  await expect.poll(modernView, 'Modern takes up 10°').toEqual({ yaw: 60, pitch: 10 });
+  for (const dir of ['up', 'left'] as const) {
+    const from = await player(page);
+    await page.keyboard.press(KEY[dir]);
+    const step = STEP[screenToGrid(dir, 60)];
+    await expect.poll(() => player(page), `${dir} at 10° in Modern`).toEqual({ r: from.r + step.r, c: from.c + step.c });
+  }
+  await page.keyboard.press('b');
+  await expect(page.locator('#stage')).toBeVisible();
+  await expect.poll(() => view(page), 'and Classic takes it back').toEqual({ yaw: 60, pitch: 10 });
   expect(errors).toEqual([]);
 });

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_YAW, MAX_PITCH, MIN_PITCH, START_PITCH } from '../src/modern/camera.ts';
-import { COMPASS_TAP_PX, COMPASS_TILT_PER_PX, COMPASS_TURN_PER_PX, compassFace, createCompassDrag, steer } from '../src/modern/compass.ts';
+import { COMPASS_TAP_PX, COMPASS_TILT_PER_PX, COMPASS_TURN_PER_PX, DIAL_SQUASH_MIN, compassFace, createCompassDrag, steer } from '../src/modern/compass.ts';
 import type { Heading } from '../src/modern/compass.ts';
 import { createGestures } from '../src/modern/gestures.ts';
 import type { CamOp } from '../src/modern/gestures.ts';
@@ -29,14 +29,14 @@ test('a drag across the compass turns the view, the way a left-button drag on th
   assert.equal(v.pitch, START_PITCH, 'across only turns');
 });
 
-test('a drag up the compass leans the view toward 45°, and down toward straight down, and no further either way', () => {
+test('a drag up the compass leans the view toward 10°, and down toward straight down, and no further either way', () => {
   const d = createCompassDrag();
   d.down(1, 50, 50);
   const some = play(d.move(1, 50, 30));
   near(some.pitch, START_PITCH - 20 * COMPASS_TILT_PER_PX);
   assert.equal(some.yaw, 0, 'up and down only tilt');
   const all = play([...d.move(1, 50, 30), ...d.move(1, 50, -400)]);
-  assert.equal(all.pitch, MIN_PITCH, 'held at 45°');
+  assert.equal(all.pitch, MIN_PITCH, 'held at 10°');
   const back = play(d.move(1, 50, 400), all);
   assert.equal(back.pitch, MAX_PITCH, 'and dragging down goes no further than straight down');
 });
@@ -85,12 +85,13 @@ test('one pointer steers at a time; a cancelled press does nothing more', () => 
 test('the face shows the view: the needle turns with the heading, the dial squashes and the ring fills as it tilts', () => {
   assert.deepEqual(compassFace({ yaw: 0, pitch: MAX_PITCH }), { needle: 0, squash: 1, tilt: 0 });
   const start = compassFace({ yaw: 0, pitch: START_PITCH });
-  near(start.tilt, 1 / 3);
+  near(start.tilt, 15 / 80);
   near(start.squash, Math.sin((75 * Math.PI) / 180));
   const low = compassFace({ yaw: -90, pitch: MIN_PITCH });
   assert.equal(low.needle, -90);
   near(low.tilt, 1);
-  near(low.squash, Math.SQRT1_2);
+  near(low.squash, DIAL_SQUASH_MIN);
+  near(compassFace({ yaw: 0, pitch: 45 }).squash, Math.SQRT1_2);
   const free = compassFace({ yaw: 30, pitch: 60 });
   assert.equal(free.needle, 30, 'any heading, not only quarter turns');
   assert.ok(free.squash < start.squash && free.squash > low.squash, 'the squash grows as the view tilts');

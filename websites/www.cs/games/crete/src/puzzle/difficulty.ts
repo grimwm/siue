@@ -4,16 +4,19 @@
  * the plain walk to the exit. `challengeProblems` checks the numbers against the
  * campaign's bar and `sharedProblems` against the bar for shared levels. A
  * winnable level can still be no fight at all (the beast walled off, the line
- * walked straight); the bars fail that. Campaign levels, the editor and endless
- * mode all use these. DOM-free. */
+ * walked straight); the bars fail that. `uselessProblems` fails a level with a
+ * piece the player can ignore, and `threatProblems` one whose beast is no threat.
+ * Campaign levels, the editor and endless mode all use these. DOM-free. */
 import type { Level } from './level.ts';
+import { parse, serialize } from './level.ts';
 import { initial } from './state.ts';
-import { solving, caught, SOLVER_CAP } from './solver.ts';
+import type { State } from './state.ts';
+import { solve, solveRefusing, solving, caught, SOLVER_CAP } from './solver.ts';
 import type { SearchRoom, SolveResult } from './solver.ts';
 import { step, noTurn } from './step.ts';
-import { DIRS, DELTA, TERRAIN, HAZARDS } from './tiles.ts';
-import type { Dir, Terrain } from './tiles.ts';
-import { lineText } from './cache.ts';
+import { DIRS, DELTA, TERRAIN, HAZARDS, KEY_COLORS } from './tiles.ts';
+import type { Dir, ObjectKind, Terrain } from './tiles.ts';
+import { lineText, lineOf } from './cache.ts';
 import { layoutOf, pack, unpack } from './pack.ts';
 import { memoryStore, StoreError } from './store.ts';
 import type { NodeStore } from './store.ts';
@@ -469,5 +472,180 @@ export function sharedProblems(d: Difficulty, bar: SharedBar = SHARED_BAR): stri
   const explored = chase ? bar.chaseExplored : bar.explored;
   if (d.shortest < shortest) out.push(`the quickest win is ${d.shortest} moves, the bar is ${shortest}`);
   if (d.explored < explored) out.push(`the solver searched ${d.explored} situations, the bar is ${explored}`);
+  return out;
+}
+
+/** A piece of a level, and the level as it would be if the player ignored that piece (one way or more). */
+export interface PieceUnit { name: string; ignored: readonly Level[] }
+
+/** The gear that carries Theseus over a floor kind unharmed. */
+const GEAR_OF: Partial<Record<Terrain, ObjectKind>> = {
+  ice: 'skates', 'force-up': 'suction', 'force-down': 'suction', 'force-left': 'suction', 'force-right': 'suction',
+};
+
+/** The level with its terrain and objects edited, parsed again so the buttons' links follow. */
+function edited(level: Level, f: (t: Terrain[], o: (ObjectKind | null)[]) => void): Level {
+  const t = [...level.terrain], o = [...level.objects];
+  f(t, o);
+  return parse(serialize({ ...level, terrain: t, objects: o }));
+}
+
+/** Every piece a player could ignore, each with the level as it is when he does. What he would take is gone (keys,
+ *  gear, the mirror, the cow, a spare relic); what he would open, push or cross stays shut as wall (a colour's doors
+ *  with its keys, a block, a fake wall, water, fire, teleports); what shapes the ground is plain floor (ice,
+ *  currents, a snare with its brown buttons, an invisible wall, a thief, a bomb) and a hazard is gone. Gravel, marked
+ *  stones and pop-up walls are both a road for Theseus and a bar to the beast, so each is tried as floor and as
+ *  wall; ice and currents are tried without their gear too. The toggle walls and their button are one piece: the
+ *  button never pressed, every wall staying as it starts. Floor kinds count as one piece each (all the gravel); the
+ *  rest count one by one. A honey cake and a story page are not puzzle pieces: a cake is a spare heart and no level
+ *  may need a catch, and a page is a reward off the quick way. */
+export function pieceUnits(level: Level): PieceUnit[] {
+  const out: PieceUnit[] = [];
+  const at = (i: number) => `row ${Math.floor(i / level.cols) + 1}, column ${(i % level.cols) + 1}`;
+  for (const color of KEY_COLORS) {
+    const key: ObjectKind = `key-${color}`;
+    if (!level.objects.includes(key) && !level.terrain.some(t => TERRAIN[t].door === color)) continue;
+    out.push({ name: `the ${color} keys and doors`, ignored: [edited(level, (t, o) => {
+      o.forEach((x, i) => { if (x === key) o[i] = null; });
+      t.forEach((x, i) => { if (TERRAIN[x].door === color) t[i] = 'wall'; });
+    })] });
+  }
+  const spare = level.objects.filter(o => o === 'relic').length > level.relics;
+  level.objects.forEach((x, i) => {
+    if (x === 'block') out.push({ name: `the block at ${at(i)}`, ignored: [edited(level, (t, o) => { o[i] = null; t[i] = 'wall'; })] });
+    else if (x === 'relic' ? spare : x !== null && x !== 'cake' && x !== 'page' && !x.startsWith('key-')) {
+      out.push({ name: `the ${x === 'relic' ? 'spare relic' : x} at ${at(i)}`, ignored: [edited(level, (_, o) => { o[i] = null; })] });
+    }
+  });
+  const kinds: [string, readonly Terrain[], readonly Terrain[]][] = [
+    ['gravel', ['gravel'], ['floor', 'wall']],
+    ['marked stones', ['safe'], ['floor', 'wall']],
+    ['pop-up walls', ['popup'], ['floor', 'wall']],
+    ['ice', ['ice'], ['floor']],
+    ['currents', ['force-up', 'force-down', 'force-left', 'force-right'], ['floor']],
+    ['water', ['water'], ['wall']],
+    ['fire', ['fire'], ['wall']],
+    ['teleports', ['teleport'], ['wall']],
+  ];
+  for (const [name, ks, as] of kinds) {
+    if (!level.terrain.some(t => ks.includes(t))) continue;
+    const ignored = as.map(to => edited(level, t => { t.forEach((x, i) => { if (ks.includes(x)) t[i] = to; }); }));
+    const gear = GEAR_OF[ks[0]!];
+    if (gear && level.objects.includes(gear)) ignored.push(edited(level, (_, o) => { o.forEach((x, i) => { if (x === gear) o[i] = null; }); }));
+    out.push({ name: `the ${name}`, ignored });
+  }
+  if (level.terrain.some(t => t === 'button' || t === 'toggle-open' || t === 'toggle-closed')) {
+    out.push({ name: 'the toggle walls and their button', ignored: [edited(level, t => {
+      t.forEach((x, i) => { if (x === 'button' || x === 'toggle-open') t[i] = 'floor'; else if (x === 'toggle-closed') t[i] = 'wall'; });
+    })] });
+  }
+  level.terrain.forEach((x, i) => {
+    const linked = (t: Terrain[]) => { for (const [b, to] of Object.entries(level.links)) if (to === i) t[Number(b)] = 'floor'; };
+    const one = (name: string, to: Terrain, more?: (t: Terrain[]) => void) =>
+      out.push({ name: `the ${name} at ${at(i)}`, ignored: [edited(level, t => { t[i] = to; more?.(t); })] });
+    if (x === 'trap') one('snare', 'floor', linked);
+    else if (x === 'fake-wall') one('fake wall', 'wall');
+    else if (x === 'invisible-wall') one('invisible wall', 'floor');
+    else if (x === 'thief') one('thief', 'floor');
+    else if (x === 'bomb') one('bomb', 'floor');
+    else if (x === 'clone') one('clone machine', 'wall', linked);
+  });
+  level.hazards.forEach((h, k) => {
+    out.push({ name: `the ${HAZARDS[h.kind].name.toLowerCase()} at ${at(h.at.r * level.cols + h.at.c)}`,
+      ignored: [parse(serialize({ ...level, hazards: level.hazards.filter((_, j) => j !== k) }))] });
+  });
+  return out;
+}
+
+/** A piece whose only mark on the level is on the search must cut it by at least this much when ignored: the step
+ *  from one challenge level to the next that the ramp aims for. */
+export const USEFUL = { explored: 1.3 };
+
+/** What ignoring a piece changes, in words; null when it changes nothing that counts. */
+function changes(d: Difficulty, lv: Level, cap: number): string | null {
+  const r = solve(initial(lv), cap);
+  if (!r.solved) return r.capped ? 'the search hit its cap' : 'the level cannot be won';
+  if (r.line.length !== d.shortest) return `the fewest moves go from ${d.shortest} to ${r.line.length}`;
+  const free = solveRefusing(initial(lv), caught, cap);
+  if (!free.solved) return free.capped ? 'the search hit its cap' : 'no win without a catch';
+  if (free.line.length !== d.catchFree) return `the fewest catch-free moves go from ${d.catchFree} to ${free.line.length}`;
+  if (d.explored >= USEFUL.explored * r.explored) return `the search falls from ${d.explored} situations to ${r.explored}`;
+  return null;
+}
+
+/** Every piece matters: ignoring it (pieceUnits) makes the level unwinnable or need a catch, changes its fewest
+ *  moves, or cuts its search by at least USEFUL.explored times. A piece the player can ignore with nothing changing
+ *  fails the level. */
+export function uselessProblems(level: Level, d: Difficulty, cap = SOLVER_CAP): string[] {
+  if (!d.solved || typeof d.catchFree !== 'number') return [];
+  return pieceUnits(level).flatMap(u => (u.ignored.some(lv => changes(d, lv, cap) !== null)
+    ? [] : [`${u.name}: ignoring it changes nothing (still ${d.shortest} moves, and the search no ${USEFUL.explored} × smaller)`]));
+}
+
+/** The beast along the shortest line: `live` of its `turns`, and the longest run of turns in a row he is not live. */
+export interface Threat { turns: number; live: number; quiet: number }
+
+/** A live beast: within `reach` steps of Theseus over ground he may tread (two of his turns). On the shortest line
+ *  he is live for at least `share` of the turns and quiet for at most `quiet` of them in a row; a teaching level,
+ *  which shows one piece, is held to the gentler bar. */
+export const THREAT = {
+  reach: 4,
+  challenge: { share: 1 / 3, quiet: 1 / 3 },
+  teaching: { share: 1 / 4, quiet: 1 / 2 },
+};
+
+/** Steps from the Minotaur to Theseus over cells the Minotaur may enter (Theseus's own cell counts), when at most
+ *  `most`; Infinity otherwise. */
+function beastReach(s: State, most: number): number {
+  const lv = s.level;
+  if (!s.minotaur) return Infinity;
+  const from = s.minotaur.r * lv.cols + s.minotaur.c, goal = s.player.r * lv.cols + s.player.c;
+  const dist = new Map<number, number>([[from, 0]]);
+  const queue = [from];
+  for (let k = 0; k < queue.length; k++) {
+    const i = queue[k]!, here = dist.get(i)!;
+    if (i === goal) return here;
+    if (here >= most) continue;
+    const r = Math.floor(i / lv.cols), c = i % lv.cols;
+    for (const d of DIRS) {
+      const nr = r + DELTA[d][0], nc = c + DELTA[d][1];
+      if (nr < 0 || nc < 0 || nr >= lv.rows || nc >= lv.cols) continue;
+      const j = nr * lv.cols + nc;
+      if (dist.has(j)) continue;
+      if (j !== goal && (!TERRAIN[s.terrain[j]!].minotaur || s.objects[j] === 'block')) continue;
+      dist.set(j, here + 1);
+      queue.push(j);
+    }
+  }
+  return Infinity;
+}
+
+/** The beast along the shortest line (`d.line`): a turn is live when, after it, he has moved, is stone or held in a
+ *  snare (Theseus dealt with him), or stands within THREAT.reach steps of Theseus. */
+export function threatOf(level: Level, d: Difficulty): Threat {
+  const line = lineOf(d.line) ?? [];
+  let s = initial(level);
+  let live = 0, quiet = 0, run = 0;
+  for (const a of line) {
+    const x = step(s, a);
+    s = x.state;
+    const on = s.stone > 0 || x.events.some(e => e.kind === 'stoned' || ((e.kind === 'moved' || e.kind === 'slid' || e.kind === 'held') && e.who === 'minotaur'))
+      || beastReach(s, THREAT.reach) <= THREAT.reach;
+    if (on) { live++; run = 0; } else quiet = Math.max(quiet, ++run);
+  }
+  return { turns: line.length, live, quiet };
+}
+
+/** The beast is a real threat, not penned from the start. No route that ignores him wins as quickly (he adds at
+ *  least a move), and on the shortest line he is live for at least THREAT[kind].share of the turns and never quiet
+ *  for more than THREAT[kind].quiet of them in a row. A level without a Minotaur has nothing to check. */
+export function threatProblems(level: Level, d: Difficulty, kind: 'teaching' | 'challenge'): string[] {
+  if (!level.minotaur || !d.solved || typeof d.shortest !== 'number') return [];
+  const out: string[] = [];
+  if (d.minotaurDelta !== null && d.minotaurDelta < 1) out.push('the beast adds no moves: a route that ignores him wins as quickly');
+  const bar = THREAT[kind];
+  const t = threatOf(level, d);
+  if (t.live < bar.share * t.turns) out.push(`the beast is live on ${t.live} of ${t.turns} turns; the bar is ${Math.ceil(bar.share * t.turns)}`);
+  if (t.quiet > bar.quiet * t.turns) out.push(`the beast is quiet for ${t.quiet} turns in a row; the bar is ${Math.floor(bar.quiet * t.turns)}`);
   return out;
 }

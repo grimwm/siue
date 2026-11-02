@@ -19,6 +19,7 @@ interface PiecesTest {
   game: { run: { now: { player: Cell; moves: number; hazards: { kind: string; at: Cell }[] } } };
   parse(text: string): unknown;
   playLevel(level: unknown): void;
+  classic: { at(c: number, r: number): { x: number; y: number } | null };
 }
 /** The hook's shape as this spec uses it; crete-play.spec.ts declares the global `__creteTest` itself. */
 type Hooked = { __creteTest: PiecesTest };
@@ -71,16 +72,19 @@ const now = (page: Page) => page.evaluate(() => {
   const s = (window as unknown as Hooked).__creteTest.game.run.now;
   return { moves: s.moves, player: s.player, harpy: s.hazards[0]!.at };
 });
-/** How many dark pixels board cell (r, c) holds. Figures carry a dark outline and floor has none, so the cell a figure
- *  stands in holds far more than its neighbour, whatever frame of its loop is showing. A cell is the canvas width over
- *  the level's 7 columns; the rows sit under the top row's rise. */
+/** How many dark pixels the figure standing on board cell (r, c) shows. The figures stand upright on the
+ *  `.stage-figures` canvas over the tilted sheet, so the box read is a cell wide and a cell high above the square's
+ *  projected centre. Figures carry a dark outline and an empty square shows none, so the cell a figure stands on holds
+ *  far more than its neighbour, whatever frame of its loop is showing. */
 const darkIn = (page: Page, r: number, c: number) => page.evaluate(([r, c]) => {
-  const stage = document.getElementById('stage') as HTMLCanvasElement;
-  const cell = stage.width / 7;
-  const top = stage.height - 6 * cell;
-  const d = stage.getContext('2d')!.getImageData(c * cell, top + r * cell, cell, cell).data;
+  const at = (window as unknown as Hooked).__creteTest.classic.at(c, r)!;
+  const o = document.querySelector('.stage-figures') as HTMLCanvasElement;
+  const box = o.getBoundingClientRect();
+  const k = o.width / box.width;
+  const cell = Number((document.getElementById('stage') as HTMLElement).dataset.cell) * k;
+  const d = o.getContext('2d')!.getImageData(Math.round((at.x - box.left) * k - cell / 2), Math.round((at.y - box.top) * k - cell), Math.round(cell), Math.round(cell)).data;
   let n = 0;
-  for (let i = 0; i < d.length; i += 4) if (d[i]! + d[i + 1]! + d[i + 2]! < 180) n++;
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 200 && d[i]! + d[i + 1]! + d[i + 2]! < 180) n++;
   return n;
 }, [r, c] as const);
 

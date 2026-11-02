@@ -40,9 +40,10 @@ export interface Cam {
 /** How much the ground's depth axis is foreshortened at pitch `deg`: 1 looking straight down. */
 const sinPitch = (deg: number): number => Math.sin((deg * Math.PI) / 180);
 
-/** Ease `cur` toward `goal` in place; true while it is still moving. `snap` (reduced motion) jumps at once. */
+/** Ease `cur` toward `goal` in place, never past it, its pitch held between the lowest tilt and straight down; true
+ *  while it is still moving. `snap` (reduced motion) jumps at once. A frame whose time runs back moves it not at all. */
 export function easeCam(cur: Cam, goal: Cam, dtSec: number, snap: boolean): boolean {
-  const k = snap ? 1 : 1 - Math.exp(-dtSec * 11);
+  const k = snap ? 1 : 1 - Math.exp(-Math.max(0, dtSec) * 11);
   let moving = false;
   for (const key of ['yaw', 'pitch', 'tx', 'tz', 'zoom'] as const) {
     const d = goal[key] - cur[key];
@@ -50,6 +51,7 @@ export function easeCam(cur: Cam, goal: Cam, dtSec: number, snap: boolean): bool
     cur[key] = Math.abs(d) > (key === 'yaw' || key === 'pitch' ? 0.02 : 0.002) && !snap ? cur[key] + d * k : goal[key];
     if (cur[key] !== goal[key]) moving = true;
   }
+  cur.pitch = clampTilt(cur.pitch);
   return moving;
 }
 

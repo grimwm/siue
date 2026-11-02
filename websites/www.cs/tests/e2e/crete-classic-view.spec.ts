@@ -79,12 +79,12 @@ async function dragCompass(page: Page, dx: number, dy: number): Promise<void> {
   }, [dx, dy] as const);
 }
 
-async function openHall(page: Page): Promise<{ errors: string[]; modernJs: string[] }> {
+async function openHall(page: Page, motion: 'reduce' | 'no-preference' = 'reduce'): Promise<{ errors: string[]; modernJs: string[] }> {
   const errors: string[] = [];
   const modernJs: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('request', r => { if (/\/dist\/modern\.js/.test(r.url())) modernJs.push(r.url()); });
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.emulateMedia({ reducedMotion: motion });
   await page.goto('games/crete/');
   await page.locator('#title-play').click();
   await page.locator('#pick-enter').click();
@@ -118,6 +118,64 @@ test('the classic sheet opens at 75° and north up, turns and tilts on the compa
   // A tap on the compass goes back to the opening view, by the nearest way round.
   await dragCompass(page, 0, 0);
   await expect.poll(() => view(page)).toEqual({ yaw: 0, pitch: 75 });
+  expect(errors).toEqual([]);
+});
+
+test('a tap on the compass eases back to 75° and north up from the lowest tilt, however the view was turned', async ({ page }) => {
+  // A display frame's time can come before the moment the input that started the ease was read: on a phone the
+  // first eased frame is stamped earlier than the tap. Here the page's clock runs 40 ms ahead of the frames' stamps.
+  await page.addInitScript(() => {
+    const now = performance.now.bind(performance);
+    performance.now = () => now() + 40;
+  });
+  const { errors } = await openHall(page, 'no-preference');
+  for (const across of [-150, 150, -300, 75, -500, 400]) {
+    await dragCompass(page, across, 0);
+    await dragCompass(page, 0, -250);
+    await expect.poll(() => view(page), `turned ${across} px and held at 10°`).toMatchObject({ pitch: 10 });
+    await dragCompass(page, 0, 0);
+    await expect.poll(async () => {
+      const v = await view(page);
+      return { north: ((v.yaw % 360) + 360) % 360, pitch: v.pitch };
+    }, `back from ${across} px`).toEqual({ north: 0, pitch: 75 });
+    await expect.poll(() => compass(page).then(c => c.pitch)).toBe(75);
+  }
+  expect(errors).toEqual([]);
+});
+
+test('in Modern too, a tap on the compass eases back to 75° and north up from the lowest tilt, however the view was turned', async ({ page }) => {
+  await page.addInitScript(() => {
+    const now = performance.now.bind(performance);
+    performance.now = () => now() + 40;
+  });
+  const { errors } = await openHall(page, 'no-preference');
+  await page.keyboard.press('b');
+  await expect(page.locator('#stage3d')).toBeVisible();
+  await page.waitForFunction(() => (window as unknown as Hooked).__creteTest.modern?.active === true);
+  const modernView = () => page.evaluate(() => {
+    const m = (window as unknown as Hooked).__creteTest.modern!;
+    return { yaw: Math.round(m.yaw()), pitch: Math.round(m.pitch()) };
+  });
+  const drag = (dx: number, dy: number) => page.locator('#cam-compass').evaluate((el, [dx, dy]) => {
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const ev = (kind: string, px: number, py: number) => el.dispatchEvent(new PointerEvent(kind, {
+      pointerId: 43, pointerType: 'mouse', isPrimary: true, clientX: px, clientY: py, bubbles: true, cancelable: true, button: 0,
+    }));
+    ev('pointerdown', x, y);
+    for (let i = 1; i <= 8; i++) ev('pointermove', x + dx! * i / 8, y + dy! * i / 8);
+    ev('pointerup', x + dx!, y + dy!);
+  }, [dx, dy] as const);
+  for (const across of [-150, 150, -300, 400]) {
+    await drag(across, 0);
+    await drag(0, -250);
+    await expect.poll(modernView, `turned ${across} px and held at 10°`).toMatchObject({ pitch: 10 });
+    await drag(0, 0);
+    await expect.poll(async () => {
+      const v = await modernView();
+      return { north: ((v.yaw % 360) + 360) % 360, pitch: v.pitch };
+    }, `back from ${across} px`).toEqual({ north: 0, pitch: 75 });
+  }
   expect(errors).toEqual([]);
 });
 

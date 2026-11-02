@@ -148,7 +148,8 @@ export interface SheetView {
   set(yaw: number, pitch: number): void;
   /** Back to 75° and north up; eased unless `eased` is false. */
   home(eased: boolean): void;
-  /** Moves `cur` toward `goal` over `dtSec`; `snap` (reduced motion) jumps. True while it still moves. */
+  /** Moves `cur` toward `goal` over `dtSec`, never past it nor out of the tilt's range; `snap` (reduced motion)
+   *  jumps. True while it still moves. */
   step(dtSec: number, snap: boolean): boolean;
 }
 
@@ -176,7 +177,8 @@ export function createSheetView(): SheetView {
       if (!eased) Object.assign(cur, goal);
     },
     step(dtSec, snap) {
-      const k = snap ? 1 : 1 - Math.exp(-dtSec * 11);
+      // A frame stamped before the input that sent the view (its time negative) moves it not at all, never away.
+      const k = snap ? 1 : 1 - Math.exp(-Math.max(0, dtSec) * 11);
       let moving = false;
       for (const key of ['yaw', 'pitch'] as const) {
         const d = goal[key] - cur[key];
@@ -184,6 +186,7 @@ export function createSheetView(): SheetView {
         cur[key] = Math.abs(d) > 0.02 && !snap ? cur[key] + d * k : goal[key];
         if (cur[key] !== goal[key]) moving = true;
       }
+      cur.pitch = clampTilt(cur.pitch);
       return moving;
     },
   };

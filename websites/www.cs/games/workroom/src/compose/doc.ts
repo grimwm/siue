@@ -97,6 +97,16 @@ function beatOfSaved(clock: BeatClock, pos: number): number {
   return Math.abs(snapped - beat) <= slack ? snapped : round(beat);
 }
 
+/**
+ * The beat at a saved note time: the nearest 1/48 of a beat when the score's rounding to a microsecond is all that
+ * separates them, so notes on the editor's grid come back exactly.
+ */
+function beatOfSeconds(clock: BeatClock, seconds: number): number {
+  const beat = clock.beat(seconds);
+  const snapped = Math.round(beat * 48) / 48;
+  return Math.abs(snapped - beat) < 1e-5 ? snapped : round(beat);
+}
+
 /** A note's identity apart from its id, to 1/1000 of a beat. */
 const noteSig = (n: Omit<EditNote, 'id'>): string =>
   `${Math.round(n.start * 1000)} ${Math.round(n.length * 1000)} ${n.pitch} ${n.velocity} ${n.motif} ${JSON.stringify(n.bend ?? null)}`;
@@ -141,8 +151,8 @@ export function docFromScore(score: Score, entries: readonly Entry[]): EditDoc {
       id: lane.id, name: lane.name, color: lane.color, family: lane.family, icon: lane.icon,
       instrument, gain_db: sound.gain_db, attack: sound.attack, release: sound.release,
       notes: score.notes.filter(n => n.lane === lane.id).map(n => {
-        const start = round(clock.beat(n.start));
-        const note: EditNote = { id: nextId++, start, length: round(clock.beat(n.start + n.length) - start), pitch: n.pitch, velocity: n.velocity, motif: n.motif };
+        const start = beatOfSeconds(clock, n.start);
+        const note: EditNote = { id: nextId++, start, length: round(beatOfSeconds(clock, n.start + n.length) - start), pitch: n.pitch, velocity: n.velocity, motif: n.motif };
         if (n.bend) note.bend = n.bend.map(([t, c]): [number, number] => [round(t / n.length), c]);
         return note;
       }),

@@ -24,14 +24,6 @@ import type { Terrain } from '../src/puzzle/tiles.ts';
 /** Two levels whose features overlap this much or more repeat one layout. */
 const SAME = 0.42;
 
-/** Pairs released before this check that it finds alike; each is kept as it shipped. Every one still measures as a
- *  repeat, so the list never outlives a redraw. */
-const EARLIER: readonly (readonly [string, string])[] = [
-  ['ch4-4', 'ch5-5'],
-  ['ch4-6', 'ch4-9'],
-  ['ch4-10', 'ch5-10'],
-];
-
 type Grid = string[][];
 const kindOf = (t: Terrain): string =>
   t === 'floor' ? '' : t.startsWith('force') ? 'force' : t.startsWith('toggle') ? 'toggle' : t === 'exit' || t === 'gate' ? 'wall' : t;
@@ -79,7 +71,6 @@ function overlap(a: Level, b: Level): number {
 }
 
 const all = CHAPTERS.filter(c => c.released).flatMap(c => c.levelIds.map((id, i) => ({ id, teaching: i < c.teaching })));
-const earlier = (a: string, b: string) => EARLIER.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
 
 /** `lv` turned half a turn, with one wall inside the border taken out: a turned, lightly edited copy. */
 function turnedCopy(lv: Level): Level {
@@ -89,19 +80,18 @@ function turnedCopy(lv: Level): Level {
   return { ...lv, terrain: terrain.map((t, i) => (i === k ? 'floor' : t)) };
 }
 
-test('the measure finds a turned, lightly edited copy of every level, a level matches itself fully, and the earlier repeats still measure as repeats', () => {
+test('the measure finds a turned, lightly edited copy of every level, and a level matches itself fully', () => {
   for (const { id } of all) {
     assert.ok(overlap(turnedCopy(levelById(id)), levelById(id)) >= SAME, id);
     assert.equal(overlap(levelById(id), levelById(id)), 1, id);
   }
-  for (const [a, b] of EARLIER) assert.ok(overlap(levelById(a), levelById(b)) >= SAME, `${a} and ${b} no longer alike: drop them from EARLIER`);
 });
 
 test(`every released level is a new layout: its features overlap no other's by ${SAME} or more (pairs of teaching levels aside)`, () => {
   const alike: string[] = [];
   for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
     const a = all[i]!, b = all[j]!;
-    if ((a.teaching && b.teaching) || earlier(a.id, b.id)) continue;
+    if (a.teaching && b.teaching) continue;
     const x = overlap(levelById(a.id), levelById(b.id));
     if (x >= SAME) alike.push(`${a.id} and ${b.id} overlap by ${x.toFixed(2)}`);
   }

@@ -1,19 +1,16 @@
-// Endless's generator and gate: every bank level (each one the generator made) passes the whole gate as it measures
-// now; a tier offers a bank level at every step of the climb; the generator gives the same level for the same seed,
-// tier and depth; and a run's levels climb by the ramp, then hold on the plateau.
+// Endless's generator and gate: the bank (each level passes the whole gate in test/endless-bank-*.test.ts, a quarter
+// of it each, so node runs them side by side); a tier offers a bank level at every step of the climb; the generator
+// gives the same level for the same seed, tier and depth; and a run's levels climb by the ramp, then hold on the plateau.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BANK } from '../src/endless/bank.ts';
 import { generate, fromBank, RUN_MEMORY } from '../src/endless/generate.ts';
 import type { Played, Request } from '../src/endless/generate.ts';
-import { bandAfter, chapterOf, floorOf, gateProblems, knownOf, newProblems, PLATEAU, FLOOR } from '../src/endless/gate.ts';
+import { bandAfter, chapterOf, knownOf, newProblems, PLATEAU, FLOOR } from '../src/endless/gate.ts';
 import { campaignLevels } from '../src/endless/campaign.ts';
-import { measure, rampProblems, rampOf, hidesWalls } from '../src/puzzle/difficulty.ts';
+import { rampProblems, rampOf, hidesWalls } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
-import { lineOf } from '../src/puzzle/cache.ts';
-import { initial } from '../src/puzzle/state.ts';
-import { step } from '../src/puzzle/step.ts';
 
 const known = knownOf(campaignLevels());
 
@@ -21,23 +18,6 @@ test('the bank holds levels of every chapter\'s pieces, none hiding walls', () =
   assert.ok(BANK.length >= 20, `${BANK.length} levels`);
   assert.ok(BANK.some(b => b.chapter === 1), 'Chapter 1\'s pieces alone, for a new player');
   for (const b of BANK) assert.equal(hidesWalls(parse(b.text)), false);
-});
-
-test('every bank level passes the whole gate, as it measures now: the bars, no catch, every piece, a live beast, tidy and new', () => {
-  const failed: string[] = [];
-  for (const b of BANK) {
-    const level = parse(b.text);
-    const d = measure(level);
-    assert.equal(chapterOf(level), b.chapter, 'its chapter');
-    assert.deepEqual([d.explored, d.shortest], [b.explored, b.shortest], 'its numbers');
-    // Its line wins: Ariadne's thread follows it.
-    let s = initial(level);
-    for (const a of lineOf(b.line)!) s = step(s, a).state;
-    assert.equal(s.outcome, 'won');
-    const problems = gateProblems(level, d, { band: { least: floorOf(b.chapter).explored, most: PLATEAU.most, plateau: true }, previous: null }, known);
-    if (problems.length) failed.push(`${b.chapter}/${b.explored}: ${problems.join('; ')}`);
-  }
-  assert.deepEqual(failed, []);
 });
 
 test('no two bank levels repeat a layout', () => {

@@ -88,13 +88,14 @@ export const STEPS = 120;
 /** How readily a climb takes a step up: a step that adds 0.25 to the distance is taken about one time in three. */
 const TEMPERATURE = 0.25;
 
-/** A draft's size, rooms and families, drawn for the band it must fall in. */
-export function planOf(rng: Rng, tier: number, band: Band, hides: boolean): Plan {
+/** A draft's size, rooms and families, drawn for the band it must fall in; with `newest`, always with a family of
+ *  the tier's own chapter (the bank's tool asks for it, so each chapter's pieces get levels of their own). */
+export function planOf(rng: Rng, tier: number, band: Band, hides: boolean, newest = false): Plan {
   const all = familiesOf(tier).filter(f => !HIDING.includes(f));
-  const newest = all.filter(f => FAMILY_CHAPTER[f] === Math.min(tier, 9));
+  const fresh = all.filter(f => FAMILY_CHAPTER[f] === Math.min(tier, 9));
   const count = 2 + rng.int(2);
   const families: Family[] = [];
-  if (newest.length && rng.next() < 0.5) families.push(rng.pick(newest));
+  if (fresh.length && (rng.next() < 0.5 || newest)) families.push(rng.pick(fresh));
   if (hides) families.push(rng.pick(HIDING));
   for (const f of rng.shuffle(all)) if (families.length < count + (hides ? 1 : 0) && !families.includes(f)) families.push(f);
   // Boards and room grids of many shapes, so that no two levels share a plan of walls; Chapter 1's pieces alone
@@ -236,6 +237,7 @@ interface Spent { tries: number; spent: number }
 export function search(
   key: readonly (string | number)[], tier: number, band: Band, previous: Difficulty | null, known: Known, run: readonly Level[],
   budget: number, at: Spent, progress?: (p: Progress) => void, hidingBand: Band | null = null, trace?: (line: string) => void,
+  newest = false,
 ): { text: string; d: Difficulty } | null {
   const stats = (at as { by?: Record<string, number> }).by;
   const spend = (n: number, kind = 'other') => { at.spent += n; if (stats) { stats[kind] = (stats[kind] ?? 0) + n; stats[kind + '#'] = (stats[kind + '#'] ?? 0) + 1; } };
@@ -251,7 +253,7 @@ export function search(
     const rng = rngOf('endless', ...key, round);
     const hides = hidingBand !== null && rng.next() < 0.25;
     const roundBand = hides ? hidingBand! : band;
-    let sketch = draft(rng, planOf(rng, tier, roundBand, hides));
+    let sketch = draft(rng, planOf(rng, tier, roundBand, hides, newest));
     if (!sketch) { spend(1_000); continue; }
     const levelOf = (s: Sketch): Level | null => { try { return parse(textOf(s, '')); } catch { return null; } };
     // A change that comes back to a level already judged costs nothing more: the same text, the same distance.

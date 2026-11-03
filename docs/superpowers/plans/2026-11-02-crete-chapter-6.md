@@ -57,7 +57,7 @@ The chapter is the ring where the halls fold: a step in one place is a step out 
 - **Pages:** level 9 holds "The Open Sky" and level 10 holds "Arts Unknown". Each lies off the shortest line, on a longer winning route.
 - **Quotations** are word for word from More's Ovid and Frazer's Apollodorus, cited by line or section.
 - **Music:** the title theme, unchanged.
-- **Layouts:** tuned with the solver for the numbers, then tidied: no stray wall stubs or pointless pockets. Levels 4 and 9 share the force-floor motif and levels 7 and 8 the ice. Level 7 is flipped top to bottom and level 8 left to right, so no two levels read alike. Level 10 grew from level 6's fire hall, with a south hall added. The Minotaur's rule (along the horizontal gap first) is the same under either flip.
+- **Layouts:** tuned with the solver for the numbers, then tidied: no stray wall stubs or pointless pockets. Every level is its own layout (`test/layouts.test.ts`): no level is another turned, flipped or lightly edited. Level 10 grew from level 6's fire hall, with a south hall added.
 
 ## Review focus
 

@@ -145,23 +145,23 @@ facing: down left
 ############
 ` },
   { id: 'ch8-10', text: `title: The Last Wind
-intro: The den ends at the gate in the east. Fire burns in the north, where Talos's fire runs, and a red key in the middle opens the red door by the beast. Three relics, two Harpies and Talos's fire. Off the quickest way a page waits, and a memory of how the bronze guard fell.
+intro: The den ends at the gate in the east. Two Harpies ride the winds across both ways south, and Talos's fire runs a shaft of fire across the hall below them. The beast keeps the south. Three relics. Off the quickest way a page waits, and a memory of how the bronze guard fell.
 pages: ch8-lead
-facing: left down up
+facing: right left down
 
-##############
-##MR.........#
-##...:#.*FF.P#
-#...p....FF###
-#w#...#..FFe.#
-#..#...r.....#
-#.#..#......|E
-#.#..#....*..#
-#.#.#...####~#
-###....#w...~#
-###..*.#.....#
-##:....#...:.#
-##############
+###############
+#######p#######
+#######.#####P#
+##*...........#
+####.#####.##.#
+###w.~~#~~.w###
+####.#####.####
+#.....#e##....#
+#.##.......##.#
+#.##..#F#.###.#
+#.#######...#.#
+#*.....*...M#|E
+###############
 ` },
 ];
 

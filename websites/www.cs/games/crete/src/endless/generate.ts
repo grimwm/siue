@@ -160,14 +160,17 @@ export function fromBank(bank: readonly BankLevel[], req: Request, band: Band): 
     b => b.explored >= plateau.least && b.explored <= plateau.most,
     () => true,
   ];
+  const pick = (ok: readonly BankLevel[]) => ok[hash('endless-bank', req.seed, req.tier, req.depth) % ok.length]!;
   // Past the fresh ones, an older level of the run comes back before the one just played.
   const notLast = offered.filter(b => b.text !== req.run.at(-1)?.text);
-  for (const pool of [fresh, notLast, offered, bank]) {
-    for (const fits of ladder) {
+  // The band matters most: a fresh level outside it comes only after an old one inside it.
+  for (const fits of ladder) {
+    for (const pool of [fresh, notLast, offered]) {
       const ok = pool.filter(fits);
-      if (ok.length) return ok[hash('endless-bank', req.seed, req.tier, req.depth) % ok.length]!;
+      if (ok.length) return pick(ok);
     }
   }
+  if (bank.length) return pick(bank);
   throw new RangeError('the bank is empty');
 }
 

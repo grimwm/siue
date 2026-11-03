@@ -47,7 +47,7 @@ export function EndlessCard(p: EndlessCardProps) {
     );
   }
   return (
-    <Dialog open={p.open} id="endless-veil" veilClass="veil" panelClass="card endless" kicker="Endless" kickerClass="kicker"
+    <Dialog open={p.open} id="endless-veil" veilClass="veil" panelClass="card endless" kicker="The Island of Crete" kickerClass="kicker"
       titleId="endless-title" title="Endless" focusId={p.linked ? 'endless-linked' : run ? 'endless-continue' : 'endless-new'}>
       <p>New levels without end, made from a seed and checked by the solver, each a little harder than the last until the climb levels off. A new run takes {tierWords(p.tier)}.</p>
       {run && (

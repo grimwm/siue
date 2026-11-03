@@ -11,7 +11,7 @@ import type { Lane, Score } from '../score.ts';
 import { vocalBuffer } from './vocal.ts';
 import { applyLaneFx, audible, DEFAULT_ROOM_SEND, limit, roomReverb } from './fx.ts';
 import { applyVoice } from './voice.ts';
-import { applyClips, barMap, crossfadeGains } from './djfx.ts';
+import { applyClips, barMap, crossfadeGains, fadeGains, isFade } from './djfx.ts';
 import { keyScale } from '../compose/hum.ts';
 import { bendRate, voices } from './plan.ts';
 import type { Library, Voice } from './plan.ts';
@@ -179,8 +179,10 @@ async function soundBus(score: Score, lib: Library, vs: readonly Voice[], sample
   const anySolo = score.lanes.some(l => l.fx?.solo);
   const heard = score.lanes.filter(l => audible(l.fx, anySolo));
   const clips = score.fx_clips ?? [];
-  const faders = clips.filter(c => c.effect === 'crossfader');
-  const faded = new Set(faders.flatMap(c => [...((c.settings?.['a'] as string[]) ?? []), ...((c.settings?.['b'] as string[]) ?? [])]));
+  // A crossfader changes its lanes only inside its clip; timeline fades (settings.fade) also hold after theirs.
+  const faders = clips.filter(c => c.effect === 'crossfader' && !isFade(c));
+  const fades = clips.filter(isFade);
+  const faded = new Set([...faders, ...fades].flatMap(c => [...((c.settings?.['a'] as string[]) ?? []), ...((c.settings?.['b'] as string[]) ?? [])]));
   const carriers = new Set([
     ...score.lanes.flatMap(l => (l.voice ?? []).flatMap(v => ('carrier' in v ? [v.carrier] : []))),
     ...clips.flatMap(c => (c.effect === 'vocoder' && typeof c.settings?.['carrier'] === 'string' ? [c.settings['carrier'] as string] : [])),
@@ -212,11 +214,14 @@ async function soundBus(score: Score, lib: Library, vs: readonly Voice[], sample
   const send = room ? [new Float32Array(length), new Float32Array(length)] : null;
   const bars = barMap(score.tempo ?? [{ bar: 1, bpm: 120, beats: 4, unit: 4 }], RATE);
   const add = (ch: readonly Float32Array[], sendLevel: number, lane?: string) => {
-    // A lane on a side of a crossfader comes and goes with the fader's position (each fader's gains made once).
-    const fades = lane ? faders.flatMap(f => { const g = crossfadeGains(f, lane, length, bars); return g ? [g] : []; }) : [];
+    // A lane on a side of a crossfader comes and goes with the fader's position (each fader's gains made once); one
+    // named by timeline fades follows one envelope made from all of them.
+    const gains = lane ? faders.flatMap(f => { const g = crossfadeGains(f, lane, length, bars); return g ? [g] : []; }) : [];
+    const env = lane && fades.length ? fadeGains(fades, lane, length, bars) : null;
+    if (env) gains.push(env);
     for (let c = 0; c < 2; c++) for (let i = 0; i < length; i++) {
       let v = ch[c]![i]!;
-      for (const g of fades) v *= g[i]!;
+      for (const g of gains) v *= g[i]!;
       bus[c]![i] = bus[c]![i]! + v;
       if (send) send[c]![i] = send[c]![i]! + v * sendLevel;
     }

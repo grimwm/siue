@@ -661,3 +661,44 @@ export function crossfadeGains(clip: FxClip, lane: string, length: number, bars:
   }
   return g;
 }
+
+/** Whether a crossfader clip is a timeline fade (settings.fade): it fades A out and B in, and they hold after it. */
+export const isFade = (clip: FxClip): boolean => clip.effect === 'crossfader' && clip.settings?.['fade'] === true;
+
+/**
+ * A lane's gain over `length` samples from every timeline fade in `clips` (crossfaders with settings.fade; the rest are
+ * left to crossfadeGains); null when no fade names the lane. Fades on the lane apply in the order they start: across
+ * each, an A lane goes from the level it held to 0 and a B lane to 1 on an equal-power curve (with recorded moves, the
+ * fader's position sets the sides' gains as on any crossfader), and after it the lane holds that level until its next
+ * fade. Before its first fade a lane plays at 1, or at 0 when that fade brings it in with settings.silent.
+ */
+export function fadeGains(clips: readonly FxClip[], lane: string, length: number, bars: BarMap): Float32Array | null {
+  const mine = clips.flatMap(c => {
+    if (!isFade(c)) return [];
+    const s = settingsOf(c);
+    const side = (s['a'] as string[] | undefined)?.includes(lane) ? 'a' : (s['b'] as string[] | undefined)?.includes(lane) ? 'b' : null;
+    return side ? [{ c, side, silent: s['silent'] === true }] : [];
+  }).sort((x, y) => x.c.from_bar - y.c.from_bar);
+  if (!mine.length) return null;
+  const first = mine[0]!;
+  const g = new Float32Array(length).fill(first.side === 'b' && first.silent ? 0 : 1);
+  for (const { c, side } of mine) {
+    const start = Math.max(0, Math.round(bars.sample(c.from_bar)));
+    if (start >= length) break;
+    const stop = Math.round(bars.sample(c.to_bar));
+    const span = Math.max(1, stop - start);
+    const from = g[start]!;
+    const to = side === 'a' ? 0 : 1;
+    const mv = moves(c.points, bars);
+    const at = (i: number): number => {
+      if (mv) { const pos = mv(i, 0); return side === 'a' ? clamp01(2 - 2 * pos) : clamp01(2 * pos); }
+      // Equal power: the squares of the old and new levels trade places along a quarter turn.
+      const t = (Math.min(span, i - start) / span) * (Math.PI / 2);
+      return Math.sqrt(from * from * Math.cos(t) ** 2 + to * to * Math.sin(t) ** 2);
+    };
+    const end = Math.min(length, stop);
+    for (let i = start; i < end; i++) g[i] = at(i);
+    if (end < length) g.fill(at(start + span), end);
+  }
+  return g;
+}

@@ -1,6 +1,6 @@
 // Chapter 7, "The Bronze Guard": ten levels that bring in the bronze ball and nothing else new. Every level parses,
 // is won by the exact solver, keeps to the pieces released so far, and on each one the balls matter: taken away, the
-// level is lost or won another way. The teaching levels each teach one thing about them, and the two pages lie off
+// level is lost, won in another number of moves, or far easier to search. The teaching levels each teach one thing about them, and the two pages lie off
 // the shortest line, on a harder route. The challenge bar and the ramp are gated in test/difficulty.test.ts.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +17,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import type { Terrain } from '../src/puzzle/tiles.ts';
 
 /** Each level's shortest line, pinned: a rule change that alters a level fails here. */
-const SHORTEST: number[] = [18, 8, 18];
+const SHORTEST: number[] = [18, 8, 18, 35, 31, 33, 45, 48, 56, 47];
 /** Level 10 is larger than the screen; its proofs may search further than the in-game cap. */
 const BIG_CAP = 6_000_000;
 const capOf = (i: number) => (i === 9 ? BIG_CAP : SOLVER_CAP);
@@ -49,6 +49,7 @@ function played(i: number) {
   const { events, flippedAway } = play(roundLevel(i), r.line);
   return {
     line: r.line,
+    explored: r.explored,
     took: new Set(events.flatMap(e => (e.kind === 'took' ? [e.what] : []))),
     caught: events.some(e => e.kind === 'caught'),
     waits: r.line.filter(a => a.kind === 'wait').length,
@@ -114,8 +115,11 @@ test('each shortest line is pinned and takes no catch, and on each level the bal
   assert.deepEqual(ROUNDS.map((_, i) => once(i).line.length), SHORTEST);
   ROUNDS.forEach((w, i) => {
     assert.ok(!once(i).caught, `${w.id}: the shortest line is never caught`);
+    // As the gate's every-piece rule has it: lost, won in another number of moves, or a search at least 1.3 times
+    // smaller.
     const without = solve(initial(noBalls(roundLevel(i))), capOf(i));
-    assert.ok(!without.solved || without.line.length !== once(i).line.length, `${w.id}: without the balls, the level plays another way`);
+    assert.ok(!without.solved || without.line.length !== once(i).line.length || once(i).explored >= 1.3 * without.explored,
+      `${w.id}: without the balls, the level plays another way`);
   });
 });
 
@@ -148,4 +152,12 @@ test('the two pages: The Brazen Man in level 9 and The Bronze Nail in level 10, 
     const r = solve(initial(copy), capOf(i));
     assert.ok(r.solved && r.line.length > once(i).line.length, `ch7-${i + 1}: the page is on a longer, winning route`);
   }
+});
+
+test('level 10: the red door is the one way to the last relic, and the ball rolls through the middle hall', () => {
+  const lv = roundLevel(9);
+  assert.ok(lv.terrain.includes('gate') && lv.terrain.includes('exit') && lv.relics > 0);
+  assert.ok(lv.terrain.includes('door-red') && lv.objects.includes('key-red'));
+  const withoutKey = { ...lv, objects: lv.objects.map(o => (o === 'key-red' ? null : o)) };
+  assert.ok(unwinnable(solve(initial(withoutKey), BIG_CAP)), 'the key is needed');
 });

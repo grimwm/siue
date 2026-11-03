@@ -42,18 +42,18 @@ intro: A block goes through a teleport as you do. Of the two teleports, push it 
 ###########
 ` },
   { id: 'ch6-4', text: `title: The Driven Fold
-intro: Three teleports, each sending you out of the next along, counting left to right and top to bottom. Force floors drive you round the south hall; the suction boots in the north let you walk them as you please. Three relics.
+intro: Three teleports, each sending you out of the next along, counting left to right and top to bottom. Force floors drive you round the middle; the suction boots in the south let you walk them as you please. Three relics.
 
 ############
-#..@..#u.|E#
-#...M##....#
-#.*..#..#..#
-##.@.##..@.#
-####*......#
-#..##...<<##
-##..P...^#*#
-##......^..#
-###..>>>^..#
+#..........#
+#........@.#
+#..#..P..*##
+#.#...*...##
+#.#>>>v...@#
+#...#.v....#
+##.##u<<<..#
+##.@####...#
+#M....*##|E#
 ############
 ` },
   { id: 'ch6-5', text: `title: The Drowned Fold

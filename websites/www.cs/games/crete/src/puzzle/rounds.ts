@@ -43,100 +43,101 @@ facing: right
 ############
 ` },
   { id: 'ch7-4', text: `title: The Frozen Round
-intro: Ice runs through the west, and skates and a block lie in the east, by a snare. The brown button in the southeast looses the snare, and one bronze ball rolls beside it. Two relics.
-facing: left
-
-############
-#E|...######
-#.......####
-##......##.#
-####=.#....#
-####=*#o&Ok#
-#...=.###..#
-#*..==#==..#
-#...#.....-#
-#..M#..P####
-############
-` },
-  { id: 'ch7-5', text: `title: The Sunken Round
-intro: Three teleports, each sending you out of the next along, counting left to right and top to bottom. Pools lie in the northeast and the southwest, with flippers between; a block waits in the south, and one bronze ball rolls along the north hall. Two relics.
+intro: Ice runs across the north hall, with skates above it. A snare waits in the west by a block, and the brown button in the south looses it; one bronze ball rolls along the south hall. Two relics.
 facing: right
 
 ############
-#E|...o..###
-#..##...~~##
-#..##.##~~.#
-##..f..##.P#
-##.###@##..#
-#......*#..#
-#.@##.###.@#
-#.~~#..O...#
-#.~~.*M#...#
+####P#######
+##...###k###
+##.=====.###
+##.#&...*.##
+##..O###...#
+##...M##...#
+##...o.....#
+##.*#......#
+#####..-.|E#
+############
+` },
+  { id: 'ch7-5', text: `title: The Sunken Round
+intro: Three teleports, each sending you out of the next along, counting left to right and top to bottom. Pools lie in the northeast and the southwest, with flippers between; a block waits in the southeast, and one bronze ball rolls along the middle hall. Two relics.
+facing: right
+
+############
+#P#@.#...*##
+#....#..~~##
+#....#*.~~##
+#..###.#####
+##..o.M...##
+#..f......##
+#~~.......##
+#.~....#O@##
+#E|#...@####
 ############
 ` },
   { id: 'ch7-6', text: `title: The Burning Round
-intro: Three teleports stand together in the east, each sending you out of the next along. Fire burns in two places, and boots lie by a toggle wall; the button in the middle opens the toggle walls, and shuts them again. Two relics, and one bronze ball in the south.
-facing: down
-
-############
-#E|.#...####
-#...#...#*##
-##.Th.*.FF##
-##..##_...##
-##...#..@.##
-#.T....@@.##
-#.......o.##
-#.MFFF..P..#
-#..........#
-############
-` },
-  { id: 'ch7-7', text: `title: The Icy Round
-intro: Ice runs up the southwest, a current drives west across the middle, and pop-up walls rise behind you once you leave them. Two relics, and one bronze ball in the west, where the ice will carry it.
-facing: down
-
-############
-E|.#.M....*#
-#..#.#..;###
-#.........*#
-#..o...;..##
-#...#<<<<.##
-#...#.....##
-#..=##.#.###
-##.=...#.###
-##;=...#.P##
-############
-` },
-  { id: 'ch7-8', text: `title: The Driven Round
-intro: Currents run through these ways, and gravel lies about them: you can cross it, but the beast and the ball cannot. Suction boots in the north let you walk the currents as you please. Three relics, and one bronze ball in the southeast.
+intro: Three teleports, each sending you out of the next along. Fire burns in the middle hall, with boots above it; the button in the south opens the toggle wall below the fire, and shuts it again. Two relics, and one bronze ball in the south.
 facing: left
 
 ############
-E..:...^.>.#
-#:.......#*#
-#..u..:..###
-##.....:...#
-##..M:v.:>.#
-#...#..#..v#
-#*..:*v....#
-##...#...o<#
-##.<..<...P#
+#P###...####
+#.........##
+#.........##
+#..#h#....##
+#..@..FF.@*#
+###*#..T####
+##..#....###
+#.o.._...###
+#@M.###..|E#
+############
+` },
+  { id: 'ch7-7', text: `title: The Icy Round
+intro: Ice runs down the middle, a current drives west below the east room, and pop-up walls rise behind you once you leave them. Two relics, and one bronze ball in the south, where the ice will carry it.
+facing: down
+
+############
+#......#####
+#P.....#####
+#.....######
+#....=..*..#
+#...;=.....#
+##..;=#<<<.#
+####...#...#
+###......M##
+###.*o..#|E#
+############
+` },
+  { id: 'ch7-8', text: `title: The Driven Round
+intro: Currents run through these ways, and gravel lies about them: you can cross it, but the beast and the ball cannot. Suction boots in the middle let you walk the currents as you please. Three relics, and one bronze ball in the southeast.
+facing: up
+
+############
+#..>>>>v####
+#.P....v.###
+#....#uv:..#
+#...#.:....#
+#.<<<<.**.##
+#......^#.##
+#...#..^...#
+#.#..:.^.o.#
+#.*.M#.^.|E#
 ############
 ` },
   { id: 'ch7-9', text: `title: The Mirrored Round
-intro: Fire burns across these halls, with boots in the south, and pop-up walls rise behind you once you leave them. Medusa's mirror lies past the fire and a honey cake in the north; two relics, and one bronze ball in the southeast. Off the quick way a page waits, and a memory of the man of bronze.
+intro: Fire burns down the west halls, with boots beside it, and pop-up walls rise behind you once you leave them. Medusa's mirror lies in the east and a honey cake by the fire; two relics, and one bronze ball in the south. Off the quick way a page waits, and a memory of the man of bronze.
 pages: ch7-brazen
 facing: down
 
 ############
-E|...;.x...#
-##.MF..##..#
-##.;#####;*#
-##..########
-#..#z..###*#
-#..#.p.###.#
-#...FF.;...#
-#....#..o..#
-#...h.....P#
+#P##..##p###
+#.##..#..###
+#..#.F#..#;#
+#h.;.F#...*#
+#...xF...z;#
+#....F.....#
+##.##..#.#.#
+#......o...#
+#..M.....|E#
+#*.........#
 ############
 ` },
   { id: 'ch7-10', text: `title: The Last Round

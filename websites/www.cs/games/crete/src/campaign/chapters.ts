@@ -9,6 +9,7 @@ import { CHAPTER_4 } from './chapter-4.ts';
 import { CHAPTER_5 } from './chapter-5.ts';
 import { CHAPTER_6 } from './chapter-6.ts';
 import { CHAPTER_7 } from './chapter-7.ts';
+import { CHAPTER_8 } from './chapter-8.ts';
 import type { Level } from '../puzzle/level.ts';
 import type { Action } from '../puzzle/step.ts';
 import { TRIALS, trialLevel } from '../puzzle/trials.ts';
@@ -18,6 +19,7 @@ import { FALSE_WALLS, falseWallLevel } from '../puzzle/false-walls.ts';
 import { SNARES, snareLevel } from '../puzzle/snares.ts';
 import { FOLDS, foldLevel } from '../puzzle/folds.ts';
 import { ROUNDS, roundLevel } from '../puzzle/rounds.ts';
+import { WINDS, windLevel } from '../puzzle/winds.ts';
 
 export interface Chapter {
   n: number; name: string; released: boolean; levelIds: readonly string[];
@@ -72,14 +74,20 @@ export const CHAPTERS: readonly Chapter[] = [
     teaching: 3,
     lore: CHAPTER_7,
   },
-  ...Array.from({ length: 3 }, (_, i) => unreleased(i + 8)),
+  {
+    n: 8, name: "The Harpies' Den", released: true,
+    levelIds: WINDS.map(w => w.id),
+    teaching: 3,
+    lore: CHAPTER_8,
+  },
+  ...Array.from({ length: 2 }, (_, i) => unreleased(i + 9)),
 ];
 
 export const LEVEL_IDS: readonly string[] = CHAPTERS.filter(c => c.released).flatMap(c => c.levelIds);
 
 /** A released level's level, by id: a trial (Chapter 1), one of the winding ways (Chapter 2), one of the closing
- *  ways (Chapter 3), one of the false walls (Chapter 4), one of the snares (Chapter 5), one of the folds (Chapter 6)
- *  or one of the rounds (Chapter 7). */
+ *  ways (Chapter 3), one of the false walls (Chapter 4), one of the snares (Chapter 5), one of the folds (Chapter 6),
+ *  one of the rounds (Chapter 7) or one of the winds (Chapter 8). */
 export function levelById(id: string): Level {
   const t = TRIALS.findIndex(x => x.id === id);
   if (t >= 0) return trialLevel(t);
@@ -95,6 +103,8 @@ export function levelById(id: string): Level {
   if (o >= 0) return foldLevel(o);
   const b = ROUNDS.findIndex(x => x.id === id);
   if (b >= 0) return roundLevel(b);
+  const h = WINDS.findIndex(x => x.id === id);
+  if (h >= 0) return windLevel(h);
   throw new RangeError(`no level ${id}`);
 }
 

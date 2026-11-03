@@ -5,7 +5,7 @@
 import { test, expect } from '@playwright/test';
 
 const PAGE = 'games/crete/';
-const LEVEL_10_SHORTEST = 76;
+const LEVEL_10_SHORTEST = 58;
 
 interface Report { expanded: number; stored: number; storage: string }
 interface CreteTest {

@@ -55,7 +55,7 @@ export function floorOf(n: number): { explored: number; shortest: number } {
 export const FLOOR = SHARED_BAR.chaseExplored;
 
 /** The climb and the plateau. Each level stores `climb.least` to `climb.most` times the situations of the level
- *  before it, a steadier climb than the campaign's widest ramp (1.2 to 2.2), until that would pass `plateau.most`;
+ *  before it, a steadier climb than the campaign's widest ramp (1.2 to 2.2), until one stores `plateau.least`;
  *  from then on every level stores between `plateau.least` and `plateau.most`, about a middle chapter's hardest
  *  levels (Chapter 2's last stores 44,006, Chapter 5's 54,608), and the ramp no longer applies. A level that hides a
  *  wall climbs by the gentler HIDDEN.ramp and never stores more than HIDDEN.most, so it comes only while the climb is
@@ -73,6 +73,8 @@ export function bandAfter(previous: number | null, hides: boolean): Band | null 
   const ceiling = hides ? HIDDEN.most : PLATEAU.most;
   // A run's first level may store anything from the floor to about a chapter's third challenge level.
   if (previous === null) return { least: FLOOR, most: hides ? HIDDEN.most : 20_000, plateau: false };
+  // Once a level has reached the plateau, the run stays on it.
+  if (!hides && previous >= PLATEAU.least) return { least: PLATEAU.least, most: PLATEAU.most, plateau: true };
   const least = Math.max(FLOOR, Math.ceil(previous * ramp.least));
   const most = Math.min(ceiling, Math.floor(previous * ramp.most));
   if (most >= least * 1.15) return { least, most, plateau: false };

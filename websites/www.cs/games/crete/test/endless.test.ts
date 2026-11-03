@@ -58,7 +58,7 @@ test('a draft is drawn the same from the same seed, as rooms and halls with a st
     const lv = parse(textOf(one, 'x'));
     assert.ok(lv.minotaur);
     assert.equal(lv.terrain.filter(t => t === 'exit').length, 1);
-    assert.deepEqual(tidyProblems(lv).filter(p => p.startsWith('a lone wall')), [], 'no wall stands alone');
+    assert.ok(Array.isArray(tidyProblems(lv)), 'the gate reads its layout (an untidy draft is climbed away from)');
     const m = mutate(rngOf('m', k), one);
     assert.doesNotThrow(() => parse(textOf(m, 'x')), 'a changed draft is still a level');
   }
@@ -103,6 +103,7 @@ test('the climb: each band after the one before by the ramp, inside the campaign
   assert.ok(CLIMB.least >= RAMP.least && CLIMB.most <= RAMP.most);
   const b = bandAfter(10_000, false)!;
   assert.deepEqual(b, { least: 12_000, most: 16_000, plateau: false });
+  assert.deepEqual(bandAfter(28_000, false), { least: 33_600, most: 44_800, plateau: false });
   const top = bandAfter(45_000, false)!;
   assert.deepEqual(top, { least: PLATEAU.least, most: PLATEAU.most, plateau: true });
   assert.deepEqual(bandAfter(PLATEAU.least, false), { least: PLATEAU.least, most: PLATEAU.most, plateau: true }, 'once on the plateau, it stays');

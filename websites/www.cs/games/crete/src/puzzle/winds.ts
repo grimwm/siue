@@ -47,6 +47,86 @@ facing: up
 ##.#..#F.#E#
 ############
 ` },
+  { id: 'ch8-4', text: `title: The Storm Pool
+intro: A pool fills the middle, with flippers by your start. One Harpy flies back and forth in the west, and the button in the north opens and shuts the toggle wall in the south.
+facing: down
+
+############
+####._.....#
+#..###....##
+#.w.##~~~###
+###.#~~.~~##
+##...~.~~..#
+#.Pf#.~~~..#
+#...#..#..##
+#..###.#####
+#..T..M...E#
+############
+` },
+  { id: 'ch8-5', text: `title: The Burning Court
+intro: Fire rings the court in the middle, with boots in the west. Talos's fire runs the halls of the southwest, turning right at every wall, and a red key in the north opens the red door by the way out.
+facing: left
+
+############
+###.....P..#
+#...##.r...#
+##........##
+###.FFFFF.##
+#.#.F...F.##
+#h#.FFFFF.##
+#.#..###.###
+#..e.###.#R#
+##...M....E#
+############
+` },
+  { id: 'ch8-6', text: `title: Harpies on the Ice
+intro: Ice runs down the west and the middle, with skates by it. Two Harpies fly here, one in the northeast and one in the south. Two relics.
+facing: right right
+
+############
+#P..==.*...#
+###.==###..#
+#.#.==.##w##
+#..*...##..#
+######...###
+#...#..==###
+#.###k.==M##
+#..###..#..#
+###.###w#.|E
+############
+` },
+  { id: 'ch8-7', text: `title: The Frozen Line
+intro: A line of ice runs down the middle, with skates and a block in the north. Talos's fire runs the southwest, turning right at every wall.
+facing: left
+
+############
+#.##...=.O.#
+##.....=...#
+##.P.k.=...#
+#.####.....#
+####...=..##
+#.#....=..##
+###....=..E#
+#e....M=..##
+#....##...##
+############
+` },
+  { id: 'ch8-8', text: `title: The Snared Wing
+intro: Two teleports, one sending you out of the other; a snare in the north, loosed by the brown button below it; and one Harpy in the east. Two relics.
+facing: right
+
+############
+#.P.#...#..#
+#.#.#&..#..#
+#.#.@.#...##
+#....##.*###
+#...-.....##
+####..###..#
+#*....M.##w#
+#.##.@...#.#
+#.........E#
+############
+` },
 ];
 
 const cache = new Map<number, Level>();

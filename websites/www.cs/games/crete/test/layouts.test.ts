@@ -2,9 +2,8 @@
 // edited. Two levels are compared by their walls inside the border, under all eight turns and flips, at every offset
 // when their sizes differ by at most two rows and two columns: the overlap is the walls they share over the walls
 // either has. Matching cells are not the measure: floor is most of every level, so unrelated released levels agree
-// on 70 to 85 per cent of their cells, while their walls overlap by under 0.47 (the largest between levels of
-// different chapters that were drawn apart). Chapter 7's levels grown from earlier ones by a half turn overlap them
-// by 0.57 to 0.96.
+// on 70 to 85 per cent of their cells, while the walls of levels drawn apart overlap by under 0.47, and a level turned
+// half a turn from another overlaps it by 0.57 or more.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
@@ -50,9 +49,19 @@ function overlap(a: Level, b: Level): number {
 const released = CHAPTERS.filter(c => c.released);
 const all = released.flatMap(c => c.levelIds.map(id => ({ id, n: c.n })));
 
-test('the measure finds a turned copy: Chapter 7 level 5 grew from Chapter 6 level 5 by a half turn', () => {
-  assert.ok(overlap(levelById('ch7-5'), levelById('ch6-5')) >= SAME);
-  assert.ok(overlap(levelById('ch6-5'), levelById('ch6-5')) === 1);
+/** `lv` turned half a turn, with one wall inside the border taken out: a turned, lightly edited copy. */
+function turnedCopy(lv: Level): Level {
+  const n = lv.rows * lv.cols;
+  const terrain = lv.terrain.map((_, i) => lv.terrain[n - 1 - i]!);
+  const k = terrain.findIndex((t, i) => t === 'wall' && i > lv.cols && i % lv.cols > 0 && i % lv.cols < lv.cols - 1 && i < n - lv.cols);
+  return { ...lv, terrain: terrain.map((t, i) => (i === k ? 'floor' : t)) };
+}
+
+test('the measure finds a turned, lightly edited copy, and a level matches itself fully', () => {
+  for (const { id } of all) {
+    assert.ok(overlap(turnedCopy(levelById(id)), levelById(id)) >= SAME, id);
+    assert.equal(overlap(levelById(id), levelById(id)), 1, id);
+  }
 });
 
 test(`from Chapter ${FIRST_NEW} on, every level is a new layout: its walls overlap no other released level's by ${SAME} or more`, () => {

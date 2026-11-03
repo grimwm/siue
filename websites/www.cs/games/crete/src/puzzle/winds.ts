@@ -127,6 +127,23 @@ facing: right
 #.........E#
 ############
 ` },
+  { id: 'ch8-9', text: `title: The Crossing Winds
+intro: Currents run along the north hall, with suction boots at their end, and gravel lies in the west: you can cross it, but the beast cannot. Fire burns in the east, and Talos's fire runs the halls beside it; one Harpy flies the southwest. Off the quick way a page waits, and a memory of whom the Harpies were named for.
+pages: ch8-storm
+facing: down left
+
+############
+#..P..>>>u.#
+#:####.#.#.#
+#.#.##..#..#
+#.###p.###.#
+#..:##...FF#
+#.#.#.###.F#
+#...#...e.F#
+#...w...##.#
+#...#..M..E#
+############
+` },
 ];
 
 const cache = new Map<number, Level>();

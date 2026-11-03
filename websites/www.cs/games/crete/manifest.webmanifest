@@ -1,7 +1,7 @@
 {
     "name": "The Island of Crete",
     "short_name": "Crete",
-    "description": "Chapters of tile puzzles in the Labyrinth. Gather the relics, open the gate and reach the exit while the Minotaur takes two steps to your one.",
+    "description": "Chapters of tile puzzles in the Labyrinth, then Endless levels made from a seed. Gather the relics, open the gate and reach the exit while the Minotaur takes two steps to your one.",
     "lang": "en",
     "start_url": "./",
     "scope": "./",

@@ -1,6 +1,14 @@
 /* The Island of Crete: Endless's bank, written by tools/endless-bank.ts; do not edit it by hand. Levels the
  * generator made ahead of time and the gate passed, for a run's first level and for any level whose search runs out
- * of its budget. DOM-free. */
+ * of its budget: 7 levels, by chapter and then situations stored. DOM-free. */
 import type { BankLevel } from './generate.ts';
 
-export const BANK: readonly BankLevel[] = [];
+export const BANK: readonly BankLevel[] = [
+  { chapter: 1, explored: 12729, shortest: 36, line: 'urrrdrrdlddddrrcrdrrruullluuuuurrrur', text: "title: \nintro: \n\n##############\n#FFF#...#....#\n#FFF|...#....#\n##.####.####.E\n#...u...#....#\n#.P....c#....#\n#.......#....#\n#....>>>.....#\n###.##.##.####\n#...#...#....#\n#..M#........#\n#...#...#...*#\n#.......#....#\n##############\n" },
+  { chapter: 1, explored: 17639, shortest: 49, line: 'ddluuurruulllllllwwllrrrddllllrrrddrdlddddrrrrrrd', text: "title: \nintro: \n\n#############\n#.<#...#....#\n#.<T.....u..#\n##.##.#####.#\n#*.....t....#\n#..#...#._P.#\n#..#.*.#....#\n#........*..#\n#.##.########\n#..#..M#....#\n#..#...#....#\n#...........#\n##########E##\n" },
+  { chapter: 1, explored: 22651, shortest: 41, line: 'rrrrwwwlldddllllluuuuuldddrddddllddddlrrd', text: "title: \nintro: \n\n###############\n#...*.#...k#..#\n#.....#....#..#\n#.....#.P.....#\n#.....#....#..#\n#.###.#.##.##.#\n#..........O..#\n#.....#.......#\n#.....#.......#\n###.########..#\n#.....#..O.#..#\n#..........#..#\n#=====#.......#\n#.*...#M...#..#\n####E##########\n" },
+  { chapter: 1, explored: 29936, shortest: 49, line: 'uuuullddddllcdlldurrdddrrrrdrullllluuuuurruuuurru', text: "title: \nintro: \n\n##########E##\n#....#....|.#\n#....#..c...#\n#....#......#\n#.######.#.##\n#.M..#...#..#\n#....#...#P.#\n#........#..#\n#..O*#......#\n##.###.######\n#....#......#\n#....#...#.*#\n#############\n" },
+  { chapter: 1, explored: 40858, shortest: 43, line: 'luwdllwrruuuurrrddrruuurrlluuudlllllllzlddl', text: "title: \nintro: \n\n#############\n#.b.....#..M#\n#.......#*..#\n#...........#\n#*.######...#\nE|......B..*#\n#..#...z#...#\n#..#....#...#\n#..#..b.....#\n#.##.######.#\n#....P..B...#\n#..#....#...#\n#############\n" },
+  { chapter: 3, explored: 8195, shortest: 61, line: 'ddrddrrrrlllllllllluuuludrrrdrrrrdddddlddddrrrlluulllluullldl', text: "title: \nintro: \n\n##############\n#*~#...P.#...#\n#.~..........#\n#.~#.....#...#\n##.##.##.##;##\n#.....h.....f#\n#............#\n#............#\n#............#\nE.##.##|##.###\n#..#.....#...#\n#..#.....#FFF#\n#M.#.........#\n##############\n" },
+  { chapter: 8, explored: 7105, shortest: 31, line: 'rrwllldlllrrrrrdwwwdrddllllllll', text: "title: \nintro: \nfacing: down\n\n#############\n#.......#...#\n#....*P.....#\n#.......#...#\n#######.###:#\n#..#vvvv#...#\n#...vvvv....#\n#:######.####\nE.....u...w.#\n#..#........#\n#..#......M.#\n#..#........#\n#############\n" },
+];

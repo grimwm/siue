@@ -160,7 +160,9 @@ export function fromBank(bank: readonly BankLevel[], req: Request, band: Band): 
     b => b.explored >= plateau.least && b.explored <= plateau.most,
     () => true,
   ];
-  for (const pool of [fresh, offered, bank]) {
+  // Past the fresh ones, an older level of the run comes back before the one just played.
+  const notLast = offered.filter(b => b.text !== req.run.at(-1)?.text);
+  for (const pool of [fresh, notLast, offered, bank]) {
     for (const fits of ladder) {
       const ok = pool.filter(fits);
       if (ok.length) return ok[hash('endless-bank', req.seed, req.tier, req.depth) % ok.length]!;

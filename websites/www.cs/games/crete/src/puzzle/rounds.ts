@@ -141,24 +141,23 @@ facing: down
 ############
 ` },
   { id: 'ch7-10', text: `title: The Last Round
-intro: The rounds end at the gate. Three teleports, each sending you out of the next along; fire and the boots for it; the toggle walls and their button; and a red key in the north for the door to the last relic. Three relics, and one bronze ball in the middle hall. Off the quickest way a page waits, and a memory of how the bronze guard fell.
+intro: The rounds end at the gate. Three teleports, each sending you out of the next along; fire and the boots for it; the toggle wall and its button; and a red key in the west for the door to the last relic, in the southeast. Three relics, and one bronze ball in the north hall. Off the quickest way a page waits, and a memory of how the bronze guard fell.
 pages: ch7-vein
 facing: up
 
-############
-#E|.##.p##.#
-#......r...#
-#.#.###.##.#
-#...#.#R*#.#
-#...#...#*##
-#..T.*..FF.#
-##..##_....#
-##...#h.@..#
-##T..o....##
-#...@...@.##
-#M.FFF..P.##
-##.........#
-############
+################
+#P...o#........#
+#.....#........#
+#.#...@...###.p#
+#...###...###..#
+#...#h....FF...#
+#...#*#....#.#.#
+#..T._......@..#
+#..#.##......###
+#...r#...M...#*#
+#.@###.FF*..R..#
+#E|######...####
+################
 ` },
 ];
 

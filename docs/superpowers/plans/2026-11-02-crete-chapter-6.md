@@ -45,7 +45,7 @@ The chapter is the ring where the halls fold: a step in one place is a step out 
 - **Challenge levels 4–10:**
   - Each clears the challenge bar and the shared bar, and `catchProblems`: no level needs a catch, to win or for the fewest moves.
   - Each stores 1.2 to 2.2 times the situations of the level before it (`RAMP`).
-  - The measures: level 4 stores 7,730, then 10,111, 12,756, 16,499, 20,878, 30,282 and 55,797. That is 1.31, 1.26, 1.29, 1.27, 1.45 and 1.84 times a step.
+  - The measures: level 4 stores 6,729, then 10,111, 12,756, 17,040, 20,878, 30,282 and 55,797. That is 1.50, 1.26, 1.34, 1.23, 1.45 and 1.84 times a step.
   - The teaching levels store 48, 98 and 40.
   - Level 4 stores at least 20 times as many as the hardest teaching level.
   - Level 10 is the hardest. It stores more than Chapter 5's level 10 (55,073 after the every-piece retune).

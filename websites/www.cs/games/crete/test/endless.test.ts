@@ -18,6 +18,7 @@ import { endlessName, endlessKicker, tierWords } from '../src/endless/name.ts';
 import { CAMPAIGN_TEXTS } from '../src/endless/campaign.ts';
 import { BANK } from '../src/endless/bank.ts';
 import type { Made, Request } from '../src/endless/generate.ts';
+import { ln, expNeg } from '../src/endless/generate.ts';
 import { CHAPTERS, LEVEL_IDS, levelById } from '../src/campaign/chapters.ts';
 import { measure, HIDDEN, RAMP } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
@@ -51,10 +52,12 @@ test('seeds: typed ones are cleaned, new ones are six readable characters', () =
 
 test('a draft is drawn the same from the same seed, as rooms and halls with a start, a beast and an exit', () => {
   const plan = { rows: 12, cols: 12, roomRows: 3, roomCols: 3, families: familiesOf(9).slice(0, 3), relics: 2, hall: 0.2, loop: 0.35 };
+  let drawn = 0;
   for (let k = 0; k < 20; k++) {
     const one = draft(rngOf('t', k), plan), two = draft(rngOf('t', k), plan);
     assert.deepEqual(one && textOf(one, 'x'), two && textOf(two, 'x'));
     if (!one) continue;
+    drawn++;
     const lv = parse(textOf(one, 'x'));
     assert.ok(lv.minotaur);
     assert.equal(lv.terrain.filter(t => t === 'exit').length, 1);
@@ -62,6 +65,7 @@ test('a draft is drawn the same from the same seed, as rooms and halls with a st
     const m = mutate(rngOf('m', k), one);
     assert.doesNotThrow(() => parse(textOf(m, 'x')), 'a changed draft is still a level');
   }
+  assert.ok(drawn >= 10, `${drawn} of 20 seeds drew a draft`);
 });
 
 test('each family comes in at its chapter; a tier offers the families up to it', () => {
@@ -241,18 +245,22 @@ test('the mode: a new run opens its first level, the next is made meanwhile, and
   const st = memory();
   const saved = createEndlessSaved(st);
   const opened: EndlessAbout[] = [];
-  const client = createEndlessClient(() => fakeWorker(200_000));
+  // Every job the mode starts, so the test waits on its answer, not on the clock.
+  const base = createEndlessClient(() => fakeWorker(200_000));
+  const jobs: Promise<unknown>[] = [];
+  const client = { ...base, make: (r: Request) => { const j = base.make(r); jobs.push(j.result.then(() => {}, () => {})); return j; } };
+  const settled = async () => { for (let n = 0; n < jobs.length; n++) await jobs[n]; await new Promise(r => setTimeout(r, 0)); };
   let changes = 0;
   const mode = createEndlessMode({ saved, client, tier: () => 1, newSeed: () => 'fresh1', play: (_, about) => opened.push(about), changed: () => { changes++; } });
   mode.newRun();
   assert.ok(mode.view().finding, 'waiting for the first level');
-  await new Promise(r => setTimeout(r, 50));
+  await settled();
   assert.equal(opened.length, 1);
   assert.equal(opened[0]!.depth, 1);
   assert.equal(opened[0]!.seed, 'fresh1');
   assert.equal(mode.view().finding, null);
   // The worker makes level 2 while level 1 is played (here, at once: the budget is small, so it is the bank's).
-  for (let i = 0; i < 100 && !saved.run()!.next; i++) await new Promise(r => setTimeout(r, 20));
+  await settled();
   assert.ok(saved.run()!.next, 'level 2 is made during level 1');
   mode.next();
   assert.equal(opened.length, 1, 'Next Level waits for a win');
@@ -267,4 +275,10 @@ test('the mode: a new run opens its first level, the next is made meanwhile, and
   assert.deepEqual(mode.view().linked, { seed: 'other', tier: 4 });
   mode.cancel();
   assert.equal(mode.view().linked, null);
+});
+
+test('the search\'s log and exp, made of + - * / alone, agree with Math\'s', () => {
+  for (const x of [0.001, 0.3, 1, 1.5, 2, 7.25, 1e6]) assert.ok(Math.abs(ln(x) - Math.log(x)) < 1e-12, `ln ${x}`);
+  for (const y of [0, 0.1, 0.25, 1, 4, 20]) assert.ok(Math.abs(expNeg(y) - Math.exp(-y)) < 1e-12, `exp -${y}`);
+  assert.equal(expNeg(100), 0);
 });

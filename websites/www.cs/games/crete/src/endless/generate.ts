@@ -94,6 +94,34 @@ export function planOf(rng: Rng, tier: number, band: Band, hides: boolean): Plan
   };
 }
 
+/* The search steers by these two, and a seed must steer it the same way on every device. Math.log and Math.exp
+ * may differ in their last bit from one engine to another; these use only + - * /, which IEEE 754 fixes exactly. */
+const LN2 = 0.6931471805599453;
+
+/** The natural log of x > 0. */
+export function ln(x: number): number {
+  let k = 0;
+  while (x >= 2) { x /= 2; k++; }
+  while (x < 1) { x *= 2; k--; }
+  // ln(x) = 2 atanh((x - 1) / (x + 1)), x in [1, 2).
+  const z = (x - 1) / (x + 1), z2 = z * z;
+  let term = z, sum = 0;
+  for (let i = 1; i < 60; i += 2) { sum += term / i; term *= z2; }
+  return 2 * sum + k * LN2;
+}
+
+/** e to the power -y, for y >= 0. */
+export function expNeg(y: number): number {
+  if (!(y >= 0)) return 1;
+  if (y > 60) return 0;
+  let n = 0;
+  while (y >= LN2) { y -= LN2; n++; }
+  let term = 1, sum = 1;
+  for (let i = 1; i < 30; i++) { term *= -y / i; sum += term; }
+  for (; n > 0; n--) sum /= 2;
+  return sum;
+}
+
 /** The searches' caps: a solve that stores more than the band allows is no use, and the measure's other searches
  *  (the catch-free line, the beast's first catch, the line without him) get room to finish. */
 const solveCap = (band: Band) => Math.ceil(band.most * 1.05);
@@ -114,8 +142,8 @@ export function distance(level: Level, band: Band, spend: (n: number) => void): 
   let far = 0;
   const floor = floorOf(chapterOf(level));
   const least = Math.max(band.least, floor.explored);
-  if (r.explored < least) far += 3 * Math.log(least / r.explored);
-  if (r.explored > band.most) far += 3 * Math.log(r.explored / band.most);
+  if (r.explored < least) far += 3 * ln(least / r.explored);
+  if (r.explored > band.most) far += 3 * ln(r.explored / band.most);
   if (r.line.length < floor.shortest) far += 0.2 * (floor.shortest - r.line.length);
   let s = start, catches = 0;
   for (const a of r.line) { const x = step(s, a); s = x.state; if (caught(x.events, s)) catches++; }
@@ -229,7 +257,7 @@ export function search(
       if (!nextLevel) continue;
       const nextFar = distance(nextLevel, roundBand, spend);
       // Downhill always; uphill now and then, less the further up, so a climb is not stuck in a dip.
-      if (nextFar <= far || (Number.isFinite(nextFar) && rng.next() < Math.exp(-(nextFar - far) / TEMPERATURE))) {
+      if (nextFar <= far || (Number.isFinite(nextFar) && rng.next() < expNeg((nextFar - far) / TEMPERATURE))) {
         sketch = next; level = nextLevel; far = nextFar;
       }
     }

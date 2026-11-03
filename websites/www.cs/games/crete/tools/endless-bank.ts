@@ -46,6 +46,8 @@ if (cmd === 'make') {
     for (const line of readFileSync(f, 'utf8').split('\n')) {
       if (!line.trim()) continue;
       const b = JSON.parse(line) as BankLevel;
+      const counts = [b.chapter, b.explored, b.shortest].every(n => Number.isInteger(n) && n >= 0);
+      if (!counts || typeof b.text !== 'string' || typeof b.line !== 'string' || !/^[a-z]*$/.test(b.line)) throw new Error(`${f}: not a bank level: ${line.slice(0, 80)}`);
       if (seen.has(b.text)) continue;
       seen.add(b.text);
       // No two bank levels repeat a layout, so a run that falls back on the bank never meets one twice.
@@ -56,7 +58,7 @@ if (cmd === 'make') {
     }
   }
   all.sort((a, b) => a.chapter - b.chapter || a.explored - b.explored);
-  const body = all.map(b => `  { chapter: ${b.chapter}, explored: ${b.explored}, shortest: ${b.shortest}, line: '${b.line}', text: ${JSON.stringify(b.text)} },`).join('\n');
+  const body = all.map(b => `  { chapter: ${b.chapter}, explored: ${b.explored}, shortest: ${b.shortest}, line: ${JSON.stringify(b.line)}, text: ${JSON.stringify(b.text)} },`).join('\n');
   writeFileSync(new URL('../src/endless/bank.ts', import.meta.url), `/* The Island of Crete: Endless's bank, written by tools/endless-bank.ts; do not edit it by hand. Levels the
  * generator made ahead of time and the gate passed, for a run's first level and for any level whose search runs out
  * of its budget: ${all.length} levels, by chapter and then situations stored. DOM-free. */

@@ -50,14 +50,28 @@ for (const look of ['classic', 'modern'] as const) {
   test(`Endless in ${look}: a new run, a move, a win, Next Level, and the page responsive while the next level is made`, async ({ page }) => {
     test.setTimeout(120_000);
     const errors = await openEndless(page, look);
-    await page.locator('#endless-new').click();
+    // A fixed seed, whose level 2 the worker is still searching for once level 1 has opened.
+    await page.locator('#endless-seed-box').fill('e2e-stall');
+    await page.locator('#endless-seed-play').click();
     await expect(page.locator('#start-veil')).toBeVisible({ timeout: 20_000 });
     await expect(page.locator('#start-veil .kicker')).toHaveText('Endless · Level 1');
     await expect(page.locator('#hud-trial')).toHaveText('Endless • Level 1');
     await page.locator('#start-begin').click();
     // The board settles first (Modern builds its scene once); then, while the worker is still making level 2,
     // the page keeps answering.
-    await page.waitForTimeout(2_000);
+    if (look === 'modern') {
+      // The Modern board draws on demand: it has settled once no frame has come for 400 ms.
+      await page.evaluate(() => new Promise<void>(resolve => {
+        const frames = () => (window as unknown as { __creteTest: { modern: { frames(): number } } }).__creteTest.modern.frames();
+        let seen = frames(), quietSince = performance.now();
+        const tick = () => {
+          const now = frames();
+          if (now !== seen) { seen = now; quietSince = performance.now(); }
+          if (seen > 0 && performance.now() - quietSince >= 400) resolve(); else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }));
+    }
     expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.endless.saved.run()!.next), 'the worker is still searching').toBeNull();
     expect(await longestStall(page, 1500), 'no long stall on the page while the worker searches').toBeLessThan(250);
     const before = await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves);
@@ -99,18 +113,21 @@ test('the run is saved: after a reload the Endless card offers Continue, and Q g
 test('Endless on a phone: the card fits the screen and the touch pad moves Theseus', async ({ browser }) => {
   test.setTimeout(60_000);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-  const page = await context.newPage();
-  await openEndless(page, 'classic');
-  const box = await page.locator('#endless-veil .card').boundingBox();
-  expect(box!.width).toBeLessThanOrEqual(390);
-  await page.locator('#endless-new').tap();
-  await expect(page.locator('#start-veil')).toBeVisible({ timeout: 20_000 });
-  await page.locator('#start-begin').tap();
-  const before = await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves);
-  for (const arm of ['.mv-up', '.mv-down', '.mv-left', '.mv-right']) {
-    await page.locator(arm).tap();
-    if (await page.evaluate(b => (window as unknown as Hooked).__creteTest.game.run!.now.moves > b, before)) break;
+  try {
+    const page = await context.newPage();
+    await openEndless(page, 'classic');
+    const box = await page.locator('#endless-veil .card').boundingBox();
+    expect(box!.width).toBeLessThanOrEqual(390);
+    await page.locator('#endless-new').tap();
+    await expect(page.locator('#start-veil')).toBeVisible({ timeout: 20_000 });
+    await page.locator('#start-begin').tap();
+    const before = await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves);
+    for (const arm of ['.mv-up', '.mv-down', '.mv-left', '.mv-right']) {
+      await page.locator(arm).tap();
+      if (await page.evaluate(b => (window as unknown as Hooked).__creteTest.game.run!.now.moves > b, before)) break;
+    }
+    expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves)).toBeGreaterThan(before);
+  } finally {
+    await context.close();
   }
-  expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves)).toBeGreaterThan(before);
-  await context.close();
 });

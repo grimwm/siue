@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { BANK } from '../src/endless/bank.ts';
 import { generate, fromBank, RUN_MEMORY } from '../src/endless/generate.ts';
 import type { Played, Request } from '../src/endless/generate.ts';
-import { bandAfter, chapterOf, floorOf, gateProblems, knownOf, PLATEAU, FLOOR } from '../src/endless/gate.ts';
+import { bandAfter, chapterOf, floorOf, gateProblems, knownOf, newProblems, PLATEAU, FLOOR } from '../src/endless/gate.ts';
 import { campaignLevels } from '../src/endless/campaign.ts';
 import { measure, rampProblems, rampOf, hidesWalls } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
@@ -43,8 +43,7 @@ test('every bank level passes the whole gate, as it measures now: the bars, no c
 test('no two bank levels repeat a layout', () => {
   const levels = BANK.map(b => parse(b.text));
   for (let i = 0; i < levels.length; i++) {
-    assert.deepEqual(gateProblems(levels[i]!, measure(levels[i]!), { band: { least: 0, most: Infinity, plateau: true }, previous: null }, { features: [] }, levels.filter((_, j) => j !== i))
-      .filter(p => p.includes('repeats')), [], `bank level ${i}`);
+    assert.deepEqual(newProblems(levels[i]!, { features: [] }, levels.filter((_, j) => j !== i)), [], `bank level ${i}`);
   }
 });
 

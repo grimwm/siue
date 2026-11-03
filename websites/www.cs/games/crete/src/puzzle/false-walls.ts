@@ -72,15 +72,15 @@ intro: Two relics, a red key and its door. The beast waits in the upper hall; tw
 intro: Loose stone and closing stone keep the beast off, and here the walls lie both ways: one painted, two unseen. Mind where the stones close behind you.
 
 ############
-#P..::##..##
-#...#.#..;.#
-##.#I....#.#
-#.:..#W..#M#
+#P.#::#....#
+##......#;.#
+####I.#..#.#
+#.:...W..#.#
 #*##.#..:#.#
-###..##..#.#
-#...:....;.#
-#...#.#.I..#
-#*..;.....|E
+###.###....#
+#...:...#;.#
+#...#.#.I.M#
+#*..;...#.|E
 ############
 ` },
   { id: 'ch4-7', text: `title: The Glass Floor
@@ -88,13 +88,13 @@ intro: Ice runs through these halls and skates lie in the west. Two walls here a
 
 ############
 #P...#.##.*#
-#.#....#...#
+#......#...#
 #..==W==.###
-#...#..=.#.#
-#k.#M##=...#
+#...#..=##.#
+#k##.#.=...#
 #.....#=...#
-##......W..#
-#...##....##
+##....M.W..#
+#...####..##
 #*..#....|E#
 ############
 ` },
@@ -102,15 +102,15 @@ intro: Ice runs through these halls and skates lie in the west. Two walls here a
 intro: A block, a button and a wall that waits on it. A painted stone stands near the block, and an unseen wall guards the low way.
 
 ############
-#P##...#.###
+#P##.....###
 #.#...#....#
 #.#O.W..*#.#
 #.......T#.#
-#...##_....#
-###.##.##..#
-#*#.##....M#
-#...#....#.#
-###.I..###|E
+#....#_....#
+###..#.##..#
+#*#.##.....#
+#...#..#...#
+##..I..##M|E
 ############
 ` },
   { id: 'ch4-9', text: `title: The General
@@ -118,15 +118,15 @@ intro: Fire burns across these halls, and boots lie near it. One wall here is pa
 pages: ch4-taurus
 
 ############
-##..FF::..P#
-#.;###..#..#
-#.#h...I..##
-#M#..W#..:.#
-#.#:..#.#.*#
+#..#FF::..P#
+#.;###..##.#
+#..h...I..##
+##...W#..:.#
+#..:....##*#
 #.#.FF#..###
-#.;...#:...#
-#.pI.##.#..#
-E|.....;..*#
+#.;#..#:...#
+#MpI....#..#
+E|.#...;.#*#
 ############
 ` },
   { id: 'ch4-10', text: `title: The Painted Labyrinth

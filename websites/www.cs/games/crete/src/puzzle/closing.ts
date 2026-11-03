@@ -62,15 +62,15 @@ intro: A red door and its key, and stones that close behind you. The door is the
 intro: Pools fill the middle of this hall. The beast will not wade them and will not tread the closing stones; between the two, find your way to both relics.
 
 ############
-#P.......f.#
-#..#..#..#.#
+#P......#f.#
+#..#..#....#
 ##..;...#.##
-###..#....##
+####.#....##
 #..#.~~~;..#
-#....~.~...#
-#*;#.~~~..M#
-####...#...#
-#*...#..;.|E
+#.M..~.~#..#
+#*;#.~~~...#
+#.#......#.#
+#*......;#|E
 ############
 ` },
   { id: 'ch3-6', text: `title: The Sliding Floor
@@ -78,13 +78,13 @@ intro: Ice and a pushing current run through this hall, and closing stones hold 
 
 ############
 #P..#...=..#
-#...#.#.=#M#
+#...#.#.=#.#
 #.#...;#=#.#
 #......#...#
 ##.>>>>....#
 ##.#.#.....#
 #*..;......#
-###...#.#..#
+###M..#.#..#
 #*...;..#.|E
 ############
 ` },
@@ -125,13 +125,13 @@ pages: ch3-games
 ############
 #P.....h...#
 #.#.#.#....#
-#.#.;.FF#..#
-#...##p.#..#
+#.#.;.FF..##
+#.#.##p.#..#
 #*.#;.#z#..#
-###....#..##
-#*......;..#
+###.#.##..##
+#*..##..;..#
 #..##..FM..#
-#.#.x.;...|E
+#...x.;...|E
 ############
 ` },
   { id: 'ch3-10', text: `title: The Ring of Walls

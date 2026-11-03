@@ -110,15 +110,15 @@ intro: The beast cannot tread the marked stones. A catch costs a heart, not what
 pages: ch1-tribute-marks
 
 ############
-#.*#.....|E#
-#..#.#O#.###
-##S#~..#.###
-##......S.##
-#.......##.#
-##MS.#.~...#
-##.~.#.....#
-##..##..p.##
-#...##PS...#
+##*#...#.|E#
+##.#..O##..#
+#.S##M....##
+#.##....S###
+#....#.#.#.#
+##.S...p.#.#
+#.....#..#.#
+#...##.....#
+#..#..PS.###
 ############
 ` },
   { id: 'trial-10', text: `title: The Great Hall

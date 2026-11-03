@@ -19,7 +19,7 @@ final class Collector
      */
     public const EVENTS = [
         '*' => ['share' => null, 'install' => null],
-        'crete' => ['game_start' => ['new', 'continue'], 'level_start' => 'level', 'level_win' => 'level', 'hint' => null, 'route' => null, 'auto' => null],
+        'crete' => ['game_start' => ['new', 'continue', 'endless'], 'level_start' => 'level', 'level_win' => 'level', 'hint' => null, 'route' => null, 'auto' => null],
         'tankity' => ['room_host' => null, 'match_start' => ['solo', 'room'], 'match_end' => ['solo', 'room']],
         'cylon' => ['game_start' => null, 'score_submit' => null],
     ];

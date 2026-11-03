@@ -71,6 +71,9 @@ import { ratingText, renderSharedCard } from "./ui/shared.tsx";
 import type { SharedView } from "./share/visit.ts";
 import type { RatingState } from "./share/rating.ts";
 import { renderLevels } from "./ui/levels.tsx";
+import { renderEndlessCard } from "./ui/endless.tsx";
+import type { EndlessMode } from "./endless/mode.ts";
+import { endlessKicker } from "./endless/name.ts";
 import type { LevelRow } from "./ui/levels.tsx";
 
 /** What the page borrows at run time. */
@@ -133,6 +136,8 @@ export interface Controls {
   editor?: Pick<Editor, "open" | "close" | "key">;
   /** The open share link, when the page has one: its card, Play and Edit a copy. */
   shared?: { card(): SharedView | null; play(): void; edit(): void };
+  /** Endless, when the page has it: its card's words and actions, and the link that opens the saved run's seed. */
+  endless?: { mode: EndlessMode; link(): string | null; copy?(link: string): void };
   /** The editor's visit ended: the editor was left for the title card, or a campaign level was opened (from a try,
    *  or from anywhere). */
   leftEditor?(): void;
@@ -187,6 +192,8 @@ export interface Ui {
   showEditor(draft?: Parameters<Editor["open"]>[0]): void;
   /** The open share link's card, alone. */
   showShared(): void;
+  /** The Endless card, alone. */
+  showEndless(): void;
   /** A share link could not be opened: the toast and the title card say why. */
   refuseLink(message: string): void;
   /** Draws the cards again (the shared card's rating came in). */
@@ -218,7 +225,7 @@ export function createUi(deps: UiDeps): Ui {
   /** The level in play when it is from outside the campaign, else null. */
   const outsideOf = (g: Game | null): OutsideLevel | null => (g && g.trial >= 0 ? deps.levels?.outside?.(g.trial) ?? null : null);
   /** An outside level's kicker on its start and end cards. */
-  const outsideKicker = (o: OutsideLevel): string => (o.kind === "try" ? "Your level" : "Shared level");
+  const outsideKicker = (o: OutsideLevel): string => (o.kind === "try" ? "Your level" : o.kind === "endless" ? endlessKicker(o.depth ?? 1) : "Shared level");
   /** The menu's kicker and the line under its title: the level's chapter and number and its name, or for a level
    *  from outside the campaign what kind it is and its name; nothing when no level is open. */
   const menuPlace = (
@@ -389,7 +396,27 @@ export function createUi(deps: UiDeps): Ui {
 
   /** Next level from the end card: a chapter's first level shows that chapter's opening card first. */
   function nextLevel(): void {
-    pick((controls?.game ?? game)!.trial + 1, true);
+    const g = controls?.game ?? game;
+    if (outsideOf(g)?.kind === "endless") {
+      const mode = controls?.endless?.mode;
+      mode?.next();
+      if (mode?.view().finding) showEndless();
+      return;
+    }
+    pick(g!.trial + 1, true);
+  }
+
+  /** The Endless card, alone. */
+  function showEndless(): void {
+    if (!controls?.endless) return;
+    layers.clear();
+    layers.open("endless");
+  }
+
+  /** Q or Back on the Endless card: a search the player waits on stops, and the title card shows. */
+  function leaveEndless(): void {
+    controls?.endless?.mode.cancel();
+    showTitle(titleHint);
   }
 
   function showChapter(n: number, closing: boolean, target = firstOf(n)): void {
@@ -518,8 +545,31 @@ export function createUi(deps: UiDeps): Ui {
       ...(resume() !== null ? { resume: continueWords(resume()!), onContinue: goResume } : {}),
       onStory: () => layers.open("story"),
       ...(controls?.editor ? { onEditor: showEditor } : {}),
+      ...(controls?.endless ? { onEndless: showEndless } : {}),
       onSettings: () => layers.open("menu"),
     });
+    const endless = controls?.endless;
+    if (endless) {
+      const copy = endless.copy;
+      renderEndlessCard($("endless-root"), {
+        ...endless.mode.view(),
+        open: layers.isOpen("endless"),
+        link: endless.link(),
+        ...(copy ? { onCopy: copy } : {}),
+        onContinue: () => {
+          controls?.wake();
+          track("game_start", "endless");
+          endless.mode.continueRun();
+        },
+        onNew: (seed, tier) => {
+          controls?.wake();
+          track("game_start", "endless");
+          endless.mode.newRun(seed, tier);
+        },
+        onCancel: leaveEndless,
+        onBack: leaveEndless,
+      });
+    }
     renderLookPick($("look-root"), {
       open: layers.isOpen("look"),
       look,
@@ -822,6 +872,13 @@ export function createUi(deps: UiDeps): Ui {
     const out = outsideOf(g);
     // A level from outside the campaign records nothing and has no chapter: its card names it and, for a shared
     // level, sets the win against the author's best (only a win without help can beat it).
+    if (out?.kind === "endless") {
+      return {
+        open: true, won, hasNext: true, hasLevels: false, pages: [], kicker: `${endlessKicker(out.depth ?? 1)} cleared`, title: out.name,
+        text: how,
+        score: [`${s.moves} moves`, out.fewest !== undefined ? againstFewest(s.moves, out.fewest) : "", help].filter(Boolean).join(" · "),
+      };
+    }
     if (out) {
       const author = out.best === null ? "" : !run.assisted && s.moves < out.best ? ` You beat the author's ${out.best}.` : ` The author's best is ${out.best}.`;
       return {
@@ -885,8 +942,8 @@ export function createUi(deps: UiDeps): Ui {
     const place = at ? placeWords(at.chapter.n, at.within + 1, s.level.title) : null;
     renderStatus($("status-root"), {
       view: statusView({
-        trial: place?.short ?? "",
-        trialNote: place?.full ?? "",
+        trial: place?.short ?? (out?.kind === "endless" ? `Endless • Level ${out.depth ?? 1}` : ""),
+        trialNote: place?.full ?? (out?.kind === "endless" ? `${endlessKicker(out.depth ?? 1)}: ${out.name}` : ""),
         hearts: s.hearts,
         relicsLeft: s.relicsLeft,
         keys: s.keys,
@@ -1463,6 +1520,7 @@ export function createUi(deps: UiDeps): Ui {
           closePickup();
         } else if (layers.isOpen("meet")) closeMeet();
         else if (layers.isOpen("title")) layers.open("menu");
+        else if (layers.isOpen("endless")) leaveEndless();
         else if (layers.isOpen("shared")) {
           if (sharedFromMenu) {
             layers.clear();
@@ -1498,6 +1556,11 @@ export function createUi(deps: UiDeps): Ui {
       if (action === "story" && layers.isOpen("title")) {
         ev.preventDefault();
         if (!ev.repeat) layers.open("story");
+        return;
+      }
+      if (action === "endless" && layers.isOpen("title") && c.endless) {
+        ev.preventDefault();
+        if (!ev.repeat) showEndless();
         return;
       }
       if (action === "editor" && layers.isOpen("title") && c.editor) {
@@ -1729,6 +1792,7 @@ export function createUi(deps: UiDeps): Ui {
     top: () => layers.top(),
     showEditor,
     showShared: () => showShared(),
+    showEndless,
     refuseLink: (message) => {
       say(message, "bad");
       showTitle(titleHint, message);

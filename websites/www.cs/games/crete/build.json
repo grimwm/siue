@@ -7,10 +7,12 @@
     { "in": "src/tiles-page.ts", "out": "tiles-test", "format": "iife" },
     { "in": "src/icons-page.ts", "out": "icons-test", "format": "iife" },
     { "in": "src/solver-worker.ts", "out": "solver-worker", "format": "iife" },
+    { "in": "src/endless-worker.ts", "out": "endless-worker", "format": "iife" },
     { "in": "src/modern/entry.ts", "out": "modern", "format": "esm" }
   ],
   "versions": {
     "SOLVER_WORKER_V": "dist/solver-worker.js",
+    "ENDLESS_WORKER_V": "dist/endless-worker.js",
     "MODERN_V": "dist/modern.js",
     "TITLE_WEBM_V": "audio/music/title.webm",
     "TITLE_M4A_V": "audio/music/title.m4a"

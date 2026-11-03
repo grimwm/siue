@@ -1,7 +1,7 @@
 // The Island of Crete: the title card. Shown when the page opens, after Quit, and with a note when a share link
 // cannot be opened (src/share/visit.ts). New Game opens the new-game card, which asks for the look; Continue (shown
 // once a level is cleared and until all are) opens the chapter card of the first level not cleared, and has Enter;
-// Story, Make a level and Settings open the story card, the level editor and the menu when the page gives them;
+// Endless, Story, Make a level and Settings open the Endless card, the story card, the level editor and the menu when the page gives them;
 // the kit's install bar mounts into #title-install (src/install-slot.ts).
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
@@ -23,6 +23,8 @@ export interface TitleCardProps {
   onStory?: () => void;
   /** Make a level: opens the level editor. */
   onEditor?: () => void;
+  /** Endless: opens the Endless card. */
+  onEndless?: () => void;
   onSettings?: () => void;
 }
 
@@ -36,6 +38,7 @@ export function TitleCard(p: TitleCardProps) {
       <div class="title-actions">
         {p.resume && p.onContinue && <Button id="title-continue" label={p.resume} title={p.resume} keyLabel={KEYS.begin.label} onClick={p.onContinue}>Continue</Button>}
         <Button id="title-play" keyLabel={KEYS.new.label} onClick={p.onPlay}>New Game</Button>
+        {p.onEndless && <Button id="title-endless" keyLabel={KEYS.endless.label} onClick={p.onEndless}>Endless</Button>}
         {p.onStory && <Button id="title-story" keyLabel={KEYS.story.label} onClick={p.onStory}>Story</Button>}
         {p.onEditor && <Button id="title-editor" keyLabel={KEYS.editor.label} onClick={p.onEditor}>Make a Level</Button>}
         {p.onSettings && <Button id="title-settings" keyLabel={KEYS.menu.label} onClick={p.onSettings}>Settings</Button>}

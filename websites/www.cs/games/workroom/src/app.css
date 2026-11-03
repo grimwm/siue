@@ -6,6 +6,7 @@
    arithmetic and test/tokens.test.ts keeps the two equal. */
 @import "tailwindcss" source(none);
 @import "./shell.css";
+@import "./ui/compose/compose.css";
 @source "./**/*.{ts,tsx}";
 
 @theme static {

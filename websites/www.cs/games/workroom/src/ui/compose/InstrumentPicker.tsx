@@ -1,5 +1,5 @@
 // The instrument picker: the catalogue by category, each category and the Lyre with its icon, each instrument with its
-// range in words ("G3–A7") and, for a stand-in, what plays instead.
+// range in words ("G3–A7") and, for a stand-in, what plays instead; with onHear, a Hear button plays a short tune on it.
 import { useState } from 'preact/hooks';
 import { CATEGORIES } from '../../catalogue.ts';
 import type { Category, Entry } from '../../catalogue.ts';
@@ -25,7 +25,11 @@ export function rangeWords(e: Entry): string {
   return ex && (ex[0] !== e.range[0] || ex[1] !== e.range[1]) ? `${normal} (experts ${pitchName(ex[0])}–${pitchName(ex[1])})` : normal;
 }
 
-export interface InstrumentPickerProps { entries: readonly Entry[]; value: string | null; onPick(e: Entry): void }
+export interface InstrumentPickerProps {
+  entries: readonly Entry[]; value: string | null; onPick(e: Entry): void;
+  /** Plays a short tune on the instrument; with it, each instrument has a Hear button beside it. */
+  onHear?(e: Entry): void;
+}
 
 export function InstrumentPicker(p: InstrumentPickerProps) {
   const current = p.entries.find(e => e.id === p.value);
@@ -44,16 +48,24 @@ export function InstrumentPicker(p: InstrumentPickerProps) {
       </div>
       <div role="group" aria-label="Instruments" class="grid gap-2 sm:grid-cols-2">
         {shown.map(e => (
-          <button type="button" data-instrument={e.id} aria-pressed={e.id === p.value} onClick={() => p.onPick(e)}
-            class={cx('flex min-h-14 items-start gap-2 rounded-md border p-2 text-left', e.id === p.value ? 'border-amber bg-lane' : 'border-rule bg-panel hover:border-dim')}>
-            <Icon name={e.icon} class="mt-0.5 text-amber" />
-            <span class="grid min-w-0">
-              <span class="font-semibold">{e.name}</span>
-              <span class="font-mono text-xs text-dim">{rangeWords(e)}</span>
-              {e.standin || e.id === 'lyre' ? <span data-standin="" class="text-xs text-amber">Stand-In Sound</span> : null}
-              {e.standinNote ? <span class="text-xs text-dim">{e.standinNote}</span> : null}
-            </span>
-          </button>
+          <div class="flex items-stretch gap-1">
+            <button type="button" data-instrument={e.id} aria-pressed={e.id === p.value} onClick={() => p.onPick(e)}
+              class={cx('flex min-h-14 min-w-0 flex-1 items-start gap-2 rounded-md border p-2 text-left', e.id === p.value ? 'border-amber bg-lane' : 'border-rule bg-panel hover:border-dim')}>
+              <Icon name={e.icon} class="mt-0.5 text-amber" />
+              <span class="grid min-w-0">
+                <span class="font-semibold">{e.name}</span>
+                <span class="font-mono text-xs text-dim">{rangeWords(e)}</span>
+                {e.standin || e.id === 'lyre' ? <span data-standin="" class="text-xs text-amber">Stand-In Sound</span> : null}
+                {e.standinNote ? <span class="text-xs text-dim">{e.standinNote}</span> : null}
+              </span>
+            </button>
+            {p.onHear ? (
+              <button type="button" data-hear-instrument={e.id} aria-label={`Hear ${e.name}`} title={`Hear ${e.name}`} onClick={() => p.onHear!(e)}
+                class="inline-flex min-h-14 min-w-14 flex-col items-center justify-center gap-0.5 rounded-md border border-rule bg-panel text-xs font-semibold hover:border-dim">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 4.8v14.4a.8.8 0 0 0 1.2.7l11.3-7.2a.8.8 0 0 0 0-1.4L8.2 4.1A.8.8 0 0 0 7 4.8z" fill="currentColor" /></svg>Hear
+              </button>
+            ) : null}
+          </div>
         ))}
       </div>
     </div>

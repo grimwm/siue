@@ -1,27 +1,36 @@
-// The composer: one piece's parts, the selected part's notes on the editing grid, as sheet music or both, four ways to
-// put notes in (Play Live with Play Along, Step, Grid, Hum), a plugged-in keyboard or drum pads (Your Keyboard), Undo
-// and Redo over every edit, hearing the part alone or with the piece, Import Music File and Export, and Save Draft. It holds
-// the page's state and wires the DOM-free modules (compose/) to the keys, the grid and the sound. While any key is
-// held the page is pinned where it is (compose/scrollpin.ts), and every readout keeps a fixed height, so nothing
-// moves under the player.
+// The composer: the transport bar on top (Play, the tempo, where the music is, Undo and Redo, Save Draft, the Piece
+// menu, Compose, Mix and Sheet), and in Compose one timeline of the song's sections, its effects and its tracks (Arrange),
+// each track opening in place as a piano roll or a step sequencer. Mix holds each track's Sound, Speed And Loudness and
+// DJ Mode; Sheet the open track as sheet music. Play Live, Step, Hum and Your Keyboard sit in each track's Record drawer.
+// It holds the page's state and wires the DOM-free modules (compose/) to the keys, the timeline and the sound. The
+// sound is the real renderer's, built when Play is pressed and played as a file; the playhead and the readout are
+// drawn from its clock straight into the page, so the composer never redraws while the music plays. While any key is
+// held the page is pinned where it is (compose/scrollpin.ts).
+import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Entry } from '../../catalogue.ts';
-import { intervalWords, rangeClass, writtenPitch } from '../../catalogue.ts';
+import { intervalWords, rangeClass } from '../../catalogue.ts';
 import { beatClock } from '../../compose/beats.ts';
 import { barsNeeded, scoreFromDoc } from '../../compose/doc.ts';
 import type { EditDoc, Part } from '../../compose/doc.ts';
+import { fxDemoScore } from '../../compose/fxdemo.ts';
 import { addAsNewParts, ACCEPT, newDocFrom, previewOf, readMusicFile } from '../../compose/importing.ts';
 import type { ImportPorts, ImportPreview as Preview } from '../../compose/importing.ts';
 import { writeMidi } from '../../compose/midi.ts';
 import { ImportError } from '../../compose/music-file.ts';
 import { toMusicXml } from '../../compose/toxml.ts';
-import { addNotes, addPart, clearPart, moveIntoRange, moveNote, PART_COLOURS, recolourPart, removeNotes, removePart, renamePart, resizeNote, setInstrument } from '../../compose/edit.ts';
+import { addNotes, addPart, clearPart, moveIntoRange, PART_COLOURS, removeNotes } from '../../compose/edit.ts';
 import { createHistory } from '../../compose/history.ts';
 import { keyboardStart, OCTAVE_DOWN, OCTAVE_UP, pitchForKey } from '../../compose/keys.ts';
 import { bendFractions, humNotes, keyScale } from '../../compose/hum.ts';
 import type { HumPlace, HumSegment, HumSnap } from '../../compose/hum.ts';
 import { createLiveTake } from '../../compose/live.ts';
 import type { LiveTake } from '../../compose/live.ts';
+import { muteStatus, setAllMuted } from '../../compose/mutes.ts';
+import { fixTiming, shiftNotes, transposeNotes } from '../../compose/notetools.ts';
+import { placeTarget, targetFor } from '../../compose/placement.ts';
+import type { Target } from '../../compose/placement.ts';
+import { deleteRegion, duplicateRegion, fitRegions, splitRegion } from '../../compose/regions.ts';
 import { saveScore } from '../../compose/save.ts';
 import type { Saved } from '../../compose/save.ts';
 import type { Sampler } from '../../compose/sampler.ts';
@@ -30,26 +39,40 @@ import { GRID_LABELS, GRIDS } from '../../compose/snap.ts';
 import type { Grid } from '../../compose/snap.ts';
 import { createChordGather, createStepCursor, STEP_LENGTHS, stepBeats } from '../../compose/step.ts';
 import type { StepLength } from '../../compose/step.ts';
+import { clearStep, typedPitch, typeNote } from '../../compose/typenotes.ts';
 import { guardLeaving } from '../../leave.ts';
 import type { PageApi } from '../../api.ts';
 import { pitchName } from '../../pianoroll.ts';
 import type { BuildSound } from '../../render/sound.ts';
-import type { Score } from '../../score.ts';
-import { Button } from '../console/Button.tsx';
+import type { FxClipEffect, Score } from '../../score.ts';
 import { cx } from '../console/cx.ts';
-import { Panel } from '../console/Panel.tsx';
 import type { SheetModule } from '../SheetMusic.tsx';
-import { EditGrid } from './EditGrid.tsx';
-import { ImportPreview } from './ImportPreview.tsx';
-import { PartSheet } from './PartSheet.tsx';
-import { RangePicture } from './RangePicture.tsx';
-import { Icon, InstrumentPicker, rangeWords } from './InstrumentPicker.tsx';
+import { ActionBar, copyPicked, pasteAtCursor } from './ActionBar.tsx';
+import type { Clipboard } from './ActionBar.tsx';
+import { Arrange, headWidth } from './Arrange.tsx';
+import type { Ctl, Pick, PopName } from './ctl.ts';
+import { barWords, ROLL_ROWS } from './ctl.ts';
+import { FxPalette, FxSettings, PlaceBanner } from './FxPalette.tsx';
+import { Glyph } from './Glyph.tsx';
 import { HumPanel } from './HumPanel.tsx';
 import type { HumPorts } from './HumPanel.tsx';
+import { ImportPreview } from './ImportPreview.tsx';
+import { Icon } from './InstrumentPicker.tsx';
 import { Keyboard } from './Keyboard.tsx';
-import { YourKeyboard } from './YourKeyboard.tsx';
-import { SpeedPanel } from './SpeedPanel.tsx';
+import { PartSheet } from './PartSheet.tsx';
+import { Pop, PopItem } from './Pop.tsx';
+import { AddPop, ChordsPop, KeyPicker, MarkerPop, SectionPop, TrackMenu } from './Pops.tsx';
+import { SaveTakes } from './SaveTakes.tsx';
+import type { TakeToSave } from './SaveTakes.tsx';
 import { SoundPanel } from './SoundPanel.tsx';
+import { SpeedPanel } from './SpeedPanel.tsx';
+import { readoutWords, Transport } from './Transport.tsx';
+import type { View } from './Transport.tsx';
+import { VocalPanel } from './VocalPanel.tsx';
+import type { VocalPorts } from './VocalPanel.tsx';
+import { YourKeyboard } from './YourKeyboard.tsx';
+import { DjMode } from './DjMode.tsx';
+import type { DjPorts } from './DjMode.tsx';
 import { mixOf, setLaneFx, setMix, setVoice } from '../../compose/sound.ts';
 import type { LiveVoice } from '../../compose/livemic.ts';
 import type { VoiceFx } from '../../score.ts';
@@ -60,25 +83,14 @@ import { withSavedTakes } from '../../compose/vocalsave.ts';
 import { exportWithVocals, notesOnly } from '../../compose/vocalexport.ts';
 import type { Encoded } from '../../compose/vocalsave.ts';
 import { LOCAL_TAKE_RE } from '../../score.ts';
-import { VocalPanel } from './VocalPanel.tsx';
-import { EffectsPanel } from './EffectsPanel.tsx';
-import { DjMode } from './DjMode.tsx';
-import type { DjPorts } from './DjMode.tsx';
-import { barSeconds } from '../../score.ts';
-import type { VocalPorts } from './VocalPanel.tsx';
-import { SaveTakes } from './SaveTakes.tsx';
-import type { TakeToSave } from './SaveTakes.tsx';
 
-export type Mode = 'live' | 'step' | 'grid' | 'hum';
-export const MODES: readonly { id: Mode; label: string; icon: string; help: string }[] = [
-  { id: 'live', label: 'Play Live', icon: 'keys', help: 'Play the keys: a key held down sets the note\'s length, as on a piano. Recording starts on your first note and stops after a bar of quiet. Play Along plays the piece while you record over it, the other parts shown as outlines.' },
-  { id: 'step', label: 'Step', icon: 'pitched', help: 'Pick a length, then press a key (or several together for a chord). The note goes in at the dashed line, which moves on.' },
-  { id: 'grid', label: 'Grid', icon: 'keys', help: 'Tap an empty square to add a note of the length picked. Drag a note to move it; drag its right end to make it longer or shorter.' },
-  { id: 'hum', label: 'Hum', icon: 'voices', help: 'Hum or sing, and your voice becomes notes in this part. Record With Mic, try the demo, or upload a recording.' },
+/** The Record drawer's ways to put notes in. */
+export type Mode = 'live' | 'step' | 'hum';
+export const MODES: readonly { id: Mode; label: string; help: string }[] = [
+  { id: 'live', label: 'Play Live', help: 'Play the keys: a key held down sets the note\'s length, as on a piano. Recording starts on your first note and stops after a bar of quiet. Play Along plays the piece while you record over it.' },
+  { id: 'step', label: 'Step', help: 'Pick a length, then press a key (or several together for a chord). The note goes in at the dashed line, which moves on.' },
+  { id: 'hum', label: 'Hum', help: 'Hum or sing, and your voice becomes notes in this track. Record With Mic, try the demo, or upload a recording.' },
 ];
-
-export type Show = 'grid' | 'sheet' | 'both';
-export const SHOWS: readonly { id: Show; label: string }[] = [{ id: 'grid', label: 'Grid' }, { id: 'sheet', label: 'Sheet Music' }, { id: 'both', label: 'Both' }];
 
 /** What the editor needs for sheet music and for files: the sheet bundle, the import's readers, and handing the person a file. */
 export interface ComposerFiles {
@@ -99,7 +111,7 @@ export interface ComposerStart {
 export interface ComposerProps {
   start: ComposerStart;
   entries: readonly Entry[];
-  api: Pick<PageApi, 'saveDraft'>;
+  api: Pick2<PageApi, 'saveDraft'>;
   sampler: Sampler;
   buildSound: BuildSound;
   /** Seconds, from any steady clock. */
@@ -107,7 +119,7 @@ export interface ComposerProps {
   /** A metronome click (count-in); absent where the page has no sound. */
   click?(accent: boolean): void;
   onSaved?(piece: string, version: number): void;
-  /** Sheet music, import and export; without it the editor shows the grid only. */
+  /** Sheet music, import and export; without it the editor has no Sheet view and no files. */
   files?: ComposerFiles;
   /** Start A New Piece from an imported file: the page asks for the new piece's title and project, then opens it. */
   onNewPiece?(doc: EditDoc, title: string): void;
@@ -122,114 +134,319 @@ export interface ComposerProps {
   /** DJ Mode's live deck; absent where the page has no sound. */
   dj?: DjPorts;
 }
+type Pick2<T, K extends keyof T> = { [P in K]: T[P] };
 
 const isTyping = (t: EventTarget | null): boolean =>
   t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
+const stamp = (): string => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+const coarsePointer = (): boolean => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
 export function Composer(p: ComposerProps) {
-  const history = useMemo(() => createHistory(p.start.doc), []);
-  const [doc, setDoc] = useState<EditDoc>(p.start.doc);
-  const [savedDoc, setSavedDoc] = useState<EditDoc>(p.start.doc);
+  const history = useMemo(() => createHistory(fitRegions(p.start.doc)), []);
+  const [doc, setDoc] = useState<EditDoc>(history.now());
+  const [savedDoc, setSavedDoc] = useState<EditDoc>(history.now());
   const [version, setVersion] = useState(p.start.version);
-  const [partId, setPartId] = useState<string | null>(p.start.doc.parts[0]?.id ?? null);
-  const [mode, setMode] = useState<Mode>('live');
-  const [tidy, setTidy] = useState<Grid>('1/8');
-  const [lineUp, setLineUp] = useState<Grid>('1/8');
-  const [length, setLength] = useState<StepLength>('quarter');
-  const [dotted, setDotted] = useState(false);
-  const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
-  const [armed, setArmed] = useState<number | null>(null);
-  const [held, setHeld] = useState<ReadonlySet<number>>(new Set());
-  const [keysFrom, setKeysFrom] = useState<number | null>(null);
-  const [picking, setPicking] = useState<'add' | 'change' | null>(p.start.doc.parts.length === 0 ? 'add' : null);
-  const [help, setHelp] = useState(true);
-  const [fill, setFill] = useState(false);
-  const [countIn, setCountIn] = useState(false);
-  const [recording, setRecording] = useState<'idle' | 'counting' | 'on'>('idle');
+  const [view, setView] = useState<View>('compose');
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const [sel, setSelState] = useState<string | null>(p.start.doc.parts[0]?.id ?? null);
+  const [lows, setLows] = useState<Record<string, number>>({});
+  const [pick, setPickState] = useState<Pick>({ kind: 'none' });
+  const [lenBeats, setLen] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [chord, setChord] = useState<Ctl['chord']>(null);
+  const [splitting, setSplitting] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [cursor, setCursorState] = useState(0);
+  const [loop, setLoopState] = useState<{ from: number; to: number } | null>(null);
+  const [loopOn, setLoopOn] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [width, setWidth] = useState(360);
+  const [placing, setPlacing] = useState<FxClipEffect | null>(null);
+  const [drop, setDrop] = useState<Target | null>(null);
+  const [flash, setFlash] = useState<number | null>(null);
+  const [pop, setPop] = useState<{ name: PopName; anchor: HTMLElement | null; arg?: string } | null>(null);
+  const [clipboard, setClipboard] = useState<Clipboard>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [recordOpen, setRecordOpen] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [getting, setGetting] = useState(false);
+  const [hearingFx, setHearingFx] = useState<FxClipEffect | null>(null);
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
-  const [listening, setListening] = useState<{ what: 'piece' | 'part'; state: string } | null>(null);
-  const [playhead, setPlayhead] = useState<number | null>(null);
+  const [help] = useState(true);
+  const [mode, setMode] = useState<Mode>('live');
+  const [tidy, setTidy] = useState<Grid>('1/8');
+  const [length, setLength] = useState<StepLength>('quarter');
+  const [dotted, setDotted] = useState(false);
+  const [held, setHeld] = useState<ReadonlySet<number>>(new Set());
+  const [keysFrom, setKeysFrom] = useState<number | null>(null);
+  const [countIn, setCountIn] = useState(false);
+  const [recording, setRecording] = useState<'idle' | 'counting' | 'on'>('idle');
   const [stepAt, setStepAt] = useState(0);
-  const [show, setShow] = useState<Show>('grid');
   const [concert, setConcert] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [choice, setChoice] = useState<string[]>([]);
   const [humSnap, setHumSnap] = useState<HumSnap>('friendly');
   const [humPlace, setHumPlace] = useState<HumPlace>('after');
-  const [humLine, setHumLine] = useState<number | null>(null);
   const [along, setAlong] = useState<'off' | 'ready' | 'counting' | 'on'>('off');
   const [alongParts, setAlongParts] = useState(true);
   const [choosing, setChoosing] = useState<TakeToSave[] | null>(null);
   const [room, setRoom] = useState(p.vocal?.room ?? Infinity);
   const fileInput = useRef<HTMLInputElement>(null);
-  const gridWrap = useRef<HTMLDivElement>(null);
-  const sheetBox = useRef<HTMLDivElement | null>(null);
-  const syncing = useRef(false);
+  const readout = useRef<HTMLSpanElement>(null);
+  const coarse = useMemo(coarsePointer, []);
 
-  const part: Part | null = doc.parts.find(x => x.id === partId) ?? null;
-  const entry: Entry | null = part ? p.entries.find(e => e.id === part.instrument) ?? null : null;
   const bars = barsNeeded(doc);
   const clock = useMemo(() => beatClock(doc.tempo), [doc.tempo]);
   const quarter = clock.quarter(1);
   const bpm = clock.tempoAt(1).bpm;
-  const start = keysFrom ?? (entry ? keyboardStart(entry) : 48);
+  const end = clock.barStartBeat(bars + 1);
+  const total = clock.barStartBeat(bars + 2);
   const dirty = doc !== savedDoc;
+  const part: Part | null = doc.parts.find(x => x.id === sel) ?? null;
+  const entryOf = (x: Part): Entry | null => p.entries.find(e => e.id === x.instrument) ?? null;
+  const entry = part ? entryOf(part) : null;
+  const lengths = useMemo(() => [['1/16', quarter / 4], ['1/8', quarter / 2], ['Beat', 1], ['1/2', quarter * 2], ['Bar', clock.tempoAt(1).beats]] as const, [quarter, clock]);
+  const len = lenBeats ?? 1;
+  const hw = headWidth();
+  const ppb = Math.max(4, Math.max(coarse ? 64 : 36, (width - hw - 2) / total) * zoom);
+  const recordPart = doc.parts.find(x => x.id === recordOpen) ?? null;
+  const recordEntry = recordPart ? entryOf(recordPart) : null;
+  const keysStart = keysFrom ?? (recordEntry ? keyboardStart(recordEntry) : 48);
 
-  // Mutable state the key and timer handlers read without re-subscribing.
-  // `pressed` is each key held (a computer key's code, or "screen:<pitch>") and the pitch it started, so letting it go
-  // stops that pitch even after the keyboard moved an octave; `handles` is each sounding pitch's sampler note.
+  // ---- The document ----
+  const say = (words: string): void => setStatus(words);
+  const apply = (next: EditDoc, words?: string): void => {
+    history.push(fitRegions(next));
+    setDoc(history.now());
+    if (words) setStatus(words);
+  };
+  const clearPicks = (): void => { setPickState({ kind: 'none' }); setChord(null); setSplitting(false); };
+  const undo = (): void => { setDoc(history.undo()); clearPicks(); };
+  const redo = (): void => { setDoc(history.redo()); clearPicks(); };
+  const savedRef = useRef(savedDoc);
+  savedRef.current = savedDoc;
+  const docRef = useRef(doc);
+  docRef.current = doc;
+  useEffect(() => guardLeaving(window, () => docRef.current !== savedRef.current), []);
+  const lowOf = (x: Part): number => {
+    const set = lows[x.id];
+    if (set !== undefined) return set;
+    const e = entryOf(x);
+    const ps = x.notes.map(n => n.pitch).sort((a, b) => a - b);
+    const mid = ps.length ? ps[Math.floor(ps.length / 2)]! : e?.home ?? 60;
+    return Math.max(12, Math.min(96, Math.round((mid - 12) / 12) * 12));
+  };
+  const setLow = (id: string, low: number): void => setLows(l => ({ ...l, [id]: Math.max(0, Math.min(104, low)) }));
+  const previewNote = (x: Part, pitch: number, beats = 1): void => {
+    const h = p.sampler.start({ instrument: x.instrument, gain_db: x.gain_db, attack: x.attack, release: x.release }, pitch, 90);
+    setTimeout(() => p.sampler.stop(h), Math.max(150, Math.min(900, (beats * 60 * 1000) / bpm)));
+  };
+  useEffect(() => { for (const x of doc.parts) if (!x.vocal) void p.sampler.ready(x.instrument); }, [doc.parts.map(x => x.instrument).join()]);
+  const setCursor = (beat: number): void => {
+    const b = Math.max(0, Math.min(end, beat));
+    setCursorState(b);
+    if (!playingRef.current) drawAt(b);
+  };
+  const setPick = (k: Pick): void => {
+    setPickState(k);
+    if (k.kind !== 'none') { setChord(null); setSplitting(false); }
+    if (k.kind === 'notes' || k.kind === 'region') setSelState(k.part);
+  };
+  const toggleOpen = (id: string, to?: boolean): void => {
+    setOpen(o => {
+      const n = new Set(o);
+      if (to ?? !n.has(id)) n.add(id); else n.delete(id);
+      return n;
+    });
+    if (to ?? !open.has(id)) setSelState(id);
+  };
+
+  // ---- Sound: Play builds the piece with the real renderer and plays it as a file ----
+  const playingRef = useRef(false);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const run = useRef(0);
+  const ctlRef = useRef<Ctl | null>(null);
+  const drawAt = (beat: number, follow = false): void => {
+    ctlRef.current?.head?.draw(beat, follow);
+    const bar = clock.barOfBeat(beat + 1e-9);
+    const words = readoutWords(bar, Math.floor(beat - clock.barStartBeat(bar) + 1e-9) + 1, clock.seconds(beat));
+    if (readout.current && readout.current.textContent !== words) readout.current.textContent = words;
+  };
+  const scoreOf = (d: EditDoc): Score => scoreFromDoc(d, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: stamp() });
+  const stop = (): void => {
+    run.current++;
+    audio.current?.pause();
+    audio.current = null;
+    playingRef.current = false;
+    setPlaying(false);
+    setGetting(false);
+    drawAt(cursorRef.current);
+  };
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
+  const loopRef = useRef({ loop, loopOn, end });
+  loopRef.current = { loop, loopOn, end };
+  /** The playhead's clock: each frame it reads the audio's time and moves the playhead and the readout, nothing else. */
+  const follow = (el: HTMLAudioElement, d: EditDoc): void => {
+    const c = beatClock(d.tempo);
+    const tick = (): void => {
+      if (audio.current !== el) return;
+      let beat = c.beat(el.currentTime);
+      const l = loopRef.current;
+      const span = l.loopOn && l.loop ? l.loop : l.loopOn ? { from: 0, to: l.end } : null;
+      if (span && beat >= span.to - 0.02) { el.currentTime = c.seconds(span.from); beat = span.from; }
+      drawAt(beat, true);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  const play = async (from = cursorRef.current): Promise<void> => {
+    stop();
+    const d = docRef.current;
+    const score = scoreOf(d);
+    if (score.notes.length === 0 && !score.lanes.some(l => l.vocal?.clips.length)) { say('The song has no notes yet. Open a track and tap its grid to add some.'); return; }
+    const mine = ++run.current;
+    // Let play while the press is fresh: building the sound can take longer than the browser's window for starting sound.
+    const el = pressedAudio();
+    audio.current = el;
+    setGetting(true);
+    try {
+      const built = await p.buildSound(`compose-${editKey(d)}`, score, () => {});
+      if (mine !== run.current) return;
+      el.src = built.url;
+      const l = loopRef.current;
+      const start = l.loopOn && l.loop && (from < l.loop.from || from >= l.loop.to) ? l.loop.from : from;
+      el.currentTime = beatClock(d.tempo).seconds(start);
+      el.addEventListener('ended', () => {
+        if (audio.current !== el) return;
+        if (loopRef.current.loopOn) { el.currentTime = beatClock(docRef.current.tempo).seconds(loopRef.current.loop?.from ?? 0); void el.play(); } else stop();
+      });
+      playingRef.current = true;
+      setPlaying(true);
+      setGetting(false);
+      await el.play();
+      follow(el, d);
+    } catch (e) {
+      if (mine !== run.current) return;
+      stop();
+      say(`The sound could not be built: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  useEffect(() => () => stop(), []);
+  // An edit while the song plays is heard on the next build, swapped in at the same moment.
+  useEffect(() => {
+    if (!playingRef.current) return;
+    const t = setTimeout(async () => {
+      const el = audio.current;
+      if (!el || !playingRef.current) return;
+      const d = docRef.current;
+      const mine = run.current;
+      try {
+        const built = await p.buildSound(`compose-${editKey(d)}`, scoreOf(d), () => {});
+        if (mine !== run.current || audio.current !== el) return;
+        const at = el.currentTime;
+        el.src = built.url;
+        el.currentTime = at;
+        await el.play();
+        follow(el, d);
+      } catch { /* the playing sound carries on */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [doc]);
+  useEffect(() => { if (!playingRef.current) drawAt(cursor); });
+  const playFrom = (beat: number): void => { setCursorState(beat); void play(beat); };
+  /** Hear for an effect: a short tune with the effect on it, played on its own element so it works over the song. */
+  const fxAudio = useRef<HTMLAudioElement | null>(null);
+  const hearFx = async (effect: FxClipEffect): Promise<void> => {
+    fxAudio.current?.pause();
+    const score = fxDemoScore(effect, p.entries);
+    if (!score) return;
+    const el = pressedAudio();
+    fxAudio.current = el;
+    setHearingFx(effect);
+    try {
+      const built = await p.buildSound(`fxdemo-${effect}`, score, () => {});
+      if (fxAudio.current !== el) return;
+      el.src = built.url;
+      await el.play();
+    } catch (e) {
+      say(`The example could not be built: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setHearingFx(h => (h === effect ? null : h));
+    }
+  };
+  useEffect(() => () => { fxAudio.current?.pause(); }, []);
+  /** Hear for an instrument: a short tune through the live sampler; low instruments an octave up, one note at a time. */
+  const hearInstrument = (e: Entry): void => {
+    const sound = { instrument: e.id, gain_db: 0, attack: e.attack, release: e.release };
+    void p.sampler.ready(e.id).then(() => {
+      const gap = 260;
+      if (e.pieces) {
+        const has = (q: number) => e.pieces!.some(([x]) => x === q);
+        const kick = has(36) ? 36 : e.pieces[0]![0];
+        const snare = has(38) ? 38 : e.pieces[1]?.[0] ?? kick;
+        const hat = has(42) ? 42 : e.pieces[2]?.[0] ?? snare;
+        [[kick, hat], [hat], [snare, hat], [hat], [kick, hat], [kick, hat], [snare, hat], [hat]].forEach((hits, i) =>
+          setTimeout(() => { for (const q of hits) { const h = p.sampler.start(sound, q, 100); setTimeout(() => p.sampler.stop(h), 300); } }, i * gap));
+        return;
+      }
+      const home = e.home ?? 60;
+      const base = (home < 48 ? home + 12 : home) - ((home < 48 ? home + 12 : home) % 12);
+      [0, 4, 7, 12, 7, 4, 0].forEach((iv, i) => setTimeout(() => { const h = p.sampler.start(sound, base + iv, 96); setTimeout(() => p.sampler.stop(h), gap * 1.6); }, i * gap));
+    });
+  };
+
+  // ---- Placing effects ----
+  const placeAt = (t: Target): void => {
+    const made = placeTarget(doc, t);
+    if (!made) { if (t.bad) say(t.bad); return; }
+    apply(made.doc, `${t.label}. Undo takes it back.`);
+    setPick({ kind: 'clip', index: made.index });
+    setPlacing(null);
+    setDrop(null);
+    setFlash(made.index);
+    setTimeout(() => setFlash(f => (f === made.index ? null : f)), 700);
+  };
+  const startPlacing = (effect: FxClipEffect | null): void => {
+    setPlacing(effect);
+    setDrop(null);
+    if (effect) { clearPicks(); setView('compose'); }
+  };
+
+  // ---- Record drawer: Play Live, Step and Hum ----
   const live = useRef<{ take: LiveTake | null; handles: Map<number, number>; pressed: Map<string, number> }>({ take: null, handles: new Map(), pressed: new Map() });
   const step = useMemo(() => createStepCursor(0), []);
   const gather = useMemo(() => createChordGather(() => bpm), [bpm]);
   const pin = useMemo(() => pinScroll(window), []);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  const state = useRef({ doc, part, entry, mode, tidy, quarter, bpm, start, dotted, length, selected });
-  state.current = { doc, part, entry, mode, tidy, quarter, bpm, start, dotted, length, selected };
-
-  const apply = (next: EditDoc): void => {
-    history.push(next);
-    setDoc(history.now());
-  };
-  const undo = (): void => { setDoc(history.undo()); setSelected(new Set()); setArmed(null); };
-  const redo = (): void => { setDoc(history.redo()); setSelected(new Set()); setArmed(null); };
-
   useEffect(() => () => pin.dispose(), [pin]);
-  useEffect(() => guardLeaving(window, () => state.current.doc !== savedRef.current), []);
-  const savedRef = useRef(savedDoc);
-  savedRef.current = savedDoc;
-  // Step's cursor follows the part: the end of its notes when the part or the mode changes.
-  useEffect(() => {
-    const end = part ? Math.max(0, ...part.notes.map(n => n.start + n.length)) : 0;
-    step.moveTo(end);
-    setStepAt(step.cursor());
-  }, [partId, mode]);
-  useEffect(() => { if (entry) void p.sampler.ready(entry.id); }, [entry?.id]);
-
-  // ---- Play Live ----
-  /** Play Along's clock while it plays: the piece's own seconds. Otherwise keys are timed by `now`. */
+  const state = useRef({ doc, recordPart, recordEntry, mode, tidy, quarter, keysStart, dotted, length, pick, typing, sel, len, cursor, placing, drop, view });
+  state.current = { doc, recordPart, recordEntry, mode, tidy, quarter, keysStart, dotted, length, pick, typing, sel, len, cursor, placing, drop, view };
   const alongClock = useRef<(() => number) | null>(null);
   const liveNow = (): number => alongClock.current?.() ?? p.now();
+  const afterPart = (x: Part | null): number => {
+    const last = x ? Math.max(0, ...x.notes.map(n => n.start + n.length)) : 0;
+    return clock.barStartBeat(last === 0 ? 1 : clock.barOfBeat(last - 1e-9) + 1);
+  };
+  useEffect(() => {
+    const x = recordPart;
+    step.moveTo(x ? Math.max(0, ...x.notes.map(n => n.start + n.length)) : 0);
+    setStepAt(step.cursor());
+  }, [recordOpen, mode]);
   const commitTake = (): void => {
     const take = live.current.take;
     const t = liveNow();
     live.current.take = null;
     setRecording('idle');
     const s = state.current;
-    if (!take || !take.started() || !s.part) return;
+    if (!take || !take.started() || !s.recordPart) return;
     const notes = take.notes(s.tidy, s.quarter, t);
     if (notes.length === 0) return;
-    const added = addNotes(s.doc, s.part.id, notes);
-    apply(added.doc);
-    setStatus(`Recorded ${notes.length} ${notes.length === 1 ? 'note. Undo takes it back.' : 'notes. Undo takes them back.'}`);
-  };
-  /** The first beat of the bar after a part's last note: where a new take, or hummed notes, go. */
-  const afterPart = (x: Part | null): number => {
-    const end = x ? Math.max(0, ...x.notes.map(n => n.start + n.length)) : 0;
-    return clock.barStartBeat(end === 0 ? 1 : clock.barOfBeat(end - 1e-9) + 1);
+    apply(addNotes(s.doc, s.recordPart.id, notes).doc, `Recorded ${notes.length} ${notes.length === 1 ? 'note. Undo takes it back.' : 'notes. Undo takes them back.'}`);
   };
   const newTake = (at: number | null): LiveTake => {
-    const startBeat = afterPart(state.current.part);
+    const startBeat = afterPart(state.current.recordPart);
     const tempo = clock.tempoAt(clock.barOfBeat(startBeat));
     const take = createLiveTake({ startBeat, bpm: tempo.bpm, beatsPerBar: tempo.beats });
     if (at !== null) take.begin(at);
@@ -244,10 +461,6 @@ export function Composer(p: ComposerProps) {
     }, 100);
     return () => clearInterval(timer);
   }, [recording]);
-
-  // ---- Play Along ----
-  // The piece plays (the other parts, or a click on every beat when they are off) after a one-bar count-in, and the keys
-  // record against its own clock, so the notes land in time with it. It ends with the piece, or on Stop.
   const alongRun = useRef(0);
   const alongAudio = useRef<HTMLAudioElement | null>(null);
   const finishAlong = (): void => {
@@ -257,68 +470,61 @@ export function Composer(p: ComposerProps) {
     alongAudio.current?.pause();
     alongAudio.current = null;
     setAlong('off');
-    setPlayhead(null);
   };
   const playAlong = async (): Promise<void> => {
     const s = state.current;
-    if (!s.part) return;
+    if (!s.recordPart) return;
     if (live.current.take) commitTake();
-    stopListening();
-    const run = ++alongRun.current;
-    const full = scoreFromDoc(s.doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
-    const others: Score = { ...full, lanes: full.lanes.filter(l => l.id !== s.part!.id), notes: full.notes.filter(n => n.lane !== s.part!.id), motifs: [] };
+    stop();
+    const mine = ++alongRun.current;
+    const full = scoreOf(s.doc);
+    const others: Score = { ...full, lanes: full.lanes.filter(l => l.id !== s.recordPart!.id), notes: full.notes.filter(n => n.lane !== s.recordPart!.id), motifs: [] };
     let el: HTMLAudioElement | null = null;
     let url = '';
     if (alongParts && others.notes.length > 0) {
       setAlong('ready');
-      setStatus('Getting the other parts ready…');
-      // Let play while the press is fresh: the build and the count-in can outlast the browser's window for starting sound.
-      // Held as the run's audio from the press, so Stop while it builds lets it go.
       const pressed = pressedAudio();
       alongAudio.current = pressed;
       try {
-        url = (await p.buildSound(`along-${editKey(s.doc)}-${s.part.id}`, others, () => {})).url;
+        url = (await p.buildSound(`along-${editKey(s.doc)}-${s.recordPart.id}`, others, () => {})).url;
       } catch (e) {
-        if (run !== alongRun.current) return;
+        if (mine !== alongRun.current) return;
         pressed.pause();
         alongAudio.current = null;
         setAlong('off');
-        setStatus(`The other parts could not be built: ${e instanceof Error ? e.message : String(e)}`);
+        say(`The other tracks could not be built: ${e instanceof Error ? e.message : String(e)}`);
         return;
       }
-      if (run !== alongRun.current) return;
+      if (mine !== alongRun.current) return;
       el = pressed;
     }
-    setStatus('');
     setAlong('counting');
     const first = clock.tempoAt(1);
     const gap = 60 / first.bpm;
-    for (let i = 0; i < first.beats; i++) setTimeout(() => { if (run === alongRun.current) p.click?.(i === 0); }, i * gap * 1000);
+    for (let i = 0; i < first.beats; i++) setTimeout(() => { if (mine === alongRun.current) p.click?.(i === 0); }, i * gap * 1000);
     await new Promise(r => setTimeout(r, first.beats * gap * 1000));
-    if (run !== alongRun.current) return;
-    const end = clock.seconds(clock.barStartBeat(barsNeeded(s.doc) + 1));
+    if (mine !== alongRun.current) return;
+    const stopAt = clock.seconds(end);
     const take = createLiveTake({ startBeat: 0, bpm: first.bpm, beatsPerBar: first.beats, beatOf: t => clock.beat(t) });
     take.begin(0);
     live.current.take = take;
     const t0 = p.now();
     alongClock.current = el ? () => el.currentTime : () => p.now() - t0;
     if (el) {
-      // Its sound is set only now, after the count-in, so the other parts start on the downbeat.
       el.src = url;
-      el.addEventListener('ended', () => { if (run === alongRun.current) finishAlong(); });
+      el.addEventListener('ended', () => { if (mine === alongRun.current) finishAlong(); });
       try { await el.play(); } catch { /* the page's sound was refused: the clock still runs */ }
     }
-    // Stopped while the playback was starting.
-    if (run !== alongRun.current) return;
+    if (mine !== alongRun.current) return;
     setAlong('on');
     setRecording('on');
     let lastBeat = -1;
     const tick = (): void => {
-      if (run !== alongRun.current || !alongClock.current) return;
+      if (mine !== alongRun.current || !alongClock.current) return;
       const t = alongClock.current();
-      if (t >= end) { finishAlong(); return; }
+      if (t >= stopAt) { finishAlong(); return; }
       const beat = clock.beat(t);
-      setPlayhead(beat);
+      drawAt(beat, true);
       if (!el && Math.floor(beat + 1e-6) !== lastBeat) {
         lastBeat = Math.floor(beat + 1e-6);
         p.click?.(Math.abs(clock.barStartBeat(clock.barOfBeat(lastBeat)) - lastBeat) < 1e-6);
@@ -329,28 +535,23 @@ export function Composer(p: ComposerProps) {
   };
   useEffect(() => () => { alongRun.current++; alongAudio.current?.pause(); }, []);
   const startCountIn = (): void => {
-    if (!part) return;
+    if (!recordPart) return;
     setRecording('counting');
     const beats = clock.tempoAt(1).beats;
     const gap = 60 / bpm;
     for (let i = 0; i < beats; i++) setTimeout(() => p.click?.(i === 0), i * gap * 1000);
     setTimeout(() => { newTake(p.now()); setRecording('on'); }, beats * gap * 1000);
   };
-
-  // ---- Keys ----
-  /** A key went down: on screen, on the computer keyboard (velocity 90) or on a plugged-in keyboard or drum pad. */
+  /** A key went down in the Record drawer: on screen, on the computer keyboard or on a plugged-in keyboard or drum pad. */
   const keyDown = (pitch: number, key: string, velocity = 90, drum = false): void => {
     const s = state.current;
-    if (!s.part || live.current.pressed.has(key)) return;
-    if (drum && !s.entry?.pieces) {
-      const kit = s.doc.parts.find(x => p.entries.find(e => e.id === x.instrument)?.pieces);
-      setStatus(kit ? `Drum pads play the drum part: choose ${kit.name} in Parts In This Piece.` : 'Drum pads play a drum part: Add Part, then Drums & Percussion.');
-      return;
-    }
+    if (!s.recordPart || live.current.pressed.has(key)) return;
+    if (drum && !s.recordEntry?.pieces) { say('Drum pads play a drum track: open a Drum Kit track\'s Record drawer.'); return; }
     live.current.pressed.set(key, pitch);
     pin.hold(key);
     if (live.current.handles.has(pitch)) return;
-    live.current.handles.set(pitch, p.sampler.start({ instrument: s.part.instrument, gain_db: s.part.gain_db, attack: s.part.attack, release: s.part.release }, pitch, velocity));
+    const x = s.recordPart;
+    live.current.handles.set(pitch, p.sampler.start({ instrument: x.instrument, gain_db: x.gain_db, attack: x.attack, release: x.release }, pitch, velocity));
     setHeld(h => new Set(h).add(pitch));
     if (s.mode === 'live' && (alongClock.current || along === 'off')) {
       const take = live.current.take ?? newTake(null);
@@ -364,7 +565,6 @@ export function Composer(p: ComposerProps) {
     if (pitch === undefined) return;
     live.current.pressed.delete(key);
     pin.release(key);
-    // Another key (the same note on screen and on the computer keyboard) still holds it.
     if ([...live.current.pressed.values()].includes(pitch)) return;
     const handle = live.current.handles.get(pitch);
     if (handle === undefined) return;
@@ -373,44 +573,144 @@ export function Composer(p: ComposerProps) {
     setHeld(h => { const n = new Set(h); n.delete(pitch); return n; });
     const s = state.current;
     if (s.mode === 'live') live.current.take?.up(pitch, liveNow());
-    else if (s.mode === 'step' && s.part) {
-      const chord = gather.up(pitch, p.now());
-      if (!chord) return;
-      const beats = chord.held ?? stepBeats(s.length, s.dotted, s.quarter);
-      const added = addNotes(s.doc, s.part.id, chord.pitches.map((pp, i) => ({ start: step.cursor(), length: beats, pitch: pp, velocity: chord.velocities[i] })));
+    else if (s.mode === 'step' && s.recordPart) {
+      const ch = gather.up(pitch, p.now());
+      if (!ch) return;
+      const beats = ch.held ?? stepBeats(s.length, s.dotted, s.quarter);
+      const added = addNotes(s.doc, s.recordPart.id, ch.pitches.map((pp, i) => ({ start: step.cursor(), length: beats, pitch: pp, velocity: ch.velocities[i] })));
       step.add(beats, added.ids);
       setStepAt(step.cursor());
       apply(added.doc);
     }
   };
-  /** While DJ Mode's deck plays, the letter and number keys are its pads, not notes. */
-  const djLive = useRef(false);
-  const keyRef = useRef({ keyDown, keyUp, undo, redo });
-  keyRef.current = { keyDown, keyUp, undo, redo };
+  const key = useMemo(() => keyScale(doc.parts.filter(x => !entryOf(x)?.pieces).flatMap(x => x.notes.map(n => n.pitch))), [doc.parts]);
+  const addHum = (segs: HumSegment[]): void => {
+    const x = recordPart;
+    if (!x || segs.length === 0) return;
+    const base = humPlace === 'replace' ? clearPart(doc, x.id) : doc;
+    const startBeat = humPlace === 'replace' ? 0 : afterPart(x);
+    const bar = clock.barOfBeat(startBeat);
+    const made = humNotes(segs, { snap: humSnap, classes: key.classes, startBeat, bpm: clock.tempoAt(bar).bpm, tidy, quarter: clock.quarter(bar) });
+    const added = addNotes(base, x.id, made.map((m, i) => (m.bend ? { ...m.note, bend: bendFractions(m.bend, segs[i]!) } : m.note)));
+    apply(added.doc, `Added ${made.length} hummed ${made.length === 1 ? 'note' : 'notes'} at bar ${bar}${humPlace === 'replace' ? ', in place of the track\'s notes' : ''}. Undo takes ${made.length === 1 ? 'it' : 'them'} back.`);
+    setPick({ kind: 'notes', part: x.id, ids: new Set(added.ids) });
+  };
+
+  // ---- Keys ----
+  const keyRef = useRef<{ keyDown: typeof keyDown; keyUp: typeof keyUp; undo(): void; redo(): void; onKey(e: KeyboardEvent): boolean }>({ keyDown, keyUp, undo, redo, onKey: () => false });
+  const onKey = (e: KeyboardEvent): boolean => {
+    const s = state.current;
+    const c = ctlRef.current!;
+    const mod = e.ctrlKey || e.metaKey;
+    // Placing an effect from the keys: arrows choose the track and the bar (Shift for a beat), Enter places, Escape cancels.
+    if (s.placing) {
+      if (e.key === 'Escape') { startPlacing(null); return true; }
+      const rows = ['lane', ...s.doc.parts.map(x => x.id)];
+      const now = s.drop ?? targetFor(s.doc, s.placing, s.sel ?? 'lane', clock.barStartBeat(clock.barOfBeat(s.cursor + 1e-9)));
+      if (e.key === 'Enter') { if (!now.bad) placeAt(now); else say(now.bad); return true; }
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return false;
+      let i = Math.max(0, rows.indexOf(now.lane ?? 'lane'));
+      const barLen = clock.tempoAt(1).beats;
+      let at = s.cursor;
+      if (s.drop) { const whole = Math.floor(s.drop.from_bar); at = clock.barStartBeat(whole) + (s.drop.from_bar - whole) * barLen; }
+      if (e.key === 'ArrowUp') i = Math.max(0, i - 1);
+      if (e.key === 'ArrowDown') i = Math.min(rows.length - 1, i + 1);
+      if (e.key === 'ArrowLeft') at -= e.shiftKey ? 1 : barLen;
+      if (e.key === 'ArrowRight') at += e.shiftKey ? 1 : barLen;
+      setDrop(targetFor(s.doc, s.placing, rows[i]!, Math.max(0, Math.min(end, at))));
+      return true;
+    }
+    if (e.code === 'Space' && !mod) { if (playingRef.current) stop(); else void play(); return true; }
+    if (mod && e.code === 'KeyZ') { if (e.shiftKey) redo(); else undo(); return true; }
+    if (mod && e.code === 'KeyY') { redo(); return true; }
+    if (s.view !== 'compose') return false;
+    if (mod && e.code === 'KeyC') return copyPicked(c, setClipboard);
+    if (mod && e.code === 'KeyV') return pasteAtCursor(c, clipboardRef.current);
+    if (mod && e.code === 'KeyA') {
+      const x = s.doc.parts.find(y => y.id === s.sel);
+      if (!x || !x.notes.length) return false;
+      setPick({ kind: 'notes', part: x.id, ids: new Set(x.notes.map(n => n.id)) });
+      toggleOpen(x.id, true);
+      return true;
+    }
+    if (mod && e.code === 'KeyD') {
+      const k = s.pick;
+      if (k.kind === 'region') { const made = duplicateRegion(s.doc, k.part, k.id); apply(made.doc); setPick({ kind: 'region', part: k.part, id: made.id }); return true; }
+      return false;
+    }
+    if (mod || e.altKey) return false;
+    // Type Notes: the computer keyboard adds notes at the shaded step, which only the arrows move.
+    const typed = s.typing ? s.doc.parts.find(y => y.id === s.sel && !y.vocal && !entryOf(y)?.pieces) : undefined;
+    if (typed) {
+      const low = lowOf(typed);
+      const pitch = typedPitch(e.code, low);
+      if (pitch !== null) {
+        if (e.repeat) return true;
+        const made = typeNote(s.doc, typed.id, pitch, s.cursor, s.len);
+        if (made.added) apply(made.doc);
+        if (pitch > low + ROLL_ROWS - 1) setLow(typed.id, low + 12);
+        previewNote(typed, pitch, Math.min(s.len, 2));
+        return true;
+      }
+      if (e.code === 'ArrowRight' || e.code === 'Enter') { setCursor(Math.min(end, s.cursor + s.len)); return true; }
+      if (e.code === 'ArrowLeft') { setCursor(Math.max(0, s.cursor - s.len)); return true; }
+      if (e.code === 'Backspace' || e.code === 'Delete') { apply(clearStep(s.doc, typed.id, s.cursor)); return true; }
+      if (e.code === 'KeyZ') { setLow(typed.id, low - 12); return true; }
+      if (e.code === 'KeyX') { setLow(typed.id, low + 12); return true; }
+    }
+    // The Record drawer: the keys play the track (Play Live records, Step adds at the dashed line).
+    if (s.recordPart && (s.mode === 'live' || s.mode === 'step')) {
+      if (e.code === OCTAVE_DOWN || e.code === OCTAVE_UP) {
+        if (!e.repeat) setKeysFrom(Math.min(108, Math.max(0, s.keysStart + (e.code === OCTAVE_UP ? 12 : -12))));
+        return true;
+      }
+      const pitch = pitchForKey(e.code, s.keysStart);
+      if (pitch !== null) { if (!e.repeat) keyDown(pitch, e.code); return true; }
+    }
+    if (e.key === 'Escape') { if (s.pick.kind !== 'none' || chordRef.current || splittingRef.current) { clearPicks(); return true; } return false; }
+    const k = s.pick;
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (k.kind === 'notes') { apply(removeNotes(s.doc, k.part, k.ids), 'Deleted. Undo brings them back.'); setPick({ kind: 'none' }); return true; }
+      if (k.kind === 'region') { apply(deleteRegion(s.doc, k.part, k.id), 'Deleted the region. Undo brings it back.'); setPick({ kind: 'none' }); return true; }
+      return false;
+    }
+    if (k.kind === 'notes' && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      const x = s.doc.parts.find(y => y.id === k.part);
+      if (x && !entryOf(x)?.pieces) apply(transposeNotes(s.doc, k.part, k.ids, (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1)));
+      return true;
+    }
+    if (k.kind === 'notes' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !(e.target instanceof HTMLElement && e.target.closest('.grip'))) {
+      const x = s.doc.parts.find(y => y.id === k.part);
+      const unit = x && entryOf(x)?.pieces ? s.quarter / 4 : Math.min(s.len, 1);
+      apply(shiftNotes(s.doc, k.part, k.ids, (e.key === 'ArrowRight' ? 1 : -1) * unit));
+      return true;
+    }
+    if (e.code === 'KeyS' && !e.repeat) {
+      const id = k.kind === 'region' ? k.part : s.sel;
+      const x = s.doc.parts.find(y => y.id === id);
+      if (!x) return false;
+      const at = Math.round(s.cursor);
+      const r = (x.regions ?? []).find(q => at > q.start && at < q.start + q.length);
+      const made = r ? splitRegion(s.doc, x.id, r.id, at) : null;
+      if (made) { apply(made.doc); setPick({ kind: 'region', part: x.id, id: made.id }); } else setSplitting(true);
+      return true;
+    }
+    return false;
+  };
+  keyRef.current = { keyDown, keyUp, undo, redo, onKey };
+  const clipboardRef = useRef(clipboard);
+  clipboardRef.current = clipboard;
+  const chordRef = useRef(chord);
+  chordRef.current = chord;
+  const splittingRef = useRef(splitting);
+  splittingRef.current = splitting;
   useEffect(() => {
     const down = (e: KeyboardEvent): void => {
-      if (isTyping(e.target)) return;
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) keyRef.current.redo(); else keyRef.current.undo(); return; }
-      if (mod && e.code === 'KeyY') { e.preventDefault(); keyRef.current.redo(); return; }
-      if (mod || e.altKey || djLive.current) return;
-      if (e.code === 'Delete' || e.code === 'Backspace') {
-        const s = state.current;
-        if (s.part && s.selected.size > 0) { e.preventDefault(); apply(removeNotes(s.doc, s.part.id, s.selected)); setSelected(new Set()); setArmed(null); }
-        return;
-      }
-      if (e.code === OCTAVE_DOWN || e.code === OCTAVE_UP) {
-        e.preventDefault();
-        if (!e.repeat) setKeysFrom(Math.min(108, Math.max(0, state.current.start + (e.code === OCTAVE_UP ? 12 : -12))));
-        return;
-      }
-      const pitch = pitchForKey(e.code, state.current.start);
-      if (pitch === null) return;
-      e.preventDefault();
-      if (!e.repeat) keyRef.current.keyDown(pitch, e.code);
+      if (isTyping(e.target) || (e.target instanceof Element && e.target.closest('[data-pop]'))) return;
+      if (keyRef.current.onKey(e)) e.preventDefault();
     };
     const up = (e: KeyboardEvent): void => keyRef.current.keyUp(e.code);
-    const blur = (): void => { for (const key of [...live.current.pressed.keys()]) keyRef.current.keyUp(key); };
+    const blur = (): void => { for (const k of [...live.current.pressed.keys()]) keyRef.current.keyUp(k); };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     window.addEventListener('blur', blur);
@@ -419,124 +719,12 @@ export function Composer(p: ComposerProps) {
   // A key changed the page (a readout, a note on the grid): put it back where it was pinned.
   useEffect(() => { pin.keep(); });
 
-  // ---- Hum ----
-  const key = useMemo(() => keyScale(doc.parts.filter(x => !p.entries.find(e => e.id === x.instrument)?.pieces).flatMap(x => x.notes.map(n => n.pitch))), [doc.parts]);
-  useEffect(() => { if (humPlace === 'line' && humLine === null) setHumLine(afterPart(part)); }, [humPlace]);
-  const addHum = (segs: HumSegment[]): void => {
-    if (!part || segs.length === 0) return;
-    const base = humPlace === 'replace' ? clearPart(doc, part.id) : doc;
-    const startBeat = humPlace === 'replace' ? 0 : humPlace === 'line' && humLine !== null ? humLine : afterPart(part);
-    const bar = clock.barOfBeat(startBeat);
-    const made = humNotes(segs, { snap: humSnap, classes: key.classes, startBeat, bpm: clock.tempoAt(bar).bpm, tidy, quarter: clock.quarter(bar) });
-    // Exact Pitch keeps each sung note's bend, stretched with the note.
-    const added = addNotes(base, part.id, made.map((m, i) => (m.bend ? { ...m.note, bend: bendFractions(m.bend, segs[i]!) } : m.note)));
-    apply(added.doc);
-    setSelected(new Set(added.ids));
-    setArmed(null);
-    setStatus(`Added ${made.length} hummed ${made.length === 1 ? 'note' : 'notes'} at bar ${bar}${humPlace === 'replace' ? ', in place of the part\'s notes' : ''}. Undo takes ${made.length === 1 ? 'it' : 'them'} back.`);
-  };
-  // Outlines come from parts of the same kind: drum keys mean nothing on a melody's rows, nor pitches on a drum part's.
-  const isDrums = (x: Part): boolean => !!p.entries.find(e => e.id === x.instrument)?.pieces;
-  const ghosts = mode === 'live' && part
-    ? doc.parts.filter(x => x.id !== part.id && isDrums(x) === isDrums(part)).flatMap(x => x.notes.map(n => ({ start: n.start, length: n.length, pitch: n.pitch, color: x.color }))) : undefined;
-
-  // ---- Notes on the grid ----
-  const tapNote = (id: number): void => {
-    if (!part) return;
-    if (armed === id) {
-      apply(removeNotes(doc, part.id, new Set([id])));
-      setSelected(new Set());
-      setArmed(null);
-      setStatus('Deleted the note. Undo brings it back.');
-      return;
-    }
-    setSelected(new Set([id]));
-    setArmed(id);
-    const n = part.notes.find(m => m.id === id);
-    if (n) {
-      const h = p.sampler.start({ instrument: part.instrument, gain_db: part.gain_db, attack: part.attack, release: part.release }, n.pitch, n.velocity);
-      setTimeout(() => p.sampler.stop(h), 400);
-    }
-  };
-
-  // ---- Listening ----
-  /** Counts the presses of Hear: a press that Stop or a later press has replaced never starts its sound. */
-  const hearRun = useRef(0);
-  const stopListening = (): void => {
-    hearRun.current++;
-    audio.current?.pause();
-    audio.current = null;
-    setListening(null);
-    setPlayhead(null);
-  };
-  useEffect(() => () => stopListening(), []);
-  /** Plays the piece (or this part alone), from `fromBar` when given (Hear From Here). */
-  const hear = async (what: 'piece' | 'part', fromBar?: number): Promise<void> => {
-    stopListening();
-    if (what === 'part' && !part) return;
-    const full = scoreFromDoc(doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
-    // A part alone keeps its own clips, except a vocoder's, whose carrier is not playing.
-    const alone = (full.fx_clips ?? []).filter(c => c.lane === part?.id && c.effect !== 'vocoder');
-    const score: Score = what === 'piece' ? full : { ...full, lanes: full.lanes.filter(l => l.id === part!.id), notes: full.notes.filter(n => n.lane === part!.id), motifs: [], ...(alone.length ? { fx_clips: alone } : {}) };
-    if (what === 'part' && !alone.length) delete score.fx_clips;
-    if (score.notes.length === 0) { setStatus(what === 'part' ? 'This part has no notes yet.' : 'The piece has no notes yet.'); return; }
-    setListening({ what, state: 'Getting the instruments ready…' });
-    const run = hearRun.current;
-    // Let play while the press is fresh: building the sound can take longer than the browser's window for starting sound.
-    const el = pressedAudio();
-    audio.current = el;
-    try {
-      const built = await p.buildSound(`compose-${editKey(doc)}-${what === 'part' ? part!.id : 'all'}`, score, stage => {
-        if (run === hearRun.current) setListening({ what, state: stage === 'instruments' ? 'Getting the instruments ready…' : stage === 'rendering' ? 'Building the sound…' : 'Finishing…' });
-      });
-      if (run !== hearRun.current) return;
-      el.src = built.url;
-      if (fromBar !== undefined) el.currentTime = barSeconds(doc.tempo, fromBar);
-      setListening({ what, state: 'Playing' });
-      el.addEventListener('ended', stopListening);
-      const tick = (): void => {
-        if (audio.current !== el) return;
-        setPlayhead(clock.beat(el.currentTime));
-        requestAnimationFrame(tick);
-      };
-      await el.play();
-      requestAnimationFrame(tick);
-    } catch (e) {
-      if (run !== hearRun.current) return;
-      stopListening();
-      setStatus(`The sound could not be built: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
-
-  // ---- Vocal Tracks ----
-  const addVocal = (): void => {
-    let n = 1;
-    while (doc.parts.some(x => x.id === (n === 1 ? 'voice' : `voice-${n}`))) n++;
-    const id = n === 1 ? 'voice' : `voice-${n}`;
-    apply({ ...doc, parts: [...doc.parts, newVocalPart(id, n === 1 ? 'Vocal Track' : `Vocal Track ${n}`, PART_COLOURS[doc.parts.length % PART_COLOURS.length]!)] });
-    setPartId(id);
-    setPicking(null);
-  };
-  /** The other parts as sound from the start, for singing over; null when they have no notes. */
-  const vocalBacking = async (partIdNow: string): Promise<AudioBuffer | null> => {
-    const full = scoreFromDoc(state.current.doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
-    const others: Score = { ...full, lanes: full.lanes.filter(l => l.id !== partIdNow), notes: full.notes.filter(n => n.lane !== partIdNow), motifs: [] };
-    if (others.lanes.length === 0 || (others.notes.length === 0 && !others.lanes.some(l => l.vocal?.clips.length))) return null;
-    const built = await p.buildSound(`vocal-${editKey(state.current.doc)}-${partIdNow}`, others, () => {});
-    // The built channels themselves: the page's rules let no script fetch a blob address.
-    const b = new AudioBuffer({ length: built.channels[0]!.length, numberOfChannels: built.channels.length, sampleRate: built.rate });
-    built.channels.forEach((c, i) => b.copyToChannel(c as Float32Array<ArrayBuffer>, i));
-    return b;
-  };
-
   // ---- Saving ----
-  /** Saves `d` as the next draft with the new vocal `files` it names; true when it was kept. */
   const saveDoc = async (d: EditDoc, files: Record<string, Uint8Array> = {}): Promise<boolean> => {
     setSaving(true);
-    const score = scoreFromDoc(d, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
     let result: Saved;
     try {
-      result = await saveScore(p.api, score, files);
+      result = await saveScore(p.api, scoreOf(d), files);
     } catch (e) {
       result = { ok: false, message: `The draft could not be saved: ${e instanceof Error ? e.message : String(e)} Your edit is still here.` };
     } finally {
@@ -545,24 +733,23 @@ export function Composer(p: ComposerProps) {
     if (result.ok) {
       setVersion(result.version);
       setSavedDoc(d);
-      setStatus(`Saved as draft ${result.version}.`);
+      say(`Saved as draft ${result.version}.`);
       p.onSaved?.(p.start.piece.id, result.version);
       return true;
     }
     if (result.latest !== undefined) setVersion(result.latest);
-    setStatus(result.message);
+    say(result.message);
     return false;
   };
   const save = async (): Promise<void> => {
     const local = takesOf(doc).filter(f => LOCAL_TAKE_RE.test(f));
     if (local.length === 0 || !p.vocal) { await saveDoc(doc); return; }
-    // Takes only on this device: their sizes both ways first, then the person chooses.
     const meta = await p.vocal.takes.list(p.start.piece.id);
     const list: TakeToSave[] = [];
     for (const id of local) {
       const pcm = await p.vocal.takes.pcm(id);
       const m = meta.find(t => t.id === id);
-      if (!pcm || !m) { setStatus('A take of this piece is no longer on this device, so it cannot be saved. Remove its clips, then save again.'); return; }
+      if (!pcm || !m) { say('A take of this piece is no longer on this device, so it cannot be saved. Remove its clips, then save again.'); return; }
       list.push({ id, name: m.name, pcm, rate: m.rate });
     }
     setChoosing(list);
@@ -578,40 +765,39 @@ export function Composer(p: ComposerProps) {
       if (m) await v.takes.update({ ...m, saved: name });
     }
     apply(renamed);
-    setSavedDoc(renamed);
+    setSavedDoc(history.now());
     setRoom(r => r - Object.values(files).reduce((n, b) => n + b.length, 0));
   };
 
   // ---- Files ----
   const importFile = async (file: File): Promise<void> => {
     if (!p.files) return;
-    setStatus(`Reading ${file.name}…`);
+    say(`Reading ${file.name}…`);
     try {
       const read = await readMusicFile(file.name, new Uint8Array(await file.arrayBuffer()), p.files.importPorts);
       const v = previewOf(read, file.name, p.entries);
       setPreview(v);
       setChoice(v.parts.map(x => x.match));
-      setStatus('');
+      say('');
     } catch (e) {
       setPreview(null);
-      setStatus(e instanceof ImportError ? e.message : `${file.name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
+      say(e instanceof ImportError ? e.message : `${file.name} could not be read: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
   const addImported = (): void => {
     if (!preview) return;
     try {
       const next = addAsNewParts(doc, preview, choice, p.entries);
-      apply(next);
-      setPartId(next.parts[doc.parts.length]?.id ?? partId);
+      apply(next, `Added ${preview.parts.length} ${preview.parts.length === 1 ? 'track' : 'tracks'} from ${preview.file}. Undo takes them back.`);
+      setSelState(next.parts[doc.parts.length]?.id ?? sel);
       setPreview(null);
-      setStatus(`Added ${preview.parts.length} ${preview.parts.length === 1 ? 'part' : 'parts'} from ${preview.file}. Undo takes them back.`);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      say(e instanceof Error ? e.message : String(e));
     }
   };
   const newFromImport = (): void => {
     if (!preview || !p.onNewPiece) return;
-    if (dirty) { setStatus('Save Draft first, or Undo your changes: Start A New Piece leaves this piece.'); return; }
+    if (dirty) { say('Save Draft first, or Undo your changes: Start A New Piece leaves this piece.'); return; }
     const title = (preview.title ?? preview.file.replace(/\.[a-z]+$/i, '')).slice(0, 120);
     p.onNewPiece(newDocFrom(preview, choice, p.entries, title), title);
   };
@@ -622,12 +808,12 @@ export function Composer(p: ComposerProps) {
       ? new Blob([toMusicXml(notes, p.entries, { colours: false })], { type: 'application/vnd.recordare.musicxml+xml' })
       : new Blob([writeMidi(notes, p.entries) as Uint8Array<ArrayBuffer>], { type: 'audio/midi' });
     p.files.save(`${p.start.piece.id}.${kind}`, data);
-    setStatus(`Exported ${p.start.piece.id}.${kind}.`);
+    say(`Exported ${p.start.piece.id}.${kind}.`);
   };
   const exportVocals = async (): Promise<void> => {
     const v = p.vocal;
     if (!p.files || !v) return;
-    setStatus('Putting the vocals together…');
+    say('Putting the vocals together…');
     try {
       const meta = await v.takes.list(p.start.piece.id);
       const zip = await exportWithVocals(doc, p.entries, p.start.piece.id, {
@@ -635,291 +821,309 @@ export function Composer(p: ComposerProps) {
         local: async id => { const pcm = await v.takes.pcm(id); const m = meta.find(t => t.id === id); return pcm && m ? { pcm, rate: m.rate } : null; },
       });
       p.files.save(`${p.start.piece.id}-with-vocals.zip`, new Blob([zip as Uint8Array<ArrayBuffer>], { type: 'application/zip' }));
-      setStatus(`Exported ${p.start.piece.id}-with-vocals.zip: the notes as MusicXML, each take as it is kept, and where each clip plays.`);
+      say(`Exported ${p.start.piece.id}-with-vocals.zip: the notes as MusicXML, each take as it is kept, and where each clip plays.`);
     } catch (e) {
-      setStatus(`The vocals could not be exported: ${e instanceof Error ? e.message : String(e)}`);
+      say(`The vocals could not be exported: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
-  // Both: the grid and the sheet scroll across together, by the same share of their width.
-  const follow = (from: HTMLElement | null, to: HTMLElement | null): void => {
-    if (!from || !to || syncing.current) return;
-    const span = from.scrollWidth - from.clientWidth;
-    syncing.current = true;
-    to.scrollLeft = span > 0 ? (from.scrollLeft / span) * (to.scrollWidth - to.clientWidth) : 0;
-    requestAnimationFrame(() => { syncing.current = false; });
-  };
-  const gridBox = (): HTMLElement | null => gridWrap.current?.querySelector('[data-edit-grid]') ?? null;
-  useEffect(() => {
-    const g = show === 'both' ? gridBox() : null;
-    if (!g) return;
-    const onScroll = (): void => follow(g, sheetBox.current);
-    g.addEventListener('scroll', onScroll, { passive: true });
-    return () => g.removeEventListener('scroll', onScroll);
-  }, [show, partId]);
 
-  // ---- Parts ----
-  const pick = (e: Entry): void => {
-    if (picking === 'change' && part) apply(setInstrument(doc, part.id, e));
-    else {
-      const made = addPart(doc, e);
-      if (!made) { setStatus('A piece holds at most 16 parts.'); return; }
-      apply(made.doc);
-      setPartId(made.id);
-    }
-    setKeysFrom(null);
-    setPicking(null);
+  // ---- Tracks ----
+  const addInstrument = (e: Entry): void => {
+    const made = addPart(doc, e);
+    if (!made) { say('A piece holds at most 16 tracks.'); return; }
+    apply(made.doc, `Added ${e.name}: an empty track. Tap its grid to put notes in.`);
+    setSelState(made.id);
+    setOpen(o => new Set(o).add(made.id));
   };
-  const outOfRange = part && entry && !entry.pieces ? part.notes.filter(n => rangeClass(entry, n.pitch) === 'out').length : 0;
+  const addVocal = (): void => {
+    let n = 1;
+    while (doc.parts.some(x => x.id === (n === 1 ? 'voice' : `voice-${n}`))) n++;
+    const id = n === 1 ? 'voice' : `voice-${n}`;
+    apply({ ...doc, parts: [...doc.parts, newVocalPart(id, n === 1 ? 'Vocal Track' : `Vocal Track ${n}`, PART_COLOURS[doc.parts.length % PART_COLOURS.length]!)] });
+    setSelState(id);
+    setOpen(o => new Set(o).add(id));
+  };
+  const vocalBacking = async (partIdNow: string): Promise<AudioBuffer | null> => {
+    const full = scoreOf(state.current.doc);
+    const others: Score = { ...full, lanes: full.lanes.filter(l => l.id !== partIdNow), notes: full.notes.filter(n => n.lane !== partIdNow), motifs: [] };
+    if (others.lanes.length === 0 || (others.notes.length === 0 && !others.lanes.some(l => l.vocal?.clips.length))) return null;
+    const built = await p.buildSound(`vocal-${editKey(state.current.doc)}-${partIdNow}`, others, () => {});
+    const b = new AudioBuffer({ length: built.channels[0]!.length, numberOfChannels: built.channels.length, sampleRate: built.rate });
+    built.channels.forEach((ch, i) => b.copyToChannel(ch as Float32Array<ArrayBuffer>, i));
+    return b;
+  };
 
-  const Help = (q: { children: string }) => (help ? <p class="border-l-2 border-amber pl-2 text-sm text-dim">{q.children}</p> : null);
-  const stepNow = stepAt;
-  const modeHelp = MODES.find(m => m.id === mode)!.help;
+  const c: Ctl = {
+    doc, entries: p.entries, clock, bars, total, end, ppb, coarse, open, sel, pick, len, lengths, selectMode, chord, splitting, typing, cursor,
+    loop, loopOn, placing, flash, playing, recordOpen, renaming, paletteOpen,
+    entryOf, drums: x => !!entryOf(x)?.pieces, low: lowOf, setLow, apply, say, setPick, setSel: setSelState, toggleOpen,
+    setLen, setSelectMode: on => { setSelectMode(on); if (on) setChord(null); }, setChord, setSplitting, setTyping, setCursor,
+    setLoop: range => { setLoopState(range); if (range) setLoopOn(true); }, preview: previewNote, hearInstrument, playFrom,
+    openPop: (name, anchor, arg) => setPop({ name, anchor, arg }), head: ctlRef.current?.head ?? null, startPlacing, placeAt,
+    setRecordOpen: id => { if (live.current.take) commitTake(); if (along !== 'off') finishAlong(); setRecordOpen(id); if (id) setSelState(id); },
+    setRenaming, setPaletteOpen,
+  };
+  ctlRef.current = c;
+
+  const tools = (x: Part) => trackTools(x);
+  const drawer = (x: Part) => (recordOpen === x.id ? recordDrawer(x) : null);
+  const recordDrawer = (x: Part) => {
+    const e = entryOf(x);
+    if (!e) return null;
+    return (
+      <div class="grid gap-3 rounded-lg border border-amber bg-panel p-3" data-record-drawer={x.id}>
+        <div class="flex flex-wrap items-center gap-2">
+          <strong class="font-display text-lg">Record Into {x.name}</strong>
+          <div role="tablist" aria-label="Ways To Record" class="cmp-modes">
+            {MODES.filter(m => m.id !== 'hum' || p.hum).map(m => (
+              <button type="button" role="tab" aria-selected={m.id === mode} onClick={() => { if (along !== 'off') finishAlong(); else if (live.current.take) commitTake(); setMode(m.id); }}>{m.label}</button>
+            ))}
+          </div>
+          <button type="button" class="cmp-icon ml-auto" aria-label="Close Record" onClick={() => c.setRecordOpen(null)}><Glyph name="close" /></button>
+        </div>
+        <p class="text-sm text-dim">{MODES.find(m => m.id === mode)!.help}</p>
+        {mode === 'live' ? (
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm">Tidy To</span>
+            {GRIDS.map(g => <button type="button" class="cmp-btn small" aria-pressed={tidy === g} onClick={() => setTidy(g)}>{GRID_LABELS[g]}</button>)}
+            <button type="button" class="cmp-btn small" aria-pressed={countIn} onClick={() => setCountIn(!countIn)}>Count-In: {countIn ? 'On' : 'Off'}</button>
+            {along !== 'off' ? <button type="button" class="cmp-btn danger" data-along-stop="" onClick={finishAlong}>■ Stop Playing Along</button>
+              : recording !== 'idle' ? <button type="button" class="cmp-btn danger" onClick={commitTake}>Stop Recording</button>
+              : countIn ? <button type="button" class="cmp-btn danger" onClick={startCountIn}>● Record</button> : null}
+            {along === 'off' && recording === 'idle' ? <button type="button" class="cmp-btn" onClick={() => void playAlong()}>▶ Play Along</button> : null}
+            <button type="button" class="cmp-btn small" aria-pressed={alongParts} disabled={along !== 'off'} onClick={() => setAlongParts(!alongParts)}>Hear The Other Tracks: {alongParts ? 'On' : 'Off'}</button>
+          </div>
+        ) : mode === 'step' ? (
+          <div class="flex flex-wrap items-center gap-1">
+            {STEP_LENGTHS.map(l => <button type="button" class="cmp-btn small" aria-pressed={length === l.id} data-length={l.id} onClick={() => setLength(l.id)}>{l.label}</button>)}
+            <button type="button" class="cmp-btn small" aria-pressed={dotted} onClick={() => setDotted(!dotted)}>Dotted</button>
+            <button type="button" class="cmp-btn small" onClick={() => { step.rest(stepBeats(length, dotted, quarter)); setStepAt(step.cursor()); }}>+ Rest</button>
+            <button type="button" class="cmp-btn small" onClick={() => { const s = step.back(); if (s) { if (s.ids.length) apply(removeNotes(doc, x.id, new Set(s.ids))); setStepAt(step.cursor()); } }}>‹ Back One</button>
+          </div>
+        ) : p.hum ? (
+          <HumPanel ports={p.hum} snap={humSnap} onSnap={setHumSnap} place={humPlace === 'line' ? 'after' : humPlace} onPlace={setHumPlace} tidy={tidy} onTidy={setTidy}
+            keyName={key.name} classes={key.classes} onAdd={addHum} help={help} />
+        ) : null}
+        <p data-live-state="" class="h-6 truncate font-mono text-sm text-dim">
+          {mode === 'live' ? (along === 'ready' ? 'Getting the other tracks ready…' : along === 'counting' ? 'Counting in: one bar…' : along === 'on' ? `● Playing Along${held.size ? ` · ${[...held].map(pitchName).join(' ')}` : ''}`
+            : recording === 'counting' ? 'Counting in…' : recording === 'on' ? `● Recording · ${[...held].map(pitchName).join(' ') || 'waiting for a bar of quiet'}`
+            : `Press a key to start recording at ${barWords(clock, afterPart(x))}.`)
+            : mode === 'step' ? `Next note at ${barWords(clock, stepAt)}${held.size ? ` · ${[...held].map(pitchName).join(' ')}` : ''}`
+            : `Hummed notes go at ${humPlace === 'replace' ? 'bar 1, in place of the track\'s notes' : barWords(clock, afterPart(x))}.`}
+        </p>
+        {mode !== 'hum' ? <Keyboard entry={e} start={keysStart} held={held} onStart={setKeysFrom} onDown={q => keyDown(q, `screen:${q}`)} onUp={q => keyUp(`screen:${q}`)} /> : null}
+        {mode !== 'hum' ? <p class="text-xs text-dim">On a computer keyboard, A S D F G H J K play the white keys and W E T Y U the black ones; Z and X move down and up an octave.</p> : null}
+        <YourKeyboard request={p.midi} program={e.pieces ? null : e.gm} drums={e.pieces ? new Map(e.pieces) : null} help={help}
+          onDown={(k, q, velocity, drum) => keyRef.current.keyDown(q, k, velocity, drum)} onUp={k => keyRef.current.keyUp(k)} />
+      </div>
+    );
+  };
+  const vocalPanel = (x: Part) => (p.vocal ? (
+    <VocalPanel doc={doc} part={x} piece={p.start.piece.id} ports={p.vocal} help={help} apply={apply} status={say}
+      backing={() => vocalBacking(x.id)} beat={60 / clock.tempoAt(1).bpm} beats={clock.tempoAt(1).beats}
+      clicks={Array.from({ length: Math.ceil(end) }, (_, i) => clock.seconds(i))}
+      renamed={(from, to, seconds) => setSavedDoc(d => renameTake(d, from, to, seconds))} />
+  ) : <p class="text-sm text-dim">Vocal Tracks are not available on this page.</p>);
+  const adds = (
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="cmp-btn border-dashed" data-add-instrument="" data-pop-anchor="" disabled={doc.parts.length >= 16}
+        onClick={e => setPop({ name: 'add', anchor: e.currentTarget as HTMLElement })}><Glyph name="plus" />Add Instrument</button>
+    </div>
+  );
+  const heard = muteStatus(doc);
+  const menu = pop?.name === 'more' ? (
+    <Pop title="Piece" anchor={pop.anchor} onClose={() => setPop(null)} name="more">
+      <div class="grid">
+        <PopItem glyph="save" label={saving ? 'Saving…' : 'Save Draft'} onClick={() => { setPop(null); void save(); }} data={{ 'data-menu-save': '' }} />
+        {p.files ? <PopItem glyph="plus" label="Import Music File" onClick={() => { setPop(null); fileInput.current?.click(); }} /> : null}
+        {p.files && notesOnly(doc).parts.length ? <PopItem glyph="staff" label="Export MusicXML" onClick={() => { setPop(null); exportAs('musicxml'); }} /> : null}
+        {p.files && notesOnly(doc).parts.length ? <PopItem glyph="keys" label="Export MIDI" onClick={() => { setPop(null); exportAs('mid'); }} /> : null}
+        {p.files && p.vocal && doc.parts.some(x => x.vocal) ? <PopItem glyph="mic" label="Export With Vocals" onClick={() => { setPop(null); void exportVocals(); }} /> : null}
+        <PopItem glyph="flag" label="Markers" onClick={() => setPop({ name: 'marker', anchor: pop.anchor })} />
+        {p.vocal ? <PopItem glyph="mic" label="Add Vocal Track" onClick={() => { setPop(null); addVocal(); }} /> : null}
+      </div>
+    </Pop>
+  ) : null;
 
   return (
-    <div data-composer="" class={cx('grid gap-4 [overflow-anchor:none]', fill && 'fixed inset-0 z-50 overflow-auto bg-ground p-4')}>
-      <header class="grid gap-2">
+    <div data-composer="" class="cmp">
+      <header class="grid gap-1">
         <div class="flex flex-wrap items-baseline gap-x-3">
-          <h1 class="font-display text-3xl font-semibold tracking-wide uppercase">{p.start.piece.title}</h1>
+          <h1 class="font-display text-3xl font-semibold tracking-wide break-words uppercase">{p.start.piece.title}</h1>
           <p data-draft-line="" class="font-mono text-sm text-dim">{version === 0 ? 'New Piece · not saved yet' : `Draft ${version}${dirty ? ' · changed since' : ''}`} · {bpm} BPM · {clock.tempoAt(1).beats}/{clock.tempoAt(1).unit}</p>
         </div>
-        <div role="toolbar" aria-label="Edit" class="flex flex-wrap gap-2">
-          <Button onClick={undo} disabled={history.undoCount() === 0} data={{ 'data-undo': String(history.undoCount()) }}>↶ Undo {history.undoCount()}</Button>
-          <Button onClick={redo} disabled={history.redoCount() === 0} data={{ 'data-redo': String(history.redoCount()) }}>↷ Redo {history.redoCount()}</Button>
-          <Button onClick={() => part && apply(clearPart(doc, part.id))} disabled={!part || part.notes.length === 0}>Clear</Button>
-          {p.files ? (
-            <>
-              <Button onClick={() => fileInput.current?.click()}>Import Music File</Button>
-              <input ref={fileInput} type="file" accept={ACCEPT} class="hidden" data-import-file="" aria-label="Import Music File"
-                onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; (e.target as HTMLInputElement).value = ''; if (f) void importFile(f); }} />
-              <Button onClick={() => exportAs('musicxml')} disabled={notesOnly(doc).parts.length === 0}>Export MusicXML</Button>
-              <Button onClick={() => exportAs('mid')} disabled={notesOnly(doc).parts.length === 0}>Export MIDI</Button>
-              {p.vocal && doc.parts.some(x => x.vocal) ? <Button onClick={() => void exportVocals()}>Export With Vocals</Button> : null}
-            </>
-          ) : null}
-          <Button variant="primary" onClick={() => void save()} disabled={saving || doc.parts.length === 0}>{saving ? 'Saving…' : 'Save Draft'}</Button>
-          <Button pressed={help} onClick={() => setHelp(!help)}>Notes On Controls: {help ? 'On' : 'Off'}</Button>
-          <Button pressed={fill} onClick={() => setFill(!fill)}>{fill ? 'Leave Full Screen' : 'Fill My Screen'}</Button>
-        </div>
-        <Help>Undo and Redo step back and forward through every change; the number says how many steps there are. Ctrl+Z (⌘Z on a Mac) and Shift+Ctrl+Z work too. Clear empties this part. Import Music File brings in MusicXML or MIDI from MuseScore, Logic and other apps, after a preview; Export saves the piece for them. Save Draft keeps a new draft of the piece; older drafts stay.</Help>
-        <p data-status="" role="status" class="min-h-[1.5rem] text-sm">{status}</p>
       </header>
-
+      <Transport playing={playing} getting={getting} onPlay={() => void play()} onStop={stop} onRewind={() => { setCursor(0); if (playingRef.current) void play(0); }}
+        loopOn={loopOn} onLoop={() => setLoopOn(!loopOn)} bpm={bpm} onBpm={v => apply(setPieceSpeed(doc, Math.max(40, Math.min(240, v))))}
+        readout={readout} undos={history.undoCount()} redos={history.redoCount()} onUndo={undo} onRedo={redo}
+        saving={saving} canSave={doc.parts.length > 0} onSave={() => void save()} onMenu={a => setPop({ name: 'more', anchor: a })}
+        view={view} onView={v => { setView(v); if (v !== 'compose') startPlacing(null); }} />
+      <input ref={fileInput} type="file" accept={ACCEPT} class="hidden" data-import-file="" aria-label="Import Music File"
+        onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; (e.target as HTMLInputElement).value = ''; if (f) void importFile(f); }} />
+      <p data-status="" role="status" class="cmp-status">{status}</p>
       {preview ? (
         <ImportPreview preview={preview} choice={choice} entries={p.entries} piece={p.start.piece.title}
-          onChoice={(i, id) => setChoice(c => c.map((x, j) => (j === i ? id : x)))}
-          onAdd={addImported} onNew={newFromImport} onCancel={() => { setPreview(null); setStatus('Nothing was imported.'); }} />
+          onChoice={(i, id) => setChoice(cs => cs.map((x, j) => (j === i ? id : x)))}
+          onAdd={addImported} onNew={newFromImport} onCancel={() => { setPreview(null); say('Nothing was imported.'); }} />
+      ) : null}
+      {choosing && p.vocal ? (
+        <SaveTakes takes={choosing} room={room} quality={p.vocal.quality} opus={p.vocal.opus}
+          onCancel={() => { setChoosing(null); say('Not saved. Your takes are still on this device.'); }} onSave={chosen => void saveWithTakes(chosen)} />
       ) : null}
 
-      <div class="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
-        <div class="grid content-start gap-4">
-          <Panel title="Parts In This Piece">
-            <ul class="grid gap-2">
-              {doc.parts.map(x => (
-                <li><button type="button" data-part={x.id} aria-pressed={x.id === partId} onClick={() => { setPartId(x.id); setSelected(new Set()); setArmed(null); setKeysFrom(null); setPicking(null); }}
-                  class={cx('flex min-h-11 w-full items-center gap-2 rounded-md border px-3 text-left', x.id === partId ? 'border-amber bg-lane' : 'border-rule bg-panel hover:border-dim')}>
-                  <span class="size-3 shrink-0 rounded-sm" style={{ background: x.color }} />
-                  <span class="min-w-0 flex-1 truncate">{x.name}</span>
-                  <span class="font-mono text-xs text-dim">{x.vocal ? 'Vocal Track' : p.entries.find(e => e.id === x.instrument)?.name ?? x.instrument}</span>
-                </button></li>
-              ))}
-            </ul>
-            <div class="mt-2 flex flex-wrap gap-2">
-              <Button onClick={() => setPicking(picking === 'add' ? null : 'add')} pressed={picking === 'add'} disabled={doc.parts.length >= 16}>Add Part</Button>
-              {p.vocal ? <Button onClick={addVocal} disabled={doc.parts.length >= 16}>Add Vocal Track</Button> : null}
-              <Button onClick={() => void hear('piece')}>Hear With The Piece</Button>
-              <Button onClick={() => void hear('part')} disabled={!part}>Hear My Part Alone</Button>
-              {listening ? <Button variant="record" onClick={stopListening}>Stop</Button> : null}
-            </div>
-            <p data-listening="" class="mt-1 h-5 truncate font-mono text-xs text-dim">{listening ? `${listening.what === 'piece' ? 'The piece' : 'Your part'}: ${listening.state}` : ''}</p>
-          </Panel>
-          {picking ? (
-            <Panel title={picking === 'add' ? 'Choose An Instrument For The New Part' : 'Choose Another Instrument'}>
-              <InstrumentPicker entries={p.entries} value={picking === 'change' ? part?.instrument ?? null : null} onPick={pick} />
-              <Help>Pick a family, then an instrument. A stand-in plays another instrument's recordings until a free recording of the real one exists.</Help>
-            </Panel>
-          ) : null}
-          {part && entry ? (
-            <Panel title="Part Settings">
-              <div class="grid gap-3">
-                <label class="grid gap-1 text-sm">Name
-                  <input type="text" value={part.name} maxLength={60} class="min-h-11 rounded-md border border-rule bg-well px-3 text-ink"
-                    onChange={e => apply(renamePart(doc, part.id, (e.target as HTMLInputElement).value))} /></label>
-                <label class="flex items-center gap-2 text-sm">Colour
-                  <input type="color" value={part.color} class="h-11 w-16 rounded-md border border-rule bg-well"
-                    onChange={e => apply(recolourPart(doc, part.id, (e.target as HTMLInputElement).value))} /></label>
-                <div class="flex items-center gap-2"><Icon name={entry.icon} class="text-amber" />
-                  <span data-instrument-name="" class="font-semibold">{entry.name}</span>
-                  <Button onClick={() => setPicking(picking === 'change' ? null : 'change')} pressed={picking === 'change'}>Change Instrument</Button></div>
-                <p data-range-words="" class="font-mono text-xs text-dim">{rangeWords(entry)}</p>
-                <RangePicture entry={entry} pitches={part.notes.map(n => n.pitch)} />
-                {entry.written !== 0 && entry.range ? <p data-written="" class="text-xs text-dim">Written {intervalWords(entry.written)} how it sounds: {pitchName(entry.home ?? 60)} is written {pitchName(writtenPitch(entry, entry.home ?? 60))}.</p> : null}
-                {outOfRange > 0 ? (
-                  <div class="grid gap-1">
-                    <p data-out-of-range="" class="text-sm text-record">{outOfRange} {outOfRange === 1 ? 'note is' : 'notes are'} out of this instrument's range (red).</p>
-                    <Button onClick={() => apply(moveIntoRange(doc, part.id, entry))}>Move Them Into Range</Button>
-                  </div>
-                ) : <p data-out-of-range="" class="text-sm text-dim">Every note is in range.</p>}
-                <Help>No note is ever blocked or moved by itself. Amber notes are for experts; red notes are beyond what the instrument can play. Move Them Into Range shifts the red ones by octaves, and Undo puts them back.</Help>
-                <Button variant="ghost" onClick={() => { apply(removePart(doc, part.id)); setPartId(doc.parts.find(x => x.id !== part.id)?.id ?? null); }}>Remove Part</Button>
-              </div>
-            </Panel>
-          ) : null}
-          {part?.vocal ? (
-            <Panel title="Part Settings">
-              <div class="grid gap-3">
-                <label class="grid gap-1 text-sm">Name
-                  <input type="text" value={part.name} maxLength={60} class="min-h-11 rounded-md border border-rule bg-well px-3 text-ink"
-                    onChange={e => apply(renamePart(doc, part.id, (e.target as HTMLInputElement).value))} /></label>
-                <label class="flex items-center gap-2 text-sm">Colour
-                  <input type="color" value={part.color} class="h-11 w-16 rounded-md border border-rule bg-well"
-                    onChange={e => apply(recolourPart(doc, part.id, (e.target as HTMLInputElement).value))} /></label>
-                <Button variant="ghost" onClick={() => { apply(removePart(doc, part.id)); setPartId(doc.parts.find(x => x.id !== part.id)?.id ?? null); }}>Remove Part</Button>
-              </div>
-            </Panel>
-          ) : null}
-          {part && entry ? (
-            <SpeedPanel doc={doc} part={part} bars={barsNeeded(doc)} help={help}
-              onPieceSpeed={bpm => apply(setPieceSpeed(doc, bpm))} onLine={marks => apply(setTempoLine(doc, marks))}
-              onPartSpeed={speed => apply(setPartSpeed(doc, part.id, speed))} onLoudness={marks => apply(setDynamics(doc, part.id, marks))} />
-          ) : null}
+      {view === 'compose' ? (
+        <>
+          <div class="cmp-bar" data-hear-bar="">
+            <span class="cmp-seg" role="group" aria-label="Sound">
+              <button type="button" disabled={!doc.parts.length} onClick={() => apply(setAllMuted(doc, true))}><Glyph name="spk-off" size={16} /><span class="ml-1">Mute All</span></button>
+              <button type="button" disabled={!doc.parts.length} onClick={() => apply(setAllMuted(doc, false))}><Glyph name="spk" size={16} /><span class="ml-1">Unmute All</span></button>
+            </span>
+            <span class="cmp-seg" role="group" aria-label="Tracks">
+              <button type="button" disabled={!doc.parts.length} onClick={() => setOpen(new Set(doc.parts.map(x => x.id)))}><Glyph name="expand" size={16} /><span class="ml-1">Expand All</span></button>
+              <button type="button" disabled={!doc.parts.length} onClick={() => setOpen(new Set())}><Glyph name="collapse" size={16} /><span class="ml-1">Collapse All</span></button>
+            </span>
+            <span class="cmp-seg ml-auto" role="group" aria-label="Zoom">
+              <button type="button" aria-label="Zoom Out" title="Zoom out" onClick={() => setZoom(z => Math.max(0.4, z / 1.4))}><Glyph name="zoom-out" size={16} /></button>
+              <button type="button" aria-label="Zoom In" title="Zoom in" onClick={() => setZoom(z => Math.min(4, z * 1.4))}><Glyph name="zoom-in" size={16} /></button>
+            </span>
+            <p class="basis-full text-sm text-dim" data-mute-status="">{heard}</p>
+          </div>
+          {paletteOpen ? <FxPalette c={c} hear={effect => void hearFx(effect)} hearing={hearingFx} setDrop={setDrop} /> : null}
+          <Arrange c={c} onWidth={setWidth} tools={tools} drawer={drawer} vocal={vocalPanel} adds={adds} drop={drop} setDrop={setDrop}
+            clipSettings={i => <FxSettings c={c} index={i} building={getting} hearFrom={bar => { const b = clock.barStartBeat(bar); setCursorState(b); void play(b); }} />} />
+        </>
+      ) : view === 'mix' ? (
+        <MixView c={c} part={part} onPick={id => setSelState(id)}>
           {part && (entry || part.vocal) ? (
             <SoundPanel part={part} others={doc.parts.filter(x => x.id !== part.id).map(x => ({ id: x.id, name: x.name }))} mix={mixOf(doc)} help={help}
               onFx={change => apply(setLaneFx(doc, part.id, change))} onVoice={chain => apply(setVoice(doc, part.id, chain))}
               onMix={change => apply(setMix(doc, change))} live={p.live ? chain => p.live!(chain, key.classes) : undefined} />
           ) : null}
           {part && entry ? (
-            <YourKeyboard request={p.midi} program={entry.pieces ? null : entry.gm} drums={entry.pieces ? new Map(entry.pieces) : null} help={help}
-              onDown={(k, pitch, velocity, drum) => keyRef.current.keyDown(pitch, k, velocity, drum)} onUp={k => keyRef.current.keyUp(k)} />
+            <SpeedPanel doc={doc} part={part} bars={bars} help={help}
+              onPieceSpeed={v => apply(setPieceSpeed(doc, v))} onLine={marks => apply(setTempoLine(doc, marks))}
+              onPartSpeed={speed => apply(setPartSpeed(doc, part.id, speed))} onLoudness={marks => apply(setDynamics(doc, part.id, marks))} />
           ) : null}
-        </div>
+          {doc.parts.length && p.dj ? (
+            <DjMode doc={doc} ports={p.dj} pin={pin} help={help} apply={apply} status={say} onLive={() => {}}
+              score={only => {
+                const full = scoreOf(doc);
+                if (!only) return full;
+                const keep = new Set(only);
+                const clips = (full.fx_clips ?? []).filter(k => k.lane !== null && keep.has(k.lane) && k.effect !== 'vocoder');
+                const s: Score = { ...full, lanes: full.lanes.filter(l => keep.has(l.id)), notes: full.notes.filter(n => keep.has(n.lane)), motifs: [] };
+                if (clips.length) s.fx_clips = clips; else delete s.fx_clips;
+                return s;
+              }}
+              build={(k, score) => p.buildSound(`${k}-${editKey(doc)}`, score, () => {})} />
+          ) : null}
+        </MixView>
+      ) : (
+        <MixView c={c} part={part} onPick={id => setSelState(id)}>
+          {p.files && part && entry && !part.vocal ? (
+            <div class="grid gap-2">
+              {entry.written !== 0 && !entry.pieces ? (
+                <div class="cmp-bar">
+                  <button type="button" class="cmp-btn" aria-pressed={concert} onClick={() => setConcert(!concert)}>Concert Pitch: {concert ? 'On' : 'Off'}</button>
+                  <span class="text-sm text-dim">The {entry.name} is written {intervalWords(entry.written)} how it sounds; Concert Pitch shows how it sounds.</span>
+                </div>
+              ) : null}
+              <PartSheet doc={doc} part={part.id} entries={p.entries} concert={concert} bar={playing ? null : clock.barOfBeat(cursor + 1e-9)} loadSheet={p.files.loadSheet} boxRef={{ current: null }} />
+            </div>
+          ) : <p class="text-dim">Pick a track with notes to see it as sheet music.</p>}
+        </MixView>
+      )}
 
-        <div class="grid min-w-0 content-start gap-4">
-          {choosing && p.vocal ? (
-            <SaveTakes takes={choosing} room={room} quality={p.vocal.quality} opus={p.vocal.opus}
-              onCancel={() => { setChoosing(null); setStatus('Not saved. Your takes are still on this device.'); }} onSave={chosen => void saveWithTakes(chosen)} />
-          ) : null}
-          {part?.vocal && p.vocal ? (
-            <VocalPanel doc={doc} part={part} piece={p.start.piece.id} ports={p.vocal} help={help} apply={apply} status={setStatus}
-              backing={() => vocalBacking(part.id)} beat={60 / clock.tempoAt(1).bpm} beats={clock.tempoAt(1).beats}
-              clicks={Array.from({ length: Math.ceil(clock.barStartBeat(bars + 1)) }, (_, i) => clock.seconds(i))}
-              renamed={(from, to, seconds) => setSavedDoc(d => renameTake(d, from, to, seconds))} />
-          ) : part && entry ? (
-            <>
-              <div role="tablist" aria-label="Ways To Put Notes In" class="grid grid-cols-4 gap-1 rounded-lg border border-rule bg-panel p-1">
-                {MODES.map(m => (
-                  <button type="button" role="tab" aria-selected={m.id === mode} onClick={() => { if (along !== 'off') finishAlong(); else if (live.current.take) commitTake(); setMode(m.id); }}
-                    class={cx('flex min-h-14 flex-col items-center justify-center gap-1 rounded-md font-display text-sm font-semibold tracking-wide uppercase', m.id === mode ? 'bg-amber text-on-accent' : 'text-ink hover:bg-lane')}>
-                    <Icon name={m.icon} />{m.label}
-                  </button>
-                ))}
-              </div>
-              <Help>{modeHelp}</Help>
-              {mode === 'live' ? (
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm">Tidy To</span>
-                  {GRIDS.map(g => <Button pressed={tidy === g} onClick={() => setTidy(g)}>{GRID_LABELS[g]}</Button>)}
-                  <Button pressed={countIn} onClick={() => setCountIn(!countIn)}>Count-In: {countIn ? 'On' : 'Off'}</Button>
-                  {along !== 'off' ? <Button variant="record" onClick={finishAlong} data={{ 'data-along-stop': '' }}>■ Stop Playing Along</Button>
-                    : recording !== 'idle' ? <Button variant="record" onClick={commitTake}>Stop Recording</Button>
-                    : countIn ? <Button variant="record" onClick={startCountIn}>● Record</Button> : null}
-                  {along === 'off' && recording === 'idle' ? <Button onClick={() => void playAlong()}>▶ Play Along</Button> : null}
-                  <Button pressed={alongParts} onClick={() => setAlongParts(!alongParts)} disabled={along !== 'off'}>Hear The Other Parts: {alongParts ? 'On' : 'Off'}</Button>
-                </div>
-              ) : mode === 'hum' && p.hum ? (
-                <HumPanel ports={p.hum} snap={humSnap} onSnap={setHumSnap} place={humPlace} onPlace={setHumPlace} tidy={tidy} onTidy={setTidy}
-                  keyName={key.name} classes={key.classes} onAdd={addHum} help={help} />
-              ) : mode === 'hum' ? (
-                <p class="text-sm text-dim">Hum is not available on this page.</p>
-              ) : mode === 'step' ? (
-                <div class="flex flex-wrap items-center gap-1">
-                  {STEP_LENGTHS.map(l => <Button pressed={length === l.id} onClick={() => setLength(l.id)} data={{ 'data-length': l.id }}>{l.label}</Button>)}
-                  <Button pressed={dotted} onClick={() => setDotted(!dotted)}>Dotted</Button>
-                  <Button onClick={() => { step.rest(stepBeats(length, dotted, quarter)); setStepAt(step.cursor()); }}>+ Rest</Button>
-                  <Button onClick={() => { const s = step.back(); if (s) { if (s.ids.length) apply(removeNotes(doc, part.id, new Set(s.ids))); setStepAt(step.cursor()); } }}>‹ Back One</Button>
-                </div>
-              ) : (
-                <div class="grid gap-2">
-                  <div class="flex flex-wrap items-center gap-1">
-                    <span class="text-sm">Line Up To</span>
-                    {GRIDS.map(g => <Button pressed={lineUp === g} onClick={() => setLineUp(g)}>{GRID_LABELS[g]}</Button>)}
-                  </div>
-                  <div class="flex flex-wrap items-center gap-1">
-                    <span class="text-sm">New Notes</span>
-                    {STEP_LENGTHS.map(l => <Button pressed={length === l.id} onClick={() => setLength(l.id)}>{l.label}</Button>)}
-                  </div>
-                </div>
-              )}
-              {p.files ? (
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm">Show As</span>
-                  <div role="group" aria-label="Show As" class="flex gap-1">
-                    {SHOWS.map(s => <Button pressed={show === s.id} onClick={() => setShow(s.id)} data={{ 'data-show': s.id }}>{s.label}</Button>)}
-                  </div>
-                  {show !== 'grid' && entry.written !== 0 && !entry.pieces
-                    ? <Button pressed={concert} onClick={() => setConcert(!concert)}>Concert Pitch: {concert ? 'On' : 'Off'}</Button> : null}
-                </div>
-              ) : null}
-              {p.files && show !== 'grid' ? <Help>{`Sheet Music is the same notes written the way musicians read them, in the instrument's clef.${entry.written !== 0 && !entry.pieces ? ` The ${entry.name} is written ${intervalWords(entry.written)} how it sounds; Concert Pitch shows how it sounds.` : ''} Both shows one above the other, scrolling together.`}</Help> : null}
-              <div data-readout="" class="h-11 overflow-hidden rounded-lg border border-rule bg-panel px-3 [overflow-anchor:none]">
-                {mode === 'live' && along !== 'off' ? (
-                  <p data-live-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">{along === 'ready' ? 'Getting the other parts ready…' : along === 'counting' ? 'Counting in: one bar…'
-                    : `● Playing Along · bar ${playhead === null ? 1 : clock.barOfBeat(playhead)}${held.size ? ` · ${[...held].map(pitchName).join(' ')}` : ''}`}</p>
-                ) : mode === 'live' ? (
-                  <p data-live-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">{recording === 'counting' ? 'Counting in…' : recording === 'on'
-                    ? `● Recording · ${[...held].map(pitchName).join(' ') || 'waiting for a bar of quiet'}`
-                    : `Press a key to start recording at bar ${part.notes.length ? clock.barOfBeat(Math.max(...part.notes.map(n => n.start + n.length)) - 1e-9) + 1 : 1}, beat 1.`}</p>
-                ) : mode === 'step' ? (
-                  <p data-step-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">Next note at bar {clock.barOfBeat(stepNow)}, beat {Math.round((stepNow - clock.barStartBeat(clock.barOfBeat(stepNow)) + 1) * 100) / 100}{held.size ? ` · ${[...held].map(pitchName).join(' ')}` : ''}</p>
-                ) : mode === 'hum' ? (
-                  <p data-hum-state="" class="truncate font-mono text-sm leading-[2.6rem] text-dim">{humPlace === 'replace' ? 'Hummed notes replace this part, from bar 1.'
-                    : `Hummed notes go at bar ${clock.barOfBeat(humPlace === 'line' && humLine !== null ? humLine : afterPart(part))}${humPlace === 'line' ? ' (drag the dashed line)' : ''}.`}</p>
-                ) : (
-                  <p class="truncate font-mono text-sm leading-[2.6rem] text-dim">{selected.size ? `${selected.size} selected` : 'Tap a square to add a note.'}</p>
-                )}
-              </div>
-              {show !== 'sheet' || !p.files ? (
-                <div ref={gridWrap} class="grid gap-2">
-                <EditGrid entry={entry} color={part.color} notes={part.notes} clock={clock} bars={bars} lineUp={mode === 'grid' ? lineUp : tidy === 'off' ? 'off' : '1/16'}
-                  adding={mode === 'grid'} length={stepBeats(length, dotted, quarter)} selected={selected} armed={armed} playhead={playhead}
-                  cursor={mode === 'step' ? stepNow : null} onTapNote={tapNote}
-                  onMove={(id, s, pitch) => apply(moveNote(doc, part.id, id, s, pitch))}
-                  onResize={(id, l) => apply(resizeNote(doc, part.id, id, l, quarter / 4))}
-                  onAdd={(s, pitch) => { const made = addNotes(doc, part.id, [{ start: s, length: stepBeats(length, dotted, quarter), pitch }]); apply(made.doc); setSelected(new Set(made.ids)); setArmed(null);
-                    const h = p.sampler.start({ instrument: part.instrument, gain_db: part.gain_db, attack: part.attack, release: part.release }, pitch, 90); setTimeout(() => p.sampler.stop(h), 300); }}
-                  onSelect={ids => { setSelected(new Set(ids)); setArmed(null); }}
-                  ghosts={ghosts} line={mode === 'hum' && humPlace === 'line' ? humLine : null} onLine={setHumLine} />
-                <Help>Tap a note to hear and select it; tap it again to delete it. Drag across empty space to select several, then press Delete. Rows in red are beyond the instrument; amber rows are for experts.</Help>
-                </div>
-              ) : null}
-              {p.files && show !== 'grid' ? (
-                <PartSheet doc={doc} part={part.id} entries={p.entries} concert={concert} bar={playhead === null || held.size > 0 ? null : clock.barOfBeat(playhead)}
-                  loadSheet={p.files.loadSheet} boxRef={sheetBox} onScroll={show === 'both' ? () => follow(sheetBox.current, gridBox()) : undefined} />
-              ) : null}
-              <Keyboard entry={entry} start={start} held={held} onStart={setKeysFrom} onDown={pitch => keyDown(pitch, `screen:${pitch}`)} onUp={pitch => keyUp(`screen:${pitch}`)} />
-              <Help>On a computer keyboard, A S D F G H J K play the white keys and W E T Y U the black ones; Z and X move down and up an octave.</Help>
-            </>
-          ) : (
-            <Panel title="Start With A Part"><p class="text-dim">Choose an instrument for your first part.</p></Panel>
-          )}
-        </div>
-      </div>
-      {doc.parts.length ? <EffectsPanel doc={doc} help={help} apply={apply} hearFrom={bar => void hear('piece', bar)} building={listening !== null && listening.state !== 'Playing'} status={setStatus} /> : null}
-      {doc.parts.length && p.dj ? (
-        <DjMode doc={doc} ports={p.dj} pin={pin} help={help} apply={apply} status={setStatus} onLive={on => { djLive.current = on; }}
-          score={only => {
-            const full = scoreFromDoc(doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
-            if (!only) return full;
-            const keep = new Set(only);
-            const clips = (full.fx_clips ?? []).filter(c => c.lane !== null && keep.has(c.lane) && c.effect !== 'vocoder');
-            const part: Score = { ...full, lanes: full.lanes.filter(l => keep.has(l.id)), notes: full.notes.filter(n => keep.has(n.lane)), motifs: [] };
-            if (clips.length) part.fx_clips = clips; else delete part.fx_clips;
-            return part;
-          }}
-          build={(k, score) => p.buildSound(`${k}-${editKey(doc)}`, score, () => {})} />
+      <ActionBar c={c} clip={clipboard} setClip={setClipboard} />
+      <PlaceBanner c={c} />
+      {menu}
+      {pop?.name === 'marker' ? (
+        <MarkerPop c={c} anchor={pop.anchor} onClose={() => setPop(null)}
+          add={name => apply({ ...doc, markers: [...(doc.markers ?? []), { beat: Math.floor(cursor + 1e-9), name: name.slice(0, 24) }].sort((a, b) => a.beat - b.beat) }, `Added the marker ${name}.`)}
+          remove={i => apply({ ...doc, markers: (doc.markers ?? []).filter((_, j) => j !== i) })} />
       ) : null}
+      {pop?.name === 'track' && pop.arg ? <TrackMenu c={c} part={pop.arg} anchor={pop.anchor} onClose={() => setPop(null)} /> : null}
+      {pop?.name === 'chords' && pop.arg ? <ChordsPop c={c} part={pop.arg} anchor={pop.anchor} onClose={() => setPop(null)} setKey={k => apply(k ? { ...doc, key: k } : withoutKey(doc))} /> : null}
+      {pop?.name === 'section-add' ? <SectionPop c={c} id={null} anchor={pop.anchor} onClose={() => setPop(null)} /> : null}
+      {pop?.name === 'section-rename' && pop.arg ? <SectionPop c={c} id={pop.arg} anchor={pop.anchor} onClose={() => setPop(null)} /> : null}
+      {pop?.name === 'add' ? <AddPop c={c} anchor={pop.anchor} onClose={() => setPop(null)} onAdd={addInstrument} onVocal={p.vocal ? addVocal : undefined} /> : null}
+    </div>
+  );
+
+  /** The tool row of an open track: the instrument's name as the title, then the tools for its notes. */
+  function trackTools(x: Part) {
+    const e = entryOf(x);
+    if (!e) return null;
+    const drums = !!e.pieces;
+    const low = lowOf(x);
+    const outOfRange = !drums ? x.notes.filter(n => rangeClass(e, n.pitch) === 'out').length : 0;
+    const picked = pick.kind === 'notes' && pick.part === x.id ? pick.ids : null;
+    return (
+      <div class="cmp-tools" data-tools={x.id}>
+        <div class="cmp-ed-title" data-editor-title=""><Icon name={e.icon} size={22} class="self-center" /><strong data-instrument-name="">{e.name}</strong><span>· {drums ? 'Step Sequencer' : 'Piano Roll'}</span></div>
+        {drums ? null : (
+          <>
+            <span class="cmp-label">New Notes</span>
+            <span class="cmp-seg" role="group" aria-label="New Note Length">
+              {lengths.map(([label, beats]) => <button type="button" aria-pressed={Math.abs(len - beats) < 1e-9} data-len={label} onClick={() => setLen(beats)}>{label}</button>)}
+            </span>
+            <span class="cmp-label">Octave</span>
+            <span class="cmp-seg" role="group" aria-label="Octave">
+              <button type="button" aria-label="Lower Octave" title="Lower octave" onClick={() => setLow(x.id, low - 12)}><Glyph name="chev-d" size={16} /></button>
+              <button type="button" aria-label="Higher Octave" title="Higher octave" onClick={() => setLow(x.id, low + 12)}><Glyph name="chev-u" size={16} /></button>
+            </span>
+            <button type="button" class="cmp-btn small" aria-pressed={typing && sel === x.id} data-type-notes="" title="The computer keyboard adds notes at the shaded step"
+              onClick={() => { const on = !(typing && sel === x.id); setTyping(on); setSelState(x.id); if (on) say('Type Notes: A to L add notes at the shaded step (W E T Y U O are the black keys). → moves on, ← back, Backspace clears the step, Z and X change the octave.'); }}>
+              <Glyph name="keys" size={16} />{typing && sel === x.id ? 'Type Notes: On' : 'Type Notes'}
+            </button>
+          </>
+        )}
+        <button type="button" class="cmp-btn small" aria-pressed={selectMode} title="Drag a box around notes to pick them" onClick={() => c.setSelectMode(!selectMode)}>
+          <Glyph name="select" size={16} />{selectMode ? 'Select: On' : 'Select'}
+        </button>
+        {drums ? null : <button type="button" class="cmp-btn small" aria-pressed={chord?.part === x.id} data-pop-anchor="" title="Put in a chord by its name"
+          onClick={e2 => setPop({ name: 'chords', anchor: e2.currentTarget as HTMLElement, arg: x.id })}><Glyph name="chord" size={16} />Chords</button>}
+        <button type="button" class="cmp-btn small" title="Split a region at the cursor (S), or tap where" onClick={() => {
+          const at = Math.round(cursor);
+          const r = (x.regions ?? []).find(g => at > g.start && at < g.start + g.length);
+          const made = r ? splitRegion(doc, x.id, r.id, at) : null;
+          if (made) { apply(made.doc); setPick({ kind: 'region', part: x.id, id: made.id }); } else setSplitting(true);
+        }}><Glyph name="split" size={16} />Split</button>
+        <button type="button" class="cmp-btn small" title="Snap the notes (or the picked ones) to the New Notes length"
+          onClick={() => apply(fixTiming(doc, x.id, picked, drums ? quarter / 4 : len), picked ? 'The picked notes now start on the step.' : 'Every note now starts on the step.')}>
+          <Glyph name="magnet" size={16} />Fix Timing
+        </button>
+        <button type="button" class="cmp-btn small" aria-pressed={recordOpen === x.id} data-record={x.id} onClick={() => c.setRecordOpen(recordOpen === x.id ? null : x.id)}>
+          <Glyph name="mic" size={16} />Record
+        </button>
+        {outOfRange ? (
+          <span class="flex flex-wrap items-center gap-2">
+            <span data-out-of-range="" class="text-sm text-record">{outOfRange} {outOfRange === 1 ? 'note is' : 'notes are'} out of this instrument's range (red).</span>
+            <button type="button" class="cmp-btn small" onClick={() => apply(moveIntoRange(doc, x.id, e), 'Moved the red notes by octaves into range. Undo puts them back.')}>Move Them Into Range</button>
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+}
+
+/** Mix and Sheet: the tracks to choose from, then what the view shows for the chosen one. */
+function MixView(p: { c: Ctl; part: Part | null; onPick(id: string): void; children?: ComponentChildren }) {
+  return (
+    <div class="grid gap-3">
+      <div class="cmp-bar" role="group" aria-label="Track">
+        {p.c.doc.parts.map(x => (
+          <button type="button" class={cx('cmp-btn')} aria-pressed={p.part?.id === x.id} data-part={x.id} onClick={() => p.onPick(x.id)}>
+            <span class="size-3 rounded-sm" style={{ background: x.color }} />{x.name}
+          </button>
+        ))}
+      </div>
+      {p.children}
     </div>
   );
 }
+
+const withoutKey = (d: EditDoc): EditDoc => { const { key: _, ...rest } = d; return rest; };
 
 /**
  * An audio element told to play in the press that asked for it, before it has any sound. A browser lets a page start

@@ -357,9 +357,9 @@ export interface Bar {
   exploredTimes: number;
 }
 
-/** Chapter 1's numbers set it: its teaching Minotaurs add 3 to 14 moves (level 9's adds 14, level 10's 31), and
- *  its hardest teaching search is level 3's 614 situations (level 9 stores 24 times that, level 10 47 times); the
- *  bar sits a little under level 9's. */
+/** Chapter 1's numbers set it: its teaching Minotaurs add 3 to 14 moves (level 9's adds 8, level 10's 13), and
+ *  its hardest teaching search is level 3's 614 situations (level 9 stores 23 times that, level 10 33 times); the
+ *  bar sits at level 9's Minotaur and a little under its search. */
 export const BAR: Bar = { minotaurDelta: 8, exploredTimes: 20 };
 
 /** Where a challenge level sits: the chapter's teaching levels, measured. */
@@ -455,9 +455,9 @@ export interface SharedBar {
   chaseExplored: number;
 }
 
-/** Chapter 1 sets it: its challenge levels win in 40 and 76 moves from 14,519 and 28,990 situations, its teaching
- *  levels in at most 36 moves from at most 614. The bar sits a little under level 9's situations and at its moves,
- *  a few past the longest teaching level; a chase level that clears the chase checks needs half of that again. The
+/** Chapter 1 sets it: its challenge levels win in 42 and 58 moves from 14,423 and 20,004 situations, its teaching
+ *  levels in at most 36 moves from at most 614. The bar sits a little under level 9's situations and moves, a few
+ *  past the longest teaching level; a chase level that clears the chase checks needs half of that again. The
  *  situation counts are this solver's (its estimate and pruning): a change to either moves them, and the bar is
  *  set again from Chapter 1's new counts. */
 export const SHARED_BAR: SharedBar = { shortest: 40, explored: 12_000, chaseShortest: 30, chaseExplored: 6_000 };
@@ -495,7 +495,7 @@ function edited(level: Level, f: (t: Terrain[], o: (ObjectKind | null)[]) => voi
 /** Every piece of a level, each with the ways it can be taken out: the piece is useless when none of them changes
  *  anything (uselessProblems). What Theseus would take is gone: a colour's keys, gear, the mirror, the cow, a spare
  *  relic. What he would open, push or cross is tried both shut, as wall (he never uses it), and gone, as floor (it no
- *  longer holds anyone back): a colour's doors, a block, a fake wall, water, fire, teleports. Gravel, marked stones
+ *  longer holds anyone back): a colour's doors (with its keys, the pair), a block, a fake wall, water, fire, teleports. Gravel, marked stones
  *  and pop-up walls, a road for Theseus and a bar to the beast, are tried as floor and as wall too. What shapes the
  *  ground is plain floor: ice and currents (tried without their gear as well), a snare with its brown buttons, an
  *  invisible wall, a thief, a bomb; a hazard is gone, and a clone machine with its red buttons is wall. The toggle
@@ -511,8 +511,9 @@ export function pieceUnits(level: Level): PieceUnit[] {
       out.push({ name: `the ${color} keys`, ignored: [edited(level, (_, o) => { o.forEach((x, i) => { if (x === key) o[i] = null; }); })] });
     }
     if (level.terrain.some(t => TERRAIN[t].door === color)) {
-      out.push({ name: `the ${color} doors`, ignored: (['wall', 'floor'] as const).map(to => edited(level, t => {
+      out.push({ name: `the ${color} doors`, ignored: (['wall', 'floor'] as const).map(to => edited(level, (t, o) => {
         t.forEach((x, i) => { if (TERRAIN[x].door === color) t[i] = to; });
+        o.forEach((x, i) => { if (x === key) o[i] = null; });
       })) });
     }
   }

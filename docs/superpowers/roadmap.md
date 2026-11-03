@@ -7,11 +7,12 @@ each step starts from. A step with a design but no plan gets its plan written
 ## Crete
 
 The vision and its parts are in `specs/2026-10-16-crete-redesign-vision.md`.
-Live: the shell, the engine, Chapters 1 to 6 (ten levels each, story pages, the
+Live: the shell, the engine, Chapters 1 to 7 (ten levels each, story pages, the
 Lore book; Chapter 3 is `plans/2026-11-01-crete-chapter-3.md`, Chapter 4
 `plans/2026-11-01-crete-chapter-4.md`, Chapter 5
 `plans/2026-11-01-crete-chapter-5.md`, Chapter 6
-`plans/2026-11-02-crete-chapter-6.md`), full keyboard play
+`plans/2026-11-02-crete-chapter-6.md`, Chapter 7
+`plans/2026-11-02-crete-chapter-7.md`), full keyboard play
 and swipes, the fast solver, the level editor, the title theme on every screen, and
 two looks: Modern (painted 3D, one free camera steered from the compass, with view
 tips) and Classic, chosen when a new game starts.
@@ -29,7 +30,7 @@ tips) and Classic, chosen when a new game starts.
    Check with Stop and a progress bar, Try it on the full game screen, Share as
    a link and opening a link, with the OPFS solve cache trimmed. The README's
    "The editor" section describes it.
-3. **Chapters 7 to 10**, one pull request each, built in the editor and
+3. **Chapters 8 to 10**, built in the editor and
    exported to the repo. Every level passes the difficulty gate
    (`src/puzzle/difficulty.ts`); a level that is winnable but easy is refused. A level
    with a fake or invisible wall is held to a lower band (`HIDDEN`): a gentler

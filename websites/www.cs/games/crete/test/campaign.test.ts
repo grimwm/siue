@@ -57,7 +57,8 @@ test('nextChapter is the following chapter, or null after the last', () => {
   assert.equal(nextChapter(3)!.released, true);
   assert.equal(nextChapter(4)!.released, true);
   assert.equal(nextChapter(5)!.released, true);
-  assert.equal(nextChapter(6)!.released, false);
+  assert.equal(nextChapter(6)!.released, true);
+  assert.equal(nextChapter(7)!.released, false);
   assert.equal(nextChapter(10), null);
 });
 

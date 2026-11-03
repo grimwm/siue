@@ -33,9 +33,12 @@ tips) and Classic, chosen when a new game starts.
    Check with Stop and a progress bar, Try it on the full game screen, Share as
    a link and opening a link, with the OPFS solve cache trimmed. The README's
    "The editor" section describes it.
-3. **Endless**, next: the seeded generator on the same engine, checked by the solver. It takes a level only
-   through the gate the campaign's levels pass (`src/puzzle/difficulty.ts`): no catch needed, every piece
-   mattering, a live beast, the challenge and shared bars, and the gentler band for hidden walls.
+3. **Endless** — plan `plans/2026-11-03-crete-endless.md`. Live: the seeded generator on the same engine, checked
+   by the solver in its own worker, taking a level only through the gate the campaign's levels pass
+   (`src/puzzle/difficulty.ts`, with Endless's tidy and new-layout checks in `src/endless/gate.ts`), climbing by the
+   ramp to a plateau, with the pieces the player has been taught, a bank made ahead of time for a run's first level
+   and any search that runs out of budget, the saved run and best, and `?seed=` links. The README's "Endless"
+   section describes it. Nothing on the Crete roadmap comes after it.
 
 ## Music workroom
 

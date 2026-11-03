@@ -125,13 +125,18 @@ export function levelById(id: string): Level {
   throw new RangeError(`no level ${id}`);
 }
 
-/** A level from outside the campaign: one the author is trying in the editor, or one a link shared. */
+/** A level from outside the campaign: one the author is trying in the editor, one a link shared, or one of an
+ *  Endless run (src/endless/mode.ts). */
 export interface OutsideLevel {
-  kind: 'try' | 'shared';
-  /** What the start and end cards call it: the draft's title or "Your level" for 'try', the generated name for 'shared'. */
+  kind: 'try' | 'shared' | 'endless';
+  /** What the start and end cards call it: the draft's title or "Your level" for 'try', the generated name for
+   *  'shared' and 'endless'. */
   name: string;
   /** The author's best, for 'shared'; null otherwise or when there is none. */
   best: number | null;
+  /** An Endless level's place in its run, 1 for the first, and its fewest moves. */
+  depth?: number;
+  fewest?: number;
 }
 
 /** What the controller plays: a count, and each level's id and level by index. */

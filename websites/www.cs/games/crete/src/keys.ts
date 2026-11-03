@@ -7,7 +7,7 @@ import { BACK_KEY } from "../../_kit/keys.ts";
 export type MoveAction = "up" | "down" | "left" | "right";
 export type Action =
   | MoveAction
-  | "begin" | "wait" | "undo" | "restart" | "hint" | "route" | "auto" | "mute" | "new" | "menu" | "story" | "fullscreen" | "lore" | "dictionary" | "editor" | "look" | "tips";
+  | "begin" | "wait" | "undo" | "restart" | "hint" | "route" | "auto" | "mute" | "new" | "menu" | "story" | "fullscreen" | "lore" | "dictionary" | "editor" | "endless" | "look" | "tips";
 
 export interface KeyDef {
   /** What a button's key tab and the help text print. */
@@ -42,6 +42,8 @@ export const KEYS: Record<Action, KeyDef> = {
   dictionary: { label: "G", keys: ["g"] },
   /** Opens the level editor, from the title card. */
   editor: { label: "E", keys: ["e"] },
+  /** Opens the Endless card, from the title card. */
+  endless: { label: "O", keys: ["o"] },
   /** Swaps the board between the modern and the classic look, from the strip. */
   look: { label: "B", keys: ["b"] },
   /** Shows the view tips again, on the modern board. */

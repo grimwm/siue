@@ -207,15 +207,16 @@ test('N opens the level list, which has ten levels and ten chapter tabs; M mutes
   expect(errors).toEqual([]);
 });
 
-test('a ?seed= link opens Chapter 1\'s card with no title card, and Enter starts level 1', async ({ page }) => {
+test('an old ?seed= link opens the Endless card on that seed, and its button starts the run', async ({ page }) => {
   await page.addInitScript(pinClassic);
   await page.goto(`${PAGE}?seed=stefan-1984`);
   await expect(page.locator('#title-veil')).toBeHidden();
-  await expect(page.locator('#chapter-veil')).toBeVisible();
+  await expect(page.locator('#endless-veil')).toBeVisible();
+  await expect(page.locator('#endless-linked')).toHaveText(/Play Seed stefan-1984/);
   await page.keyboard.press('Enter');
-  await expect(page.locator('#chapter-veil')).toBeHidden();
-  await expect(page.locator('#hud-trial')).toHaveText('Ch. 1 • Level 1/10');
   await expect(page.locator('#start-veil')).toBeVisible();
+  await expect(page.locator('#start-veil .kicker')).toHaveText('Endless · Level 1');
+  await expect(page.locator('#hud-trial')).toHaveText('Endless • Level 1');
 });
 
 test('a new game starts at Chapter 1, Level 1 whatever is cleared; Levels starts Chapter 2, Level 3 there', async ({ page }) => {

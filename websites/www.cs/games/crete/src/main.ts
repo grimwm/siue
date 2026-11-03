@@ -49,6 +49,12 @@ import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { exitApp, toggleFullscreen as toggleKitFullscreen, browserAppEnv, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
+import { createEndlessSaved } from './endless/saved.ts';
+import { createEndlessClient } from './endless/client.ts';
+import type { WorkerLike as EndlessWorker } from './endless/client.ts';
+import { createEndlessMode } from './endless/mode.ts';
+import { tierOf } from './endless/tier.ts';
+import { newSeed } from './endless/random.ts';
 
 declare global {
   interface Window {
@@ -58,6 +64,7 @@ declare global {
 
 // The music files' content hashes, injected by the build (build.json versions), so a new render is fetched.
 declare const TITLE_WEBM_V: string;
+declare const ENDLESS_WORKER_V: string; // the Endless worker bundle's content hash, injected by the build
 declare const TITLE_M4A_V: string;
 
 const atlas = atlasJson as Atlas;
@@ -112,6 +119,7 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   closeLayers: () => ui.closeLayers(),
   showEditor: () => ui.showEditor(),
   bestWon: (text, moves) => editor.tryWon(text, moves),
+  endlessWon: (moves, assisted) => endless.won(moves, assisted),
 });
 const levels = outside.levels;
 /* The Map button's face: the level round Theseus in the other look, repainted only once a move has landed. */
@@ -122,6 +130,34 @@ thumb.className = 'map-thumb';
 thumb.width = THUMB_W;
 thumb.height = THUMB_H;
 const ui = createUi({ atlas, icons: iconsJson as IconSheet, thumb, board, progress, pages, met, levels, sfx: audio.sfx, cards: stack => behindEditor(stack.includes('editor')) });
+/* Endless: the saved run, the worker that makes its levels, and the mode that opens them. Its levels come from the
+   worker's own bundle (dist/endless-worker.js), never the solver's worker, so the editor's Check never waits on it. */
+const endlessSaved = createEndlessSaved(browserStorage());
+const endless = createEndlessMode({
+  saved: endlessSaved,
+  client: createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker),
+  tier: () => tierOf(CHAPTERS, id => progress.get(id).cleared),
+  newSeed: () => newSeed(Math.random),
+  play: (level, about, line) => outside.play(level, about, line),
+  changed: () => ui.refresh(),
+  budget: () => endlessBudget,
+});
+/** The Endless search's budget a browser spec set through the test hook; the generator's own otherwise. */
+let endlessBudget: number | undefined;
+/** The link that opens the saved run's seed, with its pieces. */
+function endlessLink(): string | null {
+  const run = endlessSaved.run();
+  return run ? `${window.location.origin}${window.location.pathname}?seed=${run.seed}&tier=${run.tier}` : null;
+}
+async function copyLink(link: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(link);
+    ui.say('The seed link is copied.', 'info');
+  } catch {
+    ui.say(`Copy this link: ${link}`, 'info');
+  }
+}
+
 /* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
    which comes first. */
 const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
@@ -602,6 +638,7 @@ function start(): void {
   ui.bindControls({
     game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, showViewTips, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
+    endless: { mode: endless, link: endlessLink, copy: link => { void copyLink(link); } },
   });
   const background = settings.musicHidden.get() === 'on';
   music.setBackground(background);
@@ -621,15 +658,19 @@ function start(): void {
   ui.setMoveDir(dir => moveMap(dir, modernOn && modern ? modern.yaw() : ui.classicView().yaw));
   showLook(settings.look.get());
   followMusicSwitches();
-  let direct = false;
+  // A `?seed=` link (today's, with `&tier=`, or the old chase's, with any value) opens the Endless card on that seed.
+  let linked: { seed: string; tier: number | null } | null = null;
   try {
-    direct = new URL(window.location.href).searchParams.has('seed');
+    const q = new URL(window.location.href).searchParams;
+    const seed = q.get('seed');
+    if (seed !== null) linked = { seed: seed || 'crete', tier: q.has('tier') ? Number(q.get('tier')) : null };
   } catch (_) {
     /* ignore */
   }
   ui.showTitle(false);
-  if (direct) {
-    ui.showChapter(1, false);
+  if (linked) {
+    endless.link(linked.seed, linked.tier);
+    ui.showEndless();
   }
   followHash();
   window.addEventListener('hashchange', followHash);
@@ -753,4 +794,4 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };
+window.__creteTest = { endless: { mode: endless, saved: endlessSaved, setBudget: (n: number) => { endlessBudget = n; } }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };

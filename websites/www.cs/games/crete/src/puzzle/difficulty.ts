@@ -589,12 +589,17 @@ function changes(d: Difficulty, lv: Level, cap: number): string | null {
  *  moves, or cuts its search by at least USEFUL.explored times. A piece the player can ignore with nothing changing
  *  fails the level. */
 export function uselessProblems(level: Level, d: Difficulty, cap = SOLVER_CAP): string[] {
+  return uselessPieces(level, d, cap).map(p => p.problem);
+}
+
+/** uselessProblems with the pieces themselves, for a tool that takes them out (src/endless/generate.ts). */
+export function uselessPieces(level: Level, d: Difficulty, cap = SOLVER_CAP): { unit: PieceUnit; problem: string }[] {
   if (!d.solved || typeof d.catchFree !== 'number') return [];
   return pieceUnits(level).flatMap(u => {
     const found = u.ignored.map(lv => changes(d, lv, cap));
     if (found.some(c => c !== null && c !== 'capped')) return [];
-    if (found.includes('capped')) return [`${u.name}: the search without it hit its cap, so it is not proved to matter`];
-    return [`${u.name}: ignoring it changes nothing (still ${d.shortest} moves, and the search no ${USEFUL.explored} × smaller)`];
+    if (found.includes('capped')) return [{ unit: u, problem: `${u.name}: the search without it hit its cap, so it is not proved to matter` }];
+    return [{ unit: u, problem: `${u.name}: ignoring it changes nothing (still ${d.shortest} moves, and the search no ${USEFUL.explored} × smaller)` }];
   });
 }
 

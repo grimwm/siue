@@ -3,8 +3,9 @@
  * it, a turn landing (what the Minotaur did with it, a catch, how many moves so far), or a level with relics. They
  * build on one another, so a player meets them in order: how the Minotaur moves, what he just did and how walls hold
  * him, the relics and the gate, Wait and Undo, then the exit and the hearts. One tip stands at a time, in the banner's
- * place at the top of the board (src/ui/banner.tsx); it never stops play, Got It puts it away, the next tip replaces
- * it, and it goes by itself after TIP_TURNS turns. Which tips have shown is kept with the first cards
+ * place at the top of the board (src/ui/banner.tsx). It holds play until it is read: no move, Wait, Undo or thread
+ * goes through while it stands (src/ui.ts), and Got It, Enter or Space puts it away. Which tips have shown is kept with
+ * the first cards
  * (src/met.ts noteCard), so the menu's Reset Tips shows them again. DOM-free. */
 import type { Dir } from './puzzle/tiles.ts';
 import type { Met } from './met.ts';
@@ -14,8 +15,6 @@ export type TipId = 'tip-beast' | 'tip-walls' | 'tip-relics' | 'tip-undo' | 'tip
 /** The tips, in the order a player meets them. */
 export const TIP_IDS: readonly TipId[] = ['tip-beast', 'tip-walls', 'tip-relics', 'tip-undo', 'tip-exit'];
 
-/** How many turns a tip stands through before it goes by itself. */
-export const TIP_TURNS = 4;
 /** The move count at which Wait and Undo, then the exit, are told. */
 export const UNDO_AT = 3;
 export const EXIT_AT = 5;
@@ -93,7 +92,6 @@ export interface RuleTips {
 /** The tips for this browser, whose shown ones are kept in `met`. */
 export function createRuleTips(met: Pick<Met, 'carded' | 'noteCard'>): RuleTips {
   let tip: Tip | null = null;
-  let turns = 0;
   return {
     shown: () => tip,
     on(ev) {
@@ -101,11 +99,6 @@ export function createRuleTips(met: Pick<Met, 'carded' | 'noteCard'>): RuleTips 
       if (id) {
         met.noteCard(id);
         tip = { id, text: tipText(id, ev) };
-        turns = 0;
-        return true;
-      }
-      if (tip && ev.kind === 'turn' && ++turns >= TIP_TURNS) {
-        tip = null;
         return true;
       }
       return false;

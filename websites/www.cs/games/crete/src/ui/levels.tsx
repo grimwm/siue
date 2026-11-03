@@ -8,11 +8,22 @@ import { Button } from '../../../_kit/ui/button.tsx';
 import type { Chapter } from '../campaign/chapters.ts';
 import { KEYS } from '../keys.ts';
 
+/** A piece of a level's status line, coloured by what it says: cleared, perfect, over the fewest, a page found. */
+export interface LevelMark {
+  text: string;
+  tone?: 'clear' | 'perfect' | 'over' | 'page';
+  /** What goes before it; " · " when not given (nothing before the first). */
+  sep?: string;
+}
+
 export interface LevelRow {
   title: string;
-  /** "cleared · best 12", "cleared with help" or "not yet". */
-  status: string;
+  /** "cleared · your best 12 · best possible 10 (2 over)", "cleared with help" or "not yet", in pieces. */
+  marks: LevelMark[];
 }
+
+/** A row's status line as words. */
+export const statusText = (r: LevelRow): string => r.marks.map((m, i) => (i === 0 ? '' : m.sep ?? ' · ') + m.text).join('');
 
 export interface LevelsProps {
   open: boolean;
@@ -46,7 +57,9 @@ export function Levels(p: LevelsProps) {
             <Button id={`level-${i + 1}`} class="level-pick" pressed={i === p.current} onClick={() => p.onPick(i)}>
               <span class="level-n">{i + 1}</span>
               <span class="level-name">{r.title}</span>
-              <span class="level-status">{r.status}</span>
+              <span class="level-status">
+                {r.marks.map((m, j) => [j === 0 ? '' : m.sep ?? ' · ', m.tone ? <span key={j} class={`mark-${m.tone}`}>{m.text}</span> : m.text])}
+              </span>
             </Button>
           </li>
         ))}

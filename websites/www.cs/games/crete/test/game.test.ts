@@ -10,6 +10,7 @@ import { manualClock } from '../../_kit/test/clock.ts';
 import { solve } from '../src/puzzle/solver.ts';
 import { stateKey } from './reference-solver.ts';
 import { step } from '../src/puzzle/step.ts';
+import { act } from '../src/puzzle/run.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { trialLevel, TRIALS } from '../src/puzzle/trials.ts';
@@ -368,28 +369,50 @@ test('a bomb, a snare, a thief and a revealed wall each get one line; hazard ste
   assert.deepEqual(steps.said, []);
 });
 
-/** Level 9 with its solver line given as the level's known line, and the thread's search counted. */
+/** Level 10 with its solver line given as the level's known line, and the thread's search counted. */
 function onKnownLine() {
-  const known = line(8);
+  const known = line(9);
   let solves = 0;
   const m = manualClock();
   const game = createGame({
     sfx() {}, say() {}, progress: createProgress(null), pages: createFoundPages(null), timers: m.timers, clock: m.clock,
     reducedMotion: () => true, changed() {},
-    levels: { ...CAMPAIGN_LEVELS, line: i => (i === 8 ? known : null) },
+    levels: { ...CAMPAIGN_LEVELS, line: i => (i === 9 ? known : null) },
     solve: (s, cap) => { solves++; return solve(s, cap); },
   });
-  game.open(8);
-  /** A move that changes the try but is not the known line's next. */
+  game.open(9);
+  /** A move that changes the try, is not the known line's next and retraces nothing (so it is a turn of its own). */
   const offLine = (): Action => {
     const next = known[game.run!.now.moves]!;
     const a = [...(['up', 'down', 'left', 'right'] as const).map((dir): Action => ({ kind: 'move', dir })), { kind: 'wait' } as Action]
-      .find(a => JSON.stringify(a) !== JSON.stringify(next) && step(game.run!.now, a).state !== game.run!.now);
+      .find(a => JSON.stringify(a) !== JSON.stringify(next) && step(game.run!.now, a).state !== game.run!.now && act(game.run!, a).back === undefined);
     assert.ok(a, 'some move leaves the line');
     return a;
   };
   return { game, known, solves: () => solves, offLine };
 }
+
+test('retracing a step back to where the try stood is an undo, said as "Back to move N", and Undo after it agrees', () => {
+  const said: string[] = [];
+  const m = manualClock();
+  const game = createGame({
+    sfx() {}, say: t => { said.push(t); }, progress: createProgress(null), pages: createFoundPages(null), timers: m.timers, clock: m.clock,
+    reducedMotion: () => true, changed() {}, levels: CAMPAIGN_LEVELS,
+  });
+  game.open(0);
+  // Chapter 1, Level 1: right, then up (the Minotaur held by his wall), then down again retraces the step up.
+  game.press({ kind: 'move', dir: 'right' });
+  game.press({ kind: 'move', dir: 'up' });
+  assert.equal(game.run!.now.moves, 2);
+  const one = game.run!.past[1]!;
+  game.press({ kind: 'move', dir: 'down' });
+  assert.equal(game.run!.now.moves, 1, 'the count drops to the earlier state\'s');
+  assert.equal(game.run!.now, one, 'the try is that earlier state, as Undo would leave it');
+  assert.deepEqual(said, ['↶ Back to move 1']);
+  game.press('undo');
+  assert.equal(game.run!.now.moves, 0);
+  assert.deepEqual(game.run!.past, []);
+});
 
 test('the thread follows a known line while the try is on it', () => {
   const h = onKnownLine();

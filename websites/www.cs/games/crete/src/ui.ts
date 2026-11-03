@@ -74,7 +74,7 @@ import { renderLevels } from "./ui/levels.tsx";
 import { renderEndlessCard } from "./ui/endless.tsx";
 import type { EndlessMode } from "./endless/mode.ts";
 import { endlessKicker } from "./endless/name.ts";
-import type { LevelRow } from "./ui/levels.tsx";
+import type { LevelMark, LevelRow } from "./ui/levels.tsx";
 
 /** What the page borrows at run time. */
 export interface UiDeps {
@@ -83,8 +83,8 @@ export interface UiDeps {
   progress: Progress;
   /** The story pages found in this browser, for the Lore Book. */
   pages: FoundPages;
-  /** The levels the game plays, for telling one from outside the campaign; without it every level is the campaign's. */
-  levels?: Pick<Levels, "outside">;
+  /** The levels the game plays, for telling one from outside the campaign and a try's proven line (its fewest moves); without it every level is the campaign's. */
+  levels?: Pick<Levels, "outside" | "line">;
   /** Voices an event (the chapter card's sound). */
   sfx?(name: SfxName): void;
   /** Told the cards after every change to them (the modern board hides behind the editor). */
@@ -377,11 +377,18 @@ export function createUi(deps: UiDeps): Ui {
     return CHAPTERS[n - 1]!.levelIds.map((id, i) => {
       const p = progress.get(id);
       const fewest = FEWEST[id];
-      const target = fewest === undefined ? "" : p.cleared && !p.assisted ? ` · ${againstFewest(p.best!, fewest)}` : ` · best possible ${fewest}`;
-      return {
-        title: CAMPAIGN_LEVELS.level(first + i).title,
-        status: (!p.cleared ? "not yet" : p.assisted ? "cleared with help" : `cleared · your best ${p.best}`) + target,
-      };
+      const level = CAMPAIGN_LEVELS.level(first + i);
+      const marks: LevelMark[] = !p.cleared ? [{ text: "not yet" }]
+        : p.assisted ? [{ text: "cleared with help", tone: "clear" }]
+        : [{ text: "cleared", tone: "clear" }, { text: `your best ${p.best}` }];
+      if (fewest !== undefined) {
+        marks.push({ text: `best possible ${fewest}` });
+        if (p.cleared && !p.assisted) {
+          marks.push(p.best! <= fewest ? { text: "perfect", tone: "perfect" } : { text: `(${p.best! - fewest} over)`, tone: "over", sep: " " });
+        }
+      }
+      if (level.pageIds.some((pg) => pages.has(pg))) marks.push({ text: "page found", tone: "page" });
+      return { title: level.title, marks };
     });
   }
 
@@ -678,7 +685,11 @@ export function createUi(deps: UiDeps): Ui {
       },
       onClose: () => layers.close("dictionary"),
     });
-    renderBanner($("banner-root"), { entries: bannerEntries, line: bannerLine, seq: bannerSeq, pics: pics(), tip: tipShowing(), onTip: closeTip });
+    const tipNow = tipShowing();
+    renderBanner($("banner-root"), { entries: bannerEntries, line: bannerLine, seq: bannerSeq, pics: pics(), tip: tipNow, onTip: closeTip });
+    // A tip that has just come up takes the focus, so the keyboard lands on Got It.
+    if (tipNow && tipNow.id !== tipFocused) document.getElementById("tip-ok")?.focus();
+    tipFocused = tipNow?.id ?? null;
     renderMenu($("menu-root"), {
       open: layers.isOpen("menu"),
       muted,
@@ -750,6 +761,18 @@ export function createUi(deps: UiDeps): Ui {
     const link = endless.link();
     const copy = endless.copy;
     return link && copy ? { seed, onCopySeed: () => copy(link) } : { seed };
+  }
+
+  /** The fewest possible moves of the level in play, where known (the campaign's table, an Endless level's search, a
+   *  try's or a shared level's proven line), and the player's own best clear of a campaign level. */
+  function fewestOf(g: Game, out: OutsideLevel | null): { fewest?: number; yourBest?: number | null } {
+    if (out) {
+      const fewest = out.fewest ?? (out.kind !== "endless" ? deps.levels?.line?.(g.trial)?.length : undefined);
+      return fewest === undefined ? {} : { fewest };
+    }
+    const id = LEVEL_IDS[g.trial];
+    const fewest = id === undefined ? undefined : FEWEST[id];
+    return fewest === undefined ? {} : { fewest, yourBest: progress.get(id!).best };
   }
 
   function say(text: string, tone?: Tone): void {
@@ -967,6 +990,7 @@ export function createUi(deps: UiDeps): Ui {
         gear: s.gear,
         moves: s.moves,
         stone: s.stone,
+        ...fewestOf(g, out),
       }),
       menuKey: KEYS.menu.label,
       onMenu: () => layers.open("menu"),
@@ -1119,6 +1143,9 @@ export function createUi(deps: UiDeps): Ui {
     });
   }
 
+  /** The tip whose Got It last took the focus. */
+  let tipFocused: string | null = null;
+
   /** The rule tips (src/rule-tips.ts), where first cards show. */
   const tips = met ? createRuleTips(met) : null;
 
@@ -1128,6 +1155,22 @@ export function createUi(deps: UiDeps): Ui {
   function closeTip(): void {
     tips?.close();
     drawLayers();
+  }
+
+  /** When the last blocked press nudged the tip, so a held key or pad nudges it once, not on every repeat. */
+  let nudgedAt = -Infinity;
+  /** A rule tip stands and holds play: true, and the tip is nudged (a pulse, and the focus on Got It) so the player
+   *  sees why nothing moved. */
+  function tipHolds(): boolean {
+    if (!tipShowing()) return false;
+    const now = Date.now();
+    if (now - nudgedAt > 600) {
+      nudgedAt = now;
+      const box = document.getElementById("tip");
+      if (box) box.className = box.className.includes("nudge-a") ? "tip-box nudge-b" : "tip-box nudge-a";
+    }
+    document.getElementById("tip-ok")?.focus();
+    return true;
   }
 
   /** What the try in play shows the tips: with `turned`, the turn that just landed (if it was one, not an undo or a
@@ -1220,6 +1263,10 @@ export function createUi(deps: UiDeps): Ui {
       controls?.wake();
       fn();
     };
+    /** A press that plays: held while a rule tip stands. */
+    const play = (fn: () => void) => act(() => {
+      if (!tipHolds()) fn();
+    });
     compact = phone();
     if (!compact) threadOpen = false;
     renderStrip($("strip-root"), {
@@ -1239,18 +1286,18 @@ export function createUi(deps: UiDeps): Ui {
       // A pointer on the pad moves by itself (bindPad), which keeps its click from reaching here; Enter or Space on a
       // focused arrow clicks it.
       onMove: (dir) => {
-        act(() => {
+        play(() => {
           layers.close("start");
           g.press({ kind: "move", dir: moveDir(dir) });
         })();
       },
-      onWait: act(() => g.press({ kind: "wait" })),
-      onUndo: act(() => g.press("undo")),
-      onRestart: act(() => g.press("restart")),
-      onHint: act(() => { track("hint"); g.hint(); }),
-      onRoute: act(() => { track("route"); g.route(); }),
-      onAuto: act(() => { track("auto"); g.auto(); }),
-      onTool: (tool) => act(() => g.press({ kind: "tool", tool }))(),
+      onWait: play(() => g.press({ kind: "wait" })),
+      onUndo: play(() => g.press("undo")),
+      onRestart: play(() => g.press("restart")),
+      onHint: play(() => { track("hint"); g.hint(); }),
+      onRoute: play(() => { track("route"); g.route(); }),
+      onAuto: play(() => { track("auto"); g.auto(); }),
+      onTool: (tool) => play(() => g.press({ kind: "tool", tool }))(),
       onLook: (l) => act(() => controls?.setLook?.(l))(),
     });
   }
@@ -1345,7 +1392,7 @@ export function createUi(deps: UiDeps): Ui {
     const step = (dir: MoveAction): boolean => {
       const g = controls?.game;
       const run = g?.run;
-      if (!g || !run || run.now.outcome !== "playing" || blocked()) return false;
+      if (!g || !run || run.now.outcome !== "playing" || blocked() || tipHolds()) return false;
       controls?.wake();
       layers.close("start");
       const moves = run.now.moves;
@@ -1776,6 +1823,13 @@ export function createUi(deps: UiDeps): Ui {
       // A card is up: only Q, N and M (and the keys a card names) reach the game.
       if (layers.any() && !layers.isOpen("start")) return;
       const g = c.game;
+      // A rule tip holds play until it is put away: the keys that play wait, and the tip is nudged.
+      const plays = isMove(action) || action === "wait" || action === "undo" || action === "restart" || action === "hint"
+        || action === "route" || action === "auto" || (!action && itemFor(k, TOOLS) !== null);
+      if (plays && tipHolds()) {
+        ev.preventDefault();
+        return;
+      }
       if (isMove(action)) {
         ev.preventDefault();
         g.press({ kind: "move", dir: moveDir(action) });

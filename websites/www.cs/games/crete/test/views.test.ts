@@ -55,6 +55,7 @@ const noop = () => {};
 const tabsOf = (el: StubElement) => walk(el).filter(n => n.localName === 'kbd');
 
 // ---- status bar ----
+const STATUS_BASE = { trial: '1/8', hearts: 3, relicsLeft: 1, keys: { red: 0, blue: 0, yellow: 0, green: 0 }, gear: ['flippers'] as const, moves: 0, stone: 0 };
 const VIEW = statusView({ trial: 'Ch. 1 • Level 3/10', trialNote: 'Chapter 1, Level 3: The Doors of Daedalus', hearts: 2, relicsLeft: 1, keys: { red: 1, blue: 0, yellow: 0, green: 2 }, gear: ['flippers'], moves: 12, stone: 0 });
 
 test('the status bar shows Level, Hearts, Relics, Keys, Gear and Moves, and a Menu button with its Q tab', () => {
@@ -77,6 +78,26 @@ test('the status bar shows Level, Hearts, Relics, Keys, Gear and Moves, and a Me
   assert.equal(tab.getAttribute('aria-hidden'), 'true');
   click(menu);
   assert.equal(opened, 1);
+});
+
+test('Best shows the fewest possible moves, soft while on track; past it, amber with how many over; unknown, no stat', () => {
+  const root = mount();
+  const at = (moves: number, fewest?: number) => {
+    renderStatus(root, { view: statusView({ ...STATUS_BASE, moves, ...(fewest === undefined ? {} : { fewest }) }), menuKey: 'Q', onMenu: noop });
+    const best = maybeById(root, 'hud-best');
+    return best ? { text: best.textContent, cls: (best.parentNode as StubElement).getAttribute('class'), title: (best.parentNode as StubElement).getAttribute('title') } : null;
+  };
+  assert.deepEqual(at(10, 12), { text: '12', cls: 'stat stat-best', title: 'Fewest possible moves 12' });
+  assert.equal(at(12, 12)!.cls, 'stat stat-best', 'at the fewest, still on track');
+  const over = at(15, 12)!;
+  assert.equal(over.text, '12 +3');
+  assert.equal(over.cls, 'stat stat-best over');
+  assert.match(over.title!, /3 over/);
+  assert.equal(at(11, 12)!.cls, 'stat stat-best', 'moves back to or under the fewest (Undo, or a retrace) clear the cue');
+  assert.equal(at(5), null);
+  for (const [id, cls] of [['hud-hearts', 'stat stat-hearts'], ['hud-relics', 'stat stat-relics'], ['hud-gear', 'stat stat-gear'], ['hud-moves', 'stat stat-moves']]) {
+    assert.equal((byId(root, id!).parentNode as StubElement).getAttribute('class'), cls, 'each stat is named for its colour');
+  }
 });
 
 test('hearts and keys carry their long form as a tooltip; nothing held shows a dash', () => {
@@ -482,11 +503,12 @@ test("an earlier chapter's closing card shows no ending", () => {
 });
 
 // ---- levels list ----
-const LEVEL_ROWS = [
-  { title: 'The Mouth of the Labyrinth', status: 'cleared · best 14' },
-  { title: 'The Tribute Relics', status: 'cleared with help' },
-  { title: 'The Doors of Daedalus', status: 'not yet' },
+const LEVEL_ROWS: LevelsProps['rows'] = [
+  { title: 'The Mouth of the Labyrinth', marks: [{ text: 'cleared', tone: 'clear' }, { text: 'your best 14' }, { text: 'best possible 12' }, { text: '(2 over)', tone: 'over', sep: ' ' }] },
+  { title: 'The Tribute Relics', marks: [{ text: 'cleared with help', tone: 'clear' }, { text: 'page found', tone: 'page' }] },
+  { title: 'The Doors of Daedalus', marks: [{ text: 'not yet' }, { text: 'best possible 9' }] },
 ];
+const LEVEL_TEXT = ['cleared · your best 14 · best possible 12 (2 over)', 'cleared with help · page found', 'not yet · best possible 9'];
 function levelsProps(over: Partial<LevelsProps> = {}): LevelsProps {
   return { open: true, chapters: CHAPTERS, shown: 1, rows: LEVEL_ROWS, current: -1, onPick: noop, onTab: noop, onClose: noop, ...over };
 }
@@ -500,11 +522,21 @@ test('the levels list has a button per level with its title and standing, and pi
   LEVEL_ROWS.forEach((r, i) => {
     const b = byId(root, `level-${i + 1}`);
     assert.ok(b.textContent.includes(r.title), r.title);
-    assert.ok(b.textContent.includes(r.status), r.status);
+    assert.ok(b.textContent.includes(LEVEL_TEXT[i]!), LEVEL_TEXT[i]);
     assert.equal(b.disabled, false);
     click(b);
   });
   assert.deepEqual(seen, [0, 1, 2]);
+});
+
+test('the levels list colours its marks quietly, each mark still in words', () => {
+  const root = mount();
+  renderLevels(root, levelsProps({ rows: [...LEVEL_ROWS, { title: 'Perfect', marks: [{ text: 'cleared', tone: 'clear' }, { text: 'your best 9' }, { text: 'best possible 9' }, { text: 'perfect', tone: 'perfect' }] }] }));
+  const marks = (i: number) => walk(byId(root, `level-${i}`)).filter(n => /^mark-/.test(n.getAttribute('class') ?? '')).map(n => [n.getAttribute('class'), n.textContent]);
+  assert.deepEqual(marks(1), [['mark-clear', 'cleared'], ['mark-over', '(2 over)']]);
+  assert.deepEqual(marks(2), [['mark-clear', 'cleared with help'], ['mark-page', 'page found']]);
+  assert.deepEqual(marks(3), [], 'not yet played stays plain');
+  assert.deepEqual(marks(4), [['mark-clear', 'cleared'], ['mark-perfect', 'perfect']]);
 });
 
 test('the levels list has ten chapter tabs: chapter 1 pressed, all ten open', () => {

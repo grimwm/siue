@@ -9,6 +9,14 @@
   --bad: #f85149;
   --safe: #58a6ff;
   --player: #ffd700;
+  /* The quiet stat colours, shared by the status bar and the level list: low in saturation, each at least 4.5:1 on
+     the panel and the page. */
+  --stat-heart: #f29b93;
+  --stat-gold: #e3c068;
+  --stat-teal: #7cc8bd;
+  --stat-good: #8fd19e;
+  --stat-amber: #e8a95c;
+  --stat-parchment: #e6d6ad;
 }
 
 * { box-sizing: border-box; }
@@ -70,6 +78,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 .stat { display: flex; gap: 0.35rem; align-items: baseline; white-space: nowrap; }
 .stat dt { color: var(--dim); font-size: 0.8rem; }
 .stat dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Each stat's number in its quiet colour; the labels stay dim and Moves plain. Best is soft green while a perfect
+   clear is still possible and amber once the moves are past it, where its words say by how many. */
+.stat-hearts dd { color: var(--stat-heart); }
+.stat-relics dd { color: var(--stat-gold); }
+.stat-gear dd { color: var(--stat-teal); }
+.stat-best dd { color: var(--stat-good); }
+.stat-best.over dd { color: var(--stat-amber); }
 /* "Ch. 1 • Level 3/10" stays on one line. */
 .stat #hud-trial { white-space: nowrap; }
 
@@ -367,6 +382,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 .level-n { grid-area: n; color: var(--accent); font-variant-numeric: tabular-nums; }
 .level-name { grid-area: name; }
 .level-status { grid-area: status; color: var(--dim); font-size: 0.8rem; font-weight: 400; }
+/* The level list's marks, in the status bar's colours, each with its words: a tick by cleared, a star by perfect. */
+.mark-clear { color: var(--stat-good); }
+.mark-clear::before { content: "✓ "; }
+.mark-perfect { color: var(--stat-gold); }
+.mark-perfect::before { content: "★ "; }
+.mark-over { color: var(--stat-amber); }
+.mark-page { color: var(--stat-parchment); }
 .lore h3 { margin: 0.8rem 0 0.3rem; font-size: 1rem; color: var(--accent); }
 .lore .story { color: var(--dim); }
 .lore-entries { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -443,8 +465,8 @@ button:disabled { opacity: 0.45; cursor: default; }
   0%, 80% { opacity: 1; }
   100% { opacity: 0; }
 }
-/* The rule tip (src/rule-tips.ts), under the banner: a line and Got It. Only it takes a pointer; the board, the pad
-   and every key go on working while it stands. */
+/* The rule tip (src/rule-tips.ts), under the banner: a line and Got It. Only it takes a pointer; it holds play (the
+   pad and the keys that play wait) until Got It, Enter or Space, while the camera and the menu go on working. */
 .tip-box {
   display: flex;
   flex-wrap: wrap;
@@ -465,6 +487,12 @@ button:disabled { opacity: 0.45; cursor: default; }
 .tip-text { flex: 1 1 14rem; margin: 0; font-size: 0.92rem; line-height: 1.3; }
 .tip-ok { min-height: 36px; padding: 0.3rem 0.8rem; font-size: 0.88rem; }
 @keyframes tip-in { from { opacity: 0; transform: translateY(-8px); } }
+/* A press the tip holds back nudges it once: a soft swell of its edge and of Got It, so the player sees why nothing
+   moved. Two names, so each nudge starts the pulse again. */
+.tip-box.nudge-a { animation: tip-nudge-a 0.5s ease-out; }
+.tip-box.nudge-b { animation: tip-nudge-b 0.5s ease-out; }
+@keyframes tip-nudge-a { 40% { box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.45), 0 4px 14px rgba(0, 0, 0, 0.5); transform: scale(1.015); } }
+@keyframes tip-nudge-b { 40% { box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.45), 0 4px 14px rgba(0, 0, 0, 0.5); transform: scale(1.015); } }
 
 /* Quieter buttons: outlined, not filled. A danger button is outlined in red. */
 button.quiet { background: var(--bg); color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
@@ -763,7 +791,8 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 @media (prefers-reduced-motion: reduce) {
   .toast { transition: none; }
   .banner-box { animation-name: banner-still; }
-  .tip-box { animation: none; }
+  .tip-box, .tip-box.nudge-a, .tip-box.nudge-b { animation: none; }
+  .tip-box.nudge-a .tip-ok, .tip-box.nudge-b .tip-ok { outline: 3px solid var(--safe); outline-offset: 2px; }
   .check-bar::after { animation: none; width: 100%; opacity: 0.5; }
 }
 

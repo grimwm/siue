@@ -1,10 +1,10 @@
 // The rule tips on the real page and game in the DOM stub, on Chapter 1, Level 1 for a new player: how the Minotaur
-// moves once the start card has gone, what he just did after the first move, Wait and Undo, then the exit. None stops
-// play, Got It puts one away, none shows under a card, and a try from the editor shows none.
+// moves once the start card has gone, what he just did after the first move, Wait and Undo, then the exit. Each holds
+// play until Got It, Enter or Space puts it away, none shows under a card, and a try from the editor shows none.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { importTsx } from '../../_kit/test/tsx.ts';
-import { click, document, fireDocument, installDocument, maybeById } from '../../_kit/test/dom-stub.ts';
+import { byId, click, document, fireDocument, installDocument, maybeById } from '../../_kit/test/dom-stub.ts';
 import { manualClock } from '../../_kit/test/clock.ts';
 import { createGame } from '../src/game.ts';
 import type { Game } from '../src/game.ts';
@@ -47,7 +47,9 @@ const banner = () => document.getElementById('banner-root');
 const tip = () => maybeById(banner(), 'tip-text')?.textContent ?? null;
 const moves = () => game.run!.now.moves;
 
-test('Chapter 1, Level 1 teaches the rules a tip at a time, and play never waits for one', () => {
+const WALLS = 'He went right, then a wall stopped him. He never steps away from you, so a wall in his way can trap him.';
+
+test('Chapter 1, Level 1 teaches the rules a tip at a time, and each holds play until it is put away', () => {
   game.open(0);
   assert.equal(flow.top(), 'start');
   m.advance(1);
@@ -56,30 +58,43 @@ test('Chapter 1, Level 1 teaches the rules a tip at a time, and play never waits
   m.advance(1);
   assert.equal(tip(), tipText('tip-beast'), 'once the board is in view: how the Minotaur moves');
   assert.equal(maybeById(banner(), 'tip-ok')?.textContent, 'Got It');
+  assert.equal(document.activeElement?.id, 'tip-ok', 'the keyboard lands on Got It');
   key('q');
-  assert.equal(flow.top(), 'menu');
+  assert.equal(flow.top(), 'menu', 'the menu still opens');
   assert.equal(tip(), null, 'a card hides it');
   key('q');
   assert.equal(tip(), tipText('tip-beast'), 'and it stands again once the card closes');
 
+  for (const k of ['ArrowRight', 'd', '.', 'u', 'r', 'h', 'z']) {
+    assert.equal(key(k).prevented, true, k);
+    assert.equal(moves(), 0, `${k} waits while the tip stands`);
+  }
+  assert.match(byId(banner(), 'tip').getAttribute('class') ?? '', /nudge/, 'and nudges it');
+  assert.equal(tip(), tipText('tip-beast'), 'the tip stays');
+  key('Enter');
+  assert.equal(tip(), null, 'Enter puts it away');
   key('ArrowRight');
-  assert.equal(moves(), 1, 'the move goes through with the tip up');
-  assert.equal(tip(), 'He went right, then a wall stopped him. He never steps away from you, so a wall in his way can trap him.',
-    'the first move: what he just did, and that walls hold him');
-
+  assert.equal(moves(), 1, 'then the next move goes');
+  assert.equal(tip(), WALLS, 'the first move: what he just did, and that walls hold him');
+  key('ArrowUp');
+  assert.equal(moves(), 1, 'held by the new tip');
   click(maybeById(banner(), 'tip-ok')!);
   assert.equal(tip(), null, 'Got It puts it away');
   key('ArrowUp');
   assert.equal(moves(), 2);
   assert.equal(tip(), null, 'nothing new until the third move');
-  key('.');
-  assert.equal(moves(), 3, 'Wait is a turn');
+  key('ArrowRight');
+  assert.equal(moves(), 3);
   assert.equal(tip(), tipText('tip-undo'));
+  for (let i = 0; i < 6; i++) key('ArrowLeft');
+  assert.equal(moves(), 3, 'it never goes by itself: there are no turns while it stands');
+  key(' ');
+  assert.equal(tip(), null, 'Space puts it away too');
   key('u');
   assert.equal(moves(), 2, 'Undo goes through');
+  key('ArrowRight');
   key('.');
-  key('.');
-  assert.equal(moves(), 4);
+  assert.equal(moves(), 4, 'Wait is a turn');
   key('.');
   assert.equal(moves(), 5);
   assert.equal(tip(), tipText('tip-exit'));
@@ -119,7 +134,7 @@ test('Enter puts the tip away, as Got It does, and is no turn; with no tip it is
   key('Enter');
   assert.equal(moves(), 0, 'with no tip Enter does nothing in play');
   key('ArrowRight');
-  assert.equal(tip(), 'He went right, then a wall stopped him. He never steps away from you, so a wall in his way can trap him.');
+  assert.equal(tip(), WALLS);
   key('Escape');
   assert.equal(tip(), null, 'Escape puts it away');
   assert.equal(moves(), 1);

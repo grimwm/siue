@@ -1,11 +1,14 @@
 // websites/www.cs/games/crete/test/puzzle-run.test.ts
 // A try: undo steps back one turn as far as the start, restart goes back to the start,
-// a finished try only undoes or restarts, and help marks the try assisted until it is left.
+// a finished try only undoes or restarts, help marks the try assisted until it is left, and a turn that brings the
+// whole situation back to an earlier one is an undo to there.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from '../src/puzzle/level.ts';
 import { startRun, act, undo, restart, assist } from '../src/puzzle/run.ts';
-import { mv } from './puzzle-grid.ts';
+import { mv, WAIT } from './puzzle-grid.ts';
+import type { Action } from '../src/puzzle/step.ts';
+import type { Run } from '../src/puzzle/run.ts';
 
 const lv = (rows: string[], header = '') => parse(`title: t\nintro: i\n${header}\n${rows.join('\n')}\n`);
 
@@ -75,4 +78,58 @@ test('showing an invisible wall is no entry in undo: Undo goes back the last who
   const back = undo(shown.run);
   assert.equal(back.now.moves, 0, 'Undo takes back the step before it');
   assert.equal(back.past.length, 0);
+});
+
+/** Plays `actions` from `r`, each turn's `back` kept. */
+function walk(r: Run, ...actions: Action[]): { run: Run; backs: (number | undefined)[] } {
+  const backs: (number | undefined)[] = [];
+  for (const a of actions) {
+    const x = act(r, a);
+    r = x.run;
+    backs.push(x.back);
+  }
+  return { run: r, backs };
+}
+
+/** A corridor, and the Minotaur walled in below it: he can never move. */
+const PENNED = ['P....E', '######', 'M#....'];
+
+test('three steps out and three back, with the Minotaur penned, is an undo to the start, one turn at a time', () => {
+  const r0 = startRun(lv(PENNED));
+  const out = walk(r0, mv('right'), mv('right'), mv('right'));
+  assert.equal(out.run.now.moves, 3);
+  assert.deepEqual(out.backs, [undefined, undefined, undefined]);
+  const back = walk(out.run, mv('left'));
+  assert.equal(back.run.now, undo(out.run).now, 'the first step back leaves the try as Undo would');
+  assert.equal(back.run.past.length, undo(out.run).past.length);
+  assert.deepEqual(back.backs, [2]);
+  const home = walk(back.run, mv('left'), mv('left'));
+  assert.deepEqual(home.backs, [1, 0]);
+  assert.equal(home.run.now, r0.now, 'back at the start');
+  assert.equal(home.run.now.moves, 0);
+  assert.deepEqual(home.run.past, []);
+});
+
+test('a retrace that leaves the Minotaur somewhere else still counts every move', () => {
+  const r0 = startRun(lv(['P....', '.....', '....M']));
+  const { run, backs } = walk(r0, mv('right'), mv('left'));
+  assert.equal(run.now.moves, 2);
+  assert.deepEqual(backs, [undefined, undefined]);
+  assert.equal(run.past.length, 2);
+});
+
+test('Wait: one that changes nothing is an undo to before it; one the Minotaur moves in counts', () => {
+  const penned = walk(startRun(lv(PENNED)), mv('right'), WAIT);
+  assert.deepEqual(penned.backs, [undefined, 1]);
+  assert.equal(penned.run.now.moves, 1);
+  const free = walk(startRun(lv(['P....', '.....', '....M'])), WAIT);
+  assert.deepEqual(free.backs, [undefined]);
+  assert.equal(free.run.now.moves, 1);
+});
+
+test('a retrace back to before a relic was taken is no undo: the relic is held now', () => {
+  const r0 = startRun(lv(['P*..E', '#####', 'M#...']));
+  const { run, backs } = walk(r0, mv('right'), mv('left'));
+  assert.deepEqual(backs, [undefined, undefined]);
+  assert.equal(run.now.moves, 2);
 });

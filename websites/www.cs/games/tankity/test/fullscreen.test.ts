@@ -181,8 +181,11 @@ test('no game listens for Esc, and no button, hint or help text names it', () =>
   }
   assert.deepEqual(codes, [], 'a key code 27 test');
   // What is left is the Keyboard Lock that keeps Chrome from leaving full
-  // screen on Esc, and its console warning when the lock is refused.
-  assert.deepEqual(hits.sort(), ["_kit/app.ts: 'Escape'", '_kit/app.ts: Esc']);
+  // screen on Esc, and its console warning when the lock is refused; and
+  // Crete, where Escape only puts away a rule tip or the touch tour and backs
+  // out of a card opened from the title card (never a full-screen exit, and
+  // Q does each too).
+  assert.deepEqual(hits.sort(), ["_kit/app.ts: 'Escape'", '_kit/app.ts: Esc', 'crete/src/tour.ts: "Escape"', 'crete/src/ui.ts: "Escape"']);
   assert.match(body('_kit/app.ts', 'holdEscape'), /warn\(`Keyboard Lock refused, so Esc will leave full screen/);
   assert.match(body('_kit/app.ts', 'holdEscape'), /lock\(\['Escape'\]\)/);
 });

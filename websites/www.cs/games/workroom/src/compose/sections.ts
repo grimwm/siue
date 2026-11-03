@@ -124,9 +124,9 @@ function tempoOf(old: BeatClock, order: readonly number[]): Tempo[] {
 }
 
 /**
- * Marks of a line (tempo or loudness) on the reordered bars: each mark goes with its bar, and wherever the new order
- * jumps to a bar without one, a mark carries on what was in force there (so bar 1 always has one). Steady marks that
- * repeat the one before are dropped.
+ * A loudness line's marks on the reordered bars: each mark goes with its bar, and wherever the new order jumps to a
+ * bar without one, a copy of the mark in force there carries it on (so bar 1 always has one). Steady marks that repeat
+ * the one before are dropped.
  */
 function reorderMarks<M extends { bar: number; shape: string }>(marks: readonly M[], order: readonly number[], carry: (bar: number) => M): M[] {
   const out: M[] = [];

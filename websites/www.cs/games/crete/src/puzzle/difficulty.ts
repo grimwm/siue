@@ -336,8 +336,8 @@ export function plainWalk(level: Level): Dir[] | null {
 
 function popcount(m: number): number { let n = 0; for (; m; m &= m - 1) n++; return n; }
 
-/** The plain walk, played on the real level, wins. */
-function naiveWalkWins(level: Level): boolean {
+/** The plain walk, played on the real level, wins: measure's `naiveWins`, which fails sharedProblems. */
+export function naiveWalkWins(level: Level): boolean {
   const walk = plainWalk(level);
   if (!walk) return false;
   let s = initial(level);
@@ -632,6 +632,14 @@ export const THREAT = {
   challenge: { share: 1 / 3, quiet: 1 / 3 },
   teaching: { share: 1 / 4, quiet: 1 },
 };
+
+/** The beast can never be live (THREAT): he is penned apart from every cell Theseus could reach, and the level has
+ *  no mirror to turn him to stone and no snare to hold him. Then every turn of every line is quiet, and
+ *  threatProblems fails the level whatever its line: a check that needs no search. */
+export function neverLive(level: Level): boolean {
+  if (!level.minotaur || level.objects.includes('mirror') || level.terrain.includes('trap')) return false;
+  return apart(level);
+}
 
 /** Steps from the Minotaur to Theseus over cells the Minotaur may enter (Theseus's own cell counts), when at most
  *  `most`; Infinity otherwise. */

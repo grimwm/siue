@@ -2,7 +2,7 @@
 // every piece on it matters, its beast is a threat, and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT, startProblems } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT, startProblems, naiveWalkWins, neverLive } from '../src/puzzle/difficulty.ts';
 import { CAMPAIGN_TEXTS } from '../src/endless/campaign.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
@@ -562,4 +562,23 @@ test('nothing starts under a figure: every campaign level, and a level built wit
   assert.equal(bad.length, 2);
   assert.match(bad[0]!, /Theseus starts on button/);
   assert.match(bad[1]!, /the Minotaur starts on relic/);
+});
+
+test('the climb\'s cheap rejects are the gate\'s own answers: the plain walk as measure has it, and a penned beast with nothing to make him live always fails the threat check', () => {
+  const levels = corpus(4, 60).filter(l => l.minotaur);
+  // With safe ground round the beast he is often penned, so both sides of neverLive come up.
+  const penned = (lv: Level): Level => ({ ...lv, terrain: lv.terrain.map((t, i) => {
+    const m = lv.minotaur!, r = Math.floor(i / lv.cols), c = i % lv.cols;
+    return Math.abs(r - m.r) + Math.abs(c - m.c) === 1 && t === 'floor' && !lv.objects[i] ? 'safe' as const : t;
+  }) });
+  let never = 0;
+  for (const lv of [...levels, ...levels.filter(l => l.minotaur).map(penned)]) {
+    const d = measure(lv, 60_000);
+    assert.equal(naiveWalkWins(lv), d.naiveWins, serialize(lv));
+    if (neverLive(lv) && d.solved && typeof d.shortest === 'number' && d.shortest > 0) {
+      never++;
+      assert.ok(threatProblems(lv, d, 'challenge').some(p => p.startsWith('the beast is live on')), serialize(lv));
+    }
+  }
+  assert.ok(never > 0, 'some levels have a beast that is never live');
 });

@@ -15,7 +15,7 @@ import { initial } from '../puzzle/state.ts';
 import { solve, caught } from '../puzzle/solver.ts';
 import { step } from '../puzzle/step.ts';
 import { lineText } from '../puzzle/cache.ts';
-import { measure, pieceUnits, threatOf, uselessPieces, THREAT, BAR } from '../puzzle/difficulty.ts';
+import { measure, naiveWalkWins, neverLive, pieceUnits, threatOf, uselessPieces, THREAT, BAR } from '../puzzle/difficulty.ts';
 import type { Difficulty } from '../puzzle/difficulty.ts';
 import { rngOf, hash } from './random.ts';
 import type { Rng } from './random.ts';
@@ -151,6 +151,10 @@ export function distance(level: Level, band: Band, spend: (n: number, kind?: str
   // So is one whose layout repeats a campaign level's or the run's: no solve can mend that.
   const x = like(level);
   if (x >= SAME) return 13 + 10 * (x - SAME);
+  // Two of the gate's own failures that need no solve: the plain walk wins (sharedProblems), or the beast is penned
+  // with nothing to make him live (threatProblems).
+  if (naiveWalkWins(level)) { spend(0, 'cheap:walk'); return 12.5; }
+  if (neverLive(level)) { spend(0, 'cheap:penned'); return 12.5; }
   const start = initial(level);
   const r = solve(start, solveCap(band));
   if (!r.solved) { spend(r.explored, r.capped ? 'solve:capped' : 'solve:lost'); return r.capped ? 12 : 30; }

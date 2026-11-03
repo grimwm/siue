@@ -45,7 +45,7 @@ intro: Lead the beast into the snare, then mind the brown button beside it: what
 ###########
 ` },
   { id: 'ch5-4', text: `title: The Frozen Snare
-intro: Ice runs through the middle halls; skates and a block lie in the west. Two snares wait in the south, and the brown button by the ice looses the eastern one: that is the snare you want the beast in.
+intro: Ice runs through the middle halls; skates and a block lie in the west. A snare waits in the south, and the brown button by the ice looses it: lead the beast in, then keep off that button.
 
 ############
 #P.....#..*#
@@ -56,7 +56,7 @@ intro: Ice runs through the middle halls; skates and a block lie in the west. Tw
 #....#.=#.##
 #.##......##
 #..#.&.....#
-#*&#....#|E#
+#*.#....#|E#
 ############
 ` },
   { id: 'ch5-5', text: `title: The Drowned Snare

@@ -11,9 +11,9 @@ export const FALSE_WALLS: readonly { id: string; text: string }[] = [
 intro: The high way runs past the beast. The low way ends in a wall, and one of its stones is only painted: walk into it and it gives way, and you are through.
 
 ###########
-#P...#...E#
+#P...#..ME#
 #.##...##.#
-#.#..M..#.#
+#.#.....#.#
 #.#######.#
 #....W....#
 ###########
@@ -31,8 +31,8 @@ intro: The gap under the beast is no gap. It is wall you cannot see, to him as m
 intro: Here what looks open is shut, and what looks shut is open. Bump what blocks you, go round what does not, and keep the beast in his hall above.
 
 ###########
-#P........#
-#.##.M.##.#
+#P.......M#
+#.##...##.#
 #.#######.#
 #.I..W...E#
 #...#######
@@ -63,7 +63,7 @@ intro: Two relics, a red key and its door. The beast waits in the upper hall; tw
 #.#........#
 #..........#
 #.##S.#..#.#
-#S#rS#...#.#
+#S#rS#..##.#
 #..S###.R#.#
 ###.W..*#|E#
 ############

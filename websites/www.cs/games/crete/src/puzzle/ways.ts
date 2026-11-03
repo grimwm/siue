@@ -75,15 +75,15 @@ intro: The floors are polished to ice, and the beast skids on them as you do. Lo
 intro: A river and a fire cross these ways, with loose stone between them. Flippers and fire boots both lie here, and you will need both; the beast will not wait while you find them.
 
 ############
-#P:.#~.##.*#
+#P:.#~#.#.*#
 #...~.O.F:##
-#..#....F#:#
-#f...##:..##
-####.####M.#
-#*##...#.#.#
-#.F..~h:~#.#
-###.#.#:...#
-#*.~#.#F:.|E
+##.#....F#:#
+#f.#.##:.###
+##...##....#
+#*.#.#..####
+##F..~h:~###
+#...M.#:...#
+#*.~###F:.|E
 ############
 ` },
   { id: 'ch2-7', text: `title: The Three Locks
@@ -91,9 +91,9 @@ intro: Three doors and three keys, and not every key is worth its door. Each doo
 
 ############
 #P..#..#.#*#
-##..Rr##.#.#
+##..Rr##.#M#
 #.#.#:.:#..#
-#r#.##:M..##
+#r#.##:...##
 #.....:..###
 #*#:#b#....#
 ##R:B...##.#

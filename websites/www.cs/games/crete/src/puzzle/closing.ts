@@ -21,9 +21,9 @@ intro: These stones bear you once. Step off one and it rises into wall behind yo
 intro: The beast will not set a hoof on these stones, risen or not. Two of them pen him in the lower hall; go round, and leave him there.
 
 ############
-#P.........#
+#..........#
 #.########;#
-#.#......#.#
+#P#......#.#
 #.#.####.#.#
 #..;...M.;.#
 ######.###.#

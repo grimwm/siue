@@ -41,6 +41,88 @@ machines: block-right
 #........E#
 ###########
 ` },
+  { id: 'ch9-4', text: `title: The Thief's Pool
+intro: A pool fills the west, and the flippers lie by your start. A thief stands among the relics in the middle: step on it and the flippers are gone. Gravel in the north keeps the beast back, and a block waits beside it. Three relics.
+
+############
+##.#####.P##
+#..:.......#
+#..O#...#f.#
+##*.....##.#
+#~~~..*.$*.#
+#~~~.......#
+#..M##.###.#
+##..#..#...#
+#...#..#...#
+#..........#
+####E#######
+` },
+  { id: 'ch9-5', text: `title: The Powder Store
+intro: Two bombs guard the doorways, and a block waits in the north hall. The button in the middle opens and shuts the toggle wall to the west. Two relics.
+
+############
+###.#...P..#
+#....!O....#
+#.###...##.#
+#*..#...##.#
+#...T...#..#
+##.##._....#
+##..##.##.##
+#.....M.#..#
+E....!.....#
+##..#*.....#
+############
+` },
+  { id: 'ch9-6', text: `title: The Copying Bench
+intro: The red button by your start makes the clone machine below it turn out a block. A snare waits in the north hall, loosed by the brown button in the southwest. Two relics.
+machines: block-up
+
+############
+#.P..#.#...#
+#.+........#
+#.....&#...#
+##C#.####*##
+#......#...#
+E..#.......#
+#.####.##.##
+#-.....#.M.#
+#..#...#...#
+#..#..*..###
+############
+` },
+  { id: 'ch9-7', text: `title: Stolen Skates
+intro: Ice fills the room in the northeast, with the skates and a block in the south. A thief waits in the ice room's doorway, and a red key opens the red door on the way out. Three relics.
+
+############
+#.....*#===#
+##..##..===#
+##M....#===#
+##..###..###
+E...#*##$..#
+#...R.....*#
+##.r#.##...#
+##..#..#...#
+#..P#..#kO.#
+##.....#...#
+############
+` },
+  { id: 'ch9-8', text: `title: The Bronze Copies
+intro: The red button in the northwest wakes the clone machine in the east, which makes bronze balls. Two teleports, one sending you out of the other, and a bomb by the button. Two relics.
+machines: ball-up
+
+############
+#...#..#...#
+#@+.#..#...#
+#..!#..#.*.#
+#.#.#*.#...#
+#...#..#...#
+#..P#.###..#
+##.##.###.C#
+##.....#@M.#
+#...#......#
+##..#..#...E
+############
+` },
 ];
 
 const cache = new Map<number, Level>();

@@ -15,10 +15,10 @@
 // then), the take Only On This Device and kept through a reload, Save To Studio showing both sizes, saved as Perfect,
 // heard, converted to Good To The Ear, a second take saved as Good To The Ear, Export With Vocals, and Your studio's
 // count; and Save To Studio refusing takes that need more room than the studio has. Then DJ & Effects: effects placed
-// on the timeline by tap and by drag, a clip moved, lengthened, stepped Longer, given a setting and removed with Undo;
-// DJ Mode's deck played with held keys and a held pad, the platter and the XY Pad under Record To Timeline, landing as
-// clips Undo takes back in one step; saved as fx_clips; and on a phone a held pad never moves the page. SHOTS_DIR
-// keeps screenshots.
+// on the timeline by tap and by drag, Hear From Here on a riser playing on its first press however slow the build, a
+// clip moved, lengthened, stepped Longer, given a setting and removed with Undo; DJ Mode's deck played with held keys
+// and a held pad, the platter and the XY Pad under Record To Timeline, landing as clips Undo takes back in one step;
+// saved as fx_clips; and on a phone a held pad never moves the page. SHOTS_DIR keeps screenshots.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -897,6 +897,18 @@ test('DJ & Effects: placed on the timeline, performed live under Record To Timel
     await tapBar(page, 'whole', 2, bars);
     await expect(clips).toHaveCount(1);
     await expect(fx.locator('[data-clip-sheet] [data-clip-bars]')).toHaveText('bar 2 to bar 4');
+    // Hear From Here plays on its first press however long the sound takes to build: on a slowed machine the build
+    // outlasts the moments after a press in which a browser lets a page start sound.
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 40 });
+    await fx.getByRole('button', { name: 'Hear From Here' }).click();
+    await expect(fx.getByRole('button', { name: 'Getting Ready…' }), 'the button says the sound is on its way').toBeDisabled();
+    await expect(page.locator('[data-listening]')).toHaveText('The piece: Playing', { timeout: 120_000 });
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    await expect(page.locator('[data-playhead]').first(), 'the playhead moves with the sound').toBeVisible();
+    await expect(fx.getByRole('button', { name: 'Hear From Here' })).toBeEnabled();
+    // The piece plays on to its end by itself.
+    await expect(page.locator('[data-listening]')).toHaveText('', { timeout: 60_000 });
     await fx.getByRole('button', { name: 'Longer' }).click();
     await expect(fx.locator('[data-clip-bars]')).toHaveText('bar 2 to bar 4 + 0.25');
     await fx.locator('[data-family="turntable"]').click();

@@ -16,6 +16,7 @@ import { keyScale } from '../compose/hum.ts';
 import { bendRate, voices } from './plan.ts';
 import type { Library, Voice } from './plan.ts';
 import { fold, hissSource, levelGain } from './master.ts';
+import { loopedBuffer } from './loop.ts';
 
 export const RATE = 48000;
 export const TAIL = 6; // seconds of release rendered past the end, then folded onto the start
@@ -133,7 +134,9 @@ function schedule(ctx: OfflineAudioContext, score: Score, vs: readonly Voice[], 
   for (const v of vs) {
     const lane = lanes.get(v.lane)!;
     const src = ctx.createBufferSource();
-    src.buffer = samples.get(v.file)!;
+    const sample = samples.get(v.file)!;
+    // A held note's loop is crossfaded, so it comes round without a click or a jump in level.
+    src.buffer = v.loop ? loopedBuffer(sample, v.loop, (c, n, r) => ctx.createBuffer(c, n, r)) : sample;
     src.playbackRate.value = v.rate;
     // A bend is linear in cents, so the rate moves exponentially between its points, then holds at the last.
     if (v.bend) {

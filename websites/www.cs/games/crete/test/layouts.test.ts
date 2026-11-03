@@ -2,8 +2,8 @@
 // edited. Two levels are compared by their walls inside the border, under all eight turns and flips, at every offset
 // when their sizes differ by at most two rows and two columns: the overlap is the walls they share over the walls
 // either has. Matching cells are not the measure: floor is most of every level, so unrelated released levels agree
-// on 70 to 85 per cent of their cells, while the walls of levels drawn apart overlap by under 0.47, and a level turned
-// half a turn from another overlaps it by 0.57 or more.
+// on 70 to 85 per cent of their cells, while the walls of levels drawn apart almost all overlap by under 0.47, and a
+// level turned half a turn from another overlaps it by 0.57 or more.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';

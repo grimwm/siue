@@ -96,19 +96,19 @@ facing: right right
 ############
 ` },
   { id: 'ch8-7', text: `title: The Frozen Line
-intro: A line of ice runs down the middle, with skates and a block in the north. Talos's fire runs the southwest, turning right at every wall.
-facing: left
+intro: A line of ice runs down the middle, with skates beside it and a block in the north. Talos's fire runs the southwest, turning right at every wall.
+facing: down
 
 ############
-#.##...=.O.#
-##.....=...#
-##.P.k.=...#
-#.####.....#
+####...=O..#
+#......=...#
+##P....=...#
+######.....#
+####..k=..##
 ####...=..##
-#.#....=..##
 ###....=..E#
-#e....M=..##
-#....##...##
+#e.....=...#
+#...M##.#.##
 ############
 ` },
   { id: 'ch8-8', text: `title: The Snared Wing

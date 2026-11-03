@@ -2,7 +2,7 @@
 // every piece on it matters, its beast is a threat, and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT, startProblems, naiveWalkWins, neverLive } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT, startProblems, naiveWalkWins, neverLive, purposeProblems } from '../src/puzzle/difficulty.ts';
 import { CAMPAIGN_TEXTS } from '../src/endless/campaign.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
@@ -581,4 +581,20 @@ test('the climb\'s cheap rejects are the gate\'s own answers: the plain walk as 
     }
   }
   assert.ok(never > 0, 'some levels have a beast that is never live');
+});
+
+test('every piece has a purpose a player sees: the line meets it, or ignoring it changes the fewest moves or the win; a smaller search alone is no purpose', () => {
+  assert.deepEqual(purposeProblems(DECOY, measure(DECOY)), [
+    'the red keys: the shortest line never meets it, and ignoring it leaves the fewest moves at 5',
+    'the red doors: the shortest line never meets it, and ignoring it leaves the fewest moves at 5',
+  ]);
+  const needed = level(['######', '#PrRE#', '######']);
+  assert.deepEqual(purposeProblems(needed, measure(needed)), [], 'the line takes the key and opens the door');
+  const holds = level(['#########', '#P....E.#', '###.#####', '###R#####', '###M#####', '#########']);
+  assert.deepEqual(purposeProblems(holds, measure(holds)), [], 'the line never meets the door, but as floor it lets the beast out');
+  // A side room behind a door, its key off the way: both grow the search, and the line walks past them.
+  const side = level(['#########', '#P.....E#', '#.#####.#', '#r#...R.#', '#.#.M.#.#', '#########']);
+  const d = measure(side);
+  const strict = purposeProblems(side, d).join();
+  assert.match(strict, /the red keys: the shortest line never meets it/);
 });

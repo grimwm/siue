@@ -282,7 +282,7 @@ export function search(
         if (qp.length) { trace?.(`gate: ${qp.join('; ')}`); if (stats) for (const q of qp) { const k = 'gate:' + q.replace(/[0-9.,×]+/g, 'N').slice(0, 50); stats[k] = (stats[k] ?? 0) + 1; } far = 1; judged.set(textOf(sketch, ''), far); }
         else {
           spend(pieceUnits(level).reduce((n, u) => n + u.ignored.length, 0) * 2 * d.explored, 'useless');
-          const useless = uselessPieces(level, d, measureCap(roundBand));
+          const useless = uselessPieces(level, d, measureCap(roundBand), true);
           if (!useless.length) return { text: textOf(sketch, ''), d };
           trace?.(`useless: ${useless.map(u => u.problem).join('; ')}`);
           // Take the first useless piece out and climb on from there.

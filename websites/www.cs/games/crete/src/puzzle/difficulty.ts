@@ -478,7 +478,24 @@ export function sharedProblems(d: Difficulty, bar: SharedBar = SHARED_BAR): stri
 }
 
 /** A piece of a level, and the level as it would be if the player ignored that piece (one way or more). */
-export interface PieceUnit { name: string; ignored: readonly Level[] }
+export interface PieceUnit {
+  name: string;
+  ignored: readonly Level[];
+  /** For a piece whose purpose is a use, not a touch: true for a situation where it is being used (a door of its
+   *  colour opened, its gear worn on its ground, the mirror raised, the cow set down). purposeProblems reads it. */
+  used?: (s: State) => boolean;
+}
+
+/** How a taken piece is used, where taking it is not yet a use: gear worn on its ground, the mirror raised, the cow
+ *  set down. A spare relic is used by being taken. */
+const USE: Partial<Record<ObjectKind, (s: State) => boolean>> = {
+  flippers: s => s.gear.includes('flippers') && s.terrain[s.player.r * s.level.cols + s.player.c] === 'water',
+  'fire-boots': s => s.gear.includes('fire-boots') && s.terrain[s.player.r * s.level.cols + s.player.c] === 'fire',
+  skates: s => s.gear.includes('skates') && s.terrain[s.player.r * s.level.cols + s.player.c] === 'ice',
+  suction: s => s.gear.includes('suction') && TERRAIN[s.terrain[s.player.r * s.level.cols + s.player.c]!].carries !== undefined,
+  mirror: s => s.stone > 0,
+  cow: s => s.cow !== null,
+};
 
 /** The gear that carries Theseus over a floor kind unharmed. */
 const GEAR_OF: Partial<Record<Terrain, ObjectKind>> = {
@@ -507,16 +524,19 @@ function edited(level: Level, f: (t: Terrain[], o: (ObjectKind | null)[]) => voi
 export function pieceUnits(level: Level): PieceUnit[] {
   const out: PieceUnit[] = [];
   const at = (i: number) => `row ${Math.floor(i / level.cols) + 1}, column ${(i % level.cols) + 1}`;
+  const on = (s: State) => level.terrain[s.player.r * level.cols + s.player.c]!;
   for (const color of KEY_COLORS) {
     const key: ObjectKind = `key-${color}`;
+    // A colour's keys and doors are used when Theseus walks through one of its doors.
+    const opened = (s: State) => TERRAIN[on(s)].door === color;
     if (level.objects.includes(key)) {
-      out.push({ name: `the ${color} keys`, ignored: [edited(level, (_, o) => { o.forEach((x, i) => { if (x === key) o[i] = null; }); })] });
+      out.push({ name: `the ${color} keys`, ignored: [edited(level, (_, o) => { o.forEach((x, i) => { if (x === key) o[i] = null; }); })], used: opened });
     }
     if (level.terrain.some(t => TERRAIN[t].door === color)) {
       out.push({ name: `the ${color} doors`, ignored: (['wall', 'floor'] as const).map(to => edited(level, (t, o) => {
         t.forEach((x, i) => { if (TERRAIN[x].door === color) t[i] = to; });
         o.forEach((x, i) => { if (x === key) o[i] = null; });
-      })) });
+      })), used: opened });
     }
   }
   const spare = level.objects.filter(o => o === 'relic').length > level.relics;
@@ -525,7 +545,7 @@ export function pieceUnits(level: Level): PieceUnit[] {
       out.push({ name: `the block at ${at(i)}`, ignored: [
         edited(level, (t, o) => { o[i] = null; t[i] = 'wall'; }), edited(level, (_, o) => { o[i] = null; })] });
     } else if (x === 'relic' ? spare : x !== null && x !== 'cake' && x !== 'page' && !x.startsWith('key-')) {
-      out.push({ name: `the ${x === 'relic' ? 'spare relic' : x} at ${at(i)}`, ignored: [edited(level, (_, o) => { o[i] = null; })] });
+      out.push({ name: `the ${x === 'relic' ? 'spare relic' : x} at ${at(i)}`, ignored: [edited(level, (_, o) => { o[i] = null; })], used: x === null ? undefined : USE[x] });
     }
   });
   const kinds: [string, readonly Terrain[], readonly Terrain[]][] = [
@@ -573,16 +593,48 @@ export function pieceUnits(level: Level): PieceUnit[] {
 export const USEFUL = { explored: 1.3 };
 
 /** What ignoring a piece changes, in words; null when it changes nothing that counts, 'capped' when a search hit
- *  its cap and so proved nothing. */
-function changes(d: Difficulty, lv: Level, cap: number): string | null {
+ *  its cap and so proved nothing. With `strict`, a smaller search no longer counts: only the fewest moves (with a
+ *  catch or without) or the level's being won. */
+function changes(d: Difficulty, lv: Level, cap: number, strict = false): string | null {
   const r = solve(initial(lv), cap);
   if (!r.solved) return r.capped ? 'capped' : 'the level cannot be won';
   if (r.line.length !== d.shortest) return `the fewest moves go from ${d.shortest} to ${r.line.length}`;
   const free = solveRefusing(initial(lv), caught, cap);
   if (!free.solved) return free.capped ? 'capped' : 'no win without a catch';
   if (free.line.length !== d.catchFree) return `the fewest catch-free moves go from ${d.catchFree} to ${free.line.length}`;
-  if (d.explored >= USEFUL.explored * r.explored) return `the search falls from ${d.explored} situations to ${r.explored}`;
+  if (!strict && d.explored >= USEFUL.explored * r.explored) return `the search falls from ${d.explored} situations to ${r.explored}`;
   return null;
+}
+
+/** The cells a piece holds: wherever one of the ways of taking it out changes the level. A hazard's way leaves the
+ *  ground as it was, so it holds none. */
+function cellsOf(level: Level, u: PieceUnit): number[] {
+  const out = new Set<number>();
+  for (const lv of u.ignored) {
+    for (let i = 0; i < level.terrain.length; i++) if (lv.terrain[i] !== level.terrain[i] || lv.objects[i] !== level.objects[i]) out.add(i);
+  }
+  return [...out];
+}
+
+/** The shortest line meets the piece: it is used (PieceUnit's `used`: a door of a key's colour walked through, gear
+ *  worn on its ground, the mirror raised, the cow set down), or, for any other piece, Theseus stands on one of its
+ *  cells (a spare relic taken, gravel or a teleport crossed, a button pressed), what one holds changes (a block
+ *  pushed, a toggle wall turned, water filled, a bomb set off), or the beast stands in a snare there. */
+function meets(level: Level, line: string, u: PieceUnit): boolean {
+  const cells = u.used ? [] : cellsOf(level, u);
+  if (!cells.length && !u.used) return false;
+  let s = initial(level);
+  const at = (c: { r: number; c: number }) => c.r * level.cols + c.c;
+  for (const a of lineOf(line) ?? []) {
+    s = step(s, a).state;
+    if (u.used?.(s)) return true;
+    const p = at(s.player), m = s.minotaur ? at(s.minotaur) : -1;
+    for (const i of cells) {
+      if (p === i || s.terrain[i] !== level.terrain[i] || s.objects[i] !== level.objects[i]) return true;
+      if (m === i && level.terrain[i] === 'trap') return true;
+    }
+  }
+  return false;
 }
 
 /** Every piece matters: ignoring it (pieceUnits) makes the level unwinnable or need a catch, changes its fewest
@@ -592,14 +644,28 @@ export function uselessProblems(level: Level, d: Difficulty, cap = SOLVER_CAP): 
   return uselessPieces(level, d, cap).map(p => p.problem);
 }
 
-/** uselessProblems with the pieces themselves, for a tool that takes them out (src/endless/generate.ts). */
-export function uselessPieces(level: Level, d: Difficulty, cap = SOLVER_CAP): { unit: PieceUnit; problem: string }[] {
+/** Every piece has a purpose a player sees: the shortest line meets it (takes the key, opens the door, pushes the
+ *  block, presses the button, crosses the tile), or ignoring it makes the level unwinnable or changes its fewest
+ *  moves (a door that holds the beast back). A piece that only makes the search bigger is a decoy the player can
+ *  walk past, and fails. Endless holds every level to this (src/endless/gate.ts); the campaign's levels are held to
+ *  uselessProblems. */
+export function purposeProblems(level: Level, d: Difficulty, cap = SOLVER_CAP): string[] {
+  return uselessPieces(level, d, cap, true).map(p => p.problem);
+}
+
+/** uselessProblems with the pieces themselves, for a tool that takes them out (src/endless/generate.ts); with
+ *  `strict`, purposeProblems's. */
+export function uselessPieces(level: Level, d: Difficulty, cap = SOLVER_CAP, strict = false): { unit: PieceUnit; problem: string }[] {
   if (!d.solved || typeof d.catchFree !== 'number') return [];
   return pieceUnits(level).flatMap(u => {
-    const found = u.ignored.map(lv => changes(d, lv, cap));
+    // The line meets it: it has a purpose, with no search.
+    if (strict && meets(level, d.line, u)) return [];
+    const found = u.ignored.map(lv => changes(d, lv, cap, strict));
     if (found.some(c => c !== null && c !== 'capped')) return [];
     if (found.includes('capped')) return [{ unit: u, problem: `${u.name}: the search without it hit its cap, so it is not proved to matter` }];
-    return [{ unit: u, problem: `${u.name}: ignoring it changes nothing (still ${d.shortest} moves, and the search no ${USEFUL.explored} × smaller)` }];
+    return [{ unit: u, problem: strict
+      ? `${u.name}: the shortest line never meets it, and ignoring it leaves the fewest moves at ${d.shortest}`
+      : `${u.name}: ignoring it changes nothing (still ${d.shortest} moves, and the search no ${USEFUL.explored} × smaller)` }];
   });
 }
 

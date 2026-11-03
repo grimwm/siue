@@ -153,10 +153,10 @@ Chapter 1 sets both bars. Every level is chase and no plain walk wins:
 | 6 | 24 | 447 | 8 | no | 0 |
 | 7 | 24 | 443 | 14 | no | 0 |
 | 8 | 29 | 120 | 11 | no | 0 |
-| 9 | 42 | 14,423 | 8 | no | 0 |
+| 9 | 43 | 16,596 | 11 | no | 0 |
 | 10 | 58 | 20,004 | 13 | no | 0 |
 
-Its hardest teaching search is level 3's 614 situations; level 9 stores 23 times that and level 10 33 times, so the campaign bar of 20 times sits a little under level 9's. The shared bar sits a little under level 9's situations (12,000 against 14,423) and its 42 moves (40), a few past the longest teaching level (36), so levels 9 and 10 clear it and levels 1 to 8 fall far short. `test/difficulty.test.ts` gates every released level on both bars (`test/chapter-2.test.ts` checks Chapter 2's own rules: gravel and nothing later, the teaching levels' gravel, the pages, level 10's water and fire); new campaign levels must pass `BAR` and every shared level `SHARED_BAR`.
+Its hardest teaching search is level 3's 614 situations; level 9 stores 27 times that and level 10 33 times, so the campaign bar of 20 times sits a little under level 9's. The shared bar sits a little under level 9's situations (12,000 against 16,596) and its 43 moves (40), a few past the longest teaching level (36), so levels 9 and 10 clear it and levels 1 to 8 fall far short. `test/difficulty.test.ts` gates every released level on both bars (`test/chapter-2.test.ts` checks Chapter 2's own rules: gravel and nothing later, the teaching levels' gravel, the pages, level 10's water and fire); new campaign levels must pass `BAR` and every shared level `SHARED_BAR`.
 
 Chapter 2 teaches gravel in three small levels and then mixes it with Chapter 1's pieces: force floors and suction boots (4), ice and skates (5), water, fire and their gear (6), keys and doors (7), blocks, the plate and toggle walls (8), the tools and safe zones (9), and, at the inner gate (10), water that needs the flippers and a quicker way through fire for the fire boots. Every shortest line crosses gravel. The later chapters follow the same shape, each with its own `test/chapter-N.test.ts`. The numbers for every released level are not copied here. `test/difficulty.test.ts` measures each one and fails when it breaks the gate, holds a piece that does not matter, has a beast that is no threat, or breaks the ramp or the hidden-wall band; each chapter's own test checks its teaching levels and pages, `test/campaign.test.ts` checks the quotations and their citations, and `test/fewest.test.ts` checks `src/campaign/fewest.ts`.
 

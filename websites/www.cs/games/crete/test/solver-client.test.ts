@@ -18,7 +18,7 @@ import { SOLVER_CAP } from '../src/puzzle/solver.ts';
 import { TRIALS, trialLevel } from '../src/puzzle/trials.ts';
 
 const L9 = TRIALS[8]!.text;
-const L9_SHORTEST = 42;
+const L9_SHORTEST = 43;
 const tick = () => new Promise<void>(r => setImmediate(r));
 /** Ticks until `done()`, failing the test rather than hanging when it never holds. */
 async function until(done: () => boolean): Promise<void> {

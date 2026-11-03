@@ -77,13 +77,13 @@ intro: A river and a fire cross these ways, with loose stone between them. Flipp
 ############
 #P:.#~#.#.*#
 #...~.O.F:##
-##.#....F#:#
-#f.#..#:.###
-##...##....#
-#*.#.#..####
+#..#....F#:#
+#f.#.##:..##
+##...##.#..#
+#*.#.#...#.#
 ##F..~h:~###
-#.M...#:...#
-#*.~###F:.|E
+##M...#:...#
+#*.~#.#F:.|E
 ############
 ` },
   { id: 'ch2-7', text: `title: The Three Locks

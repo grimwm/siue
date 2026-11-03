@@ -357,9 +357,9 @@ export interface Bar {
   exploredTimes: number;
 }
 
-/** Chapter 1's numbers set it: its teaching Minotaurs add 3 to 14 moves (level 9's adds 8, level 10's 13), and
- *  its hardest teaching search is level 3's 614 situations (level 9 stores 23 times that, level 10 33 times); the
- *  bar sits at level 9's Minotaur and a little under its search. */
+/** Chapter 1's numbers set it: its teaching Minotaurs add 3 to 14 moves (level 9's adds 11, level 10's 13), and
+ *  its hardest teaching search is level 3's 614 situations (level 9 stores 27 times that, level 10 33 times); the
+ *  bar sits a little under level 9's. */
 export const BAR: Bar = { minotaurDelta: 8, exploredTimes: 20 };
 
 /** Where a challenge level sits: the chapter's teaching levels, measured. */
@@ -455,7 +455,7 @@ export interface SharedBar {
   chaseExplored: number;
 }
 
-/** Chapter 1 sets it: its challenge levels win in 42 and 58 moves from 14,423 and 20,004 situations, its teaching
+/** Chapter 1 sets it: its challenge levels win in 43 and 58 moves from 16,596 and 20,004 situations, its teaching
  *  levels in at most 36 moves from at most 614. The bar sits a little under level 9's situations and moves, a few
  *  past the longest teaching level; a chase level that clears the chase checks needs half of that again. The
  *  situation counts are this solver's (its estimate and pruning): a change to either moves them, and the bar is

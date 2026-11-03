@@ -13,7 +13,7 @@ import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
-const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 24, 29, 42, 58];
+const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 24, 29, 43, 58];
 /** Level 10 is larger than the screen; its proof may search further than the in-game cap. */
 const GREAT_HALL_CAP = 6_000_000;
 

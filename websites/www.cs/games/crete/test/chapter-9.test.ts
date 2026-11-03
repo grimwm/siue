@@ -19,7 +19,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import type { Terrain } from '../src/puzzle/tiles.ts';
 
 /** Each level's shortest line, pinned: a rule change that alters a level fails here. */
-const SHORTEST: number[] = [18, 16, 16];
+const SHORTEST: number[] = [18, 16, 16, 35, 40, 39, 42, 43, 63, 53];
 /** Level 10 is larger than the screen; its proofs may search further than the in-game cap. */
 const BIG_CAP = 6_000_000;
 const capOf = (i: number) => (i === 9 ? BIG_CAP : SOLVER_CAP);
@@ -157,8 +157,9 @@ test('the two pages: The Backward Tracks in level 9 and The First Inventor in le
   }
 });
 
-test('level 10 has all three new pieces, and ends at a gate', () => {
+test('level 10 ends at a gate, with a clone machine and a Harpy', () => {
   const lv = workshopLevel(9);
   assert.ok(lv.terrain.includes('gate') && lv.terrain.includes('exit') && lv.relics > 0);
-  for (const t of ['thief', 'bomb', 'clone'] as const) assert.ok(has(lv, t), `level 10 has a ${t}`);
+  assert.ok(has(lv, 'clone') && has(lv, 'button-red'), 'level 10 has a clone machine and its red button');
+  assert.ok(lv.hazards.some(h => h.kind === 'glider'), 'level 10 has a Harpy');
 });

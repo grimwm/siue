@@ -137,9 +137,30 @@ facing: left
 #...#f.....#
 ##.#######.#
 #...#w.....#
-#......#O..#
-#pM.#..#...#
+#p.....#O..#
+#.M.#..#...#
 ########E###
+` },
+  { id: 'ch9-10', text: `title: The Last Bench
+intro: The workshop ends at the gate in the west. The red button in the east wakes the clone machine above it, one Harpy flies the north room, and the beast waits in the northwest. Three relics. Off the quick way a page waits, and a memory of the man who built this place.
+pages: ch9-inventor
+facing: down
+machines: block-right
+
+###############
+#Mp.#*..#.....#
+#.......#..#..#
+#...#w..#..C..#
+#E|.#####.##..#
+#.......#..#..#
+#...#......#+.#
+#*..#...#.....#
+#####.#######.#
+#...#.......*.#
+#...#...#.....#
+#.......#....P#
+#...#...#....##
+###############
 ` },
 ];
 

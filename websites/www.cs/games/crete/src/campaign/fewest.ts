@@ -20,6 +20,8 @@ export const FEWEST: Readonly<Record<string, number>> = {
   'ch8-6': 31, 'ch8-7': 36, 'ch8-8': 46, 'ch8-9': 37, 'ch8-10': 39,
   'ch9-1': 18, 'ch9-2': 16, 'ch9-3': 16, 'ch9-4': 35, 'ch9-5': 40,
   'ch9-6': 39, 'ch9-7': 42, 'ch9-8': 43, 'ch9-9': 63, 'ch9-10': 53,
+  'ch10-1': 20, 'ch10-2': 16, 'ch10-3': 22, 'ch10-4': 50, 'ch10-5': 42,
+  'ch10-6': 40, 'ch10-7': 54, 'ch10-8': 55, 'ch10-9': 42, 'ch10-10': 48,
 };
 
 /** How a count of moves stands against the fewest possible: "best possible 12 (2 over)", or "best possible 12 ·

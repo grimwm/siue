@@ -7,14 +7,15 @@ each step starts from. A step with a design but no plan gets its plan written
 ## Crete
 
 The vision and its parts are in `specs/2026-10-16-crete-redesign-vision.md`.
-Live: the shell, the engine, Chapters 1 to 9 (ten levels each, story pages, the
-Lore book; Chapter 3 is `plans/2026-11-01-crete-chapter-3.md`, Chapter 4
+Live: the shell, the engine, the whole campaign, Chapters 1 to 10 (ten levels
+each, story pages, the Lore book, and three endings chosen by the pages found; Chapter 3 is `plans/2026-11-01-crete-chapter-3.md`, Chapter 4
 `plans/2026-11-01-crete-chapter-4.md`, Chapter 5
 `plans/2026-11-01-crete-chapter-5.md`, Chapter 6
 `plans/2026-11-02-crete-chapter-6.md`, Chapter 7
 `plans/2026-11-02-crete-chapter-7.md`, Chapter 8
 `plans/2026-11-02-crete-chapter-8.md`, Chapter 9
-`plans/2026-11-02-crete-chapter-9.md`), full keyboard play
+`plans/2026-11-02-crete-chapter-9.md`, Chapter 10
+`plans/2026-11-03-crete-chapter-10.md`), full keyboard play
 and swipes, the fast solver, the level editor, the title theme on every screen, and
 two looks: Modern (painted 3D, one free camera steered from the compass, with view
 tips) and Classic, chosen when a new game starts.
@@ -32,15 +33,9 @@ tips) and Classic, chosen when a new game starts.
    Check with Stop and a progress bar, Try it on the full game screen, Share as
    a link and opening a link, with the OPFS solve cache trimmed. The README's
    "The editor" section describes it.
-3. **Chapter 10**, the last, built in the editor and
-   exported to the repo. It brings in no new piece. Every level passes the difficulty gate
-   (`src/puzzle/difficulty.ts`); a level that is winnable but easy is refused. A level
-   with a fake or invisible wall is held to a lower band (`HIDDEN`): a gentler
-   ramp and a ceiling, since the measure sees walls a player has to find.
-   From Chapter 8 on every level is a new layout, never an earlier one turned
-   or flipped (`test/layouts.test.ts`). Each chapter gets its music once the
-   first piece is done.
-4. **Endless**: the seeded generator on the same engine, checked by the solver.
+3. **Endless**, next: the seeded generator on the same engine, checked by the solver. It takes a level only
+   through the gate the campaign's levels pass (`src/puzzle/difficulty.ts`): no catch needed, every piece
+   mattering, a live beast, the challenge and shared bars, and the gentler band for hidden walls.
 
 ## Music workroom
 

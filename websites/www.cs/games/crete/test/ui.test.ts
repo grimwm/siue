@@ -390,7 +390,7 @@ test('every released level in order: Enter starts it, a win shows moves and the 
     if (i + 1 === LEVEL_IDS.length) break;
     key('Enter');
     if (within === 10) {
-      assert.equal(text('chapter-title'), ['The Winding Ways', 'The Closing Ways', 'The False Walls', 'The Snares of Daedalus', 'The Folding Halls', 'The Bronze Guard', "The Harpies' Den", "Daedalus's Workshop"][chapter - 1]);
+      assert.equal(text('chapter-title'), ['The Winding Ways', 'The Closing Ways', 'The False Walls', 'The Snares of Daedalus', 'The Folding Halls', 'The Bronze Guard', "The Harpies' Den", "Daedalus's Workshop", 'The Heart of the Labyrinth'][chapter - 1]);
       key('Enter');
     }
   }
@@ -435,7 +435,7 @@ test('the status bar and the menu name the chapter and the level', () => {
   assert.equal(text('menu-level'), title);
   flow.closeLayers();
   game.open(LEVEL_IDS.length - 1);
-  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, 'Ch. 9 • Level 10/10');
+  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, 'Ch. 10 • Level 10/10');
 });
 
 test('I on the title opens the story card and Q opens the menu; Q again returns to the title', () => {
@@ -715,7 +715,10 @@ test('left and right in the levels list switch between the released chapters, cl
   key('d');
   assert.equal(pressed(9), 'true');
   key('d');
-  assert.equal(pressed(9), 'true', 'clamped at the last released chapter');
+  assert.equal(pressed(10), 'true');
+  key('d');
+  assert.equal(pressed(10), 'true', 'clamped at the last chapter');
+  key('ArrowLeft');
   key('ArrowLeft');
   key('ArrowLeft');
   key('ArrowLeft');

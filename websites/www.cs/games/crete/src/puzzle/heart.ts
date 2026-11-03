@@ -145,6 +145,26 @@ E...#......#
 #...#......#
 ############
 ` },
+  { id: 'ch10-10', text: `title: The Open Space
+intro: The beast waits in the southeast room. Medusa's mirror lies by your start, the wooden cow in the northwest room, and a snare in the middle hall, loosed by the brown button beside the cow. Three relics, and the way out is through the gate in the north. Off the quick way a page waits, and a memory of how the poet ends the story.
+pages: ch10-oak
+
+#################
+#....p#...#.E...#
+#...........|#..#
+#.##.######..##.#
+#.c#..#*.....#..#
+#..#-.#...#..#*.#
+#..######.#.##..#
+#...............#
+##.#..###.#.#####
+#.....#.....&#..#
+#z..P.#...#*..M.#
+##.####...#..#..#
+#..#......#..#..#
+#..#......#..#..#
+#################
+` },
 ];
 
 const cache = new Map<number, Level>();

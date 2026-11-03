@@ -504,15 +504,15 @@ test('the levels list has a button per level with its title and standing, and pi
   assert.deepEqual(seen, [0, 1, 2]);
 });
 
-test('the levels list has ten chapter tabs: chapter 1 pressed, chapters 2 to 9 open, the rest disabled and marked soon', () => {
+test('the levels list has ten chapter tabs: chapter 1 pressed, all ten open', () => {
   const root = mount();
   const seen: number[] = [];
   renderLevels(root, levelsProps({ onTab: n => seen.push(n) }));
   for (let n = 1; n <= 10; n++) {
     const tab = byId(root, `levels-tab-${n}`);
     assert.equal(tab.getAttribute('aria-pressed'), n === 1 ? 'true' : 'false', `tab ${n}`);
-    assert.equal(tab.disabled, n > 9, `tab ${n}`);
-    assert.equal(tab.textContent, n <= 9 ? `Ch ${n}` : `Ch ${n} · soon`, `tab ${n}`);
+    assert.equal(tab.disabled, false, `tab ${n}`);
+    assert.equal(tab.textContent, `Ch ${n}`, `tab ${n}`);
   }
   click(byId(root, 'levels-tab-1'));
   click(byId(root, 'levels-tab-2'));
@@ -565,7 +565,7 @@ function loreProps(over: Partial<LoreProps> = {}): LoreProps {
 }
 const PAGES = CH1.lore!.pages;
 
-test('the Lore Book lists Chapters 1 to 9 with their opening cards, and chapter 10 as not yet released', () => {
+test('the Lore Book lists all ten chapters with their opening cards', () => {
   const root = mount();
   renderLore(root, loreProps({ open: false }));
   assert.equal(byId(root, 'lore-veil').hidden, true);

@@ -138,9 +138,12 @@ const endless = createEndlessMode({
   client: createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker),
   tier: () => tierOf(CHAPTERS, id => progress.get(id).cleared),
   newSeed: () => newSeed(Math.random),
-  play: (level, about) => outside.play(level, about),
+  play: (level, about, line) => outside.play(level, about, line),
   changed: () => ui.refresh(),
+  budget: () => endlessBudget,
 });
+/** The Endless search's budget a browser spec set through the test hook; the generator's own otherwise. */
+let endlessBudget: number | undefined;
 /** The link that opens the saved run's seed, with its pieces. */
 function endlessLink(): string | null {
   const run = endlessSaved.run();
@@ -791,4 +794,4 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
-window.__creteTest = { game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };
+window.__creteTest = { endless: { mode: endless, saved: endlessSaved, setBudget: (n: number) => { endlessBudget = n; } }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };

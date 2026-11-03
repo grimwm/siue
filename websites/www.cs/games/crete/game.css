@@ -299,6 +299,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 .runstats { color: var(--dim); font-size: 0.9rem; }
 .title-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
 .title-install { margin-top: 0.8rem; }
+/* The Endless card: its seed box beside Play This Seed (stacked on a narrow phone), and the search's progress bar. */
+.endless-seed { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.8rem; }
+.endless-seed label { color: var(--dim); font-size: 0.9rem; }
+.endless-seed input { flex: 1 1 8rem; min-width: 0; font: inherit; font-size: 16px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 0.35rem 0.5rem; }
+.endless-bar { height: 8px; margin-top: 0.6rem; overflow: hidden; background: var(--bg); border-radius: 4px; }
+.endless-bar span { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s ease; }
+@media (prefers-reduced-motion: reduce) { .endless-bar span { transition: none; } }
 /* The start card sits in the board's row of the frame, so the status bar and the strip stay clear and usable. */
 .veil-start {
   position: relative;

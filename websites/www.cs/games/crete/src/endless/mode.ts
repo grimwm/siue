@@ -4,6 +4,8 @@
  * usually opens it straight away, and otherwise the Endless card shows the search's progress until it is in. The
  * card's words come from `view()`. */
 import { parse } from '../puzzle/level.ts';
+import { lineOf } from '../puzzle/cache.ts';
+import type { Action } from '../puzzle/step.ts';
 import type { Level } from '../puzzle/level.ts';
 import type { Made, Progress } from './generate.ts';
 import type { EndlessClient, MakeJob } from './client.ts';
@@ -22,10 +24,12 @@ export interface EndlessDeps {
   tier(): number;
   /** A new random seed. */
   newSeed(): string;
-  /** Opens `level` on the game screen. */
-  play(level: Level, about: EndlessAbout): void;
+  /** Opens `level` on the game screen, with its shortest line for Ariadne's thread. */
+  play(level: Level, about: EndlessAbout, line: readonly Action[] | null): void;
   /** The card's words changed. */
   changed(): void;
+  /** The search's budget, when a browser spec has set one. */
+  budget?(): number | undefined;
 }
 
 export interface EndlessView {
@@ -76,7 +80,7 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
     const l = run.levels.at(-1)!;
     let level: Level;
     try { level = parse(l.text); } catch (e) { error = `The level could not be read: ${e instanceof Error ? e.message : String(e)}`; deps.changed(); return; }
-    deps.play({ ...level, title: endlessName(run.seed, run.depth), intro: `Seed ${run.seed}. The fewest moves are ${l.shortest}.` }, about(run, l));
+    deps.play({ ...level, title: endlessName(run.seed, run.depth), intro: `Seed ${run.seed}. The fewest moves are ${l.shortest}.` }, about(run, l), lineOf(l.line));
     prefetch();
   };
 
@@ -90,7 +94,8 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
   function start(seed: string, tier: number, depth: number, first: boolean): void {
     job?.make.cancel();
     const played = first ? [] : deps.saved.played();
-    const make = deps.client.make({ seed, tier, depth, run: played });
+    const budget = deps.budget?.();
+    const make = deps.client.make({ seed, tier, depth, run: played, ...(budget !== undefined ? { budget } : {}) });
     const mine = { make, seed, depth, first };
     job = mine;
     make.progress(p => {

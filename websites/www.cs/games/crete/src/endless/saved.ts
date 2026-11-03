@@ -15,6 +15,8 @@ export interface RunLevel {
   text: string;
   explored: number;
   shortest: number;
+  /** Its shortest line, as move letters. */
+  line: string;
   from: 'made' | 'bank';
 }
 
@@ -46,7 +48,7 @@ const isCount = (v: unknown): v is number => Number.isInteger(v) && (v as number
 const isLevel = (v: unknown): v is RunLevel => {
   if (typeof v !== 'object' || v === null) return false;
   const l = v as Record<string, unknown>;
-  return isText(l.text) && isCount(l.explored) && isCount(l.shortest) && (l.from === 'made' || l.from === 'bank');
+  return isText(l.text) && isCount(l.explored) && isCount(l.shortest) && isText(l.line, 4_000) && (l.from === 'made' || l.from === 'bank');
 };
 const isRun = (v: unknown): v is EndlessRun => {
   if (typeof v !== 'object' || v === null) return false;
@@ -83,7 +85,7 @@ export interface EndlessSaved {
   played(): Played[];
 }
 
-const level = (m: Made): RunLevel => ({ text: m.text, explored: m.explored, shortest: m.shortest, from: m.from });
+const level = (m: Made): RunLevel => ({ text: m.text, explored: m.explored, shortest: m.shortest, line: m.line, from: m.from });
 
 export function createEndlessSaved(storage: StorageLike | null): EndlessSaved {
   const table = pref<Stored>(ENDLESS_KEY, { run: null, best: null }, json(isStored), storage);

@@ -8,7 +8,7 @@
 import type { Level } from '../puzzle/level.ts';
 import type { Difficulty } from '../puzzle/difficulty.ts';
 import {
-  BAR, HIDDEN, SHARED_BAR, challengeProblems, hiddenProblems, hidesWalls, rampOf, rampProblems, sharedProblems,
+  BAR, HIDDEN, SHARED_BAR, challengeProblems, hiddenProblems, hidesWalls, rampOf, rampProblems, sharedProblems, startProblems,
   threatProblems, uselessProblems,
 } from '../puzzle/difficulty.ts';
 import { SAME, eight, featuresOf, overlapOf } from '../puzzle/layouts.ts';
@@ -114,6 +114,15 @@ export function newProblems(level: Level, known: Known, run: readonly Level[] = 
   return out;
 }
 
+/** The most `level`'s layout overlaps any campaign level's or any of `run`'s: under SAME it is new. */
+export function likeness(level: Level, known: Known, run: readonly Level[] = []): number {
+  const A = featuresOf(level);
+  let most = 0;
+  for (const Bs of known.features) most = Math.max(most, overlapOf(A, Bs));
+  for (const lv of run) most = Math.max(most, overlapOf(A, eight(featuresOf(lv))));
+  return most;
+}
+
 /** What Endless needs to know of where a level falls: its band, and the run's level before it (null for the first). */
 export interface Place { band: Band; previous: Difficulty | null }
 
@@ -127,7 +136,7 @@ export function quickProblems(level: Level, d: Difficulty, place: Place, known: 
   if (!place.band.plateau && place.previous) out.push(...rampProblems(place.previous, d, rampOf(level)));
   if (hidesWalls(level) && place.band.plateau) out.push('a level that hides walls never sits on the plateau');
   if (out.length) return out;
-  return [...tidyProblems(level), ...newProblems(level, known, run)];
+  return [...startProblems(level), ...tidyProblems(level), ...newProblems(level, known, run)];
 }
 
 /** The whole gate: quickProblems, then uselessProblems with searches capped at `cap`. Empty when the level passes. */

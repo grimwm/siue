@@ -65,6 +65,12 @@ export interface EndlessMode {
   prefetch(): void;
 }
 
+/** The start card's words: the seed and the fewest moves, and, for a level the search did not make from the seed
+ *  in time, that it comes from the level bank. */
+export function introOf(seed: string, l: RunLevel): string {
+  return `Seed ${seed}. The fewest moves are ${l.shortest}.${l.from === 'bank' ? ' From the level bank.' : ''}`;
+}
+
 export function createEndlessMode(deps: EndlessDeps): EndlessMode {
   let finding: { progress: Progress | null } | null = null;
   let error: string | null = null;
@@ -80,7 +86,7 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
     const l = run.levels.at(-1)!;
     let level: Level;
     try { level = parse(l.text); } catch (e) { error = `The level could not be read: ${e instanceof Error ? e.message : String(e)}`; deps.changed(); return; }
-    deps.play({ ...level, title: endlessName(run.seed, run.depth), intro: `Seed ${run.seed}. The fewest moves are ${l.shortest}.` }, about(run, l), lineOf(l.line));
+    deps.play({ ...level, title: endlessName(run.seed, run.depth), intro: introOf(run.seed, l) }, about(run, l), lineOf(l.line));
     prefetch();
   };
 

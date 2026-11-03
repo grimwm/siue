@@ -12,7 +12,7 @@ import { createEndlessHost, PROGRESS_MS } from '../src/endless/host.ts';
 import type { FromEndless } from '../src/endless/host.ts';
 import { createEndlessClient, CancelledError } from '../src/endless/client.ts';
 import type { WorkerLike } from '../src/endless/client.ts';
-import { createEndlessMode } from '../src/endless/mode.ts';
+import { createEndlessMode, introOf } from '../src/endless/mode.ts';
 import type { EndlessAbout } from '../src/endless/mode.ts';
 import { endlessName, endlessKicker, tierWords } from '../src/endless/name.ts';
 import { CAMPAIGN_TEXTS } from '../src/endless/campaign.ts';
@@ -281,4 +281,10 @@ test('the search\'s log and exp, made of + - * / alone, agree with Math\'s', () 
   for (const x of [0.001, 0.3, 1, 1.5, 2, 7.25, 1e6]) assert.ok(Math.abs(ln(x) - Math.log(x)) < 1e-12, `ln ${x}`);
   for (const y of [0, 0.1, 0.25, 1, 4, 20]) assert.ok(Math.abs(expNeg(y) - Math.exp(-y)) < 1e-12, `exp -${y}`);
   assert.equal(expNeg(100), 0);
+});
+
+test('the start card says when a level comes from the level bank, and says nothing of it for a made one', () => {
+  const l = { text: LEVEL_A, explored: 7000, shortest: 31, line: '', from: 'bank' as const };
+  assert.equal(introOf('abcdef', l), 'Seed abcdef. The fewest moves are 31. From the level bank.');
+  assert.equal(introOf('abcdef', { ...l, from: 'made' }), 'Seed abcdef. The fewest moves are 31.');
 });

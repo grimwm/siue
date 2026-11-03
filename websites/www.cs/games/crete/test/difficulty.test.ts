@@ -2,7 +2,8 @@
 // every piece on it matters, its beast is a threat, and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT, startProblems } from '../src/puzzle/difficulty.ts';
+import { CAMPAIGN_TEXTS } from '../src/endless/campaign.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
@@ -547,4 +548,18 @@ test('hardPieces counts a hazard-template machine as a hazard, and breaks ties i
   // Two hazards (one a ball machine) tie with two blocks: blocks come first. Two buttons come last.
   const lv = level(['#########', '#POOCw.E#', '#..-+...#', '#########'], 'machines: ball-down\nfacing: right');
   assert.deepEqual(hardPieces(lv), ['2 blocks', '2 hazards', '2 buttons']);
+});
+
+test('nothing starts under a figure: every campaign level, and a level built with a relic under the beast fails', () => {
+  for (const { id, text } of CAMPAIGN_TEXTS) assert.deepEqual(startProblems(parse(text)), [], id);
+  const lv = parse(`title: t\nintro: i\n\n#######\n#P.*.M#\n####E##\n`);
+  assert.deepEqual(startProblems(lv), []);
+  const objects = [...lv.objects];
+  objects[lv.minotaur!.r * lv.cols + lv.minotaur!.c] = 'relic';
+  const terrain = [...lv.terrain];
+  terrain[lv.player.r * lv.cols + lv.player.c] = 'button';
+  const bad = startProblems({ ...lv, objects, terrain });
+  assert.equal(bad.length, 2);
+  assert.match(bad[0]!, /Theseus starts on button/);
+  assert.match(bad[1]!, /the Minotaur starts on relic/);
 });

@@ -21,7 +21,8 @@ import { rngOf, hash } from './random.ts';
 import type { Rng } from './random.ts';
 import { draft, familiesOf, mutate, textOf, FAMILY_CHAPTER, HIDING } from './draft.ts';
 import type { Family, Plan, Sketch } from './draft.ts';
-import { bandAfter, chapterOf, floorOf, quickProblems, newProblems, tidyProblems } from './gate.ts';
+import { bandAfter, chapterOf, floorOf, likeness, quickProblems, newProblems, tidyProblems } from './gate.ts';
+import { SAME } from '../puzzle/layouts.ts';
 import type { Band, Known } from './gate.ts';
 import type { Dir } from '../puzzle/tiles.ts';
 
@@ -130,15 +131,18 @@ const measureCap = (band: Band) => Math.max(200_000, band.most * 4);
 /** How far a level is from passing the cheap checks: 0 when it passes them, more the further it is; Infinity when it
  *  is no level. A tidy layout first, then one capped solve, and a second without the beast once the first is in the
  *  band. */
-export function distance(level: Level, band: Band, spend: (n: number) => void): number {
+export function distance(level: Level, band: Band, spend: (n: number, kind?: string) => void, like: (level: Level) => number = () => 0): number {
   if (!level.minotaur) return Infinity;
   // An untidy draft (a wall standing alone, a bare pocket) is far, whatever it plays like.
   const untidy = tidyProblems(level).length;
   if (untidy) return 14 + untidy;
+  // So is one whose layout repeats a campaign level's or the run's: no solve can mend that.
+  const x = like(level);
+  if (x >= SAME) return 13 + 10 * (x - SAME);
   const start = initial(level);
   const r = solve(start, solveCap(band));
-  spend(r.explored);
-  if (!r.solved) return r.capped ? 12 : 30;
+  if (!r.solved) { spend(r.explored, r.capped ? 'solve:capped' : 'solve:lost'); return r.capped ? 12 : 30; }
+  spend(r.explored, r.explored < band.least ? 'solve:low' : r.explored > band.most ? 'solve:high' : 'solve:in');
   let far = 0;
   const floor = floorOf(chapterOf(level));
   const least = Math.max(band.least, floor.explored);
@@ -153,7 +157,7 @@ export function distance(level: Level, band: Band, spend: (n: number) => void): 
   far += 6 * Math.max(0, t.quiet / Math.max(1, t.turns) - THREAT.challenge.quiet);
   if (far > 0) return far;
   const free = solve(initial({ ...level, minotaur: null }), solveCap(band));
-  spend(free.explored);
+  spend(free.explored, 'free');
   if (free.solved) {
     far += 0.4 * Math.max(0, BAR.minotaurDelta - (r.line.length - free.line.length));
     let g = start;
@@ -217,7 +221,16 @@ export function search(
   key: readonly (string | number)[], tier: number, band: Band, previous: Difficulty | null, known: Known, run: readonly Level[],
   budget: number, at: Spent, progress?: (p: Progress) => void, hidingBand: Band | null = null, trace?: (line: string) => void,
 ): { text: string; d: Difficulty } | null {
-  const spend = (n: number) => { at.spent += n; };
+  const stats = (at as { by?: Record<string, number> }).by;
+  const spend = (n: number, kind = 'other') => { at.spent += n; if (stats) { stats[kind] = (stats[kind] ?? 0) + n; stats[kind + '#'] = (stats[kind + '#'] ?? 0) + 1; } };
+  // A layout's likeness turns on its terrain alone, so moving a piece never changes it.
+  const likes = new Map<string, number>();
+  const like = (lv: Level): number => {
+    const k = `${lv.cols}:${lv.terrain.join(',')}`;
+    let x = likes.get(k);
+    if (x === undefined) { x = likeness(lv, known, run); likes.set(k, x); }
+    return x;
+  };
   for (let round = 0; at.spent < budget; round++) {
     const rng = rngOf('endless', ...key, round);
     const hides = hidingBand !== null && rng.next() < 0.25;
@@ -225,8 +238,18 @@ export function search(
     let sketch = draft(rng, planOf(rng, tier, roundBand, hides));
     if (!sketch) { spend(1_000); continue; }
     const levelOf = (s: Sketch): Level | null => { try { return parse(textOf(s, '')); } catch { return null; } };
+    // A change that comes back to a level already judged costs nothing more: the same text, the same distance.
+    const judged = new Map<string, number>();
+    const judge = (s: Sketch, lv: Level): number => {
+      const text = textOf(s, '');
+      let far = judged.get(text);
+      if (far === undefined) { far = distance(lv, roundBand, spend, like); judged.set(text, far); }
+      else if (stats) stats['memo#'] = (stats['memo#'] ?? 0) + 1;
+      return far;
+    };
     let level = levelOf(sketch);
-    let far = level ? distance(level, roundBand, spend) : Infinity;
+    let far = level ? judge(sketch, level) : Infinity;
+    const startFar = far, spentAtStart = at.spent;
     // A round that has come close gets more steps; one that stays far gives way sooner.
     let steps = STEPS;
     for (let stepNo = 0; stepNo < steps && at.spent < budget; stepNo++) {
@@ -236,11 +259,11 @@ export function search(
       if (stepNo % 8 === 0) progress?.({ tries: at.tries, spent: at.spent, budget });
       if (far === 0 && level) {
         const d = measure(level, measureCap(roundBand));
-        spend(4 * d.explored);
+        spend(4 * d.explored, 'measure');
         const qp = quickProblems(level, d, { band: roundBand, previous }, known, run);
-        if (qp.length) { trace?.(`gate: ${qp.join('; ')}`); far = 1; }
+        if (qp.length) { trace?.(`gate: ${qp.join('; ')}`); if (stats) for (const q of qp) { const k = 'gate:' + q.replace(/[0-9.,×]+/g, 'N').slice(0, 50); stats[k] = (stats[k] ?? 0) + 1; } far = 1; judged.set(textOf(sketch, ''), far); }
         else {
-          spend(pieceUnits(level).reduce((n, u) => n + u.ignored.length, 0) * 2 * d.explored);
+          spend(pieceUnits(level).reduce((n, u) => n + u.ignored.length, 0) * 2 * d.explored, 'useless');
           const useless = uselessPieces(level, d, measureCap(roundBand));
           if (!useless.length) return { text: textOf(sketch, ''), d };
           trace?.(`useless: ${useless.map(u => u.problem).join('; ')}`);
@@ -248,20 +271,20 @@ export function search(
           const stripped = emptiest(useless[0]!.unit.ignored);
           sketch = sketchFrom(sketch, stripped);
           level = levelOf(sketch);
-          far = level ? distance(level, roundBand, spend) : Infinity;
+          far = level ? judge(sketch, level) : Infinity;
           continue;
         }
       }
       const next = mutate(rng, sketch);
       const nextLevel = levelOf(next);
       if (!nextLevel) continue;
-      const nextFar = distance(nextLevel, roundBand, spend);
+      const nextFar = judge(next, nextLevel);
       // Downhill always; uphill now and then, less the further up, so a climb is not stuck in a dip.
       if (nextFar <= far || (Number.isFinite(nextFar) && rng.next() < expNeg((nextFar - far) / TEMPERATURE))) {
         sketch = next; level = nextLevel; far = nextFar;
       }
     }
-    trace?.(`round ${round}: ended ${far.toFixed(2)} from passing, ${at.spent} spent`);
+    trace?.(`round ${round}: began ${startFar.toFixed(2)}, ended ${far.toFixed(2)} from passing, ${at.spent - spentAtStart} spent`);
   }
   return null;
 }

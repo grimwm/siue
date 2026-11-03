@@ -603,6 +603,22 @@ export function uselessPieces(level: Level, d: Difficulty, cap = SOLVER_CAP): { 
   });
 }
 
+/** Nothing starts under a figure: the cell where Theseus, the Minotaur or a hazard begins is plain floor with no
+ *  piece on it (no relic, key, gear, tool, page, cake, button or other piece), so the player sees every piece at the
+ *  start. The level text cannot write a figure on a piece, so this guards levels built in code (an edit, a draft). */
+export function startProblems(level: Level): string[] {
+  const figures: [string, { r: number; c: number }][] = [['Theseus', level.player]];
+  if (level.minotaur) figures.push(['the Minotaur', level.minotaur]);
+  for (const h of level.hazards) figures.push([`the ${HAZARDS[h.kind].name.toLowerCase()}`, h.at]);
+  const out: string[] = [];
+  for (const [who, at] of figures) {
+    const i = at.r * level.cols + at.c;
+    const t = level.terrain[i]!, o = level.objects[i];
+    if (t !== 'floor' || o !== null) out.push(`${who} starts on ${o ?? t} at row ${at.r + 1}, column ${at.c + 1}: nothing may start under a figure`);
+  }
+  return out;
+}
+
 /** The beast along the shortest line: `live` of its `turns`, and the longest run of turns in a row he is not live. */
 export interface Threat { turns: number; live: number; quiet: number }
 

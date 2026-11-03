@@ -136,21 +136,21 @@ E|.M.#.;..*#
 ############
 ` },
   { id: 'ch5-10', text: `title: The Gate of the Labyrinth
-intro: The snares end at the gate. A red door is one way through; the other runs east past a snare that the block, pushed onto the brown button, holds open. A second snare lies in the south. Off the quickest way, a page waits, and a memory of another telling.
+intro: The snares end at the gate. A red door is one way through; the other runs east past a snare that the block, pushed onto the brown button, holds open. Off the quickest way, a page waits, and a memory of another telling.
 pages: ch5-gate
 
 ####################
 #P....#......####..#
-#..##...###....#...#
-##.*..:...##..:..###
-#.........O-###....#
-#..##...#.......#&.#
-##....###.##....#.##
-#r###.:...#...:##.##
-#.......###M.#.#...#
-#..*.###..##.#.R...#
-#.#..#p...:#.#.#..##
-#*#....&.#...####|E#
+#..#....###....#...#
+###*..:.#.##..:#.###
+#..#......O-###....#
+#..#....#.......#&.#
+#......##.##....#.##
+#r###M:...#...:##.##
+#.......###..#.#...#
+##.*.###..##.#.R...#
+#....#p...:#.#.#..##
+#*#......#..#####|E#
 ####################
 ` },
 ];

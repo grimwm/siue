@@ -31,8 +31,8 @@ intro: The gap under the beast is no gap. It is wall you cannot see, to him as m
 intro: Here what looks open is shut, and what looks shut is open. Bump what blocks you, go round what does not, and keep the beast in his hall above.
 
 ###########
-#P.......M#
-#.##...##.#
+#P........#
+#.##.M.##.#
 #.#######.#
 #.I..W...E#
 #...#######
@@ -120,13 +120,13 @@ pages: ch4-taurus
 ############
 #..#FF::..P#
 #.;###..##.#
-#..h...I..##
+#..h...I#.##
 ##...W#..:.#
 #..:....##*#
 #.#.FF#..###
-#.;#..#:...#
-#MpI....#..#
-E|.#...;.#*#
+#.;##.#:...#
+#.pI....#..#
+E|M#...;.#*#
 ############
 ` },
   { id: 'ch4-10', text: `title: The Painted Labyrinth

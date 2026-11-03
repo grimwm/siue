@@ -133,21 +133,21 @@ pages: ch2-lots
 ############
 ` },
   { id: 'ch2-10', text: `title: The Inner Gate
-intro: The winding ways end at the inner gate. Water guards it on one side and fire on the other: flippers take you through the one, fire boots through the other. The longest way round holds a page and a honey cake.
+intro: The winding ways end at the inner gate. Water guards it, and only the flippers take you across; fire boots open a quicker way through the flames. The beast roams the halls between. The longest way round holds a page and a honey cake.
 pages: ch2-black-sail
 
 ####################
-#P..##.:.......p..x#
-#.##::..#....##.:..#
-#..r.:...#...#..:.##
-#..##.:#.#.#..:##:.#
-#*:##..#...#......##
-#....#.#.###.#.#.#.#
-#...#:.h.#.*M#.....#
+#P..##.:.......p.#x#
+#.#.::..#....#..:#.#
+##...:..##...#..:..#
+#..##.:..#.##.:##:.#
+#*:##.....##.......#
+#..#.#.##..#.###.#.#
+#.#.#:.h.#.*.#.....#
 ###.#...####.###~###
-##..R#.......###~###
-#.####.....#.#..~.*#
-#*..:..##.f...FF..|E
+##.#........####~###
+#.##M#.....#.#..~.*#
+#*..:..##.f...FF#.|E
 ####################
 ` },
 ];

@@ -1,14 +1,17 @@
-/* The Island of Crete: Endless's worker side, as a message handler. It takes a request for a run's level, runs the
- * generator (src/endless/generate.ts) and posts its progress, at most every PROGRESS_MS, then the level. The
- * generator runs straight through, so the page cancels a search by ending the worker (src/endless/client.ts);
- * worker.ts wires it to the Worker and the tests run it in-process. DOM-free. */
-import { generate } from './generate.ts';
-import type { BankLevel, Made, Progress, Request } from './generate.ts';
+/* The Island of Crete: Endless's worker side, as a message handler. It runs one part of a level's search
+ * (src/endless/generate.ts's makePart) and posts its progress, at most every PROGRESS_MS, then what the part came
+ * to; or it answers a level from the bank. A part runs straight through, so the page cancels one by ending its
+ * worker (src/endless/client.ts); worker.ts wires it to the Worker and the tests run it in-process. DOM-free. */
+import { bankFor, makePart } from './generate.ts';
+import type { BankLevel, Made, Part, Progress, Request } from './generate.ts';
 import type { Known } from './gate.ts';
 
-export type ToEndless = { type: 'make'; id: number; request: Request };
+export type ToEndless =
+  | { type: 'part'; id: number; request: Request; part: number }
+  | { type: 'bank'; id: number; request: Request; tries: number; spent: number };
 export type FromEndless =
   | { type: 'progress'; id: number; progress: Progress }
+  | { type: 'part'; id: number; part: number; result: Part }
   | { type: 'made'; id: number; made: Made }
   | { type: 'failed'; id: number; message: string };
 
@@ -19,8 +22,6 @@ export interface EndlessHostDeps {
   known(): Known;
   /** Milliseconds, for spacing the progress posts. */
   now(): number;
-  /** The generator's budget; its own by default. */
-  budget?: number;
 }
 
 export const PROGRESS_MS = 150;
@@ -29,12 +30,12 @@ export function createEndlessHost(deps: EndlessHostDeps): { receive(m: ToEndless
   let known: Known | null = null;
   return {
     receive(m) {
-      if (m.type !== 'make') return;
       try {
+        if (m.type === 'bank') { deps.post({ type: 'made', id: m.id, made: bankFor(m.request, deps.bank, m.tries, m.spent) }); return; }
+        if (m.type !== 'part') return;
         known ??= deps.known();
         let last = -Infinity;
-        const made = generate(m.request, deps.bank, known, {
-          ...(deps.budget !== undefined ? { budget: deps.budget } : {}),
+        const result = makePart(m.request, m.part, known, {
           progress: (p) => {
             const t = deps.now();
             if (t - last < PROGRESS_MS) return;
@@ -42,7 +43,7 @@ export function createEndlessHost(deps: EndlessHostDeps): { receive(m: ToEndless
             deps.post({ type: 'progress', id: m.id, progress: p });
           },
         });
-        deps.post({ type: 'made', id: m.id, made });
+        deps.post({ type: 'part', id: m.id, part: m.part, result });
       } catch (e) {
         deps.post({ type: 'failed', id: m.id, message: e instanceof Error ? e.message : String(e) });
       }

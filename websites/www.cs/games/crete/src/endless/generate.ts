@@ -45,8 +45,8 @@ export interface Request {
   /** The run's levels so far, oldest first (the last is the level before this one); the generator reads the last
    *  RUN_MEMORY of them. */
   run: readonly Played[];
-  /** The search's budget in situations, BUDGET when not given: only the browser specs set it, since another budget
-   *  can make another level. */
+  /** The search's whole budget in situations, PARTS × PART_BUDGET when not given: only the browser specs set it,
+   *  since another budget can make another level. */
   budget?: number;
 }
 
@@ -66,9 +66,21 @@ export interface Made {
 
 export interface Progress { tries: number; spent: number; budget: number }
 
-/** Situations the search may spend on one level before it takes the bank's (docs/superpowers/plans/
- *  2026-11-03-crete-endless.md has the measurements behind it). */
-export const BUDGET = 6_000_000;
+/** A level's search is cut into parts: part k is a search of its own, steered by the seed and k, that may spend
+ *  PART_BUDGET situations. The level is the one found by the lowest part that finds one, and the bank's when none of
+ *  the PARTS does. So parts can run side by side, in as many workers as a device has, and every device still picks
+ *  the same level: one with more cores only finds it sooner (docs/superpowers/plans/2026-11-03-crete-endless.md has
+ *  the measurements behind both numbers). */
+export const PART_BUDGET = 3_000_000;
+export const PARTS = 12;
+/** The whole budget: what the parts may spend together. */
+export const BUDGET = PART_BUDGET * PARTS;
+
+/** The parts a request's search is cut into, and each one's budget: PARTS of PART_BUDGET, or PARTS sharing the
+ *  budget a spec sets. */
+export function partsOf(req: Pick<Request, 'budget'>): { parts: number; budget: number } {
+  return { parts: PARTS, budget: req.budget === undefined ? PART_BUDGET : Math.max(1, Math.floor(req.budget / PARTS)) };
+}
 /** How many of the run's last levels a new level's layout is checked against. */
 export const RUN_MEMORY = 12;
 /** Changes tried on one draft before the next round's draft takes over. */
@@ -289,18 +301,62 @@ export function search(
   return null;
 }
 
-/** The run's level at `req.depth`. */
-export function generate(req: Request, bank: readonly BankLevel[], known: Known, opts: { budget?: number; progress?: (p: Progress) => void } = {}): Made {
-  const budget = req.budget ?? opts.budget ?? BUDGET;
+/** What a part of a level's search came to: the level it found, or null once it spent its budget. */
+export interface Part { found: Made | null; tries: number; spent: number }
+
+/** Where the run stands for a level at `req.depth`: its band, and the band a level that hides walls climbs in. */
+function placeOf(req: Request): { band: Band; hides: Band | null; before: Played | null } {
   const before = req.run.at(-1) ?? null;
   const band = bandAfter(before?.explored ?? null, false)!;
-  const at: Spent = { tries: 0, spent: 0 };
-  const take = (b: BankLevel): Made => ({ text: b.text, explored: b.explored, shortest: b.shortest, line: b.line, from: 'bank', ...at });
-  if (req.depth <= 1 || !before) return take(fromBank(bank, req, band));
-  const run = req.run.slice(-RUN_MEMORY).map(p => parse(p.text));
-  const hides = familiesOf(req.tier).some(f => HIDING.includes(f)) ? bandAfter(before.explored, true) : null;
-  const found = search([req.seed, req.tier, req.depth], req.tier, band, { explored: before.explored } as Difficulty, known, run, budget, at, opts.progress, hides);
-  if (!found) return take(fromBank(bank, req, band));
-  return { text: found.text, explored: found.d.explored, shortest: found.d.shortest as number, line: found.d.line, from: 'made', ...at };
+  const hides = before && familiesOf(req.tier).some(f => HIDING.includes(f)) ? bandAfter(before.explored, true) : null;
+  return { band, hides, before };
 }
 
+/** Part `k` of the search for the run's level at `req.depth` (2 or more). */
+export function makePart(req: Request, k: number, known: Known, opts: { progress?: (p: Progress) => void } = {}): Part {
+  const { band, hides, before } = placeOf(req);
+  const { parts, budget } = partsOf(req);
+  if (!before || k < 0 || k >= parts) throw new RangeError(`no part ${k} of a search for level ${req.depth}`);
+  const at: Spent = { tries: 0, spent: 0 };
+  const run = req.run.slice(-RUN_MEMORY).map(p => parse(p.text));
+  const found = search([req.seed, req.tier, req.depth, 'part', k], req.tier, band, { explored: before.explored } as Difficulty, known, run, budget, at, opts.progress, hides);
+  const made: Made | null = found
+    ? { text: found.text, explored: found.d.explored, shortest: found.d.shortest as number, line: found.d.line, from: 'made', tries: at.tries, spent: at.spent }
+    : null;
+  return { found: made, ...at };
+}
+
+/** The bank's level for the run's level at `req.depth`, after parts that spent `tries` and `spent`. */
+export function bankFor(req: Request, bank: readonly BankLevel[], tries = 0, spent = 0): Made {
+  const b = fromBank(bank, req, placeOf(req).band);
+  return { text: b.text, explored: b.explored, shortest: b.shortest, line: b.line, from: 'bank', tries, spent };
+}
+
+/** The level a search's parts settle on: the lowest part's that found one, with what the parts up to it spent; null
+ *  while a lower part is still to come back, or when none found one (`results` holds each part's, by k). */
+export function settle(results: readonly (Part | undefined)[], parts: number): { made: Made | null; done: boolean } {
+  let tries = 0, spent = 0;
+  for (let k = 0; k < parts; k++) {
+    const r = results[k];
+    if (!r) return { made: null, done: false };
+    tries += r.tries; spent += r.spent;
+    if (r.found) return { made: { ...r.found, tries, spent }, done: true };
+  }
+  return { made: null, done: true };
+}
+
+/** The run's level at `req.depth`: a run's first from the bank at once; every later one from its search's parts,
+ *  run one after another here (src/endless/client.ts runs them side by side and settles on the same one), and the
+ *  bank's when none finds one. */
+export function generate(req: Request, bank: readonly BankLevel[], known: Known, opts: { progress?: (p: Progress) => void } = {}): Made {
+  if (req.depth <= 1 || !req.run.length) return bankFor(req, bank);
+  const { parts, budget } = partsOf(req);
+  const results: Part[] = [];
+  for (let k = 0; k < parts; k++) {
+    const base = results.reduce((n, r) => n + r.spent, 0);
+    results.push(makePart(req, k, known, { progress: p => opts.progress?.({ tries: p.tries, spent: base + p.spent, budget: parts * budget }) }));
+    const s = settle(results, parts);
+    if (s.made) return s.made;
+  }
+  return bankFor(req, bank, results.reduce((n, r) => n + r.tries, 0), results.reduce((n, r) => n + r.spent, 0));
+}

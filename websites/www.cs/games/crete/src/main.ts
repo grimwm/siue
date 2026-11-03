@@ -50,7 +50,7 @@ import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { exitApp, toggleFullscreen as toggleKitFullscreen, browserAppEnv, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
 import { createEndlessSaved } from './endless/saved.ts';
-import { createEndlessClient } from './endless/client.ts';
+import { createEndlessClient, workersFor } from './endless/client.ts';
 import type { WorkerLike as EndlessWorker } from './endless/client.ts';
 import { createEndlessMode } from './endless/mode.ts';
 import { tierOf } from './endless/tier.ts';
@@ -135,7 +135,8 @@ const ui = createUi({ atlas, icons: iconsJson as IconSheet, thumb, board, progre
 const endlessSaved = createEndlessSaved(browserStorage());
 const endless = createEndlessMode({
   saved: endlessSaved,
-  client: createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker),
+  client: createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker,
+    () => workersFor(navigator.hardwareConcurrency, endlessBattery)),
   tier: () => tierOf(CHAPTERS, id => progress.get(id).cleared),
   newSeed: () => newSeed(Math.random),
   play: (level, about, line) => outside.play(level, about, line),
@@ -144,6 +145,15 @@ const endless = createEndlessMode({
 });
 /** The Endless search's budget a browser spec set through the test hook; the generator's own otherwise. */
 let endlessBudget: number | undefined;
+/** The battery, where the browser tells it: a low one that is not charging searches with one worker. */
+let endlessBattery: { level: number; charging: boolean } | null = null;
+type BatteryLike = { level: number; charging: boolean; addEventListener(type: string, f: () => void): void };
+void (navigator as Navigator & { getBattery?: () => Promise<BatteryLike> }).getBattery?.().then(b => {
+  const read = () => { endlessBattery = { level: b.level, charging: b.charging }; };
+  read();
+  b.addEventListener('levelchange', read);
+  b.addEventListener('chargingchange', read);
+}, () => {});
 /** The link that opens the saved run's seed, with its pieces. */
 function endlessLink(): string | null {
   const run = endlessSaved.run();

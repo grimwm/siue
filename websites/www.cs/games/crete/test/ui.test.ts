@@ -1025,7 +1025,7 @@ test("Chapter 10's closing card shows the ending the pages found earn: none, som
       flow.showChapter(10, true);
       const [t, block] = ending();
       assert.equal(t, title);
-      assert.match(block, new RegExp(`The End · ${count} of ${all.length} pages found`));
+      assert.match(block ?? '', new RegExp(`The End · ${count} of ${all.length} pages found`));
       flow.closeLayers();
     }
   } finally {

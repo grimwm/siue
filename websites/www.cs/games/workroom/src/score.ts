@@ -1,6 +1,7 @@
 // The score.json model, schemas 1 and 2: what a draft's score file holds, and the validator that every rule of the
 // schema table goes through. Schema 2 adds, all optional, the tempo line, each part's speed, loudness line, sound
-// settings and voice effects, note bends, and the piece's room and limiter; schema 1 refuses them. DOM-free.
+// settings, voice effects and regions, note bends, the piece's room and limiter, DJ & Effects' clips, markers and key;
+// schema 1 refuses them. DOM-free.
 import { term } from './glossary.ts';
 
 export const SCHEMA = 1;
@@ -63,10 +64,23 @@ export const MAX_TAKES = 32;
 export const MAX_CLIPS = 64;
 /** A take is at most 15 minutes. */
 export const MAX_TAKE_SECONDS = 900;
+/**
+ * A block of a music lane's notes on the timeline (schema 2), in bar positions. A looped region repeats its first
+ * `loop_bars` until `to_bar`; the score's notes hold every repeat as a real note, so a reader that ignores regions hears
+ * the same music.
+ */
+export interface ScoreRegion { from_bar: number; to_bar: number; loop_bars?: number }
+export const MAX_REGIONS = 256;
 export interface Lane {
   id: string; name: string; family: Family; icon: Family; color: string; sound?: Sound;
-  speed?: Speed; dynamics?: DynMark[]; fx?: LaneFx; voice?: VoiceFx[]; vocal?: VocalTrack;
+  speed?: Speed; dynamics?: DynMark[]; fx?: LaneFx; voice?: VoiceFx[]; vocal?: VocalTrack; regions?: ScoreRegion[];
 }
+/** A named point on the ruler (schema 2, music only), at a bar position. */
+export interface Marker { bar: number; name: string }
+export const MAX_MARKERS = 64;
+export const MAX_MARKER_NAME = 24;
+/** The piece's key (schema 2, music only): its tonic, 0 to 11 from C, and its mode. */
+export interface Key { tonic: number; mode: 'major' | 'minor' }
 export const isVocal = (l: Pick<Lane, 'vocal'>): boolean => l.vocal !== undefined;
 export const MIX_STYLES = ['lofi'] as const;
 export const ROOMS = ['dry', 'small_room', 'concert_hall', 'cathedral', 'cave'] as const;
@@ -126,6 +140,8 @@ export interface Score {
   spectrogram?: Spectrogram;                               // required unless the score is renderable
   mix?: Mix;                                               // with a sound on every lane, the score is renderable
   fx_clips?: FxClip[];                                     // schema 2, music only: DJ & Effects on the timeline
+  markers?: Marker[];                                      // schema 2, music only: named points on the ruler
+  key?: Key;                                               // schema 2, music only: the piece's key
   musicxml?: 'score.musicxml';                             // required for music, optional for sound
   changes: Change[];
 }
@@ -146,7 +162,8 @@ export function tempoLineBpm(marks: readonly TempoMark[], bar: number): number {
 /** Whether a score uses anything schema 1 does not have, and so must be saved as schema 2. */
 export function needsSchema2(s: Score): boolean {
   return s.piece_tempo !== undefined || s.fx_clips !== undefined || s.mix?.room !== undefined || s.mix?.limiter !== undefined
-    || s.lanes.some(l => l.speed !== undefined || l.dynamics !== undefined || l.fx !== undefined || l.voice !== undefined || l.vocal !== undefined)
+    || s.markers !== undefined || s.key !== undefined
+    || s.lanes.some(l => l.speed !== undefined || l.dynamics !== undefined || l.fx !== undefined || l.voice !== undefined || l.vocal !== undefined || l.regions !== undefined)
     || s.notes.some(n => n.bend !== undefined);
 }
 
@@ -271,6 +288,16 @@ function build(r: Obj, instruments: ReadonlySet<string> | undefined): Score {
   }
   let pieceTempo: TempoMark[] | undefined;
   if (music && v2(r, 'piece_tempo', '')) pieceTempo = tempoLineOf(r['piece_tempo'], bars!, tempo!);
+  let markers: Marker[] | undefined;
+  if (v2(r, 'markers', '')) {
+    if (!music) fail('markers', 'a sound piece has no bars for markers');
+    markers = markersOf(r['markers'], bars!);
+  }
+  let key: Key | undefined;
+  if (v2(r, 'key', '')) {
+    if (!music) fail('key', 'a sound piece has no key');
+    key = keyOf(r['key']);
+  }
 
   const sections = sectionsOf(r['sections'], music, bars, duration);
   const lanes = arr(r['lanes'], 'lanes', 1).map((l, i): Lane => {
@@ -288,6 +315,11 @@ function build(r: Obj, instruments: ReadonlySet<string> | undefined): Score {
     if (v2(o, 'vocal', p)) lane.vocal = vocalOf(o['vocal'], `${p}.vocal`, duration);
     if ((lane.sound?.instrument === VOCAL_INSTRUMENT) !== (lane.vocal !== undefined)) {
       fail(lane.vocal ? `${p}.sound` : `${p}.sound.instrument`, lane.vocal ? `a vocal track's sound is the instrument ${VOCAL_INSTRUMENT}` : `${VOCAL_INSTRUMENT} is only for a lane with a vocal track`);
+    }
+    if (v2(o, 'regions', p)) {
+      if (!music) fail(`${p}.regions`, 'a sound piece has no bars for regions');
+      if (lane.vocal) fail(`${p}.regions`, 'a vocal track holds takes, not regions');
+      lane.regions = regionsOf(o['regions'], `${p}.regions`, bars!);
     }
     return lane;
   });
@@ -434,6 +466,8 @@ function build(r: Obj, instruments: ReadonlySet<string> | undefined): Score {
   if (spectrogram !== undefined) score.spectrogram = spectrogram;
   if (mix !== undefined) score.mix = mix;
   if (fxClips !== undefined) score.fx_clips = fxClips;
+  if (markers !== undefined) score.markers = markers;
+  if (key !== undefined) score.key = key;
   if (bars !== undefined) score.bars = bars;
   if (tempo !== undefined) score.tempo = tempo;
   if (musicxml !== undefined) score.musicxml = musicxml;
@@ -604,7 +638,7 @@ const FX_CLIP_RULES: Record<FxClipEffect, { rules: Record<string, (x: unknown, q
   harmonizer: { rules: { voices: harmonyVoices, mix: span(0, 1) } },
   vocoder: { rules: { carrier: (x, q) => id(x, q), bands: whole(8, 32) }, needed: ['carrier'] },
   autotune: { rules: { strength: span(0, 1), retune_ms: span(0, 400) } },
-  crossfader: { rules: { a: laneList, b: laneList }, needed: ['a', 'b'] },
+  crossfader: { rules: { a: laneList, b: (x, q) => (Array.isArray(x) && x.length === 0 ? [] : laneList(x, q)), fade: bool, silent: bool }, needed: ['a', 'b'] },
   hot_cue: { rules: { cue_bar: (x, q) => inRange(x, q, 1, 100000) }, needed: ['cue_bar'] },
   looper: {
     rules: {
@@ -649,6 +683,7 @@ function fxClipsOf(v: unknown, bars: number, laneIds: ReadonlySet<string>): FxCl
       const b = st['b'] as string[];
       [...a, ...b].forEach(x => { if (!laneIds.has(x)) fail(`${p}.settings.${a.includes(x) ? 'a' : 'b'}`, 'must name lanes of the piece'); });
       if (a.some(x => b.includes(x))) fail(`${p}.settings.b`, 'must not share a lane with a');
+      if (b.length === 0 && st['fade'] !== true) fail(`${p}.settings.b`, 'must name a lane unless fade is true');
     }
     if (effect === 'hot_cue' && (st['cue_bar'] as number) >= bars + 1) fail(`${p}.settings.cue_bar`, `must be before the end (bar ${bars + 1})`);
     if (effect === 'looper') (st['bars'] as number[]).forEach((b, j) => { if (b > bars) fail(`${p}.settings.bars[${j}]`, `must be a bar of the piece (1 to ${bars})`); });
@@ -666,6 +701,55 @@ function fxClipsOf(v: unknown, bars: number, laneIds: ReadonlySet<string>): FxCl
     }
     return clip;
   });
+}
+
+/** A lane's regions: in order, never overlapping, each inside the piece; a loop shorter than its region. */
+function regionsOf(v: unknown, path: string, bars: number): ScoreRegion[] {
+  const list = arr(v, path);
+  if (list.length > MAX_REGIONS) fail(path, `must have at most ${MAX_REGIONS} regions`);
+  const out = list.map((x, i): ScoreRegion => {
+    const p = `${path}[${i}]`;
+    const o = obj(x, p);
+    for (const k of Object.keys(o)) if (!['from_bar', 'to_bar', 'loop_bars'].includes(k)) fail(`${p}.${k}`, 'is not part of a region (from_bar, to_bar, loop_bars)');
+    const from = inRange(o['from_bar'], `${p}.from_bar`, 1, bars + 1);
+    const to = inRange(o['to_bar'], `${p}.to_bar`, 1, bars + 1);
+    if (barPos(from) !== from) fail(`${p}.from_bar`, 'must be a bar position to 1/1000 of a bar');
+    if (barPos(to) !== to) fail(`${p}.to_bar`, 'must be a bar position to 1/1000 of a bar');
+    if (!(to > from)) fail(`${p}.to_bar`, 'must be after from_bar');
+    const r: ScoreRegion = { from_bar: from, to_bar: to };
+    if (o['loop_bars'] !== undefined) {
+      const loop = num(o['loop_bars'], `${p}.loop_bars`);
+      if (barPos(loop) !== loop) fail(`${p}.loop_bars`, 'must be a length to 1/1000 of a bar');
+      if (!(loop > 0 && loop < to - from - EPS)) fail(`${p}.loop_bars`, 'must be above 0 and shorter than the region');
+      r.loop_bars = loop;
+    }
+    return r;
+  });
+  out.forEach((r, i) => { if (i > 0 && r.from_bar < out[i - 1]!.to_bar - EPS) fail(`${path}[${i}].from_bar`, 'must not start before the previous region ends'); });
+  return out;
+}
+
+/** The ruler's markers: in bar order, each inside the piece with a short name. */
+function markersOf(v: unknown, bars: number): Marker[] {
+  const list = arr(v, 'markers');
+  if (list.length > MAX_MARKERS) fail('markers', `must have at most ${MAX_MARKERS} markers`);
+  const out = list.map((x, i): Marker => {
+    const p = `markers[${i}]`;
+    const o = obj(x, p);
+    for (const k of Object.keys(o)) if (k !== 'bar' && k !== 'name') fail(`${p}.${k}`, 'is not part of a marker (bar, name)');
+    const bar = num(o['bar'], `${p}.bar`);
+    if (!(bar >= 1 && bar < bars + 1)) fail(`${p}.bar`, `must be from 1 to before ${bars + 1}`);
+    if (barPos(bar) !== bar) fail(`${p}.bar`, 'must be a bar position to 1/1000 of a bar');
+    return { bar, name: text(o['name'], `${p}.name`, MAX_MARKER_NAME) };
+  });
+  out.forEach((m, i) => { if (i > 0 && m.bar < out[i - 1]!.bar) fail(`markers[${i}].bar`, 'bars must not go back'); });
+  return out;
+}
+
+function keyOf(v: unknown): Key {
+  const o = obj(v, 'key');
+  for (const k of Object.keys(o)) if (k !== 'tonic' && k !== 'mode') fail(`key.${k}`, 'is not part of a key (tonic, mode)');
+  return { tonic: int(o['tonic'], 'key.tonic', 0, 11), mode: oneOf(o['mode'], 'key.mode', ['major', 'minor'] as const) };
 }
 
 /** A Vocal Track: 1 to 32 takes the studio holds, and up to 64 clips of them, each inside its take and the piece. */

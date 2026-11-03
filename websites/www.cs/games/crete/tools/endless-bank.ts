@@ -5,7 +5,7 @@
 //
 // `make` searches for levels whose newest pieces are at most Chapter <chapter>'s (a tier offers a bank level from its
 // chapter on) and whose search stores situations inside band <band> of BANDS, each through the whole gate. Run
-// several at once (at most four), each appending to its own file, then `write` them all. Run from games/crete.
+// several at once (at most four), each appending to its own file, then `write` them all; `write` leaves out a level whose layout repeats one it has kept. Run from games/crete.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { search } from '../src/endless/generate.ts';
 import type { BankLevel } from '../src/endless/generate.ts';
@@ -13,6 +13,7 @@ import { chapterOf, knownOf, floorOf } from '../src/endless/gate.ts';
 import { campaignLevels } from '../src/endless/campaign.ts';
 import { measure } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
+import { SAME, overlap } from '../src/puzzle/layouts.ts';
 
 /** The bands the bank fills, a little under 1.3 times apart, from the shared bar up to the plateau's top. */
 export const BANDS: readonly [number, number][] = [
@@ -47,6 +48,10 @@ if (cmd === 'make') {
       const b = JSON.parse(line) as BankLevel;
       if (seen.has(b.text)) continue;
       seen.add(b.text);
+      // No two bank levels repeat a layout, so a run that falls back on the bank never meets one twice.
+      const lv = parse(b.text);
+      const like = all.find(k => overlap(lv, parse(k.text)) >= SAME);
+      if (like) { console.log(`left out a level of chapter ${b.chapter} (${b.explored}): its layout repeats one of chapter ${like.chapter} (${like.explored})`); continue; }
       all.push(b);
     }
   }

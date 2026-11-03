@@ -23,7 +23,7 @@ Claude settled these without asking, under the roadmap's standing rule.
 - **The challenge bar.** An Endless level is a challenge level of the latest chapter whose pieces it holds (`chapterOf` in `src/endless/gate.ts`), measured against that chapter's teaching levels exactly as the campaign's challenge levels are: at least 20 times their most situations and no shorter than their longest line, and never under the shared bar for a chase (6,000 situations, 30 moves). The teaching numbers are constants (`TEACHING`), measured again by the test.
 - **The ramp.** The first level stores anything from 6,000 to 20,000 situations. Each level after it stores 1.2 to 1.6 times the one before (inside the campaign's `RAMP` of 1.2 to 2.2, aimed at its 1.3), a level that hides walls 1.1 to 1.5 times (`HIDDEN.ramp`) and never more than `HIDDEN.most`. Once a level stores 30,000 the climb levels off: every later level stores 30,000 to 50,000, about a middle chapter's last levels (Chapter 2's stores 44,006, Chapter 5's 54,608), and the ramp check no longer applies. An endless climb by 1.3 a level would pass the solver's cap within twenty levels, and a phone could not make such levels.
 - **The rest of the gate.** Every level also passes `sharedProblems`, `threatProblems` with the challenge bar, `hiddenProblems`, `catchProblems` (through `challengeProblems`) and `uselessProblems`, all from `src/puzzle/difficulty.ts`; plus two the campaign's tests keep for released levels: a **tidy** layout of rooms and halls (no wall standing alone, no bare pocket) and a **new** layout, overlapping no campaign level and none of the run's last twelve by `SAME` (0.42), with the measure moved from `test/layouts.test.ts` to `src/puzzle/layouts.ts` so both share it.
-- **The bank.** A run's first level always comes from the bank, picked by the seed, so a run starts at once on any phone. Every later level is searched for, with a budget counted in situations the searches store (12,000,000), so every device stops at the same step and the same seed gives the same level everywhere; when the budget runs out the level is the bank's, picked by the seed among those in the band that the tier offers and the run has not had lately (when none is in the band, one within the campaign's own `RAMP` of 1.2 to 2.2, then one on the plateau). The bank is made by the same generator ahead of time (`tools/endless-bank.ts`) and committed; `test/endless-gate.test.ts` measures every bank level again and runs it through the whole gate.
+- **The bank.** A run's first level always comes from the bank, picked by the seed, so a run starts at once on any phone. Every later level is searched for, with a budget counted in situations the searches store (6,000,000), so every device stops at the same step and the same seed gives the same level everywhere; when the budget runs out the level is the bank's, picked by the seed among those in the band that the tier offers and the run has not had lately (when none is in the band, one within the campaign's own `RAMP` of 1.2 to 2.2, then one on the plateau). The bank is made by the same generator ahead of time (`tools/endless-bank.ts`) and committed; `test/endless-gate.test.ts` measures every bank level again and runs it through the whole gate.
 - **Determinism and builds.** A seed reproduces its run within a build. A later build whose generator or gate changes may make other levels from the same seed; a saved run keeps its levels' texts, so a run in progress never changes under the player.
 - **Help.** Using Ariadne's thread on an Endless level still clears it and moves the run on (a run has no other way forward), but marks the run "with help", and such a run sets no deepest.
 - **Score and best.** A level's score is its moves against its fewest, as in the campaign. The run counts its levels cleared and their moves; the best is the deepest level a run cleared without help, with its seed.
@@ -53,9 +53,23 @@ On the development laptop (Node 22, one core each):
 | The gate on one of 69,836 (Chapter 10, level 8) | measure 1,151 ms, every piece 3,550 ms |
 | The gate on one of 180,046 (Chapter 10, level 10) | measure 3,402 ms, every piece 3,424 ms |
 | Random drafts, no climb: share passing the cheap checks in the first band | about 1 in 300 |
-| The climb, per level found (first numbers, before the bands were set per chapter) | 2 of 12 within 12,000,000 situations, about 100 s each |
+| The climb, per level found, before the bar was set per chapter (every level held to Chapter 1's 36 moves) | 2 of 12 searches found one within 12,000,000 situations, about 100 s each |
+| The bank's search, no budget, per level (36 levels, four at once) | all 36 found; median 197 s, mean 241 s, 5 s to 1,084 s |
+| The search's pace | about 100,000 situations a second (12,000,000 in 117 to 124 s in Chrome's worker) |
 
-FILLED IN AT THE END: the bank's build times, the share of searches that find a level within the budget, and the phone figures from a throttled browser.
+In the browser (Chrome, `tests/e2e`, the local site), through the page's own Endless:
+
+| Measure | Laptop | Main thread throttled 4× (CDP) |
+| --- | --- | --- |
+| New Run to the first level's start card (the bank's) | 229 to 279 ms | 552 ms |
+| The worker making level 2 with a budget of 12,000,000 | 117 s (made) and 123 s (the bank's after the budget) | 124 s: CDP's throttle slows the page's thread, not the worker's |
+| The page's longest stall while the worker searches | 21 to 33 ms | 38 ms |
+
+So the page never freezes: the worker carries every search and the page's longest stall stayed under 40 ms. What a phone changes is how long a search takes. The budget is counted in situations, not seconds, so a phone makes the same level as the laptop, only later. A phone's JavaScript runs at roughly a third to a quarter of this laptop's single-core speed (an estimate: Chrome cannot throttle a worker, and no phone was at hand), which gives about 25,000 to 35,000 situations a second.
+
+The budget is set from that: 6,000,000 situations take about a minute on the laptop and three to four minutes on such a phone, spent while the player plays the level before. A player who is faster sees Finding a Good Level… with its progress for at most what is left of that. About a quarter of the searches find a level within it (the bank's median of 197 s is more than the laptop's minute); the rest take the bank's. That is why the bank, not the search, carries most of a run's variety, and it is built to cover every tier's climb (`test/endless-gate.test.ts`).
+
+**WebAssembly:** not used. The page is never blocked, so the only gain would be a shorter search. That gain is a constant factor, perhaps two, on code that is already integer typed-array work in a worker, and it would not change the design: the bank and the prefetch would still be needed. It is worth trying only if a phone measurement shows players waiting on Finding a Good Level… often.
 
 ## Tasks
 

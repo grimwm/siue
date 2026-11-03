@@ -67,7 +67,7 @@ export interface Progress { tries: number; spent: number; budget: number }
 
 /** Situations the search may spend on one level before it takes the bank's (docs/superpowers/plans/
  *  2026-11-03-crete-endless.md has the measurements behind it). */
-export const BUDGET = 12_000_000;
+export const BUDGET = 6_000_000;
 /** How many of the run's last levels a new level's layout is checked against. */
 export const RUN_MEMORY = 12;
 /** Changes tried on one draft before the next round's draft takes over. */
@@ -84,9 +84,14 @@ export function planOf(rng: Rng, tier: number, band: Band, hides: boolean): Plan
   if (newest.length && rng.next() < 0.5) families.push(rng.pick(newest));
   if (hides) families.push(rng.pick(HIDING));
   for (const f of rng.shuffle(all)) if (families.length < count + (hides ? 1 : 0) && !families.includes(f)) families.push(f);
-  // Chapter 1's pieces alone need a longer line (its teaching levels' 36 moves), so a bigger board.
-  const size = (tier <= 1 ? 13 : 12) + rng.int(3);
-  return { rows: size, cols: size, roomRows: 3, roomCols: 3, families, relics: 1 + rng.int(3), hall: 0.2, loop: 0.35 };
+  // Boards and room grids of many shapes, so that no two levels share a plan of walls; Chapter 1's pieces alone
+  // need a longer line (its teaching levels' 36 moves), so a bigger board. Up to 15 by 15 fits a phone's screen.
+  const least = tier <= 1 ? 12 : 11;
+  const rows = least + rng.int(16 - least), cols = least + rng.int(16 - least);
+  return {
+    rows, cols, roomRows: 2 + rng.int(3), roomCols: 2 + rng.int(3), families, relics: 1 + rng.int(3),
+    hall: 0.1 + 0.25 * rng.next(), loop: 0.2 + 0.3 * rng.next(),
+  };
 }
 
 /** The searches' caps: a solve that stores more than the band allows is no use, and the measure's other searches

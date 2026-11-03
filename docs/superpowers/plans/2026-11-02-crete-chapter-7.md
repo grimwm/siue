@@ -33,7 +33,11 @@ These were open; Claude settled them without asking, per the roadmap's standing 
   3. it presses the buttons it rolls over: rolling over a toggle button in a sealed hall, it opens and shuts the toggle wall in Theseus's way (without the ball the level is lost).
   A block stopping a ball was tried as the third lesson and dropped: in a straight hall Theseus can always walk behind a ball rolling away from him, so a block is never needed against a lone ball unless the beast presses him, and then the lesson is the beast, not the ball.
 - **The ramp's start:** as in Chapter 6, measured within the chapter: level 4 starts at the challenge bar (20 times the hardest teaching level, and the shared bar), and each level after it climbs 1.2 to 2.2 times. Level 10 stores more than Chapter 6's level 10 (55,797).
-- **Where the levels come from:** each challenge level grew from an earlier chapter's level, turned end for end (rotated half a turn, force floors turned with it) and given a bronze ball, then tuned with the solver to the ramp and tidied. Rotating keeps the shape of a level that already reads well and makes it new to the eye; the ball changes how it plays. LEVEL_SOURCES_PLACEHOLDER
+- **Where the levels come from:** each challenge level grew from an earlier chapter's level, turned end for end (rotated half a turn, force floors turned with it) and given a bronze ball, then tuned with the solver to the ramp and tidied. Rotating keeps the shape of a level that already reads well and makes it new to the eye; the ball changes how it plays.
+  - level 4 grew from Chapter 5's level 4 (the frozen snare), level 5 from Chapter 6's level 5 (the drowned fold), level 6 from Chapter 6's level 6 (the burning fold);
+  - level 7 from Chapter 3's level 6 (the sliding floor), level 8 from Chapter 2's level 4 (the currents), level 9 from Chapter 3's level 9 (the bronze glass);
+  - level 10 from Chapter 6's level 10, the folds' finale: with its red door, teleports, fire and toggle walls it is the one earlier finale that a single ball took to the ramp's next step with a live beast. Chapter 3's finale was tried first and dropped: with a ball its beast stays penned for 25 turns in a row, past `THREAT`'s third, and every retune that freed him made the fewest moves take a catch.
+  The Minotaur's rule (along the horizontal gap first), the ball's (straight, then back) and the solver's counts are the same under the half turn: levels 7 to 9 store the same situations turned as unturned, give or take two.
 - **Every piece matters, the beast is live:** the owner's two rules, as the `crete/gate-every-piece` branch states them (`uselessProblems`, `threatProblems`), hold on every level, the ball included: taken away, each ball changes the fewest moves, makes the level lost, or cuts its search by `USEFUL.explored`.
 
 ## The story
@@ -47,10 +51,25 @@ The chapter is the ring the bronze ball guards, as Talos guarded Crete. The open
 - **Challenge levels 4–10:**
   - Each clears the challenge bar and the shared bar, and `catchProblems`: no level needs a catch, to win or for the fewest moves.
   - Each stores 1.2 to 2.2 times the situations of the level before it (`RAMP`).
-  - MEASURES_PLACEHOLDER
+  - The measures, in situations stored (the gate-every-piece branch's solver):
+
+    | Level | Title | Fewest moves | Stored | × the level before | Beast adds |
+    |---|---|---|---|---|---|
+    | 1 | The Bronze Ball | 18 | 102 | | 3 |
+    | 2 | The Ball and the Beast | 8 | 30 | | 1 |
+    | 3 | The Rolling Button | 18 | 174 | | 8 |
+    | 4 | The Frozen Round | 35 | 6,281 | 36 × level 3 | 15 |
+    | 5 | The Sunken Round | 31 | 13,018 | 2.07 | 11 |
+    | 6 | The Burning Round | 33 | 15,870 | 1.22 | 8 |
+    | 7 | The Icy Round | 45 | 29,027 | 1.83 | 15 |
+    | 8 | The Driven Round | 48 | 50,102 | 1.73 | 9 |
+    | 9 | The Mirrored Round | 56 | 74,084 | 1.48 | 9 |
+    | 10 | The Last Round | 47 | 114,683 | 1.55 | 9 |
+  - Level 4 stores at least 20 times as many as the hardest teaching level (174), and clears the shared bar for a chase level (6,000 stored, 30 moves).
+  - Level 10 is the hardest. It stores more than Chapter 6's level 10 (55,797).
   - No level hides a wall, so `HIDDEN` does not apply.
 - **Every level** has a Minotaur and at least one bronze ball, and its intro names how many ("one bronze ball").
-- **Size:** levels 1–9 fit 12 by 12. Level 10 is larger than the screen but fits 20 by 20.
+- **Size:** levels 1–9 fit 12 by 12. Level 10 is larger than the screen (12 by 14) but fits 20 by 20; its red door is the one way to the last relic, so its key is needed, and it ends at a gate.
 - **Pages:** level 9 holds "The Brazen Man" and level 10 holds "The Bronze Nail". Each lies off the shortest line, on a longer winning route.
 - **Quotations** are word for word from Seaton's Apollonius and Frazer's Apollodorus, cited by line or section.
 - **Music:** the title theme, unchanged.
@@ -76,7 +95,8 @@ The chapter is the ring the bronze ball guards, as Talos guarded Crete. The open
   - the ball as the new piece, counted in each intro, and no later piece;
   - pinned shortest lines, never caught, and on every level the balls matter;
   - the three teaching lessons;
-  - the pages.
+  - the pages;
+  - level 10's red door and key.
 - Run `node --test test/chapter-7.test.ts`, then `test/difficulty.test.ts`, then `test/fewest.test.ts`. Expected: all pass.
 
 ### Task 2: chapter flow and e2e

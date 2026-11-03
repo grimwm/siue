@@ -59,7 +59,7 @@ facing: left
 ############
 ` },
   { id: 'ch7-5', text: `title: The Sunken Round
-intro: Three teleports, each sending you out of the next along, counting left to right and top to bottom. Pools lie in the north and the southwest, with flippers between; a block waits in the south, and one bronze ball rolls along the north hall. Two relics.
+intro: Three teleports, each sending you out of the next along, counting left to right and top to bottom. Pools lie in the northeast and the southwest, with flippers between; a block waits in the south, and one bronze ball rolls along the north hall. Two relics.
 facing: right
 
 ############
@@ -91,52 +91,52 @@ facing: down
 ############
 ` },
   { id: 'ch7-7', text: `title: The Icy Round
-intro: Ice runs down the north, a current drives east across the middle, and pop-up walls rise behind you once you leave them. Two relics, and one bronze ball in the east, where the ice will carry it.
-facing: up
+intro: Ice runs up the southwest, a current drives west across the middle, and pop-up walls rise behind you once you leave them. Two relics, and one bronze ball in the west, where the ice will carry it.
+facing: down
 
 ############
-##P.#...=;##
-###.#...=.##
-###.#.##=..#
-##.....#...#
-##.>>>>#...#
-##..;...o..#
-#*.........#
-###;..#.#..#
-#*....M.#.|E
+E|.#.M....*#
+#..#.#..;###
+#.........*#
+#..o...;..##
+#...#<<<<.##
+#...#.....##
+#..=##.#.###
+##.=...#.###
+##;=...#.P##
 ############
 ` },
   { id: 'ch7-8', text: `title: The Driven Round
-intro: Currents run through these ways, and gravel lies about them: you can cross it, but the beast and the ball cannot. Suction boots in the south let you walk the currents as you please. Three relics, and one bronze ball in the northwest.
-facing: right
+intro: Currents run through these ways, and gravel lies about them: you can cross it, but the beast and the ball cannot. Suction boots in the north let you walk the currents as you please. Three relics, and one bronze ball in the southeast.
+facing: left
 
 ############
-#P...>..>.##
-#>o...#...##
-#....^*:..*#
-#^..#..#...#
-#.<:.^:M..##
-#...:.....##
-###..:..u..#
-#*#.......:#
-#.<.v...:..E
+E..:...^.>.#
+#:.......#*#
+#..u..:..###
+##.....:...#
+##..M:v.:>.#
+#...#..#..v#
+#*..:*v....#
+##...#...o<#
+##.<..<...P#
 ############
 ` },
   { id: 'ch7-9', text: `title: The Mirrored Round
-intro: Fire burns across these halls, with boots in the north, and pop-up walls rise behind you once you leave them. Medusa's mirror lies past the fire and a honey cake in the south; two relics, and one bronze ball in the northwest. Off the quick way a page waits, and a memory of the man of bronze.
+intro: Fire burns across these halls, with boots in the south, and pop-up walls rise behind you once you leave them. Medusa's mirror lies past the fire and a honey cake in the north; two relics, and one bronze ball in the southeast. Off the quick way a page waits, and a memory of the man of bronze.
 pages: ch7-brazen
-facing: up
+facing: down
 
 ############
-#P.....h...#
-#..o..#....#
-#...;.FF...#
-#.###.p.#..#
-#*###..z#..#
-########..##
-#*;#####;.##
-#..##..FM.##
-#...x.;...|E
+E|...;.x...#
+##.MF..##..#
+##.;#####;*#
+##..########
+#..#z..###*#
+#..#.p.###.#
+#...FF.;...#
+#....#..o..#
+#...h.....P#
 ############
 ` },
   { id: 'ch7-10', text: `title: The Last Round

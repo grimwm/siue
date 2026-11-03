@@ -186,7 +186,7 @@ test('a link opened in a page shows the card; Edit a copy then U brings back the
   const name = (await page.locator('#share-name').textContent())!;
   // The draft then differs from the shared level (a wall on a floor cell), so Edit a copy and U can be told apart.
   await page.locator('#brush-wall').click();
-  await paint(page, 5, 5);
+  await paint(page, 5, 4);
   const earlier = await draftOf(page);
 
   // The same page follows a link put in its address.

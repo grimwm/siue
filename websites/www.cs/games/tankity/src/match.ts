@@ -11,7 +11,7 @@
  * The game's state, the page and the rest of the game arrive as deps. */
 import { track } from './track.ts';
 import { maxArmor } from './armor.ts';
-import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
+import type { SfxName, sfx as SfxApi, music as MusicApi } from './audio.ts';
 import type { DifficultySetting } from './difficulty.ts';
 import { FOE_DYING, FOE_FIRE, FOE_HIT, FOE_MISS, TANK_FIRE, TANK_HIT, TANK_MISS, TANK_OWS, pick } from './chatter.ts';
 import type { FxSys } from './fx/types.ts';
@@ -175,7 +175,7 @@ export function createMatch(deps: MatchDeps) {
     advance('matchStart');
     refreshNavHints(); // the rotate hint shows from the first name card
     music.leaveTheme(); // a new match leaves the demo's theme at once
-    startBanner('Round 1. The battery holds these hills.', openShop);
+    startBanner('Round 1. The battery holds these hills.', openShop, null);
     say(`Match ${G.seed}: $600 stake in your pocket. Buy guns first. The battery holds these hills.`, 'info');
     talk('tank', 'tankity tank! Shopping, then shooting!', true);
   }
@@ -223,7 +223,7 @@ export function createMatch(deps: MatchDeps) {
         const who = opener.isPlayer ? 'Tankity tank' : opener.id;
         say(`Round ${G.round}. Wind ${windText()}.${sides ? ` ${sides}.` : ''} ${who} moves first.`, 'info');
       }
-    });
+    }, null);
   }
   /* How the earth guns play on the battlefield (earth-fx.ts). */
   const earthFx: EarthFxDeps = {
@@ -623,7 +623,7 @@ export function createMatch(deps: MatchDeps) {
   const BANNER_MS = 1500;
   // Banner timing rides the game clock, never wall time: hidden tabs throttle
   // setTimeout, which used to strand the game on its name card after refocus.
-  function startBanner(text: string, done?: (() => void) | null): void {
+  function startBanner(text: string, done?: (() => void) | null, sound: SfxName | null = 'fanfare'): void {
     const t = $('round-banner-text');
     if (t) t.textContent = text;
     const b = $('round-banner');
@@ -632,7 +632,10 @@ export function createMatch(deps: MatchDeps) {
       void b.offsetWidth;
       b.hidden = false;
     }
-    sfx.play('fanfare');
+    // A sting marks an outcome, never a start: the fanfare falls from the lose
+    // jingle's own opening note and holds low, so on a Round 1 card it sounds
+    // like the match was just lost. Starts arrive on the music instead.
+    if (sound) sfx.play(sound);
     G.bannerT = BANNER_MS / 1000;
     G.bannerDone = done || null;
   }

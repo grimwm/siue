@@ -383,7 +383,7 @@ function onKnownLine() {
   /** A move that changes the try but is not the known line's next. */
   const offLine = (): Action => {
     const next = known[game.run!.now.moves]!;
-    const a = (['up', 'down', 'left', 'right'] as const).map((dir): Action => ({ kind: 'move', dir }))
+    const a = [...(['up', 'down', 'left', 'right'] as const).map((dir): Action => ({ kind: 'move', dir })), { kind: 'wait' } as Action]
       .find(a => JSON.stringify(a) !== JSON.stringify(next) && step(game.run!.now, a).state !== game.run!.now);
     assert.ok(a, 'some move leaves the line');
     return a;

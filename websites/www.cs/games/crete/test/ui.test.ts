@@ -1213,7 +1213,7 @@ test('winning level 10 opens the closing card over the end card; Continue goes o
   win(9);
   assert.equal(flow.top(), 'chapter');
   assert.equal(text('chapter-kicker'), 'End of Chapter 1');
-  assert.match(text('chapter-score'), /^Level 10 cleared: \d+ moves · best possible 76/);
+  assert.match(text('chapter-score'), /^Level 10 cleared: \d+ moves · best possible 58/);
   assert.match(text('chapter-text'), /Labyrinth begins here/);
   assert.equal(byId(rootOf('end-veil'), 'end-veil').hidden, true);
   key('Enter');

@@ -11,9 +11,8 @@ interface CreteHook {
   game: { run: { now: { moves: number; outcome: string } } | null; press(a: string): void };
   endless: { setBudget(n: number): void; saved: { run(): { depth: number; next: unknown; cleared: number } | null } };
 }
-declare global {
-  interface Window { __creteTest: CreteHook }
-}
+/** The page's window as the hook types it. */
+type Hooked = Window & { __creteTest: CreteHook };
 
 /** The longest the page's main thread went without running a timer over `ms`, sampled every 16 ms. */
 async function longestStall(page: Page, ms: number): Promise<number> {
@@ -40,7 +39,7 @@ async function openEndless(page: Page, look: 'classic' | 'modern'): Promise<stri
   await page.goto(PAGE);
   await expect(page.locator('#title-veil')).toBeVisible();
   // The specs' budget keeps a search short: past it the level is the bank's.
-  await page.evaluate(() => window.__creteTest.endless.setBudget(1_500_000));
+  await page.evaluate(() => (window as unknown as Hooked).__creteTest.endless.setBudget(1_500_000));
   await page.locator('#title-endless').click();
   await expect(page.locator('#endless-veil')).toBeVisible();
   await expect(page.locator('#endless-title')).toHaveText('Endless');
@@ -59,14 +58,14 @@ for (const look of ['classic', 'modern'] as const) {
     // The board settles first (Modern builds its scene once); then, while the worker is still making level 2,
     // the page keeps answering.
     await page.waitForTimeout(2_000);
-    expect(await page.evaluate(() => window.__creteTest.endless.saved.run()!.next), 'the worker is still searching').toBeNull();
+    expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.endless.saved.run()!.next), 'the worker is still searching').toBeNull();
     expect(await longestStall(page, 1500), 'no long stall on the page while the worker searches').toBeLessThan(250);
-    const before = await page.evaluate(() => window.__creteTest.game.run!.now.moves);
+    const before = await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves);
     for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
       await page.keyboard.press(key);
-      if (await page.evaluate(b => window.__creteTest.game.run!.now.moves > b, before)) break;
+      if (await page.evaluate(b => (window as unknown as Hooked).__creteTest.game.run!.now.moves > b, before)) break;
     }
-    expect(await page.evaluate(() => window.__creteTest.game.run!.now.moves)).toBeGreaterThan(before);
+    expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves)).toBeGreaterThan(before);
     // Ariadne's thread plays the rest out.
     await page.keyboard.press('r');
     await page.keyboard.press('t');
@@ -75,7 +74,7 @@ for (const look of ['classic', 'modern'] as const) {
     await expect(page.locator('#end-score')).toContainText('best possible');
     await page.locator('#end-next').click();
     await expect(page.locator('#start-veil .kicker')).toHaveText('Endless · Level 2', { timeout: 60_000 });
-    expect(await page.evaluate(() => window.__creteTest.endless.saved.run()!.depth)).toBe(2);
+    expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.endless.saved.run()!.depth)).toBe(2);
     expect(errors).toEqual([]);
   });
 }
@@ -107,11 +106,11 @@ test('Endless on a phone: the card fits the screen and the touch pad moves These
   await page.locator('#endless-new').tap();
   await expect(page.locator('#start-veil')).toBeVisible({ timeout: 20_000 });
   await page.locator('#start-begin').tap();
-  const before = await page.evaluate(() => window.__creteTest.game.run!.now.moves);
+  const before = await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves);
   for (const arm of ['.mv-up', '.mv-down', '.mv-left', '.mv-right']) {
     await page.locator(arm).tap();
-    if (await page.evaluate(b => window.__creteTest.game.run!.now.moves > b, before)) break;
+    if (await page.evaluate(b => (window as unknown as Hooked).__creteTest.game.run!.now.moves > b, before)) break;
   }
-  expect(await page.evaluate(() => window.__creteTest.game.run!.now.moves)).toBeGreaterThan(before);
+  expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves)).toBeGreaterThan(before);
   await context.close();
 });

@@ -904,10 +904,11 @@ test('DJ & Effects: placed on the timeline, performed live under Record To Timel
     await fx.getByRole('button', { name: 'Hear From Here' }).click();
     await expect(fx.getByRole('button', { name: 'Getting Ready…' }), 'the button says the sound is on its way').toBeDisabled();
     await expect(page.locator('[data-listening]')).toHaveText('The piece: Playing', { timeout: 120_000 });
-    await expect(fx.getByRole('button', { name: 'Hear From Here' })).toBeEnabled();
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
-    await page.getByRole('button', { name: 'Stop', exact: true }).click();
-    await expect(page.locator('[data-listening]')).toHaveText('');
+    await expect(page.locator('[data-playhead]').first(), 'the playhead moves with the sound').toBeVisible();
+    await expect(fx.getByRole('button', { name: 'Hear From Here' })).toBeEnabled();
+    // The piece plays on to its end by itself.
+    await expect(page.locator('[data-listening]')).toHaveText('', { timeout: 60_000 });
     await fx.getByRole('button', { name: 'Longer' }).click();
     await expect(fx.locator('[data-clip-bars]')).toHaveText('bar 2 to bar 4 + 0.25');
     await fx.locator('[data-family="turntable"]').click();

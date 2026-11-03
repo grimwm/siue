@@ -268,21 +268,26 @@ export function Composer(p: ComposerProps) {
     const full = scoreFromDoc(s.doc, { piece: p.start.piece, project: p.start.project, draft: version + 1, made: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
     const others: Score = { ...full, lanes: full.lanes.filter(l => l.id !== s.part!.id), notes: full.notes.filter(n => n.lane !== s.part!.id), motifs: [] };
     let el: HTMLAudioElement | null = null;
+    let url = '';
     if (alongParts && others.notes.length > 0) {
       setAlong('ready');
       setStatus('Getting the other parts ready…');
       // Let play while the press is fresh: the build and the count-in can outlast the browser's window for starting sound.
+      // Held as the run's audio from the press, so Stop while it builds lets it go.
       const pressed = pressedAudio();
+      alongAudio.current = pressed;
       try {
-        const built = await p.buildSound(`along-${editKey(s.doc)}-${s.part.id}`, others, () => {});
-        pressed.src = built.url;
-        el = pressed;
+        url = (await p.buildSound(`along-${editKey(s.doc)}-${s.part.id}`, others, () => {})).url;
       } catch (e) {
+        if (run !== alongRun.current) return;
+        pressed.pause();
+        alongAudio.current = null;
         setAlong('off');
         setStatus(`The other parts could not be built: ${e instanceof Error ? e.message : String(e)}`);
         return;
       }
       if (run !== alongRun.current) return;
+      el = pressed;
     }
     setStatus('');
     setAlong('counting');
@@ -298,7 +303,8 @@ export function Composer(p: ComposerProps) {
     const t0 = p.now();
     alongClock.current = el ? () => el.currentTime : () => p.now() - t0;
     if (el) {
-      alongAudio.current = el;
+      // Its sound is set only now, after the count-in, so the other parts start on the downbeat.
+      el.src = url;
       el.addEventListener('ended', () => { if (run === alongRun.current) finishAlong(); });
       try { await el.play(); } catch { /* the page's sound was refused: the clock still runs */ }
     }

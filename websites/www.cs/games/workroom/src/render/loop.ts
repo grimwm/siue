@@ -8,8 +8,9 @@
 export const LOOP_CROSSFADE = 1;
 
 /**
- * A copy of `ch` whose samples [end - n, end) are faded (equal power) from themselves into the samples [start - n, start),
- * so playing up to `end` and jumping to `start` is seamless. `start` and `end` are sample indices; n is `fade` samples,
+ * A copy of `ch` whose samples [end - n, end) are faded from themselves into the samples [start - n, start) on sfizz's
+ * default S-shaped curve, (1 - cos(pi t)) / 2, whose two gains sum to 1 so a steady tone keeps its level through the
+ * fade. Playing up to `end` and jumping to `start` is then seamless. `start` and `end` are sample indices; n is `fade` samples,
  * cut to what fits before `start` and inside the loop. A loop with no room for a fade comes back as a plain copy.
  */
 export function crossfadeLoop(ch: Float32Array, start: number, end: number, fade: number): Float32Array<ArrayBuffer> {
@@ -20,7 +21,8 @@ export function crossfadeLoop(ch: Float32Array, start: number, end: number, fade
   for (let k = 0; k < n; k++) {
     const t = (k + 1) / n;
     const i = last - n + k;
-    out[i] = ch[i]! * Math.cos((t * Math.PI) / 2) + ch[start - n + k]! * Math.sin((t * Math.PI) / 2);
+    const into = (1 - Math.cos(Math.PI * t)) / 2;
+    out[i] = ch[i]! * (1 - into) + ch[start - n + k]! * into;
   }
   return out;
 }

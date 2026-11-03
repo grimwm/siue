@@ -135,6 +135,7 @@ test('a looped voice plays its sample with the loop crossfaded, so a held note c
   await renderScore(s, LIBRARY, d);
   const sources = contexts[0]!.nodes.filter(n => n.kind === 'source');
   const want = voices(s, LIBRARY);
+  assert.equal(sources.length, want.length);
   sources.forEach((src, i) => {
     const v = want[i]!;
     const b = src['buffer'] as Buf;

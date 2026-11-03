@@ -178,7 +178,7 @@ test('Hear plays on its first press however long the sound takes to build; a pre
     }), renderTarget(root));
   });
   const listening = () => text(walk(root).find(e => e._attrs['data-listening'] !== undefined)!);
-  const built = async (url: string) => act(async () => { builds.shift()!(url); await new Promise(r => setTimeout(r, 0)); });
+  const built = async (url: string) => act(async () => { builds.shift()!(url); });
 
   // One press; the build finishes long after it, outside the press.
   await act(() => press(button(root, 'Hear With The Piece')));

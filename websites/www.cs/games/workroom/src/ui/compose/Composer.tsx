@@ -271,9 +271,12 @@ export function Composer(p: ComposerProps) {
     if (alongParts && others.notes.length > 0) {
       setAlong('ready');
       setStatus('Getting the other parts ready…');
+      // Let play while the press is fresh: the build and the count-in can outlast the browser's window for starting sound.
+      const pressed = pressedAudio();
       try {
         const built = await p.buildSound(`along-${editKey(s.doc)}-${s.part.id}`, others, () => {});
-        el = new Audio(built.url);
+        pressed.src = built.url;
+        el = pressed;
       } catch (e) {
         setAlong('off');
         setStatus(`The other parts could not be built: ${e instanceof Error ? e.message : String(e)}`);
@@ -451,7 +454,10 @@ export function Composer(p: ComposerProps) {
   };
 
   // ---- Listening ----
+  /** Counts the presses of Hear: a press that Stop or a later press has replaced never starts its sound. */
+  const hearRun = useRef(0);
   const stopListening = (): void => {
+    hearRun.current++;
     audio.current?.pause();
     audio.current = null;
     setListening(null);
@@ -469,12 +475,16 @@ export function Composer(p: ComposerProps) {
     if (what === 'part' && !alone.length) delete score.fx_clips;
     if (score.notes.length === 0) { setStatus(what === 'part' ? 'This part has no notes yet.' : 'The piece has no notes yet.'); return; }
     setListening({ what, state: 'Getting the instruments ready…' });
+    const run = hearRun.current;
+    // Let play while the press is fresh: building the sound can take longer than the browser's window for starting sound.
+    const el = pressedAudio();
+    audio.current = el;
     try {
       const built = await p.buildSound(`compose-${editKey(doc)}-${what === 'part' ? part!.id : 'all'}`, score, stage => {
-        setListening({ what, state: stage === 'instruments' ? 'Getting the instruments ready…' : stage === 'rendering' ? 'Building the sound…' : 'Finishing…' });
+        if (run === hearRun.current) setListening({ what, state: stage === 'instruments' ? 'Getting the instruments ready…' : stage === 'rendering' ? 'Building the sound…' : 'Finishing…' });
       });
-      const el = new Audio(built.url);
-      audio.current = el;
+      if (run !== hearRun.current) return;
+      el.src = built.url;
       if (fromBar !== undefined) el.currentTime = barSeconds(doc.tempo, fromBar);
       setListening({ what, state: 'Playing' });
       el.addEventListener('ended', stopListening);
@@ -486,7 +496,8 @@ export function Composer(p: ComposerProps) {
       await el.play();
       requestAnimationFrame(tick);
     } catch (e) {
-      setListening(null);
+      if (run !== hearRun.current) return;
+      stopListening();
       setStatus(`The sound could not be built: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
@@ -886,7 +897,7 @@ export function Composer(p: ComposerProps) {
           )}
         </div>
       </div>
-      {doc.parts.length ? <EffectsPanel doc={doc} help={help} apply={apply} hearFrom={bar => void hear('piece', bar)} status={setStatus} /> : null}
+      {doc.parts.length ? <EffectsPanel doc={doc} help={help} apply={apply} hearFrom={bar => void hear('piece', bar)} building={listening !== null && listening.state !== 'Playing'} status={setStatus} /> : null}
       {doc.parts.length && p.dj ? (
         <DjMode doc={doc} ports={p.dj} pin={pin} help={help} apply={apply} status={setStatus} onLive={on => { djLive.current = on; }}
           score={only => {
@@ -902,6 +913,18 @@ export function Composer(p: ComposerProps) {
       ) : null}
     </div>
   );
+}
+
+/**
+ * An audio element told to play in the press that asked for it, before it has any sound. A browser lets a page start
+ * sound only in the moments after a press; a piece's sound can take longer than that to build, and a play() after it
+ * would be refused, leaving the press doing nothing. Played in the press, the element is let play once its sound is
+ * set, however long the build takes.
+ */
+export function pressedAudio(): HTMLAudioElement {
+  const el = new Audio();
+  el.play().catch(() => { /* nothing to play yet: setting its sound ends this first play */ });
+  return el;
 }
 
 /** A key per document, so a document's sound is built once however often it is heard. */

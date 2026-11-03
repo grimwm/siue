@@ -122,6 +122,30 @@ test('one source per voice, started at its time with its rate, looping over the 
   assert.ok(sources.some(n => n['loop'] === true) && sources.some(n => n['loop'] === false), 'the fixture has looped and plucked voices');
 });
 
+test('a looped voice plays its sample with the loop crossfaded, so a held note comes round without a click; a plucked one plays it as decoded', async () => {
+  const s = score();
+  const { deps: d, contexts } = deps();
+  const decoded = new Set<Buf>();
+  d.decode = async () => {
+    const b = buffer(2, RATE * 10, RATE);
+    b.data.forEach(c => { for (let i = 0; i < c.length; i++) c[i] = Math.sin(i / 7) * (1 - i / c.length); });
+    decoded.add(b);
+    return b as unknown as AudioBuffer;
+  };
+  await renderScore(s, LIBRARY, d);
+  const sources = contexts[0]!.nodes.filter(n => n.kind === 'source');
+  const want = voices(s, LIBRARY);
+  sources.forEach((src, i) => {
+    const v = want[i]!;
+    const b = src['buffer'] as Buf;
+    if (!v.loop) { assert.ok(decoded.has(b), 'a plucked note plays the decoded sample'); return; }
+    assert.ok(!decoded.has(b), 'a looped note plays a crossfaded copy');
+    const [start, end] = v.loop.map(t => Math.round(t * RATE)) as [number, number];
+    const raw = [...decoded][0]!; // every decoded sample here holds the same signal
+    for (let c = 0; c < 2; c++) assert.equal(b.data[c]![end - 1], raw.data[c]![start - 1], 'the end of the loop runs on into its start');
+  });
+});
+
 test('each voice has an envelope: a linear attack to its level, a hold, and a linear release after its length', async () => {
   const s = score();
   const { deps: d, contexts } = deps();

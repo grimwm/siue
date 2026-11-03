@@ -138,3 +138,76 @@ test('the import preview: facts, a select per part (drums only drums), What Can\
   assert.deepEqual(calls, ['add', 'new', 'cancel']);
   render(null, renderTarget(root));
 });
+
+/**
+ * An audio element as a browser's autoplay rule has it: play() is let through inside a press, or on an element already
+ * played in one; any other play() is refused. `pressing` is true only while a click runs.
+ */
+let pressing = false;
+const elements: FakeAudio[] = [];
+class FakeAudio {
+  src = '';
+  currentTime = 0;
+  paused = true;
+  unlocked = false;
+  plays: string[] = [];
+  constructor(src = '') { this.src = src; elements.push(this); }
+  addEventListener(): void {}
+  pause(): void { this.paused = true; }
+  play(): Promise<void> {
+    if (pressing) this.unlocked = true;
+    if (!this.unlocked) { this.plays.push(`refused ${this.src}`); return Promise.reject(new Error('NotAllowedError')); }
+    this.plays.push(`played ${this.src}`);
+    if (this.src) this.paused = false;
+    return Promise.resolve();
+  }
+}
+const press = (el: StubElement): void => { pressing = true; try { click(el); } finally { pressing = false; } };
+
+test('Hear plays on its first press however long the sound takes to build; a press replaced or stopped while it builds never plays', async () => {
+  Object.assign(globalThis, { Audio: FakeAudio });
+  let doc = addPart(newDoc('Slow Build'), ENTRIES.find(e => e.id === 'cello')!)!.doc;
+  doc = addNotes(doc, 'cello', [{ start: 0, length: 4, pitch: 48 }, { start: 8, length: 4, pitch: 50 }]).doc;
+  const builds: ((url: string) => void)[] = [];
+  const buildSound = () => new Promise<{ url: string; channels: Float32Array[]; rate: number }>(r => builds.push(url => r({ url, channels: [new Float32Array(1)], rate: 48000 })));
+  const root = makeEl('root');
+  await act(() => {
+    render(h(ui.c.Composer, {
+      start: { doc, piece: { id: 'slow-build', title: 'Slow Build' }, project: { id: 'my-pieces', name: 'My Pieces' }, version: 0 },
+      entries: ENTRIES, api: { saveDraft: async () => ({ status: 201, data: { version: 1 } }) }, sampler, buildSound, now: () => 0,
+    }), renderTarget(root));
+  });
+  const listening = () => text(walk(root).find(e => e._attrs['data-listening'] !== undefined)!);
+  const built = async (url: string) => act(async () => { builds.shift()!(url); await new Promise(r => setTimeout(r, 0)); });
+
+  // One press; the build finishes long after it, outside the press.
+  await act(() => press(button(root, 'Hear With The Piece')));
+  assert.match(listening(), /Getting the instruments ready/, 'the press shows the sound is on its way');
+  await built('blob:one');
+  const one = elements.at(-1)!;
+  assert.deepEqual(one.plays, ['played ', 'played blob:one'], 'played in the press, then let play once built');
+  assert.equal(one.paused, false);
+  assert.equal(listening(), 'The piece: Playing');
+
+  // Pressed twice while it builds: only the second press plays.
+  await act(() => click(button(root, 'Stop')));
+  assert.equal(one.paused, true);
+  await act(() => press(button(root, 'Hear With The Piece')));
+  const first = elements.at(-1)!;
+  await act(() => press(button(root, 'Hear My Part Alone')));
+  const second = elements.at(-1)!;
+  await built('blob:piece');
+  await built('blob:part');
+  assert.ok(first.paused && !first.plays.some(p => p.includes('blob:')), 'the replaced press never starts');
+  assert.deepEqual(second.plays, ['played ', 'played blob:part']);
+
+  // Stop while it builds: nothing plays when the build ends.
+  await act(() => click(button(root, 'Stop')));
+  await act(() => press(button(root, 'Hear With The Piece')));
+  const stopped = elements.at(-1)!;
+  await act(() => click(button(root, 'Stop')));
+  await built('blob:late');
+  assert.ok(stopped.paused && !stopped.plays.some(p => p.includes('blob:')), 'a stopped build never plays');
+  assert.equal(listening(), '');
+  render(null, renderTarget(root));
+});

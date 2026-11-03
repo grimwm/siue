@@ -5,6 +5,7 @@
 import { regions, velocityGain } from '../render/plan.ts';
 import type { Library, LibraryFile } from '../render/plan.ts';
 import type { Sound } from '../score.ts';
+import { loopedBuffer } from '../render/loop.ts';
 
 /** How loud a live note is at velocity 127 and 0 dB: the rendered piece is levelled afterwards, live notes are not. */
 export const LIVE_LEVEL = 0.5;
@@ -67,7 +68,7 @@ export function createSampler(ports: SamplerPorts): Sampler {
         if (!buffer || p.stopped) return;
         const ctx = ports.context();
         const src = ctx.createBufferSource();
-        src.buffer = buffer;
+        src.buffer = voice.loop ? loopedBuffer(buffer, voice.loop, (c, n, r) => ctx.createBuffer(c, n, r)) : buffer;
         src.playbackRate.value = voice.rate;
         if (voice.loop) {
           src.loop = true;

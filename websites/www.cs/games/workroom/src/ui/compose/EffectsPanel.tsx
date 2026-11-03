@@ -23,6 +23,8 @@ export interface EffectsPanelProps {
   apply(next: EditDoc): void;
   /** Plays the piece from a bar position. */
   hearFrom(bar: number): void;
+  /** True while the piece's sound is being built to play: Hear From Here says so and waits. */
+  building?: boolean;
   status(text: string): void;
 }
 
@@ -193,7 +195,7 @@ function ClipSheet(q: { clip: FxClip; i: number; p: EffectsPanelProps; bars: num
       <p class="font-semibold">{x.name} <span class="font-mono text-xs text-dim" data-clip-bars="">{barWords(clip.from_bar)} to {barWords(clip.to_bar)}</span></p>
       <p class="text-sm text-dim">{x.does}</p>
       <div class="flex flex-wrap gap-2">
-        <Button onClick={() => p.hearFrom(clip.from_bar)}>Hear From Here</Button>
+        <Button onClick={() => p.hearFrom(clip.from_bar)} disabled={p.building}>{p.building ? 'Getting Ready…' : 'Hear From Here'}</Button>
         <Button onClick={() => p.apply(moveClip(p.doc, i, clip.from_bar - 1 / beatsAt(p.doc, clip.from_bar)))}>Earlier</Button>
         <Button onClick={() => p.apply(moveClip(p.doc, i, clip.from_bar + 1 / beatsAt(p.doc, clip.from_bar)))}>Later</Button>
         <Button onClick={() => p.apply(stepClip(p.doc, i, -1))}>Shorter</Button>

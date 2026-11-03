@@ -1,6 +1,6 @@
 # Shared sample library
 
-Every sample the composing pipeline renders with, as lossless FLAC at the rate and depth it was recorded, one file per sounding pitch: `<instrument>/<midi pitch>.flac`. `library.json` lists them (rate, channels, and the loop points of the sustained instruments). The browser renderer plays these.
+Every sample the composing pipeline renders with, as lossless FLAC at the rate and depth it was recorded, one file per sounding pitch: `<instrument>/<midi pitch>.flac`. `library.json` lists them (rate, channels, and the loop points of the sustained instruments). The browser renderer plays these, and repeats a sustained note's loop with a one-second crossfade, as the pipeline's sfizz instruments do (`loop_crossfade=1.0`), so a held note comes round without a click.
 
 Built by `make music-library` from `music/compose/samples.json`; do not edit by hand.
 

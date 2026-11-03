@@ -45,15 +45,15 @@ intro: A pushed block will not cross loose stone either. The near pool is barred
 intro: Daedalus set currents running through these ways, and they carry the beast as they carry you. Draw him onto them and let them take him while you gather the relics; suction boots will hold you fast.
 
 ############
-#P...>..>.##
+#P..#>..>.##
 #>..:.#...##
-#.##.^*:#*.#
-#^....##...#
+###..^*:.*.#
+#^..#.##...#
 #.<:#^:Mu.##
 #...:...#.##
-##....#:.#.#
-#*#.....##.#
-#.<.v.#.:..E
+##..#.#:...#
+#*#...#.##.#
+#.<.v.#.:#.E
 ############
 ` },
   { id: 'ch2-5', text: `title: The Glassy Ways

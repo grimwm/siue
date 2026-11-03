@@ -39,18 +39,18 @@ intro: Here what looks open is shut, and what looks shut is open. Bump what bloc
 ###########
 ` },
   { id: 'ch4-4', text: `title: The Unseen Shore
-intro: Flippers lie in the pool and three relics about it. Two stretches of floor here are wall you cannot see; the beast knows where they are, and he will not wade after you.
+intro: A relic lies in the pool, two more about it, and the flippers in the far corner. One stretch of floor here is wall you cannot see; the beast knows where it is, and he will not wade after you.
 
 ############
-#P.#######*#
-#...#M.~~~.#
-#..*.I.~f~.#
-#..#.#.~~~.#
-#....#.....#
+#P.#######f#
+#...#..~~~.#
+#..*.I.~*~.#
+#..#.#.~~~M#
+#....#..#..#
 #..###..#.##
 #*..O......#
-###....##..#
-###.##I..|E#
+###........#
+###.##...|E#
 ############
 ` },
   { id: 'ch4-5', text: `title: The Painted Stone

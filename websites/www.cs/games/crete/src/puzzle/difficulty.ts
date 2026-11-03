@@ -595,9 +595,9 @@ export interface Threat { turns: number; live: number; quiet: number }
 
 /** A live beast: within `reach` steps of Theseus over ground he may tread (four of his turns: he takes two steps a
  *  turn); penned where no path reaches Theseus, he is quiet. Stone or held in a snare he counts as live: Theseus
- *  worked to put him there. On the shortest line of a challenge level he is live for at least a third of the turns and never quiet for more than a third of them
- *  in a row. A teaching level shows one piece, and may pen the beast once it has shown how: it asks a quarter of
- *  the turns and no limit on a quiet stretch. */
+ *  worked to put him there. On the shortest line of a challenge level he is live for at least a third of the turns
+ *  and never quiet for more than a third of them in a row. A teaching level shows one piece, and may leave the beast
+ *  behind once it has: a quarter of the turns, and no limit on a quiet stretch. */
 export const THREAT = {
   reach: 8,
   challenge: { share: 1 / 3, quiet: 1 / 3 },

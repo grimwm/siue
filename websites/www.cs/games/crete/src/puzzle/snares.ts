@@ -60,18 +60,18 @@ intro: Ice runs through the middle halls; skates and a block lie in the west. A 
 ############
 ` },
   { id: 'ch5-5', text: `title: The Drowned Snare
-intro: A relic lies in the pool, two more about it, and the flippers in the far corner. Two snares lie by the water: one will take the beast, and a block will fill the other. The brown button in the northwest looses the eastern one.
+intro: A relic lies in the pool, two more beside it, and the flippers wait by the gate. One snare guards the south door: lead the beast into it. The brown button in the north looses it, so keep off it, and keep the block off it too.
 
 ############
-#P...#####f#
-#-#...#~~~.#
-###*...~*~.#
-#.....&~~~.#
-#...&#.....#
-##..##..##.#
-#*..O..#M..#
-#.##...#...#
-#........|E#
+#...#......#
+#...#......#
+#.OP####-###
+#..........#
+#.##*~~~##.#
+#.#..~*~.#.#
+#.#*.~~~.#.#
+#.####.&####
+#..M....f|E#
 ############
 ` },
   { id: 'ch5-6', text: `title: The Snare at the Gate
@@ -136,22 +136,25 @@ E|.M.#.;..*#
 ############
 ` },
   { id: 'ch5-10', text: `title: The Gate of the Labyrinth
-intro: The snares end at the gate. A red door is one way through; the other runs east past a snare that the block, pushed onto the brown button, holds open. Off the quickest way, a page waits, and a memory of another telling.
+intro: The snares end at the gate, and the beast waits by it, behind a red door. The door is one way through; the other runs east, past a snare that the block, pushed onto the brown button, holds open. Off the quickest way, a page waits, and a memory of another telling.
 pages: ch5-gate
 
-####################
-#P....#......####..#
-#..#....###....#...#
-###*..:.#.##..:#.###
-#..#......O-###....#
-#..#....#.......#&.#
-#......##.##....#.##
-#r###M:...#...:##.##
-#.......###..#.#...#
-##.*.###..##.#.R...#
-#....#p...:#.#.#..##
-#*#......#..#####|E#
-####################
+#################
+#.....#.##..#...#
+#####.#.###.#.#.#
+###*..#...#..*#.#
+###.#####.#####.#
+##..............#
+###.###.###.#####
+#.r.#.....#.....#
+#..P#.....#...Op#
+#....*....#...-.#
+#######.#######&#
+#######..RM.....#
+#######...###.#.#
+#######...#...#|#
+###############E#
+#################
 ` },
 ];
 

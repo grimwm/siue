@@ -195,8 +195,7 @@ test('N opens the level list, which has ten levels and ten chapter tabs; M mutes
   await expect(page.locator('#levels-veil')).toBeVisible();
   for (let i = 1; i <= 10; i++) await expect(page.locator(`#level-${i}`)).toBeVisible();
   for (let n = 1; n <= 10; n++) await expect(page.locator(`#levels-tab-${n}`)).toBeVisible();
-  await expect(page.locator('#levels-tab-5')).toBeEnabled();
-  await expect(page.locator('#levels-tab-6')).toBeDisabled();
+  for (let n = 1; n <= 10; n++) await expect(page.locator(`#levels-tab-${n}`)).toBeEnabled();
   await page.keyboard.press('q');
   await expect(page.locator('#levels-veil')).toBeHidden();
   await page.keyboard.press('m');

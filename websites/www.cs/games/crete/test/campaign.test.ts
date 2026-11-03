@@ -6,7 +6,8 @@ import { CHAPTERS, LEVEL_IDS, chapterOf, pageHome, nextChapter, levelById, place
 import type { Quote } from '../src/campaign/lore.ts';
 import { trialLevel } from '../src/puzzle/trials.ts';
 
-const CITE = /^[A-Z][^,]+, .+, .+, tr\. .+ \(\d{4}\)$/;
+/** Author, work, section, translator and year; a work written in English (Hawthorne's) has no translator. */
+const CITE = /^(?!Nathaniel Hawthorne,)[A-Z][^,]+, .+, .+, tr\. .+ \(\d{4}\)$|^Nathaniel Hawthorne, [^,]+, [^,]+ \(\d{4}\)$/;
 const released = CHAPTERS.filter(c => c.released);
 const levelOf = (i: number) => levelById(LEVEL_IDS[i]!);
 
@@ -23,15 +24,8 @@ test('Chapter 1 holds ten levels, trial-1 to trial-10', () => {
   assert.deepEqual(CHAPTERS[0]!.levelIds, Array.from({ length: 10 }, (_, i) => `trial-${i + 1}`));
 });
 
-test('released chapters come first and have lore; the rest are empty', () => {
-  const firstUnreleased = CHAPTERS.findIndex(c => !c.released);
-  assert.ok(firstUnreleased > 0);
-  CHAPTERS.slice(firstUnreleased).forEach(c => {
-    assert.equal(c.released, false, `chapter ${c.n} released after an unreleased one`);
-    assert.equal(c.name, '');
-    assert.deepEqual(c.levelIds, []);
-    assert.equal(c.lore, null);
-  });
+test('all ten chapters are released, each with its name and lore', () => {
+  assert.equal(released.length, 10);
   released.forEach(c => {
     assert.ok(c.lore, `chapter ${c.n} has no lore`);
     assert.ok(c.name.length > 0);
@@ -56,7 +50,11 @@ test('nextChapter is the following chapter, or null after the last', () => {
   assert.equal(nextChapter(2)!.released, true);
   assert.equal(nextChapter(3)!.released, true);
   assert.equal(nextChapter(4)!.released, true);
-  assert.equal(nextChapter(5)!.released, false);
+  assert.equal(nextChapter(5)!.released, true);
+  assert.equal(nextChapter(6)!.released, true);
+  assert.equal(nextChapter(7)!.released, true);
+  assert.equal(nextChapter(8)!.released, true);
+  assert.equal(nextChapter(9)!.released, true);
   assert.equal(nextChapter(10), null);
 });
 

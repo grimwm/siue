@@ -72,15 +72,15 @@ intro: Two relics, a red key and its door. The beast waits in the upper hall; tw
 intro: Loose stone and closing stone keep the beast off, and here the walls lie both ways: one painted, two unseen. Mind where the stones close behind you.
 
 ############
-#P.#::#....#
-##......#;.#
-####I.#..#.#
-#.:...W..#.#
-#*##.#..:#.#
-###.###....#
-#...:...#;.#
-#...#.#.I.M#
-#*..;...#.|E
+###.*###P..#
+#...##.....#
+#......I:..#
+##.;##.#...#
+#..###.W.###
+#........###
+##....;I.###
+###.###..###
+#.*.:..M.|E#
 ############
 ` },
   { id: 'ch4-7', text: `title: The Glass Floor

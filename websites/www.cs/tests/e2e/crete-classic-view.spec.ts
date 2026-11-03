@@ -168,16 +168,19 @@ test('in Modern too, a tap on the compass eases back to 75° and north up from t
     for (let i = 1; i <= 8; i++) ev('pointermove', x + dx! * i / 8, y + dy! * i / 8);
     ev('pointerup', x + dx!, y + dy!);
   }, [dx, dy] as const);
+  // Every move here eases, a step a frame, and a headless browser without a GPU draws a frame about every half
+  // second: the drag down to the lowest tilt takes a dozen frames to settle.
+  const eased = { timeout: 20_000 };
   for (const across of [-150, 150, -300, 400]) {
     const yaw = (await modernView()).yaw - across * 0.6;
     await drag(across, 0);
     await drag(0, -250);
-    await expect.poll(modernView, `turned ${across} px and held at 10°`).toEqual({ yaw, pitch: 10 });
+    await expect.poll(modernView, { ...eased, message: `turned ${across} px and held at 10°` }).toEqual({ yaw, pitch: 10 });
     await drag(0, 0);
     await expect.poll(async () => {
       const v = await modernView();
       return { north: ((v.yaw % 360) + 360) % 360, pitch: v.pitch };
-    }, `back from ${across} px`).toEqual({ north: 0, pitch: 75 });
+    }, { ...eased, message: `back from ${across} px` }).toEqual({ north: 0, pitch: 75 });
   }
   expect(errors).toEqual([]);
 });

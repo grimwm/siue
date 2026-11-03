@@ -24,7 +24,7 @@ import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
 import { DIRS } from '../src/puzzle/tiles.ts';
 import { stateKey } from './reference-solver.ts';
-import { CAMPAIGN_LEVELS, LEVEL_IDS, chapterOf } from '../src/campaign/chapters.ts';
+import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import type { Levels, OutsideLevel } from '../src/campaign/chapters.ts';
 import { icedPages } from './puzzle-grid.ts';
@@ -390,7 +390,7 @@ test('every released level in order: Enter starts it, a win shows moves and the 
     if (i + 1 === LEVEL_IDS.length) break;
     key('Enter');
     if (within === 10) {
-      assert.equal(text('chapter-title'), ['The Winding Ways', 'The Closing Ways', 'The False Walls', 'The Snares of Daedalus'][chapter - 1]);
+      assert.equal(text('chapter-title'), ['The Winding Ways', 'The Closing Ways', 'The False Walls', 'The Snares of Daedalus', 'The Folding Halls', 'The Bronze Guard', "The Harpies' Den", "Daedalus's Workshop", 'The Heart of the Labyrinth'][chapter - 1]);
       key('Enter');
     }
   }
@@ -435,7 +435,7 @@ test('the status bar and the menu name the chapter and the level', () => {
   assert.equal(text('menu-level'), title);
   flow.closeLayers();
   game.open(LEVEL_IDS.length - 1);
-  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, 'Ch. 5 • Level 10/10');
+  assert.equal(byId(document.getElementById('status-root')!, 'hud-trial').textContent, 'Ch. 10 • Level 10/10');
 });
 
 test('I on the title opens the story card and Q opens the menu; Q again returns to the title', () => {
@@ -707,7 +707,22 @@ test('left and right in the levels list switch between the released chapters, cl
   key('d');
   assert.equal(pressed(5), 'true');
   key('d');
-  assert.equal(pressed(5), 'true', 'clamped at the last released chapter');
+  assert.equal(pressed(6), 'true');
+  key('d');
+  assert.equal(pressed(7), 'true');
+  key('d');
+  assert.equal(pressed(8), 'true');
+  key('d');
+  assert.equal(pressed(9), 'true');
+  key('d');
+  assert.equal(pressed(10), 'true');
+  key('d');
+  assert.equal(pressed(10), 'true', 'clamped at the last chapter');
+  key('ArrowLeft');
+  key('ArrowLeft');
+  key('ArrowLeft');
+  key('ArrowLeft');
+  key('ArrowLeft');
   key('ArrowLeft');
   key('ArrowLeft');
   key('ArrowLeft');
@@ -935,14 +950,89 @@ test("Chapter 4's closing card goes on to Chapter 5's opening card", () => {
   assert.ok(el('chapter-enter'));
 });
 
-test("Chapter 5's closing card says Chapter 6 is not yet released, and Continue puts it away", () => {
+test("Chapter 5's closing card goes on to Chapter 6's opening card", () => {
+  reset();
+  flow.showChapter(5, true);
+  click(byId(rootOf('chapter-continue'), 'chapter-continue'));
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Folding Halls');
+  assert.ok(el('chapter-enter'));
+});
+
+test("Chapter 6's closing card goes on to Chapter 7's opening card", () => {
+  reset();
+  flow.showChapter(6, true);
+  click(byId(rootOf('chapter-continue'), 'chapter-continue'));
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Bronze Guard');
+  assert.ok(el('chapter-enter'));
+});
+
+test("Chapter 7's closing card goes on to Chapter 8's opening card", () => {
+  reset();
+  flow.showChapter(7, true);
+  click(byId(rootOf('chapter-continue'), 'chapter-continue'));
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), "The Harpies' Den");
+  assert.ok(el('chapter-enter'));
+});
+
+test("Chapter 8's closing card goes on to Chapter 9's opening card", () => {
+  reset();
+  flow.showChapter(8, true);
+  click(byId(rootOf('chapter-continue'), 'chapter-continue'));
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), "Daedalus's Workshop");
+  assert.ok(el('chapter-enter'));
+});
+
+test("Chapter 9's closing card goes on to Chapter 10's opening card", () => {
+  reset();
+  flow.showChapter(9, true);
+  click(byId(rootOf('chapter-continue'), 'chapter-continue'));
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Heart of the Labyrinth');
+  assert.ok(el('chapter-enter'));
+});
+
+test("Chapter 10's closing card ends the campaign: an ending by the pages found, no next chapter, and Continue puts it away", () => {
   reset();
   const opened = game.opens;
-  flow.showChapter(5, true);
-  assert.match(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /Chapter 6 is not yet released/);
+  flow.showChapter(10, true);
+  const veil = byId(document.getElementById('chapter-root'), 'chapter-veil').textContent;
+  assert.doesNotMatch(veil, /not yet released/);
+  assert.match(veil, /The End · \d+ of \d+ pages found/);
   key('Enter');
   assert.equal(flow.top(), null);
   assert.equal(game.opens, opened);
+});
+
+test("Chapter 10's closing card shows the ending the pages found earn: none, some, then every one", () => {
+  // Runs on a store of its own, so no other test's pages decide the branch and its pages reach no other test.
+  const all = CHAPTERS.flatMap(c => c.lore?.pages ?? []).map(p => p.id);
+  const was = found.all();
+  const own = createFoundPages(null);
+  Object.assign(found, { has: own.has, all: own.all, add: own.add });
+  try {
+    const ending = () => [text('chapter-ending-title'), byId(document.getElementById('chapter-root'), 'chapter-ending').textContent];
+    for (const [add, title, count] of [
+      [[], 'The Hallway Ending', 0],
+      [all.slice(0, 1), 'Out, but Thin', 1],
+      [all, "The True Ending: The Maker's Notes", all.length],
+    ] as const) {
+      reset();
+      found.add(add);
+      flow.showChapter(10, true);
+      const [t, block] = ending();
+      assert.equal(t, title);
+      assert.match(block ?? '', new RegExp(`The End · ${count} of ${all.length} pages found`));
+      flow.closeLayers();
+    }
+  } finally {
+    const back = createFoundPages(null);
+    back.add(was);
+    Object.assign(found, { has: back.has, all: back.all, add: back.add });
+  }
 });
 
 test('with Chapter 1 all cleared, Levels and Chapter 2, Level 3 starts there', () => {
@@ -1231,11 +1321,11 @@ test('winning level 10 opens the closing card over the end card; Continue goes o
   assert.equal(game.trial, 10);
 });
 
-test("winning Chapter 5's last level opens its closing card, and no Next level follows it", () => {
+test("winning Chapter 10's last level opens its closing card, and no Next level follows it", () => {
   reset();
-  win(49);
+  win(99);
   assert.equal(flow.top(), 'chapter');
-  assert.match(text('chapter-veil'), /Chapter 6 is not yet released/);
+  assert.match(text('chapter-veil'), /The End/);
   key('Enter');
   assert.equal(flow.top(), 'end');
   assert.equal(el('end-next'), undefined);

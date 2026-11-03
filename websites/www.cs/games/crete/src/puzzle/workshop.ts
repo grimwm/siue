@@ -123,6 +123,24 @@ machines: ball-up
 ##..#..#...E
 ############
 ` },
+  { id: 'ch9-9', text: `title: The Backward Tracks
+intro: Water fills the northwest, and a thief waits in its doorway: step on it and it takes your flippers. Gravel lies by your start, one Harpy flies the south hall, and a block waits in the southeast. Two relics. Off the quick way a page waits, and a memory of the oldest thief's trick.
+pages: ch9-tracks
+facing: left
+
+############
+#~~~#.P:.*.#
+#~~~#..#...#
+#~~~$..#...#
+##.##..#.###
+#..*#......#
+#...#f.....#
+##.#######.#
+#...#w.....#
+#......#O..#
+#pM.#..#...#
+########E###
+` },
 ];
 
 const cache = new Map<number, Level>();

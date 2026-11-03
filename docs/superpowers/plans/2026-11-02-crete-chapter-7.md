@@ -48,25 +48,25 @@ The chapter is the ring the bronze ball guards, as Talos guarded Crete. The open
 - **Challenge levels 4–10:**
   - Each clears the challenge bar and the shared bar, and `catchProblems`: no level needs a catch, to win or for the fewest moves.
   - Each stores 1.2 to 2.2 times the situations of the level before it (`RAMP`).
-  - The measures, in situations stored (the gate-every-piece branch's solver):
+  - The measures, in situations stored (the solver on `main`):
 
     | Level | Title | Fewest moves | Stored | × the level before | Beast adds |
     |---|---|---|---|---|---|
     | 1 | The Bronze Ball | 18 | 102 | | 3 |
     | 2 | The Ball and the Beast | 8 | 30 | | 1 |
     | 3 | The Rolling Button | 18 | 174 | | 8 |
-    | 4 | The Frozen Round | 35 | 6,281 | 36 × level 3 | 15 |
-    | 5 | The Sunken Round | 31 | 13,018 | 2.07 | 11 |
-    | 6 | The Burning Round | 33 | 15,870 | 1.22 | 8 |
-    | 7 | The Icy Round | 45 | 29,027 | 1.83 | 15 |
-    | 8 | The Driven Round | 48 | 50,102 | 1.73 | 9 |
-    | 9 | The Mirrored Round | 56 | 74,084 | 1.48 | 9 |
-    | 10 | The Last Round | 47 | 114,683 | 1.55 | 9 |
+    | 4 | The Frozen Round | 33 | 7,765 | 45 × level 3 | 8 |
+    | 5 | The Sunken Round | 41 | 9,890 | 1.27 | 8 |
+    | 6 | The Burning Round | 41 | 14,363 | 1.45 | 13 |
+    | 7 | The Icy Round | 35 | 19,687 | 1.37 | 11 |
+    | 8 | The Driven Round | 30 | 33,254 | 1.69 | 9 |
+    | 9 | The Mirrored Round | 40 | 51,674 | 1.55 | 9 |
+    | 10 | The Last Round | 51 | 93,443 | 1.81 | 13 |
   - Level 4 stores at least 20 times as many as the hardest teaching level (174), and clears the shared bar for a chase level (6,000 stored, 30 moves).
   - Level 10 is the hardest. It stores more than Chapter 6's level 10 (55,797).
   - No level hides a wall, so `HIDDEN` does not apply.
 - **Every level** has a Minotaur and at least one bronze ball, and its intro names how many ("one bronze ball").
-- **Size:** levels 1–9 fit 12 by 12. Level 10 is larger than the screen (12 by 14) but fits 20 by 20; its red door is the one way to the last relic, so its key is needed, and it ends at a gate.
+- **Size:** levels 1–9 fit 12 by 12. Level 10 is larger than the screen (13 by 16) but fits 20 by 20; its red door is the one way to the last relic, so its key is needed, and it ends at a gate.
 - **Pages:** level 9 holds "The Brazen Man" and level 10 holds "The Bronze Nail". Each lies off the shortest line, on a longer winning route.
 - **Quotations** are word for word from Seaton's Apollonius and Frazer's Apollodorus, cited by line or section.
 - **Music:** the title theme, unchanged.

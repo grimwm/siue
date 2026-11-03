@@ -154,7 +154,7 @@ test('the two pages: The Brazen Man in level 9 and The Bronze Nail in level 10, 
   }
 });
 
-test('level 10: the red door is the one way to the last relic, and the ball rolls through the middle hall', () => {
+test('level 10: the red door is the one way to the last relic', () => {
   const lv = roundLevel(9);
   assert.ok(lv.terrain.includes('gate') && lv.terrain.includes('exit') && lv.relics > 0);
   assert.ok(lv.terrain.includes('door-red') && lv.objects.includes('key-red'));

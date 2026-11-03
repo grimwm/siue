@@ -73,23 +73,40 @@ keys. Nobody else's studio is ever visible to them.
 
 ### The composer
 
-`compose.php` is the editor (`games/workroom/src/ui/compose/`, its DOM-free parts in `src/compose/`): a music piece's
-parts, each a lane with an instrument from the library's catalogue, and three ways to put notes in, all writing to one
-grid: **Play Live** (a held key sets the note's length; Tidy To snaps the starts to 1/4, 1/8, 1/16 or Off; recording
-stops after a bar of quiet; an optional count-in), **Step** (a length, Dotted, + Rest, ‹ Back One) and **Grid** (tap
-to add, drag to move, drag the right end to stretch, Line Up To). Keys pressed together are a chord in every mode.
-Tap a note to select it and again to delete it; Undo and Redo cover every edit. A note outside its instrument's range
-is drawn amber (experts only) or red (beyond the instrument) and never moved, except by Move Them Into Range. While a
-key is held the page is pinned where it is. Hear With The Piece and Hear My Part Alone build the sound with the same
-renderer the piece page uses. Save Draft keeps the piece's next draft through `save-draft.php`; the edit stays in the
-page when a save is refused. The piece page links Compose on a music piece; the pieces page and Your studio link New
-Piece. The design is `docs/superpowers/specs/2026-10-31-composer-editor-design.md`.
+`compose.php` is the editor (`games/workroom/src/ui/compose/`, its DOM-free parts in `src/compose/`). A transport
+bar stays at the top: Play and Stop (also the space bar; "Getting Ready…" while the sound is built), Back To Start,
+Loop, the tempo, where the music is (Bar · Beat · time), Undo, Redo, Save Draft, the Piece menu (Save Draft, Import,
+Export, Markers, Add Vocal Track) and the three views, **Compose**, **Mix** and **Sheet**.
 
-**Show As** puts the selected part on the Grid, as Sheet Music (engraved in the page by `src/compose/toxml.ts`
-through the sheet bundle, in the instrument's clef, written as its players read it: Double Bass an octave up, B♭
+Compose is one timeline running left to right, every row on one scale and one scroll: the song's **sections** (tap
+one for Rename, Duplicate, Loop Bars and Remove; drag it to move it with its music), the **ruler** (tap a bar to start
+there, drag along bars to loop them, markers to jump to), the **Effects** lane, then one row per track. Every track
+starts closed. A track's header is a grip (drag it, or ↑ and ↓, to reorder), a caret to open or close it, its
+instrument's tile (the track menu: Rename, Duplicate Track, Change Instrument, Clear Notes, Remove Track), its name,
+and a speaker that mutes it. Mute All and Unmute All sit above, with a line saying which tracks will play; there is
+no Solo. A closed track shows its **regions** (blocks of notes: tap one for Split, Join, Repeat, Duplicate, Copy,
+Paste and Delete; drag one along its track or onto another track of the same kind; drag its corner to repeat it). An
+open track is titled with its instrument ("Piano · Piano Roll", "Drum Kit · Step Sequencer") and opens as a piano roll
+(two octaves, the keys in the header column, rows of the chosen key shaded, the bars fitted to the width) or a step
+sequencer. Tap to add a note of the New Notes length, drag to move, drag the right end to stretch; right-click,
+double-click or a long press deletes; Select (or Shift and drag) boxes several, and the action bar then changes
+their pitch, octave and loudness, fixes their timing, duplicates, copies, pastes, loops or deletes them. **Type
+Notes** turns the computer keyboard into a piano that adds notes at a shaded step (so chords build a few keys at a
+time), and **Chords** places named chords, in the chosen key or not. A note outside its instrument's range is red
+and never moved except by Move Them Into Range. Each open track's **Record** drawer holds **Play Live** (with Play
+Along), **Step**, **Hum**, the on-screen keyboard and Your Keyboard. While a key is held the page is pinned where it
+is. Play builds the song with the same renderer the piece page uses and plays it as a file; the playhead and the
+readout follow its clock without redrawing the page, and the bars scroll to keep the playhead centred. Mix holds the
+chosen track's Sound and Speed And Loudness, and DJ Mode; Sheet shows the chosen track as sheet music. Save Draft
+keeps the piece's next draft through `save-draft.php`; the edit stays in the page when a save is refused. The piece
+page links Compose on a music piece; the pieces page and Your studio link New Piece. The design is
+`docs/superpowers/specs/2026-10-31-composer-editor-design.md`, with the layout of
+`docs/superpowers/plans/2026-11-03-composer-redesign.md`.
+
+**Sheet** shows the chosen track as sheet music (engraved in the page by `src/compose/toxml.ts` through the sheet
+bundle, in the instrument's clef, written as its players read it: Double Bass an octave up, B♭
 clarinet and trumpet a tone up, the horn in F a fifth up, piccolo, celesta and xylophone an octave down, glockenspiel two;
-Concert Pitch shows how it sounds) or Both, scrolling together. The range picture in Part Settings shows where the
-instrument plays. A piece page whose draft stores no MusicXML engraves its Sheet music view the same way.
+Concert Pitch shows how it sounds). A piece page whose draft stores no MusicXML engraves its Sheet music view the same way.
 
 **Import Music File** reads MusicXML (`.musicxml`, `.xml`, `.mxl`) or MIDI (`.mid`, `.midi`) in the browser only, and
 shows a preview (each part matched to the nearest instrument, which can be changed; What Can't Come Across) before
@@ -100,10 +117,15 @@ It refuses a file over 10 MB, an `.mxl` that would unzip past 20 MB or points ou
 
 ### DJ & Effects
 
-Below the editor, **Place On The Timeline** puts an effect (Turntable, Build-Up and Drop, Rhythm, Colour, Time and
-Space, Pitch and Voice, Live DJ Tools) over bars of The Whole Piece or one part: tap the effect and then a bar, or drag
-it on; drag a clip to move it and its right edge to lengthen it; its sheet has Hear From Here, Shorter, Longer,
-Remove, where it plays and its setting. **DJ Mode** plays the piece on a live deck (Platter, Crossfader, Hot Cues,
+**Add Effect** opens a palette of every effect by family (Turntable, Build-Up and Drop, Rhythm, Colour, Time and
+Space, Pitch and Voice, Live DJ Tools), each with a Hear that plays a short example over whatever is playing. Drag a
+chip onto a track or the Effects row (with a finger, hold it a moment first), or tap it and then tap a bar; a mouse
+shows where it will land. Effects that are a sound of their own (Riser, Snare Roll, Impact, Vinyl Crackle And Wow) sit
+on the Effects lane; every other effect changes only the track it lands on and is drawn on that track, a Filter Sweep
+and a crossfade as ramps, the rest as blocks (dropped on the Effects row, it is the whole song's and shows on every
+track). A crossfade placed on a track fades that track out; its settings choose the tracks that fade in and whether
+they are silent until it, and each track holds its level after it. Drag a block to move it, its ends to resize it;
+tap it for its settings, Hear From Here, Earlier, Later, Shorter, Longer and Remove. **DJ Mode**, in Mix, plays the piece on a live deck (Platter, Crossfader, Hot Cues,
 sixteen held Performance Pads on keys 1–4, Q–R, A–F and Z–V, the XY Pad, the Looper); with Record To Timeline on, what
 is played lands on the timeline in one Undo step. Both are saved as the score's `fx_clips` and rebuilt by the renderer
 (`src/render/djfx.ts`, the same processors live and offline): a part's clips after its Sound settings, the whole

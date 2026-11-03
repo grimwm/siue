@@ -87,18 +87,18 @@ intro: Three teleports stand together in the west, each sending you out of the n
 ############
 ` },
   { id: 'ch6-7', text: `title: The Frozen Fold
-intro: Two teleports join the south to the north. Ice runs across both halls, and skates lie in the west; three relics, and a pop-up wall that rises behind you once you have crossed it.
+intro: Two teleports join the northeast to the middle. Ice lies in the northwest and across the south, and skates lie in the east; three relics, and a pop-up wall that rises behind you once you have crossed it.
 
 ############
-##..##*#.|E#
-#.=====..M.#
-#.......@..#
-##*.....*.##
-#..........#
-#....;.....#
-#.k#=====..#
-#P##.@#....#
-#.......#..#
+#..#*###..##
+#.==.###...#
+#.==.###@###
+##...@...###
+#.;......#.#
+#...#*.#P..#
+#..===..k..#
+#...#..*.###
+#E|##.M..###
 ############
 ` },
   { id: 'ch6-8', text: `title: The Far Gate

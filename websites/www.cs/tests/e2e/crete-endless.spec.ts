@@ -40,7 +40,7 @@ async function openEndless(page: Page, look: 'classic' | 'modern'): Promise<stri
   await page.goto(PAGE);
   await expect(page.locator('#title-veil')).toBeVisible();
   // The specs' budget keeps a search short: past it the level is the bank's.
-  await page.evaluate(() => window.__creteTest.endless.setBudget(400_000));
+  await page.evaluate(() => window.__creteTest.endless.setBudget(1_500_000));
   await page.locator('#title-endless').click();
   await expect(page.locator('#endless-veil')).toBeVisible();
   await expect(page.locator('#endless-title')).toHaveText('Endless');
@@ -56,7 +56,10 @@ for (const look of ['classic', 'modern'] as const) {
     await expect(page.locator('#start-veil .kicker')).toHaveText('Endless · Level 1');
     await expect(page.locator('#hud-trial')).toHaveText('Endless • Level 1');
     await page.locator('#start-begin').click();
-    // The worker is making level 2 now; the page keeps answering.
+    // The board settles first (Modern builds its scene once); then, while the worker is still making level 2,
+    // the page keeps answering.
+    await page.waitForTimeout(2_000);
+    expect(await page.evaluate(() => window.__creteTest.endless.saved.run()!.next), 'the worker is still searching').toBeNull();
     expect(await longestStall(page, 1500), 'no long stall on the page while the worker searches').toBeLessThan(250);
     const before = await page.evaluate(() => window.__creteTest.game.run!.now.moves);
     for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {

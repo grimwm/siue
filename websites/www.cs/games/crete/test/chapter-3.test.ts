@@ -17,7 +17,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
 /** Each level's shortest line, pinned: a rule change that alters a level fails here. */
-const SHORTEST: number[] = [14, 17, 23, 49, 50, 45, 37, 52, 55, 78];
+const SHORTEST: number[] = [14, 17, 23, 49, 50, 51, 37, 52, 55, 78];
 /** Level 10 is larger than the screen; its proofs may search further than the in-game cap. */
 const BIG_CAP = 6_000_000;
 const capOf = (i: number) => (i === 9 ? BIG_CAP : SOLVER_CAP);
@@ -134,13 +134,11 @@ test('the two pages: The Games of Minos in level 9 and The Thread in level 10, e
   }
 });
 
-test('level 10 has more than one way through: the red door, or the long west hall', () => {
+test('level 10: the long west hall is the way through, and the red door a second road beside it', () => {
   const lv = closingLevel(9);
   assert.ok(lv.terrain.includes('gate') && lv.terrain.includes('exit') && lv.relics > 0);
   assert.ok(lv.terrain.includes('door-red') && lv.objects.includes('key-red'));
-  // The west hall alone: without the key the door stays shut, and the level is still won.
-  assert.ok(solve(initial(withoutObjects(lv, ['key-red'])), BIG_CAP).solved, 'won without the red key');
-  // The door alone: with the west hall walled, the key and the door still win it.
-  assert.ok(solve(initial(walled(lv, 8, 3)), BIG_CAP).solved, 'won with the west hall walled');
-  assert.ok(unwinnable(solve(initial(walled(withoutObjects(lv, ['key-red']), 8, 3)), BIG_CAP)), 'level 10 needs one of its two ways');
+  assert.ok(unwinnable(solve(initial(walled(lv, 8, 3)), BIG_CAP)), 'level 10 needs the west hall');
+  const noKey = solve(initial(withoutObjects(lv, ['key-red'])), BIG_CAP);
+  assert.ok(noKey.solved && noKey.line.length === once(9).line.length, 'won as quickly without the red key, by the other road');
 });

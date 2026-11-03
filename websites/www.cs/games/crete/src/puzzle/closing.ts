@@ -78,13 +78,13 @@ intro: Ice and a pushing current run through this hall, and closing stones hold 
 
 ############
 #P..#...=..#
-#...#.#.=#.#
+#...#.#.=###
 #.#...;#=#.#
-#......#...#
+##....##...#
 ##.>>>>....#
-##.#.#.....#
-#*..;......#
-###M..#.#..#
+##.###.....#
+#*..;M.....#
+###...#.#.##
 #*...;..#.|E
 ############
 ` },
@@ -135,11 +135,11 @@ pages: ch3-games
 ############
 ` },
   { id: 'ch3-10', text: `title: The Ring of Walls
-intro: The closing ways end in a ring of walls that were floor a moment ago. A red door is one way through and the long west hall another; off the quickest, a page waits, and a memory of Ariadne.
+intro: The closing ways end in a ring of walls that were floor a moment ago. The long west hall is the way through, and a red door opens a second road beside it; off the quickest way, a page waits, and a memory of Ariadne.
 pages: ch3-thread
 
 ####################
-#P...#....;...##p#.#
+#P...#....;...##p..#
 #.##...####..##.##.#
 #..r.;...#......;..#
 #..#.......#.#.##..#

@@ -163,7 +163,7 @@ test('level 10, The Great Hall: keys, gear, a block and a button, a tool and the
   const unwinnable = (r: SolveResult): boolean => !r.solved && !r.capped;
   for (const k of ['key-red', 'block'] as const) assert.ok(unwinnable(solve(initial(withoutObjects(lv, [k])), GREAT_HALL_CAP)), `level 10 needs the ${k}`);
   const noMirror = solve(initial(withoutObjects(lv, ['mirror'])), GREAT_HALL_CAP);
-  assert.ok(!noMirror.solved || noMirror.line.length > t10.line.length, 'the mirror is on the quickest way past the beast');
+  assert.ok(worse(noMirror, t10.line.length), 'the mirror is on the quickest way past the beast');
   assert.ok(!t10.took.has('page'), 'the page lies off the shortest line');
   const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
   assert.ok(solve(initial(copy), GREAT_HALL_CAP).solved, 'the page lies on a winning line');

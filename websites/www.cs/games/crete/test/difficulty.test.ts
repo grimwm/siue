@@ -394,6 +394,10 @@ test('pieceUnits: each piece with the ways it can be taken out', () => {
     ['the red keys', 1], ['the red doors', 2], ['the flippers at row 2, column 7', 1], ['the block at row 2, column 8', 2],
     ['the gravel', 2], ['the marked stones', 2], ['the pop-up walls', 2], ['the water', 2], ['the fake wall at row 3, column 7', 2],
   ]);
+  // A clone machine taken out takes its `machines:` entry with it, so the level still parses.
+  const cloning = level(['#######', '#P+.C.#', '#~~~~~#', '#M...E#', '#######'], 'machines: block-down');
+  const machine = pieceUnits(cloning).find(u => u.name.startsWith('the clone machine'))!;
+  assert.equal(machine.ignored[0]!.machines.length, 0);
 });
 
 /** The beast stands in the short way, between two stones he cannot tread: he never moves, and the long way round

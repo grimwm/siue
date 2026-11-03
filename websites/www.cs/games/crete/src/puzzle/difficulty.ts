@@ -489,7 +489,9 @@ const GEAR_OF: Partial<Record<Terrain, ObjectKind>> = {
 function edited(level: Level, f: (t: Terrain[], o: (ObjectKind | null)[]) => void): Level {
   const t = [...level.terrain], o = [...level.objects];
   f(t, o);
-  return parse(serialize({ ...level, terrain: t, objects: o }));
+  // A clone machine taken out takes its entry in the `machines:` header with it.
+  const machines = level.machines.filter(m => t[m.at.r * level.cols + m.at.c] === 'clone');
+  return parse(serialize({ ...level, terrain: t, objects: o, machines }));
 }
 
 /** Every piece of a level, each with the ways it can be taken out: the piece is useless when none of them changes
@@ -570,13 +572,14 @@ export function pieceUnits(level: Level): PieceUnit[] {
  *  from one challenge level to the next that the ramp aims for. */
 export const USEFUL = { explored: 1.3 };
 
-/** What ignoring a piece changes, in words; null when it changes nothing that counts. */
+/** What ignoring a piece changes, in words; null when it changes nothing that counts, 'capped' when a search hit
+ *  its cap and so proved nothing. */
 function changes(d: Difficulty, lv: Level, cap: number): string | null {
   const r = solve(initial(lv), cap);
-  if (!r.solved) return r.capped ? 'the search hit its cap' : 'the level cannot be won';
+  if (!r.solved) return r.capped ? 'capped' : 'the level cannot be won';
   if (r.line.length !== d.shortest) return `the fewest moves go from ${d.shortest} to ${r.line.length}`;
   const free = solveRefusing(initial(lv), caught, cap);
-  if (!free.solved) return free.capped ? 'the search hit its cap' : 'no win without a catch';
+  if (!free.solved) return free.capped ? 'capped' : 'no win without a catch';
   if (free.line.length !== d.catchFree) return `the fewest catch-free moves go from ${d.catchFree} to ${free.line.length}`;
   if (d.explored >= USEFUL.explored * r.explored) return `the search falls from ${d.explored} situations to ${r.explored}`;
   return null;
@@ -587,8 +590,12 @@ function changes(d: Difficulty, lv: Level, cap: number): string | null {
  *  fails the level. */
 export function uselessProblems(level: Level, d: Difficulty, cap = SOLVER_CAP): string[] {
   if (!d.solved || typeof d.catchFree !== 'number') return [];
-  return pieceUnits(level).flatMap(u => (u.ignored.some(lv => changes(d, lv, cap) !== null)
-    ? [] : [`${u.name}: ignoring it changes nothing (still ${d.shortest} moves, and the search no ${USEFUL.explored} × smaller)`]));
+  return pieceUnits(level).flatMap(u => {
+    const found = u.ignored.map(lv => changes(d, lv, cap));
+    if (found.some(c => c !== null && c !== 'capped')) return [];
+    if (found.includes('capped')) return [`${u.name}: the search without it hit its cap, so it is not proved to matter`];
+    return [`${u.name}: ignoring it changes nothing (still ${d.shortest} moves, and the search no ${USEFUL.explored} × smaller)`];
+  });
 }
 
 /** The beast along the shortest line: `live` of its `turns`, and the longest run of turns in a row he is not live. */

@@ -103,3 +103,25 @@ test('a try from the editor shows no tip', () => {
   assert.equal(tip(), null);
   tryAt = -1;
 });
+
+test('Enter puts the tip away, as Got It does, and is no turn; with no tip it is nothing; Escape puts one away too', () => {
+  delete data['crete-met-cards'];
+  flow.closeLayers();
+  game.open(0);
+  key('Enter');
+  m.advance(1);
+  assert.equal(tip(), tipText('tip-beast'));
+  const ev = key('Enter');
+  assert.equal(ev.prevented, true, 'no focused button presses too');
+  assert.equal(tip(), null, 'Enter puts it away');
+  assert.equal(moves(), 0, 'and Wait never ran');
+  assert.equal(flow.top(), null, 'nor did a card open');
+  key('Enter');
+  assert.equal(moves(), 0, 'with no tip Enter does nothing in play');
+  key('ArrowRight');
+  assert.equal(tip(), 'He went right, then a wall stopped him. He never steps away from you, so a wall in his way can trap him.');
+  key('Escape');
+  assert.equal(tip(), null, 'Escape puts it away');
+  assert.equal(moves(), 1);
+  assert.equal(flow.top(), null, 'and opens nothing');
+});

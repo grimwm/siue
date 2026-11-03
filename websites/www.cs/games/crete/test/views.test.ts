@@ -399,15 +399,15 @@ test('the story log lists every line; how to play comes from the help lines', ()
 // ---- chapter card ----
 const CH1 = CHAPTERS[0]!;
 function chapterProps(over: Partial<ChapterCardProps> = {}): ChapterCardProps {
-  return { open: true, chapter: CH1, closing: false, next: nextChapter(1), onEnter: noop, onLevels: noop, onClose: noop, ...over };
+  return { open: true, chapter: CH1, closing: false, next: nextChapter(1), onEnter: noop, onLevels: noop, onClose: noop, onBack: noop, ...over };
 }
 
-test('the opening chapter card shows the kicker, name, words and quotation, with Enter the Halls and Levels', () => {
+test('the opening chapter card shows the kicker, name, words and quotation, with Enter the Halls, Levels and Back', () => {
   const root = mount();
   const seen: string[] = [];
   renderChapter(root, chapterProps({ open: false }));
   assert.equal(byId(root, 'chapter-veil').hidden, true);
-  renderChapter(root, chapterProps({ onEnter: () => seen.push('enter'), onLevels: () => seen.push('levels') }));
+  renderChapter(root, chapterProps({ onEnter: () => seen.push('enter'), onLevels: () => seen.push('levels'), onBack: () => seen.push('back') }));
   assert.equal(byId(root, 'chapter-veil').hidden, false);
   assert.equal(byId(root, 'chapter-kicker').textContent, 'Chapter 1 of 10');
   assert.equal(byId(root, 'chapter-title').textContent, 'The Outer Halls');
@@ -424,7 +424,9 @@ test('the opening chapter card shows the kicker, name, words and quotation, with
   assert.ok(byId(root, 'chapter-levels').textContent.includes('Levels'));
   click(byId(root, 'chapter-enter'));
   click(byId(root, 'chapter-levels'));
-  assert.deepEqual(seen, ['enter', 'levels']);
+  assert.equal(tabsOf(byId(root, 'chapter-back'))[0]?.textContent, KEYS.menu.label);
+  click(byId(root, 'chapter-back'));
+  assert.deepEqual(seen, ['enter', 'levels', 'back']);
   assert.equal(maybeById(root, 'chapter-continue'), undefined);
   assert.equal(maybeById(root, 'chapter-next'), undefined);
   renderChapter(root, chapterProps({ score: 'Level 10 cleared: 76 moves' }));
@@ -445,6 +447,7 @@ test('the closing chapter card says it is the end of the chapter, with its words
   assert.equal(maybeById(root, 'chapter-next'), undefined, 'Chapter 2 is released');
   assert.equal(maybeById(root, 'chapter-enter'), undefined);
   assert.equal(maybeById(root, 'chapter-levels'), undefined);
+  assert.equal(maybeById(root, 'chapter-back'), undefined, 'the closing card goes on, never back');
   assert.equal(globalThis.__focused?.id, 'chapter-continue');
   assert.equal(maybeById(root, 'chapter-score'), undefined, 'no win, no score line');
   renderChapter(root, chapterProps({ closing: true, score: 'Level 10 cleared: 80 moves · best possible 76 (4 over)', onClose: () => { closed++; } }));
@@ -690,4 +693,17 @@ test('a compact strip carries Menu between Hints and the look swap; a wide strip
   assert.deepEqual([...view.children].map(c => (c as { id?: string }).id), ['btn-menu-strip', 'btn-look'], 'Menu sits left of the look swap');
   renderStrip(root, stripProps({ compact: false }));
   assert.equal(maybeById(root, 'btn-menu-strip'), undefined);
+});
+
+test('during an Endless run the menu shows the seed, selectable, with Copy Seed Link; otherwise neither', () => {
+  const root = mount();
+  renderMenu(root, menuProps());
+  assert.equal(maybeById(root, 'menu-seed'), undefined);
+  assert.equal(maybeById(root, 'menu-copy-seed'), undefined);
+  let copied = 0;
+  renderMenu(root, menuProps({ seed: 'wrvrsk', onCopySeed: () => { copied++; } }));
+  assert.equal(byId(root, 'menu-seed').textContent, 'Seed: wrvrsk');
+  assert.equal(byId(root, 'menu-copy-seed').textContent, 'Copy Seed Link');
+  click(byId(root, 'menu-copy-seed'));
+  assert.equal(copied, 1);
 });

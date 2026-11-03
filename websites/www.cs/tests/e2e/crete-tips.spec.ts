@@ -64,4 +64,42 @@ test.describe('on a touch phone', () => {
     await expect(page.locator('#tip')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
+
+  test('Enter skips the touch tour and does nothing more; the first tip then shows, and Enter puts it away', async ({ page }) => {
+    const errors = await newGame(page, 'classic');
+    await page.locator('#start-begin').tap();
+    await expect(page.locator('#tour')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#tour'), 'Enter is Skip Tour').toHaveCount(0);
+    expect(await moves(page)).toBe(0);
+    await expect(page.locator('#tip-text')).toHaveText(BEAST);
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#tip')).toHaveCount(0);
+    expect(await moves(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test('Enter puts a tip away, as Got It does, and is no Wait even with Wait focused; Tab reaches Got It', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const errors = await newGame(page, 'classic');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#tip-text')).toHaveText(BEAST);
+  let reached = false;
+  for (let i = 0; i < 60 && !reached; i++) {
+    await page.keyboard.press('Tab');
+    reached = await page.evaluate(() => document.activeElement?.id === 'tip-ok');
+  }
+  expect(reached, 'Tab reaches Got It').toBe(true);
+  await page.locator('#btn-wait').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#tip'), 'Enter puts it away').toHaveCount(0);
+  expect(await moves(page), 'and Wait never ran').toBe(0);
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#tip-text')).toHaveText(WALLS);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#tip'), 'Escape puts one away too').toHaveCount(0);
+  await expect(page.locator('#menu-veil')).toBeHidden();
+  expect(await moves(page)).toBe(1);
+  expect(errors).toEqual([]);
 });

@@ -2,7 +2,9 @@
 // cannot be opened (src/share/visit.ts). New Game opens the new-game card, which asks for the look; Continue (shown
 // once a level is cleared and until all are) opens the chapter card of the first level not cleared, and has Enter;
 // Endless, Story, Make a level and Settings open the Endless card, the story card, the level editor and the menu when the page gives them;
-// the kit's install bar mounts into #title-install (src/install-slot.ts).
+// the kit's install bar mounts into #title-install (src/install-slot.ts). The buttons stand in one column: the way in
+// first and filled (Continue when it is offered, else New Game), New Game outlined under Continue, then the rest
+// outlined, two to a row; Escape, as Q, backs out of any card opened from here (src/ui.ts).
 import { render } from 'preact';
 import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';
@@ -35,13 +37,15 @@ export function TitleCard(p: TitleCardProps) {
       <p>Tile puzzles in the Labyrinth. Gather the relics, open the Daedalus Gate and reach the exit. The Minotaur takes two steps to your one.</p>
       {p.hint && <p id="title-hint" class="runstats" role="status">{EXIT_HINT}.</p>}
       {p.note && <p id="title-note" class="runstats">{p.note}</p>}
-      <div class="title-actions">
-        {p.resume && p.onContinue && <Button id="title-continue" label={p.resume} title={p.resume} keyLabel={KEYS.begin.label} onClick={p.onContinue}>Continue</Button>}
-        <Button id="title-play" keyLabel={KEYS.new.label} onClick={p.onPlay}>New Game</Button>
-        {p.onEndless && <Button id="title-endless" keyLabel={KEYS.endless.label} onClick={p.onEndless}>Endless</Button>}
-        {p.onStory && <Button id="title-story" keyLabel={KEYS.story.label} onClick={p.onStory}>Story</Button>}
-        {p.onEditor && <Button id="title-editor" keyLabel={KEYS.editor.label} onClick={p.onEditor}>Make a Level</Button>}
-        {p.onSettings && <Button id="title-settings" keyLabel={KEYS.menu.label} onClick={p.onSettings}>Settings</Button>}
+      <div class="title-menu">
+        {p.resume && p.onContinue && <Button id="title-continue" class="title-primary" label={p.resume} title={p.resume} keyLabel={KEYS.begin.label} onClick={p.onContinue}>Continue</Button>}
+        <Button id="title-play" class={p.resume && p.onContinue ? 'quiet' : 'title-primary'} keyLabel={KEYS.new.label} onClick={p.onPlay}>New Game</Button>
+        <div class="title-grid">
+          {p.onEndless && <Button id="title-endless" class="quiet" keyLabel={KEYS.endless.label} onClick={p.onEndless}>Endless</Button>}
+          {p.onStory && <Button id="title-story" class="quiet" keyLabel={KEYS.story.label} onClick={p.onStory}>Story</Button>}
+          {p.onEditor && <Button id="title-editor" class="quiet" keyLabel={KEYS.editor.label} onClick={p.onEditor}>Make a Level</Button>}
+          {p.onSettings && <Button id="title-settings" class="quiet" keyLabel={KEYS.menu.label} onClick={p.onSettings}>Settings</Button>}
+        </div>
       </div>
       <div id="title-install" class="title-install" />
     </Dialog>

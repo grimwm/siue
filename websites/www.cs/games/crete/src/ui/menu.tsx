@@ -66,6 +66,9 @@ export interface MenuProps {
   onBackToEditor?: () => void;
   /** The shared level's card, shown only when given. */
   onSharedCard?: () => void;
+  /** During an Endless run: its seed, as text to select, and Copy Seed Link when given. */
+  seed?: string;
+  onCopySeed?: () => void;
 }
 
 const WALL_CHOICES: [WallMode, string][] = [['solid', 'Solid'], ['ghosted', 'Ghosted'], ['low', 'Low']];
@@ -84,6 +87,12 @@ export function Menu(p: MenuProps) {
       titleId="menu-title" title="Menu"
       close={<Button id="menu-close" class="close" label="Close menu" keyLabel={KEYS.menu.label} onClick={p.onClose}>✕</Button>}>
       {p.levelName && <p id="menu-level" class="menu-level">{p.levelName}</p>}
+      {p.seed && (
+        <div class="menu-seed" data-section="seed">
+          <p id="menu-seed">Seed: <span class="menu-seed-text">{p.seed}</span></p>
+          {p.onCopySeed && <Button id="menu-copy-seed" class="quiet" onClick={p.onCopySeed}>Copy Seed Link</Button>}
+        </div>
+      )}
       <div class="menu-cols">
         <div class="menu-col">
           <section class="menu-sec" data-section="audio" aria-labelledby="menu-audio-h">

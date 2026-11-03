@@ -299,6 +299,25 @@ button:disabled { opacity: 0.45; cursor: default; }
 .runstats { color: var(--dim); font-size: 0.9rem; }
 .title-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
 .title-install { margin-top: 0.8rem; }
+/* The title card's buttons (src/ui/title.tsx): one column, every button its full width or half of it, the same gap
+   between all. The way in is filled and taller; the rest are outlined, two to a row, a lone last one across both.
+   Each name starts at the button's left and its key tab sits at the right, so names and tabs line up down the
+   column. */
+.title-menu { display: grid; gap: 0.5rem; margin-top: 1rem; }
+.title-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.title-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+.title-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  text-align: left;
+}
+.title-menu button .kit-key-inline { margin: 0; top: 0; }
+.title-menu button.title-primary { min-height: 52px; font-size: 1.1rem; }
 /* The Endless card: its seed box beside Play This Seed (stacked on a narrow phone), and the search's progress bar. */
 .endless-seed { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.8rem; }
 .endless-seed label { color: var(--dim); font-size: 0.9rem; }
@@ -479,6 +498,11 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 .card.menu { max-width: 30rem; }
 /* The open level's name, under the Menu title. */
 .menu-level { margin: -0.3rem 0 0.9rem; color: var(--dim); font-style: italic; }
+/* During an Endless run: the seed, which a press selects whole, and Copy Seed Link beside it. */
+.menu-seed { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.8rem; margin: -0.4rem 0 0.9rem; }
+.menu-seed p { margin: 0; color: var(--dim); }
+.menu-seed-text { color: var(--ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; user-select: all; -webkit-user-select: all; }
+.menu-seed button { min-height: 36px; }
 .menu-cols { display: grid; gap: 1.1rem 1.6rem; align-items: start; }
 .menu-col { display: grid; gap: 1.1rem; min-width: 0; }
 .menu-sec { display: grid; gap: 0.45rem; }

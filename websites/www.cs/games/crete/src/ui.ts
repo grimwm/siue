@@ -599,6 +599,7 @@ export function createUi(deps: UiDeps): Ui {
       onEnter: enter,
       onLevels: () => layers.open("levels"),
       onClose: () => (chapterClosing ? goOn() : leave("chapter")),
+      onBack: () => leave("chapter"),
     });
     renderLevels($("levels-root"), {
       open: layers.isOpen("levels"),
@@ -732,7 +733,18 @@ export function createUi(deps: UiDeps): Ui {
       ...menuPlace(out, playing, lv?.title ?? ""),
       onBackToEditor: backToEditor(g),
       onSharedCard: sharedCard(g),
+      ...endlessSeed(out),
     });
+  }
+
+  /** The menu's seed line during an Endless run, with Copy Seed Link when the page can copy. */
+  function endlessSeed(out: OutsideLevel | null): { seed?: string; onCopySeed?: () => void } {
+    const endless = controls?.endless;
+    const seed = out?.kind === "endless" ? endless?.mode.view().run?.seed : undefined;
+    if (!endless || !seed) return {};
+    const link = endless.link();
+    const copy = endless.copy;
+    return link && copy ? { seed, onCopySeed: () => copy(link) } : { seed };
   }
 
   function say(text: string, tone?: Tone): void {
@@ -1291,6 +1303,13 @@ export function createUi(deps: UiDeps): Ui {
     layers.open("title");
   }
 
+  /** True when the top card was opened from the title card: Endless (which always goes back to it), or any card but
+   *  the editor with the title card under it. */
+  function fromTitle(): boolean {
+    const top = layers.top();
+    return top === "endless" || (top !== null && top !== "title" && top !== "editor" && layers.has("title"));
+  }
+
   /** The enabled buttons of card `name`, in order. */
   function cardButtons(name: LayerName): HTMLElement[] {
     const veil = document.getElementById(`${name}-root`);
@@ -1503,7 +1522,16 @@ export function createUi(deps: UiDeps): Ui {
         }
         return;
       }
-      if (isBackKey(ev)) {
+      // Escape is bound only where it cannot cost a run: it puts away the rule tip standing, and it backs out of a card
+      // opened from the title card (the new-game card, the chapter card a new game opens, Endless, the story, the menu
+      // as Settings) as Q does. It never leaves full screen: the full-screen toggle holds the Escape lock.
+      const escape = ev.key === "Escape" && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.isComposing;
+      if (escape && tipShowing()) {
+        ev.preventDefault();
+        if (!ev.repeat) closeTip();
+        return;
+      }
+      if (isBackKey(ev) || (escape && fromTitle())) {
         ev.preventDefault();
         if (ev.repeat) return;
         // An open Thread panel shuts first, unless a card other than the start card is over it.
@@ -1538,6 +1566,12 @@ export function createUi(deps: UiDeps): Ui {
       // Held Enter repeats nothing: it would close the card the first press opened, or press its focused button.
       if (action === "begin" && ev.repeat) {
         ev.preventDefault();
+        return;
+      }
+      // Enter or Space puts away the rule tip standing, as Got It does, and nothing more: not a focused button.
+      if (action === "begin" && tipShowing()) {
+        ev.preventDefault();
+        closeTip();
         return;
       }
       // The title's New Game is worded N: there it opens the new-game card, elsewhere N opens the list (not over the

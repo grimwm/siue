@@ -1,7 +1,9 @@
 /* The Island of Crete: the key table. One place says which keys do
  * what and what a button's key tab prints, so a tab can never disagree with
  * its binding. The tools' keys are not here: they come from TOOLS. Q is the
- * kit's back key (isBackKey) and Escape is not bound. DOM-free. */
+ * kit's back key (isBackKey). Escape is no action here: src/ui.ts reads it
+ * only to put away a rule tip and to back out of a card opened from the title
+ * card. DOM-free. */
 import { BACK_KEY } from "../../_kit/keys.ts";
 
 export type MoveAction = "up" | "down" | "left" | "right";

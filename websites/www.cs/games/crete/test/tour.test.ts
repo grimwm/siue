@@ -1,7 +1,7 @@
 // The touch tour: when it shows by itself, and what each step shows.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TOUR_STEPS, tourDue, tourEndsOn } from '../src/tour.ts';
+import { TOUR_STEPS, tourDue, tourEndsOn, tourSkipKey } from '../src/tour.ts';
 
 test('the tour shows by itself only on a touch screen, once, while a level is in play with no card over it', () => {
   const due = { touch: true, seen: false, playing: true, covered: false };
@@ -39,5 +39,15 @@ test('any play ends the tour: a press anywhere but its banner, the wheel, any ke
   assert.equal(tourEndsOn({ type: 'keydown', key: 'Tab' }), false, 'Tab goes to the banner\'s buttons');
   assert.equal(tourEndsOn({ type: 'keydown', key: 'Enter', inBanner: true }), false, 'Enter on Next or Skip Tour is the banner\'s');
   assert.equal(tourEndsOn({ type: 'keydown', key: ' ', inBanner: true }), false);
-  assert.equal(tourEndsOn({ type: 'keydown', key: 'Enter' }), true, 'Enter elsewhere is play');
+  assert.equal(tourEndsOn({ type: 'keydown', key: 'Enter' }), true, 'Enter elsewhere ends it');
+});
+
+test('Enter or Escape off the banner\'s buttons skips the tour and goes no further; other keys go on to the game', () => {
+  assert.equal(tourSkipKey({ key: 'Enter' }), true);
+  assert.equal(tourSkipKey({ key: 'Escape' }), true);
+  assert.equal(tourSkipKey({ key: 'Escape', inBanner: true }), true);
+  assert.equal(tourSkipKey({ key: 'Enter', inBanner: true }), false, 'Enter on Next or Skip Tour presses that button');
+  assert.equal(tourSkipKey({ key: '.' }), false, 'Wait ends the tour and waits');
+  assert.equal(tourSkipKey({ key: 'ArrowUp' }), false);
+  assert.equal(tourSkipKey({ key: 'Enter', ctrlKey: true }), false, 'a browser chord');
 });

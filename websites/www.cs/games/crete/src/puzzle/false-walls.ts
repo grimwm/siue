@@ -130,21 +130,21 @@ E|M#...;.#*#
 ############
 ` },
   { id: 'ch4-10', text: `title: The Painted Labyrinth
-intro: The false walls end in a maze of them. A red door is one way through and a painted wall the other; one more painted wall leads nowhere, and one stretch of open floor is not open at all. Off the quickest way, a page waits, and a memory of the queen.
+intro: The false walls end in a maze of them. A red door is the way through, a painted wall opens a second road to the gate, and one stretch of open floor is not open at all. Off the quickest way, a page waits, and a memory of the queen.
 pages: ch4-queen
 
 ####################
 #P....#......####.p#
 ##.#....###..###..##
 ###*..:...##..:..###
-#.......#..I##.....#
+#.......##.I##.....#
 #..##...#.......#W.#
-##..#.##..###.#.#.##
-#r###.:..M#...:.#.##
+##..#......##.#...##
+#r###.:.......:.####
 #........##..#.#...#
-#..*.###..#..#.R...#
+#..*.###.##..#.R...#
 #.#..#.#..:.#####.##
-#*##...W##...##.#|E#
+#*##M..###...##.#|E#
 ####################
 ` },
 ];

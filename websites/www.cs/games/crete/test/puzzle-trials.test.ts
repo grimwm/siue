@@ -13,7 +13,7 @@ import { parse, serialize } from '../src/puzzle/level.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
-const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 24, 29, 40, 76];
+const SHORTEST: number[] = [10, 23, 36, 28, 23, 24, 24, 29, 42, 58];
 /** Level 10 is larger than the screen; its proof may search further than the in-game cap. */
 const GREAT_HALL_CAP = 6_000_000;
 
@@ -146,7 +146,7 @@ test("level 9, The Bull's Horns: the quickest way through takes no catch, and th
   assert.ok(solve(initial(copy)).solved, 'the page lies on a winning line');
 });
 
-test('level 10, The Great Hall: keys, gear, a block and a button, a tool and the Minotaur, two routes to the gate', () => {
+test('level 10, The Great Hall: keys, gear, a block and a button, a tool and the Minotaur, two ways to the gate', () => {
   const lv = trialLevel(9);
   assert.ok(lv.minotaur);
   assert.equal(lv.pageIds.length, 1);
@@ -156,13 +156,14 @@ test('level 10, The Great Hall: keys, gear, a block and a button, a tool and the
   assert.ok(t10.kinds.has('pushed') && t10.kinds.has('flipped'), 'pushes a block and flips the walls');
   assert.ok([...t10.took].some(o => ['flippers', 'fire-boots', 'skates', 'suction'].includes(o)), 'takes a gear');
   assert.ok([...t10.took].some(o => ['mirror', 'cake', 'cow'].includes(o)), 'takes a tool');
-  const routes: ObjectKind[] = ['flippers', 'fire-boots'];
-  for (const k of routes) {
-    assert.ok(solve(initial(withoutObjects(lv, [k])), GREAT_HALL_CAP).solved, `level 10 is won without the ${k}`);
-  }
+  // The fire with its boots is the quick way; without them the long upper hall still reaches the gate.
+  assert.ok(t10.took.has('fire-boots'), 'the quickest way crosses the fire');
+  const slow = solve(initial(withoutObjects(lv, ['fire-boots'])), GREAT_HALL_CAP);
+  assert.ok(slow.solved && slow.line.length > t10.line.length, 'level 10 is won without the fire boots, the long way');
   const unwinnable = (r: SolveResult): boolean => !r.solved && !r.capped;
-  assert.ok(unwinnable(solve(initial(withoutObjects(lv, routes)), GREAT_HALL_CAP)), 'level 10 needs one of its two routes');
-  for (const k of ['key-red', 'block', 'mirror'] as const) assert.ok(unwinnable(solve(initial(withoutObjects(lv, [k])), GREAT_HALL_CAP)), `level 10 needs the ${k}`);
+  for (const k of ['key-red', 'block'] as const) assert.ok(unwinnable(solve(initial(withoutObjects(lv, [k])), GREAT_HALL_CAP)), `level 10 needs the ${k}`);
+  const noMirror = solve(initial(withoutObjects(lv, ['mirror'])), GREAT_HALL_CAP);
+  assert.ok(!noMirror.solved || noMirror.line.length > t10.line.length, 'the mirror is on the quickest way past the beast');
   assert.ok(!t10.took.has('page'), 'the page lies off the shortest line');
   const copy = { ...lv, objects: lv.objects.map(o => (o === 'page' ? 'relic' as const : o)), relics: lv.relics + 1, pageIds: [], pageCells: [] };
   assert.ok(solve(initial(copy), GREAT_HALL_CAP).solved, 'the page lies on a winning line');

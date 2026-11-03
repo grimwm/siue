@@ -47,14 +47,14 @@ intro: A pushed block will not cross a closing stone either. The near way to the
 intro: A red door and its key, and stones that close behind you. The door is the quicker way; every stone you cross is one you cannot cross again.
 
 ############
-#P......r..#
-#.......##.#
-#.#...;..#.#
+#P..#...r..#
+#........#.#
+###.#.;..#.#
 #.##.....#.#
-#...;....#M#
-###..#.#.#.#
+#...;....#.#
+###..M.#.###
 #*#.#...;..#
-#.#..##R##.#
+#.#..#.R##.#
 #...#.;...|E
 ############
 ` },
@@ -78,12 +78,12 @@ intro: Ice and a pushing current run through this hall, and closing stones hold 
 
 ############
 #P..#...=..#
-#...#.#.=#.#
+#...#.#.=#M#
 #.#...;#=#.#
-#......#.M.#
+#......#...#
 ##.>>>>....#
 ##.#.#.....#
-#*..;...k..#
+#*..;......#
 ###...#.#..#
 #*...;..#.|E
 ############
@@ -95,11 +95,11 @@ intro: A block stands in the way, and a wall waits on a button. The closing ston
 #P...#...#.#
 #.##.#...#.#
 #..O.;...###
-#....##..#.#
-#...._.T.;M#
+#.....#..#.#
+#...._.T.;.#
 ###.##...#.#
 #*..;...#..#
-##.#.#.....#
+##.#.#...M.#
 #*...#;#..|E
 ############
 ` },

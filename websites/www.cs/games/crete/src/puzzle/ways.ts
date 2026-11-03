@@ -63,8 +63,8 @@ intro: The floors are polished to ice, and the beast skids on them as you do. Lo
 #P#.#k.#..*#
 #=#..:.#=..#
 #.:=....:.##
-#..=##.=.#.#
-#.==.*#=M..#
+#..=##.=.#M#
+#.==.*#=...#
 #.:....=...#
 #.#.#..===.#
 #:..:.#..###
@@ -78,11 +78,11 @@ intro: A river and a fire cross these ways, with loose stone between them. Flipp
 #P:.#~#.#.*#
 #...~.O.F:##
 ##.#....F#:#
-#f.#.##:.###
+#f.#..#:.###
 ##...##....#
 #*.#.#..####
 ##F..~h:~###
-#...M.#:...#
+#.M...#:...#
 #*.~###F:.|E
 ############
 ` },
@@ -109,11 +109,11 @@ intro: A plate here moves the walls, and the only road over the water is a block
 #...#.#....#
 #.....~.##.#
 ###....##:.#
-#*.#._#:M..#
-#.#..#:.:O.#
+#*.#._#:...#
+#.#..#:.:..#
 #:O...##~.T#
-#::...#.T..#
-#*......#..E
+#::...#MT..#
+#*.#.......E
 ############
 ` },
   { id: 'ch2-9', text: `title: The Bronze Mirror

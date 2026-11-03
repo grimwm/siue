@@ -59,9 +59,9 @@ intro: Two relics, a red key and its door. The beast waits in the upper hall; tw
 ############
 #P....S.##.#
 #.##....#..#
-#.#*S.WM#.##
-#.#........#
-#..........#
+#.#*S.W##.##
+#.#.#.....M#
+#........#.#
 #.##S.#..#.#
 #S#rS#..##.#
 #..S###.R#.#
@@ -99,17 +99,17 @@ intro: Ice runs through these halls and skates lie in the west. Two walls here a
 ############
 ` },
   { id: 'ch4-8', text: `title: The Waiting Wall
-intro: A block, a button and a wall that waits on it. A painted stone stands near the block, and two unseen walls guard the low ways.
+intro: A block, a button and a wall that waits on it. A painted stone stands near the block, and an unseen wall guards the low way.
 
 ############
-#P##..##.###
-#.#...#..#.#
+#P##...#.###
+#.#...#....#
 #.#O.W..*#.#
-#.......T###
-#...#._#..##
-###.##.#..M#
-#*#.#......#
-#...#...I#.#
+#.......T#.#
+#...##_....#
+###.##.##..#
+#*#.##....M#
+#...#....#.#
 ###.I..###|E
 ############
 ` },

@@ -135,7 +135,7 @@ facing: down left
 ############
 #..P..>>>u.#
 #:####.#.#.#
-#.#.##..#..#
+#.####..#..#
 #.###p.###.#
 #..:##...FF#
 #.#.#.###.F#
@@ -143,6 +143,25 @@ facing: down left
 #...w...##.#
 #...#..M..E#
 ############
+` },
+  { id: 'ch8-10', text: `title: The Last Wind
+intro: The den ends at the gate in the east. Fire burns in the north, and the boots for it lie in the far southeast, past a pool and the flippers; a red key in the middle opens the red door by the beast. Three relics, two Harpies and Talos's fire. Off the quickest way a page waits, and a memory of how the bronze guard fell.
+pages: ch8-lead
+facing: left up left
+
+##############
+##MR.........#
+##...:#.*FF.P#
+#...p....FF###
+#w#...#..FF..#
+#......r.....#
+#.#..#......|E
+#.#..#....*..#
+#.#.....####~#
+###....#w...~#
+#.#..*.#....f#
+##:....#.e.:h#
+##############
 ` },
 ];
 

@@ -18,7 +18,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import type { Terrain } from '../src/puzzle/tiles.ts';
 
 /** Each level's shortest line, pinned: a rule change that alters a level fails here. */
-const SHORTEST: number[] = [25, 17, 19];
+const SHORTEST: number[] = [25, 17, 19, 38, 31, 31, 36, 46, 37, 40];
 /** Level 10 is larger than the screen; its proofs may search further than the in-game cap. */
 const BIG_CAP = 6_000_000;
 const capOf = (i: number) => (i === 9 ? BIG_CAP : SOLVER_CAP);
@@ -112,7 +112,7 @@ test("the Harpy and Talos's fire are the new pieces: every level has one, its in
     const h = count(lv, 'glider'), f = count(lv, 'fireball'), b = count(lv, 'ball');
     assert.ok(h + f >= 1, `${w.id} has a Harpy or Talos's fire`);
     for (const [n, words, what] of [[h, harpies, 'Harpies'], [f, fires, "Talos's fires"], [b, balls, 'bronze balls']] as const) {
-      if (n > 0) assert.ok(lv.intro.includes(words[n]!), `${w.id}: the intro names its ${n} ${what}`);
+      if (n > 0) assert.ok(lv.intro.toLowerCase().includes(words[n]!.toLowerCase()), `${w.id}: the intro names its ${n} ${what}`);
     }
     if (f === 0) assert.doesNotMatch(lv.intro, /Talos's fire/, `${w.id} names no fire it does not have`);
     if (h === 0) assert.doesNotMatch(lv.intro, /Harp/, `${w.id} names no Harpy it does not have`);

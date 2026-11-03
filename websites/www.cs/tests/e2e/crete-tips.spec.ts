@@ -80,7 +80,7 @@ test.describe('on a touch phone', () => {
   });
 });
 
-test('Enter puts a tip away, as Got It does, and is no Wait even with Wait focused; Tab reaches Got It', async ({ page }) => {
+test('Enter puts a tip away, as Got It does, and Enter or Space is no Wait even with Wait focused; Tab reaches Got It', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const errors = await newGame(page, 'classic');
   await page.keyboard.press('Enter');
@@ -97,9 +97,18 @@ test('Enter puts a tip away, as Got It does, and is no Wait even with Wait focus
   expect(await moves(page), 'and Wait never ran').toBe(0);
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('#tip-text')).toHaveText(WALLS);
+  await page.locator('#btn-wait').focus();
+  await page.keyboard.press(' ');
+  await expect(page.locator('#tip'), 'Space puts it away').toHaveCount(0);
+  expect(await moves(page), 'and the focused Wait never ran').toBe(1);
+  await page.keyboard.press('.');
+  await expect.poll(() => moves(page)).toBe(2);
+  await page.keyboard.press('.');
+  await expect.poll(() => moves(page)).toBe(3);
+  await expect(page.locator('#tip-text'), 'the Wait and Undo tip').toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('#tip'), 'Escape puts one away too').toHaveCount(0);
   await expect(page.locator('#menu-veil')).toBeHidden();
-  expect(await moves(page)).toBe(1);
+  expect(await moves(page)).toBe(3);
   expect(errors).toEqual([]);
 });

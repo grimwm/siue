@@ -400,15 +400,20 @@ export function createUi(deps: UiDeps): Ui {
     if (outsideOf(g)?.kind === "endless") {
       const mode = controls?.endless?.mode;
       mode?.next();
-      if (mode?.view().finding) showEndless();
+      if (mode?.view().finding) showEndless(true);
       return;
     }
     pick(g!.trial + 1, true);
   }
 
-  /** The Endless card, alone. */
-  function showEndless(): void {
+  /** The Endless card opened from play (Next Level waiting on the next level), not from the title card or a link:
+   *  Escape leaves it be. */
+  let endlessFromPlay = false;
+
+  /** The Endless card, alone; `fromPlay` when Next Level opened it to wait for the level being made. */
+  function showEndless(fromPlay = false): void {
     if (!controls?.endless) return;
+    endlessFromPlay = fromPlay;
     layers.clear();
     layers.open("endless");
   }
@@ -1303,11 +1308,11 @@ export function createUi(deps: UiDeps): Ui {
     layers.open("title");
   }
 
-  /** True when the top card was opened from the title card: Endless (which always goes back to it), or any card but
-   *  the editor with the title card under it. */
+  /** True when the top card was opened from the title card: Endless opened from it or from a link (not the card
+   *  Next Level opens to wait for a level), or any card but the editor with the title card under it. */
   function fromTitle(): boolean {
     const top = layers.top();
-    return top === "endless" || (top !== null && top !== "title" && top !== "editor" && layers.has("title"));
+    return (top === "endless" && !endlessFromPlay) || (top !== null && top !== "endless" && top !== "title" && top !== "editor" && layers.has("title"));
   }
 
   /** The enabled buttons of card `name`, in order. */
@@ -1511,7 +1516,15 @@ export function createUi(deps: UiDeps): Ui {
     controls = c;
     game = c.game;
     document.addEventListener("keydown", (ev) => {
-      if (typesText(ev.target)) return;
+      // Escape is no letter: in the Endless card's seed box it still backs out to the title card.
+      const escape = ev.key === "Escape" && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.isComposing;
+      if (typesText(ev.target)) {
+        if (escape && layers.isOpen("endless") && fromTitle()) {
+          ev.preventDefault();
+          if (!ev.repeat) leaveEndless();
+        }
+        return;
+      }
       c.wake();
       // The editor takes every key while it is the top layer; a Q it does not use (no dialog of its own is open)
       // leaves it for the title card.
@@ -1524,8 +1537,9 @@ export function createUi(deps: UiDeps): Ui {
       }
       // Escape is bound only where it cannot cost a run: it puts away the rule tip standing, and it backs out of a card
       // opened from the title card (the new-game card, the chapter card a new game opens, Endless, the story, the menu
-      // as Settings) as Q does. It never leaves full screen: the full-screen toggle holds the Escape lock.
-      const escape = ev.key === "Escape" && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.isComposing;
+      // as Settings) as Q does. Where the browser grants the full-screen toggle the Escape lock (Keyboard Lock), Escape
+      // never leaves full screen; where it does not (Safari, Firefox), the browser spends Escape on leaving full
+      // screen, so Q stays the sure back key.
       if (escape && tipShowing()) {
         ev.preventDefault();
         if (!ev.repeat) closeTip();

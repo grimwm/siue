@@ -107,6 +107,10 @@ test('Back and Escape from the Endless card return to the title card with the sa
   await expect(page.locator('#endless-veil')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('#title-veil'), 'Escape').toBeVisible();
+  await page.keyboard.press('o');
+  await page.locator('#endless-seed-box').fill('abc');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#title-veil'), 'Escape from the seed box').toBeVisible();
   expect(await savedRun(page), 'the saved run is untouched').toBe(run);
   await page.keyboard.press('o');
   await expect(page.locator('#endless-run')).toContainText('Level 1');

@@ -317,6 +317,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 .chapter .story { color: var(--dim); }
 .chapter-quote { margin: 0.8rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid var(--accent); font-style: italic; }
 .chapter-quote cite { display: block; margin-top: 0.4rem; color: var(--dim); font-size: 0.8rem; font-style: normal; }
+.chapter-ending { margin: 0.8rem 0; padding: 0.6rem 0.8rem; border: 1px solid var(--accent); border-radius: 6px; }
+.chapter-ending h3 { margin: 0.2rem 0 0.4rem; font-size: 1rem; }
+.chapter-ending .story { margin: 0; }
 .chapter-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 0.6rem 0; }
 .chapter-tab { min-height: 32px; padding: 0 0.5rem; font-size: 0.78rem; font-weight: 600; background: var(--bg); color: var(--dim); border: 1px solid var(--line); }
 .chapter-tab[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); }

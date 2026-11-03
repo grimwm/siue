@@ -983,11 +983,22 @@ test("Chapter 8's closing card goes on to Chapter 9's opening card", () => {
   assert.ok(el('chapter-enter'));
 });
 
-test("Chapter 9's closing card says Chapter 10 is not yet released, and Continue puts it away", () => {
+test("Chapter 9's closing card goes on to Chapter 10's opening card", () => {
+  reset();
+  flow.showChapter(9, true);
+  click(byId(rootOf('chapter-continue'), 'chapter-continue'));
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(text('chapter-title'), 'The Heart of the Labyrinth');
+  assert.ok(el('chapter-enter'));
+});
+
+test("Chapter 10's closing card ends the campaign: an ending by the pages found, no next chapter, and Continue puts it away", () => {
   reset();
   const opened = game.opens;
-  flow.showChapter(9, true);
-  assert.match(byId(document.getElementById('chapter-root'), 'chapter-veil').textContent, /Chapter 10 is not yet released/);
+  flow.showChapter(10, true);
+  const veil = byId(document.getElementById('chapter-root'), 'chapter-veil').textContent;
+  assert.doesNotMatch(veil, /not yet released/);
+  assert.match(veil, /The End · \d+ of \d+ pages found/);
   key('Enter');
   assert.equal(flow.top(), null);
   assert.equal(game.opens, opened);
@@ -1279,11 +1290,11 @@ test('winning level 10 opens the closing card over the end card; Continue goes o
   assert.equal(game.trial, 10);
 });
 
-test("winning Chapter 9's last level opens its closing card, and no Next level follows it", () => {
+test("winning Chapter 10's last level opens its closing card, and no Next level follows it", () => {
   reset();
-  win(89);
+  win(99);
   assert.equal(flow.top(), 'chapter');
-  assert.match(text('chapter-veil'), /Chapter 10 is not yet released/);
+  assert.match(text('chapter-veil'), /The End/);
   key('Enter');
   assert.equal(flow.top(), 'end');
   assert.equal(el('end-next'), undefined);

@@ -11,6 +11,7 @@ import { CHAPTER_6 } from './chapter-6.ts';
 import { CHAPTER_7 } from './chapter-7.ts';
 import { CHAPTER_8 } from './chapter-8.ts';
 import { CHAPTER_9 } from './chapter-9.ts';
+import { CHAPTER_10 } from './chapter-10.ts';
 import type { Level } from '../puzzle/level.ts';
 import type { Action } from '../puzzle/step.ts';
 import { TRIALS, trialLevel } from '../puzzle/trials.ts';
@@ -22,6 +23,7 @@ import { FOLDS, foldLevel } from '../puzzle/folds.ts';
 import { ROUNDS, roundLevel } from '../puzzle/rounds.ts';
 import { WINDS, windLevel } from '../puzzle/winds.ts';
 import { WORKSHOP, workshopLevel } from '../puzzle/workshop.ts';
+import { HEART, heartLevel } from '../puzzle/heart.ts';
 
 export interface Chapter {
   n: number; name: string; released: boolean; levelIds: readonly string[];
@@ -30,8 +32,6 @@ export interface Chapter {
   teaching: number;
   lore: ChapterLore | null;
 }
-
-const unreleased = (n: number): Chapter => ({ n, name: '', released: false, levelIds: [], teaching: 0, lore: null });
 
 export const CHAPTERS: readonly Chapter[] = [
   {
@@ -88,14 +88,19 @@ export const CHAPTERS: readonly Chapter[] = [
     teaching: 3,
     lore: CHAPTER_9,
   },
-  unreleased(10),
+  {
+    n: 10, name: 'The Heart of the Labyrinth', released: true,
+    levelIds: HEART.map(w => w.id),
+    teaching: 3,
+    lore: CHAPTER_10,
+  },
 ];
 
 export const LEVEL_IDS: readonly string[] = CHAPTERS.filter(c => c.released).flatMap(c => c.levelIds);
 
 /** A released level's level, by id: a trial (Chapter 1), one of the winding ways (Chapter 2), one of the closing
  *  ways (Chapter 3), one of the false walls (Chapter 4), one of the snares (Chapter 5), one of the folds (Chapter 6),
- *  one of the rounds (Chapter 7), one of the winds (Chapter 8) or one of the workshop's (Chapter 9). */
+ *  one of the rounds (Chapter 7), one of the winds (Chapter 8), one of the workshop's (Chapter 9) or one of the heart's (Chapter 10). */
 export function levelById(id: string): Level {
   const t = TRIALS.findIndex(x => x.id === id);
   if (t >= 0) return trialLevel(t);
@@ -115,6 +120,8 @@ export function levelById(id: string): Level {
   if (h >= 0) return windLevel(h);
   const k = WORKSHOP.findIndex(x => x.id === id);
   if (k >= 0) return workshopLevel(k);
+  const m = HEART.findIndex(x => x.id === id);
+  if (m >= 0) return heartLevel(m);
   throw new RangeError(`no level ${id}`);
 }
 

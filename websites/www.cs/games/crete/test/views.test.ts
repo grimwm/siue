@@ -453,16 +453,29 @@ test('the closing chapter card says it is the end of the chapter, with its words
   assert.equal(closed, 1);
 });
 
-test("Chapter 9's closing card says Chapter 10 is not yet released, and its button is Continue", () => {
+test("Chapter 10's closing card is the last: no next chapter, its button is Continue, and it shows the ending", () => {
   const root = mount();
-  const nine = CHAPTERS[8]!;
-  renderChapter(root, chapterProps({ chapter: nine, closing: true, next: nextChapter(9) }));
-  assert.equal(byId(root, 'chapter-kicker').textContent, 'End of Chapter 9');
-  assert.equal(byId(root, 'chapter-title').textContent, "Daedalus's Workshop");
-  assert.equal(byId(root, 'chapter-text').textContent, nine.lore!.closing.text);
-  assert.equal(byId(root, 'chapter-next').textContent, 'Chapter 10 is not yet released');
+  const ten = CHAPTERS[9]!;
+  const endings = ten.lore!.closing.endings!;
+  renderChapter(root, chapterProps({ chapter: ten, closing: true, next: nextChapter(10), pagesFound: 20, pagesTotal: 20 }));
+  assert.equal(byId(root, 'chapter-kicker').textContent, 'End of Chapter 10');
+  assert.equal(byId(root, 'chapter-title').textContent, 'The Heart of the Labyrinth');
+  assert.equal(byId(root, 'chapter-text').textContent, ten.lore!.closing.text);
+  assert.equal(maybeById(root, 'chapter-next'), undefined);
   assert.ok(byId(root, 'chapter-continue').textContent.includes('Continue'));
   assert.doesNotMatch(byId(root, 'chapter-continue').textContent, /On to/);
+  assert.ok(byId(root, 'chapter-ending').textContent.includes('The End · 20 of 20 pages found'));
+  assert.equal(byId(root, 'chapter-ending-title').textContent, endings.find(e => e.pages === 'all')!.title);
+  renderChapter(root, chapterProps({ chapter: ten, closing: true, next: null, pagesFound: 7, pagesTotal: 20 }));
+  assert.equal(byId(root, 'chapter-ending-title').textContent, endings.find(e => e.pages === 'some')!.title);
+  renderChapter(root, chapterProps({ chapter: ten, closing: true, next: null, pagesFound: 0, pagesTotal: 20 }));
+  assert.equal(byId(root, 'chapter-ending-title').textContent, endings.find(e => e.pages === 'none')!.title);
+});
+
+test("an earlier chapter's closing card shows no ending", () => {
+  const root = mount();
+  renderChapter(root, chapterProps({ chapter: CHAPTERS[8]!, closing: true, next: nextChapter(9), pagesFound: 3, pagesTotal: 20 }));
+  assert.equal(maybeById(root, 'chapter-ending'), undefined);
 });
 
 // ---- levels list ----
@@ -595,9 +608,12 @@ test('the Lore Book lists Chapters 1 to 9 with their opening cards, and chapter 
   assert.ok(byId(root, 'lore-opening-9').textContent.includes('Opening'));
   assert.ok(byId(root, 'lore-page-ch9-tracks').textContent.includes('hides in level 9'));
   assert.ok(byId(root, 'lore-page-ch9-inventor').textContent.includes('hides in level 10'));
+  assert.ok(text.includes('Chapter 10 · The Heart of the Labyrinth'));
+  assert.ok(byId(root, 'lore-opening-10').textContent.includes('Opening'));
+  assert.ok(byId(root, 'lore-page-ch10-last-part').textContent.includes('hides in level 9'));
+  assert.ok(byId(root, 'lore-page-ch10-oak').textContent.includes('hides in level 10'));
   const soon = walk(byId(root, 'lore-veil')).filter(n => n.className === 'lore-soon');
-  assert.equal(soon.length, 1);
-  assert.ok(soon.every(n => n.textContent.includes('Not yet released')));
+  assert.equal(soon.length, 0, 'every chapter is released');
 });
 
 test('a found page shows its title and where it was found; a missing one shows ? ? ? and where it hides', () => {

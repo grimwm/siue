@@ -544,6 +544,8 @@ export function createUi(deps: UiDeps): Ui {
       closing: chapterClosing,
       score: chapterScore,
       next: nextChapter(chapterN),
+      pagesFound: CHAPTERS.flatMap(c => c.lore?.pages ?? []).filter(pg => pages.has(pg.id)).length,
+      pagesTotal: CHAPTERS.flatMap(c => c.lore?.pages ?? []).length,
       onEnter: enter,
       onLevels: () => layers.open("levels"),
       onClose: () => (chapterClosing ? goOn() : leave("chapter")),

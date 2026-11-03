@@ -24,7 +24,7 @@ import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
 import { DIRS } from '../src/puzzle/tiles.ts';
 import { stateKey } from './reference-solver.ts';
-import { CAMPAIGN_LEVELS, LEVEL_IDS, chapterOf } from '../src/campaign/chapters.ts';
+import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
 import type { Levels, OutsideLevel } from '../src/campaign/chapters.ts';
 import { icedPages } from './puzzle-grid.ts';
@@ -1005,6 +1005,34 @@ test("Chapter 10's closing card ends the campaign: an ending by the pages found,
   key('Enter');
   assert.equal(flow.top(), null);
   assert.equal(game.opens, opened);
+});
+
+test("Chapter 10's closing card shows the ending the pages found earn: none, some, then every one", () => {
+  // Runs on a store of its own, so no other test's pages decide the branch and its pages reach no other test.
+  const all = CHAPTERS.flatMap(c => c.lore?.pages ?? []).map(p => p.id);
+  const was = found.all();
+  const own = createFoundPages(null);
+  Object.assign(found, { has: own.has, all: own.all, add: own.add });
+  try {
+    const ending = () => [text('chapter-ending-title'), byId(document.getElementById('chapter-root'), 'chapter-ending').textContent];
+    for (const [add, title, count] of [
+      [[], 'The Hallway Ending', 0],
+      [all.slice(0, 1), 'Out, but Thin', 1],
+      [all, "The True Ending: The Maker's Notes", all.length],
+    ] as const) {
+      reset();
+      found.add(add);
+      flow.showChapter(10, true);
+      const [t, block] = ending();
+      assert.equal(t, title);
+      assert.match(block, new RegExp(`The End · ${count} of ${all.length} pages found`));
+      flow.closeLayers();
+    }
+  } finally {
+    const back = createFoundPages(null);
+    back.add(was);
+    Object.assign(found, { has: back.has, all: back.all, add: back.add });
+  }
 });
 
 test('with Chapter 1 all cleared, Levels and Chapter 2, Level 3 starts there', () => {

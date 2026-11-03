@@ -6,8 +6,8 @@ import { CHAPTERS, LEVEL_IDS, chapterOf, pageHome, nextChapter, levelById, place
 import type { Quote } from '../src/campaign/lore.ts';
 import { trialLevel } from '../src/puzzle/trials.ts';
 
-/** Author, work, section, then the translator and year, or only the year for a work written in English. */
-const CITE = /^[A-Z][^,]+, .+, .+(, tr\. .+)? \(\d{4}\)$/;
+/** Author, work, section, translator and year; a work written in English (Hawthorne's) has no translator. */
+const CITE = /^(?!Nathaniel Hawthorne,)[A-Z][^,]+, .+, .+, tr\. .+ \(\d{4}\)$|^Nathaniel Hawthorne, [^,]+, [^,]+ \(\d{4}\)$/;
 const released = CHAPTERS.filter(c => c.released);
 const levelOf = (i: number) => levelById(LEVEL_IDS[i]!);
 

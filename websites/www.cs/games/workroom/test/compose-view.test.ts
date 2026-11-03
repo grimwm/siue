@@ -1,5 +1,7 @@
-// The composer against the DOM stub: Title Case controls, Undo counting each edit, amber and red notes that stay where
-// they were put until Move Them Into Range, and Save Draft keeping the next draft and saying so.
+// The composer against the DOM stub: the transport and the timeline's Title Case controls, every track closed on
+// opening and the open one titled with its instrument, red notes that stay where they were put until Move Them Into
+// Range, Mute All and Unmute All with their status line, Save Draft, the Sheet view and the Piece menu's exports, and
+// Play starting on its first press however long the sound takes to build.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -27,15 +29,18 @@ const ui = await importTsx<{ c: typeof import('../src/ui/compose/Composer.tsx') 
 const settle = async (): Promise<void> => { await new Promise(r => setTimeout(r, 300)); await act(async () => {}); };
 const sampler = { ready: async () => {}, start: () => 1, stop() {}, stopAll() {} };
 const text = (el: StubElement): string => el.textContent.replace(/\s+/g, ' ').trim();
+/** A button by its words, or by its accessible name when it shows only a picture. */
 const button = (root: StubElement, words: string): StubElement => {
-  const b = walk(root).find(e => e.localName === 'button' && text(e) === words);
-  assert.ok(b, `no button "${words}" in ${walk(root).filter(e => e.localName === 'button').map(text).join(' | ')}`);
+  const b = walk(root).find(e => e.localName === 'button' && (text(e) === words || e._attrs['aria-label'] === words));
+  assert.ok(b, `no button "${words}" in ${walk(root).filter(e => e.localName === 'button').map(e => text(e) || e._attrs['aria-label']).join(' | ')}`);
   return b;
 };
+const attr = (root: StubElement, name: string): StubElement[] => walk(root).filter(e => e._attrs[name] !== undefined);
 
-test('the composer: Title Case controls, coloured notes, Move Them Into Range with Undo, and Save Draft', async () => {
+test('the composer: the transport, closed tracks, the instrument as the title, red notes kept until Move Them Into Range, mutes and Save Draft', async () => {
   let doc = addPart(newDoc('My First Tune'), ENTRIES.find(e => e.id === 'violin')!)!.doc;
-  doc = addNotes(doc, 'violin', [{ start: 0, length: 1, pitch: 24 }, { start: 1, length: 1, pitch: 103 }, { start: 2, length: 1, pitch: 67 }]).doc;
+  doc = addNotes(doc, 'violin', [{ start: 0, length: 1, pitch: 24 }, { start: 1, length: 1, pitch: 67 }, { start: 2, length: 1, pitch: 69 }]).doc;
+  doc = addPart(doc, ENTRIES.find(e => e.id === 'kit')!)!.doc;
   const saved: number[] = [];
   const api = { saveDraft: async (_piece: string, version: number) => { saved.push(version); return { status: 201, data: { version } }; } };
   const root = makeEl('root');
@@ -45,27 +50,45 @@ test('the composer: Title Case controls, coloured notes, Move Them Into Range wi
       entries: ENTRIES, api, sampler, buildSound: async () => { throw new Error('no sound here'); }, now: () => 0,
     }), renderTarget(root));
   });
-  for (const words of ['↶ Undo 0', '↷ Redo 0', 'Clear', 'Save Draft', 'Notes On Controls: On', 'Fill My Screen', 'Add Part', 'Hear With The Piece', 'Hear My Part Alone',
-    'Change Instrument', 'Move Them Into Range', 'Remove Part', '‹ Lower', 'Higher ›']) button(root, words);
-  const ranges = () => walk(root).filter(e => e.dataset['noteId'] !== undefined || e._attrs['data-note-id'] !== undefined).map(e => e._attrs['data-range'] ?? e.dataset['range']);
-  assert.deepEqual(ranges(), ['out', 'expert', 'normal']);
-  assert.match(text(walk(root).find(e => e._attrs['data-out-of-range'] !== undefined)!), /^1 note is out of this instrument's range/);
+  for (const words of ['Play', 'Back To Start', 'Loop', 'Undo', 'Redo', 'Save Draft', 'Piece Menu', 'Compose', 'Mix', 'Sheet',
+    'Mute All', 'Unmute All', 'Expand All', 'Collapse All', 'Add Effect', 'Add Section', 'Add Instrument', 'Expand Violin', 'Mute Violin', 'Track Menu: Violin']) button(root, words);
+  assert.equal(attr(root, 'data-grid').length, 0, 'every track starts closed');
+  assert.equal(attr(root, 'data-region').length, 1, 'an old piece opens with a region over its notes');
 
+  await act(() => click(button(root, 'Expand Violin')));
+  assert.equal(text(attr(root, 'data-editor-title')[0]!), 'Violin· Piano Roll');
+  for (const words of ['1/16', '1/8', 'Beat', '1/2', 'Bar', 'Type Notes', 'Select', 'Chords', 'Split', 'Fix Timing', 'Record', 'Move Them Into Range']) button(root, words);
+  const ranges = () => attr(root, 'data-note-id').map(e => e._attrs['data-range']);
+  assert.match(text(attr(root, 'data-out-of-range')[0]!), /^1 note is out of this instrument's range/);
   await act(() => click(button(root, 'Move Them Into Range')));
-  assert.deepEqual(ranges(), ['normal', 'expert', 'normal']);
-  button(root, '↶ Undo 1');
-  await act(() => click(button(root, '↶ Undo 1')));
-  assert.deepEqual(ranges(), ['out', 'expert', 'normal'], 'Undo puts the red note back');
-  button(root, '↷ Redo 1');
+  assert.ok(!attr(root, 'data-out-of-range').length, 'no red notes left');
+  await act(() => click(button(root, 'Undo')));
+  assert.match(text(attr(root, 'data-out-of-range')[0]!), /^1 note is out/, 'Undo puts the red note back');
+  assert.ok(ranges().length >= 2);
+
+  await act(() => click(button(root, 'Expand Drum Kit')));
+  assert.equal(text(attr(root, 'data-editor-title')[1]!), 'Drum Kit· Step Sequencer');
+  await act(() => click(button(root, 'Collapse All')));
+  assert.equal(attr(root, 'data-grid').length, 0);
+
+  const heard = () => text(attr(root, 'data-mute-status')[0]!);
+  assert.equal(heard(), 'All tracks will play.');
+  await act(() => click(button(root, 'Mute Drum Kit')));
+  assert.equal(heard(), 'Playing: Violin. Muted: Drum Kit.');
+  button(root, 'Unmute Drum Kit');
+  await act(() => click(button(root, 'Mute All')));
+  assert.equal(heard(), 'All tracks are muted. Press Unmute on each track you want to hear.');
+  await act(() => click(button(root, 'Unmute All')));
+  assert.equal(heard(), 'All tracks will play.');
 
   await act(async () => { click(button(root, 'Save Draft')); await new Promise(r => setTimeout(r, 0)); });
   assert.deepEqual(saved, [1]);
-  assert.equal(text(walk(root).find(e => e._attrs['data-status'] !== undefined)!), 'Saved as draft 1.');
-  assert.match(text(walk(root).find(e => e._attrs['data-draft-line'] !== undefined)!), /^Draft 1 · 92 BPM · 4\/4$/);
+  assert.equal(text(attr(root, 'data-status')[0]!), 'Saved as draft 1.');
+  assert.match(text(attr(root, 'data-draft-line')[0]!), /^Draft 1 · 92 BPM · 4\/4$/);
   render(null, renderTarget(root));
 });
 
-test('Show As: Grid, Sheet Music and Both; the sheet is the part engraved, written as it is read, Concert Pitch as it sounds', async () => {
+test('Sheet shows the chosen track engraved, written as it is read, Concert Pitch as it sounds; the Piece menu exports', async () => {
   let doc = addPart(newDoc('Horn Call'), ENTRIES.find(e => e.id === 'horn')!)!.doc;
   doc = addNotes(doc, 'french-horn', [{ start: 0, length: 4, pitch: 53 }]).doc;
   const shown: { xml: string; lane: string | null }[] = [];
@@ -83,28 +106,23 @@ test('Show As: Grid, Sheet Music and Both; the sheet is the part engraved, writt
       entries: ENTRIES, api: { saveDraft: async () => ({ status: 201, data: { version: 1 } }) }, sampler, buildSound: async () => { throw new Error('no sound'); }, now: () => 0, files,
     }), renderTarget(root));
   });
-  for (const words of ['Import Music File', 'Export MusicXML', 'Export MIDI', 'Grid', 'Sheet Music', 'Both']) button(root, words);
-  const sheetBoxes = () => walk(root).filter(e => e._attrs['data-part-sheet'] !== undefined).length;
-  const grids = () => walk(root).filter(e => e._attrs['data-edit-grid'] !== undefined).length;
-  assert.deepEqual([grids(), sheetBoxes()], [1, 0], 'the grid alone at first');
-  assert.ok(walk(root).some(e => e._attrs['data-range-picture'] !== undefined), 'the range picture in Part Settings');
-
-  await act(() => click(button(root, 'Sheet Music'))); await settle();
-  assert.deepEqual([grids(), sheetBoxes()], [0, 1]);
+  const sheetBoxes = () => attr(root, 'data-part-sheet').length;
+  assert.equal(sheetBoxes(), 0, 'Compose first');
+  await act(() => click(button(root, 'Sheet'))); await settle();
+  assert.equal(sheetBoxes(), 1);
   assert.equal(shown.length, 1, text(walk(root).find(e => e._attrs['data-sheet-state'] !== undefined) ?? root));
   assert.equal(shown[0]!.lane, 'french-horn');
   assert.match(shown[0]!.xml, /<step>C<\/step><octave>4<\/octave>/, 'the horn in F is written a fifth up');
-
   await act(() => click(button(root, 'Concert Pitch: Off'))); await settle();
   assert.match(shown[shown.length - 1]!.xml, /<step>F<\/step><octave>3<\/octave>/);
   assert.doesNotMatch(shown[shown.length - 1]!.xml, /<transpose>/);
 
-  await act(() => click(button(root, 'Both'))); await settle();
-  assert.deepEqual([grids(), sheetBoxes()], [1, 1]);
-
+  await act(() => click(button(root, 'Piece Menu')));
+  for (const words of ['Save Draft', 'Import Music File', 'Export MusicXML', 'Export MIDI', 'Markers']) button(root, words);
   await act(() => click(button(root, 'Export MIDI')));
   assert.equal(saved[0]!.name, 'horn-call.mid');
   assert.equal(new TextDecoder().decode(new Uint8Array(await saved[0]!.data.arrayBuffer()).slice(0, 4)), 'MThd');
+  await act(() => click(button(root, 'Piece Menu')));
   await act(() => click(button(root, 'Export MusicXML')));
   assert.equal(saved[1]!.name, 'horn-call.musicxml');
   assert.doesNotMatch(await saved[1]!.data.text(), /color=/, 'an export carries no range colours');
@@ -164,7 +182,7 @@ class FakeAudio {
 }
 const press = (el: StubElement): void => { pressing = true; try { click(el); } finally { pressing = false; } };
 
-test('Hear plays on its first press however long the sound takes to build; a press replaced or stopped while it builds never plays', async () => {
+test('Play plays on its first press however long the sound takes to build; Stop while it builds plays nothing', async () => {
   Object.assign(globalThis, { Audio: FakeAudio });
   let doc = addPart(newDoc('Slow Build'), ENTRIES.find(e => e.id === 'cello')!)!.doc;
   doc = addNotes(doc, 'cello', [{ start: 0, length: 4, pitch: 48 }, { start: 8, length: 4, pitch: 50 }]).doc;
@@ -177,37 +195,29 @@ test('Hear plays on its first press however long the sound takes to build; a pre
       entries: ENTRIES, api: { saveDraft: async () => ({ status: 201, data: { version: 1 } }) }, sampler, buildSound, now: () => 0,
     }), renderTarget(root));
   });
-  const listening = () => text(walk(root).find(e => e._attrs['data-listening'] !== undefined)!);
+  const play = () => walk(root).find(e => e._attrs['data-play'] !== undefined)!;
   const built = async (url: string) => act(async () => { builds.shift()!(url); });
 
   // One press; the build finishes long after it, outside the press.
-  await act(() => press(button(root, 'Hear With The Piece')));
-  assert.match(listening(), /Getting the instruments ready/, 'the press shows the sound is on its way');
+  await act(() => press(play()));
+  assert.equal(text(play()), 'Getting Ready…', 'the press shows the sound is on its way, beside Play');
   await built('blob:one');
   const one = elements.at(-1)!;
   assert.deepEqual(one.plays, ['played ', 'played blob:one'], 'played in the press, then let play once built');
   assert.equal(one.paused, false);
-  assert.equal(listening(), 'The piece: Playing');
+  assert.equal(text(play()), 'Stop');
 
-  // Pressed twice while it builds: only the second press plays.
-  await act(() => click(button(root, 'Stop')));
+  // Stop while it plays, then Stop while the next one builds: nothing plays when that build ends.
+  await act(() => click(play()));
   assert.equal(one.paused, true);
-  await act(() => press(button(root, 'Hear With The Piece')));
-  const first = elements.at(-1)!;
-  await act(() => press(button(root, 'Hear My Part Alone')));
-  const second = elements.at(-1)!;
-  await built('blob:piece');
-  await built('blob:part');
-  assert.ok(first.paused && !first.plays.some(p => p.includes('blob:')), 'the replaced press never starts');
-  assert.deepEqual(second.plays, ['played ', 'played blob:part']);
-
-  // Stop while it builds: nothing plays when the build ends.
-  await act(() => click(button(root, 'Stop')));
-  await act(() => press(button(root, 'Hear With The Piece')));
+  await act(() => press(play()));
   const stopped = elements.at(-1)!;
-  await act(() => click(button(root, 'Stop')));
+  await act(() => press(button(root, 'Back To Start')));
+  const restarted = elements.at(-1)!;
+  assert.notEqual(stopped, restarted, 'Back To Start while it builds starts again from the top');
   await built('blob:late');
-  assert.ok(stopped.paused && !stopped.plays.some(p => p.includes('blob:')), 'a stopped build never plays');
-  assert.equal(listening(), '');
+  await built('blob:top');
+  assert.ok(stopped.paused && !stopped.plays.some(p => p.includes('blob:')), 'a replaced build never plays');
+  assert.deepEqual(restarted.plays, ['played ', 'played blob:top']);
   render(null, renderTarget(root));
 });

@@ -99,8 +99,8 @@ export function ActionBar(p: ActionBarProps) {
   const ref = useRef<HTMLDivElement>(null);
   const shown = !c.placing && (k.kind === 'notes' || k.kind === 'region' || k.kind === 'section' || !!c.chord || c.splitting);
   useEffect(() => {
-    document.body.classList.toggle('cmp-has-actbar', shown);
-    return () => document.body.classList.remove('cmp-has-actbar');
+    document.body?.classList?.toggle('cmp-has-actbar', shown);
+    return () => document.body?.classList?.remove('cmp-has-actbar');
   }, [shown]);
   if (!shown) return null;
   const close = () => { c.setPick({ kind: 'none' }); c.setChord(null); c.setSplitting(false); };

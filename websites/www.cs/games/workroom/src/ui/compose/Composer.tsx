@@ -953,7 +953,7 @@ export function Composer(p: ComposerProps) {
           <p data-draft-line="" class="font-mono text-sm text-dim">{version === 0 ? 'New Piece · not saved yet' : `Draft ${version}${dirty ? ' · changed since' : ''}`} · {bpm} BPM · {clock.tempoAt(1).beats}/{clock.tempoAt(1).unit}</p>
         </div>
       </header>
-      <Transport playing={playing} getting={getting} onPlay={() => void play()} onStop={stop} onRewind={() => { setCursor(0); if (playingRef.current) void play(0); }}
+      <Transport playing={playing} getting={getting} onPlay={() => void play()} onStop={stop} onRewind={() => { setCursor(0); if (audio.current) void play(0); }}
         loopOn={loopOn} onLoop={() => setLoopOn(!loopOn)} bpm={bpm} onBpm={v => apply(setPieceSpeed(doc, Math.max(40, Math.min(240, v))))}
         readout={readout} undos={history.undoCount()} redos={history.redoCount()} onUndo={undo} onRedo={redo}
         saving={saving} canSave={doc.parts.length > 0} onSave={() => void save()} onMenu={a => setPop({ name: 'more', anchor: a })}

@@ -35,7 +35,7 @@ export function Pop(p: PopProps) {
   }, []);
   useLayoutEffect(() => {
     const el = box.current;
-    if (!el || typeof window === 'undefined' || !p.anchor || window.innerWidth <= WIDE || !el.getBoundingClientRect) return;
+    if (!el || typeof window === 'undefined' || !p.anchor || !(window.innerWidth > WIDE) || !p.anchor.getBoundingClientRect) return;
     const r = p.anchor.getBoundingClientRect();
     const w = el.offsetWidth;
     const h = el.offsetHeight;

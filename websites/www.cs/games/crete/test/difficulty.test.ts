@@ -1,8 +1,8 @@
 // The difficulty measure on small hand-made levels, and the campaign gate: every released level clears the bar,
-// and a chapter's challenge levels are a real fight.
+// every piece on it matters, its beast is a threat, and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
@@ -354,9 +354,114 @@ test('the shared bar: never needs a Minotaur; a chase level may trade puzzle num
     'a chase level clears it on puzzle numbers alone too');
 });
 
+/** A red key on the way to the exit, and a red door that opens on a dead end: the player can ignore both. */
+const DECOY = level([
+  '#########',
+  '#P...rE.#',
+  '###R#####',
+  '###.#####',
+  '#########',
+]);
+
+test('every piece matters: a key and a door the player can ignore fail the level', () => {
+  const d = measure(DECOY);
+  assert.deepEqual(uselessProblems(DECOY, d), [
+    'the red keys: ignoring it changes nothing (still 5 moves, and the search no 1.3 × smaller)',
+    'the red doors: ignoring it changes nothing (still 5 moves, and the search no 1.3 × smaller)',
+  ]);
+  assert.deepEqual(USEFUL, { explored: 1.3 }, 'a piece that only grows the search grows it by the ramp\'s aimed step');
+});
+
+test('a key and door the line needs matter, and so does a door that holds the beast back', () => {
+  const needed = level(['######', '#PrRE#', '######']);
+  assert.deepEqual(uselessProblems(needed, measure(needed)), [], 'without the key the level is lost; shut, the door seals the exit');
+  // No key opens this door, and the line never touches it; as floor, it lets the beast out onto the line.
+  const holds = level(['#########', '#P....E.#', '###.#####', '###R#####', '###M#####', '#########']);
+  assert.deepEqual(uselessProblems(holds, measure(holds)), []);
+});
+
+test('a block nobody pushes and that holds nothing back fails; a honey cake and a page are never counted', () => {
+  const block = level(['#######', '#P..E.#', '#..O..#', '#######']);
+  assert.match(uselessProblems(block, measure(block)).join(), /^the block at row 3, column 4: ignoring it changes nothing/);
+  const extras = level(['#######', '#P.x.E#', '#..p..#', '#######'], 'pages: ch1-chalk');
+  assert.deepEqual(pieceUnits(extras), []);
+  assert.deepEqual(uselessProblems(extras, measure(extras)), []);
+});
+
+test('pieceUnits: each piece with the ways it can be taken out', () => {
+  const lv = level(['##########', '#PrR:~fO.#', '#..S;.W.E#', '##########']);
+  assert.deepEqual(pieceUnits(lv).map(u => [u.name, u.ignored.length]), [
+    ['the red keys', 1], ['the red doors', 2], ['the flippers at row 2, column 7', 1], ['the block at row 2, column 8', 2],
+    ['the gravel', 2], ['the marked stones', 2], ['the pop-up walls', 2], ['the water', 2], ['the fake wall at row 3, column 7', 2],
+  ]);
+  // A clone machine taken out takes its `machines:` entry with it, so the level still parses.
+  const cloning = level(['#######', '#P+.C.#', '#~~~~~#', '#M...E#', '#######'], 'machines: block-down');
+  const machine = pieceUnits(cloning).find(u => u.name.startsWith('the clone machine'))!;
+  assert.equal(machine.ignored[0]!.machines.length, 0);
+});
+
+/** The beast stands in the short way, between two stones he cannot tread: he never moves, and the long way round
+ *  never comes near him. */
+const PENNED = level([
+  '#########',
+  '#P.:M:.E#',
+  '#.#####.#',
+  '#.......#',
+  '#########',
+]);
+/** The beast runs at Theseus down the open middle of the hall. */
+const RUNNING = level([
+  '#########',
+  '#P......#',
+  '#.##.##.#',
+  '#.#M..#.#',
+  '#.##.##.#',
+  '#......E#',
+  '#########',
+]);
+
+test('the beast must be a threat: a penned beast fails though he adds moves, a running one passes', () => {
+  assert.deepEqual(THREAT, { reach: 8, challenge: { share: 1 / 3, quiet: 1 / 3 }, teaching: { share: 1 / 4, quiet: 1 } });
+  const d = measure(PENNED);
+  assert.equal(d.minotaurDelta, 4, 'he adds moves: the line must go round');
+  assert.deepEqual(threatOf(PENNED, d), { turns: 10, live: 0, quiet: 10 });
+  assert.deepEqual(threatProblems(PENNED, d, 'challenge'), ['the beast is live on 0 of 10 turns; the bar is 4', 'the beast is quiet for 10 turns in a row; the bar is 3']);
+  assert.deepEqual(threatProblems(PENNED, d, 'teaching'), ['the beast is live on 0 of 10 turns; the bar is 3'], 'a teaching level has no quiet limit');
+  const run = measure(RUNNING);
+  const t = threatOf(RUNNING, run);
+  assert.ok(t.live >= t.turns / 3 && t.quiet <= t.turns / 3, JSON.stringify(t));
+  assert.deepEqual(threatProblems(RUNNING, run, 'challenge'), []);
+});
+
+test('the beast must add a move: a beast-free route that wins as quickly fails, teaching or challenge', () => {
+  const d = measure(WALLED);
+  for (const kind of ['teaching', 'challenge'] as const) {
+    assert.ok(threatProblems(WALLED, d, kind).includes('the beast adds no moves: a route that ignores him wins as quickly'), kind);
+  }
+  assert.deepEqual(threatProblems({ ...WALLED, minotaur: null }, measure({ ...WALLED, minotaur: null }), 'challenge'), [], 'no beast, nothing to check');
+});
+
 // The campaign gate. Each released chapter's levels are measured once.
 const measured = new Map<string, Difficulty>();
 const of = (id: string) => { if (!measured.has(id)) measured.set(id, measure(levelById(id))); return measured.get(id)!; };
+
+/** Teaching levels held to every rule but the live beast's share of the turns: each teaches a piece whose lesson is
+ *  keeping the beast away, so he is meant to be out of reach once the lesson is shown. Each still needs its beast to
+ *  add a move. */
+const THREAT_EXEMPT: Readonly<Record<string, string>> = {
+  'ch3-2': 'Stones He Will Not Tread: two pop-up walls pen the beast in the lower hall, and the lesson is to leave him there',
+  'ch5-2': 'The Brown Button: the beast keeps the high way, and the lesson is the low way, through a snare the block holds open',
+};
+const threatFor = (id: string, kind: 'teaching' | 'challenge') =>
+  threatProblems(levelById(id), of(id), kind).filter(p => !(id in THREAT_EXEMPT && /^the beast is live on/.test(p)));
+
+test('each live-beast exemption is a teaching level that still needs it', () => {
+  for (const id of Object.keys(THREAT_EXEMPT)) {
+    const chapter = CHAPTERS.find(c => c.levelIds.includes(id))!;
+    assert.ok(chapter.levelIds.indexOf(id) < chapter.teaching, `${id} is a teaching level`);
+    assert.match(threatProblems(levelById(id), of(id), 'teaching').join(), /^the beast is live on/, `${id} still falls short of the share`);
+  }
+});
 
 for (const chapter of CHAPTERS.filter(c => c.released)) {
   const teaching = chapter.levelIds.slice(0, chapter.teaching);
@@ -365,8 +470,13 @@ for (const chapter of CHAPTERS.filter(c => c.released)) {
     assert.ok(teaching.length > 0 && challenges.length > 0);
   });
   for (const id of teaching) {
-    test(`${id} clears the bar: its Minotaur shapes the route`, () => {
-      assert.deepEqual(challengeProblems(of(id)), [], id);
+    test(`${id} clears the bar: its Minotaur shapes the route and is a threat`, () => {
+      assert.deepEqual([...challengeProblems(of(id)), ...threatFor(id, 'teaching')], [], id);
+    });
+  }
+  for (const id of chapter.levelIds) {
+    test(`${id}: every piece matters`, () => {
+      assert.deepEqual(uselessProblems(levelById(id), of(id)), [], id);
     });
   }
   // The shared bar is set by Chapter 1: its challenge levels clear it and its teaching levels do not.
@@ -383,6 +493,7 @@ for (const chapter of CHAPTERS.filter(c => c.released)) {
         ...challengeProblems(of(id), BAR, { teaching: teaching.map(of) }),
         ...(k > 0 ? rampProblems(of(challenges[k - 1]!), of(id), rampOf(levelById(id))) : []),
         ...hiddenProblems(levelById(id), of(id)),
+        ...threatFor(id, 'challenge'),
       ];
       assert.deepEqual(problems, [], id);
     });

@@ -11,9 +11,9 @@ export const FALSE_WALLS: readonly { id: string; text: string }[] = [
 intro: The high way runs past the beast. The low way ends in a wall, and one of its stones is only painted: walk into it and it gives way, and you are through.
 
 ###########
-#P...#...E#
+#P...#..ME#
 #.##...##.#
-#.#..M..#.#
+#.#.....#.#
 #.#######.#
 #....W....#
 ###########
@@ -39,18 +39,18 @@ intro: Here what looks open is shut, and what looks shut is open. Bump what bloc
 ###########
 ` },
   { id: 'ch4-4', text: `title: The Unseen Shore
-intro: Flippers lie in the pool and three relics about it. Two stretches of floor here are wall you cannot see; the beast knows where they are, and he will not wade after you.
+intro: A relic lies in the pool, two more about it, and the flippers in the far corner. One stretch of floor here is wall you cannot see; the beast knows where it is, and he will not wade after you.
 
 ############
-#P.#######*#
-#...#M.~~~.#
-#..*.I.~f~.#
-#..#.#.~~~.#
-#....#.....#
+#P.#######f#
+#...#..~~~.#
+#..*.I.~*~.#
+#..#.#.~~~M#
+#....#..#..#
 #..###..#.##
 #*..O......#
-###....##..#
-###.##I..|E#
+###........#
+###.##...|E#
 ############
 ` },
   { id: 'ch4-5', text: `title: The Painted Stone
@@ -59,11 +59,11 @@ intro: Two relics, a red key and its door. The beast waits in the upper hall; tw
 ############
 #P....S.##.#
 #.##....#..#
-#.#*S.WM#.##
-#.#........#
-#..........#
+#.#*S.W##.##
+#.#.#.....M#
+#........#.#
 #.##S.#..#.#
-#S#rS#...#.#
+#S#rS#..##.#
 #..S###.R#.#
 ###.W..*#|E#
 ############
@@ -72,15 +72,15 @@ intro: Two relics, a red key and its door. The beast waits in the upper hall; tw
 intro: Loose stone and closing stone keep the beast off, and here the walls lie both ways: one painted, two unseen. Mind where the stones close behind you.
 
 ############
-#P..::##..##
-#...#.#..;.#
-##.#I....#.#
-#.:..#W..#M#
+#P.#::#....#
+##......#;.#
+####I.#..#.#
+#.:...W..#.#
 #*##.#..:#.#
-###..##..#.#
-#...:....;.#
-#...#.#.I..#
-#*..;.....|E
+###.###....#
+#...:...#;.#
+#...#.#.I.M#
+#*..;...#.|E
 ############
 ` },
   { id: 'ch4-7', text: `title: The Glass Floor
@@ -88,29 +88,29 @@ intro: Ice runs through these halls and skates lie in the west. Two walls here a
 
 ############
 #P...#.##.*#
-#.#....#...#
+#......#...#
 #..==W==.###
-#...#..=.#.#
-#k.#M##=...#
+#...#..=##.#
+#k##.#.=...#
 #.....#=...#
-##......W..#
-#...##....##
+##....M.W..#
+#...####..##
 #*..#....|E#
 ############
 ` },
   { id: 'ch4-8', text: `title: The Waiting Wall
-intro: A block, a button and a wall that waits on it. A painted stone stands near the block, and two unseen walls guard the low ways.
+intro: A block, a button and a wall that waits on it. A painted stone stands near the block, and an unseen wall guards the low way.
 
 ############
-#P##..##.###
-#.#...#..#.#
+#P##.....###
+#.#...#....#
 #.#O.W..*#.#
-#.......T###
-#...#._#..##
-###.##.#..M#
-#*#.#......#
-#...#...I#.#
-###.I..###|E
+#.......T#.#
+#....#_....#
+###..#.##..#
+#*#.##.....#
+#...#..#...#
+##..I..##M|E
 ############
 ` },
   { id: 'ch4-9', text: `title: The General
@@ -118,33 +118,33 @@ intro: Fire burns across these halls, and boots lie near it. One wall here is pa
 pages: ch4-taurus
 
 ############
-##..FF::..P#
-#.;###..#..#
-#.#h...I..##
-#M#..W#..:.#
-#.#:..#.#.*#
+#..#FF::..P#
+#.;###..##.#
+#..h...I#.##
+##...W#..:.#
+#..:....##*#
 #.#.FF#..###
-#.;...#:...#
-#.pI.##.#..#
-E|.....;..*#
+#.;##.#:...#
+#.pI....#..#
+E|M#...;.#*#
 ############
 ` },
   { id: 'ch4-10', text: `title: The Painted Labyrinth
-intro: The false walls end in a maze of them. A red door is one way through and a painted wall the other; one more painted wall leads nowhere, and one stretch of open floor is not open at all. Off the quickest way, a page waits, and a memory of the queen.
+intro: The false walls end in a maze of them. A red door is the way through, a painted wall opens a second road to the gate, and one stretch of open floor is not open at all. Off the quickest way, a page waits, and a memory of the queen.
 pages: ch4-queen
 
 ####################
 #P....#......####.p#
 ##.#....###..###..##
 ###*..:...##..:..###
-#.......#..I##.....#
+#.......##.I##.....#
 #..##...#.......#W.#
-##..#.##..###.#.#.##
-#r###.:..M#...:.#.##
+##..#......##.#...##
+#r###.:.......:.####
 #........##..#.#...#
-#..*.###..#..#.R...#
+#..*.###.##..#.R...#
 #.#..#.#..:.#####.##
-#*##...W##...##.#|E#
+#*##M..###...##.#|E#
 ####################
 ` },
 ];

@@ -45,7 +45,7 @@ intro: Lead the beast into the snare, then mind the brown button beside it: what
 ###########
 ` },
   { id: 'ch5-4', text: `title: The Frozen Snare
-intro: Ice runs through the middle halls; skates and a block lie in the west. Two snares wait in the south, and the brown button by the ice looses the eastern one: that is the snare you want the beast in.
+intro: Ice runs through the middle halls; skates and a block lie in the west. A snare waits in the south, and the brown button by the ice looses it: lead the beast in, then keep off that button.
 
 ############
 #P.....#..*#
@@ -56,16 +56,16 @@ intro: Ice runs through the middle halls; skates and a block lie in the west. Tw
 #....#.=#.##
 #.##......##
 #..#.&.....#
-#*&#....#|E#
+#*.#....#|E#
 ############
 ` },
   { id: 'ch5-5', text: `title: The Drowned Snare
-intro: Flippers lie in the pool and three relics about it. Two snares lie by the water: one will take the beast, and a block will fill the other. The brown button in the northwest looses the eastern one.
+intro: A relic lies in the pool, two more about it, and the flippers in the far corner. Two snares lie by the water: one will take the beast, and a block will fill the other. The brown button in the northwest looses the eastern one.
 
 ############
-#P...#####*#
+#P...#####f#
 #-#...#~~~.#
-###*...~f~.#
+###*...~*~.#
 #.....&~~~.#
 #...&#.....#
 ##..##..##.#
@@ -82,8 +82,8 @@ intro: A snare lies before the gate, and its brown button sits far off in the no
 #.##......##
 #.#*...##..#
 #.####..##.#
-#.#..##.#..#
-#..M..#....#
+#.#.M##.#..#
+#.....#....#
 #..O...#...#
 #....#.#...#
 ###.*#.&.|E#
@@ -94,13 +94,13 @@ intro: A block, a red key and its door, two relics and one snare. The brown butt
 
 ############
 #P.....#####
-#..##...####
+#.......####
 #..O...&*..#
-#......#R..#
-#...##.##.##
-###.#...#..#
-#*#.#.#-M..#
-#.....#....#
+#....#.#R..#
+#...##....##
+###.#M..#..#
+#*#.#.#-...#
+#.....##...#
 ###r.##...|E
 ############
 ` },
@@ -109,14 +109,14 @@ intro: One relic hides in the northwest, and the only way to it runs through a s
 
 ############
 #*#...P....#
-#.#....##..#
+#.#....#.#.#
 #&.....#...#
-#..###...O.#
-#.&....:#..#
-#.###..M#.##
+#.#.##...O.#
+#.&....:#.##
+#.###.#...##
 #.#.;...#..#
 #.#........#
-#E|#.-.#:.##
+#E|#.-M#:.##
 ############
 ` },
   { id: 'ch5-9', text: `title: The House of Erechtheus
@@ -126,31 +126,31 @@ pages: ch5-kinsman
 ############
 #...FF::..P#
 #.;.....##.#
-#.&h#...p&.#
-#.###..##:.#
-#..:..#.#.*#
-##..FF..####
-##;..#.:#-##
-##......M..#
-E|...#.;.#*#
+#.&h....p&.#
+#.###...#:.#
+#..:..#..#*#
+##..FF.#.###
+##;..#.:#-.#
+##.........#
+E|.M.#.;..*#
 ############
 ` },
   { id: 'ch5-10', text: `title: The Gate of the Labyrinth
-intro: The snares end at the gate. A red door is one way through; the other runs east past a snare that the block, pushed onto the brown button, holds open. A second snare lies in the south. Off the quickest way, a page waits, and a memory of another telling.
+intro: The snares end at the gate. A red door is one way through; the other runs east past a snare that the block, pushed onto the brown button, holds open. Off the quickest way, a page waits, and a memory of another telling.
 pages: ch5-gate
 
 ####################
 #P....#......####..#
-#..##...###....#...#
-##.*..:...##..:..###
-#.........O-###....#
-#..##...#.......#&.#
-##....###.##....#.##
-#r###.:...#...:##.##
-#.......###M.#.#...#
-#..*.###..##.#.R...#
-#.#..#p...:#.#.#..##
-#*#....&.#...####|E#
+#..#....###....#...#
+###*..:.#.##..:#.###
+#..#......O-###....#
+#..#....#.......#&.#
+#......##.##....#.##
+#r###M:...#...:##.##
+#.......###..#.#...#
+##.*.###..##.#.R...#
+#....#p...:#.#.#..##
+#*#......#..#####|E#
 ####################
 ` },
 ];

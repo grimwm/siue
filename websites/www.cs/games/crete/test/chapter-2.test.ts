@@ -16,12 +16,10 @@ import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
 /** Each level's shortest line, pinned: a rule change that alters a level fails here. */
-const SHORTEST: number[] = [12, 17, 25, 51, 44, 62, 66, 60, 54, 72];
+const SHORTEST: number[] = [12, 17, 25, 53, 45, 60, 66, 66, 54, 76];
 /** Level 10 is larger than the screen; its proofs may search further than the in-game cap. */
 const BIG_CAP = 6_000_000;
 const capOf = (i: number) => (i === 9 ? BIG_CAP : SOLVER_CAP);
-/** Level 10's routes to the inner gate: water with the flippers, fire with the fire boots; either will do. */
-const ROUTES: ObjectKind[] = ['flippers', 'fire-boots'];
 
 /** The pieces later chapters bring in (Chapters 3 to 9): none may appear here. */
 const LATER_TERRAIN: readonly Terrain[] = ['popup', 'fake-wall', 'invisible-wall', 'trap', 'button-brown', 'teleport', 'thief', 'bomb', 'clone', 'button-red'];
@@ -134,9 +132,11 @@ test('the two pages: The Lots in level 9 and The Black Sail in level 10, each of
   }
 });
 
-test('level 10 ends at the inner gate and has more than one route', () => {
+test('level 10 ends at the inner gate behind water, with a quicker way through fire', () => {
   const lv = wayLevel(9);
   assert.ok(lv.terrain.includes('gate') && lv.terrain.includes('exit') && lv.relics > 0);
-  for (const k of ROUTES) assert.ok(solve(initial(withoutObjects(lv, [k])), BIG_CAP).solved, `level 10 is won without the ${k}`);
-  assert.ok(unwinnable(solve(initial(withoutObjects(lv, ROUTES)), BIG_CAP)), 'level 10 needs one of its routes');
+  assert.ok(unwinnable(solve(initial(withoutObjects(lv, ['flippers'])), BIG_CAP)), 'level 10 needs the flippers');
+  const slow = solve(initial(withoutObjects(lv, ['fire-boots'])), BIG_CAP);
+  assert.ok(slow.solved && slow.line.length > once(9).line.length, 'level 10 is won without the fire boots, the long way');
+  assert.ok(once(9).took.has('fire-boots'), 'the quickest way takes the fire boots');
 });

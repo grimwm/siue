@@ -143,11 +143,11 @@ test('a winnable chase level reads out its numbers and is shareable', () => {
   const d = measure(L9);
   const r = checkLines(done(d), 'T', L9);
   assert.deepEqual(r.lines.slice(0, 3), [
-    'Winnable: quickest win 40 moves',
+    'Winnable: quickest win 43 moves',
     `Situations searched: ${d.explored.toLocaleString('en-US')}`,
     `Chase: the Minotaur adds ${d.minotaurDelta} moves; ignoring him ${d.greedyWins ? 'wins' : 'loses'}`,
   ]);
-  assert.equal(r.lines[0], 'Winnable: quickest win 40 moves');
+  assert.equal(r.lines[0], 'Winnable: quickest win 43 moves');
 });
 
 test('the lines of a hand-made chase answer are exact, down to the thousands separator', () => {

@@ -21,9 +21,9 @@ intro: These stones bear you once. Step off one and it rises into wall behind yo
 intro: The beast will not set a hoof on these stones, risen or not. Two of them pen him in the lower hall; go round, and leave him there.
 
 ############
-#P.........#
+#..........#
 #.########;#
-#.#......#.#
+#P#......#.#
 #.#.####.#.#
 #..;...M.;.#
 ######.###.#
@@ -47,14 +47,14 @@ intro: A pushed block will not cross a closing stone either. The near way to the
 intro: A red door and its key, and stones that close behind you. The door is the quicker way; every stone you cross is one you cannot cross again.
 
 ############
-#P......r..#
-#.......##.#
-#.#...;..#.#
+#P..#...r..#
+#........#.#
+###.#.;..#.#
 #.##.....#.#
-#...;....#M#
-###..#.#.#.#
+#...;....#.#
+###..M.#.###
 #*#.#...;..#
-#.#..##R##.#
+#.#..#.R##.#
 #...#.;...|E
 ############
 ` },
@@ -62,15 +62,15 @@ intro: A red door and its key, and stones that close behind you. The door is the
 intro: Pools fill the middle of this hall. The beast will not wade them and will not tread the closing stones; between the two, find your way to both relics.
 
 ############
-#P.......f.#
-#..#..#..#.#
+#P......#f.#
+#..#..#....#
 ##..;...#.##
-###..#....##
+####.#....##
 #..#.~~~;..#
-#....~.~...#
-#*;#.~~~..M#
-####...#...#
-#*...#..;.|E
+#.M..~.~#..#
+#*;#.~~~...#
+#.#......#.#
+#*......;#|E
 ############
 ` },
   { id: 'ch3-6', text: `title: The Sliding Floor
@@ -78,13 +78,13 @@ intro: Ice and a pushing current run through this hall, and closing stones hold 
 
 ############
 #P..#...=..#
-#...#.#.=#.#
+#...#.#.=###
 #.#...;#=#.#
-#......#.M.#
+##....##...#
 ##.>>>>....#
-##.#.#.....#
-#*..;...k..#
-###...#.#..#
+##.###.....#
+#*..;M.....#
+###...#.#.##
 #*...;..#.|E
 ############
 ` },
@@ -95,11 +95,11 @@ intro: A block stands in the way, and a wall waits on a button. The closing ston
 #P...#...#.#
 #.##.#...#.#
 #..O.;...###
-#....##..#.#
-#...._.T.;M#
+#.....#..#.#
+#...._.T.;.#
 ###.##...#.#
 #*..;...#..#
-##.#.#.....#
+##.#.#...M.#
 #*...#;#..|E
 ############
 ` },
@@ -125,31 +125,31 @@ pages: ch3-games
 ############
 #P.....h...#
 #.#.#.#....#
-#.#.;.FF#..#
-#...##p.#..#
+#.#.;.FF..##
+#.#.##p.#..#
 #*.#;.#z#..#
-###....#..##
-#*......;..#
+###.#.##..##
+#*..##..;..#
 #..##..FM..#
-#.#.x.;...|E
+#...x.;...|E
 ############
 ` },
   { id: 'ch3-10', text: `title: The Ring of Walls
-intro: The closing ways end in a ring of walls that were floor a moment ago. A red door is one way through and the long west hall another; off the quickest, a page waits, and a memory of Ariadne.
+intro: The closing ways end in a ring of walls that were floor a moment ago. The long west hall is the way through, and a red door opens a second road beside it; off the quickest way, a page waits, and a memory of Ariadne.
 pages: ch3-thread
 
 ####################
-#P...#....;...#.p..#
+#P...#....;...##p..#
 #.##...####..##.##.#
-#..r.;...#...#..;..#
+#..r.;...#......;..#
 #..#.......#.#.##..#
-#*.#.#.#.#.#...#..##
-#....###..######.#.#
-#....;.......M#..#.#
-###.#..#####....#;.#
-#...R.......#...#..#
+#*...#.#.#.#...#..##
+#......#..######.#.#
+#....;.......M...#.#
+###.##.#####....#;.#
+#...R#......#...#..#
 #.##..##....##..#..#
-#*#..;...#.##.x.;.|E
+#*#.#;...#.##.x.;.|E
 ####################
 ` },
 ];

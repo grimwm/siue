@@ -112,7 +112,7 @@ test("Chapter 1's closing card goes on to Chapter 2: its opening card, then its 
   await expect(page.locator('#chapter-veil')).toBeVisible();
   await expect(page.locator('#chapter-kicker')).toHaveText('End of Chapter 1');
   await expect(page.locator('#chapter-title')).toHaveText('The Outer Halls');
-  await expect(page.locator('#chapter-score')).toContainText(/^Level 10 cleared: \d+ moves · best possible 76/);
+  await expect(page.locator('#chapter-score')).toContainText(/^Level 10 cleared: \d+ moves · best possible 58/);
   await expect(page.locator('#chapter-continue')).toContainText('On to Chapter 2');
   await expect(page.locator('#chapter-next')).toHaveCount(0);
   await page.locator('#chapter-continue').click();

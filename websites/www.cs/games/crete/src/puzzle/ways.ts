@@ -45,15 +45,15 @@ intro: A pushed block will not cross loose stone either. The near pool is barred
 intro: Daedalus set currents running through these ways, and they carry the beast as they carry you. Draw him onto them and let them take him while you gather the relics; suction boots will hold you fast.
 
 ############
-#P...>..>.##
+#P..#>..>.##
 #>..:.#...##
-#.##.^*:#*.#
-#^....##...#
+###..^*:.*.#
+#^..#.##...#
 #.<:#^:Mu.##
 #...:...#.##
-##....#:.#.#
-#*#.....##.#
-#.<.v.#.:..E
+##..#.#:...#
+#*#...#.##.#
+#.<.v.#.:#.E
 ############
 ` },
   { id: 'ch2-5', text: `title: The Glassy Ways
@@ -63,8 +63,8 @@ intro: The floors are polished to ice, and the beast skids on them as you do. Lo
 #P#.#k.#..*#
 #=#..:.#=..#
 #.:=....:.##
-#..=##.=.#.#
-#.==.*#=M..#
+#..=##.=.#M#
+#.==.*#=...#
 #.:....=...#
 #.#.#..===.#
 #:..:.#..###
@@ -75,14 +75,14 @@ intro: The floors are polished to ice, and the beast skids on them as you do. Lo
 intro: A river and a fire cross these ways, with loose stone between them. Flippers and fire boots both lie here, and you will need both; the beast will not wait while you find them.
 
 ############
-#P:.#~.##.*#
+#P:.#~#.#.*#
 #...~.O.F:##
 #..#....F#:#
-#f...##:..##
-####.####M.#
-#*##...#.#.#
-#.F..~h:~#.#
-###.#.#:...#
+#f.#.##:..##
+##...##.#..#
+#*.#.#...#.#
+##F..~h:~###
+##M...#:...#
 #*.~#.#F:.|E
 ############
 ` },
@@ -109,11 +109,11 @@ intro: A plate here moves the walls, and the only road over the water is a block
 #...#.#....#
 #.....~.##.#
 ###....##:.#
-#*.#._#:M..#
-#.#..#:.:O.#
+#*.#._#:...#
+#.#..#:.:..#
 #:O...##~.T#
-#::...#.T..#
-#*......#..E
+#::...#MT..#
+#*.#.......E
 ############
 ` },
   { id: 'ch2-9', text: `title: The Bronze Mirror
@@ -123,31 +123,31 @@ pages: ch2-lots
 ############
 #:.##.p#z.*#
 #P....#.:#.#
-###..#..:#.#
+####.#..:#.#
 ####.#:#.###
 #*...S...c.#
-##..##.###.#
-##x#:..M#..#
-#.S#S####..#
+##..##.#.#.#
+##x#:..M.#.#
+#.S.S####..#
 #*..##S.#:|E
 ############
 ` },
   { id: 'ch2-10', text: `title: The Inner Gate
-intro: The winding ways end at the inner gate. Water guards it on one side and fire on the other: flippers take you through the one, fire boots through the other. The longest way round holds a page and a honey cake.
+intro: The winding ways end at the inner gate. Water guards it, and only the flippers take you across; fire boots open a quicker way through the flames. The beast roams the halls between. The longest way round holds a page and a honey cake.
 pages: ch2-black-sail
 
 ####################
-#P..##.:.......p..x#
-#.##::..#....##.:..#
-#..r.:...#...#..:.##
-#..##.:#.#.#..:##:.#
-#*:##..#...#......##
-#....#.#.###.#.#.#.#
-#...#:.h.#.*M#.....#
+#P..##.:.......p.#x#
+#.#.::..#....#..:#.#
+##...:..##...#..:..#
+#..##.:..#.##.:##:.#
+#*:##.....##.......#
+#..#.#.##..#.###.#.#
+#.#.#:.h.#.*.#.....#
 ###.#...####.###~###
-##..R#.......###~###
-#.####.....#.#..~.*#
-#*..:..##.f...FF..|E
+##.#........####~###
+#.##M#.....#.#..~.*#
+#*..:..##.f...FF#.|E
 ####################
 ` },
 ];

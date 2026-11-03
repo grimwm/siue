@@ -13,7 +13,7 @@ export function TrackHead(p: { c: Ctl; part: Part }) {
   const renaming = c.renaming === part.id;
   const setRenaming = (on: boolean): void => c.setRenaming(on ? part.id : null);
   const open = c.open.has(part.id);
-  const muted = isMuted(part);
+  const muted = isMuted(part, c.doc);
   const entry = c.entryOf(part);
   const kind = part.vocal ? 'Vocal Track' : entry?.pieces ? 'Drums' : entry?.name ?? part.instrument;
   const commit = (v: string): void => {

@@ -577,7 +577,7 @@ function MiniRow(p: { c: Ctl; part: Part }) {
   const hi = Math.max(...ps, lo + 12) + 1;
   const pieces = entry?.pieces ?? [];
   return (
-    <div class={cx('cmp-row cmp-track cmp-mini', isMuted(part) && 'muted')} data-track-row={part.id}>
+    <div class={cx('cmp-row cmp-track cmp-mini', isMuted(part, c.doc) && 'muted')} data-track-row={part.id}>
       <div class="cmp-head"><TrackHead c={c} part={part} /></div>
       <div class="cmp-cell" style={{ '--c': part.color }} onClick={e => { if (!c.placing && !(e.target as HTMLElement).closest('.cmp-rg,.cmp-auto')) c.toggleOpen(part.id, true); }}>
         <Extra c={c} />
@@ -601,7 +601,7 @@ function MiniRow(p: { c: Ctl; part: Part }) {
 function OpenRows(p: { c: Ctl; part: Part; tools: ComponentChildren; drawer: ComponentChildren }) {
   const { c, part } = p;
   const entry = c.entryOf(part);
-  const muted = isMuted(part) ? 'muted' : '';
+  const muted = isMuted(part, c.doc) ? 'muted' : '';
   if (!entry) return null;
   return (
     <>
@@ -627,7 +627,7 @@ function VocalRows(p: { c: Ctl; part: Part; panel: ComponentChildren }) {
   const open = c.open.has(part.id);
   return (
     <>
-      <div class={cx('cmp-row cmp-track cmp-mini', isMuted(part) && 'muted')} data-track-row={part.id}>
+      <div class={cx('cmp-row cmp-track cmp-mini', isMuted(part, c.doc) && 'muted')} data-track-row={part.id}>
         <div class="cmp-head"><TrackHead c={c} part={part} /></div>
         <div class="cmp-cell" style={{ '--c': part.color }} onClick={() => { if (!c.placing) c.toggleOpen(part.id, true); }}>
           <Extra c={c} />

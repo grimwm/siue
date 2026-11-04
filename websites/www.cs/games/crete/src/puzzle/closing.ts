@@ -47,15 +47,15 @@ intro: A pushed block will not cross a closing stone either. The near way to the
 intro: A red door and its key, and stones that close behind you. The door is the quicker way; every stone you cross is one you cannot cross again.
 
 ############
-#P..#...r..#
-#........#.#
+#...#...r..#
+#..P.....#.#
 ###.#.;..#.#
 #.##.....#.#
 #...;....#.#
 ###..M.#.###
-#*#.#...;..#
-#.#..#.R##.#
-#...#.;...|E
+#.#.#...;..#
+#.#*.#..##.#
+#...##;.R.|E
 ############
 ` },
   { id: 'ch3-5', text: `title: The Flooded Hall
@@ -92,30 +92,30 @@ intro: Ice and a pushing current run through this hall, and closing stones hold 
 intro: A block stands in the way, and a wall waits on a button. The closing stones leave few ways round; plan before you cross.
 
 ############
-#P...#...#.#
-#.##.#...#.#
-#..O.;...###
-#.....#..#.#
-#...._.T.;.#
-###.##...#.#
-#*..;...#..#
-##.#.#...M.#
-#*...#;#..|E
+#....##..#;#
+###...##...#
+#P....;.####
+#.O...#..#.#
+#.#_...T...#
+###*##.....#
+#...;.M....#
+##.#.#.....#
+#*.;.#.#..|E
 ############
 ` },
   { id: 'ch3-8', text: `title: Marked Ground
 intro: Loose stone, marked stone and closing stone: the beast can stand on none of them. Between them lies open floor, and that is where he will look for you.
 
 ############
-#P..::....##
-##....##..##
-#.#.;.....##
-#...#.S#...#
-#*.#....;.M#
-###.:.#..#.#
-#...###..#.#
-#.;##...:..#
-#*...#.#.;|E
+#.##.:....##
+##P...##..##
+##..;......#
+#...#..#...#
+#*##....;M.#
+###.S:#.#..#
+#...#;#.:..#
+#..#...:...#
+#*#......;|E
 ############
 ` },
   { id: 'ch3-9', text: `title: The Bronze Glass
@@ -135,21 +135,21 @@ pages: ch3-games
 ############
 ` },
   { id: 'ch3-10', text: `title: The Ring of Walls
-intro: The closing ways end in a ring of walls that were floor a moment ago. The long west hall is the way through, and a red door opens a second road beside it; off the quickest way, a page waits, and a memory of Ariadne.
+intro: The closing ways end in a ring of walls that were floor a moment ago. The long west hall is the way through, and the red key opens its door; off the quickest way, a page waits, and a memory of Ariadne.
 pages: ch3-thread
 
 ####################
-#P...#....;...##p..#
+#..P.#..;.;...##p..#
 #.##...####..##.##.#
-#..r.;...#......;..#
-#..#.......#.#.##..#
+#..r.....#......;..#
+##.#.......#.#.##..#
 #*...#.#.#.#...#..##
 #......#..######.#.#
-#....;.......M...#.#
-###.##.#####....#;.#
-#...R#......#...#..#
-#.##..##....##..#..#
-#*#.#;...#.##.x.;.|E
+#....;.......M...#;#
+###R##.#####....#..#
+#....#.;....#...#..#
+#.##..##....##.x#..#
+#*#.#....#.##...;.|E
 ####################
 ` },
 ];

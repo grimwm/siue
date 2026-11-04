@@ -61,27 +61,27 @@ intro: The floors are polished to ice, and the beast skids on them as you do. Lo
 
 ############
 #P#.#k.#..*#
-#=#..:.#=..#
-#.:=....:.##
-#..=##.=.#M#
-#.==.*#=...#
-#.:....=...#
+#.#.=:.#=..#
+#=:=....:.##
+#...##.=.#.#
+#==..*#=.M.#
+#......=...#
 #.#.#..===.#
-#:..:.#..###
-#.=*#..#.=.E
+#:.::.#..###
+#.=*#..#=..E
 ############
 ` },
   { id: 'ch2-6', text: `title: Water and Fire
 intro: A river and a fire cross these ways, with loose stone between them. Flippers and fire boots both lie here, and you will need both; the beast will not wait while you find them.
 
 ############
-#P:.#~#.#.*#
-#...~.O.F:##
-#..#....F#:#
+#P:.#~#:#.*#
+#...~.O...##
+#..#...FF#:#
 #f.#.##:..##
 ##...##.#..#
-#*.#.#...#.#
-##F..~h:~###
+#*.#.#:..#.#
+##F..~h.~###
 ##M...#:...#
 #*.~#.#F:.|E
 ############

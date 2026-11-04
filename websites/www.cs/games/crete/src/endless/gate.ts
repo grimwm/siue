@@ -2,8 +2,8 @@
  * (src/puzzle/difficulty.ts) as a challenge level: `challengeProblems` against `BAR` (which carries
  * `catchProblems`), `sharedProblems` against `SHARED_BAR`, `threatProblems` with the challenge bar,
  * `hiddenProblems`, `rampProblems` with `rampOf` on the climb, `startProblems`, and `purposeProblems`, the
- * every-piece rule held to what a player sees (a piece the shortest line meets, or one whose loss changes the
- * fewest moves or the win; a smaller search alone no longer counts); and two of its own that the campaign's tests
+ * every-piece rule (a piece the shortest line meets, or one whose loss changes the fewest moves or the win; a
+ * smaller search alone does not count); and two of its own that the campaign's tests
  * keep for released levels: a tidy layout of rooms and halls, and a layout new against every campaign level and the
  * run's own levels (src/puzzle/layouts.ts). The difficulty climbs by the ramp, level by
  * level, until it reaches a plateau, where it stays. DOM-free. */
@@ -141,8 +141,8 @@ export function quickProblems(level: Level, d: Difficulty, place: Place, known: 
   return [...startProblems(level), ...tidyProblems(level), ...newProblems(level, known, run)];
 }
 
-/** The whole gate: quickProblems, then purposeProblems (every piece has a purpose the player sees: the campaign's
- *  every-piece rule without its smaller-search clause) with searches capped at `cap`. Empty when the level passes. */
+/** The whole gate: quickProblems, then purposeProblems (every piece has a purpose the player sees, the campaign's
+ *  every-piece rule) with searches capped at `cap`. Empty when the level passes. */
 export function gateProblems(level: Level, d: Difficulty, place: Place, known: Known, run: readonly Level[] = [], cap?: number): string[] {
   const quick = quickProblems(level, d, place, known, run);
   return quick.length ? quick : purposeProblems(level, d, cap);

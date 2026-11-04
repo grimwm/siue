@@ -4,8 +4,8 @@
  * the plain walk to the exit. `challengeProblems` checks the numbers against the
  * campaign's bar and `sharedProblems` against the bar for shared levels. A
  * winnable level can still be no fight at all (the beast walled off, the line
- * walked straight); the bars fail that. `uselessProblems` fails a level with a
- * piece the player can ignore, and `threatProblems` one whose beast is no threat.
+ * walked straight); the bars fail that. `purposeProblems` fails a level with a
+ * piece the player can walk past, and `threatProblems` one whose beast is no threat.
  * Campaign levels, the editor and endless mode all use these. DOM-free. */
 import type { Level } from './level.ts';
 import { parse, serialize } from './level.ts';
@@ -648,8 +648,8 @@ export function uselessProblems(level: Level, d: Difficulty, cap = SOLVER_CAP): 
 /** Every piece has a purpose a player sees: the shortest line meets it (takes the key, opens the door, pushes the
  *  block, presses the button, crosses the tile), or ignoring it makes the level unwinnable or changes its fewest
  *  moves (a door that holds the beast back). A piece that only makes the search bigger is a decoy the player can
- *  walk past, and fails. Endless holds every level to this (src/endless/gate.ts); the campaign's levels are held to
- *  uselessProblems. */
+ *  walk past, and fails. Every campaign level (test/difficulty.test.ts) and every Endless level (src/endless/gate.ts)
+ *  is held to this. */
 export function purposeProblems(level: Level, d: Difficulty, cap = SOLVER_CAP): string[] {
   return uselessPieces(level, d, cap, true).map(p => p.problem);
 }

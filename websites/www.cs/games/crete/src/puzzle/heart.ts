@@ -82,16 +82,16 @@ facing: down
 intro: Ice runs down the north, with the skates below it, and a thief waits beside your start. A snare holds the doorway to the west room; the brown button by the ice looses it. A block waits by the thief. Two relics.
 
 ############
-#*#..==#.M.#
-#....==#...#
-##...==#...#
-#....==..-##
-#...#k######
-#...#...*..#
-##&##......#
-##.#..##...E
-#...#.P.$O.#
-#.#........#
+#*#..#.#.#=#
+#......##..#
+##.==.##M#-#
+##..k===*#.#
+###.#..##..#
+#...#=.#=..#
+##..#P.#..##
+##&#.$.#...E
+#...#.O....#
+#.#...#....#
 ############
 ` },
   { id: 'ch10-7', text: `title: The Powder Fold

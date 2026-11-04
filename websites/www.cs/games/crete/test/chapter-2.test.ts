@@ -16,7 +16,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
 /** Each level's shortest line, pinned: a rule change that alters a level fails here. */
-const SHORTEST: number[] = [12, 17, 25, 53, 45, 60, 66, 66, 54, 76];
+const SHORTEST: number[] = [12, 17, 25, 53, 54, 60, 66, 66, 54, 76];
 /** Level 10 is larger than the screen; its proofs may search further than the in-game cap. */
 const BIG_CAP = 6_000_000;
 const capOf = (i: number) => (i === 9 ? BIG_CAP : SOLVER_CAP);

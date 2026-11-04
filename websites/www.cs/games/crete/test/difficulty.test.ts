@@ -1,5 +1,5 @@
 // The difficulty measure on small hand-made levels, and the campaign gate: every released level clears the bar,
-// every piece on it matters, its beast is a threat, and a chapter's challenge levels are a real fight.
+// every piece on it has a purpose a player sees, its beast is a threat, and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT, startProblems, naiveWalkWins, neverLive, purposeProblems } from '../src/puzzle/difficulty.ts';
@@ -476,8 +476,8 @@ for (const chapter of CHAPTERS.filter(c => c.released)) {
     });
   }
   for (const id of chapter.levelIds) {
-    test(`${id}: every piece matters`, () => {
-      assert.deepEqual(uselessProblems(levelById(id), of(id)), [], id);
+    test(`${id}: every piece has a purpose a player sees`, () => {
+      assert.deepEqual(purposeProblems(levelById(id), of(id)), [], id);
     });
   }
   // The shared bar is set by Chapter 1: its challenge levels clear it and its teaching levels do not.

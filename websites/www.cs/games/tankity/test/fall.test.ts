@@ -280,7 +280,7 @@ test('a solo volley arms the parachute of a unit it digs out, so the canopy open
 });
 
 test('a unit dug out by an early pellet is seen to fall at once, before the volley settles', () => {
-  const me = unit('tank', true, 100, 400, 100, { dirS: 1, angle: 35, power: 80 });
+  const me = unit('tank', true, 100, 400, 100, { dirS: 1, angle: 35, power: 60 }); // power 60 lands the spread under the foe
   const foe = unit('reaper', false, 400, 400, 100, { dirS: -1 });
   const G = world([me, foe], { ammo: { shell: Infinity, buck: 9 } });
   sim.fireWeapon(G, arsenal, me, 'buck');

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { MUSIC_HEADROOM, sfx, music, initAudio, noteGesture } from '../src/audio.ts';
+import { MUSIC_HEADROOM, MUSIC_LEVEL_TRIM, sfx, music, initAudio, noteGesture } from '../src/audio.ts';
 import { DEFAULT_LEVEL, gainFor } from '../src/volume.ts';
 import { fakeAudioContext } from '../../_kit/test/audio.ts';
 
@@ -30,7 +30,7 @@ test('the buses: at the default levels, sound and music through the curve, music
   const [sound, mus] = buses;
   assert.ok(sound?.kind === 'gain' && mus?.kind === 'gain');
   assert.equal(sound.gain.value, gainFor(DEFAULT_LEVEL.sound));
-  assert.equal(mus.gain.value, gainFor(DEFAULT_LEVEL.music) * MUSIC_HEADROOM);
+  assert.equal(mus.gain.value, gainFor(DEFAULT_LEVEL.music * MUSIC_LEVEL_TRIM) * MUSIC_HEADROOM);
   // Every synthesized music voice feeds the music bus, every effect the sound bus.
   const feeds = (bus: unknown) => ctx.nodes.filter(n => n.kind === 'gain' && n.to.includes(bus));
   assert.ok(feeds(mus).length > 0 && feeds(sound).length > 0);
@@ -65,7 +65,7 @@ test('at the default levels the music sits 6 to 10 dB under the loud effects', {
     return burstDb(pcm(e.file, 5)) + db(e.volume) + db(gainFor(DEFAULT_LEVEL.sound));
   });
   const effect = effects.reduce((a, b) => a + b, 0) / effects.length;
-  const tracks = game.audio.music.map(t => db(rms(pcm(t.file, 40), 0, 22050 * 40)) + db(t.volume * MUSIC_HEADROOM * gainFor(DEFAULT_LEVEL.music)));
+  const tracks = game.audio.music.map(t => db(rms(pcm(t.file, 40), 0, 22050 * 40)) + db(t.volume * MUSIC_HEADROOM * gainFor(DEFAULT_LEVEL.music * MUSIC_LEVEL_TRIM)));
   const mus = tracks.reduce((a, b) => a + b, 0) / tracks.length;
   const gap = effect - mus;
   console.log(`effects ${effect.toFixed(1)} dB (${effects.map(x => x.toFixed(1)).join(', ')}), music ${mus.toFixed(1)} dB, gap ${gap.toFixed(1)} dB`);

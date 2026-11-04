@@ -9,7 +9,7 @@
  * lobby.ts. The game's state, the room client and the rest of the game arrive
  * as deps. */
 import { track } from './track.ts';
-import type { sfx as SfxApi, music as MusicApi } from './audio.ts';
+import type { SfxName, sfx as SfxApi, music as MusicApi } from './audio.ts';
 import {
   FOE_DYING, FOE_FIRE, FOE_HIT, FOE_IDLE, TANK_FIRE, TANK_HIT, TANK_IDLE, TANK_OWS, pick,
 } from './chatter.ts';
@@ -79,7 +79,7 @@ export interface RoomDeps {
   renderShopReady(): void;
   shownAngle(t: GameTank): number;
   shownPower(t: GameTank): number;
-  startBanner(text: string, done?: (() => void) | null): void;
+  startBanner(text: string, done?: (() => void) | null, sound?: SfxName | null): void;
   updateCamera(dt: number): void;
   /** The clouds drift with the wind, wrapping out of the floor view's sight. */
   driftClouds(dt: number): void;
@@ -309,7 +309,7 @@ export function createRoom(deps: RoomDeps) {
         // the host came through so nobody has to close it with Q mid-battle.
         if (MATCH.lastPhase !== 'play') closeOverlays();
         music.forRound(room.round);
-        startBanner(`Round ${room.round}. ${room.mapName || 'Random hills'}.`);
+        startBanner(`Round ${room.round}. ${room.mapName || 'Random hills'}.`, null, null);
         say(`Round ${G.round}. Wind ${windText()}. ${MATCH.myTurn ? 'Your move. Aim!' : seatName(room.turn!) + ' moves first.'}`, 'info');
         if (MATCH.myTurn) talk('tank', 'tankity tank! My hill now!', true);
       } else if (MATCH.myTurn && MATCH.lastTurn !== net.seat) {

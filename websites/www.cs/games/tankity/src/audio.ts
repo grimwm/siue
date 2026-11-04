@@ -34,10 +34,19 @@ const core = createAudioCore();
  *  setting the music lies about 8 dB under the loud effects. It covers the track
  *  player and the synthesized songs alike; test/audio-levels.test.ts measures it. */
 export const MUSIC_HEADROOM = 0.4;
+/** The menu shows the music level; the bus plays 10% under it, so 50 on the
+ *  menu sounds like 45 and the soundtrack never overwhelms the effects at
+ *  the level the player picked. The shown level is untouched. */
+export const MUSIC_LEVEL_TRIM = 0.9;
+/** The music bus's gain for a slider level: the curve, under the headroom,
+ *  with the level trimmed as heard. */
+function musicGainFor(level: number): number {
+  return gainFor(level * MUSIC_LEVEL_TRIM) * MUSIC_HEADROOM;
+}
 /* The sliders' levels (volume.ts): each bus's gain is the level's curve, the
-   music's under its headroom. A mute is the bus's own, so the level survives it. */
+   music's under its headroom and 10% under the shown level. A mute is the bus's own, so the level survives it. */
 core.setGain('sfx', gainFor(DEFAULT_LEVEL.sound));
-core.setGain('music', gainFor(DEFAULT_LEVEL.music) * MUSIC_HEADROOM);
+core.setGain('music', musicGainFor(DEFAULT_LEVEL.music));
 let musicMuted = false;
 let musicOn = false;
 let lastMusicTick = 0;
@@ -384,7 +393,7 @@ function playTrack(): void {
     const old = play.heard;
     play.heard = null;
     fadeOutPlay(old, old ? SWITCH_S : 0);
-    playPass(play, entry, typeof t.volume === 'number' ? t.volume : 1, ac.currentTime + 0.05, old ? SWITCH_S : 0.4);
+    playPass(play, entry, typeof t.volume === 'number' ? t.volume : 1, ac.currentTime + 0.05, SWITCH_S);
     dropDecoded(t.file);
     if (onTrackStart) onTrackStart(t, cause);
   });
@@ -443,8 +452,8 @@ function stopMusic(): void {
   nextPending = false;
   stopSynth();
   const heard = heardPlay();
-  fadeOutPlay(heard, 0.3);
-  if (trackPlay !== heard) fadeOutPlay(trackPlay, 0.3);
+  fadeOutPlay(heard, SWITCH_S);
+  if (trackPlay !== heard) fadeOutPlay(trackPlay, SWITCH_S);
   trackPlay = null;
 }
 
@@ -460,8 +469,6 @@ export const music = {
   playTheme(): void { songIdx = 0; musicForLevel(0); },
   /** The track and built-in song for a round (1 is the first). */
   forRound(round: number): void { songIdx = (round - 1) % SONGS.length; musicForLevel(round); },
-  /** Leaves the theme for round 1's track, leaving the built-in song as it is. */
-  leaveTheme(): void { musicForLevel(1); },
   /** Re-pins a wedged scheduler to the clock; call it every frame. */
   watchdog(): void {
     if (musicOn && !musicMuted && Date.now() - lastMusicTick > 1500) {
@@ -536,8 +543,8 @@ export function setSoundMuted(muted: boolean): void {
 }
 /** The sound slider: 0 to 100 percent, through the volume curve. */
 export function setSoundLevel(level: number): void { core.setGain('sfx', gainFor(level)); }
-/** The music slider: 0 to 100 percent, through the curve and under the headroom. */
-export function setMusicLevel(level: number): void { core.setGain('music', gainFor(level) * MUSIC_HEADROOM); }
+/** The music slider: 0 to 100 percent, through the curve, under the headroom, and 10% under the shown level. */
+export function setMusicLevel(level: number): void { core.setGain('music', musicGainFor(level)); }
 export function isMusicMuted(): boolean { return musicMuted; }
 let musicBusTimer: ReturnType<typeof setTimeout> | 0 = 0;
 const MUSIC_FADE_MS = 350;
@@ -546,7 +553,7 @@ export function setMusicMuted(muted: boolean): void {
   clearTimeout(musicBusTimer);
   musicBusTimer = 0;
   if (muted) {
-    stopMusic(); // the tracks fade out over 0.3 s, then the bus itself goes silent
+    stopMusic(); // the tracks fade out, and the bus itself goes silent after 350 ms
     musicBusTimer = setTimeout(() => { musicBusTimer = 0; if (musicMuted) core.setMuted('music', true); }, MUSIC_FADE_MS);
   } else {
     core.setMuted('music', false);

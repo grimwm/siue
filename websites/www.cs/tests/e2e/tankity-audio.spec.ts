@@ -89,16 +89,17 @@ test('no sound file is requested before a gesture; the first key press starts mu
   const { page, errors, files, config } = await open(browser);
   await page.waitForTimeout(800);
   expect(files).toEqual([]);
-  await page.keyboard.press('n'); // opens the shop: a click effect plays
+  await page.keyboard.press('n'); // opens the shop; the start banner plays no sting
   await page.waitForSelector('#shop-veil:not([hidden])');
-  await expect.poll(() => files.filter(f => f.startsWith('audio/sfx/')).length, { timeout: 15_000 }).toBe(sfxFiles(config).length);
-  expect(new Set(files.filter(f => f.startsWith('audio/sfx/')))).toEqual(new Set(sfxFiles(config)));
-  // Round 1 plays the second track (the first is the demo's theme).
-  await expect.poll(() => files.includes(musicFiles(config)[1]!)).toBe(true);
-  // Once decoded, effects play from the files, not the synth.
   await page.click('#shop-next');
   await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
+  // Round 1 plays the second track (the first is the demo's theme).
+  await expect.poll(() => files.includes(musicFiles(config)[1]!)).toBe(true);
+  // The first effect loads the whole set, and once decoded, effects play
+  // from the files, not the synth.
   await page.keyboard.press('Control');
+  await expect.poll(() => files.filter(f => f.startsWith('audio/sfx/')).length, { timeout: 15_000 }).toBe(sfxFiles(config).length);
+  expect(new Set(files.filter(f => f.startsWith('audio/sfx/')))).toEqual(new Set(sfxFiles(config)));
   await expect.poll(() => page.evaluate(() => window.__samples), { timeout: 15_000 }).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
@@ -208,8 +209,12 @@ test('the demo plays the theme, loops it without a seam, and a round picks the n
   expect(a.dur).toBeLessThan(3.2);
   expect(b.when).toBeLessThan(a.when + a.dur);
   expect(b.when).toBeGreaterThan(a.when + a.dur - 2.1);
-  // A new match's round 1 switches to the next track.
+  // A new match keeps the theme through the shop; round 1 switches to the
+  // next track when the round starts.
   await page.keyboard.press('n');
+  await page.waitForSelector('#shop-veil:not([hidden])');
+  await page.click('#shop-next');
+  await expect.poll(() => hud(page, 'hud-turn'), { timeout: 30_000 }).toMatch(/YOU|Aim/);
   await expect.poll(() => music.includes(tracks[1]!), { timeout: 15_000 }).toBe(true);
   await expect.poll(() => logText(page), { timeout: 15_000 }).toContain(`Now playing: ${config.audio.music[1]!.title}`);
   await expect(page.locator('#track-toast')).toBeHidden(); // a round change is not Next song

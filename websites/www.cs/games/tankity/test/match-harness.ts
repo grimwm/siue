@@ -52,7 +52,7 @@ export function harness(over: Partial<MatchDeps> = {}) {
     alive: () => G.tanks.filter(t => t.hp > 0), foesAlive: () => G.tanks.filter(t => !t.isPlayer && t.hp > 0),
     me: () => unit(0), cur: () => unit(G.turn), surfY: x => surfY(G.terrain, x),
     keyHint: () => '', windText: () => '', closeGuns: () => false, fxImpact: () => 0, openShop: () => match.advance('shopOpen'),
-    music: { leaveTheme() {}, start() {}, stop() {}, playTheme() {}, forRound() {} }, sfx: { play() {} }, walls: { get: () => 'none' }, ...over,
+    music: { start() {}, stop() {}, playTheme() {}, forRound() {} }, sfx: { play() {} }, walls: { get: () => 'none' }, ...over,
   };
   // Every other dependency is a no-op; values the match reads must be in base.
   const deps = new Proxy(base, { get: (t, k) => (k in t ? Reflect.get(t, k) : () => undefined) }) as MatchDeps;

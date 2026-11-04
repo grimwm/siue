@@ -74,6 +74,7 @@ import { renderLevels } from "./ui/levels.tsx";
 import { renderEndlessCard } from "./ui/endless.tsx";
 import type { EndlessMode } from "./endless/mode.ts";
 import { endlessKicker } from "./endless/name.ts";
+import { wallHint } from "./wall-hint.ts";
 import type { LevelMark, LevelRow } from "./ui/levels.tsx";
 
 /** What the page borrows at run time. */
@@ -628,6 +629,7 @@ export function createUi(deps: UiDeps): Ui {
       onClose: () => layers.close("levels"),
     });
     const lv = g?.run?.now.level;
+    const hint = lv ? wallHint(lv, playing?.chapter.n ?? null) : null;
     renderStart($("start-root"), {
       open: layers.isOpen("start"),
       chapter: playing?.chapter.n ?? 1,
@@ -635,6 +637,7 @@ export function createUi(deps: UiDeps): Ui {
       ...(out ? { kicker: outsideKicker(out) } : {}),
       title: out ? out.name : lv?.title ?? "",
       intro: lv?.intro ?? "",
+      ...(hint ? { hint } : {}),
       ...(out?.best != null ? { best: `beat ${out.best}` } : {}),
       onBegin: () => layers.close("start"),
     });

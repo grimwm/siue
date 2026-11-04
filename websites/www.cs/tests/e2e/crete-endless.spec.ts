@@ -1,6 +1,7 @@
-// Endless: the title card's Endless opens its card; New Run opens a level made for the run, which plays like any
-// other; the worker makes the next level meanwhile and the page stays responsive; a win offers Next Level, which
-// opens level 2; the run is saved, and Continue comes back to it after a reload.
+// Endless: the title card's Endless opens its card at Medium, with Easy and Hard beside it; New Run opens a level made
+// for the run, which plays like any other; the worker makes the next level meanwhile and the page stays responsive; a
+// win offers Next Level, which opens level 2; the run is saved, and Continue comes back to it after a reload; each
+// difficulty keeps its own run; and a seed link names its difficulty.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -48,7 +49,7 @@ async function openEndless(page: Page, look: 'classic' | 'modern'): Promise<stri
 
 for (const look of ['classic', 'modern'] as const) {
   test(`Endless in ${look}: a new run, a move, a win, Next Level, and the page responsive while the next level is made`, async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     const errors = await openEndless(page, look);
     // A fixed seed, whose level 2 the worker is still searching for once level 1 has opened.
     await page.locator('#endless-seed-box').fill('e2e-stall');
@@ -82,10 +83,10 @@ for (const look of ['classic', 'modern'] as const) {
       if (await page.evaluate(b => (window as unknown as Hooked).__creteTest.game.run!.now.moves > b, before)) break;
     }
     expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run!.now.moves)).toBeGreaterThan(before);
-    // Ariadne's thread plays the rest out.
+    // Ariadne's thread plays the rest out: a maze's line runs to 50 moves and more.
     await page.keyboard.press('r');
     await page.keyboard.press('t');
-    await expect(page.locator('#end-veil')).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('#end-veil')).toBeVisible({ timeout: 120_000 });
     await expect(page.locator('#end-kicker')).toHaveText('Endless · Level 1 cleared');
     await expect(page.locator('#end-score')).toContainText('best possible');
     await page.locator('#end-next').click();
@@ -132,4 +133,34 @@ test('Endless on a phone: the card fits the screen and the touch pad moves These
   } finally {
     await context.close();
   }
+});
+
+test('the card offers Easy, Medium and Hard, each with its own run; the choice is kept; a link names its difficulty', async ({ page }) => {
+  test.setTimeout(60_000);
+  await openEndless(page, 'classic');
+  await expect(page.locator('#endless-grade-medium')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#endless-grade-easy')).toHaveText('Easy');
+  await expect(page.locator('#endless-grade-hard')).toHaveText('Hard');
+  await expect(page.locator('#endless-best')).toHaveText('Your deepest on Medium: none yet');
+  await page.locator('#endless-new').click();
+  await expect(page.locator('#start-veil')).toContainText(', Medium. The fewest moves are', { timeout: 20_000 });
+  await page.reload();
+  await page.locator('#title-endless').click();
+  await expect(page.locator('#endless-continue')).toBeVisible();
+  await page.locator('#endless-grade-hard').click();
+  await expect(page.locator('#endless-grade-hard')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#endless-continue')).toHaveCount(0);
+  await expect(page.locator('#endless-best')).toHaveText('Your deepest on Hard: none yet');
+  await page.reload();
+  await page.locator('#title-endless').click();
+  await expect(page.locator('#endless-grade-hard')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#endless-grade-medium').click();
+  await expect(page.locator('#endless-continue')).toBeVisible();
+
+  await page.goto(`${PAGE}?seed=e2e-hard&tier=3&difficulty=hard`);
+  await expect(page.locator('#endless-veil')).toBeVisible();
+  await expect(page.locator('#endless-grade-hard')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#endless-linked-note')).toContainText('on Hard');
+  await page.locator('#endless-linked').click();
+  await expect(page.locator('#start-veil')).toContainText('Seed e2e-hard, Hard.', { timeout: 20_000 });
 });

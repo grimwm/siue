@@ -10,6 +10,9 @@ import type { Level } from '../src/puzzle/level.ts';
 import { parse, serialize } from '../src/puzzle/level.ts';
 import { initial } from '../src/puzzle/state.ts';
 import { lineOf } from '../src/puzzle/cache.ts';
+import { habitWins } from '../src/puzzle/habits.ts';
+import { openness, OPEN } from '../src/puzzle/rating.ts';
+import { FEWEST } from '../src/campaign/fewest.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
@@ -597,4 +600,20 @@ test('every piece has a purpose a player sees: the line meets it, or ignoring it
   const d = measure(side);
   const strict = purposeProblems(side, d).join();
   assert.match(strict, /the red keys: the shortest line never meets it/);
+});
+
+test('the campaign, measured but not yet held to Endless\'s rules: the levels a habit wins and the levels over the open ceiling', t => {
+  // Report only: the campaign's levels are redrawn to these rules later, and Chapter 1 is left as it is. The test
+  // fails on nothing but a check that throws, and lists what it found.
+  const habits: string[] = [], open: string[] = [];
+  for (const { id, text } of CAMPAIGN_TEXTS) {
+    const lv = parse(text);
+    const wins = habitWins(lv, FEWEST[id]!);
+    if (wins.length) habits.push(`${id} (${wins.join(', ')})`);
+    const share = openness(lv).share;
+    if (share > OPEN.most) open.push(`${id} (${Math.round(100 * share)}%)`);
+  }
+  t.diagnostic(`a habit wins ${habits.length} of ${CAMPAIGN_TEXTS.length}: ${habits.join('; ')}`);
+  t.diagnostic(`over ${Math.round(100 * OPEN.most)}% open: ${open.length} of ${CAMPAIGN_TEXTS.length}: ${open.join('; ')}`);
+  assert.ok(habits.length < CAMPAIGN_TEXTS.length && open.length < CAMPAIGN_TEXTS.length);
 });

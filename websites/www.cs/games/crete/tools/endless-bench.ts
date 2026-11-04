@@ -1,7 +1,11 @@
-// Measures how often Endless's search finds a level within its budget, as the browser runs it: a run's second
-// level (after the bank's first for that seed) at each tier, one JSON line per level with each part's time.
+// Measures how often Endless's search finds a level within its budget, as the browser runs it, one JSON line per
+// level with each part's time: for each grade, a run's second level (after the bank's first for that seed), and a
+// level on the plateau (after a level that scored the plateau's start), at each tier.
 //
 //   node tools/endless-bench.ts <tiers> <seeds> [lane] [lanes] [done-dir]   # e.g. 1-10 50 0 4 out/
+//
+// For a phone, run it under systemd-run --user --scope -p CPUQuota=25%: one core at a quarter of its speed, a 4×
+// throttle of the worker's JavaScript (Chrome's CPU throttling does not reach a worker).
 //   node tools/endless-bench.ts sum <file.jsonl>...               # the share made, by tier
 //
 // `lane` of `lanes` takes every lanes-th search, so four can run at once. Run from games/crete.
@@ -9,8 +13,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fromBank, makePart, settle, PARTS } from '../src/endless/generate.ts';
 import type { Made, Part } from '../src/endless/generate.ts';
 import { AHEAD } from '../src/endless/saved.ts';
-import { BANK } from '../src/endless/bank.ts';
-import { bandAfter, knownOf } from '../src/endless/gate.ts';
+import { BANKS } from '../src/endless/bank.ts';
+import { bandAfter, knownOf, GRADE_BANDS } from '../src/endless/gate.ts';
+import { GRADES } from '../src/puzzle/rating.ts';
 import { campaignLevels } from '../src/endless/campaign.ts';
 
 /** The wall time of parts handed out in order to `n` workers, as src/endless/client.ts does: none past the first that
@@ -51,22 +56,23 @@ const openAt: number[] = [0];
 
 const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === 'sum') {
-  const by = new Map<number, { n: number; made: number; ms: number[]; w3: number[] }>();
+  const by = new Map<string, { n: number; made: number; ms: number[]; w3: number[] }>();
   for (const f of rest) for (const line of readFileSync(f, 'utf8').split('\n')) {
     if (!line.trim()) continue;
-    const r = JSON.parse(line) as { tier: number; from: string; ms?: number; parts?: { ms: number; found: boolean }[] };
-    const t = by.get(r.tier) ?? { n: 0, made: 0, ms: [], w3: [] };
+    const r = JSON.parse(line) as { tier: number; grade: string; where: string; from: string; ms?: number; parts?: { ms: number; found: boolean }[] };
+    const key = `${r.grade} ${r.where}`;
+    const t = by.get(key) ?? { n: 0, made: 0, ms: [], w3: [] };
     t.n++; if (r.from === 'made') t.made++;
     // A level's time: one worker's (the parts in a row; for the old runs, the one search), and three workers'.
     t.ms.push(r.parts ? r.parts.reduce((n, p) => n + p.ms, 0) : r.ms!);
     if (r.parts) t.w3.push(wall(r.parts, 3));
-    by.set(r.tier, t);
+    by.set(key, t);
   }
   let n = 0, made = 0;
-  for (const [tier, t] of [...by].sort((a, b) => a[0] - b[0])) {
+  for (const [tier, t] of [...by].sort((a, b) => a[0].localeCompare(b[0]))) {
     n += t.n; made += t.made;
     const med = (xs: number[]) => (xs.length ? Math.round([...xs].sort((a, b) => a - b)[xs.length >> 1]! / 1000) : '-');
-    console.log(`tier ${tier}: ${t.made}/${t.n} fresh (${Math.round(100 * t.made / t.n)}%), median per level ${med(t.ms)} s on one worker, ${med(t.w3)} s on three`);
+    console.log(`${tier}: ${t.made}/${t.n} fresh (${Math.round(100 * t.made / t.n)}%), median per level ${med(t.ms)} s on one worker, ${med(t.w3)} s on three`);
     if (t.w3.length) for (const [who, slow] of [['workstation', 1], ['phone (3.5× slower)', 3.5]] as const) {
       const words = [60, 120].map(play => {
         openAt.length = 1;
@@ -85,16 +91,17 @@ if (cmd === 'sum') {
   // Levels a stopped run already measured (any .jsonl in `doneDir`) are not measured again.
   const done = new Set<string>();
   if (doneDir) for (const f of readdirSync(doneDir)) if (f.endsWith('.jsonl')) {
-    for (const line of readFileSync(`${doneDir}/${f}`, 'utf8').split('\n')) if (line.trim()) { const r = JSON.parse(line) as { tier: number; seed: string }; done.add(`${r.tier}/${r.seed}`); }
+    for (const line of readFileSync(`${doneDir}/${f}`, 'utf8').split('\n')) if (line.trim()) { const r = JSON.parse(line) as { tier: number; grade: string; where: string; seed: string }; done.add(`${r.tier}/${r.grade}/${r.where}/${r.seed}`); }
   }
   let k = 0;
   // Seed by seed across the tiers, so a run stopped early has measured every tier alike.
   for (let i = 0; i < seeds; i++) {
-    for (let tier = lo; tier <= hi!; tier++) {
+    for (let tier = lo; tier <= hi!; tier++) for (const grade of GRADES) for (const where of ['second', 'plateau'] as const) {
       const seed = `bench${i}`;
-      if (done.has(`${tier}/${seed}`) || k++ % lanes !== lane) continue;
-      const first = fromBank(BANK, { seed, tier, depth: 1, run: [] }, bandAfter(null, false)!);
-      const req = { seed, tier, depth: 2, run: [{ text: first.text, explored: first.explored }] };
+      if (done.has(`${tier}/${grade}/${where}/${seed}`) || k++ % lanes !== lane) continue;
+      const first = fromBank(BANKS[grade], { seed, tier, grade, depth: 1, run: [] }, bandAfter(null, grade));
+      const before = where === 'second' ? first.score : GRADE_BANDS[grade].plateau[0];
+      const req = { seed, tier, grade, depth: 2, run: [{ text: first.text, explored: first.explored, score: before }] };
       // The parts one after another, as one worker runs them, each timed.
       const parts: { ms: number; found: boolean; spent: number }[] = [];
       const results: Part[] = [];
@@ -106,7 +113,7 @@ if (cmd === 'sum') {
         parts.push({ ms: Date.now() - t0, found: !!r.found, spent: r.spent });
         made = settle(results, PARTS).made;
       }
-      console.log(JSON.stringify({ tier, seed, from: made ? 'made' : 'bank', part: made ? parts.length - 1 : null, explored: made?.explored ?? null, spent: parts.reduce((n, p) => n + p.spent, 0), parts }));
+      console.log(JSON.stringify({ tier, grade, where, seed, from: made ? 'made' : 'bank', part: made ? parts.length - 1 : null, explored: made?.explored ?? null, spent: parts.reduce((n, p) => n + p.spent, 0), parts }));
     }
   }
 }

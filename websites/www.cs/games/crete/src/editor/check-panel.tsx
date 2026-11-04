@@ -1,9 +1,10 @@
 // The Island of Crete: the editor's Check panel. The Check button, then, while the search runs, an indeterminate
-// bar with how far it has looked and Stop and Keep searching; when it is done, what the solver found (check.ts).
+// bar with how far it has looked and Stop and Keep searching; when it is done, what the solver found and the
+// level's Endless rating: its band, its score in parts, and every rule that keeps it out of Endless (check.ts).
 // An answer for an earlier draft stays, greyed, with "Out of date: press Check."
 import { Button } from '../../../_kit/ui/button.tsx';
 import { EDITOR_KEYS } from './keys.ts';
-import { checkLines, checkSummary } from './check.ts';
+import { checkLines, checkSummary, ratingLines } from './check.ts';
 import type { CheckState } from './check.ts';
 import type { Level } from '../puzzle/level.ts';
 
@@ -56,6 +57,7 @@ export function CheckPanel(p: CheckPanelProps) {
   const s = p.state;
   const running = s.kind === 'running';
   const { lines, stale } = checkLines(s, p.current, p.level);
+  const rating = ratingLines(s);
   return (
     <section id="check-panel" class="check-panel" aria-label="Check">
       <h3>Check</h3>
@@ -75,6 +77,17 @@ export function CheckPanel(p: CheckPanelProps) {
       {lines.length > 0 && (
         <div id="check-result" class={stale ? 'check-result stale' : 'check-result'} role="status">
           {lines.map((line, i) => <p key={i}>{line}</p>)}
+          {rating.band && (
+            <div id="check-rating" class="check-rating">
+              <p id="check-band"><span class="check-band-label">Endless rating</span> <strong>{rating.band}</strong></p>
+              {rating.lines.map((line, i) => <p key={i} class="check-score">{line}</p>)}
+              {rating.problems.length > 0 && (
+                <ul id="check-problems" class="check-problems" aria-label="What keeps it out of Endless">
+                  {rating.problems.map((line, i) => <li key={i}>{line}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
           {stale && <p id="check-stale" class="check-stale">Out of date: press Check.</p>}
         </div>
       )}

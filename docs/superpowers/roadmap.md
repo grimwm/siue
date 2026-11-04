@@ -33,12 +33,16 @@ tips) and Classic, chosen when a new game starts.
    Check with Stop and a progress bar, Try it on the full game screen, Share as
    a link and opening a link, with the OPFS solve cache trimmed. The README's
    "The editor" section describes it.
-3. **Endless** — plan `plans/2026-11-03-crete-endless.md`. Live: the seeded generator on the same engine, checked
-   by the solver in its own worker, taking a level only through the gate the campaign's levels pass
-   (`src/puzzle/difficulty.ts`, with Endless's tidy and new-layout checks in `src/endless/gate.ts`), climbing by the
-   ramp to a plateau, with the pieces the player has been taught, a bank made ahead of time for a run's first level
-   and any search that runs out of budget, the saved run and best, and `?seed=` links. The README's "Endless"
-   section describes it. Nothing on the Crete roadmap comes after it.
+3. **Endless** — design `specs/2026-11-04-crete-endless-difficulty-design.md`, plan
+   `plans/2026-11-04-crete-endless-difficulty.md` (the first build: `plans/2026-11-03-crete-endless.md`). Live: three
+   difficulties, Easy, Medium and Hard, each with its own saved run, best and bank, named in seed links; corridor
+   mazes made by a seeded generator on the same engine and checked by the solver in its own worker; a gate no habit
+   player passes, with open space that earns its place and hidden walls at every depth; runs that climb by a
+   difficulty score to each difficulty's plateau; and the editor's Check rating any level on the same scale with the
+   same checks. The README's "Endless" and "The editor" sections describe it.
+4. **The campaign to Endless's rules** — redraw the campaign levels that a habit player wins or that are over the
+   open-space ceiling (the report in `test/difficulty.test.ts` lists them), then hold the campaign to both rules.
+   Chapter 1 stays as it is. Needs a plan.
 
 ## Music workroom
 

@@ -24,7 +24,9 @@ export interface Rater {
   check(text: string): CheckJob;
 }
 
-export function createRater(start: (text: string) => CheckJob, changed: () => void): Rater {
+/** `start` begins a shared level's rating (a measure); `startCheck` the editor's Check (a rate search), `start` when
+ *  not given. */
+export function createRater(start: (text: string) => CheckJob, changed: () => void, startCheck: (text: string) => CheckJob = start): Rater {
   let state: RatingState = { kind: 'none' };
   let job: CheckJob | null = null;
   /** The running rating's number; an answer of any other number is dropped. */
@@ -97,7 +99,7 @@ export function createRater(start: (text: string) => CheckJob, changed: () => vo
       }
       let j: CheckJob;
       try {
-        j = start(text);
+        j = startCheck(text);
       } catch (e) {
         if (checks.size === 0 && state.kind === 'waiting') launch(state.text);
         throw e;

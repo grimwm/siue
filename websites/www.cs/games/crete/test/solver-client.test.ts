@@ -6,12 +6,16 @@ import assert from 'node:assert/strict';
 import { CancelledError, startSearch, solverBusy, watchSolver } from '../src/solver-client.ts';
 import type { WorkerLike } from '../src/solver-client.ts';
 import { createSolverHost, searchLimits, MEMORY_CEILING } from '../src/solver-host.ts';
-import type { NodeFile, Report } from '../src/solver-host.ts';
+import type { Answer, NodeFile, Report } from '../src/solver-host.ts';
+import { rating } from '../src/endless/gate.ts';
+import type { Rated } from '../src/endless/gate.ts';
+import { finish } from '../src/puzzle/astar.ts';
 import { memoryResults, resultKey } from '../src/puzzle/cache.ts';
 import type { ResultStore } from '../src/puzzle/cache.ts';
 import { handleFile, memoryFile } from '../src/puzzle/paged.ts';
 import type { PagedFile, SyncHandle } from '../src/puzzle/paged.ts';
 import { measure } from '../src/puzzle/difficulty.ts';
+import { parse } from '../src/puzzle/level.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import type { SolveResult } from '../src/puzzle/solver.ts';
 import { SOLVER_CAP } from '../src/puzzle/solver.ts';
@@ -63,9 +67,9 @@ function inProcess(opts: { results?: ResultStore; open?: () => Promise<NodeFile>
   return worker;
 }
 
-const lengthOf = (r: SolveResult | Difficulty) => {
+const lengthOf = (r: Answer) => {
   assert.ok('line' in r, 'a solve result');
-  return r.line.length;
+  return (r as { line: { length: number } }).line.length;
 };
 
 test('a search reports progress and resolves with the shortest line', async () => {
@@ -73,7 +77,7 @@ test('a search reports progress and resolves with the shortest line', async () =
   const job = startSearch(L9, 'solve', inProcess({ open: () => disk.open(), spill: true }));
   const seen: Report[] = [];
   job.progress(p => seen.push(p));
-  const r = await job.result;
+  const r = await job.result as SolveResult;
   assert.equal(r.solved, true);
   assert.equal(lengthOf(r), L9_SHORTEST);
   assert.ok(seen.length >= 2, `progress arrives (${seen.length} reports)`);
@@ -383,7 +387,7 @@ test('a search started after a cancel runs', async () => {
   const first = startSearch(L9, 'solve', worker);
   first.cancel();
   await assert.rejects(first.result, CancelledError);
-  const r = await startSearch(L9, 'solve', worker).result;
+  const r = await startSearch(L9, 'solve', worker).result as SolveResult;
   assert.equal(r.solved, true);
 });
 
@@ -404,4 +408,28 @@ test('the solver says when a search is running, for Endless\'s background levels
   await assert.rejects(held.result, CancelledError);
   assert.equal(solverBusy(), false, 'a cancel ends it');
   assert.deepEqual(seen, [true, false, true, false, true, false]);
+});
+
+test('rate measures, then rates as Endless\'s gate does, and Stop holds it between the rating\'s searches too', async () => {
+  const job = startSearch(L9, 'rate', inProcess());
+  let measured = false, stopped = false;
+  const seen: Report[] = [];
+  job.progress(p => {
+    seen.push(p);
+    // The measure's searches report their expansions; once the rating's steps begin (its own searches and the
+    // steps between pieces), stop there.
+    if (p.expanded > 0) measured = true;
+    if (measured && !stopped && seen.length > 20) { stopped = true; job.stop(); }
+  });
+  let done = false;
+  void job.result.then(() => { done = true; });
+  await until(() => stopped);
+  for (let i = 0; i < 50; i++) await tick();
+  assert.equal(done, false, 'no answer while stopped');
+  job.resume();
+  const r = await job.result as Rated;
+  const d = measure(parse(L9));
+  assert.deepEqual(r.d, d);
+  assert.deepEqual(r, finish(rating(parse(L9), d)), 'the same rating the gate gives');
+  assert.ok(r.score && r.band);
 });

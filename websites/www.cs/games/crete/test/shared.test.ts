@@ -337,3 +337,10 @@ test('Q on the card opened from the menu goes back to the menu over the level, n
   key('q');
   assert.equal(ui.top(), 'title', 'a card opened by a link still goes to the title card');
 });
+
+test('the editor\'s Check starts its own kind of search: a shared level\'s rating measures, Check rates', () => {
+  const rating = fakeSearches(), checks = fakeSearches();
+  const r = createRater(rating.start, () => {}, checks.start);
+  r.check('DRAFT');
+  assert.deepEqual([rating.searches.length, checks.searches.map(s => s.text)], [0, ['DRAFT']]);
+});

@@ -29,7 +29,7 @@ test('the rules never name the page', () => {
 });
 
 test('the entry hands the browser specs their test hook, and the bundle ships it', () => {
-  assert.match(read('src/main.ts'), /window\.__creteTest = \{ endless: \{ mode: endless, saved: endlessSaved, setBudget: \(n: number\) => \{ endlessBudget = n; \}, workers: endlessWorkers, warm: \(\) => \{ endlessWarm = true; followEndless\(\); \} \}, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook \};/);
+  assert.match(read('src/main.ts'), /window\.__creteTest = \{ endless: \{ mode: endless, get saved\(\) \{ return endlessSaves\[endlessGrade\.get\(\)\]; \}, saves: endlessSaves, setBudget: \(n: number\) => \{ endlessBudget = n; \}, workers: endlessWorkers, warm: \(\) => \{ endlessWarm = true; followEndless\(\); \} \}, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook \};/);
   assert.match(read('dist/main.js'), /__creteTest/);
   assert.doesNotMatch(read('dist/main.js'), /__mazeTest/);
 });
@@ -64,7 +64,7 @@ test('the game reaches no function the site script defines', { skip: !existsSync
 test("New Game opens Chapter 1's card, Continue the chapter card of its level, and a ?seed= link the Endless card", () => {
   const main = read('src/main.ts');
   assert.match(main, /function play\(at\?: number\)[^}]*if \(at === undefined\) ui\.showChapter\(1, false\);\s*else ui\.showChapter\(chapterOf\(at\)\.chapter\.n, false, at\)/);
-  assert.match(main, /if \(linked\) \{\s*endless\.link\(linked\.seed, linked\.tier\);\s*ui\.showEndless\(\);/);
+  assert.match(main, /if \(linked\) \{\s*endless\.link\(linked\.seed, linked\.tier, linked\.grade\);\s*ui\.showEndless\(\);/);
 });
 
 test('the entry follows the page: hidden ends the play-out, holds the music and Endless\'s background levels; shown goes on with both', () => {

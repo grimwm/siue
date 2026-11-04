@@ -3,11 +3,12 @@
 import type { Entry } from '../../catalogue.ts';
 import { TEMPLATES, templateEntry } from '../../compose/templates.ts';
 import type { TemplateId } from '../../compose/templates.ts';
+import { PART_COLOURS } from '../../compose/edit.ts';
 import { Glyph } from './Glyph.tsx';
 import { Icon } from './InstrumentPicker.tsx';
 
 /** The tiles' colours, in track order, as the tracks' own. */
-const TILE = ['#7a9cc6', '#c98b3a', '#7a8f6a', '#b0a6d6'];
+const TILE = PART_COLOURS;
 
 export function StartSong(p: { entries: readonly Entry[]; onPick(id: TemplateId): void; onHide(): void }) {
   return (

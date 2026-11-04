@@ -90,7 +90,7 @@ test('the composer: the transport, closed tracks, the instrument as the title, r
   render(null, renderTarget(root));
 });
 
-test('Sheet shows the chosen track engraved, written as it is read, Concert Pitch as it sounds; the Piece menu exports', async () => {
+test('Sheet shows every track on the timeline\'s scale, and the chosen track engraved behind its button, written as it is read, Concert Pitch as it sounds; the Piece menu exports', async () => {
   let doc = addPart(newDoc('Horn Call'), ENTRIES.find(e => e.id === 'horn')!)!.doc;
   doc = addNotes(doc, 'french-horn', [{ start: 0, length: 4, pitch: 53 }]).doc;
   const shown: { xml: string; lane: string | null }[] = [];
@@ -110,7 +110,11 @@ test('Sheet shows the chosen track engraved, written as it is read, Concert Pitc
   });
   const sheetBoxes = () => attr(root, 'data-part-sheet').length;
   assert.equal(sheetBoxes(), 0, 'Compose first');
-  await act(() => click(button(root, 'Sheet'))); await settle(() => sheetBoxes() === 1 && shown.length === 1);
+  await act(() => click(button(root, 'Sheet')));
+  assert.equal(attr(root, 'data-sheet-row').length, 1, 'the horn on the staff view');
+  assert.equal(attr(root, 'data-sheet-note').length, 1);
+  assert.equal(sheetBoxes(), 0, 'engraved only when asked for');
+  await act(() => click(button(root, 'Engraved Sheet Music'))); await settle(() => sheetBoxes() === 1 && shown.length === 1);
   assert.equal(sheetBoxes(), 1);
   assert.equal(shown.length, 1, text(walk(root).find(e => e._attrs['data-sheet-state'] !== undefined) ?? root));
   assert.equal(shown[0]!.lane, 'french-horn');
@@ -120,7 +124,7 @@ test('Sheet shows the chosen track engraved, written as it is read, Concert Pitc
   assert.doesNotMatch(shown[shown.length - 1]!.xml, /<transpose>/);
 
   await act(() => click(button(root, 'Piece Menu')));
-  for (const words of ['Save Draft', 'Import Music File', 'Export MusicXML', 'Export MIDI', 'Markers']) button(root, words);
+  for (const words of ['Save Draft', 'Song', 'Start A Song', 'Colors And Style', 'Import Music File', 'Export MusicXML', 'Export MIDI', 'Markers']) button(root, words);
   await act(() => click(button(root, 'Export MIDI')));
   assert.equal(saved[0]!.name, 'horn-call.mid');
   assert.equal(new TextDecoder().decode(new Uint8Array(await saved[0]!.data.arrayBuffer()).slice(0, 4)), 'MThd');

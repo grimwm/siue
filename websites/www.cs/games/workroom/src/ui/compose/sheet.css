@@ -1,1 +1,34 @@
-/* placeholder */
+/* The Sheet view: every track on a staff, on Compose's scale (--W, --head as the timeline), in one sideways scroll
+   with the track headers stuck at the left. The staff is drawn in the palette's tokens: lines in dim, heads and
+   stems in ink, each note's length as a bar in its track's colour, the playhead in go. */
+@layer components {
+  .cmp-sv-bar { @apply flex flex-wrap items-center gap-2; }
+  .cmp-sv-help { @apply min-w-0 flex-1 basis-64 text-sm text-dim; }
+  .cmp-sv { @apply relative overflow-x-auto overflow-y-hidden rounded-lg border border-rule bg-lane; overscroll-behavior-x: contain; }
+  .cmp-sv-in { position: relative; min-width: 100%; }
+  .cmp-sv-ruler .cmp-cell { height: 1.75rem; }
+  .cmp-sv-head { display: flex; align-items: flex-start; gap: .375rem; padding: .375rem; }
+  .cmp-sv-head .cmp-tile { width: 2.5rem; height: 2.5rem; }
+  @media (max-width: 639px) {
+    .cmp-sv-head { flex-direction: column; }
+    .cmp-sv-head .cmp-tile { width: 2rem; height: 2rem; }
+  }
+  .cmp-sv-vocal { min-height: 3.5rem; }
+  .cmp-sv-staff { display: block; cursor: pointer; color: var(--color-ink); }
+  .cmp-sv-past { fill: color-mix(in srgb, var(--color-ground) 55%, transparent); }
+  .cmp-sv-line { stroke: var(--color-dim); stroke-width: 1; }
+  .cmp-sv-barline { stroke: color-mix(in srgb, var(--color-ink) 70%, transparent); stroke-width: 1; }
+  .cmp-sv-barline.end { stroke: var(--color-ink); stroke-width: 3; }
+  .cmp-sv-note { cursor: pointer; outline: none; }
+  .cmp-sv-note.ghost { opacity: .55; }
+  .cmp-sv-note:focus-visible .cmp-sv-dot, .cmp-sv-note:hover .cmp-sv-dot { stroke: var(--color-amber); }
+  .cmp-sv-len { opacity: .28; }
+  .cmp-sv-ledger { stroke: var(--color-dim); stroke-width: 1.2; }
+  .cmp-sv-dot { fill: var(--color-ink); stroke: var(--color-ink); stroke-width: 1.6; }
+  .cmp-sv-dot.hollow { fill: var(--color-lane); }
+  .cmp-sv-x { stroke: var(--color-ink); stroke-width: 2; stroke-linecap: round; fill: none; }
+  .cmp-sv-note:focus-visible .cmp-sv-x, .cmp-sv-note:hover .cmp-sv-x { stroke: var(--color-amber); }
+  .cmp-sv-stem { stroke: var(--color-ink); stroke-width: 1.4; }
+  .cmp-sv-acc { fill: var(--color-ink); font-size: 13px; }
+  .cmp-sv-name { fill: var(--color-dim); font-family: var(--font-mono); font-size: 9px; pointer-events: none; }
+}

@@ -1,1 +1,38 @@
-/* placeholder */
+/* The Mix view: panels, a strip per track (a coloured top edge, the instrument, Mute, a meter and four knobs), the DJ
+   decks with the crossfader between them, the list of effects on the timeline, the whole song. The Song popover's
+   rows. Colours are the workroom's tokens, so the Colors palettes apply; looks.css restyles the meter per Style. */
+@layer components {
+  .cmp-panel { @apply grid gap-3 rounded-lg border border-rule bg-panel p-3 sm:p-4; min-width: 0; }
+  .cmp-h2 { @apply m-0 font-display text-xl font-semibold tracking-wide; }
+  .cmp-explain { @apply m-0 max-w-[70ch] text-sm text-dim; }
+  .cmp-strips { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .625rem; }
+  @media (max-width: 639px) { .cmp-strips { grid-template-columns: minmax(0, 1fr); } }
+  .cmp-strip { @apply grid gap-2 rounded-lg border border-rule bg-well p-3; border-top: 5px solid var(--c); min-width: 0; }
+  .cmp-strip.muted { opacity: .7; }
+  .cmp-strip-head { @apply flex items-center gap-2; min-width: 0; }
+  .cmp-strip-head .cmp-tile { width: 2.5rem; height: 2.5rem; }
+  .cmp-knob { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) 3.75rem; align-items: center; gap: .375rem; @apply text-sm; }
+  .cmp-knob input { width: 100%; min-width: 0; min-height: 2.25rem; accent-color: var(--color-amber); }
+  .cmp-knob output { @apply text-right font-mono text-xs text-dim; font-variant-numeric: tabular-nums; }
+  .cmp-meter { --lvl: 0; position: relative; display: block; height: .625rem; overflow: hidden; border-radius: 999px; border: 1px solid var(--color-rule); background: var(--color-ground); }
+  .cmp-meter > i { display: block; height: 100%; width: 100%; background: linear-gradient(to right, var(--color-go) 70%, var(--color-amber) 88%, var(--color-record));
+    clip-path: inset(0 calc((1 - var(--lvl)) * 100%) 0 0); transition: clip-path .06s linear; }
+  .cmp-more { @apply grid gap-3; }
+
+  .cmp-decks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 1.4fr) minmax(0, 1fr); gap: .75rem; align-items: center; }
+  @media (max-width: 760px) { .cmp-decks { grid-template-columns: minmax(0, 1fr); } }
+  .cmp-deck { @apply grid gap-1 rounded-lg border border-rule bg-well p-3; min-width: 0; }
+  .cmp-deck b { @apply font-display text-base font-semibold tracking-wide; }
+  .cmp-deck > span:not(.cmp-deck-lvl) { @apply text-sm break-words; }
+  .cmp-deck-lvl { display: block; height: .375rem; overflow: hidden; border-radius: 999px; background: var(--color-rule); }
+  .cmp-deck-lvl i { display: block; height: 100%; background: var(--color-amber); transform-origin: left; }
+  .cmp-xf { @apply grid gap-1.5 text-center; min-width: 0; }
+  .cmp-xf .cmp-btn { white-space: normal; line-height: 1.15; }
+
+  .cmp-fxitem { @apply rounded-md bg-well px-2 py-1.5; border-left: 4px solid var(--c); min-width: 0; }
+  .cmp-fxitem > div > svg { color: var(--c); }
+
+  .cmp-song-list { @apply grid gap-1; }
+  .cmp-song-li { @apply flex flex-wrap items-center gap-2 rounded-md bg-well px-2 py-1 text-sm; }
+  .cmp-tempo-mark { @apply absolute top-5 z-10 inline-flex h-5 items-center rounded-sm bg-panel/90 px-1 font-mono text-[0.65rem] whitespace-nowrap text-go; pointer-events: none; }
+}

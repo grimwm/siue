@@ -18,6 +18,7 @@ import type { ModernBoard } from './modern/board3d.ts';
 import { DEFAULT_YAW } from './modern/camera.ts';
 import { createMoveMap } from './modern/screen-move.ts';
 import { drawList } from './board-plan.ts';
+import { bubbles } from './item-bubble.ts';
 import { createOpenings, portalAt } from './openings.ts';
 import type { Atlas } from './board-plan.ts';
 import { createGame, frameOf } from './game.ts';
@@ -497,6 +498,7 @@ function loop(now: number): void {
     const t0 = performance.now();
     const moving = classicOpenings.at(f.state, f.figures, now, reduced, f.done);
     classicPortal = portalAt(f.state, moving);
+    board.bubbles(bubbles(f.state, f.figures));
     board.paint(drawList(f.state, f.figures, atlas, now, moving), game.thread ?? undefined, reduced ? undefined : now / 1000);
     paintMs.push(performance.now() - t0);
     if (paintMs.length > PAINT_KEEP) paintMs.shift();
@@ -599,6 +601,7 @@ async function createModern(): Promise<void> {
         overlay: document.querySelector('#modern .modern-overlay') as HTMLElement,
         atlas,
         image,
+        icons: iconsJson as IconSheet,
         blocked: () => ui.cardsOpen(),
         covered: () => ui.layersOpen(),
         gesture: () => ui.closeStart(),
@@ -773,6 +776,7 @@ const classicHook = {
   },
   paintMs: () => paintMs.slice(),
   portal: () => classicPortal,
+  bubbles: () => board.shownBubbles(),
 };
 /* The modern board, as far as the browser specs read it. */
 const modernHook = {
@@ -794,6 +798,7 @@ const modernHook = {
     return { x: b.left + x, y: b.top + y };
   },
   markers: () => modern?.markers() ?? [],
+  bubbles: () => modern?.bubbles() ?? [],
   quality: () => modern?.quality() ?? 3,
   fps: () => modern?.fps() ?? null,
   thumbMs: () => thumbMs,

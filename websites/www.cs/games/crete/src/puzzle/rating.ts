@@ -23,7 +23,7 @@ import type { Terrain } from './tiles.ts';
 import { lineOf, lineText } from './cache.ts';
 import type { Progress } from './astar.ts';
 import type { Difficulty } from './difficulty.ts';
-import { HABITS, HABIT_LIST, goalDistance, habitLimit, playHabit } from './habits.ts';
+import { HABIT_LIST, goalDistance, habitLimit, playHabit } from './habits.ts';
 import type { Habit } from './habits.ts';
 
 /** The three difficulties of Endless; the editor names a level's band after them. */
@@ -261,7 +261,6 @@ export function habitProblems(level: Level, d: Difficulty): Problem[] {
   return HABIT_LIST.filter(h => playHabit(level, h, habitLimit(d.shortest as number)).won)
     .map(h => ({ rule: `habit:${h}`, words: HABIT_WORDS[h] }));
 }
-void HABITS;
 
 /** The level with every `object` taken off. */
 const without = (level: Level, object: 'cow' | 'mirror'): Level =>

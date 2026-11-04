@@ -1,14 +1,16 @@
-/* The Island of Crete: Endless's generator. A run is a seed and a piece tier; its level at depth d is found by a
- * search the seed steers (`rngOf('endless', seed, tier, depth, round)`): a draft of rooms and halls
- * (src/endless/draft.ts), then small changes to it (a piece moved, a doorway opened or walled up), each kept when it
- * brings the level no further from the band it must fall in and the cheap checks it must pass, judged by one capped
- * solve. A draft that passes them all goes through the whole gate (src/endless/gate.ts); a piece the gate finds
- * useless is taken out and the climb goes on. A draft that stalls gives way to the next round's.
+/* The Island of Crete: Endless's generator. A run is a seed, a piece tier and a grade; its level at depth d is found
+ * by a search the seed steers (`rngOf('endless', seed, tier, grade, depth, …, round)`): a corridor maze
+ * (src/endless/draft.ts), then small changes to it (a piece moved, a passage opened or walled up), each kept when it
+ * brings the level no further from the band its score must fall in and the cheap checks it must pass, judged by a
+ * capped solve, one without the beast, the habit players and the score. A draft that passes them all goes through the
+ * whole gate (src/endless/gate.ts); a piece the gate finds useless or a tool no one needs is taken out, an open area
+ * that does not earn its place is walled in, and the climb goes on. A draft that stalls gives way to the next
+ * round's.
  *
  * The search spends at most `budget` situations, counted from what each search stores, so every device stops at the
- * same step and the same seed, tier and depth give the same level everywhere. Past the budget the level is one from
- * the bank of levels made the same way ahead of time (src/endless/bank.ts), picked by the seed. A run's first level
- * always comes from the bank, so a new run starts at once. DOM-free. */
+ * same step and the same seed, tier, grade and depth give the same level everywhere. Past the budget the level is one
+ * from the grade's bank of levels made the same way ahead of time (src/endless/bank.ts), picked by the seed. A run's
+ * first level always comes from the bank, so a new run starts at once. DOM-free. */
 import { parse, serialize } from '../puzzle/level.ts';
 import type { Level } from '../puzzle/level.ts';
 import { initial } from '../puzzle/state.ts';
@@ -161,8 +163,8 @@ const MEASURE_CAP = CHECK_CAP;
 const HABIT_CHARGE = 2_000;
 
 /** How far a level is from passing the cheap checks: 0 when it passes them, more the further it is; Infinity when it
- *  is no level. A tidy maze first, then one capped solve, a second without the beast, the habit players, and a quick
- *  guess at the score against the band. */
+ *  is no level. A tidy maze first, then one capped solve, a second without the beast, the habit players, and the
+ *  score against the band. */
 export function distance(level: Level, band: Band, spend: (n: number, kind?: string) => void, like: (level: Level) => number = () => 0): number {
   if (!level.minotaur) return Infinity;
   // An untidy draft (a wall standing alone, a bare nub) is far, whatever it plays like.

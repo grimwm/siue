@@ -252,6 +252,19 @@ test('the rating: the band, the score in plain words, and each rule that keeps t
   assert.deepEqual(r.lines, ['Score 46: detour forced by the Minotaur 11 (6 moves off the free route), 5 moves away from the goal, 1 wait, 4 traps, 1 forced move']);
   assert.deepEqual(r.problems, ['The cow habit wins: setting the cow down at once and walking clears it', 'Too open: 85% of the floor is open space (at most 50%)']);
   assert.match(checkSummary(s, 'T'), / · Easy, not for Endless$/);
+  const many = { ...rated, problems: [
+    { rule: 'habit:cowAtOnce', words: 'The cow habit wins: setting the cow down at once and walking clears it' },
+    { rule: 'habit:cowNear', words: 'The cow habit wins: setting the cow down when the Minotaur comes near clears it' },
+    { rule: 'habit:cowStuck', words: 'The cow habit wins: setting the cow down where the Minotaur gets stuck clears it' },
+    { rule: 'open-area', words: 'An open area near row 2, column 6 does not earn its place: walled into corridors, the level is as hard (27 against 27)' },
+    { rule: 'open-area', words: 'An open area near row 9, column 6 does not earn its place: walled into corridors, the level is as hard (27 against 27)' },
+    { rule: 'purpose', words: 'A useless piece: the red doors' },
+  ] };
+  assert.deepEqual(ratingLines({ ...s, rated: many }).problems, [
+    'The cow habit wins: setting the cow down at once and walking clears it (and 2 more habits)',
+    '2 open areas do not earn their place: walled into corridors, the level is as hard',
+    'A useless piece: the red doors',
+  ], 'kept short');
   assert.match(checkSummary({ ...s, rated: { ...rated, band: 'Hard', problems: [] } }, 'T'), / · Hard$/);
   assert.deepEqual(ratingLines(done(d)), { band: null, lines: [], problems: [] }, 'an answer with no rating shows none');
 });

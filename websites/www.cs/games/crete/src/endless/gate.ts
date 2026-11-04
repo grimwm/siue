@@ -253,5 +253,5 @@ export function gateProblems(level: Level, d: Difficulty, place: Place, known: K
   return bandProblems(checked.score!, place.band);
 }
 
-/** A level's hides walls: re-exported for the generator. */
+/** Whether a level hides walls (difficulty.ts's), for the generator. */
 export { hidesWalls };

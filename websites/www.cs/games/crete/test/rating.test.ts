@@ -32,7 +32,7 @@ test('the score: its parts weighed by WEIGHTS; the detour is the moves the Minot
     assert.equal(s.total, WEIGHTS.detour * s.detour + WEIGHTS.offRoute * s.offRoute + WEIGHTS.away * s.away + WEIGHTS.waits * s.waits + WEIGHTS.traps * s.traps + WEIGHTS.forced * s.forced, id);
     assert.equal(s.detour, d.minotaurDelta, id);
     assert.equal(s.waits, [...d.line].filter(c => c === 'w').length, id);
-    assert.ok(s.offRoute <= d.shortest as number, id);
+    assert.ok(s.offRoute <= (d.shortest as number), id);
   }
 });
 

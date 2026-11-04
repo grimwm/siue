@@ -172,8 +172,21 @@ export function ratingLines(s: CheckState): { band: string | null; lines: string
   if (s.kind !== 'done' || !s.rated || !s.d.solved) return { band: null, lines: [], problems: [] };
   const r = s.rated;
   const lines = r.score ? [`Score ${r.score.total}: ${scoreWords(r.score)}`] : [];
-  const problems = r.problems.map(p => p.words);
-  return { band: r.band, lines, problems };
+  return { band: r.band, lines, problems: compact(r.problems) };
+}
+
+/** The problems as the panel lists them, kept short: the habits that win as the first, with how many more, and the
+ *  open areas that do not earn their place as one line. */
+function compact(problems: readonly { rule: string; words: string }[]): string[] {
+  const habits = problems.filter(p => p.rule.startsWith('habit:'));
+  const areas = problems.filter(p => p.rule === 'open-area');
+  const out: string[] = [];
+  for (const p of problems) {
+    if (p === habits[0]) out.push(habits.length > 1 ? `${p.words} (and ${habits.length - 1} more ${habits.length === 2 ? 'habit' : 'habits'})` : p.words);
+    else if (p === areas[0]) out.push(areas.length > 1 ? `${areas.length} open areas do not earn their place: walled into corridors, the level is as hard` : p.words);
+    else if (!habits.includes(p) && !areas.includes(p)) out.push(p.words);
+  }
+  return out;
 }
 
 /** The one-line summary of a check, for the strip that stays on screen when the side panel is closed; '' before any

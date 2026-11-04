@@ -1,6 +1,7 @@
-// Endless: the title card's Endless opens its card; New Run opens a level made for the run, which plays like any
-// other; the worker makes the next level meanwhile and the page stays responsive; a win offers Next Level, which
-// opens level 2; the run is saved, and Continue comes back to it after a reload.
+// Endless: the title card's Endless opens its card at Medium, with Easy and Hard beside it; New Run opens a level made
+// for the run, which plays like any other; the worker makes the next level meanwhile and the page stays responsive; a
+// win offers Next Level, which opens level 2; the run is saved, and Continue comes back to it after a reload; each
+// difficulty keeps its own run; and a seed link names its difficulty.
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -132,4 +133,34 @@ test('Endless on a phone: the card fits the screen and the touch pad moves These
   } finally {
     await context.close();
   }
+});
+
+test('the card offers Easy, Medium and Hard, each with its own run; the choice is kept; a link names its difficulty', async ({ page }) => {
+  test.setTimeout(60_000);
+  await openEndless(page, 'classic');
+  await expect(page.locator('#endless-grade-medium')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#endless-grade-easy')).toHaveText('Easy');
+  await expect(page.locator('#endless-grade-hard')).toHaveText('Hard');
+  await expect(page.locator('#endless-best')).toHaveText('Your deepest on Medium: none yet');
+  await page.locator('#endless-new').click();
+  await expect(page.locator('#start-veil')).toContainText(', Medium. The fewest moves are', { timeout: 20_000 });
+  await page.reload();
+  await page.locator('#title-endless').click();
+  await expect(page.locator('#endless-continue')).toBeVisible();
+  await page.locator('#endless-grade-hard').click();
+  await expect(page.locator('#endless-grade-hard')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#endless-continue')).toHaveCount(0);
+  await expect(page.locator('#endless-best')).toHaveText('Your deepest on Hard: none yet');
+  await page.reload();
+  await page.locator('#title-endless').click();
+  await expect(page.locator('#endless-grade-hard')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#endless-grade-medium').click();
+  await expect(page.locator('#endless-continue')).toBeVisible();
+
+  await page.goto(`${PAGE}?seed=e2e-hard&tier=3&difficulty=hard`);
+  await expect(page.locator('#endless-veil')).toBeVisible();
+  await expect(page.locator('#endless-grade-hard')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#endless-linked-note')).toContainText('on Hard');
+  await page.locator('#endless-linked').click();
+  await expect(page.locator('#start-veil')).toContainText('Seed e2e-hard, Hard.', { timeout: 20_000 });
 });

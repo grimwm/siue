@@ -205,7 +205,7 @@ async function copyLink(link: string): Promise<void> {
 
 /* The solver's one worker runs one search at a time: a shared level's rating takes turns with the editor's Check,
    which comes first. */
-const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh());
+const rater = createRater(text => startSearch(text, 'measure'), () => ui.refresh(), text => startSearch(text, 'rate'));
 /* The level editor, a layer over the game frame. Try it plays the draft on the game screen. */
 const editor = createEditor({
   root: document.getElementById('editor-root') as HTMLElement,

@@ -19,7 +19,7 @@ export interface WallCues {
 }
 
 const GLASS = new Color(0.55, 0.78, 1);
-const HAZE = new Color(1, 0.9, 0.74);
+const HAZE = new Color(1, 0.93, 0.82);
 /** How far the shell stands out from the stone, and the haze off the face. */
 const SHELL = 1.03;
 const OFF = 0.012;
@@ -65,7 +65,7 @@ varying vec2 vUv;
 void main() {
   float ends = smoothstep(0.0, 0.18, vUv.x) * (1.0 - smoothstep(0.82, 1.0, vUv.x)) * smoothstep(0.0, 0.12, vUv.y) * (1.0 - smoothstep(0.85, 1.0, vUv.y));
   float wave = vUv.y * 16.0 + sin(vUv.x * 9.0 + uT * 2.2) * 1.4 - uT * 2.6;
-  float bands = mix(0.35 + 0.65 * (0.5 + 0.5 * sin(wave)), 0.7, uStill);
+  float bands = mix(0.5 + 0.5 * (0.5 + 0.5 * sin(wave)), 0.75, uStill);
   gl_FragColor = vec4(uColor * uA * bands * ends, 1.0);
 }`;
 
@@ -106,7 +106,7 @@ export function createWallCues(): WallCues {
     const yaw = Math.atan2(dx, dz);
     const set = (m: Mesh) => {
       const u = (m.material as ShaderMaterial).uniforms;
-      u.uA!.value = (c.still ? 0.16 : 0.24) * strength;
+      u.uA!.value = (c.still ? 0.04 : 0.055) * strength;
       u.uT!.value = c.t;
       u.uStill!.value = c.still ? 1 : 0;
     };

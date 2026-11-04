@@ -69,6 +69,10 @@ export const atlas = JSON.parse(readFileSync(new URL('../fx/sprites/tiles.json',
 interface EditorOpts {
   owner?: boolean;
   pageUrl?: string;
+  /** The page's look setting, its Modern loader and its toast. */
+  look?: EditorDeps['look'];
+  modern?: EditorDeps['modern'];
+  say?: EditorDeps['say'];
 }
 export interface MadeEditor {
   root: StubElement;
@@ -99,6 +103,7 @@ export function makeEditor(
     root: root as unknown as HTMLElement, atlas, image: makeEl('img') as unknown as HTMLImageElement,
     tryIt: (level, text, line) => { tries.push({ level, text, line }); }, changed: () => { changes++; },
     ...(opts.pageUrl ? { pageUrl: () => opts.pageUrl! } : {}), start,
+    ...(opts.look ? { look: opts.look } : {}), ...(opts.modern ? { modern: opts.modern } : {}), ...(opts.say ? { say: opts.say } : {}),
   });
   return { root, canvas, tries, searches, changes: () => changes, editor };
 }

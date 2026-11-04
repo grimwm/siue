@@ -3,8 +3,12 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
-/** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels. */
-const allMet = (): void => localStorage.setItem('crete-met', '["*"]');
+/** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels; the
+ *  look pinned to Classic, whose flat board these specs paint (crete-editor-looks.spec.ts paints in Modern). */
+const allMet = (): void => {
+  localStorage.setItem('crete-met', '["*"]');
+  localStorage.setItem('crete-look', 'classic');
+};
 
 test.beforeEach(async ({ context }) => { await context.addInitScript(allMet); });
 

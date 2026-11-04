@@ -152,10 +152,10 @@ test('EDITOR_KEYS never binds escape', () => {
   for (const mods of [{}, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }]) assert.equal(editorActionFor({ key: 'Escape', ...mods }), null);
 });
 
-test('the editor keys: U and Ctrl or Cmd+Z undo; Y, Ctrl or Cmd+Y and Ctrl or Cmd+Shift+Z redo; P, C and O', () => {
+test('the editor keys: U and Ctrl or Cmd+Z undo; Y, Ctrl or Cmd+Y and Ctrl or Cmd+Shift+Z redo; P, C, O and B', () => {
   assert.deepEqual(EDITOR_KEYS, {
     undo: { label: 'U', keys: ['u'] }, redo: { label: 'Y', keys: ['y'] }, try: { label: 'P', keys: ['p'] },
-    check: { label: 'C', keys: ['c'] }, rotate: { label: 'O', keys: ['o'] },
+    check: { label: 'C', keys: ['c'] }, rotate: { label: 'O', keys: ['o'] }, look: { label: 'B', keys: ['b'] },
   });
   assert.equal(editorActionFor({ key: 'u' }), 'undo');
   assert.equal(editorActionFor({ key: 'U' }), 'undo');
@@ -169,6 +169,7 @@ test('the editor keys: U and Ctrl or Cmd+Z undo; Y, Ctrl or Cmd+Y and Ctrl or Cm
   assert.equal(editorActionFor({ key: 'p' }), 'try');
   assert.equal(editorActionFor({ key: 'c' }), 'check');
   assert.equal(editorActionFor({ key: 'o' }), 'rotate');
+  assert.equal(editorActionFor({ key: 'b' }), 'look');
   assert.equal(editorActionFor({ key: 'z' }), null);
   assert.equal(editorActionFor({ key: 'u', altKey: true }), null);
   assert.equal(editorActionFor({ key: 'q' }), null);

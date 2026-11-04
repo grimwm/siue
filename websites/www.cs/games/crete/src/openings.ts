@@ -1,6 +1,7 @@
-/* The Island of Crete: how the Daedalus Gate and the doors move as they open and shut, and how the Minotaur stands
- * at the gate, for both looks. The gate is a pit across the way; the last relic taken, bronze bars slide out of the
- * walls on both sides of it and meet over it, a grid a man crosses and hooves cannot. A door sinks straight down
+/* The Island of Crete: how the Daedalus Gate, the exit's portal and the doors move as they open and shut, and how the
+ * Minotaur stands at the gate, for both looks. The gate is a pit across the way; the last relic taken, bronze bars
+ * slide out of the walls on both sides of it and meet over it, a grid a man crosses and hooves cannot, and the
+ * portal, dormant till then, lights up. A door sinks straight down
  * into the floor and leaves a sill in its key's colour. The Minotaur stands back a little from a gate beside him, and
  * the first time in a try he waits beside an open one he tries its bars with a hoof, twice, and backs off. All of it
  * is only how things look: none of it touches the rules. Reduced motion snaps. DOM-free. */
@@ -12,6 +13,8 @@ import type { State } from './puzzle/state.ts';
 export const GATE_BARS = 4;
 /** How long the bars take to slide across, or back. */
 export const GATE_SLIDE_MS = 900;
+/** How long the exit's portal takes to light up once the last relic is taken, or to go dark again. */
+export const PORTAL_WAKE_MS = 800;
 /** How long a door takes to sink into the floor, or rise out of it. */
 export const DOOR_SINK_MS = 500;
 /** How far the Minotaur stands back from a gate beside him, in cells. */
@@ -66,6 +69,9 @@ export interface Motion {
   /** How far each gate cell's bars are across, by cell, while they slide: 0 a bare pit to 1 a grid. A gate cell
    *  not named is at rest, open or shut as the state says. */
   readonly bars: ReadonlyMap<number, number>;
+  /** How far the exit's portal is lit while it lights up or goes dark, 0 dormant to 1 lit; null at rest, lit as
+   *  `portalLit` says. */
+  readonly portal: number | null;
   /** How far each door cell's door has sunk, by cell, while it moves: 0 standing to 1 gone. */
   readonly doors: ReadonlyMap<number, number>;
   /** How far the Minotaur leans toward the gate beside him, testing it, in cells. */
@@ -74,7 +80,13 @@ export interface Motion {
   readonly busy: boolean;
 }
 
-export const REST: Motion = { bars: new Map(), doors: new Map(), hoof: 0, busy: false };
+export const REST: Motion = { bars: new Map(), portal: null, doors: new Map(), hoof: 0, busy: false };
+
+/** The exit's portal is lit once every relic is taken: the exit lets Theseus out only then. */
+export const portalLit = (s: Pick<State, 'relicsLeft'>): number => (s.relicsLeft === 0 ? 1 : 0);
+
+/** How lit the exit's portal is drawn: as it moves, else as the state says. */
+export const portalAt = (s: Pick<State, 'relicsLeft'>, m: Motion): number => m.portal ?? portalLit(s);
 
 export interface Openings {
   /** What moves at `now` (ms), for the state the board draws and where the figures stand. `resting` is true once
@@ -101,8 +113,10 @@ export function createOpenings(): Openings {
   interface Move { from: number; to: number; t0: number; ms: number }
   let level: State['level'] | null = null;
   let gateOpen = false;
+  let moves = 0;
   let doorOpen = new Map<number, boolean>();
   const gate: { move: Move | null } = { move: null };
+  const portal: { move: Move | null } = { move: null };
   const doors = new Map<number, Move>();
   /** The hoof test has played in this try; the state it started on, and when. */
   let hoofed = false;
@@ -133,17 +147,27 @@ export function createOpenings(): Openings {
       if (s.level !== level) {
         level = s.level;
         gate.move = null;
+        portal.move = null;
         doors.clear();
         hoofed = false;
         hoof = null;
       } else if (!reduced) {
-        if (open !== gateOpen) gate.move = toward(gate.move, open ? 1 : 0, now, GATE_SLIDE_MS);
+        // A restart (back to no moves from more than one undo away) puts the gate and the portal straight back.
+        if (s.moves === 0 && moves > 1) {
+          gate.move = null;
+          portal.move = null;
+        } else if (open !== gateOpen) {
+          gate.move = toward(gate.move, open ? 1 : 0, now, GATE_SLIDE_MS);
+          portal.move = toward(portal.move, open ? 1 : 0, now, PORTAL_WAKE_MS);
+        }
         for (const [i, o] of nowOpen) if (doorOpen.get(i) !== o) doors.set(i, toward(doors.get(i), o ? 1 : 0, now, DOOR_SINK_MS));
       }
       gateOpen = open;
       doorOpen = nowOpen;
+      moves = s.moves;
       if (reduced) {
         gate.move = null;
+        portal.move = null;
         doors.clear();
       }
 
@@ -154,6 +178,14 @@ export function createOpenings(): Openings {
         else {
           const p = where(gate.move, now);
           s.terrain.forEach((t, i) => { if (t === 'gate') bars.set(i, p); });
+          busy = true;
+        }
+      }
+      let lit: number | null = null;
+      if (portal.move) {
+        if (now - portal.move.t0 >= portal.move.ms) portal.move = null;
+        else {
+          lit = where(portal.move, now);
           busy = true;
         }
       }
@@ -182,7 +214,7 @@ export function createOpenings(): Openings {
           busy = true;
         }
       }
-      return busy ? { bars, doors: sunk, hoof: lean, busy } : REST;
+      return busy ? { bars, portal: lit, doors: sunk, hoof: lean, busy } : REST;
     },
   };
 }

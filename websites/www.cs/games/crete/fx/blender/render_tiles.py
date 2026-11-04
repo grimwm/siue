@@ -731,19 +731,34 @@ def ring(h_out, h_in, z_top, top, side, depth=0.5):
         box(x0, x1, y0, y1, -depth, z_top, top, side, 0.0, outline=False)
 
 
-def build_exit(f):
+EXIT_WAKE = 8                 # the frames of the portal lighting up, between dormant and lit (src/openings.ts)
+
+
+def build_exit(f, light=(1.0,)):
     """The Aegean Portal, as the modern look draws it: a white marble arch with gold
-    capitals and a gold keystone at the back of the cell, facing the viewer, filled
-    with a sheet of Aegean-blue light, over a blue pool in a marble ring on a flagstone."""
+    capitals and a gold keystone at the back of the cell, facing the viewer, over a pool
+    in a marble ring on a flagstone. `light` lists, frame by frame, how far it is lit:
+    at 1 the arch holds a sheet of Aegean-blue light and the pool glows blue; at 0 it is
+    dormant, its opening dark stone and its basin dry; between, the light rises up the
+    opening and the pool fills from the middle out."""
     slab(floor_mat())
     marble = paint('exit-marble', '#f2ece0', rough=0.5, var=0.08, bump=0.05, scale=12)
     au = gold('exit-gold')
-    # The pool of light in its marble ring: nearly white at the middle, Aegean blue at the edge.
+    many = len(light) > 1
+    # The pool in its marble ring: nearly white at the middle, Aegean blue at the edge, over a dry dark basin.
     pool = MB('exit-pool')
+    pk = pool.value('lit', light[0]).outputs[0]
+    if many:
+        for fr, k in enumerate(light):
+            key_val(pk, fr, k)
     s = pool.sep()
     r = pool.vmath('LENGTH', pool.comb(s.outputs['X'], s.outputs['Y']))
     pc = pool.ramp(r, [(0.0, '#d8f2ff'), (0.14, '#7cc8f4'), (0.3, '#1e78d2')])
-    pool.emission(pc, 1.6)
+    r2 = pool.vmath('LENGTH', pool.comb(s.outputs['X'], pool.math('ADD', s.outputs['Y'], 0.1)))
+    wet = pool.math('DIVIDE', pool.math('SUBTRACT', pool.math('MULTIPLY', pk, 0.4), r2), 0.06, clamp=True)
+    basin = pool.ramp(pool.noise(14, 3, 0.6), [(0.3, '#4c463e'), (0.7, '#5e574d')])
+    basin = pool.mix(pool.ramp(r2, [(0.0, '#56616c'), (0.18, '#4c463e')]), basin, 0.5)  # a faint cold stain where the light was
+    pool.emission(pool.mix(basin, pc, wet), pool.math('ADD', 1.0, pool.math('MULTIPLY', wet, 0.6)))
     cyl((0, -0.1, 0.0), 0.3, length=0.02, mat=pool.mat, seg=48, outline=False)
     torus((0, -0.1, 0.012), 0.31, 0.022, marble, outline=False)
     # The arch: two columns on bases under gold capitals, and a round arch over them.
@@ -758,15 +773,24 @@ def build_exit(f):
     band += [(math.cos(math.pi * i / n) * R0, spring + math.sin(math.pi * i / n) * R0) for i in range(n, -1, -1)]
     prism(band, 0.1, marble, 'XZ', Y, bevel=0.0, outline=False)
     box(-0.05, 0.05, Y - 0.06, Y + 0.06, spring + R1 - 0.05, spring + R1 + 0.02, au, au, 0.006, outline=False)
-    # The sheet of light filling the arch: pale in the middle, Aegean blue at the sides, with soft ripples.
+    # The sheet of light filling the arch: pale in the middle, Aegean blue at the sides, with soft ripples. Its
+    # light stands as high up the opening as `lit` says; above it the opening is dark stone.
     veil = MB('exit-veil')
+    vk = veil.value('lit', light[0]).outputs[0]
+    if many:
+        for fr, k in enumerate(light):
+            key_val(vk, fr, k)
     v = veil.sep()
     ax = veil.math('ABSOLUTE', v.outputs['X'])
     vc = veil.ramp(ax, [(0.0, '#bfe9ff'), (0.2, '#0b5fa8')])
     wave = veil.math('FRACT', veil.math('ADD', veil.math('MULTIPLY', v.outputs['Z'], 14.0),
                                         veil.math('MULTIPLY', veil.math('SINE', veil.math('MULTIPLY', v.outputs['X'], 30.0)), 0.25)))
     vc = veil.mix(vc, '#ffffff', veil.ramp(wave, [(0.0, '#000000'), (0.1, '#5a5a5a'), (0.2, '#000000')]), 'MIX')
-    veil.emission(vc, 1.8)
+    top = spring + R0 + 0.06
+    level = veil.math('ADD', 0.035, veil.math('MULTIPLY', vk, top - 0.035))
+    up = veil.math('DIVIDE', veil.math('SUBTRACT', level, v.outputs['Z']), 0.06, clamp=True)
+    dark = veil.ramp(veil.noise(18, 3, 0.6), [(0.3, '#1c242e'), (0.7, '#2a333d')])
+    veil.emission(veil.mix(dark, vc, up), veil.math('ADD', 1.0, veil.math('MULTIPLY', up, 0.8)))
     R = R0
     hole = [(-R, 0.035)] + [(math.cos(math.pi * i / n) * R * -1, spring + math.sin(math.pi * i / n) * R)
                             for i in range(n + 1)] + [(R, 0.035)]
@@ -1548,6 +1572,8 @@ SPRITES = [
     ('floor', build_floor, 1, 0, 'terrain'),
     ('wall', build_wall, 1, 0, 'terrain'),
     ('exit', build_exit, 1, 0, 'terrain'),
+    ('exit-off', lambda f: build_exit(f, (0.0,)), 1, 0, 'terrain'),
+    ('exit-wake', lambda f: build_exit(f, [(i + 1) / (EXIT_WAKE + 1) for i in range(EXIT_WAKE)]), EXIT_WAKE, 0, 'terrain'),
     ('gate-closed', lambda f: build_gate(f, [0.0]), 1, 0, 'terrain'),
     ('gate-open', lambda f: build_gate(f, [1.0]), 1, 0, 'terrain'),
     ('gate-closed-v', lambda f: build_gate(f, [0.0], True), 1, 0, 'terrain'),

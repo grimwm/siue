@@ -13,14 +13,14 @@
  * home plays its move, then is gone or home when the turn lands; anything a
  * clone machine makes has no path and shows when the turn lands. Reduced motion snaps. It also says when the
  * player's figure reaches each thing taken. The gate and the doors draw as they slide and sink, and the Minotaur
- * where he stands at a gate (src/openings.ts): the gate as a pit, its bars part way over it, or the grid; a door
- * sinking through its sill, or the sill it left. DOM-free. */
+ * where he stands at a gate (src/openings.ts): the gate as a pit, its bars part way over it, or the grid; the exit's
+ * portal dormant, lighting up, or lit; a door sinking through its sill, or the sill it left. DOM-free. */
 import { DIRS, TERRAIN, OBJECTS, HAZARDS } from './puzzle/tiles.ts';
 import type { Cell, HazardKind, ObjectKind } from './puzzle/tiles.ts';
 import { same } from './puzzle/state.ts';
 import type { State } from './puzzle/state.ts';
 import type { GameEvent } from './puzzle/step.ts';
-import { REST, axisAt, beastDrawnAt, openedDoor } from './openings.ts';
+import { REST, axisAt, beastDrawnAt, openedDoor, portalAt } from './openings.ts';
 import type { Motion } from './openings.ts';
 
 export interface Atlas {
@@ -61,10 +61,18 @@ export function frameAt(atlas: Atlas, sprite: string, ms: number): number {
 }
 
 /** Of the gate's slide frames, the one `p` of the way across shows, or -1 for the bare pit and the frame count for
- *  the grid. */
-export function slideFrame(atlas: Atlas, p: number): number {
-  const n = atlas.sprites['gate-slide']?.frames ?? 1;
+ *  the grid. The exit's waking frames, `sprite` 'exit-wake', are counted the same way: -1 dormant, the count lit. */
+export function slideFrame(atlas: Atlas, p: number, sprite = 'gate-slide'): number {
+  const n = atlas.sprites[sprite]?.frames ?? 1;
   return Math.max(-1, Math.min(n, Math.round(p * (n + 1)) - 1));
+}
+
+/** The exit's sprite and frame, `p` of the way lit (src/openings.ts portalAt). */
+export function exitSprite(atlas: Atlas, p: number): { sprite: string; frame: number } {
+  const f = slideFrame(atlas, p, 'exit-wake');
+  if (f < 0) return { sprite: 'exit-off', frame: 0 };
+  if (f >= (atlas.sprites['exit-wake']?.frames ?? 1)) return { sprite: 'exit', frame: 0 };
+  return { sprite: 'exit-wake', frame: f };
 }
 
 export function drawList(s: State, fig: Figures, atlas: Atlas, ms: number, motion: Motion = REST): Draw[] {
@@ -96,6 +104,7 @@ export function drawList(s: State, fig: Figures, atlas: Atlas, ms: number, motio
       const door = TERRAIN[t].door ?? openedDoor(s, i);
       if (machine) put(sprites[DIRS.indexOf(machine.dir)]!, c, r);
       else if (t === 'gate') gate(c, r, motion.bars.get(i) ?? (s.relicsLeft === 0 ? 1 : 0));
+      else if (t === 'exit') out.push({ ...exitSprite(atlas, portalAt(s, motion)), x: c, y: r });
       else if (door && (t !== 'floor' ? motion.doors.has(i) : true)) sill(door, c, r, motion.doors.get(i) ?? 1);
       else put(sprites[0]!, c, r);
     }

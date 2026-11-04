@@ -38,7 +38,7 @@ export interface PieceInfo {
   /** Its flames or discs at loop time `t` seconds. */
   loop?: (t: number) => void;
   /** How far it has opened, 0 shut to 1 open (src/openings.ts): the Daedalus Gate's bars across its pit, a door
-   *  sunk into its floor. */
+   *  sunk into its floor, the exit's portal lit. */
   open?: (p: number) => void;
 }
 
@@ -207,7 +207,7 @@ function turned(x: ModelCtx, live: Object3D[]): Object3D[] {
 }
 
 /** The exit: the Aegean Portal (portal.ts), set into a wall beside it, north first, so its front faces the opening
- *  camera whenever it can; with no wall beside it, it faces south. */
+ *  camera whenever it can; with no wall beside it, it faces south. `open` lights it. */
 function exit(x: ModelCtx): Group {
   const p = portal(x.kit, box, cyl);
   const [dr, dc] = exitFacing(x.wall, x.r, x.c);
@@ -215,7 +215,7 @@ function exit(x: ModelCtx): Group {
   const live = new Group();
   live.add(...p.live);
   live.rotation.y = p.g.rotation.y;
-  return piece(p.g, { half: 0.45, h: p.h, tall: true, loop: p.loop }, [live]);
+  return piece(p.g, { half: 0.45, h: p.h, tall: true, loop: p.loop, open: p.light }, [live]);
 }
 
 function toggle(x: ModelCtx, closed: boolean): Group {

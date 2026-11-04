@@ -15,7 +15,7 @@ import type { Atlas, Figures, Pos } from '../board-plan.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell, Dir } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
-import { REST, createOpenings } from '../openings.ts';
+import { REST, createOpenings, portalAt } from '../openings.ts';
 import type { Motion } from '../openings.ts';
 import { DEFAULT_YAW, START_PITCH, cameraDistance, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
@@ -85,7 +85,7 @@ export interface ModernBoard {
   /** Frames drawn, for tests. */
   frames(): number;
   /** What the gate and the doors were doing when the last frame was drawn (src/openings.ts), for tests. */
-  opening(): { bars: number[]; doors: number[]; hoof: number };
+  opening(): { bars: number[]; portal: number; doors: number[]; hoof: number };
   /** The render quality step (quality.ts), for tests. */
   quality(): number;
   /** The frame rate measured over the last two seconds of animation, or null before there is that much. */
@@ -347,7 +347,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     if (busy) invalidate();
   }
 
-  /** Moves the gate's bars, the doors and the Minotaur at the gate as they are at `now`; true while any moves. */
+  /** Moves the gate's bars, the exit's light, the doors and the Minotaur at the gate as they are at `now`; true while
+   *  any moves. */
   function open(now: number): boolean {
     if (!last || !lastFigures) return false;
     const m = (lastMotion = openings.at(last, lastFigures, now, snap(), lastDone));
@@ -355,6 +356,11 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       const p = pieces[i]?.userData as PieceInfo | undefined;
       if (!p?.open) return;
       if (t === 'gate') p.open(m.bars.get(i) ?? (last!.relicsLeft === 0 ? 1 : 0));
+      else if (t === 'exit') {
+        const k = portalAt(last!, m);
+        p.open(k);
+        lights?.portal(i, k);
+      }
       else p.open(m.doors.get(i) ?? (t === 'floor' ? 1 : 0));
     });
     if (m.hoof !== hoof) {
@@ -569,7 +575,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     }
     const prev = last!;
     const changed = changedCells(prev, s);
-    if (prev.relicsLeft !== s.relicsLeft) s.terrain.forEach((t, i) => { if (t === 'gate') changed.push(i); });
+    if (prev.relicsLeft !== s.relicsLeft) s.terrain.forEach((t, i) => { if (t === 'gate' || t === 'exit') changed.push(i); });
     let ground = false, walled = false;
     const { rows: nr, cols: nc } = s.level;
     const near = new Set<number>();
@@ -743,7 +749,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       scheduleLoops();
     },
     frames: () => drawn,
-    opening: () => ({ bars: [...lastMotion.bars.values()], doors: [...lastMotion.doors.values()], hoof: lastMotion.hoof }),
+    opening: () => ({
+      bars: [...lastMotion.bars.values()], portal: last ? portalAt(last, lastMotion) : 0,
+      doors: [...lastMotion.doors.values()], hoof: lastMotion.hoof,
+    }),
     quality: () => quality,
     fps: () => rate(ladder.gaps, DOWN_MS),
     floating: () => floats.cells(),

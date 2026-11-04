@@ -13,7 +13,7 @@ import type { Atlas, Draw } from './board-plan.ts';
 import { drawThread } from './board.ts';
 import { pulseScale } from './thread-path.ts';
 import type { ThreadCell } from './thread-path.ts';
-import { TERRAIN, TURNED_SPRITES } from './puzzle/tiles.ts';
+import { EXIT_SPRITES, TERRAIN, TURNED_SPRITES } from './puzzle/tiles.ts';
 import { AWAY, LEAN_FEET, faceQuarter, project, sheetTransform } from './sheet.ts';
 import type { Frame } from './sheet.ts';
 
@@ -27,7 +27,7 @@ export interface SheetBoard {
   paint(list: Draw[], thread?: readonly ThreadCell[], t?: number): void;
 }
 
-const TERRAIN_SPRITES = new Set([...Object.values(TERRAIN).flatMap(t => t.sprites), ...TURNED_SPRITES]);
+const TERRAIN_SPRITES = new Set([...Object.values(TERRAIN).flatMap(t => t.sprites), ...TURNED_SPRITES, ...EXIT_SPRITES]);
 /** Each sprite that lies across the way through its cell, and its twin drawn the other way round. */
 const TWIN = new Map(TURNED_SPRITES.filter(v => v.endsWith('-v')).flatMap(v => [[v, v.slice(0, -2)], [v.slice(0, -2), v]] as const));
 /** Tiles whose picture points along the grid: they never turn with the view. */

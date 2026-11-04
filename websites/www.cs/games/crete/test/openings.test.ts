@@ -4,9 +4,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  DOOR_SINK_MS, GATE_SLIDE_MS, HOOF_MS, REST, STEP_BACK, axisAt, beastDrawnAt, createOpenings, hoofAt, openedDoor,
+  DOOR_SINK_MS, GATE_SLIDE_MS, HOOF_MS, PORTAL_WAKE_MS, REST, STEP_BACK, axisAt, beastDrawnAt, createOpenings, hoofAt,
+  openedDoor, portalAt, portalLit,
 } from '../src/openings.ts';
-import { drawList, slideFrame } from '../src/board-plan.ts';
+import { drawList, exitSprite, slideFrame } from '../src/board-plan.ts';
 import type { Atlas, Figures } from '../src/board-plan.ts';
 import { terrainModel } from '../src/modern/model-names.ts';
 import type { State } from '../src/puzzle/state.ts';
@@ -140,4 +141,58 @@ test('Classic draws the Minotaur stood back from the gate', () => {
   const s = grid(['#####', 'P*|M.', '#####']);
   const m = drawList(s, rest(s), atlas, 0).find(d => d.sprite === 'minotaur')!;
   assert.equal(m.x, 3 + STEP_BACK);
+});
+
+test('the exit\'s portal is dormant until the last relic is taken, lights up with the bars, and goes dark on undo', () => {
+  const o = createOpenings();
+  const s = grid(['#####', 'P*|.E', '#####']);
+  assert.equal(portalLit(s), 0, 'dormant while a relic is left');
+  assert.equal(portalAt(s, o.at(s, rest(s), 0, false, true)), 0);
+  const t = play(s, mv('right')).state;
+  assert.equal(portalLit(t), 1, 'lit once every relic is taken');
+  assert.equal(o.at(t, rest(t), 1000, false, true).portal, 0, 'it starts dark');
+  const mid = o.at(t, rest(t), 1000 + PORTAL_WAKE_MS / 2, false, true).portal!;
+  assert.ok(mid > 0.3 && mid < 0.7, `half lit ${mid}`);
+  assert.equal(portalAt(t, o.at(t, rest(t), 1000 + Math.max(PORTAL_WAKE_MS, GATE_SLIDE_MS) + 1, false, true)), 1, 'then lit');
+  // Undo puts the relic back: the light fades out again.
+  assert.equal(o.at(s, rest(s), 5000, false, true).portal, 1, 'it starts lit');
+  const fading = o.at(s, rest(s), 5000 + PORTAL_WAKE_MS / 2, false, true).portal!;
+  assert.ok(fading > 0 && fading < 1, `fading ${fading}`);
+  assert.equal(portalAt(s, o.at(s, rest(s), 5000 + GATE_SLIDE_MS + 1, false, true)), 0, 'dormant again');
+});
+
+test('the portal is lit from the start on a level with no relics, and a restart or reduced motion sets it at once', () => {
+  const o = createOpenings();
+  const bare = grid(['#####', 'P...E', '#####']);
+  assert.equal(portalAt(bare, o.at(bare, rest(bare), 0, false, true)), 1, 'no relics: lit at once');
+  const p = createOpenings();
+  const s = grid(['#######', 'P*...E#', '#######']);
+  p.at(s, rest(s), 0, false, true);
+  const t = play(s, mv('right'), mv('right'), mv('right')).state;
+  p.at(t, rest(t), 100, false, true);
+  assert.equal(portalAt(t, p.at(t, rest(t), 100 + PORTAL_WAKE_MS + GATE_SLIDE_MS, false, true)), 1);
+  // A restart: back to no moves from three away. Dormant at once, nothing fading.
+  assert.equal(p.at(s, rest(s), 5000, false, true), REST);
+  assert.equal(portalAt(s, REST), 0);
+  const r = createOpenings();
+  r.at(s, rest(s), 0, true, true);
+  const u = play(s, mv('right')).state;
+  assert.equal(r.at(u, rest(u), 10, true, true), REST, 'reduced motion: no fade');
+  assert.equal(portalAt(u, REST), 1);
+});
+
+test('Classic draws the exit dormant, waking frame by frame, and lit', () => {
+  const n = atlas.sprites['exit-wake']!.frames;
+  assert.ok(n > 1, 'the waking has frames');
+  assert.deepEqual(exitSprite(atlas, 0), { sprite: 'exit-off', frame: 0 });
+  assert.deepEqual(exitSprite(atlas, 1), { sprite: 'exit', frame: 0 });
+  const mid = exitSprite(atlas, 0.5);
+  assert.equal(mid.sprite, 'exit-wake');
+  assert.ok(mid.frame > 0 && mid.frame < n - 1);
+  const s = grid(['#####', 'P*|.E', '#####']);
+  const at = (x: State, m = REST) => drawList(x, rest(x), atlas, 0, m).find(d => d.x === 4 && d.y === 1)!;
+  assert.equal(at(s).sprite, 'exit-off', 'a relic left: dormant');
+  const t = play(s, mv('right')).state;
+  assert.equal(at(t).sprite, 'exit', 'every relic taken: lit');
+  assert.equal(at(t, { ...REST, portal: 0.5, busy: true }).sprite, 'exit-wake');
 });

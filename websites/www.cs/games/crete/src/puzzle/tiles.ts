@@ -146,11 +146,16 @@ export const TURNED_SPRITES = [
   'door-red-sill-v', 'door-blue-sill-v', 'door-yellow-sill-v', 'door-green-sill-v',
 ] as const;
 
+/** Classic's exit as it wakes: dormant until the last relic is taken, then lighting up, one frame a step of the way
+ *  (src/openings.ts), to the lit `exit`. */
+export const EXIT_SPRITES = ['exit-off', 'exit-wake'] as const;
+
 /** Every sprite the board can ask the atlas for. */
 export const SPRITE_NAMES: readonly string[] = [
   ...new Set([
     ...Object.values(TERRAIN).flatMap(d => d.sprites),
     ...TURNED_SPRITES,
+    ...EXIT_SPRITES,
     ...Object.values(OBJECTS).map(o => o.sprite),
     ...FIGURE_SPRITES,
     ...Object.values(HAZARDS).map(h => h.sprite),

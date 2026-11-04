@@ -103,6 +103,7 @@ export function pruneFor(level: Level, layout: Layout): Prune {
   let room = FIRST;
   let keys = new Uint32Array(room * W);
   let heads = new Int32Array(room);
+  let ghash = new Uint32Array(room);
   let groups = 0;
   /** Slots hold group + 1; 0 is empty. Kept at most half full. */
   let table = new Int32Array(FIRST * 2);
@@ -122,10 +123,11 @@ export function pruneFor(level: Level, layout: Layout): Prune {
     room *= 2;
     const k = new Uint32Array(room * W); k.set(keys); keys = k;
     const d = new Int32Array(room); d.set(heads); heads = d;
+    const gh = new Uint32Array(room); gh.set(ghash); ghash = gh;
     table = new Int32Array(room * 2);
     tmask = table.length - 1;
     for (let g = 0; g < groups; g++) {
-      let slot = hashOf(keys, g * W, W) & tmask;
+      let slot = ghash[g]! & tmask;
       while (table[slot] !== 0) slot = (slot + 1) & tmask;
       table[slot] = g + 1;
     }
@@ -170,6 +172,7 @@ export function pruneFor(level: Level, layout: Layout): Prune {
     let group = -1;
     for (let e = table[slot]!; e !== 0; slot = (slot + 1) & tmask, e = table[slot]!) {
       const k = e - 1;
+      if (ghash[k] !== h) continue;
       let same = true;
       for (let i = 0; i < W && same; i++) same = keys[k * W + i] === key[i];
       if (same) { group = k; break; }
@@ -182,6 +185,7 @@ export function pruneFor(level: Level, layout: Layout): Prune {
       }
       group = groups++;
       keys.set(key, group * W);
+      ghash[group] = h;
       table[slot] = group + 1;
       heads[group] = newEntry(g, -1);
       return false;

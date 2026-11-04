@@ -12,7 +12,11 @@ import { setObject, setTerrain, tAt, oAt } from './work.ts';
 import type { GameEvent, Work } from './work.ts';
 
 /** A hazard stands on `x`. */
-export const hazardOn = (w: Work, x: Cell): boolean => w.hazards.length > 0 && w.hazards.some(h => same(x, h.at));
+export function hazardOn(w: Work, x: Cell): boolean {
+  const hs = w.hazards;
+  for (let i = 0; i < hs.length; i++) { const at = hs[i]!.at; if (at.r === x.r && at.c === x.c) return true; }
+  return false;
+}
 
 /** Something pressed the toggle button: every toggle wall opens or closes. */
 export function flip(w: Work, ev: GameEvent[]): void {

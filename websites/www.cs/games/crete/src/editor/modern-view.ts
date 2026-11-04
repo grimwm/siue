@@ -84,7 +84,8 @@ export function createModernView(deps: ModernViewDeps): ModernView {
       return loading;
     },
     show(on) {
-      deps.holder.classList.toggle('look-modern', on && board !== null);
+      const rest = deps.holder.className.split(' ').filter(c => c && c !== 'look-modern');
+      deps.holder.className = (on && board ? [...rest, 'look-modern'] : rest).join(' ');
       if (!board) return;
       if (on) {
         board.walls(deps.walls());

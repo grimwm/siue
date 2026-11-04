@@ -768,6 +768,11 @@ test('the look buttons: the editor opens in the game\'s look, and Classic, Moder
   assert.deepEqual(set, ['modern', 'modern'], 'B swaps the look');
   assert.deepEqual(press(e, 'u'), { used: true, prevented: true });
   assert.equal(cell(e, 2, 3), '.', 'the undo history is kept across a switch');
+  await new Promise(r => setTimeout(r, 0));
+  e.editor.close();
+  e.editor.open();
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(said.length, 1, 'the toast says it once a visit');
 });
 
 test('without the page\'s look setting the bar has no look buttons, and B does nothing', () => {

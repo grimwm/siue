@@ -171,6 +171,8 @@ export function createEditor(deps: EditorDeps): Editor {
   let modernView: ModernView | null = null;
   /** The draft the Modern board last showed. */
   let modernFor: Draft | null = null;
+  /** The toast has said Modern cannot start here. */
+  let noModernSaid = false;
   const modernOn = (): boolean => look === 'modern' && !!modernView?.board;
   /** Touches on the board, for telling a one-finger stroke from a two-finger scroll. */
   const touches = new Map<number, { x: number; y: number }>();
@@ -348,7 +350,8 @@ export function createEditor(deps: EditorDeps): Editor {
     modernView ??= createModernView({
       holder, load: m.load, atlas, image, icons: m.icons, walls: m.walls, hidden: () => !shown,
       painter: {
-        stroke: (at, first) => (first ? beginStroke(-1, at) : strokeTo(-1, at)),
+        // A drag that starts off the board starts its stroke where it first reaches a cell.
+        stroke: (at, first) => (first || !stroke ? beginStroke(-1, at) : strokeTo(-1, at)),
         end: () => { if (stroke?.id === -1) endStroke(); },
         drop: dropStroke,
       },
@@ -358,7 +361,11 @@ export function createEditor(deps: EditorDeps): Editor {
       if (look !== 'modern') return;
       if (!ok) {
         look = 'classic';
-        deps.say?.(NO_MODERN_MESSAGE);
+        // Said once a visit: the setting stays Modern, so each opening of the editor finds it cannot start again.
+        if (!noModernSaid) {
+          noModernSaid = true;
+          deps.say?.(NO_MODERN_MESSAGE);
+        }
         drawPanel();
         return;
       }

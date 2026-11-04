@@ -12,6 +12,9 @@
 import { ACESFilmicToneMapping, Box3, Color, DirectionalLight, Group, HemisphereLight, NoToneMapping, OrthographicCamera, PCFSoftShadowMap, SRGBColorSpace, Scene, Vector3, WebGLRenderTarget, WebGLRenderer } from 'three';
 import type { Object3D } from 'three';
 import type { Atlas, Figures, Pos } from '../board-plan.ts';
+import { bubbles, createBubbleLayer, modernPics } from '../item-bubble.ts';
+import type { BubbleLayer } from '../item-bubble.ts';
+import type { IconSheet } from '../icons-models.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Cell, Dir } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
@@ -53,6 +56,8 @@ export interface ModernHost {
   /** For the mini map. */
   atlas: Atlas;
   image: HTMLImageElement;
+  /** The Modern icons, for the item bubble. */
+  icons: IconSheet;
   /** True while a layer other than `start` is open. */
   blocked(): boolean;
   /** True while any layer, the start card too, covers the board. */
@@ -99,6 +104,8 @@ export interface ModernBoard {
   markers(): { kind: MarkerKind; at: [number, number]; foot: [number, number]; cell: number }[];
   /** Where cell (c, r)'s centre on the floor shows on the canvas, in CSS pixels, for tests. */
   cellAt(c: number, r: number): [number, number];
+  /** The item bubbles showing (src/item-bubble.ts), for tests. */
+  bubbles(): ReturnType<BubbleLayer['shown']>;
   splashing(): number[];
   /** The Mini map setting: shows or hides the mini map. */
   minimap(on: boolean): void;
@@ -115,6 +122,8 @@ export interface ModernBoard {
 }
 
 const BACKGROUND = 0x060504;
+/** The top of the Minotaur's head above the floor, in cells, where his item bubble starts. */
+const BUBBLE_HEAD = 1.15;
 const RAD = Math.PI / 180;
 const LOOP_FPS = 12;
 /** A zoom about a point this near the view's centre (a share of its width or height) keeps following Theseus. */
@@ -152,6 +161,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const ladder = createLadder();
   let quality = ladder.q;
   let width = 1, height = 1;
+  const bubbleLayer = createBubbleLayer(l => host.overlay.prepend(l), modernPics(host.icons));
   let mode: WallMode = 'solid';
   const V = variant();
   let last: State | null = null;
@@ -337,6 +347,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       renderer.render(markers.scene, camera);
       renderer.autoClear = true;
     }
+    placeBubbles();
     const key = `${cur.yaw} ${cur.tx} ${cur.tz} ${cur.zoom} ${width} ${height}`;
     if (key !== viewKey) {
       viewKey = key;
@@ -395,6 +406,16 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       const info = m.userData as MarkerInfo;
       return { kind: info.kind, at: px(m.position), foot: px(info.foot), cell: height / cur.zoom };
     });
+  }
+
+  /** The item bubble by the Minotaur's head while he stands on an item, placed as this frame's camera shows it. */
+  function placeBubbles(): void {
+    const list = last && lastFigures ? bubbles(last, lastFigures) : [];
+    bubbleLayer.place(list.map(b => {
+      const x = cellX(b.c, cols()), z = cellZ(b.r, rows());
+      ndc.set(x, FY + BUBBLE_HEAD, z).project(camera);
+      return { bubble: b, x: ((ndc.x + 1) / 2) * width, head: ((1 - ndc.y) / 2) * height, cell: height / cur.zoom };
+    }), width, height);
   }
 
   function cellAt(c: number, r: number): [number, number] {
@@ -759,6 +780,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     routeNext: () => thread.next(),
     markers: markerSpots,
     cellAt,
+    bubbles: () => bubbleLayer.shown(),
     splashing: () => floats.splashing(),
     minimap(on) {
       mini?.show(on);

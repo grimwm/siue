@@ -16,6 +16,8 @@ import type { ThreadCell } from './thread-path.ts';
 import { EXIT_SPRITES, TERRAIN, TURNED_SPRITES } from './puzzle/tiles.ts';
 import { AWAY, LEAN_FEET, faceQuarter, project, sheetTransform } from './sheet.ts';
 import type { Frame } from './sheet.ts';
+import { classicPics, createBubbleLayer } from './item-bubble.ts';
+import type { Bubble, BubbleLayer } from './item-bubble.ts';
 
 export interface SheetBoard {
   /** Sets the sheet to `cols × rows` cells of `cellPx` CSS pixels, snapped to whole device pixels. */
@@ -27,6 +29,14 @@ export interface SheetBoard {
   paint(list: Draw[], thread?: readonly ThreadCell[], t?: number): void;
 }
 
+/** The game's sheet, with the item bubbles over it. */
+export interface ClassicBoard extends SheetBoard {
+  /** The item bubbles (src/item-bubble.ts) the next paint shows. */
+  bubbles(list: readonly Bubble[]): void;
+  /** The item bubbles showing, for tests. */
+  shownBubbles(): ReturnType<BubbleLayer['shown']>;
+}
+
 const TERRAIN_SPRITES = new Set([...Object.values(TERRAIN).flatMap(t => t.sprites), ...TURNED_SPRITES, ...EXIT_SPRITES]);
 /** Each sprite that lies across the way through its cell, and its twin drawn the other way round. */
 const TWIN = new Map(TURNED_SPRITES.filter(v => v.endsWith('-v')).flatMap(v => [[v, v.slice(0, -2)], [v.slice(0, -2), v]] as const));
@@ -35,7 +45,7 @@ const GRID_WAY = new Set(Object.values(TERRAIN).filter(t => t.carries || t === T
 /** A shadow's radius, in cells. */
 const SHADOW = 0.33;
 
-export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image: HTMLImageElement): SheetBoard {
+export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image: HTMLImageElement): ClassicBoard {
   const ctx = canvas.getContext('2d')!;
   const view = canvas.parentElement!;
   const overlay = document.createElement('canvas');
@@ -43,6 +53,8 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
   overlay.setAttribute('aria-hidden', 'true');
   view.append(overlay);
   const o = overlay.getContext('2d')!;
+  const bubbleLayer = createBubbleLayer(l => overlay.after(l), classicPics(atlas, image));
+  let bubbles: readonly Bubble[] = [];
   canvas.classList.add('sheet');
   const rise = atlas.rise / atlas.cell;
   const fw = atlas.cell, fh = atlas.cell + atlas.rise;
@@ -118,7 +130,18 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
     }
   }
 
-  const sheet: SheetBoard = {
+  /** Lays each bubble by its figure's head: the top of the sprite's frame, a little down, as paintFigures stands it. */
+  function placeBubbles(fr: Frame): void {
+    const c = cell / dpr, k = fr.k;
+    const lean = Math.min(1, Math.max(0, (90 - fr.pitch) / 45));
+    const anchor = (top + cell * (0.5 + LEAN_FEET * lean)) * k / dpr;
+    bubbleLayer.place(bubbles.map(b => {
+      const p = project(fr, (b.c + 0.5) * c, (b.r + 0.5) * c);
+      return { bubble: b, x: p.x, head: p.y - anchor + (top * k * 0.4) / dpr, cell: c * k };
+    }), fr.vw, fr.vh);
+  }
+
+  const sheet: ClassicBoard = {
     size(cols, rows, cellPx) {
       dpr = window.devicePixelRatio || 1;
       cell = Math.max(1, Math.round(cellPx * dpr));
@@ -159,7 +182,12 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
         overKey = ok;
         paintFigures(up, f);
       }
+      placeBubbles(f);
     },
+    bubbles(list) {
+      bubbles = list;
+    },
+    shownBubbles: () => bubbleLayer.shown(),
   };
   return sheet;
 }

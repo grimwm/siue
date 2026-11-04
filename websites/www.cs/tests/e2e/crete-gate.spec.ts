@@ -18,7 +18,7 @@ interface GateTest {
   game: { run: { now: { player: Cell; minotaur: Cell | null; relicsLeft: number; terrain: string[]; moves: number } } };
   parse(text: string): unknown;
   playLevel(level: unknown): void;
-  modern: { opening(): { bars: number[]; portal: number; doors: number[]; hoof: number }; active: boolean };
+  modern: { opening(): { bars: number[]; portal: number; doors: number[]; hoof: number }; active: boolean; frames(): number };
   classic: { portal(): number };
 }
 type Hooked = { __creteTest: GateTest };
@@ -53,6 +53,8 @@ async function open(page: Page, look: 'classic' | 'modern', text: string): Promi
     });
   } else {
     await expect.poll(() => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern.active)).toBe(true);
+    // A headless runner draws Modern slowly: wait for its first frame, so what the test reads is what it drew.
+    await expect.poll(() => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern.frames()), { timeout: 30_000 }).toBeGreaterThan(0);
   }
   return errors;
 }

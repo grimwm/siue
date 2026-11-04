@@ -159,18 +159,19 @@ The instrument picker is grouped by category, each category with its own icon:
 
 ### Views
 
-The note area offers **Grid**, **Sheet Music** and **Both**:
+The transport switches between three views (the layout is `docs/superpowers/plans/2026-11-03-composer-redesign.md`):
 
-- **Grid** is the piano roll.
-- **Sheet Music** is the same part engraved live (OpenSheetMusicDisplay, as the Sheet view already uses):
-  - in the instrument's clef, with the grand staff for Piano, Organ, Harp and Marimba and a percussion staff for
-    drums;
-  - with the written transposition;
-  - with amber and red notes coloured as on the grid.
-- **Both** stacks them, and they scroll together.
+- **Compose** is the timeline: sections, the ruler, the Effects lane and one row per track, each opening in place as
+  a piano roll or a step sequencer.
+- **Mix** has a strip per track (Mute, a meter, Volume, Left/Right, Echo, Room, and More for the full Sound and Speed
+  And Loudness), the DJ decks with the crossfader and Put A Crossfade On The Timeline, the effects on the timeline as a
+  list, and the whole song's volume and limiter.
+- **Sheet** writes every track on a staff on the same scale and scroll as Compose, with note names and a tap to hear a
+  note, the playhead kept centred. Engraved Sheet Music shows one track engraved (OpenSheetMusicDisplay): in the
+  instrument's clef, the grand staff for Piano, Organ, Harp and Marimba, a percussion staff for drums, with the written
+  transposition and Concert Pitch.
 
-On a phone, Both stacks the two views and each keeps a usable height. The whole piece's Full Score and
-Continuous views stay on the piece page.
+The whole piece's Full Score and Continuous views stay on the piece page.
 
 ### Speed and loudness
 

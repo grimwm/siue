@@ -115,17 +115,17 @@ PR 1 (this plan's first half):
 - [ ] 8. Record drawer, Vocal Tracks, Mix and Sheet views hosting today's panels.
 - [ ] 9. e2e rewrite, screenshots at 390 and 1440, docs.
 
-## PR 2 tasks (later)
+## PR 2 tasks
 
-- [ ] Mix view: a strip per track (Volume, Left/Right, Echo, Room, mute, live level), Sound behind More; DJ decks and
+- [x] Mix view: a strip per track (Volume, Left/Right, Echo, Room, mute, live level), Sound behind More; DJ decks and
   the crossfader with Put A Crossfade On The Timeline; the effects list with Show On Timeline; the whole song's volume
   and limiter.
-- [ ] Sheet on the shared scale, every track, note names, the playhead following centred.
-- [ ] Song: time signature (4/4, 3/4, 6/8), tempo changes on the ruler, add or remove bars, count-in, metronome (clicks
+- [x] Sheet on the shared scale, every track, note names, the playhead following centred.
+- [x] Song: time signature (4/4, 3/4, 6/8), tempo changes on the ruler, add or remove bars, count-in, metronome (clicks
   on the AudioContext clock).
-- [ ] Colors and Style as two pickers, remembered on the device; Tape & Valve dark by default; Original button sizes
+- [x] Colors and Style as two pickers, remembered on the device; Tape & Valve dark by default; Original button sizes
   in every style.
-- [ ] Start A Song: templates as starting documents (`newpiece.ts`), the Try It coach, the screenshots, share images
+- [x] Start A Song: templates as starting documents (`newpiece.ts`), the Try It coach, the screenshots, share images
   and READMEs.
 
 ## Data migration

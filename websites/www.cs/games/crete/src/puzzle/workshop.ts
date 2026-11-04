@@ -45,16 +45,16 @@ machines: block-right
 intro: A pool fills the west, and the flippers lie by your start. A thief stands among the relics in the middle: step on it and the flippers are gone. Gravel in the north keeps the beast back, and a block waits beside it. Three relics.
 
 ############
-##.#####.P##
-#..:.......#
-#..O#...#f.#
-##*.....##.#
-#~~~..*.$*.#
-#~~~.......#
-#..M##.###.#
-##..#..#...#
-#...#..#...#
-#..........#
+#..#.###...#
+#........P.#
+#.~#....#f.#
+##..*~*.##.#
+#.~....$*#.#
+#..~~~.....#
+##..##.###.#
+##..#......#
+###M#..#...#
+#.#...##...#
 ####E#######
 ` },
   { id: 'ch9-5', text: `title: The Powder Store

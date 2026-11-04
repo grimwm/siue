@@ -9,7 +9,7 @@ import { WINDS, windLevel } from '../src/puzzle/winds.ts';
 import { CHAPTERS, LEVEL_IDS, levelById, pageHome, chapterOf } from '../src/campaign/chapters.ts';
 import { CHAPTER_8 } from '../src/campaign/chapter-8.ts';
 import { initial } from '../src/puzzle/state.ts';
-import { solve, SOLVER_CAP } from '../src/puzzle/solver.ts';
+import { solve, solveRefusing, caught, SOLVER_CAP } from '../src/puzzle/solver.ts';
 import type { SolveResult } from '../src/puzzle/solver.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action, GameEvent } from '../src/puzzle/step.ts';
@@ -129,11 +129,16 @@ test('each shortest line is pinned and takes no catch, and on each level the haz
   assert.deepEqual(WINDS.map((_, i) => once(i).line.length), SHORTEST);
   WINDS.forEach((w, i) => {
     assert.ok(!once(i).caught, `${w.id}: the shortest line is never caught`);
-    // As the gate's every-piece rule has it: lost, won in another number of moves, or a search at least 1.3 times
-    // smaller.
-    const without = solve(initial(noHazards(windLevel(i))), capOf(i));
-    assert.ok(!without.solved || without.line.length !== once(i).line.length || once(i).explored >= 1.3 * without.explored,
-      `${w.id}: without the hazards, the level plays another way`);
+    // As the gate's every-piece rule has it: each one taken off the board alone, the level is lost or its fewest
+    // moves change, with a catch allowed or without one.
+    const lv = windLevel(i);
+    const fewest = (x: Level) => { const r = solve(initial(x), capOf(i)); return r.solved ? r.line.length : null; };
+    const catchFree = (x: Level) => { const r = solveRefusing(initial(x), caught, capOf(i)); return r.solved ? r.line.length : null; };
+    lv.hazards.forEach((h, k) => {
+      const without = parse(serialize({ ...lv, hazards: lv.hazards.filter((_, j) => j !== k) }));
+      assert.ok(fewest(without) !== fewest(lv) || catchFree(without) !== catchFree(lv),
+        `${w.id}: without the hazard at row ${h.at.r + 1}, column ${h.at.c + 1}, the level plays another way`);
+    });
   });
 });
 

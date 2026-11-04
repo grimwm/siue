@@ -117,19 +117,19 @@ intro: A plate here moves the walls, and the only road over the water is a block
 ############
 ` },
   { id: 'ch2-9', text: `title: The Bronze Mirror
-intro: A bronze mirror lies past the beast, and Daedalus's cow beside him. Marked stones and loose ones both keep him off you; between them you will have to run. Off the quick way, a page waits, and a memory of Athens.
+intro: A bronze mirror lies past the beast, in the northeast. Marked stones and loose ones both keep him off you; between them you will have to run. Off the quick way, a page waits, and a memory of Athens.
 pages: ch2-lots
 
 ############
-#:.##.p#z.*#
-#P....#.:#.#
-####.#..:#.#
+#.P.#..##*.#
+#:...p#..z.#
+####.#:.:#.#
 ####.#:#.###
-#*...S...c.#
-##..##.#.#.#
-##x#:..M.#.#
-#.S.S####..#
-#*..##S.#:|E
+#*...S.....#
+##:S##...#.#
+#.x#...M.#:#
+#.S..##S...#
+#*.###..#.|E
 ############
 ` },
   { id: 'ch2-10', text: `title: The Inner Gate

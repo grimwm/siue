@@ -18,7 +18,7 @@ import type { ModernBoard } from './modern/board3d.ts';
 import { DEFAULT_YAW } from './modern/camera.ts';
 import { createMoveMap } from './modern/screen-move.ts';
 import { drawList } from './board-plan.ts';
-import { createOpenings } from './openings.ts';
+import { createOpenings, portalAt } from './openings.ts';
 import type { Atlas } from './board-plan.ts';
 import { createGame, frameOf } from './game.ts';
 import { initial } from './puzzle/state.ts';
@@ -477,6 +477,8 @@ function lookPicture(look: Look, cols: number, rows: number, cell: number): stri
 /* The classic board repaints every frame while it shows: the sprites animate, a turn's figures move between
    cells (holding still while a story page the figure reached is read), and the gate and the doors slide and sink. */
 const classicOpenings = createOpenings();
+/** How lit the exit's portal was at the classic board's last paint, 0 dormant to 1 lit, for the browser specs. */
+let classicPortal = 0;
 function loop(now: number): void {
   classicRaf = 0;
   if (modernOn) return;
@@ -484,6 +486,7 @@ function loop(now: number): void {
   if (f) {
     const t0 = performance.now();
     const moving = classicOpenings.at(f.state, f.figures, now, reduced, f.done);
+    classicPortal = portalAt(f.state, moving);
     board.paint(drawList(f.state, f.figures, atlas, now, moving), game.thread ?? undefined, reduced ? undefined : now / 1000);
     paintMs.push(performance.now() - t0);
     if (paintMs.length > PAINT_KEEP) paintMs.shift();
@@ -759,11 +762,12 @@ const classicHook = {
     return { left: s.left + e.left, top: s.top + e.top, right: s.left + e.right, bottom: s.top + e.bottom };
   },
   paintMs: () => paintMs.slice(),
+  portal: () => classicPortal,
 };
 /* The modern board, as far as the browser specs read it. */
 const modernHook = {
   frames: () => modern?.frames() ?? 0,
-  opening: () => modern?.opening() ?? { bars: [], doors: [], hoof: 0 },
+  opening: () => modern?.opening() ?? { bars: [], portal: 0, doors: [], hoof: 0 },
   yaw: () => modern?.yaw() ?? DEFAULT_YAW,
   zoom: () => modern?.zoom() ?? 0,
   pitch: () => modern?.pitch() ?? 0,

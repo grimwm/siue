@@ -1,8 +1,10 @@
-// The Daedalus Gate and the sinking doors in a real browser, in both looks, with motion on: the gate is a bare pit
-// until the last relic is taken, then its bronze bars slide over it; Theseus crosses it with the Minotaur beside it,
+// The Daedalus Gate, the exit's portal and the sinking doors in a real browser, in both looks, with motion on: the gate
+// is a bare pit until the last relic is taken, then its bronze bars slide over it and the dormant portal lights up
+// (Undo puts it out again; a level with no relics opens lit); Theseus crosses the gate with the Minotaur beside it,
 // who never steps onto it; a door sinks into the floor as Theseus walks into it and leaves its sill. Classic is read
-// from the board's own pixels; Modern from the test hook's `opening()`, what its last frame drew moving (a headless
-// Chrome draws Modern slowly, so a frame count would say more about the machine than the board).
+// from the board's own pixels and the hook's `classic.portal()`; Modern from the test hook's `opening()`, what its
+// last frame drew moving (a headless Chrome draws Modern slowly, so a frame count would say more about the machine
+// than the board).
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -16,11 +18,13 @@ interface GateTest {
   game: { run: { now: { player: Cell; minotaur: Cell | null; relicsLeft: number; terrain: string[]; moves: number } } };
   parse(text: string): unknown;
   playLevel(level: unknown): void;
-  modern: { opening(): { bars: number[]; doors: number[]; hoof: number }; active: boolean };
+  modern: { opening(): { bars: number[]; portal: number; doors: number[]; hoof: number }; active: boolean };
+  classic: { portal(): number };
 }
 type Hooked = { __creteTest: GateTest };
 
 const GATE = ['title: The grid', 'intro: Take the relic.', '', '#########', '#P*..|ME#', '#########', ''].join('\n');
+const BARE = ['title: The way out', 'intro: Walk out.', '', '#######', '#P...E#', '#######', ''].join('\n');
 const DOOR = ['title: The door', 'intro: Take the key.', '', '########', '#Pr.R.E#', '########', ''].join('\n');
 
 async function open(page: Page, look: 'classic' | 'modern', text: string): Promise<string[]> {
@@ -134,3 +138,30 @@ test('Modern: a door sinks as Theseus walks into it', async ({ page }) => {
   await expect.poll(async () => (await now(page)).terrain[1 * 8 + 4]).toBe('floor');
   expect(errors).toEqual([]);
 });
+
+/** How lit the exit's portal is drawn, 0 dormant to 1 lit, in the look showing. */
+const portal = (page: Page, look: 'classic' | 'modern') => page.evaluate(l => {
+  const h = (window as unknown as Hooked).__creteTest;
+  return l === 'classic' ? h.classic.portal() : h.modern.opening().portal;
+}, look);
+
+for (const look of ['classic', 'modern'] as const) {
+  const name = look === 'classic' ? 'Classic' : 'Modern';
+  test(`${name}: the exit is dormant until the last relic is taken, lights up with the bars, and goes dark on Undo`, async ({ page }) => {
+    const errors = await open(page, look, GATE);
+    expect(await portal(page, look), 'dormant while a relic is left').toBe(0);
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => portal(page, look), { message: 'it lights up' }).toBeGreaterThan(0);
+    await expect.poll(() => portal(page, look), { message: 'and stays lit' }).toBe(1);
+    await page.keyboard.press('u');
+    await expect.poll(async () => (await now(page)).relicsLeft).toBe(1);
+    await expect.poll(() => portal(page, look), { message: 'Undo puts it out' }).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test(`${name}: a level with no relics opens with its exit lit`, async ({ page }) => {
+    const errors = await open(page, look, BARE);
+    await expect.poll(() => portal(page, look)).toBe(1);
+    expect(errors).toEqual([]);
+  });
+}

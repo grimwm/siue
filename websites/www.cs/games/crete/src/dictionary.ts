@@ -96,7 +96,7 @@ export const ENTRIES: readonly Entry[] = [
     short: 'Turns right when blocked; crosses fire' },
   { id: 'exit', kind: 'hazard', name: 'The Exit', sprite: 'exit',
     lore: 'Daylight, the harbour, and the ship home to Athens.',
-    effect: 'Step onto it once every relic is taken and you have won the level.',
+    effect: 'Dark until every relic is taken; then it lights up, and stepping onto it wins the level.',
     short: 'The way out' },
   { id: 'gate', kind: 'hazard', name: 'Daedalus Gate', sprite: 'gate-open',
     lore: 'Daedalus built the Labyrinth, and its bull-proof grids too: the same craftsman who made the queen\'s wooden cow.',

@@ -1,7 +1,9 @@
 /* The Island of Crete, modern look: the exit, the Aegean Portal. A white marble arch with gold capitals and a gold
  * keystone, filled with a shimmering sheet of Aegean-blue light, over a blue pool in a marble ring on a flagstone.
- * Built facing local -x; terrain.ts turns it to face its cell's open side. The shimmer runs through `loop(t)`, which
- * the board never calls when motion is reduced, so the built portal is its still one. */
+ * Until the last relic is taken it is dormant: its opening dark stone, its basin dry, no light. `light(k)` sets how
+ * far it is lit (src/openings.ts): the sheet rises and brightens, the pool spreads from the middle. Built facing
+ * local -x; terrain.ts turns it to face its cell's open side. The shimmer runs through `loop(t)`, which the board
+ * never calls when motion is reduced, so the built portal is its still one. */
 import {
   CanvasTexture, CircleGeometry, ClampToEdgeWrapping, DoubleSide, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial,
   PlaneGeometry, RepeatWrapping, SRGBColorSpace, Shape, ShapeGeometry, TorusGeometry, AdditiveBlending,
@@ -18,6 +20,8 @@ export interface Portal {
   /** Its height, for the ghosted walls. */
   h: number;
   loop: (t: number) => void;
+  /** How far it is lit, 0 dormant to 1 lit. It is built lit. */
+  light: (k: number) => void;
 }
 
 type Box = (x: number, y: number, z: number, m: Material) => Mesh;
@@ -100,14 +104,25 @@ export function portal(kit: Kit, box: Box, cyl: Cyl): Portal {
   arch.rotation.y = Math.PI / 2;
   g.add(at(arch, 0, spring, 0));
   g.add(at(box(0.16, 0.14, 0.1, kit.m.gold), 0, spring + W + 0.02, 0));
-  // The sheet of light filling the arch.
+  // Dormant, the arch holds dark stone, just behind where the light stands.
+  const shutMat = new MeshStandardMaterial({ color: 0x26303b, roughness: 0.9, transparent: true, side: DoubleSide });
+  const shut = at(new Mesh(opening(0.3, spring), shutMat), 0.015, 0, 0);
+  live.push(shut);
+  // The sheet of light filling the arch, rising from the floor as it lights.
   const sheen = shimmerTex();
   const veil = new MeshBasicMaterial({ map: sheen, transparent: true, opacity: 0.92, side: DoubleSide, depthWrite: false });
-  live.push(new Mesh(opening(0.3, spring), veil));
+  const sheetGeo = opening(0.3, spring);
+  sheetGeo.translate(0, -FY, 0);
+  const sheet = at(new Mesh(sheetGeo, veil), 0, FY, 0);
+  live.push(sheet);
   // A marble ring round a blue pool on the floor, so it reads from straight above.
   const ring = new Mesh(new TorusGeometry(0.42, 0.03, 6, 40), marble);
   ring.rotation.x = Math.PI / 2;
   g.add(at(ring, 0, FY + 0.012, 0));
+  // The basin under the pool: dry, dark stone while the portal sleeps.
+  const basin = new Mesh(new CircleGeometry(0.42, 40), new MeshStandardMaterial({ color: 0x8a8378, roughness: 0.95 }));
+  basin.rotation.x = -Math.PI / 2;
+  g.add(at(basin, 0, FY + 0.006, 0));
   const poolMat = new MeshBasicMaterial({
     map: poolTex('rgba(190,235,255,1)', 'rgba(30,120,210,0.95)'), transparent: true, opacity: 0.95, depthWrite: false,
   });
@@ -115,18 +130,37 @@ export function portal(kit: Kit, box: Box, cyl: Cyl): Portal {
   pool.rotation.x = -Math.PI / 2;
   live.push(at(pool, 0, FY + 0.015, 0));
   // A soft halo of blue light round the arch.
-  const halo = new Mesh(new PlaneGeometry(1.1, 1.3), new MeshBasicMaterial({
+  const haloMat = new MeshBasicMaterial({
     map: poolTex('rgba(150,215,255,0.8)', 'rgba(40,130,220,0.3)'), transparent: true, opacity: 0.7,
     blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
-  }));
+  });
+  const halo = new Mesh(new PlaneGeometry(1.1, 1.3), haloMat);
   halo.rotation.y = Math.PI / 2;
   live.push(at(halo, 0.01, spring - 0.05, 0));
+  let lit = 1;
+  /** The shimmer's own swing, 1 when still. */
+  let veilSwing = 0.92, poolSwing = 0.95;
+  const paint = () => {
+    sheet.visible = pool.visible = halo.visible = lit > 0.001;
+    shut.visible = lit < 0.999;
+    shutMat.opacity = 1 - lit;
+    sheet.scale.y = lit;
+    pool.scale.setScalar(Math.max(0.001, lit));
+    veil.opacity = veilSwing * lit;
+    poolMat.opacity = poolSwing * lit;
+    haloMat.opacity = 0.7 * lit;
+  };
   return {
     g, live, h: spring + 0.45,
     loop: t => {
       sheen.offset.y = (t * 0.06) % 1;
-      veil.opacity = 0.86 + 0.08 * Math.sin(t * 1.4);
-      poolMat.opacity = 0.85 + 0.1 * Math.sin(t * 1.4 + 1);
+      veilSwing = 0.86 + 0.08 * Math.sin(t * 1.4);
+      poolSwing = 0.85 + 0.1 * Math.sin(t * 1.4 + 1);
+      paint();
+    },
+    light: k => {
+      lit = Math.min(1, Math.max(0, k));
+      paint();
     },
   };
 }

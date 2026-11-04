@@ -22,6 +22,8 @@ export interface Lights {
   setMode(m: WallMode): void;
   /** A cell's model changed: its lamp, if it has one, lights only while it is still a door, gate or exit. */
   piece(i: number, model: TerrainModel): void;
+  /** How far the exit's lamp at cell `i` is lit, 0 off to 1 full (src/openings.ts portalAt). */
+  portal(i: number, k: number): void;
   /** Turns shadows on or off. */
   shadows(on: boolean): void;
   /** Torch and fire flicker at time `t` seconds. */
@@ -145,6 +147,10 @@ export function createLights(kit: Kit, models: readonly TerrainModel[], rows: nu
     piece(i, md) {
       const l = lamps.get(i);
       if (l) l.light.intensity = kindOf(md) === l.kind ? l.base : 0;
+    },
+    portal(i, k) {
+      const l = lamps.get(i);
+      if (l?.kind === 'exit') l.light.intensity = l.base * k;
     },
     shadows(on) {
       moon.castShadow = on;

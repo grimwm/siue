@@ -51,7 +51,7 @@
    "d": {
     "solved": true,
     "shortest": 43,
-    "explored": 16596,
+    "explored": 13906,
     "withoutMinotaur": 32,
     "minotaurDelta": 11,
     "greedyWins": false,
@@ -59,12 +59,10 @@
     "catches": 0,
     "label": "chase",
     "naiveWins": false,
-    "line": "llwrruurruuulllldllluuruuddlddrrurrurrruurr"
+    "line": "llwrruurruuulllldllluuuurddlddrrurruurrrurr"
    },
    "useless": [],
-   "purpose": [
-    "the block at row 3, column 7: the shortest line never meets it, and ignoring it leaves the fewest moves at 43"
-   ],
+   "purpose": [],
    "threat": {
     "turns": 43,
     "live": 28,
@@ -213,25 +211,23 @@
    "id": "ch4-7",
    "d": {
     "solved": true,
-    "shortest": 55,
-    "explored": 12320,
-    "withoutMinotaur": 38,
-    "minotaurDelta": 17,
+    "shortest": 57,
+    "explored": 10825,
+    "withoutMinotaur": 37,
+    "minotaurDelta": 20,
     "greedyWins": false,
-    "catchFree": 55,
+    "catchFree": 57,
     "catches": 0,
     "label": "chase",
     "naiveWins": false,
-    "line": "ddrrrrururdlldldrdrdrdudllllllddllururrrrrurlurdrdrddrr"
+    "line": "ddrrdrduurururdlldllwlrrdrddllldldlluruuluuddrdrrrrrrrddr"
    },
    "useless": [],
-   "purpose": [
-    "the skates at row 6, column 2: the shortest line never meets it, and ignoring it leaves the fewest moves at 55"
-   ],
+   "purpose": [],
    "threat": {
-    "turns": 55,
-    "live": 34,
-    "quiet": 9
+    "turns": 57,
+    "live": 25,
+    "quiet": 16
    }
   },
   {
@@ -261,25 +257,23 @@
    "id": "ch5-5",
    "d": {
     "solved": true,
-    "shortest": 43,
-    "explored": 12966,
-    "withoutMinotaur": 35,
-    "minotaurDelta": 8,
+    "shortest": 46,
+    "explored": 11145,
+    "withoutMinotaur": 36,
+    "minotaurDelta": 10,
     "greedyWins": false,
-    "catchFree": 43,
+    "catchFree": 46,
     "catches": 0,
     "label": "chase",
     "naiveWins": false,
-    "line": "drrrrllldddlruuullldddddrrrrrrrlluuudddrrrr"
+    "line": "drddrdurrrlllllldddddrrrrrrrlluulllrrrudddrrrr"
    },
    "useless": [],
-   "purpose": [
-    "the block at row 4, column 3: the shortest line never meets it, and ignoring it leaves the fewest moves at 43"
-   ],
+   "purpose": [],
    "threat": {
-    "turns": 43,
-    "live": 39,
-    "quiet": 4
+    "turns": 46,
+    "live": 37,
+    "quiet": 9
    }
   },
   {
@@ -401,25 +395,23 @@
    "id": "ch7-9",
    "d": {
     "solved": true,
-    "shortest": 40,
-    "explored": 51674,
-    "withoutMinotaur": 31,
-    "minotaurDelta": 9,
+    "shortest": 45,
+    "explored": 43190,
+    "withoutMinotaur": 29,
+    "minotaurDelta": 16,
     "greedyWins": false,
-    "catchFree": 40,
+    "catchFree": 45,
     "catches": 0,
     "label": "chase",
     "naiveWins": false,
-    "line": "dddrrrrdrrurrrdldlllddddllzlllrrrrrrrurr"
+    "line": "dddwrrrrddrrrrllldddllzlllrrurrururrrruuddddd"
    },
    "useless": [],
-   "purpose": [
-    "the bronze ball at row 9, column 8: the shortest line never meets it, and ignoring it leaves the fewest moves at 40"
-   ],
+   "purpose": [],
    "threat": {
-    "turns": 40,
-    "live": 16,
-    "quiet": 13
+    "turns": 45,
+    "live": 20,
+    "quiet": 12
    }
   },
   {

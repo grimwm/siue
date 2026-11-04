@@ -793,11 +793,11 @@ pages: ch1-tribute-marks
 
 ############
 #.*#...#.|E#
-##.#..O#.###
-#.S##M...###
+#S.#.O...###
+#S.##M...###
 #.#.....S.##
 #....#.#.#.#
-##.S...p.#.#
+##...p...#.#
 ##...#.....#
 ##..##....##
 #..#..PS...#
@@ -870,26 +870,26 @@ intro: The floors are polished to ice, and the beast skids on them as you do. Lo
 
 ############
 #P#.#k.#..*#
-#=#..:.#=..#
-#.:=....:.##
-#..=##.=.#M#
-#.==.*#=...#
-#.:....=...#
+#.#.=:.#=..#
+#=:=....:.##
+#...##.=.#.#
+#==..*#=.M.#
+#......=...#
 #.#.#..===.#
-#:..:.#..###
-#.=*#..#.=.E
+#:.::.#..###
+#.=*#..#=..E
 ############
 `},{id:"ch2-6",text:`title: Water and Fire
 intro: A river and a fire cross these ways, with loose stone between them. Flippers and fire boots both lie here, and you will need both; the beast will not wait while you find them.
 
 ############
-#P:.#~#.#.*#
-#...~.O.F:##
-#..#....F#:#
+#P:.#~#:#.*#
+#...~.O...##
+#..#...FF#:#
 #f.#.##:..##
 ##...##.#..#
-#*.#.#...#.#
-##F..~h:~###
+#*.#.#:..#.#
+##F..~h.~###
 ##M...#:...#
 #*.~#.#F:.|E
 ############
@@ -922,19 +922,19 @@ intro: A plate here moves the walls, and the only road over the water is a block
 #*.#.......E
 ############
 `},{id:"ch2-9",text:`title: The Bronze Mirror
-intro: A bronze mirror lies past the beast, and Daedalus's cow beside him. Marked stones and loose ones both keep him off you; between them you will have to run. Off the quick way, a page waits, and a memory of Athens.
+intro: A bronze mirror lies past the beast, in the northeast. Marked stones and loose ones both keep him off you; between them you will have to run. Off the quick way, a page waits, and a memory of Athens.
 pages: ch2-lots
 
 ############
-#:.##.p#z.*#
-#P....#.:#.#
-####.#..:#.#
+#.P.#..##*.#
+#:...p#..z.#
+####.#:.:#.#
 ####.#:#.###
-#*...S...c.#
-##..##.#.#.#
-##x#:..M.#.#
-#.S.S####..#
-#*..##S.#:|E
+#*...S.....#
+##:S##...#.#
+#.x#...M.#:#
+#.S..##S...#
+#*.###..#.|E
 ############
 `},{id:"ch2-10",text:`title: The Inner Gate
 intro: The winding ways end at the inner gate. Water guards it, and only the flippers take you across; fire boots open a quicker way through the flames. The beast roams the halls between. The longest way round holds a page and a honey cake.
@@ -990,15 +990,15 @@ intro: A pushed block will not cross a closing stone either. The near way to the
 intro: A red door and its key, and stones that close behind you. The door is the quicker way; every stone you cross is one you cannot cross again.
 
 ############
-#P..#...r..#
-#........#.#
+#...#...r..#
+#..P.....#.#
 ###.#.;..#.#
 #.##.....#.#
 #...;....#.#
 ###..M.#.###
-#*#.#...;..#
-#.#..#.R##.#
-#...#.;...|E
+#.#.#...;..#
+#.#*.#..##.#
+#...##;.R.|E
 ############
 `},{id:"ch3-5",text:`title: The Flooded Hall
 intro: Pools fill the middle of this hall. The beast will not wade them and will not tread the closing stones; between the two, find your way to both relics.
@@ -1032,29 +1032,29 @@ intro: Ice and a pushing current run through this hall, and closing stones hold 
 intro: A block stands in the way, and a wall waits on a button. The closing stones leave few ways round; plan before you cross.
 
 ############
-#P...#...#.#
-#.##.#...#.#
-#..O.;...###
-#.....#..#.#
-#...._.T.;.#
-###.##...#.#
-#*..;...#..#
-##.#.#...M.#
-#*...#;#..|E
+#....##..#;#
+###...##...#
+#P....;.####
+#.O...#..#.#
+#.#_...T...#
+###*##.....#
+#...;.M....#
+##.#.#.....#
+#*.;.#.#..|E
 ############
 `},{id:"ch3-8",text:`title: Marked Ground
 intro: Loose stone, marked stone and closing stone: the beast can stand on none of them. Between them lies open floor, and that is where he will look for you.
 
 ############
-#P..::....##
-##....##..##
-#.#.;.....##
-#...#.S#...#
-#*.#....;.M#
-###.:.#..#.#
-#...###..#.#
-#.;##...:..#
-#*...#.#.;|E
+#.##.:....##
+##P...##..##
+##..;......#
+#...#..#...#
+#*##....;M.#
+###.S:#.#..#
+#...#;#.:..#
+#..#...:...#
+#*#......;|E
 ############
 `},{id:"ch3-9",text:`title: The Bronze Glass
 intro: Fire burns across these halls, and a bronze mirror lies past the beast. Off the quick way a page waits, and a memory of the games of Minos.
@@ -1072,21 +1072,21 @@ pages: ch3-games
 #...x.;...|E
 ############
 `},{id:"ch3-10",text:`title: The Ring of Walls
-intro: The closing ways end in a ring of walls that were floor a moment ago. The long west hall is the way through, and a red door opens a second road beside it; off the quickest way, a page waits, and a memory of Ariadne.
+intro: The closing ways end in a ring of walls that were floor a moment ago. The long west hall is the way through, and the red key opens its door; off the quickest way, a page waits, and a memory of Ariadne.
 pages: ch3-thread
 
 ####################
-#P...#....;...##p..#
+#..P.#..;.;...##p..#
 #.##...####..##.##.#
-#..r.;...#......;..#
-#..#.......#.#.##..#
+#..r.....#......;..#
+##.#.......#.#.##..#
 #*...#.#.#.#...#..##
 #......#..######.#.#
-#....;.......M...#.#
-###.##.#####....#;.#
-#...R#......#...#..#
-#.##..##....##..#..#
-#*#.#;...#.##.x.;.|E
+#....;.......M...#;#
+###R##.#####....#..#
+#....#.;....#...#..#
+#.##..##....##.x#..#
+#*#.#....#.##...;.|E
 ####################
 `}];var er=[{id:"ch4-1",text:`title: The Wall That Gives
 intro: The high way runs past the beast. The low way ends in a wall, and one of its stones is only painted: walk into it and it gives way, and you are through.
@@ -1134,42 +1134,42 @@ intro: A relic lies in the pool, two more about it, and the flippers in the far 
 intro: Two relics, a red key and its door. The beast waits in the upper hall; two of these walls are only painted, and they are your way round him.
 
 ############
-#P....S.##.#
-#.##....#..#
-#.#*S.W##.##
-#.#.#.....M#
+#..#....W###
+#P##..##..S#
+#.#*S.##.M##
+#.#.#......#
 #........#.#
 #.##S.#..#.#
-#S#rS#..##.#
-#..S###.R#.#
-###.W..*#|E#
+#S#S.#*r.#R#
+#..S#....#.#
+#...W.###|E#
 ############
 `},{id:"ch4-6",text:`title: Lying Ground
 intro: Loose stone and closing stone keep the beast off, and here the walls lie both ways: one painted, two unseen. Mind where the stones close behind you.
 
 ############
-###.*###P..#
-#...##.....#
-#......I:..#
-##.;##.#...#
+#.#.*###...#
+#...#....P.#
+#...;..I:..#
+##...#.#.#.#
 #..###.W.###
-#........###
-##....;I.###
-###.###..###
-#.*.:..M.|E#
+#..........#
+##..#..I...#
+###.#.#..###
+#*:..;M..|E#
 ############
 `},{id:"ch4-7",text:`title: The Glass Floor
-intro: Ice runs through these halls and skates lie in the west. Two walls here are only painted, one of them across the ice; the beast skids as you do.
+intro: Ice runs through these halls and skates lie in the west. Two walls here are only painted; on the ice the beast skids as you do.
 
 ############
 #P...#.##.*#
 #......#...#
-#..==W==.###
-#...#..=##.#
-#k##.#.=...#
-#.....#=...#
-##....M.W..#
-#...####..##
+#..==.==.###
+#...#.=.##.#
+#k##M#.=...#
+#.....#....#
+##....W.W..#
+#....###.=##
 #*..#....|E#
 ############
 `},{id:"ch4-8",text:`title: The Waiting Wall
@@ -1197,26 +1197,26 @@ pages: ch4-taurus
 ##...W#..:.#
 #..:....##*#
 #.#.FF#..###
-#.;##.#:...#
+#.;##..:...#
 #.pI....#..#
 E|M#...;.#*#
 ############
 `},{id:"ch4-10",text:`title: The Painted Labyrinth
-intro: The false walls end in a maze of them. A red door is the way through, a painted wall opens a second road to the gate, and one stretch of open floor is not open at all. Off the quickest way, a page waits, and a memory of the queen.
+intro: The false walls end in a maze. A red door is the way through, and one stretch of open floor is not open at all. Off the quickest way, a page waits, and a memory of the queen.
 pages: ch4-queen
 
 ####################
-#P....#......####.p#
-##.#....###..###..##
+#P....#......####..#
+##......###..###..##
 ###*..:...##..:..###
-#.......##.I##.....#
-#..##...#.......#W.#
-##..#......##.#...##
-#r###.:.......:.####
+#.......##.I##....p#
+#..##...#.......##.#
+##.##......#..#...##
+#r###*:.......:.####
 #........##..#.#...#
-#..*.###.##..#.R...#
-#.#..#.#..:.#####.##
-#*##M..###...##.#|E#
+#...*###.##..#.R...#
+###..#.#..:.#####.##
+#.##M..#.#...##.#|E#
 ####################
 `}];var tr=[{id:"ch5-1",text:`title: The Snare
 intro: The beast stands between you and the way out. A snare of Daedalus lies in the west hall: lead him into it and it will hold him while you pass.
@@ -1270,15 +1270,15 @@ intro: Ice runs through the middle halls; skates and a block lie in the west. A 
 intro: A relic lies in the pool, two more beside it, and the flippers wait by the gate. One snare guards the south door: lead the beast into it. The brown button in the north looses it, so keep off it, and keep the block off it too.
 
 ############
-#...#......#
-#...#......#
-#.OP####-###
+#.P.#.-.#..#
+#.O.##.....#
+#...####..##
 #..........#
-#.##*~~~##.#
-#.#..~*~.#.#
-#.#*.~~~.#.#
+#.##*~~.##.#
+#.#~.~*~~#.#
+#.#*~~...#.#
 #.####.&####
-#..M....f|E#
+#.M.....f|E#
 ############
 `},{id:"ch5-6",text:`title: The Snare at the Gate
 intro: A snare lies before the gate, and its brown button sits far off in the northeast. Two relics and a block; lead the beast into the snare, and stay off that button.
@@ -1298,29 +1298,29 @@ intro: A snare lies before the gate, and its brown button sits far off in the no
 intro: A block, a red key and its door, two relics and one snare. The brown button by the beast's hall looses the snare: once he is held, keep off it.
 
 ############
-#P.....#####
-#.......####
-#..O...&*..#
+#..#...#####
+##......####
+#P.O...&*#.#
 #....#.#R..#
 #...##....##
-###.#M..#..#
-#*#.#.#-...#
+###r#..##.##
+#*#.#M.....#
 #.....##...#
-###r.##...|E
+###..###-.|E
 ############
 `},{id:"ch5-8",text:`title: The Snared Relic
 intro: One relic hides in the northwest, and the only way to it runs through a snare. Push the block to the brown button in the south to open it; a second snare lies in the west hall, for the beast.
 
 ############
-#*#...P....#
-#.#....#.#.#
+###...P....#
+#.#..*...#.#
 #&.....#...#
-#.#.##...O.#
-#.&....:#.##
+#.#.##.:.O.#
+#.&.....#.##
 #.###.#...##
 #.#.;...#..#
 #.#........#
-#E|#.-M#:.##
+#E|#M-.#:.##
 ############
 `},{id:"ch5-9",text:`title: The House of Erechtheus
 intro: Fire burns across these halls, and boots lie in the west. Two snares, and one brown button in the east that looses the western snare. Off the quick way a page waits, and a memory of the man who laid them.
@@ -1338,24 +1338,24 @@ pages: ch5-kinsman
 E|.M.#.;..*#
 ############
 `},{id:"ch5-10",text:`title: The Gate of the Labyrinth
-intro: The snares end at the gate, and the beast waits by it, behind a red door. The door is one way through; the other runs east, past a snare that the block, pushed onto the brown button, holds open. Off the quickest way, a page waits, and a memory of another telling.
+intro: The snares end at the gate, and the beast waits by it. The way runs east, past a snare that the block, pushed onto the brown button, holds open; a second snare in the east room is for the beast. Off the quickest way, a page waits, and a memory of another telling.
 pages: ch5-gate
 
 #################
-#.....#.##..#...#
-#####.#.###.#.#.#
-###*..#...#..*#.#
-###.#####.#####.#
-##..............#
-###.###.###.#####
-#.r.#.....#.....#
-#..P#.....#...Op#
-#....*....#...-.#
-#######.#######&#
-#######..RM.....#
-#######...###.#.#
-#######...#...#|#
-###############E#
+#.#..#####......#
+#####.#..##.#.#.#
+###*.##..##*..#.#
+###..####.#####.#
+##p.............#
+###..##.##..#####
+#..P#.....#.....#
+#...#.....#.&.O.#
+#.*.#....#....-.#
+#####.#.#######&#
+#######..#......#
+#######...###M#.#
+#####.#...#.#.#|#
+##########.####E#
 #################
 `}];var nr=[{id:"ch6-1",text:`title: The Teleport
 intro: The way out lies in a sealed hall. Two teleports join it to the rest: step into the one in the south hall and you step out of the other, still walking the way you went in.
@@ -1392,15 +1392,15 @@ intro: A block goes through a teleport as you do. Of the two teleports, push it 
 intro: Three teleports, each sending you out of the next along, counting left to right and top to bottom. Force floors drive you round the middle; the suction boots in the south let you walk them as you please. Three relics.
 
 ############
-#..........#
+#v..#......#
 #........@.#
-#..#..P..*##
-#.#...*...##
-#.#>>>v...@#
-#...#.v....#
-##.##u<<<..#
-##.@####...#
-#M....*##|E#
+#..#...>>.##
+#.#..P*...##
+#.#>..v.*.@#
+#@..#<....<#
+##.##u.....#
+##..####<..#
+#M..*.###|E#
 ############
 `},{id:"ch6-5",text:`title: The Drowned Fold
 intro: Three teleports, and each sends you out of the next along, counting left to right and top to bottom. Flippers lie by the southern pool; a block waits in the north, by the beast and the first of two relics.
@@ -1524,19 +1524,19 @@ facing: right
 ##........E#
 ############
 `},{id:"ch7-4",text:`title: The Frozen Round
-intro: Ice runs across the north hall, with skates above it. A snare waits in the west by a block, and the brown button in the south looses it; one bronze ball rolls along the south hall. Two relics.
+intro: Ice runs across the north hall, and you will skid on it as the beast does. A snare waits in the west by a block, and the brown button in the south looses it; one bronze ball rolls along the south hall. Two relics.
 facing: right
 
 ############
-####P#######
-##...###k###
-##.=====.###
+####P###.###
+##...###..##
+#..=====.###
 ##.#&...*.##
-##..O###...#
-##...M##...#
-##...o.....#
+##..O#.....#
+###...##...#
+##M..o.....#
 ##.*#......#
-#####..-.|E#
+####...-.|E#
 ############
 `},{id:"ch7-5",text:`title: The Sunken Round
 intro: Three teleports, each sending you out of the next along, counting left to right and top to bottom. Pools lie in the northeast and the southwest, with flippers between; a block waits in the southeast, and one bronze ball rolls along the middle hall. Two relics.
@@ -1588,15 +1588,15 @@ intro: Currents run through these ways, and gravel lies about them: you can cros
 facing: up
 
 ############
-#..>>>>v####
+#..>.>>v####
 #.P....v.###
 #....#uv:..#
-#...#.:....#
-#.<<<<.**.##
-#......^#.##
-#...#..^...#
-#.#..:.^.o.#
-#.*.M#.^.|E#
+#..>#<.:...#
+#.<.<...*..#
+#.....:^#.##
+#..<#M.^*..#
+#.#....^.o.#
+#.*..#.^.|E#
 ############
 `},{id:"ch7-9",text:`title: The Mirrored Round
 intro: Fire burns down the west halls, with boots beside it, and pop-up walls rise behind you once you leave them. Medusa's mirror lies in the east and a honey cake by the fire; two relics, and one bronze ball in the south. Off the quick way a page waits, and a memory of the man of bronze.
@@ -1604,32 +1604,32 @@ pages: ch7-brazen
 facing: down
 
 ############
-#P##..##p###
-#.##..#..###
-#..#.F#..#;#
+#P.#..##;###
+#.##.....###
+#..#.F#.p#.#
 #h.;.F#...*#
-#...xF...z;#
-#....F.....#
-##.##..#.#.#
+#...xF.....#
+#...F....z.#
+##.##..#.#;#
 #......o...#
-#..M.....|E#
-#*.........#
+#*.....M.|E#
+#..#.#.#...#
 ############
 `},{id:"ch7-10",text:`title: The Last Round
-intro: The rounds end at the gate. Three teleports, each sending you out of the next along; fire and the boots for it; the toggle wall and its button; and a red key in the west for the door to the last relic, in the southeast. Three relics, and one bronze ball in the north hall. Off the quickest way a page waits, and a memory of how the bronze guard fell.
+intro: The rounds end at the gate. Three teleports, each sending you out of the next along; fire that nobody crosses; the toggle wall and its button; and a red key in the west for the door to the last relic, in the southeast. Three relics, and one bronze ball in the south hall. Off the quickest way a page waits, and a memory of how the bronze guard fell.
 pages: ch7-vein
-facing: up
+facing: down
 
 ################
-#P...o#........#
+#P....#........#
 #.....#........#
 #.#...@...###.p#
 #...###...###..#
-#...#h....FF...#
+#...#.....FF...#
 #...#*#....#.#.#
 #..T._......@..#
 #..#.##......###
-#...r#...M...#*#
+#...r#o..M...#*#
 #.@###.FF*..R..#
 #E|######...####
 ################
@@ -1689,19 +1689,19 @@ facing: down
 #..T..M...E#
 ############
 `},{id:"ch8-5",text:`title: The Burning Court
-intro: Fire rings the court in the middle, with boots in the west. Talos's fire runs the halls of the southwest, turning right at every wall, and a red key in the north opens the red door by the way out.
-facing: left
+intro: Fire rings the court in the middle, with boots in the west. Talos's fire runs the halls of the southwest, turning right at every wall.
+facing: down
 
 ############
-###.....P..#
-#...##.r...#
-##........##
-###.FFFFF.##
-#.#.F...F.##
-#h#.FFFFF.##
-#.#..###.###
-#..e.###.#R#
-##...M....E#
+##......FF.#
+##...##.P..#
+#.........F#
+##...F.F.###
+#.#.....F.##
+#.#.F.FFF.##
+#.#..#.F.###
+#h..e###F###
+##..M.....E#
 ############
 `},{id:"ch8-6",text:`title: Harpies on the Ice
 intro: Ice runs down the west and the middle, with skates by it. Two Harpies fly here, one in the northeast and one in the south. Two relics.
@@ -1754,15 +1754,15 @@ pages: ch8-storm
 facing: down left
 
 ############
-#..P..>>>u.#
-#:####.#.#.#
-#.####..#..#
-#.###p.###.#
-#..:##...FF#
-#.#.#.###.F#
-#...#...e.F#
-#...w...##.#
-#...#..M..E#
+#:.P..>>>.u#
+#.######.#.#
+#.#.##p.#..#
+#.###..###F#
+#..:##...F.#
+#.#.#.##...#
+#...#.F.e..#
+#...wM..##.#
+#...#..F..E#
 ############
 `},{id:"ch8-10",text:`title: The Last Wind
 intro: The den ends at the gate in the east. Two Harpies ride the winds across both ways south, and Talos's fire runs a shaft of fire across the hall below them. The beast keeps the south. Three relics. Off the quickest way a page waits, and a memory of how the bronze guard fell.
@@ -1817,19 +1817,19 @@ machines: block-right
 #........E#
 ###########
 `},{id:"ch9-4",text:`title: The Thief's Pool
-intro: A pool fills the west, and the flippers lie by your start. A thief stands among the relics in the middle: step on it and the flippers are gone. Gravel in the north keeps the beast back, and a block waits beside it. Three relics.
+intro: A pool fills the west, and the flippers lie by your start. A thief stands among the relics in the middle: step on it and the flippers are gone. Three relics, and the beast waits by the way out.
 
 ############
-##.#####.P##
-#..:.......#
-#..O#...#f.#
-##*.....##.#
-#~~~..*.$*.#
-#~~~.......#
-#..M##.###.#
-##..#..#...#
-#...#..#...#
-#..........#
+#..#.###...#
+#........P.#
+#.~#....#f.#
+##..*~*.##.#
+#.~....$*#.#
+#..~~~.....#
+##..##.###.#
+##..#......#
+###M#..#...#
+#.#...##...#
 ####E#######
 `},{id:"ch9-5",text:`title: The Powder Store
 intro: Two bombs guard the doorways, and a block waits in the north hall. The button in the middle opens and shuts the toggle wall to the west. Two relics.
@@ -1863,34 +1863,34 @@ E..#.......#
 #..#..*..###
 ############
 `},{id:"ch9-7",text:`title: Stolen Skates
-intro: Ice fills the room in the northeast, with the skates and a block in the south. A thief waits in the ice room's doorway, and a red key opens the red door on the way out. Three relics.
+intro: Ice fills the room in the northeast, with the skates and a block in the south. A thief waits in the ice room's doorway. Three relics.
 
 ############
-#.....*#===#
-##..##..===#
-##M....#===#
-##..###..###
-E...#*##$..#
-#...R.....*#
-##.r#.##...#
-##..#..#...#
-#..P#..#kO.#
-##.....#...#
+#M....*#==##
+##..##=...=#
+##.....#==.#
+#...###.=###
+E...#*##.$=#
+##..#.=...*#
+##..#.#.O..#
+#...#..#...#
+#..P#.##k..#
+##....#....#
 ############
 `},{id:"ch9-8",text:`title: The Bronze Copies
-intro: The red button in the northwest wakes the clone machine in the east, which makes bronze balls. Two teleports, one sending you out of the other, and a bomb by the button. Two relics.
+intro: The red button in the south wakes the clone machine in the east, which makes bronze balls. Two teleports, one sending you out of the other, and a bomb above the machine. Two relics.
 machines: ball-up
 
 ############
 #...#..#...#
-#@+.#..#...#
-#..!#..#.*.#
-#.#.#*.#...#
+#@..#..#...#
+#...#..#.*.#
+#.#.#*.#.!.#
 #...#..#...#
 #..P#.###..#
 ##.##.###.C#
 ##.....#@M.#
-#...#......#
+#...#.+....#
 ##..#..#...E
 ############
 `},{id:"ch9-9",text:`title: The Backward Tracks
@@ -1911,22 +1911,22 @@ facing: left
 #.M.#..#...#
 ########E###
 `},{id:"ch9-10",text:`title: The Last Bench
-intro: The workshop ends at the gate in the west. The red button in the east wakes the clone machine above it, one Harpy flies the north room, and the beast waits in the northwest. Three relics. Off the quick way a page waits, and a memory of the man who built this place.
+intro: The workshop ends at the gate in the west. The red button in the middle wakes the clone machine in the southwest, one Harpy flies the west hall, and the beast waits in the northwest. Three relics. Off the quick way a page waits, and a memory of the man who built this place.
 pages: ch9-inventor
-facing: down
+facing: right
 machines: block-right
 
 ###############
 #Mp.#*..#.....#
 #.......#..#..#
-#...#w..#..C..#
+#...#...#.....#
 #E|.#####.##..#
 #.......#..#..#
-#...#......#+.#
-#*..#...#.....#
+#...#+.....#..#
+#*w.#...#.....#
 #####.#######.#
 #...#.......*.#
-#...#...#.....#
+#.C.#...#.....#
 #.......#....P#
 #...#...#....##
 ###############
@@ -2002,16 +2002,16 @@ facing: down
 intro: Ice runs down the north, with the skates below it, and a thief waits beside your start. A snare holds the doorway to the west room; the brown button by the ice looses it. A block waits by the thief. Two relics.
 
 ############
-#*#..==#.M.#
-#....==#...#
-##...==#...#
-#....==..-##
-#...#k######
-#...#...*..#
-##&##......#
-##.#..##...E
-#...#.P.$O.#
-#.#........#
+#*#..#.#.#=#
+#......##..#
+##.==.##M#-#
+##..k===*#.#
+###.#..##..#
+#...#=.#=..#
+##..#P.#..##
+##&#.$.#...E
+#...#.O....#
+#.#...#....#
 ############
 `},{id:"ch10-7",text:`title: The Powder Fold
 intro: Two teleports, one sending you out of the other. A bomb waits by the way out in the west, and a block in the southeast. Three relics.
@@ -2062,23 +2062,23 @@ E...#......#
 #...#......#
 ############
 `},{id:"ch10-10",text:`title: The Open Space
-intro: The beast waits in the southeast room. Medusa's mirror lies by your start, the wooden cow in the northwest room, and a snare in the middle hall, loosed by the brown button beside the cow. Three relics, and the way out is through the gate in the north. Off the quick way a page waits, and a memory of how the poet ends the story.
+intro: The beast waits in the southeast room. Medusa's mirror lies in the southwest room, and a snare in the middle hall, loosed by the brown button in the north. Three relics, and the way out is through the gate in the north. Off the quick way a page waits, and a memory of how the poet ends the story.
 pages: ch10-oak
 
 #################
-#....p#...#.E...#
+#...#.......E...#
 #...........|#..#
-#.##.######..##.#
-#.c#..#*.....#..#
-#..#-.#...#..#*.#
-#..######.#.##..#
-#...............#
-##.#..###.#.#####
+#..#.#-.#....##.#
+#.##..#......#..#
+#..#..#.*.#..#.##
+#...#####.#.##.*#
+#p.P............#
+##.#..###....####
 #.....#.....&#..#
-#z..P.#...#*..M.#
-##.####...#..#..#
-#..#......#..#..#
-#..#......#..#..#
+#....z#...#.M...#
+##..#.#....#.##.#
+#..##.....#..#..#
+#..#.....##..#*.#
 #################
 `}];var Ao=[...Jn,...Vn,...Qn,...er,...tr,...nr,...rr,...or,...sr,...lr];function ir(){return Ao.map(e=>Q(e.text))}var vo=Zn({post:e=>self.postMessage(e),bank:Xn,known:()=>$n(ir()),now:()=>performance.now()});self.onmessage=e=>vo.receive(e.data);})();
 //# sourceMappingURL=endless-worker.js.map

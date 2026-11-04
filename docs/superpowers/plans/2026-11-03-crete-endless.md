@@ -32,7 +32,7 @@ Claude settled these without asking, under the roadmap's standing rule.
 - **Score and best.** A level's score is its moves against its fewest, as in the campaign. The run counts its levels cleared and their moves; the best is the deepest level a run cleared without help, with its seed.
 - **Names.** Endless levels carry generated hall names, never typed text; the start card's intro gives the seed and the fewest moves, and says "From the level bank." for a bank level.
 - **The key.** O opens Endless from the title card: K and J already move the focus on every card.
-- **No WebAssembly yet.** The profile below puts 55% of a search's time in the game's own `step` (the rules, building a State per move), 13% in packing and unpacking situations and 8% in the pruning; the store is already packed words in a typed-array open-addressing table. A faster engine would shorten every part by a constant, and the measurements below show a phone waiting at Next Level, so `step` is the case for WebAssembly (or an allocation-free rewrite of it in TypeScript): it is the next step if phones wait too often.
+- **No WebAssembly.** The engine's hot path is TypeScript that copies as little as it can ("The engine's speed", below), 2.3 to 2.7 times as fast as the engine Endless shipped with and giving the same answers bit for bit. After it the rules (`step`) take 42% of a search, so even a WebAssembly `step` that cost nothing could make a search at most 1.7 times as fast, short of the 2 times that would earn a second toolchain; and a `step` in WebAssembly would have to take each situation across the boundary, which is the copying the TypeScript work took out. Only the whole search (rules, packing, store, pruning) in WebAssembly could pass that bar, a second engine to keep equal to the first.
 
 ## Architecture
 
@@ -68,7 +68,7 @@ On the workstation (Intel i7-9700, 8 cores, 16 GB, Linux; Node 22, one core a se
 
 The level came from part 0 in 21 of the 101, part 1 in 21, part 2 in 13, from parts 3 to 11 in 44, and from the bank in 2: a part finds a level about one time in five. Within the old budget's 6,000,000 (parts 0 and 1) the new search makes 42 of 101, the old 44 of 100: the stricter every-piece rule costs about what the cheaper climb below saves.
 
-**Where the time goes.** A CPU profile of a whole search: 95% in the climb's capped solves (`distance`), 3% in the gate's measure and every-piece check. Inside the solves: the game's `step` 55% (the rules, a State built per move), the A* loop 12%, `work` 11%, packing and unpacking situations 13%, the pruning 8%, the garbage collector 4%. Of the situations the climb's solves store, about 40% go to drafts too easy for their band, 22% to drafts in the band that fail another cheap check, 21% to drafts too hard (the solve hits its cap), and the rest to drafts that cannot be won and to the second solve without the beast.
+**Where the time goes.** A CPU profile of a whole search: 95% in the climb's capped solves (`distance`), 3% in the gate's measure and every-piece check. Inside the solves, after the engine work below: the game's `step` 42% (its own code 13%, the Minotaur's steps 12%, the hazards' 8%), the pruning 15%, the A* loop and its heap and store about 20%, packing and unpacking situations 11%, the garbage collector 3%. Before it, `step` took 55% (half of it copying and comparing the board's arrays), packing and unpacking 13% and the pruning 8%. Of the situations the climb's solves store, about 40% go to drafts too easy for their band, 22% to drafts in the band that fail another cheap check, 21% to drafts too hard (the solve hits its cap), and the rest to drafts that cannot be won and to the second solve without the beast.
 
 **What each change gave**, on the same seeds:
 
@@ -98,7 +98,16 @@ In the browser (Chrome, `tests/e2e`, the local site), through the page's own End
 
 So the page never freezes: the workers carry every search.
 
-**WebAssembly:** the profile puts 55% of a search in `step`, the game's rules, which build a new State for every move tried. A WebAssembly or allocation-free version of `step` (and of packing a situation, 13%) would shorten every part by a constant, perhaps two to three times; that is what a phone needs to keep up with a quick player. It is the next step if phones wait too often.
+**The engine's speed.** Each change measured on the same work: plain solves of campaign levels 70, 80, 89, 90, 99 and 100 (a finale's search each, 805,000 situations in all), and two Endless parts of 1,000,000 situations (tier 5 and tier 8), the old engine and the new run one after the other on the workstation, which was shared with other work (load 6 to 13 on its 8 cores):
+
+| Change | Solves | Parts |
+| --- | --- | --- |
+| A turn shares the state's terrain and objects until it changes them (it copied both, then compared them item by item to share them again, half of `step`'s time) | 1.6× | 1.5× |
+| `unpack` shares one terrain and one objects array per pattern of bits, and one object per cell; `pack` copies the bits a child shares with its parent | 2.0× (both) | 2.2× (both) |
+| Keys, tools and gear shared until changed; cells from one table; the Minotaur's and a ride's steps without lists, closures or a set; pruning's fields in typed arrays | 2.4× (all three) | 2.7× (all three) |
+| Hazard checks without closures; pruning's groups keep their hash | about 1.04× more | about 1.04× more |
+
+Every change gives the same answers: `test/engine-same-*.test.ts` (README, "The solver") hold every campaign level's measure and every-piece verdicts, every bank level's gate and ten Endless searches to the old engine's, and a differential run over 511 levels (the campaign, the bank, the 360-level corpus and the trials) compared the old and new `step`, `act`, `pack` and `unpack` on 9.1 million turns, events and situations included.
 
 ## Tasks
 

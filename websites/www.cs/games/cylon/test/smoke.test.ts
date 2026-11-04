@@ -25,12 +25,13 @@ test('the theme reaches the site only through options.onTheme', () => {
 });
 
 test('mount.html is fetched with its build-time version', () => {
-  assert.match(main, /new URL\(`\.\.\/mount\.html\?v=\$\{MOUNT_HTML_V\}`, import\.meta\.url\)/);
+  assert.match(main, /new URL\(path, import\.meta\.url\)/);
+  assert.match(main, /bundleUrl\(`\.\.\/mount\.html\?v=\$\{MOUNT_HTML_V\}`\)/);
   assert.doesNotMatch(read('dist/main.js'), /MOUNT_HTML_V/);
 });
 
 test('the scores endpoint is found next to the game folder, not the bundle', () => {
-  assert.match(main, /new URL\('\.\.\/scores\.php', import\.meta\.url\)/);
+  assert.match(main, /bundleUrl\('\.\.\/scores\.php'\)/);
 });
 
 test('the site page imports the bundle with a version', () => {

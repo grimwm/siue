@@ -1,4 +1,5 @@
 // The Island of Crete: the level editor's controls around its board. The bar holds Undo, Redo, Try it and Leave,
+// the look the board shows (Classic or Modern, as a pair of buttons; B swaps them),
 // the size bar (rows and cols, 3 to 64, and Resize), the hearts (1 to 99) and the relics needed ("all", or 0 to
 // the relics on the board). The palette sits beside the board; under 700 px it is a drawer the Pieces button
 // opens (game.css). The Check panel (check-panel.tsx) and the Share panel (share-panel.tsx) sit above the palette.
@@ -9,6 +10,7 @@ import { BACK_KEY } from '../../../_kit/keys.ts';
 import { OBJECTS } from '../puzzle/tiles.ts';
 import { MAX_SIDE, MIN_SIDE, clampSide } from './model.ts';
 import type { Brush, Draft } from './model.ts';
+import type { Look } from '../settings.ts';
 import { EDITOR_KEYS } from './keys.ts';
 import { Palette } from './palette.tsx';
 import { CheckPanel, CheckStrip } from './check-panel.tsx';
@@ -40,7 +42,18 @@ export interface EditorPanelProps {
   check?: CheckPanelProps;
   /** The Share panel, under the Check panel. */
   share?: ShareProps;
+  /** The look the board shows, and choosing one; without them the bar has no look buttons. */
+  look?: Look;
+  onLook?: (look: Look) => void;
 }
+
+const LOOKS: { look: Look; label: string }[] = [{ look: 'classic', label: 'Classic' }, { look: 'modern', label: 'Modern' }];
+
+/** The board's rule for painting and for the view, in each look (docs/superpowers/specs/2026-11-04-crete-editor-looks-design.md). */
+export const BOARD_HELP: Record<Look, string> = {
+  modern: 'One finger or the left button paints; a drag paints a run. Two fingers, the right button and the wheel move the view; the compass turns and tilts it, and a tap on it resets it.',
+  classic: 'One finger or the mouse paints; a drag paints a run. Two fingers scroll a big board.',
+};
 
 /** A box's number, or null when it is empty or not a number. */
 function boxNumber(box: HTMLInputElement | null): number | null {
@@ -67,6 +80,14 @@ export function EditorPanel(p: EditorPanelProps) {
           <button type="button" id="editor-pieces" class="editor-pieces" aria-expanded={p.drawer} aria-controls="editor-side"
             onClick={() => p.onDrawer(!p.drawer)}>Pieces</button>
           {p.onLeave && <Button id="editor-leave" keyLabel={BACK_KEY} onClick={p.onLeave}>Leave</Button>}
+          {p.onLook && p.look && (
+            <div class="editor-look" role="group" aria-label="Look" title={`Look (${EDITOR_KEYS.look.label})`}>
+              {LOOKS.map(l => (
+                <button key={l.look} type="button" id={`editor-look-${l.look}`} aria-pressed={p.look === l.look}
+                  onClick={() => { if (p.look !== l.look) p.onLook!(l.look); }}>{l.label}</button>
+              ))}
+            </div>
+          )}
         </div>
         {p.check && <CheckStrip {...p.check} />}
         <div class="editor-size">
@@ -97,6 +118,7 @@ export function EditorPanel(p: EditorPanelProps) {
         </div>
       </header>
       <aside id="editor-side" class={p.drawer ? 'editor-side open' : 'editor-side'} aria-label="Pieces">
+        <p id="editor-help" class="editor-help">{BOARD_HELP[p.look ?? 'classic']}</p>
         {p.check && <CheckPanel {...p.check} />}
         {p.share && <SharePanel {...p.share} />}
         <Palette brush={p.brush} owner={p.owner} onPick={p.onPick} onRotate={p.onRotate} />

@@ -208,6 +208,17 @@ const editor = createEditor({
   start: rater.check,
   changed: () => {},
   leave: () => ui.leaveEditor(),
+  // The editor opens in the game's look, and its Classic and Modern buttons set it, as the Map button does.
+  look: {
+    get: () => settings.look.get(),
+    set: look => {
+      settings.look.set(look);
+      ui.setLook(look, settings.walls.get());
+      showLook(look);
+    },
+  },
+  modern: { load: loadModern, icons: iconsJson as IconSheet, walls: () => settings.walls.get() },
+  say: message => ui.say(message, 'info'),
 });
 /* A share link in the address: its card, Play as a shared level, Edit a copy in the editor (the address then says
    #edit, as for any visit to the editor). */
@@ -786,6 +797,7 @@ function playLevel(level: Level, opts: { outside?: OutsideLevel; line?: readonly
 const editorHook = {
   open: editor.open, close: editor.close, key: editor.key, bestFor: editor.bestFor,
   get draft() { return editor.draft; },
+  get modern() { return editor.modern; },
   load(text: string): void {
     ui.showEditor(fromLevel(parse(text)));
   },

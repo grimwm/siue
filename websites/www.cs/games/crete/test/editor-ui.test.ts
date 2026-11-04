@@ -738,3 +738,46 @@ test('an editor first opened on a loaded draft has no empty draft beneath it', (
   fresh.key({ key: 'u', target: { tagName: 'DIV' }, preventDefault() {} } as unknown as KeyboardEvent);
   assert.deepEqual(fresh.draft, loaded, 'U has nothing earlier to bring back');
 });
+
+test('the look buttons: the editor opens in the game\'s look, and Classic, Modern or B set it; Modern that cannot start stays Classic and says so', async () => {
+  let look: 'classic' | 'modern' = 'classic';
+  const set: string[] = [];
+  const said: string[] = [];
+  let loads = 0;
+  const e = makeEditor(ed.editor.createEditor, stored, roots, {
+    look: { get: () => look, set: l => { look = l; set.push(l); } },
+    modern: { load: async () => { loads++; return null; }, icons: { cell: 1, width: 1, height: 1, icons: {} }, walls: () => 'solid' },
+    say: m => said.push(m),
+  });
+  e.editor.open();
+  assert.equal(byId(e.root, 'editor-look-classic').getAttribute('aria-pressed'), 'true');
+  assert.equal(byId(e.root, 'editor-look-modern').getAttribute('aria-pressed'), 'false');
+  assert.equal(loads, 0, 'Classic never loads the 3D board');
+  fire(e.canvas, 'pointerdown', at(e, 2, 3));
+  fire(e.canvas, 'pointerup', at(e, 2, 3));
+  const painted = toText(e.editor.draft, true);
+  click(byId(e.root, 'editor-look-modern'));
+  assert.deepEqual(set, ['modern'], 'the choice is the game\'s look setting');
+  assert.equal(byId(e.root, 'editor-look-modern').getAttribute('aria-pressed'), 'true');
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(loads, 1);
+  assert.deepEqual(said, [ed.editor.NO_MODERN_MESSAGE]);
+  assert.equal(byId(e.root, 'editor-look-classic').getAttribute('aria-pressed'), 'true', 'no WebGL: the board stays Classic');
+  assert.equal(toText(e.editor.draft, true), painted, 'the draft is kept');
+  assert.deepEqual(press(e, 'b'), { used: true, prevented: true });
+  assert.deepEqual(set, ['modern', 'modern'], 'B swaps the look');
+  assert.deepEqual(press(e, 'u'), { used: true, prevented: true });
+  assert.equal(cell(e, 2, 3), '.', 'the undo history is kept across a switch');
+  await new Promise(r => setTimeout(r, 0));
+  e.editor.close();
+  e.editor.open();
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(said.length, 1, 'the toast says it once a visit');
+});
+
+test('without the page\'s look setting the bar has no look buttons, and B does nothing', () => {
+  const e = make();
+  e.editor.open();
+  assert.ok(!maybeById(e.root, 'editor-look-modern'));
+  assert.deepEqual(press(e, 'b'), { used: true, prevented: true });
+});

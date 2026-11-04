@@ -746,6 +746,18 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 .editor-board.scrolls .stage { flex: none; margin: auto; }
 /* One finger paints, so the browser takes no touch gesture on the board; two fingers scroll it (editor.ts). */
 .editor-stage { touch-action: none; cursor: crosshair; }
+/* The Modern look (editor/modern-view.ts): the 3D board and its compass fill the board region in place of the flat
+   canvas; one finger paints, two fingers move the camera, so the browser takes no touch gesture on it. */
+.editor-board.look-modern > .editor-stage { display: none; }
+.editor-board:not(.look-modern) > .editor-modern { display: none; }
+.editor-modern { position: absolute; inset: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+.editor-modern > * { grid-area: 1 / 1; min-width: 0; min-height: 0; width: 100%; height: 100%; }
+.editor-modern > .modern-overlay { position: relative; inset: auto; }
+.editor-stage3d { touch-action: none; cursor: crosshair; }
+.editor-look { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.editor-look button { font: inherit; font-size: 0.85rem; padding: 0.2rem 0.55rem; border: 0; background: var(--bg); color: var(--dim); cursor: pointer; }
+.editor-look button + button { border-left: 1px solid var(--line); }
+.editor-look button[aria-pressed="true"] { background: var(--accent); color: var(--bg); font-weight: 600; }
 .editor-side {
   grid-area: side;
   width: 15.5rem;
@@ -754,6 +766,7 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
   border-left: 1px solid var(--line);
   background: var(--panel);
 }
+.editor-help { margin: 0 0 0.6rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); font-size: 0.85rem; color: var(--dim); }
 .check-panel { margin-bottom: 0.6rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); }
 .check-panel h3 { margin: 0 0 0.3rem; font-size: 0.8rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
 .check-panel p { margin: 0.3rem 0; font-size: 0.9rem; }

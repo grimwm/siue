@@ -140,6 +140,16 @@ export function groundAt(c: Cam, sx: number, sy: number): Ground {
   return { x: c.tx + Math.cos(y) * sx - Math.sin(y) * fy, z: c.tz - Math.sin(y) * sx - Math.cos(y) * fy };
 }
 
+/** The cell whose floor lies under a canvas point, as a ray through it meets the ground plane: `(fx, fy)` are
+ *  fractions of the canvas from its centre (right and up positive, so each runs -0.5 to 0.5 across it), `aspect` its
+ *  width over its height. Null off the board. Cell (r, c) covers x = c - (cols - 1) / 2 ± 0.5 (and z likewise). */
+export function cellUnder(c: Cam, aspect: number, fx: number, fy: number, cols: number, rows: number): { r: number; c: number } | null {
+  const g = groundAt(c, fx * c.zoom * aspect, fy * c.zoom);
+  const col = Math.round(g.x + (cols - 1) / 2), row = Math.round(g.z + (rows - 1) / 2);
+  if (!Number.isFinite(col) || !Number.isFinite(row) || col < 0 || row < 0 || col >= cols || row >= rows) return null;
+  return { r: row + 0, c: col + 0 }; // never -0
+}
+
 /** The camera zoomed by `factor` (its view height times `factor`, within `lim`) about the screen point `(u, v)` view
  *  heights right of and above the view's centre: the floor point under it stays under it. */
 export function zoomAbout(c: Cam, factor: number, u: number, v: number, lim: ZoomLimits): Cam {

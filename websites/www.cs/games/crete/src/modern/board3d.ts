@@ -21,10 +21,12 @@ import type { WallMode } from '../settings.ts';
 import { REST, createOpenings, portalAt } from '../openings.ts';
 import type { Motion } from '../openings.ts';
 import { lightAt } from './portal-wake.ts';
-import { DEFAULT_YAW, START_PITCH, cameraDistance, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
+import { DEFAULT_YAW, START_PITCH, cameraDistance, cellUnder, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
 import type { Cam } from './camera.ts';
 import { createControls } from './controls.ts';
+import type { PaintHooks } from './controls.ts';
+import { createEditMarks } from './scene/edit-marks.ts';
 import { changedCells } from './diff.ts';
 import { filledWater } from './float.ts';
 import { ghostSubjects } from './ghost.ts';
@@ -66,11 +68,24 @@ export interface ModernHost {
   /** A camera gesture happened (closes the start card). */
   gesture(): void;
   reducedMotion(): boolean;
+  /** The level editor's brush: when given, one finger or the left button paints the cell under it (a ray through the
+   *  pointer meets the floor) rather than moving the camera (paint-route.ts), and the cell under the mouse is framed.
+   *  `first` marks the press that starts a stroke; `drop` undoes a stroke a second finger turned into a camera move. */
+  painter?: { stroke(at: Cell, first: boolean): void; end(): void; drop(): void };
 }
 
 export interface ModernBoard {
   /** Builds the scene for a new level; the camera resets to follow. */
   level(s: State): void;
+  /** The level editor's draft changed to `s`, the start of its level: a board of the same size rebuilds only the
+   *  cells, walls, pieces and figures that changed and keeps the camera; a new size builds the level afresh. */
+  edit(s: State): void;
+  /** The level editor's letters on the cells the game draws as something else. */
+  marks(list: readonly { r: number; c: number; mark: string }[]): void;
+  /** The cell under a client point, or null off the board, for the editor's tests. */
+  cellUnder(x: number, y: number): Cell | null;
+  /** The cell framed under the pointer, for tests. */
+  hovered(): Cell | null;
   /** Applies the state and figures locally and draws once; `done` tells it the turn's animation has ended. */
   show(f: { state: State; figures: Figures; done?: boolean }, thread: readonly Cell[] | null): void;
   walls(m: WallMode): void;
@@ -132,6 +147,8 @@ const LOOP_FPS = 12;
 const drawnPortal = (s: State, m: Motion): number => (m.wake !== null ? lightAt(m.wake) : portalAt(s, m));
 /** A zoom about a point this near the view's centre (a share of its width or height) keeps following Theseus. */
 const ZOOM_CENTRE = 0.12;
+/** How long the editor's painting pauses before a changed set of torches and lamps is lit. */
+const RELIGHT_MS = 400;
 
 export function createModernBoard(host: ModernHost): ModernBoard {
   let override: string | null = null;
@@ -155,6 +172,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const actors = createActors(kit, markers);
   const thread = createThread();
   const floats = createFloats(kit);
+  const editMarks = createEditMarks();
   scene.add(floor.group, wallSet.group, pieceGroup, actors.group, thread.group, floats.group);
 
   let active = true;
@@ -349,6 +367,11 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       keepMarkers(grow);
       renderer.autoClear = false;
       renderer.render(markers.scene, camera);
+      renderer.autoClear = true;
+    }
+    if (!editMarks.empty()) {
+      renderer.autoClear = false;
+      renderer.render(editMarks.scene, camera);
       renderer.autoClear = true;
     }
     placeBubbles();
@@ -591,11 +614,11 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     if (!loopTimer) scheduleLoops();
   }
 
-  function show(f: { state: State; figures: Figures; done?: boolean }, threadCells: readonly Cell[] | null): void {
+  function show(f: { state: State; figures: Figures; done?: boolean }, threadCells: readonly Cell[] | null, sameLevel = false): void {
     const s = f.state;
     lastFigures = f.figures;
     lastDone = f.done ?? true;
-    if (!last || s.level !== last.level) {
+    if (!last || (s.level !== last.level && !sameLevel)) {
       level(s);
     }
     const prev = last!;
@@ -640,6 +663,68 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     invalidate();
     if (!loopTimer) scheduleLoops();
   }
+
+  /** The lamps a level's lights were built with; another set rebuilds them once the editing pauses. */
+  const lampKey = (ms: readonly TerrainModel[]): string => ms.map((m, i) => (m === 'wall' || m.startsWith('door') || m.startsWith('gate') || m === 'exit' || m === 'fire' ? `${i}${m}` : '')).join(',');
+  let lamps = '';
+  let relight: ReturnType<typeof setTimeout> | 0 = 0;
+  function edit(s: State): void {
+    const resting = { player: s.player, minotaur: s.minotaur, hazards: s.hazards.map(h => ({ kind: h.kind, at: h.at })) };
+    if (!last || last.level.rows !== s.level.rows || last.level.cols !== s.level.cols) {
+      lastFigures = resting;
+      lastDone = true;
+      level(s);
+      lamps = lampKey(models);
+      hover(null);
+      return;
+    }
+    show({ state: s, figures: resting, done: true }, null, true);
+    if (lampKey(models) === lamps) return;
+    // A level's lights are fixed when it is built (adding one recompiles every material): new torches and lamps
+    // come once the painting pauses.
+    if (relight) clearTimeout(relight);
+    relight = setTimeout(() => {
+      relight = 0;
+      if (!last || !lights) return;
+      scene.remove(lights.group);
+      lights.dispose();
+      lights = createLights(kit, models, rows(), cols(), wallSet.list());
+      lights.setMode(mode);
+      lights.shadows(quality >= 3);
+      const hero = actors.hero();
+      if (hero) lights.hero(hero.position.x, hero.position.z);
+      scene.add(lights.group);
+      lamps = lampKey(models);
+      shadowsDirty = loopsDirty = true;
+      invalidate();
+    }, RELIGHT_MS);
+  }
+
+  /** The cell under a client point. */
+  function cellAtPoint(x: number, y: number): Cell | null {
+    if (!last) return null;
+    const r = host.canvas.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    return cellUnder(cur, aspect(), (x - r.left) / r.width - 0.5, 0.5 - (y - r.top) / r.height, cols(), rows());
+  }
+  let hovered: Cell | null = null;
+  function hover(at: Cell | null): void {
+    if (at === hovered || (at && hovered && at.r === hovered.r && at.c === hovered.c)) return;
+    hovered = at;
+    editMarks.hover(at, cols(), rows());
+    invalidate();
+  }
+  const painter = host.painter;
+  const paintHooks: PaintHooks | undefined = painter && {
+    stroke(x, y, first) {
+      const at = cellAtPoint(x, y);
+      hover(at);
+      if (at) painter.stroke(at, first);
+    },
+    end() { painter.end(); },
+    drop() { hover(null); painter.drop(); },
+    hover(p) { hover(p ? cellAtPoint(p.x, p.y) : null); },
+  };
 
   function walls(chosen: WallMode): void {
     const m = V.cutaway && chosen === 'solid' ? 'ghosted' : chosen;
@@ -708,9 +793,10 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const ui = document.createElement('div');
   ui.className = 'modern-ui';
   host.overlay.append(ui);
-  const controls = createControls(host.canvas, ui, host, cam);
+  const controls = createControls(host.canvas, ui, host, cam, paintHooks);
 
-  const mini = host.atlas && host.image
+  // The editor's board has no mini map: painting it on every stroke would cost more than the stroke.
+  const mini = !host.painter && host.atlas && host.image
     ? createMinimap(ui, host.atlas, host.image, {
       blocked: () => host.blocked(),
       look(g) {
@@ -748,7 +834,14 @@ export function createModernBoard(host: ModernHost): ModernBoard {
 
   return {
     level,
-    show,
+    show: (f, t) => show(f, t),
+    edit,
+    marks(list) {
+      editMarks.marks(list, cols(), rows());
+      invalidate();
+    },
+    cellUnder: cellAtPoint,
+    hovered: () => hovered,
     walls,
     yaw: () => cur.yaw,
     zoom: () => cur.zoom,
@@ -795,6 +888,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     dispose() {
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
+      if (relight) clearTimeout(relight);
       active = false;
       scheduleLoops();
       document.removeEventListener('visibilitychange', onVisible);
@@ -810,6 +904,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       floats.dispose();
       thread.dispose();
       markers.dispose();
+      editMarks.dispose();
       snapTarget?.dispose();
       finish.dispose();
       kit.dispose();

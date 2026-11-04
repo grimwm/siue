@@ -37,9 +37,10 @@ import { createGameOver } from './gameover.ts';
 import { createChrome } from './chrome.ts';
 import { renderHelp } from './ui/help.tsx';
 import * as state from './state.ts';
-import { createScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
+import { createScoresClient, createLocalScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
 import { exitApp, browserAppEnv, EXIT_HINT } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
+import { browserStorage } from '../../_kit/ports.browser.ts';
 import { typesText } from '../../_kit/keys.ts';
 import { mountInstallBar } from '../../_kit/ui/install-bar.tsx';
 import { asksInstall, browserInstallEnv, OUT_OF_SCOPE_PROMPTS, versionedShareUrl, versionOf } from '../../_kit/install.ts';
@@ -56,11 +57,15 @@ declare global {
 export interface CylonOptions {
     onTheme?: (combat: boolean) => void;
     scoresApi?: string;
+    /** mount.html's markup, when the caller carries it (the embed): nothing is fetched for it. */
+    mountHtml?: string;
+    /** Keep the scores in this browser only and never call scores.php (the embed, on another site). */
+    localScores?: boolean;
 }
 
 // Everything the game fetches is found relative to this bundle (in dist/), wherever it is served from.
-const CYLON_MOUNT_URL = new URL(`../mount.html?v=${MOUNT_HTML_V}`, import.meta.url).href;
-const CYLON_SCORES_URL = new URL('../scores.php', import.meta.url).href;
+// The embed bundles this module as a classic script, where import.meta has no url; it hands in what these name.
+const bundleUrl = (path: string): string => new URL(path, import.meta.url).href;
 
 /** Whether Chrome offers The CIC's install prompt on index.html, inside its manifest's scope, once the page links that manifest (measured in Chrome). */
 const PROMPTS_IN_SCOPE: boolean = true;
@@ -84,14 +89,18 @@ function mountInstall(): void {
     }, browserInstallEnv());
 }
 
-async function mountCylonDom() {
+async function mountCylonDom(mountHtml?: string) {
     const root = document.getElementById('game-root');
     if (!root) return false;
     if (root.dataset.mounted === '1' && document.getElementById('cylon-eye')) return true;
     try {
-        const res = await fetch(CYLON_MOUNT_URL, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`mount ${res.status}`);
-        root.innerHTML = await res.text();
+        if (mountHtml !== undefined) {
+            root.innerHTML = mountHtml;
+        } else {
+            const res = await fetch(bundleUrl(`../mount.html?v=${MOUNT_HTML_V}`), { cache: 'no-store' });
+            if (!res.ok) throw new Error(`mount ${res.status}`);
+            root.innerHTML = await res.text();
+        }
         root.dataset.mounted = '1';
         root.dataset.game = 'cylon';
         return true;
@@ -111,10 +120,12 @@ async function mountCylonDom() {
  *   no theme itself.
  * @param {string} [options.scoresApi] The score server's URL, when it is not
  *   scores.php in the game folder, one level above dist/.
+ * @param {string} [options.mountHtml] mount.html's markup, so nothing is fetched for it.
+ * @param {boolean} [options.localScores] Keep the boards in this browser and never call scores.php.
  */
 export async function initializeCylonEffects(options: CylonOptions = {}) {
     const onTheme = typeof options.onTheme === 'function' ? options.onTheme : () => {};
-    await mountCylonDom();
+    await mountCylonDom(options.mountHtml);
 
     const eye = document.getElementById('cylon-eye');
     const glare = document.getElementById('cylon-glare');
@@ -159,9 +170,11 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     const BOT_HARD_CAP = coarsePointer ? 10 : 30;
     if (reduceMotion) return;
 
-    const scores = createScoresClient(options.scoresApi || CYLON_SCORES_URL, {
-        fetch: (url, init) => fetch(url, init),
-    });
+    const scores = options.localScores
+        ? createLocalScoresClient(browserStorage())
+        : createScoresClient(options.scoresApi || bundleUrl('../scores.php'), {
+            fetch: (url, init) => fetch(url, init),
+        });
     /**
      * What the modules share and replace as the game runs (src/types.ts). `run` is
      * the run's score and hull and `schedule` the moments the game is waiting for

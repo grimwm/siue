@@ -8,6 +8,7 @@ Homepage mini-game module. Licensed under the GNU GPL v3 (see `LICENSE`).
 - `src/*.ts` — the typed modules `main.ts` imports
 - `src/ui/` — the Preact overlays (How to Play, game over, settings, the board), drawn with the kit's components; `mount.html` and the site page keep empty mount points (`#cylon-help-root`, `#cylon-gameover-root`, `#cylon-settings-panel`)
 - `dist/main.js`, `dist/main.js.map` — the one esbuild bundle the site loads; generated and checked in
+- `src/embed.ts`, `src/embed.css`, `dist/embed.js` — the embed for another site's page (see Embedding on another site); `src/text-imports.d.ts` types the files it inlines
 - `build.json`, `tsconfig.json`, `src/tsconfig.dom.json` — the kit build config (see Source layout and build)
 - `mount.html` — scanner, battlefield, FX and the help and game-over mount points (injected into `#game-root`)
 - `scores.php` — high-score API
@@ -46,9 +47,39 @@ The game reaches the page only through what it is handed and what it declares:
 
 - **`options.onTheme(combat)`** — called with `true` when combat starts and `false` when it ends. The page uses it to force its dark theme while the game is live and to restore the visitor's choice after; the game changes no theme itself. Omitted, it does nothing.
 - **`options.scoresApi`** — the score server's URL, when it is not `scores.php` in the game folder.
+- **`options.mountHtml`** — `mount.html`'s markup, so nothing is fetched for it (the embed).
+- **`options.localScores`** — keep the boards in this browser's storage (`cylon-local-scores`) and never call `scores.php` (the embed).
 - **`window.cylonStartGame`** — the start function `metadata.yaml` names (`start:`); the Games page calls it by name. It is defined once `initializeCylonEffects` has mounted the game, and does nothing while a run is live or the game is over.
 
 The game defines and calls nothing that the site's scripts define; `test/smoke.test.ts` fails if a function or variable in the site's `main.js` appears in `src/`.
+
+## Embedding on another site
+The CIC can take over a page on another site, a WordPress post for one, the way it takes over the home page: the scanner, the battlefield over the page, the page's own words scattered by the nukes and the world-ended look. A frame cannot reach the page around it, so it is a script. In WordPress, add a Custom HTML block where the button should sit:
+
+```html
+<div id="cic-embed"></div>
+<script src="https://www.cs.siue.edu/~wgrim/games/cylon/dist/embed.js" defer></script>
+```
+
+Without the `<div>`, the button waits in the bottom-right corner. The block needs an account that may post scripts: an Administrator on a self-hosted WordPress can; WordPress.com plans without plugins remove the script.
+
+`dist/embed.js` is a classic script (`src/embed.ts`, an `iife` entry in `build.json`) that carries the whole game: `mount.html`'s markup, `dist/kit.css`, every stylesheet in `css/` in the home page's order and `src/embed.css`, inlined as text. So the host page fetches nothing else from this site and needs no cross-origin headers; the only other request is the Orbitron font from Google Fonts. Until **Play The CIC** is pressed it adds one inline-styled button and no stylesheet. Pressed, it:
+
+- adds the stylesheets and `cic-embed-on` to `<html>` and `<body>` (the home page's dark tokens, and horizontal debris is clipped);
+- makes each of the host's top-level elements a page panel (`page-panel cic-embed-host`), stacked at the home page's `main` level so the game draws over them, admin bars and sticky headers included, and marks its images, figures, quotes, tables and forms `cylon-debris` so they fly as blocks;
+- puts `#game-root` and a fixed combat bar (`#cic-embed-bar`: the home page header's game controls and **Leave**) on the page, and starts a run with `initializeCylonEffects({ mountHtml, localScores: true })`.
+
+**Leave** reloads the page, which is how the host gets its own page back. A failure is logged to the console, never thrown into the host page.
+
+What differs from the home page:
+
+- **Scores stay in the visitor's browser.** `scores.php` checks the origin and a CSRF token, and a page on another site passes neither, so the embed keeps its own This Week (from Sunday midnight, the visitor's time) and All Time boards, top ten each, under the host site's `localStorage`. Nothing reaches the site's boards.
+- No theme switch: the host page keeps its own colours under the game's dark overlay.
+- No Install, Share or visit counting.
+- A visitor who asks for reduced motion gets a disabled button, as the home page's game also stays still for them.
+- A long page is split into one span per letter when the first nuke lands, as the home page is; a very long post takes a moment longer.
+
+`tests/e2e/cylon-embed.spec.ts` serves a stand-in WordPress post (`tests/e2e/fixtures/wp-post.html`) from another origin and checks that the post keeps its look before Play, that the game takes it over, and that Leave gives it back; `test/embed.test.ts` checks the local boards and that the bundle carries every stylesheet.
 
 ## Source layout and build
 `src/main.ts` is the entry; esbuild bundles it and the modules it imports into `dist/main.js` (native ESM), which is checked in and served as it is: the host has no Node. The bundle is built by the games kit (`games/_kit/README.md`).

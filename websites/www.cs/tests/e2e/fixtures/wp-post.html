@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- A stand-in for a WordPress post on another site: the theme's own fixed admin bar,
+     sticky header, article, images, sidebar and footer. cylon-embed.spec.ts serves it
+     from its own origin, with the script address pointed at the embed. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hello from the blog – Happy St. Louis</title>
+<style>
+  :root { --text: #222; --bg: #fdfbf7; }
+  body { margin: 0; font: 18px/1.65 Georgia, serif; color: var(--text); background: var(--bg); }
+  #wpadminbar { position: fixed; top: 0; left: 0; right: 0; height: 32px; background: #1d2327; color: #f0f0f1; z-index: 99999; font: 13px/32px sans-serif; padding: 0 12px; }
+  #page { padding-top: 32px; }
+  .site-header { position: sticky; top: 32px; z-index: 999; background: #0f5132; color: #fff; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; }
+  .site-title { margin: 0; font-size: 28px; }
+  .site-title a { color: #fff; text-decoration: none; }
+  .main-navigation a { color: #d1e7dd; margin-left: 18px; text-decoration: none; }
+  .site-content { display: flex; gap: 32px; max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+  .entry { flex: 1 1 auto; min-width: 0; }
+  .entry-title { font-size: 40px; line-height: 1.15; margin: 0 0 8px; }
+  .entry-meta { color: #666; font-size: 14px; margin-bottom: 24px; }
+  .wp-block-image img { width: 100%; height: auto; display: block; border-radius: 4px; }
+  figcaption { font-size: 14px; color: #555; text-align: center; }
+  blockquote { border-left: 4px solid #0f5132; margin: 24px 0; padding: 4px 18px; font-style: italic; }
+  .widget-area { flex: 0 0 260px; }
+  .widget { background: #fff; border: 1px solid #e4e0d8; padding: 16px; margin-bottom: 20px; }
+  .widget h2 { font-size: 18px; margin-top: 0; }
+  .site-footer { background: #222; color: #ccc; text-align: center; padding: 24px; font-size: 14px; }
+  @media (max-width: 760px) { .site-content { flex-direction: column; } .widget-area { flex-basis: auto; } .main-navigation { display: none; } }
+</style>
+</head>
+<body class="post-template-default single single-post">
+<div id="wpadminbar">Happy St. Louis &nbsp; + New &nbsp; Edit Post</div>
+<div id="page" class="site">
+  <header class="site-header">
+    <p class="site-title"><a href="/">Happy St. Louis</a></p>
+    <nav class="main-navigation"><a href="/">Home</a><a href="/about/">About</a><a href="/contact/">Contact</a></nav>
+  </header>
+  <div class="site-content">
+    <main id="main" class="site-main">
+      <article class="entry post">
+        <h1 class="entry-title">A small game lands on the blog</h1>
+        <div class="entry-meta">Posted on November 4, 2026 by William</div>
+        <div class="entry-content">
+          <p>Welcome back to the blog. This week a little visitor from campus moved in: a scanner eye that watches the page, and a fleet of drones that would very much like to take it apart.</p>
+          <figure class="wp-block-image"><img alt="A sunset over the river" width="800" height="300" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 300'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23f6a623'/%3E%3Cstop offset='1' stop-color='%23b8336a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='800' height='300' fill='url(%23g)'/%3E%3Ccircle cx='400' cy='210' r='70' fill='%23ffe08a'/%3E%3Crect y='220' width='800' height='80' fill='%23264653'/%3E%3C/svg%3E"><figcaption>The river at dusk, before the drones arrived.</figcaption></figure>
+          <p>Press the button below to start it. The page is the battlefield: every word on it is fair game, and when the first nuke lands the letters scatter across the screen.</p>
+          <div id="cic-embed"></div>
+          <h2>Why put a game on a blog?</h2>
+          <p>Because it is fun, and because it shows what a few hundred lines of TypeScript can do to a page that was never designed for it. Nothing here is permanent: leave the game and the page comes back exactly as it was.</p>
+          <blockquote><p>So say we all.</p></blockquote>
+          <p>Thanks for reading. Comments are open below, as always.</p>
+        </div>
+      </article>
+    </main>
+    <aside class="widget-area">
+      <section class="widget"><h2>Recent Posts</h2><ul><li><a href="#">Spring garden notes</a></li><li><a href="#">A weekend on the Katy Trail</a></li><li><a href="#">Toasted ravioli, ranked</a></li></ul></section>
+      <section class="widget"><h2>Archives</h2><ul><li><a href="#">October 2026</a></li><li><a href="#">September 2026</a></li></ul></section>
+    </aside>
+  </div>
+  <footer class="site-footer">© 2026 Happy St. Louis · Proudly powered by WordPress</footer>
+</div>
+<script src="EMBED_SRC" defer></script>
+</body>
+</html>

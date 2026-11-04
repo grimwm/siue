@@ -248,7 +248,7 @@ const BLOCK_SPREAD: BlastSpread = { xSpread: 1.15, ySpread: 1.25, rotMax: 150 };
 const CHAR_SPREAD: BlastSpread = { xSpread: 1.35, ySpread: 1.4, rotMax: 220 };
 const LIST_ITEMS = '.interest-list li, .course-list li';
 const BLOCKS =
-  'h1, h2, h3, .page-lead, .contact-block, .interest-list, .course-list, .project-list, .project-list > li, aside, .games-hub-card, .games-home-callout';
+  'h1, h2, h3, .page-lead, .contact-block, .interest-list, .course-list, .project-list, .project-list > li, aside, .games-hub-card, .games-home-callout, .cylon-debris';
 /** How long a reshuffle's long transition runs before the snappy curve returns. */
 const RESHUFFLE_SETTLE_MS = 3000;
 

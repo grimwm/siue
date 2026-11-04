@@ -1,0 +1,168 @@
+/* Cylon Defense: the embed's own rules (src/embed.ts): the home page's dark tokens, the combat bar and the host page's panels.
+ * Every rule needs body.cic-embed-on or the bar, which only exist once the visitor starts the game. */
+body.cic-embed-on {
+  --bg: #0c0e12;
+  --bg-elevated: #141820;
+  --surface: #1a1f2a;
+  --text: #e6e9ef;
+  --text-muted: #9aa3b2;
+  --steel: #6b7a8f;
+  --steel-bright: #a8b4c4;
+  --crimson: #ff1a1a;
+  --crimson-hot: #ff5555;
+  --crimson-dim: #8a0a0a;
+  --rail: #1e2430;
+  --rail-edge: #2a3344;
+  --focus: #ff4444;
+  --font-display: "Orbitron", "Segoe UI", sans-serif;
+  --scanner-height: 1.15rem;
+}
+
+/* Debris flies past the screen's edges without widening the page (the home page clips the same way). */
+html.cic-embed-on,
+body.cic-embed-on {
+  overflow-x: clip;
+}
+
+/* The host page's top-level elements: the game's panels, stacked over the hiding drones like the home page's main. */
+body.cic-embed-on .cic-embed-host {
+  isolation: isolate;
+  z-index: 1058 !important;
+}
+
+body.cic-embed-on .cic-embed-host-static {
+  position: relative;
+}
+
+body.cylon-world-ended .cic-embed-host {
+  filter: grayscale(0.72) contrast(1.08) brightness(0.78) sepia(0.18);
+}
+
+/* The combat bar, fixed under the scanner, above everything the game draws but its dialogs. */
+#cic-embed-bar {
+  position: fixed;
+  top: var(--scanner-height);
+  left: 0;
+  right: 0;
+  z-index: 2250;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.5rem 0;
+  background: rgba(12, 14, 18, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--rail-edge);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font: 400 16px/1.4 "Segoe UI", system-ui, sans-serif;
+  text-align: left;
+}
+
+#cic-embed-bar *,
+#cic-embed-bar *::before,
+#cic-embed-bar *::after {
+  box-sizing: border-box;
+}
+
+#cic-embed-bar button {
+  cursor: pointer;
+  text-transform: none;
+}
+
+#cic-embed-bar .site-nav-inner {
+  --nav-control-h: 2.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.6rem;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+#cic-embed-bar .site-brand {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  color: var(--crimson-hot);
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+#cic-embed-bar .site-nav-power,
+#cic-embed-bar .site-nav-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+#cic-embed-bar .site-nav-game {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem 0.55rem;
+  min-width: 0;
+}
+
+#cic-embed-bar .site-nav-game[hidden] {
+  display: none;
+}
+
+#cic-embed-bar .site-nav-tools {
+  margin-left: auto;
+}
+
+#cic-embed-bar .cylon-settings {
+  position: relative;
+}
+
+#cic-embed-bar .cic-embed-leave {
+  height: var(--nav-control-h);
+  padding: 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--steel-bright);
+  background: var(--surface);
+  border: 1px solid var(--rail-edge);
+  border-radius: 0;
+}
+
+#cic-embed-bar .cic-embed-leave:hover,
+#cic-embed-bar .cic-embed-leave:focus-visible {
+  color: var(--text);
+  border-color: var(--crimson-hot);
+}
+
+#cic-embed-bar .visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+@media (max-width: 679px) {
+  #cic-embed-bar .site-nav-inner {
+    --nav-control-h: 2.5rem;
+    padding: 0 0.5rem;
+  }
+
+  /* Two rows: The CIC · power · gear · Leave, then the game bar across the full width. */
+  #cic-embed-bar .site-nav-game {
+    order: 5;
+    flex-basis: 100%;
+  }
+}

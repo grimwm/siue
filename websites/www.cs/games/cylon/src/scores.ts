@@ -11,6 +11,8 @@
  * server. main.ts builds the real client from the page's fetch and the
  * scores URL. */
 
+import type { StorageLike } from '../../_kit/ports.ts';
+
 export interface ScoreEntry {
   initials?: string;
   score: number;
@@ -63,7 +65,8 @@ export interface ScoresEnv {
 /** A line saying when the board resets, from the server's config. */
 export function weeklyResetText(config: ScoreConfig): string {
   const day = config.weekStartsOn === 'sunday' ? 'Sunday' : 'Monday';
-  const zone = config.timezone === 'America/Chicago' ? 'Central' : String(config.timezone || '');
+  // 'local' is the embed's boards (createLocalScoresClient), which follow this browser's clock.
+  const zone = config.timezone === 'America/Chicago' ? 'Central' : config.timezone === 'local' ? 'your time' : String(config.timezone || '');
   return `Play often — scores reset every ${day} at midnight ${zone}.`;
 }
 
@@ -232,5 +235,80 @@ export function createScoresClient(api: string, env: ScoresEnv): ScoresClient {
     load,
     startRun,
     submit,
+  };
+}
+
+/** Where the local boards are kept (createLocalScoresClient). */
+export const LOCAL_SCORES_KEY = 'cylon-local-scores';
+const LOCAL_LIMIT = 10;
+
+/** The most recent Sunday 00:00 in this browser's time zone: when the local weekly board starts. */
+export function localWeekStart(now: Date): number {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() - d.getDay());
+  return d.getTime();
+}
+
+/**
+ * The boards kept in this browser only, for the embed on another site, where
+ * scores.php's origin and CSRF checks refuse the page. Same shape as the server
+ * client: the weekly board is this week's (from Sunday 00:00 here) best runs,
+ * the all-time board every run's; both keep the top ten.
+ */
+export function createLocalScoresClient(storage: StorageLike | null, now: () => Date = () => new Date()): ScoresClient {
+  let all: ScoreEntry[] = [];
+
+  function read(): ScoreEntry[] {
+    try {
+      const data: unknown = JSON.parse(storage?.getItem(LOCAL_SCORES_KEY) ?? '[]');
+      if (!Array.isArray(data)) return [];
+      return data.filter((e): e is ScoreEntry => isRecord(e) && typeof e.score === 'number' && e.score >= 1);
+    } catch {
+      return [];
+    }
+  }
+  const ranked = (list: ScoreEntry[]): ScoreEntry[] => [...list]
+    .sort((a, b) => b.score - a.score || Number(new Date(a.at ?? 0)) - Number(new Date(b.at ?? 0)))
+    .slice(0, LOCAL_LIMIT);
+  const alltime = (): ScoreEntry[] => ranked(all);
+  const week = (): ScoreEntry[] => {
+    const start = localWeekStart(now());
+    return ranked(all.filter((e) => Number(new Date(e.at ?? 0)) >= start));
+  };
+  all = read();
+
+  function qualifies(score: number, list: readonly ScoreEntry[] = week()): boolean {
+    if (score < 1) return false;
+    if (list.length < LOCAL_LIMIT) return true;
+    return score > Math.min(...list.map((e) => e.score));
+  }
+
+  return {
+    board: week,
+    alltime,
+    qualifies,
+    isBlocked: () => false,
+    async load() {
+      all = read();
+      return { maxScores: LOCAL_LIMIT, weekStartsOn: 'sunday', timezone: 'local' };
+    },
+    async startRun() {},
+    async submit(score, initials, hits) {
+      void hits;
+      if (!score || score < 1) return { saved: false, problem: null, allTimeRank: null };
+      const clean = (initials || 'AAA').toUpperCase().slice(0, 3).padEnd(3, 'A');
+      const entry: ScoreEntry = { initials: clean, score, at: now().toISOString() };
+      all = [...read(), entry];
+      // Only rows on either board are worth keeping.
+      const keep = new Set([...alltime(), ...week()]);
+      all = all.filter((e) => keep.has(e));
+      try {
+        storage?.setItem(LOCAL_SCORES_KEY, JSON.stringify(all));
+      } catch {
+        // Storage full or refused: the boards still show this run until the page goes.
+      }
+      const rank = alltime().indexOf(entry);
+      return { saved: true, problem: null, allTimeRank: rank >= 0 ? rank + 1 : null };
+    },
   };
 }

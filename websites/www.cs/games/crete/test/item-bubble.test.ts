@@ -3,7 +3,7 @@
 // up and to the right of the head unless that would leave the board, when it goes to the side or below.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bubbleAt, bubbleSize, bubbles } from '../src/item-bubble.ts';
+import { bubbleAt, bubbleSize, bubbles, spotInView } from '../src/item-bubble.ts';
 import type { Figures } from '../src/board-plan.ts';
 import type { State } from '../src/puzzle/state.ts';
 import type { ObjectKind } from '../src/puzzle/tiles.ts';
@@ -58,4 +58,14 @@ test('the bubble goes up and right of the head, and stays on the board at its ed
 test('the bubble stays readable on a phone and small beside a zoomed-in cell', () => {
   assert.equal(bubbleSize(20), 34);
   assert.equal(bubbleSize(200), 54);
+});
+
+test('a Minotaur the camera has turned or panned out of view shows no bubble', () => {
+  const bubble = { kind: 'relic', c: 1, r: 1, by: 'minotaur' } as const;
+  const spot = (x: number, head: number) => ({ bubble, x, head, cell: 60 });
+  assert.ok(spotInView(spot(200, 200), 400, 400));
+  assert.ok(spotInView(spot(200, -30), 400, 400), 'a top-row head just above the board still counts');
+  for (const [x, head] of [[-10, 200], [410, 200], [200, -70], [200, 420]] as const) {
+    assert.ok(!spotInView(spot(x, head), 400, 400), `out at ${x},${head}`);
+  }
 });

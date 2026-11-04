@@ -56,6 +56,12 @@ export function bubbleAt(x: number, head: number, cell: number, w: number, h: nu
   return { cx: clamp(ax + px * d, r + EDGE, w - r - EDGE), cy: clamp(ay + py * d, r + EDGE, h - r - EDGE), place: 0 };
 }
 
+/** Whether a spot's head is within a `w` × `h` view (a head up to a cell above the top still counts, for the top
+ *  row): a figure the camera has turned or panned away shows no bubble. */
+export function spotInView(sp: BubbleSpot, w: number, h: number): boolean {
+  return sp.x >= 0 && sp.x <= w && sp.head >= -sp.cell && sp.head <= h;
+}
+
 /** What draws an item's icon: Classic's atlas or Modern's icon sheet (game.css names the picture), each a frame at
  *  (x, y) of `w` × `h` in a sheet `sw` × `sh`, with the item's middle at (mx, my) in the frame as shares of it, drawn
  *  `fill` of the cloud's width across. */
@@ -153,6 +159,7 @@ export function createBubbleLayer(insert: (layer: HTMLElement) => void, pics: Bu
     place(spots, w, h) {
       const keep = new Set<string>();
       for (const sp of spots) {
+        if (!spotInView(sp, w, h)) continue;
         const id = `${sp.bubble.by} ${sp.bubble.c},${sp.bubble.r} ${sp.bubble.kind}`;
         keep.add(id);
         let s = live.get(id);

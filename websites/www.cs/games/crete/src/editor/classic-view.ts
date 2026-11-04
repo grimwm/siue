@@ -113,7 +113,9 @@ export function createClassicView(deps: ClassicViewDeps): ClassicView {
     const before = frame;
     const was = cellCss;
     zoom = clampZoom(zoom, wholePx);
-    cellCss = zoomedCell(wholePx, zoom, window.devicePixelRatio || 1);
+    const dpr = window.devicePixelRatio || 1;
+    // The sheet draws its cell in whole device pixels (sheet-board.ts size()): the frame and the hit test use that cell.
+    cellCss = Math.max(1, Math.round(zoomedCell(wholePx, zoom, dpr) * dpr)) / dpr;
     board.size(cols, rows, cellCss);
     const vw = b.width, vh = b.height;
     if (zoom === 1 || !before || !was) frame = wholeFrame(sheetView.cur, cols, rows, cellCss, rise, vw, vh);

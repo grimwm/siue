@@ -18,6 +18,8 @@ import { chapterOf, knownOf, floorOf } from '../src/endless/gate.ts';
 import { campaignLevels } from '../src/endless/campaign.ts';
 import { measure } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
+import type { Level } from '../src/puzzle/level.ts';
+import { BANK } from '../src/endless/bank.ts';
 import { SAME, overlap } from '../src/puzzle/layouts.ts';
 
 /** The bands the bank fills, a little under 1.3 times apart, from the shared bar up to the plateau's top. */
@@ -35,19 +37,21 @@ export const JOBS: readonly (readonly [number, number])[] = [
   // Chapter 9's pieces are the hardest to keep: the climb often takes them out as decoys and leaves an older
   // chapter's level, so they get a second round.
   ...[1, 3, 4, 5, 2, 6, 7, 4].map(b => [9, b] as const),
+  // A third round, each level new against the bank as it stands, for the chapters that had the fewest.
+  ...([[7, 2], [7, 4], [7, 6], [9, 2], [9, 5], [9, 7], [5, 4], [3, 2]] as const),
 ];
 /** A bank job gives up past this many situations and is written as skipped. */
 const JOB_BUDGET = 80_000_000;
 
 /** One bank level, made by the search with no budget but `budget`; null when it runs out. */
-function makeOne(chapter: number, bandNo: number, key: readonly (string | number)[], newest: boolean, budget = Number.MAX_SAFE_INTEGER): { out: BankLevel; tries: number; s: number } | null {
+function makeOne(chapter: number, bandNo: number, key: readonly (string | number)[], newest: boolean, budget = Number.MAX_SAFE_INTEGER, others: readonly Level[] = []): { out: BankLevel; tries: number; s: number } | null {
   const [lo, hi] = BANDS[bandNo]!;
   const least = Math.max(lo, floorOf(chapter).explored);
   if (least >= hi) throw new RangeError(`Chapter ${chapter}'s floor is past band ${bandNo}`);
   const known = knownOf(campaignLevels());
   const at = { tries: 0, spent: 0 };
   const t0 = Date.now();
-  const found = search(key, chapter, { least, most: hi, plateau: false }, null, known, [], budget, at, undefined, null,
+  const found = search(key, chapter, { least, most: hi, plateau: false }, null, known, others, budget, at, undefined, null,
     process.env.TRACE ? line => process.stderr.write(`  ${line.slice(0, 300)}\n`) : undefined, newest);
   if (!found) return null;
   const level = parse(found.text);
@@ -60,14 +64,22 @@ if (cmd === 'fill') {
   const [laneS, lanesS, dir] = args;
   const lane = Number(laneS), lanes = Number(lanesS);
   const done = new Set<string>();
+  // Every level the bank holds or a lane has made: a new one's layout must repeat none of them.
+  const others: Level[] = BANK.map(b => parse(b.text));
   for (const f of existsSync(dir!) ? readdirSync(dir!) : []) {
     if (!f.endsWith('.jsonl')) continue;
-    for (const line of readFileSync(`${dir}/${f}`, 'utf8').split('\n')) if (line.trim()) done.add((JSON.parse(line) as { job: string }).job);
+    for (const line of readFileSync(`${dir}/${f}`, 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      const j = JSON.parse(line) as { job: string; text?: string };
+      done.add(j.job);
+      if (j.text) others.push(parse(j.text));
+    }
   }
   JOBS.forEach(([chapter, bandNo], j) => {
     const job = `${j}:${chapter}:${bandNo}`;
     if (j % lanes !== lane || done.has(job)) return;
-    const made = makeOne(chapter, bandNo, ['bank', 'fill', j], true, JOB_BUDGET);
+    const made = makeOne(chapter, bandNo, ['bank', 'fill', j], true, JOB_BUDGET, others);
+    if (made) others.push(parse(made.out.text));
     if (made) process.stderr.write(`job ${job}: chapter ${made.out.chapter}, ${made.out.explored} situations, ${made.out.shortest} moves, ${made.tries} tries, ${made.s} s\n`);
     else process.stderr.write(`job ${job}: skipped past ${JOB_BUDGET}\n`);
     appendFileSync(`${dir}/lane${lane}.jsonl`, `${JSON.stringify(made ? { job, ...made.out } : { job, skipped: true })}\n`);

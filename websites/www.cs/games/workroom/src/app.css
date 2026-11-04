@@ -7,6 +7,10 @@
 @import "tailwindcss" source(none);
 @import "./shell.css";
 @import "./ui/compose/compose.css";
+@import "./ui/compose/mix.css";
+@import "./ui/compose/sheet.css";
+@import "./ui/compose/start.css";
+@import "./ui/compose/looks.css";
 @source "./**/*.{ts,tsx}";
 
 @theme static {

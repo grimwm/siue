@@ -1,0 +1,799 @@
+{
+ "campaign": [
+  {
+   "id": "trial-4",
+   "d": {
+    "solved": true,
+    "shortest": 28,
+    "explored": 120,
+    "withoutMinotaur": 16,
+    "minotaurDelta": 12,
+    "greedyWins": false,
+    "catchFree": 28,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uruulrrddddrrlluuuurrrduuurr"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 28,
+    "live": 15,
+    "quiet": 6
+   }
+  },
+  {
+   "id": "trial-8",
+   "d": {
+    "solved": true,
+    "shortest": 29,
+    "explored": 120,
+    "withoutMinotaur": 18,
+    "minotaurDelta": 11,
+    "greedyWins": false,
+    "catchFree": 29,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rrddlldddrluuurrdrrrzrddddrrr"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 29,
+    "live": 10,
+    "quiet": 17
+   }
+  },
+  {
+   "id": "ch2-2",
+   "d": {
+    "solved": true,
+    "shortest": 17,
+    "explored": 84,
+    "withoutMinotaur": 13,
+    "minotaurDelta": 4,
+    "greedyWins": false,
+    "catchFree": 17,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "dduurrrrrrrrrdddd"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 17,
+    "live": 8,
+    "quiet": 7
+   }
+  },
+  {
+   "id": "ch2-6",
+   "d": {
+    "solved": true,
+    "shortest": 60,
+    "explored": 12622,
+    "withoutMinotaur": 50,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 60,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "dddrddlruuuurrllrrddddddldllrururrruruuuurrurldlddldddddrrrr"
+   },
+   "useless": [],
+   "purpose": [
+    "the block at row 3, column 7: the shortest line never meets it, and ignoring it leaves the fewest moves at 60"
+   ],
+   "threat": {
+    "turns": 60,
+    "live": 29,
+    "quiet": 9
+   }
+  },
+  {
+   "id": "ch2-10",
+   "d": {
+    "solved": true,
+    "shortest": 76,
+    "explored": 44006,
+    "withoutMinotaur": 66,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 76,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rrddlddlururrrddrrrrdrdrlulullluuurlldddrddrdddldlllllrrrrrurrrdrrrrrurrrrdr"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 76,
+    "live": 41,
+    "quiet": 13
+   }
+  },
+  {
+   "id": "ch3-4",
+   "d": {
+    "solved": true,
+    "shortest": 49,
+    "explored": 7289,
+    "withoutMinotaur": 36,
+    "minotaurDelta": 13,
+    "greedyWins": false,
+    "catchFree": 49,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "drlrrrrddrrrdduwddllullldddlluuddrruuurrdrddrrrrr"
+   },
+   "useless": [],
+   "purpose": [
+    "the red keys: the shortest line never meets it, and ignoring it leaves the fewest moves at 49",
+    "the red doors: the shortest line never meets it, and ignoring it leaves the fewest moves at 49"
+   ],
+   "threat": {
+    "turns": 49,
+    "live": 22,
+    "quiet": 11
+   }
+  },
+  {
+   "id": "ch3-8",
+   "d": {
+    "solved": true,
+    "shortest": 52,
+    "explored": 22932,
+    "withoutMinotaur": 42,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 52,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rdrddldlurruurrurrrddddllldlldlddluurrururrrdddrdrrr"
+   },
+   "useless": [],
+   "purpose": [
+    "the marked stones: the shortest line never meets it, and ignoring it leaves the fewest moves at 52"
+   ],
+   "threat": {
+    "turns": 52,
+    "live": 31,
+    "quiet": 11
+   }
+  },
+  {
+   "id": "ch4-2",
+   "d": {
+    "solved": true,
+    "shortest": 12,
+    "explored": 27,
+    "withoutMinotaur": 8,
+    "minotaurDelta": 4,
+    "greedyWins": false,
+    "catchFree": 12,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ddrrrrrrrruu"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 12,
+    "live": 6,
+    "quiet": 6
+   }
+  },
+  {
+   "id": "ch4-6",
+   "d": {
+    "solved": true,
+    "shortest": 44,
+    "explored": 10427,
+    "withoutMinotaur": 30,
+    "minotaurDelta": 14,
+    "greedyWins": false,
+    "catchFree": 44,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "dlldllluurlddrrrurrllrrdddddddllllllrrrrrrrr"
+   },
+   "useless": [],
+   "purpose": [
+    "the pop-up walls: the shortest line never meets it, and ignoring it leaves the fewest moves at 44"
+   ],
+   "threat": {
+    "turns": 44,
+    "live": 21,
+    "quiet": 11
+   }
+  },
+  {
+   "id": "ch4-10",
+   "d": {
+    "solved": true,
+    "shortest": 91,
+    "explored": 18005,
+    "withoutMinotaur": 47,
+    "minotaurDelta": 44,
+    "greedyWins": false,
+    "catchFree": 91,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rrllrrrddldrrdddrduuuuurrrlluurrrrdrdrrdrdddlrllllllldlllldllldduuuudrrrrurrrrrrrrrddrrrddr"
+   },
+   "useless": [],
+   "purpose": [
+    "the fake wall at row 6, column 18: the shortest line never meets it, and ignoring it leaves the fewest moves at 91"
+   ],
+   "threat": {
+    "turns": 91,
+    "live": 33,
+    "quiet": 29
+   }
+  },
+  {
+   "id": "ch5-4",
+   "d": {
+    "solved": true,
+    "shortest": 56,
+    "explored": 8315,
+    "withoutMinotaur": 37,
+    "minotaurDelta": 19,
+    "greedyWins": false,
+    "catchFree": 56,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "drrrrrddrddrlldlluuulllddduuurrrdrrruruurrlddldldrddrrdr"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 56,
+    "live": 55,
+    "quiet": 1
+   }
+  },
+  {
+   "id": "ch5-8",
+   "d": {
+    "solved": true,
+    "shortest": 49,
+    "explored": 32069,
+    "withoutMinotaur": 37,
+    "minotaurDelta": 12,
+    "greedyWins": false,
+    "catchFree": 49,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "llddrlllrrrrdrrurddddrdllllulduuulluulluudddddddd"
+   },
+   "useless": [],
+   "purpose": [
+    "the gravel: the shortest line never meets it, and ignoring it leaves the fewest moves at 49"
+   ],
+   "threat": {
+    "turns": 49,
+    "live": 45,
+    "quiet": 4
+   }
+  },
+  {
+   "id": "ch6-2",
+   "d": {
+    "solved": true,
+    "shortest": 14,
+    "explored": 98,
+    "withoutMinotaur": 9,
+    "minotaurDelta": 5,
+    "greedyWins": false,
+    "catchFree": 14,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ullrllluulluul"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 14,
+    "live": 13,
+    "quiet": 1
+   }
+  },
+  {
+   "id": "ch6-6",
+   "d": {
+    "solved": true,
+    "shortest": 39,
+    "explored": 12756,
+    "withoutMinotaur": 24,
+    "minotaurDelta": 15,
+    "greedyWins": false,
+    "catchFree": 39,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ddrlddddrruurlludlllduruulddrrrdrddddrr"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 39,
+    "live": 34,
+    "quiet": 3
+   }
+  },
+  {
+   "id": "ch6-10",
+   "d": {
+    "solved": true,
+    "shortest": 54,
+    "explored": 55797,
+    "withoutMinotaur": 46,
+    "minotaurDelta": 8,
+    "greedyWins": false,
+    "catchFree": 54,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ddurdwrurddrdurrddddllllllwlrrruuuulldurrddlrddrrrrdrr"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 54,
+    "live": 26,
+    "quiet": 18
+   }
+  },
+  {
+   "id": "ch7-4",
+   "d": {
+    "solved": true,
+    "shortest": 33,
+    "explored": 7765,
+    "withoutMinotaur": 25,
+    "minotaurDelta": 8,
+    "greedyWins": false,
+    "catchFree": 33,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "dldrdddwduuuulddddrdwwwurrddrrrrr"
+   },
+   "useless": [],
+   "purpose": [
+    "the skates at row 3, column 9: the shortest line never meets it, and ignoring it leaves the fewest moves at 33"
+   ],
+   "threat": {
+    "turns": 33,
+    "live": 30,
+    "quiet": 3
+   }
+  },
+  {
+   "id": "ch7-8",
+   "d": {
+    "solved": true,
+    "shortest": 30,
+    "explored": 33254,
+    "withoutMinotaur": 21,
+    "minotaurDelta": 9,
+    "greedyWins": false,
+    "catchFree": 30,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rwwudldddlldllrurrrrrrlwrddddr"
+   },
+   "useless": [],
+   "purpose": [
+    "the suction at row 4, column 7: the shortest line never meets it, and ignoring it leaves the fewest moves at 30"
+   ],
+   "threat": {
+    "turns": 30,
+    "live": 25,
+    "quiet": 5
+   }
+  },
+  {
+   "id": "ch8-2",
+   "d": {
+    "solved": true,
+    "shortest": 17,
+    "explored": 135,
+    "withoutMinotaur": 11,
+    "minotaurDelta": 6,
+    "greedyWins": false,
+    "catchFree": 17,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ddrwwwwwwdrrrrddr"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 17,
+    "live": 12,
+    "quiet": 5
+   }
+  },
+  {
+   "id": "ch8-6",
+   "d": {
+    "solved": true,
+    "shortest": 31,
+    "explored": 17713,
+    "withoutMinotaur": 21,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 31,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rrdddrurrllllrrddrwwwddrrdrddrr"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 31,
+    "live": 28,
+    "quiet": 2
+   }
+  },
+  {
+   "id": "ch8-10",
+   "d": {
+    "solved": true,
+    "shortest": 55,
+    "explored": 134854,
+    "withoutMinotaur": 46,
+    "minotaurDelta": 9,
+    "greedyWins": false,
+    "catchFree": 55,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "dlllllwlwrwllllllrrddddwllldwuddddrrrrrrrruuururrrddddr"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 55,
+    "live": 31,
+    "quiet": 14
+   }
+  },
+  {
+   "id": "ch9-4",
+   "d": {
+    "solved": true,
+    "shortest": 35,
+    "explored": 12516,
+    "withoutMinotaur": 25,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 35,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ddrddddddduuuuludlllullluldddddrdrd"
+   },
+   "useless": [],
+   "purpose": [
+    "the block at row 4, column 4: the shortest line never meets it, and ignoring it leaves the fewest moves at 35",
+    "the gravel: the shortest line never meets it, and ignoring it leaves the fewest moves at 35"
+   ],
+   "threat": {
+    "turns": 35,
+    "live": 16,
+    "quiet": 10
+   }
+  },
+  {
+   "id": "ch9-8",
+   "d": {
+    "solved": true,
+    "shortest": 43,
+    "explored": 65017,
+    "withoutMinotaur": 34,
+    "minotaurDelta": 9,
+    "greedyWins": false,
+    "catchFree": 43,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "lddrrruuuudddddrrrrrlluwwwdruuuuuudddddrddr"
+   },
+   "useless": [],
+   "purpose": [
+    "the bomb at row 4, column 4: the shortest line never meets it, and ignoring it leaves the fewest moves at 43",
+    "the clone machine at row 8, column 11: the shortest line never meets it, and ignoring it leaves the fewest moves at 43"
+   ],
+   "threat": {
+    "turns": 43,
+    "live": 25,
+    "quiet": 8
+   }
+  },
+  {
+   "id": "ch10-2",
+   "d": {
+    "solved": true,
+    "shortest": 16,
+    "explored": 167,
+    "withoutMinotaur": 9,
+    "minotaurDelta": 7,
+    "greedyWins": false,
+    "catchFree": 16,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "lddddrruurrrrzdd"
+   },
+   "useless": [],
+   "purpose": [],
+   "threat": {
+    "turns": 16,
+    "live": 14,
+    "quiet": 2
+   }
+  },
+  {
+   "id": "ch10-6",
+   "d": {
+    "solved": true,
+    "shortest": 40,
+    "explored": 33221,
+    "withoutMinotaur": 30,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 40,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ldllulrdrruuuuuuuulllludrddrrrddrrrddrrr"
+   },
+   "useless": [],
+   "purpose": [
+    "the block at row 10, column 10: the shortest line never meets it, and ignoring it leaves the fewest moves at 40",
+    "the thief at row 10, column 9: the shortest line never meets it, and ignoring it leaves the fewest moves at 40"
+   ],
+   "threat": {
+    "turns": 40,
+    "live": 38,
+    "quiet": 2
+   }
+  },
+  {
+   "id": "ch10-10",
+   "d": {
+    "solved": true,
+    "shortest": 48,
+    "explored": 180046,
+    "withoutMinotaur": 39,
+    "minotaurDelta": 9,
+    "greedyWins": false,
+    "catchFree": 48,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "llluruurrrrrrzrrrrrruuddlllddduuuuuullllrrrruuur"
+   },
+   "useless": [],
+   "purpose": [
+    "the cow at row 5, column 3: the shortest line never meets it, and ignoring it leaves the fewest moves at 48"
+   ],
+   "threat": {
+    "turns": 48,
+    "live": 39,
+    "quiet": 9
+   }
+  }
+ ],
+ "bank": [
+  {
+   "i": 3,
+   "d": {
+    "solved": true,
+    "shortest": 38,
+    "explored": 14905,
+    "withoutMinotaur": 29,
+    "minotaurDelta": 9,
+    "greedyWins": false,
+    "catchFree": 38,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uullddddzlrrrdddddlludrruuuuurrrrrdrrr"
+   },
+   "gate": []
+  },
+  {
+   "i": 7,
+   "d": {
+    "solved": true,
+    "shortest": 61,
+    "explored": 34913,
+    "withoutMinotaur": 52,
+    "minotaurDelta": 9,
+    "greedyWins": false,
+    "catchFree": 61,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "lluuurdlddddddrluuullcluuuurldddlluuudddddldddruluuurrrrrrrrr"
+   },
+   "gate": []
+  },
+  {
+   "i": 11,
+   "d": {
+    "solved": true,
+    "shortest": 49,
+    "explored": 44373,
+    "withoutMinotaur": 36,
+    "minotaurDelta": 13,
+    "greedyWins": false,
+    "catchFree": 49,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "dllldddrdcdddrrdrrrurruuddllllluuuurddlddlluuulll"
+   },
+   "gate": []
+  },
+  {
+   "i": 15,
+   "d": {
+    "solved": true,
+    "shortest": 51,
+    "explored": 9111,
+    "withoutMinotaur": 40,
+    "minotaurDelta": 11,
+    "greedyWins": false,
+    "catchFree": 51,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "urruuulllrrrrcrddrrrrrrrllluurruuuuuuuurllldllllulu"
+   },
+   "gate": []
+  },
+  {
+   "i": 19,
+   "d": {
+    "solved": true,
+    "shortest": 49,
+    "explored": 6716,
+    "withoutMinotaur": 40,
+    "minotaurDelta": 9,
+    "greedyWins": false,
+    "catchFree": 49,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rrrurrrrlllcrrrruuluuddlluuluulllurrrrurrdrullllu"
+   },
+   "gate": []
+  },
+  {
+   "i": 23,
+   "d": {
+    "solved": true,
+    "shortest": 41,
+    "explored": 9946,
+    "withoutMinotaur": 31,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 41,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ddlddrdrlllllluuuuuuuuuuurrrrrlllllldlluu"
+   },
+   "gate": []
+  },
+  {
+   "i": 27,
+   "d": {
+    "solved": true,
+    "shortest": 43,
+    "explored": 29476,
+    "withoutMinotaur": 33,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 43,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rrddlllllrrcrdrulllluuuulddrdddlullllllldll"
+   },
+   "gate": []
+  },
+  {
+   "i": 31,
+   "d": {
+    "solved": true,
+    "shortest": 69,
+    "explored": 22691,
+    "withoutMinotaur": 46,
+    "minotaurDelta": 23,
+    "greedyWins": false,
+    "catchFree": 69,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uwrrddrrruurruuuuuudddldddddlluuuuuuuullddddlllluuuurrrrrrddddddddlld"
+   },
+   "gate": []
+  },
+  {
+   "i": 35,
+   "d": {
+    "solved": true,
+    "shortest": 60,
+    "explored": 24214,
+    "withoutMinotaur": 22,
+    "minotaurDelta": 38,
+    "greedyWins": false,
+    "catchFree": 60,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "lwrwllllllldwwdrrwwwwwwwwwwwwwwwddddddllluurwuuurrrrddrrrddr"
+   },
+   "gate": []
+  },
+  {
+   "i": 39,
+   "d": {
+    "solved": true,
+    "shortest": 49,
+    "explored": 39169,
+    "withoutMinotaur": 40,
+    "minotaurDelta": 9,
+    "greedyWins": false,
+    "catchFree": 49,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rdddduuuuurrdrdddluruucrrrrdddddluuuruuuuullluulu"
+   },
+   "gate": []
+  }
+ ],
+ "searches": [
+  {
+   "tier": 1,
+   "seed": "same0",
+   "k": 0,
+   "part": 400000,
+   "found": null,
+   "tries": 143,
+   "spent": 411167
+  },
+  {
+   "tier": 8,
+   "seed": "same7",
+   "k": 0,
+   "part": 400000,
+   "found": null,
+   "tries": 90,
+   "spent": 409359
+  }
+ ]
+}

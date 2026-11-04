@@ -36,23 +36,30 @@ export function minotaurStep(w: Work, ev: GameEvent[]): boolean {
   if (!m) return true;
   if (heldAt(w, m)) return false;
   const target = w.cow ?? w.player;
-  const dc = Math.sign(target.c - m.c);
-  const dr = Math.sign(target.r - m.r);
-  const tries: Dir[] = [];
-  if (dc) tries.push(dc > 0 ? 'right' : 'left');
-  if (dr) tries.push(dr > 0 ? 'down' : 'up');
-  const d = tries.find(dir => minotaurMayEnter(w, next(m, dir)));
-  if (!d) return false;
-  const to = next(m, d);
+  // Along the horizontal gap if that cell is open to it, else along the vertical gap.
+  let d: Dir | null = null;
+  let to: Cell | null = null;
+  if (target.c !== m.c) {
+    const dir: Dir = target.c > m.c ? 'right' : 'left';
+    const x = next(m, dir);
+    if (minotaurMayEnter(w, x)) { d = dir; to = x; }
+  }
+  if (!to && target.r !== m.r) {
+    const dir: Dir = target.r > m.r ? 'down' : 'up';
+    const x = next(m, dir);
+    if (minotaurMayEnter(w, x)) { d = dir; to = x; }
+  }
+  if (!d || !to) return false;
   ev.push({ kind: 'moved', who: 'minotaur', from: m, to });
   if (arrive(w, to, ev)) return true;
   // Ice and force floors move it on, as they move the player.
   let dir = d;
-  const seen = new Set<number>([index(w, to)]);
+  let seen: Set<number> | null = null;
   for (;;) {
     const def = TERRAIN[tAt(w, w.minotaur!)];
     if (def.carries) dir = def.carries;
     else if (!def.slides) return false;
+    seen ??= new Set<number>([index(w, to)]);
     const on = next(w.minotaur!, dir);
     if (!minotaurMayEnter(w, on) || seen.has(index(w, on))) return false;
     ev.push({ kind: 'slid', who: 'minotaur', from: w.minotaur!, to: on });

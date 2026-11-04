@@ -17,7 +17,7 @@ import { minotaurPhase } from './minotaur.ts';
 import { hazardPhase } from './hazards.ts';
 import { caught, leave, turnOver } from './catch.ts';
 import { fireRed, flip, hazardOn, heldAt, teleportExit, teleportsLinked } from './pieces.ts';
-import { work, tAt, oAt } from './work.ts';
+import { own, turnOf, setObject, setTerrain, tAt, oAt } from './work.ts';
 import type { Action, GameEvent, Work } from './work.ts';
 
 export type { Action, GameEvent } from './work.ts';
@@ -43,8 +43,8 @@ function blockMove(w: Work, from: Cell, d: Dir, ok: (x: Cell) => boolean): Block
 }
 
 function moveBlock(w: Work, from: Cell, m: BlockMove, how: 'pushed' | 'slid', ev: GameEvent[]): void {
-  w.objects[index(w, from)] = null;
-  w.objects[index(w, m.to)] = 'block';
+  setObject(w, index(w, from), null);
+  setObject(w, index(w, m.to), 'block');
   ev.push(how === 'pushed' ? { kind: 'pushed', from, to: m.entry } : { kind: 'slid', who: 'block', from, to: m.entry });
   if (m.via) ev.push({ kind: 'teleported', who: 'block', from: m.entry, via: m.via, to: m.to });
 }
@@ -60,8 +60,8 @@ export function settleBlock(w: Work, at: Cell, d: Dir, pusher: Cell | undefined,
   for (;;) {
     const t = tAt(w, here);
     if (t === 'water' || t === 'bomb') {
-      w.objects[index(w, here)] = null;
-      w.terrain[index(w, here)] = t === 'water' ? 'dirt' : 'floor';
+      setObject(w, index(w, here), null);
+      setTerrain(w, index(w, here), t === 'water' ? 'dirt' : 'floor');
       ev.push(t === 'water' ? { kind: 'sank', at: here } : { kind: 'exploded', who: 'block', at: here });
       return;
     }
@@ -107,8 +107,8 @@ function enterAsPlayer(w: Work, to: Cell, d: Dir, riding: boolean, ev: GameEvent
   }
   const def = TERRAIN[tAt(w, to)];
   if (def.door) {
-    if (def.door !== 'green') w.keys[def.door]--;
-    w.terrain[index(w, to)] = 'floor';
+    if (def.door !== 'green') { own(w); w.keys[def.door]--; }
+    setTerrain(w, index(w, to), 'floor');
     ev.push({ kind: 'opened', color: def.door, at: to });
   }
   if (oAt(w, to) === 'block') {
@@ -127,20 +127,20 @@ function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): bo
   w.player = at;
   const t = tAt(w, at);
   if (t === 'bomb') {
-    w.terrain[index(w, at)] = 'floor';
+    setTerrain(w, index(w, at), 'floor');
     ev.push({ kind: 'exploded', who: 'player', at });
     caught(w, ev, 'bomb');
     return true;
   }
   const o = oAt(w, at);
   if (o && o !== 'block') {
-    w.objects[index(w, at)] = null;
+    setObject(w, index(w, at), null);
     ev.push({ kind: 'took', what: o, at });
     if (o === 'relic') w.relicsLeft = Math.max(0, w.relicsLeft - 1);
     else if (o === 'page') w.pages |= 1 << w.level.pageCells.indexOf(index(w, at));
-    else if (o.startsWith('key-')) w.keys[o.slice(4) as KeyColor]++;
-    else if (o === 'mirror' || o === 'cake' || o === 'cow') w.tools[o]++;
-    else if (!w.gear.includes(o as Gear)) w.gear.push(o as Gear);
+    else if (o.startsWith('key-')) { own(w); w.keys[o.slice(4) as KeyColor]++; }
+    else if (o === 'mirror' || o === 'cake' || o === 'cow') { own(w); w.tools[o]++; }
+    else if (!w.gear.includes(o as Gear)) { own(w); w.gear.push(o as Gear); }
   }
   if (t === 'thief' && w.gear.length > 0) {
     ev.push({ kind: 'robbed', at, gear: w.gear });
@@ -169,11 +169,13 @@ function arrive(w: Work, at: Cell, d: Dir, riding: boolean, ev: GameEvent[]): bo
  *  the turn. A ride may carry the player back onto the cell the move started from. */
 function ridePlayer(w: Work, d: Dir, ev: GameEvent[]): void {
   let dir = d;
-  const seen = new Set<number>([index(w, w.player)]);
+  const first = w.player;
+  let seen: Set<number> | null = null;
   while (w.outcome === 'playing') {
     const def = TERRAIN[tAt(w, w.player)];
     if (def.carries && !w.gear.includes('suction')) dir = def.carries;
     else if (!def.slides || w.gear.includes(def.slides)) return;
+    seen ??= new Set<number>([index(w, first)]);
     const to = next(w.player, dir);
     if (seen.has(index(w, to)) || !enterAsPlayer(w, to, dir, true, ev)) return;
     ev.push({ kind: 'slid', who: 'player', from: w.player, to });
@@ -197,12 +199,12 @@ function playerPart(w: Work, a: Action, ev: GameEvent[]): boolean | 'shown' {
     const to = next(from, a.dir);
     const t = tAt(w, to);
     if (t === 'invisible-wall') {
-      w.terrain[index(w, to)] = 'wall';
+      setTerrain(w, index(w, to), 'wall');
       ev.push({ kind: 'revealed', at: to, what: t });
       return 'shown';
     }
     if (t === 'fake-wall') {
-      w.terrain[index(w, to)] = 'floor';
+      setTerrain(w, index(w, to), 'floor');
       ev.push({ kind: 'revealed', at: to, what: t });
     }
     if (enterAsPlayer(w, to, a.dir, false, ev)) {
@@ -221,24 +223,31 @@ function playerPart(w: Work, a: Action, ev: GameEvent[]): boolean | 'shown' {
       w.stone = 3;
       ev.push({ kind: 'stoned', turns: 3 });
     }
+    own(w);
     w.tools[a.tool]--;
   }
   return true;
 }
 
-/** A turn that left the terrain, the objects or the hazards as they were shares the previous arrays. */
-function share(w: Work, s: State): StepResult['state'] {
-  if (sameItems(w.terrain, s.terrain)) w.terrain = s.terrain as Terrain[];
-  if (sameItems(w.objects, s.objects)) w.objects = s.objects as (ObjectKind | null)[];
-  if (sameItems(w.hazards, s.hazards)) w.hazards = s.hazards as Hazard[];
-  return w;
+/** The state a turn leaves. A turn that left the terrain, the objects or the hazards as they were shares the
+ *  previous arrays. Its keys in the order of `initial`'s: states of one shape keep `step` monomorphic. */
+function share(w: Work, s: State): State {
+  return {
+    level: w.level,
+    terrain: !w.ownTerrain || sameItems(w.terrain, s.terrain) ? s.terrain : w.terrain,
+    objects: !w.ownObjects || sameItems(w.objects, s.objects) ? s.objects : w.objects,
+    player: w.player, hearts: w.hearts, keys: w.keys, gear: w.gear, tools: w.tools, pages: w.pages, throwBack: w.throwBack,
+    minotaur: w.minotaur, stone: w.stone, cow: w.cow,
+    hazards: sameItems(w.hazards, s.hazards) ? s.hazards : w.hazards,
+    relicsLeft: w.relicsLeft, moves: w.moves, outcome: w.outcome,
+  };
 }
 
 /** The player's action alone, without the hazards' moves or the Minotaur's steps: the board in the middle of a
  *  turn, once the player has moved. A bump returns the same state and no events; the move count is unchanged. */
 export function act(s: State, a: Action): StepResult {
   if (s.outcome !== 'playing') return { state: s, events: [] };
-  const w = work(s);
+  const w = turnOf(s);
   const ev: GameEvent[] = [];
   if (!playerPart(w, a, ev)) return { state: s, events: [] };
   return { state: share(w, s), events: ev };
@@ -252,7 +261,7 @@ export function noTurn(s: State, n: State): boolean {
 
 export function step(s: State, a: Action): StepResult {
   if (s.outcome !== 'playing') return { state: s, events: [] };
-  const w = work(s);
+  const w = turnOf(s);
   const ev: GameEvent[] = [];
   const part = playerPart(w, a, ev);
   if (!part) return { state: s, events: [] };

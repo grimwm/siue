@@ -43,7 +43,7 @@ facing: right
 ############
 ` },
   { id: 'ch7-4', text: `title: The Frozen Round
-intro: Ice runs across the north hall, with skates above it. A snare waits in the west by a block, and the brown button in the south looses it; one bronze ball rolls along the south hall. Two relics.
+intro: Ice runs across the north hall, and you will skid on it as the beast does. A snare waits in the west by a block, and the brown button in the south looses it; one bronze ball rolls along the south hall. Two relics.
 facing: right
 
 ############

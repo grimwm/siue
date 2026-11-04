@@ -64,19 +64,19 @@ facing: down
 ############
 ` },
   { id: 'ch8-5', text: `title: The Burning Court
-intro: Fire rings the court in the middle, with boots in the west. Talos's fire runs the halls of the southwest, turning right at every wall, and a red key in the north opens the red door by the way out.
-facing: left
+intro: Fire rings the court in the middle, with boots in the west. Talos's fire runs the halls of the southwest, turning right at every wall.
+facing: down
 
 ############
-###.....P..#
-#...##.r...#
-##........##
-###.FFFFF.##
-#.#.F...F.##
-#h#.FFFFF.##
-#.#..###.###
-#..e.###.#R#
-##...M....E#
+##......FF.#
+##...##.P..#
+#.........F#
+##...F.F.###
+#.#.....F.##
+#.#.F.FFF.##
+#.#..#.F.###
+#h..e###F###
+##..M.....E#
 ############
 ` },
   { id: 'ch8-6', text: `title: Harpies on the Ice
@@ -133,15 +133,15 @@ pages: ch8-storm
 facing: down left
 
 ############
-#..P..>>>u.#
-#:####.#.#.#
-#.####..#..#
-#.###p.###.#
-#..:##...FF#
-#.#.#.###.F#
-#...#...e.F#
-#...w...##.#
-#...#..M..E#
+#:.P..>>>.u#
+#.######.#.#
+#.#.##p.#..#
+#.###..###F#
+#..:##...F.#
+#.#.#.##...#
+#...#.F.e..#
+#...wM..##.#
+#...#..F..E#
 ############
 ` },
   { id: 'ch8-10', text: `title: The Last Wind

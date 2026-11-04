@@ -84,7 +84,7 @@ intro: Loose stone and closing stone keep the beast off, and here the walls lie 
 ############
 ` },
   { id: 'ch4-7', text: `title: The Glass Floor
-intro: Ice runs through these halls and skates lie in the west. Two walls here are only painted, one of them across the ice; the beast skids as you do.
+intro: Ice runs through these halls and skates lie in the west. Two walls here are only painted; on the ice the beast skids as you do.
 
 ############
 #P...#.##.*#

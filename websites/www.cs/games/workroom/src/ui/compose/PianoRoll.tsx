@@ -3,7 +3,8 @@
 // the New Notes length; drag a note to move it, its right end to lengthen it; drag on empty space (or Select) to box
 // several; Shift-click adds one to the picked notes; right-click, double-click or a long press deletes one. A drum
 // track is a step sequencer: one named row per drum, a square per sixteenth; tap squares to turn hits on or off, drag
-// to paint. With a finger, a tap adds on lift so a swipe still scrolls.
+// to paint. With a finger, a tap adds on lift so a swipe still scrolls. From the keys, Tab reaches each note and Enter
+// picks it; the arrows, Delete and Backspace then act on it.
 import { useRef, useState } from 'preact/hooks';
 import { rangeClass } from '../../catalogue.ts';
 import type { Entry } from '../../catalogue.ts';
@@ -263,6 +264,15 @@ export function NoteGrid(p: { c: Ctl; part: Part; entry: Entry }) {
     c.setPick({ kind: 'notes', part: part.id, ids: new Set([n.id]) });
   };
 
+  /** Enter or the space bar on a focused note picks it (Shift adds it to the picked ones). */
+  const keyPick = (e: KeyboardEvent, id: number): void => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const ids = new Set(e.shiftKey && picked ? picked : []);
+    if (ids.has(id) && e.shiftKey) ids.delete(id); else ids.add(id);
+    c.setPick(ids.size ? { kind: 'notes', part: part.id, ids } : { kind: 'none' });
+  };
   const width = c.total * c.ppb;
   const height = rows * rh;
   const shown = heardNotes(part);
@@ -296,13 +306,15 @@ export function NoteGrid(p: { c: Ctl; part: Part; entry: Entry }) {
         const on = !ghost && !!picked?.has(n.id);
         const op = (0.45 + (0.55 * n.velocity) / 127).toFixed(2);
         if (drums) {
-          return <div class="cmp-cellhit" data-hit={ghost ? undefined : n.id} aria-pressed={on}
+          return <div class="cmp-cellhit" data-hit={ghost ? undefined : n.id} aria-pressed={on} tabIndex={ghost ? undefined : 0} role={ghost ? undefined : 'button'}
+            aria-label={ghost ? undefined : `${pieces.find(([q]) => q === n.pitch)?.[1] ?? pitchName(n.pitch)} hit`} onKeyDown={ghost ? undefined : e => keyPick(e, n.id)}
             style={{ left: `${start * c.ppb + 2}px`, top: `${r * rh + 3}px`, width: `${Math.max(4, step * c.ppb - 4)}px`, height: `${rh - 6}px`, opacity: ghost ? 0.3 : op }} />;
         }
         const w = Math.max(6, length * c.ppb - 1);
         const out = rangeClass(entry, pitch) === 'out';
         return (
-          <div data-note-id={ghost ? undefined : n.id} data-note={pitchName(pitch)} data-velocity={n.velocity} data-range={out ? 'out' : 'normal'} aria-pressed={on}
+          <div data-note-id={ghost ? undefined : n.id} data-note={pitchName(pitch)} tabIndex={ghost ? undefined : 0} role={ghost ? undefined : 'button'}
+            aria-label={ghost ? undefined : `${pitchName(pitch)}${out ? ', out of this instrument\'s range' : ''}`} onKeyDown={ghost ? undefined : e => keyPick(e, n.id)} data-velocity={n.velocity} data-range={out ? 'out' : 'normal'} aria-pressed={on}
             class={cx('cmp-note', ghost && 'ghost', out && 'out')} title={`${pitchName(pitch)} · loudness ${n.velocity}`}
             style={{ left: `${start * c.ppb}px`, top: `${(high - pitch) * rh + 1}px`, width: `${w}px`, height: `${rh - 2}px`, opacity: ghost ? undefined : op }}>
             {w > 26 ? pitchName(pitch) : ''}

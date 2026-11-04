@@ -35,7 +35,7 @@ export function TrackHead(p: { c: Ctl; part: Part }) {
       {renaming ? (
         <span class="name"><input type="text" class="min-h-11 w-full min-w-0 rounded-md border border-amber bg-well px-2 text-ink" value={part.name} maxLength={60}
           aria-label="Track Name" ref={el => { if (el && document.activeElement !== el) { el.focus(); el.select?.(); } }}
-          onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commit((e.target as HTMLInputElement).value); if (e.key === 'Escape') setRenaming(false); }}
+          onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commit((e.target as HTMLInputElement).value); }}
           onBlur={e => commit((e.target as HTMLInputElement).value)} /></span>
       ) : (
         <span class="name" onDblClick={() => setRenaming(true)}>

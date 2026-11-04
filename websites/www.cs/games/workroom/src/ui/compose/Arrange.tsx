@@ -534,7 +534,7 @@ function RegionBlock(p: { c: Ctl; part: Part; r: Region; strip?: boolean }) {
         g?.el.remove();
         if (handle) {
           if (dropped && to !== r.start + r.length) { c.apply(loopRegion(c.doc, part.id, r.id, to), to > r.start + (r.loop ?? r.length) ? 'The region repeats.' : undefined); }
-          el.style.width = '';
+          el.style.width = `${r.length * c.ppb}px`;
           return;
         }
         if (dropped && target && (target.part !== part.id || target.at !== r.start)) {

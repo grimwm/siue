@@ -26,7 +26,9 @@ const ENTRIES = catalogue(JSON.parse(readFileSync(join(import.meta.dirname, '..'
 const ui = await importTsx<{ c: typeof import('../src/ui/compose/Composer.tsx') }>(import.meta.dirname, { c: '../src/ui/compose/Composer.tsx' });
 
 /** Lets the sheet's engraving timer fire and its drawing finish. */
-const settle = async (): Promise<void> => { await new Promise(r => setTimeout(r, 300)); await act(async () => {}); };
+const settle = async (done: () => boolean = () => false): Promise<void> => {
+  for (let i = 0; i < 40 && !done(); i++) { await new Promise(r => setTimeout(r, 50)); await act(async () => {}); }
+};
 const sampler = { ready: async () => {}, start: () => 1, stop() {}, stopAll() {} };
 const text = (el: StubElement): string => el.textContent.replace(/\s+/g, ' ').trim();
 /** A button by its words, or by its accessible name when it shows only a picture. */
@@ -108,12 +110,12 @@ test('Sheet shows the chosen track engraved, written as it is read, Concert Pitc
   });
   const sheetBoxes = () => attr(root, 'data-part-sheet').length;
   assert.equal(sheetBoxes(), 0, 'Compose first');
-  await act(() => click(button(root, 'Sheet'))); await settle();
+  await act(() => click(button(root, 'Sheet'))); await settle(() => sheetBoxes() === 1 && shown.length === 1);
   assert.equal(sheetBoxes(), 1);
   assert.equal(shown.length, 1, text(walk(root).find(e => e._attrs['data-sheet-state'] !== undefined) ?? root));
   assert.equal(shown[0]!.lane, 'french-horn');
   assert.match(shown[0]!.xml, /<step>C<\/step><octave>4<\/octave>/, 'the horn in F is written a fifth up');
-  await act(() => click(button(root, 'Concert Pitch: Off'))); await settle();
+  await act(() => click(button(root, 'Concert Pitch: Off'))); await settle(() => shown.length === 2);
   assert.match(shown[shown.length - 1]!.xml, /<step>F<\/step><octave>3<\/octave>/);
   assert.doesNotMatch(shown[shown.length - 1]!.xml, /<transpose>/);
 
@@ -182,7 +184,7 @@ class FakeAudio {
 }
 const press = (el: StubElement): void => { pressing = true; try { click(el); } finally { pressing = false; } };
 
-test('Play plays on its first press however long the sound takes to build; Stop while it builds plays nothing', async () => {
+test('Play plays on its first press however long the sound takes to build; a build replaced by Back To Start never plays', async () => {
   Object.assign(globalThis, { Audio: FakeAudio });
   let doc = addPart(newDoc('Slow Build'), ENTRIES.find(e => e.id === 'cello')!)!.doc;
   doc = addNotes(doc, 'cello', [{ start: 0, length: 4, pitch: 48 }, { start: 8, length: 4, pitch: 50 }]).doc;
@@ -207,7 +209,7 @@ test('Play plays on its first press however long the sound takes to build; Stop 
   assert.equal(one.paused, false);
   assert.equal(text(play()), 'Stop');
 
-  // Stop while it plays, then Stop while the next one builds: nothing plays when that build ends.
+  // Stop while it plays; then Play, and Back To Start while that build is pending: the replaced build never plays.
   await act(() => click(play()));
   assert.equal(one.paused, true);
   await act(() => press(play()));

@@ -298,7 +298,7 @@ function savedRegions(clock: BeatClock, p: Part): ScoreRegion[] | undefined {
     const region: ScoreRegion = { from_bar: from, to_bar: to };
     if (r.loop) {
       const loop = barRound(barPosOfBeat(clock, r.start + r.loop) - from);
-      if (loop > 0 && loop < to - from) region.loop_bars = loop;
+      if (loop > 0 && loop < to - from - 1e-9) region.loop_bars = loop;
     }
     out.push(region);
   }

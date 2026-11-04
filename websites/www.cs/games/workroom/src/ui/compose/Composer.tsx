@@ -602,9 +602,8 @@ export function Composer(p: ComposerProps) {
     const s = state.current;
     const c = ctlRef.current!;
     const mod = e.ctrlKey || e.metaKey;
-    // Placing an effect from the keys: arrows choose the track and the bar (Shift for a beat), Enter places, Escape cancels.
+    // Placing an effect from the keys: arrows choose the track and the bar (Shift for a beat), Enter places; Cancel on the banner stops.
     if (s.placing) {
-      if (e.key === 'Escape') { startPlacing(null); return true; }
       const rows = ['lane', ...s.doc.parts.map(x => x.id)];
       const now = s.drop ?? targetFor(s.doc, s.placing, s.sel ?? 'lane', clock.barStartBeat(clock.barOfBeat(s.cursor + 1e-9)));
       if (e.key === 'Enter') { if (!now.bad) placeAt(now); else say(now.bad); return true; }
@@ -667,7 +666,6 @@ export function Composer(p: ComposerProps) {
       const pitch = pitchForKey(e.code, s.keysStart);
       if (pitch !== null) { if (!e.repeat) keyDown(pitch, e.code); return true; }
     }
-    if (e.key === 'Escape') { if (s.pick.kind !== 'none' || chordRef.current || splittingRef.current) { clearPicks(); return true; } return false; }
     const k = s.pick;
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (k.kind === 'notes') { apply(removeNotes(s.doc, k.part, k.ids), 'Deleted. Undo brings them back.'); setPick({ kind: 'none' }); return true; }

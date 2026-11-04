@@ -4,7 +4,7 @@ import { parse } from '../src/puzzle/level.ts';
 import { initial } from '../src/puzzle/state.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { act, restart, startRun, undo } from '../src/puzzle/run.ts';
-import { HAZE_IN_MS, IDLE_MS, SHIMMER_MS, createFoundClock, cuesMoving, fakeFaces, foundWalls, hazeCue, hazeStrength, shimmerAt } from '../src/wall-cues.ts';
+import { GLASS_IN_MS, HAZE_IN_MS, IDLE_MS, NO_CUES, SHIMMER_MS, createFoundClock, createGlassClock, cueKey, cuesMoving, cuesShown, fakeFaces, foundWalls, glassFaces, hazeCue, hazeStrength, shimmerAt } from '../src/wall-cues.ts';
 
 // Theseus at (2,2): a fake wall above him and one to his left, an invisible wall to his right.
 const LEVEL = parse(['#######', '#..W..#', '#.WPI.#', '#....E#', '#######', ''].join('\n'));
@@ -53,8 +53,8 @@ test('no haze while a turn plays, after the try ends, or with no fake wall besid
   const cue = hazeCue(s, idle, false, false)!;
   assert.equal(cue.faces.length, 2);
   assert.ok(cue.strength > 0.5);
-  assert.ok(cuesMoving({ found: [], haze: cue, t: 1, still: false }));
-  assert.ok(!cuesMoving({ found: [], haze: cue, t: 1, still: true }), 'a still tint does not move');
+  assert.ok(cuesMoving({ ...NO_CUES, haze: cue, t: 1, still: false }));
+  assert.ok(!cuesMoving({ ...NO_CUES, haze: cue, t: 1, still: true }), 'a still tint does not move');
 });
 
 test('a bumped invisible wall is found; undo past the bump and restart hide it', () => {
@@ -64,10 +64,10 @@ test('a bumped invisible wall is found; undo past the bump and restart hide it',
   assert.deepEqual(foundWalls(run.now), []);
   run = act(run, { kind: 'move', dir: 'down' }).run;
   run = act(run, { kind: 'move', dir: 'right' }).run; // a turn: to (3,4)
-  run = act(run, { kind: 'move', dir: 'up' }).run; // bump: (2,4) shows, no turn
+  run = act(run, { kind: 'move', dir: 'up' }).run; // bump: (2,4) shows, a turn
   assert.deepEqual(foundWalls(run.now), [2 * 7 + 4]);
   assert.equal(run.now.terrain[2 * 7 + 4], 'wall');
-  assert.deepEqual(foundWalls(undo(run).now), [], 'Undo goes back a whole turn, past the bump');
+  assert.deepEqual(foundWalls(undo(run).now), [], 'Undo takes back the bump');
   assert.deepEqual(foundWalls(restart(run).now), []);
 });
 
@@ -102,4 +102,50 @@ test('the shimmer runs 0 to 1 over SHIMMER_MS', () => {
   assert.equal(shimmerAt(SHIMMER_MS, false), null);
   assert.equal(shimmerAt(-1, false), null);
   assert.equal(shimmerAt(10, true), null);
+});
+
+test('the glass beside Theseus: only an unshown invisible wall orthogonally beside him, its face toward him', () => {
+  const s = initial(LEVEL);
+  assert.deepEqual(glassFaces(s), [{ at: { r: 2, c: 4 }, face: 'left' }], 'to his right, its left face');
+  assert.deepEqual(glassFaces(at(s, 1, 4)), [{ at: { r: 2, c: 4 }, face: 'up' }]);
+  assert.deepEqual(glassFaces(at(s, 3, 4)), [{ at: { r: 2, c: 4 }, face: 'down' }]);
+  assert.deepEqual(glassFaces(at(s, 2, 5)), [{ at: { r: 2, c: 4 }, face: 'right' }]);
+  assert.deepEqual(glassFaces(at(s, 1, 5)), [], 'diagonal is not beside');
+  assert.deepEqual(glassFaces(at(s, 1, 1)), [], 'nor far off');
+  assert.deepEqual(fakeFaces(at(s, 1, 4)), [{ at: { r: 1, c: 3 }, face: 'right' }], 'fake walls are not glass');
+});
+
+test('a bumped invisible wall is no longer glass beside him: it is found', () => {
+  let run = startRun(LEVEL);
+  run = act(run, { kind: 'move', dir: 'right' }).run; // the bump, a turn
+  assert.deepEqual(glassFaces(run.now), []);
+  assert.deepEqual(foundWalls(run.now), [2 * 7 + 4]);
+  assert.deepEqual(glassFaces(undo(run).now), [{ at: { r: 2, c: 4 }, face: 'left' }], 'undone, it is glass beside him again');
+});
+
+test('the glass clock: comes up over GLASS_IN_MS, goes at once when he leaves, comes up again when he is back', () => {
+  const s = initial(LEVEL);
+  const away = at(s, 3, 2);
+  const clock = createGlassClock();
+  const one = (x: State, now: number, reduced = false, show = true) => clock.update(x, now, reduced, show).map(g => g.strength);
+  assert.deepEqual(one(s, 1000), [0]);
+  assert.deepEqual(one(s, 1000 + GLASS_IN_MS / 2), [0.5]);
+  assert.deepEqual(one(s, 1000 + GLASS_IN_MS * 3), [1]);
+  assert.deepEqual(one(away, 5000), [], 'gone the moment he is not beside it');
+  assert.deepEqual(one(s, 6000), [0], 'and up again from nothing');
+  assert.deepEqual(one(s, 6100, false, false), [], 'none while it is not to show');
+  assert.deepEqual(createGlassClock().update(s, 0, true, true).map(g => g.strength), [1], 'reduced motion: at once, still');
+  const g = clock.update(s, 9000, false, true);
+  assert.deepEqual(g.map(({ at: a, face }) => ({ at: a, face })), glassFaces(s));
+});
+
+test('the glass is in the cues: it moves while it comes up, keys and shows', () => {
+  const rising = { ...NO_CUES, glass: [{ at: { r: 2, c: 4 }, face: 'left' as const, strength: 0.4 }] };
+  const up = { ...NO_CUES, glass: [{ at: { r: 2, c: 4 }, face: 'left' as const, strength: 1 }] };
+  assert.ok(cuesMoving(rising));
+  assert.ok(!cuesMoving(up), 'once up it is still: nothing to redraw');
+  assert.notEqual(cueKey(rising), cueKey(up));
+  assert.notEqual(cueKey(NO_CUES), cueKey(up));
+  assert.deepEqual(cuesShown(up).glass, [{ at: { r: 2, c: 4 }, face: 'left' }]);
+  assert.deepEqual(cuesShown(NO_CUES).glass, []);
 });

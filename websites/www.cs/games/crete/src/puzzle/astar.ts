@@ -8,7 +8,7 @@
 import { DIRS } from './tiles.ts';
 import type { Tool } from './tiles.ts';
 import type { State } from './state.ts';
-import { step, noTurn } from './step.ts';
+import { step, searchSkips } from './step.ts';
 import type { Action } from './step.ts';
 import { layoutOf, pack, unpack } from './pack.ts';
 import { estimateOf } from './heuristic.ts';
@@ -180,7 +180,7 @@ function begin(start: State, opts: SearchOptions, store: NodeStore): Batch {
         if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
         const r = step(s, ACTIONS[c]!);
         const n = r.state;
-        if (noTurn(s, n) || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
+        if (searchSkips(s, r) || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
         pack(n, layout, buf, 0, s, from, 0);
         if (prune && prune(n, buf, 0)) continue;
         const size = store.size;

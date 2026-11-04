@@ -2,7 +2,7 @@
 // The trap and trick pieces, one `describe` per piece: what Theseus, a pushed block and the Minotaur do on each.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { step, noTurn } from '../src/puzzle/step.ts';
+import { step, searchSkips } from '../src/puzzle/step.ts';
 import { terrainAt } from '../src/puzzle/state.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { heldAt, released } from '../src/puzzle/pieces.ts';
@@ -69,19 +69,28 @@ describe('fake and invisible walls', () => {
     ]);
   });
 
-  test('bumping an invisible wall shows it and costs no turn: the move count stays and nothing else moves', () => {
-    const s = grid(['P.I..M', '......']);
-    const r = step(s, mv('right'));
-    const one = r.state;
+  test('bumping an invisible wall shows it and costs a turn: he stays, the move counts and the Minotaur steps', () => {
+    const s = grid(['P.I...M', '.......']);
+    const one = step(s, mv('right')).state;
     const shown = step(one, mv('right'));
-    assert.deepEqual(shown.events, [{ kind: 'revealed', at: at(0, 2), what: 'invisible-wall' }]);
+    const waited = step(one, WAIT);
+    assert.deepEqual(shown.events[0], { kind: 'revealed', at: at(0, 2), what: 'invisible-wall' });
     assert.equal(terrainAt(shown.state, at(0, 2)), 'wall');
-    assert.deepEqual(shown.state.player, one.player);
-    assert.deepEqual(shown.state.minotaur, one.minotaur, 'the Minotaur does not move');
-    assert.equal(shown.state.moves, one.moves, 'no move is counted');
-    assert.ok(noTurn(one, shown.state), 'the searches skip it');
-    assert.deepEqual(shown.state.terrain.map((t, i) => (i === 2 ? 'invisible-wall' : t)), one.terrain, 'only that cell changed');
+    assert.deepEqual(shown.state.player, one.player, 'Theseus stays where he is');
+    assert.notDeepEqual(shown.state.minotaur, one.minotaur, 'the Minotaur moves');
+    assert.deepEqual(shown.state.minotaur, waited.state.minotaur, 'he takes the steps he takes on a Wait');
+    assert.deepEqual(shown.events.slice(1), waited.events, 'and the rest of the turn is the Wait\'s');
+    assert.equal(shown.state.moves, one.moves + 1, 'the move is counted');
+    assert.deepEqual(shown.state.terrain.map((t, i) => (i === 2 ? 'invisible-wall' : t)), waited.state.terrain, 'only that cell differs from the Wait');
+    assert.ok(searchSkips(one, shown), 'the searches leave it out, as the Wait they also try');
+    assert.ok(!searchSkips(one, waited), 'but not the Wait');
     assert.equal(step(shown.state, mv('right')).state, shown.state, 'once shown it is a plain bump');
+  });
+
+  test('a bump into an invisible wall can be caught on, as a Wait can', () => {
+    const r = step(grid(['MP.', '.I.']), mv('down'));
+    assert.ok(r.events.some(e => e.kind === 'revealed'));
+    assert.ok(r.events.some(e => e.kind === 'caught'), 'the Minotaur beside him catches him');
   });
 
   test('a slide, a pushed block and a teleport exit treat both as wall and reveal nothing', () => {

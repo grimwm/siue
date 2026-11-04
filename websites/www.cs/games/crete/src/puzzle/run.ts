@@ -7,7 +7,7 @@
  * again clears it. DOM-free. */
 import { initial } from './state.ts';
 import type { State } from './state.ts';
-import { step, noTurn } from './step.ts';
+import { step } from './step.ts';
 import type { Action, GameEvent } from './step.ts';
 import type { Level } from './level.ts';
 
@@ -36,8 +36,6 @@ function situation(s: State): string {
 export function act(run: Run, a: Action): { run: Run; events: GameEvent[]; back?: number } {
   const r = step(run.now, a);
   if (r.state === run.now) return { run, events: [] };
-  // A step that took no turn (an invisible wall shown) is no entry of its own: Undo goes back a whole turn.
-  if (noTurn(run.now, r.state)) return { run: { ...run, now: r.state }, events: r.events };
   const past = [...run.past, run.now];
   if (r.state.outcome === 'playing') {
     const key = situation(r.state);

@@ -5,7 +5,7 @@
  * chord is the browser's. DOM-free. */
 import type { KeyDef } from '../keys.ts';
 
-export type EditorAction = 'undo' | 'redo' | 'try' | 'check' | 'rotate';
+export type EditorAction = 'undo' | 'redo' | 'try' | 'check' | 'rotate' | 'look';
 
 export const EDITOR_KEYS: Record<EditorAction, KeyDef> = {
   undo: { label: 'U', keys: ['u'] },
@@ -16,6 +16,8 @@ export const EDITOR_KEYS: Record<EditorAction, KeyDef> = {
   check: { label: 'C', keys: ['c'] },
   /** Turns the brush's facing a quarter clockwise. */
   rotate: { label: 'O', keys: ['o'] },
+  /** Swaps the look the editor shows, Classic or Modern, as B swaps it in play. */
+  look: { label: 'B', keys: ['b'] },
 };
 
 /** The part of a keyboard event the editor's keys read. */

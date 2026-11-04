@@ -9,6 +9,8 @@
  * down, and + and − zoom it, without moving Theseus. Every control is ignored while a layer covers the board. */
 import { compassFace, createCompassDrag } from './compass.ts';
 import { createGestures } from './gestures.ts';
+import { createPaintRouter } from './paint-route.ts';
+import type { Route } from './paint-route.ts';
 import { HINT_KEY, createHint, hintText, readHint } from './hint.ts';
 import type { HintChange } from './hint.ts';
 import type { CamOp, Ptr } from './gestures.ts';
@@ -45,6 +47,16 @@ export interface Controls {
   dispose(): void;
 }
 
+/** The level editor's brush on the board (paint-route.ts says which pointers paint): a stroke at a canvas point in
+ *  client pixels (`first` for the press that starts it), its end, its drop (a second finger came down), and the
+ *  mouse hovering over a point, or leaving (null). */
+export interface PaintHooks {
+  stroke(x: number, y: number, first: boolean): void;
+  end(): void;
+  drop(): void;
+  hover(at: { x: number; y: number } | null): void;
+}
+
 /** Degrees an arrow key on the focused compass turns the view. */
 const TURN_KEY = 15;
 /** Degrees an arrow key on the focused compass tilts the view. */
@@ -70,8 +82,9 @@ function button(id: string, label: string, html: string, className: string): HTM
   return b;
 }
 
-/** Wires `canvas` and puts the camera buttons in `parent`. */
-export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, host: ControlHost, camera: CamControl): Controls {
+/** Wires `canvas` and puts the camera buttons in `parent`. With `paint` (the level editor), one finger or the left
+ *  button paints and the camera answers two fingers, the right and middle buttons, the wheel and the compass. */
+export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, host: ControlHost, camera: CamControl, paint?: PaintHooks): Controls {
   // A camera move takes the view tips (hint.ts) away, and the first one means they never show by themselves again:
   // every control reaches the camera through here.
   let used = false;
@@ -114,6 +127,18 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     }
   };
 
+  const router = paint ? createPaintRouter() : null;
+  /** Carries out the editor's routes: the brush's, and the camera's through the gesture reader. */
+  const route = (rs: Route[]) => {
+    for (const r of rs) {
+      if (r.kind === 'paint') paint!.stroke(r.x, r.y, r.first);
+      else if (r.kind === 'end') paint!.end();
+      else if (r.kind === 'drop') paint!.drop();
+      else if (r.kind === 'hover') paint!.hover({ x: r.x, y: r.y });
+      else if (r.op === 'cancel') apply(gestures.cancel(r.p.id));
+      else apply(gestures[r.op](r.p));
+    }
+  };
   const down = (e: PointerEvent) => {
     lastPointer = e.pointerType;
     if (host.blocked()) return;
@@ -122,15 +147,22 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
     } catch {
       // A synthetic pointer cannot be captured; its moves still reach the canvas.
     }
-    apply(gestures.down(ptr(e)));
+    if (router) {
+      e.preventDefault();
+      route(router.down(ptr(e)));
+    } else apply(gestures.down(ptr(e)));
   };
-  const move = (e: PointerEvent) => apply(gestures.move(ptr(e)));
-  const up = (e: PointerEvent) => apply(gestures.up(ptr(e)));
-  const cancel = (e: PointerEvent) => apply(gestures.cancel(e.pointerId));
+  const move = (e: PointerEvent) => (router ? route(router.move(ptr(e))) : apply(gestures.move(ptr(e))));
+  const up = (e: PointerEvent) => (router ? route(router.up(ptr(e))) : apply(gestures.up(ptr(e))));
+  const cancel = (e: PointerEvent) => (router ? route(router.cancel(e.pointerId)) : apply(gestures.cancel(e.pointerId)));
   /** A finger that left the board without its capture, or lost it, is gone: it never pairs with the next touch. */
-  const leave = (e: PointerEvent) => { if (e.pointerType !== 'mouse' && !canvas.hasPointerCapture?.(e.pointerId)) cancel(e); };
+  const leave = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse') paint?.hover(null);
+    else if (!canvas.hasPointerCapture?.(e.pointerId)) cancel(e);
+  };
   const dbl = () => {
-    if (host.blocked()) return;
+    // In the editor a double click is two dabs of paint; the compass resets the view.
+    if (paint || host.blocked()) return;
     host.gesture();
     cam.reset();
   };
@@ -205,7 +237,8 @@ export function createControls(canvas: HTMLCanvasElement, parent: HTMLElement, h
   }
   const covered = (): boolean => host.covered() || document.hidden || parent.closest('[hidden]') !== null;
   // On a touch screen the touch tour (src/tour.ts) teaches the view instead: the hint shows only when asked for.
-  if (!hint.over() && !matchMedia('(pointer: coarse)').matches) ticker = window.setInterval(tick, HINT_TICK_MS);
+  // The editor's board says its own rule (one finger paints), so the play tips never show there by themselves.
+  if (!paint && !hint.over() && !matchMedia('(pointer: coarse)').matches) ticker = window.setInterval(tick, HINT_TICK_MS);
   pill.addEventListener('click', () => hintChange(hint.dismiss()));
 
   return {

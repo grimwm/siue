@@ -2,7 +2,9 @@
  * canvas #editor-stage). It draws the draft as the game would at its start, paints it with the mouse or one
  * finger (a drag paints every cell it crosses and is one undo step; two fingers scroll a big board), fits the
  * board as the game's does, and answers the editor's keys while src/ui.ts hands them over. The draft and its
- * undo history live for the page's life: leaving the editor by Try it or Q keeps them. It keeps the author's best
+ * undo history live for the page's life: leaving the editor by Try it or Q keeps them. It shows the draft in either
+ * look: Classic, this flat canvas, or Modern, the game's 3D board (modern-view.ts, loaded only once Modern is chosen);
+ * the bar's Classic and Modern buttons, or B, switch between them and set the game's own look setting. It keeps the author's best
  * for each level it tried: the fewest moves of a try won without Ariadne's thread, by the level's share text, so
  * an edit leaves a level with no best until it is won again. Needs the DOM lib. */
 import { validInitials } from '../../../_kit/initials.ts';
@@ -33,6 +35,11 @@ import type { History } from './history.ts';
 import { newDraft, paint, resize, toLevel, toText } from './model.ts';
 import type { Brush, Draft } from './model.ts';
 import { HIDDEN_MARK, dirOf, nextDir } from './palette.tsx';
+import { createModernView, drawModern } from './modern-view.ts';
+import type { ModernView } from './modern-view.ts';
+import type { ModernBoard } from '../modern/board3d.ts';
+import type { IconSheet } from '../icons-models.ts';
+import type { Look, WallMode } from '../settings.ts';
 
 export interface Editor {
   /** Shows the editor on `draft` (one undo step on the history, so U brings back the draft before it), or on the
@@ -47,6 +54,8 @@ export interface Editor {
   tryWon(text: string, moves: number): void;
   /** The author's best for the share text `text`, or null before a try of it is won without the thread. */
   bestFor(text: string): number | null;
+  /** The Modern board while the editor shows it, else null; for tests. */
+  readonly modern: ModernBoard | null;
 }
 
 export interface EditorDeps {
@@ -64,6 +73,13 @@ export interface EditorDeps {
   pageUrl?: () => string;
   /** Leaves the editor for the title card (its Leave button), when the page gives it. */
   leave?: () => void;
+  /** The game's look setting, which the editor opens in and its Classic and Modern buttons set; without it the
+   *  editor shows Classic alone. */
+  look?: { get(): Look; set(look: Look): void };
+  /** The Modern look's needs: the modern bundle's loader, the Modern icons and the walls setting. */
+  modern?: { load(): Promise<typeof import('../modern/entry.ts') | null>; icons: IconSheet; walls(): WallMode };
+  /** Says a short message on the page's toast (the Modern look could not start). */
+  say?: (message: string) => void;
 }
 
 /** The owner flag: the kit pref `crete-owner` set to `on` shows the campaign's own tools. */
@@ -72,6 +88,7 @@ export const OWNER_PREF = 'crete-owner';
 export const INITIALS_PREF = 'crete-initials';
 const NEW_SIDE = 12;
 const STOPPED_MESSAGE = 'The search stopped before it finished; press Share again to keep going.';
+export const NO_MODERN_MESSAGE = 'The modern look needs WebGL, which this browser does not have; building in Classic.';
 
 /** The figures where the level starts them. */
 function restingFigures(s: State): Figures {
@@ -147,8 +164,14 @@ export function createEditor(deps: EditorDeps): Editor {
   let listFor: Draft | null = null;
   let marks: { r: number; c: number; mark: string }[] = [];
   let sized = '';
-  /** The stroke in progress: its pointer and the last cell it painted. */
+  /** The stroke in progress: its pointer (-1 for the Modern board's) and the last cell it painted. */
   let stroke: { id: number; last: Cell } | null = null;
+  /** The look the editor shows: Classic until the page's look setting says Modern and the 3D board has loaded. */
+  let look: Look = 'classic';
+  let modernView: ModernView | null = null;
+  /** The draft the Modern board last showed. */
+  let modernFor: Draft | null = null;
+  const modernOn = (): boolean => look === 'modern' && !!modernView?.board;
   /** Touches on the board, for telling a one-finger stroke from a two-finger scroll. */
   const touches = new Map<number, { x: number; y: number }>();
   /** The author's best by share text. */
@@ -159,6 +182,13 @@ export function createEditor(deps: EditorDeps): Editor {
 
   function drawBoard(): void {
     if (!shown) return;
+    if (modernOn()) {
+      if (modernFor !== live) {
+        modernFor = live;
+        drawModern(modernView!.board!, initial(toLevel(live)), hiddenMarks(live));
+      }
+      return;
+    }
     if (listFor !== live) {
       const s = initial(toLevel(live));
       list = drawList(s, restingFigures(s), atlas, 0);
@@ -192,6 +222,10 @@ export function createEditor(deps: EditorDeps): Editor {
    *  keeps cells of at least 32 px and scrolls. */
   function fit(): void {
     if (!shown) return;
+    if (modernOn()) {
+      modernView!.resize();
+      return;
+    }
     const { cols, rows } = live;
     setScrolls(false);
     const bs = getComputedStyle(holder);
@@ -240,6 +274,7 @@ export function createEditor(deps: EditorDeps): Editor {
         onIntro: (intro) => edit(d => (intro === d.intro ? d : { ...d, intro })),
       },
       draft: live, canUndo: h.canUndo, canRedo: h.canRedo, brush, owner: isOwner, drawer,
+      ...(deps.look ? { look, onLook: (l: Look) => setLook(l, true) } : {}),
       onPick: (b) => {
         brush = b;
         drawer = false;
@@ -292,6 +327,47 @@ export function createEditor(deps: EditorDeps): Editor {
     if (dir === null || (brush.kind !== 'hazard' && brush.kind !== 'machine')) return;
     brush = { ...brush, dir: nextDir(dir) };
     drawPanel();
+  }
+
+  /** Shows the draft in `next`, and with `store` makes it the game's look too. Modern loads the 3D board the first
+   *  time; where it cannot start, the editor stays in Classic and says so. */
+  function setLook(next: Look, store: boolean): void {
+    endStroke();
+    if (store) deps.look?.set(next);
+    look = next;
+    if (next === 'classic') {
+      modernView?.show(false);
+      sized = '';
+      drawPanel();
+      drawBoard();
+      return;
+    }
+    drawPanel();
+    const m = deps.modern;
+    if (!m) return;
+    modernView ??= createModernView({
+      holder, load: m.load, atlas, image, icons: m.icons, walls: m.walls, hidden: () => !shown,
+      painter: {
+        stroke: (at, first) => (first ? beginStroke(-1, at) : strokeTo(-1, at)),
+        end: () => { if (stroke?.id === -1) endStroke(); },
+        drop: dropStroke,
+      },
+    });
+    const view = modernView;
+    void view.ready().then(ok => {
+      if (look !== 'modern') return;
+      if (!ok) {
+        look = 'classic';
+        deps.say?.(NO_MODERN_MESSAGE);
+        drawPanel();
+        return;
+      }
+      if (!shown) return;
+      setScrolls(false);
+      view.show(true);
+      modernFor = null;
+      drawBoard();
+    });
   }
 
   function tryIt(): void {
@@ -390,6 +466,26 @@ export function createEditor(deps: EditorDeps): Editor {
     show(now().now);
   }
 
+  /** A stroke by pointer `id` starts at `at`. */
+  function beginStroke(id: number, at: Cell): void {
+    if (!shown || stroke) return;
+    // The press keeps the focus where it was; a number box keeping it would take the editor's keys as typing.
+    const focused = document.activeElement as HTMLElement | null;
+    if (focused && typesText(focused)) focused.blur();
+    stroke = { id, last: at };
+    show(paint(live, at, brush));
+  }
+
+  /** The stroke by pointer `id` moves on to `at`, painting every cell on the way. */
+  function strokeTo(id: number, at: Cell): void {
+    if (!stroke || id !== stroke.id) return;
+    if (at.r === stroke.last.r && at.c === stroke.last.c) return;
+    let d = live;
+    for (const c of lineCells(stroke.last, at)) d = paint(d, c, brush);
+    stroke.last = at;
+    show(d);
+  }
+
   canvas.addEventListener('pointerdown', (ev) => {
     if (ev.pointerType === 'touch') {
       touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
@@ -400,13 +496,8 @@ export function createEditor(deps: EditorDeps): Editor {
     } else if (ev.button > 0) return;
     if (!shown || stroke) return;
     ev.preventDefault();
-    // The press keeps the focus where it was; a number box keeping it would take the editor's keys as typing.
-    const focused = document.activeElement as HTMLElement | null;
-    if (focused && typesText(focused)) focused.blur();
     canvas.setPointerCapture?.(ev.pointerId);
-    const at = cellAt(ev);
-    stroke = { id: ev.pointerId, last: at };
-    show(paint(live, at, brush));
+    beginStroke(ev.pointerId, cellAt(ev));
   });
 
   canvas.addEventListener('pointermove', (ev) => {
@@ -418,12 +509,7 @@ export function createEditor(deps: EditorDeps): Editor {
     }
     if (touch) touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     if (!stroke || ev.pointerId !== stroke.id) return;
-    const at = cellAt(ev);
-    if (at.r === stroke.last.r && at.c === stroke.last.c) return;
-    let d = live;
-    for (const c of lineCells(stroke.last, at)) d = paint(d, c, brush);
-    stroke.last = at;
-    show(d);
+    strokeTo(ev.pointerId, cellAt(ev));
   });
 
   const lift = (ev: PointerEvent): void => {
@@ -447,6 +533,10 @@ export function createEditor(deps: EditorDeps): Editor {
       live = now().now;
       checker.edited(toText(live, true));
       sized = '';
+      modernFor = null;
+      const wanted = deps.look?.get() ?? 'classic';
+      if (wanted !== look || (wanted === 'modern' && !modernOn())) setLook(wanted, false);
+      else if (modernOn()) modernView!.show(true);
       drawPanel();
       drawBoard();
     },
@@ -457,6 +547,7 @@ export function createEditor(deps: EditorDeps): Editor {
       drawer = false;
       shown = false;
       root.hidden = true;
+      modernView?.show(false);
     },
     get draft() {
       return live;
@@ -480,6 +571,7 @@ export function createEditor(deps: EditorDeps): Editor {
         case 'try': tryIt(); break;
         case 'check': runCheck(); break;
         case 'rotate': rotate(); break;
+        case 'look': if (deps.look) setLook(look === 'modern' ? 'classic' : 'modern', true); break;
       }
       return true;
     },
@@ -488,5 +580,8 @@ export function createEditor(deps: EditorDeps): Editor {
       if (best === undefined || moves < best) bests.set(text, moves);
     },
     bestFor: text => bests.get(text) ?? null,
+    get modern() {
+      return modernOn() ? modernView!.board : null;
+    },
   };
 }

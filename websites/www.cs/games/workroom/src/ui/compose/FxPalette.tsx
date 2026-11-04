@@ -48,7 +48,7 @@ export function FxPalette(p: FxPaletteProps) {
           <div class="cmp-chip" role="listitem" style={{ '--c': FAMILY_COLOR[x.family] }} title={x.does}>
             <button type="button" data-effect={x.id} aria-pressed={c.placing === x.id} aria-label={`Place ${x.name}`}
               onPointerDown={e => chipDrag(c, x.id, e, p.setDrop)}
-              onClick={e => { if (Date.now() < quietUntil) return; c.startPlacing(c.placing === x.id ? null : x.id); if ((e as MouseEvent).detail === 0) c.say(`${x.name}: use the arrow keys to choose the track and the bar, then Enter.`); }}>
+              onClick={e => { const keys = (e as MouseEvent).detail === 0; if (!keys && Date.now() < quietUntil) { quietUntil = 0; return; } c.startPlacing(c.placing === x.id ? null : x.id); if (keys) c.say(`${x.name}: use the arrow keys to choose the track and the bar, then Enter.`); }}>
               <Glyph name={fxGlyph(x.id)} size={16} />{x.name}
             </button>
             <button type="button" data-hear-effect={x.id} aria-label={`Hear ${x.name}`} title={`Hear ${x.name}`} onClick={() => p.hear(x.id)}>
@@ -63,7 +63,7 @@ export function FxPalette(p: FxPaletteProps) {
   );
 }
 
-/** After a chip is dragged, its click is not a tap. */
+/** The click that ends a chip's drag is not a tap: it is let go once, within half a second; a key press is always a tap. */
 let quietUntil = 0;
 
 /** A chip dragged onto the timeline: at once with a mouse, after a short hold with a finger. */

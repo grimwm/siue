@@ -1,11 +1,11 @@
 // Measures how often Endless's search finds a level within its budget, as the browser runs it: a run's second
 // level (after the bank's first for that seed) at each tier, one JSON line per level with each part's time.
 //
-//   node tools/endless-bench.ts <tiers> <seeds> [lane] [lanes]   # e.g. 1-10 50 0 4
+//   node tools/endless-bench.ts <tiers> <seeds> [lane] [lanes] [done-dir]   # e.g. 1-10 50 0 4 out/
 //   node tools/endless-bench.ts sum <file.jsonl>...               # the share made, by tier
 //
 // `lane` of `lanes` takes every lanes-th search, so four can run at once. Run from games/crete.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fromBank, makePart, settle, PARTS } from '../src/endless/generate.ts';
 import type { Made, Part } from '../src/endless/generate.ts';
 import { AHEAD } from '../src/endless/saved.ts';
@@ -78,15 +78,21 @@ if (cmd === 'sum') {
   }
   console.log(`all: ${made}/${n} (${Math.round(100 * made / Math.max(1, n))}%)`);
 } else {
-  const [tiersS = '1-10', seedsS = '50', laneS = '0', lanesS = '1'] = [cmd, ...rest];
+  const [tiersS = '1-10', seedsS = '50', laneS = '0', lanesS = '1', doneDir] = [cmd, ...rest];
   const [lo, hi = lo] = tiersS!.split('-').map(Number) as [number, number?];
   const seeds = Number(seedsS), lane = Number(laneS), lanes = Number(lanesS);
   const known = knownOf(campaignLevels());
+  // Levels a stopped run already measured (any .jsonl in `doneDir`) are not measured again.
+  const done = new Set<string>();
+  if (doneDir) for (const f of readdirSync(doneDir)) if (f.endsWith('.jsonl')) {
+    for (const line of readFileSync(`${doneDir}/${f}`, 'utf8').split('\n')) if (line.trim()) { const r = JSON.parse(line) as { tier: number; seed: string }; done.add(`${r.tier}/${r.seed}`); }
+  }
   let k = 0;
-  for (let tier = lo; tier <= hi!; tier++) {
-    for (let i = 0; i < seeds; i++) {
-      if (k++ % lanes !== lane) continue;
+  // Seed by seed across the tiers, so a run stopped early has measured every tier alike.
+  for (let i = 0; i < seeds; i++) {
+    for (let tier = lo; tier <= hi!; tier++) {
       const seed = `bench${i}`;
+      if (done.has(`${tier}/${seed}`) || k++ % lanes !== lane) continue;
       const first = fromBank(BANK, { seed, tier, depth: 1, run: [] }, bandAfter(null, false)!);
       const req = { seed, tier, depth: 2, run: [{ text: first.text, explored: first.explored }] };
       // The parts one after another, as one worker runs them, each timed.

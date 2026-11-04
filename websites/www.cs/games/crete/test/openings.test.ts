@@ -7,6 +7,7 @@ import {
   DOOR_SINK_MS, GATE_SLIDE_MS, HOOF_MS, PORTAL_WAKE_MS, REST, STEP_BACK, axisAt, beastDrawnAt, createOpenings, hoofAt,
   openedDoor, portalAt, portalLit,
 } from '../src/openings.ts';
+import { WAKE_MS } from '../src/modern/portal-wake.ts';
 import { drawList, exitSprite, slideFrame } from '../src/board-plan.ts';
 import type { Atlas, Figures } from '../src/board-plan.ts';
 import { terrainModel } from '../src/modern/model-names.ts';
@@ -53,7 +54,8 @@ test('the bars slide across once the last relic is taken, and back on undo', () 
   assert.equal(start.bars.get(1 * 5 + 2), 0, 'the bars start in the walls');
   const mid = o.at(t, fig(t), 1000 + GATE_SLIDE_MS / 2, false, true).bars.get(7)!;
   assert.ok(mid > 0.3 && mid < 0.7, `halfway ${mid}`);
-  assert.equal(o.at(t, fig(t), 1000 + GATE_SLIDE_MS + 1, false, true), REST, 'then the grid rests');
+  assert.equal(o.at(t, fig(t), 1000 + GATE_SLIDE_MS + 1, false, true).bars.size, 0, 'then the grid rests');
+  assert.equal(o.at(t, fig(t), 1000 + Math.max(GATE_SLIDE_MS, WAKE_MS), false, true), REST, 'and, the portal awake, all is still');
   // Undo shuts it again: the bars slide back.
   assert.equal(o.at(s, fig(s), 5000, false, true).bars.get(7), 1, 'the bars start across');
   const back2 = o.at(s, fig(s), 5000 + GATE_SLIDE_MS / 2, false, true).bars.get(7)!;
@@ -159,6 +161,31 @@ test('the exit\'s portal is dormant until the last relic is taken, lights up wit
   const fading = o.at(s, rest(s), 5000 + PORTAL_WAKE_MS / 2, false, true).portal!;
   assert.ok(fading > 0 && fading < 1, `fading ${fading}`);
   assert.equal(portalAt(s, o.at(s, rest(s), 5000 + GATE_SLIDE_MS + 1, false, true)), 0, 'dormant again');
+});
+
+test('Modern\'s waking runs its own clock from the last relic, keeps the board moving, and never plays going dark', () => {
+  const o = createOpenings();
+  const s = grid(['#####', 'P*|.E', '#####']);
+  assert.equal(o.at(s, rest(s), 0, false, true).wake, null);
+  const t = play(s, mv('right')).state;
+  assert.equal(o.at(t, rest(t), 1000, false, true).wake, 0, 'it starts with the last relic');
+  assert.equal(o.at(t, rest(t), 1000 + WAKE_MS / 2, false, true).wake, WAKE_MS / 2);
+  const late = o.at(t, rest(t), 1000 + WAKE_MS - 1, false, true);
+  assert.equal(late.wake, WAKE_MS - 1, 'it outlasts the plain fade');
+  assert.equal(late.portal, null, 'which Classic has finished');
+  assert.ok(late.busy, 'the board keeps drawing');
+  assert.equal(o.at(t, rest(t), 1000 + WAKE_MS, false, true), REST, 'then all is still');
+  // Undo during the waking: it stops, and the light only fades.
+  const p = createOpenings();
+  p.at(s, rest(s), 0, false, true);
+  p.at(t, rest(t), 1000, false, true);
+  p.at(t, rest(t), 1000 + PORTAL_WAKE_MS / 2, false, true);
+  const u = p.at(s, rest(s), 1000 + PORTAL_WAKE_MS / 2 + 100, false, true);
+  assert.equal(u.wake, null, 'no waking on the way out');
+  assert.ok(u.portal! > 0 && u.portal! < 1, 'a fade');
+  const r = createOpenings();
+  r.at(s, rest(s), 0, true, true);
+  assert.equal(r.at(t, rest(t), 10, true, true).wake, null, 'reduced motion: no waking');
 });
 
 test('the portal is lit from the start on a level with no relics, and a restart or reduced motion sets it at once', () => {

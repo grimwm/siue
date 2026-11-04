@@ -785,6 +785,7 @@ const modernHook = {
   yaw: () => modern?.yaw() ?? DEFAULT_YAW,
   zoom: () => modern?.zoom() ?? 0,
   pitch: () => modern?.pitch() ?? 0,
+  setView: (yaw: number, pitch: number) => modern?.setView(yaw, pitch),
   following: () => modern?.following() ?? true,
   floating: () => modern?.floating() ?? [],
   routeNext: () => modern?.routeNext() ?? null,

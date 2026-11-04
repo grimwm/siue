@@ -6,6 +6,7 @@
  * the first time in a try he waits beside an open one he tries its bars with a hoof, twice, and backs off. All of it
  * is only how things look: none of it touches the rules. Reduced motion snaps. DOM-free. */
 import { TERRAIN } from './puzzle/tiles.ts';
+import { WAKE_MS } from './modern/portal-wake.ts';
 import type { KeyColor } from './puzzle/tiles.ts';
 import type { State } from './puzzle/state.ts';
 
@@ -72,6 +73,9 @@ export interface Motion {
   /** How far the exit's portal is lit while it lights up or goes dark, 0 dormant to 1 lit; null at rest, lit as
    *  `portalLit` says. */
   readonly portal: number | null;
+  /** How long ago, ms, the exit's portal began to wake, while Modern's waking plays (src/modern/portal-wake.ts);
+   *  null otherwise. Going dark is only the fade in `portal`. */
+  readonly wake: number | null;
   /** How far each door cell's door has sunk, by cell, while it moves: 0 standing to 1 gone. */
   readonly doors: ReadonlyMap<number, number>;
   /** How far the Minotaur leans toward the gate beside him, testing it, in cells. */
@@ -80,7 +84,7 @@ export interface Motion {
   readonly busy: boolean;
 }
 
-export const REST: Motion = { bars: new Map(), portal: null, doors: new Map(), hoof: 0, busy: false };
+export const REST: Motion = { bars: new Map(), portal: null, wake: null, doors: new Map(), hoof: 0, busy: false };
 
 /** The exit's portal is lit once every relic is taken: the exit lets Theseus out only then. */
 export const portalLit = (s: Pick<State, 'relicsLeft'>): number => (s.relicsLeft === 0 ? 1 : 0);
@@ -117,6 +121,8 @@ export function createOpenings(): Openings {
   let doorOpen = new Map<number, boolean>();
   const gate: { move: Move | null } = { move: null };
   const portal: { move: Move | null } = { move: null };
+  /** When Modern's waking began, ms. */
+  let woke: number | null = null;
   const doors = new Map<number, Move>();
   /** The hoof test has played in this try; the state it started on, and when. */
   let hoofed = false;
@@ -148,6 +154,7 @@ export function createOpenings(): Openings {
         level = s.level;
         gate.move = null;
         portal.move = null;
+        woke = null;
         doors.clear();
         hoofed = false;
         hoof = null;
@@ -156,9 +163,11 @@ export function createOpenings(): Openings {
         if (s.moves === 0 && moves > 1) {
           gate.move = null;
           portal.move = null;
+          woke = null;
         } else if (open !== gateOpen) {
           gate.move = toward(gate.move, open ? 1 : 0, now, GATE_SLIDE_MS);
           portal.move = toward(portal.move, open ? 1 : 0, now, PORTAL_WAKE_MS);
+          woke = open ? now : null;
         }
         for (const [i, o] of nowOpen) if (doorOpen.get(i) !== o) doors.set(i, toward(doors.get(i), o ? 1 : 0, now, DOOR_SINK_MS));
       }
@@ -168,6 +177,7 @@ export function createOpenings(): Openings {
       if (reduced) {
         gate.move = null;
         portal.move = null;
+        woke = null;
         doors.clear();
       }
 
@@ -186,6 +196,14 @@ export function createOpenings(): Openings {
         if (now - portal.move.t0 >= portal.move.ms) portal.move = null;
         else {
           lit = where(portal.move, now);
+          busy = true;
+        }
+      }
+      let wake: number | null = null;
+      if (woke !== null) {
+        if (now - woke >= WAKE_MS) woke = null;
+        else {
+          wake = Math.max(0, now - woke);
           busy = true;
         }
       }
@@ -214,7 +232,7 @@ export function createOpenings(): Openings {
           busy = true;
         }
       }
-      return busy ? { bars, portal: lit, doors: sunk, hoof: lean, busy } : REST;
+      return busy ? { bars, portal: lit, wake, doors: sunk, hoof: lean, busy } : REST;
     },
   };
 }

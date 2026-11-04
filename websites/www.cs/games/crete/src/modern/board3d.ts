@@ -20,6 +20,7 @@ import type { Cell, Dir } from '../puzzle/tiles.ts';
 import type { WallMode } from '../settings.ts';
 import { REST, createOpenings, portalAt } from '../openings.ts';
 import type { Motion } from '../openings.ts';
+import { lightAt } from './portal-wake.ts';
 import { DEFAULT_YAW, START_PITCH, cameraDistance, clampTilt, clampView, clampZoom, easeCam, nearestYaw, panCam, wholeZoom, zoomAbout, zoomLimits } from './camera.ts';
 import { VARIANT_KEY, useOverrides, variant } from './variants.ts';
 import type { Cam } from './camera.ts';
@@ -126,6 +127,9 @@ const BACKGROUND = 0x060504;
 const BUBBLE_HEAD = 1.15;
 const RAD = Math.PI / 180;
 const LOOP_FPS = 12;
+
+/** How lit the exit's portal is drawn: its sheet of light while it wakes, else as it moves or as the state says. */
+const drawnPortal = (s: State, m: Motion): number => (m.wake !== null ? lightAt(m.wake) : portalAt(s, m));
 /** A zoom about a point this near the view's centre (a share of its width or height) keeps following Theseus. */
 const ZOOM_CENTRE = 0.12;
 
@@ -368,9 +372,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       if (!p?.open) return;
       if (t === 'gate') p.open(m.bars.get(i) ?? (last!.relicsLeft === 0 ? 1 : 0));
       else if (t === 'exit') {
-        const k = portalAt(last!, m);
-        p.open(k);
-        lights?.portal(i, k);
+        if (m.wake !== null && p.wake) p.wake(m.wake);
+        else p.open(portalAt(last!, m));
+        lights?.portal(i, drawnPortal(last!, m));
       }
       else p.open(m.doors.get(i) ?? (t === 'floor' ? 1 : 0));
     });
@@ -771,7 +775,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     },
     frames: () => drawn,
     opening: () => ({
-      bars: [...lastMotion.bars.values()], portal: last ? portalAt(last, lastMotion) : 0,
+      bars: [...lastMotion.bars.values()], portal: last ? drawnPortal(last, lastMotion) : 0,
       doors: [...lastMotion.doors.values()], hoof: lastMotion.hoof,
     }),
     quality: () => quality,

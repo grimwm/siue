@@ -860,7 +860,7 @@ export function Composer(p: ComposerProps) {
     setLen, setSelectMode: on => { setSelectMode(on); if (on) setChord(null); }, setChord, setSplitting, setTyping, setCursor,
     setLoop: range => { setLoopState(range); if (range) setLoopOn(true); }, preview: previewNote, hearInstrument, playFrom,
     openPop: (name, anchor, arg) => setPop({ name, anchor, arg }), head: ctlRef.current?.head ?? null, startPlacing, placeAt,
-    setRecordOpen: id => { if (live.current.take) commitTake(); if (along !== 'off') finishAlong(); setRecordOpen(id); if (id) setSelState(id); },
+    setRecordOpen: id => { if (live.current.take) commitTake(); if (along !== 'off') finishAlong(); if (id !== recordOpen) setKeysFrom(null); setRecordOpen(id); if (id) setSelState(id); },
     setRenaming, setPaletteOpen,
   };
   ctlRef.current = c;

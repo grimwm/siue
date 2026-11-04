@@ -15,7 +15,7 @@ interface BubbleTest {
   game: { run: { now: { player: Cell; minotaur: Cell | null; objects: (string | null)[]; moves: number } } };
   parse(text: string): unknown;
   playLevel(level: unknown): void;
-  modern: { active: boolean; bubbles(): Shown[]; at(c: number, r: number): { x: number; y: number } | null };
+  modern: { active: boolean; frames(): number; bubbles(): Shown[]; at(c: number, r: number): { x: number; y: number } | null };
   classic: { bubbles(): Shown[]; at(c: number, r: number): { x: number; y: number } | null };
 }
 type Hooked = { __creteTest: BubbleTest };
@@ -40,8 +40,11 @@ async function open(page: Page, look: 'classic' | 'modern'): Promise<string[]> {
   }, LEVEL);
   await page.locator('#start-begin').click();
   await expect(page.locator('#start-veil')).toBeHidden();
-  if (look === 'modern') await expect.poll(() => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern.active)).toBe(true);
-  else await page.waitForSelector('#stage[data-cell]');
+  if (look === 'modern') {
+    await expect.poll(() => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern.active)).toBe(true);
+    // A headless runner draws Modern slowly: wait for its first frame.
+    await expect.poll(() => page.evaluate(() => (window as unknown as Hooked).__creteTest.modern.frames()), { timeout: 30_000 }).toBeGreaterThan(0);
+  } else await page.waitForSelector('#stage[data-cell]');
   return errors;
 }
 

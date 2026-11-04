@@ -30,7 +30,8 @@ export const BANDS: readonly [number, number][] = [
  *  left out, as the bank holds no level that hides walls. */
 export const JOBS: readonly (readonly [number, number])[] = [
   ...[2, 3, 5, 6, 7, 8].flatMap(c => [1, 3, 5, 7].map(b => [c, b] as const)),
-  ...[1, 2, 3, 4, 5, 6, 7, 2, 4, 6, 7, 5, 3, 6].map(b => [9, b] as const),
+  ...[1, 2, 3, 4, 5, 6, 7].map(b => [9, b] as const),
+  ...[2, 3, 4, 5, 6, 7].map(b => [1, b] as const),
 ];
 /** A bank job gives up past this many situations and is written as skipped. */
 const JOB_BUDGET = 80_000_000;

@@ -14,9 +14,13 @@ import { parse } from '../src/puzzle/level.ts';
 
 const known = knownOf(campaignLevels());
 
-test('the bank holds levels of every chapter\'s pieces, none hiding walls', () => {
-  assert.ok(BANK.length >= 20, `${BANK.length} levels`);
-  assert.ok(BANK.some(b => b.chapter === 1), 'Chapter 1\'s pieces alone, for a new player');
+test('the bank, a safety net for every tier: ten levels or more each, with the tier\'s own newest pieces from Chapter 2 on, none hiding walls', () => {
+  for (let tier = 1; tier <= 10; tier++) {
+    const offered = BANK.filter(b => b.chapter <= tier);
+    assert.ok(offered.length >= 10, `tier ${tier}: ${offered.length} levels`);
+  }
+  // Chapter 4's pieces only hide walls, and Chapter 10 brings none.
+  for (const c of [1, 2, 3, 5, 6, 7, 8, 9]) assert.ok(BANK.filter(b => b.chapter === c).length >= 2, `Chapter ${c}'s pieces`);
   for (const b of BANK) assert.equal(hidesWalls(parse(b.text)), false);
 });
 

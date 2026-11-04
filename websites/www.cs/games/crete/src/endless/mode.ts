@@ -1,7 +1,7 @@
 /* The Island of Crete: Endless on the page, DOM-free. It keeps the saved run (src/endless/saved.ts), asks the
  * worker (src/endless/client.ts) for levels, and opens them as levels from outside the campaign. A new run's first
- * level comes from the bank at once; while a level is played, the worker already makes the next one, so Next Level
- * usually opens it straight away, and otherwise the Endless card shows the search's progress until it is in. The
+ * level comes from the bank at once; while a level is played, the workers already make the next AHEAD, so Next
+ * Level usually opens one straight away, and otherwise the Endless card shows the search's progress until it is in. The
  * card's words come from `view()`. */
 import { parse } from '../puzzle/level.ts';
 import { lineOf } from '../puzzle/cache.ts';
@@ -10,6 +10,7 @@ import type { Level } from '../puzzle/level.ts';
 import type { Made, Progress } from './generate.ts';
 import type { EndlessClient, MakeJob } from './client.ts';
 import { CancelledError } from './client.ts';
+import { AHEAD } from './saved.ts';
 import type { EndlessBest, EndlessRun, EndlessSaved, RunLevel } from './saved.ts';
 import { endlessName } from './name.ts';
 import { cleanSeed } from './random.ts';
@@ -65,6 +66,12 @@ export interface EndlessMode {
   prefetch(): void;
 }
 
+/** The start card's words: the seed and the fewest moves, and, for a level the search did not make from the seed
+ *  in time, that it comes from the level bank. */
+export function introOf(seed: string, l: RunLevel): string {
+  return `Seed ${seed}. The fewest moves are ${l.shortest}.${l.from === 'bank' ? ' From the level bank.' : ''}`;
+}
+
 export function createEndlessMode(deps: EndlessDeps): EndlessMode {
   let finding: { progress: Progress | null } | null = null;
   let error: string | null = null;
@@ -80,15 +87,19 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
     const l = run.levels.at(-1)!;
     let level: Level;
     try { level = parse(l.text); } catch (e) { error = `The level could not be read: ${e instanceof Error ? e.message : String(e)}`; deps.changed(); return; }
-    deps.play({ ...level, title: endlessName(run.seed, run.depth), intro: `Seed ${run.seed}. The fewest moves are ${l.shortest}.` }, about(run, l), lineOf(l.line));
+    deps.play({ ...level, title: endlessName(run.seed, run.depth), intro: introOf(run.seed, l) }, about(run, l), lineOf(l.line));
     prefetch();
   };
 
+  /** Keeps the workers AHEAD levels in front of the one being played: each level made starts the next. */
   function prefetch(): void {
     const run = deps.saved.run();
-    if (!run || run.next) return;
-    if (job && job.seed === run.seed && job.depth === run.depth + 1) return;
-    start(run.seed, run.tier, run.depth + 1, false);
+    if (!run) return;
+    const queued = deps.saved.queued().length;
+    if (queued >= AHEAD) return;
+    const depth = run.depth + 1 + queued;
+    if (job && job.seed === run.seed && job.depth === depth) return;
+    start(run.seed, run.tier, depth, false);
   }
 
   function start(seed: string, tier: number, depth: number, first: boolean): void {
@@ -111,8 +122,10 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
         if (waiting) { waiting = false; finding = null; deps.changed(); openCurrent(run); }
         return;
       }
-      deps.saved.setNext(seed, depth - 1, made);
-      if (waiting) { waiting = false; finding = null; deps.changed(); goNext(); }
+      deps.saved.addMade(seed, depth, made);
+      const run = deps.saved.run();
+      if (waiting && run?.next && run.depth + 1 === depth) { waiting = false; finding = null; deps.changed(); goNext(); return; }
+      prefetch();
     }, (e: unknown) => {
       if (job !== mine) return;
       job = null;

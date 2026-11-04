@@ -38,8 +38,8 @@ async function openEndless(page: Page, look: 'classic' | 'modern'): Promise<stri
   await page.addInitScript(l => localStorage.setItem('crete-look', l), look);
   await page.goto(PAGE);
   await expect(page.locator('#title-veil')).toBeVisible();
-  // The specs' budget keeps a search short: past it the level is the bank's.
-  await page.evaluate(() => (window as unknown as Hooked).__creteTest.endless.setBudget(1_500_000));
+  // The specs' budget keeps a search short (its twelve parts share it): past it the level is the bank's.
+  await page.evaluate(() => (window as unknown as Hooked).__creteTest.endless.setBudget(3_000_000));
   await page.locator('#title-endless').click();
   await expect(page.locator('#endless-veil')).toBeVisible();
   await expect(page.locator('#endless-title')).toHaveText('Endless');
@@ -56,6 +56,8 @@ for (const look of ['classic', 'modern'] as const) {
     await expect(page.locator('#start-veil')).toBeVisible({ timeout: 20_000 });
     await expect(page.locator('#start-veil .kicker')).toHaveText('Endless · Level 1');
     await expect(page.locator('#hud-trial')).toHaveText('Endless • Level 1');
+    // A run's first level comes from the bank at once, and its card says so.
+    await expect(page.locator('#start-veil')).toContainText('From the level bank.');
     await page.locator('#start-begin').click();
     // The board settles first (Modern builds its scene once); then, while the worker is still making level 2,
     // the page keeps answering.

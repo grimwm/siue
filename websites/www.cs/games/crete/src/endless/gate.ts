@@ -1,15 +1,17 @@
 /* The Island of Crete: Endless's gate. Every level Endless makes passes the campaign's own checks
  * (src/puzzle/difficulty.ts) as a challenge level: `challengeProblems` against `BAR` (which carries
  * `catchProblems`), `sharedProblems` against `SHARED_BAR`, `threatProblems` with the challenge bar,
- * `hiddenProblems`, `rampProblems` with `rampOf` on the climb, and `uselessProblems`; and two of its own that the
- * campaign's tests keep for released levels: a tidy layout of rooms and halls, and a layout new against every
- * campaign level and the run's own levels (src/puzzle/layouts.ts). The difficulty climbs by the ramp, level by
+ * `hiddenProblems`, `rampProblems` with `rampOf` on the climb, `startProblems`, and `purposeProblems`, the
+ * every-piece rule held to what a player sees (a piece the shortest line meets, or one whose loss changes the
+ * fewest moves or the win; a smaller search alone no longer counts); and two of its own that the campaign's tests
+ * keep for released levels: a tidy layout of rooms and halls, and a layout new against every campaign level and the
+ * run's own levels (src/puzzle/layouts.ts). The difficulty climbs by the ramp, level by
  * level, until it reaches a plateau, where it stays. DOM-free. */
 import type { Level } from '../puzzle/level.ts';
 import type { Difficulty } from '../puzzle/difficulty.ts';
 import {
-  BAR, HIDDEN, SHARED_BAR, challengeProblems, hiddenProblems, hidesWalls, rampOf, rampProblems, sharedProblems,
-  threatProblems, uselessProblems,
+  BAR, HIDDEN, SHARED_BAR, challengeProblems, hiddenProblems, hidesWalls, rampOf, rampProblems, sharedProblems, startProblems,
+  threatProblems, purposeProblems,
 } from '../puzzle/difficulty.ts';
 import { SAME, eight, featuresOf, overlapOf } from '../puzzle/layouts.ts';
 import type { Features } from '../puzzle/layouts.ts';
@@ -114,10 +116,19 @@ export function newProblems(level: Level, known: Known, run: readonly Level[] = 
   return out;
 }
 
+/** The most `level`'s layout overlaps any campaign level's or any of `run`'s: under SAME it is new. */
+export function likeness(level: Level, known: Known, run: readonly Level[] = []): number {
+  const A = featuresOf(level);
+  let most = 0;
+  for (const Bs of known.features) most = Math.max(most, overlapOf(A, Bs));
+  for (const lv of run) most = Math.max(most, overlapOf(A, eight(featuresOf(lv))));
+  return most;
+}
+
 /** What Endless needs to know of where a level falls: its band, and the run's level before it (null for the first). */
 export interface Place { band: Band; previous: Difficulty | null }
 
-/** Every check but uselessProblems (the costly one), in the order of their cost. */
+/** Every check but purposeProblems (the costly one), in the order of their cost. */
 export function quickProblems(level: Level, d: Difficulty, place: Place, known: Known, run: readonly Level[] = []): string[] {
   const out: string[] = [];
   if (d.explored < place.band.least || d.explored > place.band.most) {
@@ -127,11 +138,12 @@ export function quickProblems(level: Level, d: Difficulty, place: Place, known: 
   if (!place.band.plateau && place.previous) out.push(...rampProblems(place.previous, d, rampOf(level)));
   if (hidesWalls(level) && place.band.plateau) out.push('a level that hides walls never sits on the plateau');
   if (out.length) return out;
-  return [...tidyProblems(level), ...newProblems(level, known, run)];
+  return [...startProblems(level), ...tidyProblems(level), ...newProblems(level, known, run)];
 }
 
-/** The whole gate: quickProblems, then uselessProblems with searches capped at `cap`. Empty when the level passes. */
+/** The whole gate: quickProblems, then purposeProblems (every piece has a purpose the player sees: the campaign's
+ *  every-piece rule without its smaller-search clause) with searches capped at `cap`. Empty when the level passes. */
 export function gateProblems(level: Level, d: Difficulty, place: Place, known: Known, run: readonly Level[] = [], cap?: number): string[] {
   const quick = quickProblems(level, d, place, known, run);
-  return quick.length ? quick : uselessProblems(level, d, cap);
+  return quick.length ? quick : purposeProblems(level, d, cap);
 }

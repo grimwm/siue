@@ -22,15 +22,17 @@ Claude settled these without asking, under the roadmap's standing rule.
 - **The pieces (the tier).** A chapter's pieces are the player's once every one of its teaching levels is cleared (where the piece is taught); Chapter 1's always are. A new run takes the chapters in order up to the first not yet taught, and every piece once the whole campaign is cleared (`src/endless/tier.ts`). A run keeps the tier it began with, and a seed link carries it, so the same seed plays the same levels for anyone who opens it.
 - **The challenge bar.** An Endless level is a challenge level of the latest chapter whose pieces it holds (`chapterOf` in `src/endless/gate.ts`), measured against that chapter's teaching levels exactly as the campaign's challenge levels are: at least 20 times their most situations and no shorter than their longest line, and never under the shared bar for a chase (6,000 situations, 30 moves). The teaching numbers are constants (`TEACHING`), measured again by the test.
 - **The ramp.** The first level stores anything from 6,000 to 20,000 situations. Each level after it stores 1.2 to 1.6 times the one before (inside the campaign's `RAMP` of 1.2 to 2.2, aimed at its 1.3), a level that hides walls 1.1 to 1.5 times (`HIDDEN.ramp`) and never more than `HIDDEN.most`. Once a level stores 30,000 the climb levels off: every later level stores 30,000 to 50,000, about a middle chapter's last levels (Chapter 2's stores 44,006, Chapter 5's 54,608), and the ramp check no longer applies. An endless climb by 1.3 a level would pass the solver's cap within twenty levels, and a phone could not make such levels.
-- **The rest of the gate.** Every level also passes `sharedProblems`, `threatProblems` with the challenge bar, `hiddenProblems`, `catchProblems` (through `challengeProblems`) and `uselessProblems`, all from `src/puzzle/difficulty.ts`; plus two the campaign's tests keep for released levels: a **tidy** layout of rooms and halls (no wall standing alone, no bare pocket) and a **new** layout, overlapping no campaign level and none of the run's last twelve by `SAME` (0.42), with the measure moved from `test/layouts.test.ts` to `src/puzzle/layouts.ts` so both share it.
-- **The bank.** A run's first level always comes from the bank, picked by the seed, so a run starts at once on any phone. Every later level is searched for, with a budget counted in situations the searches store (6,000,000), so every device stops at the same step and the same seed gives the same level everywhere; when the budget runs out the level is the bank's, picked by the seed among those in the band that the tier offers and the run has not had lately (when none is in the band, one within the campaign's own `RAMP` of 1.2 to 2.2, then one on the plateau). The bank is made by the same generator ahead of time (`tools/endless-bank.ts`) and committed; `test/endless-gate.test.ts` measures every bank level again and runs it through the whole gate.
+- **The rest of the gate.** Every level also passes `sharedProblems`, `threatProblems` with the challenge bar, `hiddenProblems`, `catchProblems` (through `challengeProblems`), `startProblems` (nothing starts under Theseus, the beast or a hazard) and `purposeProblems`, all from `src/puzzle/difficulty.ts`; plus two the campaign's tests keep for released levels: a **tidy** layout of rooms and halls (no wall standing alone, no bare pocket) and a **new** layout, overlapping no campaign level and none of the run's last twelve by `SAME` (0.42), with the measure moved from `test/layouts.test.ts` to `src/puzzle/layouts.ts` so both share it.
+- **Every piece has a purpose a player sees** (`purposeProblems`). The campaign's every-piece rule (`uselessProblems`) also passes a piece whose loss shrinks the search 1.3 times or more: a door and key the shortest line never opens add situations to the search, so they passed, though a player can walk past them. That clause let through every unused piece the owner found: 28 of the first bank's 44 levels and 30 of the campaign's 100 have such a piece. Endless holds every level to the rule a player sees instead: a piece has a purpose when the shortest line uses it (walks through a door of a key's colour, wears gear on its ground, raises the mirror, sets the cow down, takes a spare relic, pushes a block, presses a button, crosses a tile) or when losing it makes the level unwinnable or changes its fewest moves (a door that holds the beast back). The campaign's levels are rebuilt to it in the next PR, and its tests then hold them to it too.
+- **Fresh levels, and the bank as a safety net.** Endless makes its levels from the seed; the bank only catches what the search cannot make in its budget. A run's first level comes from the bank, picked by the seed, so a run starts at once on any phone, and its start card says "From the level bank." (so does any other level from the bank). Every later level is searched for in `PARTS` (12) parts of `PART_BUDGET` (3,000,000 situations) each; part k is a search of its own steered by the seed and k, the level is the one the lowest part that finds one finds, and every device settles on the same one, the parts run one after another or side by side. When no part finds one the level is the bank's, picked by the seed among those in the band that the tier offers and the run has not had lately (when none is in the band, one within the campaign's own `RAMP` of 1.2 to 2.2, then one on the plateau). The bank is made by the same generator ahead of time (`tools/endless-bank.ts fill`, resumable, with a job per chapter and band so each tier's newest pieces have levels) and committed; `test/endless-bank-*.test.ts` measure every bank level again and run it through the whole gate, a quarter each.
+- **Several workers, three levels ahead.** The page runs one worker per core but one, at most three (`workersFor`), one alone on a low battery that is not charging (the Battery API, where the browser has it). While a level is played the workers make the next three, one level after another (each needs the one before it for its band and its new-layout check), and the saved run keeps them, so a reload loses none.
 - **Shapes.** Drafts take boards from 11 to 15 cells a side (12 at least for Chapter 1's pieces alone, whose 36-move bar needs room) and grids of 2 to 4 rooms each way. The first bank, all 3 by 3 rooms on boards of 12 to 14, repeated its own layouts: 20 of its 36 levels overlapped another by `SAME` or more. Shapes of every size fixed that, and `tools/endless-bank.ts write` leaves out any level whose layout repeats one it has kept.
 - **Determinism and builds.** A seed reproduces its run within a build. A later build whose generator or gate changes may make other levels from the same seed; a saved run keeps its levels' texts, so a run in progress never changes under the player.
 - **Help.** Using Ariadne's thread on an Endless level still clears it and moves the run on (a run has no other way forward), but marks the run "with help", and such a run sets no deepest.
 - **Score and best.** A level's score is its moves against its fewest, as in the campaign. The run counts its levels cleared and their moves; the best is the deepest level a run cleared without help, with its seed.
-- **Names.** Endless levels carry generated hall names, never typed text; the start card's intro gives the seed and the fewest moves.
+- **Names.** Endless levels carry generated hall names, never typed text; the start card's intro gives the seed and the fewest moves, and says "From the level bank." for a bank level.
 - **The key.** O opens Endless from the title card: K and J already move the focus on every card.
-- **No WebAssembly.** See the measurements below: the search is pure integer work in a worker that never blocks the page; the wait a player can see is the search's length, which a faster engine would shorten by a constant but not remove, so the bank and the prefetch carry it instead. WebAssembly stays out until a measured case on a phone shows a wait the bank and prefetch do not hide.
+- **No WebAssembly yet.** The profile below puts 55% of a search's time in the game's own `step` (the rules, building a State per move), 13% in packing and unpacking situations and 8% in the pruning; the store is already packed words in a typed-array open-addressing table. A faster engine would shorten every part by a constant, and the measurements below show a phone waiting at Next Level, so `step` is the case for WebAssembly (or an allocation-free rewrite of it in TypeScript): it is the next step if phones wait too often.
 
 ## Architecture
 
@@ -40,39 +42,63 @@ DOM-free modules in `src/endless/`:
 - `draft.ts`: a draft of rooms and halls (a grid of rooms one wall apart, a random spanning tree of doorways, some walls taken out whole as halls, a few loops) with the pieces of a few families on the doorways and in the rooms; `mutate` makes one small change (a piece moved, a doorway's piece moved, a hazard turned, a doorway opened or walled up).
 - `gate.ts`: the bands, the per-chapter bar, `tidyProblems`, `newProblems`, `quickProblems` and `gateProblems`.
 - `generate.ts`: `search`, a climb from a draft steered by the seed: each change kept when it brings the level no further from passing the cheap checks (`distance`: one capped solve, and one without the beast), now and then a step up so a climb is not stuck; a draft that passes them goes through the whole gate, and a piece the gate finds useless is taken out and the climb goes on. `generate` wraps it with the budget and the bank, `fromBank` picks a bank level.
-- `bank.ts` (written by the tool), `campaign.ts` (the campaign's level texts without its words, for the worker), `host.ts` (the worker's message handler), `client.ts` (the page's side: one job at a time, cancel ends the worker), `saved.ts` (the saved run and best under `crete-endless`), `tier.ts`, `name.ts`, `mode.ts` (opens levels, prefetches the next).
+- `bank.ts` (written by the tool), `campaign.ts` (the campaign's level texts without its words, for the worker), `host.ts` (the worker's message handler: one part, or the bank's level), `client.ts` (the page's side: the workers, the parts handed out in order and settled on the lowest that finds a level, one job at a time, cancel ends the workers), `saved.ts` (the saved run and best under `crete-endless`), `tier.ts`, `name.ts`, `mode.ts` (opens levels, prefetches the next).
 
 The page: `src/endless-worker.ts` (bundle `dist/endless-worker.js`, versioned by `ENDLESS_WORKER_V`), `src/ui/endless.tsx` (the card), and changes to `src/ui.ts`, `src/ui/title.tsx`, `src/main.ts`, `src/outside.ts`, `src/keys.ts`, `src/layers.ts`, `game.css`, `index.html`.
 
 ## Measurements
 
-On the development laptop (Node 22, one core each):
+On the workstation (Intel i7-9700, 8 cores, 16 GB, Linux; Node 22, one core a search). The workstation was shared with other work while these ran (load 12 to 16 on its 8 cores), so the times are about twice what an idle core gives; the shares made fresh do not depend on time, since every budget is counted in situations.
 
-| Measure | Result |
+**Fresh levels.** `tools/endless-bench.ts` makes a run's second level (after the bank's first for that seed) for seeds `bench0` to `bench9` at every tier:
+
+| Tier | Before: one search of 6,000,000, the old every-piece rule | Now: 12 parts of 3,000,000, `purposeProblems` |
+| --- | --- | --- |
+| 1 | 3 of 10 | 11 of 11 |
+| 2 | 4 of 10 | 10 of 10 |
+| 3 | 3 of 10 | 10 of 10 |
+| 4 | 3 of 10 | 10 of 10 |
+| 5 | 7 of 10 | 10 of 10 |
+| 6 | 6 of 10 | 10 of 10 |
+| 7 | 5 of 10 | 10 of 10 |
+| 8 | 3 of 10 | 9 of 10 |
+| 9 | 6 of 10 | 9 of 10 |
+| 10 | 4 of 10 | 10 of 10 |
+| All | 44 of 100 (44%) | 99 of 101 (98%) |
+
+The level came from part 0 in 21 of the 101, part 1 in 21, part 2 in 13, from parts 3 to 11 in 44, and from the bank in 2: a part finds a level about one time in five. Within the old budget's 6,000,000 (parts 0 and 1) the new search makes 42 of 101, the old 44 of 100: the stricter every-piece rule costs about what the cheaper climb below saves.
+
+**Where the time goes.** A CPU profile of a whole search: 95% in the climb's capped solves (`distance`), 3% in the gate's measure and every-piece check. Inside the solves: the game's `step` 55% (the rules, a State built per move), the A* loop 12%, `work` 11%, packing and unpacking situations 13%, the pruning 8%, the garbage collector 4%. Of the situations the climb's solves store, about 40% go to drafts too easy for their band, 22% to drafts in the band that fail another cheap check, 21% to drafts too hard (the solve hits its cap), and the rest to drafts that cannot be won and to the second solve without the beast.
+
+**What each change gave**, on the same seeds:
+
+| Change | Effect |
 | --- | --- |
-| The gate on a campaign level of 16,596 situations (Chapter 1, level 9) | measure 326 ms, every piece 82 ms |
-| The gate on one of 69,836 (Chapter 10, level 8) | measure 1,151 ms, every piece 3,550 ms |
-| The gate on one of 180,046 (Chapter 10, level 10) | measure 3,402 ms, every piece 3,424 ms |
-| Random drafts, no climb: share passing the cheap checks in the first band | about 1 in 300 |
-| The climb, per level found, before the bar was set per chapter (every level held to Chapter 1's 36 moves) | 2 of 12 searches found one within 12,000,000 situations, about 100 s each |
-| The bank's search, no budget, per level (36 levels, four at once) | all 36 found; median 197 s, mean 241 s, 5 s to 1,084 s |
-| The shipped budget, 6,000,000 situations, at a run's second level | 2 of 12 searches made a level (29 s, 56 s); 10 took the bank's after 71 to 90 s |
-| The final bank | 44 levels: 26 of Chapter 1's pieces alone, the rest of Chapters 2 to 8; every one passes the whole gate in `test/endless-gate.test.ts` |
-| The search's pace | about 100,000 situations a second (12,000,000 in 117 to 124 s in Chrome's worker) |
+| The new-layout check before any solve (it was after the measure) | Tier 1: in 4 searches, 9 of 11 levels that reached the measure were thrown out for repeating a campaign layout, after a whole climb; now such a draft is judged far and climbs away; tier 1 went from 2 to 3 of 4 made |
+| Each draft's distance remembered by its text | 89 to 127 solves saved in 3 to 4 searches (a change that undoes the one before) |
+| The plain walk wins, or the beast is penned with no mirror and no snare: rejected without a solve (both are the gate's own failures; `test/difficulty.test.ts` checks they agree with it) | 120 of about 700 drafts in 3 searches, 17% of the climb's solves |
+| Parts: 12 of 3,000,000, lowest finder wins | The share made fresh: 42% within 6,000,000, 98% within all 12 parts |
+| Early stops in the yes/no searches | None: the every-piece searches already stop at their first shortest win; stopping them sooner (at the old optimum, or once the search passes the old count / 1.3) turns some "capped" answers into "changed", which would change verdicts |
+| Packed situations, typed-array hash table | Already in place (`src/puzzle/pack.ts`, `src/puzzle/store.ts`) |
+| The every-piece check across workers | Not done: the workers already run a level's parts side by side, which keeps every core busy, and the check is 3% of the time |
+| Drafts built along a route | Not done; the parts make 98% fresh without it |
 
-In the browser (Chrome, `tests/e2e`, the local site), through the page's own Endless:
+**Time per fresh level** (the parts run as `src/endless/client.ts` runs them; medians, with the load above): one worker 125 to 403 s a level by tier, three workers 52 to 151 s (tier 7 the slowest). A part takes 54 s at the median. An idle core runs about twice as fast; a phone's JavaScript runs at a third to a quarter of the workstation's (an estimate: Chrome cannot throttle a worker, and no phone was at hand), so three workers on a phone take about 3 to 9 minutes a level.
 
-| Measure | Laptop | Main thread throttled 4× (CDP) |
+**Staying ahead.** Simulated from those times (`tools/endless-bench.ts sum`) over 30 levels, the workers three levels ahead (`AHEAD`), three workers: on the workstation a player who takes 120 s a level waits at Next Level at 0 to 6 of 29 levels by tier (none at tiers 1, 4 and 6) and has 1.1 to 2.7 levels ready at each win; at 60 s a level they wait at 6 to 29 of 29. On a phone the player outruns the workers at either pace and waits at most levels, for the rest of a level's making. On a phone the wait is the search, which is why `step` is the case for WebAssembly or an allocation-free rewrite (below).
+
+**The bank** holds 41 levels (`src/endless/bank.ts`): 12 of Chapter 1's pieces alone, 7 of Chapter 2's, 4 of Chapter 3's, 2 of Chapter 5's, 4 of Chapter 6's, 3 of Chapter 7's, 5 of Chapter 8's and 4 of Chapter 9's, so tier 1 is offered 12 and tiers 9 and 10 all 41; `test/endless-gate.test.ts` checks every tier is offered ten or more. A bank level takes 1 to 20 minutes to make here (Chapter 9's the longest, as the climb often takes their pieces out as decoys), and the fill's first rounds repeated layouts within the bank (26 of 61 left out), so its last round checks each new level against the bank as it stands. It lives only in `dist/endless-worker.js`, which the page starts when Endless asks for a level (the service worker also keeps it for playing offline). The bank is 14.6 KB of source (3.2 KB gzipped) in a bundle of 116 KB (38 KB gzipped), so it needs no compact encoding.
+
+In the browser (Chrome, `tests/e2e`, the local site), through the page's own Endless, measured with one worker:
+
+| Measure | Workstation | Main thread throttled 4× (CDP) |
 | --- | --- | --- |
 | New Run to the first level's start card (the bank's) | 229 to 279 ms | 552 ms |
-| The worker making level 2 with a budget of 12,000,000 | 117 s (made) and 123 s (the bank's after the budget) | 124 s: CDP's throttle slows the page's thread, not the worker's |
 | The page's longest stall while the worker searches | 21 to 33 ms | 38 ms |
 
-So the page never freezes: the worker carries every search and the page's longest stall stayed under 40 ms. What a phone changes is how long a search takes. The budget is counted in situations, not seconds, so a phone makes the same level as the laptop, only later. A phone's JavaScript runs at roughly a third to a quarter of this laptop's single-core speed (an estimate: Chrome cannot throttle a worker, and no phone was at hand), which gives about 25,000 to 35,000 situations a second.
+So the page never freezes: the workers carry every search.
 
-The budget is set from that: 6,000,000 situations take about a minute on the laptop and three to four minutes on such a phone, spent while the player plays the level before. A player who is faster sees Finding a Good Level… with its progress for at most what is left of that. In a sample of 12 searches for a run's second level (tiers 1, 5 and 10, four seeds each, three at once), 2 found a level within the budget, in 29 s and 56 s; the other 10 spent it in 71 to 90 s and took the bank's. The bank's median of 197 s a level is well past the laptop's minute. That is why the bank, not the search, carries most of a run's variety, and it is built to cover every tier's climb (`test/endless-gate.test.ts`).
-
-**WebAssembly:** not used. The page is never blocked, so the only gain would be a shorter search. That gain is a constant factor, perhaps two, on code that is already integer typed-array work in a worker, and it would not change the design: the bank and the prefetch would still be needed. It is worth trying only if a phone measurement shows players waiting on Finding a Good Level… often.
+**WebAssembly:** the profile puts 55% of a search in `step`, the game's rules, which build a new State for every move tried. A WebAssembly or allocation-free version of `step` (and of packing a situation, 13%) would shorten every part by a constant, perhaps two to three times; that is what a phone needs to keep up with a quick player. It is the next step if phones wait too often.
 
 ## Tasks
 

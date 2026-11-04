@@ -1,7 +1,8 @@
 /* The Island of Crete: Endless's saved run and best, on the kit's prefs under `crete-endless`, like the campaign's
  * progress. A run is its seed, its piece tier, the level it is on (`depth`), its last levels (for the generator's
- * ramp and new-layout checks), the next level once the worker has made it, and what it has cleared. The best is the
- * deepest level any run cleared without Ariadne's thread, with that run's seed. Storage that is blocked or holds
+ * ramp and new-layout checks), the levels the workers have made ahead of it (up to AHEAD, so a reload loses none),
+ * and what it has cleared. The best is the deepest level any run cleared without Ariadne's thread, with that run's
+ * seed. Storage that is blocked or holds
  * anything unexpected reads as no run and no best. DOM-free. */
 import { pref, json } from '../../../_kit/prefs.ts';
 import type { StorageLike } from '../../../_kit/ports.ts';
@@ -29,6 +30,8 @@ export interface EndlessRun {
   levels: RunLevel[];
   /** The level after `depth`, once made. */
   next: RunLevel | null;
+  /** The levels made after `next`, in order, up to AHEAD - 1 of them; absent in a run saved before there were any. */
+  ahead?: RunLevel[];
   /** Levels cleared, and their moves added up. */
   cleared: number;
   moves: number;
@@ -55,7 +58,9 @@ const isRun = (v: unknown): v is EndlessRun => {
   const r = v as Record<string, unknown>;
   return isText(r.seed, 32) && /^[a-z0-9-]+$/.test(r.seed as string) && Number.isInteger(r.tier) && (r.tier as number) >= 1 && (r.tier as number) <= 10
     && Number.isInteger(r.depth) && (r.depth as number) >= 1 && Array.isArray(r.levels) && r.levels.length >= 1 && r.levels.every(isLevel)
-    && (r.next === null || isLevel(r.next)) && isCount(r.cleared) && isCount(r.moves) && typeof r.assisted === 'boolean'
+    && (r.next === null || isLevel(r.next))
+    && (r.ahead === undefined || (Array.isArray(r.ahead) && r.ahead.length < AHEAD && r.ahead.every(isLevel) && (r.ahead.length === 0 || r.next !== null)))
+    && isCount(r.cleared) && isCount(r.moves) && typeof r.assisted === 'boolean'
     && (r.best === null || isCount(r.best));
 };
 const isBest = (v: unknown): v is EndlessBest => {
@@ -74,16 +79,24 @@ export interface EndlessSaved {
   best(): EndlessBest | null;
   /** A new run on `seed` and `tier`, at its first level. */
   start(seed: string, tier: number, first: Made): EndlessRun;
-  /** The level after the run's current one, made. Ignored unless the run is still on `depth`. */
-  setNext(seed: string, depth: number, made: Made): void;
+  /** The levels made ahead of the one being played: `next`, then `ahead`. */
+  queued(): RunLevel[];
+  /** The run's level at `depth`, made ahead: kept when it is the one after the last made (the level being played and
+   *  those queued), and the queue holds fewer than AHEAD. */
+  addMade(seed: string, depth: number, made: Made): void;
   /** The run's level was won in `moves`, with the thread's help or not: the clear is counted (once per level, the
    *  first win) and the best kept. */
   won(moves: number, assisted: boolean): EndlessRun | null;
   /** Goes on to the next level, once it is made; null when it is not. */
   advance(): EndlessRun | null;
-  /** The run's levels as the generator reads them. */
+  /** The run's levels as the generator reads them for the next level to make: those played and those queued. */
   played(): Played[];
 }
+
+/** The most levels made ahead of the one being played. */
+export const AHEAD = 3;
+
+const queuedOf = (run: EndlessRun | null): RunLevel[] => (run?.next ? [run.next, ...(run.ahead ?? [])] : []);
 
 const level = (m: Made): RunLevel => ({ text: m.text, explored: m.explored, shortest: m.shortest, line: m.line, from: m.from });
 
@@ -94,14 +107,18 @@ export function createEndlessSaved(storage: StorageLike | null): EndlessSaved {
     run: () => table.get().run,
     best: () => table.get().best,
     start(seed, tier, first) {
-      const run: EndlessRun = { seed, tier, depth: 1, levels: [level(first)], next: null, cleared: 0, moves: 0, assisted: false, best: null };
+      const run: EndlessRun = { seed, tier, depth: 1, levels: [level(first)], next: null, ahead: [], cleared: 0, moves: 0, assisted: false, best: null };
       save(run);
       return run;
     },
-    setNext(seed, depth, made) {
+    queued: () => queuedOf(table.get().run),
+    addMade(seed, depth, made) {
       const run = table.get().run;
-      if (!run || run.seed !== seed || run.depth !== depth) return;
-      save({ ...run, next: level(made) });
+      if (!run || run.seed !== seed) return;
+      const queued = queuedOf(run);
+      if (depth !== run.depth + 1 + queued.length || queued.length >= AHEAD) return;
+      const [next, ...ahead] = [...queued, level(made)];
+      save({ ...run, next: next!, ahead });
     },
     won(moves, assisted) {
       const run = table.get().run;
@@ -124,10 +141,14 @@ export function createEndlessSaved(storage: StorageLike | null): EndlessSaved {
     advance() {
       const run = table.get().run;
       if (!run?.next || run.cleared < run.depth) return null;
-      const next: EndlessRun = { ...run, depth: run.depth + 1, levels: [...run.levels, run.next].slice(-RUN_MEMORY), next: null, best: null };
+      const [after = null, ...ahead] = run.ahead ?? [];
+      const next: EndlessRun = { ...run, depth: run.depth + 1, levels: [...run.levels, run.next].slice(-RUN_MEMORY), next: after, ahead, best: null };
       save(next);
       return next;
     },
-    played: () => (table.get().run?.levels ?? []).map(l => ({ text: l.text, explored: l.explored })),
+    played: () => {
+      const run = table.get().run;
+      return run ? [...run.levels, ...queuedOf(run)].slice(-RUN_MEMORY).map(l => ({ text: l.text, explored: l.explored })) : [];
+    },
   };
 }

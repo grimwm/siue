@@ -2,7 +2,8 @@
 // every piece on it matters, its beast is a threat, and a chapter's challenge levels are a real fight.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT } from '../src/puzzle/difficulty.ts';
+import { measure, measuring, hardPieces, challengeProblems, catchProblems, rampProblems, rampOf, hiddenProblems, hidesWalls, HIDDEN, RAMP, BAR, canCatch, plainWalk, sharedProblems, SHARED_BAR, uselessProblems, pieceUnits, USEFUL, threatOf, threatProblems, THREAT, startProblems, naiveWalkWins, neverLive, purposeProblems } from '../src/puzzle/difficulty.ts';
+import { CAMPAIGN_TEXTS } from '../src/endless/campaign.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { CHAPTERS, levelById } from '../src/campaign/chapters.ts';
 import type { Level } from '../src/puzzle/level.ts';
@@ -547,4 +548,53 @@ test('hardPieces counts a hazard-template machine as a hazard, and breaks ties i
   // Two hazards (one a ball machine) tie with two blocks: blocks come first. Two buttons come last.
   const lv = level(['#########', '#POOCw.E#', '#..-+...#', '#########'], 'machines: ball-down\nfacing: right');
   assert.deepEqual(hardPieces(lv), ['2 blocks', '2 hazards', '2 buttons']);
+});
+
+test('nothing starts under a figure: every campaign level, and a level built with a relic under the beast fails', () => {
+  for (const { id, text } of CAMPAIGN_TEXTS) assert.deepEqual(startProblems(parse(text)), [], id);
+  const lv = parse(`title: t\nintro: i\n\n#######\n#P.*.M#\n####E##\n`);
+  assert.deepEqual(startProblems(lv), []);
+  const objects = [...lv.objects];
+  objects[lv.minotaur!.r * lv.cols + lv.minotaur!.c] = 'relic';
+  const terrain = [...lv.terrain];
+  terrain[lv.player.r * lv.cols + lv.player.c] = 'button';
+  const bad = startProblems({ ...lv, objects, terrain });
+  assert.equal(bad.length, 2);
+  assert.match(bad[0]!, /Theseus starts on button/);
+  assert.match(bad[1]!, /the Minotaur starts on relic/);
+});
+
+test('the climb\'s cheap rejects are the gate\'s own answers: the plain walk as measure has it, and a penned beast with nothing to make him live always fails the threat check', () => {
+  const levels = corpus(4, 60).filter(l => l.minotaur);
+  // With safe ground round the beast he is often penned, so both sides of neverLive come up.
+  const penned = (lv: Level): Level => ({ ...lv, terrain: lv.terrain.map((t, i) => {
+    const m = lv.minotaur!, r = Math.floor(i / lv.cols), c = i % lv.cols;
+    return Math.abs(r - m.r) + Math.abs(c - m.c) === 1 && t === 'floor' && !lv.objects[i] ? 'safe' as const : t;
+  }) });
+  let never = 0;
+  for (const lv of [...levels, ...levels.filter(l => l.minotaur).map(penned)]) {
+    const d = measure(lv, 60_000);
+    assert.equal(naiveWalkWins(lv), d.naiveWins, serialize(lv));
+    if (neverLive(lv) && d.solved && typeof d.shortest === 'number' && d.shortest > 0) {
+      never++;
+      assert.ok(threatProblems(lv, d, 'challenge').some(p => p.startsWith('the beast is live on')), serialize(lv));
+    }
+  }
+  assert.ok(never > 0, 'some levels have a beast that is never live');
+});
+
+test('every piece has a purpose a player sees: the line meets it, or ignoring it changes the fewest moves or the win; a smaller search alone is no purpose', () => {
+  assert.deepEqual(purposeProblems(DECOY, measure(DECOY)), [
+    'the red keys: the shortest line never meets it, and ignoring it leaves the fewest moves at 5',
+    'the red doors: the shortest line never meets it, and ignoring it leaves the fewest moves at 5',
+  ]);
+  const needed = level(['######', '#PrRE#', '######']);
+  assert.deepEqual(purposeProblems(needed, measure(needed)), [], 'the line takes the key and opens the door');
+  const holds = level(['#########', '#P....E.#', '###.#####', '###R#####', '###M#####', '#########']);
+  assert.deepEqual(purposeProblems(holds, measure(holds)), [], 'the line never meets the door, but as floor it lets the beast out');
+  // A side room behind a door, its key off the way: both grow the search, and the line walks past them.
+  const side = level(['#########', '#P.....E#', '#.#####.#', '#r#...R.#', '#.#.M.#.#', '#########']);
+  const d = measure(side);
+  const strict = purposeProblems(side, d).join();
+  assert.match(strict, /the red keys: the shortest line never meets it/);
 });

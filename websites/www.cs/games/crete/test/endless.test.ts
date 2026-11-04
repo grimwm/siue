@@ -7,18 +7,18 @@ import { rngOf, hash, cleanSeed, newSeed } from '../src/endless/random.ts';
 import { bandAfter, chapterOf, floorOf, tidyProblems, TEACHING, CLIMB, PLATEAU, FLOOR } from '../src/endless/gate.ts';
 import { draft, familiesOf, textOf, mutate, FAMILY_CHAPTER } from '../src/endless/draft.ts';
 import { tierOf } from '../src/endless/tier.ts';
-import { createEndlessSaved, ENDLESS_KEY } from '../src/endless/saved.ts';
+import { createEndlessSaved, ENDLESS_KEY, AHEAD } from '../src/endless/saved.ts';
 import { createEndlessHost, PROGRESS_MS } from '../src/endless/host.ts';
 import type { FromEndless } from '../src/endless/host.ts';
-import { createEndlessClient, CancelledError } from '../src/endless/client.ts';
+import { createEndlessClient, CancelledError, workersFor, MOST_WORKERS } from '../src/endless/client.ts';
 import type { WorkerLike } from '../src/endless/client.ts';
-import { createEndlessMode } from '../src/endless/mode.ts';
+import { createEndlessMode, introOf } from '../src/endless/mode.ts';
 import type { EndlessAbout } from '../src/endless/mode.ts';
 import { endlessName, endlessKicker, tierWords } from '../src/endless/name.ts';
 import { CAMPAIGN_TEXTS } from '../src/endless/campaign.ts';
 import { BANK } from '../src/endless/bank.ts';
 import type { Made, Request } from '../src/endless/generate.ts';
-import { ln, expNeg } from '../src/endless/generate.ts';
+import { ln, expNeg, settle, generate } from '../src/endless/generate.ts';
 import { CHAPTERS, LEVEL_IDS, levelById } from '../src/campaign/chapters.ts';
 import { measure, HIDDEN, RAMP } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
@@ -150,10 +150,18 @@ test('the saved run: started, cleared once per level, advanced only when the nex
   assert.equal(s.run(), null);
   s.start('abc', 3, made(LEVEL_A));
   assert.equal(s.advance(), null, 'nothing made yet');
-  s.setNext('abc', 1, made(LEVEL_B, 13_000));
+  s.addMade('abc', 2, made(LEVEL_B, 13_000));
   assert.equal(s.advance(), null, 'not cleared yet');
-  s.setNext('zzz', 1, made(LEVEL_A));
-  assert.equal(s.run()!.next!.text, LEVEL_B, 'another run\'s level is ignored');
+  s.addMade('zzz', 3, made(LEVEL_A));
+  s.addMade('abc', 4, made(LEVEL_A));
+  assert.equal(s.run()!.next!.text, LEVEL_B, 'another run\'s level, or one out of order, is ignored');
+  assert.equal(s.queued().length, 1);
+  // The workers stay AHEAD levels in front: level 3 and 4 queue behind level 2, and no more.
+  s.addMade('abc', 3, made(LEVEL_A, 16_000));
+  s.addMade('abc', 4, made(LEVEL_B, 20_000));
+  s.addMade('abc', 5, made(LEVEL_A, 25_000));
+  assert.deepEqual(s.queued().map(l => l.explored), [13_000, 16_000, 20_000]);
+  assert.deepEqual(s.played().map(p => p.explored), [10_000, 13_000, 16_000, 20_000], 'the next level to make follows those queued');
   s.won(30, false);
   s.won(25, false);
   assert.equal(s.run()!.cleared, 1, 'a level counts once');
@@ -163,8 +171,9 @@ test('the saved run: started, cleared once per level, advanced only when the nex
   const r = s.advance()!;
   assert.equal(r.depth, 2);
   assert.equal(r.levels.length, 2);
-  assert.equal(r.next, null);
-  assert.deepEqual(s.played().map(p => p.explored), [10_000, 13_000]);
+  assert.equal(r.next!.explored, 16_000, 'the queue moves up');
+  assert.deepEqual(s.queued().map(l => l.explored), [16_000, 20_000]);
+  assert.deepEqual(createEndlessSaved(st).queued().length, 2, 'the queue is kept over a reload');
   s.won(20, true);
   assert.equal(s.run()!.assisted, true);
   assert.deepEqual(s.best(), { depth: 1, seed: 'abc', moves: 30 }, 'a run with help sets no best');
@@ -181,24 +190,24 @@ test('blocked or corrupt Endless storage reads as no run and never throws', () =
 });
 
 /** A worker in the page's thread: the host answers on the next turn. */
-function fakeWorker(budget = 1): WorkerLike & { terminated: boolean; posted: unknown[] } {
+function fakeWorker(): WorkerLike & { terminated: boolean; posted: unknown[] } {
   let t = 0;
   const w: WorkerLike & { terminated: boolean; posted: unknown[] } = {
     terminated: false, posted: [], onmessage: null, onerror: null,
     terminate() { w.terminated = true; },
     postMessage(m) {
       w.posted.push(m);
-      const host = createEndlessHost({ post: r => queueMicrotask(() => { if (!w.terminated) w.onmessage?.({ data: r }); }), bank: BANK, known: () => ({ features: [] }), now: () => (t += 100), budget });
+      const host = createEndlessHost({ post: r => queueMicrotask(() => { if (!w.terminated) w.onmessage?.({ data: r }); }), bank: BANK, known: () => ({ features: [] }), now: () => (t += 100) });
       setTimeout(() => host.receive(m as never), 0);
     },
   };
   return w;
 }
 
-test('the host answers a first level from the bank, and a request it cannot meet with a failure', () => {
+test('the host answers from the bank, runs a part of a search, and meets a request it cannot with a failure', () => {
   const out: FromEndless[] = [];
   const host = createEndlessHost({ post: m => out.push(m), bank: BANK, known: () => ({ features: [] }), now: () => 0 });
-  host.receive({ type: 'make', id: 7, request: { seed: 'abc', tier: 1, depth: 1, run: [] } });
+  host.receive({ type: 'bank', id: 7, request: { seed: 'abc', tier: 1, depth: 1, run: [] }, tries: 0, spent: 0 });
   const last = out.at(-1)!;
   assert.equal(last.type, 'made');
   if (last.type === 'made') {
@@ -206,21 +215,49 @@ test('the host answers a first level from the bank, and a request it cannot meet
     assert.equal(last.made.from, 'bank');
     assert.ok(BANK.some(b => b.text === last.made.text && b.chapter === 1));
   }
+  const prev = BANK.find(b => b.chapter === 1)!;
+  host.receive({ type: 'part', id: 9, part: 0, request: { seed: 'abc', tier: 1, depth: 2, run: [{ text: prev.text, explored: prev.explored }], budget: 100_000 } });
+  const part = out.at(-1)!;
+  assert.equal(part.type, 'part');
+  if (part.type === 'part') assert.ok(part.result.spent >= 100_000 / 12 || part.result.found, 'a part spends its share of the budget or finds a level');
+  host.receive({ type: 'part', id: 10, part: 1, request: { seed: 'abc', tier: 1, depth: 2, run: [{ text: prev.text, explored: prev.explored }], budget: 100_000 } });
+  assert.equal(out.at(-1)!.type, 'part');
+  host.receive({ type: 'part', id: 11, part: 12, request: { seed: 'abc', tier: 1, depth: 2, run: [{ text: prev.text, explored: prev.explored }], budget: 100_000 } });
+  assert.equal(out.at(-1)!.type, 'failed', 'a search has no part past its last');
   const empty = createEndlessHost({ post: m => out.push(m), bank: [], known: () => ({ features: [] }), now: () => 0 });
-  empty.receive({ type: 'make', id: 8, request: { seed: 'abc', tier: 1, depth: 1, run: [] } });
+  empty.receive({ type: 'bank', id: 8, request: { seed: 'abc', tier: 1, depth: 1, run: [] }, tries: 0, spent: 0 });
   assert.deepEqual(out.at(-1), { type: 'failed', id: 8, message: 'the bank is empty' });
 });
 
 test('the host spaces its progress reports', () => {
   const out: FromEndless[] = [];
   let t = 0;
-  const host = createEndlessHost({ post: m => out.push(m), bank: BANK, known: () => ({ features: [] }), now: () => (t += PROGRESS_MS / 4), budget: 300_000 });
+  const host = createEndlessHost({ post: m => out.push(m), bank: BANK, known: () => ({ features: [] }), now: () => (t += PROGRESS_MS / 4) });
   const prev = BANK.find(b => b.chapter === 1)!;
-  host.receive({ type: 'make', id: 1, request: { seed: 'abc', tier: 1, depth: 2, run: [{ text: prev.text, explored: prev.explored }] } });
+  host.receive({ type: 'part', id: 1, part: 0, request: { seed: 'abc', tier: 1, depth: 2, run: [{ text: prev.text, explored: prev.explored }], budget: 12 * 300_000 } });
   const reports = out.filter(m => m.type === 'progress');
   assert.ok(reports.length >= 1);
-  assert.ok(out.at(-1)!.type === 'made');
+  assert.ok(out.at(-1)!.type === 'part');
   for (const r of reports) if (r.type === 'progress') assert.equal(r.progress.budget, 300_000);
+});
+
+test('the workers: how many a device searches with', () => {
+  assert.equal(workersFor(8, null), MOST_WORKERS);
+  assert.equal(workersFor(4, null), 3);
+  assert.equal(workersFor(2, null), 1);
+  assert.equal(workersFor(undefined, null), 1);
+  assert.equal(workersFor(8, { level: 0.1, charging: false }), 1, 'a low battery searches with one');
+  assert.equal(workersFor(8, { level: 0.1, charging: true }), MOST_WORKERS);
+});
+
+test('settle: the lowest part that found a level, once every part below it is back; the bank when none did', () => {
+  const none = { found: null, tries: 5, spent: 100 };
+  const hit = (n: number) => ({ found: made(LEVEL_A, n, 40, 'made'), tries: 2, spent: 50 });
+  assert.deepEqual(settle([undefined, hit(1)], 3), { made: null, done: false }, 'part 0 may still find one');
+  assert.equal(settle([none, hit(1), hit(2)], 3).made!.explored, 1);
+  assert.deepEqual([settle([none, hit(1)], 3).made!.tries, settle([none, hit(1)], 3).made!.spent], [7, 150], 'what the parts up to it spent');
+  assert.equal(settle([hit(9), undefined], 3).made!.explored, 9, 'part 0 wins without the rest');
+  assert.deepEqual(settle([none, none, none], 3), { made: null, done: true });
 });
 
 test('the client: a job\'s answer comes back; a new job or cancel ends the worker and rejects the old one', async () => {
@@ -241,17 +278,31 @@ test('the client: a job\'s answer comes back; a new job or cancel ends the worke
   await assert.rejects(broken.make(req).result, /could not start/);
 });
 
+test('the client: parts run side by side, and three workers settle on the level one worker makes', async () => {
+  const prev = BANK.find(b => b.chapter === 1)!;
+  const req: Request = { seed: 'side', tier: 1, depth: 2, run: [{ text: prev.text, explored: prev.explored }], budget: 12 * 10_000 };
+  const workers: ReturnType<typeof fakeWorker>[] = [];
+  const three = createEndlessClient(() => { const w = fakeWorker(); workers.push(w); return w; }, () => 3);
+  const one = createEndlessClient(() => fakeWorker(), () => 1);
+  const a = await three.make(req).result, b = await one.make(req).result;
+  assert.deepEqual(a, b);
+  assert.deepEqual(a, generate(req, BANK, { features: [] }));
+  assert.ok(workers.length <= 3, 'three workers at most at once');
+  const firsts = workers.slice(0, 3).map(w => (w.posted[0] as { part?: number }).part);
+  assert.deepEqual(firsts, [0, 1, 2], 'the first three parts at once, one to each worker');
+});
+
 test('the mode: a new run opens its first level, the next is made meanwhile, and Next Level opens it', async () => {
   const st = memory();
   const saved = createEndlessSaved(st);
   const opened: EndlessAbout[] = [];
   // Every job the mode starts, so the test waits on its answer, not on the clock.
-  const base = createEndlessClient(() => fakeWorker(200_000));
+  const base = createEndlessClient(() => fakeWorker());
   const jobs: Promise<unknown>[] = [];
   const client = { ...base, make: (r: Request) => { const j = base.make(r); jobs.push(j.result.then(() => {}, () => {})); return j; } };
   const settled = async () => { for (let n = 0; n < jobs.length; n++) await jobs[n]; await new Promise(r => setTimeout(r, 0)); };
   let changes = 0;
-  const mode = createEndlessMode({ saved, client, tier: () => 1, newSeed: () => 'fresh1', play: (_, about) => opened.push(about), changed: () => { changes++; } });
+  const mode = createEndlessMode({ saved, client, tier: () => 1, newSeed: () => 'fresh1', play: (_, about) => opened.push(about), changed: () => { changes++; }, budget: () => 100_000 });
   mode.newRun();
   assert.ok(mode.view().finding, 'waiting for the first level');
   await settled();
@@ -259,9 +310,10 @@ test('the mode: a new run opens its first level, the next is made meanwhile, and
   assert.equal(opened[0]!.depth, 1);
   assert.equal(opened[0]!.seed, 'fresh1');
   assert.equal(mode.view().finding, null);
-  // The worker makes level 2 while level 1 is played (here, at once: the budget is small, so it is the bank's).
+  // The workers make levels 2 to 4 while level 1 is played (here, at once: the budget is small).
   await settled();
   assert.ok(saved.run()!.next, 'level 2 is made during level 1');
+  assert.equal(saved.queued().length, AHEAD, 'the workers stay AHEAD levels in front');
   mode.next();
   assert.equal(opened.length, 1, 'Next Level waits for a win');
   mode.won(40, false);
@@ -281,4 +333,21 @@ test('the search\'s log and exp, made of + - * / alone, agree with Math\'s', () 
   for (const x of [0.001, 0.3, 1, 1.5, 2, 7.25, 1e6]) assert.ok(Math.abs(ln(x) - Math.log(x)) < 1e-12, `ln ${x}`);
   for (const y of [0, 0.1, 0.25, 1, 4, 20]) assert.ok(Math.abs(expNeg(y) - Math.exp(-y)) < 1e-12, `exp -${y}`);
   assert.equal(expNeg(100), 0);
+});
+
+test('the start card says when a level comes from the level bank, and says nothing of it for a made one', () => {
+  const l = { text: LEVEL_A, explored: 7000, shortest: 31, line: '', from: 'bank' as const };
+  assert.equal(introOf('abcdef', l), 'Seed abcdef. The fewest moves are 31. From the level bank.');
+  assert.equal(introOf('abcdef', { ...l, from: 'made' }), 'Seed abcdef. The fewest moves are 31.');
+});
+
+test('a run saved before levels were made ahead (no ahead list) still reads, and queues behind its next', () => {
+  const { tries: _t, spent: _s, ...first } = made(LEVEL_A);
+  const old = { seed: 'abc', tier: 1, depth: 1, levels: [first], next: null, cleared: 0, moves: 0, assisted: false, best: null };
+  const s = createEndlessSaved(memory({ [ENDLESS_KEY]: JSON.stringify({ run: old, best: null }) }));
+  assert.equal(s.run()!.seed, 'abc');
+  assert.deepEqual(s.queued(), []);
+  s.addMade('abc', 2, made(LEVEL_B));
+  s.addMade('abc', 3, made(LEVEL_A));
+  assert.equal(s.queued().length, 2);
 });

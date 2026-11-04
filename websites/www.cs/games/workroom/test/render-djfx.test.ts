@@ -4,7 +4,7 @@
 // filter sweep closes, a gate follows its pattern, Wide / 8D moves between the sides). Outside a clip nothing changes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyClips, barMap, crossfadeGain, crossfadeGains, makeClip } from '../src/render/djfx.ts';
+import { applyClips, barMap, crossfadeGain, crossfadeGains, fadeGains, makeClip } from '../src/render/djfx.ts';
 import { seeded } from '../src/render/dsp.ts';
 import type { FxClip } from '../src/score.ts';
 
@@ -290,6 +290,65 @@ test('the Crossfader moves the A side out and the B side in; other parts play on
   const g = crossfadeGains(c, 'drums', N, bars)!;
   for (const i of [at(1), at(2) + 10, at(2.7), at(3.9), at(5)]) assert.ok(Math.abs(g[i]! - crossfadeGain(c, 'drums', i, bars)) < 1e-6, `the same gain made once, at ${i}`);
   assert.equal(crossfadeGains(c, 'keys', N, bars), null);
+});
+
+const fade = (from: number, to: number, a: string[], b: string[], more: Record<string, unknown> = {}, points?: number[][]) =>
+  clip('crossfader', from, to, { a, b, fade: true, ...more }, points);
+const near = (x: number, y: number, what: string, tol = 1e-3) => assert.ok(Math.abs(x - y) < tol, `${what}: ${x}, not ${y}`);
+
+test('a timeline fade takes A out and B in on an equal-power curve, and each holds where the fade left it', () => {
+  const clips = [fade(2, 4, ['drums'], ['bass'])];
+  const a = fadeGains(clips, 'drums', N, bars)!;
+  const b = fadeGains(clips, 'bass', N, bars)!;
+  near(a[at(1)]!, 1, 'A before the fade');
+  near(b[at(1)]!, 1, 'B before the fade, not silent');
+  near(a[at(3)]!, Math.SQRT1_2, 'A at the middle');
+  near(b[at(3)]!, 1, 'B already full stays full');
+  near(a[at(2.5)]!, Math.cos(Math.PI / 8), 'A a quarter in');
+  near(a[at(4)]!, 0, 'A at the end');
+  near(a[at(5.5)]!, 0, 'A stays out after the fade');
+  near(b[at(5.5)]!, 1, 'B stays in after the fade');
+  assert.equal(fadeGains(clips, 'keys', N, bars), null, 'a lane on neither side is untouched');
+});
+
+test('Silent Until The Crossfade keeps B silent before the fade, then brings it in on the equal-power curve', () => {
+  const clips = [fade(2, 4, ['drums'], ['bass'], { silent: true })];
+  const a = fadeGains(clips, 'drums', N, bars)!;
+  const b = fadeGains(clips, 'bass', N, bars)!;
+  near(b[at(1)]!, 0, 'B before');
+  near(b[at(3)]!, Math.SQRT1_2, 'B at the middle');
+  near(a[at(3)]! ** 2 + b[at(3)]! ** 2, 1, 'equal power at the middle');
+  near(b[at(2.5)]!, Math.sin(Math.PI / 8), 'B a quarter in');
+  near(b[at(5)]!, 1, 'B after');
+  near(a[at(1)]!, 1, 'silent touches only B');
+});
+
+test('fades on one lane chain in time order: out, then back in', () => {
+  const clips = [fade(4, 5, ['bass'], ['drums']), fade(2, 3, ['drums'], ['bass'], { silent: true })];
+  const d = fadeGains(clips, 'drums', N, bars)!;
+  near(d[at(1.5)]!, 1, 'before its first fade');
+  near(d[at(3.5)]!, 0, 'out after the first fade');
+  near(d[at(4.5)]!, Math.SQRT1_2, 'half back in, from where it was held');
+  near(d[at(5.5)]!, 1, 'back in after the second');
+  const b = fadeGains(clips, 'bass', N, bars)!;
+  near(b[at(1)]!, 0, 'silent until its first fade, a fade-in');
+  near(b[at(3.5)]!, 1, 'in after it');
+  near(b[at(5.5)]!, 0, 'out after the second');
+});
+
+test('a fade with no B just fades A out; recorded moves steer a fade as on the fader', () => {
+  const g = fadeGains([fade(2, 4, ['drums'], [])], 'drums', N, bars)!;
+  near(g[at(3)]!, Math.SQRT1_2, 'middle');
+  near(g[at(5)]!, 0, 'gone after');
+  const moved = [fade(2, 4, ['drums'], ['bass'], {}, [[2, 0], [3, 1], [4, 1]])];
+  const a = fadeGains(moved, 'drums', N, bars)!;
+  near(a[at(2.5)]!, 1, 'A full while the fader is on its half');
+  near(a[at(3.5)]!, 0, 'A out with the fader at B');
+  near(a[at(5)]!, 0, 'and held there');
+});
+
+test('a crossfader without fade is left to the clip-by-clip gains', () => {
+  assert.equal(fadeGains([clip('crossfader', 2, 4, { a: ['drums'], b: ['bass'] })], 'drums', N, bars), null);
 });
 
 test('a live pad with no end yet keeps going until it is let go', () => {

@@ -15,8 +15,7 @@ spectrogram and every effect.
 ## Who it is for
 
 The users are students writing game music and faculty teaching AI and music. Many of them have never used a DAW
-or read notation. Each control says what it does in plain words, and the "Notes On Controls" switch shows a
-line of help under each control. Every button, menu, tab and heading is in Title Case ("Save Draft",
+or read notation. Each control says what it does in plain words, with a picture where one helps. Every button, menu, tab and heading is in Title Case ("Save Draft",
 "Play Live"); sentences stay in sentence case.
 
 ## The editor
@@ -31,16 +30,20 @@ line of help under each control. Every button, menu, tab and heading is in Title
   - its speed;
   - its loudness line;
   - its sound settings.
-- **Parts In This Piece** lists every part, with its instrument icon and colour. A part can be added, renamed,
-  recoloured or removed.
+- **The layout.** A transport bar stays at the top (Play, Back To Start, Loop, the tempo, where the music is, Undo,
+  Redo, Save Draft, the Piece menu, and the views Compose, Mix and Sheet). Compose is one timeline, left to right, on
+  one scale and one scroll: sections, the ruler, the Effects lane and a row per track. Each track's header has a grip,
+  a caret, its instrument's tile (the track menu: rename, duplicate, change the instrument, clear, remove), its name and
+  a mute speaker. Tracks start closed; an open one is a piano roll or a step sequencer titled with its instrument.
+  `docs/superpowers/plans/2026-11-03-composer-redesign.md` maps the layout onto the code.
 - **Parts and the score.** The score's limit of 16 lanes holds. A draft written by the AI opens like any other,
   and its lanes are its parts.
-- **Listening.** "Hear With The Piece" plays every part. "Hear My Part Alone" plays only the selected part.
-  A playhead moves through every view.
+- **Listening.** Play plays every part that is not muted; Mute All and Unmute All with a status line choose what is
+  heard. A playhead moves through the timeline and follows centred.
 - **Saving.** "Save Draft" stores the piece as the next draft of the piece, through the studio session. The page
   says the studio limit's words when a draft would pass the studio limit. Nothing is lost when a save fails: the
   edit stays in the page until it is saved or the person leaves and confirms.
-- **Clear** empties the selected part. Clear can be undone like any other edit.
+- **Clear Notes** in the track menu empties a part. It can be undone like any other edit.
 
 ### One piano roll, four ways in
 

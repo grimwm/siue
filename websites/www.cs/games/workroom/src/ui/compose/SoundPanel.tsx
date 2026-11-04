@@ -1,5 +1,5 @@
 // Sound: this part's settings (Volume, Left / Right, Bass / Middle / Treble, Echo Amount and Repeats, Shimmer, Warmth,
-// Brightness with Sweep, Even Out Loud And Soft, Room, Mute, Solo), its Voice Effects chain with Try It With The Mic,
+// Brightness with Sweep, Even Out Loud And Soft, Room), its Voice Effects chain with Try It With The Mic,
 // and The Whole Piece (Room preset and amount, the limiter, Overall Loudness), with What The Score Saves. Settings are
 // kept as score settings, never as audio; each change is one Undo step. Changes are heard with Hear With The Piece.
 import { useEffect, useRef, useState } from 'preact/hooks';
@@ -154,11 +154,7 @@ export function SoundPanel(p: SoundPanelProps) {
             {SWEEPS.map(s => <Button pressed={(fx.brightness?.sweep ?? 'off') === s} onClick={() => p.onFx(f => ({ ...f, brightness: { ...f.brightness, sweep: s } }))}>{SWEEP_NAMES[s]}</Button>)}</div>
           <Slider label="Even Out Loud And Soft" name="even-out" min={0} max={1} step={0.05} value={fx.even_out ?? 0} onChange={v => p.onFx(f => ({ ...f, even_out: v }))} />
           <Slider label="Room" name="room-send" min={0} max={1} step={0.05} value={fx.room ?? FX_DEFAULTS.room} onChange={v => p.onFx(f => ({ ...f, room: v }))} />
-          <div class="flex flex-wrap gap-2">
-            <Button pressed={!!fx.mute} onClick={() => p.onFx(f => ({ ...f, mute: !f.mute }))} data={{ 'data-mute': '' }}>{fx.mute ? 'Muted' : 'Mute'}</Button>
-            <Button pressed={!!fx.solo} onClick={() => p.onFx(f => ({ ...f, solo: !f.solo }))} data={{ 'data-solo': '' }}>{fx.solo ? 'Soloed' : 'Solo'}</Button>
-          </div>
-          <Help>Left / Right places the part in the stereo picture. Bass, Middle and Treble lift or cut those ranges. Echo repeats the part a beat later. Shimmer is a chorus, Warmth a gentle drive, Brightness a filter that Sweep moves slowly or quickly. Even Out Loud And Soft is a compressor. Room sends the part into the piece's room. Mute silences the part; Solo plays only the soloed parts.</Help>
+          <Help>Left / Right places the part in the stereo picture. Bass, Middle and Treble lift or cut those ranges. Echo repeats the part a beat later. Shimmer is a chorus, Warmth a gentle drive, Brightness a filter that Sweep moves slowly or quickly. Even Out Loud And Soft is a compressor. Room sends the part into the piece's room. The speaker on the track mutes it.</Help>
         </section>
 
         <section class="grid gap-2" aria-label="Voice Effects">

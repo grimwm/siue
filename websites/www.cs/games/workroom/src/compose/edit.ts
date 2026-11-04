@@ -1,4 +1,5 @@
-// Every edit the editor makes, as a pure function from one document to the next (history.ts keeps them for Undo). An
+// Every edit the editor makes to notes and parts (reordering and duplicating parts too), as a pure function from one
+// document to the next (history.ts keeps them for Undo). An
 // edit replaces only the part it touches, so documents share the rest. No edit ever refuses or moves a note on its
 // own: a note outside its instrument's range stays where it was put, coloured; moveIntoRange is the person's choice.
 // DOM-free.
@@ -99,6 +100,40 @@ export function intoRange(entry: Entry, pitch: number): number {
     }
   }
   return pitch;
+}
+
+/** The part moved so it sits before the part now at index `at` (the number of parts for the end); colours, notes and effects go with it. */
+export function movePart(doc: EditDoc, part: string, at: number): EditDoc {
+  const from = doc.parts.findIndex(p => p.id === part);
+  const to = Math.max(0, Math.min(doc.parts.length, at));
+  if (from < 0 || to === from || to === from + 1) return doc;
+  const parts = doc.parts.filter(p => p.id !== part);
+  parts.splice(to > from ? to - 1 : to, 0, doc.parts[from]!);
+  return { ...doc, parts };
+}
+
+/** A copy of the part right after it, named "<name> 2" (or the next free number), with its own ids; null at the 16-part limit or for a vocal part. */
+export function duplicatePart(doc: EditDoc, part: string): { doc: EditDoc; id: string } | null {
+  const src = doc.parts.find(p => p.id === part);
+  if (!src || src.vocal || doc.parts.length >= MAX_PARTS) return null;
+  const names = new Set(doc.parts.map(p => p.name));
+  const ids = new Set(doc.parts.map(p => p.id));
+  const stem = src.name.replace(/ \d+$/, '');
+  let k = 2;
+  while (names.has(`${stem} ${k}`)) k++;
+  const name = `${stem} ${k}`.slice(0, 60);
+  let id = slug(name);
+  for (let j = 2; ids.has(id); j++) id = `${slug(stem)}-${j}`;
+  let next = doc.nextId;
+  const copy = JSON.parse(JSON.stringify(src)) as Part;
+  copy.id = id;
+  copy.name = name;
+  copy.color = PART_COLOURS[doc.parts.length % PART_COLOURS.length]!;
+  copy.notes = src.notes.map(n => ({ ...n, id: next++ }));
+  if (src.regions) copy.regions = src.regions.map(r => ({ ...r, id: next++ }));
+  const parts = [...doc.parts];
+  parts.splice(doc.parts.indexOf(src) + 1, 0, copy);
+  return { doc: { ...doc, parts, nextId: next }, id };
 }
 
 /** "Move Them Into Range": each red note of the part by whole octaves into the instrument's range. Drums are untouched. */

@@ -121,20 +121,28 @@ export function addClips(doc: EditDoc, clips: readonly FxClip[]): EditDoc {
   return withClips(doc, [...clipsOf(doc), ...clips.map(c => fit(doc, c))]);
 }
 
-/** Clips without a part: its own go, a vocoder it carried goes, and it leaves a crossfader's sides (an empty side drops the fader). */
+/** Whether a crossfader with sides `a` and `b` can stay: it needs both, except a timeline fade, which needs only A. */
+const keepsSides = (c: FxClip, a: readonly string[], b: readonly string[]): boolean =>
+  a.length > 0 && (b.length > 0 || c.settings?.['fade'] === true);
+
+/**
+ * Clips without a part: its own go, a vocoder it carried goes, and it leaves a crossfader's sides. An empty side drops
+ * the fader, except an empty B on a timeline fade (settings.fade), which then just fades A out.
+ */
 export function forgetPart(clips: readonly FxClip[], part: string): FxClip[] {
   return clips.flatMap((c): FxClip[] => {
     if (c.lane === part || (c.effect === 'vocoder' && c.settings?.['carrier'] === part)) return [];
     if (c.effect !== 'crossfader') return [c];
     const a = (c.settings?.['a'] as string[] ?? []).filter(x => x !== part);
     const b = (c.settings?.['b'] as string[] ?? []).filter(x => x !== part);
-    return a.length && b.length ? [{ ...c, settings: { ...c.settings, a, b } }] : [];
+    return keepsSides(c, a, b) ? [{ ...c, settings: { ...c.settings, a, b } }] : [];
   });
 }
 
 /**
  * The clips a score can keep: each on a part that is still there, a vocoder's carrier another part, a crossfader's
- * sides parts of the piece (a side left empty drops the clip), inside the piece's bars.
+ * sides parts of the piece (a side left empty drops the clip, except an empty B on a timeline fade), inside the
+ * piece's bars.
  */
 export function savedClips(clips: readonly FxClip[], laneIds: ReadonlySet<string>, bars: number): FxClip[] {
   const out: FxClip[] = [];
@@ -146,7 +154,7 @@ export function savedClips(clips: readonly FxClip[], laneIds: ReadonlySet<string
     if (c.effect === 'crossfader') {
       const a = (s?.['a'] as string[] ?? []).filter(x => laneIds.has(x));
       const b = (s?.['b'] as string[] ?? []).filter(x => laneIds.has(x) && !a.includes(x));
-      if (!a.length || !b.length) continue;
+      if (!keepsSides(c, a, b)) continue;
       settings = { ...settings, a, b };
     }
     if (c.effect === 'hot_cue' && (s?.['cue_bar'] as number) >= bars + 1) continue;

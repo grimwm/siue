@@ -168,7 +168,7 @@ export function HumPanel(p: HumPanelProps) {
       </div>
       {p.help ? (
         <p class="border-l-2 border-amber pl-2 text-sm text-dim">
-          Hum or sing one note at a time; a breath or a new pitch starts the next note. Friendly Notes keeps to the piece's key, All 12 Notes takes the nearest note, and Exact Pitch keeps your slides and in-between notes in the picture (the saved notes keep each one's main pitch). Your voice is heard only in this page and is never kept or sent: only the notes go into the part. At The Dashed Line puts them where you drag the line on the grid.
+          Hum or sing one note at a time; a breath or a new pitch starts the next note. Friendly Notes keeps to the piece's key, All 12 Notes takes the nearest note, and Exact Pitch keeps your slides and in-between notes in the picture (the saved notes keep each one's main pitch). Your voice is heard only in this page and is never kept or sent: only the notes go into the part. At The Cursor puts them at the bar where the cursor is (tap the ruler to move it).
         </p>
       ) : null}
       <p data-hum-message="" role="status" class="h-10 overflow-hidden text-sm">{message}</p>

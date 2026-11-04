@@ -1,10 +1,11 @@
 // DJ & Effects' edits: a tapped effect lands for its usual length with what it needs, a clip moves and stretches inside
 // the piece, a setting at its default is left out, a recorded performance lands as one step, and only clips the score
-// can keep are saved (a removed part's clips go; a crossfader side left empty drops it).
+// can keep are saved (a removed part's clips go; a crossfader side left empty drops it, except a timeline fade, which
+// may have no B side).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { removePart } from '../src/compose/edit.ts';
-import { addClips, moveClip, placeClip, removeClip, resizeClip, savedClips, setClipLane, setClipSetting, stepClip, clipsOf } from '../src/compose/djclips.ts';
+import { addClips, forgetPart, moveClip, placeClip, removeClip, resizeClip, savedClips, setClipLane, setClipSetting, stepClip, clipsOf } from '../src/compose/djclips.ts';
 import { docFromScore, newDoc, scoreFromDoc } from '../src/compose/doc.ts';
 import type { EditDoc, Part } from '../src/compose/doc.ts';
 import { parseScore } from '../src/score.ts';
@@ -72,6 +73,21 @@ test('the score keeps only the clips it can: a removed part\'s go, a crossfader 
     { effect: 'riser' as const, lane: null, from_bar: 7, to_bar: 12 },
   ];
   assert.deepEqual(savedClips(clips, new Set(['keys', 'bass']), 8), [{ effect: 'riser', lane: null, from_bar: 7, to_bar: 9 }]);
+});
+
+test('a timeline fade keeps an empty B (A just fades out); it goes only when A is empty', () => {
+  const clips = [
+    { effect: 'crossfader' as const, lane: null, from_bar: 1, to_bar: 2, settings: { a: ['keys'], b: ['gone'], fade: true } },
+    { effect: 'crossfader' as const, lane: null, from_bar: 2, to_bar: 3, settings: { a: ['gone'], b: ['keys'], fade: true } },
+    { effect: 'crossfader' as const, lane: null, from_bar: 3, to_bar: 4, settings: { a: ['keys'], b: [], fade: true, silent: true } },
+  ];
+  assert.deepEqual(savedClips(clips, new Set(['keys', 'bass']), 8), [
+    { effect: 'crossfader', lane: null, from_bar: 1, to_bar: 2, settings: { a: ['keys'], b: [], fade: true } },
+    { effect: 'crossfader', lane: null, from_bar: 3, to_bar: 4, settings: { a: ['keys'], b: [], fade: true, silent: true } },
+  ]);
+  assert.deepEqual(forgetPart(clips, 'gone').map(c => c.settings), [{ a: ['keys'], b: [], fade: true }, { a: ['keys'], b: [], fade: true, silent: true }]);
+  assert.deepEqual(forgetPart(clips, 'keys').map(c => c.settings), [{ a: ['gone'], b: [], fade: true }]);
+  assert.deepEqual(forgetPart([{ effect: 'crossfader', lane: null, from_bar: 1, to_bar: 2, settings: { a: ['keys'], b: ['bass'] } }], 'bass'), [], 'a fader without fade still needs both sides');
 });
 
 test('clips round-trip through the score, and a piece without them stays as it was', () => {

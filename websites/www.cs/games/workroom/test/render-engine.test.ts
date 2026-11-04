@@ -424,6 +424,21 @@ test('the Crossfader moves the A side out and the B side in', async () => {
   assert.ok(Math.abs(at(5) - 0.3) < 1e-6, 'both after the clip');
 });
 
+test('a timeline fade takes A out and B in, and they hold after it', async () => {
+  const s = score();
+  s.schema = 2;
+  s.fx_clips = [{ effect: 'crossfader', lane: null, from_bar: 2, to_bar: 4, settings: { a: ['strings-low'], b: ['brass'], fade: true, silent: true } }];
+  const { deps: d, contexts } = deps(undefined, () => 0.1);
+  await renderScore(s, LIBRARY, d);
+  assert.equal(contexts.length, 4, 'the rest, each faded part on its own, and the master');
+  const b = bus(contexts).data[0]!;
+  const at = (bars: number) => b[Math.round(bars * BAR_S * RATE)]!;
+  // The harp is on neither side and plays throughout; B is silent until the fade.
+  assert.ok(Math.abs(at(0.5) - 0.2) < 1e-6, `before: A and the harp: ${at(0.5)}`);
+  assert.ok(Math.abs(at(2) - (0.1 + 0.2 * Math.SQRT1_2)) < 1e-3, `the middle, equal power: ${at(2)}`);
+  assert.ok(Math.abs(at(3.5) - 0.2) < 1e-6, `after: B and the harp: ${at(3.5)}`);
+});
+
 test('a score whose only schema 2 use is DJ & Effects takes the longer road', () => {
   const s = score();
   s.fx_clips = [{ effect: 'doppler', lane: null, from_bar: 1, to_bar: 2 }];

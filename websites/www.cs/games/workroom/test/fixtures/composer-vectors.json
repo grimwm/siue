@@ -1,0 +1,1056 @@
+{
+ "comment": "Shared by compose-migrate.test.ts and test_composer.py: a schema 2 score with regions (one looped), markers, a key and a crossfader that fades A out with no B side; its broken cases (set a dotted path; the page's error path); and the same fields refused on a schema 1 score.",
+ "score": {
+  "schema": 2,
+  "kind": "music",
+  "project": {
+   "id": "crete",
+   "name": "Crete"
+  },
+  "piece": {
+   "id": "test-piece",
+   "title": "Test piece: the Labyrinth wakes"
+  },
+  "draft": 1,
+  "made": "2026-10-17T12:00:00Z",
+  "duration": 16.5,
+  "bars": 8,
+  "tempo": [
+   {
+    "bar": 1,
+    "bpm": 92,
+    "beats": 4,
+    "unit": 4
+   },
+   {
+    "bar": 2,
+    "bpm": 101,
+    "beats": 4,
+    "unit": 4
+   },
+   {
+    "bar": 3,
+    "bpm": 110,
+    "beats": 4,
+    "unit": 4
+   },
+   {
+    "bar": 4,
+    "bpm": 119,
+    "beats": 4,
+    "unit": 4
+   },
+   {
+    "bar": 5,
+    "bpm": 128,
+    "beats": 4,
+    "unit": 4
+   }
+  ],
+  "sections": [
+   {
+    "id": "stirs",
+    "name": "The Labyrinth stirs",
+    "from_bar": 1,
+    "to_bar": 4,
+    "color": "#2e4057"
+   },
+   {
+    "id": "thread",
+    "name": "Ariadne's thread",
+    "from_bar": 5,
+    "to_bar": 8,
+    "color": "#6b4e16"
+   }
+  ],
+  "lanes": [
+   {
+    "id": "strings-low",
+    "name": "Low strings",
+    "family": "strings",
+    "icon": "strings",
+    "color": "#7a9cc6",
+    "sound": {
+     "instrument": "cello",
+     "gain_db": 0,
+     "attack": 0.1,
+     "release": 0.5
+    },
+    "speed": "follow",
+    "dynamics": [
+     {
+      "bar": 1,
+      "level": 48,
+      "shape": "louder"
+     },
+     {
+      "bar": 3,
+      "level": 100,
+      "shape": "steady"
+     }
+    ],
+    "fx": {
+     "volume_db": -3,
+     "pan": -0.4,
+     "eq": {
+      "bass": 3,
+      "treble": -2
+     },
+     "echo": {
+      "amount": 0.3,
+      "repeats": 3,
+      "beats": 0.5
+     },
+     "shimmer": 0.2,
+     "warmth": 0.1,
+     "brightness": {
+      "cutoff": 0.7,
+      "sweep": "slow"
+     },
+     "even_out": 0.5,
+     "room": 0.6,
+     "mute": false,
+     "solo": false
+    },
+    "voice": [
+     {
+      "effect": "talkbox",
+      "carrier": "brass",
+      "mix": 0.8
+     },
+     {
+      "effect": "robot",
+      "mix": 0.5
+     },
+     {
+      "effect": "whisper",
+      "mix": 0.3
+     }
+    ],
+    "regions": [
+     {
+      "from_bar": 1,
+      "to_bar": 3
+     },
+     {
+      "from_bar": 3,
+      "to_bar": 5,
+      "loop_bars": 1
+     }
+    ]
+   },
+   {
+    "id": "brass",
+    "name": "Horns",
+    "family": "brass",
+    "icon": "brass",
+    "color": "#c98b3a",
+    "sound": {
+     "instrument": "horn",
+     "gain_db": 2,
+     "attack": 0.2,
+     "release": 0.6
+    },
+    "speed": {
+     "ratio": 0.666667
+    },
+    "dynamics": [
+     {
+      "bar": 1,
+      "level": 80,
+      "shape": "steady"
+     },
+     {
+      "bar": 5,
+      "level": 120,
+      "shape": "softer"
+     },
+     {
+      "bar": 7,
+      "level": 64,
+      "shape": "steady"
+     }
+    ],
+    "voice": [
+     {
+      "effect": "vocoder",
+      "carrier": "strings-low",
+      "bands": 16
+     },
+     {
+      "effect": "autotune",
+      "strength": 1,
+      "retune_ms": 20
+     },
+     {
+      "effect": "harmonizer",
+      "voices": [
+       "third",
+       "fifth"
+      ],
+      "mix": 0.5
+     },
+     {
+      "effect": "pitch",
+      "semitones": -3,
+      "formant": 2
+     }
+    ],
+    "regions": [
+     {
+      "from_bar": 5,
+      "to_bar": 9
+     }
+    ]
+   },
+   {
+    "id": "voice",
+    "name": "Voice",
+    "family": "voice",
+    "icon": "voice",
+    "color": "#c0392b",
+    "sound": {
+     "instrument": "vocal",
+     "gain_db": 0,
+     "attack": 0,
+     "release": 0
+    },
+    "vocal": {
+     "takes": [
+      {
+       "file": "vocal-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.flac",
+       "seconds": 4
+      }
+     ],
+     "clips": [
+      {
+       "take": "vocal-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.flac",
+       "at": 2,
+       "from": 0,
+       "to": 4,
+       "gain_db": 0,
+       "fade_in": 0.01,
+       "fade_out": 0.01
+      }
+     ]
+    }
+   }
+  ],
+  "characters": [
+   {
+    "id": "ariadne",
+    "name": "Ariadne",
+    "color": "#d4a017"
+   },
+   {
+    "id": "minotaur",
+    "name": "Minotaur",
+    "color": "#c0392b"
+   },
+   {
+    "id": "daedalus",
+    "name": "Daedalus",
+    "color": "#b08d57"
+   },
+   {
+    "id": "athens",
+    "name": "Athens",
+    "color": "#3b6fb6"
+   }
+  ],
+  "motifs": [
+   {
+    "id": "ariadne",
+    "character": "ariadne",
+    "spans": [
+     {
+      "lane": "brass",
+      "from": 8,
+      "to": 16
+     }
+    ]
+   }
+  ],
+  "notes": [
+   {
+    "lane": "strings-low",
+    "start": 0,
+    "length": 2,
+    "pitch": 38,
+    "velocity": 70,
+    "motif": null
+   },
+   {
+    "lane": "strings-low",
+    "start": 2,
+    "length": 2,
+    "pitch": 41,
+    "velocity": 70,
+    "motif": null
+   },
+   {
+    "lane": "strings-low",
+    "start": 4,
+    "length": 4,
+    "pitch": 36,
+    "velocity": 80,
+    "motif": null
+   },
+   {
+    "lane": "brass",
+    "start": 8,
+    "length": 2,
+    "pitch": 62,
+    "velocity": 90,
+    "motif": "ariadne",
+    "bend": [
+     [
+      0,
+      -50
+     ],
+     [
+      0.5,
+      0
+     ],
+     [
+      1.2,
+      30
+     ],
+     [
+      2,
+      0
+     ]
+    ]
+   },
+   {
+    "lane": "brass",
+    "start": 10,
+    "length": 2,
+    "pitch": 65,
+    "velocity": 95,
+    "motif": "ariadne"
+   },
+   {
+    "lane": "brass",
+    "start": 12,
+    "length": 4,
+    "pitch": 69,
+    "velocity": 100,
+    "motif": "ariadne"
+   }
+  ],
+  "energy": [
+   [
+    0,
+    0.2
+   ],
+   [
+    8,
+    0.5
+   ],
+   [
+    16.5,
+    0.9
+   ]
+  ],
+  "glossary": [
+   {
+    "term": "ostinato",
+    "from": 0,
+    "to": 4
+   },
+   {
+    "term": "motif",
+    "from": 8,
+    "to": 12
+   }
+  ],
+  "audio": [],
+  "musicxml": "score.musicxml",
+  "changes": [
+   {
+    "from_bar": 5,
+    "to_bar": 8,
+    "lane": "brass",
+    "text": "Horns carry Ariadne's theme an octave higher.",
+    "answers": []
+   }
+  ],
+  "piece_tempo": [
+   {
+    "bar": 1,
+    "bpm": 92,
+    "shape": "speed_up"
+   },
+   {
+    "bar": 5,
+    "bpm": 128,
+    "shape": "steady"
+   }
+  ],
+  "mix": {
+   "style": "lofi",
+   "loudness": -20,
+   "room": {
+    "preset": "concert_hall",
+    "amount": 0.4
+   },
+   "limiter": {
+    "on": true,
+    "ceiling_db": -1
+   }
+  },
+  "fx_clips": [
+   {
+    "effect": "scratch",
+    "lane": null,
+    "from_bar": 1,
+    "to_bar": 1.5,
+    "settings": {
+     "style": "chirp"
+    },
+    "points": [
+     [
+      1,
+      1
+     ],
+     [
+      1.25,
+      -2.5
+     ],
+     [
+      1.5,
+      1
+     ]
+    ]
+   },
+   {
+    "effect": "spinback",
+    "lane": null,
+    "from_bar": 1.5,
+    "to_bar": 2,
+    "settings": {
+     "throw": "gentle"
+    }
+   },
+   {
+    "effect": "tape_stop",
+    "lane": "strings-low",
+    "from_bar": 2,
+    "to_bar": 3,
+    "settings": {
+     "time": "slow"
+    }
+   },
+   {
+    "effect": "tape_start",
+    "lane": null,
+    "from_bar": 3,
+    "to_bar": 4
+   },
+   {
+    "effect": "vinyl",
+    "lane": "brass",
+    "from_bar": 1,
+    "to_bar": 5,
+    "settings": {
+     "age": 0.5
+    }
+   },
+   {
+    "effect": "riser",
+    "lane": null,
+    "from_bar": 5,
+    "to_bar": 7,
+    "settings": {
+     "climb": 3
+    }
+   },
+   {
+    "effect": "snare_roll",
+    "lane": null,
+    "from_bar": 6,
+    "to_bar": 7,
+    "settings": {
+     "level": 0.6
+    }
+   },
+   {
+    "effect": "filter_sweep",
+    "lane": null,
+    "from_bar": 5,
+    "to_bar": 7,
+    "settings": {
+     "mode": "lowpass_down"
+    }
+   },
+   {
+    "effect": "impact",
+    "lane": null,
+    "from_bar": 7,
+    "to_bar": 7.25,
+    "settings": {
+     "kind": "downlifter"
+    }
+   },
+   {
+    "effect": "sidechain",
+    "lane": "strings-low",
+    "from_bar": 7,
+    "to_bar": 9,
+    "settings": {
+     "depth": 0.5
+    }
+   },
+   {
+    "effect": "stutter",
+    "lane": null,
+    "from_bar": 4.75,
+    "to_bar": 5,
+    "settings": {
+     "slice": 0
+    }
+   },
+   {
+    "effect": "trance_gate",
+    "lane": "brass",
+    "from_bar": 7,
+    "to_bar": 8,
+    "settings": {
+     "pattern": "choppy"
+    }
+   },
+   {
+    "effect": "wobble",
+    "lane": "strings-low",
+    "from_bar": 3,
+    "to_bar": 4,
+    "settings": {
+     "rate": 4,
+     "depth": 0.6
+    },
+    "points": [
+     [
+      3,
+      0.2,
+      0.5
+     ],
+     [
+      3.5,
+      0.9,
+      1
+     ]
+    ]
+   },
+   {
+    "effect": "tremolo",
+    "lane": "brass",
+    "from_bar": 2,
+    "to_bar": 3,
+    "settings": {
+     "rate": 12
+    }
+   },
+   {
+    "effect": "auto_pan",
+    "lane": "brass",
+    "from_bar": 3,
+    "to_bar": 4,
+    "settings": {
+     "speed": "beat"
+    }
+   },
+   {
+    "effect": "bitcrusher",
+    "lane": null,
+    "from_bar": 2,
+    "to_bar": 2.5,
+    "settings": {
+     "crunch": 0.9
+    },
+    "points": [
+     [
+      2,
+      0.1,
+      0.2
+     ],
+     [
+      2.5,
+      1,
+      0
+     ]
+    ]
+   },
+   {
+    "effect": "ring_mod",
+    "lane": "brass",
+    "from_bar": 4,
+    "to_bar": 5,
+    "settings": {
+     "tone": 440
+    }
+   },
+   {
+    "effect": "phaser",
+    "lane": "strings-low",
+    "from_bar": 4,
+    "to_bar": 5,
+    "settings": {
+     "speed": "fast"
+    }
+   },
+   {
+    "effect": "flanger",
+    "lane": "brass",
+    "from_bar": 5,
+    "to_bar": 6,
+    "settings": {
+     "speed": "slow"
+    },
+    "points": [
+     [
+      5,
+      0.5,
+      0.5
+     ],
+     [
+      6,
+      1,
+      0
+     ]
+    ]
+   },
+   {
+    "effect": "auto_wah",
+    "lane": "strings-low",
+    "from_bar": 5,
+    "to_bar": 6,
+    "settings": {
+     "sensitivity": 0.8
+    }
+   },
+   {
+    "effect": "rotary",
+    "lane": "brass",
+    "from_bar": 6,
+    "to_bar": 7,
+    "settings": {
+     "speed": "slow"
+    }
+   },
+   {
+    "effect": "echo_out",
+    "lane": null,
+    "from_bar": 8,
+    "to_bar": 9,
+    "settings": {
+     "time": "half"
+    }
+   },
+   {
+    "effect": "ping_pong",
+    "lane": "brass",
+    "from_bar": 1,
+    "to_bar": 2,
+    "settings": {
+     "time": "eighth"
+    },
+    "points": [
+     [
+      1,
+      0.4,
+      0.6
+     ],
+     [
+      2,
+      0.4,
+      0.6
+     ]
+    ]
+   },
+   {
+    "effect": "reverse",
+    "lane": "strings-low",
+    "from_bar": 1,
+    "to_bar": 2,
+    "settings": {
+     "length": "two_beats"
+    }
+   },
+   {
+    "effect": "reverse_reverb",
+    "lane": null,
+    "from_bar": 4,
+    "to_bar": 5,
+    "settings": {
+     "swell": "short"
+    }
+   },
+   {
+    "effect": "granular_freeze",
+    "lane": "voice",
+    "from_bar": 3,
+    "to_bar": 4,
+    "settings": {
+     "mode": "stretch"
+    }
+   },
+   {
+    "effect": "wide_8d",
+    "lane": "voice",
+    "from_bar": 2,
+    "to_bar": 3,
+    "settings": {
+     "circle": "bar"
+    }
+   },
+   {
+    "effect": "doppler",
+    "lane": "brass",
+    "from_bar": 8,
+    "to_bar": 9
+   },
+   {
+    "effect": "filter",
+    "lane": null,
+    "from_bar": 6,
+    "to_bar": 6.5,
+    "settings": {
+     "cutoff": 0.3,
+     "resonance": 0.8
+    },
+    "points": [
+     [
+      6,
+      0,
+      0
+     ],
+     [
+      6.25,
+      1,
+      0.5
+     ],
+     [
+      6.5,
+      0.5,
+      0.5
+     ]
+    ]
+   },
+   {
+    "effect": "pitch_shift",
+    "lane": "voice",
+    "from_bar": 2,
+    "to_bar": 3,
+    "settings": {
+     "semitones": -5,
+     "formant": 0
+    }
+   },
+   {
+    "effect": "harmonizer",
+    "lane": "voice",
+    "from_bar": 3,
+    "to_bar": 4,
+    "settings": {
+     "voices": [
+      "third",
+      "fifth"
+     ],
+     "mix": 0.5
+    }
+   },
+   {
+    "effect": "vocoder",
+    "lane": "voice",
+    "from_bar": 2,
+    "to_bar": 4,
+    "settings": {
+     "carrier": "strings-low",
+     "bands": 24
+    }
+   },
+   {
+    "effect": "autotune",
+    "lane": "voice",
+    "from_bar": 2,
+    "to_bar": 4,
+    "settings": {
+     "strength": 1,
+     "retune_ms": 0
+    }
+   },
+   {
+    "effect": "crossfader",
+    "lane": null,
+    "from_bar": 1,
+    "to_bar": 3,
+    "settings": {
+     "a": [
+      "strings-low"
+     ],
+     "b": [
+      "brass",
+      "voice"
+     ]
+    },
+    "points": [
+     [
+      1,
+      0
+     ],
+     [
+      2,
+      0.5
+     ],
+     [
+      3,
+      1
+     ]
+    ]
+   },
+   {
+    "effect": "hot_cue",
+    "lane": null,
+    "from_bar": 8.5,
+    "to_bar": 9,
+    "settings": {
+     "cue_bar": 1.5
+    }
+   },
+   {
+    "effect": "looper",
+    "lane": null,
+    "from_bar": 7,
+    "to_bar": 9,
+    "settings": {
+     "bars": [
+      5,
+      6
+     ],
+     "mute_deck": true
+    }
+   },
+   {
+    "effect": "crossfader",
+    "lane": null,
+    "from_bar": 7,
+    "to_bar": 8,
+    "settings": {
+     "a": [
+      "brass"
+     ],
+     "b": [],
+     "fade": true,
+     "silent": true
+    }
+   }
+  ],
+  "markers": [
+   {
+    "bar": 1,
+    "name": "Start"
+   },
+   {
+    "bar": 5.5,
+    "name": "Ariadne's thread"
+   }
+  ],
+  "key": {
+   "tonic": 9,
+   "mode": "minor"
+  }
+ },
+ "invalid": [
+  {
+   "name": "regions that overlap",
+   "set": "lanes.0.regions.1.from_bar",
+   "value": 2.5,
+   "error": "lanes[0].regions[1].from_bar"
+  },
+  {
+   "name": "a region on a vocal lane",
+   "set": "lanes.2.regions",
+   "value": [
+    {
+     "from_bar": 1,
+     "to_bar": 2
+    }
+   ],
+   "error": "lanes[2].regions"
+  },
+  {
+   "name": "a region past the end",
+   "set": "lanes.0.regions.1.to_bar",
+   "value": 9.5,
+   "error": "lanes[0].regions[1].to_bar"
+  },
+  {
+   "name": "a region before bar 1",
+   "set": "lanes.0.regions.0.from_bar",
+   "value": 0.5,
+   "error": "lanes[0].regions[0].from_bar"
+  },
+  {
+   "name": "a region that ends where it starts",
+   "set": "lanes.0.regions.0.to_bar",
+   "value": 1,
+   "error": "lanes[0].regions[0].to_bar"
+  },
+  {
+   "name": "a region finer than 1/1000",
+   "set": "lanes.0.regions.0.to_bar",
+   "value": 2.0004,
+   "error": "lanes[0].regions[0].to_bar"
+  },
+  {
+   "name": "a loop as long as its region",
+   "set": "lanes.0.regions.1.loop_bars",
+   "value": 2,
+   "error": "lanes[0].regions[1].loop_bars"
+  },
+  {
+   "name": "a loop of nothing",
+   "set": "lanes.0.regions.1.loop_bars",
+   "value": 0,
+   "error": "lanes[0].regions[1].loop_bars"
+  },
+  {
+   "name": "a key that is not part of a region",
+   "set": "lanes.0.regions.0.loop",
+   "value": 1,
+   "error": "lanes[0].regions[0].loop"
+  },
+  {
+   "name": "regions that are not a list",
+   "set": "lanes.1.regions",
+   "value": {
+    "from_bar": 1
+   },
+   "error": "lanes[1].regions"
+  },
+  {
+   "name": "a marker name too long",
+   "set": "markers.1.name",
+   "value": "xxxxxxxxxxxxxxxxxxxxxxxxx",
+   "error": "markers[1].name"
+  },
+  {
+   "name": "a marker with no name",
+   "set": "markers.1.name",
+   "value": "",
+   "error": "markers[1].name"
+  },
+  {
+   "name": "a marker at the end",
+   "set": "markers.1.bar",
+   "value": 9,
+   "error": "markers[1].bar"
+  },
+  {
+   "name": "a marker finer than 1/1000",
+   "set": "markers.1.bar",
+   "value": 5.0004,
+   "error": "markers[1].bar"
+  },
+  {
+   "name": "markers going back",
+   "set": "markers.0.bar",
+   "value": 6,
+   "error": "markers[1].bar"
+  },
+  {
+   "name": "a key that is not part of a marker",
+   "set": "markers.0.color",
+   "value": "#123456",
+   "error": "markers[0].color"
+  },
+  {
+   "name": "a key tonic of 12",
+   "set": "key.tonic",
+   "value": 12,
+   "error": "key.tonic"
+  },
+  {
+   "name": "a key tonic between notes",
+   "set": "key.tonic",
+   "value": 1.5,
+   "error": "key.tonic"
+  },
+  {
+   "name": "a mode not offered",
+   "set": "key.mode",
+   "value": "dorian",
+   "error": "key.mode"
+  },
+  {
+   "name": "a key setting not offered",
+   "set": "key.sharps",
+   "value": 2,
+   "error": "key.sharps"
+  },
+  {
+   "name": "a crossfader with no B side and no fade",
+   "set": "fx_clips.36.settings.fade",
+   "value": "__delete__",
+   "error": "fx_clips[36].settings.b"
+  },
+  {
+   "name": "a crossfader with no B side and fade off",
+   "set": "fx_clips.36.settings.fade",
+   "value": false,
+   "error": "fx_clips[36].settings.b"
+  },
+  {
+   "name": "a fade that is not true or false",
+   "set": "fx_clips.36.settings.fade",
+   "value": "yes",
+   "error": "fx_clips[36].settings.fade"
+  },
+  {
+   "name": "a silent setting that is not true or false",
+   "set": "fx_clips.36.settings.silent",
+   "value": 1,
+   "error": "fx_clips[36].settings.silent"
+  },
+  {
+   "name": "a crossfader with no A side",
+   "set": "fx_clips.36.settings.a",
+   "value": [],
+   "error": "fx_clips[36].settings.a"
+  }
+ ],
+ "schema1": [
+  {
+   "name": "regions",
+   "set": "lanes.0.regions",
+   "value": [
+    {
+     "from_bar": 1,
+     "to_bar": 2
+    }
+   ],
+   "error": "lanes[0].regions"
+  },
+  {
+   "name": "markers",
+   "set": "markers",
+   "value": [
+    {
+     "bar": 1,
+     "name": "Start"
+    }
+   ],
+   "error": "markers"
+  },
+  {
+   "name": "key",
+   "set": "key",
+   "value": {
+    "tonic": 0,
+    "mode": "major"
+   },
+   "error": "key"
+  }
+ ]
+}

@@ -191,6 +191,14 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
         _absent(r, "piece_tempo", "", "a sound piece has no tempo")
     if music and v2(r, "piece_tempo", ""):
         _tempo_line(r["piece_tempo"], bars, steps)
+    if v2(r, "markers", ""):
+        if not music:
+            _fail("markers", "a sound piece has no bars for markers")
+        _markers(r["markers"], bars)
+    if v2(r, "key", ""):
+        if not music:
+            _fail("key", "a sound piece has no key")
+        _key(r["key"])
 
     _sections(r.get("sections"), music, bars, duration)
     lanes = []
@@ -222,6 +230,12 @@ def _build(r: dict, glossary: frozenset[str], instruments: frozenset[str] | None
             if lanes[-1]["vocal"]:
                 _fail(f"{p}.sound", f"a vocal track's sound is the instrument {VOCAL_INSTRUMENT}")
             _fail(f"{p}.sound.instrument", f"{VOCAL_INSTRUMENT} is only for a lane with a vocal track")
+        if v2(o, "regions", p):
+            if not music:
+                _fail(f"{p}.regions", "a sound piece has no bars for regions")
+            if lanes[-1]["vocal"]:
+                _fail(f"{p}.regions", "a vocal track holds takes, not regions")
+            _regions(o["regions"], f"{p}.regions", bars)
     _unique(lanes, "lanes")
     for i, lane in enumerate(lanes):
         for j, v in enumerate(lane["voice"]):
@@ -610,7 +624,7 @@ FX_CLIP_RULES = {
     "harmonizer": ({"voices": _harmony, "mix": _span(0, 1)}, ()),
     "vocoder": ({"carrier": _id, "bands": _whole(8, 32)}, ("carrier",)),
     "autotune": ({"strength": _span(0, 1), "retune_ms": _span(0, 400)}, ()),
-    "crossfader": ({"a": _lane_list, "b": _lane_list}, ("a", "b")),
+    "crossfader": ({"a": _lane_list, "b": lambda x, p: [] if x == [] else _lane_list(x, p), "fade": _bool, "silent": _bool}, ("a", "b")),
     "hot_cue": ({"cue_bar": _span(1, 100000)}, ("cue_bar",)),
     "looper": ({"bars": _looper_bars, "mute_deck": _bool}, ("bars",)),
 }
@@ -659,6 +673,8 @@ def _fx_clips(v, bars, lane_ids) -> None:
                     _fail(f"{p}.settings.{'a' if x in st['a'] else 'b'}", "must name lanes of the piece")
             if set(st["a"]) & set(st["b"]):
                 _fail(f"{p}.settings.b", "must not share a lane with a")
+            if not st["b"] and st.get("fade") is not True:
+                _fail(f"{p}.settings.b", "must name a lane unless fade is true")
         if effect == "hot_cue" and st["cue_bar"] >= bars + 1:
             _fail(f"{p}.settings.cue_bar", f"must be before the end (bar {bars + 1})")
         if effect == "looper":
@@ -683,6 +699,77 @@ def _fx_clips(v, bars, lane_ids) -> None:
                 if prev is not None and b < prev:
                     _fail(f"{q}[0]", "bars must not go back")
                 prev = b
+
+
+MAX_REGIONS = 256
+MAX_MARKERS = 64
+MAX_MARKER_NAME = 24
+REGION_KEYS = ("from_bar", "to_bar", "loop_bars")
+
+
+def _regions(v, path, bars) -> None:
+    """A lane's regions: in order, never overlapping, each inside the piece; a loop shorter than its region."""
+    items = _arr(v, path)
+    if len(items) > MAX_REGIONS:
+        _fail(path, f"must have at most {MAX_REGIONS} regions")
+    spans = []
+    for i, x in enumerate(items):
+        p = f"{path}[{i}]"
+        o = _obj(x, p)
+        for k in o:
+            if k not in REGION_KEYS:
+                _fail(f"{p}.{k}", "is not part of a region (from_bar, to_bar, loop_bars)")
+        start = _range(o.get("from_bar"), f"{p}.from_bar", 1, bars + 1)
+        end = _range(o.get("to_bar"), f"{p}.to_bar", 1, bars + 1)
+        if _bar_pos(start) != start:
+            _fail(f"{p}.from_bar", "must be a bar position to 1/1000 of a bar")
+        if _bar_pos(end) != end:
+            _fail(f"{p}.to_bar", "must be a bar position to 1/1000 of a bar")
+        if not end > start:
+            _fail(f"{p}.to_bar", "must be after from_bar")
+        if "loop_bars" in o:
+            loop = _num(o["loop_bars"], f"{p}.loop_bars")
+            if _bar_pos(loop) != loop:
+                _fail(f"{p}.loop_bars", "must be a length to 1/1000 of a bar")
+            if not (loop > 0 and loop < end - start - EPS):
+                _fail(f"{p}.loop_bars", "must be above 0 and shorter than the region")
+        spans.append((start, end))
+    for i in range(1, len(spans)):
+        if spans[i][0] < spans[i - 1][1] - EPS:
+            _fail(f"{path}[{i}].from_bar", "must not start before the previous region ends")
+
+
+def _markers(v, bars) -> None:
+    """The ruler's markers: in bar order, each inside the piece with a short name."""
+    items = _arr(v, "markers")
+    if len(items) > MAX_MARKERS:
+        _fail("markers", f"must have at most {MAX_MARKERS} markers")
+    at = []
+    for i, x in enumerate(items):
+        p = f"markers[{i}]"
+        o = _obj(x, p)
+        for k in o:
+            if k not in ("bar", "name"):
+                _fail(f"{p}.{k}", "is not part of a marker (bar, name)")
+        bar = _num(o.get("bar"), f"{p}.bar")
+        if not (1 <= bar < bars + 1):
+            _fail(f"{p}.bar", f"must be from 1 to before {bars + 1}")
+        if _bar_pos(bar) != bar:
+            _fail(f"{p}.bar", "must be a bar position to 1/1000 of a bar")
+        _text(o.get("name"), f"{p}.name", MAX_MARKER_NAME)
+        at.append(bar)
+    for i in range(1, len(at)):
+        if at[i] < at[i - 1]:
+            _fail(f"markers[{i}].bar", "bars must not go back")
+
+
+def _key(v) -> None:
+    o = _obj(v, "key")
+    for k in o:
+        if k not in ("tonic", "mode"):
+            _fail(f"key.{k}", "is not part of a key (tonic, mode)")
+    _int(o.get("tonic"), "key.tonic", 0, 11)
+    _one_of(o.get("mode"), "key.mode", ("major", "minor"))
 
 
 def bar_seconds(tempo, bar):

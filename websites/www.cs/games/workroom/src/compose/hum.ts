@@ -16,7 +16,7 @@ export const HUM_SNAPS: readonly { id: HumSnap; label: string }[] = [
   { id: 'friendly', label: 'Friendly Notes' }, { id: 'all12', label: 'All 12 Notes' }, { id: 'exact', label: 'Exact Pitch' },
 ];
 export const HUM_PLACES: readonly { id: HumPlace; label: string }[] = [
-  { id: 'after', label: 'After The Part' }, { id: 'replace', label: 'Replace The Part' }, { id: 'line', label: 'At The Dashed Line' },
+  { id: 'after', label: 'After The Track' }, { id: 'replace', label: 'Replace The Track' }, { id: 'line', label: 'At The Cursor' },
 ];
 
 /** One sung note: seconds from the start of the recording, and its pitch curve as [seconds, fractional MIDI]. */

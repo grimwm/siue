@@ -3,7 +3,7 @@
 // one, a node file that fails or is missing, and the disk file over a sync access handle.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CancelledError, startSearch } from '../src/solver-client.ts';
+import { CancelledError, startSearch, solverBusy, watchSolver } from '../src/solver-client.ts';
 import type { WorkerLike } from '../src/solver-client.ts';
 import { createSolverHost, searchLimits, MEMORY_CEILING } from '../src/solver-host.ts';
 import type { NodeFile, Report } from '../src/solver-host.ts';
@@ -385,4 +385,23 @@ test('a search started after a cancel runs', async () => {
   await assert.rejects(first.result, CancelledError);
   const r = await startSearch(L9, 'solve', worker).result;
   assert.equal(r.solved, true);
+});
+
+test('the solver says when a search is running, for Endless\'s background levels to wait on', async () => {
+  const seen: boolean[] = [];
+  watchSolver(b => seen.push(b));
+  assert.equal(solverBusy(), false);
+  const job = startSearch(L9, 'solve', inProcess());
+  assert.equal(solverBusy(), true);
+  await job.result;
+  assert.equal(solverBusy(), false, 'an answer ends it');
+  const held = startSearch(L9, 'solve', inProcess());
+  held.stop();
+  assert.equal(solverBusy(), false, 'a stopped search is not running');
+  held.resume();
+  assert.equal(solverBusy(), true);
+  held.cancel();
+  await assert.rejects(held.result, CancelledError);
+  assert.equal(solverBusy(), false, 'a cancel ends it');
+  assert.deepEqual(seen, [true, false, true, false, true, false]);
 });

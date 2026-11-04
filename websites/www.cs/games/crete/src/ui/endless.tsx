@@ -9,7 +9,7 @@ import { Dialog } from '../../../_kit/ui/dialog.tsx';
 import { Button } from '../../../_kit/ui/button.tsx';
 import { KEYS } from '../keys.ts';
 import type { EndlessView } from '../endless/mode.ts';
-import { tierWords } from '../endless/name.ts';
+import { readyWords, tierWords } from '../endless/name.ts';
 
 export interface EndlessCardProps extends EndlessView {
   open: boolean;
@@ -55,6 +55,7 @@ export function EndlessCard(p: EndlessCardProps) {
           {`Run ${run.seed} · Level ${run.depth} · ${run.cleared} cleared${run.assisted ? ' with help' : ''} · ${run.moves} moves`}
         </p>
       )}
+      {readyWords(p) && <p id="endless-ready" class="runstats">{readyWords(p)}</p>}
       <p id="endless-best" class="runstats">{p.best ? `Your deepest: Level ${p.best.depth} (seed ${p.best.seed})` : 'Your deepest: none yet'}</p>
       {p.error && <p id="endless-error" class="runstats" role="alert">{p.error}</p>}
       {p.linked && <p id="endless-linked-note" class="runstats">{`A link brought seed ${p.linked.seed}, with ${tierWords(p.linked.tier)}. Playing it starts a new run.`}</p>}

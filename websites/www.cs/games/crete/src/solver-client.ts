@@ -77,6 +77,20 @@ function fail(worker: WorkerLike): void {
   m.clear();
 }
 
+/** The searches running (started, not stopped, not yet settled), and who wants to know when that goes to or from
+ *  none: Endless's background levels wait while the solver works. */
+const running = new Set<number>();
+const watchers = new Set<(busy: boolean) => void>();
+function setRunning(id: number, on: boolean): void {
+  const was = running.size > 0;
+  if (on) running.add(id); else running.delete(id);
+  if (was !== running.size > 0) for (const w of watchers) w(running.size > 0);
+}
+/** Whether the solver has a search running now. */
+export function solverBusy(): boolean { return running.size > 0; }
+/** Calls `cb` whenever the solver goes from no search running to one, or back. */
+export function watchSolver(cb: (busy: boolean) => void): void { watchers.add(cb); }
+
 /** A job that has already failed. */
 function failedJob(message: string): SolverJob {
   const result = Promise.reject(new Error(message));
@@ -101,6 +115,7 @@ export function startSearch(levelText: string, kind: SearchKind, given?: WorkerL
     routesOf(worker).set(id, {
       report: p => { for (const cb of listeners) cb(p); },
       settle: m => {
+        setRunning(id, false);
         if (m.type === 'result') resolve(m.result);
         else if (m.type === 'failed') reject(new Error(m.message));
       },
@@ -108,12 +123,15 @@ export function startSearch(levelText: string, kind: SearchKind, given?: WorkerL
   });
   // A search nobody awaits (one a newer search cancelled) must not surface as an unhandled rejection.
   result.catch(() => {});
+  setRunning(id, true);
   send({ type: 'start', id, text: levelText, kind });
+  const settled = () => !routesOf(worker).has(id);
   return {
     progress: cb => { listeners.push(cb); },
-    stop: () => send({ type: 'stop', id }),
-    resume: () => send({ type: 'resume', id }),
+    stop: () => { setRunning(id, false); send({ type: 'stop', id }); },
+    resume: () => { if (!settled()) setRunning(id, true); send({ type: 'resume', id }); },
     cancel: () => {
+      setRunning(id, false);
       routesOf(worker).delete(id);
       send({ type: 'cancel', id });
       rejectResult(new CancelledError());

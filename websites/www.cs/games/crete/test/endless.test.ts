@@ -1,5 +1,6 @@
 // Endless's parts that need no long search: the seeded randomness, the bands of the climb, the teaching numbers the
-// gate reads, the piece tier, the saved run, the worker's messages (host and client), and the mode that opens levels.
+// gate reads, the piece tier, the saved run, the worker's messages (host and client), the mode that opens levels, and
+// the levels it makes ahead in the background.
 // test/endless-gate.test.ts runs the generator and the gate.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,14 +8,14 @@ import { rngOf, hash, cleanSeed, newSeed } from '../src/endless/random.ts';
 import { bandAfter, chapterOf, floorOf, tidyProblems, TEACHING, CLIMB, PLATEAU, FLOOR } from '../src/endless/gate.ts';
 import { draft, familiesOf, textOf, mutate, FAMILY_CHAPTER } from '../src/endless/draft.ts';
 import { tierOf } from '../src/endless/tier.ts';
-import { createEndlessSaved, ENDLESS_KEY, AHEAD } from '../src/endless/saved.ts';
+import { createEndlessSaved, ENDLESS_KEY, AHEAD, UPCOMING } from '../src/endless/saved.ts';
 import { createEndlessHost, PROGRESS_MS } from '../src/endless/host.ts';
 import type { FromEndless } from '../src/endless/host.ts';
-import { createEndlessClient, CancelledError, workersFor, MOST_WORKERS } from '../src/endless/client.ts';
+import { createEndlessClient, CancelledError, workersFor, workersNow, MOST_WORKERS } from '../src/endless/client.ts';
 import type { WorkerLike } from '../src/endless/client.ts';
 import { createEndlessMode, introOf } from '../src/endless/mode.ts';
-import type { EndlessAbout } from '../src/endless/mode.ts';
-import { endlessName, endlessKicker, tierWords } from '../src/endless/name.ts';
+import type { EndlessAbout, EndlessDeps } from '../src/endless/mode.ts';
+import { endlessName, endlessKicker, tierWords, readyWords } from '../src/endless/name.ts';
 import { CAMPAIGN_TEXTS } from '../src/endless/campaign.ts';
 import { BANK } from '../src/endless/bank.ts';
 import type { Made, Request } from '../src/endless/generate.ts';
@@ -350,4 +351,149 @@ test('a run saved before levels were made ahead (no ahead list) still reads, and
   s.addMade('abc', 2, made(LEVEL_B));
   s.addMade('abc', 3, made(LEVEL_A));
   assert.equal(s.queued().length, 2);
+});
+
+test('the workers in the background: one, once the page is warm, shown, the solver idle and the battery not draining', () => {
+  const at = { run: false, warm: true, shown: true, solving: false, battery: null };
+  assert.equal(workersNow(at, 3), 1, 'one in the background');
+  assert.equal(workersNow({ ...at, run: true }, 3), 3, 'a run takes its full share');
+  assert.equal(workersNow({ ...at, run: true, shown: false, solving: true, warm: false }, 3), 3, 'a run goes on as ever');
+  assert.equal(workersNow({ ...at, warm: false }, 3), 0, 'not before the page is warm');
+  assert.equal(workersNow({ ...at, shown: false }, 3), 0, 'not while the tab is hidden');
+  assert.equal(workersNow({ ...at, solving: true }, 3), 0, 'not while the solver works');
+  assert.equal(workersNow({ ...at, battery: { level: 0.1, charging: false } }, 3), 0, 'not on a low battery that is draining');
+  assert.equal(workersNow({ ...at, battery: { level: 0.1, charging: true } }, 3), 1);
+});
+
+test('the client: a size of 0 holds a job, a larger one goes on with it, a smaller one ends the extra workers', async () => {
+  const prev = BANK.find(b => b.chapter === 1)!;
+  const req: Request = { seed: 'held', tier: 1, depth: 2, run: [{ text: prev.text, explored: prev.explored }], budget: 12 * 10_000 };
+  const workers: ReturnType<typeof fakeWorker>[] = [];
+  let size = 0;
+  const client = createEndlessClient(() => { const w = fakeWorker(); workers.push(w); return w; }, () => size);
+  const job = client.make(req);
+  await new Promise(r => setTimeout(r, 5));
+  assert.equal(workers.length, 0, 'no worker while the size is 0');
+  size = 3;
+  client.resize();
+  assert.equal(workers.length, 3);
+  size = 1;
+  client.resize();
+  assert.equal(workers.filter(w => !w.terminated).length, 1, 'narrowed to one worker');
+  assert.deepEqual(await job.result, generate(req, BANK, { features: [] }), 'the same level, however the size moved');
+});
+
+test('the client: the same request after a cancel goes on from the parts it finished', async () => {
+  const prev = BANK.find(b => b.chapter === 1)!;
+  const req: Request = { seed: 'resume', tier: 1, depth: 2, run: [{ text: prev.text, explored: prev.explored }], budget: 12 * 10_000 };
+  const parts: number[] = [];
+  const spawn = () => { const w = fakeWorker(); const post = w.postMessage; w.postMessage = m => { parts.push((m as { part: number }).part); post(m); }; return w; };
+  const client = createEndlessClient(spawn, () => 1);
+  const whole = generate(req, BANK, { features: [] });
+  const first = client.make(req);
+  // Waits for part 0 to come back, then cancels part 1 under way.
+  while (parts.length < 2) await new Promise(r => setTimeout(r, 1));
+  first.cancel();
+  await assert.rejects(first.result, CancelledError);
+  const again = client.make(req);
+  assert.deepEqual(await again.result, whole);
+  assert.equal(parts.filter(k => k === 0).length, 1, 'part 0 is not run again');
+});
+
+test('the upcoming run: its seed chosen ahead, its levels kept in order up to UPCOMING, dropped when a run starts', () => {
+  const st = memory();
+  const s = createEndlessSaved(st);
+  assert.equal(s.upcoming(), null);
+  s.plan('next1', 2, null);
+  s.addUpcoming('next1', 2, made(LEVEL_B));
+  assert.equal(s.upcoming()!.levels.length, 0, 'level 1 comes first');
+  for (let d = 1; d <= UPCOMING + 1; d++) s.addUpcoming('next1', d, made(d % 2 ? LEVEL_A : LEVEL_B, 10_000 + d));
+  s.addUpcoming('other', 1, made(LEVEL_A));
+  assert.deepEqual(s.upcoming()!.levels.map(l => l.explored), [10_001, 10_002, 10_003, 10_004], 'no more than UPCOMING');
+  assert.deepEqual(createEndlessSaved(st).upcoming(), s.upcoming(), 'kept over a reload');
+  s.won(3, false);
+  assert.equal(s.upcoming()!.levels.length, UPCOMING, 'a best kept leaves it');
+  const [one, ...after] = s.upcoming()!.levels;
+  const run = s.start('next1', 2, one!, after);
+  assert.equal(run.next!.explored, 10_002);
+  assert.deepEqual(s.queued().map(l => l.explored), [10_002, 10_003, 10_004]);
+  assert.equal(s.upcoming(), null, 'starting a run drops it');
+  s.plan('next2', 1, 5_000);
+  assert.equal(s.plan('next2', 3, null).levels.length, 0);
+  assert.equal(createEndlessSaved(memory({ [ENDLESS_KEY]: JSON.stringify({ run: null, best: null, upcoming: { seed: 'x', tier: 1, budget: null, levels: new Array(UPCOMING + 1).fill(run.levels[0]) } }) })).upcoming(), null, 'too many reads as none');
+});
+
+/** A mode on fresh storage, with a client whose jobs the test can wait on. */
+function harness(over: Partial<EndlessDeps> = {}) {
+  const saved = createEndlessSaved(memory());
+  const base = createEndlessClient(() => fakeWorker());
+  const jobs: Promise<unknown>[] = [];
+  const client = { ...base, make: (r: Request) => { const j = base.make(r); jobs.push(j.result.then(() => {}, () => {})); return j; } };
+  const settled = async () => { for (let n = 0; n < jobs.length; n++) await jobs[n]; await new Promise(r => setTimeout(r, 0)); };
+  const opened: EndlessAbout[] = [];
+  const mode = createEndlessMode({ saved, client, tier: () => 1, newSeed: () => 'early1', play: (_, about) => opened.push(about), changed: () => {}, budget: () => 12 * 10_000, ...over });
+  return { saved, mode, settled, opened, jobs };
+}
+
+test('levels made ahead in the background are the levels the same seed makes on demand', async () => {
+  const early = harness();
+  early.mode.ahead();
+  await early.settled();
+  const up = early.saved.upcoming()!;
+  assert.equal(up.seed, 'early1');
+  assert.equal(up.levels.length, UPCOMING, 'level 1 and the AHEAD after it, made before the run starts');
+  assert.equal(early.mode.view().ready, UPCOMING);
+  const asked = early.jobs.length;
+  early.mode.newRun();
+  assert.equal(early.opened.length, 1, 'New Run opens level 1 at once, on the seed chosen ahead');
+  assert.equal(early.opened[0]!.seed, 'early1');
+  assert.equal(early.mode.view().finding, null);
+  assert.equal(early.saved.queued().length, AHEAD, 'levels 2 to 4 are ready');
+  assert.equal(early.saved.upcoming(), null);
+  await early.settled();
+  assert.equal(early.jobs.length, asked, 'the queue is full: nothing more to make until a level is played');
+
+  // The same seed on demand, as a `?seed=` link plays it: the same levels, in the same order.
+  const later = harness({ newSeed: () => 'unused' });
+  later.mode.newRun('early1');
+  await later.settled();
+  await later.settled();
+  const texts = (h: ReturnType<typeof harness>) => [...h.saved.run()!.levels, ...h.saved.queued()].map(l => [l.text, l.explored, l.shortest, l.line, l.from]);
+  assert.deepEqual(texts(early).slice(0, 1 + AHEAD), texts(later).slice(0, 1 + AHEAD));
+});
+
+test('the background makes the saved run\'s next levels; a new tier or budget remakes the upcoming run\'s on its seed', async () => {
+  const h = harness();
+  h.mode.newRun('mine');
+  await h.settled();
+  h.mode.ahead();
+  await h.settled();
+  assert.equal(h.saved.upcoming(), null, 'with a run, nothing upcoming');
+  assert.equal(h.saved.queued().length, AHEAD);
+  let tier = 1;
+  const g = harness({ tier: () => tier });
+  g.mode.ahead();
+  await g.settled();
+  tier = 2;
+  g.mode.ahead();
+  assert.equal(g.saved.upcoming()!.tier, 2);
+  assert.equal(g.saved.upcoming()!.seed, 'early1', 'the seed stays');
+  assert.equal(g.mode.view().ready, 0);
+  await g.settled();
+  assert.equal(g.saved.upcoming()!.levels.length, UPCOMING);
+  // A typed seed starts on demand and drops the upcoming run.
+  g.mode.newRun('typed');
+  assert.ok(g.mode.view().finding);
+  await g.settled();
+  assert.equal(g.opened[0]!.seed, 'typed');
+  assert.equal(g.saved.upcoming(), null);
+});
+
+test('the card says which levels are ready', () => {
+  const run = { depth: 3 } as Parameters<typeof readyWords>[0]['run'];
+  assert.equal(readyWords({ run, ready: 0 }), null);
+  assert.equal(readyWords({ run, ready: 1 }), 'Level 4 is ready.');
+  assert.equal(readyWords({ run, ready: 3 }), 'Levels 4 to 6 are ready.');
+  assert.equal(readyWords({ run: null, ready: 1 }), null, 'a new run\'s first level is always at once');
+  assert.equal(readyWords({ run: null, ready: 4 }), 'Levels 1 to 4 of a new run are ready.');
 });

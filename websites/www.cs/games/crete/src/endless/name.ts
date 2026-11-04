@@ -28,3 +28,13 @@ export function tierWords(tier: number): string {
   if (tier >= 9) return 'every piece';
   return `the pieces of Chapters 1 to ${tier}`;
 }
+
+/** Which levels are made ahead and ready: the saved run's next ones, or a new run's first ones. */
+export function readyWords(p: { run: { depth: number } | null; ready: number }): string | null {
+  if (p.run) {
+    if (p.ready < 1) return null;
+    const from = p.run.depth + 1;
+    return p.ready === 1 ? `Level ${from} is ready.` : `Levels ${from} to ${from + p.ready - 1} are ready.`;
+  }
+  return p.ready >= 2 ? `Levels 1 to ${p.ready} of a new run are ready.` : null;
+}

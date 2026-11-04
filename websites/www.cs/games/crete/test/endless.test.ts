@@ -372,7 +372,6 @@ test('the client: a size of 0 holds a job, a larger one goes on with it, a small
   let size = 0;
   const client = createEndlessClient(() => { const w = fakeWorker(); workers.push(w); return w; }, () => size);
   const job = client.make(req);
-  await new Promise(r => setTimeout(r, 5));
   assert.equal(workers.length, 0, 'no worker while the size is 0');
   size = 3;
   client.resize();
@@ -392,7 +391,7 @@ test('the client: the same request after a cancel goes on from the parts it fini
   const whole = generate(req, BANK, { features: [] });
   const first = client.make(req);
   // Waits for part 0 to come back, then cancels part 1 under way.
-  while (parts.length < 2) await new Promise(r => setTimeout(r, 1));
+  await until(() => parts.length >= 2, 'part 1 to be handed out (part 0 found nothing)');
   first.cancel();
   await assert.rejects(first.result, CancelledError);
   const again = client.make(req);
@@ -422,6 +421,15 @@ test('the upcoming run: its seed chosen ahead, its levels kept in order up to UP
   assert.equal(s.plan('next2', 3, null).levels.length, 0);
   assert.equal(createEndlessSaved(memory({ [ENDLESS_KEY]: JSON.stringify({ run: null, best: null, upcoming: { seed: 'x', tier: 1, budget: null, levels: new Array(UPCOMING + 1).fill(run.levels[0]) } }) })).upcoming(), null, 'too many reads as none');
 });
+
+/** Waits until `done()` holds, failing with `what` rather than hanging. */
+async function until(done: () => boolean, what: string): Promise<void> {
+  const end = Date.now() + 30_000;
+  while (!done()) {
+    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+    await new Promise(r => setTimeout(r, 1));
+  }
+}
 
 /** A mode on fresh storage, with a client whose jobs the test can wait on. */
 function harness(over: Partial<EndlessDeps> = {}) {
@@ -506,7 +514,7 @@ test('the parts a search finished are kept over a reload, for that request alone
   const spawn = () => { const w = fakeWorker(); const post = w.postMessage; w.postMessage = m => { parts.push((m as { part: number }).part); post(m); }; return w; };
   const before = createEndlessClient(spawn, () => 1, partStore(st));
   const job = before.make(req);
-  while (parts.length < 2) await new Promise(r => setTimeout(r, 1));
+  await until(() => parts.length >= 2, 'part 1 to be handed out (part 0 found nothing)');
   job.cancel();
   assert.ok(st.data[PARTS_KEY], 'kept in storage');
   // A new page: a new client on the same storage.
@@ -515,4 +523,19 @@ test('the parts a search finished are kept over a reload, for that request alone
   assert.equal(parts.filter(k => k === 0).length, 1, 'part 0 is not run again after the reload');
   assert.equal(partStore(st).load(JSON.stringify({ ...req, seed: 'other' })), null, 'another request finds nothing kept');
   assert.equal(partStore(memory({ [PARTS_KEY]: '{oops' })).load(JSON.stringify(req)), null, 'corrupt storage reads as nothing');
+});
+
+test('a level the background was making for an old tier is not kept in the upcoming run remade for the new one', async () => {
+  let tier = 1;
+  const g = harness({ tier: () => tier });
+  g.mode.ahead();
+  tier = 2;
+  g.mode.ahead();
+  await g.settled();
+  const up = g.saved.upcoming()!;
+  assert.equal(up.tier, 2);
+  const fresh = harness({ tier: () => 2 });
+  fresh.mode.ahead();
+  await fresh.settled();
+  assert.deepEqual(up.levels.map(l => l.text), fresh.saved.upcoming()!.levels.map(l => l.text), 'the levels the new tier makes, from level 1');
 });

@@ -83,7 +83,7 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
   let finding: { progress: Progress | null } | null = null;
   let error: string | null = null;
   /** The worker's job: the level it makes is the saved run's next one (or its first). */
-  let job: { make: MakeJob; seed: string; depth: number; first: boolean; upcoming: boolean } | null = null;
+  let job: { make: MakeJob; seed: string; tier: number; budget: number | null; depth: number; first: boolean; upcoming: boolean } | null = null;
   /** Open the level once it is made. */
   let waiting = false;
   let linked: { seed: string; tier: number } | null = null;
@@ -119,7 +119,7 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
     if (!up || up.tier !== tier || up.budget !== budget) up = deps.saved.plan(up?.seed ?? deps.newSeed(), tier, budget);
     if (up.levels.length >= UPCOMING) return;
     const depth = up.levels.length + 1;
-    if (job && job.upcoming && job.seed === up.seed && job.depth === depth) return;
+    if (job && job.upcoming && job.seed === up.seed && job.tier === tier && job.budget === budget && job.depth === depth) return;
     start(up.seed, tier, depth, false, up.levels);
   }
 
@@ -128,7 +128,7 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
     const played = first ? [] : upcoming ? upcoming.map(l => ({ text: l.text, explored: l.explored })) : deps.saved.played();
     const budget = deps.budget?.();
     const make = deps.client.make({ seed, tier, depth, run: played, ...(budget !== undefined ? { budget } : {}) });
-    const mine = { make, seed, depth, first, upcoming: !!upcoming };
+    const mine = { make, seed, tier, budget: budget ?? null, depth, first, upcoming: !!upcoming };
     job = mine;
     make.progress(p => {
       if (job !== mine || !finding) return;
@@ -139,7 +139,9 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
       if (job !== mine) return;
       job = null;
       if (mine.upcoming) {
-        deps.saved.addUpcoming(seed, depth, made);
+        // Kept only for the plan it was made for: a new tier or budget remakes the upcoming run.
+        const up = deps.saved.upcoming();
+        if (up && up.tier === mine.tier && up.budget === mine.budget) deps.saved.addUpcoming(seed, depth, made);
         ahead();
         deps.changed();
         return;

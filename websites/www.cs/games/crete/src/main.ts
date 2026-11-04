@@ -137,7 +137,7 @@ const ui = createUi({ atlas, icons: iconsJson as IconSheet, thumb, board, progre
    worker's own bundle (dist/endless-worker.js), never the solver's worker, so the editor's Check never waits on it. */
 const endlessSaved = createEndlessSaved(browserStorage());
 const endlessClient = createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker,
-  () => endlessWorkers(), partStore(browserStorage()));
+  () => endlessWorkers(), partStore(browserStorage(), ENDLESS_WORKER_V));
 const endless = createEndlessMode({
   saved: endlessSaved,
   client: endlessClient,

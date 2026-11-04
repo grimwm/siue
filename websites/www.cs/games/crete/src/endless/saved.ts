@@ -201,9 +201,10 @@ const isPart = (v: unknown): v is Part => {
 };
 
 /** The parts one request's search has finished, under PARTS_KEY: one request at a time, so it stays small. A part's
- *  answer depends on its request alone, so a reload goes on where the search stopped. */
-export function partStore(storage: StorageLike | null): PartStore {
-  const id = (key: string) => `${hash(key)}-${hash(key, 'again')}-${key.length}`;
+ *  answer depends on its request and the generator's `build` (the worker bundle's hash), so a reload on the same
+ *  build goes on where the search stopped, and a new build starts afresh. */
+export function partStore(storage: StorageLike | null, build = ''): PartStore {
+  const id = (key: string) => `${hash(build, key)}-${hash(build, key, 'again')}-${key.length}`;
   return {
     load(key) {
       try {

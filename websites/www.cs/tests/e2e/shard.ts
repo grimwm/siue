@@ -11,6 +11,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const WEIGHTS: Record<string, number> = {
+  'crete-bubble.spec.ts': 2,
   'crete-chapter.spec.ts': 10,
   'crete-classic-view.spec.ts': 4,
   'crete-editor.spec.ts': 12,

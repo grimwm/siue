@@ -77,6 +77,8 @@ interface EditorOpts {
 export interface MadeEditor {
   root: StubElement;
   canvas: StubElement;
+  /** The Classic board's view, which takes the pointer. */
+  board: StubElement;
   /** Each Try it the editor handed over. */
   tries: { level: Level; text: string; line: Action[] | null }[];
   searches: FakeSearch[];
@@ -93,8 +95,10 @@ export function makeEditor(
   const root = makeEl('editor-root');
   roots.push(root);
   const holder = makeEl('editor-board');
+  const board = makeEl('editor-view');
   const canvas = makeEl('editor-stage');
-  holder.appendChild(canvas);
+  board.appendChild(canvas);
+  holder.appendChild(board);
   root.appendChild(holder);
   const tries: MadeEditor['tries'] = [];
   let changes = 0;
@@ -105,5 +109,5 @@ export function makeEditor(
     ...(opts.pageUrl ? { pageUrl: () => opts.pageUrl! } : {}), start,
     ...(opts.look ? { look: opts.look } : {}), ...(opts.modern ? { modern: opts.modern } : {}), ...(opts.say ? { say: opts.say } : {}),
   });
-  return { root, canvas, tries, searches, changes: () => changes, editor };
+  return { root, canvas, board, tries, searches, changes: () => changes, editor };
 }

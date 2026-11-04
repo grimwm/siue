@@ -49,11 +49,9 @@ export interface EditorPanelProps {
 
 const LOOKS: { look: Look; label: string }[] = [{ look: 'classic', label: 'Classic' }, { look: 'modern', label: 'Modern' }];
 
-/** The board's rule for painting and for the view, in each look (docs/superpowers/specs/2026-11-04-crete-editor-looks-design.md). */
-export const BOARD_HELP: Record<Look, string> = {
-  modern: 'One finger or the left button paints; a drag paints a run. Two fingers, the right button and the wheel move the view; the compass turns and tilts it, and a tap on it resets it.',
-  classic: 'One finger or the mouse paints; a drag paints a run. Two fingers scroll a big board.',
-};
+/** The board's rule for painting and for the view, the same in each look (docs/superpowers/specs/2026-11-04-crete-editor-looks-design.md). */
+const HELP = 'One finger or the left button paints; a drag paints a run. Two fingers, the right button and the wheel move the view; the compass turns and tilts it, and a tap on it resets it.';
+export const BOARD_HELP: Record<Look, string> = { modern: HELP, classic: HELP };
 
 /** A box's number, or null when it is empty or not a number. */
 function boxNumber(box: HTMLInputElement | null): number | null {

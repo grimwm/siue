@@ -16,7 +16,7 @@ import { MAX_LINE, decodeLink } from '../src/share/link.ts';
 import { openLink } from '../src/share/open.ts';
 import { fromLevel, newDraft, toText } from '../src/editor/model.ts';
 import type { Draft } from '../src/editor/model.ts';
-import { atlas, installEditorWindow, makeEditor } from './editor-fakes.ts';
+import { installEditorWindow, makeEditor } from './editor-fakes.ts';
 import type { MadeEditor } from './editor-fakes.ts';
 
 installDocument();
@@ -144,11 +144,10 @@ function paintWall(e: MadeEditor): void {
   const d = e.editor.draft;
   const spot = d.cells.findIndex(c => c === '.');
   assert.ok(spot >= 0);
-  const rise = (10 * atlas.rise) / atlas.cell;
-  e.canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: d.cols * 10, height: d.rows * 10 + rise }) as never;
-  const at = { clientX: (spot % d.cols) * 10 + 5, clientY: rise + Math.floor(spot / d.cols) * 10 + 5, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
-  fire(e.canvas, 'pointerdown', at);
-  fire(e.canvas, 'pointerup', at);
+  const p = e.editor.classic!.at(spot % d.cols, Math.floor(spot / d.cols))!;
+  const at = { clientX: p.x, clientY: p.y, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
+  fire(e.board, 'pointerdown', at);
+  fire(e.board, 'pointerup', at);
 }
 const typeInitials = (root: StubElement, v: string) => {
   const box = byId(root, 'share-initials');

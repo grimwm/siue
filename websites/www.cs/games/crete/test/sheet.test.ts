@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  AWAY, FOLLOW_CELLS, createSheetView, extent, faceQuarter, headroom, keepInView, panned, project, sheetCell, sheetTransform, unproject, wholeFrame,
+  AWAY, FOLLOW_CELLS, cellUnder, createSheetView, extent, faceQuarter, headroom, keepInView, panned, project, sheetCell, sheetTransform, unproject, wholeFrame,
 } from '../src/sheet.ts';
 import type { Frame } from '../src/sheet.ts';
 import { DEFAULT_YAW, START_PITCH } from '../src/modern/camera.ts';
@@ -48,6 +48,53 @@ test('unproject undoes project at every heading and tilt', () => {
         const g = unproject(f, p.x, p.y)!;
         near(g.x, x, 1e-6);
         near(g.y, y, 1e-6);
+      }
+    }
+  }
+});
+
+/** Where the browser draws the sheet canvas's pixel (x, y) under `transform` (sheetTransform's functions only), as
+ *  CSS composes them: each function's matrix, left to right, applied to the point, then the divide by w. */
+function cssPoint(transform: string, x: number, y: number): { x: number; y: number } {
+  type M = number[][];
+  const mul = (a: M, b: M): M => a.map((row, i) => b[0]!.map((_, j) => row.reduce((s, _v, k) => s + a[i]![k]! * b[k]![j]!, 0)));
+  const id = (): M => [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  let m = id();
+  for (const [, fn, args] of transform.matchAll(/(\w+)\(([^)]*)\)/g)) {
+    const v = args!.split(',').map(s => parseFloat(s));
+    const t = id();
+    const a = (v[0]! * Math.PI) / 180;
+    if (fn === 'translate') { t[0]![3] = v[0]!; t[1]![3] = v[1]!; }
+    else if (fn === 'scale') { t[0]![0] = t[1]![1] = v[0]!; }
+    else if (fn === 'perspective') t[3]![2] = -1 / v[0]!;
+    else if (fn === 'rotateX') { t[1]![1] = Math.cos(a); t[1]![2] = -Math.sin(a); t[2]![1] = Math.sin(a); t[2]![2] = Math.cos(a); }
+    else if (fn === 'rotateZ') { t[0]![0] = Math.cos(a); t[0]![1] = -Math.sin(a); t[1]![0] = Math.sin(a); t[1]![1] = Math.cos(a); }
+    else throw new Error(`unknown ${fn}`);
+    m = mul(m, t);
+  }
+  const p = mul(m, [[x], [y], [0], [1]]).map(r => r[0]!);
+  return { x: p[0]! / p[3]!, y: p[1]! / p[3]! };
+}
+
+test('a press lands on the square the browser draws under it, at every heading and tilt (the editor\'s Classic paints by it)', () => {
+  const cols = 9, rows = 6, cell = 20, margin = 7;
+  for (const yaw of [0, 37, 90, 180, 245, -400]) {
+    for (const pitch of [90, 75, 45, 20, 10]) {
+      const f: Frame = { ...wholeFrame({ yaw, pitch }, cols, rows, cell, RISE, 500, 400), ox: 3, oy: -4 };
+      const css = sheetTransform(f, margin);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          // The square's middle and a point near each corner, where the browser draws them on the screen.
+          for (const [dx, dy] of [[0.5, 0.5], [0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]] as const) {
+            const p = cssPoint(css, margin + (c + dx) * cell, margin + (r + dy) * cell);
+            assert.deepEqual(cellUnder(f, p.x, p.y, cols, rows, cell), { r, c }, `yaw ${yaw} pitch ${pitch} cell ${r},${c} at ${dx},${dy}`);
+          }
+        }
+      }
+      // Just off each side of the board is no square.
+      for (const [x, y] of [[-0.2, 2.5], [cols + 0.2, 2.5], [4.5, -0.2], [4.5, rows + 0.2]] as const) {
+        const p = cssPoint(css, margin + x * cell, margin + y * cell);
+        assert.equal(cellUnder(f, p.x, p.y, cols, rows, cell), null, `yaw ${yaw} pitch ${pitch} off at ${x},${y}`);
       }
     }
   }

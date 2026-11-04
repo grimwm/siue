@@ -731,24 +731,25 @@ button.danger:hover { background: rgba(248, 81, 73, 0.12); filter: none; }
 .editor-size input { width: 4rem; }
 .editor-size input, .editor-size select { font: inherit; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 0.15rem 0.3rem; }
 .editor-pieces { display: none; }
-/* The board as the game's: centred, and a big draft scrolls with cells of at least 32px (src/editor/editor.ts). */
+/* The board region: either look's board fills it. */
 .editor-board {
   grid-area: board;
   position: relative;
   min-width: 0;
   min-height: 0;
   display: grid;
-  place-items: center;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   padding: 6px;
   overflow: hidden;
 }
-.editor-board.scrolls { display: flex; overflow: auto; overscroll-behavior: contain; }
-.editor-board.scrolls .stage { flex: none; margin: auto; }
-/* One finger paints, so the browser takes no touch gesture on the board; two fingers scroll it (editor.ts). */
-.editor-stage { touch-action: none; cursor: crosshair; }
-/* The Modern look (editor/modern-view.ts): the 3D board and its compass fill the board region in place of the flat
-   canvas; one finger paints, two fingers move the camera, so the browser takes no touch gesture on it. */
-.editor-board.look-modern > .editor-stage { display: none; }
+/* The Classic look (editor/classic-view.ts): the game's tilted sheet in its view, and its compass over it, filling the
+   board region. One finger paints and two fingers move the view, so the browser takes no touch gesture on it. */
+.editor-board > .editor-view, .editor-board > .editor-classic-cam { grid-area: 1 / 1; }
+.editor-board > .editor-classic-cam { position: relative; inset: auto; }
+.editor-view { cursor: crosshair; }
+/* The Modern look (editor/modern-view.ts): the 3D board and its compass fill the board region in place of the sheet;
+   one finger paints, two fingers move the camera, so the browser takes no touch gesture on it. */
+.editor-board.look-modern > .editor-view, .editor-board.look-modern > .editor-classic-cam { display: none; }
 .editor-board:not(.look-modern) > .editor-modern { display: none; }
 .editor-modern { position: absolute; inset: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
 .editor-modern > * { grid-area: 1 / 1; min-width: 0; min-height: 0; width: 100%; height: 100%; }

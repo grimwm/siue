@@ -125,12 +125,10 @@ function press(e: Made, key: string, mods: Record<string, unknown> = {}): { used
   const used = e.editor.key({ key, target: { tagName: 'DIV' }, preventDefault: () => { prevented = true; }, ...mods } as unknown as KeyboardEvent);
   return { used, prevented };
 }
-/** The pointer over cell (r, c) of the editor's board, which the canvas lays out at 10 px a cell under its rise. */
+/** The pointer over cell (r, c) of the editor's Classic board, where the turned and tilted sheet shows its centre. */
 function at(e: Made, r: number, c: number): Record<string, unknown> {
-  const d = e.editor.draft;
-  const rise = (10 * atlas.rise) / atlas.cell;
-  e.canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: d.cols * 10, height: d.rows * 10 + rise }) as { width: number; height: number };
-  return { clientX: c * 10 + 5, clientY: rise + r * 10 + 5, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
+  const p = e.editor.classic!.at(c, r)!;
+  return { clientX: p.x, clientY: p.y, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
 }
 const cell = (e: Made, r: number, c: number) => e.editor.draft.cells[r * e.editor.draft.cols + c];
 
@@ -151,9 +149,9 @@ test('a drag paints every cell it crosses and mouse up commits one undo step', (
   const e = make();
   e.editor.open();
   click(byId(e.root, 'brush-wall'));
-  fire(e.canvas, 'pointerdown', at(e, 5, 2));
-  fire(e.canvas, 'pointermove', at(e, 5, 9));
-  fire(e.canvas, 'pointerup', at(e, 5, 9));
+  fire(e.board, 'pointerdown', at(e, 5, 2));
+  fire(e.board, 'pointermove', at(e, 5, 9));
+  fire(e.board, 'pointerup', at(e, 5, 9));
   for (let c = 2; c <= 9; c++) assert.equal(cell(e, 5, c), '#', `cell 5,${c}`);
   assert.ok(e.changes() > 0);
   assert.equal(byId(e.root, 'editor-undo').disabled, false);
@@ -172,8 +170,8 @@ test('a stroke that changes nothing adds no undo step', () => {
   const e = make();
   e.editor.open();
   click(byId(e.root, 'brush-wall'));
-  fire(e.canvas, 'pointerdown', at(e, 0, 3));
-  fire(e.canvas, 'pointerup', at(e, 0, 3));
+  fire(e.board, 'pointerdown', at(e, 0, 3));
+  fire(e.board, 'pointerup', at(e, 0, 3));
   assert.equal(byId(e.root, 'editor-undo').disabled, true);
 });
 
@@ -184,8 +182,8 @@ test('O rotates the brush', () => {
   assert.match(byId(e.root, 'brush-ball').getAttribute('aria-label') ?? '', /facing up$/);
   assert.deepEqual(press(e, 'o'), { used: true, prevented: true });
   assert.match(byId(e.root, 'brush-ball').getAttribute('aria-label') ?? '', /facing right$/);
-  fire(e.canvas, 'pointerdown', at(e, 4, 4));
-  fire(e.canvas, 'pointerup', at(e, 4, 4));
+  fire(e.board, 'pointerdown', at(e, 4, 4));
+  fire(e.board, 'pointerup', at(e, 4, 4));
   assert.equal(cell(e, 4, 4), HAZARDS.ball.char);
   assert.equal(e.editor.draft.extra[4 * 12 + 4], 'right');
 });
@@ -231,9 +229,9 @@ test('the size bar resizes, and hearts and relics needed are set; each is one un
   fire(hearts, 'change');
   assert.equal(e.editor.draft.hearts, 7);
   click(byId(e.root, 'brush-relic'));
-  fire(e.canvas, 'pointerdown', at(e, 2, 2));
-  fire(e.canvas, 'pointermove', at(e, 2, 4));
-  fire(e.canvas, 'pointerup', at(e, 2, 4));
+  fire(e.board, 'pointerdown', at(e, 2, 2));
+  fire(e.board, 'pointermove', at(e, 2, 4));
+  fire(e.board, 'pointerup', at(e, 2, 4));
   const relics = byId(e.root, 'editor-relics');
   assert.deepEqual(walk(relics).filter(n => n.localName === 'option').map(o => o.textContent), ['all', '0', '1', '2', '3']);
   relics.value = '2';
@@ -257,11 +255,33 @@ test('the editor shows the page brush only with the owner flag', () => {
   assert.ok(byId(e.root, 'brush-page'));
 });
 
-test('the board is drawn: the canvas is sized to the draft', () => {
+test('the board is drawn: the sheet is sized to the draft, with the walls\' rise all round, and opens at 75° and north up', () => {
   const e = make();
   e.editor.open();
-  assert.ok(Number(e.canvas.dataset.cell) >= 1, e.canvas.dataset.cell);
-  assert.equal((e.canvas as unknown as { width: number }).width, 12 * Number(e.canvas.dataset.cell));
+  const cell = Number(e.canvas.dataset.cell);
+  assert.ok(cell >= 1, e.canvas.dataset.cell);
+  assert.equal((e.canvas as unknown as { width: number }).width, 12 * cell + 2 * Math.round((atlas.rise / atlas.cell) * cell));
+  assert.match(e.canvas.style.transform ?? '', /rotateX\(15\.000deg\) rotateZ\(0deg\)/);
+  assert.deepEqual(e.editor.classic!.view(), { yaw: 0, pitch: 75 });
+});
+
+test('the Classic board paints the square under the pointer at any heading and tilt, and its compass resets the view', () => {
+  const e = make();
+  e.editor.open();
+  click(byId(e.root, 'brush-wall'));
+  for (const [yaw, pitch, r, c] of [[90, 60, 1, 2], [200, 30, 4, 7], [-35, 10, 8, 3]] as const) {
+    e.editor.classic!.setView(yaw, pitch);
+    assert.deepEqual(e.editor.classic!.view(), { yaw, pitch });
+    fire(e.board, 'pointerdown', at(e, r, c));
+    fire(e.board, 'pointerup', at(e, r, c));
+    assert.equal(cell(e, r, c), '#', `${yaw}° ${pitch}°`);
+  }
+  const compass = byId(e.root, 'editor-compass');
+  assert.equal(compass.dataset.heading, '-35');
+  assert.equal(compass.dataset.pitch, '10');
+  click(compass);
+  assert.deepEqual(e.editor.classic!.view(), { yaw: 0, pitch: 75 }, 'a tap on the compass resets the view');
+  assert.equal(compass.dataset.heading, '0');
 });
 
 // ---- hidden walls, focus, and the hearts and size boxes ----
@@ -269,11 +289,11 @@ test('the fake and invisible walls carry a mark on the editor board and on their
   const e = make();
   e.editor.open();
   click(byId(e.root, 'brush-fake-wall'));
-  fire(e.canvas, 'pointerdown', at(e, 3, 3));
-  fire(e.canvas, 'pointerup', at(e, 3, 3));
+  fire(e.board, 'pointerdown', at(e, 3, 3));
+  fire(e.board, 'pointerup', at(e, 3, 3));
   click(byId(e.root, 'brush-invisible-wall'));
-  fire(e.canvas, 'pointerdown', at(e, 4, 6));
-  fire(e.canvas, 'pointerup', at(e, 4, 6));
+  fire(e.board, 'pointerdown', at(e, 4, 6));
+  fire(e.board, 'pointerup', at(e, 4, 6));
   assert.deepEqual(ed.editor.hiddenMarks(e.editor.draft), [{ r: 3, c: 3, mark: 'F' }, { r: 4, c: 6, mark: 'I' }]);
   const root = palette({ kind: 'terrain', t: 'wall' }, false);
   assert.equal(byId(root, 'brush-fake-wall').querySelector('.brush-mark')?.textContent, 'F');
@@ -289,8 +309,8 @@ test('painting the board takes the focus out of a number box, so the editor keys
   box.type = 'number';
   box.focus();
   globalThis.__blurred = null;
-  fire(e.canvas, 'pointerdown', at(e, 6, 6));
-  fire(e.canvas, 'pointerup', at(e, 6, 6));
+  fire(e.board, 'pointerdown', at(e, 6, 6));
+  fire(e.board, 'pointerup', at(e, 6, 6));
   assert.equal(globalThis.__blurred, box);
   assert.notEqual(document.activeElement, box);
 });
@@ -382,14 +402,12 @@ function editing(rows: number, cols: number): void {
 }
 /** Paints a wall at (r, c) of the open draft, as a click on the board does. */
 function wallAt(r: number, c: number): void {
-  const d = tryEditor.draft;
-  const rise = (10 * atlas.rise) / atlas.cell;
-  const canvas = byId(tryRoot, 'editor-stage');
-  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: d.cols * 10, height: d.rows * 10 + rise }) as { width: number; height: number };
+  const view = byId(tryRoot, 'editor-view');
   click(byId(tryRoot, 'brush-wall'));
-  const ev = { clientX: c * 10 + 5, clientY: rise + r * 10 + 5, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
-  fire(canvas, 'pointerdown', ev);
-  fire(canvas, 'pointerup', ev);
+  const p = tryEditor.classic!.at(c, r)!;
+  const ev = { clientX: p.x, clientY: p.y, pointerId: 1, pointerType: 'mouse', button: 0, isPrimary: true };
+  fire(view, 'pointerdown', ev);
+  fire(view, 'pointerup', ev);
 }
 /** Begins the try and walks from the top left to the bottom right of an open draft: its moves. */
 function walkToExit(): number {
@@ -624,8 +642,8 @@ test('an edit cancels a running check and marks a finished one out of date; undo
   e.editor.open();
   press(e, 'c');
   click(byId(e.root, 'brush-wall'));
-  fire(e.canvas, 'pointerdown', at(e, 5, 2));
-  fire(e.canvas, 'pointerup', at(e, 5, 2));
+  fire(e.board, 'pointerdown', at(e, 5, 2));
+  fire(e.board, 'pointerup', at(e, 5, 2));
   assert.deepEqual(e.searches[0]!.calls, ['cancel']);
   assert.equal(maybeById(e.root, 'check-progress'), undefined);
   press(e, 'u');
@@ -633,8 +651,8 @@ test('an edit cancels a running check and marks a finished one out of date; undo
   assert.equal(e.searches.length, 2);
   e.searches[1]!.answer(ANSWER);
   await settle();
-  fire(e.canvas, 'pointerdown', at(e, 5, 2));
-  fire(e.canvas, 'pointerup', at(e, 5, 2));
+  fire(e.board, 'pointerdown', at(e, 5, 2));
+  fire(e.board, 'pointerup', at(e, 5, 2));
   assert.equal(said(e, 'check-stale'), 'Out of date: press Check.');
   assert.ok(byId(e.root, 'check-result').className.includes('stale'));
   press(e, 'u');
@@ -653,8 +671,8 @@ test('Try it hands the last Check\'s line over only when that check was of the v
   press(e, 'p');
   assert.deepEqual((e.tries[1]!.line as { kind: string; dir: string }[]).map(a => a.dir), ['right', 'right', 'down', 'down']);
   click(byId(e.root, 'brush-wall'));
-  fire(e.canvas, 'pointerdown', at(e, 5, 2));
-  fire(e.canvas, 'pointerup', at(e, 5, 2));
+  fire(e.board, 'pointerdown', at(e, 5, 2));
+  fire(e.board, 'pointerup', at(e, 5, 2));
   press(e, 'p');
   assert.equal(e.tries[2]!.line, null);
 });
@@ -682,8 +700,8 @@ test('the check strip in the bar, outside the drawer, shows the run, the answer 
   assert.equal(byId(e.root, 'check-strip-text').textContent, 'Winnable in 60 · Shareable');
   assert.equal(byId(e.root, 'check-strip-text').getAttribute('role'), 'status', 'the strip announces the answer');
   click(byId(e.root, 'brush-wall'));
-  fire(e.canvas, 'pointerdown', at(e, 5, 2));
-  fire(e.canvas, 'pointerup', at(e, 5, 2));
+  fire(e.board, 'pointerdown', at(e, 5, 2));
+  fire(e.board, 'pointerup', at(e, 5, 2));
   assert.equal(byId(e.root, 'check-strip-text').textContent, 'Out of date: press Check.');
   assert.ok(strip().className.includes('stale'));
   const ids = walk(e.root).map(n => n.id).filter(Boolean);
@@ -718,9 +736,9 @@ test('a diagonal drag paints a connected run of cells', () => {
   const e = make();
   e.editor.open();
   click(byId(e.root, 'brush-wall'));
-  fire(e.canvas, 'pointerdown', at(e, 2, 2));
-  fire(e.canvas, 'pointermove', at(e, 5, 7));
-  fire(e.canvas, 'pointerup', at(e, 5, 7));
+  fire(e.board, 'pointerdown', at(e, 2, 2));
+  fire(e.board, 'pointermove', at(e, 5, 7));
+  fire(e.board, 'pointerup', at(e, 5, 7));
   const inside = (x: { r: number; c: number }) => x.r >= 2 && x.r <= 5 && x.c >= 2 && x.c <= 7;
   const walls = e.editor.draft.cells.flatMap((c, i) => (c === '#' ? [{ r: Math.floor(i / 12), c: i % 12 }] : [])).filter(inside);
   assert.equal(walls.length, 6, 'the start cell and the five the line crosses');
@@ -753,8 +771,8 @@ test('the look buttons: the editor opens in the game\'s look, and Classic, Moder
   assert.equal(byId(e.root, 'editor-look-classic').getAttribute('aria-pressed'), 'true');
   assert.equal(byId(e.root, 'editor-look-modern').getAttribute('aria-pressed'), 'false');
   assert.equal(loads, 0, 'Classic never loads the 3D board');
-  fire(e.canvas, 'pointerdown', at(e, 2, 3));
-  fire(e.canvas, 'pointerup', at(e, 2, 3));
+  fire(e.board, 'pointerdown', at(e, 2, 3));
+  fire(e.board, 'pointerup', at(e, 2, 3));
   const painted = toText(e.editor.draft, true);
   click(byId(e.root, 'editor-look-modern'));
   assert.deepEqual(set, ['modern'], 'the choice is the game\'s look setting');
@@ -773,6 +791,37 @@ test('the look buttons: the editor opens in the game\'s look, and Classic, Moder
   e.editor.open();
   await new Promise(r => setTimeout(r, 0));
   assert.equal(said.length, 1, 'the toast says it once a visit');
+});
+
+test('switching looks carries the heading and tilt both ways, and shows the whole board', async () => {
+  let look: 'classic' | 'modern' = 'classic';
+  /** A Modern board that keeps its view, and what the editor told it. */
+  const view = { yaw: 0, pitch: 75 };
+  const told: string[] = [];
+  const board = {
+    yaw: () => view.yaw, pitch: () => view.pitch,
+    setView(yaw: number, pitch: number) { told.push(`view ${yaw} ${pitch}`); Object.assign(view, { yaw, pitch }); },
+    reset() { told.push('reset'); Object.assign(view, { yaw: 0, pitch: 75 }); },
+    edit() {}, marks() {}, walls() {}, minimap() {}, setActive() {}, resize() {},
+  };
+  const e = makeEditor(ed.editor.createEditor, stored, roots, {
+    look: { get: () => look, set: l => { look = l; } },
+    modern: { load: async () => ({ createModernBoard: () => board }) as never, icons: { cell: 1, width: 1, height: 1, icons: {} }, walls: () => 'solid' },
+  });
+  e.editor.open();
+  e.editor.classic!.setView(130, 40);
+  press(e, 'b');
+  await new Promise(r => setTimeout(r, 0));
+  assert.ok(e.editor.modern, 'Modern shows');
+  assert.equal(e.editor.classic, null);
+  assert.deepEqual(told, ['reset', 'view 130 40'], 'the Classic heading and tilt go to Modern, over the whole board');
+  view.yaw = 250;
+  view.pitch = 20;
+  press(e, 'b');
+  assert.equal(e.editor.modern, null);
+  assert.deepEqual(e.editor.classic!.view(), { yaw: 250, pitch: 20 }, 'the Modern heading and tilt come back to Classic');
+  assert.equal(e.editor.classic!.zoom(), 1, 'Classic shows the whole board');
+  assert.equal(byId(e.root, 'editor-compass').dataset.heading, '250');
 });
 
 test('without the page\'s look setting the bar has no look buttons, and B does nothing', () => {

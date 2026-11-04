@@ -1,7 +1,8 @@
 // The Crete level editor in both looks: on a phone in Modern, one finger paints the 3D board, a drag paints a run and
-// two fingers move the camera without painting; in Classic the flat board paints and the 3D engine never loads, and
-// the bar's Classic and Modern buttons (and B) switch between them, keeping the draft and its undo history and setting
-// the game's look. Real touches come through the DevTools protocol, so the page sees what a phone sends.
+// two fingers move the camera without painting; in Classic the tilted sheet paints and the 3D engine never loads, and
+// the bar's Classic and Modern buttons (and B) switch between them, keeping the draft, its undo history and the view's
+// heading and tilt and setting the game's look; a turned Classic view paints the square under the pointer. Real
+// touches come through the DevTools protocol, so the page sees what a phone sends.
 import { test, expect } from '@playwright/test';
 import type { CDPSession, Page } from '@playwright/test';
 
@@ -12,7 +13,11 @@ interface Hooked {
   __creteTest: {
     editor: {
       draft: { rows: number; cols: number; cells: string[] };
-      modern: { cellAt(c: number, r: number): [number, number]; yaw(): number; zoom(): number; hovered(): { r: number; c: number } | null } | null;
+      modern: {
+        cellAt(c: number, r: number): [number, number]; yaw(): number; pitch(): number; zoom(): number; hovered(): { r: number; c: number } | null;
+        setView(yaw: number, pitch: number): void;
+      } | null;
+      classic: { at(c: number, r: number): Pt | null; view(): { yaw: number; pitch: number } } | null;
     };
   };
 }
@@ -32,13 +37,21 @@ async function modernCell(page: Page, r: number, c: number): Promise<Pt> {
   return { x: box.x + x, y: box.y + y };
 }
 
-/** Where cell (r, c) shows on the editor's Classic board (square cells, the extra height the rise above row 0). */
+/** Where cell (r, c)'s centre shows on the editor's Classic board, the turned and tilted sheet, in page pixels. */
 async function classicCell(page: Page, r: number, c: number): Promise<Pt> {
-  const box = (await page.locator('#editor-stage').boundingBox())!;
-  const { rows, cols } = await page.evaluate(() => (window as unknown as Hooked).__creteTest.editor.draft);
-  const cell = box.width / cols;
-  return { x: box.x + (c + 0.5) * cell, y: box.y + box.height - (rows - r - 0.5) * cell };
+  return (await page.evaluate(([rr, cc]) => (window as unknown as Hooked).__creteTest.editor.classic!.at(cc!, rr!), [r, c]))!;
 }
+
+/** The view's heading and tilt as each look and its compass show it. */
+const classicView = (page: Page) => page.evaluate(() => (window as unknown as Hooked).__creteTest.editor.classic!.view());
+const modernView = (page: Page) => page.evaluate(() => {
+  const m = (window as unknown as Hooked).__creteTest.editor.modern!;
+  return { yaw: m.yaw(), pitch: m.pitch() };
+});
+const compass = async (page: Page, id: string) => {
+  const c = page.locator(`#editor-board #${id}`);
+  return { yaw: Number(await c.getAttribute('data-heading')), pitch: Number(await c.getAttribute('data-pitch')) };
+};
 
 /** Sends touches: each step lists the fingers down then, in order (a finger's id is its place in the list). */
 async function touch(cdp: CDPSession, steps: Pt[][]): Promise<void> {
@@ -94,7 +107,7 @@ test('on a phone in Modern, one finger paints the 3D board and a drag paints a r
   }
 });
 
-test('Classic paints the flat board and never loads the 3D engine; Modern and B switch looks, keeping the draft and its undo', async ({ page }) => {
+test('Classic paints the tilted sheet and never loads the 3D engine; Modern and B switch looks, keeping the draft and its undo', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(allMet);
   await page.addInitScript(() => localStorage.setItem('crete-look', 'classic'));
@@ -106,7 +119,9 @@ test('Classic paints the flat board and never loads the 3D engine; Modern and B 
   await expect(page.locator('#editor-root')).toBeVisible();
   await expect(page.locator('#editor-look-classic')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#editor-stage')).toBeVisible();
-  await expect(page.locator('#editor-help')).toContainText('Two fingers scroll a big board');
+  await expect(page.locator('#editor-help')).toContainText('Two fingers, the right button and the wheel move the view');
+  await expect(page.locator('#editor-compass')).toBeVisible();
+  expect(await classicView(page), 'Classic opens at 75° and north up').toEqual({ yaw: 0, pitch: 75 });
 
   for (const [r, c] of [[2, 3], [2, 4], [3, 3]] as const) {
     const p = await classicCell(page, r, c);
@@ -118,7 +133,6 @@ test('Classic paints the flat board and never loads the 3D engine; Modern and B 
   await page.locator('#editor-look-modern').click();
   await modernReady(page);
   expect(modernLoads.length).toBe(1);
-  await expect(page.locator('#editor-help'), 'the side column says the Modern board\'s rule').toContainText('Two fingers, the right button and the wheel move the view');
   expect(await page.evaluate(() => localStorage.getItem('crete-look')), 'the editor sets the game\'s look').toBe('modern');
   expect((await grid(page)).slice(2, 4).map(row => row.slice(3, 5)), 'the draft is kept').toEqual(['##', '#.']);
 
@@ -148,5 +162,62 @@ test('Classic paints the flat board and never loads the 3D engine; Modern and B 
   await page.keyboard.press('u');
   await expect.poll(async () => (await grid(page))[7]!.slice(3, 8)).toBe('.....');
   expect((await grid(page)).slice(2, 4).map(row => row.slice(3, 5))).toEqual(['##', '#.']);
+  expect(errors).toEqual([]);
+});
+
+test('switching looks keeps the view\'s heading and tilt both ways, and a turned Classic view paints the square under the pointer', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.addInitScript(allMet);
+  await page.addInitScript(() => localStorage.setItem('crete-look', 'modern'));
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto(`${PAGE}#edit`);
+  await modernReady(page);
+
+  // Set in Modern, the heading and tilt show in Classic, on its sheet and its compass.
+  await page.evaluate(() => (window as unknown as Hooked).__creteTest.editor.modern!.setView(130, 40));
+  expect(await modernView(page)).toEqual({ yaw: 130, pitch: 40 });
+  await page.locator('#editor-look-classic').click();
+  await expect(page.locator('#editor-view')).toBeVisible();
+  expect(await classicView(page)).toEqual({ yaw: 130, pitch: 40 });
+  expect(await compass(page, 'editor-compass')).toEqual({ yaw: 130, pitch: 40 });
+  await expect(page.locator('#editor-stage')).toHaveAttribute('style', /rotateX\(50(\.0+)?deg\) rotateZ\(130(\.0+)?deg\)/);
+
+  // The right button turns and tilts the Classic view and paints nothing; back in Modern the view is the same.
+  const before = await grid(page);
+  const mid = await classicCell(page, 6, 6);
+  await page.mouse.move(mid.x, mid.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(mid.x + 100, mid.y + 40, { steps: 5 });
+  await page.mouse.up({ button: 'right' });
+  expect(await grid(page), 'the right button paints nothing').toEqual(before);
+  const turned = await classicView(page);
+  expect(turned.yaw).not.toBe(130);
+  expect(turned.pitch).not.toBe(40);
+  await page.keyboard.press('b');
+  await modernReady(page);
+  const back = await modernView(page);
+  expect(back.yaw).toBeCloseTo(turned.yaw, 6);
+  expect(back.pitch).toBeCloseTo(turned.pitch, 6);
+  expect(await compass(page, 'cam-compass')).toEqual({ yaw: Math.round(turned.yaw), pitch: Math.round(turned.pitch) });
+
+  // Turned to 215° and tilted to 30° in Modern, Classic paints the square under the pointer.
+  await page.evaluate(() => (window as unknown as Hooked).__creteTest.editor.modern!.setView(215, 30));
+  await page.keyboard.press('b');
+  await expect(page.locator('#editor-look-classic')).toHaveAttribute('aria-pressed', 'true');
+  expect(await classicView(page)).toEqual({ yaw: 215, pitch: 30 });
+  await page.locator('#brush-wall').click();
+  for (const [r, c] of [[2, 3], [8, 9]] as const) {
+    const p = await classicCell(page, r, c);
+    await page.mouse.click(p.x, p.y);
+  }
+  const want = before.map((row, r) => [...row].map((ch, c) => ((r === 2 && c === 3) || (r === 8 && c === 9) ? '#' : ch)).join(''));
+  await expect.poll(() => grid(page)).toEqual(want);
+
+  // A tap on the compass goes back to 75° and the nearest north up.
+  await page.locator('#editor-compass').click();
+  const home = await classicView(page);
+  expect(home.pitch).toBe(75);
+  expect(((home.yaw % 360) + 360) % 360).toBe(0);
   expect(errors).toEqual([]);
 });

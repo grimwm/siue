@@ -1,9 +1,8 @@
 # Crete: the level editor in both looks
 
 The game has two looks, Modern (a painted 3D board with a free compass camera)
-and Classic (the Blender-rendered flat board). The level editor painted only on
-the flat canvas, whatever look the player chose. Now it builds in either look,
-and the builder chooses which.
+and Classic (the Blender-rendered board as a tilted sheet, with the same compass
+camera). The level editor builds in either look, and the builder chooses which.
 
 ## Decided
 
@@ -13,9 +12,15 @@ and the builder chooses which.
   level was built in. The editor has no look of its own.
 - **The switch keeps everything.** The draft, its undo history, the brush and
   any Check stay as they were; only the board changes.
-- **Classic is the flat canvas.** The editor's Classic board is the flat
-  board it has always had. The tilted sheet is left out of the editor: painting
-  on a tilted sheet gains little and costs a second hit test.
+- **One view for both looks.** As in the game, the heading and tilt go across
+  with the switch, both ways: Modern's to Classic, Classic's to Modern. The
+  zoom and pan do not: the look switched to shows the whole board, as each
+  look's own zoom has nothing to say about the other's.
+- **Classic is the game's tilted sheet.** The editor's Classic board is the
+  game's Classic (`src/sheet.ts`, `src/sheet-board.ts`) with its compass camera
+  (`src/editor/classic-view.ts`): it turns freely, tilts from straight down to
+  10°, zooms and pans, and opens at 75° north up. It stands still as the
+  editor's Modern board does: a turn, a tilt or a reset shows at once.
 - **Classic never loads the 3D engine.** The editor's Modern board is built
   from `dist/modern.js`, loaded the first time Modern is chosen. Where it
   cannot start (no WebGL, or the bundle fails), the editor stays in Classic and
@@ -28,7 +33,8 @@ and the builder chooses which.
 
 ## Camera versus paint
 
-The rule, as the game separates walking (the pad) from turning (the board):
+The rule, the same in both looks, as the game separates walking (the pad) from
+turning (the board):
 
 - **One finger, a pen or the left mouse button paints.** A tap paints one
   cell; a drag paints every cell it crosses, as one undo step.
@@ -45,11 +51,25 @@ The rule, as the game separates walking (the pad) from turning (the board):
 
 `src/modern/paint-route.ts` holds the rule (DOM-free, tested in
 `test/editor-modern.test.ts`); `src/modern/controls.ts` applies it when the
-board has a painter.
+Modern board has a painter, and `src/editor/classic-view.ts` on the Classic
+sheet.
 
 ## Finding the cell
 
-The cell under a pointer is where a ray through it meets the ground plane
+In Classic the cell under a pointer is the square the browser draws there on
+the turned, tilted sheet: `cellUnder` in `src/sheet.ts` inverts the sheet's
+lens, tilt and turn (`unproject`, the inverse of the `project` the figures
+stand by) and floors the ground point to its square; off the board it is none.
+The unit test in `test/sheet.test.ts` composes the sheet's CSS transform as the
+browser does and checks a press at each square's middle and near its corners
+lands on that square at six headings and five tilts, 10° included.
+
+At low tilts the far rows are thin on the screen, so painting them by eye is
+fiddly; the wheel, a pinch or the compass's + zoom in on them, or a tilt back
+toward straight down widens them. The tilt is not held higher in the editor
+than in the game.
+
+In Modern the cell under a pointer is where a ray through it meets the ground plane
 (`cellUnder` in `src/modern/camera.ts`): the lens is orthographic, so the ray
 runs along the view, and the floor point is `groundAt` of the pointer's offset
 from the view's centre. Rounding to the nearest cell centre gives the cell; off

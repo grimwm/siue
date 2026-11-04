@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { fromBank, makePart, settle, PARTS } from '../src/endless/generate.ts';
 import type { Made, Part } from '../src/endless/generate.ts';
+import { AHEAD } from '../src/endless/saved.ts';
 import { BANK } from '../src/endless/bank.ts';
 import { bandAfter, knownOf } from '../src/endless/gate.ts';
 import { campaignLevels } from '../src/endless/campaign.ts';
@@ -24,6 +25,29 @@ function wall(parts: readonly { ms: number; found: boolean }[], n: number): numb
   }
   return end;
 }
+
+/** A run of `levels` levels played at `play` seconds each, the workers making each next level in `make[i]` seconds
+ *  (taken in turn) and staying AHEAD in front, as src/endless/mode.ts does: how often the player waits at Next Level,
+ *  for how long in all, and how many levels were ready, on average, when a level was won. */
+function ahead(make: readonly number[], play: number, levels = 30): { waits: number; waited: number; ready: number } {
+  const done: number[] = [0];
+  let at = 0, waits = 0, waited = 0, ready = 0, busy = 0;
+  for (let i = 1; i < levels; i++) {
+    // The level the player is on was opened at `at`; the workers make the next ones in order, at most AHEAD past it.
+    const won = at + play;
+    while (done.length <= i + AHEAD - 1 && done.length < levels) {
+      const start = Math.max(busy, done.length - AHEAD >= 0 ? openAt[done.length - AHEAD] ?? 0 : 0);
+      busy = start + make[(done.length - 1) % make.length]!;
+      done.push(busy);
+    }
+    ready += done.filter((t, k) => k > i - 1 && t <= won).length;
+    if (done[i]! > won) { waits++; waited += done[i]! - won; }
+    at = Math.max(won, done[i]!);
+    openAt[i] = at;
+  }
+  return { waits, waited, ready: ready / (levels - 1) };
+}
+const openAt: number[] = [0];
 
 const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === 'sum') {
@@ -43,6 +67,14 @@ if (cmd === 'sum') {
     n += t.n; made += t.made;
     const med = (xs: number[]) => (xs.length ? Math.round([...xs].sort((a, b) => a - b)[xs.length >> 1]! / 1000) : '-');
     console.log(`tier ${tier}: ${t.made}/${t.n} fresh (${Math.round(100 * t.made / t.n)}%), median per level ${med(t.ms)} s on one worker, ${med(t.w3)} s on three`);
+    if (t.w3.length) for (const [who, slow] of [['workstation', 1], ['phone (3.5× slower)', 3.5]] as const) {
+      const words = [60, 120].map(play => {
+        openAt.length = 1;
+        const a = ahead(t.w3.map(ms => slow * ms / 1000), play);
+        return `${play} s a level: ${a.waits} waits in 29 levels (${Math.round(a.waited)} s), ${a.ready.toFixed(1)} ready at each win`;
+      });
+      console.log(`  ${who}: ${words.join('; ')}`);
+    }
   }
   console.log(`all: ${made}/${n} (${Math.round(100 * made / Math.max(1, n))}%)`);
 } else {

@@ -41,3 +41,13 @@ test('the level stat is short, with its full place as the note; an outside level
   assert.equal(out.trial, '');
   assert.equal(out.trialNote, '');
 });
+
+test('Best is the fewest possible; past it, by how many; the player\'s own best is in its note', () => {
+  assert.deepEqual([statusView(base).best, statusView(base).over], ['', 0], 'unknown: no Best');
+  const on = statusView({ ...base, moves: 12, fewest: 12 });
+  assert.deepEqual([on.best, on.over, on.bestNote], ['12', 0, 'Fewest possible moves 12']);
+  const over = statusView({ ...base, moves: 15, fewest: 12, yourBest: 13 });
+  assert.equal(over.best, '12 +3');
+  assert.equal(over.over, 3);
+  assert.match(over.bestNote, /^Fewest possible moves 12; 3 over.*; your best clear 13$/);
+});

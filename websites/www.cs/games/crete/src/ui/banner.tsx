@@ -2,7 +2,8 @@
 // it in with each thing's picture, name and a reminder of what it does; going on to the next level slides it in with
 // a line saying the hearts are back to three. src/ui.ts takes it away after BANNER_MS (src/notices.ts). It is a live
 // region that takes no pointer and no focus, so play goes on under it. Under it stands the rule tip, if one is
-// (src/rule-tips.ts): a line and Got It, the only part that takes a pointer; play goes on while it stands.
+// (src/rule-tips.ts): a line and Got It, the only part that takes a pointer. It holds play until it is put away
+// (src/ui.ts): Got It, Enter or Space.
 import { render } from 'preact';
 import { KeyChip } from '../../../_kit/ui/key-chip.tsx';
 import type { Entry } from '../dictionary.ts';

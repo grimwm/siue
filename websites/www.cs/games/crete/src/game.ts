@@ -260,6 +260,11 @@ export function createGame(deps: GameDeps): Game {
     const before = run.now;
     run = r.run;
     played.push(a);
+    // A turn that retraced the try back to an earlier state is an undo to there: the moves after it go.
+    if (r.back !== undefined) {
+      played = played.slice(0, r.back);
+      deps.say(`↶ Back to move ${run.now.moves}`, 'info');
+    }
     if (a.kind === 'tool' && a.tool !== 'mirror') deps.sfx('pickup');
     voice(r.events, before, run.now);
     took = r.events.flatMap(e => (e.kind === 'took' ? [e.what] : []));

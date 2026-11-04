@@ -55,6 +55,7 @@ const noop = () => {};
 const tabsOf = (el: StubElement) => walk(el).filter(n => n.localName === 'kbd');
 
 // ---- status bar ----
+const STATUS_BASE = { trial: '1/8', hearts: 3, relicsLeft: 1, keys: { red: 0, blue: 0, yellow: 0, green: 0 }, gear: ['flippers'] as const, moves: 0, stone: 0 };
 const VIEW = statusView({ trial: 'Ch. 1 • Level 3/10', trialNote: 'Chapter 1, Level 3: The Doors of Daedalus', hearts: 2, relicsLeft: 1, keys: { red: 1, blue: 0, yellow: 0, green: 2 }, gear: ['flippers'], moves: 12, stone: 0 });
 
 test('the status bar shows Level, Hearts, Relics, Keys, Gear and Moves, and a Menu button with its Q tab', () => {
@@ -77,6 +78,26 @@ test('the status bar shows Level, Hearts, Relics, Keys, Gear and Moves, and a Me
   assert.equal(tab.getAttribute('aria-hidden'), 'true');
   click(menu);
   assert.equal(opened, 1);
+});
+
+test('Best shows the fewest possible moves, soft while on track; past it, amber with how many over; unknown, no stat', () => {
+  const root = mount();
+  const at = (moves: number, fewest?: number) => {
+    renderStatus(root, { view: statusView({ ...STATUS_BASE, moves, ...(fewest === undefined ? {} : { fewest }) }), menuKey: 'Q', onMenu: noop });
+    const best = maybeById(root, 'hud-best');
+    return best ? { text: best.textContent, cls: (best.parentNode as StubElement).getAttribute('class'), title: (best.parentNode as StubElement).getAttribute('title') } : null;
+  };
+  assert.deepEqual(at(10, 12), { text: '12', cls: 'stat stat-best', title: 'Fewest possible moves 12' });
+  assert.equal(at(12, 12)!.cls, 'stat stat-best', 'at the fewest, still on track');
+  const over = at(15, 12)!;
+  assert.equal(over.text, '12 +3');
+  assert.equal(over.cls, 'stat stat-best over');
+  assert.match(over.title!, /3 over/);
+  assert.equal(at(11, 12)!.cls, 'stat stat-best', 'moves back to or under the fewest (Undo, or a retrace) clear the cue');
+  assert.equal(at(5), null);
+  for (const [id, cls] of [['hud-hearts', 'stat stat-hearts'], ['hud-relics', 'stat stat-relics'], ['hud-gear', 'stat stat-gear'], ['hud-moves', 'stat stat-moves']]) {
+    assert.equal((byId(root, id!).parentNode as StubElement).getAttribute('class'), cls, 'each stat is named for its colour');
+  }
 });
 
 test('hearts and keys carry their long form as a tooltip; nothing held shows a dash', () => {
@@ -399,15 +420,15 @@ test('the story log lists every line; how to play comes from the help lines', ()
 // ---- chapter card ----
 const CH1 = CHAPTERS[0]!;
 function chapterProps(over: Partial<ChapterCardProps> = {}): ChapterCardProps {
-  return { open: true, chapter: CH1, closing: false, next: nextChapter(1), onEnter: noop, onLevels: noop, onClose: noop, ...over };
+  return { open: true, chapter: CH1, closing: false, next: nextChapter(1), onEnter: noop, onLevels: noop, onClose: noop, onBack: noop, ...over };
 }
 
-test('the opening chapter card shows the kicker, name, words and quotation, with Enter the Halls and Levels', () => {
+test('the opening chapter card shows the kicker, name, words and quotation, with Enter the Halls, Levels and Back', () => {
   const root = mount();
   const seen: string[] = [];
   renderChapter(root, chapterProps({ open: false }));
   assert.equal(byId(root, 'chapter-veil').hidden, true);
-  renderChapter(root, chapterProps({ onEnter: () => seen.push('enter'), onLevels: () => seen.push('levels') }));
+  renderChapter(root, chapterProps({ onEnter: () => seen.push('enter'), onLevels: () => seen.push('levels'), onBack: () => seen.push('back') }));
   assert.equal(byId(root, 'chapter-veil').hidden, false);
   assert.equal(byId(root, 'chapter-kicker').textContent, 'Chapter 1 of 10');
   assert.equal(byId(root, 'chapter-title').textContent, 'The Outer Halls');
@@ -424,7 +445,9 @@ test('the opening chapter card shows the kicker, name, words and quotation, with
   assert.ok(byId(root, 'chapter-levels').textContent.includes('Levels'));
   click(byId(root, 'chapter-enter'));
   click(byId(root, 'chapter-levels'));
-  assert.deepEqual(seen, ['enter', 'levels']);
+  assert.equal(tabsOf(byId(root, 'chapter-back'))[0]?.textContent, KEYS.menu.label);
+  click(byId(root, 'chapter-back'));
+  assert.deepEqual(seen, ['enter', 'levels', 'back']);
   assert.equal(maybeById(root, 'chapter-continue'), undefined);
   assert.equal(maybeById(root, 'chapter-next'), undefined);
   renderChapter(root, chapterProps({ score: 'Level 10 cleared: 76 moves' }));
@@ -445,6 +468,7 @@ test('the closing chapter card says it is the end of the chapter, with its words
   assert.equal(maybeById(root, 'chapter-next'), undefined, 'Chapter 2 is released');
   assert.equal(maybeById(root, 'chapter-enter'), undefined);
   assert.equal(maybeById(root, 'chapter-levels'), undefined);
+  assert.equal(maybeById(root, 'chapter-back'), undefined, 'the closing card goes on, never back');
   assert.equal(globalThis.__focused?.id, 'chapter-continue');
   assert.equal(maybeById(root, 'chapter-score'), undefined, 'no win, no score line');
   renderChapter(root, chapterProps({ closing: true, score: 'Level 10 cleared: 80 moves · best possible 76 (4 over)', onClose: () => { closed++; } }));
@@ -479,11 +503,12 @@ test("an earlier chapter's closing card shows no ending", () => {
 });
 
 // ---- levels list ----
-const LEVEL_ROWS = [
-  { title: 'The Mouth of the Labyrinth', status: 'cleared · best 14' },
-  { title: 'The Tribute Relics', status: 'cleared with help' },
-  { title: 'The Doors of Daedalus', status: 'not yet' },
+const LEVEL_ROWS: LevelsProps['rows'] = [
+  { title: 'The Mouth of the Labyrinth', marks: [{ text: 'cleared', tone: 'clear' }, { text: 'your best 14' }, { text: 'best possible 12' }, { text: '(2 over)', tone: 'over', sep: ' ' }] },
+  { title: 'The Tribute Relics', marks: [{ text: 'cleared with help', tone: 'clear' }, { text: 'page found', tone: 'page' }] },
+  { title: 'The Doors of Daedalus', marks: [{ text: 'not yet' }, { text: 'best possible 9' }] },
 ];
+const LEVEL_TEXT = ['cleared · your best 14 · best possible 12 (2 over)', 'cleared with help · page found', 'not yet · best possible 9'];
 function levelsProps(over: Partial<LevelsProps> = {}): LevelsProps {
   return { open: true, chapters: CHAPTERS, shown: 1, rows: LEVEL_ROWS, current: -1, onPick: noop, onTab: noop, onClose: noop, ...over };
 }
@@ -497,11 +522,21 @@ test('the levels list has a button per level with its title and standing, and pi
   LEVEL_ROWS.forEach((r, i) => {
     const b = byId(root, `level-${i + 1}`);
     assert.ok(b.textContent.includes(r.title), r.title);
-    assert.ok(b.textContent.includes(r.status), r.status);
+    assert.ok(b.textContent.includes(LEVEL_TEXT[i]!), LEVEL_TEXT[i]);
     assert.equal(b.disabled, false);
     click(b);
   });
   assert.deepEqual(seen, [0, 1, 2]);
+});
+
+test('the levels list colours its marks quietly, each mark still in words', () => {
+  const root = mount();
+  renderLevels(root, levelsProps({ rows: [...LEVEL_ROWS, { title: 'Perfect', marks: [{ text: 'cleared', tone: 'clear' }, { text: 'your best 9' }, { text: 'best possible 9' }, { text: 'perfect', tone: 'perfect' }] }] }));
+  const marks = (i: number) => walk(byId(root, `level-${i}`)).filter(n => /^mark-/.test(n.getAttribute('class') ?? '')).map(n => [n.getAttribute('class'), n.textContent]);
+  assert.deepEqual(marks(1), [['mark-clear', 'cleared'], ['mark-over', '(2 over)']]);
+  assert.deepEqual(marks(2), [['mark-clear', 'cleared with help'], ['mark-page', 'page found']]);
+  assert.deepEqual(marks(3), [], 'not yet played stays plain');
+  assert.deepEqual(marks(4), [['mark-clear', 'cleared'], ['mark-perfect', 'perfect']]);
 });
 
 test('the levels list has ten chapter tabs: chapter 1 pressed, all ten open', () => {
@@ -690,4 +725,17 @@ test('a compact strip carries Menu between Hints and the look swap; a wide strip
   assert.deepEqual([...view.children].map(c => (c as { id?: string }).id), ['btn-menu-strip', 'btn-look'], 'Menu sits left of the look swap');
   renderStrip(root, stripProps({ compact: false }));
   assert.equal(maybeById(root, 'btn-menu-strip'), undefined);
+});
+
+test('during an Endless run the menu shows the seed, selectable, with Copy Seed Link; otherwise neither', () => {
+  const root = mount();
+  renderMenu(root, menuProps());
+  assert.equal(maybeById(root, 'menu-seed'), undefined);
+  assert.equal(maybeById(root, 'menu-copy-seed'), undefined);
+  let copied = 0;
+  renderMenu(root, menuProps({ seed: 'wrvrsk', onCopySeed: () => { copied++; } }));
+  assert.equal(byId(root, 'menu-seed').textContent, 'Seed: wrvrsk');
+  assert.equal(byId(root, 'menu-copy-seed').textContent, 'Copy Seed Link');
+  click(byId(root, 'menu-copy-seed'));
+  assert.equal(copied, 1);
 });

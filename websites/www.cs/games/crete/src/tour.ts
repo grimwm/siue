@@ -4,9 +4,9 @@
  * panning, twisting and pinching it. The board itself turns, tilts, slides and grows a little with them (a passing
  * CSS animation on top of whatever view it has, gone when the step ends), and Theseus never moves. The steps loop
  * in a bold banner low on the board, where a thumb is, until the tour is closed: by Skip Tour (Got It once every step
- * has shown), or by play itself. The tour never stands in the way: a press anywhere but the banner (the pad, the
- * board, a button), the wheel or any key but Tab, a browser chord, or Enter or Space on the banner's own buttons
- * closes it and goes on to do what it would have done.
+ * has shown), by Enter or Escape (as Skip Tour, and nothing more), or by play itself. The tour never stands in the
+ * way: a press anywhere but the banner (the pad, the board, a button), the wheel or any other key but Tab, a browser
+ * chord, or Enter or Space on the banner's own buttons closes it and goes on to do what it would have done.
  * With reduced motion nothing moves: each step shows its fingertips where they end, an arrow for the way they went,
  * and Next.
  *
@@ -90,13 +90,19 @@ export function tourDue(o: { touch: boolean; seen: boolean; playing: boolean; co
 
 /** What ends the tour by itself: any press but one on its banner, the wheel, and any key but Tab (the way to the
  *  banner's buttons), Enter or Space on a banner button, a browser chord (Ctrl, Alt or Meta held) or a modifier
- *  alone. The press or key then does what it would have done. */
+ *  alone. The press or key then does what it would have done, except Enter and Escape (tourSkipKey). */
 export function tourEndsOn(e: { type: string; inBanner?: boolean; key?: string; ctrlKey?: boolean; altKey?: boolean; metaKey?: boolean }): boolean {
   if (e.type === "pointerdown") return !e.inBanner;
   if (e.type === "wheel") return true;
   if (e.type !== "keydown") return false;
   if (e.key === "Tab" || (e.inBanner && (e.key === "Enter" || e.key === " "))) return false;
   return !(e.ctrlKey || e.altKey || e.metaKey || ["Shift", "Control", "Alt", "Meta"].includes(e.key ?? ""));
+}
+
+/** Enter or Escape, off the banner's buttons: Skip Tour, and the key goes no further (no Wait, no focused button). */
+export function tourSkipKey(e: { key?: string; inBanner?: boolean; ctrlKey?: boolean; altKey?: boolean; metaKey?: boolean }): boolean {
+  if (e.ctrlKey || e.altKey || e.metaKey) return false;
+  return e.key === "Escape" || (e.key === "Enter" && !e.inBanner);
 }
 
 export interface TourHost {
@@ -238,11 +244,17 @@ export function showTour(frame: HTMLElement, host: TourHost): Tour {
   const onPlay = (e: Event): void => {
     const k = e as KeyboardEvent;
     const inBanner = e.target instanceof Node && card.contains(e.target);
-    if (tourEndsOn({ type: e.type, inBanner, key: k.key, ctrlKey: k.ctrlKey, altKey: k.altKey, metaKey: k.metaKey })) close();
+    if (e.type === "keydown" && tourSkipKey({ key: k.key, inBanner, ctrlKey: k.ctrlKey, altKey: k.altKey, metaKey: k.metaKey })) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!k.repeat) close();
+    } else if (tourEndsOn({ type: e.type, inBanner, key: k.key, ctrlKey: k.ctrlKey, altKey: k.altKey, metaKey: k.metaKey })) close();
     // Enter or Space on a banner button presses it, and only it: the game never sees that key.
     else if (e.type === "keydown" && inBanner && (k.key === "Enter" || k.key === " ")) e.stopPropagation();
   };
-  for (const t of ["keydown", "pointerdown", "wheel"]) document.addEventListener(t, onPlay, { capture: true, passive: true });
+  // Keys are heard actively, so Enter and Escape can be kept from the game; presses and the wheel passively.
+  document.addEventListener("keydown", onPlay, { capture: true });
+  for (const t of ["pointerdown", "wheel"]) document.addEventListener(t, onPlay, { capture: true, passive: true });
   card.addEventListener("click", e => {
     if (e.target === next) show(step + 1);
     else if (e.target === done) close();

@@ -1,7 +1,7 @@
 // The rule tips: which tip each sight or turn shows, in what order, each once, and back again after Reset Tips.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EXIT_AT, TIP_IDS, TIP_TURNS, UNDO_AT, createRuleTips, nextTip, tipText } from '../src/rule-tips.ts';
+import { EXIT_AT, TIP_IDS, UNDO_AT, createRuleTips, nextTip, tipText } from '../src/rule-tips.ts';
 import type { TipEvent, TipId } from '../src/rule-tips.ts';
 import { createMet } from '../src/met.ts';
 import type { StorageLike } from '../../_kit/ports.ts';
@@ -66,9 +66,8 @@ test('each tip shows once, a later one replaces it, it goes after a few turns, a
   assert.equal(tips.shown(), null, 'Got It puts it away');
   assert.equal(tips.on(turn(UNDO_AT)), true);
   assert.equal(tips.shown()?.id, 'tip-undo');
-  for (let i = 1; i < TIP_TURNS; i++) assert.equal(tips.on(turn(UNDO_AT)), false, 'it stands through a few turns');
-  assert.equal(tips.on(turn(UNDO_AT)), true);
-  assert.equal(tips.shown(), null, 'then goes by itself');
+  for (let i = 0; i < 6; i++) assert.equal(tips.on(turn(UNDO_AT)), false, 'it never goes by itself');
+  assert.equal(tips.shown()?.id, 'tip-undo');
   tips.on(turn(EXIT_AT));
   assert.equal(tips.shown()?.id, 'tip-exit');
   tips.clear();

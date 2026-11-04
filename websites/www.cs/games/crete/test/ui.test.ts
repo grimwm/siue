@@ -166,6 +166,21 @@ test('Story and Settings appear when the page gives them, and call back', () => 
   assert.deepEqual(seen, ['story', 'settings']);
 });
 
+test('the title card leads with one filled way in, Continue when offered, else New Game; the rest are outlined', () => {
+  const root = makeEl('title-root');
+  const all = { onStory() {}, onSettings() {}, onEditor() {}, onEndless() {} };
+  renderTitleCard(root, { open: true, hint: false, onPlay() {}, ...all });
+  const cls = (id: string) => byId(root, id).getAttribute('class');
+  assert.equal(cls('title-play'), 'title-primary');
+  for (const id of ['title-endless', 'title-story', 'title-editor', 'title-settings']) assert.equal(cls(id), 'quiet', id);
+  renderTitleCard(root, { open: true, hint: false, onPlay() {}, resume: 'Continue at Chapter 1, Level 2', onContinue() {}, ...all });
+  assert.equal(cls('title-continue'), 'title-primary');
+  assert.equal(cls('title-play'), 'quiet');
+  // The buttons are in the order they read, so the focus walks them that way.
+  assert.deepEqual(walk(root).filter(n => n.localName === 'button').map(b => b.id),
+    ['title-continue', 'title-play', 'title-endless', 'title-story', 'title-editor', 'title-settings']);
+});
+
 test('the title card leaves the look to the new-game card and the menu', () => {
   const root = makeEl('title-root');
   renderTitleCard(root, { open: true, hint: false, onPlay() {} });
@@ -688,6 +703,37 @@ test('on the new-game card left and right pick a look, Enter goes in and Q goes 
   key('n');
   key('Enter');
   assert.equal(flow.top(), 'chapter');
+});
+
+test('Escape and Back go from every card the title card opens back to it, starting nothing; on the title card Escape is nothing', () => {
+  reset();
+  flow.showTitle(false);
+  const before = game.run;
+  const esc = () => key('Escape');
+  assert.equal(esc().prevented, false);
+  assert.equal(flow.top(), 'title', 'Escape on the title card opens no menu');
+  key('n');
+  esc();
+  assert.equal(flow.top(), 'title', 'from the new-game card');
+  key('n');
+  key('Enter');
+  assert.equal(flow.top(), 'chapter');
+  assert.equal(byId(rootOf('chapter'), 'chapter-back').textContent, `Back${KEYS.menu.label}`);
+  click(byId(rootOf('chapter'), 'chapter-back'));
+  assert.equal(flow.top(), 'title', 'Back on the chapter card a new game opens');
+  key('n');
+  key('Enter');
+  esc();
+  assert.equal(flow.top(), 'title', 'Escape on it too');
+  assert.equal(game.run, before, 'and no level was opened');
+  key('i');
+  assert.equal(flow.top(), 'story');
+  esc();
+  assert.equal(flow.top(), 'title', 'from the story');
+  key('q');
+  assert.equal(flow.top(), 'menu');
+  esc();
+  assert.equal(flow.top(), 'title', 'from the menu opened as Settings');
 });
 
 test('left and right in the levels list switch between the released chapters, clamped at the ends', () => {

@@ -1,5 +1,5 @@
 // The Island of Crete: a chapter's card. The opening card (under "Chapter 1 of 10": the chapter's words and
-// quotation, Enter the halls and Levels) shows before its first level. The closing card (under "End of Chapter 1":
+// quotation, Enter the Halls, Levels and Back) shows before its first level. The closing card (under "End of Chapter 1":
 // its own words and quotation, the moves and best possible of the win that ended it, and On to Chapter 2, which
 // goes on to that chapter's opening card, or Continue with a line saying the next chapter is not yet released)
 // shows after its last. The last chapter's closing card also shows the campaign's ending, chosen by the story pages
@@ -28,6 +28,8 @@ export interface ChapterCardProps {
   onEnter: () => void;
   onLevels: () => void;
   onClose: () => void;
+  /** Back on the opening card: it closes, as Q does, and shows what was under it (the title card after New Game). */
+  onBack: () => void;
 }
 
 export function ChapterCard(p: ChapterCardProps) {
@@ -59,6 +61,7 @@ export function ChapterCard(p: ChapterCardProps) {
       <div class="title-actions">
         {!p.closing && <Button id="chapter-enter" keyLabel={KEYS.begin.label} onClick={p.onEnter}>Enter the Halls</Button>}
         {!p.closing && <Button id="chapter-levels" keyLabel={KEYS.new.label} onClick={p.onLevels}>Levels</Button>}
+        {!p.closing && <Button id="chapter-back" class="quiet" keyLabel={KEYS.menu.label} onClick={p.onBack}>Back</Button>}
         {p.closing && <Button id="chapter-continue" keyLabel={KEYS.begin.label} onClick={p.onClose}>{onward}</Button>}
       </div>
     </Dialog>

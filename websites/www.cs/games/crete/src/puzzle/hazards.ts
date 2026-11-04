@@ -51,13 +51,13 @@ function moveHazard(w: Work, i: number, ev: GameEvent[]): Outcome {
   ev.push({ kind: 'moved', who: 'hazard', hazard: h.kind, from: h.at, to });
   let seen: Set<number> | null = null;
   for (;;) {
-    h = w.hazards[i] = { ...h, at: to, dir };
+    h = w.hazards[i] = { kind: h.kind, at: to, dir, home: h.home };
     const end = arrive(w, i, ev);
     if (end !== 'on') return end;
     const def = TERRAIN[tAt(w, to)];
     if (def.carries) {
       dir = def.carries;
-      if (h.dir !== dir) h = w.hazards[i] = { ...h, dir };
+      if (h.dir !== dir) h = w.hazards[i] = { kind: h.kind, at: h.at, dir, home: h.home };
     } else if (!def.slides) return 'on';
     // Ice and force floors are never snares, so a sliding hazard is never held.
     seen ??= new Set<number>([index(w, to)]);

@@ -8,7 +8,7 @@
  * it) and its facing. Otherwise they pack per cell a hazard could ever stand on: 0 empty, else 1 + facing + 4 ×
  * home. DOM-free. */
 import { TERRAIN, HAZARDS, KEY_COLORS, GEAR, DIRS, DELTA } from './tiles.ts';
-import type { Gear, Hazard, HazardKind, KeyColor, ObjectKind, Terrain, Tool } from './tiles.ts';
+import type { Cell, Dir, Gear, Hazard, HazardKind, KeyColor, ObjectKind, Terrain, Tool } from './tiles.ts';
 import type { Level } from './level.ts';
 import { maxHearts } from './state.ts';
 import type { State } from './state.ts';
@@ -56,6 +56,16 @@ export interface Layout {
   readonly hazardBits: number;
   /** Each home's hazard kind: the level's hazards, then the hazard-template machines. */
   readonly homeKinds: readonly HazardKind[];
+  /** Where the terrain's bits (changing, then the toggle bit), the objects' bits (fixed, blockOnly, blockOrObject)
+   *  and the hazards' bits start. */
+  readonly terrainAt: number;
+  readonly objectsAt: number;
+  readonly hazardsAt: number;
+  /** The level's cells, `row * cols + col`, one object each: unpacked situations share them. */
+  readonly cells: readonly Cell[];
+  /** Terrain and objects arrays already unpacked, by their bits (terrainOf, objectsOf). */
+  readonly terrains: Map<number | string, readonly Terrain[]>;
+  readonly objectLists: Map<number | string, readonly (ObjectKind | null)[]>;
 }
 
 const TOOL_LIST: readonly Tool[] = ['mirror', 'cake', 'cow'];
@@ -182,7 +192,13 @@ function build(lv: Level): Layout {
     + keyBits.reduce((a, b) => a + b, 0) + toolBits.reduce((a, b) => a + b, 0) + gear.length
     + changing.length + (toggles.length ? 1 : 0) + fixed.length + blockOnly.length + 2 * blockOrObject.length
     + hazardSlots * (cellBits + 2) + hazardCells.length * hazardBits;
+  const terrainAt = at + gear.length;
+  const objectsAt = terrainAt + changing.length + (toggles.length ? 1 : 0);
+  const hazardsAt = objectsAt + fixed.length + blockOnly.length + 2 * blockOrObject.length;
+  const cellList: Cell[] = [];
+  for (let i = 0; i < cells; i++) cellList.push({ r: Math.floor(i / lv.cols), c: i % lv.cols });
   return {
+    terrainAt, objectsAt, hazardsAt, cells: cellList, terrains: new Map(), objectLists: new Map(),
     words: Math.max(1, Math.ceil(total / 32)), cellBits, none: cells, minotaur: mino, cow, stoneBits,
     heartBits, relicBits: bits(lv.relics), pageBits: lv.pageIds.length, keyBits, toolBits, gear,
     heartAt, pageAt, keyAt, toolAt, gearAt: at,
@@ -214,7 +230,21 @@ export function get(words: Uint32Array, at: number, pos: number, width: number):
 
 const cellOf = (s: State, x: { r: number; c: number } | null, none: number): number => (x ? x.r * s.level.cols + x.c : none);
 
-export function pack(s: State, layout: Layout, out: Uint32Array, at: number): void {
+/** Each direction's place in DIRS. */
+const DIR_INDEX: Readonly<Record<Dir, number>> = { up: 0, down: 1, left: 2, right: 3 };
+
+/** Copies `width` bits at bit `pos` of `from` (from word `fromAt`) to the same place in `out` (from word `at`); the
+ *  bits there are zero. */
+function copyBits(from: Uint32Array, fromAt: number, out: Uint32Array, at: number, pos: number, width: number): void {
+  for (let p = pos, end = pos + width; p < end; p += 30) {
+    const n = Math.min(30, end - p);
+    put(out, at, p, n, get(from, fromAt, p, n));
+  }
+}
+
+/** The situation `s` packed into `out` from word `at`. When `parent` is given (the situation `s` was played from,
+ *  packed in `parentWords` from `parentAt`), the terrain or objects `s` shares with it are copied as packed there. */
+export function pack(s: State, layout: Layout, out: Uint32Array, at: number, parent?: State, parentWords?: Uint32Array, parentAt = 0): void {
   const l = layout;
   for (let i = 0; i < l.words; i++) out[at + i] = 0;
   let p = 0;
@@ -226,78 +256,157 @@ export function pack(s: State, layout: Layout, out: Uint32Array, at: number): vo
   p = put(out, at, p, l.heartBits, s.hearts);
   p = put(out, at, p, l.relicBits, s.relicsLeft);
   p = put(out, at, p, l.pageBits, s.pages);
-  for (let i = 0; i < KEY_COLORS.length; i++) p = put(out, at, p, l.keyBits[i]!, s.keys[KEY_COLORS[i]!]);
-  for (let i = 0; i < TOOL_LIST.length; i++) p = put(out, at, p, l.toolBits[i]!, s.tools[TOOL_LIST[i]!]);
-  for (const g of l.gear) p = put(out, at, p, 1, s.gear.includes(g) ? 1 : 0);
-  for (const i of l.changing) p = put(out, at, p, 1, s.terrain[i] === s.level.terrain[i] ? 0 : 1);
-  if (l.toggles.length) p = put(out, at, p, 1, s.terrain[l.toggles[0]!] === s.level.terrain[l.toggles[0]!] ? 0 : 1);
-  for (const i of l.fixed) p = put(out, at, p, 1, s.objects[i] ? 1 : 0);
-  for (const i of l.blockOnly) p = put(out, at, p, 1, s.objects[i] === 'block' ? 1 : 0);
-  for (const i of l.blockOrObject) p = put(out, at, p, 2, s.objects[i] === 'block' ? 2 : s.objects[i] ? 1 : 0);
-  if (l.hazardSlots > 1 && s.hazards.some((h, i) => i > 0 && cellOf(s, h.at, l.none) < cellOf(s, s.hazards[i - 1]!.at, l.none))) throw new Error('the hazards must be sorted by cell');
+  const keys = s.keys, tools = s.tools;
+  p = put(out, at, p, l.keyBits[0]!, keys.red);
+  p = put(out, at, p, l.keyBits[1]!, keys.blue);
+  p = put(out, at, p, l.keyBits[2]!, keys.yellow);
+  p = put(out, at, p, l.keyBits[3]!, keys.green);
+  p = put(out, at, p, l.toolBits[0]!, tools.mirror);
+  p = put(out, at, p, l.toolBits[1]!, tools.cake);
+  p = put(out, at, p, l.toolBits[2]!, tools.cow);
+  for (let g = 0; g < l.gear.length; g++) p = put(out, at, p, 1, s.gear.includes(l.gear[g]!) ? 1 : 0);
+  const terrain = s.terrain, objects = s.objects, first = s.level.terrain;
+  if (parent && parentWords && terrain === parent.terrain) copyBits(parentWords, parentAt, out, at, l.terrainAt, l.objectsAt - l.terrainAt);
+  else {
+    for (let k = 0; k < l.changing.length; k++) {
+      const i = l.changing[k]!;
+      put(out, at, l.terrainAt + k, 1, terrain[i] === first[i] ? 0 : 1);
+    }
+    if (l.toggles.length) put(out, at, l.objectsAt - 1, 1, terrain[l.toggles[0]!] === first[l.toggles[0]!] ? 0 : 1);
+  }
+  if (parent && parentWords && objects === parent.objects) copyBits(parentWords, parentAt, out, at, l.objectsAt, l.hazardsAt - l.objectsAt);
+  else {
+    p = l.objectsAt;
+    for (let k = 0; k < l.fixed.length; k++) p = put(out, at, p, 1, objects[l.fixed[k]!] ? 1 : 0);
+    for (let k = 0; k < l.blockOnly.length; k++) p = put(out, at, p, 1, objects[l.blockOnly[k]!] === 'block' ? 1 : 0);
+    for (let k = 0; k < l.blockOrObject.length; k++) {
+      const o = objects[l.blockOrObject[k]!];
+      p = put(out, at, p, 2, o === 'block' ? 2 : o ? 1 : 0);
+    }
+  }
+  p = l.hazardsAt;
+  const hazards = s.hazards;
+  if (l.hazardSlots > 1) {
+    for (let i = 1; i < hazards.length; i++) {
+      if (cellOf(s, hazards[i]!.at, l.none) < cellOf(s, hazards[i - 1]!.at, l.none)) throw new Error('the hazards must be sorted by cell');
+    }
+  }
   for (let home = 0; home < l.hazardSlots; home++) {
-    const h = s.hazards.find(x => x.home === home);
+    let h: Hazard | undefined;
+    for (let i = 0; i < hazards.length; i++) if (hazards[i]!.home === home) { h = hazards[i]; break; }
     p = put(out, at, p, l.cellBits, h ? cellOf(s, h.at, l.none) : l.none);
-    p = put(out, at, p, 2, h ? DIRS.indexOf(h.dir) : 0);
+    p = put(out, at, p, 2, h ? DIR_INDEX[h.dir] : 0);
   }
   // The hazards are sorted by cell, as the cells are: one pass pairs them.
   let k = 0;
-  for (const i of l.hazardCells) {
-    const h = s.hazards[k];
+  for (let c = 0; c < l.hazardCells.length; c++) {
+    const i = l.hazardCells[c]!;
+    const h = hazards[k];
     const here = h !== undefined && cellOf(s, h.at, l.none) === i;
-    p = put(out, at, p, l.hazardBits, here ? 1 + DIRS.indexOf(h.dir) + 4 * h.home : 0);
+    p = put(out, at, p, l.hazardBits, here ? 1 + DIR_INDEX[h.dir] + 4 * h.home : 0);
     if (here) k++;
   }
   // A hazard out of cell order, or off every hazard cell, would be passed over without a sign.
-  if (l.hazardCells.length && k !== s.hazards.length) throw new Error(`packed ${k} of ${s.hazards.length} hazards: they must be sorted by cell`);
+  if (l.hazardCells.length && k !== hazards.length) throw new Error(`packed ${k} of ${hazards.length} hazards: they must be sorted by cell`);
 }
 
-/** The situation packed in the words; `moves` is what it says (moves are not packed). */
+/** Unpacked terrain and objects arrays kept per level at most; past it they are forgotten and made again. */
+const BOARDS_KEPT = 4096;
+
+/** The `width` bits at `pos` as a key: a number up to 30 bits, else a string of 30-bit parts. */
+function bitsKey(words: Uint32Array, at: number, pos: number, width: number): number | string {
+  if (width <= 30) return get(words, at, pos, width);
+  let key = '';
+  for (let p = pos, end = pos + width; p < end; p += 30) key += get(words, at, p, Math.min(30, end - p)) + ',';
+  return key;
+}
+
+/** The terrain the situation in the words holds: the level's, changed where its bits say. Made once per pattern of
+ *  bits and shared by every situation with it, so never written to (a turn copies it first, work.ts). */
+function terrainOf(words: Uint32Array, at: number, l: Layout, level: Level): readonly Terrain[] {
+  const width = l.objectsAt - l.terrainAt;
+  if (width === 0) return level.terrain;
+  const key = bitsKey(words, at, l.terrainAt, width);
+  const kept = l.terrains.get(key);
+  if (kept) return kept;
+  const made: Terrain[] = [...level.terrain];
+  for (let k = 0; k < l.changing.length; k++) {
+    if (!get(words, at, l.terrainAt + k, 1)) continue;
+    const i = l.changing[k]!;
+    made[i] = changesTo(level.terrain[i]!)!;
+  }
+  if (l.toggles.length && get(words, at, l.objectsAt - 1, 1)) {
+    for (const i of l.toggles) made[i] = level.terrain[i] === 'toggle-open' ? 'toggle-closed' : 'toggle-open';
+  }
+  if (l.terrains.size >= BOARDS_KEPT) l.terrains.clear();
+  l.terrains.set(key, made);
+  return made;
+}
+
+/** The objects the situation in the words holds, made once per pattern of bits and shared as terrainOf's are. */
+function objectsOf(words: Uint32Array, at: number, l: Layout, level: Level): readonly (ObjectKind | null)[] {
+  const width = l.hazardsAt - l.objectsAt;
+  if (width === 0) return level.objects;
+  const key = bitsKey(words, at, l.objectsAt, width);
+  const kept = l.objectLists.get(key);
+  if (kept) return kept;
+  const made: (ObjectKind | null)[] = [...level.objects];
+  let p = l.objectsAt;
+  for (const i of l.fixed) if (!get(words, at, p++, 1)) made[i] = null;
+  for (const i of l.blockOnly) made[i] = get(words, at, p++, 1) ? 'block' : null;
+  for (const i of l.blockOrObject) {
+    const v = get(words, at, p, 2);
+    p += 2;
+    if (v === 0) made[i] = null;
+    else if (v === 2) made[i] = 'block';
+  }
+  if (l.objectLists.size >= BOARDS_KEPT) l.objectLists.clear();
+  l.objectLists.set(key, made);
+  return made;
+}
+
+/** The situation packed in the words; `moves` is what it says (moves are not packed). Its terrain, objects and cells
+ *  are shared with other situations unpacked from the same layout, so nothing may write to them. */
 export function unpack(words: Uint32Array, at: number, layout: Layout, level: Level, moves = 0): State {
   const l = layout;
+  const cells = l.cells, none = l.none, cb = l.cellBits;
   let p = 0;
-  const take = (width: number): number => { const v = get(words, at, p, width); p += width; return v; };
-  const cellAt = (width: number) => { const v = take(width); return v === l.none ? null : { r: Math.floor(v / level.cols), c: v % level.cols }; };
-  const player = cellAt(l.cellBits)!;
-  const throwBack = cellAt(l.cellBits)!;
-  const minotaur = l.minotaur ? cellAt(l.cellBits) : null;
-  const cow = l.cow ? cellAt(l.cellBits) : null;
-  const stone = take(l.stoneBits);
-  const hearts = take(l.heartBits);
-  const relicsLeft = take(l.relicBits);
-  const pages = take(l.pageBits);
-  const keys = { red: 0, blue: 0, yellow: 0, green: 0 } as Record<KeyColor, number>;
-  KEY_COLORS.forEach((k, i) => { keys[k] = take(l.keyBits[i]!); });
-  const tools = { mirror: 0, cake: 0, cow: 0 } as Record<Tool, number>;
-  TOOL_LIST.forEach((t, i) => { tools[t] = take(l.toolBits[i]!); });
+  const player = cells[get(words, at, p, cb)]!; p += cb;
+  const throwBack = cells[get(words, at, p, cb)]!; p += cb;
+  let minotaur: Cell | null = null, cow: Cell | null = null;
+  if (l.minotaur) { const v = get(words, at, p, cb); p += cb; minotaur = v === none ? null : cells[v]!; }
+  if (l.cow) { const v = get(words, at, p, cb); p += cb; cow = v === none ? null : cells[v]!; }
+  const stone = get(words, at, p, l.stoneBits); p += l.stoneBits;
+  const hearts = get(words, at, p, l.heartBits); p += l.heartBits;
+  const relicsLeft = get(words, at, p, l.relicBits); p += l.relicBits;
+  const pages = get(words, at, p, l.pageBits); p += l.pageBits;
+  const kb = l.keyBits, tb = l.toolBits;
+  const red = get(words, at, p, kb[0]!); p += kb[0]!;
+  const blue = get(words, at, p, kb[1]!); p += kb[1]!;
+  const yellow = get(words, at, p, kb[2]!); p += kb[2]!;
+  const green = get(words, at, p, kb[3]!); p += kb[3]!;
+  const keys: Record<KeyColor, number> = { red, blue, yellow, green };
+  const mirror = get(words, at, p, tb[0]!); p += tb[0]!;
+  const cake = get(words, at, p, tb[1]!); p += tb[1]!;
+  const cows = get(words, at, p, tb[2]!); p += tb[2]!;
+  const tools: Record<Tool, number> = { mirror, cake, cow: cows };
   const gear: Gear[] = [];
-  for (const g of l.gear) if (take(1)) gear.push(g);
-  const terrain: Terrain[] = [...level.terrain];
-  for (const i of l.changing) if (take(1)) terrain[i] = changesTo(level.terrain[i]!)!;
-  if (l.toggles.length && take(1)) {
-    for (const i of l.toggles) terrain[i] = level.terrain[i] === 'toggle-open' ? 'toggle-closed' : 'toggle-open';
-  }
-  const objects: (ObjectKind | null)[] = [...level.objects];
-  for (const i of l.fixed) if (!take(1)) objects[i] = null;
-  for (const i of l.blockOnly) objects[i] = take(1) ? 'block' : null;
-  for (const i of l.blockOrObject) {
-    const v = take(2);
-    if (v === 0) objects[i] = null;
-    else if (v === 2) objects[i] = 'block';
-  }
+  for (let g = 0; g < l.gear.length; g++) if (get(words, at, p++, 1)) gear.push(l.gear[g]!);
+  const terrain = terrainOf(words, at, l, level);
+  const objects = objectsOf(words, at, l, level);
+  p = l.hazardsAt;
   const hazards: Hazard[] = [];
-  const cell = (i: number) => ({ r: Math.floor(i / level.cols), c: i % level.cols });
   for (let home = 0; home < l.hazardSlots; home++) {
-    const i = take(l.cellBits);
-    const dir = DIRS[take(2)]!;
-    if (i !== l.none) hazards.push({ kind: l.homeKinds[home]!, at: cell(i), dir, home });
+    const i = get(words, at, p, cb); p += cb;
+    const dir = DIRS[get(words, at, p, 2)]!; p += 2;
+    if (i !== none) hazards.push({ kind: l.homeKinds[home]!, at: cells[i]!, dir, home });
   }
-  hazards.sort((a, b) => a.at.r * level.cols + a.at.c - (b.at.r * level.cols + b.at.c));
-  for (const i of l.hazardCells) {
-    const v = take(l.hazardBits);
+  if (hazards.length > 1) hazards.sort((a, b) => a.at.r * level.cols + a.at.c - (b.at.r * level.cols + b.at.c));
+  for (let c = 0; c < l.hazardCells.length; c++) {
+    const v = get(words, at, p, l.hazardBits); p += l.hazardBits;
     if (!v) continue;
     const home = (v - 1) >>> 2;
-    hazards.push({ kind: l.homeKinds[home]!, at: cell(i), dir: DIRS[(v - 1) & 3]!, home });
+    hazards.push({ kind: l.homeKinds[home]!, at: cells[l.hazardCells[c]!]!, dir: DIRS[(v - 1) & 3]!, home });
   }
   return {
     // The order of `initial`'s keys: states of one shape keep `step` monomorphic.

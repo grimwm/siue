@@ -90,11 +90,20 @@ export function pruneFor(level: Level, layout: Layout): Prune {
   let D = 0;
   for (const f of fields) { at0.push(D); D += f.width; }
   const E = (D + 31) >>> 5;
+  // The fields as typed arrays, for the hot path: where each is in a situation, its width, whether it is a set of
+  // bits, where it is side by side; and the bits of a situation outside every field.
+  const F = fields.length;
+  const fPos = Int32Array.from(fields, f => f.pos);
+  const fWidth = Int32Array.from(fields, f => f.width);
+  const fSet = Uint8Array.from(fields, f => (f.set ? 1 : 0));
+  const fAt = Int32Array.from(at0);
+  const keep = Uint32Array.from(mask, m => ~m >>> 0);
 
   // Groups: the masked words and the first of their entries.
   let room = FIRST;
   let keys = new Uint32Array(room * W);
   let heads = new Int32Array(room);
+  let ghash = new Uint32Array(room);
   let groups = 0;
   /** Slots hold group + 1; 0 is empty. Kept at most half full. */
   let table = new Int32Array(FIRST * 2);
@@ -114,10 +123,11 @@ export function pruneFor(level: Level, layout: Layout): Prune {
     room *= 2;
     const k = new Uint32Array(room * W); k.set(keys); keys = k;
     const d = new Int32Array(room); d.set(heads); heads = d;
+    const gh = new Uint32Array(room); gh.set(ghash); ghash = gh;
     table = new Int32Array(room * 2);
     tmask = table.length - 1;
     for (let g = 0; g < groups; g++) {
-      let slot = hashOf(keys, g * W, W) & tmask;
+      let slot = ghash[g]! & tmask;
       while (table[slot] !== 0) slot = (slot + 1) & tmask;
       table[slot] = g + 1;
     }
@@ -143,11 +153,10 @@ export function pruneFor(level: Level, layout: Layout): Prune {
 
   /** Every field of `a` at least as good as `b`'s (fields side by side). */
   function atLeast(a: Uint32Array, aAt: number, b: Uint32Array, bAt: number): boolean {
-    for (let i = 0; i < fields.length; i++) {
-      const f = fields[i]!;
-      const va = get(a, aAt, at0[i]!, f.width);
-      const vb = get(b, bAt, at0[i]!, f.width);
-      if (f.set ? (va & vb) !== vb : va < vb) return false;
+    for (let i = 0; i < F; i++) {
+      const va = get(a, aAt, fAt[i]!, fWidth[i]!);
+      const vb = get(b, bAt, fAt[i]!, fWidth[i]!);
+      if (fSet[i] ? (va & vb) !== vb : va < vb) return false;
     }
     return true;
   }
@@ -155,14 +164,15 @@ export function pruneFor(level: Level, layout: Layout): Prune {
   return (s, words, at) => {
     if (estimate(s) === Infinity) return true;
     const g = s.moves;
-    for (let i = 0; i < W; i++) key[i] = words[at + i]! & ~mask[i]!;
+    for (let i = 0; i < W; i++) key[i] = words[at + i]! & keep[i]!;
     const h = hashOf(key, 0, W);
     cur.fill(0);
-    for (let i = 0; i < fields.length; i++) put(cur, 0, at0[i]!, fields[i]!.width, get(words, at, fields[i]!.pos, fields[i]!.width));
+    for (let i = 0; i < F; i++) put(cur, 0, fAt[i]!, fWidth[i]!, get(words, at, fPos[i]!, fWidth[i]!));
     let slot = h & tmask;
     let group = -1;
     for (let e = table[slot]!; e !== 0; slot = (slot + 1) & tmask, e = table[slot]!) {
       const k = e - 1;
+      if (ghash[k] !== h) continue;
       let same = true;
       for (let i = 0; i < W && same; i++) same = keys[k * W + i] === key[i];
       if (same) { group = k; break; }
@@ -175,6 +185,7 @@ export function pruneFor(level: Level, layout: Layout): Prune {
       }
       group = groups++;
       keys.set(key, group * W);
+      ghash[group] = h;
       table[slot] = group + 1;
       heads[group] = newEntry(g, -1);
       return false;

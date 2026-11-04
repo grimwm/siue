@@ -68,7 +68,13 @@ export const inside = (lv: Level, x: Cell): boolean => x.r >= 0 && x.c >= 0 && x
 export const index = (s: { level: Level }, x: Cell): number => x.r * s.level.cols + x.c;
 export const terrainAt = (s: State, x: Cell): Terrain => (inside(s.level, x) ? s.terrain[index(s, x)]! : 'wall');
 export const same = (a: Cell, b: Cell | null): boolean => !!b && a.r === b.r && a.c === b.c;
-export const next = (x: Cell, d: Dir): Cell => ({ r: x.r + DELTA[d][0], c: x.c + DELTA[d][1] });
+/** Cells are never written to, so one object serves each cell of a board up to 64 a side (the editor's largest) and
+ *  the row and column just outside it: a turn's steps make no new ones. */
+const CELL_SPAN = 66;
+const CELLS: readonly Cell[] = Array.from({ length: CELL_SPAN * CELL_SPAN }, (_, k) => ({ r: Math.floor(k / CELL_SPAN) - 1, c: (k % CELL_SPAN) - 1 }));
+export const cellAt = (r: number, c: number): Cell =>
+  (r >= -1 && c >= -1 && r < CELL_SPAN - 1 && c < CELL_SPAN - 1 ? CELLS[(r + 1) * CELL_SPAN + c + 1]! : { r, c });
+export const next = (x: Cell, d: Dir): Cell => cellAt(x.r + DELTA[d][0], x.c + DELTA[d][1]);
 export const gateOpen = (s: Pick<State, 'relicsLeft'>): boolean => s.relicsLeft === 0;
 
 /** The ids of the pages taken, in the level's `pages:` order. */

@@ -8,15 +8,20 @@ import type { Cell, Dir, HazardKind } from './tiles.ts';
 import { index, inside, next, same } from './state.ts';
 import type { Level } from './level.ts';
 import { blockMayEnter, settleBlock } from './step.ts';
-import { tAt, oAt } from './work.ts';
+import { setObject, setTerrain, tAt, oAt } from './work.ts';
 import type { GameEvent, Work } from './work.ts';
 
 /** A hazard stands on `x`. */
-export const hazardOn = (w: Work, x: Cell): boolean => w.hazards.length > 0 && w.hazards.some(h => same(x, h.at));
+export function hazardOn(w: Work, x: Cell): boolean {
+  const hs = w.hazards;
+  for (let i = 0; i < hs.length; i++) { const at = hs[i]!.at; if (at.r === x.r && at.c === x.c) return true; }
+  return false;
+}
 
 /** Something pressed the toggle button: every toggle wall opens or closes. */
 export function flip(w: Work, ev: GameEvent[]): void {
   w.terrain = w.terrain.map(t => (t === 'toggle-open' ? 'toggle-closed' : t === 'toggle-closed' ? 'toggle-open' : t));
+  w.ownTerrain = true;
   ev.push({ kind: 'flipped' });
 }
 
@@ -110,7 +115,7 @@ export function hazardLands(w: Work, i: number, ev: GameEvent[], keep?: Cell, in
   const h = w.hazards[i]!;
   const t = tAt(w, h.at);
   if (t === 'bomb') {
-    w.terrain[index(w, h.at)] = 'floor';
+    setTerrain(w, index(w, h.at), 'floor');
     w.hazards.splice(i, 1);
     ev.push({ kind: 'exploded', who: 'hazard', at: h.at });
     return 'gone';
@@ -134,7 +139,7 @@ export function fireRed(w: Work, button: number, ev: GameEvent[], keep?: Cell, i
   if (keep && same(front, keep)) return;
   if (m.template === 'block') {
     if (!blockMayEnter(w, front)) return;
-    w.objects[index(w, front)] = 'block';
+    setObject(w, index(w, front), 'block');
     ev.push({ kind: 'cloned', what: 'block', at: front });
     settleBlock(w, front, m.dir, keep, ev, inPhase);
     return;

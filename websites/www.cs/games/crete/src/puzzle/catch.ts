@@ -9,7 +9,7 @@ import type { Cell, HazardKind } from './tiles.ts';
 import { inside, index, next, same } from './state.ts';
 import type { Level } from './level.ts';
 import { hazardRoom } from './pieces.ts';
-import { tAt } from './work.ts';
+import { setTerrain, tAt } from './work.ts';
 import type { GameEvent, Work } from './work.ts';
 
 export type CatchCause = 'minotaur' | 'hazard' | 'bomb';
@@ -25,7 +25,7 @@ export function homeCell(level: Level, home: number): Cell {
 /** Theseus leaves `from`, by any means: a pop-up wall there rises. Every change of `w.player` goes through it. */
 export function leave(w: Work, from: Cell, ev: GameEvent[]): void {
   if (tAt(w, from) !== 'popup') return;
-  w.terrain[index(w, from)] = 'wall';
+  setTerrain(w, index(w, from), 'wall');
   ev.push({ kind: 'rose', at: from });
 }
 

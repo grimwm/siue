@@ -193,6 +193,7 @@ export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {})
   const every = Math.max(1, room.every ?? 65_536);
   try {
     const buf = new Uint32Array(layout.words);
+    const from = new Uint32Array(layout.words);
     pack(initial(level), layout, buf, 0);
     store.add(buf, 0, -1, 0, 0);
     if (store.size >= cap) return null;
@@ -200,15 +201,15 @@ export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {})
     // Every store hands out ids in the order it stores situations, so they are the breadth-first queue.
     for (let id = 0; id < store.size; id++) {
       if (++expanded % every === 0) yield { expanded, stored: store.size, bestF: 0, startH: 0 };
-      store.words(id, buf, 0);
-      const s = unpack(buf, 0, layout, level, 0);
+      store.words(id, from, 0);
+      const s = unpack(from, 0, layout, level, 0);
       for (const c of ORDER) {
         if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
         const x = step(s, ACTIONS[c]!);
         if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur')) return true;
         const n = x.state;
         if (noTurn(s, n) || n.outcome !== 'playing') continue;
-        pack(n, layout, buf, 0);
+        pack(n, layout, buf, 0, s, from, 0);
         store.add(buf, 0, id, c, 0);
         if (store.size >= cap) return null;
       }

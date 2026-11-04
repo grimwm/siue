@@ -92,6 +92,8 @@ function begin(start: State, opts: SearchOptions, store: NodeStore): Batch {
   const layout = layoutOf(level);
   const estimate = estimateOf(level);
   const buf = new Uint32Array(layout.words);
+  /** The node being expanded, packed: its children's packing copies what they share with it. */
+  const from = new Uint32Array(layout.words);
 
   // Per node: f and h (h -1 when infinite: never expanded), its heap position (-1 when not in the heap), a win, and
   // the hearts left.
@@ -172,14 +174,14 @@ function begin(start: State, opts: SearchOptions, store: NodeStore): Batch {
       const f = fs[id]!;
       const g = f - hs[id]!;
       if (++expanded % every === 0) paused = { expanded, stored: store.size, bestF: f, startH };
-      store.words(id, buf, 0);
-      const s = unpack(buf, 0, layout, level, g);
+      store.words(id, from, 0);
+      const s = unpack(from, 0, layout, level, g);
       for (const c of ORDER) {
         if (c > WAIT_CODE && s.tools[TOOL_LIST[c - WAIT_CODE - 1]!] <= 0) continue;
         const r = step(s, ACTIONS[c]!);
         const n = r.state;
         if (noTurn(s, n) || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
-        pack(n, layout, buf, 0);
+        pack(n, layout, buf, 0, s, from, 0);
         if (prune && prune(n, buf, 0)) continue;
         const size = store.size;
         const nid = store.add(buf, 0, id, c, g + 1);

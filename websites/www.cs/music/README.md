@@ -250,11 +250,12 @@ SIUED1 bundle of `score.json` and the new vocal takes it names, from any account
 only as the piece's next draft; 409 `stale` with `latest` otherwise, 409 `exists`, 413 `over_quota` with `room` and
 `message`, 422 `bad_take` or `missing_take`, 413 `take_too_long`, 507 `low_disk`; a 201 carries `room`),
 `take.php?file=` (one of the account's vocal takes) and `convert-take.php?from=&to=` (POST, a Good To The Ear copy of a
-saved Perfect take, as long as it to 0.1 s: every draft moves onto it). Signed out, a page goes to
+saved Perfect take, as long as it to 0.1 s: every draft moves onto it) and `look.php` (POST `look`, the composer's Colors
+And Style as `<colors> <style> <lights>`, such as `tape tape dark`, kept for the account; 400 `bad_look` otherwise). Signed out, a page goes to
 `login.php?next=` (the page, when sign-in may return to it) and a data route answers 401
 `{"error":"signed_out"}`. Each POST's answer carries the next CSRF token. The page shells'
 `<body>` carries `data-note-max` (the largest note), `data-room` (bytes the studio may still
-store), `data-score-only` (`1` when drafts hold a score and no MusicXML), `data-account-has-key` (`1` once a keyring is stored) and `data-vocal-quality` (`perfect` or `ear`, the quality Save To Studio picks first).
+store), `data-score-only` (`1` when drafts hold a score and no MusicXML), `data-account-has-key` (`1` once a keyring is stored) and `data-vocal-quality` (`perfect` or `ear`, the quality Save To Studio picks first); the compose page's adds `data-composer-look` once the account has chosen a look.
 
 API routes (Bearer key, HTTPS; `lib/KeyGate.php`): an AI key (`lib/AiKeys.php`, the
 `studio_keys` table: per account, at most 10 active, 60 requests a minute, scopes

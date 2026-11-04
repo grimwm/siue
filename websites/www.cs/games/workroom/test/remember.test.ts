@@ -23,6 +23,7 @@ function server() {
   const api: PageApi = {
     takeBytes: async () => new Uint8Array(0),
     convertTake: async () => ({ status: 200, data: {} }),
+    saveLook: async () => {},
     upload: async () => { state.uploads++; return { kind: 'sent', id: '0'.repeat(32) }; },
     list: async () => ({ notes: [], unreadable: 0 }),
     bytes: async () => new Uint8Array(),

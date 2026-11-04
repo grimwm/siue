@@ -909,6 +909,7 @@ export function Composer(p: ComposerProps) {
     const made = addPart(doc, e);
     if (!made) { say('A piece holds at most 16 tracks.'); return; }
     apply(made.doc, `Added ${e.name}: an empty track. Tap its grid to put notes in.`);
+    setStartOpen(false);
     setSelState(made.id);
     setOpen(o => new Set(o).add(made.id));
   };

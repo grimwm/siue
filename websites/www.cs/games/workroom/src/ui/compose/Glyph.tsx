@@ -57,6 +57,11 @@ const GLYPHS: Record<string, () => JSX.Element | JSX.Element[]> = {
   voice: () => [S('M4 12h2M8 8v8M12 5v14M16 8v8M20 11v2')],
   live: () => [<circle cx="7" cy="16" r="3" />, <circle cx="17" cy="16" r="3" />, S('M4 6h16M12 6v6')],
   build: () => [S('M3 19 21 5'), S('M15 5h6v6')],
+  reel: () => [<circle cx="12" cy="12" r="9" />, <circle cx="12" cy="12" r="1.6" fill="currentColor" />, <circle cx="12" cy="6.8" r="1.9" />, <circle cx="16.5" cy="14.6" r="1.9" />, <circle cx="7.5" cy="14.6" r="1.9" />],
+  dial: () => [<circle cx="12" cy="13" r="7" />, S('M12 13 8.5 9.5'), S('M3.5 6.5l1.6 1.4M20.5 6.5l-1.6 1.4M12 2.5v2.2')],
+  sliders: () => [S('M4 7h10M18 7h2M4 17h4M12 17h8'), <circle cx="16" cy="7" r="2.2" />, <circle cx="10" cy="17" r="2.2" />],
+  metro: () => [S('M9.5 3.5h5l4 17h-13z'), S('M12 15.5 17.5 6'), <path d="M8 15.5h8" stroke-width="1.4" />],
+  song: () => [S('M9 18V6l10-2v12'), <circle cx="6.5" cy="18" r="2.5" />, <circle cx="16.5" cy="16" r="2.5" />],
 };
 
 /** One of the composer's icons, `size` pixels square; decorative (the button around it carries the name). */

@@ -127,6 +127,11 @@ final class Store
         $this->db->exec('CREATE TABLE IF NOT EXISTS music_draft_takes (account_id INTEGER NOT NULL, piece TEXT NOT NULL, version INTEGER NOT NULL, file TEXT NOT NULL, PRIMARY KEY (account_id, piece, version, file))');
         $this->db->exec('CREATE INDEX IF NOT EXISTS music_draft_takes_file ON music_draft_takes(account_id, file)');
         $this->db->exec("CREATE TABLE IF NOT EXISTS music_settings (account_id INTEGER PRIMARY KEY, vocal_quality TEXT NOT NULL DEFAULT 'perfect')");
+        // The composer's look ("tape tape dark": colors, style, lights), on a settings row made before it existed too.
+        $columns = array_column($this->db->query('PRAGMA table_info(music_settings)')->fetchAll(\PDO::FETCH_ASSOC), 'name');
+        if (!in_array('composer_look', $columns, true)) {
+            $this->db->exec('ALTER TABLE music_settings ADD COLUMN composer_look TEXT');
+        }
     }
 
     public const VOCAL_QUALITIES = ['perfect', 'ear'];
@@ -146,6 +151,27 @@ final class Store
             return false;
         }
         $this->db->prepare('INSERT INTO music_settings (account_id, vocal_quality) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET vocal_quality = excluded.vocal_quality')->execute([$this->account, $quality]);
+        return true;
+    }
+
+    /** A composer look: its colors, its style and its lights, as src/compose/looks.ts writes them. */
+    public const COMPOSER_LOOK = '/^(tape|rack|night|site|original) (tape|rack|night|site|plain) (dark|light)$/';
+
+    /** The look the composer opens with for this account, or null when it never chose one. */
+    public function composerLook(): ?string
+    {
+        $q = $this->db->prepare('SELECT composer_look FROM music_settings WHERE account_id = ?');
+        $q->execute([$this->account]);
+        $v = $q->fetchColumn();
+        return is_string($v) && preg_match(self::COMPOSER_LOOK, $v) === 1 ? $v : null;
+    }
+
+    public function setComposerLook(string $look): bool
+    {
+        if (preg_match(self::COMPOSER_LOOK, $look) !== 1) {
+            return false;
+        }
+        $this->db->prepare('INSERT INTO music_settings (account_id, composer_look) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET composer_look = excluded.composer_look')->execute([$this->account, $look]);
         return true;
     }
 

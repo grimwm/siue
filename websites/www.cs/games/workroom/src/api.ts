@@ -62,6 +62,8 @@ export interface PageApi {
   takeBytes(file: string): Promise<Uint8Array<ArrayBuffer>>;
   /** Replaces the held take `from` with `to` (Good To The Ear, made in the page) in every draft: the server's status and answer. */
   convertTake(from: string, to: string, bytes: Uint8Array<ArrayBuffer>): Promise<{ status: number; data: Record<string, unknown> }>;
+  /** Keeps the composer's look ("tape tape dark", compose/looks.ts) for the account. */
+  saveLook(look: string): Promise<void>;
 }
 
 type Reply = Awaited<ReturnType<Fetch>>;
@@ -216,6 +218,10 @@ export function createApi(rawFetch: Fetch, csrf: string): PageApi {
       const { reply, data } = await post('delete-draft.php', 'application/x-www-form-urlencoded', encoder.encode(form));
       if (!reply.ok) throw failed(reply);
       return typeof data['deleted'] === 'number' ? data['deleted'] : 0;
+    },
+    async saveLook(look) {
+      const { reply } = await post('look.php', 'application/x-www-form-urlencoded', encoder.encode(`look=${encodeURIComponent(look)}`));
+      if (!reply.ok) throw failed(reply);
     },
   };
 }

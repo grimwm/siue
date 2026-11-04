@@ -41,6 +41,7 @@ const STUDENT4 = 'composer4@siue.edu';
 const STUDENT5 = 'composer5@siue.edu';
 const STUDENT6 = 'composer6@siue.edu';
 const STUDENT7 = 'composer7@siue.edu';
+const STUDENT8 = 'composer8@siue.edu';
 const QUARTET = join(import.meta.dirname, '..', '..', 'games', 'workroom', 'test', 'fixtures', 'import', 'musescore-quartet.musicxml');
 const GUIDE_VIEWS = ['story', 'roll', 'sound', 'sheet', 'energy'] as const;
 const shots = process.env.SHOTS_DIR;
@@ -276,8 +277,10 @@ test('sheet music, import and export, and the piece page\'s engraved sheet', asy
     await page.goto(`${base}music/compose.php?id=my-first-tune`);
     await expect(page.locator('[data-track-head]')).toHaveCount(2);
 
-    // The Sheet view: the chosen track engraved, and no piano roll.
+    // The Sheet view: every track on the timeline's scale, the chosen track engraved behind its button, and no piano roll.
     await view(page, 'sheet');
+    await expect(page.locator('[data-sheet-row]')).toHaveCount(2);
+    await page.locator('[data-engraved-toggle]').click();
     await expect(page.locator('[data-part]')).toHaveCount(2);
     await page.locator('[data-part="cello"]').click();
     await expect(page.locator('[data-part="cello"]')).toHaveAttribute('aria-pressed', 'true');
@@ -592,7 +595,7 @@ test('speed, loudness and Exact Pitch bends are saved as a schema 2 draft', asyn
 
     // The Mix view's Speed And Loudness: the piece's speed, Quick 128, then a gradual slow-down to 66 at a later bar.
     await view(page, 'mix');
-    await expect(page.locator('[data-part="cello"]')).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('[data-strip-more="cello"]').click();
     const panel = page.locator('[data-speed-panel]');
     await panel.locator('[data-piece-speed="128"]').click();
     await expect(page.locator('[data-draft-line]')).toContainText('128 BPM');
@@ -654,6 +657,7 @@ test('on a phone, the Mix view fits and a held key never moves the page', async 
     await signInAt(page, base, 'music', STUDENT3);
     await page.goto(`${base}music/compose.php?id=speed-test`);
     await view(page, 'mix');
+    await page.locator('[data-strip-more]').first().click();
     await expect(page.locator('[data-speed-panel]')).toBeVisible();
     await shot(page, 'phone-speed-loudness');
     const width = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -709,14 +713,14 @@ test('Sound, Voice Effects, the Room and the limiter are heard and saved as scor
       input.value = String(v);
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }, value);
-    await page.locator('[data-part="cello"]').click();
+    await page.locator('[data-strip-more="cello"]').click();
     await slide('pan', -0.5);
     await slide('bass', 6);
     await slide('echo', 0.4);
     await slide('warmth', 0.3);
 
     // Voice Effects on the horn: a Vocoder with the cello as its carrier, then Auto-Tune.
-    await page.locator('[data-part="french-horn"]').click();
+    await page.locator('[data-strip-more="french-horn"]').click();
     await sound.locator('[data-voice-pick]').selectOption('vocoder');
     await sound.locator('[data-voice-add]').click();
     await expect(sound.locator('[data-carrier]')).toHaveValue('cello');
@@ -1372,6 +1376,151 @@ test('the redesign: Hear, tracks open and closed, Type Notes, chords, box select
     await expect(page.locator('[data-grid]')).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no sideways scroll').toBeLessThanOrEqual(await page.evaluate(() => window.innerWidth));
     await shot(page, 'phone-open-tracks');
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
+/** The composer's own look and layout at 390px: no sideways page scroll. */
+const noSideways = async (page: Page): Promise<void> => {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no sideways scroll').toBeLessThanOrEqual(await page.evaluate(() => window.innerWidth));
+};
+const knob = (page: Page, strip: string, name: string, value: number) => page.locator(`[data-strip="${strip}"] [data-knob="${name}"]`).evaluate((el, v) => {
+  const input = el as HTMLInputElement;
+  input.value = String(v);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}, value);
+
+test('Start A Song, the Song settings, Mix, Sheet and Colors And Style', async ({ browser, baseURL }) => {
+  test.setTimeout(300_000);
+  const base = baseURL!;
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await context.addInitScript(countPlays);
+  try {
+    const page = await context.newPage();
+    const errors = watchErrors(page);
+    await signInAt(page, base, 'music', STUDENT8);
+    await newPiece(page, base, 'Band Test');
+    const composer = page.locator('[data-composer]');
+    await expect(composer).toHaveAttribute('data-colors', 'tape');
+    await expect(composer).toHaveAttribute('data-style', 'tape');
+    await expect(composer).toHaveAttribute('data-mode', 'dark');
+
+    // Start A Song opens on a new piece, with the Try It coach above it; Full Band brings four tracks, two sections and a riser.
+    await expect(page.locator('[data-start-song]')).toBeVisible();
+    await expect(page.locator('[data-coach]')).toBeVisible();
+    await shot(page, 'pr2-1440-start');
+    await page.locator('[data-template="band"]').click();
+    await expect(page.locator('[data-start-song]')).toHaveCount(0);
+    await expect(page.locator('[data-track-head]')).toHaveCount(4);
+    await expect(page.locator('[data-section]', { hasText: 'Verse' })).toHaveCount(1);
+    await expect(page.locator('[data-section]', { hasText: 'Chorus' })).toHaveCount(1);
+    expect(await clipCount(page)).toBeGreaterThan(0);
+    await undo(page);
+    await expect(page.locator('[data-track-head]')).toHaveCount(0);
+    await redo(page);
+    await expect(page.locator('[data-track-head]')).toHaveCount(4);
+
+    // The Song popover: the time signature redraws the bars, bars go in and out, a tempo change holds from bar 5.
+    await page.locator('[data-transport] [data-song]').click();
+    const song = page.locator('[data-pop="song"]');
+    await expect(song.locator('[data-song-length]')).toContainText('8 bars');
+    await song.locator('[data-meter-id="3/4"]').click();
+    await expect(page.locator('[data-draft-line]')).toContainText('3/4');
+    await song.locator('[data-meter-id="4/4"]').click();
+    await expect(page.locator('[data-draft-line]')).toContainText('4/4');
+    await song.locator('[data-bar-add-end]').click();
+    await expect(song.locator('[data-song-length]')).toContainText('9 bars');
+    await song.locator('[data-bar-remove-end]').click();
+    await expect(song.locator('[data-song-length]')).toContainText('8 bars');
+    await shot(page, 'pr2-1440-song');
+    await song.getByRole('button', { name: 'Close' }).click();
+    const ruler = (await page.locator('[data-ruler]').boundingBox())!;
+    await page.mouse.click(ruler.x + 16 * (await ppb(page)) + 4, ruler.y + ruler.height / 2);
+    await page.locator('[data-transport] [data-song]').click();
+    await song.getByRole('button', { name: 'Faster' }).click();
+    await song.locator('[data-tempo-at]').click();
+    await expect(song.locator('[data-tempo-change="5"]')).toBeVisible();
+    await expect(page.locator('[data-tempo-mark="5"]')).toBeVisible();
+    await song.locator('[data-song-pref="countIn"]').click();
+    await expect(song.locator('[data-song-pref="countIn"]')).toHaveAttribute('aria-pressed', 'true');
+    await song.getByRole('button', { name: 'Close' }).click();
+    await page.locator('[data-transport] [data-click]').click();
+    await expect(page.locator('[data-transport] [data-click]')).toHaveAttribute('aria-pressed', 'true');
+
+    // Mix: a strip per track; a strip's Volume is an edit; the meters move while the song plays.
+    await view(page, 'mix');
+    await expect(page.locator('[data-strip]')).toHaveCount(4);
+    const strip = await page.locator('[data-strip]').first().getAttribute('data-strip');
+    await knob(page, strip!, 'volume', -6);
+    await expect(page.locator('[data-transport] [data-undo]')).not.toHaveAttribute('data-undo', '0');
+    await play(page).click();
+    await expect(play(page)).toHaveAttribute('aria-label', 'Stop', { timeout: 60_000 });
+    await expect.poll(() => page.locator('[data-meter]').evaluateAll(els => Math.max(...els.map(e => Number.parseFloat((e as HTMLElement).style.getPropertyValue('--lvl') || '0')))), { timeout: 20_000 }).toBeGreaterThan(0);
+    await shot(page, 'pr2-1440-mix');
+    await play(page).click();
+    await expect(page.locator('[data-fx-item="riser"]')).toBeVisible();
+    await page.locator('[data-fx-item="riser"] [data-show-on-timeline]').click();
+    await expect(page.locator('[data-fx-settings="riser"]')).toBeVisible();
+    await view(page, 'mix');
+    await expect(page.locator('[data-decks]')).toBeVisible();
+    await page.locator('[data-place-crossfade]').click();
+    await expect(page.locator('[data-place-banner]')).toBeVisible();
+    await page.locator('[data-place-banner]').getByRole('button', { name: 'Cancel' }).click();
+
+    // Sheet: every track on the timeline's scale, note names, a tap hears a note.
+    await view(page, 'sheet');
+    await expect(page.locator('[data-sheet-row]')).toHaveCount(4);
+    await expect(page.locator('[data-sheet-playhead]')).toHaveCount(1);
+    await page.locator('[data-sheet-note]').first().click();
+    await shot(page, 'pr2-1440-sheet');
+
+    // Colors And Style: two separate choices, remembered for the account.
+    await page.locator('[data-transport] [data-looks]').click();
+    const looks = page.locator('[data-pop="looks"]');
+    await looks.locator('[data-look-colors="night"]').click();
+    await looks.locator('[data-look-style="rack"]').click();
+    await expect(composer).toHaveAttribute('data-colors', 'night');
+    await expect(composer).toHaveAttribute('data-style', 'rack');
+    await shot(page, 'pr2-1440-looks');
+    await looks.getByRole('button', { name: 'Close' }).click();
+
+    // Saved: the tempo change is the score's; the look comes back after a reload.
+    await save(page);
+    await expect(status(page)).toHaveText('Saved as draft 1.');
+    const score = await scoreOf<{ tempo: { bar: number; bpm: number }[]; lanes: unknown[] }>(page, 'band-test', 1);
+    expect(score.lanes).toHaveLength(4);
+    expect(score.tempo.map(t => t.bar)).toContain(5);
+    await page.evaluate(() => localStorage.removeItem('workroom-composer-look'));
+    await page.reload();
+    await expect(composer).toHaveAttribute('data-colors', 'night');
+    await expect(composer).toHaveAttribute('data-style', 'rack');
+
+    // A phone: every view fits.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await noSideways(page);
+    await view(page, 'mix');
+    await noSideways(page);
+    await shot(page, 'pr2-390-mix');
+    await view(page, 'sheet');
+    await noSideways(page);
+    await shot(page, 'pr2-390-sheet');
+    await view(page, 'compose');
+    await pieceMenu(page, 'Song');
+    await noSideways(page);
+    await shot(page, 'pr2-390-song');
+    await page.locator('[data-pop="song"]').getByRole('button', { name: 'Close' }).click();
+    await pieceMenu(page, 'Colors And Style');
+    await page.locator('[data-pop="looks"] [data-look-colors="tape"]').click();
+    await page.locator('[data-pop="looks"] [data-look-style="tape"]').click();
+    await shot(page, 'pr2-390-looks');
+    await page.locator('[data-pop="looks"]').getByRole('button', { name: 'Close' }).click();
+    await pieceMenu(page, 'Start A Song');
+    await expect(page.locator('[data-start-song]')).toBeVisible();
+    await noSideways(page);
+    await shot(page, 'pr2-390-start');
     expect(errors).toEqual([]);
   } finally {
     await context.close();

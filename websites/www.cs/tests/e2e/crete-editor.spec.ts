@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 /** Every Dictionary entry met before the page loads, so no first card (src/ui/meet.tsx) stops these specs' levels; the
- *  look pinned to Classic, whose flat board these specs paint (crete-editor-looks.spec.ts paints in Modern). */
+ *  look pinned to Classic, whose sheet these specs paint (crete-editor-looks.spec.ts paints in Modern). */
 const allMet = (): void => {
   localStorage.setItem('crete-met', '["*"]');
   localStorage.setItem('crete-look', 'classic');
@@ -20,7 +20,7 @@ interface CreteTest {
   game: { run: { now: { outcome: string } } };
   TRIALS: { text: string }[];
   solve(s: unknown): { solved: boolean; line: Act[] };
-  editor: { draft: { rows: number; cols: number; cells: string[] }; load(text: string): void };
+  editor: { draft: { rows: number; cols: number; cells: string[] }; load(text: string): void; classic: { at(c: number, r: number): { x: number; y: number } | null } | null };
 }
 /** The page's window with its test hook (a cast in each evaluated function, which runs in the page). */
 type Hooked = { __creteTest: CreteTest };
@@ -57,13 +57,11 @@ async function winWithLine(page: Page, letters: string): Promise<void> {
   expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run.now.outcome)).toBe('won');
 }
 
-/** Paints one cell with the selected brush, as a click on the editor's board does (cells are square, the board's
- *  extra height is the rise above the first row). */
+/** Paints one cell with the selected brush, as a click on the editor's Classic board does, where the turned and
+ *  tilted sheet shows the cell's centre. */
 async function paint(page: Page, r: number, c: number): Promise<void> {
-  const box = (await page.locator('#editor-stage').boundingBox())!;
-  const { rows, cols } = await page.evaluate(() => (window as unknown as Hooked).__creteTest.editor.draft);
-  const cell = box.width / cols;
-  await page.mouse.click(box.x + (c + 0.5) * cell, box.y + box.height - (rows - r - 0.5) * cell);
+  const p = await page.evaluate(([rr, cc]) => (window as unknown as Hooked).__creteTest.editor.classic!.at(cc!, rr!), [r, c]);
+  await page.mouse.click(p!.x, p!.y);
 }
 
 /** Trial 9 with no title, intro or page, as a link carries a level. */

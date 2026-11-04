@@ -1,20 +1,19 @@
 /* The Island of Crete: the level editor, a layer over the game frame (#editor-root, which holds its own board
  * canvas #editor-stage). It draws the draft as the game would at its start, paints it with the mouse or one
- * finger (a drag paints every cell it crosses and is one undo step; two fingers scroll a big board), fits the
- * board as the game's does, and answers the editor's keys while src/ui.ts hands them over. The draft and its
- * undo history live for the page's life: leaving the editor by Try it or Q keeps them. It shows the draft in either
- * look: Classic, this flat canvas, or Modern, the game's 3D board (modern-view.ts, loaded only once Modern is chosen);
- * the bar's Classic and Modern buttons, or B, switch between them and set the game's own look setting. It keeps the author's best
+ * finger (a drag paints every cell it crosses and is one undo step; two fingers move the view), and answers the
+ * editor's keys while src/ui.ts hands them over. The draft and its undo history live for the page's life: leaving the
+ * editor by Try it or Q keeps them. It shows the draft in either look: Classic, the game's tilted sheet with its
+ * compass camera (classic-view.ts), or Modern, the game's 3D board (modern-view.ts, loaded only once Modern is
+ * chosen); the bar's Classic and Modern buttons, or B, switch between them and set the game's own look setting, and
+ * the heading and tilt go across with the switch, as in the game. It keeps the author's best
  * for each level it tried: the fewest moves of a try won without Ariadne's thread, by the level's share text, so
  * an edit leaves a level with no best until it is won again. Needs the DOM lib. */
 import { validInitials } from '../../../_kit/initials.ts';
 import { isBackKey, typesText } from '../../../_kit/keys.ts';
 import { oneOf, pref, text as textCodec } from '../../../_kit/prefs.ts';
 import { browserStorage } from '../../../_kit/ports.browser.ts';
-import { createBoard } from '../board.ts';
-import { boardRows, drawList } from '../board-plan.ts';
-import type { Atlas, Draw, Figures } from '../board-plan.ts';
-import { cellFor } from '../fit.ts';
+import { drawList } from '../board-plan.ts';
+import type { Atlas, Figures } from '../board-plan.ts';
 import { initial } from '../puzzle/state.ts';
 import type { State } from '../puzzle/state.ts';
 import type { Level } from '../puzzle/level.ts';
@@ -35,10 +34,13 @@ import type { History } from './history.ts';
 import { newDraft, paint, resize, toLevel, toText } from './model.ts';
 import type { Brush, Draft } from './model.ts';
 import { HIDDEN_MARK, dirOf, nextDir } from './palette.tsx';
+import { createClassicView } from './classic-view.ts';
+import type { ClassicView } from './classic-view.ts';
 import { createModernView, drawModern } from './modern-view.ts';
 import type { ModernView } from './modern-view.ts';
 import type { ModernBoard } from '../modern/board3d.ts';
 import type { IconSheet } from '../icons-models.ts';
+import type { Heading } from '../modern/compass.ts';
 import type { Look, WallMode } from '../settings.ts';
 
 export interface Editor {
@@ -56,6 +58,8 @@ export interface Editor {
   bestFor(text: string): number | null;
   /** The Modern board while the editor shows it, else null; for tests. */
   readonly modern: ModernBoard | null;
+  /** The Classic view while the editor shows it, else null; for tests. */
+  readonly classic: Pick<ClassicView, 'view' | 'setView' | 'zoom' | 'at'> | null;
 }
 
 export interface EditorDeps {
@@ -139,8 +143,6 @@ export function createEditor(deps: EditorDeps): Editor {
   const holder = part(root, root, 'editor-board', 'div');
   const canvas = part(root, holder, 'editor-stage', 'canvas') as HTMLCanvasElement;
   const panel = part(root, root, 'editor-panel', 'div');
-  const board = createBoard(canvas, atlas, image);
-  const ctx = canvas.getContext('2d');
   const owner = pref(OWNER_PREF, 'off', oneOf(['on', 'off'], 'off'), browserStorage());
   const savedInitials = pref(INITIALS_PREF, '', textCodec, browserStorage());
 
@@ -159,11 +161,8 @@ export function createEditor(deps: EditorDeps): Editor {
   let sharingText: string | null = null;
   let drawer = false;
   let shown = false;
-  /** The draw list and the draft it was made for. */
-  let list: Draw[] = [];
-  let listFor: Draft | null = null;
-  let marks: { r: number; c: number; mark: string }[] = [];
-  let sized = '';
+  /** The draft the Classic board last showed. */
+  let classicFor: Draft | null = null;
   /** The stroke in progress: its pointer (-1 for the Modern board's) and the last cell it painted. */
   let stroke: { id: number; last: Cell } | null = null;
   /** The look the editor shows: Classic until the page's look setting says Modern and the 3D board has loaded. */
@@ -174,8 +173,14 @@ export function createEditor(deps: EditorDeps): Editor {
   /** The toast has said Modern cannot start here. */
   let noModernSaid = false;
   const modernOn = (): boolean => look === 'modern' && !!modernView?.board;
-  /** Touches on the board, for telling a one-finger stroke from a two-finger scroll. */
-  const touches = new Map<number, { x: number; y: number }>();
+  /** The brush on either look's board: a drag that starts off the board starts its stroke where it first reaches a
+   *  cell. */
+  const painter = {
+    stroke: (at: Cell, first: boolean) => (first || !stroke ? beginStroke(-1, at) : strokeTo(-1, at)),
+    end: () => { if (stroke?.id === -1) endStroke(); },
+    drop: () => dropStroke(),
+  };
+  const classic: ClassicView = createClassicView({ holder, canvas, atlas, image, hidden: () => !shown || modernOn(), painter });
   /** The author's best by share text. */
   const bests = new Map<string, number>();
   const checker = createChecker(deps.start ?? (text => startSearch(text, 'rate')), () => { endStoppedShare(); clearStoppedMessage(); drawPanel(); });
@@ -191,63 +196,18 @@ export function createEditor(deps: EditorDeps): Editor {
       }
       return;
     }
-    if (listFor !== live) {
+    if (classicFor !== live) {
+      classicFor = live;
       const s = initial(toLevel(live));
-      list = drawList(s, restingFigures(s), atlas, 0);
-      marks = hiddenMarks(live);
-      listFor = live;
-    }
-    if (sized !== `${live.cols}x${live.rows}`) fit();
-    else paintBoard();
-  }
-
-  /** The board, then a letter in a dark tab on each cell the game would draw as something else. */
-  function paintBoard(): void {
-    board.paint(list);
-    if (!ctx || marks.length === 0) return;
-    const cell = canvas.width / live.cols;
-    const top = canvas.height - live.rows * cell;
-    const size = Math.max(8, Math.round(cell * 0.45));
-    ctx.font = `bold ${size}px system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    for (const m of marks) {
-      const x = (m.c + 0.5) * cell, y = top + (m.r + 0.5) * cell;
-      ctx.fillStyle = 'rgba(1, 4, 9, 0.75)';
-      ctx.fillRect(x - size * 0.6, y - size * 0.6, size * 1.2, size * 1.2);
-      ctx.fillStyle = '#f0b429';
-      ctx.fillText(m.mark, x, y);
+      classic.draw(live.cols, live.rows, drawList(s, restingFigures(s), atlas, 0), hiddenMarks(live));
     }
   }
 
-  /** The cell size: as the game's board (src/ui.ts fit), the largest whole pixel count that fits, and a big draft
-   *  keeps cells of at least 32 px and scrolls. */
+  /** Lays the board out again for the space it has. */
   function fit(): void {
     if (!shown) return;
-    if (modernOn()) {
-      modernView!.resize();
-      return;
-    }
-    const { cols, rows } = live;
-    setScrolls(false);
-    const bs = getComputedStyle(holder);
-    const w = (holder.clientWidth || 0) - parseFloat(bs.paddingLeft || '0') - parseFloat(bs.paddingRight || '0');
-    const h = (holder.clientHeight || 0) - parseFloat(bs.paddingTop || '0') - parseFloat(bs.paddingBottom || '0');
-    const fitted = cellFor(w, h, cols, rows, 0, boardRows(live, atlas));
-    let cell = Math.max(1, fitted.cell);
-    board.size(cols, rows, cell);
-    while (!fitted.scrolls && cell > 1 && (parseFloat(canvas.style.width) > w || parseFloat(canvas.style.height) > h)) {
-      cell--;
-      board.size(cols, rows, cell);
-    }
-    setScrolls(fitted.scrolls);
-    sized = `${cols}x${rows}`;
-    if (listFor === live) paintBoard();
-  }
-
-  function setScrolls(on: boolean): void {
-    const rest = holder.className.split(' ').filter(c => c && c !== 'scrolls');
-    holder.className = (on ? [...rest, 'scrolls'] : rest).join(' ');
+    if (modernOn()) modernView!.resize();
+    else classic.fit();
   }
 
   function drawPanel(): void {
@@ -336,12 +296,15 @@ export function createEditor(deps: EditorDeps): Editor {
   function setLook(next: Look, store: boolean): void {
     endStroke();
     if (store) deps.look?.set(next);
+    // One view for both looks: the heading and tilt go across with the switch; the zoom goes back to the whole board.
+    const from: Heading | null = modernOn() ? { yaw: modernView!.board!.yaw(), pitch: modernView!.board!.pitch() } : null;
     look = next;
     if (next === 'classic') {
       modernView?.show(false);
-      sized = '';
       drawPanel();
       drawBoard();
+      if (from) classic.setView(from.yaw, from.pitch);
+      else classic.fit();
       return;
     }
     drawPanel();
@@ -349,12 +312,7 @@ export function createEditor(deps: EditorDeps): Editor {
     if (!m) return;
     modernView ??= createModernView({
       holder, load: m.load, atlas, image, icons: m.icons, walls: m.walls, hidden: () => !shown,
-      painter: {
-        // A drag that starts off the board starts its stroke where it first reaches a cell.
-        stroke: (at, first) => (first || !stroke ? beginStroke(-1, at) : strokeTo(-1, at)),
-        end: () => { if (stroke?.id === -1) endStroke(); },
-        drop: dropStroke,
-      },
+      painter,
     });
     const view = modernView;
     void view.ready().then(ok => {
@@ -370,10 +328,13 @@ export function createEditor(deps: EditorDeps): Editor {
         return;
       }
       if (!shown) return;
-      setScrolls(false);
       view.show(true);
       modernFor = null;
       drawBoard();
+      // The Classic view showed until now, the Modern board loading or not: its heading and tilt go across.
+      const v = classic.view();
+      view.board!.reset();
+      view.board!.setView(v.yaw, v.pitch);
     });
   }
 
@@ -450,15 +411,6 @@ export function createEditor(deps: EditorDeps): Editor {
   }
 
   /* ---------- painting ---------- */
-  function cellAt(ev: PointerEvent): Cell {
-    const rect = canvas.getBoundingClientRect();
-    const size = rect.width / live.cols;
-    const rise = rect.height - live.rows * size;
-    const at = { r: Math.floor((ev.clientY - rect.top - rise) / size), c: Math.floor((ev.clientX - rect.left) / size) };
-    // A board not laid out yet has no cells to hit.
-    return Number.isFinite(at.r) && Number.isFinite(at.c) ? at : { r: -1, c: -1 };
-  }
-
   function endStroke(): void {
     if (!stroke) return;
     stroke = null;
@@ -493,40 +445,7 @@ export function createEditor(deps: EditorDeps): Editor {
     show(d);
   }
 
-  canvas.addEventListener('pointerdown', (ev) => {
-    if (ev.pointerType === 'touch') {
-      touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-      if (touches.size > 1) {
-        dropStroke();
-        return;
-      }
-    } else if (ev.button > 0) return;
-    if (!shown || stroke) return;
-    ev.preventDefault();
-    canvas.setPointerCapture?.(ev.pointerId);
-    beginStroke(ev.pointerId, cellAt(ev));
-  });
-
-  canvas.addEventListener('pointermove', (ev) => {
-    const touch = touches.get(ev.pointerId);
-    if (touch && touches.size > 1) {
-      // Each finger moves the board by its share, so two fingers moving together scroll it by their movement.
-      holder.scrollLeft -= (ev.clientX - touch.x) / touches.size;
-      holder.scrollTop -= (ev.clientY - touch.y) / touches.size;
-    }
-    if (touch) touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-    if (!stroke || ev.pointerId !== stroke.id) return;
-    strokeTo(ev.pointerId, cellAt(ev));
-  });
-
-  const lift = (ev: PointerEvent): void => {
-    touches.delete(ev.pointerId);
-    if (stroke && ev.pointerId === stroke.id) endStroke();
-  };
-  canvas.addEventListener('pointerup', lift);
-  canvas.addEventListener('pointercancel', lift);
-
-  image.addEventListener('load', drawBoard);
+  image.addEventListener('load', () => { classicFor = null; drawBoard(); });
   if (typeof ResizeObserver === 'function') new ResizeObserver(fit).observe(holder);
   if (typeof window !== 'undefined') window.addEventListener('resize', fit);
 
@@ -539,8 +458,7 @@ export function createEditor(deps: EditorDeps): Editor {
       root.hidden = false;
       live = now().now;
       checker.edited(toText(live, true));
-      sized = '';
-      modernFor = null;
+      classicFor = modernFor = null;
       const wanted = deps.look?.get() ?? 'classic';
       if (wanted !== look || (wanted === 'modern' && !modernOn())) setLook(wanted, false);
       else if (modernOn()) modernView!.show(true);
@@ -550,7 +468,6 @@ export function createEditor(deps: EditorDeps): Editor {
     close() {
       // A running check goes on while the editor is left (Try it, Q); its panel is current on return.
       endStroke();
-      touches.clear();
       drawer = false;
       shown = false;
       root.hidden = true;
@@ -589,6 +506,9 @@ export function createEditor(deps: EditorDeps): Editor {
     bestFor: text => bests.get(text) ?? null,
     get modern() {
       return modernOn() ? modernView!.board : null;
+    },
+    get classic() {
+      return shown && !modernOn() ? classic : null;
     },
   };
 }

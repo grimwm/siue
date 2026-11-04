@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { drawList, timeline, SLIDE_MS, boardRows } from '../src/board-plan.ts';
+import { drawList, timeline, SLIDE_MS } from '../src/board-plan.ts';
 import type { Atlas, Figures } from '../src/board-plan.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { parse } from '../src/puzzle/level.ts';
@@ -81,10 +81,6 @@ test('reduced motion snaps; a catch plays the Minotaur in, then throws the playe
   assert.deepEqual(tl.at(SLIDE_MS * 0.5), { player: { r: 0, c: 2 }, minotaur: { r: 0, c: 0.5 }, hazards: [] });
   assert.deepEqual(tl.at(SLIDE_MS * 1.5), { player: { r: 0, c: 2 }, minotaur: { r: 0, c: 1.5 }, hazards: [] });
   assert.deepEqual(tl.at(tl.duration), { player: { r: 0, c: 2 }, minotaur: { r: 0, c: 0 }, hazards: [] });
-});
-
-test('the board is the rows plus the rise of the top row', () => {
-  assert.equal(boardRows({ rows: 10 }, atlas), 10 + atlas.rise / atlas.cell);
 });
 
 test('a pushed block is drawn between its cells during the player\'s segment, and not at its old cell', () => {

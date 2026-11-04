@@ -806,6 +806,7 @@ const editorHook = {
   open: editor.open, close: editor.close, key: editor.key, bestFor: editor.bestFor,
   get draft() { return editor.draft; },
   get modern() { return editor.modern; },
+  get classic() { return editor.classic; },
   load(text: string): void {
     ui.showEditor(fromLevel(parse(text)));
   },

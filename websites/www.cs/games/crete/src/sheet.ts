@@ -63,6 +63,15 @@ export function unproject(f: Frame, X: number, Y: number): Pt | null {
   return { x: f.tx + x2 * Math.cos(a) + y2 * Math.sin(a), y: f.ty - x2 * Math.sin(a) + y2 * Math.cos(a) };
 }
 
+/** The square (row `r`, column `c`) of a `cols` × `rows` board of `cell` px squares under screen point (X, Y): what a
+ *  press there on the turned and tilted sheet lands on. Null beyond the horizon or off the board. */
+export function cellUnder(f: Frame, X: number, Y: number, cols: number, rows: number, cell: number): { r: number; c: number } | null {
+  const g = unproject(f, X, Y);
+  if (!g) return null;
+  const c = Math.floor(g.x / cell), r = Math.floor(g.y / cell);
+  return c >= 0 && r >= 0 && c < cols && r < rows ? { r, c } : null;
+}
+
 /** The CSS transform that shows the sheet at `f`, for a canvas whose board starts `margin` px in from its corner and
  *  whose transform origin is its top-left corner, laid at the view's top-left. */
 export function sheetTransform(f: Frame, margin: number): string {

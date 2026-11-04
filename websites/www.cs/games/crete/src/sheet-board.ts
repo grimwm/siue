@@ -35,6 +35,8 @@ export interface ClassicBoard extends SheetBoard {
   bubbles(list: readonly Bubble[]): void;
   /** The item bubbles showing, for tests. */
   shownBubbles(): ReturnType<BubbleLayer['shown']>;
+  /** Letters the next paint stands upright on their squares, each in a dark tab (the editor's F and I). */
+  marks(list: readonly { r: number; c: number; mark: string }[]): void;
 }
 
 const TERRAIN_SPRITES = new Set([...Object.values(TERRAIN).flatMap(t => t.sprites), ...TURNED_SPRITES, ...EXIT_SPRITES]);
@@ -53,9 +55,10 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
   overlay.setAttribute('aria-hidden', 'true');
   view.append(overlay);
   const o = overlay.getContext('2d')!;
-  const bubbleLayer = createBubbleLayer(l => overlay.after(l), classicPics(atlas, image));
+  const bubbleLayer = createBubbleLayer(l => view.insertBefore(l, overlay.nextSibling), classicPics(atlas, image));
   let bubbles: readonly Bubble[] = [];
-  canvas.classList.add('sheet');
+  let marks: readonly { r: number; c: number; mark: string }[] = [];
+  if (!canvas.className.split(' ').includes('sheet')) canvas.className = `${canvas.className} sheet`.trim();
   const rise = atlas.rise / atlas.cell;
   const fw = atlas.cell, fh = atlas.cell + atlas.rise;
   let cell = 16; // a cell, in device pixels
@@ -128,6 +131,19 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
       const s = atlas.sprites[d.sprite]!;
       o.drawImage(image, s.x + d.frame * fw, s.y, fw, fh, Math.round(p.x * dpr - dw / 2), Math.round(p.y * dpr - anchor), dw, dh);
     }
+    if (!marks.length) return;
+    const size = Math.max(8, Math.round(cell * k * 0.45));
+    o.font = `bold ${size}px system-ui, sans-serif`;
+    o.textAlign = 'center';
+    o.textBaseline = 'middle';
+    for (const m of marks) {
+      const p = project(fr, (m.c + 0.5) * c, (m.r + 0.5) * c);
+      const x = p.x * dpr, y = p.y * dpr;
+      o.fillStyle = 'rgba(1, 4, 9, 0.75)';
+      o.fillRect(x - size * 0.6, y - size * 0.6, size * 1.2, size * 1.2);
+      o.fillStyle = '#f0b429';
+      o.fillText(m.mark, x, y);
+    }
   }
 
   /** Lays each bubble by its figure's head: the top of the sprite's frame, a little down, as paintFigures stands it. */
@@ -177,7 +193,7 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
         lastThread = thread;
         paintSheet(terrain, thread, pulse, q);
       }
-      const ok = up.map(d => `${d.sprite}${d.frame}@${d.x},${d.y}`).join(',');
+      const ok = up.map(d => `${d.sprite}${d.frame}@${d.x},${d.y}`).join(',') + `|${marks.map(m => `${m.mark}@${m.c},${m.r}`).join(',')}`;
       if (ok !== overKey) {
         overKey = ok;
         paintFigures(up, f);
@@ -188,6 +204,9 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
       bubbles = list;
     },
     shownBubbles: () => bubbleLayer.shown(),
+    marks(list) {
+      marks = list;
+    },
   };
   return sheet;
 }

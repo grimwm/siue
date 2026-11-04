@@ -3,7 +3,7 @@
  * a faint glassy sheen, so it reads as found, after a short shimmer as it comes into view (`SHIMMER_MS`). Which walls
  * are found is read from the state alone (the level's invisible walls that are wall now), so a switch of looks, an
  * undo or a restart shows exactly what the state holds. An invisible wall not yet shown, while Theseus stands beside
- * it, gives a faint sliver of glass on its face toward him, just inside its cell, that comes up over `GLASS_IN_MS`
+ * it, gives a pane of pale glass on its face toward him, just inside its cell, that comes up over `GLASS_IN_MS`
  * (at once under reduced motion) and goes the moment he is no longer beside it: it is read from where he stands, never
  * kept, so the player has to remember it. A fake wall beside Theseus, once he has stood still for `IDLE_MS`, shows a
  * faint haze on its face toward him that breathes gently while he stays, a still tint under reduced motion, and goes

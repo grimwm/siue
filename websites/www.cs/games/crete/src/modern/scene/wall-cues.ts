@@ -2,7 +2,7 @@
  * figures in front hide them as they hide anything. A found invisible wall wears a glass shell a hair larger than its
  * stone: a faint cool sheen, brighter along its edges, so it reads as found without standing out; as it comes into
  * view a band of light sweeps up and across it and the shell flashes, then settles. An unshown invisible wall beside
- * Theseus shows only a thin slab of faint glass along its face toward him, just inside its cell, and only while he
+ * Theseus shows only a slab of pale glass along its face toward him, just inside its cell, and only while he
  * stands there; it is blended over the floor rather than added, so it shows on the pale sand. A fake wall's haze is a sheet just
  * off its face toward Theseus, and a strip along the top's edge on that side (seen when the face is turned away from
  * the camera): faint warm bands that waver and drift like heat over stone, or a still tint when motion is reduced. Both
@@ -29,9 +29,9 @@ const OFF = 0.012;
 const TOP_STRIP = 0.3;
 /** The glass beside Theseus: how deep its slab reaches into the cell and how much of the face it spans, in cells,
  *  and how strongly it shows when fully up. */
-const SLIVER = 0.07;
+const SLIVER = 0.24;
 const SLIVER_SPAN = 0.94;
-const SLIVER_A = 1;
+const SLIVER_A = 1.8;
 
 const VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -62,7 +62,7 @@ void main() {
   gl_FragColor = vec4(mix(uColor, vec3(1.0), band) * a, 1.0);
 }`;
 
-/** The glass beside Theseus: blended over the floor, not added to it, so pale glass shows on pale sand. A faint cool
+/** The glass beside Theseus: blended over the floor, not added to it, so pale glass shows on pale sand. A pale cool
  *  body, paler and fuller towards each face's edges, at uA. */
 const SLIVER_FRAGMENT = /* glsl */ `
 uniform vec3 uColor;
@@ -71,7 +71,7 @@ varying vec2 vUv;
 void main() {
   vec2 e = abs(vUv - 0.5) * 2.0;
   float edge = smoothstep(0.7, 1.0, max(e.x, e.y));
-  gl_FragColor = vec4(mix(uColor, vec3(1.0), 0.6 * edge), (0.08 + 0.4 * edge) * uA);
+  gl_FragColor = vec4(mix(uColor, vec3(1.0), 0.35 + 0.5 * edge), (0.1 + 0.4 * edge) * uA);
 }`;
 
 /** The haze: bands that waver along the face (vUv.x along it, vUv.y up it) and drift, fading at its ends, at uA. */

@@ -10,7 +10,7 @@
  * the turn is a quarter or three. A door sinking draws down its frame, cut off at the frame's foot. The hidden
  * walls' cues (src/wall-cues.ts) are drawn on the sheet over the terrain, in 2D: a found invisible wall a faint
  * glassy sheen and edge, after a light sweeping across it as it shimmers into view; an unshown one beside Theseus a
- * thin faint sliver of glass along its side toward him; a fake wall's haze a few faint wavering lines on its side
+ * pale pane of glass along its side toward him; a fake wall's haze a few faint wavering lines on its side
  * toward Theseus, a still tint under reduced motion. Each canvas repaints only when what
  * it shows has changed. */
 import type { Atlas, Draw } from './board-plan.ts';
@@ -54,8 +54,12 @@ export interface ClassicBoard extends SheetBoard {
 const WAY: Record<Dir, readonly [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 /** How deep a fake wall's haze reaches into its tile, in cells. */
 const HAZE_DEPTH = 0.3;
-/** How deep the sliver of glass beside Theseus reaches into its tile, in cells. */
-const GLASS_DEPTH = 0.09;
+/** How deep the glass beside Theseus reaches into its tile, in cells; how strongly its cool body and its
+ *  pale inner line show when fully up; and how wide that line is, in cells. */
+const GLASS_DEPTH = 0.26;
+const GLASS_FILL = 0.5;
+const GLASS_LINE = 0.95;
+const GLASS_LINE_W = 0.045;
 
 const TERRAIN_SPRITES = new Set([...Object.values(TERRAIN).flatMap(t => t.sprites), ...TURNED_SPRITES, ...EXIT_SPRITES]);
 /** Each sprite that lies across the way through its cell, and its twin drawn the other way round. */
@@ -184,8 +188,8 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
     return { bx, by, bw, bh, lx, ly };
   }
 
-  /** The glass of an unshown invisible wall beside Theseus: a thin sliver standing along its side toward him, as a
-   *  wall's face and top edge would, a faint cool tint with a pale line along its inner edge, at `g.strength`. */
+  /** The glass of an unshown invisible wall beside Theseus: a pane standing along its side toward him, as a
+   *  wall's face and top edge would, a pale cool tint with a bright line along its inner edge, at `g.strength`. */
   function paintGlass(g: { at: { r: number; c: number }; face: Dir; strength: number }, q: number): void {
     ctx.save();
     atTile(g.at.r, g.at.c, q);
@@ -195,11 +199,11 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
     ctx.rect(bx, by, bw, bh);
     ctx.clip();
     const k = g.strength;
-    ctx.fillStyle = `rgba(150, 205, 255, ${(0.16 * k).toFixed(3)})`;
+    ctx.fillStyle = `rgba(195, 228, 255, ${(GLASS_FILL * k).toFixed(3)})`;
     ctx.fillRect(bx, by, bw, bh);
-    // The inner edge: the side of the sliver away from him, where the glass ends inside the cell.
-    const lw = Math.max(1, cell * 0.025);
-    ctx.strokeStyle = `rgba(215, 240, 255, ${(0.42 * k).toFixed(3)})`;
+    // The inner edge: the side of the pane away from him, where the glass ends inside the cell.
+    const lw = Math.max(1, cell * GLASS_LINE_W);
+    ctx.strokeStyle = `rgba(215, 240, 255, ${(GLASS_LINE * k).toFixed(3)})`;
     ctx.lineWidth = lw;
     ctx.beginPath();
     if (lx !== 0) {

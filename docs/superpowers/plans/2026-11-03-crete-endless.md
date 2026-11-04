@@ -83,9 +83,25 @@ The level came from part 0 in 21 of the 101, part 1 in 21, part 2 in 13, from pa
 | The every-piece check across workers | Not done: the workers already run a level's parts side by side, which keeps every core busy, and the check is 3% of the time |
 | Drafts built along a route | Not done; the parts make 98% fresh without it |
 
-**Time per fresh level** (the parts run as `src/endless/client.ts` runs them; medians, with the load above): one worker 125 to 403 s a level by tier, three workers 52 to 151 s (tier 7 the slowest). A part takes 54 s at the median. An idle core runs about twice as fast; a phone's JavaScript runs at a third to a quarter of the workstation's (an estimate: Chrome cannot throttle a worker, and no phone was at hand), so three workers on a phone take about 3 to 9 minutes a level.
+**Time per fresh level**, with the engine as it is now (below), the parts run as `src/endless/client.ts` runs them: `tools/endless-bench.ts` for seeds `bench0` to `bench9` at every tier, on the workstation shared with other work (load 6 to 17). The same seeds make 93 of 100 levels fresh against today's bank, the rest from the bank after all 12 parts. Three workers, per tier:
 
-**Staying ahead.** Simulated from those times (`tools/endless-bench.ts sum`) over 30 levels, the workers three levels ahead (`AHEAD`), three workers: on the workstation a player who takes 120 s a level waits at Next Level at 0 to 6 of 29 levels by tier (none at tiers 1, 4 and 6) and has 1.1 to 2.7 levels ready at each win; at 60 s a level they wait at 6 to 29 of 29. On a phone the player outruns the workers at either pace and waits at most levels, for the rest of a level's making. On a phone the wait is the search, which is why `step` is the case for WebAssembly or an allocation-free rewrite (below).
+| Tier | Median | p90 | Phone median (estimated) | Phone p90 (estimated) |
+| --- | --- | --- | --- | --- |
+| 1 | 38 s | 51 s | 132 s | 178 s |
+| 2 | 25 s | 43 s | 89 s | 150 s |
+| 3 | 21 s | 62 s | 75 s | 217 s |
+| 4 | 32 s | 68 s | 112 s | 237 s |
+| 5 | 35 s | 83 s | 122 s | 292 s |
+| 6 | 24 s | 46 s | 83 s | 161 s |
+| 7 | 27 s | 161 s | 94 s | 564 s |
+| 8 | 58 s | 112 s | 204 s | 391 s |
+| 9 | 24 s | 71 s | 83 s | 248 s |
+| 10 | 36 s | 112 s | 126 s | 393 s |
+| All | 28 s | 68 s | 97 s | 237 s |
+
+One worker takes 34 to 160 s a level at the median. The engine Endless first shipped with took 52 to 151 s a level at the median on three workers (load 12 to 16). A phone's JavaScript runs at about a third to a quarter of the workstation's (an estimate: Chrome cannot throttle a worker, and no phone was at hand); the phone columns take 3.5 times the workstation's time.
+
+**Staying ahead.** Simulated from those times (`tools/endless-bench.ts sum`) over 30 levels, the workers three levels ahead (`AHEAD`), three workers. On the workstation a player who takes 120 s a level never waits at Next Level, and one who takes 60 s waits at most once in 29 levels (tiers 7 and 8). On a phone a 120 s player waits at 0 to 4 of 29 levels at seven tiers, 6 at tier 7, 12 at tier 5 and 15 at tier 8, with 0.5 to 2.4 levels ready at each win; a 60 s player waits at 11 to 29 of 29. With the first engine a phone player waited at most levels at either pace.
 
 **The bank** holds 41 levels (`src/endless/bank.ts`): 12 of Chapter 1's pieces alone, 7 of Chapter 2's, 4 of Chapter 3's, 2 of Chapter 5's, 4 of Chapter 6's, 3 of Chapter 7's, 5 of Chapter 8's and 4 of Chapter 9's, so tier 1 is offered 12 and tiers 9 and 10 all 41; `test/endless-gate.test.ts` checks every tier is offered ten or more. A bank level takes 1 to 20 minutes to make here (Chapter 9's the longest, as the climb often takes their pieces out as decoys), and the fill's first rounds repeated layouts within the bank (26 of 61 left out), so its last round checks each new level against the bank as it stands. It lives only in `dist/endless-worker.js`, which the page starts when Endless asks for a level (the service worker also keeps it for playing offline). The bank is 14.6 KB of source (3.2 KB gzipped) in a bundle of 116 KB (38 KB gzipped), so it needs no compact encoding.
 

@@ -42,7 +42,7 @@ machines: block-right
 ###########
 ` },
   { id: 'ch9-4', text: `title: The Thief's Pool
-intro: A pool fills the west, and the flippers lie by your start. A thief stands among the relics in the middle: step on it and the flippers are gone. Gravel in the north keeps the beast back, and a block waits beside it. Three relics.
+intro: A pool fills the west, and the flippers lie by your start. A thief stands among the relics in the middle: step on it and the flippers are gone. Three relics, and the beast waits by the way out.
 
 ############
 #..#.###...#
@@ -91,19 +91,19 @@ E..#.......#
 ############
 ` },
   { id: 'ch9-7', text: `title: Stolen Skates
-intro: Ice fills the room in the northeast, with the skates and a block in the south. A thief waits in the ice room's doorway, and a red key opens the red door on the way out. Three relics.
+intro: Ice fills the room in the northeast, with the skates and a block in the south. A thief waits in the ice room's doorway. Three relics.
 
 ############
-#.....*#===#
-##..##..===#
-##M....#===#
-##..###..###
-E...#*##$..#
-#...R.....*#
-##.r#.##...#
-##..#..#...#
-#..P#..#kO.#
-##.....#...#
+#M....*#==##
+##..##=...=#
+##.....#==.#
+#...###.=###
+E...#*##.$=#
+##..#.=...*#
+##..#.#.O..#
+#...#..#...#
+#..P#.##k..#
+##....#....#
 ############
 ` },
   { id: 'ch9-8', text: `title: The Bronze Copies

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_LEVEL, LEGACY_KEYS, VOLUME_KEY, clampLevel, createVolume, gainFor, parseVolume } from '../src/volume.ts';
 import * as audio from '../src/audio.ts';
-import { MUSIC_HEADROOM } from '../src/audio.ts';
+import { MUSIC_HEADROOM, MUSIC_LEVEL_TRIM } from '../src/audio.ts';
 import { fakeAudioContext } from '../../_kit/test/audio.ts';
 import type { StorageLike } from '../../_kit/ports.ts';
 
@@ -112,13 +112,13 @@ test('levels reach the buses through the curve, the music under its headroom', a
   audio.noteGesture(false);
   const v = createVolume(memory(), audio);
   assert.ok(near(buses().sound, gainFor(DEFAULT_LEVEL.sound)));
-  assert.ok(near(buses().music, gainFor(DEFAULT_LEVEL.music) * MUSIC_HEADROOM));
+  assert.ok(near(buses().music, gainFor(DEFAULT_LEVEL.music * MUSIC_LEVEL_TRIM) * MUSIC_HEADROOM));
   v.setLevel('sound', 100);
   v.setLevel('music', 100);
-  assert.deepEqual(buses(), { sound: 1, music: MUSIC_HEADROOM });
+  assert.deepEqual(buses(), { sound: 1, music: gainFor(100 * MUSIC_LEVEL_TRIM) * MUSIC_HEADROOM });
   v.setLevel('music', 30);
   v.setLevel('sound', 50);
-  assert.ok(near(buses().music, 0.09 * MUSIC_HEADROOM));
+  assert.ok(near(buses().music, gainFor(30 * MUSIC_LEVEL_TRIM) * MUSIC_HEADROOM));
   assert.ok(near(buses().sound, 0.25));
   audio.music.stop();
 });
@@ -135,7 +135,7 @@ test('muting zeroes the bus and unmuting brings the slider\'s level back, not th
   v.toggleMute('sound');
   v.toggleMute('music');
   assert.ok(near(buses().sound, 0.36));
-  assert.ok(near(buses().music, 0.09 * MUSIC_HEADROOM));
+  assert.ok(near(buses().music, gainFor(30 * MUSIC_LEVEL_TRIM) * MUSIC_HEADROOM));
   audio.music.stop();
 });
 

@@ -60,7 +60,7 @@ export interface MatchDeps {
   tables: Tables;
   net: Pick<RoomClient, 'on'>;
   sfx: Pick<typeof SfxApi, 'play'>;
-  music: Pick<typeof MusicApi, 'leaveTheme' | 'start' | 'stop' | 'playTheme' | 'forRound'>;
+  music: Pick<typeof MusicApi, 'start' | 'stop' | 'playTheme' | 'forRound'>;
   /** The Menu's Difficulty; a match reads it once, when it is dealt. */
   difficulty: Pick<DifficultySetting, 'get'>;
   /** The Menu's Walls; a match reads it at each round's start. */
@@ -174,7 +174,7 @@ export function createMatch(deps: MatchDeps) {
     // No round yet: spend the starting stake in the shop first.
     advance('matchStart');
     refreshNavHints(); // the rotate hint shows from the first name card
-    music.leaveTheme(); // a new match leaves the demo's theme at once
+    music.playTheme(); // a new match keeps the demo's theme through the shop; round 1's track starts with round 1
     startBanner('Round 1. The battery holds these hills.', openShop, null);
     say(`Match ${G.seed}: $600 stake in your pocket. Buy guns first. The battery holds these hills.`, 'info');
     talk('tank', 'tankity tank! Shopping, then shooting!', true);

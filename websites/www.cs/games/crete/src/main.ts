@@ -11,7 +11,7 @@ import { mediaDeck, pickSource } from './music-decks.ts';
 import type { AudioSource } from './music-decks.ts';
 import { createBoard } from './board.ts';
 import { createSheetBoard } from './sheet-board.ts';
-import { IDLE_MS, NO_CUES, createFoundClock, cuesMoving, fakeFaces, hazeCue } from './wall-cues.ts';
+import { IDLE_MS, NO_CUES, createFoundClock, createGlassClock, cueKey, cuesMoving, fakeFaces, hazeCue } from './wall-cues.ts';
 import type { CueDraw, CuesShown } from './wall-cues.ts';
 import { extent, project, unproject } from './sheet.ts';
 import type { Frame } from './sheet.ts';
@@ -588,14 +588,19 @@ function modernFrame(): void {
     pendingView = null;
   }
   modern.show(f, game.thread);
+  // The cues follow the frame: the glass beside Theseus comes and goes as his figure arrives, and a wall he bumps
+  // shimmers as the turn plays.
+  if (game.anim) wantCues();
   if (game.anim && f.done) game.finishAnim();
   else if (game.anim && !game.anim.paused && !modernRaf) modernRaf = requestAnimationFrame(modernFrame);
 }
 
 /* The hidden walls' cues (src/wall-cues.ts), the same in both looks: a found invisible wall shimmers into view and
-   stays marked while the state shows it, and a fake wall beside Theseus hazes once he has stood still a while. The
-   classic loop asks for them every frame; the modern board is told when they change, and while they move. */
+   stays marked while the state shows it, an unshown one beside Theseus gives a sliver of glass on its face toward
+   him, and a fake wall beside him hazes once he has stood still a while. The classic loop asks for them every frame;
+   the modern board is told when they change, and while they move. */
 const foundClock = createFoundClock();
+const glassClock = createGlassClock();
 /** When Theseus last stood still from: the try's last change. */
 let stillSince = performance.now();
 let cueRun: unknown = null;
@@ -610,15 +615,12 @@ function cuesNow(now: number): CueDraw {
   const s = frameOf(game, game.animMs())?.state ?? run.now;
   const cols = s.level.cols;
   const found = foundClock.update(s, game.opens, now, reduced).map(({ i, shimmer }) => ({ at: { r: Math.floor(i / cols), c: i % cols }, shimmer }));
+  // The glass follows the state the board shows, so it comes as his figure arrives beside it and goes as he leaves.
+  const glass = glassClock.update(s, now, reduced, s.outcome === 'playing' && !editorUp);
   const busy = !!game.anim || game.playing || ui.layersOpen() || editorUp;
   const idle = now - stillSince;
-  return { found, haze: hazeCue(s, idle, reduced, busy), t: idle / 1000, still: reduced };
+  return { found, glass, haze: hazeCue(s, idle, reduced, busy), t: idle / 1000, still: reduced };
 }
-
-/** The cues as the modern board draws them: a haze's ripple steps at 15 fps. */
-const cueKey = (c: CueDraw): string =>
-  `${c.found.map(f => `${f.at.r},${f.at.c}:${f.shimmer === null ? '-' : f.shimmer.toFixed(2)}`).join(';')}|${
-    c.haze ? `${c.haze.faces.map(f => `${f.at.r},${f.at.c}${f.face}`).join(';')}:${c.haze.strength.toFixed(2)}:${c.still ? '-' : Math.floor(c.t * 15)}` : '-'}`;
 
 function tickCues(): void {
   cueRaf = 0;

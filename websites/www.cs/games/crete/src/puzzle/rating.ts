@@ -16,7 +16,7 @@ import { initial } from './state.ts';
 import type { State } from './state.ts';
 import { solving, caught } from './solver.ts';
 import type { SolveResult } from './solver.ts';
-import { step } from './step.ts';
+import { step, searchSkips } from './step.ts';
 import type { Action, GameEvent } from './step.ts';
 import { DIRS } from './tiles.ts';
 import type { Terrain } from './tiles.ts';
@@ -104,7 +104,8 @@ export function* scoring(level: Level, d: Difficulty, cost: { spent: number } = 
       let safe = 0;
       for (const b of [...MOVES, WAIT]) {
         const x = step(s, b);
-        if (b.kind === 'move' && x.state === s) continue;
+        // A bump is no choice, and a move that shows an invisible wall is the Wait, counted once.
+        if (b.kind === 'move' && searchSkips(s, x)) continue;
         if (caughtIn(x.events) || x.state.outcome === 'lost') continue;
         safe++;
       }
@@ -127,7 +128,7 @@ export function* scoring(level: Level, d: Difficulty, cost: { spent: number } = 
         for (const b of [...MOVES, WAIT]) {
           if (b.kind === a.kind && (b.kind !== 'move' || a.kind !== 'move' || b.dir === a.dir)) continue;
           const x = step(s, b);
-          if (b.kind === 'move' && x.state === s) continue;
+          if (b.kind === 'move' && searchSkips(s, x)) continue;
           if (caughtIn(x.events) || x.state.outcome !== 'playing') continue;
           const r = yield* solving(x.state, caught, trapCap(d));
           cost.spent += r.explored;

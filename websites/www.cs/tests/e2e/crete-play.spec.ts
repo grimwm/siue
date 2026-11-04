@@ -539,10 +539,10 @@ test('the first key of any colour shows one Keys card naming all four colours; a
   expect(errors).toEqual([]);
 });
 
-/* ---- the false walls: a fake wall is walked through on one move, an invisible wall's bump costs no turn ---- */
+/* ---- the false walls: a fake wall is walked through on one move, an invisible wall's bump costs a turn ---- */
 const FALSE_WALLS = ['title: Two False Walls', 'intro: One painted, one unseen.', '', '########', '#PW.I.E#', '#......#', '########', ''].join('\n');
 
-test('walking into a fake wall opens it and steps through on one move; bumping an invisible wall shows it and costs no move', async ({ page }) => {
+test('walking into a fake wall opens it and steps through on one move; bumping an invisible wall shows it and costs a move', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -569,7 +569,7 @@ test('walking into a fake wall opens it and steps through on one move; bumping a
   await press('ArrowRight');
   await expect.poll(board).toEqual({ moves: 2, c: 3, wall: 'floor', unseen: 'invisible-wall' });
   await press('ArrowRight');
-  await expect.poll(board, 'the bump shows the wall and is no move').toEqual({ moves: 2, c: 3, wall: 'floor', unseen: 'wall' });
-  await expect(page.locator('#hud-moves')).toHaveText('2');
+  await expect.poll(board, 'the bump shows the wall and is a move').toEqual({ moves: 3, c: 3, wall: 'floor', unseen: 'wall' });
+  await expect(page.locator('#hud-moves')).toHaveText('3');
   expect(errors).toEqual([]);
 });

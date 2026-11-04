@@ -13,7 +13,7 @@ import { initial } from './state.ts';
 import type { State } from './state.ts';
 import { solve, solveRefusing, solving, caught, SOLVER_CAP } from './solver.ts';
 import type { SearchRoom, SolveResult } from './solver.ts';
-import { step, noTurn } from './step.ts';
+import { step, searchSkips } from './step.ts';
 import { DIRS, DELTA, TERRAIN, HAZARDS, KEY_COLORS } from './tiles.ts';
 import type { Dir, ObjectKind, Terrain } from './tiles.ts';
 import { lineText, lineOf } from './cache.ts';
@@ -208,7 +208,7 @@ export function* catching(level: Level, cap = SOLVER_CAP, room: SearchRoom = {})
         const x = step(s, ACTIONS[c]!);
         if (x.events.some(e => e.kind === 'caught' && e.by === 'minotaur')) return true;
         const n = x.state;
-        if (noTurn(s, n) || n.outcome !== 'playing') continue;
+        if (searchSkips(s, x) || n.outcome !== 'playing') continue;
         pack(n, layout, buf, 0, s, from, 0);
         store.add(buf, 0, id, c, 0);
         if (store.size >= cap) return null;

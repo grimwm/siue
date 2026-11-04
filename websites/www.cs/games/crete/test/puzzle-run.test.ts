@@ -68,16 +68,29 @@ test('undo restores the board after a reveal, a bomb and a clone', () => {
   assert.equal(run.now.objects[9], null);
 });
 
-test('showing an invisible wall is no entry in undo: Undo goes back the last whole turn', () => {
+test('showing an invisible wall is a turn: one entry in undo, and Undo hides it again', () => {
   let run = startRun(lv(['P.I.E', '.....']));
   run = act(run, mv('right')).run;
   const shown = act(run, mv('right'));
   assert.ok(shown.events.some(e => e.kind === 'revealed'));
-  assert.equal(shown.run.past.length, 1, 'the bump added no entry');
-  assert.equal(shown.run.now.moves, 1);
+  assert.equal(shown.run.past.length, 2, 'the bump is an entry of its own');
+  assert.equal(shown.run.now.moves, 2, 'and counts as a move');
+  assert.equal(shown.run.now.terrain[2], 'wall');
   const back = undo(shown.run);
-  assert.equal(back.now.moves, 0, 'Undo takes back the step before it');
-  assert.equal(back.past.length, 0);
+  assert.equal(back.now, run.now, 'Undo takes back the bump alone');
+  assert.equal(back.now.terrain[2], 'invisible-wall', 'the wall is hidden again');
+  assert.equal(back.now.moves, 1);
+});
+
+test('a turn after the bump never retraces past it: the shown wall is part of the situation', () => {
+  let run = startRun(lv(['P.I.E', '.....']));
+  run = act(run, mv('right')).run;
+  run = act(run, mv('right')).run;
+  const r = act(run, mv('left'));
+  assert.equal(r.back, undefined, 'back at the start cell, but with the wall shown: no undo to there');
+  assert.equal(r.run.past.length, 3);
+  const again = act(r.run, mv('right'));
+  assert.equal(again.back, 2, 'stepping back beside it retraces to the turn after the bump');
 });
 
 /** Plays `actions` from `r`, each turn's `back` kept. */

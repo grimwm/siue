@@ -172,7 +172,7 @@ export const ENTRIES: readonly Entry[] = [
     short: 'Crumbles when you walk into it' },
   { id: 'invisible-wall', kind: 'hazard', name: 'Invisible Wall', sprite: 'wall',
     lore: 'Glass so clear it cannot be seen, set across the passages to baffle the lost.',
-    effect: 'It looks like floor and is a wall. Walk into it and it shows itself, and that costs no turn: the beast does not move. Sliding into it, or pushing a block at it, does not show it.',
+    effect: 'It looks like floor and is a wall. Stand beside it and you sense the glass: a faint sliver on the side toward you, gone as you step away. Walk into it and it shows itself, and that costs a turn: the beast moves as if you had waited. Sliding into it, or pushing a block at it, does not show it.',
     short: 'A wall that looks like floor' },
   { id: 'teleport', kind: 'hazard', name: 'Teleport', sprite: 'teleport',
     lore: 'A doorway of Hermes, the messenger, who goes from place to place without crossing the space between.',

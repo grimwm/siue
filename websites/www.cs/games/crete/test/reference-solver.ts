@@ -1,10 +1,12 @@
 // websites/www.cs/games/crete/test/reference-solver.ts
 // The breadth-first reference solver, for the tests only. Exact and simple: the first win found is a shortest line.
-// Every faster solver must give its answers (same-answers.test.ts). Not a test file.
+// Every faster solver must give its answers (same-answers.test.ts). It plays a move that shows an invisible wall as
+// the turn it is, where the fast searches leave it out as a Wait in disguise (step.ts searchSkips), so agreeing with it
+// shows that leaving it out loses nothing. Not a test file.
 import { DIRS, TERRAIN, OBJECTS, KEY_COLORS } from '../src/puzzle/tiles.ts';
 import type { Terrain, Tool } from '../src/puzzle/tiles.ts';
 import type { Level } from '../src/puzzle/level.ts';
-import { step, noTurn } from '../src/puzzle/step.ts';
+import { step } from '../src/puzzle/step.ts';
 import type { Action } from '../src/puzzle/step.ts';
 import type { State } from '../src/puzzle/state.ts';
 import { SOLVER_CAP } from '../src/puzzle/solver.ts';
@@ -86,7 +88,7 @@ function search(start: State, cap: number, refuse: Refuse | null): SolveResult {
     for (const code of actionCodes(s)) {
       const r = step(s, decode(code));
       const n = r.state;
-      if (noTurn(s, n) || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
+      if (n === s || n.outcome === 'lost' || (refuse && refuse(r.events, s))) continue;
       const k = stateKey(n);
       if (seen.has(k)) continue;
       seen.add(k);

@@ -39,8 +39,9 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
       " is pressed down, and only while something stands on it: you, a block or a hazard.",
     ],
     [
-      { strong: "Pop-up walls" }, " rise behind you. ", { strong: "Fake walls" }, " and ", { strong: "invisible walls" },
-      " open or show when you bump them. Only you can cross ", { strong: "gravel" }, ".",
+      { strong: "Pop-up walls" }, " rise behind you. A ", { strong: "fake wall" }, " opens as you walk into it. Beside an ",
+      { strong: "invisible wall" }, " you sense a sliver of its glass; bumping it shows it and costs a turn. Only you can cross ",
+      { strong: "gravel" }, ".",
     ],
     [
       { strong: "Teleports" }, " carry you to the next one in reading order. A ", { strong: "thief" },
@@ -56,7 +57,7 @@ export function helpLines(keys: Record<Action, KeyDef>, tools: typeof TOOLS): Se
     ],
     ["Three tools, one use each. ", ...toolSegs],
     [
-      `Move with ${arrows}${letters ? ` or ${letters}` : ""}, or the pad: tap an arrow to step, hold it to keep walking, or slide a finger from arrow to arrow; bumping a wall costs no turn. `,
+      `Move with ${arrows}${letters ? ` or ${letters}` : ""}, or the pad: tap an arrow to step, hold it to keep walking, or slide a finger from arrow to arrow; bumping a wall costs no turn, but finding an invisible wall does. `,
       { strong: `Begin (${k("begin")})` }, " closes a level's start card; so does a move. ",
       { strong: `Wait (${k("wait")})` }, " lets the Minotaur come. ",
       { strong: `Undo (${k("undo")})` }, " takes back a move. ",

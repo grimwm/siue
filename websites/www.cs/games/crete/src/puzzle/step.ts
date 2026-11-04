@@ -5,10 +5,9 @@
  * state and what happened, for the log, the sounds and the board's animation.
  * A bump (an action that cannot happen: a wall in the way, a tool not held or
  * of no use) returns the same state object and no events, and costs no turn.
- * A false wall costs no turn either: a fake wall gives way as Theseus walks
- * into it, and he steps through on that same move; bumping an invisible wall
- * shows it and is no turn at all (a new state, the move count unchanged, the
- * hazards and the Minotaur still). DOM-free. */
+ * A fake wall gives way as Theseus walks into it, and he steps through on that
+ * same move. Bumping an invisible wall shows it and costs a turn: he stays where
+ * he is, and the hazards and the Minotaur move as on a Wait. DOM-free. */
 import { TERRAIN } from './tiles.ts';
 import type { Cell, Dir, Gear, Hazard, KeyColor, ObjectKind, Terrain } from './tiles.ts';
 import { index, inside, same, next, gateOpen } from './state.ts';
@@ -191,8 +190,9 @@ function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
   return true;
 }
 
-/** The player's part of a turn, played on `w`: false for a bump, 'shown' for a bump that found an invisible wall. */
-function playerPart(w: Work, a: Action, ev: GameEvent[]): boolean | 'shown' {
+/** The player's part of a turn, played on `w`: false for a bump. A move into an invisible wall shows it and is a
+ *  turn, as a Wait is. */
+function playerPart(w: Work, a: Action, ev: GameEvent[]): boolean {
   if (a.kind === 'move') {
     const from = w.player;
     if (heldAt(w, from)) return false;
@@ -201,7 +201,7 @@ function playerPart(w: Work, a: Action, ev: GameEvent[]): boolean | 'shown' {
     if (t === 'invisible-wall') {
       setTerrain(w, index(w, to), 'wall');
       ev.push({ kind: 'revealed', at: to, what: t });
-      return 'shown';
+      return true;
     }
     if (t === 'fake-wall') {
       setTerrain(w, index(w, to), 'floor');
@@ -253,19 +253,20 @@ export function act(s: State, a: Action): StepResult {
   return { state: share(w, s), events: ev };
 }
 
-/** A step that took no turn: a bump, or one that only showed an invisible wall. The searches skip it, since what it
- *  shows changes nothing a later turn does. */
-export function noTurn(s: State, n: State): boolean {
-  return n === s || n.moves === s.moves;
+/** A step the searches leave out: a bump (the same state back), or a turn whose move showed an invisible wall. That
+ *  one is a whole turn, but it plays exactly as a Wait from the same state, which the searches try too: the wall it
+ *  shows was wall to everyone already, so showing it changes nothing a later turn does. */
+export function searchSkips(s: State, r: StepResult): boolean {
+  if (r.state === s) return true;
+  const e = r.events[0];
+  return e?.kind === 'revealed' && e.what === 'invisible-wall';
 }
 
 export function step(s: State, a: Action): StepResult {
   if (s.outcome !== 'playing') return { state: s, events: [] };
   const w = turnOf(s);
   const ev: GameEvent[] = [];
-  const part = playerPart(w, a, ev);
-  if (!part) return { state: s, events: [] };
-  if (part === 'shown') return { state: share(w, s), events: ev };
+  if (!playerPart(w, a, ev)) return { state: s, events: [] };
   // The mirror turn is itself a stone turn: the Minotaur sits it out without spending any of the 3 that follow.
   const raisedMirror = a.kind === 'tool' && a.tool === 'mirror';
   if (!turnOver(w, ev)) hazardPhase(w, ev);

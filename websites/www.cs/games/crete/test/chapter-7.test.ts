@@ -8,7 +8,7 @@ import { ROUNDS, roundLevel } from '../src/puzzle/rounds.ts';
 import { CHAPTERS, LEVEL_IDS, levelById, pageHome, chapterOf } from '../src/campaign/chapters.ts';
 import { CHAPTER_7 } from '../src/campaign/chapter-7.ts';
 import { initial } from '../src/puzzle/state.ts';
-import { solve, SOLVER_CAP } from '../src/puzzle/solver.ts';
+import { solve, solveRefusing, caught, SOLVER_CAP } from '../src/puzzle/solver.ts';
 import type { SolveResult } from '../src/puzzle/solver.ts';
 import { step } from '../src/puzzle/step.ts';
 import type { Action, GameEvent } from '../src/puzzle/step.ts';
@@ -17,7 +17,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import type { Terrain } from '../src/puzzle/tiles.ts';
 
 /** Each level's shortest line, pinned: a rule change that alters a level fails here. */
-const SHORTEST: number[] = [18, 8, 18, 33, 41, 41, 35, 30, 40, 51];
+const SHORTEST: number[] = [18, 8, 18, 33, 41, 41, 35, 31, 45, 55];
 /** Level 10 is larger than the screen; its proofs may search further than the in-game cap. */
 const BIG_CAP = 6_000_000;
 const capOf = (i: number) => (i === 9 ? BIG_CAP : SOLVER_CAP);
@@ -115,11 +115,16 @@ test('each shortest line is pinned and takes no catch, and on each level the bal
   assert.deepEqual(ROUNDS.map((_, i) => once(i).line.length), SHORTEST);
   ROUNDS.forEach((w, i) => {
     assert.ok(!once(i).caught, `${w.id}: the shortest line is never caught`);
-    // As the gate's every-piece rule has it: lost, won in another number of moves, or a search at least 1.3 times
-    // smaller.
-    const without = solve(initial(noBalls(roundLevel(i))), capOf(i));
-    assert.ok(!without.solved || without.line.length !== once(i).line.length || once(i).explored >= 1.3 * without.explored,
-      `${w.id}: without the balls, the level plays another way`);
+    // As the gate's every-piece rule has it: each one taken off the board alone, the level is lost or its fewest
+    // moves change, with a catch allowed or without one.
+    const lv = roundLevel(i);
+    const fewest = (x: Level) => { const r = solve(initial(x), capOf(i)); return r.solved ? r.line.length : null; };
+    const catchFree = (x: Level) => { const r = solveRefusing(initial(x), caught, capOf(i)); return r.solved ? r.line.length : null; };
+    lv.hazards.forEach((h, k) => {
+      const without = parse(serialize({ ...lv, hazards: lv.hazards.filter((_, j) => j !== k) }));
+      assert.ok(fewest(without) !== fewest(lv) || catchFree(without) !== catchFree(lv),
+        `${w.id}: without the ball at row ${h.at.r + 1}, column ${h.at.c + 1}, the level plays another way`);
+    });
   });
 });
 

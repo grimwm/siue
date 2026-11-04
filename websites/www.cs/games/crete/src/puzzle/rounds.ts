@@ -43,19 +43,19 @@ facing: right
 ############
 ` },
   { id: 'ch7-4', text: `title: The Frozen Round
-intro: Ice runs across the north hall, with skates above it. A snare waits in the west by a block, and the brown button in the south looses it; one bronze ball rolls along the south hall. Two relics.
+intro: Ice runs across the north hall, and you will skid on it as the beast does. A snare waits in the west by a block, and the brown button in the south looses it; one bronze ball rolls along the south hall. Two relics.
 facing: right
 
 ############
-####P#######
-##...###k###
-##.=====.###
+####P###.###
+##...###..##
+#..=====.###
 ##.#&...*.##
-##..O###...#
-##...M##...#
-##...o.....#
+##..O#.....#
+###...##...#
+##M..o.....#
 ##.*#......#
-#####..-.|E#
+####...-.|E#
 ############
 ` },
   { id: 'ch7-5', text: `title: The Sunken Round
@@ -111,15 +111,15 @@ intro: Currents run through these ways, and gravel lies about them: you can cros
 facing: up
 
 ############
-#..>>>>v####
+#..>.>>v####
 #.P....v.###
 #....#uv:..#
-#...#.:....#
-#.<<<<.**.##
-#......^#.##
-#...#..^...#
-#.#..:.^.o.#
-#.*.M#.^.|E#
+#..>#<.:...#
+#.<.<...*..#
+#.....:^#.##
+#..<#M.^*..#
+#.#....^.o.#
+#.*..#.^.|E#
 ############
 ` },
   { id: 'ch7-9', text: `title: The Mirrored Round
@@ -128,33 +128,33 @@ pages: ch7-brazen
 facing: down
 
 ############
-#P##..##p###
-#.##..#..###
-#..#.F#..#;#
+#P.#..##;###
+#.##.....###
+#..#.F#.p#.#
 #h.;.F#...*#
-#...xF...z;#
-#....F.....#
-##.##..#.#.#
+#...xF.....#
+#...F....z.#
+##.##..#.#;#
 #......o...#
-#..M.....|E#
-#*.........#
+#*.....M.|E#
+#..#.#.#...#
 ############
 ` },
   { id: 'ch7-10', text: `title: The Last Round
-intro: The rounds end at the gate. Three teleports, each sending you out of the next along; fire and the boots for it; the toggle wall and its button; and a red key in the west for the door to the last relic, in the southeast. Three relics, and one bronze ball in the north hall. Off the quickest way a page waits, and a memory of how the bronze guard fell.
+intro: The rounds end at the gate. Three teleports, each sending you out of the next along; fire that nobody crosses; the toggle wall and its button; and a red key in the west for the door to the last relic, in the southeast. Three relics, and one bronze ball in the south hall. Off the quickest way a page waits, and a memory of how the bronze guard fell.
 pages: ch7-vein
-facing: up
+facing: down
 
 ################
-#P...o#........#
+#P....#........#
 #.....#........#
 #.#...@...###.p#
 #...###...###..#
-#...#h....FF...#
+#...#.....FF...#
 #...#*#....#.#.#
 #..T._......@..#
 #..#.##......###
-#...r#...M...#*#
+#...r#o..M...#*#
 #.@###.FF*..R..#
 #E|######...####
 ################

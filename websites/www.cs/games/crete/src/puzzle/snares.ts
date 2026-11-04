@@ -63,15 +63,15 @@ intro: Ice runs through the middle halls; skates and a block lie in the west. A 
 intro: A relic lies in the pool, two more beside it, and the flippers wait by the gate. One snare guards the south door: lead the beast into it. The brown button in the north looses it, so keep off it, and keep the block off it too.
 
 ############
-#...#......#
-#...#......#
-#.OP####-###
+#.P.#.-.#..#
+#.O.##.....#
+#...####..##
 #..........#
-#.##*~~~##.#
-#.#..~*~.#.#
-#.#*.~~~.#.#
+#.##*~~.##.#
+#.#~.~*~~#.#
+#.#*~~...#.#
 #.####.&####
-#..M....f|E#
+#.M.....f|E#
 ############
 ` },
   { id: 'ch5-6', text: `title: The Snare at the Gate
@@ -93,30 +93,30 @@ intro: A snare lies before the gate, and its brown button sits far off in the no
 intro: A block, a red key and its door, two relics and one snare. The brown button by the beast's hall looses the snare: once he is held, keep off it.
 
 ############
-#P.....#####
-#.......####
-#..O...&*..#
+#..#...#####
+##......####
+#P.O...&*#.#
 #....#.#R..#
 #...##....##
-###.#M..#..#
-#*#.#.#-...#
+###r#..##.##
+#*#.#M.....#
 #.....##...#
-###r.##...|E
+###..###-.|E
 ############
 ` },
   { id: 'ch5-8', text: `title: The Snared Relic
 intro: One relic hides in the northwest, and the only way to it runs through a snare. Push the block to the brown button in the south to open it; a second snare lies in the west hall, for the beast.
 
 ############
-#*#...P....#
-#.#....#.#.#
+###...P....#
+#.#..*...#.#
 #&.....#...#
-#.#.##...O.#
-#.&....:#.##
+#.#.##.:.O.#
+#.&.....#.##
 #.###.#...##
 #.#.;...#..#
 #.#........#
-#E|#.-M#:.##
+#E|#M-.#:.##
 ############
 ` },
   { id: 'ch5-9', text: `title: The House of Erechtheus
@@ -136,24 +136,24 @@ E|.M.#.;..*#
 ############
 ` },
   { id: 'ch5-10', text: `title: The Gate of the Labyrinth
-intro: The snares end at the gate, and the beast waits by it, behind a red door. The door is one way through; the other runs east, past a snare that the block, pushed onto the brown button, holds open. Off the quickest way, a page waits, and a memory of another telling.
+intro: The snares end at the gate, and the beast waits by it. The way runs east, past a snare that the block, pushed onto the brown button, holds open; a second snare in the east room is for the beast. Off the quickest way, a page waits, and a memory of another telling.
 pages: ch5-gate
 
 #################
-#.....#.##..#...#
-#####.#.###.#.#.#
-###*..#...#..*#.#
-###.#####.#####.#
-##..............#
-###.###.###.#####
-#.r.#.....#.....#
-#..P#.....#...Op#
-#....*....#...-.#
-#######.#######&#
-#######..RM.....#
-#######...###.#.#
-#######...#...#|#
-###############E#
+#.#..#####......#
+#####.#..##.#.#.#
+###*.##..##*..#.#
+###..####.#####.#
+##p.............#
+###..##.##..#####
+#..P#.....#.....#
+#...#.....#.&.O.#
+#.*.#....#....-.#
+#####.#.#######&#
+#######..#......#
+#######...###M#.#
+#####.#...#.#.#|#
+##########.####E#
 #################
 ` },
 ];

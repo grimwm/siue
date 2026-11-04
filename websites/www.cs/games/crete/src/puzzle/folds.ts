@@ -45,15 +45,15 @@ intro: A block goes through a teleport as you do. Of the two teleports, push it 
 intro: Three teleports, each sending you out of the next along, counting left to right and top to bottom. Force floors drive you round the middle; the suction boots in the south let you walk them as you please. Three relics.
 
 ############
-#..........#
+#v..#......#
 #........@.#
-#..#..P..*##
-#.#...*...##
-#.#>>>v...@#
-#...#.v....#
-##.##u<<<..#
-##.@####...#
-#M....*##|E#
+#..#...>>.##
+#.#..P*...##
+#.#>..v.*.@#
+#@..#<....<#
+##.##u.....#
+##..####<..#
+#M..*.###|E#
 ############
 ` },
   { id: 'ch6-5', text: `title: The Drowned Fold

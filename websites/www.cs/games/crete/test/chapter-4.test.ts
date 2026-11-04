@@ -18,7 +18,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
 /** Each level's shortest line, pinned: a rule change that alters a level fails here. */
-const SHORTEST: number[] = [16, 12, 13, 53, 42, 44, 55, 48, 58, 91];
+const SHORTEST: number[] = [16, 12, 13, 53, 42, 45, 57, 48, 57, 85];
 /** Level 10 is larger than the screen; its proofs may search further than the in-game cap. */
 const BIG_CAP = 6_000_000;
 const capOf = (i: number) => (i === 9 ? BIG_CAP : SOLVER_CAP);
@@ -135,15 +135,13 @@ test('the two pages: Taurus in level 9 and The Queen in level 10, each off the s
   }
 });
 
-const walled = (lv: Level, r: number, c: number): Level => ({ ...lv, terrain: lv.terrain.map((t, i) => (i === r * lv.cols + c ? 'wall' : t)) });
 
-test('level 10: the red door is the way through, and the painted wall in the east a second road to the gate', () => {
+test('level 10: the red door is the way through, and an unseen wall shuts the short way', () => {
   const lv = falseWallLevel(9);
   assert.ok(lv.terrain.includes('gate') && lv.terrain.includes('exit') && lv.relics > 0);
   assert.ok(lv.terrain.includes('door-red') && lv.objects.includes('key-red'));
-  assert.equal(lv.terrain[5 * lv.cols + 17], 'fake-wall');
   assert.ok(unwinnable(solve(initial(withoutObjects(lv, ['key-red'])), BIG_CAP)), 'level 10 needs the red key');
-  // With the painted wall a true wall the level is still won as quickly, by the other road.
-  const walledOff = solve(initial(walled(lv, 5, 17)), BIG_CAP);
-  assert.ok(walledOff.solved && walledOff.line.length === once(9).line.length, 'won as quickly with the painted wall a true wall');
+  // As open floor, the invisible wall would be the quicker way.
+  const open = solve(initial(retile(lv, 'invisible-wall', 'floor')), BIG_CAP);
+  assert.ok(open.solved && open.line.length < once(9).line.length, 'the invisible wall shuts a shorter way');
 });

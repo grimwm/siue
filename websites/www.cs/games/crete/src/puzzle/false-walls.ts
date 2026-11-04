@@ -57,44 +57,44 @@ intro: A relic lies in the pool, two more about it, and the flippers in the far 
 intro: Two relics, a red key and its door. The beast waits in the upper hall; two of these walls are only painted, and they are your way round him.
 
 ############
-#P....S.##.#
-#.##....#..#
-#.#*S.W##.##
-#.#.#.....M#
+#..#....W###
+#P##..##..S#
+#.#*S.##.M##
+#.#.#......#
 #........#.#
 #.##S.#..#.#
-#S#rS#..##.#
-#..S###.R#.#
-###.W..*#|E#
+#S#S.#*r.#R#
+#..S#....#.#
+#...W.###|E#
 ############
 ` },
   { id: 'ch4-6', text: `title: Lying Ground
 intro: Loose stone and closing stone keep the beast off, and here the walls lie both ways: one painted, two unseen. Mind where the stones close behind you.
 
 ############
-###.*###P..#
-#...##.....#
-#......I:..#
-##.;##.#...#
+#.#.*###...#
+#...#....P.#
+#...;..I:..#
+##...#.#.#.#
 #..###.W.###
-#........###
-##....;I.###
-###.###..###
-#.*.:..M.|E#
+#..........#
+##..#..I...#
+###.#.#..###
+#*:..;M..|E#
 ############
 ` },
   { id: 'ch4-7', text: `title: The Glass Floor
-intro: Ice runs through these halls and skates lie in the west. Two walls here are only painted, one of them across the ice; the beast skids as you do.
+intro: Ice runs through these halls and skates lie in the west. Two walls here are only painted; on the ice the beast skids as you do.
 
 ############
 #P...#.##.*#
 #......#...#
-#..==W==.###
-#...#..=##.#
-#k##.#.=...#
-#.....#=...#
-##....M.W..#
-#...####..##
+#..==.==.###
+#...#.=.##.#
+#k##M#.=...#
+#.....#....#
+##....W.W..#
+#....###.=##
 #*..#....|E#
 ############
 ` },
@@ -124,27 +124,27 @@ pages: ch4-taurus
 ##...W#..:.#
 #..:....##*#
 #.#.FF#..###
-#.;##.#:...#
+#.;##..:...#
 #.pI....#..#
 E|M#...;.#*#
 ############
 ` },
   { id: 'ch4-10', text: `title: The Painted Labyrinth
-intro: The false walls end in a maze of them. A red door is the way through, a painted wall opens a second road to the gate, and one stretch of open floor is not open at all. Off the quickest way, a page waits, and a memory of the queen.
+intro: The false walls end in a maze. A red door is the way through, and one stretch of open floor is not open at all. Off the quickest way, a page waits, and a memory of the queen.
 pages: ch4-queen
 
 ####################
-#P....#......####.p#
-##.#....###..###..##
+#P....#......####..#
+##......###..###..##
 ###*..:...##..:..###
-#.......##.I##.....#
-#..##...#.......#W.#
-##..#......##.#...##
-#r###.:.......:.####
+#.......##.I##....p#
+#..##...#.......##.#
+##.##......#..#...##
+#r###*:.......:.####
 #........##..#.#...#
-#..*.###.##..#.R...#
-#.#..#.#..:.#####.##
-#*##M..###...##.#|E#
+#...*###.##..#.R...#
+###..#.#..:.#####.##
+#.##M..#.#...##.#|E#
 ####################
 ` },
 ];

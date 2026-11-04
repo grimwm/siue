@@ -82,16 +82,16 @@ facing: down
 intro: Ice runs down the north, with the skates below it, and a thief waits beside your start. A snare holds the doorway to the west room; the brown button by the ice looses it. A block waits by the thief. Two relics.
 
 ############
-#*#..==#.M.#
-#....==#...#
-##...==#...#
-#....==..-##
-#...#k######
-#...#...*..#
-##&##......#
-##.#..##...E
-#...#.P.$O.#
-#.#........#
+#*#..#.#.#=#
+#......##..#
+##.==.##M#-#
+##..k===*#.#
+###.#..##..#
+#...#=.#=..#
+##..#P.#..##
+##&#.$.#...E
+#...#.O....#
+#.#...#....#
 ############
 ` },
   { id: 'ch10-7', text: `title: The Powder Fold
@@ -146,23 +146,23 @@ E...#......#
 ############
 ` },
   { id: 'ch10-10', text: `title: The Open Space
-intro: The beast waits in the southeast room. Medusa's mirror lies by your start, the wooden cow in the northwest room, and a snare in the middle hall, loosed by the brown button beside the cow. Three relics, and the way out is through the gate in the north. Off the quick way a page waits, and a memory of how the poet ends the story.
+intro: The beast waits in the southeast room. Medusa's mirror lies in the southwest room, and a snare in the middle hall, loosed by the brown button in the north. Three relics, and the way out is through the gate in the north. Off the quick way a page waits, and a memory of how the poet ends the story.
 pages: ch10-oak
 
 #################
-#....p#...#.E...#
+#...#.......E...#
 #...........|#..#
-#.##.######..##.#
-#.c#..#*.....#..#
-#..#-.#...#..#*.#
-#..######.#.##..#
-#...............#
-##.#..###.#.#####
+#..#.#-.#....##.#
+#.##..#......#..#
+#..#..#.*.#..#.##
+#...#####.#.##.*#
+#p.P............#
+##.#..###....####
 #.....#.....&#..#
-#z..P.#...#*..M.#
-##.####...#..#..#
-#..#......#..#..#
-#..#......#..#..#
+#....z#...#.M...#
+##..#.#....#.##.#
+#..##.....#..#..#
+#..#.....##..#*.#
 #################
 ` },
 ];

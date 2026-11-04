@@ -18,7 +18,7 @@ import type { Level } from '../src/puzzle/level.ts';
 import type { ObjectKind, Terrain } from '../src/puzzle/tiles.ts';
 
 /** Each level's shortest line, pinned: a rule change that alters a level fails here. */
-const SHORTEST: number[] = [18, 18, 17, 56, 43, 71, 44, 49, 64, 66];
+const SHORTEST: number[] = [18, 18, 17, 56, 46, 71, 43, 45, 64, 75];
 /** Level 10 is larger than the screen; its proofs may search further than the in-game cap. */
 const BIG_CAP = 6_000_000;
 const capOf = (i: number) => (i === 9 ? BIG_CAP : SOLVER_CAP);
@@ -146,14 +146,10 @@ test('the two pages: The Kinsman in level 9 and The Gate in level 10, each off t
   }
 });
 
-test('level 10 has more than one way through: the red door, or the snares', () => {
+test('level 10: the block holds the snare on the way to the gate open, and a second snare holds the beast', () => {
   const lv = snareLevel(9);
   assert.ok(lv.terrain.includes('gate') && lv.terrain.includes('exit') && lv.relics > 0);
-  assert.ok(lv.terrain.includes('door-red') && lv.objects.includes('key-red'));
-  // The snares' way alone: without the key the door stays shut, and the level is still won.
-  assert.ok(solve(initial(withoutObjects(lv, ['key-red'])), BIG_CAP).solved, 'won without the red key');
-  // The door alone: with every snare a wall, the key and the door still win it.
-  const walled = retile(lv, 'trap', 'wall');
-  assert.ok(solve(initial(walled), BIG_CAP).solved, 'won with the snares walled up');
-  assert.ok(unwinnable(solve(initial(withoutObjects(walled, ['key-red'])), BIG_CAP)), 'level 10 needs one of its two ways');
+  assert.ok(lv.objects.includes('block') && lv.terrain.includes('button-brown'));
+  assert.ok(unwinnable(solve(initial(withoutObjects(lv, ['block'])), BIG_CAP)), 'without the block the snare stays shut, and the level is lost');
+  assert.ok(once(9).beastHeld, 'the shortest line holds the beast in a snare');
 });

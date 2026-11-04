@@ -27,7 +27,7 @@ import type { State } from './puzzle/state.ts';
 import { parse } from './puzzle/level.ts';
 import type { Level } from './puzzle/level.ts';
 import { solve } from './puzzle/solver.ts';
-import { startSearch } from './solver-client.ts';
+import { startSearch, solverBusy, watchSolver } from './solver-client.ts';
 import type { Report } from './solver-host.ts';
 import { TRIALS, trialLevel } from './puzzle/trials.ts';
 import { CAMPAIGN_LEVELS, CHAPTERS, LEVEL_IDS, chapterOf, levelById } from './campaign/chapters.ts';
@@ -50,8 +50,8 @@ import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { exitApp, toggleFullscreen as toggleKitFullscreen, browserAppEnv, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
-import { createEndlessSaved } from './endless/saved.ts';
-import { createEndlessClient, workersFor } from './endless/client.ts';
+import { createEndlessSaved, partStore } from './endless/saved.ts';
+import { createEndlessClient, workersFor, workersNow } from './endless/client.ts';
 import type { WorkerLike as EndlessWorker } from './endless/client.ts';
 import { createEndlessMode } from './endless/mode.ts';
 import { tierOf } from './endless/tier.ts';
@@ -110,6 +110,8 @@ let modernRaf = 0;
 let classicRaf = 0;
 let tilesLoaded = false;
 let editorUp = false;
+/** Endless's background levels follow the page once it has started (src/main.ts's start). */
+let endlessReady = false;
 const progress = createProgress(browserStorage());
 const pages = createFoundPages(browserStorage());
 const met = createMet(browserStorage());
@@ -130,27 +132,52 @@ const thumb = document.createElement('canvas');
 thumb.className = 'map-thumb';
 thumb.width = THUMB_W;
 thumb.height = THUMB_H;
-const ui = createUi({ atlas, icons: iconsJson as IconSheet, thumb, board, progress, pages, met, levels, sfx: audio.sfx, cards: stack => behindEditor(stack.includes('editor')) });
+const ui = createUi({ atlas, icons: iconsJson as IconSheet, thumb, board, progress, pages, met, levels, sfx: audio.sfx, cards: stack => { behindEditor(stack.includes('editor')); followEndless(); } });
 /* Endless: the saved run, the worker that makes its levels, and the mode that opens them. Its levels come from the
    worker's own bundle (dist/endless-worker.js), never the solver's worker, so the editor's Check never waits on it. */
 const endlessSaved = createEndlessSaved(browserStorage());
+const endlessClient = createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker,
+  () => endlessWorkers(), partStore(browserStorage(), ENDLESS_WORKER_V));
 const endless = createEndlessMode({
   saved: endlessSaved,
-  client: createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker,
-    () => workersFor(navigator.hardwareConcurrency, endlessBattery)),
+  client: endlessClient,
   tier: () => tierOf(CHAPTERS, id => progress.get(id).cleared),
   newSeed: () => newSeed(Math.random),
   play: (level, about, line) => outside.play(level, about, line),
-  changed: () => ui.refresh(),
+  changed: () => { ui.refresh(); followEndless(); },
   budget: () => endlessBudget,
 });
+/* Endless's levels are made in the background too, outside a run: with one worker, once the page has been quiet
+   for ENDLESS_WARM_MS, while it shows and the solver's worker is idle, and not on a low battery that is draining.
+   In a run (its level open, or Next Level waiting) its workers take their full share. */
+const ENDLESS_WARM_MS = 5000;
+let endlessWarm = false;
+let pageShown = typeof document === 'undefined' || document.visibilityState !== 'hidden';
+/** The player is in an Endless run: its level is on the game screen (with its cards), or Next Level waits. */
+function inEndlessRun(): boolean {
+  if (endless.view().finding) return true;
+  const top = ui.top();
+  if (top === 'title' || top === 'endless' || top === 'editor' || top === 'shared' || top === 'levels') return false;
+  return game.trial >= 0 && levels.outside?.(game.trial)?.kind === 'endless';
+}
+function endlessWorkers(): number {
+  return workersNow({ run: inEndlessRun(), warm: endlessWarm, shown: pageShown, solving: solverBusy(), battery: endlessBattery },
+    workersFor(navigator.hardwareConcurrency, endlessBattery));
+}
+/** The page's standing changed: the workers follow it, and outside a run the background levels go on. */
+function followEndless(): void {
+  if (!endlessReady) return;
+  endlessClient.resize();
+  if (!inEndlessRun() && endlessWorkers() > 0) endless.ahead();
+}
+watchSolver(() => followEndless());
 /** The Endless search's budget a browser spec set through the test hook; the generator's own otherwise. */
 let endlessBudget: number | undefined;
 /** The battery, where the browser tells it: a low one that is not charging searches with one worker. */
 let endlessBattery: { level: number; charging: boolean } | null = null;
 type BatteryLike = { level: number; charging: boolean; addEventListener(type: string, f: () => void): void };
 void (navigator as Navigator & { getBattery?: () => Promise<BatteryLike> }).getBattery?.().then(b => {
-  const read = () => { endlessBattery = { level: b.level, charging: b.charging }; };
+  const read = () => { endlessBattery = { level: b.level, charging: b.charging }; followEndless(); };
   read();
   b.addEventListener('levelchange', read);
   b.addEventListener('chargingchange', read);
@@ -690,6 +717,8 @@ function start(): void {
   }
   followHash();
   window.addEventListener('hashchange', followHash);
+  endlessReady = true;
+  followEndless();
   mountTitleInstall(window, document.getElementById('title-install'));
   image.onload = () => {
     tilesLoaded = true;
@@ -713,9 +742,25 @@ followPage({ doc: document, win: window }, {
   hide: () => {
     game.stop();
     music.hold();
+    pageShown = false;
+    followEndless();
   },
-  show: music.release,
+  show: () => {
+    music.release();
+    pageShown = true;
+    followEndless();
+  },
 });
+// Endless's background levels start once the page has loaded and been quiet a few seconds.
+function warmEndless(): void {
+  window.setTimeout(() => {
+    const go = () => { endlessWarm = true; followEndless(); };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: ENDLESS_WARM_MS });
+    else go();
+  }, ENDLESS_WARM_MS);
+}
+if (document.readyState === 'complete') warmEndless();
+else window.addEventListener('load', warmEndless, { once: true });
 // The page going away cancels a shared level's rating; a page brought back from the browser's cache rates it again.
 window.addEventListener('pagehide', () => visit.leave());
 window.addEventListener('pageshow', e => { if (e.persisted) visit.back(); });
@@ -814,4 +859,4 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
-window.__creteTest = { endless: { mode: endless, saved: endlessSaved, setBudget: (n: number) => { endlessBudget = n; } }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };
+window.__creteTest = { endless: { mode: endless, saved: endlessSaved, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); } }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };

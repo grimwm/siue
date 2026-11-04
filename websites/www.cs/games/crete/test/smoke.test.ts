@@ -29,7 +29,7 @@ test('the rules never name the page', () => {
 });
 
 test('the entry hands the browser specs their test hook, and the bundle ships it', () => {
-  assert.match(read('src/main.ts'), /window\.__creteTest = \{ endless: \{ mode: endless, saved: endlessSaved, setBudget: \(n: number\) => \{ endlessBudget = n; \} \}, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook \};/);
+  assert.match(read('src/main.ts'), /window\.__creteTest = \{ endless: \{ mode: endless, saved: endlessSaved, setBudget: \(n: number\) => \{ endlessBudget = n; \}, workers: endlessWorkers, warm: \(\) => \{ endlessWarm = true; followEndless\(\); \} \}, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook \};/);
   assert.match(read('dist/main.js'), /__creteTest/);
   assert.doesNotMatch(read('dist/main.js'), /__mazeTest/);
 });
@@ -67,9 +67,9 @@ test("New Game opens Chapter 1's card, Continue the chapter card of its level, a
   assert.match(main, /if \(linked\) \{\s*endless\.link\(linked\.seed, linked\.tier\);\s*ui\.showEndless\(\);/);
 });
 
-test('the entry follows the page: hidden ends the play-out and holds the music, shown goes on with the music', () => {
+test('the entry follows the page: hidden ends the play-out, holds the music and Endless\'s background levels; shown goes on with both', () => {
   const main = read('src/main.ts');
-  assert.match(main, /followPage\(\{ doc: document, win: window \}, \{\s*hide: \(\) => \{\s*game\.stop\(\);\s*music\.hold\(\);\s*\},\s*show: music\.release,\s*\}\)/);
+  assert.match(main, /followPage\(\{ doc: document, win: window \}, \{\s*hide: \(\) => \{\s*game\.stop\(\);\s*music\.hold\(\);\s*pageShown = false;\s*followEndless\(\);\s*\},\s*show: \(\) => \{\s*music\.release\(\);\s*pageShown = true;\s*followEndless\(\);\s*\},\s*\}\)/);
 });
 
 test('the page is one frame: no header, side panels or seed form, the board is a canvas, and the cards are inside it', () => {

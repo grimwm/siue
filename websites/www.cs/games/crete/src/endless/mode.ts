@@ -1,8 +1,10 @@
 /* The Island of Crete: Endless on the page, DOM-free. It keeps the saved run (src/endless/saved.ts), asks the
  * worker (src/endless/client.ts) for levels, and opens them as levels from outside the campaign. A new run's first
  * level comes from the bank at once; while a level is played, the workers already make the next AHEAD, so Next
- * Level usually opens one straight away, and otherwise the Endless card shows the search's progress until it is in. The
- * card's words come from `view()`. */
+ * Level usually opens one straight away, and otherwise the Endless card shows the search's progress until it is in.
+ * Outside a run, `ahead()` makes levels in the background: the saved run's next ones, or, with no run, the next new
+ * run's (its seed chosen ahead, src/endless/saved.ts's upcoming), so New Run opens on levels already made. How many
+ * workers it may use is the client's `size()`. The card's words come from `view()`. */
 import { parse } from '../puzzle/level.ts';
 import { lineOf } from '../puzzle/cache.ts';
 import type { Action } from '../puzzle/step.ts';
@@ -10,7 +12,7 @@ import type { Level } from '../puzzle/level.ts';
 import type { Made, Progress } from './generate.ts';
 import type { EndlessClient, MakeJob } from './client.ts';
 import { CancelledError } from './client.ts';
-import { AHEAD } from './saved.ts';
+import { AHEAD, UPCOMING } from './saved.ts';
 import type { EndlessBest, EndlessRun, EndlessSaved, RunLevel } from './saved.ts';
 import { endlessName } from './name.ts';
 import { cleanSeed } from './random.ts';
@@ -39,6 +41,8 @@ export interface EndlessView {
   best: EndlessBest | null;
   /** The tier a new run would take. */
   tier: number;
+  /** Levels made ahead and ready: the saved run's queued ones, or, with no run, the next new run's. */
+  ready: number;
   /** The search for a level the player waits on: its progress (null until the first report), or null when none. */
   finding: { progress: Progress | null } | null;
   /** Why the last level could not be made, until the next try. */
@@ -64,6 +68,9 @@ export interface EndlessMode {
   cancel(): void;
   /** The level being played belongs to the saved run: the next one is being made, or ready. */
   prefetch(): void;
+  /** Makes levels in the background, while the player waits on none: the saved run's next, else the next new
+   *  run's first; nothing once they are made. */
+  ahead(): void;
 }
 
 /** The start card's words: the seed and the fewest moves, and, for a level the search did not make from the seed
@@ -76,7 +83,7 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
   let finding: { progress: Progress | null } | null = null;
   let error: string | null = null;
   /** The worker's job: the level it makes is the saved run's next one (or its first). */
-  let job: { make: MakeJob; seed: string; depth: number; first: boolean } | null = null;
+  let job: { make: MakeJob; seed: string; tier: number; budget: number | null; depth: number; first: boolean; upcoming: boolean } | null = null;
   /** Open the level once it is made. */
   let waiting = false;
   let linked: { seed: string; tier: number } | null = null;
@@ -98,16 +105,30 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
     const queued = deps.saved.queued().length;
     if (queued >= AHEAD) return;
     const depth = run.depth + 1 + queued;
-    if (job && job.seed === run.seed && job.depth === depth) return;
+    if (job && !job.upcoming && job.seed === run.seed && job.depth === depth) return;
     start(run.seed, run.tier, depth, false);
   }
 
-  function start(seed: string, tier: number, depth: number, first: boolean): void {
+  /** The next new run's levels, made while there is no run: its seed is chosen once and kept; its levels are
+   *  dropped when the tier or the budget it was made for changes. */
+  function ahead(): void {
+    if (waiting) return;
+    if (deps.saved.run()) { prefetch(); return; }
+    const tier = deps.tier(), budget = deps.budget?.() ?? null;
+    let up = deps.saved.upcoming();
+    if (!up || up.tier !== tier || up.budget !== budget) up = deps.saved.plan(up?.seed ?? deps.newSeed(), tier, budget);
+    if (up.levels.length >= UPCOMING) return;
+    const depth = up.levels.length + 1;
+    if (job && job.upcoming && job.seed === up.seed && job.tier === tier && job.budget === budget && job.depth === depth) return;
+    start(up.seed, tier, depth, false, up.levels);
+  }
+
+  function start(seed: string, tier: number, depth: number, first: boolean, upcoming: readonly RunLevel[] | null = null): void {
     job?.make.cancel();
-    const played = first ? [] : deps.saved.played();
+    const played = first ? [] : upcoming ? upcoming.map(l => ({ text: l.text, explored: l.explored })) : deps.saved.played();
     const budget = deps.budget?.();
     const make = deps.client.make({ seed, tier, depth, run: played, ...(budget !== undefined ? { budget } : {}) });
-    const mine = { make, seed, depth, first };
+    const mine = { make, seed, tier, budget: budget ?? null, depth, first, upcoming: !!upcoming };
     job = mine;
     make.progress(p => {
       if (job !== mine || !finding) return;
@@ -117,6 +138,14 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
     make.result.then((made: Made) => {
       if (job !== mine) return;
       job = null;
+      if (mine.upcoming) {
+        // Kept only for the plan it was made for: a new tier or budget remakes the upcoming run.
+        const up = deps.saved.upcoming();
+        if (up && up.tier === mine.tier && up.budget === mine.budget) deps.saved.addUpcoming(seed, depth, made);
+        ahead();
+        deps.changed();
+        return;
+      }
       if (first) {
         const run = deps.saved.start(seed, tier, made);
         if (waiting) { waiting = false; finding = null; deps.changed(); openCurrent(run); }
@@ -129,7 +158,8 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
     }, (e: unknown) => {
       if (job !== mine) return;
       job = null;
-      if (e instanceof CancelledError) return;
+      // A level made in the background that could not be made is asked for again when the player wants it.
+      if (e instanceof CancelledError || mine.upcoming) return;
       error = `No level could be made: ${e instanceof Error ? e.message : String(e)}`;
       waiting = false;
       finding = null;
@@ -144,7 +174,13 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
   }
 
   return {
-    view: () => ({ run: deps.saved.run(), best: deps.saved.best(), tier: deps.tier(), finding, error, linked }),
+    view: () => {
+      const run = deps.saved.run();
+      const up = run ? null : deps.saved.upcoming();
+      const tier = deps.tier();
+      const ready = run ? deps.saved.queued().length : up && up.tier === tier && up.budget === (deps.budget?.() ?? null) ? up.levels.length : 0;
+      return { run, best: deps.saved.best(), tier, ready, finding, error, linked };
+    },
     link(seed, tier) {
       const s = cleanSeed(seed);
       if (!s) return;
@@ -155,10 +191,22 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
       deps.changed();
     },
     newRun(seed, tier) {
-      const s = (seed && cleanSeed(seed)) || deps.newSeed();
+      const up = deps.saved.upcoming();
+      const s = (seed && cleanSeed(seed)) || up?.seed || deps.newSeed();
       const t = tier !== undefined && Number.isInteger(tier) && tier >= 1 && tier <= 10 ? tier : deps.tier();
       linked = null;
       error = null;
+      // The levels made ahead for this seed, tier and budget: the run opens on them at once.
+      if (up && up.levels.length && up.seed === s && up.tier === t && up.budget === (deps.budget?.() ?? null)) {
+        if (job) { job.make.cancel(); job = null; }
+        waiting = false;
+        finding = null;
+        const [first, ...after] = up.levels;
+        const run = deps.saved.start(s, t, first!, after);
+        deps.changed();
+        openCurrent(run);
+        return;
+      }
       waiting = true;
       finding = { progress: null };
       deps.changed();
@@ -192,5 +240,6 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
       deps.changed();
     },
     prefetch,
+    ahead,
   };
 }

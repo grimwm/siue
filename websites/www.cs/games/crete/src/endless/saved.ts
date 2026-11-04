@@ -2,12 +2,15 @@
  * progress. A run is its seed, its piece tier, the level it is on (`depth`), its last levels (for the generator's
  * ramp and new-layout checks), the levels the workers have made ahead of it (up to AHEAD, so a reload loses none),
  * and what it has cleared. The best is the deepest level any run cleared without Ariadne's thread, with that run's
- * seed. Storage that is blocked or holds
- * anything unexpected reads as no run and no best. DOM-free. */
+ * seed. While there is no run, the next new run's seed is chosen ahead of time (`upcoming`), and its first levels
+ * are made in the background, up to UPCOMING of them, so New Run starts on them; starting any run drops it. Storage
+ * that is blocked or holds anything unexpected reads as no run and no best. DOM-free. */
 import { pref, json } from '../../../_kit/prefs.ts';
 import type { StorageLike } from '../../../_kit/ports.ts';
 import { RUN_MEMORY } from './generate.ts';
-import type { Made, Played } from './generate.ts';
+import type { Made, Part, Played } from './generate.ts';
+import type { PartStore } from './client.ts';
+import { hash } from './random.ts';
 
 export const ENDLESS_KEY = 'crete-endless';
 
@@ -44,7 +47,11 @@ export interface EndlessRun {
 /** The deepest level a run cleared without the thread. */
 export interface EndlessBest { depth: number; seed: string; moves: number }
 
-interface Stored { run: EndlessRun | null; best: EndlessBest | null }
+/** The next new run, chosen ahead of time: its seed, tier and budget (null for the generator's own), and its first
+ *  levels made so far, in order from level 1. */
+export interface Upcoming { seed: string; tier: number; budget: number | null; levels: RunLevel[] }
+
+interface Stored { run: EndlessRun | null; best: EndlessBest | null; upcoming?: Upcoming | null }
 
 const isText = (v: unknown, most = 20_000): v is string => typeof v === 'string' && v.length <= most;
 const isCount = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
@@ -63,6 +70,14 @@ const isRun = (v: unknown): v is EndlessRun => {
     && isCount(r.cleared) && isCount(r.moves) && typeof r.assisted === 'boolean'
     && (r.best === null || isCount(r.best));
 };
+const isSeed = (v: unknown): v is string => isText(v, 32) && /^[a-z0-9-]+$/.test(v);
+const isUpcoming = (v: unknown): v is Upcoming => {
+  if (typeof v !== 'object' || v === null) return false;
+  const u = v as Record<string, unknown>;
+  return isSeed(u.seed) && Number.isInteger(u.tier) && (u.tier as number) >= 1 && (u.tier as number) <= 10
+    && (u.budget === null || (Number.isInteger(u.budget) && (u.budget as number) > 0))
+    && Array.isArray(u.levels) && u.levels.length <= UPCOMING && u.levels.every(isLevel);
+};
 const isBest = (v: unknown): v is EndlessBest => {
   if (typeof v !== 'object' || v === null) return false;
   const b = v as Record<string, unknown>;
@@ -71,14 +86,23 @@ const isBest = (v: unknown): v is EndlessBest => {
 const isStored = (v: unknown): v is Stored => {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
   const s = v as Record<string, unknown>;
-  return (s.run === null || isRun(s.run)) && (s.best === null || isBest(s.best));
+  return (s.run === null || isRun(s.run)) && (s.best === null || isBest(s.best))
+    && (s.upcoming === undefined || s.upcoming === null || isUpcoming(s.upcoming));
 };
 
 export interface EndlessSaved {
   run(): EndlessRun | null;
   best(): EndlessBest | null;
-  /** A new run on `seed` and `tier`, at its first level. */
-  start(seed: string, tier: number, first: Made): EndlessRun;
+  /** A new run on `seed` and `tier`, at its first level; the levels after it, made ahead, queue behind it. The
+   *  upcoming run is dropped. */
+  start(seed: string, tier: number, first: Made | RunLevel, after?: readonly RunLevel[]): EndlessRun;
+  /** The next new run chosen ahead of time, while there is no run. */
+  upcoming(): Upcoming | null;
+  /** Chooses the next new run: `seed`, `tier` and `budget`, with no level made yet. */
+  plan(seed: string, tier: number, budget: number | null): Upcoming;
+  /** The upcoming run's level at `depth`, made ahead: kept when it is the one after the last made, while it has
+   *  fewer than UPCOMING. */
+  addUpcoming(seed: string, depth: number, made: Made): void;
   /** The levels made ahead of the one being played: `next`, then `ahead`. */
   queued(): RunLevel[];
   /** The run's level at `depth`, made ahead: kept when it is the one after the last made (the level being played and
@@ -95,21 +119,35 @@ export interface EndlessSaved {
 
 /** The most levels made ahead of the one being played. */
 export const AHEAD = 3;
+/** The most levels of the upcoming run made ahead: its first, from the bank, and AHEAD after it. */
+export const UPCOMING = 1 + AHEAD;
 
 const queuedOf = (run: EndlessRun | null): RunLevel[] => (run?.next ? [run.next, ...(run.ahead ?? [])] : []);
 
-const level = (m: Made): RunLevel => ({ text: m.text, explored: m.explored, shortest: m.shortest, line: m.line, from: m.from });
+const level = (m: Made | RunLevel): RunLevel => ({ text: m.text, explored: m.explored, shortest: m.shortest, line: m.line, from: m.from });
 
 export function createEndlessSaved(storage: StorageLike | null): EndlessSaved {
-  const table = pref<Stored>(ENDLESS_KEY, { run: null, best: null }, json(isStored), storage);
-  const save = (run: EndlessRun | null, best = table.get().best) => table.set({ run, best });
+  const table = pref<Stored>(ENDLESS_KEY, { run: null, best: null, upcoming: null }, json(isStored), storage);
+  const save = (run: EndlessRun | null, best = table.get().best) => table.set({ ...table.get(), run, best });
   return {
     run: () => table.get().run,
     best: () => table.get().best,
-    start(seed, tier, first) {
-      const run: EndlessRun = { seed, tier, depth: 1, levels: [level(first)], next: null, ahead: [], cleared: 0, moves: 0, assisted: false, best: null };
-      save(run);
+    start(seed, tier, first, after = []) {
+      const [next = null, ...ahead] = after.slice(0, AHEAD).map(level);
+      const run: EndlessRun = { seed, tier, depth: 1, levels: [level(first)], next, ahead, cleared: 0, moves: 0, assisted: false, best: null };
+      table.set({ ...table.get(), run, upcoming: null });
       return run;
+    },
+    upcoming: () => table.get().upcoming ?? null,
+    plan(seed, tier, budget) {
+      const upcoming: Upcoming = { seed, tier, budget, levels: [] };
+      table.set({ ...table.get(), upcoming });
+      return upcoming;
+    },
+    addUpcoming(seed, depth, made) {
+      const up = table.get().upcoming;
+      if (!up || up.seed !== seed || depth !== up.levels.length + 1 || up.levels.length >= UPCOMING) return;
+      table.set({ ...table.get(), upcoming: { ...up, levels: [...up.levels, level(made)] } });
     },
     queued: () => queuedOf(table.get().run),
     addMade(seed, depth, made) {
@@ -149,6 +187,39 @@ export function createEndlessSaved(storage: StorageLike | null): EndlessSaved {
     played: () => {
       const run = table.get().run;
       return run ? [...run.levels, ...queuedOf(run)].slice(-RUN_MEMORY).map(l => ({ text: l.text, explored: l.explored })) : [];
+    },
+  };
+}
+
+export const PARTS_KEY = 'crete-endless-parts';
+
+const isPart = (v: unknown): v is Part => {
+  if (typeof v !== 'object' || v === null) return false;
+  const p = v as Record<string, unknown>;
+  const f = p.found as Record<string, unknown> | null;
+  return isCount(p.tries) && isCount(p.spent) && (f === null || (isLevel(f) && isCount(f.tries) && isCount(f.spent)));
+};
+
+/** The parts one request's search has finished, under PARTS_KEY: one request at a time, so it stays small. A part's
+ *  answer depends on its request and the generator's `build` (the worker bundle's hash), so a reload on the same
+ *  build goes on where the search stopped, and a new build starts afresh. */
+export function partStore(storage: StorageLike | null, build = ''): PartStore {
+  const id = (key: string) => `${hash(build, key)}-${hash(build, key, 'again')}-${key.length}`;
+  return {
+    load(key) {
+      try {
+        const raw = storage?.getItem(PARTS_KEY);
+        if (!raw) return null;
+        const v = JSON.parse(raw) as { id?: unknown; results?: unknown };
+        if (v.id !== id(key) || !Array.isArray(v.results) || v.results.length > 64) return null;
+        const results = v.results.map(r => (r === null ? undefined : r));
+        return results.every(r => r === undefined || isPart(r)) ? results as (Part | undefined)[] : null;
+      } catch {
+        return null;
+      }
+    },
+    save(key, results) {
+      try { storage?.setItem(PARTS_KEY, JSON.stringify({ id: id(key), results: results.map(r => r ?? null) })); } catch { /* kept in memory only */ }
     },
   };
 }

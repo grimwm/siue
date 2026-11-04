@@ -707,6 +707,8 @@ export function Composer(p: ComposerProps) {
   useEffect(() => {
     const down = (e: KeyboardEvent): void => {
       if (isTyping(e.target) || (e.target instanceof Element && e.target.closest('[data-pop]'))) return;
+      // Enter and the space bar on a focused button press that button, whatever else they do.
+      if ((e.key === 'Enter' || e.key === ' ') && e.target instanceof HTMLElement && e.target.closest('button,[role="button"]') && !ctlRef.current?.placing) return;
       if (keyRef.current.onKey(e)) e.preventDefault();
     };
     const up = (e: KeyboardEvent): void => keyRef.current.keyUp(e.code);

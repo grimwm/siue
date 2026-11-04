@@ -189,4 +189,47 @@ on the score. Each grade has its own bank, saved run and best.
 
 ## Results
 
-Filled in as the work lands.
+**Rulings made on the way.**
+- The floor is 2,000 situations, not the shared bar's 6,000. Raw maze drafts score 100 to 300 from 450 to 7,000
+  situations. At 6,000, most drafts that passed every other check failed; the score and the habits now keep out
+  easy levels.
+- The ceiling is 30,000 situations, not 150,000. At 60,000, two thirds of a search's budget went on solves that hit
+  their cap.
+- Plateaus are Medium 70–110 and Hard 110–170, down from a first draft of 80–120 and 130–200. A part found a level
+  at those first plateaus well under one time in ten; the bands that shipped still sit on the campaign's hardest
+  levels and past them (see the spec).
+- The exit and relics are placed far from Theseus. Being caught throws him back to his start, and in a corridor
+  maze that carried him past a Minotaur blocking the way: two drafts in three had a catch on the best line. Placing
+  the way out on the far side stops the catch being a shortcut.
+- The climb mends what it can instead of throwing the draft away. A cow or mirror no one needs is taken out, and an
+  open area that does not earn its place is walled in.
+- Endless's likeness check leaves out the lattice's corners. Every maze has walls there, so with them counted half
+  of all drafts looked like a campaign level.
+- The editor's problem list is kept short: winning habits fold into one line, "(and N more habits)", and open areas
+  into one.
+
+**Generation time at a 4× throttle** (`systemd-run --user --scope -p CPUQuota=25%`, one core at a quarter speed). Each
+row is one request, its 12 parts run in order on one worker, then laid out on three workers as `src/endless/client.ts`
+runs them:
+
+| Grade | Place | Tier | From | Parts run | One worker | Three workers |
+| --- | --- | --- | --- | --- | --- | --- |
+| Easy | 2nd level | 9 | made (39) | 1 | 23 s | 23 s |
+| Easy | 2nd level | 5 | made (38) | 6 | 364 s | 126 s |
+| Easy | plateau | 9 | made (48) | 3 | 163 s | 61 s |
+| Easy | plateau | 5 | made (68) | 6 | 316 s | 123 s |
+| Medium | 2nd level | 9 | made (42) | 8 | 616 s | 217 s |
+| Medium | 2nd level | 5 | made (50) | 1 | 55 s | 55 s |
+| Medium | plateau | 9 | made (77) | 6 | 370 s | 141 s |
+| Medium | plateau | 5 | made (93) | 1 | 34 s | 34 s |
+| Hard | 2nd level | 9 | made (49) | 5 | 385 s | 167 s |
+| Hard | 2nd level | 5 | made (73) | 3 | 184 s | 68 s |
+| Hard | plateau | 9 | made (85, hides walls) | 5 | 347 s | 149 s |
+| Hard | plateau | 5 | bank | 12 | 824 s | 276 s |
+
+- 11 of 12 were made fresh. The median on three workers is about 2 minutes and the worst 4.6 minutes; the worst was
+  a Hard plateau level that fell back to its bank.
+- A run never stalls. Its first level comes from the bank at once, the workers make the next three while a level is
+  played (`AHEAD`), and a search that runs out of budget takes a bank level.
+- Hard leans on its bank at the plateau, which holds plateau levels for every tier.
+- `PARTS` and `PART_BUDGET` are unchanged.

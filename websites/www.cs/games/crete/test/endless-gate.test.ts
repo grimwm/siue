@@ -71,17 +71,18 @@ test('a run from a bank alone climbs by the score at every tier and grade, a hid
   }
 });
 
-test('a fixed seed is made fresh at each grade, and the level passes the whole gate', () => {
+test('a fixed seed is made fresh by its first part at each grade, and the level passes the whole gate', () => {
   const prev = { text: 'title: \nintro: \n\n#######\n#P...E#\n#M....#\n#######\n', explored: 3000, score: 30 };
-  for (const grade of GRADES) {
-    const req: Request = { seed: 'fixed2', tier: 9, grade, depth: 2, run: [prev] };
-    let part = null;
-    for (let k = 0; k < 12 && !part?.found; k++) part = makePart(req, k, known);
-    assert.ok(part?.found, `${grade}: made fresh within its parts`);
+  // tools/endless-bench.ts measures how often the search makes a level fresh; these pin one seed a grade that does.
+  for (const [grade, seed] of [['easy', 'fixed0'], ['medium', 'fixed7'], ['hard', 'fixed1']] as const) {
+    const req: Request = { seed, tier: 9, grade, depth: 2, run: [prev] };
+    const part = makePart(req, 0, known);
+    assert.ok(part.found, `${grade}: made fresh within its part's budget`);
     const level = parse(part.found.text);
     const d = measure(level);
     assert.deepEqual([d.explored, d.shortest], [part.found.explored, part.found.shortest]);
     const band = placeOf(req).band;
+    assert.ok(part.found.score >= band.least && part.found.score <= band.most, `${grade}: scored ${part.found.score} in ${band.least} to ${band.most}`);
     assert.deepEqual(gateProblems(level, d, { grade, band, previous: { explored: prev.explored } as Difficulty }, known, [parse(prev.text)]), [], grade);
   }
 });

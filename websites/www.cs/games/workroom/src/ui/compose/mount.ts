@@ -12,6 +12,8 @@ import type { EditDoc } from '../../compose/doc.ts';
 import type { XmlDocument } from '../../compose/fromxml.ts';
 import { browserInflate } from '../../compose/mxl.ts';
 import { createSampler } from '../../compose/sampler.ts';
+import { createLookPorts } from '../../compose/looks.ts';
+import { browserStorage } from '../../browser.ts';
 import { loadDraft } from '../../load.ts';
 import type { Fetch } from '../../load.ts';
 import { defaultDeps, LIBRARY_BASE, loadInstruments } from '../../render/engine.ts';
@@ -175,16 +177,18 @@ export async function mountComposer(a: MountArgs): Promise<void> {
     library: async () => lib,
     load: (l, instrument, only) => loadInstruments(l, [instrument], deps.fetchBytes, deps.decode, undefined, only),
   });
-  const click = (accent: boolean): void => {
+  /** A metronome click `delay` seconds from now, on the AudioContext's clock. */
+  const click = (accent: boolean, delay = 0): void => {
     const c = context();
+    const at = c.currentTime + Math.max(0, delay);
     const osc = c.createOscillator();
     const amp = c.createGain();
     osc.frequency.value = accent ? 1760 : 1320;
-    amp.gain.setValueAtTime(0.25, c.currentTime);
-    amp.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.08);
+    amp.gain.setValueAtTime(0.25, at);
+    amp.gain.exponentialRampToValueAtTime(0.001, at + 0.08);
     osc.connect(amp).connect(c.destination);
-    osc.start();
-    osc.stop(c.currentTime + 0.1);
+    osc.start(at);
+    osc.stop(at + 0.1);
   };
   const hum = humPorts(context);
   // Voice Effects on the live microphone: asked for only when Try It With The Mic is tapped, with its own context.
@@ -212,10 +216,12 @@ export async function mountComposer(a: MountArgs): Promise<void> {
       },
     })), a.root);
   };
+  // The composer's look: the account's (the page says it), else this device's, else Tape & Valve dark.
+  const looks = createLookPorts({ account: body['composerLook'], storage: browserStorage(), send: t => a.api.saveLook(t) });
   const open = (start: ComposerStart): void => {
     a.root.textContent = '';
     render(h(ThemeRoot, { handle: a.theme }, h(Composer, {
-      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES, hum, midi, live, vocal, dj: { context },
+      start, entries: entries as Entry[], api: a.api, sampler, buildSound: a.buildSound, click, files: FILES, hum, midi, live, vocal, dj: { context }, looks, storage: browserStorage(),
       now: () => performance.now() / 1000,
       onSaved: piece => { history.replaceState(null, '', `compose.php?id=${encodeURIComponent(piece)}`); },
       onNewPiece: (doc, title) => {

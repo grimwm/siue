@@ -107,6 +107,11 @@ function withTempo(doc: EditDoc, tempo: Tempo[], line: TempoMark[] | null): Edit
   };
 }
 
+/** The piece at the step tempo `tempo` (no tempo line). */
+export function setStepTempo(doc: EditDoc, tempo: readonly Tempo[]): EditDoc {
+  return withTempo(doc, tempo.map(t => ({ ...t })), null);
+}
+
 /** The tempo line `marks` (tidied), written out as the step tempo. */
 export function setTempoLine(doc: EditDoc, marks: readonly TempoMark[]): EditDoc {
   const line = tidyLine(marks.map(m => ({ ...m, bpm: clampBpm(m.bpm) })));

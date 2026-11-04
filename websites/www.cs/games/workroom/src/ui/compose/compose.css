@@ -31,8 +31,8 @@
     .cmp-transport { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
     .cmp-transport > .cmp-play { grid-column: span 2; }
     .cmp-transport > .cmp-tempo { grid-column: span 2; }
-    .cmp-transport > .cmp-readout { grid-column: span 3; justify-content: center; }
-    .cmp-transport > .cmp-modes { grid-column: 1 / -1; }
+    .cmp-transport > .cmp-readout { grid-column: span 3; justify-content: center; padding-inline: .25rem; font-size: .8rem; }
+    .cmp-transport > .cmp-modes { grid-column: span 5; }
     .cmp-transport > .cmp-wide { display: none; }
     .cmp-transport .cmp-icon, .cmp-transport .cmp-btn { width: 100%; }
     .cmp-transport .cmp-tempo { display: flex; width: 100%; }
@@ -40,6 +40,7 @@
   }
   @media (min-width: 640px) { .cmp-transport > .cmp-modes { margin-left: auto; } .cmp-transport > .cmp-narrow { display: none; } }
 
+  @media (min-width: 640px) { .cmp-transport .cmp-mid { display: none; } .cmp-transport { column-gap: .375rem; } .cmp-transport .cmp-modes > button { padding-inline: .5rem; } .cmp-transport .cmp-readout { padding-inline: .5rem; } .cmp-transport .cmp-mode-glyph { display: none; } }
   .cmp-bar { @apply flex flex-wrap items-center gap-2; }
   .cmp-status { @apply min-h-5 text-sm text-dim; }
 

@@ -17,6 +17,7 @@ import { clipsOnPart, laneClips, targetFor } from '../../compose/placement.ts';
 import type { Target } from '../../compose/placement.ts';
 import { heardNotes, loopRegion, moveRegion, splitRegion } from '../../compose/regions.ts';
 import { moveSection, sectionColor, sectionsOf } from '../../compose/sections.ts';
+import { tempoChanges } from '../../compose/song.ts';
 import { cx } from '../console/cx.ts';
 import type { Ctl } from './ctl.ts';
 import { barWords } from './ctl.ts';
@@ -386,6 +387,7 @@ function RulerRow(p: { c: Ctl }) {
       <div class="cmp-cell" onPointerDown={down} data-ruler="">
         <Extra c={c} />
         {bars.map(b => <span class="cmp-barnum" style={{ left: `${b.x}px` }}>{b.bar}</span>)}
+        {tempoChanges(c.doc).map(t => <span class="cmp-tempo-mark" data-tempo-mark={t.bar} style={{ left: `${c.clock.barStartBeat(t.bar) * c.ppb + 2}px` }} title={`From bar ${t.bar}: ${t.bpm} BPM`}>{`♩ ${t.bpm}`}</span>)}
         {c.loop ? (
           <div class={cx('cmp-loopband', !c.loopOn && 'off')} data-loop-band="" style={{ left: `${c.loop.from * c.ppb}px`, width: `${(c.loop.to - c.loop.from) * c.ppb}px` }}>
             <button type="button" aria-label="Clear The Loop Range" title="Clear the loop range" onClick={() => c.setLoop(null)}><Glyph name="close" size={14} /></button>

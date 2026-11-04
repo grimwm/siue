@@ -1,0 +1,47 @@
+/* Start A Song and the Try It coach. Colours are the workroom's tokens, so the composer's Colors and Style apply. */
+@layer components {
+  .cmp-link { @apply inline-flex min-h-10 items-center bg-transparent px-1 text-sm text-amber underline underline-offset-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-amber; }
+
+  /* Try It: one line, never in the way */
+  .cmp-coach { @apply flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border-[1.5px] border-dashed px-3 py-2 text-sm;
+    border-color: color-mix(in srgb, var(--color-amber) 70%, transparent); background: color-mix(in srgb, var(--color-amber) 12%, var(--color-panel)); }
+  .cmp-coach > b { @apply font-display font-semibold tracking-wide uppercase; }
+  .cmp-coach-msg { flex: 1 1 16rem; min-width: 0; }
+  .cmp-coach-off { @apply flex justify-end; }
+  .cmp-dots { @apply inline-flex gap-1; }
+  .cmp-dots > i { @apply size-2.5 rounded-full border-[1.5px] border-amber; }
+  .cmp-dots > i.done { @apply bg-amber; box-shadow: 0 0 6px color-mix(in srgb, var(--color-amber) 60%, transparent); }
+  @media (max-width: 639px) {
+    .cmp-coach { @apply px-2.5; }
+    .cmp-coach > .cmp-link { order: 1; margin-left: auto; }
+    .cmp-coach-msg { order: 2; flex-basis: 100%; }
+  }
+
+  /* Start A Song: pictured cards, four across, two on a phone */
+  .cmp-start { @apply grid gap-2.5 rounded-lg border-[1.5px] border-rule bg-panel p-3; }
+  .cmp-start-head { @apply flex flex-wrap items-baseline gap-x-3 gap-y-1; }
+  .cmp-start-head h2 { @apply m-0 font-display text-xl font-semibold tracking-wide uppercase; }
+  .cmp-start-head p { @apply m-0 text-sm text-dim; }
+  .cmp-start-head .cmp-link { margin-left: auto; }
+  .cmp-templates { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .625rem; }
+  .cmp-tpl { @apply grid content-start overflow-hidden rounded-md border-[1.5px] border-rule bg-well p-0 text-left text-ink hover:border-dim focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber; box-shadow: 0 2px 0 var(--color-rule); }
+  .cmp-tpl:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--color-rule); }
+  .cmp-tpl-pic { @apply flex h-14 items-center justify-center gap-1 border-b-[1.5px] border-rule px-2;
+    background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-rule) 70%, transparent) 0 1px, transparent 1px 14px), linear-gradient(180deg, var(--color-lane), var(--color-well)); }
+  .cmp-tpl-tile { @apply inline-flex size-8 items-center justify-center rounded-md border-2 bg-panel; border-color: var(--c); color: var(--c); }
+  .cmp-tpl-empty { @apply inline-flex size-8 items-center justify-center rounded-md border-2 border-dashed border-dim text-dim; }
+  .cmp-tpl-txt { @apply grid gap-0.5 px-2.5 pt-2 pb-2.5; }
+  .cmp-tpl-txt b { @apply font-display text-base font-semibold tracking-wide; }
+  .cmp-tpl-txt small { @apply text-xs leading-snug text-dim; }
+  @media (max-width: 899px) { .cmp-templates { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 639px) {
+    .cmp-start { @apply gap-2 p-2.5; }
+    .cmp-start-head h2 { @apply text-lg; }
+    .cmp-start-head .cmp-link { order: 1; }
+    .cmp-start-head p { order: 2; flex-basis: 100%; }
+    .cmp-tpl-pic { @apply h-12; }
+    .cmp-tpl-tile, .cmp-tpl-empty { @apply size-7; }
+    .cmp-tpl-txt small { display: none; }
+    .cmp-tpl-txt b { @apply text-sm; }
+  }
+}

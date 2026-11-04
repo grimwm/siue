@@ -179,6 +179,20 @@ test('deleteDraft posts piece and version with CSRF; no version deletes the piec
   await assert.rejects(api.deleteDraft('a-piece', 9), (e: unknown) => e instanceof ServerError && e.status === 404);
 });
 
+test('saveLook posts the look with CSRF; a refusal is a ServerError', async () => {
+  const sent: { url: string; init: Init }[] = [];
+  let status = 200;
+  const fetch: Fetch = async (url, init?: Init) => { sent.push({ url, init }); return reply(status, status === 200 ? { ok: true, csrf: 'next' } : { error: 'bad_look', csrf: 'next' }); };
+  const api = createApi(fetch, 't0');
+  await api.saveLook('night rack light');
+  assert.equal(sent[0]!.url, 'look.php');
+  assert.equal(sent[0]!.init?.method, 'POST');
+  assert.equal(sent[0]!.init?.headers?.['X-CSRF'], 't0');
+  assert.equal(new TextDecoder().decode(sent[0]!.init?.body), 'look=night%20rack%20light');
+  status = 400;
+  await assert.rejects(api.saveLook('nope'), (e: unknown) => e instanceof ServerError && e.status === 400);
+});
+
 test('an over-quota upload is a refusal that carries the room', async () => {
   const fetch: Fetch = async () => reply(413, { error: 'over_quota', room: 1234, message: 'Your studio has 1 KB of 5 MB left.', csrf: 'n' });
   assert.deepEqual(await createApi(fetch, 'x').upload(new Uint8Array(4)), { kind: 'refused', reason: 'over_quota', room: 1234 });

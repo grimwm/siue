@@ -1,0 +1,363 @@
+/* The composer's look: Colors and Style, chosen apart (src/compose/looks.ts). [data-colors] on .cmp sets the palette,
+   dark unless [data-mode="light"], by redefining the workroom's colour tokens (--color-ground, -panel, -amber …) and a
+   few more the styles use; the page body takes the same palette through :has, so nothing around the composer shows
+   another colour. [data-style] sets the shapes: lettering, radii, bevels, the readout and the meters, built only from
+   palette tokens or neutral shading, so any colors go with any style. Sizes never change: every style keeps the
+   Original look's button sizes. A picker card carries its own [data-colors] or [data-style] (and [data-mode]) and so
+   shows its own look inside the page's. Hooks the markup provides: .cmp-meter > i (its level, --lvl from 0 to 1, set on
+   either), a reel glyph (.reel) in .cmp-play, .cmp-panel for a panel, and .playing on .cmp while the song plays. */
+
+@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/fraunces-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Source Serif 4"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/source-serif-4-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/courier-prime-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 700; font-display: swap; src: url("fonts/courier-prime-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Chakra Petch"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/chakra-petch-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Chakra Petch"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/chakra-petch-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Share Tech Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/share-tech-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Michroma"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/michroma-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Sora"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/sora-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Sora"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/sora-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "VT323"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/vt323-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Orbitron"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/orbitron-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Source Sans 3"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/source-sans-3-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Source Sans 3"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/source-sans-3-latin-600-normal.woff2") format("woff2"); }
+
+@layer components {
+  /* ================= Colors: dark first, a light twin under [data-mode="light"] ================= */
+  [data-colors="tape"],
+  body:has(.cmp[data-colors="tape"]) {
+    --color-ground: #1b1814; --color-panel: #27221b; --color-well: #1e1a15; --color-lane: #221e18;
+    --color-rule: #40372b; --color-ink: #efe4cf; --color-dim: #b6a78c; --color-amber: #eadcbd; --accent-soft: #3a3125;
+    --color-on-accent: #1d1913; --color-go: #a7d46e; --color-record: #e0553d; --line-bar: rgba(239,228,207,.30);
+    --line-beat: rgba(239,228,207,.12); --line-step: rgba(239,228,207,.045); --t1: #e0553d; --t2: #6fb6c9;
+    --t3: #a7c66c; --t4: #dd94b4; --t5: #e2b85a; --t6: #a397e3; --fx-riser: #e2b85a; --fx-sweep: #6fb6c9;
+    --fx-hit: #e0553d; --fx-xfade: #a397e3; --hilite: rgba(255,240,210,.10); --shade: rgba(0,0,0,.5);
+    --scrim: rgba(8,6,4,.55); --note-ink: #1d1913; --key-black: #0c0a07; --lcd: #ffcf86; --lcd-bg: #120f0b;
+    --trim: #5d3b21; --color-paper: #f6ecd2; --paper-ink: #2b2216; color-scheme: dark;
+  }
+  [data-colors="tape"][data-mode="light"],
+  body:has(.cmp[data-colors="tape"][data-mode="light"]) {
+    --color-ground: #efe6d3; --color-panel: #f9f2e3; --color-well: #f1e7d1; --color-lane: #e9dec5;
+    --color-rule: #cbb995; --color-ink: #2a2117; --color-dim: #6b5a41; --color-amber: #2f261b; --accent-soft: #e8d9b8;
+    --color-on-accent: #f9f2e3; --color-go: #4b7a26; --color-record: #b5321f; --line-bar: rgba(42,33,23,.34);
+    --line-beat: rgba(42,33,23,.14); --line-step: rgba(42,33,23,.06); --t1: #b5321f; --t2: #2f7f94; --t3: #5b7a22;
+    --t4: #a4466f; --t5: #9a6a10; --t6: #5d4fb0; --fx-riser: #9a6a10; --fx-sweep: #2f7f94; --fx-hit: #b5321f;
+    --fx-xfade: #5d4fb0; --hilite: rgba(255,255,255,.7); --shade: rgba(60,40,20,.2); --scrim: rgba(40,30,15,.4);
+    --note-ink: #ffffff; --key-black: #2a2117; --lcd: #ffcf86; --lcd-bg: #241c13; --trim: #6b4527;
+    --color-paper: #fbf3df; --paper-ink: #2b2216; color-scheme: light;
+  }
+  [data-colors="rack"],
+  body:has(.cmp[data-colors="rack"]) {
+    --color-ground: #141619; --color-panel: #23272c; --color-well: #1a1d21; --color-lane: #1f2226;
+    --color-rule: #3a4048; --color-ink: #e6e8eb; --color-dim: #9ba3ad; --color-amber: #ff5b3a; --accent-soft: #3a1f19;
+    --color-on-accent: #1a0c08; --color-go: #3bff7c; --color-record: #ff3d3d; --line-bar: rgba(230,232,235,.30);
+    --line-beat: rgba(230,232,235,.12); --line-step: rgba(230,232,235,.045); --t1: #ff5b3a; --t2: #ff9d2e;
+    --t3: #ffd84a; --t4: #efe6cf; --t5: #5ac8ff; --t6: #7cff9e; --fx-riser: #ffd84a; --fx-sweep: #5ac8ff;
+    --fx-hit: #ff5b3a; --fx-xfade: #efe6cf; --hilite: rgba(255,255,255,.11); --shade: rgba(0,0,0,.55);
+    --scrim: rgba(5,6,8,.55); --note-ink: #111316; --key-black: #08090a; --lcd: #3bff7c; --lcd-bg: #060807;
+    --trim: #3a3f46; --color-paper: #e9ece6; --paper-ink: #15181b; color-scheme: dark;
+  }
+  [data-colors="rack"][data-mode="light"],
+  body:has(.cmp[data-colors="rack"][data-mode="light"]) {
+    --color-ground: #cfd3d7; --color-panel: #e7e9ec; --color-well: #dde0e4; --color-lane: #d4d8dc;
+    --color-rule: #a3abb4; --color-ink: #15181b; --color-dim: #4c5560; --color-amber: #d93a1c; --accent-soft: #f4d3c9;
+    --color-on-accent: #ffffff; --color-go: #12803b; --color-record: #c51f1a; --line-bar: rgba(21,24,27,.34);
+    --line-beat: rgba(21,24,27,.14); --line-step: rgba(21,24,27,.06); --t1: #d93a1c; --t2: #c96a00; --t3: #9a7a00;
+    --t4: #6b5b3a; --t5: #1f7fbf; --t6: #138a4a; --fx-riser: #9a7a00; --fx-sweep: #1f7fbf; --fx-hit: #d93a1c;
+    --fx-xfade: #6b5b3a; --hilite: rgba(255,255,255,.85); --shade: rgba(0,0,0,.2); --scrim: rgba(10,12,15,.4);
+    --note-ink: #ffffff; --key-black: #15181b; --lcd: #3bff7c; --lcd-bg: #0b0e0c; --trim: #8e969f;
+    --color-paper: #f4f5f1; --paper-ink: #15181b; color-scheme: light;
+  }
+  [data-colors="night"],
+  body:has(.cmp[data-colors="night"]) {
+    --color-ground: #05070d; --color-panel: #0b1120; --color-well: #070b16; --color-lane: #0c1325;
+    --color-rule: #1c2944; --color-ink: #dfe8ff; --color-dim: #8796bb; --color-amber: #38e8f0; --accent-soft: #0a2730;
+    --color-on-accent: #03121a; --color-go: #ffd23f; --color-record: #ff4f6d; --line-bar: rgba(140,170,255,.28);
+    --line-beat: rgba(140,170,255,.11); --line-step: rgba(140,170,255,.045); --t1: #ffd23f; --t2: #38e8f0;
+    --t3: #7dff9a; --t4: #ff4f6d; --t5: #5b93ff; --t6: #ff9f43; --fx-riser: #ffd23f; --fx-sweep: #38e8f0;
+    --fx-hit: #ff4f6d; --fx-xfade: #5b93ff; --hilite: rgba(140,200,255,.08); --shade: rgba(0,0,0,.6);
+    --scrim: rgba(2,4,10,.6); --note-ink: #05070d; --key-black: #010208; --lcd: #7ff6ff; --lcd-bg: #04161c;
+    --trim: #1a2a4a; --color-paper: #e3f3fb; --paper-ink: #0b1120; color-scheme: dark;
+  }
+  [data-colors="night"][data-mode="light"],
+  body:has(.cmp[data-colors="night"][data-mode="light"]) {
+    --color-ground: #e6ecf7; --color-panel: #f8faff; --color-well: #eef2fb; --color-lane: #e2e8f5;
+    --color-rule: #b7c3dc; --color-ink: #0b1120; --color-dim: #47567a; --color-amber: #007d8a; --accent-soft: #d0f0f2;
+    --color-on-accent: #ffffff; --color-go: #b07a00; --color-record: #c8243f; --line-bar: rgba(11,17,32,.32);
+    --line-beat: rgba(11,17,32,.13); --line-step: rgba(11,17,32,.05); --t1: #a87700; --t2: #007d8a; --t3: #12804a;
+    --t4: #c8243f; --t5: #2457c9; --t6: #c25a00; --fx-riser: #a87700; --fx-sweep: #007d8a; --fx-hit: #c8243f;
+    --fx-xfade: #2457c9; --hilite: rgba(255,255,255,.85); --shade: rgba(20,40,90,.16); --scrim: rgba(10,20,45,.4);
+    --note-ink: #ffffff; --key-black: #0b1120; --lcd: #7ff6ff; --lcd-bg: #062027; --trim: #9fb0d2;
+    --color-paper: #f4f8ff; --paper-ink: #0b1120; color-scheme: light;
+  }
+  [data-colors="site"],
+  body:has(.cmp[data-colors="site"]) {
+    --color-ground: #0c0e12; --color-panel: #1a1f2a; --color-well: #141820; --color-lane: #1e2430;
+    --color-rule: #2a3344; --color-ink: #e6e9ef; --color-dim: #9aa3b2; --color-amber: #ff1a1a; --accent-soft: #2b1014;
+    --color-on-accent: #ffffff; --color-go: #ff5555; --color-record: #ff5555; --line-bar: rgba(168,180,196,.30);
+    --line-beat: rgba(168,180,196,.12); --line-step: rgba(168,180,196,.045); --t1: #ff4a4a; --t2: #a8b4c4;
+    --t3: #5ec8ff; --t4: #ffd166; --t5: #e86fb0; --t6: #7be0b0; --fx-riser: #ffd166; --fx-sweep: #5ec8ff;
+    --fx-hit: #ff4a4a; --fx-xfade: #a8b4c4; --hilite: rgba(255,255,255,.06); --shade: rgba(0,0,0,.5);
+    --scrim: rgba(4,5,8,.6); --note-ink: #0c0e12; --key-black: #050608; --lcd: #ff3b3b; --lcd-bg: #07080b;
+    --trim: #2a3344; --color-paper: #eceff4; --paper-ink: #1a1f2a; color-scheme: dark;
+  }
+  [data-colors="site"][data-mode="light"],
+  body:has(.cmp[data-colors="site"][data-mode="light"]) {
+    --color-ground: #e8ebf0; --color-panel: #ffffff; --color-well: #f4f6f9; --color-lane: #e4e8ee;
+    --color-rule: #c5ccd8; --color-ink: #1a1f2a; --color-dim: #5a6578; --color-amber: #c81010; --accent-soft: #f8dcdc;
+    --color-on-accent: #ffffff; --color-go: #c81010; --color-record: #c81010; --line-bar: rgba(26,31,42,.32);
+    --line-beat: rgba(26,31,42,.13); --line-step: rgba(26,31,42,.05); --t1: #c81010; --t2: #3d4a5c; --t3: #0f6fa8;
+    --t4: #9a6a00; --t5: #b02a78; --t6: #1a8a5a; --fx-riser: #9a6a00; --fx-sweep: #0f6fa8; --fx-hit: #c81010;
+    --fx-xfade: #3d4a5c; --hilite: rgba(255,255,255,.8); --shade: rgba(30,40,60,.14); --scrim: rgba(10,14,22,.4);
+    --note-ink: #ffffff; --key-black: #1a1f2a; --lcd: #ff3b3b; --lcd-bg: #1a1f2a; --trim: #c5ccd8;
+    --color-paper: #ffffff; --paper-ink: #1a1f2a; color-scheme: light;
+  }
+  [data-colors="original"],
+  body:has(.cmp[data-colors="original"]) {
+    --color-ground: #121519; --color-panel: #1b1f25; --color-well: #0f1215; --color-lane: #20252c;
+    --color-rule: #2e353f; --color-ink: #e8eaee; --color-dim: #9aa3b0; --color-amber: #f5b942; --accent-soft: #3a2f17;
+    --color-on-accent: #15191f; --color-go: #3ddc84; --color-record: #e2574c; --line-bar: rgba(232,234,238,.34);
+    --line-beat: rgba(232,234,238,.14); --line-step: rgba(232,234,238,.05); --t1: #6aa3ec; --t2: #e3944f;
+    --t3: #4cc08b; --t4: #b98ae0; --t5: #e2708f; --t6: #4cc1d3; --fx-riser: #f5b942; --fx-sweep: #4cc1d3;
+    --fx-hit: #e2708f; --fx-xfade: #b98ae0; --hilite: rgba(255,255,255,.07); --shade: rgba(0,0,0,.45);
+    --scrim: rgba(10,12,15,.55); --note-ink: #ffffff; --key-black: #050607; --lcd: #3ddc84; --lcd-bg: #0a0d10;
+    --trim: #2e353f; --color-paper: #f1f2ee; --paper-ink: #15191f; color-scheme: dark;
+  }
+  [data-colors="original"][data-mode="light"],
+  body:has(.cmp[data-colors="original"][data-mode="light"]) {
+    --color-ground: #eef0f3; --color-panel: #ffffff; --color-well: #f7f8fa; --color-lane: #e6e9ee;
+    --color-rule: #cfd5dd; --color-ink: #15191f; --color-dim: #55606d; --color-amber: #8f5d00; --accent-soft: #f3e3c2;
+    --color-on-accent: #ffffff; --color-go: #1a7f47; --color-record: #b8322a; --line-bar: rgba(21,25,31,.38);
+    --line-beat: rgba(21,25,31,.16); --line-step: rgba(21,25,31,.06); --t1: #3f7fd0; --t2: #c9752c; --t3: #2f9a6a;
+    --t4: #9a59c8; --t5: #c4466a; --t6: #2a9bb0; --fx-riser: #c48a12; --fx-sweep: #2a9bb0; --fx-hit: #c4466a;
+    --fx-xfade: #9a59c8; --hilite: rgba(255,255,255,.75); --shade: rgba(16,20,26,.16); --scrim: rgba(10,12,15,.45);
+    --note-ink: #ffffff; --key-black: #15191f; --lcd: #3ddc84; --lcd-bg: #15191f; --trim: #cfd5dd;
+    --color-paper: #ffffff; --paper-ink: #15191f; color-scheme: light;
+  }
+
+  /* ================= Styles =================
+     Every style is a set of custom properties, declared on the composer, on the page body and again on any picker card
+     (so a card's tokens resolve against its own palette and its own style), and the rules below read only those. The
+     base is Original: the composer's first look. */
+  .cmp, .cmp [data-colors], .cmp [data-style], body:has(.cmp) {
+    --font-display: "Barlow Condensed", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --k-readout-font: var(--font-mono);
+    --k-r: .5rem; --k-rb: .375rem;
+    --k-case: none; --k-track: .025em;
+    --k-ground-bg: var(--color-ground);
+    --k-panel-bg: var(--color-panel);
+    --k-panel-shadow: 0 1px 2px var(--shade, rgba(0,0,0,.4));
+    --k-panel-edge: var(--color-rule);
+    --k-btn-bg: var(--color-panel); --k-btn-ink: var(--color-ink); --k-btn-edge: var(--color-rule);
+    --k-btn-bevel: 0 2px 0 var(--color-rule);
+    --k-btn-press: 0 1px 0 var(--color-rule);
+    --k-on-bg: var(--color-amber); --k-on-ink: var(--color-on-accent); --k-on-edge: var(--color-amber); --k-on-glow: 0 2px 0 var(--color-rule);
+    --k-hover-edge: var(--color-dim); --k-hover-glow: var(--k-btn-bevel); --k-hover-filter: none;
+    --k-readout-bg: var(--color-well); --k-readout-ink: var(--color-amber); --k-readout-glow: none; --k-readout-size: .875rem; --k-readout-track: 0;
+    --k-playhead-glow: 0 0 6px var(--color-go);
+    --k-meter-fill: linear-gradient(to right, var(--color-go) 70%, var(--color-amber) 88%, var(--color-record));
+    --k-meter-bg: var(--color-well); --k-meter-h: 10px; --k-meter-r: 5px; --k-meter-edge: var(--color-rule);
+    --k-meter-mask: none; --k-meter-label: ""; --k-needle: 0; --k-i-bg: var(--k-meter-fill); --k-needle-ink: var(--paper-ink, #222);
+    --vu-face: linear-gradient(180deg, var(--color-paper), color-mix(in srgb, var(--color-paper), var(--paper-ink, #222) 10%));
+    --vu-red: var(--color-record); --vu-edge: color-mix(in srgb, var(--color-ground), black 40%);
+    --scan-core: color-mix(in srgb, var(--color-amber), white 70%);
+    --k-reel: none; --k-noreel: inline-block; --k-scan: 0;
+  }
+  /* Studio Rack: anodised metal, screw heads, backlit pads, an LED readout and segment meters */
+  .cmp[data-style="rack"], .cmp[data-style="rack"] [data-colors], .cmp [data-style="rack"], .cmp [data-style="rack"] [data-colors], body:has(.cmp[data-style="rack"]) {
+    --font-display: "Chakra Petch", "Arial Narrow", sans-serif; --font-body: "Chakra Petch", "Segoe UI", sans-serif;
+    --font-mono: "Share Tech Mono", ui-monospace, Menlo, monospace; --k-readout-font: "Share Tech Mono", ui-monospace, monospace;
+    --k-r: 4px; --k-rb: 5px; --k-case: uppercase; --k-track: .05em;
+    --k-screw: radial-gradient(circle, color-mix(in srgb, var(--color-ink) 55%, var(--color-panel)) 0 1.6px, color-mix(in srgb, var(--color-ink) 22%, var(--color-panel)) 2.2px 3.2px, transparent 3.8px);
+    --k-ground-bg: repeating-linear-gradient(90deg, color-mix(in srgb, var(--hilite) 18%, transparent) 0 1px, transparent 1px 3px), var(--color-ground);
+    --k-panel-bg: var(--k-screw) 3px 3px / 12px 12px no-repeat, var(--k-screw) calc(100% - 3px) 3px / 12px 12px no-repeat,
+      var(--k-screw) 3px calc(100% - 3px) / 12px 12px no-repeat, var(--k-screw) calc(100% - 3px) calc(100% - 3px) / 12px 12px no-repeat,
+      linear-gradient(180deg, color-mix(in srgb, var(--hilite) 40%, transparent), transparent 60%), repeating-linear-gradient(90deg, color-mix(in srgb, var(--hilite) 22%, transparent) 0 1px, transparent 1px 2px), var(--color-panel);
+    --k-panel-shadow: inset 0 1px 0 var(--hilite), 0 2px 0 color-mix(in srgb, var(--color-ground), black 45%);
+    --k-btn-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-panel), white 12%), color-mix(in srgb, var(--color-panel), black 8%));
+    --k-btn-edge: color-mix(in srgb, var(--color-ground), black 45%);
+    --k-btn-bevel: inset 0 1px 0 var(--hilite), inset 0 -2px 0 rgba(0,0,0,.22), 0 2px 0 color-mix(in srgb, var(--color-ground), black 55%);
+    --k-btn-press: inset 0 2px 5px var(--shade);
+    --k-on-bg: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--color-amber), white 45%), var(--color-amber) 55%, color-mix(in srgb, var(--color-amber), black 22%));
+    --k-on-edge: color-mix(in srgb, var(--color-amber), black 45%);
+    --k-on-glow: 0 0 14px color-mix(in srgb, var(--color-amber) 55%, transparent), inset 0 1px 0 rgba(255,255,255,.35);
+    --k-hover-filter: brightness(1.12);
+    --k-readout-bg: linear-gradient(180deg, var(--lcd-bg), color-mix(in srgb, var(--lcd-bg), var(--lcd) 4%)); --k-readout-ink: var(--lcd);
+    --k-readout-glow: 0 0 6px color-mix(in srgb, var(--lcd) 60%, transparent); --k-readout-size: 1.0625rem; --k-readout-track: .06em;
+    --k-playhead-glow: 0 0 8px color-mix(in srgb, var(--color-go) 70%, transparent);
+    --k-meter-fill: linear-gradient(to right, var(--color-go) 0 62%, var(--fx-riser) 62% 84%, var(--color-record) 84%);
+    --k-meter-bg: var(--lcd-bg); --k-meter-h: 12px; --k-meter-r: 2px;
+    --k-meter-mask: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 8px); --k-i-bg: var(--k-meter-fill);
+  }
+  /* Tape & Valve: walnut cheeks, typewriter labels, a warm valve-glow readout, needle VU meters and a turning reel */
+  .cmp[data-style="tape"], .cmp[data-style="tape"] [data-colors], .cmp [data-style="tape"], .cmp [data-style="tape"] [data-colors], body:has(.cmp[data-style="tape"]) {
+    --font-display: "Fraunces", Georgia, "Times New Roman", serif; --font-body: "Source Serif 4", Georgia, serif;
+    --font-mono: "Courier Prime", "Courier New", monospace; --k-readout-font: "Courier Prime", "Courier New", monospace;
+    --k-r: 6px; --k-rb: 4px; --k-track: .01em;
+    --k-wood: repeating-linear-gradient(93deg, var(--trim) 0 2px, color-mix(in srgb, var(--trim), black 20%) 2px 5px, color-mix(in srgb, var(--trim), white 10%) 5px 6px, color-mix(in srgb, var(--trim), black 10%) 6px 10px);
+    --k-ground-bg: var(--k-wood) left top / 9px 100% no-repeat fixed, var(--k-wood) right top / 9px 100% no-repeat fixed,
+      repeating-linear-gradient(0deg, color-mix(in srgb, var(--hilite) 12%, transparent) 0 1px, transparent 1px 3px), var(--color-ground);
+    --k-panel-bg: linear-gradient(180deg, color-mix(in srgb, var(--hilite) 35%, transparent), transparent 50%), var(--color-panel);
+    --k-panel-shadow: inset 0 1px 0 color-mix(in srgb, var(--hilite) 60%, transparent), 0 3px 8px var(--shade);
+    --k-btn-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-panel), white 10%), color-mix(in srgb, var(--color-panel), black 5%));
+    --k-btn-edge: color-mix(in srgb, var(--color-ground), black 40%);
+    --k-btn-bevel: inset 0 1px 0 var(--hilite), 0 3px 0 color-mix(in srgb, var(--color-ground), black 50%);
+    --k-btn-press: inset 0 2px 5px var(--shade);
+    --k-on-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-amber), white 18%), color-mix(in srgb, var(--color-amber), black 6%));
+    --k-on-edge: color-mix(in srgb, var(--color-amber), black 40%);
+    --k-on-glow: inset 0 -2px 0 rgba(0,0,0,.18), 0 1px 0 color-mix(in srgb, var(--color-ground), black 50%);
+    --k-hover-filter: brightness(1.1);
+    --k-readout-bg: linear-gradient(180deg, var(--lcd-bg), color-mix(in srgb, var(--lcd-bg), white 4%)); --k-readout-ink: var(--lcd);
+    --k-readout-glow: 0 0 7px color-mix(in srgb, var(--lcd) 55%, transparent); --k-readout-size: .9375rem;
+    --k-playhead-glow: 0 0 6px color-mix(in srgb, var(--color-go) 60%, transparent);
+    --k-meter-h: 62px; --k-meter-r: 6px 6px 3px 3px; --k-meter-edge: var(--vu-edge); --k-meter-label: "VU"; --k-needle: 1; --k-i-bg: var(--paper-ink);
+    --k-meter-bg: radial-gradient(130% 120% at 50% 118%, transparent 58%, var(--vu-red) 58.5% 61%, transparent 61.5%), radial-gradient(130% 120% at 50% 118%, transparent 58%, var(--paper-ink) 58.5% 60%, transparent 60.5%), var(--vu-face);
+    --k-reel: inline-block; --k-noreel: none;
+  }
+  /* Night Synth: rounded, glowing outlines, a CRT readout */
+  .cmp[data-style="night"], .cmp[data-style="night"] [data-colors], .cmp [data-style="night"], .cmp [data-style="night"] [data-colors], body:has(.cmp[data-style="night"]) {
+    --font-display: "Michroma", "Eurostile", "Arial Black", sans-serif; --font-body: "Sora", "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace; --k-readout-font: "VT323", "IBM Plex Mono", monospace;
+    --k-r: 12px; --k-rb: 10px; --k-case: uppercase; --k-track: .06em;
+    --k-ground-bg: radial-gradient(900px 500px at 15% -10%, color-mix(in srgb, var(--color-amber) 9%, var(--color-ground)) 0%, transparent 70%), radial-gradient(700px 400px at 110% 10%, color-mix(in srgb, var(--t5) 8%, var(--color-ground)) 0%, transparent 70%), var(--color-ground);
+    --k-panel-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-amber) 5%, transparent), transparent 40%), var(--color-panel);
+    --k-panel-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-amber) 6%, transparent), 0 0 24px color-mix(in srgb, var(--color-amber) 8%, transparent);
+    --k-panel-edge: color-mix(in srgb, var(--color-rule) 78%, var(--color-amber));
+    --k-btn-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-panel) 92%, var(--color-amber)), var(--color-panel));
+    --k-btn-edge: color-mix(in srgb, var(--color-rule) 70%, var(--color-amber));
+    --k-btn-bevel: inset 0 1px 0 var(--hilite), 0 0 10px color-mix(in srgb, var(--color-amber) 8%, transparent);
+    --k-btn-press: inset 0 0 12px color-mix(in srgb, var(--color-amber) 25%, transparent);
+    --k-on-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-amber) 28%, var(--color-panel)), color-mix(in srgb, var(--color-amber) 12%, var(--color-panel)));
+    --k-on-ink: color-mix(in srgb, var(--color-amber) 35%, var(--color-ink)); --k-on-edge: var(--color-amber);
+    --k-on-glow: 0 0 14px color-mix(in srgb, var(--color-amber) 45%, transparent), inset 0 0 10px color-mix(in srgb, var(--color-amber) 22%, transparent);
+    --k-hover-filter: brightness(1.12);
+    --k-readout-bg: radial-gradient(120% 140% at 50% 50%, color-mix(in srgb, var(--lcd-bg), var(--lcd) 10%), var(--lcd-bg)); --k-readout-ink: var(--lcd);
+    --k-readout-glow: 0 0 8px color-mix(in srgb, var(--lcd) 75%, transparent), 0 0 2px color-mix(in srgb, var(--lcd), white 60%); --k-readout-size: 1.375rem;
+    --k-playhead-glow: 0 0 10px color-mix(in srgb, var(--color-go) 80%, transparent);
+    --k-meter-fill: linear-gradient(to right, var(--color-amber), var(--color-go) 85%, var(--color-record)); --k-i-bg: var(--k-meter-fill);
+  }
+  /* Site Match: steel and Orbitron, a lit edge on hover, the scanner sweep */
+  .cmp[data-style="site"], .cmp[data-style="site"] [data-colors], .cmp [data-style="site"], .cmp [data-style="site"] [data-colors], body:has(.cmp[data-style="site"]) {
+    --font-display: "Orbitron", "Segoe UI", sans-serif; --font-body: "Source Sans 3", "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace; --k-readout-font: "Orbitron", "Segoe UI", sans-serif;
+    --k-r: 6px; --k-rb: 4px; --k-case: uppercase; --k-track: .08em;
+    --k-ground-bg: linear-gradient(180deg, var(--color-well) 0%, var(--color-ground) 340px, var(--color-ground) 100%);
+    --k-panel-bg: linear-gradient(180deg, color-mix(in srgb, var(--hilite) 40%, transparent), transparent 50%), var(--color-panel);
+    --k-panel-shadow: 0 8px 24px var(--shade);
+    --k-btn-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-amber) 10%, var(--color-panel)), color-mix(in srgb, var(--color-amber) 18%, var(--color-well)));
+    --k-btn-edge: color-mix(in srgb, var(--color-amber) 40%, var(--color-rule));
+    --k-btn-bevel: inset 0 1px 0 var(--hilite); --k-btn-press: inset 0 2px 6px var(--shade);
+    --k-on-bg: linear-gradient(180deg, var(--color-amber), color-mix(in srgb, var(--color-amber), black 28%));
+    --k-on-edge: color-mix(in srgb, var(--color-amber), white 25%);
+    --k-on-glow: 0 0 16px color-mix(in srgb, var(--color-amber) 35%, transparent), inset 0 1px 0 rgba(255,255,255,.1);
+    --k-hover-edge: color-mix(in srgb, var(--color-amber), white 25%); --k-hover-glow: 0 0 16px color-mix(in srgb, var(--color-amber) 22%, transparent), inset 0 1px 0 var(--hilite);
+    --k-readout-bg: var(--lcd-bg); --k-readout-ink: var(--lcd); --k-readout-glow: 0 0 8px color-mix(in srgb, var(--lcd) 60%, transparent); --k-readout-size: .75rem; --k-readout-track: .08em;
+    --k-playhead-glow: 0 0 10px color-mix(in srgb, var(--color-go) 80%, transparent);
+    --k-meter-fill: linear-gradient(to right, var(--color-dim) 0 60%, color-mix(in srgb, var(--color-amber), white 45%) 80%, var(--color-amber));
+    --k-scan: 1; --k-i-bg: var(--k-meter-fill);
+  }
+
+  /* ================= What the styles dress ================= */
+  body:has(.cmp) { background: var(--k-ground-bg); color: var(--color-ink); }
+  .cmp { background: var(--k-ground-bg); color: var(--color-ink); font-family: var(--font-body); min-height: 70dvh; align-content: start; }
+
+  /* buttons: one tactile family. A raised cap that sinks when pressed and lights when on; the sizes stay Original's. */
+  :where(.cmp) .cmp-btn, :where(.cmp) .cmp-icon, :where(.cmp) .cmp-seg > button, :where(.cmp) .cmp-families > button, :where(.cmp) .cmp-actbar .cmp-btn {
+    border-color: var(--k-btn-edge); background: var(--k-btn-bg); color: var(--k-btn-ink); box-shadow: var(--k-btn-bevel);
+    transition: transform .06s, box-shadow .06s, filter .12s;
+  }
+  :where(.cmp) .cmp-btn, :where(.cmp) .cmp-icon { border-radius: var(--k-rb); }
+  :where(.cmp) .cmp-btn, :where(.cmp) .cmp-modes > button { text-transform: var(--k-case); letter-spacing: var(--k-track); }
+  :where(.cmp) .cmp-seg { border-color: var(--k-btn-edge); border-radius: var(--k-rb); box-shadow: var(--k-btn-bevel); }
+  :where(.cmp) .cmp-seg > button { box-shadow: none; border-radius: 0; }
+  :where(.cmp) .cmp-btn:hover:not(:disabled), :where(.cmp) .cmp-icon:hover:not(:disabled), :where(.cmp) .cmp-seg > button:hover:not(:disabled) {
+    filter: var(--k-hover-filter); border-color: var(--k-hover-edge);
+  }
+  :where(.cmp) .cmp-btn:hover:not(:disabled), :where(.cmp) .cmp-icon:hover:not(:disabled) { box-shadow: var(--k-hover-glow); }
+  :where(.cmp) .cmp-btn:active:not(:disabled), :where(.cmp) .cmp-icon:active:not(:disabled), :where(.cmp) .cmp-seg > button:active:not(:disabled) {
+    transform: translateY(1.5px); box-shadow: var(--k-btn-press);
+  }
+  .cmp .cmp-btn[aria-pressed="true"], .cmp .cmp-btn.on, .cmp .cmp-btn.primary, .cmp .cmp-icon[aria-pressed="true"],
+  .cmp .cmp-seg > button[aria-pressed="true"], .cmp .cmp-modes > button[aria-selected="true"], .cmp .cmp-families > button[aria-selected="true"] {
+    background: var(--k-on-bg); color: var(--k-on-ink); border-color: var(--k-on-edge); box-shadow: var(--k-on-glow);
+  }
+  .cmp .cmp-btn.danger:not([aria-pressed="true"]) { color: var(--color-record); }
+  /* Play lights green while the music plays */
+  .cmp .cmp-play.on { background: var(--color-go); border-color: var(--color-go); color: var(--color-on-accent); box-shadow: 0 0 14px color-mix(in srgb, var(--color-go) 50%, transparent); }
+  /* Tape & Valve's Play shows a reel that turns while the music plays */
+  .cmp-play .reel { display: var(--k-reel); }
+  .cmp-play [data-glyph="play"], .cmp-play [data-glyph="stop"] { display: var(--k-noreel); }
+  .cmp-play.on .reel { animation: cmp-reel 1.6s linear infinite; }
+
+  /* the views' tabs: a well with the chosen one lit */
+  :where(.cmp) .cmp-modes { background: var(--color-well); border-color: var(--k-btn-edge); border-radius: calc(var(--k-rb) + 3px); box-shadow: inset 0 2px 4px var(--shade); }
+  :where(.cmp) .cmp-modes > button { border-radius: var(--k-rb); border: 1.5px solid transparent; }
+
+  /* the readout and the tempo: an LED, valve-glow, CRT or plain window, as the style has it */
+  :where(.cmp) .cmp-readout, :where(.cmp) [data-bpm] {
+    font-family: var(--k-readout-font); color: var(--k-readout-ink); text-shadow: var(--k-readout-glow); letter-spacing: var(--k-readout-track);
+    font-variant-numeric: tabular-nums;
+  }
+  :where(.cmp) .cmp-readout { background: var(--k-readout-bg); border-color: var(--k-btn-edge); border-radius: var(--k-rb); box-shadow: inset 0 2px 6px var(--shade); font-size: min(var(--k-readout-size), 1.0625rem); }
+  @media (min-width: 640px) { :where(.cmp) .cmp-readout { font-size: var(--k-readout-size); } }
+  :where(.cmp) [data-bpm] { background: var(--k-readout-bg); opacity: 1; }
+
+  /* the transport, panels, popovers and the timeline */
+  :where(.cmp) .cmp-transport { background: var(--k-panel-bg); backdrop-filter: none; border-color: var(--color-rule); box-shadow: 0 2px 10px var(--shade); }
+  .cmp-panel { display: grid; gap: .75rem; padding: .875rem; border: 1.5px solid var(--k-panel-edge); border-radius: var(--k-r); background: var(--k-panel-bg); box-shadow: var(--k-panel-shadow); min-width: 0; }
+  @media (max-width: 639px) { .cmp-panel { padding: .75rem; gap: .625rem; } }
+  :where(.cmp) .cmp-pop { background: var(--k-panel-bg); border-color: var(--k-panel-edge); }
+  :where(.cmp) .cmp-tl { border-color: var(--k-panel-edge); border-radius: var(--k-r); box-shadow: var(--k-panel-shadow); }
+  :where(.cmp) .cmp-playhead { box-shadow: var(--k-playhead-glow); }
+  :where(.cmp) .cmp-key.black { background: var(--key-black, #23262b); }
+
+  /* the level meter: a bar by default, segments in Studio Rack, a needle on a paper dial in Tape & Valve */
+  .cmp-meter { --lvl: 0; position: relative; display: block; overflow: hidden; height: var(--k-meter-h); border-radius: var(--k-meter-r);
+    background: var(--k-meter-bg); border: 1.5px solid var(--k-meter-edge); box-shadow: inset 0 1px 3px var(--shade); }
+  .cmp-meter::before { content: var(--k-meter-label); position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%); font-family: var(--font-mono); font-weight: 700; font-size: 11px; color: var(--paper-ink); }
+  .cmp-meter > i { position: absolute; bottom: calc(var(--k-needle) * -14px); left: calc(var(--k-needle) * 50%); margin-left: calc(var(--k-needle) * -1px);
+    width: calc(100% - var(--k-needle) * (100% - 2px)); height: calc(100% + var(--k-needle) * 14px);
+    background: var(--k-i-bg); clip-path: inset(0 calc((1 - var(--lvl)) * 100% * (1 - var(--k-needle))) 0 0);
+    -webkit-mask: var(--k-meter-mask); mask: var(--k-meter-mask);
+    transform-origin: 50% 100%; transform: rotate(calc(var(--k-needle) * (var(--lvl) * 96deg - 48deg))); transition: transform .08s linear, clip-path .08s linear; }
+
+  /* flourishes that belong to the page, not to a card */
+  .cmp[data-style="tape"] .cmp-th .name b { font-family: var(--font-mono); font-weight: 700; }
+  .cmp[data-style="night"] .cmp-note, .cmp[data-style="night"] .cmp-cellhit, .cmp[data-style="night"] .cmp-n { box-shadow: 0 0 6px var(--c); }
+  .cmp[data-style="night"] .cmp-clip, .cmp[data-style="night"] .cmp-tile { box-shadow: 0 0 10px color-mix(in srgb, var(--c) 40%, transparent); }
+  .cmp[data-style="night"] .cmp-meter > i { box-shadow: 0 0 10px var(--color-amber); }
+  /* Site Match: the scanner sweeps under the transport while the music plays */
+  .cmp-transport::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 2px; pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg, transparent, var(--color-amber) 45%, var(--scan-core) 50%, var(--color-amber) 55%, transparent) 0 0 / 30% 100% no-repeat; }
+  .cmp.playing .cmp-transport::after { opacity: var(--k-scan); animation: cmp-scan 1.8s ease-in-out infinite alternate; }
+  .cmp[data-style="site"] .cmp-readout, .cmp[data-style="site"] [data-bpm] { font-weight: 600; }
+
+  /* ================= The Colors And Style picker ================= */
+  .cmp-looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr)); gap: .625rem; }
+  .cmp-look { display: grid; padding: 0; overflow: hidden; text-align: left; border-radius: var(--k-r); border: 2px solid var(--color-rule); background: var(--color-well); color: var(--color-ink); min-width: 0; }
+  .cmp-look[aria-pressed="true"] { border-color: var(--color-amber); box-shadow: 0 0 0 2px var(--color-amber); }
+  .cmp-look:focus-visible { outline: 2px solid var(--color-amber); outline-offset: 2px; }
+  .cmp-look .name { display: grid; gap: .125rem; padding: .5rem .625rem .625rem; }
+  .cmp-look .name b { font-family: var(--font-display); font-weight: 600; font-size: .95rem; }
+  .cmp-look .name small { color: var(--color-dim); font-size: .8rem; line-height: 1.3; }
+  .cmp-swatch, .cmp-stylecard { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .5rem; align-items: center; padding: .625rem;
+    background: var(--k-ground-bg); color: var(--color-ink); font-family: var(--font-body); }
+  .cmp-swatch .ground { grid-column: 1 / -1; display: flex; height: 16px; border-radius: 4px; overflow: hidden; border: 1px solid var(--color-rule); }
+  .cmp-swatch .ground i, .cmp-swatch .cables i { flex: 1; }
+  .cmp-swatch .pad { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: var(--k-rb); background: var(--k-on-bg); border: 1.5px solid var(--k-on-edge); box-shadow: var(--k-on-glow); color: var(--k-on-ink); }
+  .cmp-swatch .read, .cmp-stylecard .read { justify-self: start; padding: .25rem .5rem; border-radius: var(--k-rb); white-space: nowrap; overflow: hidden; max-width: 100%;
+    background: var(--k-readout-bg); color: var(--k-readout-ink); text-shadow: var(--k-readout-glow); font-family: var(--k-readout-font); font-size: min(var(--k-readout-size), 1.0625rem); letter-spacing: var(--k-readout-track); }
+  .cmp-swatch .cables { grid-column: 1 / -1; display: flex; gap: 5px; }
+  .cmp-swatch .cables i { height: 6px; border-radius: 3px; }
+  .cmp-stylecard .cmp-btn { pointer-events: none; }
+  .cmp-stylecard .cmp-meter { grid-column: 1 / -1; --lvl: .62; }
+
+  @keyframes cmp-reel { to { transform: rotate(360deg); } }
+  @keyframes cmp-scan { from { background-position: 0 0; } to { background-position: 100% 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .cmp-play.on .reel, .cmp.playing .cmp-transport::after { animation: none; }
+    .cmp-meter > i { transition: none; }
+  }
+}

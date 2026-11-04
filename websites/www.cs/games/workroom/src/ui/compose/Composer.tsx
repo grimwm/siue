@@ -72,6 +72,23 @@ import { VocalPanel } from './VocalPanel.tsx';
 import type { VocalPorts } from './VocalPanel.tsx';
 import { YourKeyboard } from './YourKeyboard.tsx';
 import { DjMode } from './DjMode.tsx';
+import { MixView as MixPanels } from './MixView.tsx';
+import { SheetView } from './SheetView.tsx';
+import { SongPop } from './SongPop.tsx';
+import { StartSong } from './StartSong.tsx';
+import { Coach } from './Coach.tsx';
+import { LooksPop } from './LooksPop.tsx';
+import { templateDoc, TEMPLATES } from '../../compose/templates.ts';
+import type { TemplateId } from '../../compose/templates.ts';
+import { coachPref } from '../../compose/coach.ts';
+import type { CoachStep } from '../../compose/coach.ts';
+import { DEFAULT_LOOK } from '../../compose/looks.ts';
+import type { Look, LookPorts } from '../../compose/looks.ts';
+import { songPrefs } from '../../compose/songprefs.ts';
+import type { SongPrefs } from '../../compose/songprefs.ts';
+import { clicksBetween } from '../../compose/song.ts';
+import type { StorageLike } from '../../../../_kit/ports.ts';
+import { beatOfBar } from './Arrange.tsx';
 import type { DjPorts } from './DjMode.tsx';
 import { mixOf, setLaneFx, setMix, setVoice } from '../../compose/sound.ts';
 import type { LiveVoice } from '../../compose/livemic.ts';
@@ -116,8 +133,12 @@ export interface ComposerProps {
   buildSound: BuildSound;
   /** Seconds, from any steady clock. */
   now(): number;
-  /** A metronome click (count-in); absent where the page has no sound. */
-  click?(accent: boolean): void;
+  /** A metronome click, `delay` seconds from now (count-in, Click); absent where the page has no sound. */
+  click?(accent: boolean, delay?: number): void;
+  /** The composer's own switches (Click, count-in, Type Notes in key) and tips are remembered here. */
+  storage?: StorageLike | null;
+  /** Colors And Style: the choice it opens with and where a new choice is kept. */
+  looks?: LookPorts;
   onSaved?(piece: string, version: number): void;
   /** Sheet music, import and export; without it the editor has no Sheet view and no files. */
   files?: ComposerFiles;
@@ -193,6 +214,30 @@ export function Composer(p: ComposerProps) {
   const [alongParts, setAlongParts] = useState(true);
   const [choosing, setChoosing] = useState<TakeToSave[] | null>(null);
   const [room, setRoom] = useState(p.vocal?.room ?? Infinity);
+  const prefStore = useMemo(() => songPrefs(p.storage ?? null), []);
+  const [prefs, setPrefsState] = useState<SongPrefs>(prefStore.get());
+  const setPrefs = (v: SongPrefs): void => { prefStore.set(v); setPrefsState(v); };
+  const tipsPref = useMemo(() => coachPref(p.storage ?? null), []);
+  const [tips, setTips] = useState(tipsPref.get());
+  const [done, setDone] = useState<ReadonlySet<CoachStep>>(new Set());
+  const did = (k: CoachStep): void => setDone(d => (d.has(k) ? d : new Set(d).add(k)));
+  const [look, setLookState] = useState<Look>(p.looks?.initial ?? DEFAULT_LOOK);
+  const setLook = (l: Look): void => { setLookState(l); p.looks?.save(l); };
+  const [startOpen, setStartOpen] = useState(p.start.version === 0 && p.start.doc.parts.length === 0);
+  /** The other views' playheads and meters, drawn by the same clock as the timeline's. */
+  const heads = useRef(new Set<{ draw(beat: number, follow: boolean): void }>());
+  const register = (slot: { current: { draw(beat: number, follow: boolean): void } | null }) => (h: { draw(beat: number, follow: boolean): void } | null): void => {
+    if (slot.current) heads.current.delete(slot.current);
+    slot.current = h;
+    if (h) heads.current.add(h);
+  };
+  const sheetSlot = useRef<{ draw(beat: number, follow: boolean): void } | null>(null);
+  const mixSlot = useRef<{ draw(beat: number, follow: boolean): void } | null>(null);
+  const registerSheet = useMemo(() => register(sheetSlot), []);
+  const registerMix = useMemo(() => register(mixSlot), []);
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
+  const [engraved, setEngraved] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const readout = useRef<HTMLSpanElement>(null);
   const coarse = useMemo(coarsePointer, []);
@@ -215,6 +260,23 @@ export function Composer(p: ComposerProps) {
   const recordEntry = recordPart ? entryOf(recordPart) : null;
   const keysStart = keysFrom ?? (recordEntry ? keyboardStart(recordEntry) : 48);
 
+  // ---- The Try It coach notices what has been done ----
+  /** A template or Undo replaced the song: what it brings is not something the person did. */
+  const fresh = useRef(false);
+  const counts = useRef({ notes: Number.MAX_SAFE_INTEGER, parts: doc.parts.length, clips: doc.fxClips?.length ?? 0 });
+  useEffect(() => {
+    const notes = doc.parts.reduce((n, x) => n + x.notes.length, 0);
+    const was = counts.current;
+    const skip = fresh.current;
+    fresh.current = false;
+    if (!skip) {
+      if (notes > was.notes) did('note');
+      if (doc.parts.length > was.parts) did('inst');
+      if ((doc.fxClips?.length ?? 0) > was.clips) did('fxadd');
+    }
+    counts.current = { notes, parts: doc.parts.length, clips: doc.fxClips?.length ?? 0 };
+  }, [doc]);
+
   // ---- The document ----
   const say = (words: string): void => setStatus(words);
   const apply = (next: EditDoc, words?: string): void => {
@@ -223,8 +285,8 @@ export function Composer(p: ComposerProps) {
     if (words) setStatus(words);
   };
   const clearPicks = (): void => { setPickState({ kind: 'none' }); setChord(null); setSplitting(false); };
-  const undo = (): void => { setDoc(history.undo()); clearPicks(); };
-  const redo = (): void => { setDoc(history.redo()); clearPicks(); };
+  const undo = (): void => { fresh.current = true; setDoc(history.undo()); clearPicks(); };
+  const redo = (): void => { fresh.current = true; setDoc(history.redo()); clearPicks(); };
   const savedRef = useRef(savedDoc);
   savedRef.current = savedDoc;
   const docRef = useRef(doc);
@@ -270,6 +332,7 @@ export function Composer(p: ComposerProps) {
   const ctlRef = useRef<Ctl | null>(null);
   const drawAt = (beat: number, follow = false): void => {
     ctlRef.current?.head?.draw(beat, follow);
+    for (const h of heads.current) h.draw(beat, follow);
     const bar = clock.barOfBeat(beat + 1e-9);
     const words = readoutWords(bar, Math.floor(beat - clock.barStartBeat(bar) + 1e-9) + 1, clock.seconds(beat));
     if (readout.current && readout.current.textContent !== words) readout.current.textContent = words;
@@ -291,12 +354,23 @@ export function Composer(p: ComposerProps) {
   /** The playhead's clock: each frame it reads the audio's time and moves the playhead and the readout, nothing else. */
   const follow = (el: HTMLAudioElement, d: EditDoc): void => {
     const c = beatClock(d.tempo);
+    let nextClick = -1;
     const tick = (): void => {
       if (audio.current !== el) return;
       let beat = c.beat(el.currentTime);
       const l = loopRef.current;
       const span = l.loopOn && l.loop ? l.loop : l.loopOn ? { from: 0, to: l.end } : null;
       if (span && beat >= span.to - 0.02) { el.currentTime = c.seconds(span.from); beat = span.from; }
+      // Click: each beat in the next moment is scheduled on the sound's own clock, so it lands on the beat.
+      if (prefsRef.current.click && p.click && !el.paused) {
+        if (nextClick < 0 || beat < nextClick - 1.01) nextClick = Math.ceil(beat - 1e-6);
+        const ahead = c.beat(el.currentTime + 0.15);
+        const stopAt = span ? Math.min(ahead, span.to) : ahead;
+        for (const k of clicksBetween(c, nextClick, stopAt)) {
+          p.click(k.accent, Math.max(0, c.seconds(k.beat) - el.currentTime));
+          nextClick = k.beat + 1;
+        }
+      } else nextClick = -1;
       drawAt(beat, true);
       requestAnimationFrame(tick);
     };
@@ -323,9 +397,18 @@ export function Composer(p: ComposerProps) {
         if (audio.current !== el) return;
         if (loopRef.current.loopOn) { el.currentTime = beatClock(docRef.current.tempo).seconds(loopRef.current.loop?.from ?? 0); void el.play(); } else stop();
       });
+      if (prefsRef.current.countIn && p.click) {
+        // A bar of clicks first, at the tempo where the song starts playing.
+        const bar = beatClock(d.tempo).tempoAt(beatClock(d.tempo).barOfBeat(start + 1e-9));
+        const gap = 60 / bar.bpm;
+        for (let i = 0; i < bar.beats; i++) p.click(i === 0, i * gap);
+        await new Promise(r => setTimeout(r, bar.beats * gap * 1000));
+        if (mine !== run.current) return;
+      }
       playingRef.current = true;
       setPlaying(true);
       setGetting(false);
+      did('play');
       await el.play();
       follow(el, d);
     } catch (e) {
@@ -642,7 +725,7 @@ export function Composer(p: ComposerProps) {
     const typed = s.typing ? s.doc.parts.find(y => y.id === s.sel && !y.vocal && !entryOf(y)?.pieces) : undefined;
     if (typed) {
       const low = lowOf(typed);
-      const pitch = typedPitch(e.code, low);
+      const pitch = typedPitch(e.code, low, s.doc.key, prefsRef.current.inKey);
       if (pitch !== null) {
         if (e.repeat) return true;
         const made = typeNote(s.doc, typed.id, pitch, s.cursor, s.len);
@@ -832,6 +915,7 @@ export function Composer(p: ComposerProps) {
     const made = addPart(doc, e);
     if (!made) { say('A piece holds at most 16 tracks.'); return; }
     apply(made.doc, `Added ${e.name}: an empty track. Tap its grid to put notes in.`);
+    setStartOpen(false);
     setSelState(made.id);
     setOpen(o => new Set(o).add(made.id));
   };
@@ -851,6 +935,20 @@ export function Composer(p: ComposerProps) {
     const b = new AudioBuffer({ length: built.channels[0]!.length, numberOfChannels: built.channels.length, sampleRate: built.rate });
     built.channels.forEach((ch, i) => b.copyToChannel(ch as Float32Array<ArrayBuffer>, i));
     return b;
+  };
+
+  /** Start A Song: a template replaces the song (Undo brings the old one back). */
+  const pickTemplate = (id: TemplateId): void => {
+    stop();
+    const t = TEMPLATES.find(x => x.id === id)!;
+    const next = templateDoc(id, p.entries, doc.title);
+    fresh.current = true;
+    apply(next, `${t.name}: ${next.parts.length ? `${next.parts.length} ${next.parts.length === 1 ? 'track' : 'tracks'} to change as you like.` : 'an empty song.'} Undo brings back what was here.`);
+    setOpen(new Set());
+    setSelState(next.parts.find(x => !entryOf(x)?.pieces)?.id ?? next.parts[0]?.id ?? null);
+    setCursorState(0);
+    setLoopState(null);
+    setStartOpen(false);
   };
 
   const c: Ctl = {
@@ -939,6 +1037,9 @@ export function Composer(p: ComposerProps) {
         {p.files && notesOnly(doc).parts.length ? <PopItem glyph="staff" label="Export MusicXML" onClick={() => { setPop(null); exportAs('musicxml'); }} /> : null}
         {p.files && notesOnly(doc).parts.length ? <PopItem glyph="keys" label="Export MIDI" onClick={() => { setPop(null); exportAs('mid'); }} /> : null}
         {p.files && p.vocal && doc.parts.some(x => x.vocal) ? <PopItem glyph="mic" label="Export With Vocals" onClick={() => { setPop(null); void exportVocals(); }} /> : null}
+        <PopItem glyph="sliders" label="Song" onClick={() => setPop({ name: 'song', anchor: pop.anchor })} data={{ 'data-menu-song': '' }} />
+        <PopItem glyph="song" label="Start A Song" onClick={() => { setPop(null); setStartOpen(true); setView('compose'); }} data={{ 'data-menu-start': '' }} />
+        <PopItem glyph="dial" label="Colors And Style" onClick={() => setPop({ name: 'looks', anchor: pop.anchor })} data={{ 'data-menu-looks': '' }} />
         <PopItem glyph="flag" label="Markers" onClick={() => setPop({ name: 'marker', anchor: pop.anchor })} />
         {p.vocal ? <PopItem glyph="mic" label="Add Vocal Track" onClick={() => { setPop(null); addVocal(); }} /> : null}
       </div>
@@ -946,7 +1047,7 @@ export function Composer(p: ComposerProps) {
   ) : null;
 
   return (
-    <div data-composer="" class="cmp">
+    <div data-composer="" class={cx('cmp', playing && 'playing')} data-colors={look.colors} data-style={look.style} data-mode={look.mode}>
       <header class="grid gap-1">
         <div class="flex flex-wrap items-baseline gap-x-3">
           <h1 class="font-display text-3xl font-semibold tracking-wide break-words uppercase">{p.start.piece.title}</h1>
@@ -957,7 +1058,11 @@ export function Composer(p: ComposerProps) {
         loopOn={loopOn} onLoop={() => setLoopOn(!loopOn)} bpm={bpm} onBpm={v => apply(setPieceSpeed(doc, Math.max(40, Math.min(240, v))))}
         readout={readout} undos={history.undoCount()} redos={history.redoCount()} onUndo={undo} onRedo={redo}
         saving={saving} canSave={doc.parts.length > 0} onSave={() => void save()} onMenu={a => setPop({ name: 'more', anchor: a })}
-        view={view} onView={v => { setView(v); if (v !== 'compose') startPlacing(null); }} />
+        view={view} onView={v => { setView(v); if (v !== 'compose') startPlacing(null); }}
+        click={prefs.click} onClick={() => setPrefs({ ...prefs, click: !prefs.click })}
+        onSong={a => setPop({ name: 'song', anchor: a })} startOpen={startOpen} onStart={() => { setStartOpen(!startOpen); setView('compose'); }}
+        onLooks={a => setPop({ name: 'looks', anchor: a })} />
+      <Coach done={done} hidden={tips === 'hidden'} onHide={() => { tipsPref.set('hidden'); setTips('hidden'); }} onShow={() => { tipsPref.set('shown'); setTips('shown'); }} />
       <input ref={fileInput} type="file" accept={ACCEPT} class="hidden" data-import-file="" aria-label="Import Music File"
         onChange={e => { const f = (e.target as HTMLInputElement).files?.[0]; (e.target as HTMLInputElement).value = ''; if (f) void importFile(f); }} />
       <p data-status="" role="status" class="cmp-status">{status}</p>
@@ -973,6 +1078,7 @@ export function Composer(p: ComposerProps) {
 
       {view === 'compose' ? (
         <>
+          {startOpen ? <StartSong entries={p.entries} onPick={pickTemplate} onHide={() => setStartOpen(false)} /> : null}
           <div class="cmp-bar" data-hear-bar="">
             <span class="cmp-seg" role="group" aria-label="Sound">
               <button type="button" disabled={!doc.parts.length} onClick={() => apply(setAllMuted(doc, true))}><Glyph name="spk-off" size={16} /><span class="ml-1">Mute All</span></button>
@@ -990,22 +1096,28 @@ export function Composer(p: ComposerProps) {
           </div>
           {paletteOpen ? <FxPalette c={c} hear={effect => void hearFx(effect)} hearing={hearingFx} setDrop={setDrop} /> : null}
           <Arrange c={c} onWidth={setWidth} tools={tools} drawer={drawer} vocal={vocalPanel} adds={adds} drop={drop} setDrop={setDrop}
-            clipSettings={i => <FxSettings c={c} index={i} building={getting} hearFrom={bar => { const b = clock.barStartBeat(bar); setCursorState(b); void play(b); }} />} />
+            clipSettings={i => <FxSettings c={c} index={i} building={getting} hearFrom={bar => { const b = clock.barStartBeat(bar); did('fx'); setCursorState(b); void play(b); }} />} />
         </>
       ) : view === 'mix' ? (
-        <MixView c={c} part={part} onPick={id => setSelState(id)}>
-          {part && (entry || part.vocal) ? (
-            <SoundPanel part={part} others={doc.parts.filter(x => x.id !== part.id).map(x => ({ id: x.id, name: x.name }))} mix={mixOf(doc)} help={help}
-              onFx={change => apply(setLaneFx(doc, part.id, change))} onVoice={chain => apply(setVoice(doc, part.id, chain))}
-              onMix={change => apply(setMix(doc, change))} live={p.live ? chain => p.live!(chain, key.classes) : undefined} />
-          ) : null}
-          {part && entry ? (
-            <SpeedPanel doc={doc} part={part} bars={bars} help={help}
-              onPieceSpeed={v => apply(setPieceSpeed(doc, v))} onLine={marks => apply(setTempoLine(doc, marks))}
-              onPartSpeed={speed => apply(setPartSpeed(doc, part.id, speed))} onLoudness={marks => apply(setDynamics(doc, part.id, marks))} />
-          ) : null}
-          {doc.parts.length && p.dj ? (
+        <MixPanels c={c} register={registerMix}
+          more={x => (
+            <>
+              {entryOf(x) || x.vocal ? (
+                <SoundPanel part={x} others={doc.parts.filter(y => y.id !== x.id).map(y => ({ id: y.id, name: y.name }))} mix={mixOf(doc)} help={help}
+                  onFx={change => apply(setLaneFx(doc, x.id, change))} onVoice={chain => apply(setVoice(doc, x.id, chain))}
+                  onMix={change => apply(setMix(doc, change))} live={p.live ? chain => p.live!(chain, key.classes) : undefined} />
+              ) : null}
+              {entryOf(x) ? (
+                <SpeedPanel doc={doc} part={x} bars={bars} help={help}
+                  onPieceSpeed={v => apply(setPieceSpeed(doc, v))} onLine={marks => apply(setTempoLine(doc, marks))}
+                  onPartSpeed={speed => apply(setPartSpeed(doc, x.id, speed))} onLoudness={marks => apply(setDynamics(doc, x.id, marks))} />
+              ) : null}
+            </>
+          )}
+          dj={doc.parts.length && p.dj ? (
             <DjMode doc={doc} ports={p.dj} pin={pin} help={help} apply={apply} status={say} onLive={() => {}}
+              onPlaceCrossfade={() => { say('Tap the track that fades out, at the bar where the crossfade should start.'); startPlacing('crossfader'); }}
+              onFader={() => did('xf')}
               score={only => {
                 const full = scoreOf(doc);
                 if (!only) return full;
@@ -1016,22 +1128,37 @@ export function Composer(p: ComposerProps) {
                 return s;
               }}
               build={(k, score) => p.buildSound(`${k}-${editKey(doc)}`, score, () => {})} />
-          ) : null}
-        </MixView>
+          ) : <p class="text-dim">{doc.parts.length ? 'The decks are not available on this page.' : 'Add a track in Compose to use the decks.'}</p>}
+          clipSettings={i => <FxSettings c={c} index={i} building={getting} hearFrom={bar => { const b = clock.barStartBeat(bar); did('fx'); setCursorState(b); void play(b); }} />}
+          showClip={i => {
+            setView('compose');
+            const clip = i >= 0 ? doc.fxClips?.[i] : undefined;
+            if (clip) { setPick({ kind: 'clip', index: i }); setCursor(beatOfBar(c, clip.from_bar)); }
+          }} />
       ) : (
-        <MixView c={c} part={part} onPick={id => setSelState(id)}>
-          {p.files && part && entry && !part.vocal ? (
-            <div class="grid gap-2">
-              {entry.written !== 0 && !entry.pieces ? (
-                <div class="cmp-bar">
-                  <button type="button" class="cmp-btn" aria-pressed={concert} onClick={() => setConcert(!concert)}>Concert Pitch: {concert ? 'On' : 'Off'}</button>
-                  <span class="text-sm text-dim">The {entry.name} is written {intervalWords(entry.written)} how it sounds; Concert Pitch shows how it sounds.</span>
-                </div>
-              ) : null}
-              <PartSheet doc={doc} part={part.id} entries={p.entries} concert={concert} bar={playing ? null : clock.barOfBeat(cursor + 1e-9)} loadSheet={p.files.loadSheet} boxRef={{ current: null }} />
+        <SheetView c={c} register={registerSheet} engraved={p.files ? (
+          <div class="grid gap-2" data-engraved="">
+            <div class="cmp-bar">
+              <button type="button" class="cmp-btn small" aria-expanded={engraved} data-engraved-toggle="" onClick={() => setEngraved(!engraved)}><Glyph name="staff" size={16} />{engraved ? 'Hide Engraved Sheet Music' : 'Engraved Sheet Music'}</button>
+              {engraved ? doc.parts.filter(x => !x.vocal).map(x => (
+                <button type="button" class="cmp-btn small" aria-pressed={part?.id === x.id} data-part={x.id} onClick={() => setSelState(x.id)}>
+                  <span class="size-3 rounded-sm" style={{ background: x.color }} />{x.name}
+                </button>
+              )) : null}
             </div>
-          ) : <p class="text-dim">Pick a track with notes to see it as sheet music.</p>}
-        </MixView>
+            {engraved && part && entry && !part.vocal ? (
+              <>
+                {entry.written !== 0 && !entry.pieces ? (
+                  <div class="cmp-bar">
+                    <button type="button" class="cmp-btn small" aria-pressed={concert} onClick={() => setConcert(!concert)}>Concert Pitch: {concert ? 'On' : 'Off'}</button>
+                    <span class="text-sm text-dim">The {entry.name} is written {intervalWords(entry.written)} how it sounds; Concert Pitch shows how it sounds.</span>
+                  </div>
+                ) : null}
+                <PartSheet doc={doc} part={part.id} entries={p.entries} concert={concert} bar={playing ? null : clock.barOfBeat(cursor + 1e-9)} loadSheet={p.files.loadSheet} boxRef={{ current: null }} />
+              </>
+            ) : null}
+          </div>
+        ) : null} />
       )}
 
       <ActionBar c={c} clip={clipboard} setClip={setClipboard} />
@@ -1042,6 +1169,13 @@ export function Composer(p: ComposerProps) {
           add={name => apply({ ...doc, markers: [...(doc.markers ?? []), { beat: Math.floor(cursor + 1e-9), name: name.slice(0, 24) }].sort((a, b) => a.beat - b.beat) }, `Added the marker ${name}.`)}
           remove={i => apply({ ...doc, markers: (doc.markers ?? []).filter((_, j) => j !== i) })} />
       ) : null}
+      {pop?.name === 'song' ? (
+        <SongPop c={c} anchor={pop.anchor} onClose={() => setPop(null)} prefs={prefs} setPrefs={setPrefs}
+          setKey={k => apply(k ? { ...doc, key: k } : withoutKey(doc))}
+          addMarker={name => apply({ ...doc, markers: [...(doc.markers ?? []), { beat: Math.floor(cursor + 1e-9), name: name.slice(0, 24) }].sort((a, b) => a.beat - b.beat) }, `Added the marker ${name}.`)}
+          removeMarker={i => apply({ ...doc, markers: (doc.markers ?? []).filter((_, j) => j !== i) })} />
+      ) : null}
+      {pop?.name === 'looks' ? <LooksPop look={look} onLook={setLook} anchor={pop.anchor} onClose={() => setPop(null)} /> : null}
       {pop?.name === 'track' && pop.arg ? <TrackMenu c={c} part={pop.arg} anchor={pop.anchor} onClose={() => setPop(null)} /> : null}
       {pop?.name === 'chords' && pop.arg ? <ChordsPop c={c} part={pop.arg} anchor={pop.anchor} onClose={() => setPop(null)} setKey={k => apply(k ? { ...doc, key: k } : withoutKey(doc))} /> : null}
       {pop?.name === 'section-add' ? <SectionPop c={c} id={null} anchor={pop.anchor} onClose={() => setPop(null)} /> : null}
@@ -1105,22 +1239,6 @@ export function Composer(p: ComposerProps) {
       </div>
     );
   }
-}
-
-/** Mix and Sheet: the tracks to choose from, then what the view shows for the chosen one. */
-function MixView(p: { c: Ctl; part: Part | null; onPick(id: string): void; children?: ComponentChildren }) {
-  return (
-    <div class="grid gap-3">
-      <div class="cmp-bar" role="group" aria-label="Track">
-        {p.c.doc.parts.map(x => (
-          <button type="button" class={cx('cmp-btn')} aria-pressed={p.part?.id === x.id} data-part={x.id} onClick={() => p.onPick(x.id)}>
-            <span class="size-3 rounded-sm" style={{ background: x.color }} />{x.name}
-          </button>
-        ))}
-      </div>
-      {p.children}
-    </div>
-  );
 }
 
 const withoutKey = (d: EditDoc): EditDoc => { const { key: _, ...rest } = d; return rest; };

@@ -5,6 +5,26 @@
     { "name": "Barlow Condensed", "source": "@fontsource/barlow-condensed 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-BarlowCondensed.txt",
       "files": ["barlow-condensed-latin-600-normal.woff2"] },
     { "name": "IBM Plex Mono", "source": "@fontsource/ibm-plex-mono 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-IBMPlexMono.txt",
-      "files": ["ibm-plex-mono-latin-400-normal.woff2", "ibm-plex-mono-latin-500-normal.woff2"] }
+      "files": ["ibm-plex-mono-latin-400-normal.woff2", "ibm-plex-mono-latin-500-normal.woff2"] },
+    { "name": "Chakra Petch", "source": "@fontsource/chakra-petch 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-ChakraPetch.txt",
+      "files": ["chakra-petch-latin-500-normal.woff2", "chakra-petch-latin-600-normal.woff2"] },
+    { "name": "Courier Prime", "source": "@fontsource/courier-prime 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-CourierPrime.txt",
+      "files": ["courier-prime-latin-400-normal.woff2", "courier-prime-latin-700-normal.woff2"] },
+    { "name": "Fraunces", "source": "@fontsource/fraunces 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-Fraunces.txt",
+      "files": ["fraunces-latin-600-normal.woff2"] },
+    { "name": "Michroma", "source": "@fontsource/michroma 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-Michroma.txt",
+      "files": ["michroma-latin-400-normal.woff2"] },
+    { "name": "Orbitron", "source": "@fontsource/orbitron 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-Orbitron.txt",
+      "files": ["orbitron-latin-600-normal.woff2"] },
+    { "name": "Share Tech Mono", "source": "@fontsource/share-tech-mono 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-ShareTechMono.txt",
+      "files": ["share-tech-mono-latin-400-normal.woff2"] },
+    { "name": "Sora", "source": "@fontsource/sora 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-Sora.txt",
+      "files": ["sora-latin-400-normal.woff2", "sora-latin-600-normal.woff2"] },
+    { "name": "Source Sans 3", "source": "@fontsource/source-sans-3 5.3.1", "license": "OFL-1.1", "licenseFile": "OFL-SourceSans3.txt",
+      "files": ["source-sans-3-latin-400-normal.woff2", "source-sans-3-latin-600-normal.woff2"] },
+    { "name": "Source Serif 4", "source": "@fontsource/source-serif-4 5.3.1", "license": "OFL-1.1", "licenseFile": "OFL-SourceSerif4.txt",
+      "files": ["source-serif-4-latin-400-normal.woff2"] },
+    { "name": "VT323", "source": "@fontsource/vt323 5.3.0", "license": "OFL-1.1", "licenseFile": "OFL-VT323.txt",
+      "files": ["vt323-latin-400-normal.woff2"] }
   ]
 }

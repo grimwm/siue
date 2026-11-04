@@ -42,7 +42,7 @@ final class MusicPagesTest extends TestCase
     public function testEveryRouteNeedsASession(): void
     {
         $anon = req(['https' => true, 'query' => ['id' => str_repeat('0', 32), 'piece' => 'x', 'v' => '1', 'file' => 'score.json']]);
-        foreach (['csrf', 'note', 'keyring', 'drafts', 'draftFile', 'delete', 'deleteDraft'] as $route) {
+        foreach (['csrf', 'note', 'keyring', 'drafts', 'draftFile', 'delete', 'deleteDraft', 'saveLook'] as $route) {
             $res = $this->pages->$route($anon);
             self::assertSame([401, ['error' => 'signed_out']], [$res->status, json_decode($res->body, true)], $route);
             self::assertArrayNotHasKey('Location', $res->headers, "$route is fetched by the page's script, which shows the sign-in itself");
@@ -592,6 +592,28 @@ final class MusicPagesTest extends TestCase
         self::assertDirectoryDoesNotExist("{$this->dir}/drafts/{$this->account}/p1");
         self::assertSame(['p2'], array_column($this->store->drafts(), 'piece'), 'other pieces stay');
         self::assertSame(404, $del(['piece' => 'p1'])->status);
+    }
+
+    public function testTheComposersLookIsKeptForTheAccountAndShownOnTheComposePage(): void
+    {
+        $in = music_signed_in($this->sessions, $this->account);
+        self::assertStringNotContainsString('data-composer-look', $this->pages->compose($in)->body, 'no look chosen yet');
+        self::assertSame(405, $this->pages->saveLook($in)->status, 'POST only');
+        $save = fn(array $post, ?string $token = null) => $this->pages->saveLook($token === null ? $this->postWithToken($this->account, ['post' => $post])
+            : req(['https' => true, 'method' => 'POST', 'cookies' => $in->cookies, 'headers' => ['x-csrf' => $token], 'post' => $post]));
+        self::assertSame(403, $save(['look' => 'night rack light'], 'nope')->status);
+        foreach ([[], ['look' => 'neon rack light'], ['look' => 'night rack'], ['look' => 'night rack light extra'], ['look' => '<b> rack light']] as $post) {
+            $res = $save($post);
+            self::assertSame([400, 'bad_look'], [$res->status, json_decode($res->body, true)['error']], json_encode($post));
+        }
+        self::assertNull($this->store->composerLook());
+        $ok = $save(['look' => 'night rack light']);
+        self::assertSame(200, $ok->status);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', json_decode($ok->body, true)['csrf']);
+        self::assertSame('night rack light', $this->store->composerLook());
+        self::assertStringContainsString(' data-composer-look="night rack light"', $this->pages->compose($in)->body);
+        self::assertSame(200, $save(['look' => 'tape plain dark'])->status);
+        self::assertSame('tape plain dark', $this->store->composerLook(), 'a new choice replaces the old');
     }
 
     private const HEAD_ASSETS = '<script src="../games/workroom/dist/theme.js?v=0123456789"></script>'

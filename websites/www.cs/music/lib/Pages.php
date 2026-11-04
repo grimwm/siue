@@ -720,6 +720,18 @@ final class Pages
         }, 'POST');
     }
 
+    /** POST look.php: the composer's look for this account (`look`, "tape tape dark"). 400 bad_look when it is not one. */
+    public function saveLook(\Admin\Request $r): \Admin\Response
+    {
+        return $this->guarded($r, false, true, function (Store $store) use ($r): \Admin\Response {
+            $look = $r->post['look'] ?? null;
+            if (!is_string($look) || !$store->setComposerLook($look)) {
+                return $this->refuseWithToken(400, 'bad_look', $r);
+            }
+            return Http::json(200, ['ok' => true, 'csrf' => $this->sessions->csrf($r)]);
+        }, 'POST');
+    }
+
     /** GET draft.php?piece=&v=&file=: one draft file, with Range for audio. */
     public function draftFile(\Admin\Request $r): \Admin\Response
     {
@@ -852,6 +864,13 @@ final class Pages
         }
     }
 
+    /** The composer's look for the account, when it chose one: data-composer-look on the compose page's body. */
+    private function lookData(Store $store): string
+    {
+        $look = $store->composerLook();
+        return $look === null ? '' : ' data-composer-look="' . Html::e($look) . '"';
+    }
+
     /** The limits of $account's address under the deploy's configuration. */
     private function limitsOf(int $account): Limits
     {
@@ -959,7 +978,7 @@ final class Pages
             . ' data-account-has-key="' . ($store->keyring() === null ? '0' : '1') . '"'
             . ' data-vocal-quality="' . $store->vocalQuality() . '"'
             . ($view === 'index' ? ' data-connect="' . Html::e($this->connectData()) . '"' : '')
-            . ($view === 'compose' ? $this->newPieceData($store) : '');
+            . ($view === 'compose' ? $this->newPieceData($store) . $this->lookData($store) : '');
         $v = Html::e($this->assetVersion);
         $heading = ($view === 'piece' || $view === 'compose' ? '<p class="crumb"><a href="./">All pieces</a></p>' : '<h1>' . Html::e($title) . '</h1>')
             . ($view === 'piece' && $this->isMusic($store, $piece) ? '<p class="crumb"><a class="compose-link" href="compose.php?id=' . Html::e($piece) . '">Compose</a></p>' : '')

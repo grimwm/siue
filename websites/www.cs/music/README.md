@@ -75,8 +75,23 @@ keys. Nobody else's studio is ever visible to them.
 
 `compose.php` is the editor (`games/workroom/src/ui/compose/`, its DOM-free parts in `src/compose/`). A transport
 bar stays at the top: Play and Stop (also the space bar; "Getting Ready…" while the sound is built), Back To Start,
-Loop, the tempo, where the music is (Bar · Beat · time), Undo, Redo, Save Draft, the Piece menu (Save Draft, Import,
-Export, Markers, Add Vocal Track) and the three views, **Compose**, **Mix** and **Sheet**.
+Loop, Undo, Redo, the tempo, where the music is (Bar · Beat · time), **Click** (the metronome, ticking on the sound's
+own clock), Save Draft, **Song**, **Start A Song**, **Colors And Style**, the Piece menu (Save Draft, Song, Start A Song,
+Colors And Style, Import, Export, Markers, Add Vocal Track; on a phone it is where Song, Start A Song and Colors And
+Style live) and the three views, **Compose**, **Mix** and **Sheet**. A one-line **Try It** coach under it suggests the
+next thing to try (Play, a note, an instrument, an effect, Hear It, the crossfader); it never blocks, and Hide Tips
+folds it away.
+
+**Start A Song** opens on a new piece: Just A Beat, Beat + Bass, Full Band (drums, bass, piano and marimba over a
+Verse and a Chorus, with a Riser into bar 5) and Empty Song, each built from the library's own instruments; picking
+one replaces the song, and Undo brings it back. **Song** holds the song's length (a bar more or less at the end or at
+the cursor, with everything after it moving), its time signature (4/4, 3/4 or 6/8 for the whole song: the bars, the
+ruler and the metronome change and the notes keep their place in time; 6/8 counts eighths, so its tempo doubles), tempo
+changes that hold from a bar on (marked ♩ on the ruler), the key (with Type Notes Stay In Key), markers, Click and a
+bar of count-in before Play. Click, count-in and Stay In Key are remembered on the device. **Colors And Style** are two
+separate choices: Colors (Tape & Valve, Studio Rack, Night Synth, Site Match, Original, each dark or light) and Style
+(Tape & Valve, Studio Rack, Night Synth, Site Match, Original), Tape & Valve both and dark to begin with, every style
+with the same button sizes; the choice is kept for the account (`look.php`) and on the device.
 
 Compose is one timeline running left to right, every row on one scale and one scroll: the song's **sections** (tap
 one for Rename, Duplicate, Loop Bars and Remove; drag it to move it with its music), the **ruler** (tap a bar to start
@@ -96,8 +111,15 @@ time), and **Chords** places named chords, in the chosen key or not. A note outs
 and never moved except by Move Them Into Range. Each open track's **Record** drawer holds **Play Live** (with Play
 Along), **Step**, **Hum**, the on-screen keyboard and Your Keyboard. While a key is held the page is pinned where it
 is. Play builds the song with the same renderer the piece page uses and plays it as a file; the playhead and the
-readout follow its clock without redrawing the page, and the bars scroll to keep the playhead centred. Mix holds the
-chosen track's Sound and Speed And Loudness, and DJ Mode; Sheet shows the chosen track as sheet music. Save Draft
+readout follow its clock without redrawing the page, and the bars scroll to keep the playhead centred. **Mix** has a
+strip per track (Mute, a meter that moves with the track's notes while the song plays, Volume, Left/Right, Echo and
+Room, and More for its full Sound and its Speed And Loudness), the **DJ decks** (DJ Mode: Deck A and Deck B either side
+of the crossfader, Put A Crossfade On The Timeline, the platter, Hot Cues, pads, the XY Pad and the Looper), the
+effects on the timeline as a list with each one's settings and Show On Timeline, and the **Whole Song**'s volume and
+limiter. **Sheet** writes every track on a staff on the same scale and scroll as Compose (treble, bass or both by the
+instrument's notes, drums on their own lines), with note names, a shaded bar for each note's length, a tap on a note to
+hear it, and the playhead kept centred; Engraved Sheet Music shows one track as printed sheet music, with Concert
+Pitch. Save Draft
 keeps the piece's next draft through `save-draft.php`; the edit stays in the page when a save is refused. The piece
 page links Compose on a music piece; the pieces page and Your studio link New Piece. The design is
 `docs/superpowers/specs/2026-10-31-composer-editor-design.md`, with the layout of
@@ -250,11 +272,12 @@ SIUED1 bundle of `score.json` and the new vocal takes it names, from any account
 only as the piece's next draft; 409 `stale` with `latest` otherwise, 409 `exists`, 413 `over_quota` with `room` and
 `message`, 422 `bad_take` or `missing_take`, 413 `take_too_long`, 507 `low_disk`; a 201 carries `room`),
 `take.php?file=` (one of the account's vocal takes) and `convert-take.php?from=&to=` (POST, a Good To The Ear copy of a
-saved Perfect take, as long as it to 0.1 s: every draft moves onto it). Signed out, a page goes to
+saved Perfect take, as long as it to 0.1 s: every draft moves onto it) and `look.php` (POST `look`, the composer's Colors
+And Style as `<colors> <style> <lights>`, such as `tape tape dark`, kept for the account; 400 `bad_look` otherwise). Signed out, a page goes to
 `login.php?next=` (the page, when sign-in may return to it) and a data route answers 401
 `{"error":"signed_out"}`. Each POST's answer carries the next CSRF token. The page shells'
 `<body>` carries `data-note-max` (the largest note), `data-room` (bytes the studio may still
-store), `data-score-only` (`1` when drafts hold a score and no MusicXML), `data-account-has-key` (`1` once a keyring is stored) and `data-vocal-quality` (`perfect` or `ear`, the quality Save To Studio picks first).
+store), `data-score-only` (`1` when drafts hold a score and no MusicXML), `data-account-has-key` (`1` once a keyring is stored) and `data-vocal-quality` (`perfect` or `ear`, the quality Save To Studio picks first); the compose page's adds `data-composer-look` once the account has chosen a look.
 
 API routes (Bearer key, HTTPS; `lib/KeyGate.php`): an AI key (`lib/AiKeys.php`, the
 `studio_keys` table: per account, at most 10 active, 60 requests a minute, scopes

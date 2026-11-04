@@ -13,7 +13,7 @@ import type { ScrollPin } from '../../compose/scrollpin.ts';
 import { barMap } from '../../render/djfx.ts';
 import type { Score, FxClipEffect } from '../../score.ts';
 import { Button } from '../console/Button.tsx';
-import { Panel } from '../console/Panel.tsx';
+import { Glyph } from './Glyph.tsx';
 import { cx } from '../console/cx.ts';
 
 export interface DjPorts {
@@ -33,6 +33,10 @@ export interface DjModeProps {
   status(text: string): void;
   /** Told whether the deck is playing: while it plays, the pad keys are the deck's. */
   onLive?(playing: boolean): void;
+  /** Put A Crossfade On The Timeline: tap the track that fades out, at the bar it starts. */
+  onPlaceCrossfade?(): void;
+  /** The crossfader moved. */
+  onFader?(): void;
 }
 
 /** 33⅓ turns a minute, in radians a second: the platter's normal speed. */
@@ -177,8 +181,24 @@ export function DjMode(p: DjModeProps) {
   const mode = XY_MODES.find(m => m.effect === xyMode)!;
 
   return (
-    <Panel title="DJ & Effects · Perform Live (DJ Mode)" data={{ 'data-dj': '' }}>
+    <div class="grid gap-3" data-dj="">
       <div class="grid gap-3">
+        <div class="cmp-decks" data-decks="">
+          <div class="cmp-deck" data-deck="a"><b>Deck A</b><span>{sides ? nameOf(sides.a) : 'The whole song'}</span><span class="cmp-deck-lvl"><i style={{ transform: `scaleX(${sides ? 1 - fader : 1})` }} /></span></div>
+          <div class="cmp-xf">
+            <label class="cmp-label" for="cmp-crossfader">Crossfader</label>
+            {sides ? (
+              <input id="cmp-crossfader" type="range" min={0} max={1} step={0.01} value={fader} data-crossfader="" class="min-h-11 w-full accent-amber" disabled={ready !== 'yes'}
+                onPointerDown={() => p.pin.hold('dj:fader')} onPointerUp={() => p.pin.release('dj:fader')}
+                onInput={e => { const v = Number((e.target as HTMLInputElement).value); setFader(v); p.onFader?.(); deck.current?.fader(Math.abs(v - 0.5) < 0.02 ? null : v); }} />
+            ) : <p class="text-xs text-dim">The Crossfader needs two tracks or more.</p>}
+            <span class="flex justify-between font-mono text-xs text-dim"><span>A</span><span>B</span></span>
+            {p.onPlaceCrossfade ? (
+              <button type="button" class="cmp-btn small" data-place-crossfade="" onClick={p.onPlaceCrossfade}><Glyph name="xfade" size={16} />Put A Crossfade On The Timeline</button>
+            ) : null}
+          </div>
+          <div class="cmp-deck" data-deck="b"><b>Deck B</b><span>{sides ? nameOf(sides.b) : 'Add a second track'}</span><span class="cmp-deck-lvl"><i style={{ transform: `scaleX(${sides ? fader : 0})` }} /></span></div>
+        </div>
         <div class="flex flex-wrap items-center gap-2">
           {ready !== 'yes' ? <Button variant="primary" onClick={() => void getReady()} disabled={ready === 'building'}>{ready === 'building' ? 'Getting Ready…' : 'Get The Deck Ready'}</Button> : (
             <>
@@ -225,15 +245,6 @@ export function DjMode(p: DjModeProps) {
             </div>
             <p class="text-xs text-dim">Drag the record round and back to scratch. Let go and the beat carries on in time.</p>
 
-            <h3 class="font-display text-sm font-semibold tracking-wide uppercase">Crossfader</h3>
-            {sides ? (
-              <label class="grid gap-1 text-sm">
-                <input type="range" min={0} max={1} step={0.01} value={fader} data-crossfader="" class="min-h-11 w-full accent-amber"
-                  onPointerDown={() => p.pin.hold('dj:fader')} onPointerUp={() => p.pin.release('dj:fader')}
-                  onInput={e => { const v = Number((e.target as HTMLInputElement).value); setFader(v); deck.current?.fader(Math.abs(v - 0.5) < 0.02 ? null : v); }} />
-                <span class="flex justify-between font-mono text-xs text-dim"><span>A: {nameOf(sides.a)}</span><span>B: {nameOf(sides.b)}</span></span>
-              </label>
-            ) : <p class="text-xs text-dim">The Crossfader needs two parts or more.</p>}
 
             <h3 class="font-display text-sm font-semibold tracking-wide uppercase">Hot Cues</h3>
             <div class="flex flex-wrap gap-2">
@@ -295,7 +306,7 @@ export function DjMode(p: DjModeProps) {
         </div>
         {p.help ? <p class="border-l-2 border-amber pl-2 text-sm text-dim">The deck plays the piece as it was when it was made; after changing the piece, Get The Deck Ready Again. Several fingers work at once. With Record To Timeline on, each pad, cue, loop and move lands on the timeline above as a clip.</p> : null}
       </div>
-    </Panel>
+    </div>
   );
 }
 

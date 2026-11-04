@@ -89,7 +89,7 @@ export interface Ctl {
   setPaletteOpen(open: boolean): void;
 }
 
-export type PopName = 'track' | 'chords' | 'section-add' | 'section-rename' | 'add' | 'more' | 'marker';
+export type PopName = 'track' | 'chords' | 'section-add' | 'section-rename' | 'add' | 'more' | 'marker' | 'song' | 'looks';
 
 /** "bar 3" or "bar 3 beat 2" for a beat. */
 export function barWords(clock: BeatClock, beat: number): string {

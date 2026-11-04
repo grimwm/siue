@@ -112,6 +112,34 @@ export function duplicateSection(doc: EditDoc, id: string): EditDoc {
   return reorder(doc, order, [s.from, s.to + 1], list);
 }
 
+/**
+ * An empty bar put in before bar `before` (the bar after the last for the end), with that bar's tempo and section;
+ * everything from `before` on moves a bar later.
+ */
+export function insertBar(doc: EditDoc, before: number): EditDoc {
+  const bars = barsNeeded(doc);
+  const at = Math.max(1, Math.min(bars + 1, Math.round(before)));
+  if (at > bars) return { ...doc, bars: bars + 1 };
+  const order: number[] = [];
+  for (let b = 1; b <= bars; b++) { if (b === at) order.push(b); order.push(b); }
+  return reorder(doc, order, [at], sectionsOf(doc), new Set([at - 1]));
+}
+
+/**
+ * Bar `bar` taken out with everything that starts in it; the bars after it move a bar earlier. A piece keeps at least
+ * one bar.
+ */
+export function removeBar(doc: EditDoc, bar: number): EditDoc {
+  const bars = barsNeeded(doc);
+  const at = Math.round(bar);
+  if (bars <= 1 || at < 1 || at > bars) return doc;
+  const order: number[] = [];
+  for (let b = 1; b <= bars; b++) if (b !== at) order.push(b);
+  const out = reorder(doc, order, [at, at + 1], sectionsOf(doc));
+  const n = bars - 1;
+  return out.base && (out.base.bars ?? 0) > n ? { ...out, base: { ...out.base, bars: n } } : out;
+}
+
 /** The step tempo of bars in `order`: each new bar keeps its old bar's tempo, one entry wherever it changes. */
 function tempoOf(old: BeatClock, order: readonly number[]): Tempo[] {
   const out: Tempo[] = [];
@@ -193,7 +221,7 @@ function tidyDynamics(marks: DynMark[]): DynMark[] {
  * are first cut at the bar lines in `cuts`, so each one lies in a block that moves together. The first copy of a note,
  * region or clip keeps its id; later copies get new ones.
  */
-function reorder(doc: EditDoc, order: readonly number[], cuts: readonly number[], sections: readonly EditSection[]): EditDoc {
+function reorder(doc: EditDoc, order: readonly number[], cuts: readonly number[], sections: readonly EditSection[], blank: ReadonlySet<number> = new Set()): EditDoc {
   const bars = barsNeeded(doc);
   const old = beatClock(doc.tempo);
   let d = doc;
@@ -209,7 +237,7 @@ function reorder(doc: EditDoc, order: readonly number[], cuts: readonly number[]
   }
   const n = order.length;
   const where = new Map<number, number[]>();
-  order.forEach((b, i) => where.set(b, [...(where.get(b) ?? []), i + 1]));
+  order.forEach((b, i) => { if (!blank.has(i)) where.set(b, [...(where.get(b) ?? []), i + 1]); });
   /** The new bars an old bar became; a bar past the end stays past the new end. */
   const barsFor = (b: number): number[] => where.get(b) ?? (b > bars ? [n + b - bars] : []);
 
@@ -270,7 +298,7 @@ function reorder(doc: EditDoc, order: readonly number[], cuts: readonly number[]
   let lastKey = '';
   order.forEach((b, i) => {
     const k = seen.get(b) ?? 0;
-    seen.set(b, k + 1);
+    if (!blank.has(i)) seen.set(b, k + 1);
     const s = ofBar(b);
     const key = `${s.id} ${k}`;
     if (key === lastKey) newSections[newSections.length - 1]!.to = i + 1;

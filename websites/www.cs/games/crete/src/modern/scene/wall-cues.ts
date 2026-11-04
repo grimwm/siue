@@ -49,7 +49,8 @@ void main() {
   float edge = smoothstep(0.78, 1.0, max(e.x, e.y));
   float a = 0.045 + 0.17 * edge;
   float d = (vPos.y / uH + 0.5) * 0.7 + (vPos.x + vPos.z) * 0.3 + 0.15;
-  float band = uFlash * exp(-pow((d - uBand) * 5.0, 2.0));
+  float k = (d - uBand) * 5.0;
+  float band = uFlash * exp(-k * k);
   a += 0.18 * uFlash + 0.55 * band;
   gl_FragColor = vec4(mix(uColor, vec3(1.0), band) * a, 1.0);
 }`;
@@ -62,7 +63,7 @@ uniform float uT;
 uniform float uStill;
 varying vec2 vUv;
 void main() {
-  float ends = smoothstep(0.0, 0.18, vUv.x) * smoothstep(1.0, 0.82, vUv.x) * smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
+  float ends = smoothstep(0.0, 0.18, vUv.x) * (1.0 - smoothstep(0.82, 1.0, vUv.x)) * smoothstep(0.0, 0.12, vUv.y) * (1.0 - smoothstep(0.85, 1.0, vUv.y));
   float wave = vUv.y * 16.0 + sin(vUv.x * 9.0 + uT * 2.2) * 1.4 - uT * 2.6;
   float bands = mix(0.35 + 0.65 * (0.5 + 0.5 * sin(wave)), 0.7, uStill);
   gl_FragColor = vec4(uColor * uA * bands * ends, 1.0);

@@ -28,7 +28,8 @@ export interface StartProps {
 export function Start(p: StartProps) {
   return (
     <Dialog open={p.open} id="start-veil" veilClass="veil veil-start" panelClass="card start" kicker={p.kicker ?? placeWords(p.chapter, p.number, '').kicker}
-      kickerClass="kicker" titleId="start-title" title={p.title} focusId="start-begin">
+      kickerClass="kicker" titleId="start-title" title={p.title} focusId="start-begin"
+      describedBy={p.hint !== undefined ? 'start-intro start-hint' : 'start-intro'}>
       <p id="start-intro">{p.intro}</p>
       {p.hint !== undefined && <p id="start-hint" class="start-hint">{p.hint}</p>}
       {p.best !== undefined && <p id="start-best" class="runstats">{p.best}</p>}

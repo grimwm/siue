@@ -16,7 +16,7 @@ const PAGE = 'games/crete/';
 interface Cell { r: number; c: number }
 interface Shown { found: Cell[]; haze: { at: Cell; face: string }[]; strength: number }
 interface CuesTest {
-  game: { run: { now: { player: Cell; terrain: string[] } } };
+  game: { run: { now: { player: Cell; terrain: string[]; moves: number } } };
   parse(text: string): unknown;
   playLevel(level: unknown): void;
   modern: { active: boolean; frames(): number };
@@ -81,8 +81,8 @@ for (const look of ['classic', 'modern'] as const) {
     expect((await cues(page))?.haze, 'no haze at once').toEqual([]);
     await expect.poll(async () => (await cues(page))?.haze, { timeout: 15_000 }).toEqual([{ at: { r: 1, c: 3 }, face: 'left' }]);
     expect((await cues(page))!.strength).toBeGreaterThan(0);
-    // The haze is only a look: nothing moved and no move was counted.
-    expect(await page.locator('#start-veil').isVisible()).toBe(false);
+    // The haze is only a look: Theseus stands where he was and no move was counted.
+    expect(await page.evaluate(() => (window as unknown as Hooked).__creteTest.game.run.now)).toMatchObject({ player: { r: 1, c: 2 }, moves: 1 });
     await page.keyboard.press('ArrowDown');
     await expect.poll(async () => (await cues(page))?.haze).toEqual([]);
     expect(errors).toEqual([]);

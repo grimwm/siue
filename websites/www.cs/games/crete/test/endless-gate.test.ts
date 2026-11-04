@@ -4,11 +4,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BANK } from '../src/endless/bank.ts';
-import { generate, fromBank, RUN_MEMORY } from '../src/endless/generate.ts';
+import { generate, fromBank, makePart, RUN_MEMORY } from '../src/endless/generate.ts';
 import type { Played, Request } from '../src/endless/generate.ts';
-import { bandAfter, chapterOf, knownOf, newProblems, PLATEAU, FLOOR } from '../src/endless/gate.ts';
+import { bandAfter, chapterOf, gateProblems, knownOf, newProblems, PLATEAU, FLOOR } from '../src/endless/gate.ts';
 import { campaignLevels } from '../src/endless/campaign.ts';
-import { rampProblems, rampOf, hidesWalls } from '../src/puzzle/difficulty.ts';
+import { measure, rampProblems, rampOf, hidesWalls } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
 
@@ -58,6 +58,20 @@ test('the ramp: a run from the bank alone climbs by the ramp at every tier, then
       });
     }
   }
+});
+
+test('a fixed seed is made fresh: part 0 finds a level with every piece (Chapter 9\'s pieces), and it passes the whole gate', () => {
+  // tools/endless-bench.ts measures how often the search makes a level fresh, per tier; this pins one that does.
+  const prev = { text: 'title: \nintro: \n\n#######\n#P...E#\n#M....#\n#######\n', explored: 8000 };
+  const req: Request = { seed: 'fixed1', tier: 9, depth: 2, run: [prev] };
+  const part = makePart(req, 0, known);
+  assert.ok(part.found, 'made fresh within its part\'s budget');
+  assert.equal(part.found.from, 'made');
+  const level = parse(part.found.text);
+  const d = measure(level);
+  assert.deepEqual([d.explored, d.shortest], [part.found.explored, part.found.shortest]);
+  const band = bandAfter(prev.explored, false)!;
+  assert.deepEqual(gateProblems(level, d, { band, previous: { explored: prev.explored } as Difficulty }, known, [parse(prev.text)]), []);
 });
 
 test('the generator: the same seed, tier and depth give the same level; another seed another', () => {

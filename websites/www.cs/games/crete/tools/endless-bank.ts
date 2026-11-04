@@ -46,7 +46,9 @@ export function jobsOf(grade: Grade): Job[] {
   const out: Job[] = [];
   let k = 0;
   const next = () => k++ % n;
-  for (const f of CH1) out.push({ grade, tier: 1, family: f, band: next(), hidden: false });
+  // Hard's cow goes in its first band: Chapter 1's pieces alone seldom reach Hard's higher bands with a cow needed at
+  // the right moment.
+  for (const f of CH1) { const band = next(); out.push({ grade, tier: 1, family: f, band: grade === 'hard' && f === 'cow' ? 0 : band, hidden: false }); }
   out.push({ grade, tier: 1, family: null, band: 0, hidden: false }, { grade, tier: 1, family: null, band: n - 1, hidden: false });
   for (const f of LATER) out.push({ grade, tier: FAMILY_CHAPTER[f], family: f, band: next(), hidden: false });
   for (const [f, tier, band] of [['fake', 4, 0], ['invisible', 4, 1], ['fake', 6, n - 1], ['invisible', 9, n - 1]] as const) {

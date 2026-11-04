@@ -1,6 +1,7 @@
 /* The Island of Crete: Endless's gate, and the rating the editor's Check shows. Every level Endless makes passes the
  * campaign's own checks (src/puzzle/difficulty.ts) as a challenge level: `challengeProblems` against `BAR` (which
- * carries `catchProblems`), `sharedProblems` against `SHARED_BAR`, `threatProblems` with the challenge bar,
+ * carries `catchProblems`), `sharedProblems` (both with their situations at Endless's FLOOR), `threatProblems` with
+ * the challenge bar,
  * `hiddenProblems`, `startProblems` and `purposeProblems`, the every-piece rule; the rules of src/puzzle/rating.ts:
  * no habit player wins, open space earns its place, a cow or a mirror is needed (and in Hard the cow set down at once
  * loses); and two of its own: a tidy maze, and a layout new against every campaign level and the run's own levels
@@ -190,9 +191,8 @@ function plain(rule: string, problems: readonly string[]): Problem[] {
 export interface Checked { score: Score | null; problems: Problem[] }
 
 /** Every rule that does not depend on the run, for a level of `grade` (or the grade its score puts it at): the
- *  campaign's checks as a challenge level of
- *  its chapter, nothing under a figure, a tidy maze, no habit win, the score, open space that earns its place, the
- *  tools needed, and every piece's purpose, in order of their cost. With `all` false it stops at the first that fails
+ *  campaign's checks as a challenge level of its chapter, nothing under a figure, a tidy maze, no habit win, the
+ *  score, open space that earns its place, the tools needed, and every piece's purpose, in order of their cost. With `all` false it stops at the first that fails
  *  (Endless's gate); with `all` true it goes through every one (the editor). Searches are capped at `cap`. */
 export function* levelChecks(level: Level, d: Difficulty, grade: Grade | ((score: Score) => Grade), all: boolean, cap = SOLVER_CAP): Generator<Progress, Checked, void> {
   const problems: Problem[] = [];

@@ -233,3 +233,19 @@ runs them:
   played (`AHEAD`), and a search that runs out of budget takes a bank level.
 - Hard leans on its bank at the plateau, which holds plateau levels for every tier.
 - `PARTS` and `PART_BUDGET` are unchanged.
+
+**The banks.**
+
+| Grade | Levels | Habit wins | Open share (mean, max) | Hide walls | Cows | Scores |
+| --- | --- | --- | --- | --- | --- | --- |
+| Easy | 28 | 0 (0%) | 0.00, 0.00 | 4 | 7 | 22–64 |
+| Medium | 28 | 0 (0%) | 0.00, 0.07 | 4 | 4 | 31–102 |
+| Hard | 27 | 0 (0%) | 0.00, 0.00 | 4 | 1 | 37–161 |
+
+For comparison, the old bank's open share was 0.91, and the habits won 11 of its 41 levels; the campaign's median is
+0.72. Two Hard jobs ran out of their 400,000,000 budget: tier 1 ice at 103–125, and tier 1 cow at 103–125, whose
+place the first band's cow job took. One Medium gravel level repeated another made in a parallel lane and was made
+again.
+
+The engine-same shards were recorded again. Their campaign answers are identical to the earlier recordings, shard
+for shard.

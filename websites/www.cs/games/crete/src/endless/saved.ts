@@ -8,7 +8,9 @@
 import { pref, json } from '../../../_kit/prefs.ts';
 import type { StorageLike } from '../../../_kit/ports.ts';
 import { RUN_MEMORY } from './generate.ts';
-import type { Made, Played } from './generate.ts';
+import type { Made, Part, Played } from './generate.ts';
+import type { PartStore } from './client.ts';
+import { hash } from './random.ts';
 
 export const ENDLESS_KEY = 'crete-endless';
 
@@ -185,6 +187,38 @@ export function createEndlessSaved(storage: StorageLike | null): EndlessSaved {
     played: () => {
       const run = table.get().run;
       return run ? [...run.levels, ...queuedOf(run)].slice(-RUN_MEMORY).map(l => ({ text: l.text, explored: l.explored })) : [];
+    },
+  };
+}
+
+export const PARTS_KEY = 'crete-endless-parts';
+
+const isPart = (v: unknown): v is Part => {
+  if (typeof v !== 'object' || v === null) return false;
+  const p = v as Record<string, unknown>;
+  const f = p.found as Record<string, unknown> | null;
+  return isCount(p.tries) && isCount(p.spent) && (f === null || (isLevel(f) && isCount(f.tries) && isCount(f.spent)));
+};
+
+/** The parts one request's search has finished, under PARTS_KEY: one request at a time, so it stays small. A part's
+ *  answer depends on its request alone, so a reload goes on where the search stopped. */
+export function partStore(storage: StorageLike | null): PartStore {
+  const id = (key: string) => `${hash(key)}-${hash(key, 'again')}-${key.length}`;
+  return {
+    load(key) {
+      try {
+        const raw = storage?.getItem(PARTS_KEY);
+        if (!raw) return null;
+        const v = JSON.parse(raw) as { id?: unknown; results?: unknown };
+        if (v.id !== id(key) || !Array.isArray(v.results) || v.results.length > 64) return null;
+        const results = v.results.map(r => (r === null ? undefined : r));
+        return results.every(r => r === undefined || isPart(r)) ? results as (Part | undefined)[] : null;
+      } catch {
+        return null;
+      }
+    },
+    save(key, results) {
+      try { storage?.setItem(PARTS_KEY, JSON.stringify({ id: id(key), results: results.map(r => r ?? null) })); } catch { /* kept in memory only */ }
     },
   };
 }

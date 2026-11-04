@@ -6,7 +6,7 @@
  * part that has found one is no longer needed, and its worker is ended. When no part finds one, a worker answers
  * from the bank. `size()` may change while a job runs (`resize`): a smaller size ends the workers of the highest
  * parts, which run again later, and 0 holds the job until it grows. The parts a request has finished are kept, so
- * the same request asked again, after a cancel, goes on where it stopped. A part runs straight through, so cancelling
+ * the same request asked again, after a cancel or a reload (`keep`), goes on where it stopped. A part runs straight through, so cancelling
  * a job ends its workers at once and rejects the answer with CancelledError. One job runs at a time: a new one
  * cancels the one before it. A worker that fails rejects its job; the next job starts fresh workers. The page never
  * waits on the search. */
@@ -74,7 +74,13 @@ interface Slot { worker: WorkerLike; busy: number | null }
 /** What a job needs of the client between messages. */
 interface Live { pump(): void; drop(part: number): void }
 
-export function createEndlessClient(spawn: () => WorkerLike, size: () => number = () => 1): EndlessClient {
+/** Where the parts a request has finished are kept over a reload (src/endless/saved.ts's partStore). */
+export interface PartStore {
+  load(key: string): (Part | undefined)[] | null;
+  save(key: string, results: readonly (Part | undefined)[]): void;
+}
+
+export function createEndlessClient(spawn: () => WorkerLike, size: () => number = () => 1, keep: PartStore | null = null): EndlessClient {
   const slots: Slot[] = [];
   let current: { id: number; stop: (e: Error) => void; live: Live } | null = null;
   /** The job under way's handlers: a worker outlives a job, so its messages go to whichever job is current. */
@@ -125,7 +131,7 @@ export function createEndlessClient(spawn: () => WorkerLike, size: () => number 
       const first = request.depth <= 1 || request.run.length === 0;
       const { parts, budget } = partsOf(request);
       const key = JSON.stringify(request);
-      if (memo.key !== key) memo = { key, results: [] };
+      if (memo.key !== key) memo = { key, results: keep?.load(key) ?? [] };
       const results = memo.results;
       /** Each running part's progress, and what the finished ones spent. */
       const live = new Map<number, Progress>();
@@ -201,6 +207,7 @@ export function createEndlessClient(spawn: () => WorkerLike, size: () => number 
         s.busy = null;
         drop(m.part);
         results[m.part] = m.result;
+        keep?.save(key, results);
         if (m.result.found && m.part < found) {
           found = m.part;
           // The parts above it can no longer be the answer: their workers are ended.

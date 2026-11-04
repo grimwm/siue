@@ -8,7 +8,7 @@ import { rngOf, hash, cleanSeed, newSeed } from '../src/endless/random.ts';
 import { bandAfter, chapterOf, floorOf, tidyProblems, TEACHING, CLIMB, PLATEAU, FLOOR } from '../src/endless/gate.ts';
 import { draft, familiesOf, textOf, mutate, FAMILY_CHAPTER } from '../src/endless/draft.ts';
 import { tierOf } from '../src/endless/tier.ts';
-import { createEndlessSaved, ENDLESS_KEY, AHEAD, UPCOMING } from '../src/endless/saved.ts';
+import { createEndlessSaved, partStore, ENDLESS_KEY, PARTS_KEY, AHEAD, UPCOMING } from '../src/endless/saved.ts';
 import { createEndlessHost, PROGRESS_MS } from '../src/endless/host.ts';
 import type { FromEndless } from '../src/endless/host.ts';
 import { createEndlessClient, CancelledError, workersFor, workersNow, MOST_WORKERS } from '../src/endless/client.ts';
@@ -496,4 +496,23 @@ test('the card says which levels are ready', () => {
   assert.equal(readyWords({ run, ready: 3 }), 'Levels 4 to 6 are ready.');
   assert.equal(readyWords({ run: null, ready: 1 }), null, 'a new run\'s first level is always at once');
   assert.equal(readyWords({ run: null, ready: 4 }), 'Levels 1 to 4 of a new run are ready.');
+});
+
+test('the parts a search finished are kept over a reload, for that request alone', async () => {
+  const prev = BANK.find(b => b.chapter === 1)!;
+  const req: Request = { seed: 'reload', tier: 1, depth: 2, run: [{ text: prev.text, explored: prev.explored }], budget: 12 * 10_000 };
+  const st = memory();
+  const parts: number[] = [];
+  const spawn = () => { const w = fakeWorker(); const post = w.postMessage; w.postMessage = m => { parts.push((m as { part: number }).part); post(m); }; return w; };
+  const before = createEndlessClient(spawn, () => 1, partStore(st));
+  const job = before.make(req);
+  while (parts.length < 2) await new Promise(r => setTimeout(r, 1));
+  job.cancel();
+  assert.ok(st.data[PARTS_KEY], 'kept in storage');
+  // A new page: a new client on the same storage.
+  const after = createEndlessClient(spawn, () => 1, partStore(st));
+  assert.deepEqual(await after.make(req).result, generate(req, BANK, { features: [] }));
+  assert.equal(parts.filter(k => k === 0).length, 1, 'part 0 is not run again after the reload');
+  assert.equal(partStore(st).load(JSON.stringify({ ...req, seed: 'other' })), null, 'another request finds nothing kept');
+  assert.equal(partStore(memory({ [PARTS_KEY]: '{oops' })).load(JSON.stringify(req)), null, 'corrupt storage reads as nothing');
 });

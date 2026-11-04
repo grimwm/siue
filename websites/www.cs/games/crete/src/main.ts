@@ -50,7 +50,7 @@ import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { exitApp, toggleFullscreen as toggleKitFullscreen, browserAppEnv, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
-import { createEndlessSaved } from './endless/saved.ts';
+import { createEndlessSaved, partStore } from './endless/saved.ts';
 import { createEndlessClient, workersFor, workersNow } from './endless/client.ts';
 import type { WorkerLike as EndlessWorker } from './endless/client.ts';
 import { createEndlessMode } from './endless/mode.ts';
@@ -137,7 +137,7 @@ const ui = createUi({ atlas, icons: iconsJson as IconSheet, thumb, board, progre
    worker's own bundle (dist/endless-worker.js), never the solver's worker, so the editor's Check never waits on it. */
 const endlessSaved = createEndlessSaved(browserStorage());
 const endlessClient = createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker,
-  () => endlessWorkers());
+  () => endlessWorkers(), partStore(browserStorage()));
 const endless = createEndlessMode({
   saved: endlessSaved,
   client: endlessClient,

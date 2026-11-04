@@ -2,7 +2,7 @@
 // reused or gone stale) with a fake job whose answer comes on demand, and the lines the panel shows for each answer.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createChecker, checkLines, checkSummary } from '../src/editor/check.ts';
+import { createChecker, checkLines, checkSummary, ratingLines } from '../src/editor/check.ts';
 import type { CheckState } from '../src/editor/check.ts';
 import { hardPieces, measure, sharedProblems } from '../src/puzzle/difficulty.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
@@ -28,7 +28,7 @@ test('a check runs the search, shows its progress, and keeps the answer', async 
   assert.deepEqual(c.state, { kind: 'running', text: 'A', report: REPORT, stopped: false });
   f.jobs[0]!.answer(DIFF);
   assert.equal(await p, DIFF);
-  assert.deepEqual(c.state, { kind: 'done', text: 'A', d: DIFF });
+  assert.deepEqual(c.state, { kind: 'done', text: 'A', d: DIFF, rated: null });
   assert.ok(f.changes() >= 3);
 });
 
@@ -137,7 +137,7 @@ test('a search that cannot start fails at once', async () => {
 /* ---------- the lines ---------- */
 const level = (rows: readonly string[], header = '') => parse(`title: t\nintro: i\n${header}\n${rows.join('\n')}\n`);
 const L9 = parse(TRIALS[8]!.text);
-const done = (d: Difficulty): CheckState => ({ kind: 'done', text: 'T', d });
+const done = (d: Difficulty): CheckState => ({ kind: 'done', text: 'T', d, rated: null });
 
 test('a winnable chase level reads out its numbers and is shareable', () => {
   const d = measure(L9);
@@ -240,4 +240,18 @@ test('the one-line summary', () => {
   assert.equal(checkSummary(done({ ...DIFF, solved: false, shortest: 'unknown', line: '' }), 'T'), 'The solver could not finish');
   assert.equal(checkSummary(done(DIFF), 'other'), 'Out of date: press Check.');
   assert.equal(checkSummary({ kind: 'failed', text: 'T', message: 'boom' }, 'T'), 'The solver stopped: boom');
+});
+
+test('the rating: the band, the score in plain words, and each rule that keeps the level out of Endless', () => {
+  const d = measure(L9);
+  const score = { detour: 11, offRoute: 6, away: 5, waits: 1, traps: 4, forced: 1, total: 46 };
+  const rated = { d, score, band: 'Easy' as const, problems: [{ rule: 'habit:cowAtOnce', words: 'The cow habit wins: setting the cow down at once and walking clears it' }, { rule: 'open', words: 'Too open: 85% of the floor is open space (at most 50%)' }] };
+  const s: CheckState = { kind: 'done', text: 'T', d, rated };
+  const r = ratingLines(s);
+  assert.equal(r.band, 'Easy');
+  assert.deepEqual(r.lines, ['Score 46: detour forced by the Minotaur 11 (6 moves off the free route), 5 moves away from the goal, 1 wait, 4 traps, 1 forced move']);
+  assert.deepEqual(r.problems, ['The cow habit wins: setting the cow down at once and walking clears it', 'Too open: 85% of the floor is open space (at most 50%)']);
+  assert.match(checkSummary(s, 'T'), / · Easy, not for Endless$/);
+  assert.match(checkSummary({ ...s, rated: { ...rated, band: 'Hard', problems: [] } }, 'T'), / · Hard$/);
+  assert.deepEqual(ratingLines(done(d)), { band: null, lines: [], problems: [] }, 'an answer with no rating shows none');
 });

@@ -5,6 +5,7 @@
 import { bankFor, makePart } from './generate.ts';
 import type { BankLevel, Made, Part, Progress, Request } from './generate.ts';
 import type { Known } from './gate.ts';
+import type { Grade } from '../puzzle/rating.ts';
 
 export type ToEndless =
   | { type: 'part'; id: number; request: Request; part: number }
@@ -17,7 +18,8 @@ export type FromEndless =
 
 export interface EndlessHostDeps {
   post(m: FromEndless): void;
-  bank: readonly BankLevel[];
+  /** Each grade's bank. */
+  banks: Readonly<Record<Grade, readonly BankLevel[]>>;
   /** The campaign's layouts, worked out on the first request. */
   known(): Known;
   /** Milliseconds, for spacing the progress posts. */
@@ -31,7 +33,7 @@ export function createEndlessHost(deps: EndlessHostDeps): { receive(m: ToEndless
   return {
     receive(m) {
       try {
-        if (m.type === 'bank') { deps.post({ type: 'made', id: m.id, made: bankFor(m.request, deps.bank, m.tries, m.spent) }); return; }
+        if (m.type === 'bank') { deps.post({ type: 'made', id: m.id, made: bankFor(m.request, deps.banks[m.request.grade], m.tries, m.spent) }); return; }
         if (m.type !== 'part') return;
         known ??= deps.known();
         let last = -Infinity;

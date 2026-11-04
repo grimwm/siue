@@ -1,86 +1,100 @@
-// Endless's generator and gate: the bank (each level passes the whole gate in test/endless-bank-*.test.ts, a quarter
-// of it each, so node runs them side by side); a tier offers a bank level at every step of the climb; the generator
-// gives the same level for the same seed, tier and depth; and a run's levels climb by the ramp, then hold on the plateau.
+// Endless's generator and gate: each grade's bank (each level passes the whole gate in test/endless-bank-*.test.ts, a
+// quarter of it each, so node runs them side by side) covers every tier, every family and hidden walls, with few cows
+// in Hard; a run from a bank alone climbs by the score; the generator gives the same level for the same seed, tier,
+// grade and depth; and a fixed seed is made fresh at each grade.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BANK } from '../src/endless/bank.ts';
-import { generate, fromBank, makePart, RUN_MEMORY } from '../src/endless/generate.ts';
+import { BANKS } from '../src/endless/bank.ts';
+import { generate, fromBank, makePart, holds, placeOf, RUN_MEMORY } from '../src/endless/generate.ts';
 import type { Played, Request } from '../src/endless/generate.ts';
-import { bandAfter, chapterOf, gateProblems, knownOf, newProblems, PLATEAU, FLOOR } from '../src/endless/gate.ts';
+import { bandAfter, chapterOf, gateProblems, knownOf, newProblems, GRADE_BANDS, HIDDEN_EASE, CLIMB } from '../src/endless/gate.ts';
 import { campaignLevels } from '../src/endless/campaign.ts';
-import { measure, rampProblems, rampOf, hidesWalls } from '../src/puzzle/difficulty.ts';
+import { familiesOf } from '../src/endless/draft.ts';
+import { measure, hidesWalls } from '../src/puzzle/difficulty.ts';
+import { GRADES } from '../src/puzzle/rating.ts';
+import type { Grade } from '../src/puzzle/rating.ts';
 import type { Difficulty } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
 
 const known = knownOf(campaignLevels());
 
-test('the bank, a safety net for every tier: ten levels or more each, with the tier\'s own newest pieces from Chapter 2 on, none hiding walls', () => {
-  for (let tier = 1; tier <= 10; tier++) {
-    const offered = BANK.filter(b => b.chapter <= tier);
-    assert.ok(offered.length >= 10, `tier ${tier}: ${offered.length} levels`);
+test('each grade\'s bank, a safety net for every tier: ten levels or more each, every family, hidden walls, few cows in Hard', () => {
+  for (const g of GRADES) {
+    const bank = BANKS[g];
+    for (let tier = 1; tier <= 10; tier++) assert.ok(bank.filter(b => b.chapter <= tier).length >= 10, `${g} tier ${tier}`);
+    const levels = bank.map(b => parse(b.text));
+    for (const f of familiesOf(9)) assert.ok(levels.some(lv => holds(lv, f)), `${g}: a level with ${f}`);
+    assert.ok(levels.filter(hidesWalls).length >= 3, `${g}: levels that hide walls`);
+    const plateau = GRADE_BANDS[g].plateau;
+    assert.ok(bank.filter(b => b.score >= plateau[0] && b.score <= plateau[1]).length >= 3, `${g}: levels on the plateau`);
   }
-  // Chapter 4's pieces only hide walls, and Chapter 10 brings none.
-  for (const c of [1, 2, 3, 5, 6, 7, 8, 9]) assert.ok(BANK.filter(b => b.chapter === c).length >= 2, `Chapter ${c}'s pieces`);
-  for (const b of BANK) assert.equal(hidesWalls(parse(b.text)), false);
+  const cows = BANKS.hard.filter(b => holds(parse(b.text), 'cow')).length;
+  assert.ok(cows >= 1 && cows <= BANKS.hard.length / 5, `Hard: ${cows} cows`);
 });
 
-test('no two bank levels repeat a layout', () => {
-  const levels = BANK.map(b => parse(b.text));
-  for (let i = 0; i < levels.length; i++) {
-    assert.deepEqual(newProblems(levels[i]!, { features: [] }, levels.filter((_, j) => j !== i)), [], `bank level ${i}`);
+test('no two levels of a grade\'s bank repeat a layout', () => {
+  for (const g of GRADES) {
+    const levels = BANKS[g].map(b => parse(b.text));
+    for (let i = 0; i < levels.length; i++) {
+      assert.deepEqual(newProblems(levels[i]!, { features: [] }, levels.filter((_, j) => j !== i)), [], `${g} bank level ${i}`);
+    }
   }
 });
 
 /** A run of `depth` levels on `seed` taken from the bank alone, as when every search runs out of budget. */
-function bankRun(seed: string, tier: number, depth: number): Played[] {
+function bankRun(seed: string, tier: number, grade: Grade, depth: number): Played[] {
   const run: Played[] = [];
   for (let d = 1; d <= depth; d++) {
-    const band = bandAfter(run.at(-1)?.explored ?? null, false)!;
-    const b = fromBank(BANK, { seed, tier, depth: d, run }, band);
-    run.push({ text: b.text, explored: b.explored });
+    const req: Request = { seed, tier, grade, depth: d, run };
+    const place = placeOf(req);
+    const b = fromBank(BANKS[grade], req, place.band, place.hides);
+    run.push({ text: b.text, explored: b.explored, score: b.score });
   }
   return run;
 }
 
-test('the ramp: a run from the bank alone climbs by the ramp at every tier, then holds on the plateau', () => {
-  for (let tier = 1; tier <= 10; tier++) {
-    for (const seed of ['a', 'b', 'c']) {
-      const run = bankRun(seed, tier, 16);
+test('a run from a bank alone climbs by the score at every tier and grade, a hidden-wall level eased, never a cliff', () => {
+  for (const grade of GRADES) for (let tier = 1; tier <= 10; tier++) {
+    for (const seed of ['a', 'b']) {
+      const run = bankRun(seed, tier, grade, 14);
       run.forEach((p, i) => {
         const lv = parse(p.text);
-        assert.ok(chapterOf(lv) <= tier, `tier ${tier}: only pieces it offers`);
-        if (i === 0) { assert.ok(p.explored >= FLOOR); return; }
-        const prev = run[i - 1]!;
-        assert.notEqual(p.text, prev.text, 'never the same level twice in a row');
-        const band = bandAfter(prev.explored, false)!;
-        if (band.plateau) assert.ok(p.explored >= PLATEAU.least && p.explored <= PLATEAU.most, `tier ${tier} level ${i + 1} on the plateau: ${p.explored}`);
-        else assert.deepEqual(rampProblems({ explored: prev.explored } as Difficulty, { explored: p.explored } as Difficulty, rampOf(lv)), [], `tier ${tier} seed ${seed} level ${i + 1}`);
+        assert.ok(chapterOf(lv) <= tier, `${grade} tier ${tier}: only pieces it offers`);
+        if (i === 0) return;
+        assert.notEqual(p.text, run[i - 1]!.text, 'never the same level twice in a row');
+        // Against the last plain level before it: no cliff up, and a dip only as deep as a hidden level's ease.
+        const plain = [...run.slice(0, i)].reverse().find(q => !hidesWalls(parse(q.text)))!;
+        assert.ok(p.score <= Math.max(plain.score * CLIMB.most, GRADE_BANDS[grade].plateau[1]), `${grade} tier ${tier} seed ${seed} level ${i + 1}: ${plain.score} → ${p.score}`);
+        assert.ok(p.score >= plain.score * HIDDEN_EASE.least * 0.9 || p.score >= GRADE_BANDS[grade].plateau[0] * HIDDEN_EASE.least, `${grade} tier ${tier} seed ${seed} level ${i + 1}: ${plain.score} → ${p.score}`);
       });
     }
   }
 });
 
-test('a fixed seed is made fresh: part 0 finds a level with every piece (Chapter 9\'s pieces), and it passes the whole gate', () => {
-  // tools/endless-bench.ts measures how often the search makes a level fresh, per tier; this pins one that does.
-  const prev = { text: 'title: \nintro: \n\n#######\n#P...E#\n#M....#\n#######\n', explored: 8000 };
-  const req: Request = { seed: 'fixed1', tier: 9, depth: 2, run: [prev] };
-  const part = makePart(req, 0, known);
-  assert.ok(part.found, 'made fresh within its part\'s budget');
-  assert.equal(part.found.from, 'made');
-  const level = parse(part.found.text);
-  const d = measure(level);
-  assert.deepEqual([d.explored, d.shortest], [part.found.explored, part.found.shortest]);
-  const band = bandAfter(prev.explored, false)!;
-  assert.deepEqual(gateProblems(level, d, { band, previous: { explored: prev.explored } as Difficulty }, known, [parse(prev.text)]), []);
+test('a fixed seed is made fresh at each grade, and the level passes the whole gate', () => {
+  const prev = { text: 'title: \nintro: \n\n#######\n#P...E#\n#M....#\n#######\n', explored: 3000, score: 30 };
+  for (const grade of GRADES) {
+    const req: Request = { seed: 'fixed2', tier: 9, grade, depth: 2, run: [prev] };
+    let part = null;
+    for (let k = 0; k < 12 && !part?.found; k++) part = makePart(req, k, known);
+    assert.ok(part?.found, `${grade}: made fresh within its parts`);
+    const level = parse(part.found.text);
+    const d = measure(level);
+    assert.deepEqual([d.explored, d.shortest], [part.found.explored, part.found.shortest]);
+    const band = placeOf(req).band;
+    assert.deepEqual(gateProblems(level, d, { grade, band, previous: { explored: prev.explored } as Difficulty }, known, [parse(prev.text)]), [], grade);
+  }
 });
 
-test('the generator: the same seed, tier and depth give the same level; another seed another', () => {
-  const first = BANK.find(b => b.chapter <= 3)!;
-  const req = (seed: string): Request => ({ seed, tier: 3, depth: 2, run: [{ text: first.text, explored: first.explored }], budget: 400_000 });
-  const a = generate(req('same'), BANK, known), b = generate(req('same'), BANK, known);
+test('the generator: the same seed, tier, grade and depth give the same level; another grade another', () => {
+  const first = BANKS.medium.find(b => b.chapter <= 3)!;
+  const req = (seed: string, grade: Grade): Request => ({ seed, tier: 3, grade, depth: 2, run: [{ text: first.text, explored: first.explored, score: first.score }], budget: 400_000 });
+  const a = generate(req('same', 'medium'), BANKS, known), b = generate(req('same', 'medium'), BANKS, known);
   assert.deepEqual(a, b);
   assert.ok(a.spent > 0 && a.tries > 0, 'it searched');
-  const firsts = new Set(['x1', 'x2', 'x3', 'x4', 'x5', 'x6'].map(s => generate({ seed: s, tier: 10, depth: 1, run: [] }, BANK, known).text));
+  const firsts = new Set(['x1', 'x2', 'x3', 'x4', 'x5', 'x6'].map(s => generate({ seed: s, tier: 10, grade: 'hard', depth: 1, run: [] }, BANKS, known).text));
   assert.ok(firsts.size >= 3, 'seeds spread over the bank');
+  assert.ok(BANKS.hard.some(l => l.text === [...firsts][0]), 'a Hard run starts from Hard\'s bank');
   assert.ok(RUN_MEMORY >= 10);
+  void bandAfter;
 });

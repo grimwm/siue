@@ -1,4 +1,6 @@
-/* The Island of Crete: Endless on the page, DOM-free. It keeps the saved run (src/endless/saved.ts), asks the
+/* The Island of Crete: Endless on the page, DOM-free. A run is played at a grade, Easy, Medium or Hard, each with its
+ * own saved run and best; the card shows the grade chosen last (Medium until one is). It keeps the saved runs
+ * (src/endless/saved.ts), asks the
  * worker (src/endless/client.ts) for levels, and opens them as levels from outside the campaign. A new run's first
  * level comes from the bank at once; while a level is played, the workers already make the next AHEAD, so Next
  * Level usually opens one straight away, and otherwise the Endless card shows the search's progress until it is in.
@@ -16,12 +18,18 @@ import { AHEAD, UPCOMING } from './saved.ts';
 import type { EndlessBest, EndlessRun, EndlessSaved, RunLevel } from './saved.ts';
 import { endlessName } from './name.ts';
 import { cleanSeed } from './random.ts';
+import { GRADES, GRADE_NAMES } from '../puzzle/rating.ts';
+import type { Grade } from '../puzzle/rating.ts';
 
 /** What an Endless level is, for the cards: its depth, its name and its fewest moves. */
-export interface EndlessAbout { kind: 'endless'; name: string; best: null; depth: number; fewest: number; seed: string }
+export interface EndlessAbout { kind: 'endless'; name: string; best: null; depth: number; fewest: number; seed: string; grade: Grade }
 
 export interface EndlessDeps {
-  saved: EndlessSaved;
+  /** Each grade's saved run and best. */
+  saved(grade: Grade): EndlessSaved;
+  /** The grade the card shows, and choosing another. */
+  grade(): Grade;
+  setGrade(grade: Grade): void;
   client: EndlessClient;
   /** The piece tier a new run takes (src/endless/tier.ts). */
   tier(): number;
@@ -36,6 +44,8 @@ export interface EndlessDeps {
 }
 
 export interface EndlessView {
+  /** The grade the card shows: its run, best and levels ready are the ones below. */
+  grade: Grade;
   /** The saved run, when there is one. */
   run: EndlessRun | null;
   best: EndlessBest | null;
@@ -47,17 +57,20 @@ export interface EndlessView {
   finding: { progress: Progress | null } | null;
   /** Why the last level could not be made, until the next try. */
   error: string | null;
-  /** A seed a link brought, with the tier it names (else the player's), until it is played or the card is left. */
-  linked: { seed: string; tier: number } | null;
+  /** A seed a link brought, with the tier and grade it names (else the player's and Medium), until it is played or
+   *  the card is left. */
+  linked: { seed: string; tier: number; grade: Grade } | null;
 }
 
 export interface EndlessMode {
   view(): EndlessView;
-  /** A new run on `seed` (a random one when not given) and `tier` (the player's when not given), opened at its
-   *  first level. */
-  newRun(seed?: string, tier?: number): void;
-  /** A link brought `seed` (and perhaps a tier): the card offers it. */
-  link(seed: string, tier: number | null): void;
+  /** A new run on `seed` (a random one when not given), `tier` (the player's when not given) and `grade` (the
+   *  card's when not given), opened at its first level. */
+  newRun(seed?: string, tier?: number, grade?: Grade): void;
+  /** A link brought `seed` (and perhaps a tier and a grade): the card offers it, at that grade. */
+  link(seed: string, tier: number | null, grade?: string | null): void;
+  /** The card shows `grade`. */
+  choose(grade: Grade): void;
   /** The saved run's level, opened again. */
   continueRun(): void;
   /** The level in play was won. */
@@ -75,60 +88,73 @@ export interface EndlessMode {
 
 /** The start card's words: the seed and the fewest moves, and, for a level the search did not make from the seed
  *  in time, that it comes from the level bank. */
-export function introOf(seed: string, l: RunLevel): string {
-  return `Seed ${seed}. The fewest moves are ${l.shortest}.${l.from === 'bank' ? ' From the level bank.' : ''}`;
+export function introOf(seed: string, l: RunLevel, grade: Grade): string {
+  return `Seed ${seed}, ${GRADE_NAMES[grade]}. The fewest moves are ${l.shortest}.${l.from === 'bank' ? ' From the level bank.' : ''}`;
+}
+
+/** A grade as a link names it, or null for anything else. */
+export function gradeFrom(raw: string | null | undefined): Grade | null {
+  const g = (raw ?? '').trim().toLowerCase();
+  return GRADES.includes(g as Grade) ? g as Grade : null;
 }
 
 export function createEndlessMode(deps: EndlessDeps): EndlessMode {
   let finding: { progress: Progress | null } | null = null;
   let error: string | null = null;
-  /** The worker's job: the level it makes is the saved run's next one (or its first). */
-  let job: { make: MakeJob; seed: string; tier: number; budget: number | null; depth: number; first: boolean; upcoming: boolean } | null = null;
+  /** The worker's job: the level it makes is a run's next one (or its first), or the upcoming run's. */
+  let job: { make: MakeJob; seed: string; tier: number; grade: Grade; budget: number | null; depth: number; first: boolean; upcoming: boolean } | null = null;
   /** Open the level once it is made. */
   let waiting = false;
-  let linked: { seed: string; tier: number } | null = null;
+  let linked: { seed: string; tier: number; grade: Grade } | null = null;
+  /** The grade of the run whose level is open: its wins and Next Level go to that run, whatever the card shows. */
+  let playing: Grade = deps.grade();
 
-  const about = (run: EndlessRun, l: RunLevel): EndlessAbout =>
-    ({ kind: 'endless', name: endlessName(run.seed, run.depth), best: null, depth: run.depth, fewest: l.shortest, seed: run.seed });
-  const openCurrent = (run: EndlessRun) => {
+  const about = (run: EndlessRun, l: RunLevel, grade: Grade): EndlessAbout =>
+    ({ kind: 'endless', name: endlessName(run.seed, run.depth), best: null, depth: run.depth, fewest: l.shortest, seed: run.seed, grade });
+  const openCurrent = (run: EndlessRun, grade: Grade) => {
+    playing = grade;
     const l = run.levels.at(-1)!;
     let level: Level;
     try { level = parse(l.text); } catch (e) { error = `The level could not be read: ${e instanceof Error ? e.message : String(e)}`; deps.changed(); return; }
-    deps.play({ ...level, title: endlessName(run.seed, run.depth), intro: introOf(run.seed, l) }, about(run, l), lineOf(l.line));
+    deps.play({ ...level, title: endlessName(run.seed, run.depth), intro: introOf(run.seed, l, grade) }, about(run, l, grade), lineOf(l.line));
     prefetch();
   };
 
-  /** Keeps the workers AHEAD levels in front of the one being played: each level made starts the next. */
+  /** Keeps the workers AHEAD levels in front of the level being played: each level made starts the next. */
   function prefetch(): void {
-    const run = deps.saved.run();
+    const saved = deps.saved(playing);
+    const run = saved.run();
     if (!run) return;
-    const queued = deps.saved.queued().length;
+    const queued = saved.queued().length;
     if (queued >= AHEAD) return;
     const depth = run.depth + 1 + queued;
-    if (job && !job.upcoming && job.seed === run.seed && job.depth === depth) return;
-    start(run.seed, run.tier, depth, false);
+    if (job && !job.upcoming && job.grade === playing && job.seed === run.seed && job.depth === depth) return;
+    start(run.seed, run.tier, playing, depth, false);
   }
 
-  /** The next new run's levels, made while there is no run: its seed is chosen once and kept; its levels are
-   *  dropped when the tier or the budget it was made for changes. */
+  /** In the background: the card's grade's saved run's next levels, or, with no run, its next new run's (its seed
+   *  chosen once and kept; its levels dropped when the tier or the budget it was made for changes). */
   function ahead(): void {
     if (waiting) return;
-    if (deps.saved.run()) { prefetch(); return; }
+    const grade = deps.grade();
+    const saved = deps.saved(grade);
+    if (saved.run()) { playing = grade; prefetch(); return; }
     const tier = deps.tier(), budget = deps.budget?.() ?? null;
-    let up = deps.saved.upcoming();
-    if (!up || up.tier !== tier || up.budget !== budget) up = deps.saved.plan(up?.seed ?? deps.newSeed(), tier, budget);
+    let up = saved.upcoming();
+    if (!up || up.tier !== tier || up.budget !== budget) up = saved.plan(up?.seed ?? deps.newSeed(), tier, budget);
     if (up.levels.length >= UPCOMING) return;
     const depth = up.levels.length + 1;
-    if (job && job.upcoming && job.seed === up.seed && job.tier === tier && job.budget === budget && job.depth === depth) return;
-    start(up.seed, tier, depth, false, up.levels);
+    if (job && job.upcoming && job.grade === grade && job.seed === up.seed && job.tier === tier && job.budget === budget && job.depth === depth) return;
+    start(up.seed, tier, grade, depth, false, up.levels);
   }
 
-  function start(seed: string, tier: number, depth: number, first: boolean, upcoming: readonly RunLevel[] | null = null): void {
+  function start(seed: string, tier: number, grade: Grade, depth: number, first: boolean, upcoming: readonly RunLevel[] | null = null): void {
     job?.make.cancel();
-    const played = first ? [] : upcoming ? upcoming.map(l => ({ text: l.text, explored: l.explored })) : deps.saved.played();
+    const saved = deps.saved(grade);
+    const played = first ? [] : upcoming ? upcoming.map(l => ({ text: l.text, explored: l.explored, score: l.score })) : saved.played();
     const budget = deps.budget?.();
-    const make = deps.client.make({ seed, tier, depth, run: played, ...(budget !== undefined ? { budget } : {}) });
-    const mine = { make, seed, tier, budget: budget ?? null, depth, first, upcoming: !!upcoming };
+    const make = deps.client.make({ seed, tier, grade, depth, run: played, ...(budget !== undefined ? { budget } : {}) });
+    const mine = { make, seed, tier, grade, budget: budget ?? null, depth, first, upcoming: !!upcoming };
     job = mine;
     make.progress(p => {
       if (job !== mine || !finding) return;
@@ -140,20 +166,20 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
       job = null;
       if (mine.upcoming) {
         // Kept only for the plan it was made for: a new tier or budget remakes the upcoming run.
-        const up = deps.saved.upcoming();
-        if (up && up.tier === mine.tier && up.budget === mine.budget) deps.saved.addUpcoming(seed, depth, made);
+        const up = saved.upcoming();
+        if (up && up.tier === mine.tier && up.budget === mine.budget) saved.addUpcoming(seed, depth, made);
         ahead();
         deps.changed();
         return;
       }
       if (first) {
-        const run = deps.saved.start(seed, tier, made);
-        if (waiting) { waiting = false; finding = null; deps.changed(); openCurrent(run); }
+        const run = saved.start(seed, tier, made);
+        if (waiting) { waiting = false; finding = null; deps.changed(); openCurrent(run, grade); }
         return;
       }
-      deps.saved.addMade(seed, depth, made);
-      const run = deps.saved.run();
-      if (waiting && run?.next && run.depth + 1 === depth) { waiting = false; finding = null; deps.changed(); goNext(); return; }
+      saved.addMade(seed, depth, made);
+      const run = saved.run();
+      if (waiting && grade === playing && run?.next && run.depth + 1 === depth) { waiting = false; finding = null; deps.changed(); goNext(); return; }
       prefetch();
     }, (e: unknown) => {
       if (job !== mine) return;
@@ -168,69 +194,87 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
   }
 
   function goNext(): void {
-    const run = deps.saved.advance();
+    const run = deps.saved(playing).advance();
     if (!run) return;
-    openCurrent(run);
+    openCurrent(run, playing);
   }
+
+  const tierFrom = (tier: number | null | undefined) => (tier !== null && tier !== undefined && Number.isInteger(tier) && tier >= 1 && tier <= 10 ? tier : deps.tier());
 
   return {
     view: () => {
-      const run = deps.saved.run();
-      const up = run ? null : deps.saved.upcoming();
+      const grade = deps.grade();
+      const saved = deps.saved(grade);
+      const run = saved.run();
+      const up = run ? null : saved.upcoming();
       const tier = deps.tier();
-      const ready = run ? deps.saved.queued().length : up && up.tier === tier && up.budget === (deps.budget?.() ?? null) ? up.levels.length : 0;
-      return { run, best: deps.saved.best(), tier, ready, finding, error, linked };
+      const ready = run ? saved.queued().length : up && up.tier === tier && up.budget === (deps.budget?.() ?? null) ? up.levels.length : 0;
+      return { grade, run, best: saved.best(), tier, ready, finding, error, linked };
     },
-    link(seed, tier) {
-      const s = cleanSeed(seed);
-      if (!s) return;
-      const run = deps.saved.run();
-      const t = tier !== null && Number.isInteger(tier) && tier >= 1 && tier <= 10 ? tier : deps.tier();
-      // The saved run is that seed's: Continue is the way back into it.
-      linked = run && run.seed === s && run.tier === t ? null : { seed: s, tier: t };
+    choose(grade) {
+      if (!GRADES.includes(grade) || grade === deps.grade()) return;
+      deps.setGrade(grade);
+      if (linked) linked = { ...linked, grade };
+      error = null;
       deps.changed();
     },
-    newRun(seed, tier) {
-      const up = deps.saved.upcoming();
+    link(seed, tier, grade) {
+      const s = cleanSeed(seed);
+      if (!s) return;
+      const g = gradeFrom(grade) ?? 'medium';
+      const t = tierFrom(tier);
+      if (g !== deps.grade()) deps.setGrade(g);
+      const run = deps.saved(g).run();
+      // The saved run is that seed's: Continue is the way back into it.
+      linked = run && run.seed === s && run.tier === t ? null : { seed: s, tier: t, grade: g };
+      deps.changed();
+    },
+    newRun(seed, tier, grade) {
+      const g = grade && GRADES.includes(grade) ? grade : deps.grade();
+      if (g !== deps.grade()) deps.setGrade(g);
+      const saved = deps.saved(g);
+      const up = saved.upcoming();
       const s = (seed && cleanSeed(seed)) || up?.seed || deps.newSeed();
-      const t = tier !== undefined && Number.isInteger(tier) && tier >= 1 && tier <= 10 ? tier : deps.tier();
+      const t = tierFrom(tier);
       linked = null;
       error = null;
+      playing = g;
       // The levels made ahead for this seed, tier and budget: the run opens on them at once.
       if (up && up.levels.length && up.seed === s && up.tier === t && up.budget === (deps.budget?.() ?? null)) {
         if (job) { job.make.cancel(); job = null; }
         waiting = false;
         finding = null;
         const [first, ...after] = up.levels;
-        const run = deps.saved.start(s, t, first!, after);
+        const run = saved.start(s, t, first!, after);
         deps.changed();
-        openCurrent(run);
+        openCurrent(run, g);
         return;
       }
       waiting = true;
       finding = { progress: null };
       deps.changed();
-      start(s, t, 1, true);
+      start(s, t, g, 1, true);
     },
     continueRun() {
-      const run = deps.saved.run();
+      const grade = deps.grade();
+      const run = deps.saved(grade).run();
       if (!run) return;
       error = null;
-      openCurrent(run);
+      openCurrent(run, grade);
     },
     won(moves, assisted) {
-      deps.saved.won(moves, assisted);
+      deps.saved(playing).won(moves, assisted);
       deps.changed();
     },
     next() {
-      const run = deps.saved.run();
+      const run = deps.saved(playing).run();
       if (!run || run.cleared < run.depth) return;
       if (run.next) { goNext(); return; }
       error = null;
       waiting = true;
       finding = { progress: null };
       deps.changed();
-      if (!job || job.seed !== run.seed || job.depth !== run.depth + 1) start(run.seed, run.tier, run.depth + 1, false);
+      if (!job || job.grade !== playing || job.seed !== run.seed || job.depth !== run.depth + 1) start(run.seed, run.tier, playing, run.depth + 1, false);
     },
     cancel() {
       linked = null;

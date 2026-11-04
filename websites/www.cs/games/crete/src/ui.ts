@@ -573,11 +573,12 @@ export function createUi(deps: UiDeps): Ui {
           track("game_start", "endless");
           endless.mode.continueRun();
         },
-        onNew: (seed, tier) => {
+        onNew: (seed, tier, grade) => {
           controls?.wake();
           track("game_start", "endless");
-          endless.mode.newRun(seed, tier);
+          endless.mode.newRun(seed, tier, grade);
         },
+        onGrade: grade => endless.mode.choose(grade),
         onCancel: leaveEndless,
         onBack: leaveEndless,
       });

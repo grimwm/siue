@@ -1,5 +1,6 @@
 /* The Island of Crete: the solver's worker side, as a message handler. It takes a level's text and a search kind
- * (solve: the shortest line; measure: difficulty.ts's numbers), answers from the result cache when it can (an entry
+ * (solve: the shortest line; measure: difficulty.ts's numbers; rate: those numbers and the rating Endless's gate
+ * gives, src/endless/gate.ts's `rating`, for the editor's Check), answers from the result cache when it can (an entry
  * of this solver's version; a cached line only when it still wins), and otherwise searches in batches, reporting
  * progress between them. Past a memory budget the search's nodes go to a node file on disk (the origin private file
  * system, in the worker); without one they stay in memory and the progress says so. Stop pauses between batches
@@ -19,14 +20,16 @@ import type { Progress } from './puzzle/astar.ts';
 import { solving, SOLVER_CAP } from './puzzle/solver.ts';
 import type { SolveResult } from './puzzle/solver.ts';
 import { measuring } from './puzzle/difficulty.ts';
+import { rating, CHECK_CAP } from './endless/gate.ts';
+import type { Rated } from './endless/gate.ts';
 import type { Difficulty } from './puzzle/difficulty.ts';
 import { lineOf, lineText, resultKey, safeResults } from './puzzle/cache.ts';
 import type { CachedResult, ResultStore } from './puzzle/cache.ts';
 
-export type SearchKind = 'solve' | 'measure';
+export type SearchKind = 'solve' | 'measure' | 'rate';
 export type Storage = 'disk' | 'memory';
 export interface Report extends Progress { storage: Storage }
-export type Answer = SolveResult | Difficulty;
+export type Answer = SolveResult | Difficulty | Rated;
 
 export type ToHost =
   | { type: 'start'; id: number; text: string; kind: SearchKind }
@@ -129,8 +132,9 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
         ? spillingStore(words, file, spill.memoryNodes, spill)
         : memoryStore(words));
       const solveStore = kind === 'solve' ? store(layoutOf(level).words) : null;
-      const batches = solveStore
+      const batches: Generator<Progress, Answer, void> = solveStore
         ? solving(initial(level), null, limits.cap, { store: solveStore, every })
+        : kind === 'rate' ? rated(level, limits.cap, { store, every })
         : measuring(level, limits.cap, { store, every });
       let answer: Answer;
       for (;;) {
@@ -175,10 +179,22 @@ export function createSolverHost(deps: HostDeps): { receive(m: ToHost): void } {
   };
 }
 
+/** The rate search: the measure, then, for a level it proves winnable, the rating. */
+function* rated(level: Level, cap: number, room: { store: (words: number) => NodeStore; every: number }): Generator<Progress, Rated, void> {
+  const d = yield* measuring(level, cap, room);
+  if (!d.solved) return { d, score: null, band: null, problems: [] };
+  return yield* rating(level, d, Math.min(cap, CHECK_CAP));
+}
+
+const isRated = (a: Answer): a is Rated => 'problems' in a;
 const isDifficulty = (a: Answer): a is Difficulty => 'shortest' in a;
 
 /** A finished answer as the cache keeps it; null for one that hit its cap (it may finish another time). */
 function toCache(a: Answer): CachedResult | null {
+  if (isRated(a)) {
+    const open = [a.d.shortest, a.d.catchFree, a.d.withoutMinotaur, a.d.label].includes('unknown');
+    return open ? null : { solved: a.d.solved, line: '', explored: a.d.explored, difficulty: a };
+  }
   if (isDifficulty(a)) {
     const open = [a.shortest, a.catchFree, a.withoutMinotaur, a.label].includes('unknown');
     return open ? null : { solved: a.solved, line: '', explored: a.explored, difficulty: a };
@@ -190,6 +206,15 @@ function toCache(a: Answer): CachedResult | null {
 /** The cached answer for `kind` on `level`, or null when the entry does not read as one, or its line does not win
  *  `level` on its last move. */
 function fromCache(c: CachedResult, kind: SearchKind, level: Level): Answer | null {
+  if (kind === 'rate') {
+    const r = c.difficulty as Rated | null | undefined;
+    if (!(typeof r === 'object' && r !== null && 'problems' in r && Array.isArray(r.problems) && typeof r.d === 'object' && r.d !== null && typeof r.d.line === 'string')) return null;
+    if (r.d.solved) {
+      const line = lineOf(r.d.line);
+      if (!line || !wins(level, line)) return null;
+    }
+    return r;
+  }
   if (kind === 'measure') {
     const d = c.difficulty;
     if (!(typeof d === 'object' && d !== null && 'shortest' in d && 'label' in d && typeof (d as Difficulty).line === 'string')) return null;

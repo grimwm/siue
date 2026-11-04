@@ -50,7 +50,9 @@ import { mountTitleInstall } from './install-slot.ts';
 import { browserStorage, browserTimers } from '../../_kit/ports.browser.ts';
 import { exitApp, toggleFullscreen as toggleKitFullscreen, browserAppEnv, holdEscape, topKeyLock } from '../../_kit/app.ts';
 import { followPage } from '../../_kit/page-life.ts';
-import { createEndlessSaved, partStore } from './endless/saved.ts';
+import { createEndlessSaved, gradePref, partStore } from './endless/saved.ts';
+import { GRADES } from './puzzle/rating.ts';
+import type { Grade } from './puzzle/rating.ts';
 import { createEndlessClient, workersFor, workersNow } from './endless/client.ts';
 import type { WorkerLike as EndlessWorker } from './endless/client.ts';
 import { createEndlessMode } from './endless/mode.ts';
@@ -135,11 +137,15 @@ thumb.height = THUMB_H;
 const ui = createUi({ atlas, icons: iconsJson as IconSheet, thumb, board, progress, pages, met, levels, sfx: audio.sfx, cards: stack => { behindEditor(stack.includes('editor')); followEndless(); } });
 /* Endless: the saved run, the worker that makes its levels, and the mode that opens them. Its levels come from the
    worker's own bundle (dist/endless-worker.js), never the solver's worker, so the editor's Check never waits on it. */
-const endlessSaved = createEndlessSaved(browserStorage());
+/* Each grade keeps its own run and best; the card shows the grade chosen last. */
+const endlessSaves = Object.fromEntries(GRADES.map(g => [g, createEndlessSaved(browserStorage(), g)])) as Record<Grade, ReturnType<typeof createEndlessSaved>>;
+const endlessGrade = gradePref(browserStorage());
 const endlessClient = createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker,
   () => endlessWorkers(), partStore(browserStorage(), ENDLESS_WORKER_V));
 const endless = createEndlessMode({
-  saved: endlessSaved,
+  saved: grade => endlessSaves[grade],
+  grade: () => endlessGrade.get(),
+  setGrade: grade => endlessGrade.set(grade),
   client: endlessClient,
   tier: () => tierOf(CHAPTERS, id => progress.get(id).cleared),
   newSeed: () => newSeed(Math.random),
@@ -182,10 +188,11 @@ void (navigator as Navigator & { getBattery?: () => Promise<BatteryLike> }).getB
   b.addEventListener('levelchange', read);
   b.addEventListener('chargingchange', read);
 }, () => {});
-/** The link that opens the saved run's seed, with its pieces. */
+/** The link that opens the saved run's seed, with its pieces and its grade. */
 function endlessLink(): string | null {
-  const run = endlessSaved.run();
-  return run ? `${window.location.origin}${window.location.pathname}?seed=${run.seed}&tier=${run.tier}` : null;
+  const grade = endlessGrade.get();
+  const run = endlessSaves[grade].run();
+  return run ? `${window.location.origin}${window.location.pathname}?seed=${run.seed}&tier=${run.tier}&difficulty=${grade}` : null;
 }
 async function copyLink(link: string): Promise<void> {
   try {
@@ -701,18 +708,19 @@ function start(): void {
   ui.setMoveDir(dir => moveMap(dir, modernOn && modern ? modern.yaw() : ui.classicView().yaw));
   showLook(settings.look.get());
   followMusicSwitches();
-  // A `?seed=` link (today's, with `&tier=`, or the old chase's, with any value) opens the Endless card on that seed.
-  let linked: { seed: string; tier: number | null } | null = null;
+  // A `?seed=` link (with `&tier=`, the pieces, and `&difficulty=`, the grade, Medium when it names none; or the old
+  // chase's, with any value) opens the Endless card on that seed.
+  let linked: { seed: string; tier: number | null; grade: string | null } | null = null;
   try {
     const q = new URL(window.location.href).searchParams;
     const seed = q.get('seed');
-    if (seed !== null) linked = { seed: seed || 'crete', tier: q.has('tier') ? Number(q.get('tier')) : null };
+    if (seed !== null) linked = { seed: seed || 'crete', tier: q.has('tier') ? Number(q.get('tier')) : null, grade: q.get('difficulty') };
   } catch (_) {
     /* ignore */
   }
   ui.showTitle(false);
   if (linked) {
-    endless.link(linked.seed, linked.tier);
+    endless.link(linked.seed, linked.tier, linked.grade);
     ui.showEndless();
   }
   followHash();
@@ -859,4 +867,4 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
-window.__creteTest = { endless: { mode: endless, saved: endlessSaved, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); } }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };
+window.__creteTest = { endless: { mode: endless, get saved() { return endlessSaves[endlessGrade.get()]; }, saves: endlessSaves, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); } }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };

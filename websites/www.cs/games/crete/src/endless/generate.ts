@@ -16,30 +16,39 @@ import { solve, caught } from '../puzzle/solver.ts';
 import { step } from '../puzzle/step.ts';
 import { lineText } from '../puzzle/cache.ts';
 import { measure, naiveWalkWins, neverLive, pieceUnits, threatOf, uselessPieces, THREAT, BAR } from '../puzzle/difficulty.ts';
+import { finish } from '../puzzle/astar.ts';
+import { scoring } from '../puzzle/rating.ts';
+import type { Grade } from '../puzzle/rating.ts';
+import { habitWins, HABIT_LIST } from '../puzzle/habits.ts';
 import type { Difficulty } from '../puzzle/difficulty.ts';
 import { rngOf, hash } from './random.ts';
 import type { Rng } from './random.ts';
 import { draft, familiesOf, mutate, textOf, FAMILY_CHAPTER, HIDING } from './draft.ts';
 import type { Family, Plan, Sketch } from './draft.ts';
-import { bandAfter, chapterOf, floorOf, likeness, quickProblems, newProblems, tidyProblems } from './gate.ts';
+import {
+  bandAfter, bandProblems, chapterOf, floorOf, hiddenBand, hidesWalls, levelChecks, likeness, newProblems, runProblems, tidyProblems,
+  CHECK_CAP, CLIMB, EXPLORED_MOST, HIDDEN_EASE, HIDDEN_EVERY,
+} from './gate.ts';
 import { SAME } from '../puzzle/layouts.ts';
-import type { Band, Known } from './gate.ts';
+import type { Band, Checked, Known } from './gate.ts';
 import type { Dir } from '../puzzle/tiles.ts';
 
 /** The most chapters a tier counts: Chapter 10 brings no new piece, so its pieces are Chapter 9's. */
 export const TIERS = 10;
 
-/** A level the bank holds: its text, the situations it stores, its fewest moves, and the latest chapter whose
- *  pieces it uses (a tier offers it from that chapter on). */
-export interface BankLevel { text: string; explored: number; shortest: number; chapter: number; line: string }
+/** A level the bank holds: its text, the situations it stores, its fewest moves, its score (rating.ts), the latest
+ *  chapter whose pieces it uses (a tier offers it from that chapter on), and its line. */
+export interface BankLevel { text: string; explored: number; shortest: number; score: number; chapter: number; line: string }
 
-/** A level of the run so far: its text and the situations it stores. */
-export interface Played { text: string; explored: number }
+/** A level of the run so far: its text, the situations it stores and its score. */
+export interface Played { text: string; explored: number; score: number }
 
 export interface Request {
   seed: string;
   /** The chapters whose pieces the run uses: 1 to TIERS. */
   tier: number;
+  /** The run's grade: Easy, Medium or Hard. */
+  grade: Grade;
   /** 1 for the run's first level. */
   depth: number;
   /** The run's levels so far, oldest first (the last is the level before this one); the generator reads the last
@@ -53,9 +62,10 @@ export interface Request {
 /** A level Endless made: `made` by the search, or from the `bank`. */
 export interface Made {
   text: string;
-  /** The situations it stores and its fewest moves (difficulty.ts's measure). */
+  /** The situations it stores, its fewest moves (difficulty.ts's measure) and its score (rating.ts). */
   explored: number;
   shortest: number;
+  score: number;
   /** Its shortest line, as move letters (cache.ts's lineText), for Ariadne's thread. */
   line: string;
   from: 'made' | 'bank';
@@ -69,8 +79,7 @@ export interface Progress { tries: number; spent: number; budget: number }
 /** A level's search is cut into parts: part k is a search of its own, steered by the seed and k, that may spend
  *  PART_BUDGET situations. The level is the one found by the lowest part that finds one, and the bank's when none of
  *  the PARTS does. So parts can run side by side, in as many workers as a device has, and every device still picks
- *  the same level: one with more cores only finds it sooner (docs/superpowers/plans/2026-11-03-crete-endless.md has
- *  the measurements behind both numbers). */
+ *  the same level: one with more cores only finds it sooner. */
 export const PART_BUDGET = 3_000_000;
 export const PARTS = 12;
 /** The whole budget: what the parts may spend together. */
@@ -87,24 +96,32 @@ export const RUN_MEMORY = 12;
 export const STEPS = 120;
 /** How readily a climb takes a step up: a step that adds 0.25 to the distance is taken about one time in three. */
 const TEMPERATURE = 0.25;
+/** In a Hard run the cow, the easiest tool to lean on, comes in about one draft in COW_HARD of those that could
+ *  hold it. */
+const COW_HARD = 8;
+/** A band from this score up draws the biggest boards. */
+export const HIGH_BAND = 60;
 
-/** A draft's size, rooms and families, drawn for the band it must fall in; with `newest`, always with a family of
- *  the tier's own chapter (the bank's tool asks for it, so each chapter's pieces get levels of their own). */
-export function planOf(rng: Rng, tier: number, band: Band, hides: boolean, newest = false): Plan {
-  const all = familiesOf(tier).filter(f => !HIDING.includes(f));
+/** A draft's size, maze and families, drawn for the run's grade; with `family`, always with that family (the bank's
+ *  tool asks for one, so every piece has levels of its own); `high` when its band is high (HIGH_BAND or more): the
+ *  biggest board and two relics or more, for a longer way. */
+export function planOf(rng: Rng, tier: number, grade: Grade, hides: boolean, family: Family | null = null, high = false): Plan {
+  let all = familiesOf(tier).filter(f => !HIDING.includes(f));
+  if (grade === 'hard' && family !== 'cow' && rng.int(COW_HARD) !== 0) all = all.filter(f => f !== 'cow');
   const fresh = all.filter(f => FAMILY_CHAPTER[f] === Math.min(tier, 9));
-  const count = 2 + rng.int(2);
+  const count = (grade === 'hard' ? 4 : 3) + rng.int(2);
   const families: Family[] = [];
-  if (fresh.length && (rng.next() < 0.5 || newest)) families.push(rng.pick(fresh));
-  if (hides) families.push(rng.pick(HIDING));
+  if (family && !HIDING.includes(family)) families.push(family);
+  else if (fresh.length && rng.next() < 0.5) families.push(rng.pick(fresh));
+  if (hides) families.push(family && HIDING.includes(family) ? family : rng.pick(HIDING));
   for (const f of rng.shuffle(all)) if (families.length < count + (hides ? 1 : 0) && !families.includes(f)) families.push(f);
-  // Boards and room grids of many shapes, so that no two levels share a plan of walls; Chapter 1's pieces alone
-  // need a longer line (its teaching levels' 36 moves), so a bigger board. Up to 15 by 15 fits a phone's screen.
-  const least = tier <= 1 ? 12 : 11;
-  const rows = least + rng.int(16 - least), cols = least + rng.int(16 - least);
+  // Odd sides, so the maze's lattice fills the board, and big enough for a search past the floor. Up to 15 by 15
+  // fits a phone's screen.
+  const sides = high ? [15] : [13, 15];
+  const roll = rng.next();
   return {
-    rows, cols, roomRows: 2 + rng.int(3), roomCols: 2 + rng.int(3), families, relics: 1 + rng.int(3),
-    hall: 0.1 + 0.25 * rng.next(), loop: 0.2 + 0.3 * rng.next(),
+    rows: rng.pick(sides), cols: rng.pick(sides), families, relics: (high ? 2 : 1) + rng.int(2),
+    winding: 0.3 + 0.6 * rng.next(), braid: 0.45 + 0.5 * rng.next(), chambers: roll < 0.85 ? 0 : roll < 0.97 ? 1 : 2,
   };
 }
 
@@ -136,17 +153,19 @@ export function expNeg(y: number): number {
   return sum;
 }
 
-/** The searches' caps: a solve that stores more than the band allows is no use, and the measure's other searches
- *  (the catch-free line, the beast's first catch, the line without him) get room to finish. */
-const solveCap = (band: Band) => Math.ceil(band.most * 1.05);
-const measureCap = (band: Band) => Math.max(200_000, band.most * 4);
+/** The searches' caps: no Endless level stores more than EXPLORED_MOST, and the measure's other searches (the
+ *  catch-free line, the beast's first catch, the line without him) get room to finish. */
+const SOLVE_CAP = Math.ceil(EXPLORED_MOST * 1.05);
+const MEASURE_CAP = CHECK_CAP;
+/** What a habit player's try is charged against the budget, in situations: its turns are cheap, but not free. */
+const HABIT_CHARGE = 2_000;
 
 /** How far a level is from passing the cheap checks: 0 when it passes them, more the further it is; Infinity when it
- *  is no level. A tidy layout first, then one capped solve, and a second without the beast once the first is in the
- *  band. */
+ *  is no level. A tidy maze first, then one capped solve, a second without the beast, the habit players, and a quick
+ *  guess at the score against the band. */
 export function distance(level: Level, band: Band, spend: (n: number, kind?: string) => void, like: (level: Level) => number = () => 0): number {
   if (!level.minotaur) return Infinity;
-  // An untidy draft (a wall standing alone, a bare pocket) is far, whatever it plays like.
+  // An untidy draft (a wall standing alone, a bare nub) is far, whatever it plays like.
   const untidy = tidyProblems(level).length;
   if (untidy) return 14 + untidy;
   // So is one whose layout repeats a campaign level's or the run's: no solve can mend that.
@@ -157,14 +176,12 @@ export function distance(level: Level, band: Band, spend: (n: number, kind?: str
   if (naiveWalkWins(level)) { spend(0, 'cheap:walk'); return 12.5; }
   if (neverLive(level)) { spend(0, 'cheap:penned'); return 12.5; }
   const start = initial(level);
-  const r = solve(start, solveCap(band));
+  const r = solve(start, SOLVE_CAP);
   if (!r.solved) { spend(r.explored, r.capped ? 'solve:capped' : 'solve:lost'); return r.capped ? 12 : 30; }
-  spend(r.explored, r.explored < band.least ? 'solve:low' : r.explored > band.most ? 'solve:high' : 'solve:in');
+  spend(r.explored, 'solve');
   let far = 0;
   const floor = floorOf(chapterOf(level));
-  const least = Math.max(band.least, floor.explored);
-  if (r.explored < least) far += 3 * ln(least / r.explored);
-  if (r.explored > band.most) far += 3 * ln(r.explored / band.most);
+  if (r.explored < floor.explored) far += 3 * ln(floor.explored / r.explored);
   if (r.line.length < floor.shortest) far += 0.2 * (floor.shortest - r.line.length);
   let s = start, catches = 0;
   for (const a of r.line) { const x = step(s, a); s = x.state; if (caught(x.events, s)) catches++; }
@@ -173,18 +190,31 @@ export function distance(level: Level, band: Band, spend: (n: number, kind?: str
   far += 6 * Math.max(0, THREAT.challenge.share - t.live / Math.max(1, t.turns));
   far += 6 * Math.max(0, t.quiet / Math.max(1, t.turns) - THREAT.challenge.quiet);
   if (far > 0) return far;
-  const free = solve(initial({ ...level, minotaur: null }), solveCap(band));
+  const free = solve(initial({ ...level, minotaur: null }), SOLVE_CAP);
   spend(free.explored, 'free');
+  let detour = 0;
   if (free.solved) {
-    far += 0.4 * Math.max(0, BAR.minotaurDelta - (r.line.length - free.line.length));
+    detour = r.line.length - free.line.length;
+    far += 0.4 * Math.max(0, BAR.minotaurDelta - detour);
     let g = start;
     for (const a of free.line) g = step(g, a).state;
     if (g.outcome === 'won') far += 2;
   }
+  if (far > 0) return far;
+  // The habit players: each that wins puts the draft further off.
+  const wins = habitWins(level, r.line.length).length;
+  spend(HABIT_CHARGE * HABIT_LIST.length, 'habits');
+  if (wins) return 1 + 0.5 * Math.min(wins, 4);
+  // The score: a draft under its band, or over it, is far.
+  const cost = { spent: 0 };
+  const score = finish(scoring(level, { line: lineText(r.line), minotaurDelta: detour, explored: r.explored } as Difficulty, cost)).total;
+  spend(cost.spent, 'score');
+  if (score < band.least) far += 3 * ln(band.least / Math.max(1, score));
+  if (score > band.most) far += 3 * ln(score / band.most);
   return far;
 }
 
-/** `s` as `level` has it: its grid and its hazards' and machines' facings, with `s`'s doorways. */
+/** `s` as `level` has it: its grid and its hazards' and machines' facings, with `s`'s passages. */
 function sketchFrom(s: Sketch, level: Level): Sketch {
   const text = serialize(level);
   const g = text.slice(text.indexOf('\n\n') + 2).trimEnd().split('\n').map(r => [...r]);
@@ -199,22 +229,25 @@ function emptiest(variants: readonly Level[]): Level {
   return variants.reduce((a, b) => (walls(b) < walls(a) ? b : a));
 }
 
-/** The bank's level for this place: one the tier offers, in the band (else in the campaign's widest ramp, else on
- *  the plateau), not among the run's last levels, picked by the seed and depth. */
-export function fromBank(bank: readonly BankLevel[], req: Request, band: Band): BankLevel {
+/** The bank's level for this place: one the tier offers, that hides walls when the place does (else one that does
+ *  not), in the band (else within the climb from the run's last plain level, else on the plateau), not among the
+ *  run's last levels, picked by the seed and depth. */
+export function fromBank(bank: readonly BankLevel[], req: Request, band: Band, hides = false): BankLevel {
   const recent = req.run.slice(-RUN_MEMORY);
   const offered = bank.filter(b => b.chapter <= req.tier);
   const runLevels = recent.map(p => parse(p.text));
   const fresh = offered.filter(b => !recent.some(p => p.text === b.text) && newProblems(parse(b.text), { features: [] }, runLevels).length === 0);
-  const prev = req.run.at(-1)?.explored ?? null;
-  const plateau = bandAfter(Number.MAX_SAFE_INTEGER, false)!;
+  const prev = lastPlain(req.run)?.score ?? null;
+  const plateau = bandAfter(Number.MAX_SAFE_INTEGER, req.grade);
+  const hiding = (b: BankLevel) => hidesWalls(parse(b.text)) === hides;
   const ladder: ((b: BankLevel) => boolean)[] = [
-    b => b.explored >= band.least && b.explored <= band.most,
-    b => prev !== null && b.explored >= prev * 1.2 && b.explored <= prev * 2.2,
-    b => b.explored >= plateau.least && b.explored <= plateau.most,
+    b => hiding(b) && b.score >= band.least && b.score <= band.most,
+    b => b.score >= band.least && b.score <= band.most && !hidesWalls(parse(b.text)),
+    b => prev !== null && b.score >= prev * HIDDEN_EASE.least && b.score <= prev * CLIMB.most,
+    b => b.score >= plateau.least && b.score <= plateau.most,
     () => true,
   ];
-  const pick = (ok: readonly BankLevel[]) => ok[hash('endless-bank', req.seed, req.tier, req.depth) % ok.length]!;
+  const pick = (ok: readonly BankLevel[]) => ok[hash('endless-bank', req.seed, req.tier, req.grade, req.depth) % ok.length]!;
   // Past the fresh ones, an older level of the run comes back before the one just played.
   const notLast = offered.filter(b => b.text !== req.run.at(-1)?.text);
   // The band matters most: a fresh level outside it comes only after an old one inside it.
@@ -228,17 +261,25 @@ export function fromBank(bank: readonly BankLevel[], req: Request, band: Band): 
   throw new RangeError('the bank is empty');
 }
 
+/** The run's last level that hides no walls: the climb goes on from its score. */
+function lastPlain(run: readonly Played[]): Played | null {
+  for (let i = run.length - 1; i >= 0; i--) if (!hidesWalls(parse(run[i]!.text))) return run[i]!;
+  return null;
+}
+
 /** Where the search stands, for `search`'s callers. */
 interface Spent { tries: number; spent: number }
 
-/** The search: the first level that passes the gate in `band`, or null once `budget` situations are spent.
- *  `hidingBand`, when given, is the band a round that hides walls climbs in; `trace` hears why drafts fall short
- *  (tools/endless-bank.ts prints it). */
+/** What a search looks for: the tier's pieces at a grade, in a band, a level that hides walls or not, and, for the
+ *  bank's tool, a family it must hold. */
+export interface Aim { tier: number; grade: Grade; band: Band; hides: boolean; family?: Family | null }
+
+/** The search: the first level that passes the gate for `aim`, or null once `budget` situations are spent. `trace`
+ *  hears why drafts fall short (tools/endless-bank.ts prints it). */
 export function search(
-  key: readonly (string | number)[], tier: number, band: Band, previous: Difficulty | null, known: Known, run: readonly Level[],
-  budget: number, at: Spent, progress?: (p: Progress) => void, hidingBand: Band | null = null, trace?: (line: string) => void,
-  newest = false,
-): { text: string; d: Difficulty } | null {
+  key: readonly (string | number)[], aim: Aim, previous: Difficulty | null, known: Known, run: readonly Level[],
+  budget: number, at: Spent, progress?: (p: Progress) => void, trace?: (line: string) => void,
+): { text: string; d: Difficulty; score: number } | null {
   const stats = (at as { by?: Record<string, number> }).by;
   const spend = (n: number, kind = 'other') => { at.spent += n; if (stats) { stats[kind] = (stats[kind] ?? 0) + n; stats[kind + '#'] = (stats[kind + '#'] ?? 0) + 1; } };
   // A layout's likeness turns on its terrain alone, so moving a piece never changes it.
@@ -249,11 +290,10 @@ export function search(
     if (x === undefined) { x = likeness(lv, known, run); likes.set(k, x); }
     return x;
   };
+  const place = { grade: aim.grade, band: aim.band, previous };
   for (let round = 0; at.spent < budget; round++) {
     const rng = rngOf('endless', ...key, round);
-    const hides = hidingBand !== null && rng.next() < 0.25;
-    const roundBand = hides ? hidingBand! : band;
-    let sketch = draft(rng, planOf(rng, tier, roundBand, hides, newest));
+    let sketch = draft(rng, planOf(rng, aim.tier, aim.grade, aim.hides, aim.family ?? null, aim.band.least >= HIGH_BAND));
     if (!sketch) { spend(1_000); continue; }
     const levelOf = (s: Sketch): Level | null => { try { return parse(textOf(s, '')); } catch { return null; } };
     // A change that comes back to a level already judged costs nothing more: the same text, the same distance.
@@ -261,8 +301,13 @@ export function search(
     const judge = (s: Sketch, lv: Level): number => {
       const text = textOf(s, '');
       let far = judged.get(text);
-      if (far === undefined) { far = distance(lv, roundBand, spend, like); judged.set(text, far); }
-      else if (stats) stats['memo#'] = (stats['memo#'] ?? 0) + 1;
+      if (far === undefined) {
+        far = distance(lv, aim.band, spend, like);
+        // A level that should hide walls and no longer does (the climb took them out) is no use here.
+        if (Number.isFinite(far) && hidesWalls(lv) !== aim.hides) far += 4;
+        if (aim.family && Number.isFinite(far) && !holds(lv, aim.family)) far += 4;
+        judged.set(text, far);
+      } else if (stats) stats['memo#'] = (stats['memo#'] ?? 0) + 1;
       return far;
     };
     let level = levelOf(sketch);
@@ -276,14 +321,35 @@ export function search(
       at.tries++;
       if (stepNo % 8 === 0) progress?.({ tries: at.tries, spent: at.spent, budget });
       if (far === 0 && level) {
-        const d = measure(level, measureCap(roundBand));
+        const d = measure(level, MEASURE_CAP);
         spend(4 * d.explored, 'measure');
-        const qp = quickProblems(level, d, { band: roundBand, previous }, known, run);
-        if (qp.length) { trace?.(`gate: ${qp.join('; ')}`); if (stats) for (const q of qp) { const k = 'gate:' + q.replace(/[0-9.,×]+/g, 'N').slice(0, 50); stats[k] = (stats[k] ?? 0) + 1; } far = 1; judged.set(textOf(sketch, ''), far); }
-        else {
+        const rp = runProblems(level, d, known, run);
+        let checked: Checked | null = null;
+        if (!rp.length) {
+          checked = finish(levelChecks(level, d, aim.grade, false, MEASURE_CAP));
+          spend(checked.score ? 8 * d.explored : 0, 'checks');
+        }
+        const problems = rp.length ? rp : checked!.problems.map(p => p.words);
+        const purposeOnly = !rp.length && checked!.problems.length > 0 && checked!.problems.every(p => p.rule === 'purpose');
+        // A problem the gate knows how to mend (a tool no one needs taken out, an open area walled in): the climb goes
+        // on from the mended level.
+        const mended = rp.length ? undefined : checked!.problems.find(p => p.mended)?.mended;
+        if (mended) {
+          trace?.(`mended: ${problems.join('; ')}`);
+          if (stats) stats['mended#'] = (stats['mended#'] ?? 0) + 1;
+          sketch = sketchFrom(sketch, mended);
+          level = levelOf(sketch);
+          far = level ? judge(sketch, level) : Infinity;
+          continue;
+        }
+        if (problems.length && !purposeOnly) {
+          trace?.(`gate: ${problems.join('; ')}`);
+          if (stats) for (const q of problems) { const k = 'gate:' + q.replace(/[0-9.,×%]+/g, 'N').slice(0, 50); stats[k] = (stats[k] ?? 0) + 1; }
+          far = 1; judged.set(textOf(sketch, ''), far);
+        } else if (purposeOnly) {
           spend(pieceUnits(level).reduce((n, u) => n + u.ignored.length, 0) * 2 * d.explored, 'useless');
-          const useless = uselessPieces(level, d, measureCap(roundBand), true);
-          if (!useless.length) return { text: textOf(sketch, ''), d };
+          const useless = uselessPieces(level, d, MEASURE_CAP, true);
+          if (!useless.length) { far = 1; judged.set(textOf(sketch, ''), far); continue; }
           trace?.(`useless: ${useless.map(u => u.problem).join('; ')}`);
           // Take the first useless piece out and climb on from there.
           const stripped = emptiest(useless[0]!.unit.ignored);
@@ -291,6 +357,14 @@ export function search(
           level = levelOf(sketch);
           far = level ? judge(sketch, level) : Infinity;
           continue;
+        } else {
+          const score = checked!.score!;
+          const out = bandProblems(score, aim.band);
+          if (!out.length) return { text: textOf(sketch, ''), d, score: score.total };
+          trace?.(`band: ${out.join('; ')}`);
+          if (stats) stats['gate:band'] = (stats['gate:band'] ?? 0) + 1;
+          far = 0.5 + 3 * Math.abs(ln(score.total < aim.band.least ? aim.band.least / Math.max(1, score.total) : score.total / aim.band.most));
+          judged.set(textOf(sketch, ''), far);
         }
       }
       const next = mutate(rng, sketch);
@@ -307,15 +381,46 @@ export function search(
   return null;
 }
 
+/** The level holds a piece of `family`. */
+export function holds(level: Level, family: Family): boolean {
+  const t = (x: string) => level.terrain.includes(x as never), o = (x: string) => level.objects.includes(x as never);
+  const h = (k: string) => level.hazards.some(z => z.kind === k);
+  switch (family) {
+    case 'keys': return level.terrain.some(x => x.startsWith('door-'));
+    case 'water': return t('water');
+    case 'fire': return t('fire');
+    case 'ice': return t('ice');
+    case 'force': return level.terrain.some(x => x.startsWith('force-'));
+    case 'blocks': return o('block') || level.machines.some(m => m.template === 'block');
+    case 'toggle': return t('toggle-open') || t('toggle-closed');
+    case 'mirror': return o('mirror');
+    case 'cow': return o('cow');
+    case 'gravel': return t('gravel');
+    case 'popup': return t('popup');
+    case 'fake': return t('fake-wall');
+    case 'invisible': return t('invisible-wall');
+    case 'snare': return t('trap');
+    case 'teleport': return t('teleport');
+    case 'ball': return h('ball');
+    case 'glider': return h('glider');
+    case 'fireball': return h('fireball');
+    case 'thief': return t('thief');
+    case 'bomb': return t('bomb');
+    case 'clone': return t('clone');
+  }
+}
+
 /** What a part of a level's search came to: the level it found, or null once it spent its budget. */
 export interface Part { found: Made | null; tries: number; spent: number }
 
-/** Where the run stands for a level at `req.depth`: its band, and the band a level that hides walls climbs in. */
-function placeOf(req: Request): { band: Band; hides: Band | null; before: Played | null } {
+/** The place `req.depth` holds in its run: its band, whether its level hides walls (one in HIDDEN_EVERY, from the
+ *  seed, once the tier has hidden walls), and the run's level before it. */
+export function placeOf(req: Request): { band: Band; hides: boolean; before: Played | null } {
   const before = req.run.at(-1) ?? null;
-  const band = bandAfter(before?.explored ?? null, false)!;
-  const hides = before && familiesOf(req.tier).some(f => HIDING.includes(f)) ? bandAfter(before.explored, true) : null;
-  return { band, hides, before };
+  const plain = bandAfter(lastPlain(req.run)?.score ?? null, req.grade);
+  const hides = req.depth > 1 && familiesOf(req.tier).some(f => HIDING.includes(f))
+    && hash('endless-hides', req.seed, req.tier, req.grade, req.depth) % HIDDEN_EVERY === 0;
+  return { band: hides ? hiddenBand(plain) : plain, hides, before };
 }
 
 /** Part `k` of the search for the run's level at `req.depth` (2 or more). */
@@ -325,17 +430,19 @@ export function makePart(req: Request, k: number, known: Known, opts: { progress
   if (!before || k < 0 || k >= parts) throw new RangeError(`no part ${k} of a search for level ${req.depth}`);
   const at: Spent = { tries: 0, spent: 0 };
   const run = req.run.slice(-RUN_MEMORY).map(p => parse(p.text));
-  const found = search([req.seed, req.tier, req.depth, 'part', k], req.tier, band, { explored: before.explored } as Difficulty, known, run, budget, at, opts.progress, hides);
+  const found = search([req.seed, req.tier, req.grade, req.depth, 'part', k], { tier: req.tier, grade: req.grade, band, hides },
+    { explored: before.explored } as Difficulty, known, run, budget, at, opts.progress);
   const made: Made | null = found
-    ? { text: found.text, explored: found.d.explored, shortest: found.d.shortest as number, line: found.d.line, from: 'made', tries: at.tries, spent: at.spent }
+    ? { text: found.text, explored: found.d.explored, shortest: found.d.shortest as number, score: found.score, line: found.d.line, from: 'made', tries: at.tries, spent: at.spent }
     : null;
   return { found: made, ...at };
 }
 
 /** The bank's level for the run's level at `req.depth`, after parts that spent `tries` and `spent`. */
 export function bankFor(req: Request, bank: readonly BankLevel[], tries = 0, spent = 0): Made {
-  const b = fromBank(bank, req, placeOf(req).band);
-  return { text: b.text, explored: b.explored, shortest: b.shortest, line: b.line, from: 'bank', tries, spent };
+  const place = placeOf(req);
+  const b = fromBank(bank, req, place.band, place.hides);
+  return { text: b.text, explored: b.explored, shortest: b.shortest, score: b.score, line: b.line, from: 'bank', tries, spent };
 }
 
 /** The level a search's parts settle on: the lowest part's that found one, with what the parts up to it spent; null
@@ -353,8 +460,9 @@ export function settle(results: readonly (Part | undefined)[], parts: number): {
 
 /** The run's level at `req.depth`: a run's first from the bank at once; every later one from its search's parts,
  *  run one after another here (src/endless/client.ts runs them side by side and settles on the same one), and the
- *  bank's when none finds one. */
-export function generate(req: Request, bank: readonly BankLevel[], known: Known, opts: { progress?: (p: Progress) => void } = {}): Made {
+ *  bank's when none finds one. `banks` holds each grade's bank. */
+export function generate(req: Request, banks: Readonly<Record<Grade, readonly BankLevel[]>>, known: Known, opts: { progress?: (p: Progress) => void } = {}): Made {
+  const bank = banks[req.grade];
   if (req.depth <= 1 || !req.run.length) return bankFor(req, bank);
   const { parts, budget } = partsOf(req);
   const results: Part[] = [];

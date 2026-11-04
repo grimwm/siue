@@ -670,6 +670,23 @@ export function uselessPieces(level: Level, d: Difficulty, cap = SOLVER_CAP, str
   });
 }
 
+/** purposeProblems in steps: it yields between the pieces (a progress of nothing searched), so a caller can stop
+ *  between them (the editor's Check). Its answer is purposeProblems's. */
+export function* purposing(level: Level, d: Difficulty, cap = SOLVER_CAP): Generator<Progress, string[], void> {
+  if (!d.solved || typeof d.catchFree !== 'number') return [];
+  const out: string[] = [];
+  for (const u of pieceUnits(level)) {
+    yield { expanded: 0, stored: 0, bestF: 0, startH: 0 };
+    if (meets(level, d.line, u)) continue;
+    const found = u.ignored.map(lv => changes(d, lv, cap, true));
+    if (found.some(c => c !== null && c !== 'capped')) continue;
+    out.push(found.includes('capped')
+      ? `${u.name}: the search without it hit its cap, so it is not proved to matter`
+      : `${u.name}: the shortest line never meets it, and ignoring it leaves the fewest moves at ${d.shortest}`);
+  }
+  return out;
+}
+
 /** Nothing starts under a figure: the cell where Theseus, the Minotaur or a hazard begins is plain floor with no
  *  piece on it (no relic, key, gear, tool, page, cake, button or other piece), so the player sees every piece at the
  *  start. The level text cannot write a figure on a piece, so this guards levels built in code (an edit, a draft). */

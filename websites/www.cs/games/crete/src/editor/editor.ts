@@ -153,7 +153,7 @@ export function createEditor(deps: EditorDeps): Editor {
   const touches = new Map<number, { x: number; y: number }>();
   /** The author's best by share text. */
   const bests = new Map<string, number>();
-  const checker = createChecker(deps.start ?? (text => startSearch(text, 'measure')), () => { endStoppedShare(); clearStoppedMessage(); drawPanel(); });
+  const checker = createChecker(deps.start ?? (text => startSearch(text, 'rate')), () => { endStoppedShare(); clearStoppedMessage(); drawPanel(); });
 
   const now = (): History<Draft> => (history ??= startHistory(newDraft(NEW_SIDE, NEW_SIDE)));
 

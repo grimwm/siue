@@ -1,5 +1,6 @@
-/* The Island of Crete: Endless's saved run and best, on the kit's prefs under `crete-endless`, like the campaign's
- * progress. A run is its seed, its piece tier, the level it is on (`depth`), its last levels (for the generator's
+/* The Island of Crete: Endless's saved runs and bests, on the kit's prefs, like the campaign's progress: one of each
+ * per grade, Easy, Medium and Hard, under `crete-endless-<grade>`, and the grade last chosen under
+ * `crete-endless-grade` (Medium until one is). A run is its seed, its piece tier, the level it is on (`depth`), its last levels (for the generator's
  * ramp and new-layout checks), the levels the workers have made ahead of it (up to AHEAD, so a reload loses none),
  * and what it has cleared. The best is the deepest level any run cleared without Ariadne's thread, with that run's
  * seed. While there is no run, the next new run's seed is chosen ahead of time (`upcoming`), and its first levels
@@ -11,14 +12,24 @@ import { RUN_MEMORY } from './generate.ts';
 import type { Made, Part, Played } from './generate.ts';
 import type { PartStore } from './client.ts';
 import { hash } from './random.ts';
+import { GRADES } from '../puzzle/rating.ts';
+import type { Grade } from '../puzzle/rating.ts';
 
-export const ENDLESS_KEY = 'crete-endless';
+/** Each grade's saved run, best and upcoming run. */
+export const endlessKey = (grade: Grade): string => `crete-endless-${grade}`;
+/** Where Endless kept its one run before it had grades: its run is dropped (its levels were made by another
+ *  generator), and its best becomes Easy's when Easy has none. */
+export const OLD_ENDLESS_KEY = 'crete-endless';
+/** The grade last chosen on the Endless card. */
+export const GRADE_KEY = 'crete-endless-grade';
 
 /** One of a run's levels: what the generator made, and how its clear went (null moves while not cleared). */
 export interface RunLevel {
   text: string;
   explored: number;
   shortest: number;
+  /** Its difficulty score (src/puzzle/rating.ts): the next level's band climbs from it. */
+  score: number;
   /** Its shortest line, as move letters. */
   line: string;
   from: 'made' | 'bank';
@@ -58,7 +69,7 @@ const isCount = (v: unknown): v is number => Number.isInteger(v) && (v as number
 const isLevel = (v: unknown): v is RunLevel => {
   if (typeof v !== 'object' || v === null) return false;
   const l = v as Record<string, unknown>;
-  return isText(l.text) && isCount(l.explored) && isCount(l.shortest) && isText(l.line, 4_000) && (l.from === 'made' || l.from === 'bank');
+  return isText(l.text) && isCount(l.explored) && isCount(l.shortest) && isCount(l.score) && isText(l.line, 4_000) && (l.from === 'made' || l.from === 'bank');
 };
 const isRun = (v: unknown): v is EndlessRun => {
   if (typeof v !== 'object' || v === null) return false;
@@ -124,10 +135,29 @@ export const UPCOMING = 1 + AHEAD;
 
 const queuedOf = (run: EndlessRun | null): RunLevel[] => (run?.next ? [run.next, ...(run.ahead ?? [])] : []);
 
-const level = (m: Made | RunLevel): RunLevel => ({ text: m.text, explored: m.explored, shortest: m.shortest, line: m.line, from: m.from });
+const level = (m: Made | RunLevel): RunLevel => ({ text: m.text, explored: m.explored, shortest: m.shortest, score: m.score, line: m.line, from: m.from });
 
-export function createEndlessSaved(storage: StorageLike | null): EndlessSaved {
-  const table = pref<Stored>(ENDLESS_KEY, { run: null, best: null, upcoming: null }, json(isStored), storage);
+/** The best Endless kept before it had grades, when it reads as one. */
+function oldBest(storage: StorageLike | null): EndlessBest | null {
+  try {
+    const raw = storage?.getItem(OLD_ENDLESS_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { best?: unknown };
+    return isBest(v.best) ? v.best : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The grade last chosen, Medium until one is; `set` keeps a new one. */
+export function gradePref(storage: StorageLike | null): { get(): Grade; set(g: Grade): void } {
+  return pref<Grade>(GRADE_KEY, 'medium', json((v: unknown): v is Grade => GRADES.includes(v as Grade)), storage);
+}
+
+/** `grade`'s saved run, best and upcoming run. Easy's best starts as the best Endless kept before it had grades. */
+export function createEndlessSaved(storage: StorageLike | null, grade: Grade = 'medium'): EndlessSaved {
+  const fresh: Stored = { run: null, best: grade === 'easy' ? oldBest(storage) : null, upcoming: null };
+  const table = pref<Stored>(endlessKey(grade), fresh, json(isStored), storage);
   const save = (run: EndlessRun | null, best = table.get().best) => table.set({ ...table.get(), run, best });
   return {
     run: () => table.get().run,
@@ -186,7 +216,7 @@ export function createEndlessSaved(storage: StorageLike | null): EndlessSaved {
     },
     played: () => {
       const run = table.get().run;
-      return run ? [...run.levels, ...queuedOf(run)].slice(-RUN_MEMORY).map(l => ({ text: l.text, explored: l.explored })) : [];
+      return run ? [...run.levels, ...queuedOf(run)].slice(-RUN_MEMORY).map(l => ({ text: l.text, explored: l.explored, score: l.score })) : [];
     },
   };
 }

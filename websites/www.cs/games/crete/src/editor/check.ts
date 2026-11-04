@@ -1,5 +1,5 @@
-/* The Island of Crete: the editor's Check. It proves and rates the draft in the solver's worker (one `measure`
- * search per share text), keeps the answer, and says in words what the answer means. An edit cancels a running
+/* The Island of Crete: the editor's Check. It proves and rates the draft in the solver's worker (one `rate` search
+ * per share text: the measure, then the rating Endless's gate gives, src/endless/gate.ts's `rating`), keeps the answer, and says in words what the answer means. An edit cancels a running
  * search and leaves a finished answer in place, marked out of date until the draft is that text again. Whether a
  * search was cancelled is this module's own bookkeeping (each search has a number), never the solver client's error:
  * a search a newer one replaced rejects with a plain Error. DOM-free. */
@@ -7,6 +7,8 @@ import type { Answer, Report } from '../solver-host.ts';
 import { hardPieces, sharedProblems } from '../puzzle/difficulty.ts';
 import type { Difficulty } from '../puzzle/difficulty.ts';
 import type { Level } from '../puzzle/level.ts';
+import type { Rated } from '../endless/gate.ts';
+import type { Score } from '../puzzle/rating.ts';
 
 /** What Check needs of a search (the solver client's SolverJob, which this DOM-free module cannot import). */
 export interface CheckJob {
@@ -20,7 +22,7 @@ export interface CheckJob {
 export type CheckState =
   | { kind: 'none' }
   | { kind: 'running'; text: string; report: Report | null; stopped: boolean }
-  | { kind: 'done'; text: string; d: Difficulty }
+  | { kind: 'done'; text: string; d: Difficulty; rated: Rated | null }
   | { kind: 'failed'; text: string; message: string };
 
 export interface Checker {
@@ -82,8 +84,9 @@ export function createChecker(start: (text: string) => CheckJob, changed: () => 
         if (gen !== mine) return null;
         job = null;
         pending = null;
-        const d = a as Difficulty;
-        set({ kind: 'done', text, d });
+        const rated = 'problems' in a ? a as Rated : null;
+        const d = rated ? rated.d : a as Difficulty;
+        set({ kind: 'done', text, d, rated });
         return d;
       },
       (e: unknown) => {
@@ -156,6 +159,23 @@ export function checkLines(s: CheckState, current: string, level: Level): { line
   return { lines, stale, shareable: problems.length === 0 };
 }
 
+/** The score's parts, in plain words: "detour 14 (8 moves off his free route), 7 moves away from the goal, …". */
+export function scoreWords(s: Score): string {
+  const parts = [`detour forced by the Minotaur ${s.detour} (${plural(s.offRoute, 'move')} off the free route)`,
+    `${plural(s.away, 'move')} away from the goal`, plural(s.waits, 'wait'), plural(s.traps, 'trap'), plural(s.forced, 'forced move')];
+  return parts.join(', ');
+}
+
+/** What the rating says: the band and score, the score's parts, and every rule the level fails (empty for a level
+ *  that is not won, or a check from before there was a rating). */
+export function ratingLines(s: CheckState): { band: string | null; lines: string[]; problems: string[] } {
+  if (s.kind !== 'done' || !s.rated || !s.d.solved) return { band: null, lines: [], problems: [] };
+  const r = s.rated;
+  const lines = r.score ? [`Score ${r.score.total}: ${scoreWords(r.score)}`] : [];
+  const problems = r.problems.map(p => p.words);
+  return { band: r.band, lines, problems };
+}
+
 /** The one-line summary of a check, for the strip that stays on screen when the side panel is closed; '' before any
  *  check. A search running has no summary (the strip shows its progress). */
 export function checkSummary(s: CheckState, current: string): string {
@@ -165,5 +185,6 @@ export function checkSummary(s: CheckState, current: string): string {
   const d = s.d;
   if (d.shortest === 'unknown') return 'The solver could not finish';
   if (!d.solved || typeof d.shortest !== 'number') return 'Cannot be won';
-  return sharedProblems(d).length === 0 ? `Winnable in ${d.shortest} · Shareable` : `Winnable in ${d.shortest} · Not shareable yet`;
+  const band = s.rated?.band ? ` · ${s.rated.band}${s.rated.problems.length ? ', not for Endless' : ''}` : '';
+  return (sharedProblems(d).length === 0 ? `Winnable in ${d.shortest} · Shareable` : `Winnable in ${d.shortest} · Not shareable yet`) + band;
 }

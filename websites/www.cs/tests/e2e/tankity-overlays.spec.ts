@@ -197,6 +197,8 @@ async function volumePlayer(browser: Browser) {
 }
 const bus = (page: Page, i: number) => page.evaluate((n: number) => (window.__buses[n] ? window.__buses[n].gain.value : null), i);
 const SOUND = 0, MUSIC = 1, HEADROOM = 0.4;
+/* The menu shows the music level; the bus plays 10% under it. */
+const TRIM = 0.9;
 
 test('the music slider is remembered; mute zeroes the bus and unmute brings the level back', async ({ browser }) => {
   const { ctx, page, errors } = await volumePlayer(browser);
@@ -208,7 +210,7 @@ test('the music slider is remembered; mute zeroes the bus and unmute brings the 
   await slider.fill('30');
   await expect(page.locator('output[for="vol-music"]')).toHaveText('30%');
   await expect(slider).toHaveAttribute('aria-valuetext', 'Music 30%');
-  await expect.poll(() => bus(page, MUSIC)).toBeCloseTo(0.09 * HEADROOM, 5);
+  await expect.poll(() => bus(page, MUSIC)).toBeCloseTo((0.3 * TRIM) ** 2 * HEADROOM, 5);
 
   // The arrow keys move a focused slider; M mutes from it; Q still leaves the menu.
   await slider.focus();
@@ -222,7 +224,7 @@ test('the music slider is remembered; mute zeroes the bus and unmute brings the 
   await expect(slider).toHaveValue('30');
   await page.locator('#btn-music').click();
   await expect(page.locator('#btn-music')).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(() => bus(page, MUSIC)).toBeCloseTo(0.09 * HEADROOM, 5);
+  await expect.poll(() => bus(page, MUSIC)).toBeCloseTo((0.3 * TRIM) ** 2 * HEADROOM, 5);
   await expect(slider).toHaveValue('30');
   await slider.focus();
   await page.keyboard.press('q');
@@ -248,7 +250,7 @@ test('the music slider is remembered; mute zeroes the bus and unmute brings the 
   await expect(page.locator('#btn-sound')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => bus(page, MUSIC)).toBe(0);
   await page.locator('#btn-music').click();
-  await expect.poll(() => bus(page, MUSIC)).toBeCloseTo(0.09 * HEADROOM, 5);
+  await expect.poll(() => bus(page, MUSIC)).toBeCloseTo((0.3 * TRIM) ** 2 * HEADROOM, 5);
   expect(errors).toEqual([]);
   await ctx.close();
 });

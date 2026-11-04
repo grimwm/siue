@@ -7,8 +7,11 @@
  * them, so the sheet draws every tile turned to the quarter of the view (src/sheet.ts faceQuarter), farthest row
  * first; a tile whose picture points along the grid (a force floor, a clone machine) keeps its own way round, and the
  * gate and a door's sill, which lie across the way through them, swap to their twin drawn the other way round when
- * the turn is a quarter or three. A door sinking draws down its frame, cut off at the frame's foot. Each canvas
- * repaints only when what it shows has changed. */
+ * the turn is a quarter or three. A door sinking draws down its frame, cut off at the frame's foot. The hidden
+ * walls' cues (src/wall-cues.ts) are drawn on the sheet over the terrain, in 2D: a found invisible wall a faint
+ * glassy sheen and edge, after a light sweeping across it as it shimmers into view; a fake wall's haze a few faint
+ * wavering lines on its side toward Theseus, a still tint under reduced motion. Each canvas repaints only when what
+ * it shows has changed. */
 import type { Atlas, Draw } from './board-plan.ts';
 import { drawThread } from './board.ts';
 import { pulseScale } from './thread-path.ts';
@@ -18,6 +21,9 @@ import { AWAY, LEAN_FEET, faceQuarter, project, sheetTransform } from './sheet.t
 import type { Frame } from './sheet.ts';
 import { classicPics, createBubbleLayer } from './item-bubble.ts';
 import type { Bubble, BubbleLayer } from './item-bubble.ts';
+import { NO_CUES, cuesShown } from './wall-cues.ts';
+import type { CueDraw, CuesShown } from './wall-cues.ts';
+import type { Dir } from './puzzle/tiles.ts';
 
 export interface SheetBoard {
   /** Sets the sheet to `cols × rows` cells of `cellPx` CSS pixels, snapped to whole device pixels. */
@@ -37,7 +43,16 @@ export interface ClassicBoard extends SheetBoard {
   shownBubbles(): ReturnType<BubbleLayer['shown']>;
   /** Letters the next paint stands upright on their squares, each in a dark tab (the editor's F and I). */
   marks(list: readonly { r: number; c: number; mark: string }[]): void;
+  /** The hidden walls' cues the next paint shows. */
+  cues(c: CueDraw): void;
+  /** The cues the sheet last drew, for tests. */
+  shownCues(): CuesShown;
 }
+
+/** A grid way as a vector, x right and y down. */
+const WAY: Record<Dir, readonly [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+/** How deep a fake wall's haze reaches into its tile, in cells. */
+const HAZE_DEPTH = 0.3;
 
 const TERRAIN_SPRITES = new Set([...Object.values(TERRAIN).flatMap(t => t.sprites), ...TURNED_SPRITES, ...EXIT_SPRITES]);
 /** Each sprite that lies across the way through its cell, and its twin drawn the other way round. */
@@ -59,6 +74,8 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
   let bubbles: readonly Bubble[] = [];
   let marks: readonly { r: number; c: number; mark: string }[] = [];
   if (!canvas.className.split(' ').includes('sheet')) canvas.className = `${canvas.className} sheet`.trim();
+  let cues: CueDraw = NO_CUES;
+  let drawnCues: CueDraw = NO_CUES;
   const rise = atlas.rise / atlas.cell;
   const fw = atlas.cell, fh = atlas.cell + atlas.rise;
   let cell = 16; // a cell, in device pixels
@@ -78,6 +95,9 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
     const away = AWAY[q]!;
     // Farthest first, so a raised tile's top leaning away covers the tile behind it.
     const order = terrain.slice().sort((a, b) => (b.x * away.x + b.y * away.y) - (a.x * away.x + a.y * away.y));
+    // Each cell's last tile drawn: its cue goes on after it.
+    const lastAt = new Map<string, Draw>();
+    for (const d of order) lastAt.set(`${d.y},${d.x}`, d);
     for (const d of order) {
       const s = atlas.sprites[(q % 2 && TWIN.get(d.sprite)) || d.sprite];
       if (!s) continue;
@@ -94,12 +114,104 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
       }
       ctx.drawImage(image, s.x + d.frame * fw, s.y, fw, fh, -cell / 2, -cell / 2 - top + down, cell, cell + top);
       ctx.restore();
+      // A cue goes on its tile as the tile is drawn, so a nearer tile drawn later covers it as it covers the tile.
+      if (lastAt.get(`${d.y},${d.x}`) !== d) continue;
+      const found = cues.found.find(f => f.at.r === d.y && f.at.c === d.x);
+      if (found) paintFound(found.at, found.shimmer, q);
+      for (const f of cues.haze?.faces ?? []) if (f.at.r === d.y && f.at.c === d.x) paintHaze(f, q);
     }
+    drawnCues = cues;
     if (thread && thread.length > 1) {
       ctx.translate(top, 0);
       drawThread(ctx, thread, cell, top, pulse);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
+  }
+
+  /** Turns the context to cell (r, c)'s tile as paintSheet draws it: origin at its square's centre, turned with the
+   *  view's quarter, so the tile's picture spans x −cell/2 to cell/2 and y −cell/2 − top (its raised top's far edge)
+   *  to cell/2. */
+  function atTile(r: number, c: number, q: number): void {
+    ctx.translate(top + c * cell + cell / 2, top + r * cell + cell / 2);
+    ctx.rotate((-q * Math.PI) / 2);
+  }
+
+  /** A found invisible wall: a faint cool sheen over its tile and a pale edge round its top, glass found where floor
+   *  seemed; while it shimmers, the tile flashes up and a band of light sweeps across it, corner to corner. */
+  function paintFound(at: { r: number; c: number }, shimmer: number | null, q: number): void {
+    const lw = Math.max(1, cell * 0.04);
+    ctx.save();
+    atTile(at.r, at.c, q);
+    const x0 = -cell / 2, y0 = -cell / 2 - top, h = cell + top;
+    ctx.beginPath();
+    ctx.rect(x0, y0, cell, h);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(150, 205, 255, 0.16)';
+    ctx.fillRect(x0, y0, cell, h);
+    ctx.strokeStyle = 'rgba(210, 238, 255, 0.6)';
+    ctx.lineWidth = lw;
+    ctx.strokeRect(x0 + lw / 2, y0 + lw / 2, cell - lw, cell - lw);
+    if (shimmer !== null) {
+      const env = Math.sin(Math.PI * shimmer);
+      ctx.fillStyle = `rgba(225, 245, 255, ${(0.3 * env).toFixed(3)})`;
+      ctx.fillRect(x0, y0, cell, h);
+      const p = -0.3 + 1.6 * shimmer;
+      const g = ctx.createLinearGradient(x0, y0 + h, x0 + cell, y0);
+      const stop = (on: number, a: number) => g.addColorStop(Math.min(1, Math.max(0, on)), `rgba(255, 255, 255, ${a.toFixed(3)})`);
+      stop(p - 0.18, 0);
+      stop(p, 0.75 * env);
+      stop(p + 0.18, 0);
+      ctx.fillStyle = g;
+      ctx.fillRect(x0, y0, cell, h);
+    }
+    ctx.restore();
+  }
+
+  /** A fake wall's haze on its side toward Theseus: a tint fuller at the face and, unless motion is reduced, a few
+   *  faint wavering lines along it, drifting as heat over stone. */
+  function paintHaze(f: { at: { r: number; c: number }; face: Dir }, q: number): void {
+    const haze = cues.haze!;
+    ctx.save();
+    atTile(f.at.r, f.at.c, q);
+    // The face's way on the turned tile.
+    const a = (q * Math.PI) / 2;
+    const [gx, gy] = WAY[f.face];
+    const lx = Math.round(gx * Math.cos(a) - gy * Math.sin(a)), ly = Math.round(gx * Math.sin(a) + gy * Math.cos(a));
+    const depth = HAZE_DEPTH * cell;
+    // The band along that side of the tile's picture: toward the viewer it takes the face and the top's near edge.
+    const bx = lx > 0 ? cell / 2 - depth : -cell / 2;
+    const by = ly > 0 ? cell / 2 - top - depth : -cell / 2 - top;
+    const bw = lx !== 0 ? depth : cell;
+    const bh = ly > 0 ? top + depth : ly < 0 ? depth : cell + top;
+    ctx.beginPath();
+    ctx.rect(bx, by, bw, bh);
+    ctx.clip();
+    const across = lx !== 0;
+    const g = across
+      ? ctx.createLinearGradient(lx > 0 ? bx : bx + bw, 0, lx > 0 ? bx + bw : bx, 0)
+      : ctx.createLinearGradient(0, ly > 0 ? by : by + bh, 0, ly > 0 ? by + bh : by);
+    const tint = cues.still ? 0.2 : 0.12 * haze.strength;
+    g.addColorStop(0, 'rgba(255, 236, 205, 0)');
+    g.addColorStop(1, `rgba(255, 236, 205, ${tint.toFixed(3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(bx, by, bw, bh);
+    if (!cues.still) {
+      ctx.strokeStyle = `rgba(255, 246, 228, ${(0.22 * haze.strength).toFixed(3)})`;
+      ctx.lineWidth = Math.max(1, cell * 0.03);
+      const len = across ? bh : bw, deep = across ? bw : bh;
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        for (let u = 0; u <= 12; u++) {
+          const along = (u / 12) * len;
+          const off = deep * ((k + 0.5) / 3) + Math.sin((u / 12) * Math.PI * 3 + cues.t * 2.6 + k * 1.9) * deep * 0.12;
+          const px = across ? bx + off : bx + along, py = across ? by + along : by + off;
+          if (u === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   function paintFigures(up: Draw[], fr: Frame): void {
@@ -187,7 +299,9 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
       const q = faceQuarter(f.yaw);
       const pulse = t === undefined ? 1 : pulseScale(t);
       const showsThread = !!thread && thread.length > 1;
-      const sk = `${q}|${showsThread ? pulse.toFixed(3) : '-'}|${terrain.map(d => `${d.sprite}${d.frame}${d.sink ?? ''}`).join(',')}`;
+      const ck = `${cues.found.map(f => `${f.at.r},${f.at.c}:${f.shimmer === null ? '-' : f.shimmer.toFixed(2)}`).join(';')}|${
+        cues.haze ? `${cues.haze.faces.map(f => `${f.at.r},${f.at.c}${f.face}`).join(';')}:${cues.haze.strength.toFixed(2)}:${cues.still ? '-' : Math.floor(cues.t * 15)}` : '-'}`;
+      const sk = `${q}|${showsThread ? pulse.toFixed(3) : '-'}|${ck}|${terrain.map(d => `${d.sprite}${d.frame}${d.sink ?? ''}`).join(',')}`;
       if (sk !== sheetKey || (showsThread && thread !== lastThread)) {
         sheetKey = sk;
         lastThread = thread;
@@ -207,6 +321,10 @@ export function createSheetBoard(canvas: HTMLCanvasElement, atlas: Atlas, image:
     marks(list) {
       marks = list;
     },
+    cues(c) {
+      cues = c;
+    },
+    shownCues: () => cuesShown(drawnCues),
   };
   return sheet;
 }

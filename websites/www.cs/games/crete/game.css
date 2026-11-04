@@ -372,6 +372,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .veil-start .card { max-width: 22rem; max-height: none; padding: 0.9rem 1rem; pointer-events: auto; }
 .start h2 { font-size: 1.05rem; margin: 0.1rem 0 0.3rem; }
 .start p { margin: 0 0 0.6rem; font-size: 0.88rem; line-height: 1.3; }
+.start .start-hint { margin-top: -0.3rem; font-size: 0.8rem; font-style: italic; opacity: 0.72; }
 .story-text { margin: 0 0 0.7rem; }
 .chapter .story { color: var(--dim); }
 .chapter-quote { margin: 0.8rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid var(--accent); font-style: italic; }

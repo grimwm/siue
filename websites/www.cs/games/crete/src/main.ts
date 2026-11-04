@@ -11,6 +11,8 @@ import { mediaDeck, pickSource } from './music-decks.ts';
 import type { AudioSource } from './music-decks.ts';
 import { createBoard } from './board.ts';
 import { createSheetBoard } from './sheet-board.ts';
+import { IDLE_MS, NO_CUES, createFoundClock, cuesMoving, fakeFaces, hazeCue } from './wall-cues.ts';
+import type { CueDraw, CuesShown } from './wall-cues.ts';
 import { extent, project, unproject } from './sheet.ts';
 import type { Frame } from './sheet.ts';
 import { loadModern } from './modern-loader.ts';
@@ -303,6 +305,12 @@ const game = createGame({
     showModern();
     seePlay(game, levels.scratch?.(game.trial) ?? false);
     wantThumb();
+    // A turn, an undo, a restart or a new level ends Theseus's standing still.
+    if (game.run !== cueRun) {
+      cueRun = game.run;
+      stillSince = performance.now();
+    }
+    wantCues();
   },
 });
 const frame = (): HTMLElement => document.getElementById('frame') ?? document.documentElement;
@@ -544,6 +552,7 @@ function loop(now: number): void {
     const moving = classicOpenings.at(f.state, f.figures, now, reduced, f.done);
     classicPortal = portalAt(f.state, moving);
     board.bubbles(bubbles(f.state, f.figures));
+    board.cues(cuesNow(performance.now()));
     board.paint(drawList(f.state, f.figures, atlas, now, moving), game.thread ?? undefined, reduced ? undefined : now / 1000);
     paintMs.push(performance.now() - t0);
     if (paintMs.length > PAINT_KEEP) paintMs.shift();
@@ -572,6 +581,8 @@ function modernFrame(): void {
   if (game.opens !== modernOpens) {
     modernOpens = game.opens;
     modern.level(f.state);
+    modernCues = '';
+    wantCues();
     // A rebuilt board opens at its own view; the classic board's, when the player came from it, goes on.
     if (pendingView?.opens === game.opens) modern.setView(pendingView.yaw, pendingView.pitch);
     pendingView = null;
@@ -579,6 +590,57 @@ function modernFrame(): void {
   modern.show(f, game.thread);
   if (game.anim && f.done) game.finishAnim();
   else if (game.anim && !game.anim.paused && !modernRaf) modernRaf = requestAnimationFrame(modernFrame);
+}
+
+/* The hidden walls' cues (src/wall-cues.ts), the same in both looks: a found invisible wall shimmers into view and
+   stays marked while the state shows it, and a fake wall beside Theseus hazes once he has stood still a while. The
+   classic loop asks for them every frame; the modern board is told when they change, and while they move. */
+const foundClock = createFoundClock();
+/** When Theseus last stood still from: the try's last change. */
+let stillSince = performance.now();
+let cueRun: unknown = null;
+let cueRaf = 0;
+let cueTimer: ReturnType<typeof setTimeout> | 0 = 0;
+/** What the modern board was last told, as a key. */
+let modernCues = '';
+
+function cuesNow(now: number): CueDraw {
+  const run = game.run;
+  if (!run) return NO_CUES;
+  const s = frameOf(game, game.animMs())?.state ?? run.now;
+  const cols = s.level.cols;
+  const found = foundClock.update(s, game.opens, now, reduced).map(({ i, shimmer }) => ({ at: { r: Math.floor(i / cols), c: i % cols }, shimmer }));
+  const busy = !!game.anim || game.playing || ui.layersOpen() || editorUp;
+  const idle = now - stillSince;
+  return { found, haze: hazeCue(s, idle, reduced, busy), t: idle / 1000, still: reduced };
+}
+
+/** The cues as the modern board draws them: a haze's ripple steps at 15 fps. */
+const cueKey = (c: CueDraw): string =>
+  `${c.found.map(f => `${f.at.r},${f.at.c}:${f.shimmer === null ? '-' : f.shimmer.toFixed(2)}`).join(';')}|${
+    c.haze ? `${c.haze.faces.map(f => `${f.at.r},${f.at.c}${f.face}`).join(';')}:${c.haze.strength.toFixed(2)}:${c.still ? '-' : Math.floor(c.t * 15)}` : '-'}`;
+
+function tickCues(): void {
+  cueRaf = 0;
+  if (cueTimer) clearTimeout(cueTimer);
+  cueTimer = 0;
+  if (!modernOn || !modern) return;
+  const now = performance.now();
+  const c = cuesNow(now);
+  const k = cueKey(c);
+  if (k !== modernCues) {
+    modernCues = k;
+    modern.cues(c);
+  }
+  if (cuesMoving(c)) cueRaf = requestAnimationFrame(tickCues);
+  else if (!c.haze && game.run && fakeFaces(game.run.now).length) {
+    // A fake wall is beside him: look again once he may have stood still long enough (or a card has closed).
+    cueTimer = setTimeout(wantCues, Math.max(250, IDLE_MS - (now - stillSince)));
+  }
+}
+
+function wantCues(): void {
+  if (modernOn && !cueRaf) cueRaf = requestAnimationFrame(tickCues);
 }
 
 function showModern(): void {
@@ -615,6 +677,8 @@ function setModernOn(on: boolean): void {
     modern?.resize();
     modern?.setActive(!editorUp);
     showModern();
+    modernCues = '';
+    wantCues();
   } else {
     if (modernRaf) cancelAnimationFrame(modernRaf);
     modernRaf = 0;
@@ -844,6 +908,8 @@ const classicHook = {
   portal: () => classicPortal,
   bubbles: () => board.shownBubbles(),
 };
+/* The hidden walls' cues as the look showing last drew them (src/wall-cues.ts). */
+const cuesHook = (): CuesShown | null => (modernOn ? modern?.shownCues() ?? null : board.shownCues());
 /* The modern board, as far as the browser specs read it. */
 const modernHook = {
   frames: () => modern?.frames() ?? 0,
@@ -880,4 +946,4 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
-window.__creteTest = { endless: { mode: endless, get saved() { return endlessSaves[endlessGrade.get()]; }, saves: endlessSaves, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); } }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook };
+window.__creteTest = { endless: { mode: endless, get saved() { return endlessSaves[endlessGrade.get()]; }, saves: endlessSaves, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); } }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook, cues: cuesHook };

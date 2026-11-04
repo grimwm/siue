@@ -50,6 +50,9 @@ import { createKit } from './scene/textures.ts';
 import { createThread } from './scene/thread.ts';
 import { LOW_H, WALL_H, createWalls } from './scene/walls.ts';
 import type { Seen } from './scene/walls.ts';
+import { createWallCues } from './scene/wall-cues.ts';
+import { NO_CUES, cuesShown } from '../wall-cues.ts';
+import type { CueDraw, CuesShown } from '../wall-cues.ts';
 
 export interface ModernHost {
   /** The modern canvas, sized by CSS to the board region. */
@@ -89,6 +92,10 @@ export interface ModernBoard {
   /** Applies the state and figures locally and draws once; `done` tells it the turn's animation has ended. */
   show(f: { state: State; figures: Figures; done?: boolean }, thread: readonly Cell[] | null): void;
   walls(m: WallMode): void;
+  /** Shows the hidden walls' cues (src/wall-cues.ts, scene/wall-cues.ts) and draws once. */
+  cues(c: CueDraw): void;
+  /** The cues last shown, for tests. */
+  shownCues(): CuesShown;
   /** The camera's yaw in degrees, for screenToGrid. */
   yaw(): number;
   /** The view's height in ground rows, for tests. */
@@ -173,7 +180,9 @@ export function createModernBoard(host: ModernHost): ModernBoard {
   const thread = createThread();
   const floats = createFloats(kit);
   const editMarks = createEditMarks();
-  scene.add(floor.group, wallSet.group, pieceGroup, actors.group, thread.group, floats.group);
+  const wallCues = createWallCues();
+  let cueDraw: CueDraw = NO_CUES;
+  scene.add(floor.group, wallSet.group, pieceGroup, actors.group, thread.group, floats.group, wallCues.group);
 
   let active = true;
   let drawn = 0;
@@ -733,6 +742,12 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     lights?.setMode(m);
     for (const p of pieces) if (p && (p.userData as PieceInfo).tall) p.scale.y = m === 'low' ? LOW_H / WALL_H : 1;
     aimWalls = shadowsDirty = true;
+    setCues(cueDraw);
+  }
+
+  function setCues(c: CueDraw): void {
+    cueDraw = c;
+    wallCues.set(c, cols(), rows(), mode === 'low' ? LOW_H : WALL_H);
     invalidate();
   }
 
@@ -843,6 +858,8 @@ export function createModernBoard(host: ModernHost): ModernBoard {
     cellUnder: cellAtPoint,
     hovered: () => hovered,
     walls,
+    cues: setCues,
+    shownCues: () => cuesShown(cueDraw),
     yaw: () => cur.yaw,
     zoom: () => cur.zoom,
     pitch: () => cur.pitch,
@@ -903,6 +920,7 @@ export function createModernBoard(host: ModernHost): ModernBoard {
       actors.dispose();
       floats.dispose();
       thread.dispose();
+      wallCues.dispose();
       markers.dispose();
       editMarks.dispose();
       snapTarget?.dispose();

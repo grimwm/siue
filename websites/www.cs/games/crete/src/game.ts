@@ -258,8 +258,11 @@ export function createGame(deps: GameDeps): Game {
       return false;
     }
     const before = run.now;
+    // A step that took no turn (an invisible wall shown) is no entry in the try's past, so none in what was played:
+    // Undo then takes back the turn before it from both.
+    const turned = r.run.past !== run.past;
     run = r.run;
-    played.push(a);
+    if (turned) played.push(a);
     // A turn that retraced the try back to an earlier state is an undo to there: the moves after it go.
     if (r.back !== undefined) {
       played = played.slice(0, r.back);

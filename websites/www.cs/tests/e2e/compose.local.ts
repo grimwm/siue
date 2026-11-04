@@ -99,12 +99,13 @@ const recordDrawer = (page: Page, part: string) => page.locator(`[data-tools="${
 /** Opens the Piece Menu and picks an item. */
 async function pieceMenu(page: Page, item: string): Promise<void> {
   await page.locator('[data-transport] [data-piece-menu]').click();
-  await page.locator('[data-pop="more"]').getByRole('button', { name: item }).click();
+  await page.locator('[data-pop="more"]').getByRole('button', { name: item, exact: true }).click();
 }
 /** Clicks an open track's piano roll at `beat` on the row of `pitch`. */
 async function tapRoll(page: Page, part: string, beat: number, pitch: number): Promise<void> {
   const key = page.locator(`[data-keys="${part}"] [data-key="${pitch}"]`);
-  await key.scrollIntoViewIfNeeded();
+  // Centred, so the action bar at the foot of the screen never covers the row.
+  await key.evaluate(e => e.scrollIntoView({ block: 'center' }));
   const grid = (await page.locator(`[data-grid="${part}"]`).boundingBox())!;
   const row = (await key.boundingBox())!;
   await page.mouse.click(grid.x + beat * (await ppb(page)) + 5, row.y + row.height / 2);
@@ -1485,6 +1486,23 @@ test('Start A Song, the Song settings, Mix, Sheet and Colors And Style', async (
     await expect(composer).toHaveAttribute('data-colors', 'night');
     await expect(composer).toHaveAttribute('data-style', 'rack');
     await shot(page, 'pr2-1440-looks');
+    await looks.locator('[data-look-colors="site"]').click();
+    await looks.locator('[data-look-style="night"]').click();
+    await looks.locator('[data-look-mode="light"]').click();
+    await expect(composer).toHaveAttribute('data-mode', 'light');
+    await looks.getByRole('button', { name: 'Close' }).click();
+    await shot(page, 'pr2-1440-site-colors-night-style-light');
+    await page.locator('[data-transport] [data-looks]').click();
+    await looks.locator('[data-look-colors="original"]').click();
+    await looks.locator('[data-look-style="plain"]').click();
+    await looks.getByRole('button', { name: 'Close' }).click();
+    await view(page, 'compose');
+    await shot(page, 'pr2-1440-original-colors-original-style-light');
+    await view(page, 'sheet');
+    await page.locator('[data-transport] [data-looks]').click();
+    await looks.locator('[data-look-mode="dark"]').click();
+    await looks.locator('[data-look-colors="night"]').click();
+    await looks.locator('[data-look-style="rack"]').click();
     await looks.getByRole('button', { name: 'Close' }).click();
 
     // Saved: the tempo change is the score's; the look comes back after a reload.

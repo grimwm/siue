@@ -35,6 +35,9 @@ test('3/4 keeps every note where it sounds and redraws the bars around them', ()
   assert.deepEqual(seconds(waltz), seconds(d));
   assert.equal(barsNeeded(waltz), Math.ceil(16 / 3));
   assert.equal(beatClock(waltz.tempo).barStartBeat(2), 3);
+  const band = { ...tune(), bars: 8 };
+  assert.equal(barsNeeded(setMeter(setMeter(fitRegions({ ...band, parts: band.parts.map(x => ({ ...x, notes: [...x.notes, { ...x.notes[0]!, id: 99, start: 31 }] })) }), '3/4'), '4/4')), 8, 'there and back keeps the bars');
+  assert.equal(barsNeeded(setMeter({ ...docWith([['piano', []]]), bars: 4 }, '3/4')), 5, 'an empty song keeps about its length');
 });
 
 test('6/8 counts eighths: the beats and the tempo double, and the song sounds the same', () => {

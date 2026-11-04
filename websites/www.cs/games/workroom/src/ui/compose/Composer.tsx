@@ -261,13 +261,19 @@ export function Composer(p: ComposerProps) {
   const keysStart = keysFrom ?? (recordEntry ? keyboardStart(recordEntry) : 48);
 
   // ---- The Try It coach notices what has been done ----
+  /** A template or Undo replaced the song: what it brings is not something the person did. */
+  const fresh = useRef(false);
   const counts = useRef({ notes: Number.MAX_SAFE_INTEGER, parts: doc.parts.length, clips: doc.fxClips?.length ?? 0 });
   useEffect(() => {
     const notes = doc.parts.reduce((n, x) => n + x.notes.length, 0);
     const was = counts.current;
-    if (notes > was.notes && was.notes >= 0) did('note');
-    if (doc.parts.length > was.parts) did('inst');
-    if ((doc.fxClips?.length ?? 0) > was.clips) did('fxadd');
+    const skip = fresh.current;
+    fresh.current = false;
+    if (!skip) {
+      if (notes > was.notes) did('note');
+      if (doc.parts.length > was.parts) did('inst');
+      if ((doc.fxClips?.length ?? 0) > was.clips) did('fxadd');
+    }
     counts.current = { notes, parts: doc.parts.length, clips: doc.fxClips?.length ?? 0 };
   }, [doc]);
 
@@ -279,8 +285,8 @@ export function Composer(p: ComposerProps) {
     if (words) setStatus(words);
   };
   const clearPicks = (): void => { setPickState({ kind: 'none' }); setChord(null); setSplitting(false); };
-  const undo = (): void => { setDoc(history.undo()); clearPicks(); };
-  const redo = (): void => { setDoc(history.redo()); clearPicks(); };
+  const undo = (): void => { fresh.current = true; setDoc(history.undo()); clearPicks(); };
+  const redo = (): void => { fresh.current = true; setDoc(history.redo()); clearPicks(); };
   const savedRef = useRef(savedDoc);
   savedRef.current = savedDoc;
   const docRef = useRef(doc);
@@ -936,6 +942,7 @@ export function Composer(p: ComposerProps) {
     stop();
     const t = TEMPLATES.find(x => x.id === id)!;
     const next = templateDoc(id, p.entries, doc.title);
+    fresh.current = true;
     apply(next, `${t.name}: ${next.parts.length ? `${next.parts.length} ${next.parts.length === 1 ? 'track' : 'tracks'} to change as you like.` : 'an empty song.'} Undo brings back what was here.`);
     setOpen(new Set());
     setSelState(next.parts.find(x => !entryOf(x)?.pieces)?.id ?? next.parts[0]?.id ?? null);

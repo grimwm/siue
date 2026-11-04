@@ -56,6 +56,8 @@ export function MixView(p: MixViewProps) {
   const tracks = useMemo(() => c.doc.parts.map(x => ({ id: x.id, t: levelTrack(x, c.doc) })), [c.doc]);
   const tracksRef = useRef(tracks);
   tracksRef.current = tracks;
+  const playingRef = useRef(c.playing);
+  playingRef.current = c.playing;
   useEffect(() => {
     p.register({
       draw(beat: number) {
@@ -63,12 +65,16 @@ export function MixView(p: MixViewProps) {
         if (!el) return;
         for (const { id, t } of tracksRef.current) {
           const m = el.querySelector<HTMLElement>(`[data-meter="${CSS.escape(id)}"]`);
-          if (m) m.style.setProperty('--lvl', c.playing ? levelAt(t, beat).toFixed(3) : '0');
+          if (m) m.style.setProperty('--lvl', playingRef.current ? levelAt(t, beat).toFixed(3) : '0');
         }
       },
     });
     return () => p.register(null);
   }, []);
+  useEffect(() => {
+    if (c.playing) return;
+    for (const m of box.current?.querySelectorAll<HTMLElement>('[data-meter]') ?? []) m.style.setProperty('--lvl', '0');
+  }, [c.playing]);
   const mix = mixOf(c.doc);
   const clips = (c.doc.fxClips ?? []).map((clip, index) => ({ clip, index })).sort((a, b) => a.clip.from_bar - b.clip.from_bar);
   const morePart = c.doc.parts.find(x => x.id === more) ?? null;

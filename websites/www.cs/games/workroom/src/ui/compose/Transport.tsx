@@ -46,7 +46,7 @@ export interface TransportProps {
 export function Transport(p: TransportProps) {
   return (
     <div class="cmp-transport" role="toolbar" aria-label="Transport" data-transport="">
-      <button type="button" class={cx('cmp-btn cmp-play min-w-28', p.playing && 'on')} data-play="" aria-label={p.playing ? 'Stop' : 'Play'} disabled={p.getting && !p.playing}
+      <button type="button" class={cx('cmp-btn cmp-play min-w-24', p.playing && 'on')} data-play="" aria-label={p.playing ? 'Stop' : 'Play'} disabled={p.getting && !p.playing}
         onClick={() => (p.playing ? p.onStop() : p.onPlay())}>
         <Glyph name={p.playing ? 'stop' : 'play'} /><Glyph name="reel" class="reel" />{p.getting ? 'Getting Ready…' : p.playing ? 'Stop' : 'Play'}
       </button>
@@ -61,14 +61,14 @@ export function Transport(p: TransportProps) {
       </span>
       <span class="cmp-readout" ref={p.readout} data-readout="" aria-live="off">Bar 1 · Beat 1 · 0:00</span>
       <button type="button" class="cmp-icon" aria-label="Click" aria-pressed={p.click} title="Click: the metronome ticks on every beat" data-click="" onClick={p.onClick}><Glyph name="metro" /></button>
-      <button type="button" class="cmp-btn cmp-wide primary" data-save="" disabled={p.saving || !p.canSave} onClick={p.onSave}><Glyph name="save" size={18} />{p.saving ? 'Saving…' : 'Save Draft'}</button>
-      <button type="button" class="cmp-btn cmp-wide" data-song="" data-pop-anchor="" title="Bars, time signature, tempo changes, key, markers and the metronome" onClick={e => p.onSong(e.currentTarget as HTMLElement)}><Glyph name="sliders" size={18} />Song</button>
-      <button type="button" class="cmp-btn cmp-wide" data-start-button="" aria-pressed={p.startOpen} onClick={p.onStart}><Glyph name="song" size={18} />Start A Song</button>
+      <button type="button" class="cmp-btn cmp-wide primary" data-save="" aria-label={p.saving ? 'Saving…' : 'Save Draft'} title="Save Draft" disabled={p.saving || !p.canSave} onClick={p.onSave}><Glyph name="save" size={18} /><span class="cmp-mid">{p.saving ? 'Saving…' : 'Save Draft'}</span></button>
+      <button type="button" class="cmp-btn cmp-wide" data-song="" data-pop-anchor="" aria-label="Song" title="Bars, time signature, tempo changes, key, markers and the metronome" onClick={e => p.onSong(e.currentTarget as HTMLElement)}><Glyph name="sliders" size={18} /><span class="cmp-mid">Song</span></button>
+      <button type="button" class="cmp-btn cmp-wide" data-start-button="" aria-pressed={p.startOpen} aria-label="Start A Song" title="Start a song from a template" onClick={p.onStart}><Glyph name="song" size={18} /><span class="cmp-mid">Start A Song</span></button>
       <button type="button" class="cmp-icon cmp-wide cmp-looks" aria-label="Colors And Style" title="Colors and style" data-looks="" data-pop-anchor="" onClick={e => p.onLooks(e.currentTarget as HTMLElement)}><Glyph name="dial" /></button>
       <button type="button" class="cmp-icon" aria-label="Piece Menu" title="Save, song, start a song, colors, import, export" data-pop-anchor="" data-piece-menu="" onClick={e => p.onMenu(e.currentTarget as HTMLElement)}><Glyph name="more" /></button>
       <div role="tablist" aria-label="Views" class="cmp-modes">
         {VIEWS.map(v => (
-          <button type="button" role="tab" aria-selected={p.view === v.id} data-view={v.id} onClick={() => p.onView(v.id)}><Glyph name={v.glyph} size={18} />{v.label}</button>
+          <button type="button" role="tab" aria-selected={p.view === v.id} data-view={v.id} onClick={() => p.onView(v.id)}><Glyph name={v.glyph} size={18} class="cmp-mode-glyph" />{v.label}</button>
         ))}
       </div>
     </div>

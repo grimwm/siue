@@ -40,6 +40,7 @@
   }
   @media (min-width: 640px) { .cmp-transport > .cmp-modes { margin-left: auto; } .cmp-transport > .cmp-narrow { display: none; } }
 
+  @media (min-width: 640px) { .cmp-transport .cmp-mid { display: none; } .cmp-transport { column-gap: .375rem; } .cmp-transport .cmp-modes > button { padding-inline: .5rem; } .cmp-transport .cmp-readout { padding-inline: .5rem; } .cmp-transport .cmp-mode-glyph { display: none; } }
   .cmp-bar { @apply flex flex-wrap items-center gap-2; }
   .cmp-status { @apply min-h-5 text-sm text-dim; }
 

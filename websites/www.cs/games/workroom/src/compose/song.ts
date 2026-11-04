@@ -43,8 +43,16 @@ export function setMeter(doc: EditDoc, id: MeterId): EditDoc {
   /** An old bar position as the new one holding the same moment. */
   const barAt = (oldPos: number): number => round(oldQ.quarters(beatOfBarPos(oldClock, oldPos)) / barQ + 1);
   const wholeBar = (oldBar: number): number => Math.max(1, Math.round(barAt(oldBar)));
+  // As many bars as the music needs, and about as long as the song was (rounded, so 4/4 → 3/4 → 4/4 comes back to the
+  // same bars).
+  const endBeat = Math.max(0,
+    ...doc.parts.flatMap(p => p.notes.map(n => n.start + n.length)),
+    ...doc.parts.flatMap(p => (p.regions ?? []).map(r => r.start + r.length)),
+    ...doc.parts.flatMap(p => (p.vocal?.clips ?? []).map(c => oldClock.beat(c.at + c.to - c.from))),
+    ...(doc.markers ?? []).map(k => k.beat + 1e-6),
+    ...(doc.fxClips ?? []).map(c => beatOfBarPos(oldClock, c.to_bar) - 1e-6));
   const totalQ = oldQ.quarters(oldClock.barStartBeat(barsNeeded(doc) + 1));
-  const bars = Math.max(1, Math.ceil(totalQ / barQ - 1e-9));
+  const bars = Math.max(1, Math.ceil(oldQ.quarters(endBeat) / barQ - 1e-9), Math.round(totalQ / barQ));
 
   // The tempo: each change goes to the bar now holding its moment, its speed counted in the new beats.
   const tempo: Tempo[] = [];

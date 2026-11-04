@@ -167,6 +167,14 @@ function Staves(p: { c: Ctl; part: Part; layout: StaffLayout; names: boolean; ba
         const y = (step: number): number => b.top + (b.hi - step) * STEP;
         const nameTop = y(b.lo) + 4;
         const row = new Map<number, number>();
+        /** Where each line of names ends, so a name that would run into the one before it is left out. */
+        const ends: number[] = [];
+        const fits = (k: number, cx: number, name: string): boolean => {
+          const w = name.length * 5.6;
+          if (cx - w / 2 < (ends[k] ?? -Infinity) + 3) return false;
+          ends[k] = cx + w / 2;
+          return true;
+        };
         return (
           <g>
             {[-4, -2, 0, 2, 4].map(s => <line class="cmp-sv-line" x1={0} x2={p.width} y1={y(s)} y2={y(s)} />)}
@@ -188,7 +196,7 @@ function Staves(p: { c: Ctl; part: Part; layout: StaffLayout; names: boolean; ba
                     ? <path class="cmp-sv-x" d={`M${cx - 4.5} ${cy - 4}L${cx + 4.5} ${cy + 4}M${cx - 4.5} ${cy + 4}L${cx + 4.5} ${cy - 4}`} />
                     : <ellipse class={n.hollow ? 'cmp-sv-dot hollow' : 'cmp-sv-dot'} cx={cx} cy={cy} rx={5.5} ry={4} transform={`rotate(-20 ${cx} ${cy})`} />}
                   {stem ? <line class="cmp-sv-stem" x1={n.stemUp ? cx + 5 : cx - 5} x2={n.stemUp ? cx + 5 : cx - 5} y1={cy} y2={n.stemUp ? cy - STEM : cy + STEM} /> : null}
-                  {p.names ? <text class="cmp-sv-name" x={cx} y={nameTop + (k + 1) * NAME_H - 2} text-anchor="middle">{n.name}</text> : null}
+                  {p.names && fits(k, cx, n.name) ? <text class="cmp-sv-name" x={cx} y={nameTop + (k + 1) * NAME_H - 2} text-anchor="middle">{n.name}</text> : null}
                   <rect x={cx - 9} y={cy - 9} width={18} height={18} fill="transparent" />
                 </g>
               );

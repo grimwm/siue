@@ -134,7 +134,8 @@ export function createBubbleLayer(insert: (layer: HTMLElement) => void, pics: Bu
   function lay(s: Shown, sp: BubbleSpot, w: number, h: number): void {
     const d = bubbleSize(sp.cell);
     const { cx, cy, place } = bubbleAt(sp.x, sp.head, sp.cell, w, h);
-    const key = `${cx.toFixed(1)} ${cy.toFixed(1)} ${d}`;
+    // The head too: a cloud held at an edge stays put while the head under it moves, and the puffs must follow.
+    const key = `${cx.toFixed(1)} ${cy.toFixed(1)} ${d} ${sp.x.toFixed(1)} ${sp.head.toFixed(1)}`;
     if (key === s.key) return;
     Object.assign(s, { key, place, x: cx, y: cy, d });
     s.cloud.style.cssText = `left:${cx - d / 2}px;top:${cy - d / 2}px;width:${d}px;height:${d * 0.86}px`;

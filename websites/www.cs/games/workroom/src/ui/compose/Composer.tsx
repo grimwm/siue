@@ -588,7 +588,7 @@ export function Composer(p: ComposerProps) {
     const x = recordPart;
     if (!x || segs.length === 0) return;
     const base = humPlace === 'replace' ? clearPart(doc, x.id) : doc;
-    const startBeat = humPlace === 'replace' ? 0 : afterPart(x);
+    const startBeat = humPlace === 'replace' ? 0 : humPlace === 'line' ? clock.barStartBeat(clock.barOfBeat(cursor + 1e-9)) : afterPart(x);
     const bar = clock.barOfBeat(startBeat);
     const made = humNotes(segs, { snap: humSnap, classes: key.classes, startBeat, bpm: clock.tempoAt(bar).bpm, tidy, quarter: clock.quarter(bar) });
     const added = addNotes(base, x.id, made.map((m, i) => (m.bend ? { ...m.note, bend: bendFractions(m.bend, segs[i]!) } : m.note)));
@@ -901,7 +901,7 @@ export function Composer(p: ComposerProps) {
             <button type="button" class="cmp-btn small" onClick={() => { const s = step.back(); if (s) { if (s.ids.length) apply(removeNotes(doc, x.id, new Set(s.ids))); setStepAt(step.cursor()); } }}>‹ Back One</button>
           </div>
         ) : p.hum ? (
-          <HumPanel ports={p.hum} snap={humSnap} onSnap={setHumSnap} place={humPlace === 'line' ? 'after' : humPlace} onPlace={setHumPlace} tidy={tidy} onTidy={setTidy}
+          <HumPanel ports={p.hum} snap={humSnap} onSnap={setHumSnap} place={humPlace} onPlace={setHumPlace} tidy={tidy} onTidy={setTidy}
             keyName={key.name} classes={key.classes} onAdd={addHum} help={help} />
         ) : null}
         <p data-live-state="" class="h-6 truncate font-mono text-sm text-dim">
@@ -909,7 +909,7 @@ export function Composer(p: ComposerProps) {
             : recording === 'counting' ? 'Counting in…' : recording === 'on' ? `● Recording · ${[...held].map(pitchName).join(' ') || 'waiting for a bar of quiet'}`
             : `Press a key to start recording at ${barWords(clock, afterPart(x))}.`)
             : mode === 'step' ? `Next note at ${barWords(clock, stepAt)}${held.size ? ` · ${[...held].map(pitchName).join(' ')}` : ''}`
-            : `Hummed notes go at ${humPlace === 'replace' ? 'bar 1, in place of the track\'s notes' : barWords(clock, afterPart(x))}.`}
+            : `Hummed notes go at ${humPlace === 'replace' ? 'bar 1, in place of the track\'s notes' : barWords(clock, humPlace === 'line' ? clock.barStartBeat(clock.barOfBeat(cursor + 1e-9)) : afterPart(x))}.`}
         </p>
         {mode !== 'hum' ? <Keyboard entry={e} start={keysStart} held={held} onStart={setKeysFrom} onDown={q => keyDown(q, `screen:${q}`)} onUp={q => keyUp(`screen:${q}`)} /> : null}
         {mode !== 'hum' ? <p class="text-xs text-dim">On a computer keyboard, A S D F G H J K play the white keys and W E T Y U the black ones; Z and X move down and up an octave.</p> : null}

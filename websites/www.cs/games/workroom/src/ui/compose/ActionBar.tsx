@@ -188,7 +188,7 @@ export function ActionBar(p: ActionBarProps) {
       <div class="btns">
         <Act glyph="split" label="Split" title="Split at the cursor, or tap where (S)" onClick={split} />
         <Act glyph="join" label="Join" disabled={(part.regions?.length ?? 0) < 2} title="Join with the next region" onClick={() => { const next = joinRegion(c.doc, part.id, r.id); if (next) c.apply(next); }} />
-        <Act glyph="loop" label="Repeat" title="Play this region once more after itself" onClick={() => c.apply(loopRegion(c.doc, part.id, r.id, r.start + r.length + (r.loop ?? r.length)), 'The region repeats once more.')} />
+        <Act glyph="loop" label="Repeat" title="Play this region once more after itself" onClick={() => { const next = loopRegion(c.doc, part.id, r.id, r.start + r.length + (r.loop ?? r.length)); if (next === c.doc || next.parts.find(x => x.id === part.id)?.regions?.find(x => x.id === r.id)?.length === r.length) c.say('There is no room to repeat it: the next region starts straight after it. Move or delete that one first.'); else c.apply(next, 'The region repeats once more.'); }} />
         <Act glyph="dup" label="Duplicate" onClick={() => { const made = duplicateRegion(c.doc, part.id, r.id); c.apply(made.doc); c.setPick({ kind: 'region', part: part.id, id: made.id }); }} />
         <Act glyph="copy" label="Copy" onClick={() => copyPicked(c, p.setClip)} />
         <Act glyph="paste" label="Paste" disabled={!p.clip} onClick={() => pasteAtCursor(c, p.clip)} />

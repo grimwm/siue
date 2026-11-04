@@ -7,7 +7,7 @@
 // (preview, Add As New Parts, Undo) and exports MIDI and MusicXML, and the piece page engraves the saved draft. On a
 // phone, holding an on-screen key in the Record drawer never moves the page. Then, with a fake Web MIDI keyboard and a
 // fake microphone: Your Keyboard (asked for only when turned on, velocity, the sustain pedal, the GM program sent), drum
-// pads (refused by a melody track, recorded by a Drum Kit), Hum (the demo, the microphone, Replace The Part with Undo)
+// pads (refused by a melody track, recorded by a Drum Kit), Hum (the demo, the microphone, Replace The Track with Undo)
 // and Play Along; and on a phone a note held by the pedal never moves the page. Then the Mix view's Speed And Loudness:
 // the piece's speed, a gradual speed change, a track at its own BPM, a loudness line, and Hum's Exact Pitch bends, saved
 // as a schema 2 draft; on a phone the Mix view has no sideways scroll and a held key still never moves the page. Then

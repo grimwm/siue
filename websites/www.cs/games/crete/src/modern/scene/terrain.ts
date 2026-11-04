@@ -4,7 +4,7 @@
  * merged into one mesh per material; flames and discs that loop stay apart, moved by `userData.loop(t)`. */
 import {
   BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Group, LatheGeometry, Mesh,
-  MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, Shape, SphereGeometry, TorusGeometry, Vector2,
+  MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, Shape, SphereGeometry, Sprite, TorusGeometry, Vector2,
 } from 'three';
 import type { BufferGeometry, Material, Object3D } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -40,6 +40,8 @@ export interface PieceInfo {
   /** How far it has opened, 0 shut to 1 open (src/openings.ts): the Daedalus Gate's bars across its pit, a door
    *  sunk into its floor, the exit's portal lit. */
   open?: (p: number) => void;
+  /** The exit's portal waking, `t` ms since it began (src/modern/portal-wake.ts). */
+  wake?: (t: number) => void;
 }
 
 export const at = <T extends Object3D>(o: T, x: number, y: number, z: number): T => (o.position.set(x, y, z), o);
@@ -207,7 +209,7 @@ function turned(x: ModelCtx, live: Object3D[]): Object3D[] {
 }
 
 /** The exit: the Aegean Portal (portal.ts), set into a wall beside it, north first, so its front faces the opening
- *  camera whenever it can; with no wall beside it, it faces south. `open` lights it. */
+ *  camera whenever it can; with no wall beside it, it faces south. `open` lights it; `wake` plays its waking. */
 function exit(x: ModelCtx): Group {
   const p = portal(x.kit, box, cyl);
   const [dr, dc] = exitFacing(x.wall, x.r, x.c);
@@ -215,7 +217,7 @@ function exit(x: ModelCtx): Group {
   const live = new Group();
   live.add(...p.live);
   live.rotation.y = p.g.rotation.y;
-  return piece(p.g, { half: 0.45, h: p.h, tall: true, loop: p.loop, open: p.light }, [live]);
+  return piece(p.g, { half: 0.45, h: p.h, tall: true, loop: p.loop, open: p.light, wake: p.wake }, [live]);
 }
 
 function toggle(x: ModelCtx, closed: boolean): Group {
@@ -420,6 +422,11 @@ export const TERRAIN_MODELS: Record<TerrainModel, (x: ModelCtx) => Object3D> = {
 /** Frees a model's own geometry and materials; the kit's shared ones stay. */
 export function disposeModel(o: Object3D, kit: Kit): void {
   o.traverse(n => {
+    // A sprite's geometry is three's own, shared by every sprite: only its material is its own.
+    if (n instanceof Sprite) {
+      if (!kit.keeps.has(n.material)) n.material.dispose();
+      return;
+    }
     if (!(n instanceof Mesh)) return;
     (n.geometry as BufferGeometry).dispose();
     const mats = Array.isArray(n.material) ? n.material : [n.material];

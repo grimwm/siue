@@ -136,24 +136,24 @@ E|.M.#.;..*#
 ############
 ` },
   { id: 'ch5-10', text: `title: The Gate of the Labyrinth
-intro: The snares end at the gate, and the beast waits by it, behind a red door. The door is one way through; the other runs east, past a snare that the block, pushed onto the brown button, holds open. Off the quickest way, a page waits, and a memory of another telling.
+intro: The snares end at the gate, and the beast waits by it. The way runs east, past a snare that the block, pushed onto the brown button, holds open; a second snare in the east room is for the beast. Off the quickest way, a page waits, and a memory of another telling.
 pages: ch5-gate
 
 #################
-#.....#.##..#...#
-#####.#.###.#.#.#
-###*..#...#..*#.#
-###.#####.#####.#
-##..............#
-###.###.###.#####
-#.r.#.....#.....#
-#..P#.....#...Op#
-#....*....#...-.#
-#######.#######&#
-#######..RM.....#
-#######...###.#.#
-#######...#...#|#
-###############E#
+#.#..#####......#
+#####.#..##.#.#.#
+###*.##..##*..#.#
+###..####.#####.#
+##p.............#
+###..##.##..#####
+#..P#.....#.....#
+#...#.....#.&.O.#
+#.*.#....#....-.#
+#####.#.#######&#
+#######..#......#
+#######...###M#.#
+#####.#...#.#.#|#
+##########.####E#
 #################
 ` },
 ];

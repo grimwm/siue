@@ -31,7 +31,7 @@
 # the site runs on Admin\People's defaults. A host's earlier studio.json is a
 # file the last deploy sent that this one does not, so PRUNE=1 deletes it.
 #
-# CRETE_BANK_VERIFIER_TOKEN (the "Crete bank verifier" 1Password item) is
+# CRETE_BANK_VERIFIER_TOKEN (the "Crete Config" 1Password item's bank-verifier field) is
 # optional too: the token Crete's trusted level verifier sends. When set it
 # must be 32 to 128 letters, digits, '-' or '_' (anything else stops the
 # deploy, without printing it), and only its sha256 is staged, as

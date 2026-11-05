@@ -10,7 +10,7 @@ name: crete-verify
 #    (Hard's plateau, large boards especially, then Medium and Easy), and posts each straight into the served pool
 #    with its provenance tuple, never past a grade's cap.
 #
-# The token, CRETE_BANK_VERIFIER_TOKEN, is the password field of the item "Crete bank verifier" in the SIUE 1Password
+# The token, CRETE_BANK_VERIFIER_TOKEN, is the bank-verifier field of the item "Crete Config" in the SIUE 1Password
 # vault, the same one the deploy turns into the server's hash (games/crete/bank/verifier.json). It is read through the
 # repository's OP_SERVICE_ACCOUNT_TOKEN secret, as the deploy reads its login, and the action masks it, so it is never
 # printed. Without the item the run skips both steps and says so. A failed step only leaves the bank as it was.
@@ -49,7 +49,7 @@ jobs:
           export-env: true
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          CRETE_BANK_VERIFIER_TOKEN: op://khvwk3iogv3mhhjui4se7xqyni/Crete bank verifier/password
+          CRETE_BANK_VERIFIER_TOKEN: op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier
 
       - name: Look for the token
         id: token
@@ -59,7 +59,7 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No Crete bank verifier token in 1Password (item \"Crete bank verifier\", field password); skipping verification and generation."
+            echo "::notice::No Crete bank verifier token in 1Password (item \"Crete Config\", field bank-verifier); skipping verification and generation."
           fi
 
       - name: Check the levels waiting in the shared bank

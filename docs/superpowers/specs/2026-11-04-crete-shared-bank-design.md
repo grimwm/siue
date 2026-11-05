@@ -77,8 +77,8 @@ and reads none. It stops starting parts when its time is spent, ends those still
 the bank's hourly share for it is spent (429) or the bank fails three times running.
 
 It authenticates with a bearer token in the `X-Crete-Verifier` header (a custom header, since Apache in front of
-PHP-FPM may drop `Authorization`). The token is `CRETE_BANK_VERIFIER_TOKEN`, the password field of the item "Crete
-bank verifier" in the SIUE 1Password vault. Both the deploy and the verifier load it with
+PHP-FPM may drop `Authorization`). The token is `CRETE_BANK_VERIFIER_TOKEN`, the `bank-verifier` field of the item "Crete
+Config" in the SIUE 1Password vault. Both the deploy and the verifier load it with
 `1password/load-secrets-action` through the repository's `OP_SERVICE_ACCOUNT_TOKEN` secret, as an optional load like
 the studio config's: a missing item means no token, never a failed run. Disputed levels are listed to it first. The
 repository is public, so the token is never committed: the deploy (`deploy.sh`, from the same item, which `deploy.yml`
@@ -305,8 +305,10 @@ store files.
 
 ## Setup the owner does once
 
-1. In 1Password, in the SIUE vault, create a Password item titled exactly "Crete bank verifier".
-2. Let 1Password generate its password: letters and digits only (symbols off), 40 to 128 characters. Save it.
+1. In 1Password, in the SIUE vault, keep an item titled exactly "Crete Config" with a password field named exactly
+   `bank-verifier`.
+2. Its value must be 32 to 128 characters of letters, digits, `-` or `_` (deploy.sh refuses anything else): let
+   1Password generate 40 or more letters and digits, symbols off. Save it.
 3. Run the deploy workflow once from the Actions tab (or merge anything): the deploy puts the token's hash on the
    server.
 4. Optionally run crete-verify from the Actions tab to seed the bank at once: it checks the waiting levels, then

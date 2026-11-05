@@ -12,7 +12,7 @@ name: crete-verify
 #
 # The token, CRETE_BANK_VERIFIER_TOKEN, is the bank-verifier field of the item "Crete Config" in the SIUE 1Password
 # vault, the same one the deploy turns into the server's hash (games/crete/bank/verifier.json). It is read through the
-# repository's OP_SERVICE_ACCOUNT_TOKEN secret, as the deploy reads its login, and the action masks it, so it is never
+# production environment's OP_SERVICE_ACCOUNT_TOKEN secret, as the deploy reads its login, and the action masks it, so it is never
 # printed. Without the item the run skips both steps and says so. A failed step only leaves the bank as it was.
 
 on:

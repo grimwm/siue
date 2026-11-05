@@ -1112,9 +1112,18 @@
    "seed": "bench1",
    "k": 0,
    "part": 3000000,
-   "found": null,
-   "tries": 376,
-   "spent": 3002644
+   "found": {
+    "text": "title: \nintro: \n\n###################\n#...#...#.........#\n#.#.#.#.#.#######.#\n#.#*#.#.#-...O....#\n#.#.#.#.#.#######.E\n#...#*#.#...#...#.#\n###.###.#.#.#.###.#\n#.......M.#...#...#\n#.#####.#.###.#.###\n#O....#.#...#.#...#\n###.#.#.###.#:###.#\n#..P#.#...#.#.#...#\n#.#.#.#.#.#&#.#.###\n#.#.#...#.....#...#\n###################\n",
+    "explored": 3263,
+    "shortest": 110,
+    "score": 88,
+    "line": "udllrruurrddddrruurrddrrrruuuuuuddddddlllluulluuuuuuuuuulldddduuuurrddddddlllluuuuddddrrrrrruuuuuurrrrrrrrdddr",
+    "from": "made",
+    "tries": 15,
+    "spent": 1194896
+   },
+   "tries": 15,
+   "spent": 1194896
   },
   {
    "tier": 5,
@@ -1123,8 +1132,8 @@
    "k": 2,
    "part": 400000,
    "found": null,
-   "tries": 436,
-   "spent": 400025
+   "tries": 187,
+   "spent": 432206
   }
  ]
 }

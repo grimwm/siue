@@ -1112,18 +1112,9 @@
    "seed": "bench0",
    "k": 0,
    "part": 3000000,
-   "found": {
-    "text": "title: \nintro: \n\n#########E#########\n#...#....|..#.....#\n###.#.###.#.#.#.#.#\n#...#.....#.#.#.#P#\n#####.#########.#.#\n#y#...#.........#.#\n#.#Y#.#.#####Y#.###\n#.#.#...>.....#.#.#\n#.#.###.#.###.#.#.#\n#...#.#.#..y;...#.#\n###.#.###.####.##.#\n#.....#....M......#\n#####.###.#####.###\n#....>.>#...#..*..#\n###################\n",
-    "explored": 2578,
-    "shortest": 69,
-    "score": 50,
-    "line": "uulrllddddddddlllllldduuuurrrrddrddrdduuluuluuuullllllddlluuuuuurrrru",
-    "from": "made",
-    "tries": 343,
-    "spent": 2478710
-   },
-   "tries": 343,
-   "spent": 2478710
+   "found": null,
+   "tries": 939,
+   "spent": 3002481
   },
   {
    "tier": 4,
@@ -1132,8 +1123,8 @@
    "k": 0,
    "part": 400000,
    "found": null,
-   "tries": 42,
-   "spent": 416105
+   "tries": 129,
+   "spent": 458555
   },
   {
    "tier": 10,
@@ -1142,8 +1133,8 @@
    "k": 3,
    "part": 400000,
    "found": null,
-   "tries": 13,
-   "spent": 409500
+   "tries": 19,
+   "spent": 408788
   }
  ]
 }

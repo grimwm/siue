@@ -1117,8 +1117,8 @@
    "k": 0,
    "part": 400000,
    "found": null,
-   "tries": 115,
-   "spent": 401717
+   "tries": 177,
+   "spent": 402949
   },
   {
    "tier": 8,
@@ -1127,8 +1127,8 @@
    "k": 0,
    "part": 400000,
    "found": null,
-   "tries": 85,
-   "spent": 402912
+   "tries": 147,
+   "spent": 406372
   }
  ]
 }

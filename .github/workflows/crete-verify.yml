@@ -10,10 +10,10 @@ name: crete-verify
 #    (Hard's plateau, large boards especially, then Medium and Easy), and posts each straight into the served pool
 #    with its provenance tuple, never past a grade's cap.
 #
-# The one secret is CRETE_BANK_VERIFIER_TOKEN, a secret of the `production` environment (which only admits runs
-# from main), the same one the deploy turns into the server's hash (games/crete/bank/verifier.json). A workflow on
-# another branch cannot read it, and it is never printed. Without it the run skips both steps and says so. A failed
-# step only leaves the bank as it was.
+# The token, CRETE_BANK_VERIFIER_TOKEN, is the bank-verifier field of the item "Crete Config" in the SIUE 1Password
+# vault, the same one the deploy turns into the server's hash (games/crete/bank/verifier.json). It is read through the
+# repository's OP_SERVICE_ACCOUNT_TOKEN secret, as the deploy reads its login, and the action masks it, so it is never
+# printed. Without the item the run skips both steps and says so. A failed step only leaves the bank as it was.
 
 on:
   schedule:
@@ -42,33 +42,36 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Load the token (optional)
+        continue-on-error: true
+        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          CRETE_BANK_VERIFIER_TOKEN: op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier
+
       - name: Look for the token
         id: token
-        env:
-          CRETE_BANK_VERIFIER_TOKEN: ${{ secrets.CRETE_BANK_VERIFIER_TOKEN }}
         run: |
           echo "CRETE_START=$(date +%s)" >> "$GITHUB_ENV"
-          if [ -n "$CRETE_BANK_VERIFIER_TOKEN" ]; then
+          if [ -n "${CRETE_BANK_VERIFIER_TOKEN:-}" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::CRETE_BANK_VERIFIER_TOKEN is not set in the production environment; skipping verification and generation."
+            echo "::notice::No Crete bank verifier token in 1Password (item \"Crete Config\", field bank-verifier); skipping verification and generation."
           fi
 
       - name: Check the levels waiting in the shared bank
         if: steps.token.outputs.present == 'true'
         continue-on-error: true
         timeout-minutes: 15
-        env:
-          CRETE_BANK_VERIFIER_TOKEN: ${{ secrets.CRETE_BANK_VERIFIER_TOKEN }}
         run: node websites/www.cs/games/crete/tools/verify-bank.ts --items 25 --minutes 12
 
       - name: Make new levels for the shared bank
         if: steps.token.outputs.present == 'true'
         continue-on-error: true
         timeout-minutes: 45
-        env:
-          CRETE_BANK_VERIFIER_TOKEN: ${{ secrets.CRETE_BANK_VERIFIER_TOKEN }}
         run: |
           left=$(( 47 - ( $(date +%s) - CRETE_START ) / 60 ))
           if [ "$left" -lt 2 ]; then echo "generate-bank: no time left in this run"; exit 0; fi

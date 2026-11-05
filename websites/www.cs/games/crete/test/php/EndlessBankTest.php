@@ -457,7 +457,7 @@ final class EndlessBankTest extends TestCase
 
     public function testOnlyAcceptedVersionsComeInAndARetiredVersionsPendingLevelsGo(): void
     {
-        self::assertSame([403, ['error' => 'version']], self::refusal(fn() => $this->submit($this->bank(), self::level(20), tuple: ['v' => 2])));
+        self::assertSame([403, ['error' => 'version']], self::refusal(fn() => $this->submit($this->bank(['accept' => [1]]), self::level(20), tuple: ['v' => 2])));
         $both = $this->bank(['accept' => [1, 2]]);
         $this->submit($both, self::level(21), tuple: ['v' => 1]);
         $this->submit($both, self::level(22), tuple: ['v' => 2]);
@@ -770,7 +770,7 @@ final class EndlessBankTest extends TestCase
     public function testTheShippedConfigIsValid(): void
     {
         $config = self::config();
-        self::assertSame([1], $config['accept']);
+        self::assertSame([1, 2], $config['accept']);
         self::assertSame(1500, $config['servedCap']);
         self::assertSame(['submit' => 30, 'claim' => 20, 'verify' => 20, 'report' => 20, 'levels' => 120, 'trusted' => 120], $config['perHour']);
         self::assertSame('crete_bank_csrf', $config['guard']['csrfCookie']);

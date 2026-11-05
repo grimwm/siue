@@ -6,8 +6,9 @@ name: crete-verify
 #
 # 1. tools/verify-bank.ts checks the levels waiting in quarantine: it makes each again from its tuple with main's
 #    generator and posts a match or a mismatch; one trusted match admits a level. At most 25 levels, 12 minutes.
-# 2. tools/generate-bank.ts spends the rest of the budget making new Endless levels on every core, scarcest first
-#    (Hard's plateau, large boards especially, then Medium and Easy), and posts each straight into the served pool
+# 2. tools/generate-bank.ts spends the rest of the budget making new Endless levels on every core, its time
+#    shared among the grades with room (Hard 50%, Medium 30%, Easy 20%), the scarcest first within each (the plateau,
+#    large boards especially), and posts each straight into the served pool
 #    with its provenance tuple, never past a grade's cap. Once every grade is full it turns each over: up to 1.5% of a
 #    grade's cap per run, each new level replacing one served level the server picks, one out for each one in.
 #

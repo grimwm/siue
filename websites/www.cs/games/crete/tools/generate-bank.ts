@@ -2,9 +2,11 @@
  * tools/verify-bank.ts has checked the waiting levels. For the rest of its time (`--minutes`) it makes new Endless
  * levels with this checkout's generator on every core the runner has, and posts each straight into the served pool
  * (`trusted-add`) with its provenance tuple: the runner is our own code on our own machine, as trusted as its
- * verdicts. It asks the bank first how full each grade is (`trusted-counts`) and makes what is scarcest: Hard's
- * plateau first, large boards especially, which a run's own search seldom finds in time, then Medium and Easy as
- * Hard fills. It never makes more than fits under a grade's cap, counting the levels waiting in quarantine.
+ * verdicts. It asks the bank first how full each grade is (`trusted-counts`) and shares the run's time among the
+ * grades with room (TIME_SHARE: Hard half, Medium 30%, Easy 20%; a grade without room passes its time to the
+ * others), Hard first on a tie, so a slow Hard never starves Medium and Easy. Within a grade it makes what is
+ * scarcest: the plateau, large boards especially, which a run's own search seldom finds in time. It never makes more
+ * than fits under a grade's cap, counting the levels waiting in quarantine.
  *
  * A full grade still turns over: each run makes up to TURNOVER_SHARE of its cap and posts each with `replace`, so the
  * server retires one served level (its own weighted pick, old and often-served first) for each one it takes in. Only
@@ -32,8 +34,10 @@ import { parse } from '../src/puzzle/level.ts';
 import type { Grade } from '../src/puzzle/rating.ts';
 import { BANK_URL, TOKEN_HEADER } from './verify-bank.ts';
 
-/** How much each grade's empty room counts: Hard's first, then Medium's, then Easy's. */
-export const GRADE_WEIGHT: Readonly<Record<Grade, number>> = { hard: 3, medium: 2, easy: 1 };
+/** Each grade's share of a run's part time while it has room; a grade without room passes its share to the others. */
+export const TIME_SHARE: Readonly<Record<Grade, number>> = { hard: 0.5, medium: 0.3, easy: 0.2 };
+/** What a part is reckoned to take before a grade has finished one: running parts count toward their grade's time. */
+export const PART_GUESS_MS = 60_000;
 /** The share of a grade's served levels that should be on the plateau, where a run spends most of its levels. */
 export const PLATEAU_SHARE = 0.75;
 /** The share of a grade's plateau levels that should be large boards. */
@@ -55,7 +59,11 @@ export interface Shelf { served: number; pending: number; cap: number; levels: r
 export type Counts = Record<Grade, Shelf>;
 /** What the planner keeps for a grade: room left under the cap (or, for a full grade, the levels to replace), whether
  *  its levels replace served ones, and the served levels by place and size. */
-export interface Tally { cap: number; room: number; replace: boolean; total: number; plateau: number; large: number; asked: number }
+export interface Tally {
+  cap: number; room: number; replace: boolean; total: number; plateau: number; large: number; asked: number;
+  /** Part time this run spent on the grade (ms), its parts finished, and its parts still running. */
+  spent: number; done: number; running: number;
+}
 /** A level to make: its grade, on the plateau or on the climb, and whether a large board is wanted. */
 export interface Want { grade: Grade; plateau: boolean; large: boolean }
 
@@ -77,21 +85,24 @@ export function tallyOf(counts: Counts): Record<Grade, Tally> {
     }
     const room = Math.max(0, s.cap - s.served - s.pending);
     const replace = room === 0 && s.served > 0;
-    out[g] = { cap: s.cap, room: replace ? Math.max(1, Math.floor(s.cap * TURNOVER_SHARE)) : room, replace, total: s.served, plateau, large, asked: 0 };
+    out[g] = { cap: s.cap, room: replace ? Math.max(1, Math.floor(s.cap * TURNOVER_SHARE)) : room, replace, total: s.served, plateau, large, asked: 0, spent: 0, done: 0, running: 0 };
   }
   return out;
 }
 
-/** The scarcest level to make next, or null when no grade has room or turnover left: the grade whose weighted share
- *  of empty room is largest, and once no grade has empty room, the full grade whose weighted turnover is (Hard first
- *  on a tie); on the plateau until PLATEAU_SHARE of the grade is, and a large board until LARGE_SHARE of its plateau
- *  is, on every LARGE_EVERY-th part the grade is asked for. */
+/** A grade's part time so far, its running parts reckoned at its average finished part (or PART_GUESS_MS). */
+const timeOf = (s: Tally) => s.spent + s.running * (s.done ? s.spent / s.done : PART_GUESS_MS);
+
+/** The level to make next, or null when no grade has room or turnover left. The grade is the one furthest behind its
+ *  TIME_SHARE of the run's part time, among the grades with empty room, and once none has, among the full grades
+ *  turning over (Hard first on a tie); on the plateau until PLATEAU_SHARE of the grade is, and a large board until
+ *  LARGE_SHARE of its plateau is, on every LARGE_EVERY-th part the grade is asked for. */
 export function nextWant(t: Readonly<Record<Grade, Tally>>): Want | null {
-  let grade: Grade | null = null, best = 0;
+  let grade: Grade | null = null, best = Infinity;
   for (const replace of [false, true]) {
     for (const g of GRADES) {
-      const p = t[g].cap > 0 ? GRADE_WEIGHT[g] * t[g].room / t[g].cap : 0;
-      if (t[g].replace === replace && t[g].room > 0 && p > best) { grade = g; best = p; }
+      const p = timeOf(t[g]) / TIME_SHARE[g];
+      if (t[g].replace === replace && t[g].room > 0 && p < best) { grade = g; best = p; }
     }
     if (grade) break;
   }
@@ -175,8 +186,10 @@ export async function generateAll(deps: GenerateDeps, limits: { ms: number }): P
   let halted = false, errors = 0;
   const running = new Set<Promise<void>>();
 
-  const finish = async (want: Want, t: Tuple, made: SharedMade | null): Promise<void> => {
-    if (!made) { out.empty++; tally[want.grade].room++; return; }
+  const finish = async (want: Want, t: Tuple, made: SharedMade | null, started: number): Promise<void> => {
+    const g = tally[want.grade];
+    g.running--; g.done++; g.spent += Math.max(0, deps.now() - started);
+    if (!made) { out.empty++; g.room++; return; }
     const s = tally[want.grade];
     const sent = halted ? 'error' : await deps.upload(t, made, s.replace).catch((): Upload => 'error');
     if (sent === 'ok') {
@@ -203,9 +216,11 @@ export async function generateAll(deps: GenerateDeps, limits: { ms: number }): P
       if (!want) break;
       tally[want.grade].room--;
       tally[want.grade].asked++;
+      tally[want.grade].running++;
       const t = deps.tupleFor(want);
+      const started = deps.now();
       out.tried++;
-      const job: Promise<void> = deps.make(t).catch(() => null).then(m => finish(want, t, m)).finally(() => { running.delete(job); });
+      const job: Promise<void> = deps.make(t).catch(() => null).then(m => finish(want, t, m, started)).finally(() => { running.delete(job); });
       running.add(job);
     }
     if (!running.size) break;

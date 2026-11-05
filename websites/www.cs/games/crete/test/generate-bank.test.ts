@@ -1,5 +1,6 @@
-// The trusted generator's script (tools/generate-bank.ts): it makes what is scarcest (Hard's plateau first, large
-// boards especially, then Medium and Easy as Hard fills), never more than fits under a grade's cap, turns a full grade
+// The trusted generator's script (tools/generate-bank.ts): it shares its time among the grades with room (Hard first,
+// never starving Medium and Easy), makes what is scarcest within one (the plateau, large boards especially), never
+// more than fits under a grade's cap, turns a full grade
 // over by replacing a small share of it with what it made, stops when its time is spent, posts with its token in the
 // header only, and fails quietly.
 import { test } from 'node:test';
@@ -20,7 +21,7 @@ const shelf = (served: number, over: Partial<Shelf> = {}, plateau = 0, large = 0
 });
 const counts = (easy: Shelf, medium: Shelf, hard: Shelf): Counts => ({ easy, medium, hard });
 
-test('Hard\'s plateau comes first, large boards especially, then Medium and Easy as Hard fills', () => {
+test('Hard\'s plateau comes first, large boards especially, and each grade with room gets its share of the time', () => {
   assert.deepEqual(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(0)))), { grade: 'hard', plateau: true, large: true });
   // Half of Hard's plateau is large: a plain plateau level next.
   assert.deepEqual(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(80, {}, 40, 20)))), { grade: 'hard', plateau: true, large: false });
@@ -30,10 +31,19 @@ test('Hard\'s plateau comes first, large boards especially, then Medium and Easy
   assert.deepEqual(leans, [true, false, false, true, false, false]);
   // Three quarters of Hard is on the plateau: a level of its climb next.
   assert.deepEqual(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(40, {}, 30, 15)))), { grade: 'hard', plateau: false, large: false });
-  // Hard a third full weighs the same as Medium empty; past that, Medium.
-  assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(500))))!.grade, 'hard');
-  assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(501))))!.grade, 'medium');
-  assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(800), shelf(1100))))!.grade, 'easy');
+  // Time shares: the grade furthest behind its share goes next, running parts counting, Hard first on a tie.
+  const shares = tallyOf(counts(shelf(0), shelf(0), shelf(0)));
+  const order: string[] = [];
+  for (let i = 0; i < 10; i++) { const w = nextWant(shares)!; order.push(w.grade); shares[w.grade].running++; }
+  assert.deepEqual(order, ['hard', 'medium', 'easy', 'hard', 'medium', 'hard', 'easy', 'hard', 'medium', 'hard']);
+  // Hard's slow parts use up its share: Medium and Easy are not starved.
+  shares.hard.running = 0; shares.medium.running = 0; shares.easy.running = 0;
+  Object.assign(shares.hard, { spent: 600_000, done: 2 });
+  Object.assign(shares.medium, { spent: 300_000, done: 10 });
+  Object.assign(shares.easy, { spent: 100_000, done: 10 });
+  assert.equal(nextWant(shares)!.grade, 'easy');
+  shares.easy.room = 0;
+  assert.equal(nextWant(shares)!.grade, 'medium', 'a grade without room passes its time on');
   // Pending levels take room too; a full grade only turns over once the others have no room.
   assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(1200, { pending: 300 }))))!.grade, 'medium');
   const full = tallyOf(counts(shelf(1500), shelf(1500), shelf(1500)));
@@ -94,7 +104,7 @@ test('it stops starting parts once its time is spent, and ends the ones still ru
   // Two at a time, each a second: parts start at 0, 0, 1, 2, 3, 4 seconds... none at or after 4.5 s.
   assert.ok(f.parts() >= 4 && f.parts() <= 6, `${f.parts()} parts`);
   assert.equal(made.tried, f.parts());
-  assert.equal(made.added.hard, f.parts());
+  assert.equal(made.added.hard + made.added.medium + made.added.easy, f.parts());
   // A part that never ends: the wait for the deadline stops the pool.
   let release: () => void = () => {};
   let waits = 0;
@@ -143,6 +153,20 @@ test('a full grade is replaced only with what the run made: a slow run retires f
   assert.ok(few.added.hard < turnover && few.added.hard > 0, `${few.added.hard} replaced`);
   assert.equal(sent.length, few.added.hard + few.added.medium + few.added.easy, 'one post, one retirement, per level made');
   assert.equal(few.empty, few.tried - sent.length);
+});
+
+test('from an empty bank a run makes levels for every grade, however slow Hard is', async () => {
+  // As the first live run found: Hard's parts slow and mostly empty (7 Hard levels in 47 minutes) must not take the
+  // whole run. Hard's parts take ten minutes and one in four makes a level; Medium's and Easy's take two.
+  let t = 0, n = 0;
+  const f = fake({
+    workers: 4,
+    now: () => t,
+    make: async tuple => { const i = n++; t += tuple.grade === 'hard' ? 600_000 : 120_000; return tuple.grade === 'hard' && i % 4 !== 0 ? null : level(i % BANKS.hard.length); },
+  });
+  const made = await generateAll(f.deps, { ms: 47 * 60_000 });
+  assert.ok(made.added.hard > 0 && made.added.medium > 0 && made.added.easy > 0, JSON.stringify(made.added));
+  assert.ok(made.added.medium >= made.added.easy, 'Medium\'s share is larger than Easy\'s');
 });
 
 test('it fails quietly, posts to HTTPS only, and never prints its token', async () => {

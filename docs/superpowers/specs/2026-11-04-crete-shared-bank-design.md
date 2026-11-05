@@ -59,9 +59,11 @@ within one budget of 47 minutes of a 60-minute job. It does two things, in order
    upload's and keeps beside it, so it can be made again later.
 
 **What the runner makes.** It first reads how full each grade is (`trusted-counts`: served and waiting counts, the
-cap, and each served level's score, chapter, size and whether it hides walls) and makes the scarcest level next. The
-grade is the one with the most empty room, weighted Hard 3, Medium 2, Easy 1, so Hard comes first and Medium and Easy
-follow as Hard fills. Within a grade it makes plateau levels until three quarters of the grade is on the plateau,
+cap, and each served level's score, chapter, size and whether it hides walls). It shares the run's part time among
+the grades with empty room: half to Hard, 30% to Medium, 20% to Easy (`TIME_SHARE`). The next part goes to the grade
+furthest behind its share, counting its running parts at its average part time so far (a minute before it has
+finished one), with Hard first on a tie; a grade without room passes its share to the others. Hard's plateau is slow
+to make, so a share keeps it from taking a whole run while Medium and Easy wait. Within a grade it makes plateau levels until three quarters of the grade is on the plateau,
 where a run spends most of its levels, and on the plateau large boards (a long side of 21 at Hard, 19 at Medium, 17
 at Easy) until half of Hard's plateau is large (a third at Medium, a quarter at Easy): those are what a run's own
 search seldom finds in time, and what sends a run to the bundled bank. Each level is one part of a search

@@ -2,7 +2,7 @@
  * One of the stylesheets index.html links in order; the order is the cascade (README.md, "Stylesheets"). */
 /*
  * Touch play: don't pan the document; keep nav / bots tappable.
- * Avoid overflow:hidden here — it jumps scroll and fights sticky nav.
+ * The root's overflow is held by src/scroll-lock.ts (html.cylon-scroll-held, fx.css).
  */
 body.cylon-touch-play {
   overscroll-behavior: none;

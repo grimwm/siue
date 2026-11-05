@@ -81,7 +81,7 @@ test('opening How to Play focuses its button first, so closing can return focus 
   const found = strip(main).match(/function openHelp\(\) \{[\s\S]*?\n    \}\n/);
   assert.ok(found);
   const open = found[0];
-  const focusAt = open.indexOf('helpBtn?.focus()');
+  const focusAt = open.indexOf('helpBtn?.focus(');
   assert.ok(focusAt > 0 && focusAt < open.indexOf('helpOpen = true'));
 });
 

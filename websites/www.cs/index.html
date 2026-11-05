@@ -48,11 +48,11 @@
 <link href="games/cylon/css/eye.css?v=b1b8b1e855" rel="stylesheet">
 <link href="games/cylon/css/nav.css?v=88488ffa6a" rel="stylesheet">
 <link href="games/cylon/css/help.css?v=03d5772c3e" rel="stylesheet">
-<link href="games/cylon/css/hud.css?v=00884fe12d" rel="stylesheet">
+<link href="games/cylon/css/hud.css?v=3c8a4c5254" rel="stylesheet">
 <link href="games/cylon/css/gameover.css?v=60f2ab3871" rel="stylesheet">
 <link href="games/cylon/css/settings.css?v=b117352054" rel="stylesheet">
 <link href="games/cylon/css/controls.css?v=885650b81f" rel="stylesheet">
-<link href="games/cylon/css/fx.css?v=495c940bea" rel="stylesheet">
+<link href="games/cylon/css/fx.css?v=9b6dea5428" rel="stylesheet">
 <link href="games/cylon/css/units.css?v=eda612a040" rel="stylesheet">
 <link href="games/cylon/css/world.css?v=b860bc34a0" rel="stylesheet">
 <link href="games/cylon/css/intro.css?v=b6955ef83f" rel="stylesheet">
@@ -210,7 +210,7 @@
   // list's ?game= link and Play button call; a game that fails to load must
   // not take the list down with it.
   try {
-    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=3f8376e17a');
+    const { initializeCylonEffects } = await import('./games/cylon/dist/main.js?v=6a4ca35fa4');
     await initializeCylonEffects({ onTheme: applyCombatTheme });
   } catch (err) {
     console.error('Cylon failed to start', err);

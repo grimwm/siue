@@ -77,7 +77,7 @@ export function createGameOver(d: GameOverDeps): GameOver {
     });
   }
 
-  const focus = (id: string): void => { document.getElementById(id)?.focus(); };
+  const focus = (id: string): void => { document.getElementById(id)?.focus({ preventScroll: true }); };
 
   function renderHighScores(): void {
     d.boardChanged();

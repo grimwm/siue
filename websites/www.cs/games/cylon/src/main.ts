@@ -36,6 +36,7 @@ import { createReticle } from './reticle.ts';
 import { createUnits } from './units.ts';
 import { createGameOver } from './gameover.ts';
 import { createChrome } from './chrome.ts';
+import { createScrollLock } from './scroll-lock.ts';
 import { renderHelp } from './ui/help.tsx';
 import * as state from './state.ts';
 import { createScoresClient, createLocalScoresClient, highScoreRows, weeklyResetText } from './scores.ts';
@@ -170,6 +171,15 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     if (!eye || !field) return;
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // The page holds still while a run is live; the game's panels still scroll inside.
+    const scrollLock = createScrollLock({
+        doc: document,
+        win: window,
+        gutterStable: CSS.supports('scrollbar-gutter', 'stable'),
+        panels: '.cylon-help-panel, .cylon-gameover, .cylon-settings-panel',
+        touchFree: '.site-nav, .cylon-help, .cylon-gameover, .cylon-settings-panel',
+        live: () => document.body.classList.contains('cylon-game-live'),
+    });
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
     const BOT_HARD_CAP = coarsePointer ? 10 : 30;
     if (reduceMotion) return;
@@ -488,6 +498,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         const on = settings.gameEnabled;
         const deferScatter = !!opts.deferScatter;
         document.body.classList.toggle('cylon-game-live', on);
+        if (on) scrollLock.hold(); else scrollLock.release();
         onTheme(on);
         syncNavChrome();
         if (on) {
@@ -641,28 +652,6 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         herdTimer = setTimeout(herdBotsIntoView, 180);
     }
 
-    /** Page scroll is pointless once glyphs are scattered — lock it for the whole session. */
-    function bindPlayScrollLock() {
-        const scrollExempt = (target: EventTarget | null) => !!(target instanceof Element
-            && target.closest('.cylon-help-panel, .cylon-gameover, .cylon-settings-panel'));
-
-        document.addEventListener('wheel', (e) => {
-            if (!document.body.classList.contains('cylon-game-live')) return;
-            if (scrollExempt(e.target)) return;
-            e.preventDefault();
-        }, { passive: false });
-
-        // iOS pans on touchmove unless non-passive + prevented.
-        document.addEventListener('touchmove', (e) => {
-            if (!document.body.classList.contains('cylon-game-live')) return;
-            const t = e.target as Element | null;
-            if (t && t.closest && t.closest('.site-nav, .cylon-help, .cylon-gameover, .cylon-settings-panel')) {
-                return;
-            }
-            e.preventDefault();
-        }, { passive: false });
-    }
-
     function drawHelp() {
         if (helpRoot) renderHelp(helpRoot, { open: helpOpen, touch: coarsePointer, onClose: closeHelp });
     }
@@ -724,7 +713,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         pauseGame();
         pagePaused = false;
         // Safari and iOS leave a clicked button unfocused; the dialog returns focus to what was focused when it opened.
-        helpBtn?.focus();
+        helpBtn?.focus({ preventScroll: true });
         helpOpen = true;
         drawHelp();
     }
@@ -1100,7 +1089,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     window.cylonStartGame = () => {
         if (settings.gameEnabled || game.run.gameOver) return;
         setGameEnabled(true);
-        window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+        scrollLock.moveTo(0, !reduceMotion);
     };
 
     bindSettings();
@@ -1108,7 +1097,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     bindAbilityControls();
     bindPlayerMissShots();
     bindReticle();
-    bindPlayScrollLock();
+    scrollLock.bind();
     bindNavMenu();
     bindHelp();
     bindPageLife();

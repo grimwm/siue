@@ -152,21 +152,99 @@ export function tidyProblems(level: Level): string[] {
   return out;
 }
 
-/** A new layout: its features overlap no campaign level's, and none of `run` (the run's earlier levels), by SAME. */
-export function newProblems(level: Level, known: Known, run: readonly Level[] = []): string[] {
+/** A maze's look, what a player takes in at a glance: its shape and how its corridors run. `dead` is the share of
+ *  its floor in dead ends, `forks` the share where three or four ways meet, `loops` its loops (the passages past a
+ *  tree's) for each cell of floor, `run` the mean length of its straight stretches of floor and `walls` of its inside
+ *  walls (each two cells or more), and `skew` how much longer its stretches of floor run one way than the other. */
+export interface Look { rows: number; cols: number; dead: number; forks: number; loops: number; run: number; walls: number; skew: number }
+
+export function lookOf(lv: Level): Look {
+  const { rows: R, cols: C } = lv;
+  // Walls as the terrain has them (featuresOf leaves out a wall buried in walls, which is no floor).
+  const inside = (r: number, c: number) => r >= 1 && c >= 1 && r < R - 1 && c < C - 1;
+  const isWall = (r: number, c: number) => { const t = lv.terrain[r * C + c]; return t === 'wall' || t === 'exit' || t === 'gate'; };
+  const open = (r: number, c: number) => inside(r, c) && !isWall(r, c);
+  const wall = (r: number, c: number) => inside(r, c) && isWall(r, c);
+  let cells = 0, dead = 0, forks = 0, joins = 0;
+  // Straight stretches of floor across, of floor down, and of wall: how many, and their cells.
+  const runs = [[0, 0], [0, 0], [0, 0]] as [number, number][];
+  const stretch = (is: (r: number, c: number) => boolean, r: number, c: number, dr: number, dc: number, into: [number, number]) => {
+    if (is(r - dr, c - dc)) return;
+    let k = 0;
+    while (is(r + k * dr, c + k * dc)) k++;
+    if (k >= 2) { into[0]++; into[1] += k; }
+  };
+  for (let r = 1; r < R - 1; r++) for (let c = 1; c < C - 1; c++) {
+    if (wall(r, c)) { stretch(wall, r, c, 0, 1, runs[2]!); stretch(wall, r, c, 1, 0, runs[2]!); continue; }
+    cells++;
+    const ways = [open(r - 1, c), open(r + 1, c), open(r, c - 1), open(r, c + 1)].filter(Boolean).length;
+    if (ways === 1) dead++;
+    if (ways >= 3) forks++;
+    if (open(r, c + 1)) joins++;
+    if (open(r + 1, c)) joins++;
+    stretch(open, r, c, 0, 1, runs[0]!);
+    stretch(open, r, c, 1, 0, runs[1]!);
+  }
+  const n = Math.max(1, cells);
+  const mean = ([k, total]: [number, number]) => (k ? total / k : 0);
+  const [across, down, walls] = runs.map(mean) as [number, number, number];
+  return {
+    rows: R, cols: C, dead: dead / n, forks: forks / n, loops: Math.max(0, joins - cells + 1) / n,
+    run: mean([runs[0]![0] + runs[1]![0], runs[0]![1] + runs[1]![1]]), walls,
+    skew: across + down ? Math.abs(across - down) / (across + down) : 0,
+  };
+}
+
+/** The differences in a look's measures that, on average, make two mazes look nothing alike. */
+export const LOOK_SCALE = { dead: 0.08, forks: 0.08, loops: 0.05, run: 2, walls: 3, skew: 0.3 };
+
+/** How alike two looks are, 0 to 1: their shapes (side against side, the board turned either way) times how alike
+ *  their corridors run (each measure's difference against LOOK_SCALE; 0 when they differ that much on average). */
+export function lookLikeness(a: Look, b: Look): number {
+  const ratio = (x: number, y: number) => Math.min(x, y) / Math.max(x, y);
+  const shape = Math.max(ratio(a.rows, b.rows) * ratio(a.cols, b.cols), ratio(a.rows, b.cols) * ratio(a.cols, b.rows));
+  const keys = Object.keys(LOOK_SCALE) as (keyof typeof LOOK_SCALE)[];
+  const off = keys.reduce((n, k) => n + Math.abs(a[k] - b[k]) / LOOK_SCALE[k], 0) / keys.length;
+  return shape * Math.max(0, 1 - off);
+}
+
+/** Two levels of a run look alike from this much (runLikeness). */
+export const RUN_SAME = 0.6;
+
+/** How alike two levels of a run look, 0 to 1: their looks (lookLikeness), or their layouts' overlap (mazeOverlap,
+ *  over the turns and flips of `b`) put on the same scale, SAME counting as RUN_SAME, whichever is more. */
+export function runLikeness(a: Level, b: Level): number {
+  return Math.max(lookLikeness(looked(a), looked(b)), overlapOf(mazeFeaturesOf(a), turned(b)) * RUN_SAME / SAME);
+}
+
+/** A run's levels are compared again and again, with every change a search tries: their looks and their features'
+ *  turns and flips are worked out once a level. */
+const looks = new WeakMap<Level, Look>(), turns = new WeakMap<Level, Features[]>();
+const looked = (lv: Level): Look => { let x = looks.get(lv); if (!x) { x = lookOf(lv); looks.set(lv, x); } return x; };
+const turned = (lv: Level): Features[] => { let x = turns.get(lv); if (!x) { x = eight(mazeFeaturesOf(lv)); turns.set(lv, x); } return x; };
+
+/** A new layout: its features overlap no campaign level's by SAME, and it looks like none of `run` (the run's
+ *  earlier levels) by RUN_SAME (runLikeness); with `look` false, its layout overlaps none of `run`'s by SAME
+ *  (a bank's levels against each other, where one size and style may come more than once). */
+export function newProblems(level: Level, known: Known, run: readonly Level[] = [], look = true): string[] {
   const A = mazeFeaturesOf(level);
   const out: string[] = [];
   known.features.forEach((Bs, k) => { const x = overlapOf(A, Bs); if (x >= SAME) out.push(`its layout repeats campaign level ${k + 1}'s (${x.toFixed(2)})`); });
-  run.forEach((lv, k) => { const x = overlapOf(A, eight(mazeFeaturesOf(lv))); if (x >= SAME) out.push(`its layout repeats the run's level ${k + 1}'s (${x.toFixed(2)})`); });
+  run.forEach((lv, k) => {
+    const x = look ? runLikeness(level, lv) : overlapOf(A, turned(lv));
+    if (x >= (look ? RUN_SAME : SAME)) out.push(`its layout ${look ? 'looks like' : 'repeats'} the run's level ${k + 1}'s (${x.toFixed(2)})`);
+  });
   return out;
 }
 
-/** The most `level`'s layout overlaps any campaign level's or any of `run`'s: under SAME it is new. */
-export function likeness(level: Level, known: Known, run: readonly Level[] = []): number {
+/** How near `level` comes to repeating a layout: the most its layout overlaps any campaign level's against SAME, or
+ *  looks like any of `run`'s against RUN_SAME (with `look` false, overlaps any of theirs against SAME, as
+ *  newProblems); under 1 it is new. */
+export function likeness(level: Level, known: Known, run: readonly Level[] = [], look = true): number {
   const A = mazeFeaturesOf(level);
   let most = 0;
-  for (const Bs of known.features) most = Math.max(most, overlapOf(A, Bs));
-  for (const lv of run) most = Math.max(most, overlapOf(A, eight(mazeFeaturesOf(lv))));
+  for (const Bs of known.features) most = Math.max(most, overlapOf(A, Bs) / SAME);
+  for (const lv of run) most = Math.max(most, look ? runLikeness(level, lv) / RUN_SAME : overlapOf(A, turned(lv)) / SAME);
   return most;
 }
 
@@ -229,11 +307,11 @@ export function* rating(level: Level, d: Difficulty, cap = CHECK_CAP): Generator
 export interface Place { grade: Grade; band: Band; previous: Difficulty | null }
 
 /** The run's checks that need no search: the situations within the floor and EXPLORED_MOST, and a layout new
- *  against the campaign and the run. */
-export function runProblems(level: Level, d: Difficulty, known: Known, run: readonly Level[] = []): string[] {
+ *  against the campaign and the run (newProblems, `look` as there). */
+export function runProblems(level: Level, d: Difficulty, known: Known, run: readonly Level[] = [], look = true): string[] {
   const out: string[] = [];
   if (d.explored > EXPLORED_MOST) out.push(`stored ${d.explored} situations, more than ${EXPLORED_MOST}`);
-  return [...out, ...newProblems(level, known, run)];
+  return [...out, ...newProblems(level, known, run, look)];
 }
 
 /** The score's band: empty when the score falls in it. */

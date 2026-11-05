@@ -25,13 +25,12 @@ import { habitWins, HABIT_LIST } from '../puzzle/habits.ts';
 import type { Difficulty } from '../puzzle/difficulty.ts';
 import { rngOf, hash } from './random.ts';
 import type { Rng } from './random.ts';
-import { draft, familiesOf, mutate, textOf, FAMILY_CHAPTER, HIDING } from './draft.ts';
-import type { Family, Plan, Sketch } from './draft.ts';
+import { draft, familiesOf, mutate, textOf, FAMILY_CHAPTER, HIDING, STYLES } from './draft.ts';
+import type { Family, Plan, Sketch, Style } from './draft.ts';
 import {
-  bandAfter, bandProblems, chapterOf, floorOf, hiddenBand, hidesWalls, levelChecks, likeness, newProblems, runProblems, tidyProblems,
-  CHECK_CAP, CLIMB, EXPLORED_MOST, HIDDEN_EASE, HIDDEN_EVERY,
+  bandAfter, bandProblems, chapterOf, floorOf, hiddenBand, hidesWalls, levelChecks, likeness, newProblems, runLikeness, runProblems, tidyProblems,
+  CHECK_CAP, CLIMB, EXPLORED_MOST, GRADE_BANDS, HIDDEN_EASE, HIDDEN_EVERY,
 } from './gate.ts';
-import { SAME } from '../puzzle/layouts.ts';
 import type { Band, Checked, Known } from './gate.ts';
 import type { Dir } from '../puzzle/tiles.ts';
 
@@ -101,13 +100,58 @@ const TEMPERATURE = 0.25;
 /** In a Hard run the cow, the easiest tool to lean on, comes in about one draft in COW_HARD of those that could
  *  hold it. */
 const COW_HARD = 8;
-/** A band from this score up draws the biggest boards. */
-export const HIGH_BAND = 60;
+/** Each grade's board sides, odd, as a range for a run's first levels and one for its plateau: a draft's sides are
+ *  drawn from between them, by how far up the climb its band stands (`reachOf`), so a run's boards grow from small
+ *  to large, the most at Hard. */
+export const SIDES: Record<Grade, { first: readonly [number, number]; plateau: readonly [number, number] }> = {
+  easy: { first: [11, 13], plateau: [15, 17] },
+  medium: { first: [13, 15], plateau: [15, 19] },
+  hard: { first: [13, 15], plateau: [15, 21] },
+};
+/** The share of drafts that stretch: one side from the top of the range and past it by up to STRETCH, the other from
+ *  the bottom half, a wide board or a tall one. */
+const STRETCHED = 0.3;
+const STRETCH = 4;
 
-/** A draft's size, maze and families, drawn for the run's grade; with `family`, always with that family (the bank's
- *  tool asks for one, so every piece has levels of its own); `high` when its band is high (HIGH_BAND or more): the
- *  biggest board and two relics or more, for a longer way. */
-export function planOf(rng: Rng, tier: number, grade: Grade, hides: boolean, family: Family | null = null, high = false): Plan {
+/** How far up its grade's climb `band` stands: 0 at the first level's band, 1 on the plateau. */
+export function reachOf(band: Band, grade: Grade): number {
+  if (band.plateau) return 1;
+  const g = GRADE_BANDS[grade];
+  return Math.max(0, Math.min(1, (band.least - g.first[0]) / (g.plateau[0] - g.first[0])));
+}
+
+/** An odd number of `x`, rounded down, and at least 7. */
+const odd = (x: number) => Math.max(7, Math.floor(x) % 2 ? Math.floor(x) : Math.floor(x) - 1);
+
+/** A draft's sides for a grade at `reach` up its climb (reachOf): each drawn from the range between the first
+ *  levels' and the plateau's (or from `range`, the bank's large boards), or stretched into a wide or a tall board. */
+export function sidesOf(rng: Rng, grade: Grade, reach: number, range: readonly [number, number] | null = null): [number, number] {
+  const { first, plateau } = SIDES[grade];
+  const lo = range ? odd(range[0]) : odd(first[0] + (plateau[0] - first[0]) * reach + 1);
+  const hi = Math.max(lo, range ? odd(range[1]) : odd(first[1] + (plateau[1] - first[1]) * reach + 1));
+  const side = (a: number, b: number) => a + 2 * rng.int((b - a) / 2 + 1);
+  if (rng.next() < STRETCHED) {
+    const long = side(hi, odd(hi + STRETCH)), short = side(lo, odd((lo + hi) / 2 + 1));
+    return rng.next() < 0.5 ? [short, long] : [long, short];
+  }
+  return [side(lo, hi), side(lo, hi)];
+}
+
+/** How often each style is drawn: the plain growing tree, whose levels pass the gate most often in time, as often as
+ *  three others together, so a run's searches find its levels about as often as they would with it alone, while the
+ *  run's look check (gate.ts's runLikeness) keeps its levels from looking alike. */
+export const STYLE_WEIGHTS: Readonly<Record<Style, number>> = { tree: 3, winding: 1, branching: 1, sidewinder: 1, division: 1, braided: 1 };
+const styleOf = (rng: Rng): Style => {
+  let k = rng.int(STYLES.reduce((n, s) => n + STYLE_WEIGHTS[s], 0));
+  for (const s of STYLES) { k -= STYLE_WEIGHTS[s]; if (k < 0) return s; }
+  return STYLES[0]!;
+};
+
+/** A draft's size, maze and families, drawn for the run's grade at `reach` up its climb (reachOf); with `family`,
+ *  always with that family (the bank's tool asks for one, so every piece has levels of its own). Its style is drawn
+ *  from STYLES by STYLE_WEIGHTS, and its board grows with `reach` (or is drawn from `range`), with two relics or more from half way
+ *  up. */
+export function planOf(rng: Rng, tier: number, grade: Grade, hides: boolean, family: Family | null = null, reach = 0, range: readonly [number, number] | null = null): Plan {
   let all = familiesOf(tier).filter(f => !HIDING.includes(f));
   if (grade === 'hard' && family !== 'cow' && rng.int(COW_HARD) !== 0) all = all.filter(f => f !== 'cow');
   const fresh = all.filter(f => FAMILY_CHAPTER[f] === Math.min(tier, 9));
@@ -117,13 +161,13 @@ export function planOf(rng: Rng, tier: number, grade: Grade, hides: boolean, fam
   else if (fresh.length && rng.next() < 0.5) families.push(rng.pick(fresh));
   if (hides) families.push(family && HIDING.includes(family) ? family : rng.pick(HIDING));
   for (const f of rng.shuffle(all)) if (families.length < count + (hides ? 1 : 0) && !families.includes(f)) families.push(f);
-  // Odd sides, so the maze's lattice fills the board, and big enough for a search past the floor. Up to 15 by 15
-  // fits a phone's screen.
-  const sides = high ? [15] : [13, 15];
+  const [rows, cols] = sidesOf(rng, grade, reach, range);
+  const style = styleOf(rng);
   const roll = rng.next();
   return {
-    rows: rng.pick(sides), cols: rng.pick(sides), families, relics: (high ? 2 : 1) + rng.int(2),
-    winding: 0.3 + 0.6 * rng.next(), braid: 0.45 + 0.5 * rng.next(), chambers: roll < 0.85 ? 0 : roll < 0.97 ? 1 : 2,
+    rows, cols, families, relics: (reach >= 0.5 ? 2 : 1) + rng.int(2), style,
+    winding: 0.3 + 0.6 * rng.next(), braid: style === 'braided' ? 0.95 + 0.05 * rng.next() : 0.45 + 0.5 * rng.next(),
+    chambers: roll < 0.85 ? 0 : roll < 0.97 ? 1 : 2,
   };
 }
 
@@ -170,9 +214,9 @@ export function distance(level: Level, band: Band, spend: (n: number, kind?: str
   // An untidy draft (a wall standing alone, a bare nub) is far, whatever it plays like.
   const untidy = tidyProblems(level).length;
   if (untidy) return 14 + untidy;
-  // So is one whose layout repeats a campaign level's or the run's: no solve can mend that.
+  // So is one whose layout repeats a campaign level's or looks like the run's: no solve can mend that.
   const x = like(level);
-  if (x >= SAME) return 13 + 10 * (x - SAME);
+  if (x >= 1) return 13 + 10 * (x - 1);
   // Two of the gate's own failures that need no solve: the plain walk wins (sharedProblems), or the beast is penned
   // with nothing to make him live (threatProblems).
   if (naiveWalkWins(level)) { spend(0, 'cheap:walk'); return 12.5; }
@@ -231,9 +275,11 @@ function emptiest(variants: readonly Level[]): Level {
   return variants.reduce((a, b) => (walls(b) < walls(a) ? b : a));
 }
 
-/** The bank's level for this place: one the tier offers, that hides walls when the place does (else one that does
- *  not), in the band (else within the climb from the run's last plain level, else on the plateau), not among the
- *  run's last levels, picked by the seed and depth. */
+/** The bank's level for this place: one the tier offers that looks like none of the run's last levels (newProblems),
+ *  that hides walls when the place does (else one that does not), in the band (else within the climb from the run's
+ *  last plain level, else on the plateau, else a gentle step from that level), picked by the seed and depth; only
+ *  when the tier offers no such level, one of the rest by the same ladder, one not among the run's last levels
+ *  before one that is, and the least like them. */
 export function fromBank(bank: readonly BankLevel[], req: Request, band: Band, hides = false): BankLevel {
   const recent = req.run.slice(-RUN_MEMORY);
   const offered = bank.filter(b => b.chapter <= req.tier);
@@ -247,18 +293,34 @@ export function fromBank(bank: readonly BankLevel[], req: Request, band: Band, h
     b => b.score >= band.least && b.score <= band.most && !hidesWalls(parse(b.text)),
     b => prev !== null && b.score >= prev * HIDDEN_EASE.least && b.score <= prev * CLIMB.most,
     b => b.score >= plateau.least && b.score <= plateau.most,
-    () => true,
   ];
   const pick = (ok: readonly BankLevel[]) => ok[hash('endless-bank', req.seed, req.tier, req.grade, req.depth) % ok.length]!;
-  // Past the fresh ones, an older level of the run comes back before the one just played.
+  // Only when no level the tier offers looks new does one like a level of the run's come back: one not among the
+  // run's last levels before one that is, never the one just played while the tier offers another, and of those the
+  // least like the run's.
+  const unplayed = offered.filter(b => !recent.some(p => p.text === b.text));
   const notLast = offered.filter(b => b.text !== req.run.at(-1)?.text);
-  // The band matters most: a fresh level outside it comes only after an old one inside it. The level just played
-  // comes back only when the tier offers nothing else.
-  for (const fits of ladder) {
-    for (const pool of [fresh, notLast]) {
-      const ok = pool.filter(fits);
-      if (ok.length) return pick(ok);
-    }
+  const nearness = new Map<BankLevel, number>();
+  const near = (b: BankLevel) => {
+    let x = nearness.get(b);
+    if (x === undefined) { const lv = parse(b.text); x = runLevels.reduce((m, r) => Math.max(m, runLikeness(lv, r)), 0); nearness.set(b, x); }
+    return x;
+  };
+  const leastLike = (ok: readonly BankLevel[]) => { const least = Math.min(...ok.map(near)); return ok.filter(b => near(b) <= least + 0.02); };
+  // A fresh level matters most, then the band: a fresh level on the ladder, or a step from the last plain level's
+  // score no steeper than the climb's or a hidden level's ease, comes before an old one; an old one there (one not
+  // played lately first) before a fresh one off it, a cliff; any fresh level before any old one.
+  const gentle = (b: BankLevel) => prev !== null && b.score >= prev * HIDDEN_EASE.least && b.score <= Math.max(prev * CLIMB.most, plateau.most);
+  const any = () => true;
+  type Try = readonly [readonly BankLevel[], (b: BankLevel) => boolean];
+  const tries: Try[] = [
+    ...ladder.map((fits): Try => [fresh, fits]), [fresh, gentle],
+    ...ladder.map((fits): Try => [unplayed, fits]), [unplayed, gentle], ...ladder.map((fits): Try => [notLast, fits]), [notLast, gentle],
+    [fresh, any], [unplayed, any], [notLast, any],
+  ];
+  for (const [pool, fits] of tries) {
+    const ok = pool.filter(fits);
+    if (ok.length) return pick(pool === fresh ? ok : leastLike(ok));
   }
   if (offered.length) return pick(offered);
   if (bank.length) return pick(bank);
@@ -276,14 +338,29 @@ interface Spent { tries: number; spent: number }
 
 /** What a search looks for: the tier's pieces at a grade, in a band, a level that hides walls or not, and, for the
  *  bank's tool, a family it must hold. */
-export interface Aim { tier: number; grade: Grade; band: Band; hides: boolean; family?: Family | null }
+export interface Aim {
+  tier: number; grade: Grade; band: Band; hides: boolean; family?: Family | null;
+  /** False when the levels it is new against are a bank's, not a run's: their layouts are compared, not their looks
+   *  (newProblems), since a bank holds many levels of one size and style. */
+  look?: boolean;
+  /** The sides its drafts are drawn from, in place of its grade's for its band (the bank's large boards). */
+  sides?: readonly [number, number];
+}
+
+/** Round `round` of a search's draft: the generator it climbs with, the plan it drew and the draft (null when its
+ *  pieces would not fit). */
+export function roundOf(key: readonly (string | number)[], aim: Aim, round: number): { rng: Rng; plan: Plan; sketch: Sketch | null } {
+  const rng = rngOf('endless', ...key, round);
+  const plan = planOf(rng, aim.tier, aim.grade, aim.hides, aim.family ?? null, reachOf(aim.band, aim.grade), aim.sides ?? null);
+  return { rng, plan, sketch: draft(rng, plan) };
+}
 
 /** The search: the first level that passes the gate for `aim`, or null once `budget` situations are spent. `trace`
  *  hears why drafts fall short (tools/endless-bank.ts prints it). */
 export function search(
   key: readonly (string | number)[], aim: Aim, previous: Difficulty | null, known: Known, run: readonly Level[],
   budget: number, at: Spent, progress?: (p: Progress) => void, trace?: (line: string) => void,
-): { text: string; d: Difficulty; score: number } | null {
+): { text: string; d: Difficulty; score: number; plan: Plan } | null {
   const stats = (at as { by?: Record<string, number> }).by;
   const spend = (n: number, kind = 'other') => { at.spent += n; if (stats) { stats[kind] = (stats[kind] ?? 0) + n; stats[kind + '#'] = (stats[kind + '#'] ?? 0) + 1; } };
   // A layout's likeness turns on its terrain alone, so moving a piece never changes it.
@@ -291,13 +368,13 @@ export function search(
   const like = (lv: Level): number => {
     const k = `${lv.cols}:${lv.terrain.join(',')}`;
     let x = likes.get(k);
-    if (x === undefined) { x = likeness(lv, known, run); likes.set(k, x); }
+    if (x === undefined) { x = likeness(lv, known, run, aim.look ?? true); likes.set(k, x); }
     return x;
   };
   const place = { grade: aim.grade, band: aim.band, previous };
   for (let round = 0; at.spent < budget; round++) {
-    const rng = rngOf('endless', ...key, round);
-    let sketch = draft(rng, planOf(rng, aim.tier, aim.grade, aim.hides, aim.family ?? null, aim.band.least >= HIGH_BAND));
+    const { rng, plan, sketch: drawn } = roundOf(key, aim, round);
+    let sketch = drawn;
     if (!sketch) { spend(1_000); continue; }
     const levelOf = (s: Sketch): Level | null => { try { return parse(textOf(s, '')); } catch { return null; } };
     // A change that comes back to a level already judged costs nothing more: the same text, the same distance.
@@ -315,7 +392,10 @@ export function search(
       return far;
     };
     let level = levelOf(sketch);
-    let far = level ? judge(sketch, level) : Infinity;
+    // A draft that looks like a level of the run (its size and style) or repeats a campaign layout gives way at once:
+    // a small change never mends that. It is charged a little, so a search of such drafts still ends.
+    if (!level || like(level) >= 1) { spend(1_000, 'like'); continue; }
+    let far = judge(sketch, level);
     const startFar = far, spentAtStart = at.spent;
     // A round that has come close gets more steps; one that stays far gives way sooner.
     let steps = STEPS;
@@ -327,7 +407,7 @@ export function search(
       if (far === 0 && level) {
         const d = measure(level, MEASURE_CAP);
         spend(4 * d.explored, 'measure');
-        const rp = runProblems(level, d, known, run);
+        const rp = runProblems(level, d, known, run, aim.look ?? true);
         let checked: Checked | null = null;
         if (!rp.length) {
           checked = finish(levelChecks(level, d, aim.grade, false, MEASURE_CAP));
@@ -364,7 +444,7 @@ export function search(
         } else {
           const score = checked!.score!;
           const out = bandProblems(score, aim.band);
-          if (!out.length) return { text: textOf(sketch, ''), d, score: score.total };
+          if (!out.length) return { text: textOf(sketch, ''), d, score: score.total, plan };
           trace?.(`band: ${out.join('; ')}`);
           if (stats) stats['gate:band'] = (stats['gate:band'] ?? 0) + 1;
           far = 0.5 + 3 * Math.abs(ln(score.total < aim.band.least ? aim.band.least / Math.max(1, score.total) : score.total / aim.band.most));

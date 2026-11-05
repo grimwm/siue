@@ -20,6 +20,8 @@ import { BANKS } from '../src/endless/bank.ts';
 import type { BankLevel, Made, Request } from '../src/endless/generate.ts';
 import { hidesWalls } from '../src/puzzle/difficulty.ts';
 import { parse } from '../src/puzzle/level.ts';
+import { mazeOverlap, runLikeness, RUN_SAME } from '../src/endless/gate.ts';
+import { SAME } from '../src/puzzle/layouts.ts';
 import type { StorageLike } from '../../_kit/ports.ts';
 
 const memory = (init: Record<string, string> = {}): StorageLike & { data: Record<string, string> } => {
@@ -105,7 +107,7 @@ test('a top-up fills the cache once it is low, no more than once a minute; a run
   assert.ok(CACHE_LOW > 1);
 });
 
-test('a level outside the place\'s band, past the tier, or like one of the run\'s stays in the cache', async () => {
+test('a level outside the place\'s band, past the tier, or like one of the run\'s in layout or look stays in the cache', async () => {
   const lv = FIRST[0]!;
   const { b } = bank([served(lv, 'a'.repeat(16))]);
   await b.refill('medium', 10);
@@ -115,6 +117,10 @@ test('a level outside the place\'s band, past the tier, or like one of the run\'
   await b5.refill('medium', 10);
   assert.equal(b5.take(firstReq({ tier: 4 })), null, 'its pieces come after the run\'s tier');
   assert.equal(b.take(firstReq({ depth: 1, run: [{ text: lv.text, explored: lv.explored, score: lv.score }] })), null, 'its layout is the run\'s own');
+  // A level of another layout that looks like one of the run's (its size and how its corridors run) stays too.
+  const alike = BANKS.medium.find(x => x !== lv && mazeOverlap(parse(x.text), parse(lv.text)) < SAME && runLikeness(parse(x.text), parse(lv.text)) >= RUN_SAME)!;
+  assert.ok(alike, 'a bank level that looks like it');
+  assert.equal(b.take(firstReq({ depth: 1, run: [{ text: alike.text, explored: alike.explored, score: alike.score }] })), null, 'it looks like the run\'s own');
   assert.equal(b.size('medium'), 1);
   assert.equal(b.take(firstReq())!.text.length > 0, true);
 });

@@ -18,7 +18,7 @@ test('every family a tier unlocks appears on the drafts of a sample of seeds, at
     for (let k = 0; k < SEEDS; k++) {
       const rng = rngOf('pieces', grade, tier, k);
       const hides = familiesOf(tier).some(f => HIDING.includes(f)) && k % 5 === 0;
-      const s = draft(rng, planOf(rng, tier, grade, hides, null, k % 2 === 0));
+      const s = draft(rng, planOf(rng, tier, grade, hides, null, (k % 3) / 2));
       if (!s) continue;
       const lv = parse(textOf(s, ''));
       for (const f of familiesOf(tier)) if (holds(lv, f)) seen.add(f);

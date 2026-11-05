@@ -14,7 +14,7 @@ import type { Grade } from '../puzzle/rating.ts';
 /** The generator's version. Anything that changes what a part makes from the same tuple (the generator, the gate,
  *  the campaign's layouts, the solver's numbers) bumps it, and the shared bank's config (games/crete/bank/config.json)
  *  accepts the new number; test/shared-version.test.ts pins one part's output to it. */
-export const ENDLESS_VERSION = 1;
+export const ENDLESS_VERSION = 2;
 
 /** The inputs of one part's search: enough to run it again anywhere. */
 export interface Tuple { v: number; seed: string; tier: number; grade: Grade; depth: number; k: number; run: Played[] }

@@ -33,7 +33,7 @@ test('a tuple keeps the run\'s last levels, and the last plain one before them w
 test('a verifier makes the tuple\'s level again and accepts only that level: a hand-edited text is rejected', () => {
   // A tuple whose part 0 finds a level part way through its budget.
   const before = BANKS.easy.find(b => b.score >= 50 && b.score <= 60)!;
-  const tuple: Tuple = { v: ENDLESS_VERSION, seed: 'prov1', tier: 3, grade: 'easy', depth: 2, k: 0, run: [asPlayed(before)] };
+  const tuple: Tuple = { v: ENDLESS_VERSION, seed: 'prov2', tier: 3, grade: 'easy', depth: 2, k: 0, run: [asPlayed(before)] };
   const made = regenerate(tuple, { features: [] });
   assert.ok(made, 'the part makes a level (pick another tuple if the generator changed)');
   assert.ok(sameMade(made, JSON.parse(JSON.stringify(made))), 'the same level, as it comes back over the wire');

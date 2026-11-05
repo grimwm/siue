@@ -1,9 +1,10 @@
 // The trusted generator's script (tools/generate-bank.ts): it makes what is scarcest (Hard's plateau first, large
-// boards especially, then Medium and Easy as Hard fills), never more than fits under a grade's cap, stops when its
-// time is spent, posts with its token in the header only, and fails quietly.
+// boards especially, then Medium and Easy as Hard fills), never more than fits under a grade's cap, turns a full grade
+// over by replacing a small share of it with what it made, stops when its time is spent, posts with its token in the
+// header only, and fails quietly.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateAll, nextWant, safeUrl, tallyOf, tupleFor, isLarge, LARGE_SIDE } from '../tools/generate-bank.ts';
+import { generateAll, nextWant, safeUrl, tallyOf, tupleFor, isLarge, LARGE_SIDE, TURNOVER_SHARE } from '../tools/generate-bank.ts';
 import type { Counts, GenerateDeps, Shelf, Want } from '../tools/generate-bank.ts';
 import { ENDLESS_VERSION, requestOf, sharedOf } from '../src/endless/provenance.ts';
 import type { SharedMade } from '../src/endless/provenance.ts';
@@ -33,9 +34,15 @@ test('Hard\'s plateau comes first, large boards especially, then Medium and Easy
   assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(500))))!.grade, 'hard');
   assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(501))))!.grade, 'medium');
   assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(800), shelf(1100))))!.grade, 'easy');
-  // Pending levels take room too; a full grade is never asked for.
+  // Pending levels take room too; a full grade only turns over once the others have no room.
   assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(1200, { pending: 300 }))))!.grade, 'medium');
-  assert.equal(nextWant(tallyOf(counts(shelf(1500), shelf(1500), shelf(1500)))), null);
+  const full = tallyOf(counts(shelf(1500), shelf(1500), shelf(1500)));
+  assert.equal(nextWant(full)!.grade, 'hard', 'turnover keeps Hard first');
+  for (const g of ['easy', 'medium', 'hard'] as const) assert.deepEqual([full[g].replace, full[g].room], [true, Math.round(1500 * TURNOVER_SHARE)]);
+  assert.equal(nextWant(tallyOf(counts(shelf(1500), shelf(1499), shelf(1500))))!.grade, 'medium', 'room before turnover');
+  assert.equal(tallyOf(counts(shelf(1499), shelf(0), shelf(0))).easy.replace, false);
+  for (const g of ['easy', 'medium', 'hard'] as const) full[g].room = 0;
+  assert.equal(nextWant(full), null);
 });
 
 test('a tuple is a real request the generator takes, at the place wanted, and a large want leans to large drafts', () => {
@@ -69,7 +76,7 @@ function fake(over: Partial<GenerateDeps> & { partMs?: number; empty?: (n: numbe
     workers: 2,
     counts: async () => counts(shelf(0), shelf(0), shelf(0)),
     make: async () => { const i = n++; t += over.partMs ?? 1000; return over.empty?.(i) ? null : level(i % BANKS.hard.length); },
-    upload: async (tuple, made) => { posted.push({ tuple, made }); return 'ok'; },
+    upload: async (tuple, made, replace) => { posted.push({ tuple, made, replace }); return 'ok'; },
     tupleFor: w => tupleFor(w, Math.random),
     now: () => t,
     wait: () => new Promise(() => {}),
@@ -101,19 +108,40 @@ test('it stops starting parts once its time is spent, and ends the ones still ru
 });
 
 test('it never makes more than fits, and stops for a full grade or a spent hourly share', async () => {
+  const turnover = Math.round(1500 * TURNOVER_SHARE);
   const f = fake({ counts: async () => counts(shelf(1500), shelf(1499), shelf(1497, { pending: 1 })) });
   const made = await generateAll(f.deps, { ms: 60_000 });
-  assert.deepEqual(made.added, { easy: 0, medium: 1, hard: 2 });
-  assert.equal(f.posted.length, 3);
+  assert.deepEqual(made.added, { easy: turnover, medium: 1, hard: 2 });
+  const posted = f.posted as { tuple: { grade: string }; replace: boolean }[];
+  assert.equal(posted.length, 3 + turnover);
+  assert.ok(posted.every(p => p.replace === (p.tuple.grade === 'easy')), 'only the full grade replaces');
   // A part that makes nothing gives its room back.
   const g = fake({ counts: async () => counts(shelf(1500), shelf(1500), shelf(1499)), empty: i => i === 0 });
   assert.deepEqual((await generateAll(g.deps, { ms: 60_000 })).added.hard, 1);
   // The bank says full: that grade is done.
   const full = fake({ counts: async () => counts(shelf(1500), shelf(1500), shelf(1000)), upload: async () => 'full' });
   const r = await generateAll(full.deps, { ms: 60_000 });
-  assert.ok(r.tried <= 2 && r.refused === r.tried);
+  assert.ok(r.tried <= 6 && r.refused === r.tried, 'at most one round of two parts per grade');
   const rate = fake({ upload: async () => 'rate' });
   assert.ok((await generateAll(rate.deps, { ms: 60_000 })).tried <= 2, 'a spent share stops the run');
+});
+
+test('a full grade is replaced only with what the run made: a slow run retires fewer', async () => {
+  const turnover = Math.round(1500 * TURNOVER_SHARE);
+  const full = () => counts(shelf(1500), shelf(1500), shelf(1500, {}, 1125, 563));
+  const f = fake({ counts: async () => full() });
+  const made = await generateAll(f.deps, { ms: 3_600_000 });
+  assert.deepEqual(made.added, { easy: turnover, medium: turnover, hard: turnover });
+  const posted = f.posted as { tuple: { grade: string }; replace: boolean }[];
+  assert.ok(posted.every(p => p.replace), 'every level replaces one');
+  assert.equal(posted[0]!.tuple.grade, 'hard', 'Hard first');
+  // Hard's plateau is rare: one part in four makes a level, and time runs out; only what was made goes in.
+  const slow = fake({ counts: async () => full(), partMs: 1000, empty: i => i % 4 !== 0 });
+  const few = await generateAll(slow.deps, { ms: 10_000 });
+  const sent = slow.posted as { replace: boolean }[];
+  assert.ok(few.added.hard < turnover && few.added.hard > 0, `${few.added.hard} replaced`);
+  assert.equal(sent.length, few.added.hard + few.added.medium + few.added.easy, 'one post, one retirement, per level made');
+  assert.equal(few.empty, few.tried - sent.length);
 });
 
 test('it fails quietly, posts to HTTPS only, and never prints its token', async () => {

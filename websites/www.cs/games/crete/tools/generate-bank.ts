@@ -6,6 +6,10 @@
  * plateau first, large boards especially, which a run's own search seldom finds in time, then Medium and Easy as
  * Hard fills. It never makes more than fits under a grade's cap, counting the levels waiting in quarantine.
  *
+ * A full grade still turns over: each run makes up to TURNOVER_SHARE of its cap and posts each with `replace`, so the
+ * server retires one served level (its own weighted pick, old and often-served first) for each one it takes in. Only
+ * what this run actually made goes in, so a slow run retires fewer and the grade never drops below its cap.
+ *
  * Each level is one part of a search (generate.ts's makePart, PART_BUDGET situations), from a tuple of its own: a
  * fresh seed, a tier, the grade, a depth and a part, and a run memory of one level from the grade's bundled bank
  * that sets the place (on the plateau, or on the climb). Anyone can make the level again from that tuple.
@@ -39,6 +43,8 @@ export const LARGE_SHARE: Readonly<Record<Grade, number>> = { hard: 0.5, medium:
 export const LARGE_EVERY = 3;
 /** A board is large when its long side reaches the top of its grade's plateau sides (Hard 21, Medium 19, Easy 17). */
 export const LARGE_SIDE: Readonly<Record<Grade, number>> = { hard: SIDES.hard.plateau[1], medium: SIDES.medium.plateau[1], easy: SIDES.easy.plateau[1] };
+/** The share of a full grade's cap each run replaces with fresh levels: 1.5%, 22 levels at a cap of 1,500. */
+export const TURNOVER_SHARE = 0.015;
 /** Memory a worker may use: its heap limit, and what the planner keeps free for the rest of the runner. */
 export const WORKER_HEAP_MB = 1536;
 const WORKER_MB = 2048;
@@ -47,8 +53,9 @@ const RESERVE_MB = 2048;
 /** A grade's shelf as trusted-counts reports it: each served level as [score, chapter, rows, cols, hides]. */
 export interface Shelf { served: number; pending: number; cap: number; levels: readonly (readonly number[])[] }
 export type Counts = Record<Grade, Shelf>;
-/** What the planner keeps for a grade: room left under the cap, and the served levels by place and size. */
-export interface Tally { cap: number; room: number; total: number; plateau: number; large: number; asked: number }
+/** What the planner keeps for a grade: room left under the cap (or, for a full grade, the levels to replace), whether
+ *  its levels replace served ones, and the served levels by place and size. */
+export interface Tally { cap: number; room: number; replace: boolean; total: number; plateau: number; large: number; asked: number }
 /** A level to make: its grade, on the plateau or on the climb, and whether a large board is wanted. */
 export interface Want { grade: Grade; plateau: boolean; large: boolean }
 
@@ -68,19 +75,25 @@ export function tallyOf(counts: Counts): Record<Grade, Tally> {
       plateau++;
       if (isLarge(g, rows, cols)) large++;
     }
-    out[g] = { cap: s.cap, room: Math.max(0, s.cap - s.served - s.pending), total: s.served, plateau, large, asked: 0 };
+    const room = Math.max(0, s.cap - s.served - s.pending);
+    const replace = room === 0 && s.served > 0;
+    out[g] = { cap: s.cap, room: replace ? Math.max(1, Math.round(s.cap * TURNOVER_SHARE)) : room, replace, total: s.served, plateau, large, asked: 0 };
   }
   return out;
 }
 
-/** The scarcest level to make next, or null when every grade is full: the grade whose weighted share of empty room is
- *  largest (Hard first on a tie), on the plateau until PLATEAU_SHARE of the grade is, and a large board until
- *  LARGE_SHARE of its plateau is, on every LARGE_EVERY-th part the grade is asked for. */
+/** The scarcest level to make next, or null when no grade has room or turnover left: the grade whose weighted share
+ *  of empty room is largest, and once no grade has empty room, the full grade whose weighted turnover is (Hard first
+ *  on a tie); on the plateau until PLATEAU_SHARE of the grade is, and a large board until LARGE_SHARE of its plateau
+ *  is, on every LARGE_EVERY-th part the grade is asked for. */
 export function nextWant(t: Readonly<Record<Grade, Tally>>): Want | null {
   let grade: Grade | null = null, best = 0;
-  for (const g of GRADES) {
-    const p = t[g].cap > 0 ? GRADE_WEIGHT[g] * t[g].room / t[g].cap : 0;
-    if (t[g].room > 0 && p > best) { grade = g; best = p; }
+  for (const replace of [false, true]) {
+    for (const g of GRADES) {
+      const p = t[g].cap > 0 ? GRADE_WEIGHT[g] * t[g].room / t[g].cap : 0;
+      if (t[g].replace === replace && t[g].room > 0 && p > best) { grade = g; best = p; }
+    }
+    if (grade) break;
   }
   if (!grade) return null;
   const s = t[grade];
@@ -137,7 +150,8 @@ export interface GenerateDeps {
   workers: number;
   /** Runs a tuple's part: the level it made, or null. */
   make(t: Tuple): Promise<SharedMade | null>;
-  upload(t: Tuple, made: SharedMade): Promise<Upload>;
+  /** Posts a level; with `replace`, a full grade retires one served level for it. */
+  upload(t: Tuple, made: SharedMade, replace: boolean): Promise<Upload>;
   tupleFor(w: Want): Tuple;
   now(): number;
   /** Resolves after `ms`. */
@@ -156,15 +170,15 @@ export async function generateAll(deps: GenerateDeps, limits: { ms: number }): P
   try { counts = await deps.counts(); } catch { counts = null; }
   if (!counts) { deps.log('could not read the bank\'s counts; nothing made'); return out; }
   const tally = tallyOf(counts);
-  for (const g of GRADES) deps.log(`${g}: ${counts[g].served} served, ${counts[g].pending} waiting, room for ${tally[g].room}; ${tally[g].plateau} on the plateau, ${tally[g].large} of them large`);
+  for (const g of GRADES) deps.log(`${g}: ${counts[g].served} served, ${counts[g].pending} waiting, ${tally[g].replace ? `full, replacing up to ${tally[g].room}` : `room for ${tally[g].room}`}; ${tally[g].plateau} on the plateau, ${tally[g].large} of them large`);
   const deadline = deps.now() + limits.ms;
   let halted = false, errors = 0;
   const running = new Set<Promise<void>>();
 
   const finish = async (want: Want, t: Tuple, made: SharedMade | null): Promise<void> => {
     if (!made) { out.empty++; tally[want.grade].room++; return; }
-    const sent = halted ? 'error' : await deps.upload(t, made).catch((): Upload => 'error');
     const s = tally[want.grade];
+    const sent = halted ? 'error' : await deps.upload(t, made, s.replace).catch((): Upload => 'error');
     if (sent === 'ok') {
       errors = 0;
       out.added[want.grade]++;
@@ -299,10 +313,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
           return (r.body as { grades: Counts }).grades;
         },
         make: t => pool.make(t),
-        async upload(tuple, made) {
-          const r = await post({ op: 'trusted-add', tuple, made });
+        async upload(tuple, made, replace) {
+          const r = await post(replace ? { op: 'trusted-add', tuple, made, replace } : { op: 'trusted-add', tuple, made });
           const error = (r.body as { error?: unknown } | null)?.error;
-          if (r.status === 200) { log(`${tuple.grade}: added ${(r.body as { h: string }).h} (score ${made.score})`); return 'ok'; }
+          if (r.status === 200) {
+            const { h, retired } = r.body as { h: string; retired?: string };
+            log(`${tuple.grade}: added ${h} (score ${made.score})${retired ? `, retired ${retired}` : ''}`);
+            return 'ok';
+          }
           if (r.status === 409 && (error === 'duplicate' || error === 'full')) return error;
           if (r.status === 429) return 'rate';
           log(`${tuple.grade}: the bank answered ${r.status}`);

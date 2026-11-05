@@ -8,7 +8,8 @@ name: crete-verify
 #    generator and posts a match or a mismatch; one trusted match admits a level. At most 25 levels, 12 minutes.
 # 2. tools/generate-bank.ts spends the rest of the budget making new Endless levels on every core, scarcest first
 #    (Hard's plateau, large boards especially, then Medium and Easy), and posts each straight into the served pool
-#    with its provenance tuple, never past a grade's cap.
+#    with its provenance tuple, never past a grade's cap. Once every grade is full it turns each over: up to 1.5% of a
+#    grade's cap per run, each new level replacing one served level the server picks, one out for each one in.
 #
 # The token, CRETE_BANK_VERIFIER_TOKEN, is the bank-verifier field of the item "Crete Config" in the SIUE 1Password
 # vault, the same one the deploy turns into the server's hash (games/crete/bank/verifier.json). It is read through the

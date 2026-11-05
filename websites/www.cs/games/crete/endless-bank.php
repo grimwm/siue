@@ -18,8 +18,9 @@
  *      -> { "ok": true, "verdict": "match" | "mismatch" }, or 404 { "error": "gone" }
  * POST { "op": "trusted-counts" }
  *      -> { "grades": { <grade>: { "served", "pending", "cap", "levels": [[score, chapter, rows, cols, hides]] } } }
- * POST { "op": "trusted-add", "tuple", "made" } -> { "ok": true, "h" } (served at once),
- *      or 409 { "error": "duplicate" | "full" }, 403 { "error": "version" }
+ * POST { "op": "trusted-add", "tuple", "made", "replace"?: true } -> { "ok": true, "h", "retired"? } (served at once),
+ *      or 409 { "error": "duplicate" | "full" }, 403 { "error": "version" }; with replace, a full grade
+ *      retires one served level (the server picks it, weighted) for the one it takes in
  * Its token is checked before a rate slot is taken (a stranger's guesses write
  * nothing), against the sha256 in bank/verifier.json, which deploy.sh writes
  * from CRETE_BANK_VERIFIER_TOKEN; CRETE_BANK_VERIFIER_FILE overrides the path

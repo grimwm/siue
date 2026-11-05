@@ -72,8 +72,16 @@ plateau or on the climb. For a large board it tries seeds until the plans of the
 than a plain one, so while large boards are wanted only one plateau part in three leans large; the rest keep the
 plateau filling. It never makes more than fits: a grade's room
 is its cap less its served and waiting levels, a part that makes nothing gives its room back, and the server refuses
-an add that would pass the cap (409 `full`), so the runner never rolls out a level a player sent. It adds no strike
-and reads none. It stops starting parts when its time is spent, ends those still running, and stops altogether when
+an add that would pass the cap (409 `full`). It adds no strike and reads none.
+
+**Turning a full bank over.** A full grade still changes without player uploads. Once no grade has empty room, each
+run makes up to `TURNOVER_SHARE` (1.5%) of a full grade's cap, 22 levels at a cap of 1,500, with the same priority
+(Hard first) and the same plateau and large-board shares, and posts each with `trusted-add` and `"replace": true`.
+For a grade at its cap the server then retires one served level, picked by the roll-out's weighting below, and takes
+the new one in its place, in one locked step; the runner never names which level goes. A grade with room takes the
+level without retiring any, a refused add (duplicate, version) retires nothing, and a grade with nothing served to
+retire still answers 409 `full`; waiting levels are never retired this way. Since a level is retired only as one comes
+in, a run that makes fewer (Hard's plateau is slow) retires fewer, and turnover never takes a grade below its cap. It stops starting parts when its time is spent, ends those still running, and stops altogether when
 the bank's hourly share for it is spent (429) or the bank fails three times running.
 
 It authenticates with a bearer token in the `X-Crete-Verifier` header (a custom header, since Apache in front of

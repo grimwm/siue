@@ -77,14 +77,15 @@ and reads none. It stops starting parts when its time is spent, ends those still
 the bank's hourly share for it is spent (429) or the bank fails three times running.
 
 It authenticates with a bearer token in the `X-Crete-Verifier` header (a custom header, since Apache in front of
-PHP-FPM may drop `Authorization`). The token is `CRETE_BANK_VERIFIER_TOKEN`, a secret of the `production` environment,
-which only admits runs from main: both the deploy and the verifier run there, and a workflow pushed on another branch
-cannot read it. Disputed levels are listed to it first. The repository is
-public, so the token is never committed: the deploy (`deploy.sh`, from the same secret, which `deploy.yml` passes in)
-stages `games/crete/bank/verifier.json` holding only the token's SHA-256, and the server compares hashes. Without the
-secret nothing is staged and the trusted calls are refused; the workflow does nothing. The token is never echoed in a
-response or written to a log, and the scripts never print it. Without the secret the workflow skips both steps with a
-notice saying the token is not set. `bank/.htaccess` denies the whole folder to browsers.
+PHP-FPM may drop `Authorization`). The token is `CRETE_BANK_VERIFIER_TOKEN`, the password field of the item "Crete
+bank verifier" in the SIUE 1Password vault. Both the deploy and the verifier load it with
+`1password/load-secrets-action` through the repository's `OP_SERVICE_ACCOUNT_TOKEN` secret, as an optional load like
+the studio config's: a missing item means no token, never a failed run. Disputed levels are listed to it first. The
+repository is public, so the token is never committed: the deploy (`deploy.sh`, from the same item, which `deploy.yml`
+loads) stages `games/crete/bank/verifier.json` holding only the token's SHA-256, and the server compares hashes.
+Without the item nothing is staged and the trusted calls are refused. The action masks the token in logs, it is never
+echoed in a response, and the scripts never print it. Without the item the workflow skips both steps with a notice
+saying the token is not in 1Password. `bank/.htaccess` denies the whole folder to browsers.
 
 **A device's own levels.** A level a device's own search made is trusted on that device: it is the device's own
 computation. Every level its search makes is kept in local storage (`crete-endless-own-<grade>`, up to 150), and a run
@@ -304,9 +305,8 @@ store files.
 
 ## Setup the owner does once
 
-1. Make a token: `openssl rand -hex 32`.
-2. Add it as a secret of the `production` environment named `CRETE_BANK_VERIFIER_TOKEN` (Settings, Environments,
-   production, Add environment secret; or `gh secret set CRETE_BANK_VERIFIER_TOKEN --env production`).
+1. In 1Password, in the SIUE vault, create a Password item titled exactly "Crete bank verifier".
+2. Let 1Password generate its password: letters and digits only (symbols off), 40 to 128 characters. Save it.
 3. Run the deploy workflow once from the Actions tab (or merge anything): the deploy puts the token's hash on the
    server.
 4. Optionally run crete-verify from the Actions tab to seed the bank at once: it checks the waiting levels, then

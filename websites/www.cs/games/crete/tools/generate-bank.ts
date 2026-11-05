@@ -274,7 +274,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const url = safeUrl(arg('url') ?? BANK_URL);
   const minutes = Number(arg('minutes') ?? 35);
   if (!token) {
-    log('no CRETE_BANK_VERIFIER_TOKEN; skipping (add it as a secret of the production environment)');
+    log('no CRETE_BANK_VERIFIER_TOKEN; skipping (it comes from the "Crete bank verifier" item in 1Password)');
   } else if (!url) {
     log('the bank\'s URL must be HTTPS; nothing made');
   } else {

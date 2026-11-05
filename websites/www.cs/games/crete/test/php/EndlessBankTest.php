@@ -1030,6 +1030,8 @@ final class EndlessBankTest extends TestCase
         // A refused add retires nothing.
         $served = array_column($this->stored('served-easy.json'), 'h');
         self::assertSame([409, ['error' => 'duplicate']], self::refusal(fn() => $this->replace($bank, self::level(367))));
+        // A level waiting in quarantine is held too: the same layout again is a duplicate, and retires nothing.
+        self::assertSame([409, ['error' => 'duplicate']], self::refusal(fn() => $this->replace($bank, self::level(361))));
         self::assertSame([403, ['error' => 'version']], self::refusal(fn() => $this->replace($bank, self::level(368), ['v' => 1])));
         self::assertSame($served, array_column($this->stored('served-easy.json'), 'h'));
         // Nothing served to retire: still full, and the waiting levels are never retired.
@@ -1039,6 +1041,88 @@ final class EndlessBankTest extends TestCase
         self::assertCount(1, $this->stored('pending-hard.json'));
         // Without replace a full grade still answers full.
         self::assertSame([409, ['error' => 'full']], self::refusal(fn() => $this->add($bank, self::level(371))));
+    }
+
+    public function testARetiredLevelNeverComesBackByAnyPath(): void
+    {
+        $this->verifierFile();
+        $retiredAs = [409, ['error' => 'retired']];
+        $hashes = fn(): array => $this->stored('retired-easy.json');
+
+        // Turned over: a replacing add at the cap retires one served level.
+        $bank = $this->bank(['servedCap' => 1]);
+        $this->add($bank, self::level(400));
+        $got = $this->replace($bank, self::level(401));
+        self::assertSame(Bank::layoutHash(self::level(400)), $got['retired']);
+        self::assertSame([$got['retired']], $hashes());
+        self::assertSame($retiredAs, self::refusal(fn() => $this->replace($bank, self::level(400))), 'back by the runner, with replace');
+        self::assertSame($retiredAs, self::refusal(fn() => $this->add($bank, self::level(400))), 'or without');
+        self::assertSame($retiredAs, self::refusal(fn() => $this->submit($bank, self::level(400), 'player')), 'or by a player');
+        self::assertSame([Bank::layoutHash(self::level(401))], array_column($this->stored('served-easy.json'), 'h'), 'nothing retired for it');
+        self::assertSame([], $this->stored('pending-easy.json'));
+
+        // Rolled out past the cap when a checked level comes in.
+        $this->admit($bank, self::level(402));
+        self::assertCount(1, $this->stored('served-easy.json'));
+        $out = array_values(array_diff([Bank::layoutHash(self::level(401)), Bank::layoutHash(self::level(402))], array_column($this->stored('served-easy.json'), 'h')));
+        self::assertCount(1, $out);
+        self::assertContains($out[0], $hashes());
+
+        // Reported by enough players.
+        $report = $this->bank(['servedCap' => 10, 'reportsToRetire' => 1]);
+        $left = $this->stored('served-easy.json')[0]['h'];
+        $report->report(['op' => 'report', 'install' => self::install('r'), 'grade' => 'easy', 'h' => $left], self::B);
+        self::assertSame([], $this->stored('served-easy.json'));
+        self::assertContains($left, $hashes());
+        $text = $left === Bank::layoutHash(self::level(401)) ? self::level(401) : self::level(402);
+        self::assertSame($retiredAs, self::refusal(fn() => $this->replace($report, $text)));
+
+        // Its version retired: its levels leave at the grade's next request, and stay gone under the new version.
+        $this->add($report, self::level(403));
+        $v3 = $this->bank(['accept' => [3]]);
+        $this->trusted($v3, ['op' => 'trusted-counts']);
+        self::assertContains(Bank::layoutHash(self::level(403)), $hashes());
+        self::assertSame($retiredAs, self::refusal(fn() => $this->add($v3, self::level(403), ['v' => 3])));
+
+        // Turned, flipped or retitled, it is the same layout.
+        $rows = self::rows(self::level(400));
+        self::assertSame($retiredAs, self::refusal(fn() => $this->replace($v3, self::text(array_map('strrev', $rows), 'New name'), ['v' => 3])));
+        self::assertSame(array_values(array_unique($hashes())), $hashes(), 'each hash once');
+    }
+
+    public function testUploadingTheSameLevelsAgainAfterTheyRotatedOutChangesNothing(): void
+    {
+        // A folder of five levels into a grade of three, with replace: two of its own rotate out. The same folder again
+        // is three duplicates and two retired, and the bank is left exactly as the first upload left it.
+        $this->verifierFile();
+        $bank = $this->bank(['servedCap' => 3]);
+        $folder = array_map(static fn(int $i): string => self::level(410 + $i), range(0, 4));
+        foreach ($folder as $text) {
+            $this->now += 60;
+            $this->replace($bank, $text);
+        }
+        $served = $this->stored('served-easy.json');
+        $retired = $this->stored('retired-easy.json');
+        self::assertCount(3, $served);
+        self::assertCount(2, $retired);
+        $again = array_map(fn(string $text): string => self::refusal(fn() => $this->replace($bank, $text))[1]['error'], $folder);
+        sort($again);
+        self::assertSame(['duplicate', 'duplicate', 'duplicate', 'retired', 'retired'], $again);
+        self::assertSame($served, $this->stored('served-easy.json'));
+        self::assertSame($retired, $this->stored('retired-easy.json'));
+    }
+
+    public function testAnAllDigitHashIsKeptAsAString(): void
+    {
+        $hash = '0123456789012345';
+        $all = '1234567890123456';
+        file_put_contents("{$this->dir}/retired-easy.json", json_encode([$hash, $all]));
+        file_put_contents("{$this->dir}/served-easy.json", Bank::encode([Bank::servedEntry(self::made(Bank::blank(self::level(420))), Bank::layoutHash(self::level(420)), 2, $this->now)]));
+        $this->verifierFile();
+        $this->replace($this->bank(['servedCap' => 1]), self::level(421));
+        $kept = $this->stored('retired-easy.json');
+        self::assertSame([$hash, $all, Bank::layoutHash(self::level(420))], $kept);
+        self::assertContainsOnlyString($kept);
     }
 
     public function testAReplacingAddRetiresByTheWeightingTowardOldAndOftenServed(): void

@@ -6,8 +6,8 @@
 // (replacing once a grade is full), and sizes its workers by the run's memory cap.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { difficultiesOf, generateAll, quotaOf, planLine, limitedTally, nextWant, optionsOf, safeUrl, tallyOf, totalLines, tupleFor, isLarge, workersIn, LARGE_SIDE } from '../tools/generate-bank.ts';
-import type { Counts, GenerateDeps, RunOptions, Shelf, Want } from '../tools/generate-bank.ts';
+import { difficultiesOf, generateAll, quotaOf, planLine, limitedTally, nextWant, optionsOf, safeUrl, tallyOf, tupleFor, gradeStats, median, runStats, statsLines, statsMarkdown, statusLines, isLarge, workersIn, LARGE_SIDE } from '../tools/generate-bank.ts';
+import type { Counts, GenerateDeps, Made, RunOptions, Shelf, Want } from '../tools/generate-bank.ts';
 import { ENDLESS_VERSION, requestOf, sharedOf } from '../src/endless/provenance.ts';
 import type { SharedMade } from '../src/endless/provenance.ts';
 import { placeOf, planOf, reachOf } from '../src/endless/generate.ts';
@@ -205,14 +205,14 @@ test('--count is one number for every difficulty, or one per difficulty in order
   // Without --difficulties a list of three is easy, medium, hard.
   const o = optionsOf(['--count', '10,20,30'], 8, 16_384) as RunOptions;
   assert.deepEqual(o.count, { easy: 10, medium: 20, hard: 30 });
-  assert.equal(planLine(o), '10 easy, 20 medium, 30 hard; 7 worker(s) for no time limit');
+  assert.equal(planLine(o), '10 easy, 20 medium, 30 hard; 7 worker(s) for no time limit, rollover on');
   assert.match(optionsOf(['--difficulties', 'hard', '--count', '1,2'], 8, 16_384) as string, /--count 1,2 for --difficulties hard/);
   assert.match(optionsOf(['--count', '0'], 8, 16_384) as string, /--count 0/);
 });
 
 test('with none of the new options a run is the runner\'s: every grade, 35 minutes, the workers the machine holds', () => {
   const o = optionsOf([], 4, 16_384) as RunOptions;
-  assert.deepEqual(o, { minutes: 35, grades: ['easy', 'medium', 'hard'], count: null, workers: 4, memoryMb: null, plan: false });
+  assert.deepEqual(o, { minutes: 35, grades: ['easy', 'medium', 'hard'], count: null, workers: 4, memoryMb: null, rollover: true, plan: false, status: false, statsFile: null, saveOnly: null });
   assert.deepEqual(optionsOf(['--minutes', '20', '--workers', '99'], 8, 16_384), { ...o, minutes: 20, workers: 7 }, '--workers never past the machine');
   assert.equal((optionsOf(['--minutes', '0'], 8, 16_384) as { minutes: number }).minutes, 1);
   // A count alone has no time limit; with --minutes, whichever comes first.
@@ -251,12 +251,12 @@ test('a count makes that many of each named grade and stops it, replacing on a f
     if (served[tuple.grade]! < 1500) { served[tuple.grade]!++; return 'ok'; }
     return replace ? 'replaced' : 'full';
   };
-  const made = await generateAll(f.deps, { ms: Infinity, grades: ['hard', 'medium'], count: { hard: 5, medium: 5 } });
+  const made = await generateAll(f.deps, { ms: Infinity, grades: ['hard', 'medium'], count: { hard: 5, medium: 5 }, rollover: true });
   assert.deepEqual(made.added, { easy: 0, medium: 5, hard: 5 }, 'the count is honoured on a full grade, past turnover');
   assert.deepEqual(made.replaced, { easy: 0, medium: 5, hard: 3 }, 'Hard filled its two empty places first');
   const posted = f.posted as { replace: boolean }[];
   assert.ok(posted.every(p => p.replace), 'every count post may replace');
-  assert.deepEqual(totalLines(made, ['hard', 'medium']), ['hard: made 5, added 2, replaced 3', 'medium: made 5, added 0, replaced 5']);
+  assert.deepEqual([gradeStats(made, 'hard', 1).added, gradeStats(made, 'hard', 1).replaced], [2, 3]);
   // A part that makes nothing does not count: the grade goes on until it has its count.
   const g = fake({ empty: i => i % 3 === 0 });
   const some = await generateAll(g.deps, { ms: Infinity, grades: ['easy'], count: { easy: 4 } });
@@ -274,4 +274,98 @@ test('with a count and a time limit, whichever comes first ends the run', async 
   const done = await generateAll(g.deps, { ms: 3_600_000, count: { easy: 3, medium: 2, hard: 1 } });
   assert.deepEqual(done.added, { easy: 3, medium: 2, hard: 1 }, 'each difficulty its own count');
   assert.equal(done.tried, 6);
+});
+
+test('without rollover a count stops at the cap and says so, and a full grade gets no turnover', async () => {
+  const f = fake({ counts: async () => counts(shelf(0), shelf(1500), shelf(1497)) });
+  const made = await generateAll(f.deps, { ms: Infinity, grades: ['hard', 'medium'], count: { hard: 100, medium: 5 }, rollover: false });
+  assert.deepEqual(made.added, { easy: 0, medium: 0, hard: 3 }, 'Hard fills its room; Medium is full');
+  assert.deepEqual(made.replaced, { easy: 0, medium: 0, hard: 0 });
+  assert.ok((f.posted as { replace: boolean }[]).every(p => !p.replace), 'nothing posted with replace');
+  const hard = 'hard: full at 1500 \u2014 stopped with 97 of 100 left. To keep making levels that replace older ones, run again with ROLLOVER=yes.';
+  assert.ok(f.lines.includes(hard), f.lines.join('\n'));
+  assert.ok(f.lines.some(l => l.startsWith('medium: full at 1500 \u2014 stopped with 5 of 5 left.')));
+  assert.deepEqual(made.capped, ['hard', 'medium']);
+  assert.equal(made.hints[0], hard, 'kept for the summary');
+  assert.equal(gradeStats(made, 'hard', 1).capped, true, 'the stats line records it');
+  // The bank saying full stops it too.
+  const g = fake({ upload: async () => 'full' });
+  await generateAll(g.deps, { ms: Infinity, grades: ['easy'], count: { easy: 4 }, rollover: false });
+  assert.ok(g.lines.some(l => l.startsWith('easy: full at 1500 \u2014 stopped with 4 of 4 left.')));
+  // A time run: full grades make nothing; the default still turns over.
+  const t = fake({ counts: async () => counts(shelf(1500), shelf(1500), shelf(1500)) });
+  assert.equal((await generateAll(t.deps, { ms: 60_000, rollover: false })).tried, 0);
+  assert.ok(t.lines.some(l => /hard: .*full, rollover off: none made/.test(l)));
+  assert.ok(t.lines.includes('hard: full at 1500. To keep making levels that replace older ones, run again with ROLLOVER=yes.'));
+  assert.deepEqual(limitedTally(counts(shelf(1500), shelf(0), shelf(0)), ['easy', 'medium', 'hard'], null).easy.replace, true);
+  assert.equal((optionsOf(['--rollover', 'no'], 8, 16_384) as RunOptions).rollover, false);
+  assert.equal((optionsOf([], 8, 16_384) as RunOptions).rollover, true, 'the runner\'s default turns over');
+  assert.match(optionsOf(['--rollover', 'maybe'], 8, 16_384) as string, /yes or no/);
+});
+
+test('a run\'s numbers: per grade made, added, replaced, refused, part time, rate and seconds a level', () => {
+  assert.equal(median([]), 0);
+  assert.equal(median([3, 1, 2]), 2);
+  assert.equal(median([4, 1, 3, 2]), 2.5);
+  const z = () => ({ easy: 0, medium: 0, hard: 0 });
+  const made: Made = {
+    tried: 10, found: { ...z(), hard: 4 }, added: { ...z(), hard: 3 }, replaced: { ...z(), hard: 1 }, empty: 5, refused: 1,
+    emptyBy: { ...z(), hard: 5 }, refusedBy: { ...z(), hard: 1 }, duplicateBy: { ...z(), hard: 2 }, retiredBy: { ...z(), hard: 1 }, spentMs: { ...z(), hard: 7_200_000 },
+    levelMs: { easy: [], medium: [], hard: [60_000, 120_000, 180_000, 600_000] }, capped: [], hints: [],
+  };
+  const s = gradeStats(made, 'hard', 1_800_000);
+  assert.deepEqual(s, { made: 4, added: 2, replaced: 1, duplicate: 2, retired: 1, refused: 1, empty: 5, capped: false, partHours: 2, perHour: 6, meanSeconds: 240, medianSeconds: 150, secondsPerLevel: 1800 });
+  assert.deepEqual(gradeStats(made, 'easy', 0), { made: 0, added: 0, replaced: 0, duplicate: 0, retired: 0, refused: 0, empty: 0, capped: false, partHours: 0, perHour: 0, meanSeconds: 0, medianSeconds: 0, secondsPerLevel: 0 });
+  const o = optionsOf(['--difficulties', 'hard', '--memory-mb', '8192'], 8, 16_000) as RunOptions;
+  const r = runStats(made, o, ['--difficulties', 'hard'], { host: 'box', cpu: 'Intel i7-9700', cores: 8, totalMb: 16_000 }, 1_800_000, new Date(0));
+  assert.deepEqual(Object.keys(r.grades), ['hard'], 'only the grades the run named');
+  assert.equal(r.at, '1970-01-01T00:00:00.000Z');
+  assert.deepEqual([r.workers, r.memoryMb, r.wallSeconds], [4, 8192, 1800]);
+  assert.deepEqual(JSON.parse(JSON.stringify(r)), r, 'one JSON line');
+  const lines = statsLines(r);
+  assert.match(lines[0]!, /^hard: made 4, added 2, replaced 1, duplicate 2, retired 1, refused 1, parts with none 5; 2 part-hours, 6 per hour, 240 s mean and 150 s median/);
+  assert.equal(lines[1], 'run: 0h30m on 4 worker(s) in 8192 MB, 8 cores (Intel i7-9700), 16000 MB');
+  assert.match(statsMarkdown(r), /\| hard \| 4 \| 2 \| 1 \| 2 \| 1 \| 1 \| 5 \| 2 \| 6 \| 240 \| 150 \|/);
+});
+
+test('a long run logs its progress about every five minutes', async () => {
+  const f = fake({ partMs: 120_000 });
+  await generateAll(f.deps, { ms: 30 * 60_000, grades: ['easy', 'medium', 'hard'], count: { easy: 100, medium: 100, hard: 100 } });
+  const progress = f.lines.filter(l => l.startsWith('progress after'));
+  assert.ok(progress.length >= 4 && progress.length <= 7, `${progress.length} progress lines`);
+  assert.match(progress[0]!, /^progress after \d+ min: easy \d+\/100, medium \d+\/100, hard \d+\/100$/);
+});
+
+test('the status is each shelf\'s served, waiting, cap and room', () => {
+  assert.deepEqual(statusLines(counts(shelf(1500), shelf(1000, { pending: 20 }), shelf(80, {}, 40, 20))), [
+    'easy: 1500 served, 0 waiting, cap 1500, room 0; 1500 on the plateau, 0 of them large',
+    'medium: 1000 served, 20 waiting, cap 1500, room 480; 0 on the plateau, 0 of them large',
+    'hard: 80 served, 0 waiting, cap 1500, room 1420; 40 on the plateau, 20 of them large',
+  ]);
+  assert.equal((optionsOf(['--status'], 8, 16_384) as RunOptions).status, true);
+  assert.match(optionsOf(['--stats-file'], 8, 16_384) as string, /needs a path/);
+  assert.equal((optionsOf(['--save-only', 'out'], 8, 16_384) as RunOptions).saveOnly, 'out');
+  assert.match(optionsOf(['--save-only', '--count', '3'], 8, 16_384) as string, /needs a folder/);
+});
+
+test('a level the bank already holds counts for nothing: the run makes another, and says duplicate', async () => {
+  // The bank holds every other level it is sent; a count of 3 still gets 3 new ones.
+  let n = 0;
+  const f = fake({ upload: async (tuple, made, replace) => (n++ % 2 ? (n % 4 ? 'duplicate' : 'retired') : (f.posted.push({ tuple, made, replace }), 'ok')) });
+  const made = await generateAll(f.deps, { ms: Infinity, grades: ['easy'], count: { easy: 3 }, rollover: false });
+  assert.equal(made.added.easy, 3, 'three new ones');
+  assert.deepEqual([made.duplicateBy.easy, made.retiredBy.easy], [1, 1], 'a retired layout counts for nothing either');
+  assert.equal(made.refused, 0, 'a duplicate is not a refusal');
+  assert.deepEqual([gradeStats(made, 'easy', 1).duplicate, gradeStats(made, 'easy', 1).retired], [1, 1]);
+  assert.ok(f.lines.some(l => /^easy: retired \(score \d+\), the bank retired this layout; not counted$/.test(l)));
+  assert.ok(f.lines.some(l => /^easy: duplicate \(score \d+\), the bank has it; not counted$/.test(l)));
+  // One level made twice in a run is sent once.
+  const same = sharedOf(BANKS.easy[0]!);
+  let clock = 0;
+  const g = fake({ now: () => clock, make: async () => { clock += 1000; return same; } });
+  const twice = await generateAll(g.deps, { ms: 10_000, grades: ['easy'], count: { easy: 2 }, rollover: false });
+  assert.equal(g.posted.length, 1, 'sent once');
+  assert.equal(twice.added.easy, 1);
+  assert.ok(twice.duplicateBy.easy >= 1);
+  assert.ok(g.lines.some(l => /made twice this run/.test(l)));
 });

@@ -19,15 +19,16 @@
  * POST { "op": "trusted-counts" }
  *      -> { "grades": { <grade>: { "served", "pending", "cap", "levels": [[score, chapter, rows, cols, hides]] } } }
  * POST { "op": "trusted-add", "tuple", "made", "replace"?: true } -> { "ok": true, "h", "retired"? } (served at once),
- *      or 409 { "error": "duplicate" | "full" }, 403 { "error": "version" }; with replace, a full grade
- *      retires one served level (the server picks it, weighted) for the one it takes in
+ *      or 409 { "error": "duplicate" | "retired" | "full" }, 403 { "error": "version" }; with replace, a full
+ *      grade retires one served level (the server picks it, weighted) for the one it takes in; a duplicate or
+ *      retired layout (one the bank served once and let go) takes no room and retires nothing
  * Its token is checked before a rate slot is taken (a stranger's guesses write
  * nothing), against the sha256 in bank/verifier.json, which deploy.sh writes
  * from CRETE_BANK_VERIFIER_TOKEN; CRETE_BANK_VERIFIER_FILE overrides the path
  * (tests). Without the file every trusted call is 401 { "error": "unauthorized" }.
  *
  * Refusals: 400 { "error": "invalid", "field" }, 400 { "error": "ticket" }, 401 { "error": "unauthorized" },
- *   403 { "error": "forbidden" }, 403 { "error": "version" }, 409 { "error": "duplicate" | "full" },
+ *   403 { "error": "forbidden" }, 403 { "error": "version" }, 409 { "error": "duplicate" | "retired" | "full" },
  *   429 { "error": "rate" | "throttled" }, 405 { "error": "method not allowed" }, 500 { "error": "server error" }.
  *
  * Every rule and store is bank/Bank.php's; settings are bank/config.json

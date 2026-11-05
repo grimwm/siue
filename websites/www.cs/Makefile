@@ -125,36 +125,56 @@ music-e2e: ## Music workroom and studio browser checks (E2E_ARGS: one spec)
 stats-e2e: ## Visitor statistics browser check in a throwaway docker project
 	@$(MAKE) --no-print-directory music-e2e E2E_ARGS=stats.local.ts
 
-# Crete's shared Endless bank, worked from this machine or by .github/workflows/crete-verify.yml: crete-verify-levels
-# checks levels waiting in quarantine (games/crete/tools/verify-bank.ts), crete-levels makes new ones and adds them
-# straight to the bank (games/crete/tools/generate-bank.ts). The token is CRETE_BANK_VERIFIER_TOKEN when it is set (the
-# workflow loads it), otherwise it is read from 1Password with op; it lives in the recipe's environment only and is
-# never printed. crete-levels caps the whole run at MEMORY_LIMIT with systemd-run where that works, and sizes its
-# workers by MEMORY_LIMIT either way.
-.PHONY: crete-levels crete-verify-levels
+# Crete's shared Endless bank, worked from this machine or by .github/workflows/crete-verify.yml (every variable is in
+# games/crete/README.md, "Making levels for the shared bank"). crete-levels makes new levels with the trusted generator
+# (games/crete/tools/generate-bank.ts) and adds them straight to the bank, or with SAVE_ONLY=<dir> saves them there for
+# crete-levels-upload (games/crete/tools/upload-bank.ts); served levels are replaced only with ROLLOVER=yes. Each
+# crete-levels run appends its numbers as one JSON line to STATS_FILE. crete-bank-status prints how full the bank is
+# and crete-verify-levels checks the levels waiting in quarantine (games/crete/tools/verify-bank.ts). The token is
+# CRETE_BANK_VERIFIER_TOKEN when it is set (the workflow loads it), otherwise it is read with op from 1Password; it
+# lives in the recipe's environment only and is never printed. crete-levels caps the whole run at MEMORY_LIMIT with
+# systemd-run where that works, and sizes its workers by MEMORY_LIMIT either way.
+.PHONY: crete-levels crete-levels-upload crete-bank-status crete-verify-levels
 MEMORY_LIMIT ?= 8G
+CRETE_TOKEN_REF = op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier
+# The token, or a one-line reason and exit 1.
 CRETE_TOKEN = test -n "$$CRETE_BANK_VERIFIER_TOKEN" || { \
 	command -v op >/dev/null || { echo "$@: needs the 1Password CLI (op), signed in, to read the bank's token" >&2; exit 1; }; \
-	CRETE_BANK_VERIFIER_TOKEN=$$(op read 'op://khvwk3iogv3mhhjui4se7xqyni/Crete Config/bank-verifier' 2>/dev/null) && test -n "$$CRETE_BANK_VERIFIER_TOKEN" || \
+	CRETE_BANK_VERIFIER_TOKEN=$$(op read '$(CRETE_TOKEN_REF)' 2>/dev/null) && test -n "$$CRETE_BANK_VERIFIER_TOKEN" || \
 		{ echo "$@: could not read the token from 1Password (sign in with: eval \$$(op signin)); nothing done" >&2; exit 1; }; }; \
 	export CRETE_BANK_VERIFIER_TOKEN
+# The token when one is to be had, for SAVE_ONLY (which runs without one).
+CRETE_TOKEN_IF_ANY = test -n "$$CRETE_BANK_VERIFIER_TOKEN" || ! command -v op >/dev/null || \
+	CRETE_BANK_VERIFIER_TOKEN=$$(op read '$(CRETE_TOKEN_REF)' 2>/dev/null) || CRETE_BANK_VERIFIER_TOKEN=; \
+	export CRETE_BANK_VERIFIER_TOKEN
 CRETE_LEVEL_ARGS = $(if $(DIFFICULTY),--difficulties "$(DIFFICULTY)") $(if $(COUNT_PER_DIFFICULTY),--count "$(COUNT_PER_DIFFICULTY)") \
-	$(if $(MINUTES),--minutes "$(MINUTES)",$(if $(COUNT_PER_DIFFICULTY),,--minutes 60)) $(if $(WORKERS),--workers "$(WORKERS)")
+	$(if $(MINUTES),--minutes "$(MINUTES)",$(if $(COUNT_PER_DIFFICULTY),,--minutes 60)) $(if $(WORKERS),--workers "$(WORKERS)") \
+	--rollover "$(or $(ROLLOVER),no)" $(if $(SAVE_ONLY),--save-only "$(SAVE_ONLY)")
 
-##@ Crete
-crete-levels: ## Make Endless levels (DIFFICULTY, COUNT_PER_DIFFICULTY=n or n,n,n; more: README)
+##@ Crete shared bank (crete-levels also takes MEMORY_LIMIT=8G WORKERS STATS_FILE; games/crete/README.md)
+crete-levels: ## Make levels (DIFFICULTY COUNT_PER_DIFFICULTY MINUTES ROLLOVER SAVE_ONLY ...)
 	@limit=$$(printf '%s' "$(MEMORY_LIMIT)" | tr kmg KMG); \
 	case "$$limit" in [0-9]*K|[0-9]*M|[0-9]*G) n=$${limit%?}; case "$$n" in *[!0-9]*) n=;; esac;; *) n=;; esac; \
 	test -n "$$n" || { echo "$@: MEMORY_LIMIT must be a size such as 8G, 12g or 12000M" >&2; exit 2; }; \
 	case "$$limit" in *K) mb=$$((n / 1024));; *M) mb=$$n;; *G) mb=$$((n * 1024));; esac; \
 	node games/crete/tools/generate-bank.ts --plan --memory-mb "$$mb" $(CRETE_LEVEL_ARGS) || exit $$?; \
-	$(CRETE_TOKEN); \
+	$(if $(SAVE_ONLY),$(CRETE_TOKEN_IF_ANY),$(CRETE_TOKEN)); \
 	cap=; if systemd-run --user --scope -q -p MemoryMax=$$limit -p MemorySwapMax=0 true 2>/dev/null; then \
 		cap="systemd-run --user --scope -q -p MemoryMax=$$limit -p MemorySwapMax=0"; \
 	else echo "$@: systemd-run is not available here; the workers are sized for $$limit but the run is not capped"; fi; \
-	$$cap node games/crete/tools/generate-bank.ts --memory-mb "$$mb" $(CRETE_LEVEL_ARGS)
+	stats="$(STATS_FILE)"; test -n "$$stats" || stats="$${XDG_STATE_HOME:-$$HOME/.local/state}/crete/levels-runs.jsonl"; \
+	$$cap node games/crete/tools/generate-bank.ts --memory-mb "$$mb" $(CRETE_LEVEL_ARGS) --stats-file "$$stats"
 
-crete-verify-levels: ## Check Endless levels waiting in the shared bank (COUNT=25 MINUTES=12)
+crete-levels-upload: ## Upload levels saved by SAVE_ONLY (FROM=<dir>, DIFFICULTY, ROLLOVER)
+	@test -n "$(FROM)" || { echo "usage: make crete-levels-upload FROM=<dir> [DIFFICULTY=easy,medium,hard] [ROLLOVER=yes]" >&2; exit 2; }; \
+	$(CRETE_TOKEN); \
+	node games/crete/tools/upload-bank.ts --from "$(FROM)" $(if $(DIFFICULTY),--difficulties "$(DIFFICULTY)") --rollover "$(or $(ROLLOVER),no)"
+
+crete-bank-status: ## Show each difficulty's served, waiting, cap and room in the shared bank
+	@$(CRETE_TOKEN); \
+	node games/crete/tools/generate-bank.ts --status
+
+crete-verify-levels: ## Check levels waiting in the shared bank (COUNT=25 MINUTES=12)
 	@$(CRETE_TOKEN); \
 	node games/crete/tools/verify-bank.ts --items "$(or $(COUNT),25)" --minutes "$(or $(MINUTES),12)"
 

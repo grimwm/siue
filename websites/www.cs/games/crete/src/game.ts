@@ -34,6 +34,8 @@ export type Tone = 'info' | 'good' | 'bad';
 /** The most states the thread's search may visit in the browser. */
 export const THREAD_CAP = 200_000;
 export const SLACK = 'The thread goes slack: undo or restart.';
+/** How often the play-out steps, in ms. */
+export const AUTO_MS = SLIDE_MS * 3;
 
 export interface GameDeps {
   sfx(name: SfxName): void;
@@ -112,7 +114,8 @@ export interface Game {
   press(a: Action | 'undo' | 'restart'): void;
   hint(): void;
   route(): void;
-  auto(): void;
+  /** T: plays the line out, a step every `every` ms (AUTO_MS when not given); again, stops it. */
+  auto(every?: number): void;
   /** Ends the play-out, if one is running. */
   stop(): void;
   finishAnim(): void;
@@ -434,7 +437,7 @@ export function createGame(deps: GameDeps): Game {
       }
       deps.changed();
     },
-    auto() {
+    auto(every = AUTO_MS) {
       if (tick !== null) {
         stop();
         return;
@@ -444,7 +447,7 @@ export function createGame(deps: GameDeps): Game {
       tick = deps.timers.setInterval(() => {
         if (pageAhead()) return;
         if (!live() || !nextOfLine() || !live()) stop();
-      }, SLIDE_MS * 3);
+      }, every);
       deps.changed();
     },
     stop,

@@ -66,6 +66,8 @@ import { renderStrip } from "./ui/strip.tsx";
 import type { ToolRow } from "./ui/strip.tsx";
 import type { Look, PadSide, WallMode } from "./settings.ts";
 import { renderTitleCard } from "./ui/title.tsx";
+import { renderDemoStrip } from "./ui/demo.tsx";
+import type { DemoView } from "./demo.ts";
 import { renderLookPick } from "./ui/look-pick.tsx";
 import { ratingText, renderSharedCard } from "./ui/shared.tsx";
 import type { SharedView } from "./share/visit.ts";
@@ -143,6 +145,8 @@ export interface Controls {
   /** The editor's visit ended: the editor was left for the title card, or a campaign level was opened (from a try,
    *  or from anywhere). */
   leftEditor?(): void;
+  /** Demo, when the page has it: the title card's Demo (and its key) starts it. */
+  demo?: { start(): void };
 }
 
 export interface Ui {
@@ -206,6 +210,8 @@ export interface Ui {
   leaveEditor(): void;
   /** Leaves the shared card for the title card, keeping the installed-app close hint as it was. */
   leaveShared(): void;
+  /** Demo is playing (its strip's words), or not: while it plays no card, banner or tip shows and nothing is met. */
+  setDemo(view: DemoView | null): void;
 }
 
 const TOOL_EMOJI: Record<Tool, string> = { mirror: "🪞", cake: "🍯", cow: "🐄" };
@@ -341,6 +347,8 @@ export function createUi(deps: UiDeps): Ui {
   let modernBoard = false;
   /** A move on the screen as a move on the grid. */
   let moveDir = (dir: MoveAction): MoveAction => dir;
+  /** Demo is playing: its strip's words. */
+  let demo: DemoView | null = null;
 
   const layers = createLayers(() => {
     if (layers.any()) game?.stop();
@@ -428,6 +436,25 @@ export function createUi(deps: UiDeps): Ui {
     endlessFromPlay = fromPlay;
     layers.clear();
     layers.open("endless");
+  }
+
+  /** Demo, from the title card: Endless plays by itself under no card (src/demo.ts). */
+  function startDemo(): void {
+    controls?.wake();
+    controls?.demo?.start();
+  }
+
+  /** Demo started or ended, or its words changed. Once it ends, what it played stays as it was: its last level's
+   *  start, end and first cards never show late. */
+  function setDemo(view: DemoView | null): void {
+    demo = view;
+    if (!view) {
+      const g = controls?.game ?? game;
+      endFor = g?.run ?? null;
+      shownOpen = g?.opens ?? shownOpen;
+      noticedNow = g?.run?.now ?? null;
+    }
+    renderDemoStrip(document.getElementById("demo-root"), { view });
   }
 
   /** Q or Back on the Endless card: a search the player waits on stops, and the title card shows. */
@@ -563,8 +590,10 @@ export function createUi(deps: UiDeps): Ui {
       onStory: () => layers.open("story"),
       ...(controls?.editor ? { onEditor: showEditor } : {}),
       ...(controls?.endless ? { onEndless: showEndless } : {}),
+      ...(controls?.demo ? { onDemo: startDemo } : {}),
       onSettings: () => layers.open("menu"),
     });
+    renderDemoStrip(document.getElementById("demo-root"), { view: demo });
     const endless = controls?.endless;
     if (endless) {
       const copy = endless.copy;
@@ -766,7 +795,7 @@ export function createUi(deps: UiDeps): Ui {
   /** The menu's seed line during an Endless run, with Copy Seed Link when the page can copy. */
   function endlessSeed(out: OutsideLevel | null): { seed?: string; onCopySeed?: () => void } {
     const endless = controls?.endless;
-    const seed = out?.kind === "endless" ? endless?.mode.view().run?.seed : undefined;
+    const seed = out?.kind === "endless" && !out.demo ? endless?.mode.view().run?.seed : undefined;
     if (!endless || !seed) return {};
     const link = endless.link();
     const copy = endless.copy;
@@ -788,6 +817,8 @@ export function createUi(deps: UiDeps): Ui {
   function say(text: string, tone?: Tone): void {
     log.push(tone ? { text, tone } : { text });
     while (log.length > LOG_LIMIT) log.shift();
+    // Demo plays quietly: its lines go to the story log, not the toast.
+    if (demo) return;
     const toast = $("toast");
     toast.textContent = text;
     toast.className = tone ? `toast show ${tone}` : "toast show";
@@ -985,7 +1016,8 @@ export function createUi(deps: UiDeps): Ui {
       log.push({ text: s.level.intro ? `${name}: ${s.level.intro}` : name, tone: "info" });
       if (!out) listed = chapterOf(g.trial).chapter.n;
       tips?.clear();
-      layers.open("start");
+      // Demo plays its levels by itself: no card stands over them.
+      if (!demo) layers.open("start");
     }
 
     const at = out ? null : chapterOf(g.trial);
@@ -1012,7 +1044,7 @@ export function createUi(deps: UiDeps): Ui {
     if (s.outcome === "playing") {
       endFor = null;
       layers.close("end");
-    } else if (!g.anim && endFor !== run) {
+    } else if (!g.anim && endFor !== run && !demo) {
       endFor = run;
       end = endView(g);
       layers.open("end");
@@ -1023,8 +1055,10 @@ export function createUi(deps: UiDeps): Ui {
         chapterScore = `${end.kicker}: ${end.score}`;
       }
     }
-    notice(g);
-    announcePages(g);
+    if (!demo) {
+      notice(g);
+      announcePages(g);
+    }
     drawLayers();
   }
 
@@ -1032,7 +1066,7 @@ export function createUi(deps: UiDeps): Ui {
   const cardsOn = (g: Game | null): boolean => !!met && outsideOf(g)?.kind !== "try";
 
   function isFirst(id: string): boolean {
-    return !!met && firstMeeting(id, met, cardsOn(controls?.game ?? game));
+    return !demo && !!met && firstMeeting(id, met, cardsOn(controls?.game ?? game));
   }
 
   /** What the player meets: where the turn's animation stopped at a first meeting (an item taken, an active tile
@@ -1127,7 +1161,7 @@ export function createUi(deps: UiDeps): Ui {
     if (!tourWaits || tour || !met) return;
     timers.setTimeout(() => {
       const run = (controls?.game ?? game)?.run;
-      if (!tourWaits || tour || !met) return;
+      if (!tourWaits || tour || !met || demo) return;
       const seen = met.carded(TOUR_ID);
       if (seen || !touchScreen()) {
         tourWaits = false;
@@ -1207,7 +1241,7 @@ export function createUi(deps: UiDeps): Ui {
     if (!tips) return;
     timers.setTimeout(() => {
       const g = controls?.game ?? game;
-      if (!g || g.anim || !cardsOn(g) || tour || tourWaits || layers.any()) return;
+      if (!g || g.anim || demo || !cardsOn(g) || tour || tourWaits || layers.any()) return;
       const ev = tipEvent(g, false);
       if (ev && tips.on(ev)) drawLayers();
     }, 0);
@@ -1663,6 +1697,11 @@ export function createUi(deps: UiDeps): Ui {
         if (!ev.repeat) layers.open("story");
         return;
       }
+      if (action === "demo" && layers.top() === "title" && c.demo) {
+        ev.preventDefault();
+        if (!ev.repeat) startDemo();
+        return;
+      }
       if (action === "endless" && layers.isOpen("title") && c.endless) {
         ev.preventDefault();
         if (!ev.repeat) showEndless();
@@ -1912,6 +1951,7 @@ export function createUi(deps: UiDeps): Ui {
     refresh: () => drawLayers(),
     leaveEditor,
     leaveShared,
+    setDemo,
     setMuted: (m) => {
       muted = m;
       drawLayers();

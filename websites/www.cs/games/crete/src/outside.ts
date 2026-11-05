@@ -3,7 +3,7 @@
  * editor is one: Try it puts the editor away and opens the draft at its start card on the game screen, Back to
  * the editor settles the game (no play-out, animation or thread) and shows the editor on its draft, and a try won
  * without Ariadne's thread is the author's best for its level text. An Endless level is one too; its win goes
- * to Endless (src/endless/mode.ts). DOM-free. */
+ * to Endless (src/endless/mode.ts), unless it is the title card's Demo's (src/demo.ts). DOM-free. */
 import type { Levels, OutsideLevel } from './campaign/chapters.ts';
 import type { Level } from './puzzle/level.ts';
 import type { Action } from './puzzle/step.ts';
@@ -52,7 +52,8 @@ export function createOutside(campaign: Levels, deps: OutsideDeps): Outside {
     line: i => (i === at ? held?.line ?? null : null),
     won(i, moves, assisted) {
       if (i === at && held?.about.kind === 'try' && held.text !== null && !assisted) deps.bestWon(held.text, moves);
-      if (i === at && held?.about.kind === 'endless') deps.endlessWon?.(moves, assisted);
+      // A demo's level (src/demo.ts) is the demo's own: its win goes to no saved run.
+      if (i === at && held?.about.kind === 'endless' && !held.about.demo) deps.endlessWon?.(moves, assisted);
     },
   };
   function play(level: Level, about: OutsideLevel, line: readonly Action[] | null = null, text: string | null = null): void {

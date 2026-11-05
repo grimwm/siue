@@ -64,7 +64,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   overflow: hidden;
 }
 #title-root, #look-root, #menu-root, #chapter-root, #levels-root, #start-root, #story-root, #end-root, #lore-root,
-#dict-root, #meet-root, #banner-root { display: contents; }
+#dict-root, #meet-root, #banner-root, #demo-root { display: contents; }
 
 /* ---- status bar ---- */
 .status {
@@ -217,6 +217,28 @@ button:disabled { opacity: 0.45; cursor: default; }
 .toast.good { border-color: var(--good); }
 .toast.bad { border-color: var(--bad); }
 .toast.info { border-color: var(--safe); }
+
+/* Demo's strip (src/ui/demo.tsx): a quiet pill at the foot of the board, over it and under every card, between the
+   mini map and the compass. It takes no pointer: a tap anywhere ends Demo. */
+.demo-strip {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 5;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(64%, 30rem);
+  padding: 0.3rem 0.9rem 0.35rem;
+  text-align: center;
+  background: rgba(1, 4, 9, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  pointer-events: none;
+  user-select: none;
+}
+.demo-strip p { margin: 0; }
+.demo-line { font-size: 0.88rem; font-weight: 700; line-height: 1.3; color: var(--stat-parchment); font-variant-numeric: tabular-nums; }
+.demo-hint { font-size: 0.75rem; color: var(--dim); }
 
 /* ---- control strip ---- */
 /* The move pad is one connected cross at the strip's left edge, or its right one while the frame wears pad-right (the

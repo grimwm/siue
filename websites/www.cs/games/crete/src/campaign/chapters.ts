@@ -137,6 +137,8 @@ export interface OutsideLevel {
   /** An Endless level's place in its run, 1 for the first, and its fewest moves. */
   depth?: number;
   fewest?: number;
+  /** An Endless level the title card's Demo plays by itself (src/demo.ts): it keeps nothing. */
+  demo?: boolean;
 }
 
 /** What the controller plays: a count, and each level's id and level by index. */

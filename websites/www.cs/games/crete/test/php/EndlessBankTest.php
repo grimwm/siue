@@ -994,6 +994,87 @@ final class EndlessBankTest extends TestCase
         self::assertSame([Bank::installHash(self::install('waiting'))], array_column($this->stored('strikes.json'), 'i'));
     }
 
+    private function replace(Bank $bank, string $text, array $tuple = [], ?string $token = self::TOKEN): array
+    {
+        return $this->trusted($bank, ['op' => 'trusted-add', 'tuple' => self::tuple($tuple), 'made' => self::made($text), 'replace' => true], $token);
+    }
+
+    public function testAReplacingAddNeedsTheTokenAndRetiresOneForOneAtTheCap(): void
+    {
+        $bank = $this->bank(['servedCap' => 3]);
+        $this->admit($bank, self::level(360));
+        $this->submit($bank, self::level(361), 'waiting', self::A);
+        $before = array_column($this->stored('served-easy.json'), 'h');
+        self::assertSame([401, ['error' => 'unauthorized']], self::refusal(fn() => $this->replace($bank, self::level(362))), 'no verifier file trusts nobody');
+        $this->verifierFile();
+        foreach (['a wrong token' => 'tok_Wrong-verifier_0123456789abcdefXYZ', 'no token' => null] as $what => $token) {
+            self::assertSame([401, ['error' => 'unauthorized']], self::refusal(fn() => $this->replace($bank, self::level(362), [], $token)), $what);
+        }
+        self::assertSame($before, array_column($this->stored('served-easy.json'), 'h'), 'nothing retired without the token');
+        self::assertSame([400, ['error' => 'invalid', 'field' => 'replace']], self::refusal(fn() => $this->trusted($bank, ['op' => 'trusted-add', 'tuple' => self::tuple(), 'made' => self::made(self::level(362)), 'replace' => 1])));
+        self::assertSame([400, ['error' => 'invalid', 'field' => 'replace']], self::refusal(fn() => $this->trusted($bank, ['op' => 'trusted-add', 'tuple' => self::tuple(), 'made' => self::made(self::level(362)), 'replace' => null])));
+
+        // Room under the cap: it simply comes in, retiring nothing.
+        self::assertSame(['ok' => true, 'h' => Bank::layoutHash(self::level(362))], $this->replace($bank, self::level(362)));
+        self::assertCount(2, $this->stored('served-easy.json'));
+        // Full (two served, one waiting): one served level leaves for each that comes in, never the waiting one.
+        for ($i = 0; $i < 5; $i++) {
+            $this->now += 3600;
+            $got = $this->replace($bank, self::level(363 + $i));
+            $served = array_column($this->stored('served-easy.json'), 'h');
+            self::assertCount(2, $served, 'the grade stays at its cap');
+            self::assertNotContains($got['retired'], $served);
+            self::assertSame(Bank::layoutHash(self::level(363 + $i)), end($served));
+            self::assertCount(1, $this->stored('pending-easy.json'), 'the waiting level stays');
+        }
+        // A refused add retires nothing.
+        $served = array_column($this->stored('served-easy.json'), 'h');
+        self::assertSame([409, ['error' => 'duplicate']], self::refusal(fn() => $this->replace($bank, self::level(367))));
+        self::assertSame([403, ['error' => 'version']], self::refusal(fn() => $this->replace($bank, self::level(368), ['v' => 1])));
+        self::assertSame($served, array_column($this->stored('served-easy.json'), 'h'));
+        // Nothing served to retire: still full, and the waiting levels are never retired.
+        $hard = $this->bank(['servedCap' => 1]);
+        $this->submit($hard, self::level(369), tuple: ['grade' => 'hard']);
+        self::assertSame([409, ['error' => 'full']], self::refusal(fn() => $this->replace($hard, self::level(370), ['grade' => 'hard'])));
+        self::assertCount(1, $this->stored('pending-hard.json'));
+        // Without replace a full grade still answers full.
+        self::assertSame([409, ['error' => 'full']], self::refusal(fn() => $this->add($bank, self::level(371))));
+    }
+
+    public function testAReplacingAddRetiresByTheWeightingTowardOldAndOftenServed(): void
+    {
+        // The same weights as the roll-out: old 10, busy 10, the two fresh 1 each; the newcomer is never the one to go.
+        $texts = ['old' => self::level(380), 'busy' => self::level(381), 'fresh1' => self::level(382), 'fresh2' => self::level(383)];
+        $retired = array_fill_keys(array_keys($texts), 0);
+        $trials = 220;
+        $this->verifierFile();
+        for ($t = 0; $t < $trials; $t++) {
+            foreach (glob($this->dir . '/*-easy*.json') as $f) {
+                unlink($f);
+            }
+            $seed = [];
+            foreach (['old' => [9, 0], 'busy' => [0, 9], 'fresh1' => [0, 0], 'fresh2' => [0, 0]] as $name => [$days, $served]) {
+                $made = self::made(Bank::blank($texts[$name]));
+                $seed[] = ['n' => $served] + Bank::servedEntry($made, Bank::layoutHash($texts[$name]), 2, $this->now - $days * 86400 - 5);
+            }
+            file_put_contents("{$this->dir}/served-easy.json", Bank::encode($seed));
+            $got = $this->replace($this->bank(['servedCap' => 4]), self::level(384 + $t + 1));
+            $left = array_column($this->stored('served-easy.json'), 'h');
+            self::assertCount(4, $left);
+            self::assertContains($got['h'], $left, 'the newcomer stays');
+            foreach ($texts as $name => $text) {
+                $retired[$name] += in_array(Bank::layoutHash($text), $left, true) ? 0 : 1;
+            }
+        }
+        self::assertSame($trials, array_sum($retired));
+        $message = json_encode($retired);
+        self::assertGreaterThan(75, $retired['old'], $message);
+        self::assertGreaterThan(75, $retired['busy'], $message);
+        $light = $retired['fresh1'] + $retired['fresh2'];
+        self::assertGreaterThan(0, $light, 'none is safe: ' . $message);
+        self::assertLessThan(50, $light, $message);
+    }
+
     public function testTrustedCountsSummariseEachGradeAndForgetRetiredProvenance(): void
     {
         $bank = $this->bank(['servedCap' => 2]);

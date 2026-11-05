@@ -558,14 +558,23 @@ final class Bank
      * code on our own machine, as trusted as its verdicts, so it is served at
      * once. Its tuple is checked like any upload's and kept beside it
      * (prov-<grade>-<h>.json), so it can be made again later. Never past the
-     * cap: a grade whose served and pending levels fill it answers 409 full,
-     * so the runner never rolls out a level a player sent. No strike either way.
-     * @param array<string, mixed> $body {op, tuple, made}
-     * @return array{ok: true, h: string}
+     * cap: a grade whose served and pending levels fill it answers 409 full.
+     * With replace (true), a full grade instead retires one served level,
+     * picked here by rollOut's weighting, and takes the new one in its place,
+     * in one locked step: one out for each one in, so turnover never shrinks
+     * the grade. A grade with room takes the level without retiring any, and
+     * one with nothing served to retire still answers 409 full. No strike
+     * either way.
+     * @param array<string, mixed> $body {op, tuple, made, replace?}
+     * @return array{ok: true, h: string, retired?: string}
      */
     private function trustedAdd(array $body): array
     {
-        self::fields($body, ['op', 'tuple', 'made'], '');
+        self::fields($body, array_key_exists('replace', $body) ? ['op', 'tuple', 'made', 'replace'] : ['op', 'tuple', 'made'], '');
+        $replace = array_key_exists('replace', $body) ? $body['replace'] : false;
+        if (!is_bool($replace)) {
+            throw Refusal::invalid('replace');
+        }
         $tuple = $this->tuple($body['tuple']);
         $made = self::made($body['made'], 'made');
         if (!in_array($tuple['v'], $this->config['accept'], true)) {
@@ -574,19 +583,26 @@ final class Bank
         $grade = $tuple['grade'];
         $h = self::layoutHash($made['text']);
         $now = ($this->clock)();
-        $this->withGrade($grade, $this->keys(), function (array &$served, array &$pending) use ($h, $tuple, $made, $grade, $now): void {
+        $retired = $this->withGrade($grade, $this->keys(), function (array &$served, array &$pending) use ($h, $tuple, $made, $grade, $now, $replace): ?string {
             foreach ([$served, $pending] as $pool) {
                 if (in_array($h, array_column($pool, 'h'), true)) {
                     throw new Refusal(409, ['error' => 'duplicate']);
                 }
             }
+            $retired = null;
             if (count($served) + count($pending) >= $this->config['servedCap']) {
-                throw new Refusal(409, ['error' => 'full']);
+                if (!$replace || $served === []) {
+                    throw new Refusal(409, ['error' => 'full']);
+                }
+                $i = $this->pick($this->retireWeights($served));
+                $retired = $served[$i]['h'];
+                array_splice($served, $i, 1);
             }
             $this->writeIfChanged("{$this->dir}/prov-$grade-$h.json", '', $tuple);
             $served[] = self::servedEntry($made, $h, $tuple['v'], $now);
+            return $retired;
         });
-        return ['ok' => true, 'h' => $h];
+        return $retired === null ? ['ok' => true, 'h' => $h] : ['ok' => true, 'h' => $h, 'retired' => $retired];
     }
 
     /** @return list<string> a checked text's grid rows */
@@ -911,14 +927,25 @@ final class Bank
      */
     private function rollOut(array &$served): void
     {
-        $now = ($this->clock)();
         while (count($served) > $this->config['servedCap']) {
-            $weights = [];
-            foreach ($served as $i => $entry) {
-                $weights[$i] = (1 + intdiv(max(0, $now - $entry['at']), self::DAY)) * (1 + $entry['n']);
-            }
-            array_splice($served, $this->pick($weights), 1);
+            array_splice($served, $this->pick($this->retireWeights($served)), 1);
         }
+    }
+
+    /**
+     * Each served level's weight for retiring: (1 + whole days since it came
+     * in) × (1 + times served).
+     * @param list<array<string, mixed>> $served
+     * @return array<int, int>
+     */
+    private function retireWeights(array $served): array
+    {
+        $now = ($this->clock)();
+        $weights = [];
+        foreach ($served as $i => $entry) {
+            $weights[$i] = (1 + intdiv(max(0, $now - $entry['at']), self::DAY)) * (1 + $entry['n']);
+        }
+        return $weights;
     }
 
     /**

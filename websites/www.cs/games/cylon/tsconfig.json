@@ -1,5 +1,5 @@
 {
   // DOM-free program: these modules cannot reach the page. See games/_kit/README.md.
   "extends": "../_kit/build/tsconfig.base.json",
-  "files": ["src/abilities.ts", "src/rules.ts", "src/playfield.ts", "src/state.ts"]
+  "files": ["src/abilities.ts", "src/glyph-math.ts", "src/rules.ts", "src/playfield.ts", "src/state.ts"]
 }

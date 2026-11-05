@@ -36,7 +36,7 @@ test('no two levels of a grade\'s bank repeat a layout', () => {
   for (const g of GRADES) {
     const levels = BANKS[g].map(b => parse(b.text));
     for (let i = 0; i < levels.length; i++) {
-      assert.deepEqual(newProblems(levels[i]!, { features: [] }, levels.filter((_, j) => j !== i)), [], `${g} bank level ${i}`);
+      assert.deepEqual(newProblems(levels[i]!, { features: [] }, levels.filter((_, j) => j !== i), false), [], `${g} bank level ${i}`);
     }
   }
 });

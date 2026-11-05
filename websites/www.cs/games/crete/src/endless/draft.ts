@@ -1,11 +1,13 @@
 /* The Island of Crete: Endless's drafts. A draft is a maze of corridors one cell wide: its cells stand on a lattice
- * (every odd row and column), joined through the wall cells between them by a growing tree (long winding corridors
- * when it grows from its newest cell, many short branches when from a random one), so it has turns and dead ends;
- * some dead ends are then broken through into a neighbour, making loops, and now and then a few cells are opened into
- * a small chamber. The pieces of a few families go on its passages (the wall cells it opened, where a door, gravel or
- * a fake wall stands between two cells) and on its cells. A draft is only a candidate: the gate (src/endless/gate.ts)
- * decides whether it is a level, and an open chamber stays only when it earns its place there. Everything is drawn
- * from the `Rng` it is given. DOM-free. */
+ * (every odd row and column), joined through the wall cells between them in one of several styles (`STYLES`), each
+ * with a look of its own: long winding corridors (a growing tree that grows from its newest cell), many short
+ * branches (one that grows from a random cell), long straight corridors all running one way (a sidewinder), long
+ * straight walls with a gap in each (recursive division), and loops everywhere (a braided maze). Some dead ends are then broken through
+ * into a neighbour, making loops, and now and then a few cells are opened into a small chamber. The pieces of a few
+ * families go on its passages (the wall cells it opened, where a door, gravel or a fake wall stands between two
+ * cells) and on its cells. A draft is only a candidate: the gate (src/endless/gate.ts) decides whether it is a level,
+ * and an open chamber stays only when it earns its place there. Everything is drawn from the `Rng` it is given.
+ * DOM-free. */
 import type { Rng } from './random.ts';
 import type { Dir } from '../puzzle/tiles.ts';
 
@@ -30,15 +32,25 @@ export function familiesOf(tier: number): Family[] {
 /** Fake and invisible walls: a level that holds one is held to the gentler band (difficulty.ts's HIDDEN). */
 export const HIDING: readonly Family[] = ['fake', 'invisible'];
 
+/** How a draft's maze is carved: `winding`, a growing tree from its newest cell (long winding corridors);
+ *  `branching`, one from a random cell (many short branches); `kruskal`, passages opened in a random order wherever
+ *  they join two parts (short dead ends everywhere); `division`, the board cut again and again by a straight wall
+ *  with one gap (long straight walls); `braided`, a growing tree whose dead ends are nearly all broken into loops. */
+export type Style = 'winding' | 'branching' | 'sidewinder' | 'division' | 'braided';
+export const STYLES: readonly Style[] = ['winding', 'branching', 'sidewinder', 'division', 'braided'];
+
 /** What a draft is drawn from. */
 export interface Plan {
-  /** Odd, so the lattice fills the board: 11, 13 or 15. */
+  /** Odd and at least 7, so the lattice fills the board. */
   rows: number;
   cols: number;
   families: readonly Family[];
   /** Relics on the board (all needed). */
   relics: number;
-  /** The chance the growing tree grows from its newest cell (a long winding corridor) rather than a random one. */
+  /** How the maze is carved; a growing tree that `winding` steers when not given. */
+  style?: Style;
+  /** For a growing tree: the chance it grows from its newest cell (a long winding corridor) rather than a random
+   *  one. */
   winding: number;
   /** The share of dead ends broken through into a neighbour, each making a loop. */
   braid: number;
@@ -98,21 +110,7 @@ export function draft(rng: Rng, plan: Plan): Sketch | null {
   const between = (a: number, b: number): [number, number] => [(cy(a) + cy(b)) / 2, (cx(a) + cx(b)) / 2];
   const doors: Door[] = [];
   const carve = (a: number, b: number) => { const [y, x] = between(a, b); g[y]![x] = '.'; doors.push({ r: y, c: x }); };
-  // The growing tree.
-  const seen = new Uint8Array(N);
-  const first = rng.int(N);
-  seen[first] = 1;
-  const active = [first];
-  while (active.length) {
-    const k = rng.next() < plan.winding ? active.length - 1 : rng.int(active.length);
-    const here = active[k]!;
-    const free = neighbours(here).filter(j => !seen[j]);
-    if (!free.length) { active.splice(k, 1); continue; }
-    const next = rng.pick(free);
-    carve(here, next);
-    seen[next] = 1;
-    active.push(next);
-  }
+  for (const [a, b] of carving(rng, plan.style, m, n, plan.winding, neighbours)) carve(a, b);
   const open = (y: number, x: number) => g[y]![x] !== '#';
   const exits = (i: number) => DIRS.filter(d => open(cy(i) + DIR_DELTA[d][0], cx(i) + DIR_DELTA[d][1])).length;
   // Loops: some dead ends broken through into a neighbour they are not joined to.
@@ -275,6 +273,75 @@ export function draft(rng: Rng, plan: Plan): Sketch | null {
   g[den[0]]![den[1]] = 'M';
   if (plan.relics > 0 && rng.next() < 0.5 && g[iy]![ix] === '.' && !isDoor(iy, ix)) g[iy]![ix] = '|';
   return { g, doors, facing, machines };
+}
+
+/** The passages a maze of `m` × `n` lattice cells opens, as pairs of cells (index r * n + c), carved in `style`:
+ *  every style joins every cell, with no loop (the loops come after). */
+function carving(rng: Rng, style: Style | undefined, m: number, n: number, winding: number, neighbours: (i: number) => number[]): [number, number][] {
+  const N = m * n;
+  const out: [number, number][] = [];
+  if (style === 'sidewinder') {
+    // Lines of cells (rows, or columns when turned), the first a corridor from end to end; along each later line, runs
+    // of cells joined side by side, each run joined to the line before it at one of its cells. Which side the first
+    // line stands on is drawn too.
+    const turned = rng.next() < 0.5, back = rng.next() < 0.5;
+    const L = turned ? n : m, W = turned ? m : n;
+    const at = (line: number, k: number) => { const l = back ? L - 1 - line : line; return turned ? k * n + l : l * n + k; };
+    for (let line = 0; line < L; line++) {
+      let run: number[] = [];
+      for (let k = 0; k < W; k++) {
+        run.push(at(line, k));
+        const close = line > 0 && (k === W - 1 || rng.next() < 0.5);
+        if (line === 0 ? k < W - 1 : !close) { out.push([at(line, k), at(line, k + 1)]); continue; }
+        if (line > 0) { const j = rng.int(run.length); out.push([run[j]!, at(line - 1, (j + k - run.length + 1))]); }
+        run = [];
+      }
+    }
+    return out;
+  }
+  if (style === 'division') {
+    // Every passage open, then each region cut across its longer side by a wall with one gap, down to single rows
+    // and columns.
+    const shut = new Set<string>();
+    const cut = (r0: number, c0: number, r1: number, c1: number) => {
+      const h = r1 - r0 + 1, w = c1 - c0 + 1;
+      if (h < 2 || w < 2) return;
+      const across = h > w || (h === w && rng.next() < 0.5);
+      if (across) {
+        const k = r0 + rng.int(h - 1), gap = c0 + rng.int(w);
+        for (let c = c0; c <= c1; c++) if (c !== gap) shut.add(`${k * n + c}:${(k + 1) * n + c}`);
+        cut(r0, c0, k, c1); cut(k + 1, c0, r1, c1);
+      } else {
+        const k = c0 + rng.int(w - 1), gap = r0 + rng.int(h);
+        for (let r = r0; r <= r1; r++) if (r !== gap) shut.add(`${r * n + k}:${r * n + k + 1}`);
+        cut(r0, c0, r1, k); cut(r0, k + 1, r1, c1);
+      }
+    };
+    cut(0, 0, m - 1, n - 1);
+    for (let i = 0; i < N; i++) {
+      if (i % n < n - 1 && !shut.has(`${i}:${i + 1}`)) out.push([i, i + 1]);
+      if (i + n < N && !shut.has(`${i}:${i + n}`)) out.push([i, i + n]);
+    }
+    return out;
+  }
+  // The growing tree: from its newest cell (winding) or a random one (branching); a braided maze, or a plan with no
+  // style, grows from either as `winding` says.
+  const newest = style === 'winding' ? Math.max(winding, 0.85) : style === 'branching' ? Math.min(winding, 0.15) : winding;
+  const seen = new Uint8Array(N);
+  const first = rng.int(N);
+  seen[first] = 1;
+  const active = [first];
+  while (active.length) {
+    const k = rng.next() < newest ? active.length - 1 : rng.int(active.length);
+    const here = active[k]!;
+    const free = neighbours(here).filter(j => !seen[j]);
+    if (!free.length) { active.splice(k, 1); continue; }
+    const next = rng.pick(free);
+    out.push([here, next]);
+    seen[next] = 1;
+    active.push(next);
+  }
+  return out;
 }
 
 /** Steps from `from` to every cell, over every cell but walls (-1 where none reach). */

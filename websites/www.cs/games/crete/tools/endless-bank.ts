@@ -9,6 +9,7 @@
 // at once at most, each under systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=0. `write` leaves out a
 // level whose layout repeats one its grade's bank has kept. Run from games/crete.
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { search } from '../src/endless/generate.ts';
 import type { BankLevel } from '../src/endless/generate.ts';
 import { bandAfter, chapterOf, hiddenBand, knownOf, mazeOverlap, GRADE_BANDS } from '../src/endless/gate.ts';
@@ -32,15 +33,17 @@ export function bandsOf(grade: Grade): Band[] {
 }
 
 /** One bank job: a grade, the tier it searches at, the family it must hold (null for any), and the band it falls in,
- *  by its index in bandsOf; `hidden` for a level that hides walls, in the hidden band of that place. */
-export interface Job { grade: Grade; tier: number; family: Family | null; band: number; hidden: boolean }
+ *  by its index in bandsOf; `hidden` for a level that hides walls, in the hidden band of that place; `large` for a
+ *  board drawn from LARGE, past the sides a run's searches mostly find in time. */
+export interface Job { grade: Grade; tier: number; family: Family | null; band: number; hidden: boolean; large?: boolean }
 
 const CH1: Family[] = ['keys', 'water', 'fire', 'ice', 'force', 'blocks', 'toggle', 'mirror', 'cow'];
 const LATER: Family[] = ['gravel', 'popup', 'snare', 'teleport', 'ball', 'glider', 'fireball', 'thief', 'bomb', 'clone'];
 
 /** The jobs for each grade: every family of every chapter once (Chapter 1's at tier 1, so tier 1 has a run; the
  *  rest at their own chapter), fake and invisible walls in hidden bands, two more Chapter 1 levels, two more that hide
- *  walls, and three more on the plateau. The bands go round in turn, so each band gets levels. */
+ *  walls, and three more on the plateau and PLATEAU_MORE past them. The bands go round in turn, so each band gets
+ *  levels. */
 export function jobsOf(grade: Grade): Job[] {
   const n = bandsOf(grade).length;
   const out: Job[] = [];
@@ -55,15 +58,24 @@ export function jobsOf(grade: Grade): Job[] {
     out.push({ grade, tier, family: f, band: Math.min(band, n - 1), hidden: true });
   }
   for (const tier of [5, 7, 9]) out.push({ grade, tier, family: null, band: n - 1, hidden: false });
+  // More on the plateau, where a run stays and its searches run out most often: at every tier in turn, the highest
+  // first, every other one a large board, so a run that leans on the bank meets a new size and style each time.
+  for (let k = 0; k < PLATEAU_MORE[grade]; k++) out.push({ grade, tier: 10 - (k % 10), family: null, band: n - 1, hidden: false, large: k % 2 === 0 });
   return out;
 }
+/** The sides a large bank board is drawn from (generate.ts's sidesOf, which stretches some past them). */
+const LARGE: Readonly<Record<Grade, readonly [number, number]>> = { easy: [17, 21], medium: [19, 23], hard: [21, 25] };
+/** The plateau levels each grade's bank holds past the three above. */
+const PLATEAU_MORE: Readonly<Record<Grade, number>> = { easy: 8, medium: 14, hard: 24 };
 export const JOBS: readonly Job[] = GRADES.flatMap(jobsOf);
 
 /** A bank job gives up past this many situations and is written as skipped. */
 const JOB_BUDGET = 400_000_000;
 
-const [cmd, ...args] = process.argv.slice(2);
-if (cmd === 'fill') {
+const [cmd, ...args] = import.meta.url === pathToFileURL(process.argv[1] ?? '').href ? process.argv.slice(2) : ['none'];
+if (cmd === 'none') {
+  // Imported, not run: JOBS and jobsOf only.
+} else if (cmd === 'fill') {
   const [laneS, lanesS, dir] = args;
   const lane = Number(laneS), lanes = Number(lanesS);
   const done = new Set<string>();
@@ -80,13 +92,13 @@ if (cmd === 'fill') {
   }
   const known = knownOf(campaignLevels());
   JOBS.forEach((job, j) => {
-    const id = `${j}:${job.grade}:${job.tier}:${job.family ?? 'any'}:${job.band}${job.hidden ? ':hidden' : ''}`;
+    const id = `${j}:${job.grade}:${job.tier}:${job.family ?? 'any'}:${job.band}${job.hidden ? ':hidden' : ''}${job.large ? ':large' : ''}`;
     if (j % lanes !== lane || done.has(id)) return;
     const plain = bandsOf(job.grade)[job.band]!;
     const band = job.hidden ? hiddenBand(plain) : plain;
     const at = { tries: 0, spent: 0 };
     const t0 = Date.now();
-    const found = search(['bank', job.grade, j], { tier: job.tier, grade: job.grade, band, hides: job.hidden, family: job.family }, null, known,
+    const found = search(['bank', job.grade, j], { tier: job.tier, grade: job.grade, band, hides: job.hidden, family: job.family, look: false, ...(job.large ? { sides: LARGE[job.grade] } : {}) }, null, known,
       others[job.grade], JOB_BUDGET, at, undefined, process.env.TRACE ? line => process.stderr.write(`  ${line.slice(0, 300)}\n`) : undefined);
     if (!found) {
       process.stderr.write(`job ${id}: skipped past ${JOB_BUDGET}\n`);

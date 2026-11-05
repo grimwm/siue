@@ -26,7 +26,7 @@ import type { Difficulty } from '../puzzle/difficulty.ts';
 import { rngOf, hash } from './random.ts';
 import type { Rng } from './random.ts';
 import { draft, familiesOf, mutate, textOf, FAMILY_CHAPTER, HIDING, STYLES } from './draft.ts';
-import type { Family, Plan, Sketch } from './draft.ts';
+import type { Family, Plan, Sketch, Style } from './draft.ts';
 import {
   bandAfter, bandProblems, chapterOf, floorOf, hiddenBand, hidesWalls, levelChecks, likeness, newProblems, runProblems, tidyProblems,
   CHECK_CAP, CLIMB, EXPLORED_MOST, GRADE_BANDS, HIDDEN_EASE, HIDDEN_EVERY,
@@ -104,14 +104,14 @@ const COW_HARD = 8;
  *  drawn from between them, by how far up the climb its band stands (`reachOf`), so a run's boards grow from small
  *  to large, the most at Hard. */
 export const SIDES: Record<Grade, { first: readonly [number, number]; plateau: readonly [number, number] }> = {
-  easy: { first: [11, 13], plateau: [13, 19] },
-  medium: { first: [11, 15], plateau: [15, 21] },
-  hard: { first: [13, 15], plateau: [15, 23] },
+  easy: { first: [11, 13], plateau: [15, 17] },
+  medium: { first: [13, 15], plateau: [15, 19] },
+  hard: { first: [13, 15], plateau: [15, 21] },
 };
 /** The share of drafts that stretch: one side from the top of the range and past it by up to STRETCH, the other from
  *  the bottom half, a wide board or a tall one. */
-const STRETCHED = 0.35;
-const STRETCH = 6;
+const STRETCHED = 0.3;
+const STRETCH = 4;
 
 /** How far up its grade's climb `band` stands: 0 at the first level's band, 1 on the plateau. */
 export function reachOf(band: Band, grade: Grade): number {
@@ -137,9 +137,19 @@ export function sidesOf(rng: Rng, grade: Grade, reach: number, range: readonly [
   return [side(lo, hi), side(lo, hi)];
 }
 
+/** How often each style is drawn: the plain growing tree, whose levels pass the gate most often in time, as often as
+ *  three others together, so a run's searches find its levels about as often as they would with it alone, while the
+ *  run's look check (gate.ts's runLikeness) keeps its levels from looking alike. */
+export const STYLE_WEIGHTS: Readonly<Record<Style, number>> = { tree: 3, winding: 1, branching: 1, sidewinder: 1, division: 1, braided: 1 };
+const styleOf = (rng: Rng): Style => {
+  let k = rng.int(STYLES.reduce((n, s) => n + STYLE_WEIGHTS[s], 0));
+  for (const s of STYLES) { k -= STYLE_WEIGHTS[s]; if (k < 0) return s; }
+  return STYLES[0]!;
+};
+
 /** A draft's size, maze and families, drawn for the run's grade at `reach` up its climb (reachOf); with `family`,
  *  always with that family (the bank's tool asks for one, so every piece has levels of its own). Its style is drawn
- *  from STYLES, and its board grows with `reach` (or is drawn from `range`), with two relics or more from half way
+ *  from STYLES by STYLE_WEIGHTS, and its board grows with `reach` (or is drawn from `range`), with two relics or more from half way
  *  up. */
 export function planOf(rng: Rng, tier: number, grade: Grade, hides: boolean, family: Family | null = null, reach = 0, range: readonly [number, number] | null = null): Plan {
   let all = familiesOf(tier).filter(f => !HIDING.includes(f));
@@ -152,11 +162,11 @@ export function planOf(rng: Rng, tier: number, grade: Grade, hides: boolean, fam
   if (hides) families.push(family && HIDING.includes(family) ? family : rng.pick(HIDING));
   for (const f of rng.shuffle(all)) if (families.length < count + (hides ? 1 : 0) && !families.includes(f)) families.push(f);
   const [rows, cols] = sidesOf(rng, grade, reach, range);
-  const style = rng.pick(STYLES);
+  const style = styleOf(rng);
   const roll = rng.next();
   return {
     rows, cols, families, relics: (reach >= 0.5 ? 2 : 1) + rng.int(2), style,
-    winding: 0.3 + 0.6 * rng.next(), braid: style === 'braided' ? 0.95 + 0.05 * rng.next() : 0.45 + 0.45 * rng.next(),
+    winding: 0.3 + 0.6 * rng.next(), braid: style === 'braided' ? 0.95 + 0.05 * rng.next() : 0.45 + 0.5 * rng.next(),
     chambers: roll < 0.85 ? 0 : roll < 0.97 ? 1 : 2,
   };
 }

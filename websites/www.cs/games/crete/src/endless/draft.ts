@@ -1,6 +1,7 @@
 /* The Island of Crete: Endless's drafts. A draft is a maze of corridors one cell wide: its cells stand on a lattice
  * (every odd row and column), joined through the wall cells between them in one of several styles (`STYLES`), each
- * with a look of its own: long winding corridors (a growing tree that grows from its newest cell), many short
+ * with a look of its own: corridors both long and branching (a growing tree), long winding corridors (one that grows
+ * from its newest cell), many short
  * branches (one that grows from a random cell), long straight corridors all running one way (a sidewinder), long
  * straight walls with a gap in each (recursive division), and loops everywhere (a braided maze). Some dead ends are then broken through
  * into a neighbour, making loops, and now and then a few cells are opened into a small chamber. The pieces of a few
@@ -32,12 +33,13 @@ export function familiesOf(tier: number): Family[] {
 /** Fake and invisible walls: a level that holds one is held to the gentler band (difficulty.ts's HIDDEN). */
 export const HIDING: readonly Family[] = ['fake', 'invisible'];
 
-/** How a draft's maze is carved: `winding`, a growing tree from its newest cell (long winding corridors);
+/** How a draft's maze is carved: `tree`, a growing tree that grows from its newest cell or a random one as the plan's
+ *  `winding` says (corridors both long and branching); `winding`, one from its newest cell (long winding corridors);
  *  `branching`, one from a random cell (many short branches); `kruskal`, passages opened in a random order wherever
  *  they join two parts (short dead ends everywhere); `division`, the board cut again and again by a straight wall
  *  with one gap (long straight walls); `braided`, a growing tree whose dead ends are nearly all broken into loops. */
-export type Style = 'winding' | 'branching' | 'sidewinder' | 'division' | 'braided';
-export const STYLES: readonly Style[] = ['winding', 'branching', 'sidewinder', 'division', 'braided'];
+export type Style = 'tree' | 'winding' | 'branching' | 'sidewinder' | 'division' | 'braided';
+export const STYLES: readonly Style[] = ['tree', 'winding', 'branching', 'sidewinder', 'division', 'braided'];
 
 /** What a draft is drawn from. */
 export interface Plan {
@@ -324,8 +326,8 @@ function carving(rng: Rng, style: Style | undefined, m: number, n: number, windi
     }
     return out;
   }
-  // The growing tree: from its newest cell (winding) or a random one (branching); a braided maze, or a plan with no
-  // style, grows from either as `winding` says.
+  // The growing tree: from its newest cell (winding) or a random one (branching); a tree, a braided maze or a plan
+  // with no style grows from either as `winding` says.
   const newest = style === 'winding' ? Math.max(winding, 0.85) : style === 'branching' ? Math.min(winding, 0.15) : winding;
   const seen = new Uint8Array(N);
   const first = rng.int(N);

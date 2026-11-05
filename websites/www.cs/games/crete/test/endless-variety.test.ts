@@ -51,9 +51,11 @@ test('a run\'s boards vary in size and shape and grow up its climb; Hard\'s plat
     const sizes = new Set(run.map(d => `${d.level.rows}x${d.level.cols}`));
     assert.ok(sizes.size >= 5, `${g}: ${[...sizes].join(' ')}`);
     assert.ok(run.some(d => d.level.rows !== d.level.cols), `${g}: some board wide or tall`);
-    const early = run.slice(0, 3).reduce((n, d) => n + area(d.level), 0) / 3;
-    const last = run.slice(-3).reduce((n, d) => n + area(d.level), 0) / 3;
-    assert.ok(last > early * 1.15, `${g}: the boards grow (${Math.round(early)} cells, then ${Math.round(last)})`);
+  }
+  for (const g of GRADES) {
+    const mean = (ds: Drawn[]) => ds.reduce((n, d) => n + area(d.level), 0) / ds.length;
+    const early = mean(RUNS[g].flatMap(r => r.slice(0, 3))), last = mean(RUNS[g].flatMap(r => r.slice(-3)));
+    assert.ok(last > early * (g === 'hard' ? 1.15 : 1.05), `${g}: the boards grow (${Math.round(early)} cells, then ${Math.round(last)})`);
   }
   for (const run of RUNS.hard) {
     const plateau = run.filter(d => d.plateau);

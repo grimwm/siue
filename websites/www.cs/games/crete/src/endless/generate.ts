@@ -265,9 +265,10 @@ function emptiest(variants: readonly Level[]): Level {
   return variants.reduce((a, b) => (walls(b) < walls(a) ? b : a));
 }
 
-/** The bank's level for this place: one the tier offers, that hides walls when the place does (else one that does
- *  not), in the band (else within the climb from the run's last plain level, else on the plateau), not among the
- *  run's last levels, picked by the seed and depth. */
+/** The bank's level for this place: one the tier offers that looks like none of the run's last levels (newProblems),
+ *  that hides walls when the place does (else one that does not), in the band (else within the climb from the run's
+ *  last plain level, else on the plateau, else a gentle step from that level), picked by the seed and depth; only
+ *  when the tier offers no such level, one of the rest by the same ladder. */
 export function fromBank(bank: readonly BankLevel[], req: Request, band: Band, hides = false): BankLevel {
   const recent = req.run.slice(-RUN_MEMORY);
   const offered = bank.filter(b => b.chapter <= req.tier);
@@ -283,15 +284,17 @@ export function fromBank(bank: readonly BankLevel[], req: Request, band: Band, h
     b => b.score >= plateau.least && b.score <= plateau.most,
   ];
   const pick = (ok: readonly BankLevel[]) => ok[hash('endless-bank', req.seed, req.tier, req.grade, req.depth) % ok.length]!;
-  // Only when no level the tier offers looks new does a level like one of the run's come back, never the one just
+  // Only when no level the tier offers looks new does one like a level of the run's come back, never the one just
   // played while the tier offers another.
   const notLast = offered.filter(b => b.text !== req.run.at(-1)?.text);
-  // A fresh level matters most, then the band: a fresh level on the ladder comes before an old one in the band; past
-  // the ladder, any fresh level before any old one.
-  const tries: [readonly BankLevel[], (b: BankLevel) => boolean][] = [
-    ...ladder.map(fits => [fresh, fits] as [readonly BankLevel[], (b: BankLevel) => boolean]),
-    ...ladder.map(fits => [notLast, fits] as [readonly BankLevel[], (b: BankLevel) => boolean]),
-    [fresh, () => true], [notLast, () => true],
+  // A fresh level matters most, then the band: a fresh level on the ladder, or a step from the last plain level's
+  // score no steeper than the climb's or a hidden level's ease, comes before an old one; any fresh level before any
+  // old one off the ladder.
+  const gentle = (b: BankLevel) => prev !== null && b.score >= prev * HIDDEN_EASE.least && b.score <= Math.max(prev * CLIMB.most, plateau.most);
+  const any = () => true;
+  type Try = readonly [readonly BankLevel[], (b: BankLevel) => boolean];
+  const tries: Try[] = [
+    ...ladder.map((fits): Try => [fresh, fits]), [fresh, gentle], ...ladder.map((fits): Try => [notLast, fits]), [fresh, any], [notLast, any],
   ];
   for (const [pool, fits] of tries) {
     const ok = pool.filter(fits);

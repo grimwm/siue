@@ -1,0 +1,45 @@
+name: crete-verify
+
+# The shared Endless bank's trusted verifier (websites/www.cs/games/crete/tools/verify-bank.ts). Every six hours,
+# and by hand from the Actions tab, it asks www.cs's bank endpoint over HTTPS for the levels waiting in quarantine,
+# makes each again from its tuple with main's generator, and posts a match or a mismatch; one trusted match admits
+# a level, so the bank grows even when only one player visits. It never uses ssh or sftp (the host's fail2ban bans
+# repeated logins). Each run checks at most 25 levels in at most 45 minutes, and a failed run only leaves levels for
+# the next one.
+#
+# The one secret is CRETE_BANK_VERIFIER_TOKEN, a secret of the `production` environment (which only admits runs
+# from main), the same one the deploy turns into the server's hash (games/crete/bank/verifier.json). A workflow on
+# another branch cannot read it. Without it the run does nothing.
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crete-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "24"
+
+      - name: Check the levels waiting in the shared bank
+        continue-on-error: true
+        env:
+          CRETE_BANK_VERIFIER_TOKEN: ${{ secrets.CRETE_BANK_VERIFIER_TOKEN }}
+        run: node websites/www.cs/games/crete/tools/verify-bank.ts --items 25 --minutes 45

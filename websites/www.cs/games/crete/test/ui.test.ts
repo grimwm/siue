@@ -301,6 +301,7 @@ const game: Game = createGame({
 });
 let toggled = 0;
 let musics = 0;
+let helpChecks = 0;
 let backgrounds = 0;
 let backs = 0;
 /* The editor as the page sees it: what it was asked to do, and every key it was handed. */
@@ -313,7 +314,7 @@ const editor = {
 };
 const looks: string[] = [];
 flow.bindControls({
-  game, toggleMute() {}, toggleMusic() { musics++; }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, setPad(side) { looks.push(`pad:${side}`); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: (at?: number) => (at === undefined ? flow.showChapter(1, false) : flow.showChapter(chapterOf(at).chapter.n, false, at)), backToEditor: () => { backs++; },
+  game, toggleMute() {}, toggleMusic() { musics++; }, toggleHelpCheck() { helpChecks++; }, toggleBackground() { backgrounds++; }, setLook(l) { looks.push(l); }, setWalls(w) { looks.push(w); }, setPad(side) { looks.push(`pad:${side}`); }, toggleFullscreen() { toggled++; }, wake() {}, quit() {}, play: (at?: number) => (at === undefined ? flow.showChapter(1, false) : flow.showChapter(chapterOf(at).chapter.n, false, at)), backToEditor: () => { backs++; },
   editor, leftEditor: () => { edits.push('left'); },
 });
 const key = (k: string) => fireDocument('keydown', { key: k, target: { tagName: 'DIV' } });
@@ -493,7 +494,7 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   toggled = 0;
   key('q');
   const at = () => document.activeElement?.id;
-  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'walls-solid', 'walls-ghosted', 'walls-low', 'minimap-switch', 'menu-view-tips', 'menu-reset-tips', 'pad-left', 'pad-right', 'menu-lore', 'quit'];
+  const order = ['menu-close', 'mute', 'music', 'music-hidden', 'fullscreen', 'help-check', 'walls-solid', 'walls-ghosted', 'walls-low', 'minimap-switch', 'menu-view-tips', 'menu-reset-tips', 'pad-left', 'pad-right', 'menu-lore', 'quit'];
   const first = order.indexOf(at() ?? '');
   assert.ok(first >= 0, `focus is on a menu button, not ${at()}`);
   for (let i = 0; i < 8; i++) key('ArrowUp');
@@ -507,15 +508,34 @@ test('in the menu, down and up (or j and k) move the focus through its buttons a
   key('s');
   assert.equal(at(), 'fullscreen');
   key('j');
+  assert.equal(at(), 'help-check');
+  key('j');
   assert.equal(at(), 'walls-solid');
   for (let i = 0; i < 8; i++) key('j');
   assert.equal(at(), 'menu-lore');
-  for (let i = 0; i < 9; i++) key('k');
+  for (let i = 0; i < 10; i++) key('k');
   assert.equal(at(), 'fullscreen');
   key('Enter');
   assert.equal(toggled, 1);
   for (let i = 0; i < order.length + 2; i++) key('ArrowDown');
   assert.equal(at(), 'quit', 'clamped at the bottom');
+});
+
+test('Help Check Endless Levels is a switch in the menu, on until turned off, with a line that says what it does', () => {
+  reset();
+  key('q');
+  const sw = () => byId(rootOf('menu'), 'help-check');
+  assert.equal(sw().getAttribute('role'), 'switch');
+  assert.equal(sw().getAttribute('aria-checked'), 'true');
+  assert.match(sw().textContent ?? '', /^Help Check Endless Levels/);
+  assert.match(sw().textContent ?? '', /spare time/);
+  const before = helpChecks;
+  click(sw());
+  assert.equal(helpChecks, before + 1);
+  flow.setHelpCheck(false);
+  assert.equal(sw().getAttribute('aria-checked'), 'false');
+  flow.setHelpCheck(true);
+  flow.closeLayers();
 });
 
 test('Music sits beside Sound in the menu, says whether it is on, and asks for its switch', () => {

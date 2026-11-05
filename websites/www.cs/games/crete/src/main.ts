@@ -58,6 +58,8 @@ import type { Grade } from './puzzle/rating.ts';
 import { createEndlessClient, workersFor, workersNow } from './endless/client.ts';
 import type { WorkerLike as EndlessWorker } from './endless/client.ts';
 import { createEndlessMode } from './endless/mode.ts';
+import { createSharedBank } from './endless/shared.ts';
+import { createVerifier, mayCheck } from './endless/verifier.ts';
 import { tierOf } from './endless/tier.ts';
 import { newSeed } from './endless/random.ts';
 
@@ -142,8 +144,32 @@ const ui = createUi({ atlas, icons: iconsJson as IconSheet, thumb, board, progre
 /* Each grade keeps its own run and best; the card shows the grade chosen last. */
 const endlessSaves = Object.fromEntries(GRADES.map(g => [g, createEndlessSaved(browserStorage(), g)])) as Record<Grade, ReturnType<typeof createEndlessSaved>>;
 const endlessGrade = gradePref(browserStorage());
-const endlessClient = createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker,
-  () => endlessWorkers(), partStore(browserStorage(), ENDLESS_WORKER_V));
+const endlessWorker = () => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker;
+const endlessClient = createEndlessClient(endlessWorker, () => endlessWorkers(), partStore(browserStorage(), ENDLESS_WORKER_V));
+/* The shared bank: every level the search makes goes up to it, and a run started with New Run takes levels from it
+   when they fit (src/endless/shared.ts). Its levels are checked by other devices in the background (the verifier).
+   Do Not Track or Global Privacy Control turns the sending off (the uploads and the checks); shared levels still
+   come in. */
+const sendsNothing = (() => {
+  const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
+  return nav.doNotTrack === '1' || (window as unknown as { doNotTrack?: string }).doNotTrack === '1' || nav.globalPrivacyControl === true;
+})();
+const sharedBank = createSharedBank({
+  fetch: (url, init) => fetch(url, init),
+  storage: browserStorage(),
+  now: () => Date.now(),
+  random: () => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32,
+  url: new URL('endless-bank.php', window.location.href).toString(),
+  quiet: sendsNothing,
+});
+const verifier = createVerifier({
+  spawn: endlessWorker,
+  claim: v => sharedBank.claim(v),
+  send: (ticket, found) => sharedBank.verdict(ticket, found),
+  now: () => Date.now(),
+  setTimeout: (f, ms) => window.setTimeout(f, ms),
+  clearTimeout: id => window.clearTimeout(id as number),
+});
 const endless = createEndlessMode({
   saved: grade => endlessSaves[grade],
   grade: () => endlessGrade.get(),
@@ -154,6 +180,8 @@ const endless = createEndlessMode({
   play: (level, about, line) => outside.play(level, about, line),
   changed: () => { ui.refresh(); followEndless(); },
   budget: () => endlessBudget,
+  shared: { take: req => sharedBank.take(req) },
+  made: (req, part, made) => { sharedBank.keep(req.grade, made); sharedBank.upload(req, part, made); },
 });
 /* Endless's levels are made in the background too, outside a run: with one worker, once the page has been quiet
    for ENDLESS_WARM_MS, while it shows and the solver's worker is idle, and not on a low battery that is draining.
@@ -176,7 +204,14 @@ function endlessWorkers(): number {
 function followEndless(): void {
   if (!endlessReady) return;
   endlessClient.resize();
-  if (!inEndlessRun() && endlessWorkers() > 0) endless.ahead();
+  const free = !inEndlessRun() && endlessWorkers() > 0;
+  if (free) endless.ahead();
+  // Checking others' levels takes turns with the page's own levels: only once Endless has nothing of its own to make.
+  verifier.allow(mayCheck({
+    run: inEndlessRun(), warm: endlessWarm, shown: pageShown, solving: solverBusy(), battery: endlessBattery,
+    endlessIdle: endless.idle(), on: settings.helpCheck.get() === 'on', sendsNothing, specBudget: endlessBudget !== undefined,
+  }));
+  if (endlessWarm || ui.top() === 'endless') void sharedBank.refill(endlessGrade.get(), tierOf(CHAPTERS, id => progress.get(id).cleared));
 }
 watchSolver(() => followEndless());
 /** The Endless search's budget a browser spec set through the test hook; the generator's own otherwise. */
@@ -363,6 +398,14 @@ function toggleMinimap(): void {
   ui.setMinimap(on);
   modern?.minimap(on);
   ui.say(on ? 'Mini Map on.' : 'Mini Map off.', 'info');
+}
+
+function toggleHelpCheck(): void {
+  const on = settings.helpCheck.get() !== 'on';
+  settings.helpCheck.set(on ? 'on' : 'off');
+  ui.setHelpCheck(on);
+  ui.say(on ? 'Checking Endless levels on.' : 'Checking Endless levels off.', 'info');
+  followEndless();
 }
 
 /* Show View Tips (the menu, the ? key): the modern board's tips by the compass again; the classic board has none. */
@@ -763,7 +806,7 @@ function noModern(why: string): void {
 
 function start(): void {
   ui.bindControls({
-    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, showViewTips, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
+    game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, toggleHelpCheck, showViewTips, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
     endless: { mode: endless, link: endlessLink, copy: link => { void copyLink(link); } },
   });
@@ -781,6 +824,7 @@ function start(): void {
   ui.setLook(settings.look.get(), settings.walls.get());
   ui.setPad(settings.pad.get());
   ui.setMinimap(settings.minimap.get() === 'on');
+  ui.setHelpCheck(settings.helpCheck.get() === 'on');
   const moveMap = createMoveMap();
   ui.setMoveDir(dir => moveMap(dir, modernOn && modern ? modern.yaw() : ui.classicView().yaw));
   showLook(settings.look.get());
@@ -948,4 +992,4 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
-window.__creteTest = { endless: { mode: endless, get saved() { return endlessSaves[endlessGrade.get()]; }, saves: endlessSaves, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); } }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook, cues: cuesHook };
+window.__creteTest = { endless: { mode: endless, get saved() { return endlessSaves[endlessGrade.get()]; }, saves: endlessSaves, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); }, shared: sharedBank }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook, cues: cuesHook };

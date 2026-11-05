@@ -168,4 +168,49 @@ final class AdminDeployTest extends TestCase
         self::assertStringNotContainsString('chmod 2755 admin', $src);
     }
 
+    /** Crete's trusted verifier token: only its hash is staged, only when set and valid, and the token is never printed */
+    public function testTheVerifierTokenIsStagedAsAHashOnlyWhenSet(): void
+    {
+        $site = escapeshellarg(self::site());
+        $token = 'tok_' . bin2hex(random_bytes(20));
+        $with = [];
+        exec("cd $site && LIST=1 CRETE_BANK_VERIFIER_TOKEN=$token ./deploy.sh 2>&1", $with, $code);
+        self::assertSame(0, $code, implode(' | ', array_slice($with, -3)));
+        self::assertContains('games/crete/bank/verifier.json', $with);
+        self::assertStringNotContainsString($token, implode("\n", $with));
+        $without = [];
+        exec("cd $site && env -u CRETE_BANK_VERIFIER_TOKEN LIST=1 ./deploy.sh 2>&1", $without, $code);
+        self::assertSame(0, $code);
+        self::assertNotContains('games/crete/bank/verifier.json', $without);
+        $bad = [];
+        exec("cd $site && LIST=1 CRETE_BANK_VERIFIER_TOKEN='short;rm' ./deploy.sh 2>&1", $bad, $code);
+        self::assertNotSame(0, $code, 'an invalid token stops the deploy');
+        self::assertContains('deploy: CRETE_BANK_VERIFIER_TOKEN is not valid', $bad);
+        self::assertStringNotContainsString('short;rm', implode("\n", $bad));
+        $src = (string) file_get_contents(self::site() . '/deploy.sh');
+        foreach (explode("\n", $src) as $line) {
+            if (preg_match('/\$\{?CRETE_BANK_VERIFIER_TOKEN\b/', $line) && preg_match('/\b(echo|printf|cat|tee)\b/', $line)) {
+                self::assertStringContainsString('| sha256sum', $line, 'the token is only ever hashed: ' . $line);
+            }
+        }
+        self::assertStringContainsString("printf '%s' \"\$CRETE_BANK_VERIFIER_TOKEN\" | sha256sum", $src);
+        self::assertStringContainsString('    games/crete/bank/verifier.json) continue ;;', $src);
+    }
+
+    /** Crete's bank folder is made after the upload batch, every line failure-tolerant, 770 before the setgid try, and never staged */
+    public function testTheGameDataBatchFollowsTheUploadAndIsFailureTolerant(): void
+    {
+        $out = [];
+        exec('cd ' . escapeshellarg(self::site()) . ' && GAME_DATA_BATCH=1 ./deploy.sh 2>&1', $out, $code);
+        self::assertSame(0, $code);
+        self::assertSame(['-mkdir games/crete/data', '-chmod 770 games/crete/data', '-chmod 2770 games/crete/data'], $out);
+        $src = (string) file_get_contents(self::site() . '/deploy.sh');
+        $upload = strpos($src, "# 3. Upload the changed files.");
+        $batch = strpos($src, 'game_data_batch >"$work/game-data"');
+        self::assertNotFalse($batch);
+        self::assertGreaterThan(strpos($src, 'sftp_batch "$work/batch"', $upload), $batch, 'after the upload batch makes games/crete/');
+        self::assertLessThan(strpos($src, '# 4. Stamp last.'), $batch, 'before the stamp');
+        self::assertStringContainsString('    games/crete/data/*) continue ;;', $src);
+    }
+
 }

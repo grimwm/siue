@@ -30,6 +30,14 @@
 # the manifest; it is never in git. When unset or empty nothing is staged and
 # the site runs on Admin\People's defaults. A host's earlier studio.json is a
 # file the last deploy sent that this one does not, so PRUNE=1 deletes it.
+#
+# CRETE_BANK_VERIFIER_TOKEN (the CRETE_BANK_VERIFIER_TOKEN GitHub secret) is
+# optional too: the token Crete's trusted level verifier sends. When set it
+# must be 32 to 128 letters, digits, '-' or '_' (anything else stops the
+# deploy, without printing it), and only its sha256 is staged, as
+# games/crete/bank/verifier.json, joining the hash and the manifest. When
+# unset or empty nothing is staged and endless-bank.php answers every trusted
+# call 401.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -136,11 +144,27 @@ if [ "${ADMIN_BATCH:-0}" = 1 ]; then
   exit 0
 fi
 
+# Crete's shared level bank lives in games/crete/data/, the server's like the
+# admin login's database: made when missing, never staged, uploaded or pruned,
+# 770 then (when allowed) 2770 the same way and for the same reason. It runs
+# after the upload batch, which makes games/crete/ on a first deploy; data/ is
+# never staged, so that batch's chmod 755 never touches it.
+game_data_batch() {
+  printf '%s\n' '-mkdir games/crete/data' '-chmod 770 games/crete/data' '-chmod 2770 games/crete/data'
+}
+if [ "${GAME_DATA_BATCH:-0}" = 1 ]; then
+  game_data_batch
+  exit 0
+fi
+
 # 1. Stage.
 while IFS= read -r -d '' f; do
   [ -e "$f" ] || continue # deleted but still in the index
   case "$f" in
     "$SCORES") continue ;;
+    # The verifier's token hash comes from the environment only (below), never
+    # from a stray local copy.
+    games/crete/bank/verifier.json) continue ;;
     # Development files that ride along with games: tests, maintainer notes
     # (README.md), each game's tools/ folder (generators for files that do
     # ship; nothing at runtime runs them), the room protocol fixtures
@@ -170,6 +194,8 @@ while IFS= read -r -d '' f; do
     # never staged, so never uploaded, never chmodded, and never in the
     # manifest a PRUNE reads.
     games/tankity/data/*) continue ;;
+    # Crete's shared level bank likewise.
+    games/crete/data/*) continue ;;
     # The admin login's storage (its database) likewise.
     admin/data/*) continue ;;
     # The admin login's pages, stylesheet, libraries and their .htaccess files
@@ -220,6 +246,16 @@ if [ -n "${STUDIO_CONFIG:-}" ]; then
     echo "deploy: STUDIO_CONFIG is not valid (the studio-config field of the SIUE music studio config item)" >&2
     exit 1
   fi
+fi
+# The trusted verifier's token: its sha256 only, and only when set.
+if [ -n "${CRETE_BANK_VERIFIER_TOKEN:-}" ]; then
+  if ! [[ "$CRETE_BANK_VERIFIER_TOKEN" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
+    echo "deploy: CRETE_BANK_VERIFIER_TOKEN is not valid" >&2
+    exit 1
+  fi
+  mkdir -p "$stage/games/crete/bank"
+  token_sha=$(printf '%s' "$CRETE_BANK_VERIFIER_TOKEN" | sha256sum | cut -d' ' -f1)
+  printf '{"tokenSha256": "%s"}\n' "$token_sha" >"$stage/games/crete/bank/verifier.json"
 fi
 find "$stage" -type d -exec chmod 755 {} +
 find "$stage" -type f -exec chmod 644 {} +
@@ -310,6 +346,8 @@ sftp_batch "$work/admin-data"
 if [ -s "$work/batch" ]; then
   sftp_batch "$work/batch"
 fi
+game_data_batch >"$work/game-data"
+sftp_batch "$work/game-data"
 if [ "${PRUNE:-0}" = 1 ] && [ -s "$work/gone" ]; then
   # '-rm' so a file someone already removed by hand does not stop the batch.
   sed -e 's/^/-rm "/' -e 's/$/"/' "$work/gone" >"$work/prune"

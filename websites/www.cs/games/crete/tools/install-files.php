@@ -1,6 +1,6 @@
 <?php
 // Keeps The Island of Crete installable: php tools/install-files.php [--check].
-// The work is games/_kit/php/install-core.php; this is Crete's config.
+// The work is games/_kit/php/install-core.php; this is Crete's config (it also keeps server/score-guard.php, server/store-dir.php and server/blocked-initials.json current for endless-bank.php).
 declare(strict_types=1);
 require_once __DIR__ . '/../../_kit/php/install-core.php';
 
@@ -9,4 +9,5 @@ exit(install_run(dirname(__DIR__), [
     'versioned' => ['dist/main.js', 'dist/install.js', 'dist/stats.js', 'dist/kit.css', 'game.css'],
     'precache_dirs' => ['dist', 'fx/looks', 'fx/sprites', 'fx/title'],
     'precache_exclude' => ['tiles-test.*', 'icons-test.*'],
+    'kit_php' => ['score-guard.php', 'store-dir.php', 'blocked-initials.json'],
 ], $argv));

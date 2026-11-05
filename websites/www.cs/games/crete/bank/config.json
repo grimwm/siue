@@ -1,0 +1,19 @@
+{
+  "accept": [1],
+  "parts": 12,
+  "servedCap": 1500,
+  "pendingCap": 300,
+  "pendingDays": 3,
+  "needed": 2,
+  "ticketMinutes": 60,
+  "strikeLimit": 3,
+  "strikeHours": 24,
+  "reportsToRetire": 2,
+  "perHour": { "submit": 30, "claim": 20, "verify": 20, "report": 20, "levels": 120, "trusted": 120 },
+  "runTtlSec": 3600,
+  "startsPerHour": 1,
+  "scoresPerHour": 1,
+  "csrfCookie": "crete_bank_csrf",
+  "storageKey": "crete-bank",
+  "allowedHosts": ["www.cs.siue.edu", "cs.siue.edu"]
+}

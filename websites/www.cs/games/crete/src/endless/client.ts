@@ -25,10 +25,13 @@ export class CancelledError extends Error {
   constructor() { super('the search was cancelled'); this.name = 'CancelledError'; }
 }
 
+/** A level a job came to: with the part that made it, when the search made it (the shared bank's tuple names it). */
+export type MadeAt = Made & { part?: number };
+
 export interface MakeJob {
   progress(cb: (p: Progress) => void): void;
   cancel(): void;
-  result: Promise<Made>;
+  result: Promise<MadeAt>;
 }
 
 export interface EndlessClient {
@@ -121,8 +124,8 @@ export function createEndlessClient(spawn: () => WorkerLike, size: () => number 
       cancel();
       const id = nextId++;
       const listeners: ((p: Progress) => void)[] = [];
-      let settleJob: { resolve: (m: Made) => void; reject: (e: Error) => void } = { resolve: () => {}, reject: () => {} };
-      const result = new Promise<Made>((resolve, reject) => { settleJob = { resolve, reject }; });
+      let settleJob: { resolve: (m: MadeAt) => void; reject: (e: Error) => void } = { resolve: () => {}, reject: () => {} };
+      const result = new Promise<MadeAt>((resolve, reject) => { settleJob = { resolve, reject }; });
       result.catch(() => {});
       const mine = () => current?.id === id;
       const finish = (f: () => void) => { if (!mine()) return; current = null; for (const s of slots) s.busy = null; f(); };
@@ -195,7 +198,11 @@ export function createEndlessClient(spawn: () => WorkerLike, size: () => number 
       /** Settles the job once the parts back decide it: its level, or the bank's when none found one. */
       const decide = (): boolean => {
         const settled = settle(results, parts);
-        if (settled.made) { const made = settled.made; finish(() => settleJob.resolve(made)); return true; }
+        if (settled.made) {
+          const made: MadeAt = { ...settled.made, part: results.findIndex(r => r?.found) };
+          finish(() => settleJob.resolve(made));
+          return true;
+        }
         if (settled.done) bankDue = true;
         return false;
       };

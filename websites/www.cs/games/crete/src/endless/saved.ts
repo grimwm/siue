@@ -32,7 +32,9 @@ export interface RunLevel {
   score: number;
   /** Its shortest line, as move letters. */
   line: string;
-  from: 'made' | 'bank';
+  /** Made by this device's search for this run, the bundled bank's, the shared bank's (src/endless/shared.ts), or
+   *  one this device's search made before, played again. */
+  from: 'made' | 'bank' | 'shared' | 'own';
 }
 
 export interface EndlessRun {
@@ -51,6 +53,9 @@ export interface EndlessRun {
   moves: number;
   /** Some level of the run was cleared with Ariadne's thread: the run sets no best. */
   assisted: boolean;
+  /** Started from a seed the player gave (a link, or Play This Seed): every level is the seed's own, never a shared
+   *  one. Absent in a run started with New Run. */
+  seeded?: boolean;
   /** The fewest moves of an unassisted clear of the level at `depth`, while the run is on it. */
   best: number | null;
 }
@@ -69,7 +74,7 @@ const isCount = (v: unknown): v is number => Number.isInteger(v) && (v as number
 const isLevel = (v: unknown): v is RunLevel => {
   if (typeof v !== 'object' || v === null) return false;
   const l = v as Record<string, unknown>;
-  return isText(l.text) && isCount(l.explored) && isCount(l.shortest) && isCount(l.score) && isText(l.line, 4_000) && (l.from === 'made' || l.from === 'bank');
+  return isText(l.text) && isCount(l.explored) && isCount(l.shortest) && isCount(l.score) && isText(l.line, 4_000) && (l.from === 'made' || l.from === 'bank' || l.from === 'shared' || l.from === 'own');
 };
 const isRun = (v: unknown): v is EndlessRun => {
   if (typeof v !== 'object' || v === null) return false;
@@ -79,7 +84,7 @@ const isRun = (v: unknown): v is EndlessRun => {
     && (r.next === null || isLevel(r.next))
     && (r.ahead === undefined || (Array.isArray(r.ahead) && r.ahead.length < AHEAD && r.ahead.every(isLevel) && (r.ahead.length === 0 || r.next !== null)))
     && isCount(r.cleared) && isCount(r.moves) && typeof r.assisted === 'boolean'
-    && (r.best === null || isCount(r.best));
+    && (r.best === null || isCount(r.best)) && (r.seeded === undefined || typeof r.seeded === 'boolean');
 };
 const isSeed = (v: unknown): v is string => isText(v, 32) && /^[a-z0-9-]+$/.test(v);
 const isUpcoming = (v: unknown): v is Upcoming => {
@@ -104,21 +109,21 @@ const isStored = (v: unknown): v is Stored => {
 export interface EndlessSaved {
   run(): EndlessRun | null;
   best(): EndlessBest | null;
-  /** A new run on `seed` and `tier`, at its first level; the levels after it, made ahead, queue behind it. The
-   *  upcoming run is dropped. */
-  start(seed: string, tier: number, first: Made | RunLevel, after?: readonly RunLevel[]): EndlessRun;
+  /** A new run on `seed` and `tier`, at its first level; the levels after it, made ahead, queue behind it; `seeded`
+   *  when the player gave the seed. The upcoming run is dropped. */
+  start(seed: string, tier: number, first: Made | RunLevel, after?: readonly RunLevel[], seeded?: boolean): EndlessRun;
   /** The next new run chosen ahead of time, while there is no run. */
   upcoming(): Upcoming | null;
   /** Chooses the next new run: `seed`, `tier` and `budget`, with no level made yet. */
   plan(seed: string, tier: number, budget: number | null): Upcoming;
   /** The upcoming run's level at `depth`, made ahead: kept when it is the one after the last made, while it has
    *  fewer than UPCOMING. */
-  addUpcoming(seed: string, depth: number, made: Made): void;
+  addUpcoming(seed: string, depth: number, made: Made | RunLevel): void;
   /** The levels made ahead of the one being played: `next`, then `ahead`. */
   queued(): RunLevel[];
   /** The run's level at `depth`, made ahead: kept when it is the one after the last made (the level being played and
    *  those queued), and the queue holds fewer than AHEAD. */
-  addMade(seed: string, depth: number, made: Made): void;
+  addMade(seed: string, depth: number, made: Made | RunLevel): void;
   /** The run's level was won in `moves`, with the thread's help or not: the clear is counted (once per level, the
    *  first win) and the best kept. */
   won(moves: number, assisted: boolean): EndlessRun | null;
@@ -162,9 +167,9 @@ export function createEndlessSaved(storage: StorageLike | null, grade: Grade = '
   return {
     run: () => table.get().run,
     best: () => table.get().best,
-    start(seed, tier, first, after = []) {
+    start(seed, tier, first, after = [], seeded = false) {
       const [next = null, ...ahead] = after.slice(0, AHEAD).map(level);
-      const run: EndlessRun = { seed, tier, depth: 1, levels: [level(first)], next, ahead, cleared: 0, moves: 0, assisted: false, best: null };
+      const run: EndlessRun = { seed, tier, depth: 1, levels: [level(first)], next, ahead, cleared: 0, moves: 0, assisted: false, best: null, ...(seeded ? { seeded } : {}) };
       table.set({ ...table.get(), run, upcoming: null });
       return run;
     },

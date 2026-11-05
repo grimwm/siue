@@ -7,8 +7,9 @@ name: crete-verify
 # repeated logins). Each run checks at most 25 levels in at most 45 minutes, and a failed run only leaves levels for
 # the next one.
 #
-# The one secret is CRETE_BANK_VERIFIER_TOKEN, the same one the deploy turns into the server's hash
-# (games/crete/bank/verifier.json). Without it the run does nothing.
+# The one secret is CRETE_BANK_VERIFIER_TOKEN, a secret of the `production` environment (which only admits runs
+# from main), the same one the deploy turns into the server's hash (games/crete/bank/verifier.json). A workflow on
+# another branch cannot read it. Without it the run does nothing.
 
 on:
   schedule:
@@ -25,6 +26,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

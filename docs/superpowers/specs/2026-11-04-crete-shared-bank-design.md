@@ -52,7 +52,9 @@ itself: a "match" whose level differs is a mismatch. One trusted match admits a 
 count as before. A level of another generator version is left for the players' devices.
 
 It authenticates with a bearer token in the `X-Crete-Verifier` header (a custom header, since Apache in front of
-PHP-FPM may drop `Authorization`). The token is the GitHub secret `CRETE_BANK_VERIFIER_TOKEN`. The repository is
+PHP-FPM may drop `Authorization`). The token is `CRETE_BANK_VERIFIER_TOKEN`, a secret of the `production` environment,
+which only admits runs from main: both the deploy and the verifier run there, and a workflow pushed on another branch
+cannot read it. Disputed levels are listed to it first. The repository is
 public, so the token is never committed: the deploy (`deploy.sh`, from the same secret, which `deploy.yml` passes in)
 stages `games/crete/bank/verifier.json` holding only the token's SHA-256, and the server compares hashes. Without the
 secret nothing is staged and the trusted calls are refused; the workflow does nothing. The token is never echoed in a
@@ -65,8 +67,10 @@ bundled bank's. So a lone player always has fast levels and never meets an unche
 are served a level only once it is verified.
 
 **Two pools.** A submission waits in quarantine (`pending`), which is served only to verifiers, never to players.
-With two matching verifications it moves to the served pool. One mismatch rejects it and counts a strike against the
-source that uploaded it.
+With two matching verifications it moves to the served pool. A peer's mismatch disputes it: a disputed level is
+never served and never handed to another peer, whatever later matches say, and waits for the trusted verifier
+(below). One peer's word is no proof against the uploader, so only the trusted verifier's mismatch rejects a level
+outright and counts a strike against its source; a disputed level it never reaches expires with quarantine.
 
 **Telling devices apart without personal data.** Each install keeps a random 128-bit id in local storage
 (`crete-endless-device`); the server stores only a hash of it. The server also keys each request's network on an
@@ -83,7 +87,7 @@ The rules:
   no ticket for; it cannot choose which;
 - a verdict is accepted only against a ticket the server issued to that install, unexpired (an hour), once.
 
-**Throttling.** Three strikes in 24 hours against an install, or against a network, and the server refuses that
+**Throttling.** Three strikes (trusted mismatches) in 24 hours against an install, or against a network, and the server refuses that
 source's submissions for the rest of those 24 hours. Rate limits per network: 30 submissions, 20 claims, 20 verdicts,
 20 reports and 120 level fetches an hour.
 
@@ -165,7 +169,7 @@ When a newly served level takes a grade over its cap, one served level is retire
 often-served ones: weight = (1 + days since it came in) × (1 + times served). The newest, least-played levels are
 the least likely to go, but none is safe, so the bank turns over steadily without its oldest levels all leaving at
 once. Players can also retire a level: a client whose checks fail on a served level reports its layout hash, and two
-reports from different installs retire it (this is also how levels a later engine change breaks leave the bank).
+reports from different installs on different networks retire it (this is also how levels a later engine change breaks leave the bank).
 
 ## Download
 
@@ -236,8 +240,10 @@ and waits a minute between claims, and ten after the server has nothing to verif
 
 The bank stores levels. While a level waits for its checks (three days at most) it also keeps a hash of the
 uploading and verifying installs' random ids and their scrambled network codes, whose key is deleted within six days.
-Rate limits keep the same scrambled codes for an hour. Do Not Track or Global Privacy Control turns the sending off
-(uploads and verification), as it turns off the site's visit counts; the page still plays shared levels.
+Rate limits keep the same scrambled codes for an hour; a strike keeps the uploader's for a day, and a report the
+reporter's for three days. The endpoint's CSRF cookie (`crete_bank_csrf`, seven days, HttpOnly, SameSite Strict,
+scoped to the game's folder) is the game's only cookie. Do Not Track or Global Privacy Control turns the sending off
+(uploads, reports and verification), as it turns off the site's visit counts; the page still plays shared levels.
 `privacy.html` says so in a short section.
 
 ## Admin
@@ -267,8 +273,8 @@ store files.
 ## Setup the owner does once
 
 1. Make a token: `openssl rand -hex 32`.
-2. Add it to the repository's secrets as `CRETE_BANK_VERIFIER_TOKEN` (Settings, Secrets and variables, Actions, New
-   repository secret; or `gh secret set CRETE_BANK_VERIFIER_TOKEN`).
+2. Add it as a secret of the `production` environment named `CRETE_BANK_VERIFIER_TOKEN` (Settings, Environments,
+   production, Add environment secret; or `gh secret set CRETE_BANK_VERIFIER_TOKEN --env production`).
 3. Run the deploy workflow once from the Actions tab (or merge anything): the deploy puts the token's hash on the
    server.
 4. Optionally run crete-verify from the Actions tab to see it list and check the waiting levels.

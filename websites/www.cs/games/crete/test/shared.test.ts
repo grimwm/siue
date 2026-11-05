@@ -345,3 +345,33 @@ test('a device keeps its own levels and plays them again in its own runs when no
   b.keep('hard', FIRST[2]!);
   assert.equal(b.take(firstReq({ grade: 'easy' })), null, 'each grade keeps its own');
 });
+
+test('Do Not Track: nothing carrying the device\'s id is sent (no upload, report or claim), and shared levels still come in', async () => {
+  const bad = { ...served(FIRST[0]!, 'd'.repeat(16)), shortest: FIRST[0]!.shortest - 1 };
+  const srv = server([bad, served(FIRST[1]!, 'e'.repeat(16))]);
+  const st = memory();
+  const b = createSharedBank({ fetch: srv.fetch, storage: st, now: () => 1_000_000, random: () => 0.5, url: 'endless-bank.php', quiet: true });
+  await b.refill('medium', 10);
+  assert.equal(b.take(firstReq())!.text, FIRST[1]!.text);
+  b.upload({ seed: 'q', tier: 1, grade: 'medium', depth: 3, run: [{ text: FIRST[0]!.text, explored: 1, score: 40 }] }, 0, FIRST[0]!);
+  assert.equal(await b.claim(ENDLESS_VERSION), null);
+  await flush(); await flush();
+  assert.deepEqual(srv.posts, []);
+  assert.equal(st.data[DEVICE_KEY], undefined, 'no id is even made');
+});
+
+test('a worker that fails on a claimed part sends no verdict: the ticket simply expires', async () => {
+  const sent: unknown[] = [];
+  const w: WorkerLike & { terminated: boolean } = {
+    terminated: false, onmessage: null, onerror: null, terminate() { w.terminated = true; },
+    postMessage() { setTimeout(() => w.onmessage?.({ data: { type: 'failed', id: 1, message: 'out of memory' } }), 0); },
+  };
+  const v = createVerifier({
+    spawn: () => w, claim: async () => ({ ticket: 't'.repeat(32), tuple: TUPLE }), send: async (t, f) => { sent.push([t, f]); },
+    now: () => 0, setTimeout: () => 0, clearTimeout: () => {},
+  });
+  v.allow(true);
+  for (let i = 0; i < 5; i++) await flush();
+  assert.deepEqual(sent, []);
+  assert.equal(w.terminated, true);
+});

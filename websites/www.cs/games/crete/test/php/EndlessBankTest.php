@@ -371,14 +371,36 @@ final class EndlessBankTest extends TestCase
         self::assertSame([], $bank->levels('easy', 10, 16), 'while it waits');
         $generated = self::made(self::level(15, 15));
         self::assertSame(['ok' => true, 'verdict' => 'mismatch'], $this->claimAndVerify($bank, 'honest', self::B, $generated));
-        self::assertSame([], $this->stored('pending-easy.json'), 'rejected');
+        self::assertTrue($this->stored('pending-easy.json')[0]['dispute'], 'disputed');
         self::assertSame([], $bank->levels('easy', 10, 16));
+        self::assertSame([], $this->stored('strikes.json'), 'one peer\'s word strikes nobody');
+        // Later verifiers who would echo it find nothing to claim.
+        self::assertSame(['none' => true], $this->claim($bank, 'accomplice', self::C));
+        self::assertSame(['none' => true], $this->claim($bank, 'accomplice2', self::A));
+        self::assertSame([], $bank->levels('easy', 10, 16), 'never served while disputed');
+        // The trusted verifier settles it: the drawing is rejected and its uploader struck.
+        $this->verifierFile();
+        $item = $this->trusted($bank, ['op' => 'trusted-list', 'limit' => 1])['items'][0];
+        self::assertSame('mismatch', $this->trusted($bank, ['op' => 'trusted-verify', 'grade' => 'easy', 'h' => $item['h'], 'verdict' => 'mismatch', 'found' => $generated])['verdict']);
+        self::assertSame([], $this->stored('pending-easy.json'), 'rejected');
         $strikes = $this->stored('strikes.json');
         self::assertCount(1, $strikes);
         self::assertSame(Bank::installHash(self::install('prankster')), $strikes[0]['i']);
         self::assertSame($bank->netCode(self::A, $bank->networkKey()), $strikes[0]['n']);
-        // Later verifiers who would echo it find nothing to claim.
-        self::assertSame(['none' => true], $this->claim($bank, 'accomplice', self::C));
+    }
+
+    public function testAPeerMatchNeverAdmitsADisputedLevel(): void
+    {
+        $bank = $this->bank();
+        $text = self::level(19);
+        $this->submit($bank, $text, 'up', self::A);
+        $first = $this->claim($bank, 'v1', self::B);
+        $second = $this->claim($bank, 'v2', self::C);
+        $verify = fn(string $who, string $addr, array $c, ?array $found): array => $this->verify($bank, $who, $addr, $c['ticket'], $found);
+        self::assertSame('mismatch', $verify('v1', self::B, $first, null)['verdict']);
+        self::assertSame('match', $verify('v2', self::C, $second, self::made($text))['verdict']);
+        self::assertSame([], $bank->levels('easy', 10, 16));
+        self::assertCount(1, $this->stored('pending-easy.json'));
     }
 
     /** @return array<string, array{array<string, mixed>|null}> */
@@ -403,7 +425,8 @@ final class EndlessBankTest extends TestCase
         $bank = $this->bank();
         $this->submit($bank, self::level(16));
         self::assertSame('mismatch', $this->claimAndVerify($bank, 'v', self::B, $found)['verdict']);
-        self::assertSame([], $this->stored('pending-easy.json'));
+        self::assertTrue($this->stored('pending-easy.json')[0]['dispute']);
+        self::assertSame([], $bank->levels('easy', 10, 16));
     }
 
     public function testOnlyTheTitleAndIntroMayDiffer(): void
@@ -416,9 +439,10 @@ final class EndlessBankTest extends TestCase
     public function testThreeStrikesThrottleTheInstallAndTheNetworkForADay(): void
     {
         $bank = $this->bank();
+        $this->verifierFile();
         for ($i = 0; $i < 3; $i++) {
             $this->submit($bank, self::level(100 + $i), 'pest', self::C);
-            $this->claimAndVerify($bank, "honest$i", self::B, null);
+            $this->trusted($bank, ['op' => 'trusted-verify', 'grade' => 'easy', 'h' => Bank::layoutHash(self::level(100 + $i)), 'verdict' => 'mismatch', 'found' => null]);
         }
         $throttled = [429, ['error' => 'throttled']];
         self::assertSame($throttled, self::refusal(fn() => $this->submit($bank, self::level(200), 'pest', self::B)), 'the install');
@@ -579,22 +603,46 @@ final class EndlessBankTest extends TestCase
         self::assertSame([400, ['error' => 'invalid', 'field' => 'grade']], self::refusal(fn() => $bank->levels('Easy', 1, 1)));
     }
 
-    public function testTwoReportsFromDistinctInstallsRetireALevel(): void
+    public function testTwoReportsFromDistinctInstallsOnDistinctNetworksRetireALevel(): void
     {
         $bank = $this->bank();
         $text = self::level(70);
         $this->admit($bank, $text);
         $h = Bank::layoutHash($text);
-        $report = fn(string $who): array => $bank->report(['op' => 'report', 'install' => self::install($who), 'grade' => 'easy', 'h' => $h], self::B);
+        $report = fn(string $who, string $addr = self::B): array => $bank->report(['op' => 'report', 'install' => self::install($who), 'grade' => 'easy', 'h' => $h], $addr);
         self::assertSame(['ok' => true], $report('a'));
         self::assertSame(['ok' => true], $report('a'));
         self::assertCount(1, $this->stored('served-easy.json'), 'one install twice is one report');
+        $report('made-up', self::B);
+        self::assertCount(1, $this->stored('served-easy.json'), 'two made-up installs on one network are one report');
         $this->now += 4 * 86400;
-        $report('b');
+        $report('b', self::C);
         self::assertCount(1, $this->stored('served-easy.json'), 'a report three days old is forgotten');
-        $report('c');
+        $report('c', self::A);
         self::assertSame([], $this->stored('served-easy.json'));
         self::assertSame(['ok' => true], $report('d'), 'an unknown level is fine');
+    }
+
+    public function testAStaleReportIsForgottenEvenWhenNoOtherComes(): void
+    {
+        $bank = $this->bank();
+        $text = self::level(71);
+        $this->admit($bank, $text);
+        $bank->report(['op' => 'report', 'install' => self::install('a'), 'grade' => 'easy', 'h' => Bank::layoutHash($text)], self::B);
+        self::assertArrayHasKey('r', $this->stored('served-easy.json')[0]);
+        $this->now += 4 * 86400;
+        $bank->levels('easy', 10, 1);
+        self::assertArrayNotHasKey('r', $this->stored('served-easy.json')[0], 'no install or network code kept past three days');
+    }
+
+    public function testTheServeWeightNeverFallsToZero(): void
+    {
+        $bank = $this->bank();
+        $this->admit($bank, self::level(72));
+        $served = $this->stored('served-easy.json');
+        $served[0]['n'] = 5_000_000;
+        file_put_contents("{$this->dir}/served-easy.json", json_encode($served));
+        self::assertCount(1, $bank->levels('easy', 10, 1), 'a level served millions of times still serves');
     }
 
     // ---- Network keys --------------------------------------------------------------

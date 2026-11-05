@@ -160,6 +160,7 @@ const sharedBank = createSharedBank({
   now: () => Date.now(),
   random: () => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32,
   url: new URL('endless-bank.php', window.location.href).toString(),
+  quiet: sendsNothing,
 });
 const verifier = createVerifier({
   spawn: endlessWorker,
@@ -180,7 +181,7 @@ const endless = createEndlessMode({
   changed: () => { ui.refresh(); followEndless(); },
   budget: () => endlessBudget,
   shared: { take: req => sharedBank.take(req) },
-  made: (req, part, made) => { sharedBank.keep(req.grade, made); if (!sendsNothing) sharedBank.upload(req, part, made); },
+  made: (req, part, made) => { sharedBank.keep(req.grade, made); sharedBank.upload(req, part, made); },
 });
 /* Endless's levels are made in the background too, outside a run: with one worker, once the page has been quiet
    for ENDLESS_WARM_MS, while it shows and the solver's worker is idle, and not on a low battery that is draining.

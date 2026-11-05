@@ -21,7 +21,7 @@
 <main>
 <h1>What this site counts</h1>
 <p>So I can see which games people play and where they get stuck, this site counts visits to its pages and
-games. It does this itself: no cookies, no advertising, and nothing is sent to anyone else.</p>
+games. It does this itself: no tracking cookies, no advertising, and nothing is sent to anyone else.</p>
 
 <h2>What is counted</h2>
 <ul>
@@ -47,12 +47,16 @@ first and last day it was seen.</p>
 <h2>Crete's shared Endless levels</h2>
 <p>When The Island of Crete makes an Endless level, it sends the maze to this site's server so other players can
 play it. While the game is open and idle, it also uses a little of your device's spare time to check mazes other
-players made; the game's menu has a <strong>Help Check Endless Levels</strong> switch that turns this off. Only mazes and the numbers that made them are
+players made; the game's menu has a <strong>Help Check Endless Levels</strong> switch that turns this off. To
+protect these requests the game sets one cookie, <code>crete_bank_csrf</code>: a random token for seven days, kept
+to the game's folder, that pages cannot read. Only mazes and the numbers that made them are
 kept. Your browser keeps a random number for the game, so the server can tell that two checks came from two
 different devices; while a maze waits for its checks (three days at most) the server keeps a scrambled code made
 from that number, and one made from your network address whose key it deletes within six days. To stop too many
-requests from one place, it also keeps that network code for an hour. Neither is linked to your name or anything
-else about you. Do Not Track or Global Privacy Control stops the game sending mazes and checks; it still
+requests from one place, it also keeps that network code for an hour. If a maze a device sent turns out not to be
+the game's own, or a player reports a shared maze broken, the server keeps that device's scrambled codes for a day
+or three days respectively. Neither is linked to your name or anything
+else about you. Do Not Track or Global Privacy Control stops the game sending mazes, checks and reports; it still
 plays the mazes others shared.</p>
 
 <h2>Turning it off</h2>

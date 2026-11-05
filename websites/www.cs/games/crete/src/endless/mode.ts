@@ -194,6 +194,8 @@ export function createEndlessMode(deps: EndlessDeps): EndlessMode {
       const run = saved.run();
       if (waiting && grade === playing && run?.next && run.depth + 1 === depth) { waiting = false; finding = null; deps.changed(); goNext(); return; }
       prefetch();
+      // The page hears that the background's work changed, so a check of others' levels can start or stop with it.
+      deps.changed();
     };
     // A run's first level: a shared one at once when one fits, else the bundled bank's, as the worker answers.
     if (depth === 1) {

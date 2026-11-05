@@ -97,7 +97,7 @@ export function createVerifier(deps: VerifierDeps): Verifier {
           if (m.type === 'part') {
             const f = (m.result as Part).found;
             try { resolve(f ? sharedOf(f) : null); } catch { resolve(null); }
-          } else if (m.type === 'failed') resolve(null);
+          } else if (m.type === 'failed') resolve(undefined);
         };
         worker.onerror = () => resolve(undefined);
         const msg: ToEndless = { type: 'part', id: 1, request: requestOf(tuple), part: tuple.k };
@@ -107,7 +107,7 @@ export function createVerifier(deps: VerifierDeps): Verifier {
     if (mine.stopped) return;
     try { mine.worker?.terminate(); } catch { /* gone either way */ }
     current = null;
-    // A worker that broke says nothing about the level: no verdict, and the ticket expires.
+    // A worker that broke or failed says nothing about the level: no verdict, and the ticket expires.
     if (found !== undefined) await deps.send(claimed.ticket, found);
     wake();
   }

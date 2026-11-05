@@ -11,7 +11,8 @@ name: deploy
 # runs from main. Its GitHub secrets are the repository's
 #   OP_SERVICE_ACCOUNT_TOKEN - a 1Password service account, read-only on the
 #     vault below.
-#   CRETE_BANK_VERIFIER_TOKEN - optional: the token Crete's trusted level
+#   CRETE_BANK_VERIFIER_TOKEN - optional, a `production` environment secret
+#     (crete-verify.yml runs there too): the token Crete's trusted level
 #     verifier sends. deploy.sh stages only its sha256, as
 #     games/crete/bank/verifier.json; without it the trusted ops answer 401.
 # The login itself is the SIUE item in the SIUE 1Password vault, referenced

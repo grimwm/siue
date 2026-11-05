@@ -268,7 +268,7 @@ final class Bank
             $got = $this->withGrade($grade, $keys, function (array &$served, array &$pending) use ($who, $v, $addr, $keys, $now): ?array {
                 $open = [];
                 foreach ($pending as $i => $item) {
-                    if ($item['v'] === $v && $item['up']['i'] !== $who && !self::holds($item, $who)) {
+                    if ($item['v'] === $v && empty($item['dispute']) && $item['up']['i'] !== $who && !self::holds($item, $who)) {
                         $open[] = $i;
                     }
                 }
@@ -320,10 +320,15 @@ final class Bank
                             throw new Refusal(400, ['error' => 'ticket']);
                         }
                         $pending[$i]['tk'][$j]['used'] = true;
+                        // One peer's word is no proof against the uploader: a mismatch disputes the level, which is
+                        // then never served, never handed to another peer, and left to the trusted verifier, whose
+                        // mismatch alone rejects it and strikes the uploader.
                         if ($found === null || !self::sameMade($found, $item['made'])) {
-                            array_splice($pending, $i, 1);
-                            $this->strike($item['up']['i'], $item['up']['n'], $item['kid']);
+                            $pending[$i]['dispute'] = true;
                             return 'mismatch';
+                        }
+                        if (!empty($item['dispute'])) {
+                            return 'match';
                         }
                         $this->admitIfReady($served, $pending, $i, $who, $net);
                         return 'match';
@@ -340,7 +345,7 @@ final class Bank
 
     /**
      * A player's report that a served level failed its client checks; enough
-     * reports from distinct installs retire it.
+     * reports from distinct installs on distinct networks retire it.
      * @param array<string, mixed> $body {op, install, grade, h}
      * @return array{ok: true}
      */
@@ -356,14 +361,15 @@ final class Bank
         $keys = $this->keys();
         $since = ($this->clock)() - $this->config['pendingDays'] * self::DAY;
         $now = ($this->clock)();
-        $this->withGrade($grade, $keys, function (array &$served, array &$pending) use ($h, $who, $since, $now): void {
+        $net = $this->netCode($addr, end($keys)['key']);
+        $this->withGrade($grade, $keys, function (array &$served, array &$pending) use ($h, $who, $net, $since, $now): void {
             foreach ($served as $i => $entry) {
                 if ($entry['h'] !== $h) {
                     continue;
                 }
                 $reports = array_values(array_filter($entry['r'] ?? [], static fn(array $r): bool => $r['at'] >= $since));
-                if (!in_array($who, array_column($reports, 'i'), true)) {
-                    $reports[] = ['i' => $who, 'at' => $now];
+                if (!in_array($who, array_column($reports, 'i'), true) && !in_array($net, array_column($reports, 'n'), true)) {
+                    $reports[] = ['i' => $who, 'n' => $net, 'at' => $now];
                 }
                 if (count($reports) >= $this->config['reportsToRetire']) {
                     array_splice($served, $i, 1);
@@ -393,7 +399,7 @@ final class Bank
             $pool = [];
             foreach ($served as $i => $entry) {
                 if ($entry['made']['chapter'] <= $tier) {
-                    $pool[$i] = intdiv(self::WEIGHT, 1 + $entry['n']);
+                    $pool[$i] = max(1, intdiv(self::WEIGHT, 1 + $entry['n']));
                 }
             }
             $out = [];
@@ -460,13 +466,14 @@ final class Bank
         foreach (self::GRADES as $grade) {
             $this->withGrade($grade, $keys, function (array &$served, array &$pending) use ($grade, &$all): void {
                 foreach ($pending as $item) {
-                    $all[] = ['at' => $item['at'], 'grade' => $grade, 'h' => $item['h'], 'tuple' => $item['tuple'], 'made' => $item['made']];
+                    $all[] = ['d' => empty($item['dispute']) ? 1 : 0, 'at' => $item['at'], 'grade' => $grade, 'h' => $item['h'], 'tuple' => $item['tuple'], 'made' => $item['made']];
                 }
             });
         }
-        usort($all, static fn(array $a, array $b): int => $a['at'] <=> $b['at']);
+        // Disputed levels first: they wait on this verifier alone. Then the oldest.
+        usort($all, static fn(array $a, array $b): int => [$a['d'], $a['at']] <=> [$b['d'], $b['at']]);
         $items = array_map(static function (array $x): array {
-            unset($x['at']);
+            unset($x['at'], $x['d']);
             return $x;
         }, array_slice($all, 0, $limit));
         return ['items' => $items];
@@ -973,6 +980,17 @@ final class Bank
                 self::decodeList($pendingRaw, $pendingPath),
                 fn(array $p): bool => $p['at'] >= $since && in_array($p['v'], $this->config['accept'], true) && isset($keys[$p['kid']]),
             ));
+            // Reports are kept for pendingDays only, then forgotten with the install and network codes they hold.
+            foreach ($served as $k => $entry) {
+                if (isset($entry['r'])) {
+                    $kept = array_values(array_filter($entry['r'], static fn(array $r): bool => $r['at'] >= $since && isset($r['n'])));
+                    if ($kept) {
+                        $served[$k]['r'] = $kept;
+                    } else {
+                        unset($served[$k]['r']);
+                    }
+                }
+            }
             $result = $fn($served, $pending);
             $this->writeIfChanged($servedPath, $servedRaw, array_values($served));
             $this->writeIfChanged($pendingPath, $pendingRaw, array_values($pending));

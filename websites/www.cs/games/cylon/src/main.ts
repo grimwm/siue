@@ -28,6 +28,7 @@ import * as playfield from './playfield.ts';
 import { createAudio } from './audio.ts';
 import { abilityKey, createAbilities, cooldownSeconds } from './abilities.ts';
 import { createHoles, createDebris, HOLE_PRESETS } from './field.ts';
+import type { GlyphLayer } from './glyphs.ts';
 import { createIntro } from './intro.ts';
 import { createLandscape } from './landscape.ts';
 import { createEye } from './eye.ts';
@@ -61,6 +62,8 @@ export interface CylonOptions {
     mountHtml?: string;
     /** Keep the scores in this browser only and never call scores.php (the embed, on another site). */
     localScores?: boolean;
+    /** Draws the scattered letters on one canvas instead of one element per letter (the embed: src/glyphs.ts). */
+    glyphLayer?: GlyphLayer;
 }
 
 // Everything the game fetches is found relative to this bundle (in dist/), wherever it is served from.
@@ -122,6 +125,7 @@ async function mountCylonDom(mountHtml?: string) {
  *   scores.php in the game folder, one level above dist/.
  * @param {string} [options.mountHtml] mount.html's markup, so nothing is fetched for it.
  * @param {boolean} [options.localScores] Keep the boards in this browser and never call scores.php.
+ * @param {GlyphLayer} [options.glyphLayer] Draws the scattered letters on one canvas (src/glyphs.ts).
  */
 export async function initializeCylonEffects(options: CylonOptions = {}) {
     const onTheme = typeof options.onTheme === 'function' ? options.onTheme : () => {};
@@ -334,9 +338,11 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
         setTimer: (fn, ms) => setTimeout(fn, ms),
         clearTimer: (h) => clearTimeout(h as Timer),
     });
-    /** The page's glyph debris (src/field.ts). */
+    /** The page's glyph debris (src/field.ts), drawn on a canvas when the caller asks (src/glyphs.ts). */
+    const glyphs = options.glyphLayer ?? null;
     const debris = createDebris({
         doc: document,
+        glyphs,
         viewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
         random: Math.random,
         reduceMotion,
@@ -373,6 +379,7 @@ export async function initializeCylonEffects(options: CylonOptions = {}) {
     /** The landscape writers and the letter kicks (src/landscape.ts). */
     const { rearrangeLandscape, rearrangeLandscapePage, disruptGlyphs, clearLandscapeVars, randRange } = createLandscape({
         reduceMotion,
+        glyphs,
         scrollX,
         scrollY,
     });

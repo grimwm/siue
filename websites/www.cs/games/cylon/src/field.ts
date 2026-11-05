@@ -13,6 +13,8 @@
  * state and a test can drive the holes with fake elements and a fake clock.
  * Browser-only: it compiles in the DOM program. */
 
+import type { GlyphLayer, GlyphVector } from './glyphs.ts';
+
 export interface HolePreset {
   /** Radius in px; 0 means "size it to the viewport" (the nuke's crater). */
   radius: number;
@@ -214,6 +216,11 @@ export function createHoles(d: HolesDeps): Holes {
 
 export interface DebrisDeps {
   doc: Document;
+  /**
+   * When given, the letters are drawn on this layer's canvas instead of
+   * becoming one element each (the embed: src/glyphs.ts).
+   */
+  glyphs?: GlyphLayer | null;
   /** The viewport's size as the page reports it (0 when unknown). */
   viewport: () => { width: number; height: number };
   /** A random source in [0, 1). */
@@ -261,14 +268,25 @@ export function createDebris(d: DebrisDeps): Debris {
     return { vw: width || 800, vh: height || 600 };
   }
 
-  function assignBlastVector(el: HTMLElement, vw: number, vh: number, s: BlastSpread): void {
-    const dx = (d.random() - 0.5) * vw * s.xSpread;
-    const dy = (d.random() - 0.5) * vh * s.ySpread;
-    const rot = (d.random() - 0.5) * s.rotMax;
-    el.style.setProperty('--sx', `${dx.toFixed(1)}px`);
-    el.style.setProperty('--sy', `${dy.toFixed(1)}px`);
-    el.style.setProperty('--sr', `${rot.toFixed(1)}deg`);
+  function blastVector(vw: number, vh: number, s: BlastSpread): GlyphVector {
+    const sx = +((d.random() - 0.5) * vw * s.xSpread).toFixed(1);
+    const sy = +((d.random() - 0.5) * vh * s.ySpread).toFixed(1);
+    const sr = +((d.random() - 0.5) * s.rotMax).toFixed(1);
+    return { sx, sy, sr };
   }
+
+  function assignBlastVector(el: HTMLElement, vw: number, vh: number, s: BlastSpread): void {
+    const v = blastVector(vw, vh, s);
+    el.style.setProperty('--sx', `${v.sx.toFixed(1)}px`);
+    el.style.setProperty('--sy', `${v.sy.toFixed(1)}px`);
+    el.style.setProperty('--sr', `${v.sr.toFixed(1)}deg`);
+  }
+
+  /** A letter's vector, spread across the full viewport: a planetary debris field. */
+  const charVector = (): GlyphVector => {
+    const { vw, vh } = size();
+    return blastVector(vw, vh, CHAR_SPREAD);
+  };
 
   /** List markers get their own blast vectors (CSS reads --mx/--my/--mr). */
   function assignListVector(li: HTMLElement, vw: number, vh: number): void {
@@ -288,7 +306,8 @@ export function createDebris(d: DebrisDeps): Debris {
     scatter() {
       if (isScattered() || d.reduceMotion) return;
       const { vw, vh } = size();
-      d.doc.querySelectorAll<HTMLElement>('.page-panel').forEach((root) => {
+      const roots = [...d.doc.querySelectorAll<HTMLElement>('.page-panel')];
+      roots.forEach((root) => {
         // The panel shell is debris too, not just the letters inside.
         root.classList.add('cylon-scatter-panel');
         assignBlastVector(root, vw, vh, PANEL_SPREAD);
@@ -297,6 +316,8 @@ export function createDebris(d: DebrisDeps): Debris {
           block.classList.add('cylon-scatter-block');
           assignBlastVector(block, vw, vh, BLOCK_SPREAD);
         });
+        root.querySelectorAll<HTMLElement>(LIST_ITEMS).forEach((li) => assignListVector(li, vw, vh));
+        if (d.glyphs) return;
 
         const walker = d.doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
           acceptNode(node) {
@@ -323,13 +344,14 @@ export function createDebris(d: DebrisDeps): Debris {
           }
           textNode.parentNode?.replaceChild(frag, textNode);
         });
-        root.querySelectorAll<HTMLElement>(LIST_ITEMS).forEach((li) => assignListVector(li, vw, vh));
       });
+      d.glyphs?.scatter(roots, charVector);
       body.dataset['cylonScattered'] = '1';
     },
 
     restore() {
       if (!isScattered()) return;
+      d.glyphs?.restore();
       d.doc.querySelectorAll('.cylon-scatter-char').forEach((span) => {
         span.replaceWith(d.doc.createTextNode(span.textContent || ''));
       });
@@ -361,6 +383,7 @@ export function createDebris(d: DebrisDeps): Debris {
         assignBlastVector(el, vw, vh, CHAR_SPREAD);
       });
       d.doc.querySelectorAll<HTMLElement>(LIST_ITEMS).forEach((li) => assignListVector(li, vw, vh));
+      d.glyphs?.reshuffle(charVector);
       d.clearTimer(settleTimer);
       settleTimer = d.setTimer(() => {
         body.classList.remove('cylon-glyphs-blowing');

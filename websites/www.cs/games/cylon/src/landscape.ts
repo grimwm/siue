@@ -12,9 +12,13 @@
  * offsets and the reduced-motion flag come in as arguments. Browser-only: it
  * compiles in the DOM program. */
 
+import type { GlyphLayer } from './glyphs.ts';
+
 export interface LandscapeDeps {
   /** With reduced motion the page is never scattered, so no letter is kicked. */
   reduceMotion: boolean;
+  /** The drawn letters, when the page's letters are drawn rather than elements (the embed). */
+  glyphs?: GlyphLayer | null;
   scrollX: () => number;
   scrollY: () => number;
 }
@@ -159,26 +163,46 @@ export function createLandscape(d: LandscapeDeps): Landscape {
     const chance = Math.min(1, 0.7 + s * 0.3);
     const jitter = 55 * s;
     const pushMax = 48 + 200 * s;
-    nodes.forEach((el) => {
-      if (el.classList.contains('cylon-scatter-panel') && s < 1.1) return;
-      const rect = el.getBoundingClientRect();
-      // On-screen position after scatter transforms — “physically next to the blast”
-      const cx = rect.left + rect.width / 2 + scrollX();
-      const cy = rect.top + rect.height / 2 + scrollY();
+    const sx0 = scrollX();
+    const sy0 = scrollY();
+    /** The kick for something whose on-screen centre is (cx, cy) in page coordinates, or null when it is out of reach. */
+    const kick = (cx: number, cy: number, sx: number, sy: number, sr: number): { sx: number; sy: number; sr: number } | null => {
       const awayX = cx - pageX;
       const awayY = cy - pageY;
       const awayDist = Math.hypot(awayX, awayY) || 1;
-      if (awayDist > radius) return;
-      if (Math.random() > chance) return;
-      const sx = parseFloat(el.style.getPropertyValue('--sx')) || 0;
-      const sy = parseFloat(el.style.getPropertyValue('--sy')) || 0;
-      const sr = parseFloat(el.style.getPropertyValue('--sr')) || 0;
+      if (awayDist > radius) return null;
+      if (Math.random() > chance) return null;
       const falloff = Math.max(0, 1 - awayDist / radius);
       const push = randRange(pushMax * 0.5, pushMax) * falloff;
-      el.style.setProperty('--sx', `${(sx + (awayX / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1)}px`);
-      el.style.setProperty('--sy', `${(sy + (awayY / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1)}px`);
-      el.style.setProperty('--sr', `${(sr + randRange(-32, 32) * s * falloff).toFixed(1)}deg`);
+      return {
+        sx: +(sx + (awayX / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1),
+        sy: +(sy + (awayY / awayDist) * push + randRange(-jitter, jitter) * falloff).toFixed(1),
+        sr: +(sr + randRange(-32, 32) * s * falloff).toFixed(1),
+      };
+    };
+    // Every position is read before any is written: a write between reads would make each read lay the page out again.
+    const targets = nodes
+      .filter((el) => !(el.classList.contains('cylon-scatter-panel') && s < 1.1))
+      .map((el) => ({ el, rect: el.getBoundingClientRect() }));
+    targets.forEach(({ el, rect }) => {
+      // On-screen position after scatter transforms — “physically next to the blast”
+      const v = kick(
+        rect.left + rect.width / 2 + sx0,
+        rect.top + rect.height / 2 + sy0,
+        parseFloat(el.style.getPropertyValue('--sx')) || 0,
+        parseFloat(el.style.getPropertyValue('--sy')) || 0,
+        parseFloat(el.style.getPropertyValue('--sr')) || 0,
+      );
+      if (!v) return;
+      el.style.setProperty('--sx', `${v.sx.toFixed(1)}px`);
+      el.style.setProperty('--sy', `${v.sy.toFixed(1)}px`);
+      el.style.setProperty('--sr', `${v.sr.toFixed(1)}deg`);
     });
+    if (d.glyphs) {
+      d.glyphs.kick((cx, cy, v) => kick(cx, cy, v.sx, v.sy, v.sr));
+      // A full nuke moves blocks and panels too; the drawn letters inside them follow.
+      if (!localOnly) d.glyphs.poke(3500);
+    }
   }
 
   function rearrangeLandscapePage(pageX: number, pageY: number, scale = 1, opts: LandscapeOptions = {}): void {

@@ -25,6 +25,7 @@ import worldCss from '../css/world.css' with { type: 'text' };
 import introCss from '../css/intro.css' with { type: 'text' };
 import embedCss from './embed.css' with { type: 'text' };
 import { initializeCylonEffects } from './main.ts';
+import { createGlyphLayer } from './glyphs.ts';
 
 /** The stylesheets in the home page's order (README.md, "Stylesheets"), then the embed's own. */
 const CSS = [kitCss, eyeCss, navCss, helpCss, hudCss, gameoverCss, settingsCss, controlsCss, fxCss, unitsCss, worldCss, introCss, embedCss];
@@ -144,7 +145,7 @@ async function launch(button: HTMLButtonElement): Promise<void> {
   document.body.classList.add('cic-embed-on');
   bar.querySelector('#cic-embed-leave')?.addEventListener('click', () => { location.reload(); });
 
-  await initializeCylonEffects({ mountHtml, localScores: true });
+  await initializeCylonEffects({ mountHtml, localScores: true, glyphLayer: createGlyphLayer({ doc: document, win: window }) });
   window.cylonStartGame?.();
 }
 

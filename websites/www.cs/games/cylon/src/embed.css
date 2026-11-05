@@ -166,3 +166,39 @@ body.cylon-world-ended .cic-embed-host {
     flex-basis: 100%;
   }
 }
+
+/* The page's letters, drawn on one canvas (src/glyphs.ts): the text under it is kept for its layout but not painted. */
+.cylon-glyph-src {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+}
+
+.cylon-glyph-parent {
+  text-decoration-color: transparent !important;
+}
+
+/* Over the host's panels (z-index 1058) as their letters were, under everything the game draws above them.
+ * Its filter is the one the letters' panel has (world.css and the host rules above), with the same timing. */
+.cylon-glyph-layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1058;
+  pointer-events: none;
+  contain: strict;
+  transition: filter 0.45s ease;
+}
+
+body.cylon-world-ended .cylon-glyph-layer {
+  filter: grayscale(0.72) contrast(1.08) brightness(0.78) sepia(0.18);
+}
+
+body.cylon-glyphs-blown .cylon-glyph-layer {
+  filter: grayscale(0.8) brightness(0.7) sepia(0.15);
+}
+
+body.cylon-glyphs-blowing .cylon-glyph-layer {
+  transition: filter var(--cylon-desolate-fade, 1.6s) ease;
+}

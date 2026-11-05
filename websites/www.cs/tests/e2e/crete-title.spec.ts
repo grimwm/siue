@@ -23,7 +23,7 @@ async function boxes(page: Page): Promise<{ id: string; x: number; w: number; ri
 
 for (const [name, viewport, touch] of [['a 360 px phone', { width: 360, height: 740 }, true], ['a 412 px phone', { width: 412, height: 915 }, true], ['a desktop', { width: 1280, height: 800 }, false]] as const) {
   for (const look of ['modern', 'classic'] as const) {
-    test(`${name}, ${look}: the title buttons share one column, the way in across it and the rest in even halves`, async ({ browser }) => {
+    test(`${name}, ${look}: the title buttons share one column, the way in across it and the rest in even halves, a lone last one across`, async ({ browser }) => {
       const ctx = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch });
       try {
         const page = await ctx.newPage();
@@ -38,13 +38,20 @@ for (const [name, viewport, touch] of [['a 360 px phone', { width: 360, height: 
           await expect(page.locator(`#${first}`)).toHaveClass('title-primary');
           const wide = all.filter(b => b.id === 'title-continue' || b.id === 'title-play');
           const halves = all.filter(b => !wide.includes(b));
-          expect(halves.map(b => b.id)).toEqual(['title-endless', 'title-story', 'title-editor', 'title-settings']);
+          expect(halves.map(b => b.id)).toEqual(['title-endless', 'title-demo', 'title-story', 'title-editor', 'title-settings']);
           const left = all[0]!.x, right = all[0]!.right;
           for (const b of wide) {
             expect(Math.abs(b.x - left), `${b.id}'s left edge`).toBeLessThanOrEqual(1);
             expect(Math.abs(b.w - all[0]!.w), `${b.id}'s width`).toBeLessThanOrEqual(1);
           }
+          // Two to a row; a lone last one goes across the column.
+          const lone = halves.length % 2 === 1 ? halves.at(-1)! : null;
           for (const [i, b] of halves.entries()) {
+            if (b === lone) {
+              expect(Math.abs(b.x - left), `${b.id}'s left edge`).toBeLessThanOrEqual(1);
+              expect(Math.abs(b.right - right), `${b.id}'s right edge`).toBeLessThanOrEqual(1);
+              continue;
+            }
             expect(Math.abs(b.w - halves[0]!.w), `${b.id}'s width`).toBeLessThanOrEqual(1);
             if (i % 2 === 0) expect(Math.abs(b.x - left), `${b.id}'s left edge`).toBeLessThanOrEqual(1);
             else expect(Math.abs(b.right - right), `${b.id}'s right edge`).toBeLessThanOrEqual(1);

@@ -16,6 +16,7 @@ export const WEIGHTS: Record<string, number> = {
   'crete-classic-view.spec.ts': 4,
   'crete-editor.spec.ts': 12,
   'crete-editor-looks.spec.ts': 4,
+  'crete-demo.spec.ts': 1,
   'crete-endless.spec.ts': 3,
   'crete-gate.spec.ts': 5,
   'crete-layout.spec.ts': 10,

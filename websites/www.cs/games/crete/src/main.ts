@@ -62,6 +62,8 @@ import { createSharedBank } from './endless/shared.ts';
 import { createVerifier, mayCheck } from './endless/verifier.ts';
 import { tierOf } from './endless/tier.ts';
 import { newSeed } from './endless/random.ts';
+import { createDemo, memoryStorage } from './demo.ts';
+import type { WakeLock } from './demo.ts';
 
 declare global {
   interface Window {
@@ -130,6 +132,42 @@ const outside = createOutside(CAMPAIGN_LEVELS, {
   bestWon: (text, moves) => editor.tryWon(text, moves),
   endlessWon: (moves, assisted) => endless.won(moves, assisted),
 });
+/* Demo (src/demo.ts): Endless at Medium with every piece, played by itself. Its runs are kept in memory and its
+   workers are its own, so the player's saved runs and the parts their searches keep are never touched. */
+const ALL_PIECES = CHAPTERS.filter(c => c.released).length;
+const demoClient = createEndlessClient(() => new Worker(new URL(`endless-worker.js?v=${ENDLESS_WORKER_V}`, import.meta.url)) as unknown as EndlessWorker,
+  () => (demo.active() && pageShown ? workersFor(navigator.hardwareConcurrency, endlessBattery) : 0));
+const demo = createDemo({
+  timers: browserTimers,
+  get game() { return game; },
+  mode: () => {
+    const store = memoryStorage();
+    return createEndlessMode({
+      saved: grade => createEndlessSaved(store, grade),
+      grade: () => 'medium',
+      setGrade: () => {},
+      client: demoClient,
+      tier: () => ALL_PIECES,
+      newSeed: () => newSeed(Math.random),
+      play: (level, about, line) => {
+        if (!demo.active()) return;
+        outside.play(level, { ...about, demo: true }, line);
+        demo.opened();
+      },
+      changed: () => demo.update(),
+      budget: () => endlessBudget,
+    });
+  },
+  tier: ALL_PIECES,
+  newSeed: () => newSeed(Math.random),
+  shown: () => pageShown,
+  changed: () => ui.setDemo(demo.view()),
+  cancel: () => demoClient.cancel(),
+  wakeLock: () => {
+    const lock = (navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<WakeLock> } }).wakeLock;
+    return lock ? lock.request('screen') : Promise.reject(new Error('no wake lock'));
+  },
+});
 const levels = outside.levels;
 /* The Map button's face: the level round Theseus in the other look, repainted only once a move has landed. */
 const THUMB_COLS = 7, THUMB_ROWS = 5, THUMB_CELL = 24;
@@ -191,12 +229,15 @@ let endlessWarm = false;
 let pageShown = typeof document === 'undefined' || document.visibilityState !== 'hidden';
 /** The player is in an Endless run: its level is on the game screen (with its cards), or Next Level waits. */
 function inEndlessRun(): boolean {
+  if (demo.active()) return false;
   if (endless.view().finding) return true;
   const top = ui.top();
   if (top === 'title' || top === 'endless' || top === 'editor' || top === 'shared' || top === 'levels') return false;
   return game.trial >= 0 && levels.outside?.(game.trial)?.kind === 'endless';
 }
 function endlessWorkers(): number {
+  // Demo has workers of its own: the player's Endless waits for it to end.
+  if (demo.active()) return 0;
   return workersNow({ run: inEndlessRun(), warm: endlessWarm, shown: pageShown, solving: solverBusy(), battery: endlessBattery },
     workersFor(navigator.hardwareConcurrency, endlessBattery));
 }
@@ -206,12 +247,13 @@ function followEndless(): void {
   endlessClient.resize();
   const free = !inEndlessRun() && endlessWorkers() > 0;
   if (free) endless.ahead();
-  // Checking others' levels takes turns with the page's own levels: only once Endless has nothing of its own to make.
-  verifier.allow(mayCheck({
+  // Checking others' levels takes turns with the page's own levels: only once Endless has nothing of its own to make,
+  // and never while Demo plays.
+  verifier.allow(!demo.active() && mayCheck({
     run: inEndlessRun(), warm: endlessWarm, shown: pageShown, solving: solverBusy(), battery: endlessBattery,
     endlessIdle: endless.idle(), on: settings.helpCheck.get() === 'on', sendsNothing, specBudget: endlessBudget !== undefined,
   }));
-  if (endlessWarm || ui.top() === 'endless') void sharedBank.refill(endlessGrade.get(), tierOf(CHAPTERS, id => progress.get(id).cleared));
+  if (!demo.active() && (endlessWarm || ui.top() === 'endless')) void sharedBank.refill(endlessGrade.get(), tierOf(CHAPTERS, id => progress.get(id).cleared));
 }
 watchSolver(() => followEndless());
 /** The Endless search's budget a browser spec set through the test hook; the generator's own otherwise. */
@@ -339,6 +381,7 @@ const game = createGame({
     ui.render(game);
     showModern();
     seePlay(game, levels.scratch?.(game.trial) ?? false);
+    demo.update();
     wantThumb();
     // A turn, an undo, a restart or a new level ends Theseus's standing still.
     if (game.run !== cueRun) {
@@ -454,6 +497,66 @@ function play(at?: number): void {
   if (at === undefined) ui.showChapter(1, false);
   else ui.showChapter(chapterOf(at).chapter.n, false, at);
 }
+
+/* Demo, from the title card (its button or key): the cards close, a remembered full screen returns, and Endless
+   plays by itself. Any key or tap ends it for the title card (below). */
+function startDemo(): void {
+  if (demo.active()) return;
+  if (settings.fullscreen.get() === 'on' && !appEnv.fullscreenElement()) toggleFullscreen();
+  ui.closeLayers();
+  game.settle();
+  demo.start();
+  followEndless();
+}
+
+function leaveDemo(): void {
+  if (!demo.active()) return;
+  demo.stop();
+  game.settle();
+  ui.showTitle(false);
+  followEndless();
+}
+
+/* While Demo plays, a key or a tap ends it and does nothing more: the press never reaches the game, the board's
+   camera or the title card that comes back, and a key held from then repeats nothing. Escape ends it too; it never
+   leaves full screen (the browser's own Escape aside, where there is no Keyboard Lock). A browser chord, a function
+   key, a modifier alone and Tab are the browser's and pass. The wheel does nothing while Demo plays. */
+const PASS_KEYS = /^(F\d{1,2}|Shift|Control|Alt|AltGraph|Meta|OS|Fn|CapsLock|NumLock|ScrollLock|Tab|ContextMenu|Audio\w*|Media\w*)$/;
+/** The key that ended Demo, held: its repeats are swallowed until it is let go. */
+let demoKey: string | null = null;
+/** The pointers of the gesture that ended Demo: every press in it, its releases and its clicks are swallowed, and
+ *  clicks a moment after its last release too. */
+const demoPointers = new Set<number>();
+let demoClicksUntil = 0;
+const swallow = (ev: Event): void => { ev.preventDefault(); ev.stopImmediatePropagation(); };
+window.addEventListener('keydown', ev => {
+  if (demoKey !== null && ev.code === demoKey && ev.repeat) { swallow(ev); return; }
+  // A repeat is a key held from before Demo began (the key that started it): it ends nothing.
+  if (demo.active() && ev.repeat) { swallow(ev); return; }
+  if (!demo.active() || ev.ctrlKey || ev.metaKey || ev.altKey || PASS_KEYS.test(ev.key)) return;
+  swallow(ev);
+  demoKey = ev.code;
+  leaveDemo();
+}, { capture: true });
+window.addEventListener('keyup', ev => { if (ev.code === demoKey) demoKey = null; }, { capture: true });
+window.addEventListener('pointerdown', ev => {
+  if (!demo.active() && demoPointers.size === 0) return;
+  swallow(ev);
+  demoPointers.add(ev.pointerId);
+  leaveDemo();
+}, { capture: true });
+for (const type of ['pointerup', 'pointercancel']) {
+  window.addEventListener(type, ev => {
+    const e = ev as PointerEvent;
+    if (!demoPointers.delete(e.pointerId)) return;
+    swallow(e);
+    if (demoPointers.size === 0) demoClicksUntil = performance.now() + 500;
+  }, { capture: true });
+}
+for (const type of ['click', 'contextmenu', 'dblclick']) {
+  window.addEventListener(type, ev => { if (demo.active() || demoPointers.size > 0 || performance.now() < demoClicksUntil) swallow(ev); }, { capture: true });
+}
+window.addEventListener('wheel', ev => { if (demo.active()) swallow(ev); }, { capture: true, passive: false });
 
 /* Quit (the menu's): the cards close and the editor's visit ends; an installed app closes where it may, and
    otherwise (always in a browser tab) the title card shows. */
@@ -757,7 +860,8 @@ async function createModern(): Promise<void> {
         image,
         icons: iconsJson as IconSheet,
         blocked: () => ui.cardsOpen(),
-        covered: () => ui.layersOpen(),
+        // Demo covers the board as a card does: the view tips keep away.
+        covered: () => ui.layersOpen() || demo.active(),
         gesture: () => ui.closeStart(),
         reducedMotion: () => reduced,
       })
@@ -809,6 +913,7 @@ function start(): void {
     game, toggleMute, toggleMusic, toggleBackground, setLook: applyLook, setWalls: applyWalls, setPad: applyPad, toggleMinimap, toggleHelpCheck, showViewTips, toggleFullscreen, wake, quit: () => { void quit(); }, play, editor, leftEditor,
     backToEditor: outside.backToEditor, shared: visit,
     endless: { mode: endless, link: endlessLink, copy: link => { void copyLink(link); } },
+    demo: { start: startDemo },
   });
   const background = settings.musicHidden.get() === 'on';
   music.setBackground(background);
@@ -866,6 +971,7 @@ function start(): void {
   };
   image.src = 'fx/sprites/tiles.png';
 }
+// Demo's searches and play hold while the tab is hidden, and go on once it shows.
 // A hidden tab runs no play-out and, unless Music in the background is on, holds the music; showing it again leaves the play-out stopped and the music going on.
 followPage({ doc: document, win: window }, {
   hide: () => {
@@ -873,11 +979,15 @@ followPage({ doc: document, win: window }, {
     music.hold();
     pageShown = false;
     followEndless();
+    demoClient.resize();
+    demo.update();
   },
   show: () => {
     music.release();
     pageShown = true;
     followEndless();
+    demoClient.resize();
+    demo.update();
   },
 });
 // Endless's background levels start once the page has loaded and been quiet a few seconds.
@@ -992,4 +1102,6 @@ const modernHook = {
   },
   get active() { return modernOn && !editorUp; },
 };
-window.__creteTest = { endless: { mode: endless, get saved() { return endlessSaves[endlessGrade.get()]; }, saves: endlessSaves, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); }, shared: sharedBank }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook, cues: cuesHook };
+/* Demo, for the browser specs: started and ended as its button and a key do, its words, and a faster pace. */
+const demoHook = { start: startDemo, stop: leaveDemo, active: () => demo.active(), view: () => demo.view(), setPace: demo.setPace };
+window.__creteTest = { demo: demoHook, endless: { mode: endless, get saved() { return endlessSaves[endlessGrade.get()]; }, saves: endlessSaves, setBudget: (n: number) => { endlessBudget = n; }, workers: endlessWorkers, warm: () => { endlessWarm = true; followEndless(); }, shared: sharedBank }, game, TRIALS, solve, initial, trialLevel, levelById, LEVEL_IDS, CHAPTERS, solveInWorker, playLevel, parse, editor: editorHook, modern: modernHook, classic: classicHook, cues: cuesHook };

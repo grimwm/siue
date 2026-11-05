@@ -1,12 +1,13 @@
 /* The Island of Crete: the shared Endless bank's trusted verifier, run by .github/workflows/crete-verify.yml every
- * six hours and by hand from the Actions tab. Over HTTPS only, it asks the bank (games/crete/endless-bank.php) for the
+ * six hours and by hand from the Actions tab, before tools/generate-bank.ts spends the rest of the run making new
+ * levels. Over HTTPS only, it asks the bank (games/crete/endless-bank.php) for the
  * levels waiting in quarantine, makes each again from its tuple with this checkout's generator, and posts whether it
  * made the same level. The bank admits a level on one trusted match, and rejects it on a mismatch. Its token is the
  * CRETE_BANK_VERIFIER_TOKEN secret, sent in the X-Crete-Verifier header; it is never printed. A level of another
  * generator version is left for the players' devices. Each run stops after `--items` levels or `--minutes`, and it
  * always exits 0: a failed run only leaves levels waiting for the next.
  *
- *   CRETE_BANK_VERIFIER_TOKEN=… node tools/verify-bank.ts [--items 25] [--minutes 45] [--url <endpoint>] */
+ *   CRETE_BANK_VERIFIER_TOKEN=… node tools/verify-bank.ts [--items 25] [--minutes 12] [--url <endpoint>] */
 import { ENDLESS_VERSION, regenerate, sameMade } from '../src/endless/provenance.ts';
 import type { SharedMade, Tuple } from '../src/endless/provenance.ts';
 import { tupleShape } from '../src/endless/verifier.ts';
@@ -95,7 +96,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       regenerate: t => regenerate(t, known),
       now: () => Date.now(),
       log: line => console.log(`verify-bank: ${line}`),
-    }, { items: arg('items', 25), ms: arg('minutes', 45) * 60_000 });
+    }, { items: arg('items', 25), ms: arg('minutes', 12) * 60_000 });
     console.log(`verify-bank: checked ${tally.checked}, matched ${tally.matched}, mismatched ${tally.mismatched}, skipped ${tally.skipped}`);
   }
 }

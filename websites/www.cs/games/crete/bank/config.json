@@ -1,5 +1,5 @@
 {
-  "accept": [1, 2],
+  "accept": [2],
   "parts": 12,
   "servedCap": 1500,
   "pendingCap": 300,
@@ -9,7 +9,7 @@
   "strikeLimit": 3,
   "strikeHours": 24,
   "reportsToRetire": 2,
-  "perHour": { "submit": 30, "claim": 20, "verify": 20, "report": 20, "levels": 120, "trusted": 120 },
+  "perHour": { "submit": 30, "claim": 20, "verify": 20, "report": 20, "levels": 120, "trusted": 600 },
   "runTtlSec": 3600,
   "startsPerHour": 1,
   "scoresPerHour": 1,

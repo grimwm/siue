@@ -615,16 +615,16 @@
    "i": 10,
    "d": {
     "solved": true,
-    "shortest": 48,
-    "explored": 2455,
-    "withoutMinotaur": 28,
-    "minotaurDelta": 20,
+    "shortest": 45,
+    "explored": 2074,
+    "withoutMinotaur": 26,
+    "minotaurDelta": 19,
     "greedyWins": false,
-    "catchFree": 48,
+    "catchFree": 45,
     "catches": 0,
     "label": "chase",
     "naiveWins": false,
-    "line": "wuuuuluurrlldddddddzdrrddlllllluurlddlllluuuuuul"
+    "line": "wrrwlldlluullddllddddrrcrrrrrrlllllllluuuuuul"
    },
    "gate": []
   },
@@ -632,21 +632,38 @@
    "i": 14,
    "d": {
     "solved": true,
-    "shortest": 42,
-    "explored": 2489,
-    "withoutMinotaur": 34,
-    "minotaurDelta": 8,
+    "shortest": 75,
+    "explored": 4621,
+    "withoutMinotaur": 55,
+    "minotaurDelta": 20,
     "greedyWins": false,
-    "catchFree": 42,
+    "catchFree": 75,
     "catches": 0,
     "label": "chase",
     "naiveWins": false,
-    "line": "lrllllddllddddddrrddllrrzrruurruurrruurrur"
+    "line": "wllllllddddddddrruurrddurrurruullwllllllddddrrddddrrddrrrruuuuuurruurruuuur"
    },
    "gate": []
   },
   {
    "i": 18,
+   "d": {
+    "solved": true,
+    "shortest": 37,
+    "explored": 2308,
+    "withoutMinotaur": 27,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 37,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "dddddurrrrllddddddllrlrruurrrrddrrrrr"
+   },
+   "gate": []
+  },
+  {
+   "i": 22,
    "d": {
     "solved": true,
     "shortest": 40,
@@ -663,24 +680,41 @@
    "gate": []
   },
   {
-   "i": 22,
+   "i": 26,
    "d": {
     "solved": true,
-    "shortest": 43,
-    "explored": 6603,
-    "withoutMinotaur": 31,
-    "minotaurDelta": 12,
+    "shortest": 70,
+    "explored": 7455,
+    "withoutMinotaur": 55,
+    "minotaurDelta": 15,
     "greedyWins": false,
-    "catchFree": 43,
+    "catchFree": 70,
     "catches": 0,
     "label": "chase",
     "naiveWins": false,
-    "line": "ddddrrrrrrrrrrllllrrrruuuuuulllwluuzrruullu"
+    "line": "rwwwlllrrrrwwlllluuuurrrruurrlluulllluurruurrrruulluurrrrddrruurrrrrrr"
    },
    "gate": []
   },
   {
-   "i": 26,
+   "i": 30,
+   "d": {
+    "solved": true,
+    "shortest": 52,
+    "explored": 7014,
+    "withoutMinotaur": 42,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 52,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rruulllllluurrrluurruwwwwwwwwwwulluurruurruurruulllu"
+   },
+   "gate": []
+  },
+  {
+   "i": 34,
    "d": {
     "solved": true,
     "shortest": 61,
@@ -697,7 +731,7 @@
    "gate": []
   },
   {
-   "i": 30,
+   "i": 38,
    "d": {
     "solved": true,
     "shortest": 44,
@@ -714,7 +748,7 @@
    "gate": []
   },
   {
-   "i": 34,
+   "i": 42,
    "d": {
     "solved": true,
     "shortest": 54,
@@ -731,41 +765,75 @@
    "gate": []
   },
   {
-   "i": 38,
-   "d": {
-    "solved": true,
-    "shortest": 52,
-    "explored": 10455,
-    "withoutMinotaur": 29,
-    "minotaurDelta": 23,
-    "greedyWins": false,
-    "catchFree": 52,
-    "catches": 0,
-    "label": "chase",
-    "naiveWins": false,
-    "line": "ddrrrlrrrrrrrrrrlluuuudduuuzullllrruuuullrrrrrrddddr"
-   },
-   "gate": []
-  },
-  {
-   "i": 42,
-   "d": {
-    "solved": true,
-    "shortest": 31,
-    "explored": 2821,
-    "withoutMinotaur": 22,
-    "minotaurDelta": 9,
-    "greedyWins": false,
-    "catchFree": 31,
-    "catches": 0,
-    "label": "chase",
-    "naiveWins": false,
-    "line": "uurruuddlcllluurruuudddlldllddl"
-   },
-   "gate": []
-  },
-  {
    "i": 46,
+   "d": {
+    "solved": true,
+    "shortest": 101,
+    "explored": 15021,
+    "withoutMinotaur": 83,
+    "minotaurDelta": 18,
+    "greedyWins": false,
+    "catchFree": 101,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rrrrrrrrddllddllllddddddddddlluuuullllddddzddllddrrrrlclllllllllrruurrrrrruuuuuuuulluuudddllddlluulll"
+   },
+   "gate": []
+  },
+  {
+   "i": 50,
+   "d": {
+    "solved": true,
+    "shortest": 72,
+    "explored": 4543,
+    "withoutMinotaur": 46,
+    "minotaurDelta": 26,
+    "greedyWins": false,
+    "catchFree": 72,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uullllllddlluulllllluurruuuulluurrrrrrrrrrrrrddrdrrdullullruurlllllllllu"
+   },
+   "gate": []
+  },
+  {
+   "i": 54,
+   "d": {
+    "solved": true,
+    "shortest": 49,
+    "explored": 2145,
+    "withoutMinotaur": 29,
+    "minotaurDelta": 20,
+    "greedyWins": false,
+    "catchFree": 49,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uulllrrrdduuuulluullllddddllddrrlluulluuuuuurrrru"
+   },
+   "gate": []
+  },
+  {
+   "i": 58,
+   "d": {
+    "solved": true,
+    "shortest": 41,
+    "explored": 2646,
+    "withoutMinotaur": 33,
+    "minotaurDelta": 8,
+    "greedyWins": false,
+    "catchFree": 41,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "dddwdddlruurrrrrrrrdduuullullluuuuluullll"
+   },
+   "gate": []
+  },
+  {
+   "i": 62,
    "d": {
     "solved": true,
     "shortest": 47,
@@ -782,75 +850,109 @@
    "gate": []
   },
   {
-   "i": 50,
-   "d": {
-    "solved": true,
-    "shortest": 56,
-    "explored": 4500,
-    "withoutMinotaur": 45,
-    "minotaurDelta": 11,
-    "greedyWins": false,
-    "catchFree": 56,
-    "catches": 0,
-    "label": "chase",
-    "naiveWins": false,
-    "line": "dddddwwwwwwwwwdddddddrruurrddrrrrrruuuuuulluuuurrdduuuuu"
-   },
-   "gate": []
-  },
-  {
-   "i": 54,
-   "d": {
-    "solved": true,
-    "shortest": 35,
-    "explored": 11372,
-    "withoutMinotaur": 25,
-    "minotaurDelta": 10,
-    "greedyWins": false,
-    "catchFree": 35,
-    "catches": 0,
-    "label": "chase",
-    "naiveWins": false,
-    "line": "llwwwwwwwlllllddllddddlllluuuuuuuul"
-   },
-   "gate": []
-  },
-  {
-   "i": 58,
-   "d": {
-    "solved": true,
-    "shortest": 77,
-    "explored": 10308,
-    "withoutMinotaur": 52,
-    "minotaurDelta": 25,
-    "greedyWins": false,
-    "catchFree": 77,
-    "catches": 0,
-    "label": "chase",
-    "naiveWins": false,
-    "line": "llllllrrrrrruuuulluuuuluuuullrcllddrddddrrddddllrruuuulluulllllldduurruuuullu"
-   },
-   "gate": []
-  },
-  {
-   "i": 62,
-   "d": {
-    "solved": true,
-    "shortest": 66,
-    "explored": 23677,
-    "withoutMinotaur": 35,
-    "minotaurDelta": 31,
-    "greedyWins": false,
-    "catchFree": 66,
-    "catches": 0,
-    "label": "chase",
-    "naiveWins": false,
-    "line": "rrlllluuuuuurruurruulluullrrzddrrdddddddduuuuurrdrrrrlllluuuurruuu"
-   },
-   "gate": []
-  },
-  {
    "i": 66,
+   "d": {
+    "solved": true,
+    "shortest": 54,
+    "explored": 14970,
+    "withoutMinotaur": 36,
+    "minotaurDelta": 18,
+    "greedyWins": false,
+    "catchFree": 54,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uuuullddddllddlluulwwwwwwwwlwrruuuullllllddddddcdrrddd"
+   },
+   "gate": []
+  },
+  {
+   "i": 70,
+   "d": {
+    "solved": true,
+    "shortest": 59,
+    "explored": 17739,
+    "withoutMinotaur": 42,
+    "minotaurDelta": 17,
+    "greedyWins": false,
+    "catchFree": 59,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "rrrrlllldddwdlluullllddddddrrddllddddrrddrrrrrruuddddddrrrd"
+   },
+   "gate": []
+  },
+  {
+   "i": 74,
+   "d": {
+    "solved": true,
+    "shortest": 57,
+    "explored": 7492,
+    "withoutMinotaur": 37,
+    "minotaurDelta": 20,
+    "greedyWins": false,
+    "catchFree": 57,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ddllllllddrrrrrrrrllrruurlddllrruurruulluulllllluuuurrrru"
+   },
+   "gate": []
+  },
+  {
+   "i": 78,
+   "d": {
+    "solved": true,
+    "shortest": 53,
+    "explored": 26152,
+    "withoutMinotaur": 38,
+    "minotaurDelta": 15,
+    "greedyWins": false,
+    "catchFree": 53,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uuuurrrrddrddddrrddrrlzluuuuurruuuuulluullrrddrrddddr"
+   },
+   "gate": []
+  },
+  {
+   "i": 82,
+   "d": {
+    "solved": true,
+    "shortest": 67,
+    "explored": 18419,
+    "withoutMinotaur": 46,
+    "minotaurDelta": 21,
+    "greedyWins": false,
+    "catchFree": 67,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uulllluulluuuuuullllrrrrrrddrrddrruuuullllzllddlldddlldddddddrrllul"
+   },
+   "gate": []
+  },
+  {
+   "i": 86,
+   "d": {
+    "solved": true,
+    "shortest": 70,
+    "explored": 3181,
+    "withoutMinotaur": 47,
+    "minotaurDelta": 23,
+    "greedyWins": false,
+    "catchFree": 70,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uullulluuurrlzldddlldddllllllddddrrrrddrrlluulluuddllddllulluuullddlll"
+   },
+   "gate": []
+  },
+  {
+   "i": 90,
    "d": {
     "solved": true,
     "shortest": 68,
@@ -867,41 +969,92 @@
    "gate": []
   },
   {
-   "i": 70,
+   "i": 94,
    "d": {
     "solved": true,
-    "shortest": 62,
-    "explored": 7102,
-    "withoutMinotaur": 38,
-    "minotaurDelta": 24,
+    "shortest": 125,
+    "explored": 2116,
+    "withoutMinotaur": 80,
+    "minotaurDelta": 45,
     "greedyWins": false,
-    "catchFree": 62,
+    "catchFree": 125,
     "catches": 0,
     "label": "chase",
     "naiveWins": false,
-    "line": "lllluurruulluuddlldrrrrzllllulluuuulluurrllddrrddddllllddddddl"
+    "line": "ddddllddrzrddrrrrrruurrddrrrrrruuuurruuuuddddllddddlllllluullddlllllluudduurrrruurrrruuuulluuurruuuuuuulllllllluuuulllllldddl"
    },
    "gate": []
   },
   {
-   "i": 74,
+   "i": 98,
    "d": {
     "solved": true,
-    "shortest": 85,
-    "explored": 3126,
-    "withoutMinotaur": 38,
-    "minotaurDelta": 47,
+    "shortest": 50,
+    "explored": 5862,
+    "withoutMinotaur": 36,
+    "minotaurDelta": 14,
     "greedyWins": false,
-    "catchFree": 85,
+    "catchFree": 50,
     "catches": 0,
     "label": "chase",
     "naiveWins": false,
-    "line": "rlllllllllddlldduuddrrrrddrddlllulldurrurrrddrrrrrwwwllwrrwwwlluulluuuurrddrruurrdddr"
+    "line": "uuuuuurrrrllwllrrddrrddrrrrrrddllddllzllllddrrddld"
    },
    "gate": []
   },
   {
-   "i": 78,
+   "i": 102,
+   "d": {
+    "solved": true,
+    "shortest": 94,
+    "explored": 2471,
+    "withoutMinotaur": 46,
+    "minotaurDelta": 48,
+    "greedyWins": false,
+    "catchFree": 94,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "ddllllddrrrrrruurrrruullrrddddrruuuuuuuuuulllllllluulllldddddduuuuuurrrrddddddrrrruurrrruuuulu"
+   },
+   "gate": []
+  },
+  {
+   "i": 106,
+   "d": {
+    "solved": true,
+    "shortest": 83,
+    "explored": 22253,
+    "withoutMinotaur": 53,
+    "minotaurDelta": 30,
+    "greedyWins": false,
+    "catchFree": 83,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "dduuuuuuuuduuuuddddllllullullllddddddlllldduuuurrrrzllllddrrrrddrrlluulllllluuuuuuu"
+   },
+   "gate": []
+  },
+  {
+   "i": 110,
+   "d": {
+    "solved": true,
+    "shortest": 78,
+    "explored": 14240,
+    "withoutMinotaur": 56,
+    "minotaurDelta": 22,
+    "greedyWins": false,
+    "catchFree": 78,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uuuullddddllllrrrruuuurrllrlddddllddlllldddwduulluulluuddrrddrrddddrrrrrrrruur"
+   },
+   "gate": []
+  },
+  {
+   "i": 114,
    "d": {
     "solved": true,
     "shortest": 68,
@@ -918,7 +1071,24 @@
    "gate": []
   },
   {
-   "i": 82,
+   "i": 118,
+   "d": {
+    "solved": true,
+    "shortest": 39,
+    "explored": 2514,
+    "withoutMinotaur": 29,
+    "minotaurDelta": 10,
+    "greedyWins": false,
+    "catchFree": 39,
+    "catches": 0,
+    "label": "chase",
+    "naiveWins": false,
+    "line": "uuuurrrrddrrurwwwwwrdrruuuulldurruuurrr"
+   },
+   "gate": []
+  },
+  {
+   "i": 122,
    "d": {
     "solved": true,
     "shortest": 67,
@@ -943,8 +1113,8 @@
    "k": 0,
    "part": 3000000,
    "found": null,
-   "tries": 397,
-   "spent": 3000713
+   "tries": 376,
+   "spent": 3002644
   },
   {
    "tier": 5,
@@ -953,8 +1123,8 @@
    "k": 2,
    "part": 400000,
    "found": null,
-   "tries": 262,
-   "spent": 400145
+   "tries": 436,
+   "spent": 400025
   }
  ]
 }

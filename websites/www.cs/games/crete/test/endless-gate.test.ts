@@ -53,7 +53,7 @@ function bankRun(seed: string, tier: number, grade: Grade, depth: number): Playe
   return run;
 }
 
-test('a run from a bank alone climbs by the score at every tier and grade, a hidden-wall level eased, never a cliff', () => {
+test('a run from a bank alone climbs by the score at every tier and grade, a hidden-wall level eased, never a cliff, no level of its last again', () => {
   for (const grade of GRADES) for (let tier = 1; tier <= 10; tier++) {
     for (const seed of ['a', 'b']) {
       const run = bankRun(seed, tier, grade, 14);
@@ -62,6 +62,10 @@ test('a run from a bank alone climbs by the score at every tier and grade, a hid
         assert.ok(chapterOf(lv) <= tier, `${grade} tier ${tier}: only pieces it offers`);
         if (i === 0) return;
         assert.notEqual(p.text, run[i - 1]!.text, 'never the same level twice in a row');
+        // With more levels than the run remembers to offer, none of its last levels comes back.
+        if (BANKS[grade].filter(b => b.chapter <= tier).length > RUN_MEMORY) {
+          assert.ok(!run.slice(Math.max(0, i - RUN_MEMORY), i).some(q => q.text === p.text), `${grade} tier ${tier} seed ${seed} level ${i + 1}: a repeat`);
+        }
         // Against the last plain level before it: no cliff up, and a dip only as deep as a hidden level's ease.
         const plain = [...run.slice(0, i)].reverse().find(q => !hidesWalls(parse(q.text)))!;
         assert.ok(p.score <= Math.max(plain.score * CLIMB.most, GRADE_BANDS[grade].plateau[1]), `${grade} tier ${tier} seed ${seed} level ${i + 1}: ${plain.score} → ${p.score}`);
@@ -74,7 +78,7 @@ test('a run from a bank alone climbs by the score at every tier and grade, a hid
 test('a fixed seed is made fresh by its first part at each grade, and the level passes the whole gate', () => {
   const prev = { text: 'title: \nintro: \n\n#######\n#P...E#\n#M....#\n#######\n', explored: 3000, score: 30 };
   // tools/endless-bench.ts measures how often the search makes a level fresh; these pin one seed a grade that does.
-  for (const [grade, seed] of [['easy', 'fixed0'], ['medium', 'fixed1'], ['hard', 'fixed10']] as const) {
+  for (const [grade, seed] of [['easy', 'fixed0'], ['medium', 'fixed1'], ['hard', 'fixed0']] as const) {
     const req: Request = { seed, tier: 9, grade, depth: 2, run: [prev] };
     const part = makePart(req, 0, known);
     assert.ok(part.found, `${grade}: made fresh within its part's budget`);

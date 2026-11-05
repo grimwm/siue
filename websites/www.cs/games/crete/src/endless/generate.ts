@@ -28,7 +28,7 @@ import type { Rng } from './random.ts';
 import { draft, familiesOf, mutate, textOf, FAMILY_CHAPTER, HIDING, STYLES } from './draft.ts';
 import type { Family, Plan, Sketch, Style } from './draft.ts';
 import {
-  bandAfter, bandProblems, chapterOf, floorOf, hiddenBand, hidesWalls, levelChecks, likeness, newProblems, runProblems, tidyProblems,
+  bandAfter, bandProblems, chapterOf, floorOf, hiddenBand, hidesWalls, levelChecks, likeness, newProblems, runLikeness, runProblems, tidyProblems,
   CHECK_CAP, CLIMB, EXPLORED_MOST, GRADE_BANDS, HIDDEN_EASE, HIDDEN_EVERY,
 } from './gate.ts';
 import type { Band, Checked, Known } from './gate.ts';
@@ -278,7 +278,8 @@ function emptiest(variants: readonly Level[]): Level {
 /** The bank's level for this place: one the tier offers that looks like none of the run's last levels (newProblems),
  *  that hides walls when the place does (else one that does not), in the band (else within the climb from the run's
  *  last plain level, else on the plateau, else a gentle step from that level), picked by the seed and depth; only
- *  when the tier offers no such level, one of the rest by the same ladder. */
+ *  when the tier offers no such level, one of the rest by the same ladder, not one of the run's last levels while
+ *  there is another, and the least like them. */
 export function fromBank(bank: readonly BankLevel[], req: Request, band: Band, hides = false): BankLevel {
   const recent = req.run.slice(-RUN_MEMORY);
   const offered = bank.filter(b => b.chapter <= req.tier);
@@ -294,9 +295,18 @@ export function fromBank(bank: readonly BankLevel[], req: Request, band: Band, h
     b => b.score >= plateau.least && b.score <= plateau.most,
   ];
   const pick = (ok: readonly BankLevel[]) => ok[hash('endless-bank', req.seed, req.tier, req.grade, req.depth) % ok.length]!;
-  // Only when no level the tier offers looks new does one like a level of the run's come back, never the one just
-  // played while the tier offers another.
-  const notLast = offered.filter(b => b.text !== req.run.at(-1)?.text);
+  // Only when no level the tier offers looks new does one like a level of the run's come back: one not among the
+  // run's last levels while the tier offers one (else never the one just played while it offers another), and of
+  // those the least like the run's.
+  const unplayed = offered.filter(b => !recent.some(p => p.text === b.text));
+  const notLast = unplayed.length ? unplayed : offered.filter(b => b.text !== req.run.at(-1)?.text);
+  const nearness = new Map<BankLevel, number>();
+  const near = (b: BankLevel) => {
+    let x = nearness.get(b);
+    if (x === undefined) { const lv = parse(b.text); x = runLevels.reduce((m, r) => Math.max(m, runLikeness(lv, r)), 0); nearness.set(b, x); }
+    return x;
+  };
+  const leastLike = (ok: readonly BankLevel[]) => { const least = Math.min(...ok.map(near)); return ok.filter(b => near(b) <= least + 0.02); };
   // A fresh level matters most, then the band: a fresh level on the ladder, or a step from the last plain level's
   // score no steeper than the climb's or a hidden level's ease, comes before an old one; any fresh level before any
   // old one off the ladder.
@@ -308,7 +318,7 @@ export function fromBank(bank: readonly BankLevel[], req: Request, band: Band, h
   ];
   for (const [pool, fits] of tries) {
     const ok = pool.filter(fits);
-    if (ok.length) return pick(ok);
+    if (ok.length) return pick(pool === fresh ? ok : leastLike(ok));
   }
   if (offered.length) return pick(offered);
   if (bank.length) return pick(bank);

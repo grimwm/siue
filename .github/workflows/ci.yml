@@ -33,7 +33,8 @@ concurrency:
 jobs:
   units:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The whole suite takes 15 to 20 minutes; this leaves room for a slow runner.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:

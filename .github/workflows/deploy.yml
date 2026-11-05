@@ -8,7 +8,7 @@ name: deploy
 # by hand from the Actions tab to redeploy main; "force" sends every file.
 #
 # The deploy job runs in the `production` environment, which only admits
-# runs from main. Its one GitHub secret is the repository's
+# runs from main. Its one GitHub secret is that environment's
 #   OP_SERVICE_ACCOUNT_TOKEN - a 1Password service account, read-only on the
 #     vault below.
 # The login itself is the SIUE item in the SIUE 1Password vault, referenced

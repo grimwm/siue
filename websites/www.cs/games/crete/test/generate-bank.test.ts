@@ -4,7 +4,7 @@
 // header only, and fails quietly.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateAll, nextWant, safeUrl, tallyOf, tupleFor, isLarge, LARGE_SIDE, TURNOVER_SHARE } from '../tools/generate-bank.ts';
+import { generateAll, nextWant, safeUrl, tallyOf, tupleFor, isLarge, LARGE_SIDE } from '../tools/generate-bank.ts';
 import type { Counts, GenerateDeps, Shelf, Want } from '../tools/generate-bank.ts';
 import { ENDLESS_VERSION, requestOf, sharedOf } from '../src/endless/provenance.ts';
 import type { SharedMade } from '../src/endless/provenance.ts';
@@ -38,9 +38,10 @@ test('Hard\'s plateau comes first, large boards especially, then Medium and Easy
   assert.equal(nextWant(tallyOf(counts(shelf(0), shelf(0), shelf(1200, { pending: 300 }))))!.grade, 'medium');
   const full = tallyOf(counts(shelf(1500), shelf(1500), shelf(1500)));
   assert.equal(nextWant(full)!.grade, 'hard', 'turnover keeps Hard first');
-  for (const g of ['easy', 'medium', 'hard'] as const) assert.deepEqual([full[g].replace, full[g].room], [true, Math.round(1500 * TURNOVER_SHARE)]);
+  for (const g of ['easy', 'medium', 'hard'] as const) assert.deepEqual([full[g].replace, full[g].room], [true, 22]);
   assert.equal(nextWant(tallyOf(counts(shelf(1500), shelf(1499), shelf(1500))))!.grade, 'medium', 'room before turnover');
   assert.equal(tallyOf(counts(shelf(1499), shelf(0), shelf(0))).easy.replace, false);
+  assert.equal(tallyOf(counts(shelf(10, { cap: 10 }), shelf(0), shelf(0))).easy.room, 1, 'a small full grade still turns one over');
   for (const g of ['easy', 'medium', 'hard'] as const) full[g].room = 0;
   assert.equal(nextWant(full), null);
 });
@@ -108,7 +109,7 @@ test('it stops starting parts once its time is spent, and ends the ones still ru
 });
 
 test('it never makes more than fits, and stops for a full grade or a spent hourly share', async () => {
-  const turnover = Math.round(1500 * TURNOVER_SHARE);
+  const turnover = 22;
   const f = fake({ counts: async () => counts(shelf(1500), shelf(1499), shelf(1497, { pending: 1 })) });
   const made = await generateAll(f.deps, { ms: 60_000 });
   assert.deepEqual(made.added, { easy: turnover, medium: 1, hard: 2 });
@@ -127,7 +128,7 @@ test('it never makes more than fits, and stops for a full grade or a spent hourl
 });
 
 test('a full grade is replaced only with what the run made: a slow run retires fewer', async () => {
-  const turnover = Math.round(1500 * TURNOVER_SHARE);
+  const turnover = 22;
   const full = () => counts(shelf(1500), shelf(1500), shelf(1500, {}, 1125, 563));
   const f = fake({ counts: async () => full() });
   const made = await generateAll(f.deps, { ms: 3_600_000 });

@@ -571,7 +571,7 @@ final class Bank
     private function trustedAdd(array $body): array
     {
         self::fields($body, array_key_exists('replace', $body) ? ['op', 'tuple', 'made', 'replace'] : ['op', 'tuple', 'made'], '');
-        $replace = $body['replace'] ?? false;
+        $replace = array_key_exists('replace', $body) ? $body['replace'] : false;
         if (!is_bool($replace)) {
             throw Refusal::invalid('replace');
         }

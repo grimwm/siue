@@ -1012,6 +1012,7 @@ final class EndlessBankTest extends TestCase
         }
         self::assertSame($before, array_column($this->stored('served-easy.json'), 'h'), 'nothing retired without the token');
         self::assertSame([400, ['error' => 'invalid', 'field' => 'replace']], self::refusal(fn() => $this->trusted($bank, ['op' => 'trusted-add', 'tuple' => self::tuple(), 'made' => self::made(self::level(362)), 'replace' => 1])));
+        self::assertSame([400, ['error' => 'invalid', 'field' => 'replace']], self::refusal(fn() => $this->trusted($bank, ['op' => 'trusted-add', 'tuple' => self::tuple(), 'made' => self::made(self::level(362)), 'replace' => null])));
 
         // Room under the cap: it simply comes in, retiring nothing.
         self::assertSame(['ok' => true, 'h' => Bank::layoutHash(self::level(362))], $this->replace($bank, self::level(362)));

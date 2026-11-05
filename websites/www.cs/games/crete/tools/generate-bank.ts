@@ -77,7 +77,7 @@ export function tallyOf(counts: Counts): Record<Grade, Tally> {
     }
     const room = Math.max(0, s.cap - s.served - s.pending);
     const replace = room === 0 && s.served > 0;
-    out[g] = { cap: s.cap, room: replace ? Math.max(1, Math.round(s.cap * TURNOVER_SHARE)) : room, replace, total: s.served, plateau, large, asked: 0 };
+    out[g] = { cap: s.cap, room: replace ? Math.max(1, Math.floor(s.cap * TURNOVER_SHARE)) : room, replace, total: s.served, plateau, large, asked: 0 };
   }
   return out;
 }
